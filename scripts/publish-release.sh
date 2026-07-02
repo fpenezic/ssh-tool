@@ -114,6 +114,16 @@ HTTP_CODE="$(curl -sS -o /tmp/publish-response.json -w "%{http_code}" \
   -F "binary=@$BIN" \
   -F "changelog=@$CHANGELOG_FILE")"
 
+if [[ "$HTTP_CODE" == "409" ]]; then
+  # The server enforces immutability per version+platform, so a 409
+  # means this exact release slot is already occupied. Treat it as
+  # success so re-running a partially-failed publish job (or a
+  # workflow re-trigger on an unchanged tag) is idempotent instead of
+  # dying on the first platform that already made it up.
+  echo "already published ($VERSION $PLATFORM) - skipping"
+  exit 0
+fi
+
 if [[ "$HTTP_CODE" != "200" ]]; then
   echo "upload failed: HTTP $HTTP_CODE" >&2
   cat /tmp/publish-response.json >&2 || true

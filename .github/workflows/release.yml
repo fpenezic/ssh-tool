@@ -184,7 +184,11 @@ jobs:
             on && /^## \[/ { exit }
             on { print }
           ' CHANGELOG.md > /tmp/notes.md
-          if [ -s /tmp/notes.md ]; then
+          # Idempotent: a re-run (or a re-triggered tag) uploads assets
+          # into the existing release instead of failing on create.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" bin/* --clobber
+          elif [ -s /tmp/notes.md ]; then
             gh release create "$tag" bin/* --title "$tag" --notes-file /tmp/notes.md
           else
             gh release create "$tag" bin/* --title "$tag" --generate-notes
@@ -207,5 +211,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${{ github.ref_name }}"
-          gh release create "$tag" bin/* --title "$tag" --prerelease \
-            --notes "Pre-release build for testing. Not published to sshtool.app."
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" bin/* --clobber
+          else
+            gh release create "$tag" bin/* --title "$tag" --prerelease \
+              --notes "Pre-release build for testing. Not published to sshtool.app."
+          fi
