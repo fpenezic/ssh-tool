@@ -7,6 +7,23 @@ in alpha upstream.
 
 ---
 
+## [0.45.2] - Fully automated releases
+
+### Changed
+
+- **Every release, including the Android APK, is now built and
+  published by CI.** The APK is compiled and signed in the release
+  pipeline with the same key as previous builds (a pipeline gate
+  verifies the signature, so a wrongly-signed APK can never ship)
+  and attached to the GitHub Release next to the desktop binaries.
+- **sshtool.app is now a mirror.** The website follows GitHub
+  Releases and this repo's feature manifest on its own; downloads
+  for new versions redirect to the GitHub release assets. Nothing
+  changes for users - update checks, download URLs and the releases
+  page keep working, including for installs older than v0.45.0.
+- The Settings -> Updates text now describes the actual check:
+  GitHub Releases first, sshtool.app as fallback.
+
 ## [0.45.1] - Android opkssh login fix, Apache 2.0 license
 
 ### Fixed
