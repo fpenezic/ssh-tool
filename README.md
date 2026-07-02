@@ -126,4 +126,4 @@ Current release: see the latest `v*` tag on `main` and
 
 ## License
 
-To be decided before public release.
+[Apache License 2.0](LICENSE). Copyright 2026 Filip Penezic.

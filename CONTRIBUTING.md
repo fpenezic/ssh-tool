@@ -22,6 +22,13 @@ and applies to humans as much as to AI assistants.
 - The app must run natively on Windows without WSL - no WSL-specific
   paths.
 
+## Licensing
+
+ssh-tool is licensed under the [Apache License 2.0](LICENSE). By
+submitting a contribution you agree that it is your own work and that
+you license it under the same terms (inbound = outbound); per Apache
+2.0 section 5, no separate CLA is required.
+
 ## Scope notes
 
 - opkssh support is a core requirement; changes must not break
