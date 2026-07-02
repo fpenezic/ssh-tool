@@ -1,5 +1,5 @@
 {
-  "_comment": "Single source of truth for the sshtool.app landing page feature list. Edited here, pushed to the release server by scripts/publish-all.sh on every release. The web server renders from this JSON server-side and falls back to a hardcoded list if it is missing. Keep prose factual, dense, no marketing fluff (see docs/APP_DESCRIPTION.md voice notes). No sensitive data: no real hostnames, IPs, emails, customer names.",
+  "_comment": "Single source of truth for the sshtool.app landing page feature list. Edited here; the web server fetches it from this repo (raw.githubusercontent) on a timer. The web server renders from this JSON server-side and falls back to a hardcoded list if it is missing. Keep prose factual, dense, no marketing fluff (see docs/APP_DESCRIPTION.md voice notes). No sensitive data: no real hostnames, IPs, emails, customer names.",
   "tagline": "Cross-platform SSH connection manager - terminal, port forwards, vault, all in one window.",
   "scenes": [
     {

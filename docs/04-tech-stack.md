@@ -63,9 +63,10 @@ member that trips strict TS).
 
 ## CI
 
-Currently lightweight. Author builds locally via `task <os>:build`
-and uploads to the release server (`sshtool.app`) with
-`scripts/publish-all.sh`. No matrix CI on the main repo yet.
+GitHub Actions (`.github/workflows/release.yml`): tag push runs
+tests, builds linux/windows amd64+arm64 and the signed android APK,
+and publishes a GitHub Release. sshtool.app mirrors GitHub Releases;
+nothing is uploaded there.
 
 ## Version pinning
 

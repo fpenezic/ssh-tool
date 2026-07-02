@@ -113,7 +113,7 @@ task linux:build                    # → bin/ssh-tool
 ```bash
 git tag -a v0.X.Y -m "v0.X.Y - short description"
 git push origin HEAD v0.X.Y
-scripts/publish-all.sh              # builds win+linux, uploads
+# releases are built + published by GitHub Actions on tag push
 ```
 
 ## Verifying tooling

@@ -100,7 +100,6 @@ ssh-tool/
 ├─ build/                  per-OS task config, icons, NSIS, AppImage
 │  └─ android/             gradle + JNI bridge (MainActivity, WailsBridge, SecureStore, SessionService)
 ├─ docs/                   user guide, TODO, gotchas, planning docs
-├─ scripts/                publish-all.sh, publish-release.sh, publish-features.sh
 ├─ docs/features.json      landing feature manifest (pushed to web on release)
 ├─ CHANGELOG.md            version history
 └─ CLAUDE.md               this file
@@ -143,7 +142,7 @@ Release:
 ```bash
 git tag -a v0.X.Y -m "..."
 git push origin HEAD v0.X.Y
-scripts/publish-all.sh             # builds win+linux, uploads to release server
+# CI (GitHub Actions) builds + publishes on tag push; see below
 ```
 
 ## Platform note
@@ -442,16 +441,17 @@ author asks to ship/promote/release:
 
 4. Tag annotated: `git tag -a v0.X.Y -m "v0.X.Y - one-line summary"`.
 
-5. Push commits + tag. CI builds all platforms and publishes to the
-   release server (`sshtool.app`); the publish job also pushes
-   `docs/features.json` to the landing page (`/api/features`) so the
-   website's feature list tracks the release. `scripts/publish-all.sh`
-   is the local escape hatch (CI down) and runs the same feature push
-   via `scripts/publish-features.sh`.
+5. Push commits + tag. GitHub Actions builds every platform
+   (desktop x4 + the signed android APK) and publishes a GitHub
+   Release with the tag's CHANGELOG block as notes. sshtool.app
+   mirrors GitHub Releases (metadata sync + download redirect)
+   within ~10 minutes - nothing is uploaded there anymore. Local
+   escape hatch (CI down): `task <os>:build` + `gh release create`.
 
 Notes:
-- New landing feature? Edit `docs/features.json`; it ships to the
-  website on the next release tag, no separate web deploy.
+- New landing feature? Edit `docs/features.json`; the website
+  fetches it from this repo (raw.githubusercontent) on a timer -
+  no push, no web deploy.
 - `task build` injects version from `git describe --tags --always
   --dirty`. Tagged build → `v0.X.Y`; untagged → SHA + `-dirty`.
 - Plain `go run .` shows `dev` / `unknown`.

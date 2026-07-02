@@ -1,9 +1,10 @@
 # Release pipeline for ssh-tool (port of the pre-OSS GitLab CI).
 #
-# Trigger: annotated semver tags. Plain tags (v0.44.0) run
-# test -> build x4 -> publish (sshtool.app + GitHub Release).
-# Suffixed tags (v0.44.0-test, v0.44.0-rc1) run the same build but
-# land as a GitHub *prerelease* only - nothing touches sshtool.app.
+# Trigger: annotated semver tags. Plain tags (v0.45.2) run
+# test -> build x4 + android -> publish (GitHub Release; sshtool.app
+# mirrors it within ~10 minutes and redirects downloads to the
+# release assets). Suffixed tags (-test, -rcN) land as a GitHub
+# *prerelease* only and are never offered as updates.
 #
 # Differences from the GitLab pipeline:
 # - No custom CI image: hosted runners apt-get the GTK/WebKit deps
@@ -13,7 +14,7 @@
 # - Pre-release artifacts go to a GitHub prerelease instead of the
 #   GitLab Generic Package Registry.
 #
-# Secrets: RELEASE_TOKEN (sshtool.app upload bearer token).
+# Secrets: ANDROID_DEBUG_KEYSTORE (APK signing, see build-android).
 
 name: release
 
@@ -229,9 +230,9 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Full release: plain semver tags only. Uploads to sshtool.app
-  # (existing installs poll it for updates) AND creates a GitHub
-  # Release with the same binaries.
+  # Full release: plain semver tags only. Creates the GitHub Release;
+  # sshtool.app mirrors it (metadata sync + download redirect), which
+  # is how pre-0.45 installs polling only sshtool.app still see it.
   publish:
     needs: [build, build-android]
     if: ${{ !contains(github.ref_name, '-') }}
@@ -242,22 +243,6 @@ jobs:
         with:
           path: bin
           merge-multiple: true
-      - name: Publish to sshtool.app
-        env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-          RELEASE_API_URL: https://sshtool.app
-        run: |
-          PLATFORM=linux-amd64    scripts/publish-release.sh bin/ssh-tool-linux-amd64
-          PLATFORM=linux-arm64    scripts/publish-release.sh bin/ssh-tool-linux-arm64
-          PLATFORM=windows-amd64  scripts/publish-release.sh bin/ssh-tool-windows-amd64.exe
-          PLATFORM=windows-arm64  scripts/publish-release.sh bin/ssh-tool-windows-arm64.exe
-      # Landing-page feature manifest tracks the release. Non-fatal: a
-      # manifest hiccup must not fail an otherwise-good release.
-      - name: Push feature manifest
-        env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-          RELEASE_API_URL: https://sshtool.app
-        run: scripts/publish-features.sh || echo "WARN feature manifest push failed (non-fatal)"
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -99,8 +99,9 @@ the android-specific traps and `TODO.md` for the packaging backlog
 
 SemVer with `0.x` prefix while Wails v3 stays in alpha. Author cuts
 releases as they go - minor for new features, patch for fixes.
-`scripts/publish-all.sh` from a tagged commit builds Windows + Linux
-and uploads to `sshtool.app`. The app checks for updates via
-`/api/latest` and shows a pill in the status bar when newer is
+A tag push triggers GitHub Actions: tests, all platform builds
+(incl. the signed android APK) and a GitHub Release. sshtool.app
+mirrors it. The app checks GitHub Releases for updates (sshtool.app
+as fallback) and shows a pill in the status bar when newer is
 available. See `CLAUDE.md` "Versioning workflow" for the exact
 steps.
