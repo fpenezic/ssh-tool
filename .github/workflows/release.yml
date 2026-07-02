@@ -124,7 +124,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install task + wails3 CLI
         run: |
-          sudo sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+          go install github.com/go-task/task/v3/cmd/task@latest
           go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}
       - name: Frontend deps
         working-directory: frontend
@@ -177,7 +177,7 @@ jobs:
         run: echo y | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.3.11579264" >/dev/null
       - name: Install task + wails3 CLI
         run: |
-          sudo sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+          go install github.com/go-task/task/v3/cmd/task@latest
           go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}
       - name: Restore signing keystore
         env:
