@@ -37,6 +37,24 @@ android {
         }
     }
 
+    // Deterministic signing: SSHTOOL_KEYSTORE (path to a keystore with
+    // the standard debug alias/passwords) overrides the AGP default of
+    // <.android dir>/debug.keystore. CI must use this - hosted runners
+    // relocate the .android dir via ANDROID_* env vars, so a keystore
+    // restored to $HOME/.android is silently ignored and the APK gets
+    // a fresh runner-generated signature that existing installs reject.
+    signingConfigs {
+        debug {
+            def ks = System.getenv("SSHTOOL_KEYSTORE")
+            if (ks != null) {
+                storeFile file(ks)
+                storePassword "android"
+                keyAlias "androiddebugkey"
+                keyPassword "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -44,6 +62,7 @@ android {
         }
         debug {
             debuggable true
+            signingConfig signingConfigs.debug
         }
     }
 

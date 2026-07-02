@@ -187,8 +187,11 @@ jobs:
             echo "::error::ANDROID_DEBUG_KEYSTORE secret not set - APK would get a throwaway signature and existing installs would refuse to upgrade"
             exit 1
           fi
-          mkdir -p ~/.android
-          echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/debug.keystore"
+          # Explicit path consumed by the signingConfig in build.gradle;
+          # the AGP default (.android dir) is relocated on hosted runners
+          # and silently falls back to a fresh throwaway key.
+          echo "SSHTOOL_KEYSTORE=$RUNNER_TEMP/debug.keystore" >> "$GITHUB_ENV"
       - name: Frontend deps
         working-directory: frontend
         run: npm ci
@@ -208,6 +211,17 @@ jobs:
           (cd build/android && ./gradlew assembleDebug -PversionName="$ver" -PversionCode="$code")
           mkdir -p bin
           cp build/android/app/build/outputs/apk/debug/app-debug.apk bin/ssh-tool-android-arm64.apk
+      - name: Verify APK signature
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          got=$("$APKSIGNER" verify --print-certs bin/ssh-tool-android-arm64.apk \
+            | grep -oE 'SHA-256 digest: [a-f0-9]+' | head -1 | awk '{print $3}')
+          exp="b2ca1fafc2e6fedbd9df84085ea0adb58d126263b2b43087f2bbba07f3b63349"
+          if [ "$got" != "$exp" ]; then
+            echo "::error::APK signed with the wrong key ($got) - existing installs would refuse this upgrade"
+            exit 1
+          fi
+          echo "signature OK ($got)"
       - uses: actions/upload-artifact@v4
         with:
           name: ssh-tool-android-arm64.apk
