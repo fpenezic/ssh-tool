@@ -1,3 +1,5 @@
+![ssh-tool - SSH connection manager](.github/social-preview.png)
+
 # ssh-tool
 
 Daily-driver SSH manager for sysadmins with 300+ hosts: folder-
