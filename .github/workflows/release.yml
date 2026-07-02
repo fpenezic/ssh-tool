@@ -140,11 +140,86 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Android APK. Built on the hosted runner (SDK preinstalled, NDK
+  # added via sdkmanager) and signed with the same keystore local
+  # builds used (ANDROID_DEBUG_KEYSTORE secret, base64) - a different
+  # signing identity would make existing installs refuse the upgrade.
+  # Clean version stamp per the bindings-regen gotcha: full
+  # android:package once, restore the desktop bindings, then a
+  # gradle-only re-assemble with the version passed explicitly.
+  build-android:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Wails v3 Linux deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config \
+            libgtk-4-dev libwebkitgtk-6.0-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install NDK r26d
+        run: echo y | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.3.11579264" >/dev/null
+      - name: Install task + wails3 CLI
+        run: |
+          sudo sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}
+      - name: Restore signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::ANDROID_DEBUG_KEYSTORE secret not set - APK would get a throwaway signature and existing installs would refuse to upgrade"
+            exit 1
+          fi
+          mkdir -p ~/.android
+          echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+      - name: Frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Build APK
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.3.11579264"
+          task android:package
+          # The mid-build bindings regen dirties the tree and taints the
+          # gradle version stamp; restore and re-assemble clean with the
+          # version derived from the tag.
+          git checkout -- frontend/bindings/
+          tag="${{ github.ref_name }}"
+          ver="${tag#v}"
+          base="${ver%%-*}"
+          IFS=. read -r MA MI PA <<< "$base"
+          code=$((MA * 100000 + MI * 1000 + PA))
+          (cd build/android && ./gradlew assembleDebug -PversionName="$ver" -PversionCode="$code")
+          mkdir -p bin
+          cp build/android/app/build/outputs/apk/debug/app-debug.apk bin/ssh-tool-android-arm64.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ssh-tool-android-arm64.apk
+          path: bin/ssh-tool-android-arm64.apk
+          if-no-files-found: error
+          retention-days: 7
+
   # Full release: plain semver tags only. Uploads to sshtool.app
   # (existing installs poll it for updates) AND creates a GitHub
   # Release with the same binaries.
   publish:
-    needs: build
+    needs: [build, build-android]
     if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-24.04
     steps:
@@ -197,7 +272,7 @@ jobs:
   # Pre-release tags (vX.Y.Z-suffix): artifacts land as a GitHub
   # prerelease for testers; sshtool.app is never touched.
   prerelease:
-    needs: build
+    needs: [build, build-android]
     if: ${{ contains(github.ref_name, '-') }}
     runs-on: ubuntu-24.04
     steps:
