@@ -1,0 +1,54 @@
+version: '3'
+
+includes:
+  common: ../Taskfile.yml
+
+vars:
+  APP_BUNDLE: "{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.app"
+  CONTENTS:   "{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
+
+tasks:
+  build:
+    summary: Builds the application for macOS (native, CGO required for WebKit)
+    deps:
+      - task: common:go:mod:tidy
+      - task: common:build:frontend
+      - task: common:generate:icons
+    cmds:
+      - go build {{.BUILD_FLAGS}} -o "{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}"
+      - task: bundle
+    vars:
+      # Version + commit injected from git, same as linux/windows -
+      # without this the status bar shows "dev" on tagged builds.
+      APP_VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+      APP_COMMIT:
+        sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
+      BUILD_FLAGS: '-tags production -trimpath -buildvcs=false -ldflags="-w -s -X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"'
+    env:
+      GOOS:        darwin
+      GOARCH:      '{{.ARCH | default ARCH}}'
+      CGO_ENABLED: '1'
+
+  bundle:
+    summary: Wraps the compiled binary in a macOS .app bundle
+    internal: true
+    cmds:
+      - rm -rf "{{.APP_BUNDLE}}"
+      - mkdir -p "{{.CONTENTS}}/MacOS" "{{.CONTENTS}}/Resources"
+      - cp "{{.ROOT_DIR}}/build/darwin/icons.icns" "{{.CONTENTS}}/Resources/icons.icns"
+      - cp "{{.ROOT_DIR}}/build/darwin/Info.plist"  "{{.CONTENTS}}/Info.plist"
+      - cp "{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}" "{{.CONTENTS}}/MacOS/{{.APP_NAME}}"
+      - chmod +x "{{.CONTENTS}}/MacOS/{{.APP_NAME}}"
+
+  package:
+    summary: Creates a .dmg for sharing
+    deps:
+      - task: build
+    cmds:
+      - hdiutil create -volname "{{.APP_NAME}}" -srcfolder "{{.APP_BUNDLE}}" -ov -format UDZO "{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
+
+  run:
+    summary: Launches the built .app
+    cmds:
+      - open "{{.APP_BUNDLE}}"

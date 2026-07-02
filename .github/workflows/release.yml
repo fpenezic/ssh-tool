@@ -1,0 +1,211 @@
+# Release pipeline for ssh-tool (port of the pre-OSS GitLab CI).
+#
+# Trigger: annotated semver tags. Plain tags (v0.44.0) run
+# test -> build x4 -> publish (sshtool.app + GitHub Release).
+# Suffixed tags (v0.44.0-test, v0.44.0-rc1) run the same build but
+# land as a GitHub *prerelease* only - nothing touches sshtool.app.
+#
+# Differences from the GitLab pipeline:
+# - No custom CI image: hosted runners apt-get the GTK/WebKit deps
+#   per job (~1 min) and setup-go/setup-node handle tool caches.
+# - linux-arm64 builds natively on the ubuntu-24.04-arm hosted
+#   runner (observed working on this repo while still private).
+# - Pre-release artifacts go to a GitHub prerelease instead of the
+#   GitLab Generic Package Registry.
+#
+# Secrets: RELEASE_TOKEN (sshtool.app upload bearer token).
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions:
+  contents: write # gh release create
+
+env:
+  WAILS3_VERSION: v3.0.0-alpha2.111
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history + tags so `git describe` stamps the version.
+          fetch-depth: 0
+      - name: Install Wails v3 Linux deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config \
+            libgtk-4-dev libwebkitgtk-6.0-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # The root `main` package embeds frontend/dist (//go:embed), so the
+      # frontend has to be built before `go test .` can compile - hence
+      # the frontend build up front (which also feeds npm run check).
+      - name: Frontend build + svelte-check
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          npm run check
+      # go vet is intentionally NOT a gate here: it currently flags some
+      # pre-existing %s:%d-vs-IPv6 formatting in the ssh layer that's a
+      # separate cleanup. The real gates are the test suite + svelte-check.
+      # Scope: ./internal/... + root main - build/{android,ios} scaffold
+      # packages don't compile without the NDK/Xcode.
+      - name: Go tests
+        run: go test ./internal/... .
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-amd64
+            runner: ubuntu-24.04
+            build: task linux:build
+            bin: bin/ssh-tool
+            out: ssh-tool-linux-amd64
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+            build: task linux:build
+            bin: bin/ssh-tool
+            out: ssh-tool-linux-arm64
+          # Windows targets cross-compile from linux with CGO_ENABLED=0.
+          # Wails v3 on Windows talks to WebView2 via a system DLL - no
+          # C compiler dep at build time, so no GTK deps either.
+          - platform: windows-amd64
+            runner: ubuntu-24.04
+            build: CGO_ENABLED=0 task windows:build
+            bin: bin/ssh-tool.exe
+            out: ssh-tool-windows-amd64.exe
+          - platform: windows-arm64
+            runner: ubuntu-24.04
+            build: CGO_ENABLED=0 task windows:build ARCH=arm64
+            bin: bin/ssh-tool.exe
+            out: ssh-tool-windows-arm64.exe
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Needed on the windows cross legs too: `go install wails3`
+      # links the CLI against the full wails runtime, which needs the
+      # GTK/WebKit shared libs even though the windows build itself
+      # is CGO_ENABLED=0.
+      - name: Install Wails v3 Linux deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config \
+            libgtk-4-dev libwebkitgtk-6.0-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install task + wails3 CLI
+        run: |
+          sudo sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}
+      - name: Frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Build
+        run: |
+          ${{ matrix.build }}
+          mv ${{ matrix.bin }} bin/${{ matrix.out }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: bin/${{ matrix.out }}
+          if-no-files-found: error
+          retention-days: 7
+
+  # Full release: plain semver tags only. Uploads to sshtool.app
+  # (existing installs poll it for updates) AND creates a GitHub
+  # Release with the same binaries.
+  publish:
+    needs: build
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: bin
+          merge-multiple: true
+      - name: Publish to sshtool.app
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          RELEASE_API_URL: https://sshtool.app
+        run: |
+          PLATFORM=linux-amd64    scripts/publish-release.sh bin/ssh-tool-linux-amd64
+          PLATFORM=linux-arm64    scripts/publish-release.sh bin/ssh-tool-linux-arm64
+          PLATFORM=windows-amd64  scripts/publish-release.sh bin/ssh-tool-windows-amd64.exe
+          PLATFORM=windows-arm64  scripts/publish-release.sh bin/ssh-tool-windows-arm64.exe
+      # Landing-page feature manifest tracks the release. Non-fatal: a
+      # manifest hiccup must not fail an otherwise-good release.
+      - name: Push feature manifest
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          RELEASE_API_URL: https://sshtool.app
+        run: scripts/publish-features.sh || echo "WARN feature manifest push failed (non-fatal)"
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.ref_name }}"
+          # Release notes = this tag's CHANGELOG block (between its
+          # heading and the next "## [" heading). CHANGELOG headings
+          # carry no "v" prefix ("## [0.44.0] - ..."), so match both
+          # forms. Fall back to auto-generated notes when missing.
+          ver="${tag#v}"
+          awk -v ver="$ver" '
+            $0 ~ "^## \\[v?" ver "\\]" { on=1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > /tmp/notes.md
+          if [ -s /tmp/notes.md ]; then
+            gh release create "$tag" bin/* --title "$tag" --notes-file /tmp/notes.md
+          else
+            gh release create "$tag" bin/* --title "$tag" --generate-notes
+          fi
+
+  # Pre-release tags (vX.Y.Z-suffix): artifacts land as a GitHub
+  # prerelease for testers; sshtool.app is never touched.
+  prerelease:
+    needs: build
+    if: ${{ contains(github.ref_name, '-') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: bin
+          merge-multiple: true
+      - name: GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.ref_name }}"
+          gh release create "$tag" bin/* --title "$tag" --prerelease \
+            --notes "Pre-release build for testing. Not published to sshtool.app."

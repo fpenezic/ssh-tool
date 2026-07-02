@@ -1,0 +1,236 @@
+html {
+    background: var(--base);
+    text-align: left;
+    color: var(--text);
+    --row-pad-y: 0.2rem;
+    --row-sub-gap: 0.05rem;
+    --ui-font-size: 13px;
+    font-size: var(--ui-font-size);
+
+    /* Catppuccin Mocha (default dark theme). Variables are
+       referenced throughout the app - see style.css "theme-light"
+       and "theme-hc" overrides for the alternative palettes.
+       Names mirror the Catppuccin layer naming so the mapping
+       between Mocha / Latte stays obvious. */
+    --base:     #1e1e2e;
+    --mantle:   #11111b;
+    --crust:    #181825;
+    --surface0: #313244;
+    --surface1: #45475a;
+    --surface2: #585b70;
+    --overlay0: #6c7086;
+    --overlay1: #7f849c;
+    --overlay2: #9399b2;
+    --subtext0: #a6adc8;
+    --subtext1: #bac2de;
+    --text:     #cdd6f4;
+    --blue:     #89b4fa;
+    --lavender: #b4befe;
+    --sapphire: #74c7ec;
+    --sky:      #89dceb;
+    --teal:     #94e2d5;
+    --green:    #a6e3a1;
+    --yellow:   #f9e2af;
+    --peach:    #fab387;
+    --maroon:   #eba0ac;
+    --red:      #f38ba8;
+    --mauve:    #cba6f7;
+    --pink:     #f5c2e7;
+    --flamingo: #f2cdcd;
+    --rosewater:#f5e0dc;
+
+    /* Semantic aliases - most components should reference these,
+       not the raw colour names. Lets a future palette swap
+       (Catppuccin Frappe, Tokyo Night, …) only edit the alias
+       block. */
+    --bg:           var(--base);
+    --bg-panel:     var(--mantle);
+    --bg-elevated:  var(--crust);
+    --border:       var(--surface0);
+    --border-soft:  var(--surface1);
+    --text-strong:  var(--text);
+    --text-muted:   var(--subtext0);
+    --text-subtle:  var(--overlay0);
+    --accent:       var(--blue);
+    --accent-soft:  var(--lavender);
+    /* Text colour for content placed ON an accent / danger / ok
+       fill (button labels, pills, etc.). In Mocha this is the
+       dark base so dark-text-on-bright-blue stays legible; in
+       Latte and HC the theme override flips it to white. */
+    --on-accent:    var(--base);
+    --ok:           var(--green);
+    --warn:         var(--yellow);
+    --danger:       var(--red);
+    --broadcast:    var(--peach);
+}
+
+/* Override the on-accent contrast when the theme is light:
+   buttons / pills use bright accent fills, so the label needs to
+   be white (not the light base, which would disappear). */
+html.theme-light,
+html.theme-hc {
+    --on-accent: #ffffff;
+}
+
+/* Catppuccin Latte - light theme. Same alias block, different
+   layer values. Activated by .theme-light on <html>. */
+html.theme-light {
+    --base:     #eff1f5;
+    --mantle:   #e6e9ef;
+    --crust:    #dce0e8;
+    --surface0: #ccd0da;
+    --surface1: #bcc0cc;
+    --surface2: #acb0be;
+    --overlay0: #9ca0b0;
+    --overlay1: #8c8fa1;
+    --overlay2: #7c7f93;
+    --subtext0: #6c6f85;
+    --subtext1: #5c5f77;
+    --text:     #4c4f69;
+    --blue:     #1e66f5;
+    --lavender: #7287fd;
+    --sapphire: #209fb5;
+    --sky:      #04a5e5;
+    --teal:     #179299;
+    --green:    #40a02b;
+    --yellow:   #df8e1d;
+    --peach:    #fe640b;
+    --maroon:   #e64553;
+    --red:      #d20f39;
+    --mauve:    #8839ef;
+    --pink:     #ea76cb;
+    --flamingo: #dd7878;
+    --rosewater:#dc8a78;
+}
+
+/* High contrast - keeps dark base but pushes muted / subtle text
+   up so it stays readable in direct sunlight. */
+html.theme-hc {
+    --subtext0: #dcdfe8;
+    --overlay0: #b6bccf;
+    --surface0: #585b70;
+    --blue:     #b4befe;
+}
+
+body {
+    margin: 0;
+    color: var(--text);
+    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+    "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+    font-size: var(--ui-font-size);
+}
+
+/* App chrome is not selectable - a desktop app, not a web page. Dragging
+   across the UI shouldn't paint a selection, and Ctrl+A shouldn't select
+   the whole window. Content that IS meant to be copied opts back in with
+   `.selectable` (or via the always-selectable elements below). */
+#app {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Code/preformatted blocks, the terminal, and anything explicitly marked
+   selectable keep normal text selection. (Ctrl+A still selects the whole
+   document by default unless the container scopes it; log + audit do.)
+
+   Note: <input>/<textarea> are intentionally NOT listed. Form controls
+   stay fully editable (caret, typing, select-within) regardless of
+   user-select - it only governs selection of non-editable content.
+   Leaving them at the inherited `none` stops a drag-selection that
+   starts in a log/code block from sweeping a nearby field's placeholder
+   into the selection. */
+#app pre,
+#app .term-host,
+#app .term-host *,
+#app .selectable,
+#app .selectable * {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+/* Inline <code> tokens (file names, commands, paths in prose) are
+   select-all islands: a click/drag selects that one token as a unit and
+   can't bleed into the next <code> across the non-selectable prose
+   between them. Without this, dragging over "store.db + vault.enc ...
+   backups/" copied "store.dbvault.encbackups/" - every code span in
+   range, prose stripped. <pre> blocks above stay free-select for
+   multi-line copy. */
+#app code {
+    user-select: all;
+    -webkit-user-select: all;
+}
+/* A <code> inside a <pre> is part of the block, not an inline token -
+   keep it free-select so the whole block selects normally. */
+#app pre code {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+/* Single-line inputs: user-select:none so a page-level drag-selection
+   that sweeps across a field can't grab its value or placeholder text
+   (WebView2 pulled the "Filter..." placeholder into a log selection
+   otherwise). Typing and the edit caret are unaffected - form controls
+   have their own editable selection independent of user-select. A field
+   that needs in-field highlight+copy opts back in with .editable-select. */
+#app input {
+    user-select: none;
+    -webkit-user-select: none;
+}
+#app input.editable-select {
+    user-select: text;
+    -webkit-user-select: text;
+}
+/* Textareas are multi-line editors where selecting + copying the content
+   is normal, so they keep text selection. They're tall blocks, not inline
+   with a code/path span, so they don't suffer the placeholder-sweep. */
+#app textarea {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+@font-face {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 400;
+    src: local(""),
+    url("assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
+}
+
+#app {
+    height: 100vh;
+    text-align: left;
+}
+
+/* Hard viewport clamp. A single child wider than the screen (a long form
+   field, an un-truncated path, a wide flex row) would otherwise let the
+   whole app scroll horizontally "forever" on a phone, pushing everything
+   off-screen. Bound the app to the viewport width and hide horizontal
+   overflow at the root so panels must lay out within it. Individual
+   scrollable regions (terminal, log) keep their own overflow. */
+html, body {
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+#app {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+.spin {
+    animation: spin 1.1s linear infinite;
+    transform-origin: center;
+}
+
+/* Highlight checked toggles globally. The default .toggle border
+   doesn't change on tick, which leaves the user uncertain whether
+   the click took. */
+.toggle:has(input[type="checkbox"]:checked) {
+    border-color: var(--accent) !important;
+    background: color-mix(in oklab, var(--accent) 6%, transparent);
+}

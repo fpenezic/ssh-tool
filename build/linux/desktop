@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=ssh-tool
+Comment=Cross-platform SSH connection manager
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/ssh-tool %u
+Terminal=false
+Type=Application
+Icon=ssh-tool
+Categories=Network;RemoteAccess;
+StartupWMClass=ssh-tool
+
+

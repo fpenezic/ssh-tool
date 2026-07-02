@@ -1,0 +1,141 @@
+{
+  "_comment": "Single source of truth for the sshtool.app landing page feature list. Edited here, pushed to the release server by scripts/publish-all.sh on every release. The web server renders from this JSON server-side and falls back to a hardcoded list if it is missing. Keep prose factual, dense, no marketing fluff (see docs/APP_DESCRIPTION.md voice notes). No sensitive data: no real hostnames, IPs, emails, customer names.",
+  "tagline": "Cross-platform SSH connection manager - terminal, port forwards, vault, all in one window.",
+  "scenes": [
+    {
+      "title": "Tree with folder inheritance",
+      "body": "Credentials, jump hosts and SSH options cascade from the folder down. Live connections light up green and bubble a count to the parent folder.",
+      "keys": ["drag", "Ctrl+click", "Del"],
+      "art": "tree"
+    },
+    {
+      "title": "Quick palette & live filter",
+      "body": "Ctrl+K fuzzy-jumps to any host, tunnel or bookmark. Enter connects. Type > for app commands: lock the vault, open a workspace, check for updates. The sidebar filter narrows the tree for browse / right-click work without collapsing folders.",
+      "keys": ["Ctrl+K", "arrows", "Enter"],
+      "art": "palette"
+    },
+    {
+      "title": "Tabs, splits, broadcast input",
+      "body": "Multi-tab terminal with horizontal and vertical splits. Toggle broadcast to fan keystrokes out to multiple named groups at once - a session can sit in several groups in parallel. Themes, paste guard, search built in.",
+      "keys": ["Ctrl+Shift+B", "Ctrl+F", "Ctrl+wheel"],
+      "art": "terminal"
+    },
+    {
+      "title": "Live tcpdump panel",
+      "body": "Stream packets straight into a side panel. Sudo handled via your saved password if the host needs it. Capped at 5000 packets server-side; brief output by default.",
+      "keys": ["right-click", "tcpdump"],
+      "art": "tcpdump"
+    },
+    {
+      "title": "HTTP & SOAP probe",
+      "body": "One-off REST/SOAP requests with a \"Route via\" dropdown of your active SOCKS5 forwards. Endpoints behind a VPN-style tunnel become reachable without leaving the app.",
+      "keys": ["JSON", "XML", "Form"],
+      "art": "http"
+    },
+    {
+      "title": "Dynamic inventory",
+      "body": "Folders that auto-populate from Proxmox VE, Hetzner Cloud, DigitalOcean, Linode, Vultr, Scaleway, AWS EC2 and Ansible inventory files. Tags / labels filter what shows; stopped guests appear greyed with a \"connect anyway\" prompt. API tokens live in the vault.",
+      "keys": ["refresh", "tag filter"],
+      "art": "dynamic"
+    },
+    {
+      "title": "VNC console, in-app",
+      "body": "Open a Proxmox VM/LXC console or any VNC host as a tab, rendered by noVNC inside the app - no external client, no X server. Proxmox reuses your inventory API token; generic hosts dial direct or tunnel the RFB port through the connection's SSH session.",
+      "keys": ["Open console", "Ctrl+Alt+Del"],
+      "art": "vnc"
+    },
+    {
+      "title": "Runs on Android too",
+      "body": "The same app - the same Go core, vault and SSH stack - runs on an Android phone (DeX-ready). Unlock with a fingerprint, a single-pane touch layout, an on-screen key bar for the keys a phone keyboard lacks, pinch-to-zoom font size, and a foreground service that keeps sessions alive in the background. opkssh login opens your browser; ssh-tool:// links open the app.",
+      "keys": ["fingerprint", "key bar", "pinch"],
+      "art": "mobile"
+    }
+  ],
+  "features": [
+    {
+      "icon": "tree",
+      "title": "Tree with folder inheritance",
+      "body": "Manage 300+ connections in nested folders. Credentials, jump hosts, and SSH options cascade down. Drag & drop, multi-select, Ctrl+K quick palette."
+    },
+    {
+      "icon": "globe",
+      "title": "Dynamic inventory",
+      "body": "Auto-populated folders that pull live from Proxmox VE, Hetzner Cloud, DigitalOcean, Linode, Vultr, Scaleway, AWS EC2 and Ansible files. Tag/label filters, hide-stopped, on-demand refresh, pin-one-host, convert-folder-to-static."
+    },
+    {
+      "icon": "lock",
+      "title": "Encrypted vault",
+      "body": "Passwords, keys and API tokens sealed with Argon2id + XChaCha20-Poly1305. Machine-bound auto-unlock (DPAPI on Windows, machine-id on Linux), idle auto-lock, strength meter."
+    },
+    {
+      "icon": "split",
+      "title": "Tabs, splits, broadcast",
+      "body": "Multi-tab terminal with horizontal/vertical splits, paste guard, themes, search. Broadcast input to multiple named groups in parallel - one session can broadcast to several groups at once."
+    },
+    {
+      "icon": "windows",
+      "title": "Detach and redock windows",
+      "body": "Tear off panes to separate windows, then snap them back. Tray icon, minimise-to-tray, close-to-tray."
+    },
+    {
+      "icon": "forward",
+      "title": "Port forwards + isolated browser",
+      "body": "Local, remote and dynamic SOCKS5 forwards. One click launches an isolated browser pinned to the SOCKS port."
+    },
+    {
+      "icon": "clock",
+      "title": "opkssh auth, native",
+      "body": "OpenPubkey SSH certificates issued via OIDC, no external binary or filesystem dance. Cert and key live in the vault."
+    },
+    {
+      "icon": "pulse",
+      "title": "Live tcpdump + network insights",
+      "body": "Streamed packet capture inline with per-protocol decode, sudo via saved credential when needed. A live analyzer flags routing and wrong-interface problems (0.0.0.0-bound replies from the wrong source IP, half-open TCP, ICMP unreachable, ARP off-subnet) and a one-click route check confirms the kernel's actual egress. Captures run in the background and survive detaching the tab to its own window."
+    },
+    {
+      "icon": "globe2",
+      "title": "HTTP / SOAP probe",
+      "body": "One-off REST or SOAP requests with auto-detected route via an active SOCKS forward. Endpoints behind VPN become reachable in-app."
+    },
+    {
+      "icon": "list",
+      "title": "Workspaces & snippets",
+      "body": "Named bundles of tabs restore your usual six terminals in one click - or let the app offer to reopen the last session's tabs at startup. Snippet palette fires reusable commands into the active session."
+    },
+    {
+      "icon": "rows",
+      "title": "Batch exec",
+      "body": "Run a one-off command across a multi-selection of hosts. Aggregate view with stdout, stderr and exit per host."
+    },
+    {
+      "icon": "globe2",
+      "title": "VNC console, in-app",
+      "body": "Open a Proxmox VM, LXC, or node console - or any VNC host - as a tab, rendered by noVNC inside the app with no external client, no X server, no install. Proxmox guests reuse your inventory API token (vncproxy + vncwebsocket, self-signed clusters supported); node shells use a realm login; generic hosts dial the RFB port directly or tunnel it through the connection's SSH session. Fit scaling, Ctrl+Alt+Del; the optional VNC password lives in the vault."
+    },
+    {
+      "icon": "globe",
+      "title": "Encrypted sync, your server",
+      "body": "Sync the whole profile - connections, credentials, vault, icons, settings - between machines over any WebDAV server or SSH/SFTP server you control. Sealed with argon2id + XChaCha20-Poly1305 before upload; the server only ever sees ciphertext. SFTP auth reuses a vault credential or a key/password you type in, so a fresh machine can bootstrap. Auto-sync pushes on change; incoming changes apply live with no restart and, optionally, in the background while you work."
+    },
+    {
+      "icon": "clock",
+      "title": "Session recording + player",
+      "body": "Record a session's terminal output to standard asciicast v2 .cast files - output only, keystrokes never touch disk. Built-in player with seek, speed and idle-skip; files also play in asciinema or any web cast player."
+    },
+    {
+      "icon": "lock",
+      "title": "Verified self-update",
+      "body": "In-app updates stream with a progress bar and are sha256-checked against the release manifest before the binary is swapped. Leftovers from the previous version are cleaned up automatically."
+    },
+    {
+      "icon": "import",
+      "title": "Import from your old tool",
+      "body": "Bring 600+ Devolutions RDM entries in one pass, your ~/.ssh/config with ProxyJump chains intact, PuTTY / KiTTY registry exports, or MobaXterm session files. All imports are additive and safe to re-run."
+    },
+    {
+      "icon": "phone",
+      "title": "Android app",
+      "body": "The same Go core, vault and SSH stack on an Android phone (arm64, DeX-ready). Biometric vault unlock backed by the device Keystore, a single-pane touch layout with system-back navigation, an on-screen key bar (Esc/Tab/Ctrl/arrows/^C^D...), pinch-to-zoom font size, and a foreground service that keeps SSH sessions alive when backgrounded. opkssh login opens the system browser; ssh-tool:// deep links open the app. Sideload the APK - no store account needed."
+    }
+  ]
+}

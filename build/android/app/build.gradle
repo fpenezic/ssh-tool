@@ -1,0 +1,81 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    // namespace drives the Java package + BuildConfig + the JNI class path.
+    // It must stay com.wails.app: the Wails runtime (.so) hardcodes JNI
+    // exports as Java_com_wails_app_WailsBridge_* (GetMethodID by mangled
+    // name), so the WailsBridge class has to resolve under com.wails.app or
+    // the native methods don't link (UnsatisfiedLinkError at boot). Only the
+    // installed app identity (applicationId) is renamed below.
+    namespace 'com.wails.app'
+    compileSdk 34
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    defaultConfig {
+        // Installed app identity (and /data/data/<applicationId>/ path).
+        // Decoupled from the namespace above, which stays com.wails.app for
+        // the JNI bridge. Renaming this off the scaffold default makes the
+        // app a distinct package; the Go DataDir / androidAppFilesDir match
+        // /data/data/app.sshtool/files.
+        applicationId "app.sshtool"
+        minSdk 21
+        targetSdk 34
+        // Injected from git by the Taskfile (-PversionName / -PversionCode)
+        // so Android App info matches the in-app version. Falls back to the
+        // scaffold default for a bare Android Studio build with no props.
+        versionCode (project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 1)
+        versionName (project.hasProperty('versionName') ? project.property('versionName') : "1.0")
+
+        // Configure supported ABIs
+        ndk {
+            abiFilters 'arm64-v8a', 'x86_64'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    // Source sets configuration
+    sourceSets {
+        main {
+            // JNI libraries are in jniLibs folder
+            jniLibs.srcDirs = ['src/main/jniLibs']
+            // Assets for the WebView
+            assets.srcDirs = ['src/main/assets']
+        }
+    }
+
+    // Packaging options
+    packagingOptions {
+        // Don't strip Go symbols in debug builds
+        doNotStrip '*/arm64-v8a/libwails.so'
+        doNotStrip '*/x86_64/libwails.so'
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.webkit:webkit:1.9.0'
+    implementation 'com.google.android.material:material:1.11.0'
+    // Vault auto-unlock: Keystore-backed encrypted storage for the
+    // passphrase, gated behind a biometric prompt.
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+    implementation 'androidx.biometric:biometric:1.1.0'
+}
