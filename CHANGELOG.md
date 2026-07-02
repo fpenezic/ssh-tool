@@ -7,6 +7,24 @@ in alpha upstream.
 
 ---
 
+## [0.45.1] - Android opkssh login fix, Apache 2.0 license
+
+### Fixed
+
+- **Android: opkssh login no longer fails on the first try.** After
+  confirming the OIDC login in the browser, the app used to show
+  "failed to exchange token ... no such host" and you had to close
+  the browser and log in again. Android freezes a backgrounded app's
+  network while you are in the browser, and the token exchange fired
+  into that frozen window. The app now keeps itself network-alive
+  for the duration of the login (a "Signing in..." notification
+  appears briefly when no sessions are open).
+
+### Changed
+
+- **ssh-tool is now licensed under the Apache License 2.0.** The
+  LICENSE, NOTICE and contribution terms are in the repo root.
+
 ## [0.45.0] - GitHub home, GitHub Releases updater, Wails alpha2.111
 
 The project now lives at
