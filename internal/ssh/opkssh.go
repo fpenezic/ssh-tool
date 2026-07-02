@@ -37,6 +37,17 @@ import (
 // portable core free of the desktop shell and CGO-on-android coupling.
 var BrowserOpenHook func(url string) error
 
+// LoginKeepAliveHook, when non-nil, brackets the interactive OIDC login:
+// called with true just before the browser opens and false when the flow
+// finishes (success or failure). Android wires this to the foreground
+// service: while the user confirms the login in the external browser this
+// app is backgrounded and android freezes its network, so the token
+// exchange that fires the instant the redirect lands back used to die on
+// its first DNS lookup ("no such host" on the token endpoint; a manual
+// retry succeeded because the process was warm again). Desktop leaves it
+// nil - there is no background network freeze to guard against.
+var LoginKeepAliveHook func(active bool)
+
 // OpksshConfig is extracted from a credential's config_json.
 type OpksshConfig struct {
 	CredentialID                     string
@@ -279,6 +290,13 @@ func runOpksshLoginNative(ctx context.Context, cfg *OpksshConfig) (keyPEM, certB
 	// oc.Auth and frees this goroutine.
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
+
+	// Keep the process network-alive across the browser round-trip; the
+	// token exchange runs inside Auth the moment the redirect lands.
+	if LoginKeepAliveHook != nil {
+		LoginKeepAliveHook(true)
+		defer LoginKeepAliveHook(false)
+	}
 
 	log.Printf("opkssh: opening browser for OIDC login (5-minute timeout)")
 	pkt, err := oc.Auth(ctx)

@@ -47,7 +47,7 @@ func buildApp(appInst *App) *application.App {
 // the WebView and the asset server; a Go-side WebviewWindow hijacks asset
 // serving). It only wires the native biometric result event into the
 // frontend poll queue. Returns nil (nothing to defer).
-func configurePlatform(_ *application.App, _ *App) func() {
+func configurePlatform(_ *application.App, appInst *App) func() {
 	// HOME is set by the Activity before this point, so a writable TMPDIR
 	// can now be derived (sync pull / backup staging need os.CreateTemp).
 	ensureMobileTempDir()
@@ -61,5 +61,10 @@ func configurePlatform(_ *application.App, _ *App) func() {
 		application.Android.OpenURL(url)
 		return nil
 	}
+
+	// Hold the foreground service up while an opkssh OIDC login is in
+	// flight so the backgrounded process keeps network for the token
+	// exchange (see setLoginKeepAlive).
+	sshlayer.LoginKeepAliveHook = appInst.setLoginKeepAlive
 	return nil
 }
