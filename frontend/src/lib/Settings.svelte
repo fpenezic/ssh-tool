@@ -1696,11 +1696,14 @@
   <div class="group">
     <h2>Updates</h2>
     <p class="hint">
-      The app checks <code>sshtool.app/api/latest</code> 5 s after
-      launch and then every 6 hours. A new release shows up as a
-      green pill in the status bar; click it to open the
-      changelog in your browser. No telemetry is sent - the
-      request is a plain GET with the User-Agent header.
+      The app checks GitHub Releases
+      (<code>github.com/fpenezic/ssh-tool</code>) 5 s after launch
+      and then every 6 hours, falling back to
+      <code>sshtool.app/api/latest</code> when GitHub is
+      unreachable. A new release shows up as a green pill in the
+      status bar; click it to open the changelog in your browser.
+      No telemetry is sent - the request is a plain GET with the
+      User-Agent header.
     </p>
     <fieldset class="check-cards">
       <label class:active={!updateCheckDisabled}>
