@@ -21,7 +21,12 @@
   // so its ITheme type-checks cleanly.
   function themeToXterm(t: TerminalTheme) {
     const { id, name, isLight, ...colors } = t;
-    return colors;
+    // xterm paints the glyph under a block cursor in cursorAccent,
+    // which defaults to black. Dark themes get away with it (their
+    // cursor is light), but on light themes the cursor block is dark
+    // too, so the character under a blinking cursor vanished. The
+    // theme background is the correct inverse for every scheme.
+    return { ...colors, cursorAccent: t.background };
   }
   import PasteGuard from "./PasteGuard.svelte";
   import TermKeyBar from "./TermKeyBar.svelte";
