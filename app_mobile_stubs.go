@@ -31,3 +31,9 @@ func SaveFileDialog(SaveFileDialogOptions) (string, error)      { return "", nil
 // LaunchServices). Not applicable on mobile.
 func registerURLScheme() error { return ErrURLSchemeNotSupported }
 func urlSchemeStatus() string  { return "" }
+
+// File-manager context-menu integration is desktop-only for the same
+// reason.
+func registerExplorerMenu() error   { return ErrURLSchemeNotSupported }
+func unregisterExplorerMenu() error { return ErrURLSchemeNotSupported }
+func explorerMenuStatus() string    { return "" }

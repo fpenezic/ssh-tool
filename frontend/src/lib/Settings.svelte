@@ -815,7 +815,34 @@
     }
   }
 
-  onMount(() => { refreshURLSchemeStatus(); });
+  // --- "Open in ssh-tool" file-manager context menu ---
+  let explorerMenuStatus = $state("");
+  let explorerMenuBusy = $state(false);
+  let explorerMenuMsg = $state<string | null>(null);
+
+  async function refreshExplorerMenuStatus() {
+    try { explorerMenuStatus = await api.explorerMenuStatus(); } catch {}
+  }
+
+  async function toggleExplorerMenu() {
+    explorerMenuBusy = true; explorerMenuMsg = null;
+    try {
+      if (explorerMenuStatus) {
+        await api.explorerMenuUnregister();
+        explorerMenuMsg = "Removed from the file manager's right-click menu.";
+      } else {
+        await api.explorerMenuRegister();
+        explorerMenuMsg = "Added. Right-click a folder (or inside one) to see \"Open in ssh-tool\".";
+      }
+      await refreshExplorerMenuStatus();
+    } catch (e: any) {
+      explorerMenuMsg = `Failed: ${errMsg(e)}`;
+    } finally {
+      explorerMenuBusy = false;
+    }
+  }
+
+  onMount(() => { refreshURLSchemeStatus(); refreshExplorerMenuStatus(); });
 
   // Watch the deep-link store: when App.svelte gets
   // `deep_link_import` it sets pendingImportURL here, we navigate
@@ -1519,6 +1546,32 @@
         </label>
       {/each}
     </fieldset>
+
+    {#if !isMobile && !settingsIsMac}
+      <h2 style="margin-top: 1.5rem;">File manager integration</h2>
+      <p class="hint">
+        Adds <strong>Open in ssh-tool</strong> to the right-click menu
+        on directories (Windows Explorer; Dolphin and the Nautilus
+        Scripts menu on Linux). Picking it opens the default local
+        shell above as a tab, already in that directory. Per-user
+        registration, no admin rights.
+      </p>
+      <div class="scheme-row">
+        <span class="lbl">Context menu</span>
+        {#if explorerMenuStatus}
+          <span class="status-ok">installed</span>
+          <code class="status-detail mono">{explorerMenuStatus}</code>
+        {:else}
+          <span class="status-warn">not installed</span>
+        {/if}
+        <button class="picker-btn" disabled={explorerMenuBusy} onclick={toggleExplorerMenu}>
+          {explorerMenuBusy ? "Working…" : explorerMenuStatus ? "Remove" : "Add to menu"}
+        </button>
+      </div>
+      {#if explorerMenuMsg}
+        <p class="hint">{explorerMenuMsg}</p>
+      {/if}
+    {/if}
 
     <h2 style="margin-top: 1.5rem;">External terminal</h2>
     <p class="hint">

@@ -59,6 +59,12 @@ type SpawnRequest struct {
 
 	// Cols / Rows are the initial PTY dimensions. Defaults 120x32.
 	Cols, Rows uint16
+
+	// Dir is the working directory the shell starts in. Empty keeps
+	// the process default (the app's own cwd). On Windows this works
+	// for the wsl kind too: wsl.exe inherits the Windows cwd and maps
+	// it to the /mnt/... equivalent itself.
+	Dir string
 }
 
 // Spawn creates a new Session and starts the child. The caller is
@@ -87,6 +93,13 @@ func Spawn(req SpawnRequest) (*Session, error) {
 	}
 
 	cmd := p.Command(name, args...)
+	if req.Dir != "" {
+		if st, err := os.Stat(req.Dir); err == nil && st.IsDir() {
+			cmd.Dir = req.Dir
+		}
+		// A vanished/invalid dir silently falls back to the default
+		// cwd - better a shell in the wrong place than no shell.
+	}
 	cmd.Env = append(os.Environ(),
 		"TERM=xterm-256color",
 		"COLORTERM=truecolor",

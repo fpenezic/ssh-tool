@@ -53,6 +53,22 @@ func parseDeepLinkArg(args []string) string {
 	return ""
 }
 
+// parseOpenDirArg looks through CLI args for `--open-dir=<path>` or
+// the two-slot `--open-dir <path>` form (the file-manager
+// registrations use the latter: `"exe" --open-dir "%V"`). Returns ""
+// if nothing matches.
+func parseOpenDirArg(args []string) string {
+	for i, a := range args {
+		if strings.HasPrefix(a, "--open-dir=") {
+			return strings.TrimPrefix(a, "--open-dir=")
+		}
+		if a == "--open-dir" && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
 // platformPreflight runs the desktop pre-window setup. Returns true if the
 // process should exit immediately (it handed a deep link to an
 // already-running instance via the single-instance socket).
@@ -69,7 +85,7 @@ func platformPreflight() bool {
 	// child processes for detached terminal windows and an
 	// unconditional hand-off would break that flow (the detach
 	// process would exit instead of becoming its own window).
-	if parseDeepLinkArg(os.Args[1:]) != "" {
+	if parseDeepLinkArg(os.Args[1:]) != "" || parseOpenDirArg(os.Args[1:]) != "" {
 		if trySendToRunning(os.Args[1:]) {
 			return true
 		}
@@ -271,8 +287,27 @@ func configurePlatform(app *application.App, appInst *App) func() {
 		}()
 	}
 
+	// "Open in ssh-tool" from a file manager: forward the directory to
+	// the frontend, which opens the default local shell cd'd into it.
+	// Same cold-start delay contract as the deep link - the webview
+	// needs a beat before its event listeners are registered.
+	dispatchOpenDir := func(argv []string, delay time.Duration) {
+		dir := parseOpenDirArg(argv)
+		if dir == "" {
+			return
+		}
+		log.Printf("open-dir: %s", dir)
+		go func() {
+			if delay > 0 {
+				time.Sleep(delay)
+			}
+			EventsEmit("open_dir_shell", dir)
+		}()
+	}
+
 	// Cold-start path: did this invocation carry a deep link?
 	dispatchDeepLink(os.Args[1:], 1200*time.Millisecond)
+	dispatchOpenDir(os.Args[1:], 1200*time.Millisecond)
 
 	// macOS path: Launch Services delivers ssh-tool:// opens as an
 	// Apple Event, never as argv, so the scan above can't see them.
@@ -304,6 +339,7 @@ func configurePlatform(app *application.App, appInst *App) func() {
 			appInst.windowHidden.Store(false)
 		}
 		dispatchDeepLink(argv, 200*time.Millisecond)
+		dispatchOpenDir(argv, 200*time.Millisecond)
 	})
 	if err != nil {
 		log.Printf("single-instance: %v (continuing without)", err)

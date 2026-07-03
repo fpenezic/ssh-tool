@@ -258,7 +258,7 @@ class LastSessionStore {
       paneTabs.addTab(res.session_id, entry.name);
       view.setTab("terminal");
     } else if (kind === "local") {
-      const res = await api.localShellOpen(spec.shellKind ?? "", 120, 32);
+      const res = await api.localShellOpen(spec.shellKind ?? "", "", 120, 32);
       sessions.add({
         sessionId: res.session_id,
         connectionId: "",
