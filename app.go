@@ -2989,11 +2989,12 @@ type LocalShellOpenResult struct {
 // (see internal/local.resolveShell). Output events use the same
 // pty_output:<sessionID> channel as SSH so the xterm component
 // doesn't need to know which kind it is.
-func (a *App) LocalShellOpen(kind string, cols, rows uint16) (*LocalShellOpenResult, error) {
+func (a *App) LocalShellOpen(kind, dir string, cols, rows uint16) (*LocalShellOpenResult, error) {
 	sess, err := local.Spawn(local.SpawnRequest{
 		Kind: kind,
 		Cols: cols,
 		Rows: rows,
+		Dir:  dir,
 	})
 	if err != nil {
 		return nil, err
@@ -4117,6 +4118,24 @@ func (a *App) RegisterURLScheme() error {
 // `ssh-tool-url.desktop`).
 func (a *App) URLSchemeStatus() string {
 	return urlSchemeStatus()
+}
+
+// ExplorerMenuRegister adds "Open in ssh-tool" to the OS file
+// manager's right-click menu for directories (Explorer on Windows,
+// Dolphin/Nautilus on Linux). Per-user / no admin. Idempotent.
+func (a *App) ExplorerMenuRegister() error {
+	return registerExplorerMenu()
+}
+
+// ExplorerMenuUnregister removes the file-manager integration.
+func (a *App) ExplorerMenuUnregister() error {
+	return unregisterExplorerMenu()
+}
+
+// ExplorerMenuStatus returns a short description of the installed
+// integration ("" = not installed).
+func (a *App) ExplorerMenuStatus() string {
+	return explorerMenuStatus()
 }
 
 // ssrfDialControl is a net.Dialer.Control hook that blocks dials to

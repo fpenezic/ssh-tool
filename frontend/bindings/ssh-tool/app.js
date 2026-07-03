@@ -853,6 +853,33 @@ export function DynamicFoldersList() {
 }
 
 /**
+ * ExplorerMenuRegister adds "Open in ssh-tool" to the OS file
+ * manager's right-click menu for directories (Explorer on Windows,
+ * Dolphin/Nautilus on Linux). Per-user / no admin. Idempotent.
+ * @returns {$CancellablePromise<void>}
+ */
+export function ExplorerMenuRegister() {
+    return $Call.ByID(2441846592);
+}
+
+/**
+ * ExplorerMenuStatus returns a short description of the installed
+ * integration ("" = not installed).
+ * @returns {$CancellablePromise<string>}
+ */
+export function ExplorerMenuStatus() {
+    return $Call.ByID(575179119);
+}
+
+/**
+ * ExplorerMenuUnregister removes the file-manager integration.
+ * @returns {$CancellablePromise<void>}
+ */
+export function ExplorerMenuUnregister() {
+    return $Call.ByID(3804843843);
+}
+
+/**
  * @param {$models.ExportSubtreeRequest} req
  * @returns {$CancellablePromise<$models.ExportSubtreeResult | null>}
  */
@@ -1228,12 +1255,13 @@ export function LocalShellList() {
  * pty_output:<sessionID> channel as SSH so the xterm component
  * doesn't need to know which kind it is.
  * @param {string} kind
+ * @param {string} dir
  * @param {number} cols
  * @param {number} rows
  * @returns {$CancellablePromise<$models.LocalShellOpenResult | null>}
  */
-export function LocalShellOpen(kind, cols, rows) {
-    return $Call.ByID(2863600362, kind, cols, rows).then(/** @type {($result: any) => any} */(($result) => {
+export function LocalShellOpen(kind, dir, cols, rows) {
+    return $Call.ByID(2863600362, kind, dir, cols, rows).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType69($result);
     }));
 }

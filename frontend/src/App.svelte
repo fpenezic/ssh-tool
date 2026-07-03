@@ -408,10 +408,10 @@
   // Resolve the kind to actually spawn. Explicit `kind` argument
   // wins (dropdown click), then the saved preference, then "" so the
   // backend picks an auto fallback.
-  async function openLocalShell(kind?: string) {
+  async function openLocalShell(kind?: string, dir?: string) {
     const effective = kind ?? localShellPrefs.kind ?? "";
     try {
-      const res = await api.localShellOpen(effective, 120, 32);
+      const res = await api.localShellOpen(effective, dir ?? "", 120, 32);
       sessions.add({
         sessionId: res.session_id,
         connectionId: "",
@@ -546,6 +546,15 @@
     if (typeof url === "string" && url) {
       deepLink.setImportURL(url);
       view.setTab("settings");
+    }
+  });
+
+  // OS file-manager integration: "Open in ssh-tool" on a directory
+  // launches/reuses the app with --open-dir; the backend forwards the
+  // path here and we open the default local shell cd'd into it.
+  EventsOn("open_dir_shell", (dir: any) => {
+    if (typeof dir === "string" && dir) {
+      openLocalShell(undefined, dir);
     }
   });
 

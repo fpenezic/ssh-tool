@@ -612,8 +612,8 @@ export const api = {
   openNativeTerminal: (kind: string) =>
     G.OpenNativeTerminal(kind) as unknown as Promise<void>,
 
-  localShellOpen: (kind: string, cols: number, rows: number) =>
-    G.LocalShellOpen(kind, cols, rows) as unknown as Promise<{
+  localShellOpen: (kind: string, dir: string, cols: number, rows: number) =>
+    G.LocalShellOpen(kind, dir, cols, rows) as unknown as Promise<{
       session_id: string;
       kind: string;
       display: string;
@@ -813,6 +813,12 @@ export const api = {
     G.RegisterURLScheme() as unknown as Promise<void>,
   urlSchemeStatus: () =>
     G.URLSchemeStatus() as unknown as Promise<string>,
+  explorerMenuRegister: () =>
+    G.ExplorerMenuRegister() as unknown as Promise<void>,
+  explorerMenuUnregister: () =>
+    G.ExplorerMenuUnregister() as unknown as Promise<void>,
+  explorerMenuStatus: () =>
+    G.ExplorerMenuStatus() as unknown as Promise<string>,
   importArchive: (req: {
     text: string;
     conflict: "skip" | "rename" | "overwrite";
