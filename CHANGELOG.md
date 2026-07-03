@@ -7,6 +7,31 @@ in alpha upstream.
 
 ---
 
+## [0.46.0] - Open in ssh-tool from the file manager
+
+### Added
+
+- **"Open in ssh-tool" in the file manager's right-click menu.**
+  Right-click a directory (or the background inside one) and pick
+  Open in ssh-tool: the app opens (or focuses, if already running)
+  with your default local shell as a tab, already in that directory -
+  like "Open in Terminal", but inside the window that holds your SSH
+  sessions. Install/remove it from Settings -> Connection -> File
+  manager integration; per-user, no admin rights. Supported in
+  Windows Explorer (on Windows 11 it appears under "Show more
+  options" - the modern top-level menu needs app signing, tracked in
+  the backlog), KDE Dolphin and the GNOME Nautilus Scripts menu.
+  Also works from scripts: `ssh-tool --open-dir <path>`. On Windows
+  the WSL shell lands in the /mnt/... equivalent automatically.
+
+### Fixed
+
+- **Light terminal themes: the character under the block cursor was
+  invisible while the cursor blinked.** The glyph inside the cursor
+  is now painted in the theme's background color (a proper inverse),
+  in the live terminal and the recording player alike. Dark themes
+  were never affected.
+
 ## [0.45.2] - Fully automated releases
 
 ### Changed
