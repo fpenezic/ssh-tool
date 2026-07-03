@@ -283,6 +283,12 @@ update params + download progress shipped right after; what remains):
 
 ## OS integration
 
+- **Windows 11 top-level context menu** - the classic registry verb
+  lands under "Show more options" on Win11 by design. Appearing in
+  the default right-click menu needs an IExplorerCommand COM DLL +
+  sparse MSIX package with identity, which in turn needs a trusted
+  code signature - revisit together with the code-signing story
+  (docs/why-not-signed). msix scaffolding exists in build/windows.
 - **macOS "Open in ssh-tool" Finder action** - Windows Explorer and
   Linux (Dolphin/Nautilus) shipped; Finder needs a Quick Action
   (Automator workflow) or Finder Sync extension bundled into the
