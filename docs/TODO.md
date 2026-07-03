@@ -281,6 +281,13 @@ update params + download progress shipped right after; what remains):
 
 ---
 
+## OS integration
+
+- **macOS "Open in ssh-tool" Finder action** - Windows Explorer and
+  Linux (Dolphin/Nautilus) shipped; Finder needs a Quick Action
+  (Automator workflow) or Finder Sync extension bundled into the
+  .app - packaging work, revisit with the macOS build.
+
 ## Window management
 
 - **Save/restore window layout** between launches. Currently

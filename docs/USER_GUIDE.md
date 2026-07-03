@@ -1697,6 +1697,15 @@ Side-nav with grouped panels (last-opened section persists as
   a "Default for plain click" selector that mirrors this
   setting. The button label updates to show the current default
   (e.g. `Local: WSL`). Saved as `local_shell_kind`.
+- **File manager integration** - adds **Open in ssh-tool** to the
+  right-click menu on directories: Windows Explorer (folder and
+  folder background), KDE Dolphin, and the GNOME Nautilus Scripts
+  submenu. Picking it opens the default local shell (setting above)
+  as a tab already cd'd into that directory - like "Open in
+  Terminal", but inside the window that holds your SSH sessions.
+  Per-user registration, no admin rights; the same card removes it.
+  Not available on macOS yet. Under the hood it launches
+  `ssh-tool --open-dir <path>`, which also works from scripts.
 - **External terminal** - three radio cards (Windows Terminal /
   PowerShell / Command Prompt). Drives both the **Native
   terminal** top-bar button and the **Open in external terminal**
