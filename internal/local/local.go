@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sync"
 
@@ -90,6 +91,17 @@ func Spawn(req SpawnRequest) (*Session, error) {
 	if err := p.Resize(int(req.Cols), int(req.Rows)); err != nil {
 		_ = p.Close()
 		return nil, err
+	}
+
+	// With cmd.Dir set, a relative executable name is resolved against
+	// that directory instead of PATH (documented os/exec semantics that
+	// go-pty mirrors) - "wsl.exe" would be looked up as
+	// <dir>\wsl.exe and fail. Pin the shell to its absolute path
+	// before the Dir assignment below.
+	if req.Dir != "" && !filepath.IsAbs(name) {
+		if abs, err := exec.LookPath(name); err == nil {
+			name = abs
+		}
 	}
 
 	cmd := p.Command(name, args...)
