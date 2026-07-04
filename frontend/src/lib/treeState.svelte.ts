@@ -56,6 +56,13 @@ class ExpandedSet {
     this.scheduleSave();
   }
 
+  // Expand-all / collapse-all. Replaces the whole set: expand gets
+  // every id the caller passes (all live folders), collapse empties it.
+  setAll(ids: string[], expanded: boolean) {
+    this.ids = expanded ? new Set(ids) : new Set();
+    this.scheduleSave();
+  }
+
   // Drop ids that no longer exist in the live tree. Called after a load
   // so the stored set doesn't grow forever after deletes.
   prune(liveIds: Set<string>) {

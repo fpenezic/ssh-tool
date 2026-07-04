@@ -5,7 +5,8 @@
   import { computeIntent, isInvalidDrop, applyDrop, applyDropToRoot, applyMultiDrop, applyMultiDropToRoot, type DragKind } from "./treeDnd";
   import { setMultiDragImage } from "./dragImage";
   import QuickAccess from "./QuickAccess.svelte";
-  import { IconFolderPlus, IconPlus, IconRotateCw, IconHost, IconLoading, IconX, IconGlobe } from "./iconMap";
+  import { IconFolderPlus, IconPlus, IconRotateCw, IconHost, IconLoading, IconX, IconGlobe, IconExpandAll, IconCollapseAll } from "./iconMap";
+  import { expandedConnections } from "./treeState.svelte";
   import TagFilter from "./TagFilter.svelte";
   import { tagFilter } from "./tagFilter.svelte.ts";
   import { nameFilter } from "./nameFilter.svelte.ts";
@@ -416,6 +417,17 @@
       <button onclick={() => dynEditor.showNew(null)} title="New dynamic folder (cloud / hypervisor)" class="iconbtn">
         <IconGlobe size={14} />
       </button>
+      {#if tree.folders.length > 0}
+        {#if expandedConnections.ids.size > 0}
+          <button onclick={() => expandedConnections.setAll([], false)} title="Collapse all folders" class="iconbtn">
+            <IconCollapseAll size={14} />
+          </button>
+        {:else}
+          <button onclick={() => expandedConnections.setAll(tree.folders.map((f) => f.id), true)} title="Expand all folders" class="iconbtn">
+            <IconExpandAll size={14} />
+          </button>
+        {/if}
+      {/if}
       <button onclick={() => tree.load()} title="Reload" class="iconbtn">
         <IconRotateCw size={14} />
       </button>

@@ -8,7 +8,7 @@
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
-  import { credentialKindIcon, IconFolderPlus, IconPlus, IconRotateCw, IconKey } from "./iconMap";
+  import { credentialKindIcon, IconFolderPlus, IconPlus, IconRotateCw, IconKey, IconExpandAll, IconCollapseAll } from "./iconMap";
   import { connectionActions } from "./connectionActions.svelte";
 
   interface Props {
@@ -116,6 +116,17 @@
       <button onclick={onCreate} title="New credential" class="iconbtn">
         <IconPlus size={14} /><IconKey size={14} />
       </button>
+      {#if credentials.folders.length > 0}
+        {#if expandedCredentials.ids.size > 0}
+          <button onclick={() => expandedCredentials.setAll([], false)} title="Collapse all folders" class="iconbtn">
+            <IconCollapseAll size={14} />
+          </button>
+        {:else}
+          <button onclick={() => expandedCredentials.setAll(credentials.folders.map((f) => f.id), true)} title="Expand all folders" class="iconbtn">
+            <IconExpandAll size={14} />
+          </button>
+        {/if}
+      {/if}
       <button onclick={() => credentials.load()} title="Reload" class="iconbtn">
         <IconRotateCw size={14} />
       </button>
