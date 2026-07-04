@@ -4,7 +4,7 @@
   import { isMobile } from "./platform";
   import PasswordInput from "./PasswordInput.svelte";
   import { api, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult } from "./api";
-  import { tree, credentials, paneTabs, view } from "./stores.svelte";
+  import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
   import FolderPicker from "./FolderPicker.svelte";
   import type { Folder } from "./api";
   import { copyPastePrefs, type CopyPasteMode } from "./copyPastePrefs.svelte";
@@ -119,6 +119,14 @@
     }
   }
   let versionInfo = $state<{ name: string; version: string; commit: string; schema_version: number } | null>(null);
+  // Profile statistics for the About section. Tree + credential stores
+  // are loaded at app start so the counts are just derived; active
+  // tunnels change at runtime and are fetched when the section opens.
+  let activeForwards = $state<number | null>(null);
+  const dynamicFolderCount = $derived(Object.keys(tree.dynamicFolders).length);
+  const connectedSessions = $derived(
+    sessions.tabs.filter((s) => s.status === "connected").length
+  );
 
   // --- Workspaces state --------------------------------------------------
   let wsBusyId = $state<string | null>(null);
@@ -960,6 +968,15 @@
   ];
 
   let activeSection = $state<SectionId>("terminal");
+
+  // Refresh the active-tunnel count every time the About section opens;
+  // "" asks the backend for forwards across all sessions.
+  $effect(() => {
+    if (activeSection !== "about") return;
+    api.forwardsActive("")
+      .then((l) => (activeForwards = l?.length ?? 0))
+      .catch(() => (activeForwards = null));
+  });
 
   // ----- Vault manual lock -----
   let lockBusy = $state(false);
@@ -3275,6 +3292,34 @@
     {:else}
       <p class="hint">Loading…</p>
     {/if}
+    <h3 style="margin-top:1.2rem">Profile statistics</h3>
+    <dl class="about-list">
+      <dt>Connections</dt>
+      <dd>{tree.connections.length}</dd>
+      <dt>Folders</dt>
+      <dd>
+        {tree.folders.length}
+        {#if dynamicFolderCount > 0}
+          <span class="hint inline">({dynamicFolderCount} dynamic)</span>
+        {/if}
+      </dd>
+      <dt>Credentials</dt>
+      <dd>
+        {credentials.list.length}
+        {#if credentials.folders.length > 0}
+          <span class="hint inline">(in {credentials.folders.length} folder{credentials.folders.length === 1 ? "" : "s"})</span>
+        {/if}
+      </dd>
+      <dt>Open sessions</dt>
+      <dd>
+        {sessions.tabs.length}
+        {#if sessions.tabs.length > 0}
+          <span class="hint inline">({connectedSessions} connected)</span>
+        {/if}
+      </dd>
+      <dt>Active tunnels</dt>
+      <dd>{activeForwards ?? "-"}</dd>
+    </dl>
     <p class="hint">
       Version and commit are injected at build time via ldflags. A
       <code>dev</code> tag means the binary was built without those
