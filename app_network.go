@@ -18,6 +18,7 @@ import (
 	"net"
 	"time"
 
+	"ssh-tool/internal/inventory"
 	"ssh-tool/internal/store"
 	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/wg"
@@ -85,6 +86,36 @@ func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 	}, nil
 }
 
+// wgBackgroundDialerFor is the timer-refresh variant: it NEVER starts
+// a tunnel. Paused -> direct; tunnel already up (someone is working
+// through it) -> use it; auto mode -> direct only, no tunnel
+// fallback; otherwise inventory.ErrTunnelWaiting so the refresh is
+// skipped as an expected idle state.
+func (a *App) wgBackgroundDialerFor(profileID string) (sshlayer.ContextDialer, error) {
+	row, err := a.db.GetNetworkProfile(profileID)
+	if err != nil {
+		return nil, err
+	}
+	var p wg.Profile
+	_ = json.Unmarshal([]byte(row.ConfigJSON), &p)
+
+	direct := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, network, addr)
+	}
+	if p.Paused {
+		return direct, nil
+	}
+	if t := a.wgman.Get(profileID); t != nil {
+		a.wgTouch(profileID)
+		return t.DialContext, nil
+	}
+	if p.Mode == wg.ModeAuto {
+		return direct, nil
+	}
+	return nil, inventory.ErrTunnelWaiting
+}
+
 func wgPrivateKeyVaultKey(profileID string) string {
 	return "wg_private_key:" + profileID
 }
@@ -131,9 +162,13 @@ func (a *App) loadWgProfile(profileID string) (*wg.Profile, error) {
 }
 
 // ensureWgTunnel returns the running tunnel for the profile, starting
-// it (vault secrets + userspace device) when needed.
+// it (vault secrets + userspace device) when needed. Every caller
+// leaves a short wgTouch hold so tunnels whose user never registers a
+// session (inventory fetch, connect that fails auth, manual test)
+// still flow into the idle-stop accounting instead of running forever.
 func (a *App) ensureWgTunnel(profileID string) (*wg.Tunnel, error) {
 	if t := a.wgman.Get(profileID); t != nil {
+		a.wgTouch(profileID)
 		return t, nil
 	}
 	p, err := a.loadWgProfile(profileID)
@@ -144,6 +179,7 @@ func (a *App) ensureWgTunnel(profileID string) (*wg.Tunnel, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.wgTouch(profileID)
 	a.recordAudit("network.tunnel.start", profileID, map[string]string{"name": p.Name})
 	EventsEmit("network_tunnel_changed", profileID)
 	return t, nil
@@ -387,6 +423,17 @@ func (a *App) NetworkProfileSetPolicy(id, mode string, paused bool) (*NetworkPro
 // network path doesn't sit open all day unused.
 const wgLinger = 2 * time.Minute
 
+// wgTouch places a short-lived hold on a profile's tunnel: an
+// anonymous acquire that self-releases after 30s. Every tunnel dial
+// that has no session lifecycle of its own (inventory fetch, failed
+// SSH attempt, manual test) goes through this, so such tunnels still
+// reach wgRelease's idle-stop path instead of staying up forever.
+func (a *App) wgTouch(profileID string) {
+	key := fmt.Sprintf("touch:%s:%d", profileID, time.Now().UnixNano())
+	a.wgAcquire(profileID, key)
+	time.AfterFunc(30*time.Second, func() { a.wgRelease(key) })
+}
+
 // wgAcquire marks a session as using a profile's tunnel and cancels
 // any pending idle stop.
 func (a *App) wgAcquire(profileID, sessionID string) {
@@ -434,7 +481,11 @@ func (a *App) wgRelease(sessionID string) {
 			}
 		}
 		a.wgSessMu.Unlock()
-		log.Printf("wg: tunnel %s idle for %s, stopping", pid, wgLinger)
+		name := pid
+		if t := a.wgman.Get(pid); t != nil {
+			name = t.Name
+		}
+		log.Printf("wg: tunnel %s idle for %s, stopping", name, wgLinger)
 		a.wgman.Stop(pid)
 		EventsEmit("network_tunnel_changed", pid)
 	})

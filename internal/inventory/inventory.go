@@ -24,7 +24,25 @@ import (
 // the host app (same pattern as ssh.FirstHopDialerHook); left nil in
 // tests and headless use, where a configured profile then fails
 // loudly instead of dialing outside the tunnel.
-var TunnelDialContext func(profileID string) (func(ctx context.Context, network, addr string) (net.Conn, error), error)
+//
+// background=true marks a timer-driven refresh: the app must NOT
+// start a tunnel for it (return ErrTunnelWaiting instead when the
+// tunnel isn't already up). A passive app shouldn't hold a VPN path
+// to a client network open around the clock just to poll inventory;
+// manual refreshes and live SSH sessions are the signals that bring
+// the tunnel up.
+var TunnelDialContext func(profileID string, background bool) (func(ctx context.Context, network, addr string) (net.Conn, error), error)
+
+// ErrTunnelWaiting: a background refresh needed the profile's tunnel
+// and it wasn't running. Recorded as folder status, not an error -
+// the cached entries stay and the next refresh with the tunnel up
+// (or a manual one) recovers.
+var ErrTunnelWaiting = fmt.Errorf("waiting for VPN tunnel - connect through the profile or refresh manually")
+
+// backgroundRefreshKey rides inside the resolved config map from
+// Manager.Refresh to httpClient. Underscore-prefixed so it can never
+// collide with a real provider config field.
+const backgroundRefreshKey = "_background_refresh"
 
 // httpClient builds the HTTP client a provider should use for its
 // API: plain unless cfg["network_profile_id"] routes it through a
@@ -39,7 +57,8 @@ func httpClient(cfg map[string]any, timeout time.Duration, insecure bool) (*http
 		if TunnelDialContext == nil {
 			return nil, fmt.Errorf("network profile configured but tunnel support not wired")
 		}
-		dial, err := TunnelDialContext(id)
+		background, _ := cfg[backgroundRefreshKey].(bool)
+		dial, err := TunnelDialContext(id, background)
 		if err != nil {
 			return nil, fmt.Errorf("network profile: %w", err)
 		}

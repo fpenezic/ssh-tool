@@ -377,9 +377,14 @@ func (a *App) initialise() {
 		return a.wgDialerFor(*s.NetworkProfileID)
 	}
 	// Same tunnels for dynamic-inventory API calls (a Proxmox that is
-	// only reachable over VPN). The provider config carries the
-	// profile id; policy (auto/paused) applies the same way.
-	inventory.TunnelDialContext = func(profileID string) (func(ctx context.Context, network, addr string) (net.Conn, error), error) {
+	// only reachable over VPN). Manual refreshes may start the tunnel;
+	// timer refreshes only ride one that's already up
+	// (wgBackgroundDialerFor) so a passive app never holds a VPN path
+	// open just to poll inventory.
+	inventory.TunnelDialContext = func(profileID string, background bool) (func(ctx context.Context, network, addr string) (net.Conn, error), error) {
+		if background {
+			return a.wgBackgroundDialerFor(profileID)
+		}
 		return a.wgDialerFor(profileID)
 	}
 	a.inventory = inventory.NewManager(db, vault, func(folderID string) {

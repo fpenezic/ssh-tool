@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -144,8 +145,18 @@ func (m *Manager) Refresh(ctx context.Context, folderID string, force bool) erro
 		setError(err.Error())
 		return err
 	}
+	// Timer refreshes must not start a VPN tunnel for a profile-routed
+	// provider API; force=true (user action) may. See TunnelDialContext.
+	cfg[backgroundRefreshKey] = !force
 	entries, err := prov.Fetch(ctx, cfg)
 	if err != nil {
+		if errors.Is(err, ErrTunnelWaiting) {
+			// Expected idle state, not a failure: keep the cached
+			// entries, surface the wait as folder status, and don't
+			// spam the log every cycle.
+			setError(ErrTunnelWaiting.Error())
+			return nil
+		}
 		setError(err.Error())
 		return err
 	}

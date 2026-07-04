@@ -18,6 +18,7 @@ import (
 // Tunnel is one live userspace WireGuard device + its netstack.
 type Tunnel struct {
 	ProfileID string
+	Name      string // profile display name, for logs / UI
 	dev       *device.Device
 	tnet      *netstack.Net
 	startedAt time.Time
@@ -90,7 +91,7 @@ func (m *Manager) Stop(profileID string) {
 	m.mu.Unlock()
 	if ok {
 		t.dev.Close()
-		log.Printf("wg: tunnel stopped for profile %s", profileID)
+		log.Printf("wg: tunnel %s stopped", t.Name)
 	}
 }
 
@@ -186,7 +187,7 @@ func startTunnel(p *Profile) (*Tunnel, error) {
 		dev.Close()
 		return nil, fmt.Errorf("device up: %w", err)
 	}
-	return &Tunnel{ProfileID: p.ID, dev: dev, tnet: tnet, startedAt: time.Now()}, nil
+	return &Tunnel{ProfileID: p.ID, Name: p.Name, dev: dev, tnet: tnet, startedAt: time.Now()}, nil
 }
 
 // buildUAPI renders the device.IpcSet key=value block: hex keys,
