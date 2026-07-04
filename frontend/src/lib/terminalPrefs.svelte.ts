@@ -32,12 +32,13 @@ class TerminalPrefs {
   // drops always leave the tab open so the user can see what happened.
   closeOnCleanExit = $state(false);
   // When true, Terminal.svelte skips loading the WebGL renderer addon
-  // and falls back to xterm's DOM/canvas renderer. Workaround for
-  // sluggish keystroke echo on Linux WebKit builds where the WebGL
-  // pipeline runs on software GL (LIBGL_ALWAYS_SOFTWARE=1) - canvas is
-  // often faster in that case. Default off; effect requires reload of
-  // each affected tab.
-  disableWebgl = $state(false);
+  // and falls back to xterm's DOM/canvas renderer. Default ON (WebGL
+  // off) since v0.47.0: the WebGL glyph atlas corrupts into garbled
+  // glyphs on some GPUs - sometimes spontaneously, with no user action
+  // at all - on both desktop and android, and canvas is fast enough
+  // for typical sessions. Users who want WebGL back opt in via
+  // Settings; an explicit stored "0" is respected.
+  disableWebgl = $state(true);
   // When true, the status bar shows a load/memory/disk/users readout for
   // the focused SSH session, probed every 10s. Off by default: it runs a
   // command on the remote host, which not every box (network gear) should
@@ -91,7 +92,10 @@ class TerminalPrefs {
     }
     try {
       const v = await api.settingsGet(DISABLE_WEBGL_KEY);
+      // Explicit user choice wins in both directions; a missing key
+      // keeps the safe default (disabled).
       if (v === "1") this.disableWebgl = true;
+      else if (v === "0") this.disableWebgl = false;
     } catch {
       // missing key is fine
     }

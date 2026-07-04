@@ -1928,10 +1928,10 @@
       <span>
         <strong>Disable WebGL renderer (use canvas fallback)</strong>
         <span class="hint inline">
-          - workaround for sluggish keystroke echo on Linux WebKit builds
-          where the WebGL pipeline runs on software GL. Canvas is often
-          faster in that case. Reopen each terminal tab for the change to
-          take effect.
+          - on by default: the WebGL glyph atlas can spontaneously corrupt
+          into garbled text on some GPUs. Untick to opt back into WebGL
+          for faster rendering of heavy output. Reopen each terminal tab
+          for the change to take effect.
         </span>
       </span>
     </label>

@@ -1080,10 +1080,14 @@
   });
 
   // React to theme changes. xterm rerenders on options.theme assignment.
+  // The WebGL glyph atlas was rasterised against the old palette; without
+  // dropping it a theme switch can paint garbled glyphs (same corruption
+  // as the font-size / broadcast cases above).
   $effect(() => {
     const t = terminalPrefs.theme;
     if (!term) return;
     term.options.theme = themeToXterm(t);
+    requestAnimationFrame(() => clearWebglAtlas());
   });
 
   // React to font family changes - applies live to every open terminal.

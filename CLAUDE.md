@@ -337,11 +337,14 @@ everything mobile is behind a build tag or an `isMobile` check.
     (`androidAppFilesDir`). Without TMPDIR, `os.TempDir` falls back to
     `/data/local/tmp` (not writable) and sync/backup fail.
 
-24. **Android xterm WebGL atlas corruption ("hijeroglifi").** WebGL is
-    off by default on mobile (`!terminalPrefs.disableWebgl &&
-    !isMobile`). On font-size and broadcast changes the glyph atlas is
-    cleared (`clearWebglAtlas()`); without it the atlas corrupts into
-    garbled glyphs (also reproduced once on desktop on broadcast).
+24. **xterm WebGL atlas corruption ("hijeroglifi").** WebGL is off by
+    default EVERYWHERE since v0.47.0 (`terminalPrefs.disableWebgl`
+    defaults true; opt back in via Settings). The glyph atlas corrupts
+    into garbled glyphs on some GPUs - on font-size, broadcast and
+    theme changes, and sometimes spontaneously with no user action
+    (seen on desktop and android). Known triggers still clear the
+    atlas (`clearWebglAtlas()`) for opted-in users, but the
+    spontaneous case is why canvas is the default.
 
 25. **JNI export names pin the Java package - rename the app id, NOT the
     namespace.** The Wails runtime (`.so`) hardcodes 18 JNI exports as
