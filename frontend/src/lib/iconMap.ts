@@ -77,6 +77,7 @@ import LoaderCircle from "@lucide/svelte/icons/loader-circle";
 import Radio from "@lucide/svelte/icons/radio";
 import Settings from "@lucide/svelte/icons/settings";
 import Globe from "@lucide/svelte/icons/globe";
+import GlobeLock from "@lucide/svelte/icons/globe-lock";
 import Activity from "@lucide/svelte/icons/activity";
 import Search from "@lucide/svelte/icons/search";
 import Cpu from "@lucide/svelte/icons/cpu";
@@ -88,6 +89,7 @@ export {
   Radio as IconBroadcast,
   Settings as IconSettings,
   Globe as IconGlobe,
+  GlobeLock as IconVpn,
   Activity as IconActivity,
   Search as IconSearch,
   Cpu as IconCpu,
