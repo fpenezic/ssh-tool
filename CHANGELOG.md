@@ -7,6 +7,44 @@ in alpha upstream.
 
 ---
 
+## [0.47.0] - Terminal workflow polish, profile statistics
+
+### Added
+
+- **Jump from a terminal straight to its connection's settings.** New
+  gear button in the pane title bar (next to the tunnels button):
+  switches to the Connections view with that connection selected,
+  ancestor folders expanded and the row scrolled into view. Handy
+  when you want to add a port forward or tweak a setting without
+  hunting the connection down in a large tree.
+- **Profile statistics in Settings -> About.** Connection count (and
+  how many have VNC enabled, inheritance included), folders (and how
+  many are dynamic), dynamic inventory broken down into hosts / VMs /
+  LXC containers / cloud servers, configured tunnels with their
+  bookmark count, credentials, open sessions and live tunnels.
+- **Expand / collapse all folders.** One toggle button in the
+  Connections and Credentials sidebar headers: collapses everything
+  when any folder is open, expands the whole tree otherwise.
+
+### Changed
+
+- **The WebGL terminal renderer is now off by default.** On some
+  GPUs the WebGL glyph atlas corrupts into garbled glyphs - at times
+  spontaneously, with the app sitting idle - so every terminal now
+  uses the reliable canvas renderer out of the box. If you had
+  explicitly toggled the WebGL setting before, your choice is kept.
+  Opting back in (Settings -> Terminal) is worthwhile mainly for
+  very heavy output; theme changes now also clear the glyph atlas
+  for opted-in users, and Ctrl+Shift+L still forces a clean redraw.
+
+### Fixed
+
+- **Closing a tab or pane leaves the keyboard in the next terminal.**
+  After Ctrl+D with auto-close enabled, closing a tab with the X /
+  Ctrl+Shift+W, or closing one pane of a split, the promoted
+  terminal now receives focus immediately - no extra click before
+  you can type.
+
 ## [0.46.0] - Open in ssh-tool from the file manager
 
 ### Added
