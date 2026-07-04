@@ -38,7 +38,10 @@ func (DigitalOcean) Fetch(ctx context.Context, cfg map[string]any) ([]Entry, err
 	}
 
 	url := "https://api.digitalocean.com/v2/droplets?per_page=200&page=1"
-	client := &http.Client{Timeout: 20 * time.Second}
+	client, err := httpClient(cfg, 20*time.Second, false)
+	if err != nil {
+		return nil, err
+	}
 	out := []Entry{}
 	for url != "" {
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)

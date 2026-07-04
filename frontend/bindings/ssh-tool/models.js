@@ -12,6 +12,9 @@ import * as ssh$0 from "./internal/ssh/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as store$0 from "./internal/store/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as wg$0 from "./internal/wg/models.js";
 
 /**
  * ActiveSessionInfo describes one live SSH session for frontend recovery
@@ -1766,6 +1769,81 @@ export class LocalShellOpenResult {
 }
 
 /**
+ * NetworkProfileInfo is the list shape for the UI: the stored row
+ * plus the parsed secretless profile for display.
+ */
+export class NetworkProfileInfo {
+    /**
+     * Creates a new NetworkProfileInfo instance.
+     * @param {Partial<NetworkProfileInfo>} [$$source = {}] - The source object to create the NetworkProfileInfo.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("profile" in $$source)) {
+            /**
+             * @member
+             * @type {wg$0.Profile}
+             */
+            this["profile"] = (new wg$0.Profile());
+        }
+        if (!("status" in $$source)) {
+            /**
+             * @member
+             * @type {wg$0.Status}
+             */
+            this["status"] = (new wg$0.Status());
+        }
+        if (!("created_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["created_at"] = 0;
+        }
+        if (!("updated_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["updated_at"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new NetworkProfileInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {NetworkProfileInfo}
+     */
+    static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType6;
+        const $$createField3_0 = $$createType7;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("profile" in $$parsedSource) {
+            $$parsedSource["profile"] = $$createField2_0($$parsedSource["profile"]);
+        }
+        if ("status" in $$parsedSource) {
+            $$parsedSource["status"] = $$createField3_0($$parsedSource["status"]);
+        }
+        return new NetworkProfileInfo(/** @type {Partial<NetworkProfileInfo>} */($$parsedSource));
+    }
+}
+
+/**
  * OpksshCertStatusResult wraps the vault cert state for the credential
  * editor. VaultLocked distinguishes "no cert" from "can't look" - a
  * locked vault returns ok=false on every Get and would otherwise
@@ -2184,7 +2262,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType7;
+        const $$createField1_0 = $$createType9;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -2937,7 +3015,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType9;
+        const $$createField0_0 = $$createType11;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -3054,7 +3132,7 @@ export class TcpdumpStartInput {
      * @returns {TcpdumpStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType10;
+        const $$createField10_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("port_overrides" in $$parsedSource) {
             $$parsedSource["port_overrides"] = $$createField10_0($$parsedSource["port_overrides"]);
@@ -3233,8 +3311,10 @@ const $$createType2 = $Create.Nullable($$createType1);
 const $$createType3 = $Create.Nullable($$createType0);
 const $$createType4 = $Create.Map($Create.Any, $Create.Any);
 const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = ssh$0.SftpEntry.createFrom;
-const $$createType7 = $Create.Array($$createType6);
-const $$createType8 = ssh$0.ParsedPacket.createFrom;
+const $$createType6 = wg$0.Profile.createFrom;
+const $$createType7 = wg$0.Status.createFrom;
+const $$createType8 = ssh$0.SftpEntry.createFrom;
 const $$createType9 = $Create.Array($$createType8);
-const $$createType10 = $Create.Map($Create.Any, $Create.Any);
+const $$createType10 = ssh$0.ParsedPacket.createFrom;
+const $$createType11 = $Create.Array($$createType10);
+const $$createType12 = $Create.Map($Create.Any, $Create.Any);

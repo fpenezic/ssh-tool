@@ -54,7 +54,10 @@ func (AWSEC2) Fetch(ctx context.Context, cfg map[string]any) ([]Entry, error) {
 	host := "ec2." + region + ".amazonaws.com"
 	out := []Entry{}
 	nextToken := ""
-	client := &http.Client{Timeout: 30 * time.Second}
+	client, err := httpClient(cfg, 30*time.Second, false)
+	if err != nil {
+		return nil, err
+	}
 
 	for {
 		q := url.Values{}

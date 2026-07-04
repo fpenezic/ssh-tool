@@ -46,7 +46,10 @@ func (Hetzner) Fetch(ctx context.Context, cfg map[string]any) ([]Entry, error) {
 	// Hetzner paginates at 50/page by default; bump to max.
 	url := "https://api.hetzner.cloud/v1/servers?per_page=50&page=1"
 
-	client := &http.Client{Timeout: 20 * time.Second}
+	client, err := httpClient(cfg, 20*time.Second, false)
+	if err != nil {
+		return nil, err
+	}
 	out := []Entry{}
 	for url != "" {
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)

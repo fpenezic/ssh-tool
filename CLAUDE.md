@@ -12,8 +12,10 @@ encrypted credential vault, multi-tab terminal with split panes,
 port forwards (incl. SOCKS5 with isolated-browser launcher),
 opkssh certificate auth, dynamic inventory from Proxmox, Hetzner,
 DigitalOcean, Linode, Vultr, Scaleway, AWS EC2, Ansible static
-inventory (`.ini` / `.yml`). Local audit log + sealed
-password / API-token history (last 5 rotations).
+inventory (`.ini` / `.yml`), userspace WireGuard network profiles
+(in-process netstack, no TUN adapter; first SSH hop + provider APIs
+dial through them). Local audit log + sealed password / API-token
+history (last 5 rotations).
 
 Author wants 300+ connections, daily-driver UX, full opkssh support
 (non-negotiable; reason we're on Go).
@@ -78,7 +80,7 @@ ssh-tool/
 ├─ wails3_runtime.go       shim: EventsEmit (+ mobile enqueue) / BrowserOpenURL
 ├─ Taskfile.yml            top-level task routing (android: namespace too)
 ├─ internal/
-│  ├─ store/               SQLite + migrations + CRUD (DB schema at v16; audit log in a separate audit.db)
+│  ├─ store/               SQLite + migrations + CRUD (DB schema at v17; audit log in a separate audit.db)
 │  ├─ importer/
 │  │   ├─ rdm/             Devolutions RDM JSON importer (3-pass)
 │  │   ├─ sshconfig/       ~/.ssh/config importer
@@ -90,6 +92,7 @@ ssh-tool/
 │  ├─ creds/               vault lifecycle, machine-bound auto-unlock
 │  ├─ backup/              encrypted store+vault snapshots, scheduler
 │  ├─ ssh/                 SSH client, opkssh, forwards, browser, tcpdump, VNC bridge
+│  ├─ wg/                  userspace WireGuard (wireguard-go + netstack) network profiles
 │  ├─ inventory/           dynamic providers: Proxmox, Hetzner, DO, Linode, Vultr, Scaleway, AWS EC2, Ansible
 │  ├─ httpc/               HTTP/SOAP probe (used by HttpModal)
 │  ├─ local/               in-app local PTY (Win/Mac/Linux shells)

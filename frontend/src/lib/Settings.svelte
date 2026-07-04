@@ -3,7 +3,8 @@
   import { errMsg } from "./connectErrors";
   import { isMobile } from "./platform";
   import PasswordInput from "./PasswordInput.svelte";
-  import { api, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult } from "./api";
+  import { api, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo } from "./api";
+  import { networkProfiles } from "./networkProfiles.svelte";
   import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
   import FolderPicker from "./FolderPicker.svelte";
   import type { Folder } from "./api";
@@ -930,6 +931,7 @@
   type SectionId =
     | "appearance"
     | "connection"
+    | "network"
     | "terminal"
     | "browser"
     | "snippets"
@@ -953,6 +955,7 @@
   const SECTIONS: SectionDef[] = [
     { id: "appearance",        title: "Appearance",       group: "Appearance" },
     { id: "connection",        title: "Connection",       group: "Appearance" },
+    { id: "network",           title: "Network profiles", group: "Appearance" },
     { id: "terminal",          title: "Terminal",         group: "Appearance" },
     { id: "browser",           title: "Browser launcher", group: "Appearance" },
     { id: "snippets",          title: "Snippets",         group: "Appearance" },
@@ -969,6 +972,71 @@
   ];
 
   let activeSection = $state<SectionId>("terminal");
+
+  // ----- Network profiles (userspace WireGuard) -----
+  let npName = $state("");
+  let npConf = $state("");
+  let npEditingId = $state<string | null>(null);
+  let npBusy = $state(false);
+
+  $effect(() => {
+    if (activeSection === "network") networkProfiles.load().catch(() => {});
+  });
+
+  async function npCreate() {
+    npBusy = true;
+    try {
+      await api.networkProfileCreate(npName.trim(), npConf);
+      npName = ""; npConf = "";
+      await networkProfiles.load(true);
+      toast.ok("Profile added");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
+  function npStartEdit(np: NetworkProfileInfo) {
+    npEditingId = np.id;
+    npName = np.name;
+    npConf = "";
+  }
+  function npCancelEdit() { npEditingId = null; npName = ""; npConf = ""; }
+  async function npSaveEdit() {
+    if (!npEditingId) return;
+    npBusy = true;
+    try {
+      await api.networkProfileUpdate(npEditingId, npName.trim(), npConf);
+      npCancelEdit();
+      await networkProfiles.load(true);
+      toast.ok("Profile saved");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
+  async function npDelete(np: NetworkProfileInfo) {
+    const ok = await showConfirm({
+      title: "Delete network profile",
+      message: `Delete "${np.name}"? Connections still assigned to it will fail to connect until you change their Network setting.`,
+      okLabel: "Delete",
+    });
+    if (!ok) return;
+    try {
+      await api.networkProfileDelete(np.id);
+      await networkProfiles.load(true);
+    } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  async function npSetPolicy(np: NetworkProfileInfo, mode: string, paused: boolean) {
+    try {
+      await api.networkProfileSetPolicy(np.id, mode, paused);
+      await networkProfiles.load(true);
+    } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  async function npTest(np: NetworkProfileInfo) {
+    npBusy = true;
+    try {
+      const st = await api.networkProfileTest(np.id);
+      toast.ok(st.running ? `Tunnel ${np.name} is up` : `Tunnel ${np.name} did not start`);
+      await networkProfiles.load(true);
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
 
   // Refresh the profile counts + active-tunnel count every time the
   // About section opens; "" asks the backend for forwards across all
@@ -2029,6 +2097,99 @@
         Open folder
       </button>
     </div>
+  </div>
+
+  {:else if activeSection === "network"}
+  <div class="group">
+    <h2>Network profiles</h2>
+    <p class="hint">
+      Userspace WireGuard tunnels - no TUN adapter, no admin rights, no
+      system routes. Assign a profile to a folder or connection
+      (Network setting) and its first SSH hop dials through the tunnel.
+      Private keys are stored in the vault.
+    </p>
+
+    {#if networkProfiles.error}
+      <p class="hint" style="color: var(--red)">{networkProfiles.error}</p>
+    {/if}
+
+    {#each networkProfiles.list as np (np.id)}
+      <div class="np-card">
+        <div class="np-head">
+          <strong>{np.name}</strong>
+          {#if np.profile.paused}
+            <span class="np-pill paused">paused</span>
+          {:else if np.status.running}
+            <span class="np-pill running" title={np.status.last_handshake > 0
+              ? `last handshake ${new Date(np.status.last_handshake * 1000).toLocaleTimeString()}`
+              : "up, no handshake yet"}>up</span>
+          {:else}
+            <span class="np-pill">idle</span>
+          {/if}
+          <span class="np-meta">
+            {np.profile.addresses?.join(", ")}
+            {#if np.profile.peers?.length}
+              &nbsp;→ {np.profile.peers[0].endpoint}
+            {/if}
+            {#if np.status.running && (np.status.rx_bytes > 0 || np.status.tx_bytes > 0)}
+              &nbsp;· rx {(np.status.rx_bytes / 1024).toFixed(0)}K tx {(np.status.tx_bytes / 1024).toFixed(0)}K
+            {/if}
+          </span>
+        </div>
+        <div class="np-actions">
+          <label class="np-mode">Mode
+            <select
+              value={np.profile.mode === "auto" ? "auto" : "always"}
+              onchange={(e) => npSetPolicy(np, (e.target as HTMLSelectElement).value, np.profile.paused ?? false)}
+            >
+              <option value="always">Always via tunnel</option>
+              <option value="auto">Auto - direct first, tunnel fallback</option>
+            </select>
+          </label>
+          <button onclick={() => npSetPolicy(np, np.profile.mode === "auto" ? "auto" : "always", !(np.profile.paused ?? false))}>
+            {np.profile.paused ? "Resume" : "Pause (go direct)"}
+          </button>
+          <button onclick={() => npTest(np)} disabled={npBusy || (np.profile.paused ?? false)}>Test</button>
+          {#if np.status.running}
+            <button onclick={() => api.networkProfileStop(np.id).catch((e) => toast.err(errMsg(e)))}>Stop tunnel</button>
+          {/if}
+          <button onclick={() => npStartEdit(np)}>Edit</button>
+          <button class="danger" onclick={() => npDelete(np)}>Delete</button>
+        </div>
+      </div>
+    {/each}
+    {#if networkProfiles.list.length === 0 && !networkProfiles.loading}
+      <p class="hint">No profiles yet - paste a wg-quick config below.</p>
+    {/if}
+
+    <h3 style="margin-top:1.2rem">{npEditingId ? "Edit profile" : "Add profile"}</h3>
+    <label>
+      <span>Name</span>
+      <input bind:value={npName} placeholder="e.g. office-vpn" />
+    </label>
+    <label>
+      <span>{npEditingId ? "Replace config (leave empty to keep current)" : "wg-quick config"}</span>
+      <textarea
+        bind:value={npConf}
+        rows="10"
+        spellcheck="false"
+        placeholder={"[Interface]\nPrivateKey = ...\nAddress = 10.0.0.2/32\nDNS = 10.0.0.1\n\n[Peer]\nPublicKey = ...\nEndpoint = vpn.example.com:51820\nAllowedIPs = 10.0.0.0/24"}
+      ></textarea>
+    </label>
+    <div class="row" style="gap:0.5rem">
+      {#if npEditingId}
+        <button class="primary" onclick={npSaveEdit} disabled={npBusy || !npName.trim()}>Save changes</button>
+        <button onclick={npCancelEdit}>Cancel</button>
+      {:else}
+        <button class="primary" onclick={npCreate} disabled={npBusy || !npName.trim() || !npConf.trim()}>Add profile</button>
+      {/if}
+    </div>
+    <p class="hint">
+      PostUp/PostDown/Table lines are ignored (there is no system
+      interface). The endpoint must be reachable from the normal
+      network; DNS servers listed in the config resolve hostnames
+      inside the tunnel.
+    </p>
   </div>
 
   {:else if activeSection === "browser"}
@@ -3368,6 +3529,53 @@
 </section>
 
 <style>
+  .np-card {
+    border: 1px solid var(--surface0);
+    border-radius: 6px;
+    padding: 0.6rem 0.7rem;
+    margin: 0.4rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  .np-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .np-meta {
+    color: var(--subtext0);
+    font-size: 0.78rem;
+    font-family: ui-monospace, monospace;
+  }
+  .np-pill {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    background: var(--surface0);
+    color: var(--subtext0);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .np-pill.running { background: var(--green); color: var(--on-accent); }
+  .np-pill.paused  { background: var(--yellow); color: var(--on-accent); }
+  .np-actions {
+    display: flex;
+    align-items: end;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+  }
+  .np-mode {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.78rem;
+    color: var(--subtext0);
+  }
+  .np-actions button.danger { color: var(--red); }
+
   .settings {
     display: grid;
     grid-template-columns: 220px 1fr;

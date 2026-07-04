@@ -178,3 +178,31 @@ func TestDeepInheritanceThreeLevels(t *testing.T) {
 		t.Fatalf("wrong: port=%d user=%s auth=%v", r.Port, *r.Username, r.AuthRef)
 	}
 }
+
+func TestNetworkProfileInheritedAndBroken(t *testing.T) {
+	f := folder("root", nil, store.InheritableSettings{
+		NetworkProfileID: ptr("wg-prod"),
+	})
+	// Child with no override inherits the folder's profile.
+	c1 := conn("c1", ptr("root"), "h", store.InheritableSettings{})
+	r1 := ResolveWith(c1, []store.Folder{f})
+	if r1.NetworkProfileID == nil || *r1.NetworkProfileID != "wg-prod" {
+		t.Fatalf("expected inherited wg-prod, got %v", r1.NetworkProfileID)
+	}
+	// Explicit "" breaks the inheritance -> normalized to nil (direct).
+	c2 := conn("c2", ptr("root"), "h", store.InheritableSettings{
+		NetworkProfileID: ptr(""),
+	})
+	r2 := ResolveWith(c2, []store.Folder{f})
+	if r2.NetworkProfileID != nil {
+		t.Fatalf("expected nil (explicit direct), got %q", *r2.NetworkProfileID)
+	}
+	// Child override replaces the parent's profile.
+	c3 := conn("c3", ptr("root"), "h", store.InheritableSettings{
+		NetworkProfileID: ptr("wg-lab"),
+	})
+	r3 := ResolveWith(c3, []store.Folder{f})
+	if r3.NetworkProfileID == nil || *r3.NetworkProfileID != "wg-lab" {
+		t.Fatalf("expected wg-lab, got %v", r3.NetworkProfileID)
+	}
+}

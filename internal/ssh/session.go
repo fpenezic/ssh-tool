@@ -21,6 +21,38 @@ import (
 // SessionID identifies an active SSH session in the pool.
 type SessionID = string
 
+// ContextDialer matches net.Dialer.DialContext / netstack's
+// Net.DialContext - the shape a custom first-hop transport must have.
+type ContextDialer func(ctx context.Context, network, addr string) (net.Conn, error)
+
+// FirstHopDialerHook, when non-nil, is consulted for connections whose
+// resolved settings carry a NetworkProfileID: it returns the dialer
+// that reaches the first hop (e.g. a userspace WireGuard tunnel from
+// internal/wg, wired by the host app - same pattern as
+// BrowserOpenHook). A returned error ABORTS the connect: a connection
+// pinned to a network profile must never silently fall back to a
+// direct dial. Hops after the first ride the previous hop's SSH
+// channel and never consult this.
+var FirstHopDialerHook func(settings *store.ResolvedSettings) (ContextDialer, error)
+
+// firstHopDial dials the first hop of a chain: through the network
+// profile's tunnel when one is resolved, plain TCP otherwise.
+func firstHopDial(ctx context.Context, settings *store.ResolvedSettings, addr string, timeout time.Duration) (net.Conn, error) {
+	if settings.NetworkProfileID != nil {
+		if FirstHopDialerHook == nil {
+			return nil, fmt.Errorf("network profile set but no tunnel support wired")
+		}
+		d, err := FirstHopDialerHook(settings)
+		if err != nil {
+			return nil, fmt.Errorf("network profile: %w", err)
+		}
+		dctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		return d(dctx, "tcp", addr)
+	}
+	return net.DialTimeout("tcp", addr, timeout)
+}
+
 // SessionState is the lifecycle event we emit to the frontend.
 type SessionState struct {
 	State   string `json:"state"` // connecting | auth_in_progress | connected | disconnected | error
@@ -406,9 +438,13 @@ func Connect(
 		var client *ssh.Client
 		if i == 0 {
 			progress("TCP dial " + h.Label)
-			debug("%s: TCP dial %s (direct)", h.Label, addr)
+			if settings.NetworkProfileID != nil {
+				debug("%s: TCP dial %s (via network profile %s)", h.Label, addr, *settings.NetworkProfileID)
+			} else {
+				debug("%s: TCP dial %s (direct)", h.Label, addr)
+			}
 			t0 := time.Now()
-			conn, err := net.DialTimeout("tcp", addr, connectTimeout)
+			conn, err := firstHopDial(ctx, settings, addr, connectTimeout)
 			if err != nil {
 				debug("%s: dial failed after %s: %v", h.Label, time.Since(t0).Round(time.Millisecond), err)
 				cleanup(clients)

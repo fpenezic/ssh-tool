@@ -37,7 +37,10 @@ func (Linode) Fetch(ctx context.Context, cfg map[string]any) ([]Entry, error) {
 	}
 
 	url := "https://api.linode.com/v4/linode/instances?page=1&page_size=500"
-	client := &http.Client{Timeout: 20 * time.Second}
+	client, err := httpClient(cfg, 20*time.Second, false)
+	if err != nil {
+		return nil, err
+	}
 	out := []Entry{}
 	for url != "" {
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)

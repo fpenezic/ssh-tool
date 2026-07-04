@@ -49,6 +49,9 @@ export interface InheritableSettings {
   vnc_enabled?: boolean;
   vnc_port?: number;
   vnc_use_tunnel?: boolean;
+  // "" = explicitly direct (breaks an inherited profile); id = a
+  // network_profiles row; absent = inherit.
+  network_profile_id?: string;
 }
 
 export interface Folder {
@@ -97,6 +100,46 @@ export interface ResolvedSettings {
   vnc_enabled: boolean;
   vnc_port: number;
   vnc_use_tunnel: boolean;
+  network_profile_id: string | null;
+}
+
+// ----- Network profiles (userspace WireGuard) -----
+
+export interface WgPeer {
+  public_key: string;
+  has_psk: boolean;
+  endpoint: string;
+  allowed_ips: string[];
+  keepalive: number;
+}
+
+export interface WgProfile {
+  id: string;
+  name: string;
+  mode?: "always" | "auto";
+  paused?: boolean;
+  addresses: string[];
+  dns: string[];
+  mtu: number;
+  peers: WgPeer[];
+}
+
+export interface WgStatus {
+  profile_id: string;
+  running: boolean;
+  started_at: number;
+  last_handshake: number;
+  rx_bytes: number;
+  tx_bytes: number;
+}
+
+export interface NetworkProfileInfo {
+  id: string;
+  name: string;
+  profile: WgProfile;
+  status: WgStatus;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface VncSession {
@@ -508,6 +551,19 @@ export const api = {
   logDir: () => G.LogDir() as unknown as Promise<string>,
   appVersion: () => G.AppVersion() as unknown as Promise<AppVersionInfo>,
   profileStats: () => G.ProfileStats() as unknown as Promise<ProfileStats>,
+
+  networkProfilesList: () =>
+    G.NetworkProfilesList() as unknown as Promise<NetworkProfileInfo[]>,
+  networkProfileCreate: (name: string, confText: string) =>
+    G.NetworkProfileCreate(name, confText) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileUpdate: (id: string, name: string, confText: string) =>
+    G.NetworkProfileUpdate(id, name, confText) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileDelete: (id: string) => G.NetworkProfileDelete(id),
+  networkProfileStop: (id: string) => G.NetworkProfileStop(id),
+  networkProfileSetPolicy: (id: string, mode: string, paused: boolean) =>
+    G.NetworkProfileSetPolicy(id, mode, paused) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileTest: (id: string) =>
+    G.NetworkProfileTest(id) as unknown as Promise<WgStatus>,
   snippetsList: (connectionId: string) =>
     G.SnippetsList(connectionId) as unknown as Promise<Snippet[]>,
   snippetCreate: (input: SnippetInput) =>

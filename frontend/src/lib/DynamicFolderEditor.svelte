@@ -17,6 +17,10 @@
   import { IconX } from "./iconMap";
   import { toast } from "./toast.svelte";
   import { showConfirm } from "./confirmModal.svelte.ts";
+  import { networkProfiles } from "./networkProfiles.svelte";
+
+  // Populate the Network dropdowns (cached; refreshes on tunnel events).
+  $effect(() => { networkProfiles.load().catch(() => {}); });
 
   type Props = {
     parentId: string | null;
@@ -138,6 +142,12 @@
     ),
   );
 
+  // Network profile (userspace WireGuard) the provider API is fetched
+  // through - for a Proxmox / internal endpoint only reachable over
+  // VPN. "" = direct. SSH connects to the entries inherit their
+  // network from the folder's own Network setting, not this.
+  let networkProfileId = $state<string>("");
+
   let saving = $state(false);
   let err = $state<string | null>(null);
   let info = $state<{ lastPulled: number | null; lastError: string } | null>(null);
@@ -173,6 +183,7 @@
         ansibleGroupPattern = String(cfg.group_pattern ?? "");
         ansibleNameFrom = (cfg.name_from === "ansible_host" ? "ansible_host" : "inventory_hostname") as any;
         ansibleJumpCredentialId = String(cfg.jump_credential_id ?? "");
+        networkProfileId = String(cfg.network_profile_id ?? "");
         info = { lastPulled: d.last_pulled_at ?? null, lastError: d.last_error ?? "" };
       } catch (e: any) {
         err = String(e);
@@ -190,6 +201,7 @@
         base_url: baseURL.trim(),
         api_token_credential_id: tokenCredentialId,
         vnc_credential_id: vncCredentialId,
+        network_profile_id: networkProfileId,
         insecure_skip_verify: insecureSkipVerify,
         include_hosts: includeHosts,
         include_guests: includeGuests,
@@ -217,6 +229,7 @@
     // and Scaleway, ignored elsewhere.
     const cfg: Record<string, any> = {
       api_token_credential_id: tokenCredentialId,
+      network_profile_id: networkProfileId,
       hostname_source: hostnameSource,
       include_hosts: false,
       include_guests: true,
@@ -495,6 +508,20 @@
             <input type="checkbox" bind:checked={insecureSkipVerify} />
             <span>Skip TLS verification (self-signed certs)</span>
           </label>
+          <label>
+            <span class="lbl">Network (API access)</span>
+            <select bind:value={networkProfileId}>
+              <option value="">Direct - no tunnel</option>
+              {#each networkProfiles.list as np (np.id)}
+                <option value={np.id}>via {np.name} (WireGuard)</option>
+              {/each}
+            </select>
+            <span class="hint">
+              Fetch the API through a WireGuard profile - for a Proxmox
+              only reachable over VPN. SSH to the entries follows the
+              folder's own Network setting instead.
+            </span>
+          </label>
         </fieldset>
 
         <fieldset>
@@ -636,6 +663,23 @@
               </button>
             </fieldset>
           {/if}
+        </fieldset>
+
+        <fieldset>
+          <legend>Network (API access)</legend>
+          <label>
+            <span class="lbl">Fetch the provider API through</span>
+            <select bind:value={networkProfileId}>
+              <option value="">Direct - no tunnel</option>
+              {#each networkProfiles.list as np (np.id)}
+                <option value={np.id}>via {np.name} (WireGuard)</option>
+              {/each}
+            </select>
+            <span class="hint">
+              For endpoints only reachable over VPN. SSH to the entries
+              follows the folder's own Network setting instead.
+            </span>
+          </label>
         </fieldset>
 
         {#if provider === "aws_ec2" || provider === "scaleway"}

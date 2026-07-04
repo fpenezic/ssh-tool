@@ -43,6 +43,7 @@ import (
 	"ssh-tool/internal/store"
 	"ssh-tool/internal/syncer"
 	"ssh-tool/internal/updater"
+	"ssh-tool/internal/wg"
 )
 
 // App is the root service exposed to the frontend.
@@ -62,6 +63,7 @@ type App struct {
 	localPool   *local.Pool
 	inventory   *inventory.Manager
 	backupSched *backup.Scheduler
+	wgman       *wg.Manager
 
 	metaMu      sync.Mutex
 	sessionMeta map[string]sessionMetaEntry
@@ -353,6 +355,26 @@ func (a *App) initialise() {
 	a.recorder = recorder.NewManager()
 	a.termSizes = map[string][2]uint16{}
 	a.forwards = sshlayer.NewForwardPool()
+	a.wgman = wg.NewManager()
+	// First-hop dialer for connections resolved to a network profile:
+	// vault-resolve the WG secrets, lazily start (or reuse) the
+	// userspace tunnel, hand its netstack DialContext to the SSH layer.
+	// Errors abort the connect - a profile-pinned connection must never
+	// fall back to a direct dial.
+	sshlayer.FirstHopDialerHook = func(s *store.ResolvedSettings) (sshlayer.ContextDialer, error) {
+		if s.NetworkProfileID == nil {
+			return nil, fmt.Errorf("no network profile on settings")
+		}
+		// wgDialerFor applies the profile's connect policy (always /
+		// auto-with-direct-probe / paused). See app_network.go.
+		return a.wgDialerFor(*s.NetworkProfileID)
+	}
+	// Same tunnels for dynamic-inventory API calls (a Proxmox that is
+	// only reachable over VPN). The provider config carries the
+	// profile id; policy (auto/paused) applies the same way.
+	inventory.TunnelDialContext = func(profileID string) (func(ctx context.Context, network, addr string) (net.Conn, error), error) {
+		return a.wgDialerFor(profileID)
+	}
 	a.inventory = inventory.NewManager(db, vault, func(folderID string) {
 		EventsEmit("dynamic_folder_refreshed", folderID)
 	})

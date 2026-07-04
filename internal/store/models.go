@@ -85,6 +85,13 @@ type InheritableSettings struct {
 	// the remote's loopback, like a localhost-bound x11vnc). When false
 	// the bridge dials host:vnc_port directly. Tri-state inheritance.
 	VncUseTunnel *bool `json:"vnc_use_tunnel,omitempty"`
+	// NetworkProfileID routes the FIRST SSH hop through a userspace
+	// WireGuard tunnel (internal/wg). nil = inherit from ancestry;
+	// "" = explicitly direct (breaks an inherited profile); otherwise
+	// the id of a network_profiles row. Jump-chain hops after the
+	// first ride the previous hop's SSH channel and need no network
+	// of their own.
+	NetworkProfileID *string `json:"network_profile_id,omitempty"`
 }
 
 // JumpHostOverride is tagged-union with two variants: "none" (explicit
@@ -169,6 +176,10 @@ type ResolvedSettings struct {
 	VncEnabled   bool   `json:"vnc_enabled"`
 	VncPort      uint16 `json:"vnc_port"`
 	VncUseTunnel bool   `json:"vnc_use_tunnel"`
+	// NetworkProfileID: non-nil when the first hop should dial through
+	// the userspace WireGuard tunnel of this network profile. An
+	// explicit "" override normalizes to nil here.
+	NetworkProfileID *string `json:"network_profile_id"`
 	// PasswordOverride carries a per-connection plaintext password resolved
 	// from the vault by app.go before passing to the SSH layer. Never
 	// serialised to JSON (not shown in the resolved-settings preview).

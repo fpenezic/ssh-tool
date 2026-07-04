@@ -38,6 +38,7 @@ export {
     LoadTextFileResult,
     LocalShellInfo,
     LocalShellOpenResult,
+    NetworkProfileInfo,
     OpksshCertStatusResult,
     PinDynamicEntryInput,
     ProfileStats,

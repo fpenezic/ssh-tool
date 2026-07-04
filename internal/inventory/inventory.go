@@ -10,7 +10,43 @@
 // providers live in their own files (proxmox.go, hetzner.go later).
 package inventory
 
-import "context"
+import (
+	"context"
+	"crypto/tls"
+	"fmt"
+	"net"
+	"net/http"
+	"time"
+)
+
+// TunnelDialContext, when non-nil, returns a dialer routed through
+// the named network profile's userspace WireGuard tunnel. Wired by
+// the host app (same pattern as ssh.FirstHopDialerHook); left nil in
+// tests and headless use, where a configured profile then fails
+// loudly instead of dialing outside the tunnel.
+var TunnelDialContext func(profileID string) (func(ctx context.Context, network, addr string) (net.Conn, error), error)
+
+// httpClient builds the HTTP client a provider should use for its
+// API: plain unless cfg["network_profile_id"] routes it through a
+// tunnel (e.g. a Proxmox host that is only reachable over VPN).
+// insecure skips TLS verification (self-signed Proxmox certs).
+func httpClient(cfg map[string]any, timeout time.Duration, insecure bool) (*http.Client, error) {
+	tr := &http.Transport{}
+	if insecure {
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+	if id, _ := cfg["network_profile_id"].(string); id != "" {
+		if TunnelDialContext == nil {
+			return nil, fmt.Errorf("network profile configured but tunnel support not wired")
+		}
+		dial, err := TunnelDialContext(id)
+		if err != nil {
+			return nil, fmt.Errorf("network profile: %w", err)
+		}
+		tr.DialContext = dial
+	}
+	return &http.Client{Timeout: timeout, Transport: tr}, nil
+}
 
 // EntryKind buckets a fetched entry into one of the two
 // pseudo-sub-folders the tree renders for a dynamic folder.

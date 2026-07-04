@@ -41,7 +41,10 @@ func (Scaleway) Fetch(ctx context.Context, cfg map[string]any) ([]Entry, error) 
 	}
 
 	url := fmt.Sprintf("https://api.scaleway.com/instance/v1/zones/%s/servers?per_page=100&page=1", zone)
-	client := &http.Client{Timeout: 20 * time.Second}
+	client, err := httpClient(cfg, 20*time.Second, false)
+	if err != nil {
+		return nil, err
+	}
 	out := []Entry{}
 	page := 1
 	for {
