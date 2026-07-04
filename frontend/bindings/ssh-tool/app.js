@@ -1337,6 +1337,18 @@ export function NetworkProfileDelete(id) {
 }
 
 /**
+ * NetworkProfileRenderConf renders the stored profile back to
+ * wg-quick text for the edit form. Secrets come out as the
+ * wg.KeepSecret placeholder; NetworkProfileUpdate translates that
+ * back to "keep the vault value".
+ * @param {string} id
+ * @returns {$CancellablePromise<string>}
+ */
+export function NetworkProfileRenderConf(id) {
+    return $Call.ByID(2254941776, id);
+}
+
+/**
  * NetworkProfileSetPolicy updates the connect policy: mode is
  * "always" or "auto"; paused is the per-profile kill switch (dial
  * direct, don't start the tunnel). Pausing also stops a running

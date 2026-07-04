@@ -925,7 +925,7 @@
         </select>
       </label>
 
-      <label title="Route the first SSH hop of every connection in this folder through a userspace WireGuard tunnel. Profiles are managed in Settings -> Network profiles.">
+      <label title="Route the first SSH hop of every connection in this folder through a userspace WireGuard tunnel.">
         Network (inherited by children)
         <select bind:value={editingFolder.networkProfile}>
           <option value="">(inherit from parent)</option>
@@ -934,6 +934,11 @@
             <option value={np.id}>via {np.name} (WireGuard)</option>
           {/each}
         </select>
+        <span class="field-note">
+          {networkProfiles.list.length === 0 ? "No WireGuard profiles yet - " : "WireGuard profiles live in "}
+          <button class="linklike" onclick={(e) => { e.preventDefault(); view.setTabSettingsSection("network"); }}>
+            Settings -&gt; Network profiles</button>.
+        </span>
       </label>
 
       <label title="Anti-idle: send an SSH keepalive every N seconds so a bastion or firewall doesn't drop connections under this folder when they're quiet. Inherited by connections; blank inherits the parent folder, 0 turns it off.">
@@ -1157,7 +1162,7 @@
           <option value="off">Off</option>
         </select>
       </label>
-      <label title="Route the first SSH hop through a userspace WireGuard tunnel (no TUN adapter, no admin rights). Profiles are managed in Settings -> Network profiles.">
+      <label title="Route the first SSH hop through a userspace WireGuard tunnel (no TUN adapter, no admin rights).">
         Network
         <select bind:value={editing.networkProfile}>
           <option value="">(inherit from folder)</option>
@@ -1166,6 +1171,11 @@
             <option value={np.id}>via {np.name} (WireGuard)</option>
           {/each}
         </select>
+        <span class="field-note">
+          {networkProfiles.list.length === 0 ? "No WireGuard profiles yet - " : "WireGuard profiles live in "}
+          <button class="linklike" onclick={(e) => { e.preventDefault(); view.setTabSettingsSection("network"); }}>
+            Settings -&gt; Network profiles</button>.
+        </span>
       </label>
       <label title="Anti-idle: send an SSH keepalive every N seconds so a bastion or firewall doesn't drop the connection when it's quiet. Blank inherits the folder's value; 0 turns it off.">
         Keepalive / anti-idle (s)
@@ -1414,6 +1424,15 @@
 <style>
   .detail { padding: 1rem 1.25rem; overflow: auto; color: var(--text); }
   /* Small explanatory note under a form field (e.g. keepalive). */
+  .linklike {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--blue);
+    cursor: pointer;
+    text-decoration: underline;
+  }
   .field-note {
     display: block;
     margin-top: 0.15rem;

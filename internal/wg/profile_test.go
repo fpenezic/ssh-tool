@@ -131,3 +131,40 @@ func TestTunnelUp(t *testing.T) {
 		t.Errorf("tunnel still present after Stop")
 	}
 }
+
+// RenderConf -> ParseConf must round-trip a stored (secretless)
+// profile: secrets come back as the KeepSecret placeholder, the rest
+// survives verbatim.
+func TestRenderConfRoundTrip(t *testing.T) {
+	orig, err := ParseConf(sampleConf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate the stored form: secrets stripped, HasPSK remembered.
+	orig.PrivateKey = ""
+	orig.Peers[0].PresharedKey = ""
+
+	text := orig.RenderConf()
+	if !strings.Contains(text, "PrivateKey = "+KeepSecret) {
+		t.Errorf("rendered conf missing private-key placeholder:\n%s", text)
+	}
+	if !strings.Contains(text, "PresharedKey = "+KeepSecret) {
+		t.Errorf("rendered conf missing psk placeholder:\n%s", text)
+	}
+
+	back, err := ParseConf(text)
+	if err != nil {
+		t.Fatalf("reparse: %v", err)
+	}
+	if back.PrivateKey != KeepSecret {
+		t.Errorf("private key = %q", back.PrivateKey)
+	}
+	if !back.Peers[0].HasPSK || back.Peers[0].PresharedKey != KeepSecret {
+		t.Errorf("psk placeholder lost: %+v", back.Peers[0])
+	}
+	if back.MTU != orig.MTU || len(back.Addresses) != len(orig.Addresses) ||
+		back.Peers[0].Endpoint != orig.Peers[0].Endpoint ||
+		back.Peers[0].Keepalive != orig.Peers[0].Keepalive {
+		t.Errorf("round-trip drift: %+v vs %+v", back, orig)
+	}
+}

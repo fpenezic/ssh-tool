@@ -35,22 +35,34 @@ type ContextDialer func(ctx context.Context, network, addr string) (net.Conn, er
 // channel and never consult this.
 var FirstHopDialerHook func(settings *store.ResolvedSettings) (ContextDialer, error)
 
+// DialPathKey is the context key under which firstHopDial passes a
+// *string to the custom dialer; the dialer records which transport
+// it actually used ("tunnel", or "direct" when an auto/paused policy
+// skipped the tunnel). Lets the UI show a truthful VPN indicator.
+type DialPathKey struct{}
+
 // firstHopDial dials the first hop of a chain: through the network
-// profile's tunnel when one is resolved, plain TCP otherwise.
-func firstHopDial(ctx context.Context, settings *store.ResolvedSettings, addr string, timeout time.Duration) (net.Conn, error) {
+// profile's tunnel when one is resolved, plain TCP otherwise. The
+// second return is the transport actually used: "" (no profile),
+// "tunnel" or "direct".
+func firstHopDial(ctx context.Context, settings *store.ResolvedSettings, addr string, timeout time.Duration) (net.Conn, string, error) {
 	if settings.NetworkProfileID != nil {
 		if FirstHopDialerHook == nil {
-			return nil, fmt.Errorf("network profile set but no tunnel support wired")
+			return nil, "", fmt.Errorf("network profile set but no tunnel support wired")
 		}
 		d, err := FirstHopDialerHook(settings)
 		if err != nil {
-			return nil, fmt.Errorf("network profile: %w", err)
+			return nil, "", fmt.Errorf("network profile: %w", err)
 		}
-		dctx, cancel := context.WithTimeout(ctx, timeout)
+		path := "tunnel" // default when the dialer doesn't report
+		dctx, cancel := context.WithTimeout(
+			context.WithValue(ctx, DialPathKey{}, &path), timeout)
 		defer cancel()
-		return d(dctx, "tcp", addr)
+		conn, err := d(dctx, "tcp", addr)
+		return conn, path, err
 	}
-	return net.DialTimeout("tcp", addr, timeout)
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	return conn, "", err
 }
 
 // SessionState is the lifecycle event we emit to the frontend.
@@ -137,7 +149,12 @@ func (b *scrollbackBuf) snapshot() ([]byte, uint64) {
 
 // Session is one live shell on a remote host (possibly via a chain).
 type Session struct {
-	ID       string
+	ID string
+	// NetworkVia is the first hop's transport: "" (plain dial, no
+	// network profile), "tunnel" (through the profile's WireGuard
+	// device) or "direct" (profile present but auto/paused policy
+	// dialed outside the tunnel).
+	NetworkVia string
 	conn     ssh.Conn      // top-of-chain client connection
 	stack    []*ssh.Client // chain of clients (last one is the target)
 	channel  ssh.Channel
@@ -339,6 +356,9 @@ func Connect(
 		clients []*ssh.Client
 		prev    *ssh.Client // for direct-tcpip on subsequent hops
 		rawConn ssh.Conn
+		// networkVia records the first hop's transport ("", "tunnel",
+		// "direct") so the app layer can surface a VPN indicator.
+		networkVia string
 	)
 
 	for i, h := range chain {
@@ -444,11 +464,15 @@ func Connect(
 				debug("%s: TCP dial %s (direct)", h.Label, addr)
 			}
 			t0 := time.Now()
-			conn, err := firstHopDial(ctx, settings, addr, connectTimeout)
+			conn, dialPath, err := firstHopDial(ctx, settings, addr, connectTimeout)
 			if err != nil {
 				debug("%s: dial failed after %s: %v", h.Label, time.Since(t0).Round(time.Millisecond), err)
 				cleanup(clients)
 				return nil, fmt.Errorf("%s: dial: %w", h.Label, err)
+			}
+			networkVia = dialPath
+			if dialPath != "" {
+				debug("%s: first hop transport: %s", h.Label, dialPath)
 			}
 			debug("%s: TCP up in %s, starting SSH handshake", h.Label, time.Since(t0).Round(time.Millisecond))
 			progress("SSH handshake " + h.Label)
@@ -556,11 +580,12 @@ func Connect(
 	}
 
 	s := &Session{
-		ID:     sessionID,
-		conn:   rawConn,
-		stack:  clients,
-		stdin:  stdin,
-		closed: make(chan struct{}),
+		ID:         sessionID,
+		conn:       rawConn,
+		stack:      clients,
+		stdin:      stdin,
+		closed:     make(chan struct{}),
+		NetworkVia: networkVia,
 	}
 
 	// Output pump. We ALWAYS allocate a PTY (RequestPty above), and a PTY

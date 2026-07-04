@@ -2332,6 +2332,17 @@ export class SshConnectResult {
              */
             this["session_id"] = "";
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * NetworkVia is the network profile NAME when the first hop
+             * dialed through its WireGuard tunnel; empty for plain dials and
+             * when an auto/paused policy went direct. Drives the pane VPN
+             * badge - only truthful tunnel use shows it.
+             * @member
+             * @type {string | undefined}
+             */
+            this["network_via"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

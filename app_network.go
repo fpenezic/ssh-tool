@@ -41,7 +41,16 @@ func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 	var p wg.Profile
 	_ = json.Unmarshal([]byte(row.ConfigJSON), &p)
 
+	// The SSH layer passes a *string under DialPathKey so the UI can
+	// show which transport the session ACTUALLY used - "direct" when
+	// an auto/paused policy skipped the tunnel.
+	report := func(ctx context.Context, path string) {
+		if h, ok := ctx.Value(sshlayer.DialPathKey{}).(*string); ok {
+			*h = path
+		}
+	}
 	direct := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		report(ctx, "direct")
 		var d net.Dialer
 		return d.DialContext(ctx, network, addr)
 	}
@@ -62,6 +71,7 @@ func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 				return nil, fmt.Errorf("direct dial failed (%v) and tunnel failed: %w", derr, terr)
 			}
 			log.Printf("wg: %s not reachable directly, dialing via tunnel %s", addr, row.Name)
+			report(ctx, "tunnel")
 			return t.DialContext(ctx, network, addr)
 		}, nil
 	}
@@ -69,7 +79,10 @@ func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return t.DialContext, nil
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		report(ctx, "tunnel")
+		return t.DialContext(ctx, network, addr)
+	}, nil
 }
 
 func wgPrivateKeyVaultKey(profileID string) string {
@@ -209,7 +222,7 @@ func (a *App) NetworkProfileCreate(name, confText string) (*NetworkProfileInfo, 
 	if err != nil {
 		return nil, err
 	}
-	if p.PrivateKey == "" {
+	if p.PrivateKey == "" || p.PrivateKey == wg.KeepSecret {
 		return nil, fmt.Errorf("config has no PrivateKey")
 	}
 	cfg, err := secretlessJSON(p)
@@ -247,6 +260,18 @@ func (a *App) NetworkProfileUpdate(id, name, confText string) (*NetworkProfileIn
 		if p.PrivateKey == "" {
 			return nil, fmt.Errorf("config has no PrivateKey")
 		}
+		// The edit UI renders vault-held secrets as the KeepSecret
+		// placeholder - translate that back to "leave the stored
+		// value alone" (storeWgSecrets skips empties).
+		if p.PrivateKey == wg.KeepSecret {
+			p.PrivateKey = ""
+		}
+		for i := range p.Peers {
+			if p.Peers[i].PresharedKey == wg.KeepSecret {
+				p.Peers[i].PresharedKey = ""
+				p.Peers[i].HasPSK = true
+			}
+		}
 		// The conf text carries no policy fields - keep the ones the
 		// user already set on this profile.
 		var old wg.Profile
@@ -269,6 +294,22 @@ func (a *App) NetworkProfileUpdate(id, name, confText string) (*NetworkProfileIn
 	EventsEmit("network_tunnel_changed", id)
 	info := a.infoFor(*updated)
 	return &info, nil
+}
+
+// NetworkProfileRenderConf renders the stored profile back to
+// wg-quick text for the edit form. Secrets come out as the
+// wg.KeepSecret placeholder; NetworkProfileUpdate translates that
+// back to "keep the vault value".
+func (a *App) NetworkProfileRenderConf(id string) (string, error) {
+	row, err := a.db.GetNetworkProfile(id)
+	if err != nil {
+		return "", err
+	}
+	var p wg.Profile
+	if err := json.Unmarshal([]byte(row.ConfigJSON), &p); err != nil {
+		return "", fmt.Errorf("bad config: %w", err)
+	}
+	return p.RenderConf(), nil
 }
 
 // NetworkProfileDelete stops the tunnel and removes the row + vault
@@ -336,6 +377,83 @@ func (a *App) NetworkProfileSetPolicy(id, mode string, paused bool) (*NetworkPro
 	EventsEmit("network_tunnel_changed", id)
 	info := a.infoFor(*updated)
 	return &info, nil
+}
+
+// ----- Tunnel lifecycle: stop when the last session using it closes -----
+
+// wgLinger is how long an idle tunnel stays up after its last SSH
+// session closes. Long enough to cover a quick disconnect/reconnect
+// cycle without paying the tunnel setup again; short enough that the
+// network path doesn't sit open all day unused.
+const wgLinger = 2 * time.Minute
+
+// wgAcquire marks a session as using a profile's tunnel and cancels
+// any pending idle stop.
+func (a *App) wgAcquire(profileID, sessionID string) {
+	a.wgSessMu.Lock()
+	defer a.wgSessMu.Unlock()
+	if a.wgSessProfile == nil {
+		a.wgSessProfile = map[string]string{}
+	}
+	a.wgSessProfile[sessionID] = profileID
+	if t := a.wgStopTimers[profileID]; t != nil {
+		t.Stop()
+		delete(a.wgStopTimers, profileID)
+	}
+}
+
+// wgRelease drops a session's claim; when it was the profile's last
+// one, schedule the idle stop. Safe to call for sessions that never
+// used a tunnel (no-op).
+func (a *App) wgRelease(sessionID string) {
+	a.wgSessMu.Lock()
+	defer a.wgSessMu.Unlock()
+	pid, ok := a.wgSessProfile[sessionID]
+	if !ok {
+		return
+	}
+	delete(a.wgSessProfile, sessionID)
+	for _, p := range a.wgSessProfile {
+		if p == pid {
+			return // still in use
+		}
+	}
+	if a.wgStopTimers == nil {
+		a.wgStopTimers = map[string]*time.Timer{}
+	}
+	if t := a.wgStopTimers[pid]; t != nil {
+		t.Stop()
+	}
+	a.wgStopTimers[pid] = time.AfterFunc(wgLinger, func() {
+		a.wgSessMu.Lock()
+		delete(a.wgStopTimers, pid)
+		for _, p := range a.wgSessProfile {
+			if p == pid {
+				a.wgSessMu.Unlock()
+				return // reacquired while lingering
+			}
+		}
+		a.wgSessMu.Unlock()
+		log.Printf("wg: tunnel %s idle for %s, stopping", pid, wgLinger)
+		a.wgman.Stop(pid)
+		EventsEmit("network_tunnel_changed", pid)
+	})
+}
+
+// wgTrackSession wires the indicator + lifecycle for a freshly
+// connected session: returns the profile display name when the
+// session dialed through a tunnel (and registers it for idle-stop
+// accounting), "" otherwise.
+func (a *App) wgTrackSession(sess *sshlayer.Session, settings *store.ResolvedSettings) string {
+	if settings.NetworkProfileID == nil || sess.NetworkVia != "tunnel" {
+		return ""
+	}
+	pid := *settings.NetworkProfileID
+	a.wgAcquire(pid, sess.ID)
+	if row, err := a.db.GetNetworkProfile(pid); err == nil {
+		return row.Name
+	}
+	return pid
 }
 
 // NetworkProfileTest brings the tunnel up (vault + device) and

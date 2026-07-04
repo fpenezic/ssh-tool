@@ -5,6 +5,15 @@
 // treats as required). That lets call sites write object literals freely.
 
 import * as G from "../../bindings/ssh-tool/app.js";
+import { recordNetworkVia } from "./networkVia";
+
+// Connect results may carry network_via (the WireGuard profile the
+// first hop actually dialed through). Stash it so SessionStore.add
+// can decorate the tab - the add always runs after this resolves.
+function recordVia<T extends { session_id: string; network_via?: string }>(r: T): T {
+  recordNetworkVia(r.session_id, r.network_via);
+  return r;
+}
 
 // Wails v3 bindings declare Promise<T | null> for every call: Go nil
 // returns map to JS null. Our app rarely tolerates a null payload (it
@@ -505,15 +514,15 @@ export const api = {
   autoBackupPrefsGet: () => G.AutoBackupPrefsGet() as unknown as Promise<AutoBackupPrefs>,
   autoBackupPrefsSet: (prefs: AutoBackupPrefs) => G.AutoBackupPrefsSet(prefs),
 
-  sshConnect: (connectionId: string) => nn(G.SshConnect(connectionId)),
+  sshConnect: (connectionId: string) => nn(G.SshConnect(connectionId)).then(recordVia),
   // overrideCredentialId: empty string falls through to SshConnect
   // behaviour (use the connection's persisted auth_ref). Non-empty
   // forces this credential for the target hop on this one attempt
   // only - the persisted auth_ref is left untouched.
   sshConnectWithOverride: (connectionId: string, overrideCredentialId: string) =>
-    nn(G.SshConnectWithOverride(connectionId, overrideCredentialId)),
+    nn(G.SshConnectWithOverride(connectionId, overrideCredentialId)).then(recordVia),
   sshConnectAdvanced: (connectionId: string, overrideCredentialId: string, overrideUsername: string, overridePassword: string) =>
-    nn(G.SshConnectAdvanced(connectionId, overrideCredentialId, overrideUsername, overridePassword)),
+    nn(G.SshConnectAdvanced(connectionId, overrideCredentialId, overrideUsername, overridePassword)).then(recordVia),
   // One-shot server health probe (load / memory / disk / users) for the
   // focused session's host. ok=false means the host answered but nothing
   // parsed (network gear, non-Linux); rejects if the session is gone.
@@ -559,6 +568,8 @@ export const api = {
   networkProfileUpdate: (id: string, name: string, confText: string) =>
     G.NetworkProfileUpdate(id, name, confText) as unknown as Promise<NetworkProfileInfo>,
   networkProfileDelete: (id: string) => G.NetworkProfileDelete(id),
+  networkProfileRenderConf: (id: string) =>
+    G.NetworkProfileRenderConf(id) as unknown as Promise<string>,
   networkProfileStop: (id: string) => G.NetworkProfileStop(id),
   networkProfileSetPolicy: (id: string, mode: string, paused: boolean) =>
     G.NetworkProfileSetPolicy(id, mode, paused) as unknown as Promise<NetworkProfileInfo>,
@@ -756,13 +767,13 @@ export const api = {
       raw?: any;
     }>>,
   sshConnectDynamic: (folderId: string, entryId: string) =>
-    G.SshConnectDynamic(folderId, entryId) as unknown as Promise<{ session_id: string }>,
+    (G.SshConnectDynamic(folderId, entryId) as unknown as Promise<{ session_id: string }>).then(recordVia),
   sshConnectDynamicWithOverride: (folderId: string, entryId: string, overrideCredentialId: string) =>
-    G.SshConnectDynamicWithOverride(folderId, entryId, overrideCredentialId) as unknown as Promise<{ session_id: string }>,
+    (G.SshConnectDynamicWithOverride(folderId, entryId, overrideCredentialId) as unknown as Promise<{ session_id: string }>).then(recordVia),
   sshConnectDynamicAdvanced: (folderId: string, entryId: string, overrideCredentialId: string, overrideUsername: string, overridePassword: string) =>
-    G.SshConnectDynamicAdvanced(folderId, entryId, overrideCredentialId, overrideUsername, overridePassword) as unknown as Promise<{ session_id: string }>,
+    (G.SshConnectDynamicAdvanced(folderId, entryId, overrideCredentialId, overrideUsername, overridePassword) as unknown as Promise<{ session_id: string }>).then(recordVia),
   sshConnectDynamicWithJumpOverride: (folderId: string, entryId: string, overrideCredentialId: string, overrideUsername: string, overridePassword: string, jumpHostOverride: string, jumpCredentialOverride: string) =>
-    G.SshConnectDynamicWithJumpOverride(folderId, entryId, overrideCredentialId, overrideUsername, overridePassword, jumpHostOverride, jumpCredentialOverride) as unknown as Promise<{ session_id: string }>,
+    (G.SshConnectDynamicWithJumpOverride(folderId, entryId, overrideCredentialId, overrideUsername, overridePassword, jumpHostOverride, jumpCredentialOverride) as unknown as Promise<{ session_id: string }>).then(recordVia),
   pinDynamicEntry: (input: {
     folder_id: string;
     entry_id: string;

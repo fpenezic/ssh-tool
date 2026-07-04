@@ -63,6 +63,46 @@ type Peer struct {
 
 const defaultMTU = 1420
 
+// KeepSecret is the placeholder the UI puts in place of vault-held
+// secrets when it renders an existing profile back to wg-quick text
+// for editing. An update that parses to this value keeps the stored
+// secret instead of replacing it.
+const KeepSecret = "**KEEP**"
+
+// RenderConf reconstructs wg-quick text from a (secretless) profile
+// for the edit UI. Secrets render as KeepSecret placeholders.
+func (p *Profile) RenderConf() string {
+	var b strings.Builder
+	b.WriteString("[Interface]\n")
+	fmt.Fprintf(&b, "PrivateKey = %s\n", KeepSecret)
+	if len(p.Addresses) > 0 {
+		fmt.Fprintf(&b, "Address = %s\n", strings.Join(p.Addresses, ", "))
+	}
+	if len(p.DNS) > 0 {
+		fmt.Fprintf(&b, "DNS = %s\n", strings.Join(p.DNS, ", "))
+	}
+	if p.MTU > 0 {
+		fmt.Fprintf(&b, "MTU = %d\n", p.MTU)
+	}
+	for _, peer := range p.Peers {
+		b.WriteString("\n[Peer]\n")
+		fmt.Fprintf(&b, "PublicKey = %s\n", peer.PublicKey)
+		if peer.HasPSK {
+			fmt.Fprintf(&b, "PresharedKey = %s\n", KeepSecret)
+		}
+		if peer.Endpoint != "" {
+			fmt.Fprintf(&b, "Endpoint = %s\n", peer.Endpoint)
+		}
+		if len(peer.AllowedIPs) > 0 {
+			fmt.Fprintf(&b, "AllowedIPs = %s\n", strings.Join(peer.AllowedIPs, ", "))
+		}
+		if peer.Keepalive > 0 {
+			fmt.Fprintf(&b, "PersistentKeepalive = %d\n", peer.Keepalive)
+		}
+	}
+	return b.String()
+}
+
 // ParseConf parses a wg-quick configuration file. wg-quick-only
 // directives that require root / a real interface (Table, FwMark,
 // PostUp/Down, PreUp/Down, SaveConfig) are ignored: netstack has no

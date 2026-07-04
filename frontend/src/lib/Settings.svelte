@@ -996,7 +996,14 @@
   function npStartEdit(np: NetworkProfileInfo) {
     npEditingId = np.id;
     npName = np.name;
+    // Prefill with the stored config; secrets render as **KEEP**
+    // placeholders, which the backend translates back to "keep the
+    // vault value" on save. Clearing the textarea also keeps the
+    // current config (rename-only).
     npConf = "";
+    api.networkProfileRenderConf(np.id)
+      .then((text) => { if (npEditingId === np.id) npConf = text; })
+      .catch((e) => toast.err(errMsg(e)));
   }
   function npCancelEdit() { npEditingId = null; npName = ""; npConf = ""; }
   async function npSaveEdit() {
@@ -2168,7 +2175,7 @@
       <input bind:value={npName} placeholder="e.g. office-vpn" />
     </label>
     <label>
-      <span>{npEditingId ? "Replace config (leave empty to keep current)" : "wg-quick config"}</span>
+      <span>{npEditingId ? "Config (**KEEP** = stored secret stays; paste a new key to replace it)" : "wg-quick config"}</span>
       <textarea
         bind:value={npConf}
         rows="10"

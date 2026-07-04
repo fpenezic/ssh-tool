@@ -302,7 +302,7 @@ func dialChain(
 		addr := fmt.Sprintf("%s:%d", h.Hostname, h.Port)
 		var client *ssh.Client
 		if i == 0 {
-			conn, err := firstHopDial(context.Background(), settings, addr, connectTimeout)
+			conn, _, err := firstHopDial(context.Background(), settings, addr, connectTimeout)
 			if err != nil {
 				closeAll()
 				return nil, func() {}, fmt.Errorf("%s: dial: %w", h.Label, err)

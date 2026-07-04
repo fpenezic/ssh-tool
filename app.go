@@ -65,6 +65,13 @@ type App struct {
 	backupSched *backup.Scheduler
 	wgman       *wg.Manager
 
+	// Tunnel idle-stop accounting: which sessions dialed through
+	// which network profile, and the pending linger timers. See
+	// wgAcquire / wgRelease in app_network.go.
+	wgSessMu      sync.Mutex
+	wgSessProfile map[string]string      // sessionID -> profileID
+	wgStopTimers  map[string]*time.Timer // profileID -> linger stop
+
 	metaMu      sync.Mutex
 	sessionMeta map[string]sessionMetaEntry
 
@@ -1025,6 +1032,7 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 		a.forwards.StopAllForSession(sessionID)
 		a.sessionRecordingCleanup(sessionID)
 		a.pool.Remove(sessionID)
+		a.wgRelease(sessionID)
 		a.metaMu.Lock()
 		delete(a.sessionMeta, sessionID)
 		a.metaMu.Unlock()
@@ -1043,7 +1051,7 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 		"user":       dynUser,
 		"name":       entry.Name,
 	})
-	return &SshConnectResult{SessionID: sess.ID}, nil
+	return &SshConnectResult{SessionID: sess.ID, NetworkVia: a.wgTrackSession(sess, &settings)}, nil
 }
 
 func (a *App) FoldersDelete(id string) error {
@@ -2321,6 +2329,11 @@ func (a *App) BackupsDelete(path string) error {
 
 type SshConnectResult struct {
 	SessionID string `json:"session_id"`
+	// NetworkVia is the network profile NAME when the first hop
+	// dialed through its WireGuard tunnel; empty for plain dials and
+	// when an auto/paused policy went direct. Drives the pane VPN
+	// badge - only truthful tunnel use shows it.
+	NetworkVia string `json:"network_via,omitempty"`
 }
 
 // HostKeyChallengeEvent is emitted as a Wails event when a server presents
@@ -2536,6 +2549,7 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 			userInit = s.WasUserInitiated()
 		}
 		a.pool.Remove(id)
+		a.wgRelease(id)
 		a.syncForegroundService()
 		a.metaMu.Lock()
 		delete(a.sessionMeta, id)
@@ -2576,7 +2590,7 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 		"user":       user,
 	})
 
-	return &SshConnectResult{SessionID: sess.ID}, nil
+	return &SshConnectResult{SessionID: sess.ID, NetworkVia: a.wgTrackSession(sess, settings)}, nil
 }
 
 // makeAlgoLookup returns a HostKeyAlgoLookup that pins the SSH
@@ -4649,6 +4663,9 @@ type ReconnectAttempt struct {
 // ReconnectSuccess is the payload of session_reconnect_success.
 type ReconnectSuccess struct {
 	NewSessionID string `json:"new_session_id"`
+	// NetworkVia mirrors SshConnectResult.NetworkVia for the fresh
+	// session so the pane's VPN badge survives an auto-reconnect.
+	NetworkVia string `json:"network_via,omitempty"`
 }
 
 // ReconnectFailed is the payload of session_reconnect_failed.
@@ -4698,7 +4715,7 @@ func (a *App) runReconnect(oldID, connID string, cancel <-chan struct{}) {
 		// pool with a fresh id; the frontend swaps the id on success.
 		res, err := a.SshConnect(connID)
 		if err == nil {
-			EventsEmit(successEvent, ReconnectSuccess{NewSessionID: res.SessionID})
+			EventsEmit(successEvent, ReconnectSuccess{NewSessionID: res.SessionID, NetworkVia: res.NetworkVia})
 			return
 		}
 		log.Printf("reconnect attempt %d for conn %s failed: %v", attempt, connID, err)
