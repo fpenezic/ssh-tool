@@ -3,6 +3,7 @@ import { expandedConnections, expandedCredentials } from "./treeState.svelte";
 import { tagFilter } from "./tagFilter.svelte.ts";
 import { resolveColorTag } from "./palette";
 import { terminalPrefs } from "./terminalPrefs.svelte.ts";
+import { focusActiveTerminal } from "./terminalFocus";
 
 class TreeStore {
   folders = $state<Folder[]>([]);
@@ -1811,6 +1812,11 @@ class SessionStore {
       // Match closeTab() behaviour: bounce to Connections if nothing
       // left to look at.
       view.setTab("connections");
+    } else {
+      // The close promoted another tab/pane to active, but keyboard
+      // focus stayed on the now-unmounted xterm. Punt it into the
+      // newly visible terminal so the user can type immediately.
+      focusActiveTerminal();
     }
   }
 }

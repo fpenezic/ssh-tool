@@ -12,10 +12,11 @@
   import {
     IconHost, IconUser, IconLock, IconClipboardCopy, IconFolder,
     IconRotateCw, IconSplitH, IconSplitV, IconX, IconBroadcast,
-    IconActivity, IconGlobe, IconTunnel, IconSearch,
+    IconActivity, IconGlobe, IconTunnel, IconSearch, IconSettings,
   } from "./iconMap";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
+  import { focusActiveTerminal } from "./terminalFocus";
   import HttpModal from "./HttpModal.svelte";
   import TunnelPopover from "./TunnelPopover.svelte";
   import { isMobile } from "./platform";
@@ -393,6 +394,10 @@
     // other leaf still references it (an SFTP split shares the session
     // with its sibling terminal pane).
     paneTabs.closePane(tabId, node.id);
+    // Whatever pane/tab got promoted to active should also get keyboard
+    // focus - without this the focus dies with the unmounted xterm and
+    // the user has to click before typing.
+    if (paneTabs.tabs.length > 0) focusActiveTerminal();
     if (paneTabs.countLeavesForSession(sessionId) === 0) {
       // Session is going away entirely - tear down any background capture
       // for it too (the overlay lives up in TerminalArea now, keyed by
@@ -526,6 +531,14 @@
                 />
               {/if}
             </div>
+            <button
+              class="edit-conn"
+              title="Edit this connection (jump to its settings in the tree)"
+              onclick={(e) => {
+                e.stopPropagation();
+                if (paneSession?.connectionId) view.reveal("connection", paneSession.connectionId);
+              }}
+            ><IconSettings size={13} /></button>
           </div>
 
           <!-- Session group: search + broadcast + reconnect -->

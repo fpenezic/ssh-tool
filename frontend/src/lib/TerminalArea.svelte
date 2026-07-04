@@ -128,6 +128,8 @@
     }
     paneTabs.removeTab(tabId);
     if (paneTabs.tabs.length === 0) view.setTab("connections");
+    // Focus follows the tab promoted to active (mirrors autoCloseSession).
+    else focusActiveTerminal();
   }
 
   function tabTitle(tabId: string): string {
