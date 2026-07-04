@@ -44,6 +44,12 @@ var ErrTunnelWaiting = fmt.Errorf("waiting for VPN tunnel - connect through the 
 // collide with a real provider config field.
 const backgroundRefreshKey = "_background_refresh"
 
+// networkDirectSentinel is the editor's explicit "Direct - no tunnel"
+// choice for the provider API. Distinct from "" (= follow the
+// folder's own Network setting) so an inherited profile can be
+// stripped for just the API fetch.
+const networkDirectSentinel = "__direct__"
+
 // httpClient builds the HTTP client a provider should use for its
 // API: plain unless cfg["network_profile_id"] routes it through a
 // tunnel (e.g. a Proxmox host that is only reachable over VPN).

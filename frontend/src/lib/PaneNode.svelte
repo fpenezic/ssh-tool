@@ -12,7 +12,7 @@
   import {
     IconHost, IconUser, IconLock, IconClipboardCopy, IconFolder,
     IconRotateCw, IconSplitH, IconSplitV, IconX, IconBroadcast,
-    IconActivity, IconGlobe, IconTunnel, IconSearch, IconSettings,
+    IconActivity, IconGlobe, IconTunnel, IconSearch, IconSettings, IconVpn,
   } from "./iconMap";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
@@ -439,7 +439,7 @@
       {/if}
       {#if paneSession?.networkVia}
         <span class="vpn-badge" title="First hop dials through WireGuard profile '{paneSession.networkVia}'">
-          <IconTunnel size={10} /> {paneSession.networkVia}
+          <IconVpn size={10} /> {paneSession.networkVia}
         </span>
       {/if}
       {#if paneSession?.status === "reconnecting"}

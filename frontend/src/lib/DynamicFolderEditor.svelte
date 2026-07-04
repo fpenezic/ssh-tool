@@ -143,9 +143,10 @@
   );
 
   // Network profile (userspace WireGuard) the provider API is fetched
-  // through - for a Proxmox / internal endpoint only reachable over
-  // VPN. "" = direct. SSH connects to the entries inherit their
-  // network from the folder's own Network setting, not this.
+  // through. "" = follow the folder's own Network setting (the
+  // backend resolves the inheritance), "__direct__" = explicitly no
+  // tunnel, otherwise a profile id. SSH connects to the entries
+  // always follow the folder's Network setting.
   let networkProfileId = $state<string>("");
 
   let saving = $state(false);
@@ -511,15 +512,17 @@
           <label>
             <span class="lbl">Network (API access)</span>
             <select bind:value={networkProfileId}>
-              <option value="">Direct - no tunnel</option>
+              <option value="">(same as the folder's Network setting)</option>
+              <option value="__direct__">Direct - no tunnel</option>
               {#each networkProfiles.list as np (np.id)}
                 <option value={np.id}>via {np.name} (WireGuard)</option>
               {/each}
             </select>
             <span class="hint">
-              Fetch the API through a WireGuard profile - for a Proxmox
-              only reachable over VPN. SSH to the entries follows the
-              folder's own Network setting instead.
+              How the provider API itself is fetched. By default it
+              follows the folder's Network setting (set it in the
+              folder's detail pane), so a VPN-only Proxmox needs no
+              extra config here.
             </span>
           </label>
         </fieldset>
@@ -670,14 +673,16 @@
           <label>
             <span class="lbl">Fetch the provider API through</span>
             <select bind:value={networkProfileId}>
-              <option value="">Direct - no tunnel</option>
+              <option value="">(same as the folder's Network setting)</option>
+              <option value="__direct__">Direct - no tunnel</option>
               {#each networkProfiles.list as np (np.id)}
                 <option value={np.id}>via {np.name} (WireGuard)</option>
               {/each}
             </select>
             <span class="hint">
-              For endpoints only reachable over VPN. SSH to the entries
-              follows the folder's own Network setting instead.
+              By default the fetch follows the folder's Network setting
+              (folder detail pane); pick Direct to keep a public API
+              off an inherited VPN.
             </span>
           </label>
         </fieldset>
