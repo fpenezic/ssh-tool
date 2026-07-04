@@ -119,11 +119,12 @@
     }
   }
   let versionInfo = $state<{ name: string; version: string; commit: string; schema_version: number } | null>(null);
-  // Profile statistics for the About section. Tree + credential stores
-  // are loaded at app start so the counts are just derived; active
-  // tunnels change at runtime and are fetched when the section opens.
+  // Profile statistics for the About section. profileStats() counts
+  // straight from the DB (incl. resolved VNC, configured forwards +
+  // bookmarks, cached dynamic entries by kind); active tunnels and
+  // session counts are runtime values on top of that.
+  let profileStats = $state<import("./api").ProfileStats | null>(null);
   let activeForwards = $state<number | null>(null);
-  const dynamicFolderCount = $derived(Object.keys(tree.dynamicFolders).length);
   const connectedSessions = $derived(
     sessions.tabs.filter((s) => s.status === "connected").length
   );
@@ -969,10 +970,14 @@
 
   let activeSection = $state<SectionId>("terminal");
 
-  // Refresh the active-tunnel count every time the About section opens;
-  // "" asks the backend for forwards across all sessions.
+  // Refresh the profile counts + active-tunnel count every time the
+  // About section opens; "" asks the backend for forwards across all
+  // sessions.
   $effect(() => {
     if (activeSection !== "about") return;
+    api.profileStats()
+      .then((s) => (profileStats = s))
+      .catch(() => (profileStats = null));
     api.forwardsActive("")
       .then((l) => (activeForwards = l?.length ?? 0))
       .catch(() => (activeForwards = null));
@@ -3293,33 +3298,61 @@
       <p class="hint">Loading…</p>
     {/if}
     <h3 style="margin-top:1.2rem">Profile statistics</h3>
-    <dl class="about-list">
-      <dt>Connections</dt>
-      <dd>{tree.connections.length}</dd>
-      <dt>Folders</dt>
-      <dd>
-        {tree.folders.length}
-        {#if dynamicFolderCount > 0}
-          <span class="hint inline">({dynamicFolderCount} dynamic)</span>
+    {#if profileStats}
+      {@const ps = profileStats}
+      <dl class="about-list">
+        <dt>Connections</dt>
+        <dd>
+          {ps.connections}
+          {#if ps.vnc_enabled > 0}
+            <span class="hint inline">({ps.vnc_enabled} with VNC)</span>
+          {/if}
+        </dd>
+        <dt>Folders</dt>
+        <dd>
+          {ps.folders}
+          {#if ps.dynamic_folders > 0}
+            <span class="hint inline">({ps.dynamic_folders} dynamic)</span>
+          {/if}
+        </dd>
+        {#if ps.dynamic_hosts + ps.dynamic_vms + ps.dynamic_lxc + ps.dynamic_servers > 0}
+          <dt>Dynamic inventory</dt>
+          <dd>
+            {[
+              ps.dynamic_hosts > 0 ? `${ps.dynamic_hosts} host${ps.dynamic_hosts === 1 ? "" : "s"}` : "",
+              ps.dynamic_vms > 0 ? `${ps.dynamic_vms} VM${ps.dynamic_vms === 1 ? "" : "s"}` : "",
+              ps.dynamic_lxc > 0 ? `${ps.dynamic_lxc} LXC` : "",
+              ps.dynamic_servers > 0 ? `${ps.dynamic_servers} server${ps.dynamic_servers === 1 ? "" : "s"}` : "",
+            ].filter(Boolean).join(", ")}
+          </dd>
         {/if}
-      </dd>
-      <dt>Credentials</dt>
-      <dd>
-        {credentials.list.length}
-        {#if credentials.folders.length > 0}
-          <span class="hint inline">(in {credentials.folders.length} folder{credentials.folders.length === 1 ? "" : "s"})</span>
-        {/if}
-      </dd>
-      <dt>Open sessions</dt>
-      <dd>
-        {sessions.tabs.length}
-        {#if sessions.tabs.length > 0}
-          <span class="hint inline">({connectedSessions} connected)</span>
-        {/if}
-      </dd>
-      <dt>Active tunnels</dt>
-      <dd>{activeForwards ?? "-"}</dd>
-    </dl>
+        <dt>Tunnels</dt>
+        <dd>
+          {ps.forwards} configured
+          {#if ps.bookmarks > 0}
+            <span class="hint inline">({ps.bookmarks} bookmark{ps.bookmarks === 1 ? "" : "s"})</span>
+          {/if}
+        </dd>
+        <dt>Credentials</dt>
+        <dd>
+          {ps.credentials}
+          {#if credentials.folders.length > 0}
+            <span class="hint inline">(in {credentials.folders.length} folder{credentials.folders.length === 1 ? "" : "s"})</span>
+          {/if}
+        </dd>
+        <dt>Open sessions</dt>
+        <dd>
+          {sessions.tabs.length}
+          {#if sessions.tabs.length > 0}
+            <span class="hint inline">({connectedSessions} connected)</span>
+          {/if}
+        </dd>
+        <dt>Active tunnels</dt>
+        <dd>{activeForwards ?? "-"}</dd>
+      </dl>
+    {:else}
+      <p class="hint">Loading…</p>
+    {/if}
     <p class="hint">
       Version and commit are injected at build time via ldflags. A
       <code>dev</code> tag means the binary was built without those

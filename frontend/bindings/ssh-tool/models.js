@@ -1902,6 +1902,111 @@ export class PinDynamicEntryInput {
 }
 
 /**
+ * ProfileStats bundles profile-wide counts for the Settings -> About
+ * "Profile statistics" block. Everything comes from the store in one
+ * pass; VNC is the resolved (inheritance-applied) value, not just the
+ * per-connection override, so a folder-level "VNC on" counts all its
+ * children.
+ */
+export class ProfileStats {
+    /**
+     * Creates a new ProfileStats instance.
+     * @param {Partial<ProfileStats>} [$$source = {}] - The source object to create the ProfileStats.
+     */
+    constructor($$source = {}) {
+        if (!("connections" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["connections"] = 0;
+        }
+        if (!("vnc_enabled" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["vnc_enabled"] = 0;
+        }
+        if (!("folders" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["folders"] = 0;
+        }
+        if (!("dynamic_folders" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["dynamic_folders"] = 0;
+        }
+        if (!("forwards" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["forwards"] = 0;
+        }
+        if (!("bookmarks" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["bookmarks"] = 0;
+        }
+        if (!("credentials" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["credentials"] = 0;
+        }
+        if (!("dynamic_hosts" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["dynamic_hosts"] = 0;
+        }
+        if (!("dynamic_vms" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["dynamic_vms"] = 0;
+        }
+        if (!("dynamic_lxc" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["dynamic_lxc"] = 0;
+        }
+        if (!("dynamic_servers" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["dynamic_servers"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ProfileStats instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ProfileStats}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ProfileStats(/** @type {Partial<ProfileStats>} */($$parsedSource));
+    }
+}
+
+/**
  * RecordingState is the payload of the "recording_changed" event and
  * the return of RecordingStart/Stop. Path is where the .cast file
  * lives (final, even after stop).

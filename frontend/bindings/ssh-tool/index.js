@@ -40,6 +40,7 @@ export {
     LocalShellOpenResult,
     OpksshCertStatusResult,
     PinDynamicEntryInput,
+    ProfileStats,
     RecordingState,
     ReleaseNotes,
     ScrollbackSnapshot,

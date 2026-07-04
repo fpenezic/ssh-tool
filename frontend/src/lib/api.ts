@@ -507,6 +507,7 @@ export const api = {
   openURL: (url: string) => G.OpenURL(url),
   logDir: () => G.LogDir() as unknown as Promise<string>,
   appVersion: () => G.AppVersion() as unknown as Promise<AppVersionInfo>,
+  profileStats: () => G.ProfileStats() as unknown as Promise<ProfileStats>,
   snippetsList: (connectionId: string) =>
     G.SnippetsList(connectionId) as unknown as Promise<Snippet[]>,
   snippetCreate: (input: SnippetInput) =>
@@ -1187,6 +1188,20 @@ export interface AppVersionInfo {
   version: string;
   commit: string;
   schema_version: number;
+}
+
+export interface ProfileStats {
+  connections: number;
+  vnc_enabled: number;
+  folders: number;
+  dynamic_folders: number;
+  forwards: number;
+  bookmarks: number;
+  credentials: number;
+  dynamic_hosts: number;
+  dynamic_vms: number;
+  dynamic_lxc: number;
+  dynamic_servers: number;
 }
 
 export interface BackupCreateResult {

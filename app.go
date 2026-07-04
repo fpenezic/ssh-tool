@@ -4826,6 +4826,87 @@ func (a *App) AppVersion() AppVersionInfo {
 	return info
 }
 
+// ProfileStats bundles profile-wide counts for the Settings -> About
+// "Profile statistics" block. Everything comes from the store in one
+// pass; VNC is the resolved (inheritance-applied) value, not just the
+// per-connection override, so a folder-level "VNC on" counts all its
+// children.
+type ProfileStats struct {
+	Connections    int `json:"connections"`
+	VncEnabled     int `json:"vnc_enabled"`
+	Folders        int `json:"folders"`
+	DynamicFolders int `json:"dynamic_folders"`
+	Forwards       int `json:"forwards"`
+	Bookmarks      int `json:"bookmarks"`
+	Credentials    int `json:"credentials"`
+	DynamicHosts   int `json:"dynamic_hosts"`
+	DynamicVMs     int `json:"dynamic_vms"`
+	DynamicLXC     int `json:"dynamic_lxc"`
+	DynamicServers int `json:"dynamic_servers"`
+}
+
+// ProfileStats counts connections (total + resolved VNC-enabled),
+// folders (total + dynamic), configured port forwards + their proxy
+// bookmarks, credentials, and cached dynamic-inventory entries
+// bucketed by kind (hosts / VMs / LXC / cloud servers).
+func (a *App) ProfileStats() (*ProfileStats, error) {
+	out := &ProfileStats{}
+	conns, err := a.db.ListConnections(nil)
+	if err != nil {
+		return nil, err
+	}
+	folders, err := a.db.ListFolders()
+	if err != nil {
+		return nil, err
+	}
+	out.Connections = len(conns)
+	out.Folders = len(folders)
+	for _, c := range conns {
+		if resolver.ResolveWith(c, folders).VncEnabled {
+			out.VncEnabled++
+		}
+	}
+	fwds, err := a.db.ListAllPortForwards()
+	if err != nil {
+		return nil, err
+	}
+	out.Forwards = len(fwds)
+	for _, f := range fwds {
+		out.Bookmarks += len(f.Bookmarks)
+	}
+	creds, err := a.db.ListCredentials()
+	if err != nil {
+		return nil, err
+	}
+	out.Credentials = len(creds)
+	dyn, err := a.db.ListDynamicFolders()
+	if err != nil {
+		return nil, err
+	}
+	out.DynamicFolders = len(dyn)
+	for _, df := range dyn {
+		entries, err := a.db.ListDynamicEntries(df.FolderID)
+		if err != nil {
+			continue // one broken folder shouldn't sink the whole panel
+		}
+		for _, e := range entries {
+			switch inventory.EntryKind(e.Kind) {
+			case inventory.KindHost:
+				out.DynamicHosts++
+			case inventory.KindGuestVM:
+				out.DynamicVMs++
+			case inventory.KindGuestLXC:
+				out.DynamicLXC++
+			default:
+				// Cloud providers (Hetzner, DO, ...) and Ansible all
+				// report flat "server" entries.
+				out.DynamicServers++
+			}
+		}
+	}
+	return out, nil
+}
+
 // UpdateCheckResult is what CheckForUpdate hands back to the frontend.
 // IsNewer signals "a strictly higher version than the running build is
 // available". Errors that aren't user-actionable (no network, server
