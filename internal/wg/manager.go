@@ -40,6 +40,9 @@ type Status struct {
 	LastHandshake int64  `json:"last_handshake"`
 	RxBytes       int64  `json:"rx_bytes"`
 	TxBytes       int64  `json:"tx_bytes"`
+	// Peers is only reported by helper-backed tunnels (NetBird):
+	// connected remote peer count. Always 0 for plain WireGuard.
+	Peers int `json:"peers,omitempty"`
 }
 
 // Manager owns the running tunnels, keyed by profile id. Tunnels

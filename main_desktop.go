@@ -149,12 +149,14 @@ func buildApp(appInst *App) *application.App {
 		ShouldQuit: func() bool {
 			if appInst.quitConfirmed.Load() {
 				appInst.syncFlushOnQuit()
+				appInst.stopTunnelsOnQuit()
 				return true
 			}
 			if appInst.SshActiveSessionCount() == 0 {
 				// Auto-sync: push a dirty profile on the way out,
 				// capped at 10s so a dead network can't block quit.
 				appInst.syncFlushOnQuit()
+				appInst.stopTunnelsOnQuit()
 				return true
 			}
 			// The confirm modal is useless behind a hidden window

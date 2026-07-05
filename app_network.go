@@ -16,17 +16,145 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"path/filepath"
 	"time"
 
 	"ssh-tool/internal/inventory"
-	"ssh-tool/internal/store"
 	sshlayer "ssh-tool/internal/ssh"
+	"ssh-tool/internal/store"
 	"ssh-tool/internal/wg"
 )
 
 // directProbeTimeout is how long ModeAuto waits for a direct TCP dial
 // before deciding the host is only reachable through the tunnel.
 const directProbeTimeout = 3 * time.Second
+
+// Profile kinds. The stored config JSON carries "kind"; absent means
+// wireguard (pre-netbird profiles have no field).
+const (
+	kindWireguard = "wireguard"
+	kindNetbird   = "netbird"
+)
+
+// NetbirdConfig is the stored (secretless) NetBird profile: the setup
+// key lives in the referenced api_token credential, registration
+// state under DataDir/netbird/<profileID>/.
+type NetbirdConfig struct {
+	Kind                 string `json:"kind"` // "netbird"
+	ManagementURL        string `json:"management_url"`
+	DeviceName           string `json:"device_name"`
+	SetupKeyCredentialID string `json:"setup_key_credential_id"`
+	Mode                 string `json:"mode,omitempty"`
+	Paused               bool   `json:"paused,omitempty"`
+}
+
+// profilePolicy is the kind/mode/paused triple every profile kind
+// shares; parsed from the config JSON without caring about the rest.
+type profilePolicy struct {
+	Kind   string `json:"kind"`
+	Mode   string `json:"mode"`
+	Paused bool   `json:"paused"`
+}
+
+func parsePolicy(configJSON string) profilePolicy {
+	var p profilePolicy
+	_ = json.Unmarshal([]byte(configJSON), &p)
+	if p.Kind == "" {
+		p.Kind = kindWireguard
+	}
+	return p
+}
+
+// tunnelDialer is what both tunnel kinds hand the SSH layer.
+type tunnelDialer interface {
+	DialContext(ctx context.Context, network, addr string) (net.Conn, error)
+}
+
+// ensureTunnel starts (or reuses) the profile's tunnel regardless of
+// kind and leaves a wgTouch hold - see ensureWgTunnel for why.
+func (a *App) ensureTunnel(row *store.NetworkProfile) (tunnelDialer, error) {
+	switch parsePolicy(row.ConfigJSON).Kind {
+	case kindNetbird:
+		return a.ensureNetbirdTunnel(row)
+	default:
+		return a.ensureWgTunnel(row.ID)
+	}
+}
+
+// tunnelStop stops whichever manager runs the profile's tunnel.
+func (a *App) tunnelStop(profileID string) {
+	a.wgman.Stop(profileID)
+	a.nbman.Stop(profileID)
+}
+
+// tunnelStatus merges both managers' views into the wg.Status shape
+// the UI renders.
+func (a *App) tunnelStatus(profileID string) wg.Status {
+	if st := a.wgman.Status(profileID); st.Running {
+		return st
+	}
+	if hs := a.nbman.Status(profileID); hs.Running {
+		return wg.Status{ProfileID: profileID, Running: true, StartedAt: hs.StartedAt, Peers: hs.Peers}
+	}
+	return wg.Status{ProfileID: profileID}
+}
+
+// netbirdStateDir is where the helper keeps a profile's registration
+// state (device keys). Removed on profile delete.
+func netbirdStateDir(profileID string) string {
+	return filepath.Join(store.DataDir(), "netbird", profileID)
+}
+
+// ensureNetbirdTunnel spawns (or reuses) the ssh-tool-netbird helper
+// for the profile. The setup key is resolved from the referenced
+// api_token credential and passed via env; once registered, the state
+// dir carries device credentials and a missing key is fine.
+func (a *App) ensureNetbirdTunnel(row *store.NetworkProfile) (tunnelDialer, error) {
+	if p := a.nbman.Get(row.ID); p != nil {
+		a.wgTouch(row.ID)
+		return p, nil
+	}
+	var cfg NetbirdConfig
+	if err := json.Unmarshal([]byte(row.ConfigJSON), &cfg); err != nil {
+		return nil, fmt.Errorf("profile %s: bad config: %w", row.Name, err)
+	}
+	exe, ok := pluginPath("netbird")
+	if !ok {
+		return nil, fmt.Errorf("NetBird plugin is not installed - download it in Settings -> Network profiles")
+	}
+	setupKey := ""
+	if cfg.SetupKeyCredentialID != "" {
+		cred, err := a.db.GetCredential(cfg.SetupKeyCredentialID)
+		if err == nil && cred != nil && cred.VaultKey != nil {
+			if v, ok, verr := a.vault.Get(*cred.VaultKey); verr != nil {
+				return nil, fmt.Errorf("profile %s: setup key: %w (vault locked?)", row.Name, verr)
+			} else if ok {
+				setupKey = v
+			}
+		}
+	}
+	device := cfg.DeviceName
+	if device == "" {
+		device = "ssh-tool"
+	}
+	args := []string{"--state-dir", netbirdStateDir(row.ID), "--device", device}
+	if cfg.ManagementURL != "" {
+		args = append(args, "--management", cfg.ManagementURL)
+	}
+	var env []string
+	if setupKey != "" {
+		env = append(env, "SSHTOOL_NB_SETUP_KEY="+setupKey)
+	}
+	p, err := a.nbman.Ensure(row.ID, row.Name, exe, args, env)
+	if err != nil {
+		return nil, err
+	}
+	a.wgTouch(row.ID)
+	a.recordAudit("network.tunnel.start", row.ID, map[string]string{"name": row.Name, "kind": kindNetbird})
+	EventsEmit("network_tunnel_changed", row.ID)
+	return p, nil
+}
 
 // wgDialerFor implements the per-profile connect policy and returns
 // the dialer the SSH layer should use for the first hop:
@@ -39,8 +167,7 @@ func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 	if err != nil {
 		return nil, err
 	}
-	var p wg.Profile
-	_ = json.Unmarshal([]byte(row.ConfigJSON), &p)
+	pol := parsePolicy(row.ConfigJSON)
 
 	// The SSH layer passes a *string under DialPathKey so the UI can
 	// show which transport the session ACTUALLY used - "direct" when
@@ -55,28 +182,28 @@ func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 		var d net.Dialer
 		return d.DialContext(ctx, network, addr)
 	}
-	if p.Paused {
+	if pol.Paused {
 		return direct, nil
 	}
-	if p.Mode == wg.ModeAuto {
+	if pol.Mode == wg.ModeAuto {
 		return func(ctx context.Context, network, addr string) (net.Conn, error) {
 			pctx, cancel := context.WithTimeout(ctx, directProbeTimeout)
 			c, derr := direct(pctx, network, addr)
 			cancel()
 			if derr == nil {
-				log.Printf("wg: %s reachable directly, skipping tunnel %s", addr, row.Name)
+				log.Printf("net: %s reachable directly, skipping tunnel %s", addr, row.Name)
 				return c, nil
 			}
-			t, terr := a.ensureWgTunnel(profileID)
+			t, terr := a.ensureTunnel(row)
 			if terr != nil {
 				return nil, fmt.Errorf("direct dial failed (%v) and tunnel failed: %w", derr, terr)
 			}
-			log.Printf("wg: %s not reachable directly, dialing via tunnel %s", addr, row.Name)
+			log.Printf("net: %s not reachable directly, dialing via tunnel %s", addr, row.Name)
 			report(ctx, "tunnel")
 			return t.DialContext(ctx, network, addr)
 		}, nil
 	}
-	t, err := a.ensureWgTunnel(profileID)
+	t, err := a.ensureTunnel(row)
 	if err != nil {
 		return nil, err
 	}
@@ -96,21 +223,26 @@ func (a *App) wgBackgroundDialerFor(profileID string) (sshlayer.ContextDialer, e
 	if err != nil {
 		return nil, err
 	}
-	var p wg.Profile
-	_ = json.Unmarshal([]byte(row.ConfigJSON), &p)
+	pol := parsePolicy(row.ConfigJSON)
 
 	direct := func(ctx context.Context, network, addr string) (net.Conn, error) {
 		var d net.Dialer
 		return d.DialContext(ctx, network, addr)
 	}
-	if p.Paused {
+	if pol.Paused {
 		return direct, nil
 	}
+	// Ride an already-running tunnel of either kind, but never START
+	// one for a background poll.
 	if t := a.wgman.Get(profileID); t != nil {
 		a.wgTouch(profileID)
 		return t.DialContext, nil
 	}
-	if p.Mode == wg.ModeAuto {
+	if p := a.nbman.Get(profileID); p != nil {
+		a.wgTouch(profileID)
+		return p.DialContext, nil
+	}
+	if pol.Mode == wg.ModeAuto {
 		return direct, nil
 	}
 	return nil, inventory.ErrTunnelWaiting
@@ -215,26 +347,39 @@ func secretlessJSON(p *wg.Profile) (string, error) {
 	return string(b), nil
 }
 
-// NetworkProfileInfo is the list shape for the UI: the stored row
-// plus the parsed secretless profile for display.
+// NetworkProfileInfo is the list shape for the UI: the stored row plus
+// the parsed secretless config for display. Kind selects which of
+// Profile (WireGuard) / Netbird is populated.
 type NetworkProfileInfo struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Profile   wg.Profile `json:"profile"`
-	Status    wg.Status  `json:"status"`
-	CreatedAt int64      `json:"created_at"`
-	UpdatedAt int64      `json:"updated_at"`
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Kind      string         `json:"kind"` // "wireguard" | "netbird"
+	Mode      string         `json:"mode"`
+	Paused    bool           `json:"paused"`
+	Profile   wg.Profile     `json:"profile"`            // WG only
+	Netbird   *NetbirdConfig `json:"netbird,omitempty"`  // NetBird only
+	Status    wg.Status      `json:"status"`
+	CreatedAt int64          `json:"created_at"`
+	UpdatedAt int64          `json:"updated_at"`
 }
 
 func (a *App) infoFor(row store.NetworkProfile) NetworkProfileInfo {
+	pol := parsePolicy(row.ConfigJSON)
 	info := NetworkProfileInfo{
 		ID: row.ID, Name: row.Name,
+		Kind: pol.Kind, Mode: pol.Mode, Paused: pol.Paused,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
-		Status: a.wgman.Status(row.ID),
+		Status: a.tunnelStatus(row.ID),
 	}
-	_ = json.Unmarshal([]byte(row.ConfigJSON), &info.Profile)
-	info.Profile.ID = row.ID
-	info.Profile.Name = row.Name
+	if pol.Kind == kindNetbird {
+		var nb NetbirdConfig
+		_ = json.Unmarshal([]byte(row.ConfigJSON), &nb)
+		info.Netbird = &nb
+	} else {
+		_ = json.Unmarshal([]byte(row.ConfigJSON), &info.Profile)
+		info.Profile.ID = row.ID
+		info.Profile.Name = row.Name
+	}
 	return info
 }
 
@@ -276,6 +421,71 @@ func (a *App) NetworkProfileCreate(name, confText string) (*NetworkProfileInfo, 
 	}
 	a.recordAudit("network.profile.create", row.ID, map[string]string{"name": name})
 	info := a.infoFor(*row)
+	return &info, nil
+}
+
+// NetworkProfileCreateNetbird stores a NetBird profile: management
+// URL, device name and a reference to the api_token credential that
+// holds the setup key. Nothing secret lives on the row. Requires the
+// NetBird plugin so the config can't be created and then fail to run
+// with no explanation.
+func (a *App) NetworkProfileCreateNetbird(name, managementURL, deviceName, setupKeyCredentialID string) (*NetworkProfileInfo, error) {
+	if _, ok := pluginPath("netbird"); !ok {
+		return nil, fmt.Errorf("NetBird plugin is not installed - download it first")
+	}
+	if setupKeyCredentialID == "" {
+		return nil, fmt.Errorf("a setup-key credential is required")
+	}
+	cfg := NetbirdConfig{
+		Kind:                 kindNetbird,
+		ManagementURL:        managementURL,
+		DeviceName:           deviceName,
+		SetupKeyCredentialID: setupKeyCredentialID,
+		Mode:                 wg.ModeAlways,
+	}
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	row, err := a.db.CreateNetworkProfile(name, string(b))
+	if err != nil {
+		return nil, err
+	}
+	a.recordAudit("network.profile.create", row.ID, map[string]string{"name": name, "kind": kindNetbird})
+	info := a.infoFor(*row)
+	return &info, nil
+}
+
+// NetworkProfileUpdateNetbird edits a NetBird profile's fields,
+// preserving its policy (mode/paused). Restarts the helper so the new
+// config takes effect.
+func (a *App) NetworkProfileUpdateNetbird(id, name, managementURL, deviceName, setupKeyCredentialID string) (*NetworkProfileInfo, error) {
+	row, err := a.db.GetNetworkProfile(id)
+	if err != nil {
+		return nil, err
+	}
+	var cfg NetbirdConfig
+	if err := json.Unmarshal([]byte(row.ConfigJSON), &cfg); err != nil {
+		return nil, fmt.Errorf("bad config: %w", err)
+	}
+	cfg.Kind = kindNetbird
+	cfg.ManagementURL = managementURL
+	cfg.DeviceName = deviceName
+	if setupKeyCredentialID != "" {
+		cfg.SetupKeyCredentialID = setupKeyCredentialID
+	}
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := a.db.UpdateNetworkProfile(id, name, string(b))
+	if err != nil {
+		return nil, err
+	}
+	a.tunnelStop(id)
+	a.recordAudit("network.profile.update", id, map[string]string{"name": name, "kind": kindNetbird})
+	EventsEmit("network_tunnel_changed", id)
+	info := a.infoFor(*updated)
 	return &info, nil
 }
 
@@ -325,7 +535,7 @@ func (a *App) NetworkProfileUpdate(id, name, confText string) (*NetworkProfileIn
 	if err != nil {
 		return nil, err
 	}
-	a.wgman.Stop(id)
+	a.tunnelStop(id)
 	a.recordAudit("network.profile.update", id, map[string]string{"name": name, "config_replaced": fmt.Sprintf("%t", confText != "")})
 	EventsEmit("network_tunnel_changed", id)
 	info := a.infoFor(*updated)
@@ -356,13 +566,19 @@ func (a *App) NetworkProfileDelete(id string) error {
 	if err != nil {
 		return err
 	}
-	a.wgman.Stop(id)
-	var p wg.Profile
-	_ = json.Unmarshal([]byte(row.ConfigJSON), &p)
-	_ = a.vault.Delete(wgPrivateKeyVaultKey(id))
-	for _, peer := range p.Peers {
-		if peer.HasPSK {
-			_ = a.vault.Delete(wgPSKVaultKey(id, peer.PublicKey))
+	a.tunnelStop(id)
+	// WG secrets live in the vault keyed by profile; NetBird keeps its
+	// registration state on disk. Clean up whichever this profile has.
+	if parsePolicy(row.ConfigJSON).Kind == kindNetbird {
+		_ = os.RemoveAll(netbirdStateDir(id))
+	} else {
+		var p wg.Profile
+		_ = json.Unmarshal([]byte(row.ConfigJSON), &p)
+		_ = a.vault.Delete(wgPrivateKeyVaultKey(id))
+		for _, peer := range p.Peers {
+			if peer.HasPSK {
+				_ = a.vault.Delete(wgPSKVaultKey(id, peer.PublicKey))
+			}
 		}
 	}
 	if err := a.db.DeleteNetworkProfile(id); err != nil {
@@ -376,7 +592,7 @@ func (a *App) NetworkProfileDelete(id string) error {
 // NetworkProfileStop tears down a running tunnel (connections dialed
 // through it drop, like killing a session).
 func (a *App) NetworkProfileStop(id string) {
-	a.wgman.Stop(id)
+	a.tunnelStop(id)
 	EventsEmit("network_tunnel_changed", id)
 }
 
@@ -407,7 +623,7 @@ func (a *App) NetworkProfileSetPolicy(id, mode string, paused bool) (*NetworkPro
 		return nil, err
 	}
 	if paused {
-		a.wgman.Stop(id)
+		a.tunnelStop(id)
 	}
 	a.recordAudit("network.profile.policy", id, map[string]string{"mode": mode, "paused": fmt.Sprintf("%t", paused)})
 	EventsEmit("network_tunnel_changed", id)
@@ -486,7 +702,7 @@ func (a *App) wgRelease(sessionID string) {
 			name = t.Name
 		}
 		log.Printf("wg: tunnel %s idle for %s, stopping", name, wgLinger)
-		a.wgman.Stop(pid)
+		a.tunnelStop(pid)
 		EventsEmit("network_tunnel_changed", pid)
 	})
 }
@@ -507,14 +723,33 @@ func (a *App) wgTrackSession(sess *sshlayer.Session, settings *store.ResolvedSet
 	return pid
 }
 
-// NetworkProfileTest brings the tunnel up (vault + device) and
-// reports its status - a cheap "does this config load" check. It does
-// not verify the peer answers (WireGuard is silent until traffic
-// flows); LastHandshake stays 0 until the first real dial.
+// stopTunnelsOnQuit tears down every running tunnel on app exit. WG
+// devices die with the process anyway, but the NetBird helper
+// processes are separate: closing them cleanly lets the peer
+// deregister and avoids orphaned children. Best-effort, bounded by
+// each manager's own stop timeouts.
+func (a *App) stopTunnelsOnQuit() {
+	if a.wgman != nil {
+		a.wgman.StopAll()
+	}
+	if a.nbman != nil {
+		a.nbman.StopAll()
+	}
+}
+
+// NetworkProfileTest brings the tunnel up and reports its status - a
+// cheap "does this config load / can we register" check, for either
+// kind. It does not verify a WG peer answers (WireGuard is silent
+// until traffic flows); for NetBird a successful helper start already
+// means registration + management sync worked.
 func (a *App) NetworkProfileTest(id string) (*wg.Status, error) {
-	if _, err := a.ensureWgTunnel(id); err != nil {
+	row, err := a.db.GetNetworkProfile(id)
+	if err != nil {
 		return nil, err
 	}
-	st := a.wgman.Status(id)
+	if _, err := a.ensureTunnel(row); err != nil {
+		return nil, err
+	}
+	st := a.tunnelStatus(id)
 	return &st, nil
 }

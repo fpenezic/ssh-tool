@@ -42,6 +42,7 @@ import (
 	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/store"
 	"ssh-tool/internal/syncer"
+	"ssh-tool/internal/tunnelhelper"
 	"ssh-tool/internal/updater"
 	"ssh-tool/internal/wg"
 )
@@ -64,6 +65,10 @@ type App struct {
 	inventory   *inventory.Manager
 	backupSched *backup.Scheduler
 	wgman       *wg.Manager
+	// nbman runs NetBird (and future helper-backed) tunnels via the
+	// ssh-tool-netbird sidecar. Kept beside wgman; app_network.go
+	// dispatches by profile kind.
+	nbman *tunnelhelper.Manager
 
 	// Tunnel idle-stop accounting: which sessions dialed through
 	// which network profile, and the pending linger timers. See
@@ -363,6 +368,12 @@ func (a *App) initialise() {
 	a.termSizes = map[string][2]uint16{}
 	a.forwards = sshlayer.NewForwardPool()
 	a.wgman = wg.NewManager()
+	a.nbman = tunnelhelper.NewManager(func(profileID string) {
+		// A helper process died (crash, network, kill). Sessions that
+		// dialed through it lose their transport and drop on their own;
+		// just refresh the UI's tunnel state (status pill, VPN badge).
+		EventsEmit("network_tunnel_changed", profileID)
+	})
 	// First-hop dialer for connections resolved to a network profile:
 	// vault-resolve the WG secrets, lazily start (or reuse) the
 	// userspace tunnel, hand its netstack DialContext to the SSH layer.
