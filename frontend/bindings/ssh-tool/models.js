@@ -1769,8 +1769,78 @@ export class LocalShellOpenResult {
 }
 
 /**
- * NetworkProfileInfo is the list shape for the UI: the stored row
- * plus the parsed secretless profile for display.
+ * NetbirdConfig is the stored (secretless) NetBird profile: the setup
+ * key lives in the referenced api_token credential, registration
+ * state under DataDir/netbird/<profileID>/.
+ */
+export class NetbirdConfig {
+    /**
+     * Creates a new NetbirdConfig instance.
+     * @param {Partial<NetbirdConfig>} [$$source = {}] - The source object to create the NetbirdConfig.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * "netbird"
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("management_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["management_url"] = "";
+        }
+        if (!("device_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["device_name"] = "";
+        }
+        if (!("setup_key_credential_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["setup_key_credential_id"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["mode"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["paused"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new NetbirdConfig instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {NetbirdConfig}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new NetbirdConfig(/** @type {Partial<NetbirdConfig>} */($$parsedSource));
+    }
+}
+
+/**
+ * NetworkProfileInfo is the list shape for the UI: the stored row plus
+ * the parsed secretless config for display. Kind selects which of
+ * Profile (WireGuard) / Netbird is populated.
  */
 export class NetworkProfileInfo {
     /**
@@ -1792,12 +1862,43 @@ export class NetworkProfileInfo {
              */
             this["name"] = "";
         }
+        if (!("kind" in $$source)) {
+            /**
+             * "wireguard" | "netbird"
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("mode" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["mode"] = "";
+        }
+        if (!("paused" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["paused"] = false;
+        }
         if (!("profile" in $$source)) {
             /**
+             * WG only
              * @member
              * @type {wg$0.Profile}
              */
             this["profile"] = (new wg$0.Profile());
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * NetBird only
+             * @member
+             * @type {NetbirdConfig | null | undefined}
+             */
+            this["netbird"] = undefined;
         }
         if (!("status" in $$source)) {
             /**
@@ -1830,14 +1931,18 @@ export class NetworkProfileInfo {
      * @returns {NetworkProfileInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType6;
-        const $$createField3_0 = $$createType7;
+        const $$createField5_0 = $$createType6;
+        const $$createField6_0 = $$createType8;
+        const $$createField7_0 = $$createType9;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("profile" in $$parsedSource) {
-            $$parsedSource["profile"] = $$createField2_0($$parsedSource["profile"]);
+            $$parsedSource["profile"] = $$createField5_0($$parsedSource["profile"]);
+        }
+        if ("netbird" in $$parsedSource) {
+            $$parsedSource["netbird"] = $$createField6_0($$parsedSource["netbird"]);
         }
         if ("status" in $$parsedSource) {
-            $$parsedSource["status"] = $$createField3_0($$parsedSource["status"]);
+            $$parsedSource["status"] = $$createField7_0($$parsedSource["status"]);
         }
         return new NetworkProfileInfo(/** @type {Partial<NetworkProfileInfo>} */($$parsedSource));
     }
@@ -1976,6 +2081,60 @@ export class PinDynamicEntryInput {
             $$parsedSource["tags"] = $$createField5_0($$parsedSource["tags"]);
         }
         return new PinDynamicEntryInput(/** @type {Partial<PinDynamicEntryInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * PluginInfo is the Settings "Plugins" card row.
+ */
+export class PluginInfo {
+    /**
+     * Creates a new PluginInfo instance.
+     * @param {Partial<PluginInfo>} [$$source = {}] - The source object to create the PluginInfo.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("installed" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["installed"] = false;
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("supported" in $$source)) {
+            /**
+             * Supported=false when this platform has no helper build
+             * (android/ios - helpers are desktop-only).
+             * @member
+             * @type {boolean}
+             */
+            this["supported"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new PluginInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {PluginInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new PluginInfo(/** @type {Partial<PluginInfo>} */($$parsedSource));
     }
 }
 
@@ -2262,7 +2421,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType9;
+        const $$createField1_0 = $$createType11;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -3026,7 +3185,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType11;
+        const $$createField0_0 = $$createType13;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -3143,7 +3302,7 @@ export class TcpdumpStartInput {
      * @returns {TcpdumpStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType12;
+        const $$createField10_0 = $$createType14;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("port_overrides" in $$parsedSource) {
             $$parsedSource["port_overrides"] = $$createField10_0($$parsedSource["port_overrides"]);
@@ -3323,9 +3482,11 @@ const $$createType3 = $Create.Nullable($$createType0);
 const $$createType4 = $Create.Map($Create.Any, $Create.Any);
 const $$createType5 = $Create.Nullable($$createType4);
 const $$createType6 = wg$0.Profile.createFrom;
-const $$createType7 = wg$0.Status.createFrom;
-const $$createType8 = ssh$0.SftpEntry.createFrom;
-const $$createType9 = $Create.Array($$createType8);
-const $$createType10 = ssh$0.ParsedPacket.createFrom;
+const $$createType7 = NetbirdConfig.createFrom;
+const $$createType8 = $Create.Nullable($$createType7);
+const $$createType9 = wg$0.Status.createFrom;
+const $$createType10 = ssh$0.SftpEntry.createFrom;
 const $$createType11 = $Create.Array($$createType10);
-const $$createType12 = $Create.Map($Create.Any, $Create.Any);
+const $$createType12 = ssh$0.ParsedPacket.createFrom;
+const $$createType13 = $Create.Array($$createType12);
+const $$createType14 = $Create.Map($Create.Any, $Create.Any);

@@ -931,11 +931,11 @@
           <option value="">(inherit from parent)</option>
           <option value="__direct__">Direct - no tunnel</option>
           {#each networkProfiles.list as np (np.id)}
-            <option value={np.id}>via {np.name} (WireGuard)</option>
+            <option value={np.id}>via {np.name} ({np.kind === "netbird" ? "NetBird" : "WireGuard"})</option>
           {/each}
         </select>
         <span class="field-note">
-          {networkProfiles.list.length === 0 ? "No WireGuard profiles yet - " : "WireGuard profiles live in "}
+          {networkProfiles.list.length === 0 ? "No network profiles yet - " : "Network profiles live in "}
           <button class="linklike" onclick={(e) => { e.preventDefault(); view.setTabSettingsSection("network"); }}>
             Settings -&gt; Network profiles</button>.
         </span>
@@ -1168,11 +1168,11 @@
           <option value="">(inherit from folder)</option>
           <option value="__direct__">Direct - no tunnel</option>
           {#each networkProfiles.list as np (np.id)}
-            <option value={np.id}>via {np.name} (WireGuard)</option>
+            <option value={np.id}>via {np.name} ({np.kind === "netbird" ? "NetBird" : "WireGuard"})</option>
           {/each}
         </select>
         <span class="field-note">
-          {networkProfiles.list.length === 0 ? "No WireGuard profiles yet - " : "WireGuard profiles live in "}
+          {networkProfiles.list.length === 0 ? "No network profiles yet - " : "Network profiles live in "}
           <button class="linklike" onclick={(e) => { e.preventDefault(); view.setTabSettingsSection("network"); }}>
             Settings -&gt; Network profiles</button>.
         </span>

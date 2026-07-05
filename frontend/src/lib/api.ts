@@ -140,15 +140,36 @@ export interface WgStatus {
   last_handshake: number;
   rx_bytes: number;
   tx_bytes: number;
+  peers?: number;
+}
+
+export interface NetbirdConfig {
+  kind: string;
+  management_url: string;
+  device_name: string;
+  setup_key_credential_id: string;
+  mode?: "always" | "auto";
+  paused?: boolean;
 }
 
 export interface NetworkProfileInfo {
   id: string;
   name: string;
+  kind: "wireguard" | "netbird";
+  mode: "always" | "auto" | "";
+  paused: boolean;
   profile: WgProfile;
+  netbird?: NetbirdConfig;
   status: WgStatus;
   created_at: number;
   updated_at: number;
+}
+
+export interface PluginInfo {
+  name: string;
+  installed: boolean;
+  path: string;
+  supported: boolean;
 }
 
 export interface VncSession {
@@ -575,6 +596,13 @@ export const api = {
     G.NetworkProfileSetPolicy(id, mode, paused) as unknown as Promise<NetworkProfileInfo>,
   networkProfileTest: (id: string) =>
     G.NetworkProfileTest(id) as unknown as Promise<WgStatus>,
+  networkProfileCreateNetbird: (name: string, managementURL: string, deviceName: string, setupKeyCredentialId: string) =>
+    G.NetworkProfileCreateNetbird(name, managementURL, deviceName, setupKeyCredentialId) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileUpdateNetbird: (id: string, name: string, managementURL: string, deviceName: string, setupKeyCredentialId: string) =>
+    G.NetworkProfileUpdateNetbird(id, name, managementURL, deviceName, setupKeyCredentialId) as unknown as Promise<NetworkProfileInfo>,
+  pluginsStatus: () => G.PluginsStatus() as unknown as Promise<PluginInfo[]>,
+  pluginDownload: (name: string) => G.PluginDownload(name) as unknown as Promise<string>,
+  pluginRemove: (name: string) => G.PluginRemove(name),
   snippetsList: (connectionId: string) =>
     G.SnippetsList(connectionId) as unknown as Promise<Snippet[]>,
   snippetCreate: (input: SnippetInput) =>

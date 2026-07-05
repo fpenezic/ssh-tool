@@ -515,7 +515,7 @@
               <option value="">(same as the folder's Network setting)</option>
               <option value="__direct__">Direct - no tunnel</option>
               {#each networkProfiles.list as np (np.id)}
-                <option value={np.id}>via {np.name} (WireGuard)</option>
+                <option value={np.id}>via {np.name} ({np.kind === "netbird" ? "NetBird" : "WireGuard"})</option>
               {/each}
             </select>
             <span class="hint">
@@ -676,7 +676,7 @@
               <option value="">(same as the folder's Network setting)</option>
               <option value="__direct__">Direct - no tunnel</option>
               {#each networkProfiles.list as np (np.id)}
-                <option value={np.id}>via {np.name} (WireGuard)</option>
+                <option value={np.id}>via {np.name} ({np.kind === "netbird" ? "NetBird" : "WireGuard"})</option>
               {/each}
             </select>
             <span class="hint">

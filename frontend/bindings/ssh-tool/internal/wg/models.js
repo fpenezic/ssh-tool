@@ -229,6 +229,15 @@ export class Status {
              */
             this["tx_bytes"] = 0;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Peers is only reported by helper-backed tunnels (NetBird):
+             * connected remote peer count. Always 0 for plain WireGuard.
+             * @member
+             * @type {number | undefined}
+             */
+            this["peers"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
