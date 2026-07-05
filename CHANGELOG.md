@@ -7,6 +7,15 @@ in alpha upstream.
 
 ---
 
+## [0.48.2] - No console flash on Windows
+
+### Fixed
+
+- **Opening Settings -> Network profiles briefly flashed a console
+  window on Windows.** The version check that shows the installed
+  NetBird helper's version spawned it without hiding the console;
+  it's now suppressed, like the tunnel process already was.
+
 ## [0.48.1] - Version-stamp fix
 
 ### Fixed
