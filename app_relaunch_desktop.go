@@ -23,9 +23,18 @@ func (a *App) relaunchApp() error {
 	}
 	cmd := exec.Command(exe)
 	cmd.Env = append(os.Environ(), "SSH_TOOL_WAIT_PID="+strconv.Itoa(os.Getpid()))
+	// Detach the child so it outlives this process. On Linux the app
+	// lives in a per-app systemd scope that gets torn down (SIGTERM to
+	// every member) when we Quit(); without setsid the fresh instance
+	// dies with it and the user sees "Restart closed the app and it
+	// never came back". Platform-split - no-op on Windows.
+	detachRelaunchChild(cmd)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	// Release the child so it doesn't become a zombie tied to us, and
+	// so nothing about our exit path can reach back into it.
+	_ = cmd.Process.Release()
 	a.quitConfirmed.Store(true)
 	if a.app != nil {
 		// Give the IPC response a moment to reach the webview before

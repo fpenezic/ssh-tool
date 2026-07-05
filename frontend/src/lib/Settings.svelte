@@ -2197,6 +2197,14 @@
       network; DNS servers listed in the config resolve hostnames
       inside the tunnel.
     </p>
+    <p class="hint warn-note">
+      <strong>One identity across machines.</strong> A WireGuard profile
+      carries a single key and overlay IP. If it is synced and the tunnel
+      is left up on another machine, bringing it up here makes both peers
+      fight for the same identity and degrades both. Stop it on the other
+      machine first, or use a peer-per-device overlay (NetBird) when you
+      routinely connect from more than one machine.
+    </p>
   </div>
 
   {:else if activeSection === "browser"}
@@ -3893,6 +3901,12 @@
     font-size: 0.88rem;
     margin: 0.4rem 0;
     line-height: 1.55;
+  }
+  .warn-note {
+    border-left: 3px solid var(--yellow);
+    padding: 0.4rem 0.7rem;
+    background: color-mix(in srgb, var(--yellow) 10%, transparent);
+    border-radius: 0 4px 4px 0;
   }
   label {
     display: flex;
