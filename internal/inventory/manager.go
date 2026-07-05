@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"ssh-tool/internal/creds"
+	"ssh-tool/internal/resolver"
 	"ssh-tool/internal/store"
 )
 
@@ -144,8 +146,36 @@ func (m *Manager) Refresh(ctx context.Context, folderID string, force bool) erro
 		setError(err.Error())
 		return err
 	}
+	// API network fallback: when the provider config has no explicit
+	// choice, the fetch follows the FOLDER's own inheritable Network
+	// setting - "the folder goes through the VPN" should mean the
+	// API does too, without a second knob. The editor's explicit
+	// "Direct" choice is stored as networkDirectSentinel and strips
+	// an inherited profile here.
+	switch cfg["network_profile_id"] {
+	case nil, "":
+		if folders, ferr := m.db.ListFolders(); ferr == nil {
+			fid := folderID
+			rs := resolver.ResolveWith(store.Connection{FolderID: &fid}, folders)
+			if rs.NetworkProfileID != nil {
+				cfg["network_profile_id"] = *rs.NetworkProfileID
+			}
+		}
+	case networkDirectSentinel:
+		cfg["network_profile_id"] = ""
+	}
+	// Timer refreshes must not start a VPN tunnel for a profile-routed
+	// provider API; force=true (user action) may. See TunnelDialContext.
+	cfg[backgroundRefreshKey] = !force
 	entries, err := prov.Fetch(ctx, cfg)
 	if err != nil {
+		if errors.Is(err, ErrTunnelWaiting) {
+			// Expected idle state, not a failure: keep the cached
+			// entries, surface the wait as folder status, and don't
+			// spam the log every cycle.
+			setError(ErrTunnelWaiting.Error())
+			return nil
+		}
 		setError(err.Error())
 		return err
 	}

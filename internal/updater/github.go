@@ -36,6 +36,11 @@ type ReleaseInfo struct {
 	ChangelogURL string // html_url of the release page
 	NotesMD      string // release body (markdown)
 	Assets       map[string]ReleaseAsset
+	// AssetsByName carries EVERY asset under its verbatim filename -
+	// the plugin downloader looks up helper binaries
+	// (ssh-tool-netbird-linux-amd64, ...) that the platform-keyed
+	// Assets map deliberately filters out.
+	AssetsByName map[string]ReleaseAsset
 }
 
 type ghReleasePayload struct {
@@ -104,20 +109,21 @@ func parseGitHubRelease(body []byte) (*ReleaseInfo, error) {
 		ChangelogURL: p.HTMLURL,
 		NotesMD:      p.Body,
 		Assets:       map[string]ReleaseAsset{},
+		AssetsByName: map[string]ReleaseAsset{},
 	}
 	for _, a := range p.Assets {
-		key, ok := assetPlatformKey(a.Name)
-		if !ok {
-			continue
-		}
 		sha := ""
 		if rest, found := strings.CutPrefix(a.Digest, "sha256:"); found {
 			sha = rest
 		}
-		info.Assets[key] = ReleaseAsset{
+		asset := ReleaseAsset{
 			URL:    a.BrowserDownloadURL,
 			SHA256: sha,
 			Size:   a.Size,
+		}
+		info.AssetsByName[a.Name] = asset
+		if key, ok := assetPlatformKey(a.Name); ok {
+			info.Assets[key] = asset
 		}
 	}
 	return info, nil

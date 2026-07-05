@@ -23,7 +23,6 @@ package inventory
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -48,13 +47,9 @@ func (Proxmox) Fetch(ctx context.Context, cfg map[string]any) ([]Entry, error) {
 
 	url := strings.TrimRight(baseURL, "/") + "/api2/json/cluster/resources"
 
-	transport := &http.Transport{}
-	if insecure {
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	}
-	client := &http.Client{
-		Timeout:   15 * time.Second,
-		Transport: transport,
+	client, err := httpClient(cfg, 15*time.Second, insecure)
+	if err != nil {
+		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {

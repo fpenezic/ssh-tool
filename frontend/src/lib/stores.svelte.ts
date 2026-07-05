@@ -4,6 +4,7 @@ import { tagFilter } from "./tagFilter.svelte.ts";
 import { resolveColorTag } from "./palette";
 import { terminalPrefs } from "./terminalPrefs.svelte.ts";
 import { focusActiveTerminal } from "./terminalFocus";
+import { takeNetworkVia } from "./networkVia";
 
 class TreeStore {
   folders = $state<Folder[]>([]);
@@ -967,6 +968,10 @@ export interface SessionTab {
   // "connected". Used by the optional tab uptime indicator. Cleared
   // on disconnect.
   connectedAt?: number;
+  // Name of the WireGuard network profile the first hop ACTUALLY
+  // dialed through. Unset for plain dials and when an auto/paused
+  // policy went direct. Drives the pane VPN badge.
+  networkVia?: string;
 }
 
 // PaneNode is a binary tree: each tab has a root node which is either a
@@ -1650,6 +1655,12 @@ class SessionStore {
     if (t.status === "connected" && !t.connectedAt) {
       t = { ...t, connectedAt: Date.now() };
     }
+    // Connect wrappers stash which WG profile the dial went through;
+    // the add always runs after the connect promise resolved.
+    if (!t.networkVia) {
+      const via = takeNetworkVia(t.sessionId);
+      if (via) t = { ...t, networkVia: via };
+    }
     this.tabs.push(t);
     this.activeId = t.sessionId;
     this.subscribe(t.sessionId);
@@ -1719,6 +1730,9 @@ class SessionStore {
         // Swap the session id across SessionStore and the pane tree.
         this.swapSessionId(sessionId, newId);
         paneTabs.swapSessionId(sessionId, newId);
+        // The fresh session may have taken a different path (auto
+        // mode: on-site direct vs remote tunnel) - refresh the badge.
+        this.setNetworkVia(newId, p.network_via || undefined);
       })
     );
     unsubs.push(
@@ -1759,6 +1773,11 @@ class SessionStore {
       this.unsubs.delete(oldId);
     }
     this.subscribe(newId);
+  }
+  setNetworkVia(sessionId: string, via: string | undefined) {
+    this.tabs = this.tabs.map((t) =>
+      t.sessionId === sessionId ? { ...t, networkVia: via } : t
+    );
   }
   setStatus(sessionId: string, status: SessionTab["status"], hint?: string) {
     // Reassign the whole array so $derived consumers re-run. In Svelte 5

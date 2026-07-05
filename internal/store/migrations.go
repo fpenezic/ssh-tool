@@ -343,6 +343,22 @@ var migrations = []struct {
 		// overrides_json, so they need no column.
 		`ALTER TABLE connections ADD COLUMN vnc_password_vault_key TEXT;`,
 	},
+	{
+		17,
+		// Userspace WireGuard network profiles. config_json is the
+		// parsed wg.Profile WITHOUT secrets - the interface private
+		// key and per-peer preshared keys live in the vault under
+		// wg_private_key:<id> / wg_psk:<id>:<peer_public_key>. The
+		// inheritable network_profile_id rides inside overrides_json /
+		// folder settings, so connections need no column.
+		`CREATE TABLE network_profiles (
+		    id          TEXT PRIMARY KEY,
+		    name        TEXT NOT NULL UNIQUE,
+		    config_json TEXT NOT NULL DEFAULT '{}',
+		    created_at  INTEGER NOT NULL,
+		    updated_at  INTEGER NOT NULL
+		);`,
+	},
 }
 
 // LatestSchemaVersion is the version a freshly-migrated DB lands on.

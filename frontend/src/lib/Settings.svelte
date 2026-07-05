@@ -3,7 +3,8 @@
   import { errMsg } from "./connectErrors";
   import { isMobile } from "./platform";
   import PasswordInput from "./PasswordInput.svelte";
-  import { api, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult } from "./api";
+  import { api, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo } from "./api";
+  import { networkProfiles } from "./networkProfiles.svelte";
   import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
   import FolderPicker from "./FolderPicker.svelte";
   import type { Folder } from "./api";
@@ -24,6 +25,7 @@
   import { themes } from "./themes";
   import LogViewer from "./LogViewer.svelte";
   import UpdateModal from "./UpdateModal.svelte";
+  import SearchableSelect from "./SearchableSelect.svelte";
   import { updateCheck } from "./updateCheck.svelte";
 
   let browserPath = $state("");
@@ -930,6 +932,7 @@
   type SectionId =
     | "appearance"
     | "connection"
+    | "network"
     | "terminal"
     | "browser"
     | "snippets"
@@ -953,6 +956,7 @@
   const SECTIONS: SectionDef[] = [
     { id: "appearance",        title: "Appearance",       group: "Appearance" },
     { id: "connection",        title: "Connection",       group: "Appearance" },
+    { id: "network",           title: "Network profiles", group: "Appearance" },
     { id: "terminal",          title: "Terminal",         group: "Appearance" },
     { id: "browser",           title: "Browser launcher", group: "Appearance" },
     { id: "snippets",          title: "Snippets",         group: "Appearance" },
@@ -969,6 +973,187 @@
   ];
 
   let activeSection = $state<SectionId>("terminal");
+
+  // ----- Network profiles (WireGuard + NetBird) -----
+  let npName = $state("");
+  let npConf = $state("");
+  let npEditingId = $state<string | null>(null);
+  let npEditKind = $state<"wireguard" | "netbird">("wireguard");
+  let npKind = $state<"wireguard" | "netbird">("wireguard");
+  let npBusy = $state(false);
+  // NetBird form fields
+  let nbManagement = $state("");
+  let nbDevice = $state("");
+  let nbCredId = $state("");
+  // Inline "create setup-key credential" (the picker only lists
+  // existing api_token creds; this avoids a trip to the Credentials
+  // tab mid-flow).
+  let nbNewKeyOpen = $state(false);
+  let nbNewKeyName = $state("");
+  let nbNewKeySecret = $state("");
+  let nbNewKeyBusy = $state(false);
+  // Plugins
+  let plugins = $state<import("./api").PluginInfo[]>([]);
+  let pluginBusy = $state(false);
+  const nbInstalled = $derived(plugins.some((p) => p.name === "netbird" && p.installed));
+  // api_token credentials for the setup-key picker.
+  const apiTokenCredOptions = $derived(
+    credentials.list
+      .filter((c) => c.kind === "api_token")
+      .map((c) => ({ value: c.id, label: c.name })),
+  );
+
+  $effect(() => {
+    if (activeSection === "network") {
+      networkProfiles.load().catch(() => {});
+      credentials.load().catch(() => {});
+      refreshPlugins();
+    }
+  });
+
+  async function refreshPlugins() {
+    try { plugins = (await api.pluginsStatus()) ?? []; } catch { /* ignore */ }
+  }
+  async function pluginDownload(name: string) {
+    pluginBusy = true;
+    try {
+      await api.pluginDownload(name);
+      await refreshPlugins();
+      toast.ok(`${name} plugin installed`);
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { pluginBusy = false; }
+  }
+  async function pluginRemove(name: string) {
+    const ok = await showConfirm({
+      title: "Remove plugin",
+      message: `Remove the ${name} plugin? Profiles using it will fail to connect until it's reinstalled.`,
+      okLabel: "Remove",
+    });
+    if (!ok) return;
+    pluginBusy = true;
+    try { await api.pluginRemove(name); await refreshPlugins(); }
+    catch (e: any) { toast.err(errMsg(e)); }
+    finally { pluginBusy = false; }
+  }
+
+  async function nbCreateSetupKey() {
+    if (!nbNewKeyName.trim() || !nbNewKeySecret) {
+      toast.err("Name and setup key are required");
+      return;
+    }
+    nbNewKeyBusy = true;
+    try {
+      const res: any = await api.credentialsCreate({
+        kind: "api_token",
+        name: nbNewKeyName.trim(),
+        api_token_id: "",
+        api_token_secret: nbNewKeySecret,
+      } as any);
+      await credentials.load();
+      const newId = res?.credential?.id ?? res?.id;
+      if (newId) nbCredId = newId;
+      nbNewKeyOpen = false;
+      nbNewKeyName = "";
+      nbNewKeySecret = "";
+      toast.ok("Setup-key credential created");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { nbNewKeyBusy = false; }
+  }
+
+  async function npCreateNetbird() {
+    npBusy = true;
+    try {
+      await api.networkProfileCreateNetbird(npName.trim(), nbManagement.trim(), nbDevice.trim(), nbCredId);
+      npCancelEdit();
+      await networkProfiles.load(true);
+      toast.ok("NetBird profile added");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
+  async function npSaveNetbird() {
+    if (!npEditingId) return;
+    npBusy = true;
+    try {
+      await api.networkProfileUpdateNetbird(npEditingId, npName.trim(), nbManagement.trim(), nbDevice.trim(), nbCredId);
+      npCancelEdit();
+      await networkProfiles.load(true);
+      toast.ok("Profile saved");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
+
+  async function npCreate() {
+    npBusy = true;
+    try {
+      await api.networkProfileCreate(npName.trim(), npConf);
+      npName = ""; npConf = "";
+      await networkProfiles.load(true);
+      toast.ok("Profile added");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
+  function npStartEdit(np: NetworkProfileInfo) {
+    npEditingId = np.id;
+    npEditKind = np.kind;
+    npName = np.name;
+    if (np.kind === "netbird") {
+      nbManagement = np.netbird?.management_url ?? "";
+      nbDevice = np.netbird?.device_name ?? "";
+      nbCredId = np.netbird?.setup_key_credential_id ?? "";
+      return;
+    }
+    // WireGuard: prefill with the stored config; secrets render as
+    // **KEEP** placeholders, which the backend translates back to
+    // "keep the vault value" on save. Clearing the textarea keeps the
+    // current config (rename-only).
+    npConf = "";
+    api.networkProfileRenderConf(np.id)
+      .then((text) => { if (npEditingId === np.id) npConf = text; })
+      .catch((e) => toast.err(errMsg(e)));
+  }
+  function npCancelEdit() {
+    npEditingId = null;
+    npName = ""; npConf = "";
+    nbManagement = ""; nbDevice = ""; nbCredId = "";
+  }
+  async function npSaveEdit() {
+    if (!npEditingId) return;
+    npBusy = true;
+    try {
+      await api.networkProfileUpdate(npEditingId, npName.trim(), npConf);
+      npCancelEdit();
+      await networkProfiles.load(true);
+      toast.ok("Profile saved");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
+  async function npDelete(np: NetworkProfileInfo) {
+    const ok = await showConfirm({
+      title: "Delete network profile",
+      message: `Delete "${np.name}"? Connections still assigned to it will fail to connect until you change their Network setting.`,
+      okLabel: "Delete",
+    });
+    if (!ok) return;
+    try {
+      await api.networkProfileDelete(np.id);
+      await networkProfiles.load(true);
+    } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  async function npSetPolicy(np: NetworkProfileInfo, mode: string, paused: boolean) {
+    try {
+      await api.networkProfileSetPolicy(np.id, mode, paused);
+      await networkProfiles.load(true);
+    } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  async function npTest(np: NetworkProfileInfo) {
+    npBusy = true;
+    try {
+      const st = await api.networkProfileTest(np.id);
+      toast.ok(st.running ? `Tunnel ${np.name} is up` : `Tunnel ${np.name} did not start`);
+      await networkProfiles.load(true);
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
 
   // Refresh the profile counts + active-tunnel count every time the
   // About section opens; "" asks the backend for forwards across all
@@ -2029,6 +2214,227 @@
         Open folder
       </button>
     </div>
+  </div>
+
+  {:else if activeSection === "network"}
+  <div class="group">
+    <h2>Network profiles</h2>
+    <p class="hint">
+      Userspace tunnels - no TUN adapter, no admin rights, no system
+      routes. Assign a profile to a folder or connection (Network
+      setting) and its first SSH hop dials through the tunnel.
+      WireGuard is built in; NetBird needs the optional plugin below.
+    </p>
+
+    <h3 style="margin-top:0.8rem">Plugins</h3>
+    <p class="hint">
+      Optional overlay-network clients, kept out of the main app to
+      keep it small. Downloaded from the GitHub release matching this
+      version and verified by checksum before install.
+    </p>
+    {#each plugins as pl (pl.name)}
+      <div class="np-card">
+        <div class="np-head">
+          <strong>{pl.name === "netbird" ? "NetBird" : pl.name}</strong>
+          {#if !pl.supported}
+            <span class="np-pill">not on this platform</span>
+          {:else if pl.installed && pl.update_available}
+            <span class="np-pill paused">update available</span>
+          {:else if pl.installed}
+            <span class="np-pill running">installed{pl.version ? ` ${pl.version}` : ""}</span>
+          {:else}
+            <span class="np-pill">not installed</span>
+          {/if}
+          {#if pl.installed}<span class="np-meta">{pl.path}</span>{/if}
+        </div>
+        {#if pl.supported}
+          {#if pl.update_available}
+            <p class="hint" style="margin:0.2rem 0">
+              Installed {pl.version || "(unknown)"}, app is {versionInfo?.version ?? "?"}. Reinstall to match.
+            </p>
+          {/if}
+          <div class="np-actions">
+            {#if pl.installed}
+              <button class:primary={pl.update_available} onclick={() => pluginDownload(pl.name)} disabled={pluginBusy}>
+                {pl.update_available ? "Update" : "Reinstall"}
+              </button>
+              <button class="danger" onclick={() => pluginRemove(pl.name)} disabled={pluginBusy}>Remove</button>
+            {:else}
+              <button class="primary" onclick={() => pluginDownload(pl.name)} disabled={pluginBusy}>Download</button>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    {/each}
+
+    <h3 style="margin-top:1.2rem">Profiles</h3>
+
+    {#if networkProfiles.error}
+      <p class="hint" style="color: var(--red)">{networkProfiles.error}</p>
+    {/if}
+
+    {#each networkProfiles.list as np (np.id)}
+      <div class="np-card">
+        <div class="np-head">
+          <strong>{np.name}</strong>
+          <span class="np-kind">{np.kind === "netbird" ? "NetBird" : "WireGuard"}</span>
+          {#if np.paused}
+            <span class="np-pill paused">paused</span>
+          {:else if np.status.running}
+            <span class="np-pill running" title={np.kind === "wireguard" && np.status.last_handshake > 0
+              ? `last handshake ${new Date(np.status.last_handshake * 1000).toLocaleTimeString()}`
+              : "up"}>up</span>
+          {:else}
+            <span class="np-pill">idle</span>
+          {/if}
+          <span class="np-meta">
+            {#if np.kind === "netbird"}
+              {np.netbird?.device_name || "ssh-tool"}
+              {#if np.netbird?.management_url}&nbsp;· {np.netbird.management_url}{/if}
+              {#if np.status.running && (np.status.peers ?? 0) > 0}&nbsp;· {np.status.peers} peer{np.status.peers === 1 ? "" : "s"}{/if}
+            {:else}
+              {np.profile.addresses?.join(", ")}
+              {#if np.profile.peers?.length}&nbsp;→ {np.profile.peers[0].endpoint}{/if}
+              {#if np.status.running && (np.status.rx_bytes > 0 || np.status.tx_bytes > 0)}
+                &nbsp;· rx {(np.status.rx_bytes / 1024).toFixed(0)}K tx {(np.status.tx_bytes / 1024).toFixed(0)}K
+              {/if}
+            {/if}
+          </span>
+        </div>
+        <div class="np-actions">
+          <label class="np-mode">Mode
+            <select
+              value={np.mode === "auto" ? "auto" : "always"}
+              onchange={(e) => npSetPolicy(np, (e.target as HTMLSelectElement).value, np.paused)}
+            >
+              <option value="always">Always via tunnel</option>
+              <option value="auto">Auto - direct first, tunnel fallback</option>
+            </select>
+          </label>
+          <button onclick={() => npSetPolicy(np, np.mode === "auto" ? "auto" : "always", !np.paused)}>
+            {np.paused ? "Resume" : "Pause (go direct)"}
+          </button>
+          <button onclick={() => npTest(np)} disabled={npBusy || np.paused}>Test</button>
+          {#if np.status.running}
+            <button onclick={() => api.networkProfileStop(np.id).catch((e) => toast.err(errMsg(e)))}>Stop tunnel</button>
+          {/if}
+          <button onclick={() => npStartEdit(np)}>Edit</button>
+          <button class="danger" onclick={() => npDelete(np)}>Delete</button>
+        </div>
+      </div>
+    {/each}
+    {#if networkProfiles.list.length === 0 && !networkProfiles.loading}
+      <p class="hint">No profiles yet - add one below.</p>
+    {/if}
+
+    <h3 style="margin-top:1.2rem">{npEditingId ? "Edit profile" : "Add profile"}</h3>
+
+    {#if !npEditingId}
+      <div class="row" style="gap:0.5rem; align-items:center">
+        <span class="hint" style="margin:0">Type:</span>
+        <label class="np-kindpick"><input type="radio" bind:group={npKind} value="wireguard" /> WireGuard</label>
+        <label class="np-kindpick"><input type="radio" bind:group={npKind} value="netbird" /> NetBird</label>
+      </div>
+    {/if}
+
+    <label>
+      <span>Name</span>
+      <input bind:value={npName} placeholder="e.g. office-vpn" />
+    </label>
+
+    {#if (npEditingId ? npEditKind : npKind) === "netbird"}
+      {#if !nbInstalled}
+        <p class="hint warn-note">
+          The NetBird plugin is not installed. Install it in the Plugins
+          card above before creating a NetBird profile.
+        </p>
+      {/if}
+      <label>
+        <span>Management URL <span class="hint inline">(blank = netbird.io cloud)</span></span>
+        <input bind:value={nbManagement} placeholder="https://netbird.example.com" />
+      </label>
+      <label>
+        <span>Device name</span>
+        <input bind:value={nbDevice} placeholder="ssh-tool-laptop" />
+      </label>
+      <label>
+        <span class="row" style="justify-content:space-between; align-items:center; gap:0.5rem">
+          Setup key credential
+          <button type="button" class="token-add" onclick={() => (nbNewKeyOpen = !nbNewKeyOpen)}>
+            {nbNewKeyOpen ? "Cancel" : "+ New"}
+          </button>
+        </span>
+        {#if !nbNewKeyOpen}
+          <SearchableSelect
+            bind:value={nbCredId}
+            options={apiTokenCredOptions}
+            placeholder="Pick an API-token credential holding the setup key…"
+          />
+          <span class="hint inline">
+            A NetBird <strong>setup key</strong> (from Setup Keys in the
+            dashboard - a UUID like <code>A1B2C3D4-...</code>), NOT a
+            personal access token. Use a <strong>reusable</strong> key if
+            you sync this profile across machines - each registers as its
+            own peer.
+          </span>
+        {/if}
+      </label>
+      {#if nbNewKeyOpen}
+        <div class="np-card" style="gap:0.5rem">
+          <label>
+            <span>Credential name</span>
+            <input bind:value={nbNewKeyName} placeholder="netbird-setup-key" />
+          </label>
+          <label>
+            <span>Setup key <span class="hint inline">(from NetBird dashboard -&gt; Setup Keys, not a PAT)</span></span>
+            <PasswordInput bind:value={nbNewKeySecret} placeholder="e.g. A1B2C3D4-E5F6-..." />
+          </label>
+          <div class="row" style="gap:0.5rem">
+            <button class="primary" onclick={nbCreateSetupKey} disabled={nbNewKeyBusy || !nbNewKeyName.trim() || !nbNewKeySecret}>Create</button>
+          </div>
+        </div>
+      {/if}
+      <div class="row" style="gap:0.5rem">
+        {#if npEditingId}
+          <button class="primary" onclick={npSaveNetbird} disabled={npBusy || !npName.trim()}>Save changes</button>
+          <button onclick={npCancelEdit}>Cancel</button>
+        {:else}
+          <button class="primary" onclick={npCreateNetbird} disabled={npBusy || !nbInstalled || !npName.trim() || !nbCredId}>Add profile</button>
+        {/if}
+      </div>
+    {:else}
+      <label>
+        <span>{npEditingId ? "Config (**KEEP** = stored secret stays; paste a new key to replace it)" : "wg-quick config"}</span>
+        <textarea
+          bind:value={npConf}
+          rows="10"
+          spellcheck="false"
+          placeholder={"[Interface]\nPrivateKey = ...\nAddress = 10.0.0.2/32\nDNS = 10.0.0.1\n\n[Peer]\nPublicKey = ...\nEndpoint = vpn.example.com:51820\nAllowedIPs = 10.0.0.0/24"}
+        ></textarea>
+      </label>
+      <div class="row" style="gap:0.5rem">
+        {#if npEditingId}
+          <button class="primary" onclick={npSaveEdit} disabled={npBusy || !npName.trim()}>Save changes</button>
+          <button onclick={npCancelEdit}>Cancel</button>
+        {:else}
+          <button class="primary" onclick={npCreate} disabled={npBusy || !npName.trim() || !npConf.trim()}>Add profile</button>
+        {/if}
+      </div>
+      <p class="hint">
+        PostUp/PostDown/Table lines are ignored (there is no system
+        interface). The endpoint must be reachable from the normal
+        network; DNS servers listed in the config resolve hostnames
+        inside the tunnel.
+      </p>
+      <p class="hint warn-note">
+        <strong>One identity across machines.</strong> A WireGuard profile
+        carries a single key and overlay IP. If it is synced and the tunnel
+        is left up on another machine, bringing it up here makes both peers
+        fight for the same identity and degrades both. Stop it on the other
+        machine first, or use NetBird (peer-per-device) when you routinely
+        connect from more than one machine.
+      </p>
+    {/if}
   </div>
 
   {:else if activeSection === "browser"}
@@ -3368,6 +3774,72 @@
 </section>
 
 <style>
+  .np-card {
+    border: 1px solid var(--surface0);
+    border-radius: 6px;
+    padding: 0.6rem 0.7rem;
+    margin: 0.4rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  .np-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .np-meta {
+    color: var(--subtext0);
+    font-size: 0.78rem;
+    font-family: ui-monospace, monospace;
+  }
+  .np-pill {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    background: var(--surface0);
+    color: var(--subtext0);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .np-pill.running { background: var(--green); color: var(--on-accent); }
+  .np-pill.paused  { background: var(--yellow); color: var(--on-accent); }
+  .np-actions {
+    display: flex;
+    align-items: end;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+  }
+  .np-mode {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.78rem;
+    color: var(--subtext0);
+  }
+  .np-actions button.danger { color: var(--red); }
+  .np-kind {
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    background: var(--surface1);
+    color: var(--subtext0);
+  }
+  .np-kindpick {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .token-add {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.5rem;
+  }
+
   .settings {
     display: grid;
     grid-template-columns: 220px 1fr;
@@ -3678,6 +4150,12 @@
     font-size: 0.88rem;
     margin: 0.4rem 0;
     line-height: 1.55;
+  }
+  .warn-note {
+    border-left: 3px solid var(--yellow);
+    padding: 0.4rem 0.7rem;
+    background: color-mix(in srgb, var(--yellow) 10%, transparent);
+    border-radius: 0 4px 4px 0;
   }
   label {
     display: flex;

@@ -20,6 +20,11 @@
   import SearchableSelect from "./SearchableSelect.svelte";
   import PasswordStrengthMeter from "./PasswordStrengthMeter.svelte";
   import DynamicEntryDetail from "./DynamicEntryDetail.svelte";
+  import { networkProfiles } from "./networkProfiles.svelte";
+
+  // Populate the Network dropdowns; cached after the first load and
+  // refreshed via the network_tunnel_changed event inside the store.
+  $effect(() => { networkProfiles.load().catch(() => {}); });
 
   // Stable option list for the credential dropdown - same shape both
   // editor instances need. flatGrouped() returns { cred, label } items
@@ -56,6 +61,7 @@
     autoReconnect: string;
     verbose: string;
     keepalive: string;
+    networkProfile: string;
   } | null>(null);
 
   function encodeBool(v: boolean | undefined): string {
@@ -67,6 +73,19 @@
     if (s === "on") return true;
     if (s === "off") return false;
     return undefined;
+  }
+
+  // network_profile_id tri-state for <select>: "" = inherit,
+  // "__direct__" = explicit direct (stored as ""), else profile id.
+  function encodeNetProfile(v: string | undefined): string {
+    if (v === undefined) return "";
+    if (v === "") return "__direct__";
+    return v;
+  }
+  function decodeNetProfile(s: string): string | undefined {
+    if (s === "") return undefined;
+    if (s === "__direct__") return "";
+    return s;
   }
 
   $effect(() => {
@@ -83,6 +102,7 @@
         keepalive: folder.settings.keepalive_interval !== undefined
           ? String(folder.settings.keepalive_interval)
           : "",
+        networkProfile: encodeNetProfile(folder.settings.network_profile_id),
       };
     } else {
       editingFolder = null;
@@ -103,6 +123,7 @@
       editingFolder.autoReconnect !== encodeBool(s.auto_reconnect) ||
       editingFolder.verbose !== encodeBool(s.verbose) ||
       editingFolder.keepalive !== (s.keepalive_interval !== undefined ? String(s.keepalive_interval) : "") ||
+      editingFolder.networkProfile !== encodeNetProfile(s.network_profile_id) ||
       JSON.stringify(editingFolder.jumpHost ?? null) !== JSON.stringify(s.jump_host ?? null)
     );
   });
@@ -128,6 +149,7 @@
         settings.keepalive_interval = isNaN(n) ? undefined : n;
       }
     }
+    settings.network_profile_id = decodeNetProfile(editingFolder.networkProfile);
     try {
       await api.foldersUpdate({ id: folder.id, name: editingFolder.name, settings });
       await tree.load();
@@ -177,6 +199,7 @@
     vncEnabled: string;
     vncPort: string;
     vncTunnel: string;
+    networkProfile: string;
     tags: string[];
   } | null>(null);
   let newTagInput = $state("");
@@ -239,6 +262,7 @@
           ? String(conn.overrides.vnc_port)
           : "",
         vncTunnel: encodeBool(conn.overrides?.vnc_use_tunnel),
+        networkProfile: encodeNetProfile(conn.overrides?.network_profile_id),
         tags: [...(conn.tags ?? [])],
       };
       newTagInput = "";
@@ -271,6 +295,7 @@
       editing.vncEnabled !== encodeBool(o.vnc_enabled) ||
       editing.vncPort !== (o.vnc_port !== undefined ? String(o.vnc_port) : "") ||
       editing.vncTunnel !== encodeBool(o.vnc_use_tunnel) ||
+      editing.networkProfile !== encodeNetProfile(o.network_profile_id) ||
       JSON.stringify(editing.jumpHost ?? null) !== JSON.stringify(o.jump_host ?? null) ||
       !tagsEq
     );
@@ -319,6 +344,7 @@
       }
     }
     overrides.vnc_use_tunnel = decodeBool(editing.vncTunnel);
+    overrides.network_profile_id = decodeNetProfile(editing.networkProfile);
     await api.connectionsUpdate({
       id: conn.id,
       name: editing.name,
@@ -899,6 +925,22 @@
         </select>
       </label>
 
+      <label title="Route the first SSH hop of every connection in this folder through a userspace WireGuard tunnel.">
+        Network (inherited by children)
+        <select bind:value={editingFolder.networkProfile}>
+          <option value="">(inherit from parent)</option>
+          <option value="__direct__">Direct - no tunnel</option>
+          {#each networkProfiles.list as np (np.id)}
+            <option value={np.id}>via {np.name} ({np.kind === "netbird" ? "NetBird" : "WireGuard"})</option>
+          {/each}
+        </select>
+        <span class="field-note">
+          {networkProfiles.list.length === 0 ? "No network profiles yet - " : "Network profiles live in "}
+          <button class="linklike" onclick={(e) => { e.preventDefault(); view.setTabSettingsSection("network"); }}>
+            Settings -&gt; Network profiles</button>.
+        </span>
+      </label>
+
       <label title="Anti-idle: send an SSH keepalive every N seconds so a bastion or firewall doesn't drop connections under this folder when they're quiet. Inherited by connections; blank inherits the parent folder, 0 turns it off.">
         Keepalive / anti-idle (s)
         <input
@@ -1119,6 +1161,21 @@
           <option value="on">On - show TCP / handshake / auth diagnostics</option>
           <option value="off">Off</option>
         </select>
+      </label>
+      <label title="Route the first SSH hop through a userspace WireGuard tunnel (no TUN adapter, no admin rights).">
+        Network
+        <select bind:value={editing.networkProfile}>
+          <option value="">(inherit from folder)</option>
+          <option value="__direct__">Direct - no tunnel</option>
+          {#each networkProfiles.list as np (np.id)}
+            <option value={np.id}>via {np.name} ({np.kind === "netbird" ? "NetBird" : "WireGuard"})</option>
+          {/each}
+        </select>
+        <span class="field-note">
+          {networkProfiles.list.length === 0 ? "No network profiles yet - " : "Network profiles live in "}
+          <button class="linklike" onclick={(e) => { e.preventDefault(); view.setTabSettingsSection("network"); }}>
+            Settings -&gt; Network profiles</button>.
+        </span>
       </label>
       <label title="Anti-idle: send an SSH keepalive every N seconds so a bastion or firewall doesn't drop the connection when it's quiet. Blank inherits the folder's value; 0 turns it off.">
         Keepalive / anti-idle (s)
@@ -1367,6 +1424,15 @@
 <style>
   .detail { padding: 1rem 1.25rem; overflow: auto; color: var(--text); }
   /* Small explanatory note under a form field (e.g. keepalive). */
+  .linklike {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--blue);
+    cursor: pointer;
+    text-decoration: underline;
+  }
   .field-note {
     display: block;
     margin-top: 0.15rem;

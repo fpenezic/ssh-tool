@@ -389,6 +389,14 @@ update params + download progress shipped right after; what remains):
   cert acquisition + EV process is the open question.
 - **macOS universal** - Taskfile + Info.plist exist; needs Apple
   Developer ID + notarisation.
+- **macOS NetBird helper.** The `build-helpers` CI job builds the
+  NetBird sidecar for Linux (amd64/arm64) and Windows (amd64) only.
+  A macOS helper needs a signed + notarised binary or Gatekeeper
+  blocks the spawn - same signing story as the app. Add `darwin-amd64`
+  / `darwin-arm64` legs once macOS signing exists; `PluginsStatus`
+  already reports `supported=true` on darwin, so until then a mac user
+  sees the plugin as available but the download 404s. Consider gating
+  the darwin download until the asset ships.
 
 ---
 

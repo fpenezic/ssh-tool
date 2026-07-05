@@ -23,6 +23,7 @@ implemented.
 6. [SFTP file browser](#sftp-file-browser)
 6b. [VNC console](#vnc-console)
 7. [Port forwards](#port-forwards)
+7b. [Network profiles (WireGuard / NetBird)](#network-profiles)
 8. [Broadcast input (multi-session)](#broadcast-input)
 9. [Multi-window: detach + redock](#multi-window)
 10. [Workspaces](#workspaces)
@@ -749,6 +750,117 @@ matter which window or pane they belong to. Hidden at zero.
 and bookmarks by name / URL. See section 11 for the full
 behaviour, including the one-click bookmark flow that opens an
 SSH session and starts the tunnel if needed.
+
+---
+
+<a id="network-profiles"></a>
+## 7b. Network profiles (WireGuard / NetBird)
+
+A network profile routes a connection's **first SSH hop** through an
+overlay VPN, so you can reach hosts that only live on a private
+network (a client's WireGuard, a Hetzner internal network, a NetBird
+tailnet) without setting up a system-wide VPN. Everything runs in
+**userspace**: no TUN adapter, no admin rights, no system routes, and
+several profiles can be up at once toward different networks.
+
+Manage profiles in **Settings -> Network profiles**. Assign one to a
+folder or a connection via its **Network** setting (in the detail
+pane); the setting inherits down the tree like the others, so a whole
+"client-X" folder can go through one tunnel. A pane whose first hop
+went through a tunnel shows a small VPN badge with the profile name,
+and the status bar shows which tunnels are up.
+
+Tunnels start on demand (first connection through them) and stop on
+their own about two minutes after the last session using them closes.
+Dynamic-inventory folders can fetch their provider API through a
+profile too (for a Proxmox reachable only over the VPN); a background
+refresh never starts a tunnel by itself.
+
+### Connect policy
+
+Each profile has a mode and a pause switch:
+
+- **Always** - the first hop always dials through the tunnel; if the
+  tunnel can't come up, the connect fails (it never silently falls
+  back to a direct dial).
+- **Auto** - probe a direct dial first (short timeout); only if that
+  fails bring the tunnel up. Good for a host reachable directly when
+  you're on-site and only via VPN from elsewhere. On-site connects
+  show no VPN badge because they really went direct.
+- **Pause** - a per-profile kill switch: every connection using it
+  dials direct and the tunnel is stopped immediately. For "I'm on the
+  network, leave the VPN alone."
+
+### WireGuard profiles
+
+Paste a standard `wg-quick` config (Interface + Peer). The private key
+and any preshared keys are stored in the vault; the rest lives in the
+profile. `PostUp` / `PostDown` / `Table` lines are ignored (there is
+no system interface to script). DNS servers listed in the config
+resolve hostnames inside the tunnel; without them only IP literals
+work.
+
+Editing shows the config back with secrets replaced by a `**KEEP**`
+placeholder - leave it to keep the stored key, or paste a new key to
+replace it.
+
+**One identity across machines.** A WireGuard profile carries a single
+key and overlay IP. Because the whole profile syncs (config + vault),
+the same identity can end up on two machines. If a tunnel is left up
+on one machine and you bring it up on another, both peers fight for
+the same identity and both degrade. Stop it on the other machine
+first, or use NetBird (below), which gives each machine its own peer.
+
+### NetBird profiles
+
+NetBird needs the optional **plugin** (a sidecar binary); install it
+from the Plugins card in the same Settings page (one click, downloaded
+from the matching release and checksum-verified). Until it's
+installed, the NetBird option points you at the download.
+
+> **Desktop only.** The NetBird plugin runs as a separate helper
+> process, which Android can't spawn - so NetBird profiles are
+> Windows / Linux / macOS only. WireGuard profiles, by contrast, are
+> built into the core and work on Android too.
+
+A NetBird profile needs three things:
+
+- **Management URL** - your NetBird control plane. Blank uses the
+  `netbird.io` cloud; for self-hosted enter the URL (a bare host like
+  `vpn.example.com` is fine - it's normalised to `https://`).
+- **Device name** - the name this peer registers under in NetBird.
+- **Setup key** - stored as an API-token credential (the setup-key
+  picker has a **+ New** button so you don't have to leave the page).
+
+**Which key.** Use a **setup key**, NOT a personal access token
+(PAT). In the NetBird dashboard: **Setup Keys -> Create Setup Key**.
+The key is a UUID (e.g. `A1B2C3D4-...`); a PAT (starting `nbp_`) is a
+different thing and will be rejected with "setup key is invalid".
+
+- **Reusable** - use a reusable key if you sync this profile across
+  machines: each machine registers as its own separate peer (no
+  identity conflict, unlike WireGuard). A one-off key works for a
+  single machine only and is consumed after one registration.
+- **Ephemeral** - optional; an ephemeral peer is auto-removed after
+  it's offline for a while. Convenient for laptops, but the machine
+  re-registers (new peer) each time it reconnects, so pair it with a
+  reusable key.
+- **Auto-assigned group** - assign the setup key to a NetBird **group
+  that has an access policy to the hosts you need to reach**.
+  Registration alone doesn't grant access; NetBird's policies decide
+  what the peer can talk to. If SSH through the tunnel connects but
+  times out reaching the target, the peer is almost certainly not in a
+  group with a policy to that host.
+- **Expiration** - set a sensible expiry; an expired key stops new
+  registrations (existing peers keep working).
+
+Each machine keeps its NetBird registration state locally (under the
+data dir); it is not synced, which is what lets each machine be its
+own peer. Deleting the profile removes that state and the peer stops
+checking in.
+
+For a full step-by-step (which key, groups, access policies, common
+errors) see **`docs/netbird-setup.md`**.
 
 ---
 

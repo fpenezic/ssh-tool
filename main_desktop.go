@@ -22,7 +22,17 @@ import (
 
 var _ embed.FS // keep the embed import for the //go:embed directive below
 
-//go:embed build/windows/icon.ico
+// appIcon is the application icon (window, taskbar, about box). PNG so
+// GTK/WebKitGTK on Linux renders it; Windows/macOS accept it too.
+//
+//go:embed build/appicon.png
+var appIcon []byte
+
+// trayIcon is the system-tray icon. Must be PNG on Linux - the GTK
+// StatusNotifier renders a "..." placeholder for a Windows .ico, which
+// is what the user saw. Reusing the app PNG keeps one source of truth.
+//
+//go:embed build/appicon.png
 var trayIcon []byte
 
 // parseDeepLinkArg looks through CLI args for either a
@@ -112,6 +122,14 @@ func buildApp(appInst *App) *application.App {
 	return application.New(application.Options{
 		Name:        appName,
 		Description: "SSH connection manager",
+		Icon:        appIcon,
+		Linux: application.LinuxOptions{
+			// g_set_prgname: without it GTK reports the generic
+			// "wails app" as the program name (taskbar hover, window
+			// grouping). Must match the .desktop StartupWMClass so the
+			// window binds to the launcher entry (and its icon).
+			ProgramName: "ssh-tool",
+		},
 		Services: []application.Service{
 			application.NewService(appInst),
 		},
@@ -131,12 +149,14 @@ func buildApp(appInst *App) *application.App {
 		ShouldQuit: func() bool {
 			if appInst.quitConfirmed.Load() {
 				appInst.syncFlushOnQuit()
+				appInst.stopTunnelsOnQuit()
 				return true
 			}
 			if appInst.SshActiveSessionCount() == 0 {
 				// Auto-sync: push a dirty profile on the way out,
 				// capped at 10s so a dead network can't block quit.
 				appInst.syncFlushOnQuit()
+				appInst.stopTunnelsOnQuit()
 				return true
 			}
 			// The confirm modal is useless behind a hidden window

@@ -7,6 +7,60 @@ in alpha upstream.
 
 ---
 
+## [0.48.0] - Network profiles: WireGuard + NetBird
+
+### Added
+
+- **Userspace VPN profiles.** Route a connection's first SSH hop
+  through an overlay VPN so you can reach hosts on a private network -
+  a client's WireGuard, a Hetzner internal network, a NetBird tailnet -
+  without a system-wide VPN. Everything runs in userspace: no TUN
+  adapter, no admin rights, no system routes, and several tunnels can
+  be up at once. Manage profiles in Settings -> Network profiles;
+  assign one to a folder or connection via its Network setting, which
+  inherits down the tree so a whole client folder can go through one
+  tunnel. A pane whose hop went through a tunnel shows a VPN badge, and
+  the status bar lists running tunnels.
+- **WireGuard**, built in. Paste a standard wg-quick config; the
+  private key and preshared keys live in the vault. DNS servers in the
+  config resolve hostnames inside the tunnel. Editing shows the config
+  back with secrets as a **KEEP** placeholder so you can tweak without
+  re-pasting keys.
+- **NetBird**, via an optional plugin. Install it in one click from the
+  Plugins card (downloaded from the matching release and checksum-
+  verified). A profile takes a management URL, a device name, and a
+  setup key (stored as a credential; a + New button creates it inline).
+  Unlike WireGuard's single shared identity, each machine registers as
+  its own NetBird peer - the right choice for connecting from several
+  machines. See docs/netbird-setup.md for which key to use and how
+  groups / access policies work.
+- **Connect policy per profile.** Always (first hop always tunnels),
+  Auto (probe direct first, tunnel only when that fails - direct
+  on-site, tunnel remote), or Pause (a kill switch that dials direct
+  and stops the tunnel). Tunnels start on demand and stop about two
+  minutes after the last session using them closes. Dynamic-inventory
+  folders can fetch their provider API through a profile too, for a
+  Proxmox reachable only over the VPN.
+
+  WireGuard works everywhere including Android; NetBird is desktop-only
+  (its helper is a separate process Android can't spawn). A synced
+  WireGuard profile carries one identity across machines - a warning in
+  the editor explains the trade-off and points at NetBird for
+  multi-machine use.
+
+### Fixed
+
+- **Linux: the app now has an icon and identifies itself properly.**
+  The window / taskbar / tray showed no icon and the taskbar hover said
+  "wails app"; the tray icon rendered as "...". The app now ships its
+  icon, sets its program name and window class to match the launcher
+  entry, and the tray uses a PNG the GTK tray can actually draw.
+- **Linux: "Restart to apply" after an update now relaunches the app.**
+  It used to close and never come back (a manual launch worked) because
+  the new instance inherited the closing app's systemd scope and was
+  killed with it. The relaunched instance now detaches into its own
+  session.
+
 ## [0.47.0] - Terminal workflow polish, profile statistics
 
 ### Added

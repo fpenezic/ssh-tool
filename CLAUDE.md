@@ -12,8 +12,11 @@ encrypted credential vault, multi-tab terminal with split panes,
 port forwards (incl. SOCKS5 with isolated-browser launcher),
 opkssh certificate auth, dynamic inventory from Proxmox, Hetzner,
 DigitalOcean, Linode, Vultr, Scaleway, AWS EC2, Ansible static
-inventory (`.ini` / `.yml`). Local audit log + sealed
-password / API-token history (last 5 rotations).
+inventory (`.ini` / `.yml`), userspace WireGuard network profiles
+(in-process netstack, no TUN adapter; first SSH hop + provider APIs
+dial through them) plus NetBird profiles via an optional sidecar
+plugin (desktop-only). Local audit log + sealed password / API-token
+history (last 5 rotations).
 
 Author wants 300+ connections, daily-driver UX, full opkssh support
 (non-negotiable; reason we're on Go).
@@ -78,7 +81,7 @@ ssh-tool/
 ├─ wails3_runtime.go       shim: EventsEmit (+ mobile enqueue) / BrowserOpenURL
 ├─ Taskfile.yml            top-level task routing (android: namespace too)
 ├─ internal/
-│  ├─ store/               SQLite + migrations + CRUD (DB schema at v16; audit log in a separate audit.db)
+│  ├─ store/               SQLite + migrations + CRUD (DB schema at v17; audit log in a separate audit.db)
 │  ├─ importer/
 │  │   ├─ rdm/             Devolutions RDM JSON importer (3-pass)
 │  │   ├─ sshconfig/       ~/.ssh/config importer
@@ -90,6 +93,8 @@ ssh-tool/
 │  ├─ creds/               vault lifecycle, machine-bound auto-unlock
 │  ├─ backup/              encrypted store+vault snapshots, scheduler
 │  ├─ ssh/                 SSH client, opkssh, forwards, browser, tcpdump, VNC bridge
+│  ├─ wg/                  userspace WireGuard (wireguard-go + netstack) network profiles
+│  ├─ tunnelhelper/        sidecar (plugin) process manager: spawn + SOCKS5 dialer (NetBird)
 │  ├─ inventory/           dynamic providers: Proxmox, Hetzner, DO, Linode, Vultr, Scaleway, AWS EC2, Ansible
 │  ├─ httpc/               HTTP/SOAP probe (used by HttpModal)
 │  ├─ local/               in-app local PTY (Win/Mac/Linux shells)
@@ -409,6 +414,36 @@ everything mobile is behind a build tag or an `isMobile` check.
     describe`, so Settings -> About showed "dev". When touching version /
     build-stamp logic, update ALL of `build/{linux,windows,darwin,android,
     ios}/Taskfile.yml`, not just the desktop ones.
+
+30. **NetBird lives in a SEPARATE module (`netbird-helper/`), built as a
+    sidecar plugin - never import it into the main module.** netbirdio/
+    netbird needs 8 go.mod `replace` directives (its own wireguard-go fork
+    among them), which would silently swap the upstream `wireguard-go`
+    that `internal/wg` runs on. The helper is a standalone binary
+    (`ssh-tool-netbird[.exe]`) the app spawns; the main module has ZERO
+    netbird imports. Pinned to netbird v0.73.2 with the exact replace set
+    from that version - do not bump one without the other.
+
+31. **NetBird helper: `WireguardPort=0` (random) is mandatory; Windows
+    needs a CGO build.** Two traps cost a full debugging session:
+    - The embedded netstack peer still binds a real UDP socket for the WG
+      transport; the default is 51820. On a machine also running the real
+      NetBird client (or Birdview, or a second helper), 51820 is taken -
+      the bind fails, the half-built device is torn down, and the netstack
+      tun panics on a double-close. The log says `wt0` and "creating
+      tunnel interface", which looks like it's trying a real adapter, but
+      netstack IS on (`IsEnabled()=true`); the real cause is the port
+      clash. `embed.Options.WireguardPort = &zero` fixes it.
+    - The helper's Windows binary must be built with `CGO_ENABLED=1` via
+      the `wails-cross` docker image (zig + mingw, `CC=zcc-windows-amd64`).
+      A plain `CGO_ENABLED=0` cross-compile misbehaves. Linux/macOS build
+      native. (Same toolchain remote-tool uses for its in-process embed.)
+
+32. **NetBird is desktop-only; WireGuard is everywhere.** `internal/wg`
+    is pure-Go netstack and compiles for android, so WG profiles work on
+    mobile. NetBird needs the sidecar helper PROCESS, which android can't
+    spawn - `PluginsStatus` reports `supported=false` off desktop and the
+    UI hides / disables the NetBird path there.
 
 ## Branch / commit conventions
 

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=ssh-tool
+GenericName=SSH connection manager
+Comment=Cross-platform SSH connection manager
+Exec=ssh-tool %U
+Icon=ssh-tool
+Categories=Network;Development;RemoteAccess;
+Terminal=false
+Keywords=ssh;terminal;sftp;tunnel;wireguard;
+Version=1.0
+StartupNotify=true
+StartupWMClass=org.wails.ssh-tool
+MimeType=x-scheme-handler/ssh-tool;

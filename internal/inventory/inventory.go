@@ -10,7 +10,68 @@
 // providers live in their own files (proxmox.go, hetzner.go later).
 package inventory
 
-import "context"
+import (
+	"context"
+	"crypto/tls"
+	"fmt"
+	"net"
+	"net/http"
+	"time"
+)
+
+// TunnelDialContext, when non-nil, returns a dialer routed through
+// the named network profile's userspace WireGuard tunnel. Wired by
+// the host app (same pattern as ssh.FirstHopDialerHook); left nil in
+// tests and headless use, where a configured profile then fails
+// loudly instead of dialing outside the tunnel.
+//
+// background=true marks a timer-driven refresh: the app must NOT
+// start a tunnel for it (return ErrTunnelWaiting instead when the
+// tunnel isn't already up). A passive app shouldn't hold a VPN path
+// to a client network open around the clock just to poll inventory;
+// manual refreshes and live SSH sessions are the signals that bring
+// the tunnel up.
+var TunnelDialContext func(profileID string, background bool) (func(ctx context.Context, network, addr string) (net.Conn, error), error)
+
+// ErrTunnelWaiting: a background refresh needed the profile's tunnel
+// and it wasn't running. Recorded as folder status, not an error -
+// the cached entries stay and the next refresh with the tunnel up
+// (or a manual one) recovers.
+var ErrTunnelWaiting = fmt.Errorf("waiting for VPN tunnel - connect through the profile or refresh manually")
+
+// backgroundRefreshKey rides inside the resolved config map from
+// Manager.Refresh to httpClient. Underscore-prefixed so it can never
+// collide with a real provider config field.
+const backgroundRefreshKey = "_background_refresh"
+
+// networkDirectSentinel is the editor's explicit "Direct - no tunnel"
+// choice for the provider API. Distinct from "" (= follow the
+// folder's own Network setting) so an inherited profile can be
+// stripped for just the API fetch.
+const networkDirectSentinel = "__direct__"
+
+// httpClient builds the HTTP client a provider should use for its
+// API: plain unless cfg["network_profile_id"] routes it through a
+// tunnel (e.g. a Proxmox host that is only reachable over VPN).
+// insecure skips TLS verification (self-signed Proxmox certs).
+func httpClient(cfg map[string]any, timeout time.Duration, insecure bool) (*http.Client, error) {
+	tr := &http.Transport{}
+	if insecure {
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+	if id, _ := cfg["network_profile_id"].(string); id != "" {
+		if TunnelDialContext == nil {
+			return nil, fmt.Errorf("network profile configured but tunnel support not wired")
+		}
+		background, _ := cfg[backgroundRefreshKey].(bool)
+		dial, err := TunnelDialContext(id, background)
+		if err != nil {
+			return nil, fmt.Errorf("network profile: %w", err)
+		}
+		tr.DialContext = dial
+	}
+	return &http.Client{Timeout: timeout, Transport: tr}, nil
+}
 
 // EntryKind buckets a fetched entry into one of the two
 // pseudo-sub-folders the tree renders for a dynamic folder.

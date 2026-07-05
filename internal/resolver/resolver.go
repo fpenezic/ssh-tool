@@ -74,6 +74,7 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		VncEnabled:        firstNonNilBool(over.VncEnabled, base.VncEnabled),
 		VncPort:           firstNonNilU16(over.VncPort, base.VncPort),
 		VncUseTunnel:      firstNonNilBool(over.VncUseTunnel, base.VncUseTunnel),
+		NetworkProfileID:  firstNonNil(over.NetworkProfileID, base.NetworkProfileID),
 		SSHOptions:        mergeMap(base.SSHOptions, over.SSHOptions),
 		EnvVars:           mergeMap(base.EnvVars, over.EnvVars),
 	}
@@ -128,6 +129,12 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 	if env == nil {
 		env = map[string]string{}
 	}
+	// An explicit "" override means "direct" - normalize to nil so
+	// consumers only branch on non-nil.
+	netProfile := s.NetworkProfileID
+	if netProfile != nil && *netProfile == "" {
+		netProfile = nil
+	}
 	return store.ResolvedSettings{
 		Hostname:          hostname,
 		Username:          s.Username,
@@ -145,6 +152,7 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 		VncEnabled:        s.VncEnabled != nil && *s.VncEnabled,
 		VncPort:           vncPort,
 		VncUseTunnel:      s.VncUseTunnel != nil && *s.VncUseTunnel,
+		NetworkProfileID:  netProfile,
 	}
 }
 

@@ -42,7 +42,9 @@ import (
 	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/store"
 	"ssh-tool/internal/syncer"
+	"ssh-tool/internal/tunnelhelper"
 	"ssh-tool/internal/updater"
+	"ssh-tool/internal/wg"
 )
 
 // App is the root service exposed to the frontend.
@@ -62,6 +64,18 @@ type App struct {
 	localPool   *local.Pool
 	inventory   *inventory.Manager
 	backupSched *backup.Scheduler
+	wgman       *wg.Manager
+	// nbman runs NetBird (and future helper-backed) tunnels via the
+	// ssh-tool-netbird sidecar. Kept beside wgman; app_network.go
+	// dispatches by profile kind.
+	nbman *tunnelhelper.Manager
+
+	// Tunnel idle-stop accounting: which sessions dialed through
+	// which network profile, and the pending linger timers. See
+	// wgAcquire / wgRelease in app_network.go.
+	wgSessMu      sync.Mutex
+	wgSessProfile map[string]string      // sessionID -> profileID
+	wgStopTimers  map[string]*time.Timer // profileID -> linger stop
 
 	metaMu      sync.Mutex
 	sessionMeta map[string]sessionMetaEntry
@@ -353,6 +367,43 @@ func (a *App) initialise() {
 	a.recorder = recorder.NewManager()
 	a.termSizes = map[string][2]uint16{}
 	a.forwards = sshlayer.NewForwardPool()
+	a.wgman = wg.NewManager()
+	a.nbman = tunnelhelper.NewManager(func(profileID string) {
+		// A helper process died (crash, network, kill). Sessions that
+		// dialed through it lose their transport and drop on their own;
+		// just refresh the UI's tunnel state (status pill, VPN badge).
+		EventsEmit("network_tunnel_changed", profileID)
+	})
+	// Ensure the plugins dir exists so a user can drop a helper binary
+	// in by hand (airgap / portable) without creating it first. The
+	// download path also creates it, but this covers the manual case.
+	if err := os.MkdirAll(pluginsDir(), 0o755); err != nil {
+		log.Printf("plugins dir: %v", err)
+	}
+	// First-hop dialer for connections resolved to a network profile:
+	// vault-resolve the WG secrets, lazily start (or reuse) the
+	// userspace tunnel, hand its netstack DialContext to the SSH layer.
+	// Errors abort the connect - a profile-pinned connection must never
+	// fall back to a direct dial.
+	sshlayer.FirstHopDialerHook = func(s *store.ResolvedSettings) (sshlayer.ContextDialer, error) {
+		if s.NetworkProfileID == nil {
+			return nil, fmt.Errorf("no network profile on settings")
+		}
+		// wgDialerFor applies the profile's connect policy (always /
+		// auto-with-direct-probe / paused). See app_network.go.
+		return a.wgDialerFor(*s.NetworkProfileID)
+	}
+	// Same tunnels for dynamic-inventory API calls (a Proxmox that is
+	// only reachable over VPN). Manual refreshes may start the tunnel;
+	// timer refreshes only ride one that's already up
+	// (wgBackgroundDialerFor) so a passive app never holds a VPN path
+	// open just to poll inventory.
+	inventory.TunnelDialContext = func(profileID string, background bool) (func(ctx context.Context, network, addr string) (net.Conn, error), error) {
+		if background {
+			return a.wgBackgroundDialerFor(profileID)
+		}
+		return a.wgDialerFor(profileID)
+	}
 	a.inventory = inventory.NewManager(db, vault, func(folderID string) {
 		EventsEmit("dynamic_folder_refreshed", folderID)
 	})
@@ -1003,6 +1054,7 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 		a.forwards.StopAllForSession(sessionID)
 		a.sessionRecordingCleanup(sessionID)
 		a.pool.Remove(sessionID)
+		a.wgRelease(sessionID)
 		a.metaMu.Lock()
 		delete(a.sessionMeta, sessionID)
 		a.metaMu.Unlock()
@@ -1021,7 +1073,7 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 		"user":       dynUser,
 		"name":       entry.Name,
 	})
-	return &SshConnectResult{SessionID: sess.ID}, nil
+	return &SshConnectResult{SessionID: sess.ID, NetworkVia: a.wgTrackSession(sess, &settings)}, nil
 }
 
 func (a *App) FoldersDelete(id string) error {
@@ -2299,6 +2351,11 @@ func (a *App) BackupsDelete(path string) error {
 
 type SshConnectResult struct {
 	SessionID string `json:"session_id"`
+	// NetworkVia is the network profile NAME when the first hop
+	// dialed through its WireGuard tunnel; empty for plain dials and
+	// when an auto/paused policy went direct. Drives the pane VPN
+	// badge - only truthful tunnel use shows it.
+	NetworkVia string `json:"network_via,omitempty"`
 }
 
 // HostKeyChallengeEvent is emitted as a Wails event when a server presents
@@ -2514,6 +2571,7 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 			userInit = s.WasUserInitiated()
 		}
 		a.pool.Remove(id)
+		a.wgRelease(id)
 		a.syncForegroundService()
 		a.metaMu.Lock()
 		delete(a.sessionMeta, id)
@@ -2554,7 +2612,7 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 		"user":       user,
 	})
 
-	return &SshConnectResult{SessionID: sess.ID}, nil
+	return &SshConnectResult{SessionID: sess.ID, NetworkVia: a.wgTrackSession(sess, settings)}, nil
 }
 
 // makeAlgoLookup returns a HostKeyAlgoLookup that pins the SSH
@@ -4627,6 +4685,9 @@ type ReconnectAttempt struct {
 // ReconnectSuccess is the payload of session_reconnect_success.
 type ReconnectSuccess struct {
 	NewSessionID string `json:"new_session_id"`
+	// NetworkVia mirrors SshConnectResult.NetworkVia for the fresh
+	// session so the pane's VPN badge survives an auto-reconnect.
+	NetworkVia string `json:"network_via,omitempty"`
 }
 
 // ReconnectFailed is the payload of session_reconnect_failed.
@@ -4676,7 +4737,7 @@ func (a *App) runReconnect(oldID, connID string, cancel <-chan struct{}) {
 		// pool with a fresh id; the frontend swaps the id on success.
 		res, err := a.SshConnect(connID)
 		if err == nil {
-			EventsEmit(successEvent, ReconnectSuccess{NewSessionID: res.SessionID})
+			EventsEmit(successEvent, ReconnectSuccess{NewSessionID: res.SessionID, NetworkVia: res.NetworkVia})
 			return
 		}
 		log.Printf("reconnect attempt %d for conn %s failed: %v", attempt, connID, err)

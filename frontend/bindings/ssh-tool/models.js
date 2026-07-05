@@ -12,6 +12,9 @@ import * as ssh$0 from "./internal/ssh/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as store$0 from "./internal/store/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as wg$0 from "./internal/wg/models.js";
 
 /**
  * ActiveSessionInfo describes one live SSH session for frontend recovery
@@ -1766,6 +1769,186 @@ export class LocalShellOpenResult {
 }
 
 /**
+ * NetbirdConfig is the stored (secretless) NetBird profile: the setup
+ * key lives in the referenced api_token credential, registration
+ * state under DataDir/netbird/<profileID>/.
+ */
+export class NetbirdConfig {
+    /**
+     * Creates a new NetbirdConfig instance.
+     * @param {Partial<NetbirdConfig>} [$$source = {}] - The source object to create the NetbirdConfig.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * "netbird"
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("management_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["management_url"] = "";
+        }
+        if (!("device_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["device_name"] = "";
+        }
+        if (!("setup_key_credential_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["setup_key_credential_id"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["mode"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["paused"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new NetbirdConfig instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {NetbirdConfig}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new NetbirdConfig(/** @type {Partial<NetbirdConfig>} */($$parsedSource));
+    }
+}
+
+/**
+ * NetworkProfileInfo is the list shape for the UI: the stored row plus
+ * the parsed secretless config for display. Kind selects which of
+ * Profile (WireGuard) / Netbird is populated.
+ */
+export class NetworkProfileInfo {
+    /**
+     * Creates a new NetworkProfileInfo instance.
+     * @param {Partial<NetworkProfileInfo>} [$$source = {}] - The source object to create the NetworkProfileInfo.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("kind" in $$source)) {
+            /**
+             * "wireguard" | "netbird"
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("mode" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["mode"] = "";
+        }
+        if (!("paused" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["paused"] = false;
+        }
+        if (!("profile" in $$source)) {
+            /**
+             * WG only
+             * @member
+             * @type {wg$0.Profile}
+             */
+            this["profile"] = (new wg$0.Profile());
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * NetBird only
+             * @member
+             * @type {NetbirdConfig | null | undefined}
+             */
+            this["netbird"] = undefined;
+        }
+        if (!("status" in $$source)) {
+            /**
+             * @member
+             * @type {wg$0.Status}
+             */
+            this["status"] = (new wg$0.Status());
+        }
+        if (!("created_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["created_at"] = 0;
+        }
+        if (!("updated_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["updated_at"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new NetworkProfileInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {NetworkProfileInfo}
+     */
+    static createFrom($$source = {}) {
+        const $$createField5_0 = $$createType6;
+        const $$createField6_0 = $$createType8;
+        const $$createField7_0 = $$createType9;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("profile" in $$parsedSource) {
+            $$parsedSource["profile"] = $$createField5_0($$parsedSource["profile"]);
+        }
+        if ("netbird" in $$parsedSource) {
+            $$parsedSource["netbird"] = $$createField6_0($$parsedSource["netbird"]);
+        }
+        if ("status" in $$parsedSource) {
+            $$parsedSource["status"] = $$createField7_0($$parsedSource["status"]);
+        }
+        return new NetworkProfileInfo(/** @type {Partial<NetworkProfileInfo>} */($$parsedSource));
+    }
+}
+
+/**
  * OpksshCertStatusResult wraps the vault cert state for the credential
  * editor. VaultLocked distinguishes "no cert" from "can't look" - a
  * locked vault returns ok=false on every Get and would otherwise
@@ -1898,6 +2081,80 @@ export class PinDynamicEntryInput {
             $$parsedSource["tags"] = $$createField5_0($$parsedSource["tags"]);
         }
         return new PinDynamicEntryInput(/** @type {Partial<PinDynamicEntryInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * PluginInfo is the Settings "Plugins" card row.
+ */
+export class PluginInfo {
+    /**
+     * Creates a new PluginInfo instance.
+     * @param {Partial<PluginInfo>} [$$source = {}] - The source object to create the PluginInfo.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("installed" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["installed"] = false;
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("version" in $$source)) {
+            /**
+             * Version is the installed helper's stamped version ("" if it
+             * couldn't be read, "dev" for un-stamped local builds).
+             * @member
+             * @type {string}
+             */
+            this["version"] = "";
+        }
+        if (!("update_available" in $$source)) {
+            /**
+             * UpdateAvailable is true when the installed helper's version
+             * differs from the running app - after an app update, the bundled
+             * helper is a version behind and should be re-downloaded. Helper
+             * and app share the release tag, so equality means up to date.
+             * @member
+             * @type {boolean}
+             */
+            this["update_available"] = false;
+        }
+        if (!("supported" in $$source)) {
+            /**
+             * Supported=false when this platform has no helper build
+             * (android/ios - helpers are desktop-only).
+             * @member
+             * @type {boolean}
+             */
+            this["supported"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new PluginInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {PluginInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new PluginInfo(/** @type {Partial<PluginInfo>} */($$parsedSource));
     }
 }
 
@@ -2184,7 +2441,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType7;
+        const $$createField1_0 = $$createType11;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -2253,6 +2510,17 @@ export class SshConnectResult {
              * @type {string}
              */
             this["session_id"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * NetworkVia is the network profile NAME when the first hop
+             * dialed through its WireGuard tunnel; empty for plain dials and
+             * when an auto/paused policy went direct. Drives the pane VPN
+             * badge - only truthful tunnel use shows it.
+             * @member
+             * @type {string | undefined}
+             */
+            this["network_via"] = undefined;
         }
 
         Object.assign(this, $$source);
@@ -2937,7 +3205,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType9;
+        const $$createField0_0 = $$createType13;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -3054,7 +3322,7 @@ export class TcpdumpStartInput {
      * @returns {TcpdumpStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType10;
+        const $$createField10_0 = $$createType14;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("port_overrides" in $$parsedSource) {
             $$parsedSource["port_overrides"] = $$createField10_0($$parsedSource["port_overrides"]);
@@ -3233,8 +3501,12 @@ const $$createType2 = $Create.Nullable($$createType1);
 const $$createType3 = $Create.Nullable($$createType0);
 const $$createType4 = $Create.Map($Create.Any, $Create.Any);
 const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = ssh$0.SftpEntry.createFrom;
-const $$createType7 = $Create.Array($$createType6);
-const $$createType8 = ssh$0.ParsedPacket.createFrom;
-const $$createType9 = $Create.Array($$createType8);
-const $$createType10 = $Create.Map($Create.Any, $Create.Any);
+const $$createType6 = wg$0.Profile.createFrom;
+const $$createType7 = NetbirdConfig.createFrom;
+const $$createType8 = $Create.Nullable($$createType7);
+const $$createType9 = wg$0.Status.createFrom;
+const $$createType10 = ssh$0.SftpEntry.createFrom;
+const $$createType11 = $Create.Array($$createType10);
+const $$createType12 = ssh$0.ParsedPacket.createFrom;
+const $$createType13 = $Create.Array($$createType12);
+const $$createType14 = $Create.Map($Create.Any, $Create.Any);

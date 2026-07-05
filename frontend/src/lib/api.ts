@@ -5,6 +5,15 @@
 // treats as required). That lets call sites write object literals freely.
 
 import * as G from "../../bindings/ssh-tool/app.js";
+import { recordNetworkVia } from "./networkVia";
+
+// Connect results may carry network_via (the WireGuard profile the
+// first hop actually dialed through). Stash it so SessionStore.add
+// can decorate the tab - the add always runs after this resolves.
+function recordVia<T extends { session_id: string; network_via?: string }>(r: T): T {
+  recordNetworkVia(r.session_id, r.network_via);
+  return r;
+}
 
 // Wails v3 bindings declare Promise<T | null> for every call: Go nil
 // returns map to JS null. Our app rarely tolerates a null payload (it
@@ -49,6 +58,9 @@ export interface InheritableSettings {
   vnc_enabled?: boolean;
   vnc_port?: number;
   vnc_use_tunnel?: boolean;
+  // "" = explicitly direct (breaks an inherited profile); id = a
+  // network_profiles row; absent = inherit.
+  network_profile_id?: string;
 }
 
 export interface Folder {
@@ -97,6 +109,69 @@ export interface ResolvedSettings {
   vnc_enabled: boolean;
   vnc_port: number;
   vnc_use_tunnel: boolean;
+  network_profile_id: string | null;
+}
+
+// ----- Network profiles (userspace WireGuard) -----
+
+export interface WgPeer {
+  public_key: string;
+  has_psk: boolean;
+  endpoint: string;
+  allowed_ips: string[];
+  keepalive: number;
+}
+
+export interface WgProfile {
+  id: string;
+  name: string;
+  mode?: "always" | "auto";
+  paused?: boolean;
+  addresses: string[];
+  dns: string[];
+  mtu: number;
+  peers: WgPeer[];
+}
+
+export interface WgStatus {
+  profile_id: string;
+  running: boolean;
+  started_at: number;
+  last_handshake: number;
+  rx_bytes: number;
+  tx_bytes: number;
+  peers?: number;
+}
+
+export interface NetbirdConfig {
+  kind: string;
+  management_url: string;
+  device_name: string;
+  setup_key_credential_id: string;
+  mode?: "always" | "auto";
+  paused?: boolean;
+}
+
+export interface NetworkProfileInfo {
+  id: string;
+  name: string;
+  kind: "wireguard" | "netbird";
+  mode: "always" | "auto" | "";
+  paused: boolean;
+  profile: WgProfile;
+  netbird?: NetbirdConfig;
+  status: WgStatus;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface PluginInfo {
+  name: string;
+  installed: boolean;
+  path: string;
+  version: string;
+  update_available: boolean;
+  supported: boolean;
 }
 
 export interface VncSession {
@@ -462,15 +537,15 @@ export const api = {
   autoBackupPrefsGet: () => G.AutoBackupPrefsGet() as unknown as Promise<AutoBackupPrefs>,
   autoBackupPrefsSet: (prefs: AutoBackupPrefs) => G.AutoBackupPrefsSet(prefs),
 
-  sshConnect: (connectionId: string) => nn(G.SshConnect(connectionId)),
+  sshConnect: (connectionId: string) => nn(G.SshConnect(connectionId)).then(recordVia),
   // overrideCredentialId: empty string falls through to SshConnect
   // behaviour (use the connection's persisted auth_ref). Non-empty
   // forces this credential for the target hop on this one attempt
   // only - the persisted auth_ref is left untouched.
   sshConnectWithOverride: (connectionId: string, overrideCredentialId: string) =>
-    nn(G.SshConnectWithOverride(connectionId, overrideCredentialId)),
+    nn(G.SshConnectWithOverride(connectionId, overrideCredentialId)).then(recordVia),
   sshConnectAdvanced: (connectionId: string, overrideCredentialId: string, overrideUsername: string, overridePassword: string) =>
-    nn(G.SshConnectAdvanced(connectionId, overrideCredentialId, overrideUsername, overridePassword)),
+    nn(G.SshConnectAdvanced(connectionId, overrideCredentialId, overrideUsername, overridePassword)).then(recordVia),
   // One-shot server health probe (load / memory / disk / users) for the
   // focused session's host. ok=false means the host answered but nothing
   // parsed (network gear, non-Linux); rejects if the session is gone.
@@ -508,6 +583,28 @@ export const api = {
   logDir: () => G.LogDir() as unknown as Promise<string>,
   appVersion: () => G.AppVersion() as unknown as Promise<AppVersionInfo>,
   profileStats: () => G.ProfileStats() as unknown as Promise<ProfileStats>,
+
+  networkProfilesList: () =>
+    G.NetworkProfilesList() as unknown as Promise<NetworkProfileInfo[]>,
+  networkProfileCreate: (name: string, confText: string) =>
+    G.NetworkProfileCreate(name, confText) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileUpdate: (id: string, name: string, confText: string) =>
+    G.NetworkProfileUpdate(id, name, confText) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileDelete: (id: string) => G.NetworkProfileDelete(id),
+  networkProfileRenderConf: (id: string) =>
+    G.NetworkProfileRenderConf(id) as unknown as Promise<string>,
+  networkProfileStop: (id: string) => G.NetworkProfileStop(id),
+  networkProfileSetPolicy: (id: string, mode: string, paused: boolean) =>
+    G.NetworkProfileSetPolicy(id, mode, paused) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileTest: (id: string) =>
+    G.NetworkProfileTest(id) as unknown as Promise<WgStatus>,
+  networkProfileCreateNetbird: (name: string, managementURL: string, deviceName: string, setupKeyCredentialId: string) =>
+    G.NetworkProfileCreateNetbird(name, managementURL, deviceName, setupKeyCredentialId) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileUpdateNetbird: (id: string, name: string, managementURL: string, deviceName: string, setupKeyCredentialId: string) =>
+    G.NetworkProfileUpdateNetbird(id, name, managementURL, deviceName, setupKeyCredentialId) as unknown as Promise<NetworkProfileInfo>,
+  pluginsStatus: () => G.PluginsStatus() as unknown as Promise<PluginInfo[]>,
+  pluginDownload: (name: string) => G.PluginDownload(name) as unknown as Promise<string>,
+  pluginRemove: (name: string) => G.PluginRemove(name),
   snippetsList: (connectionId: string) =>
     G.SnippetsList(connectionId) as unknown as Promise<Snippet[]>,
   snippetCreate: (input: SnippetInput) =>
@@ -700,13 +797,13 @@ export const api = {
       raw?: any;
     }>>,
   sshConnectDynamic: (folderId: string, entryId: string) =>
-    G.SshConnectDynamic(folderId, entryId) as unknown as Promise<{ session_id: string }>,
+    (G.SshConnectDynamic(folderId, entryId) as unknown as Promise<{ session_id: string }>).then(recordVia),
   sshConnectDynamicWithOverride: (folderId: string, entryId: string, overrideCredentialId: string) =>
-    G.SshConnectDynamicWithOverride(folderId, entryId, overrideCredentialId) as unknown as Promise<{ session_id: string }>,
+    (G.SshConnectDynamicWithOverride(folderId, entryId, overrideCredentialId) as unknown as Promise<{ session_id: string }>).then(recordVia),
   sshConnectDynamicAdvanced: (folderId: string, entryId: string, overrideCredentialId: string, overrideUsername: string, overridePassword: string) =>
-    G.SshConnectDynamicAdvanced(folderId, entryId, overrideCredentialId, overrideUsername, overridePassword) as unknown as Promise<{ session_id: string }>,
+    (G.SshConnectDynamicAdvanced(folderId, entryId, overrideCredentialId, overrideUsername, overridePassword) as unknown as Promise<{ session_id: string }>).then(recordVia),
   sshConnectDynamicWithJumpOverride: (folderId: string, entryId: string, overrideCredentialId: string, overrideUsername: string, overridePassword: string, jumpHostOverride: string, jumpCredentialOverride: string) =>
-    G.SshConnectDynamicWithJumpOverride(folderId, entryId, overrideCredentialId, overrideUsername, overridePassword, jumpHostOverride, jumpCredentialOverride) as unknown as Promise<{ session_id: string }>,
+    (G.SshConnectDynamicWithJumpOverride(folderId, entryId, overrideCredentialId, overrideUsername, overridePassword, jumpHostOverride, jumpCredentialOverride) as unknown as Promise<{ session_id: string }>).then(recordVia),
   pinDynamicEntry: (input: {
     folder_id: string;
     entry_id: string;

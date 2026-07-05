@@ -12,7 +12,7 @@
   import {
     IconHost, IconUser, IconLock, IconClipboardCopy, IconFolder,
     IconRotateCw, IconSplitH, IconSplitV, IconX, IconBroadcast,
-    IconActivity, IconGlobe, IconTunnel, IconSearch, IconSettings,
+    IconActivity, IconGlobe, IconTunnel, IconSearch, IconSettings, IconVpn,
   } from "./iconMap";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
@@ -437,6 +437,11 @@
       {#if paneSession?.hostname}
         <span class="pane-host">{paneSession.hostname}</span>
       {/if}
+      {#if paneSession?.networkVia}
+        <span class="vpn-badge" title="First hop dials through WireGuard profile '{paneSession.networkVia}'">
+          <IconVpn size={10} /> {paneSession.networkVia}
+        </span>
+      {/if}
       {#if paneSession?.status === "reconnecting"}
         <span class="reconnecting" title={paneSession.statusHint}>
           ↻ reconnect {paneSession.reconnectAttempt}/{paneSession.reconnectMaxAttempts}
@@ -769,6 +774,19 @@
     white-space: nowrap;
     flex-shrink: 1;
     min-width: 0;
+  }
+  .vpn-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.62rem;
+    font-weight: 600;
+    padding: 0.02rem 0.4rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--mauve, #b675f0) 22%, transparent);
+    color: var(--mauve, #b675f0);
+    white-space: nowrap;
+    flex-shrink: 0;
   }
   .pane-actions {
     margin-left: auto;

@@ -15,7 +15,8 @@
   import { errMsg } from "./connectErrors";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
-  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers } from "./iconMap";
+  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn } from "./iconMap";
+  import { networkProfiles } from "./networkProfiles.svelte";
   import { terminalPrefs } from "./terminalPrefs.svelte";
   import type { ServerStats } from "./api";
   import { syncState } from "./syncState.svelte";
@@ -82,6 +83,9 @@
 
   onMount(() => {
     workspaces.load();
+    // Live WG tunnel segment; the store refreshes itself on the
+    // network_tunnel_changed event after the first load.
+    networkProfiles.load().catch(() => {});
     api.appVersion().then((v) => { version = v.version; }).catch(() => {});
     refreshTunnels();
     tunnelTimer = setInterval(refreshTunnels, 3000);
@@ -136,6 +140,12 @@
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   });
+
+  // WireGuard tunnels currently up. Paused profiles can't be running
+  // (pausing stops the device), so no extra filter needed.
+  const runningVpns = $derived(
+    networkProfiles.list.filter((p) => p.status.running),
+  );
 
   const liveCount = $derived(
     sessions.tabs.filter((s) => s.status === "connected").length,
@@ -371,6 +381,17 @@
     </span>
   {/if}
 
+  {#if runningVpns.length > 0}
+    <button
+      class="seg vpn"
+      onclick={() => view.setTabSettingsSection("network")}
+      title={`WireGuard up: ${runningVpns.map((p) => p.name).join(", ")} - click to manage`}
+    >
+      <IconVpn size={11} />
+      <span>{runningVpns.length === 1 ? runningVpns[0].name : runningVpns.length}</span>
+    </button>
+  {/if}
+
   {#if broadcast.totalMembers() > 1}
     <span class="seg bcast" title="{broadcast.totalMembers()} sessions across all broadcast groups">
       <IconBroadcast size={11} />
@@ -530,6 +551,7 @@
   button.seg:hover { background: var(--surface0); color: var(--text); }
   .seg.has-error { color: var(--yellow); }
   .seg.bcast { color: var(--peach); }
+  .seg.vpn { color: var(--mauve, #b675f0); }
   /* Server-status readout: a group of small icon+number stats for the
      focused session, muted so it reads as ambient info. */
   .seg.stats { gap: 0.55rem; color: var(--subtext0); }

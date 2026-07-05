@@ -1054,6 +1054,19 @@ export class InheritableSettings {
              */
             this["vnc_use_tunnel"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * NetworkProfileID routes the FIRST SSH hop through a userspace
+             * WireGuard tunnel (internal/wg). nil = inherit from ancestry;
+             * "" = explicitly direct (breaks an inherited profile); otherwise
+             * the id of a network_profiles row. Jump-chain hops after the
+             * first ride the previous hop's SSH channel and need no network
+             * of their own.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["network_profile_id"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -1409,6 +1422,16 @@ export class ResolvedSettings {
              * @type {boolean}
              */
             this["vnc_use_tunnel"] = false;
+        }
+        if (!("network_profile_id" in $$source)) {
+            /**
+             * NetworkProfileID: non-nil when the first hop should dial through
+             * the userspace WireGuard tunnel of this network profile. An
+             * explicit "" override normalizes to nil here.
+             * @member
+             * @type {string | null}
+             */
+            this["network_profile_id"] = null;
         }
 
         Object.assign(this, $$source);

@@ -165,16 +165,20 @@ tasks:
       - wails3 tool package -name "{{.APP_NAME}}" -format archlinux -config ./build/linux/nfpm/nfpm.yaml -out {{.ROOT_DIR}}/bin
 
   generate:dotdesktop:
-    summary: Generates a `.desktop` file
+    summary: Installs the maintained `.desktop` file
     dir: build
+    # We do NOT use `wails3 generate .desktop` here: its flag set can't
+    # emit StartupWMClass / Keywords / MimeType, and it OVERWRITES the
+    # file on every build. Those fields matter on Linux - without
+    # StartupWMClass the window shows as "wails app" in the taskbar and
+    # doesn't bind to the launcher icon. So the .desktop is a
+    # hand-maintained source (ssh-tool.desktop.in) that we copy into
+    # place; edit the .in file, never the generated one.
     cmds:
       - mkdir -p {{.ROOT_DIR}}/build/linux/appimage
-      - wails3 generate .desktop -name "{{.APP_NAME}}" -exec "{{.EXEC}}" -icon "{{.ICON}}" -outputfile "{{.ROOT_DIR}}/build/linux/{{.APP_NAME}}.desktop" -categories "{{.CATEGORIES}}"
+      - cp "{{.ROOT_DIR}}/build/linux/{{.APP_NAME}}.desktop.in" "{{.ROOT_DIR}}/build/linux/{{.APP_NAME}}.desktop"
     vars:
       APP_NAME: '{{.APP_NAME}}'
-      EXEC: '{{.APP_NAME}}'
-      ICON: '{{.APP_NAME}}'
-      CATEGORIES: 'Development;'
       OUTPUTFILE: '{{.ROOT_DIR}}/build/linux/{{.APP_NAME}}.desktop'
 
   run:
