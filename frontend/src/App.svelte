@@ -34,6 +34,7 @@
   import DeleteConfirm from "./lib/DeleteConfirm.svelte";
   import PromptModal from "./lib/PromptModal.svelte";
   import ConfirmModal from "./lib/ConfirmModal.svelte";
+  import PresenceTakeoverModal from "./lib/PresenceTakeoverModal.svelte";
   import { connectionActions } from "./lib/connectionActions.svelte";
   import DetachedWindow from "./lib/DetachedWindow.svelte";
   import ResizeHandle from "./lib/ResizeHandle.svelte";
@@ -1076,6 +1077,7 @@
   <RecordingsModal />
   <PromptModal />
   <ConfirmModal />
+  <PresenceTakeoverModal />
 
   {#if connectionActions.movePending}
     <FolderPicker

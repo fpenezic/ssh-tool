@@ -9,6 +9,7 @@ import { vncSessions } from "./vncState.svelte.ts";
 import { showPrompt } from "./promptModal.svelte.ts";
 import { toast } from "./toast.svelte.ts";
 import { unwrapRaw } from "./connectErrors";
+import { presenceTakeover, isBusyElsewhere } from "./presenceTakeover.svelte.ts";
 
 // isTransientConnectError flags failures worth a single auto-retry.
 // Excludes anything credential / cryptographic so a wrong password
@@ -171,11 +172,23 @@ class ConnectionActionsStore {
       try {
         r = await attempt();
       } catch (firstErr) {
-        // Single auto-retry on transient classes - DNS hiccup, the
-        // host wasn't up yet, brief network blip. Auth / handshake /
-        // host-key failures are never retried (same outcome twice
-        // burns the user's saved password + spams the audit log).
-        if (isTransientConnectError(firstErr)) {
+        // A synced WG profile is up on another machine: offer a
+        // take-over instead of failing. If the user takes over (or
+        // connects anyway), retry once; otherwise surface as a normal
+        // cancel (no error toast).
+        const busy = isBusyElsewhere(firstErr);
+        if (busy) {
+          const decision = await presenceTakeover.ask(busy.profileId, busy.owner);
+          if (decision === "retry") {
+            r = await attempt();
+          } else {
+            return false;
+          }
+        } else if (isTransientConnectError(firstErr)) {
+          // Single auto-retry on transient classes - DNS hiccup, the
+          // host wasn't up yet, brief network blip. Auth / handshake /
+          // host-key failures are never retried (same outcome twice
+          // burns the user's saved password + spams the audit log).
           await new Promise((resolve) => setTimeout(resolve, 800));
           r = await attempt();
         } else {

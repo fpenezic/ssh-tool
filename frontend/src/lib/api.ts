@@ -174,6 +174,14 @@ export interface PluginInfo {
   supported: boolean;
 }
 
+export interface RemoteOwner {
+  active: boolean;
+  machine_name: string;
+  kind: string;
+  since_unix: number;
+  estimate_seconds: number;
+}
+
 export interface VncSession {
   session_id: string;
   ws_url: string;
@@ -605,6 +613,12 @@ export const api = {
   pluginsStatus: () => G.PluginsStatus() as unknown as Promise<PluginInfo[]>,
   pluginDownload: (name: string) => G.PluginDownload(name) as unknown as Promise<string>,
   pluginRemove: (name: string) => G.PluginRemove(name),
+  networkProfilePresence: (profileId: string) =>
+    G.NetworkProfilePresence(profileId) as unknown as Promise<RemoteOwner>,
+  networkProfileTakeOver: (profileId: string) =>
+    G.NetworkProfileTakeOver(profileId) as unknown as Promise<number>,
+  networkProfileConnectAnyway: (profileId: string) =>
+    G.NetworkProfileConnectAnyway(profileId),
   snippetsList: (connectionId: string) =>
     G.SnippetsList(connectionId) as unknown as Promise<Snippet[]>,
   snippetCreate: (input: SnippetInput) =>

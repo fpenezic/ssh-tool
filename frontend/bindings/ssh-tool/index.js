@@ -46,6 +46,7 @@ export {
     ProfileStats,
     RecordingState,
     ReleaseNotes,
+    RemoteOwner,
     ScrollbackSnapshot,
     SftpListResult,
     SftpPreview,

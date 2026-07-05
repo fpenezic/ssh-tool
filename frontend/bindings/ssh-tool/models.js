@@ -2367,6 +2367,70 @@ export class ReleaseNotes {
 }
 
 /**
+ * RemoteOwner is what the UI needs to render the take-over dialog.
+ */
+export class RemoteOwner {
+    /**
+     * Creates a new RemoteOwner instance.
+     * @param {Partial<RemoteOwner>} [$$source = {}] - The source object to create the RemoteOwner.
+     */
+    constructor($$source = {}) {
+        if (!("active" in $$source)) {
+            /**
+             * a live foreign owner exists
+             * @member
+             * @type {boolean}
+             */
+            this["active"] = false;
+        }
+        if (!("machine_name" in $$source)) {
+            /**
+             * hostname to name in the dialog
+             * @member
+             * @type {string}
+             */
+            this["machine_name"] = "";
+        }
+        if (!("kind" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("since_unix" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["since_unix"] = 0;
+        }
+        if (!("estimate_seconds" in $$source)) {
+            /**
+             * EstimateSeconds is the honest upper bound the countdown should
+             * start from: two poll cycles (owner reads the kill, requester
+             * reads the freed presence) plus a margin.
+             * @member
+             * @type {number}
+             */
+            this["estimate_seconds"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RemoteOwner instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RemoteOwner}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RemoteOwner(/** @type {Partial<RemoteOwner>} */($$parsedSource));
+    }
+}
+
+/**
  * ScrollbackSnapshot pairs a base64 chunk with the cumulative-byte watermark
  * at snapshot time, so the frontend can subscribe-then-snapshot atomically
  * and discard re-delivered bytes without losing or duplicating any.

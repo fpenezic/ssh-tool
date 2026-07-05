@@ -77,6 +77,10 @@ type App struct {
 	wgSessProfile map[string]string      // sessionID -> profileID
 	wgStopTimers  map[string]*time.Timer // profileID -> linger stop
 
+	// Tunnel presence + remote-disconnect across synced machines.
+	// See app_presence.go.
+	presence presenceState
+
 	metaMu      sync.Mutex
 	sessionMeta map[string]sessionMetaEntry
 

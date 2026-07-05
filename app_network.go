@@ -23,6 +23,7 @@ import (
 
 	"ssh-tool/internal/creds"
 	"ssh-tool/internal/inventory"
+	"ssh-tool/internal/presence"
 	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/store"
 	"ssh-tool/internal/wg"
@@ -84,10 +85,12 @@ func (a *App) ensureTunnel(row *store.NetworkProfile) (tunnelDialer, error) {
 	}
 }
 
-// tunnelStop stops whichever manager runs the profile's tunnel.
+// tunnelStop stops whichever manager runs the profile's tunnel and
+// releases its presence claim so other synced machines see it free.
 func (a *App) tunnelStop(profileID string) {
 	a.wgman.Stop(profileID)
 	a.nbman.Stop(profileID)
+	go a.presenceClear(profileID)
 }
 
 // tunnelStatus merges both managers' views into the wg.Status shape
@@ -190,6 +193,7 @@ func (a *App) ensureNetbirdTunnel(row *store.NetworkProfile) (tunnelDialer, erro
 	}
 	a.wgTouch(row.ID)
 	a.recordAudit("network.tunnel.start", row.ID, map[string]string{"name": row.Name, "kind": kindNetbird})
+	go a.presencePublish(row.ID, kindNetbird)
 	EventsEmit("network_tunnel_changed", row.ID)
 	return p, nil
 }
@@ -341,6 +345,14 @@ func (a *App) ensureWgTunnel(profileID string) (*wg.Tunnel, error) {
 		a.wgTouch(profileID)
 		return t, nil
 	}
+	// Guard against flapping a synced WG identity: if another machine
+	// owns this tunnel and the user hasn't authorised a take-over,
+	// refuse with a recognisable error so the UI can offer one. The
+	// error carries "<profileID>|<ownerName>" after the prefix so the
+	// frontend take-over dialog has both without a resolve round-trip.
+	if owner, blocked := a.presenceBlocksBringUp(profileID); blocked {
+		return nil, fmt.Errorf("%s%s|%s", errProfileBusyPrefix, profileID, owner)
+	}
 	p, err := a.loadWgProfile(profileID)
 	if err != nil {
 		return nil, err
@@ -351,6 +363,8 @@ func (a *App) ensureWgTunnel(profileID string) (*wg.Tunnel, error) {
 	}
 	a.wgTouch(profileID)
 	a.recordAudit("network.tunnel.start", profileID, map[string]string{"name": p.Name})
+	// Claim presence for this WG profile across synced machines.
+	go a.presencePublish(profileID, kindWireguard)
 	EventsEmit("network_tunnel_changed", profileID)
 	return t, nil
 }
@@ -767,6 +781,25 @@ func (a *App) wgTrackSession(sess *sshlayer.Session, settings *store.ResolvedSet
 // deregister and avoids orphaned children. Best-effort, bounded by
 // each manager's own stop timeouts.
 func (a *App) stopTunnelsOnQuit() {
+	// Release presence for every owned profile first, so another
+	// machine sees them free promptly instead of waiting for the
+	// records to go stale.
+	a.presence.mu.Lock()
+	owned := make([]string, 0, len(a.presence.owned))
+	for pid := range a.presence.owned {
+		owned = append(owned, pid)
+	}
+	a.presence.mu.Unlock()
+	if len(owned) > 0 {
+		self := a.machineID()
+		a.presenceLoadSave(func(f *presence.File) {
+			for _, pid := range owned {
+				f.ClearOwner(pid, self)
+			}
+		})
+	}
+	a.stopPresencePoll()
+
 	if a.wgman != nil {
 		a.wgman.StopAll()
 	}
