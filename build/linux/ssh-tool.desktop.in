@@ -10,5 +10,5 @@ Terminal=false
 Keywords=ssh;terminal;sftp;tunnel;wireguard;
 Version=1.0
 StartupNotify=true
-StartupWMClass=ssh-tool
+StartupWMClass=org.wails.ssh-tool
 MimeType=x-scheme-handler/ssh-tool;
