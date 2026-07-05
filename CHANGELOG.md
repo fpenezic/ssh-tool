@@ -7,6 +7,20 @@ in alpha upstream.
 
 ---
 
+## [0.48.1] - Version-stamp fix
+
+### Fixed
+
+- **v0.48.0 was stamped "v0.48.0-rc2" internally.** The release build
+  ran while the rc2 tag still sat on the same commit as the release
+  tag, and the version derivation picked the wrong one. Cosmetically
+  that showed the wrong version in Settings -> About; more importantly
+  it broke the NetBird plugin download, which looks for the helper in
+  the release matching the app's own version - and rc2 had been
+  deleted. Builds now stamp the exact tag that triggered them. Update
+  from v0.48.0 to get a correctly-stamped app and a working plugin
+  download.
+
 ## [0.48.0] - Network profiles: WireGuard + NetBird
 
 ### Added
