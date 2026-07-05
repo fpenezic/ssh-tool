@@ -40,7 +40,7 @@ tasks:
           ARCH: '{{.ARCH | default "arm64"}}'
     vars:
       APP_VERSION:
-        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
       APP_COMMIT:
         sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
       BUILD_FLAGS: '{{if eq .PRODUCTION "true"}}-tags production,android -trimpath -buildvcs=false -ldflags="-w -s -X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"{{else}}-tags android,debug -buildvcs=false -gcflags=all="-l" -ldflags="-X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"{{end}}'
@@ -97,7 +97,7 @@ tasks:
           -o build/android/app/src/main/jniLibs/$JNI_DIR/libwails.so
     vars:
       APP_VERSION:
-        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
       APP_COMMIT:
         sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
       BUILD_FLAGS: '{{if eq .PRODUCTION "true"}}-tags production,android -trimpath -buildvcs=false -ldflags="-w -s -X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"{{else}}-tags android,debug -buildvcs=false -gcflags=all="-l" -ldflags="-X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"{{end}}'

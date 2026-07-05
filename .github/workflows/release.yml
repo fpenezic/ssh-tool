@@ -131,6 +131,13 @@ jobs:
         working-directory: frontend
         run: npm ci
       - name: Build
+        # SSHTOOL_VERSION pins the stamped version to the EXACT tag that
+        # triggered this run. `git describe` is ambiguous when a commit
+        # has more than one tag (a leftover -rcN next to the release
+        # tag) and picked the wrong one in v0.48.0. The Taskfiles prefer
+        # this env when set.
+        env:
+          SSHTOOL_VERSION: ${{ github.ref_name }}
         run: |
           ${{ matrix.build }}
           mv ${{ matrix.bin }} bin/${{ matrix.out }}
@@ -197,6 +204,8 @@ jobs:
         working-directory: frontend
         run: npm ci
       - name: Build APK
+        env:
+          SSHTOOL_VERSION: ${{ github.ref_name }}
         run: |
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.3.11579264"
           task android:package

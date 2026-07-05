@@ -57,8 +57,12 @@ tasks:
     cmds:
       - go build {{.BUILD_FLAGS}} -o {{.OUTPUT}}
     vars:
+      # SSHTOOL_VERSION (set by CI from the exact tag ref) wins over
+      # `git describe`, which is AMBIGUOUS when a commit carries more
+      # than one tag and can stamp the wrong one. Falls back to
+      # describe for local builds.
       APP_VERSION:
-        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
       APP_COMMIT:
         sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
       BUILD_FLAGS: '{{if eq .DEV "true"}}{{if .EXTRA_TAGS}}-tags {{.EXTRA_TAGS}} {{end}}-buildvcs=false -gcflags=all="-l" -ldflags="-X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"{{else}}-tags production{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s -X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"{{end}}'
