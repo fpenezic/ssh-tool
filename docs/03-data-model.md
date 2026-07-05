@@ -2,7 +2,7 @@
 
 The DB lives at `DataDir/ssh-tool.db` (SQLite via `modernc.org/sqlite`,
 WAL mode, foreign keys on). Schema is versioned in `schema_meta.value`
-and migrated in order on every startup. Current head: **v16**. The audit log lives in a separate audit.db (machine-local, not in this schema).
+and migrated in order on every startup. Current head: **v17**. The audit log lives in a separate audit.db (machine-local, not in this schema).
 
 The canonical migration source is `internal/store/migrations.go`. This
 doc summarises the current shape and lists each migration's purpose.
@@ -213,6 +213,7 @@ Vault keys for various features:
 | 14 | credential_secret_history (sealed previous values keyed by vault_account) |
 | 15 | pinned_dynamic_entries (dynamic-inventory host → permanent connection mapping) |
 | 16 | vnc_password_vault_key on connections (per-connection VNC/RFB password key) |
+| 17 | network_profiles (WireGuard + NetBird overlay profiles; secretless config, secrets in vault) |
 
 Migration runner: `runMigrations` in `internal/store/migrations.go`.
 Each migration applies inside a transaction; failure rolls back and
@@ -331,3 +332,42 @@ snapshots every cached entry into a connection, then drops the
 `dynamic_folders` row + cached entries entirely, leaving the
 base `folders` row in place. Pin rows for that folder are
 cleared at the same time since the dynamic source is gone.
+
+### `network_profiles` (v17)
+
+Overlay-network profiles for routing a connection's first SSH hop
+through a userspace tunnel. One table serves both kinds; the `kind`
+field inside `config_json` selects WireGuard vs NetBird.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | text PK | |
+| name | text UNIQUE | display name |
+| config_json | text | secretless profile; see below |
+| created_at / updated_at | int64 | unix seconds |
+
+`config_json` is **secretless by construction**:
+
+- **WireGuard** (`kind` absent / `"wireguard"`): addresses, DNS, MTU,
+  peers (public keys, endpoints, allowed IPs, `has_psk` flags), plus
+  `mode` (`always` / `auto`) and `paused`. The interface private key
+  lives in the vault under `wg_private_key:<id>`; each peer's optional
+  preshared key under `wg_psk:<id>:<peer_public_key>`.
+- **NetBird** (`kind: "netbird"`): `management_url`, `device_name`,
+  `setup_key_credential_id` (a reference to an `api_token` credential
+  that holds the setup key in the vault), plus `mode` / `paused`. No
+  secret is stored on the row. Peer registration state (device keys)
+  lives on disk under `DataDir/netbird/<id>/` and is intentionally
+  **not** synced, so each machine registers as its own peer.
+
+Connections and folders select a profile through a new inheritable
+setting **`network_profile_id`** (in `overrides_json` / folder
+`settings_json`): tri-state - absent = inherit, `""` = explicit direct
+(break an inherited profile), otherwise a profile id. It rides the
+normal inheritance cascade, so a whole folder can go through one
+tunnel. `resolver` normalises `""` to nil.
+
+Platform note: WireGuard profiles work everywhere the core runs,
+**including Android** (pure-Go netstack). NetBird needs the sidecar
+plugin binary, which is **desktop-only** (Windows / Linux / macOS) -
+Android can't spawn a separate native helper process.

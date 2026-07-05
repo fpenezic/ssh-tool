@@ -46,12 +46,25 @@ func fatal(format string, args ...any) {
 	os.Exit(1)
 }
 
+// version is stamped at build time via -X main.version=<app version>.
+// The app uses it to tell whether an installed helper is older than the
+// running app and should be re-downloaded. "dev" for un-stamped builds.
+var version = "dev"
+
 func main() {
 	management := flag.String("management", "", "management URL (empty = netbird.io cloud)")
 	device := flag.String("device", "ssh-tool", "device name this peer registers under")
 	stateDir := flag.String("state-dir", "", "directory for netbird config + state (required)")
 	logLevel := flag.String("log-level", "warn", "netbird client log level")
+	showVersion := flag.Bool("version", false, "print helper version and exit")
 	flag.Parse()
+
+	// --version prints one line and exits, so the app can read the
+	// installed helper's version without a full connect.
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	if *stateDir == "" {
 		fatal("--state-dir is required")
@@ -61,23 +74,47 @@ func main() {
 	}
 
 	setupKey := os.Getenv("SSHTOOL_NB_SETUP_KEY")
-	configPath := filepath.Join(*stateDir, "config.json")
 	if setupKey == "" {
-		if _, err := os.Stat(configPath); err != nil {
-			fatal("no setup key (SSHTOOL_NB_SETUP_KEY) and no prior registration in %s", *stateDir)
-		}
+		fatal("no setup key (SSHTOOL_NB_SETUP_KEY) provided")
 	}
 
 	// The netbird client logs through logrus to stderr; keep our
 	// protocol stream (stdout) clean.
 	log.SetOutput(os.Stderr)
 
+	// Force userspace / netstack mode explicitly, BEFORE embed.New.
+	// embed.New sets these itself, but belt-and-suspenders: on Windows
+	// the client was still trying to create a real wt0 adapter (needs
+	// admin, binds udp 51820, panics on teardown). Setting the env up
+	// front guarantees netstack.IsEnabled() is true no matter the
+	// ordering inside the engine's startup goroutines.
+	_ = os.Setenv("NB_USE_NETSTACK_MODE", "true")
+	_ = os.Setenv("NB_NETSTACK_SKIP_PROXY", "true")
+
+	// IMPORTANT: do NOT set ConfigPath. embed.New only takes the pure
+	// userspace / netstack path when ConfigPath is empty (in-memory
+	// config). With a ConfigPath it goes through the file-based
+	// profile manager, which on Windows tries to create a real wt0
+	// adapter and bind udp 51820 - needs admin, collides with a real
+	// NetBird install, and panics in the embedded netstack tun on
+	// teardown. StatePath is fine (device/DNS state only). This is
+	// how the remote-tool agent runs embed too.
+	//
+	// WireguardPort=0 (random) is REQUIRED: the netstack device still
+	// binds a real UDP socket for the WireGuard transport, and the
+	// default is 51820. On a machine that also runs the real NetBird
+	// client (or a second helper), 51820 is already taken - the bind
+	// fails, the engine tears the half-built device down, and the
+	// embedded netstack tun panics on the double-close. A random port
+	// sidesteps the collision entirely. This - not netstack mode - was
+	// the "wt0 / bind 51820 / panic" crash on Windows.
+	randomPort := 0
 	client, err := embed.New(embed.Options{
 		DeviceName:    *device,
 		SetupKey:      setupKey,
 		ManagementURL: *management,
-		ConfigPath:    configPath,
 		StatePath:     filepath.Join(*stateDir, "state.json"),
+		WireguardPort: &randomPort,
 		LogOutput:     os.Stderr,
 		LogLevel:      *logLevel,
 	})

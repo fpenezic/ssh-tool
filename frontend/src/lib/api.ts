@@ -169,6 +169,8 @@ export interface PluginInfo {
   name: string;
   installed: boolean;
   path: string;
+  version: string;
+  update_available: boolean;
   supported: boolean;
 }
 

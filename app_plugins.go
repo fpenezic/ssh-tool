@@ -11,12 +11,14 @@ package main
 // the app updater itself uses.
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -73,18 +75,56 @@ type PluginInfo struct {
 	Name      string `json:"name"`
 	Installed bool   `json:"installed"`
 	Path      string `json:"path"`
+	// Version is the installed helper's stamped version ("" if it
+	// couldn't be read, "dev" for un-stamped local builds).
+	Version string `json:"version"`
+	// UpdateAvailable is true when the installed helper's version
+	// differs from the running app - after an app update, the bundled
+	// helper is a version behind and should be re-downloaded. Helper
+	// and app share the release tag, so equality means up to date.
+	UpdateAvailable bool `json:"update_available"`
 	// Supported=false when this platform has no helper build
 	// (android/ios - helpers are desktop-only).
 	Supported bool `json:"supported"`
 }
 
-// PluginsStatus reports every known plugin's install state.
+// pluginVersion runs `<helper> --version` and returns the stamped
+// version line. Cheap (the flag exits before any network work); "" on
+// any error so the UI just omits the version rather than failing.
+func pluginVersion(exe string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, exe, "--version").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// PluginsStatus reports every known plugin's install state + version.
 func (a *App) PluginsStatus() []PluginInfo {
 	out := make([]PluginInfo, 0, len(knownPlugins))
-	supported := runtime.GOOS == "windows" || runtime.GOOS == "linux" || runtime.GOOS == "darwin"
+	// Only platforms the release actually builds a helper for. macOS
+	// is excluded until the signed/notarised darwin helper ships (see
+	// TODO) - otherwise the download would 404. A user who drops a
+	// helper into the plugins dir by hand still works: pluginPath
+	// finds it regardless of this flag.
+	supported := runtime.GOOS == "windows" || runtime.GOOS == "linux"
 	for _, name := range knownPlugins {
 		p, ok := pluginPath(name)
-		out = append(out, PluginInfo{Name: name, Installed: ok, Path: p, Supported: supported})
+		info := PluginInfo{Name: name, Installed: ok, Path: p, Supported: supported}
+		if ok {
+			info.Version = pluginVersion(p)
+			// Only flag an update when we could read a real version and
+			// it differs from the app. A "dev" app or unreadable helper
+			// version stays quiet - we don't nag on dev builds.
+			if info.Version != "" && info.Version != "dev" &&
+				appVersion != "dev" && appVersion != "" &&
+				info.Version != appVersion {
+				info.UpdateAvailable = true
+			}
+		}
+		out = append(out, info)
 	}
 	return out
 }

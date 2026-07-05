@@ -18,8 +18,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"ssh-tool/internal/creds"
 	"ssh-tool/internal/inventory"
 	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/store"
@@ -106,6 +108,21 @@ func netbirdStateDir(profileID string) string {
 	return filepath.Join(store.DataDir(), "netbird", profileID)
 }
 
+// normalizeMgmtURL tolerates a management URL typed without a scheme
+// ("vpn.example.com" -> "https://vpn.example.com"). Empty stays empty
+// (means the netbird.io cloud default). An explicit http:// is left
+// as-is for local/dev setups.
+func normalizeMgmtURL(u string) string {
+	u = strings.TrimSpace(u)
+	if u == "" {
+		return ""
+	}
+	if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+		return "https://" + u
+	}
+	return u
+}
+
 // ensureNetbirdTunnel spawns (or reuses) the ssh-tool-netbird helper
 // for the profile. The setup key is resolved from the referenced
 // api_token credential and passed via env; once registered, the state
@@ -123,16 +140,40 @@ func (a *App) ensureNetbirdTunnel(row *store.NetworkProfile) (tunnelDialer, erro
 	if !ok {
 		return nil, fmt.Errorf("NetBird plugin is not installed - download it in Settings -> Network profiles")
 	}
-	setupKey := ""
-	if cfg.SetupKeyCredentialID != "" {
-		cred, err := a.db.GetCredential(cfg.SetupKeyCredentialID)
-		if err == nil && cred != nil && cred.VaultKey != nil {
-			if v, ok, verr := a.vault.Get(*cred.VaultKey); verr != nil {
-				return nil, fmt.Errorf("profile %s: setup key: %w (vault locked?)", row.Name, verr)
-			} else if ok {
-				setupKey = v
-			}
+	// Resolve the setup key from the referenced api_token credential.
+	// The helper runs a pure userspace peer (no persisted file config),
+	// so the setup key is needed on every start; NetBird dedupes the
+	// device by name + state, so re-registering with a reusable key is
+	// the normal path.
+	if cfg.SetupKeyCredentialID == "" {
+		return nil, fmt.Errorf("profile %s: no setup-key credential assigned", row.Name)
+	}
+	cred, err := a.db.GetCredential(cfg.SetupKeyCredentialID)
+	if err != nil {
+		return nil, fmt.Errorf("profile %s: setup key credential: %w", row.Name, err)
+	}
+	if cred == nil {
+		return nil, fmt.Errorf("profile %s: setup key credential not found (was it deleted?)", row.Name)
+	}
+	if cred.VaultKey == nil {
+		return nil, fmt.Errorf("profile %s: credential %q holds no secret in the vault - recreate it with the setup key as the secret", row.Name, cred.Name)
+	}
+	setupKey, ok, verr := a.vault.Get(*cred.VaultKey)
+	if verr != nil {
+		return nil, fmt.Errorf("profile %s: setup key: %w", row.Name, verr)
+	}
+	if !ok {
+		switch a.vault.Status().Kind {
+		case creds.StatusLocked:
+			return nil, fmt.Errorf("profile %s: vault is locked - unlock it, then retry", row.Name)
+		case creds.StatusNotInitialized:
+			return nil, fmt.Errorf("profile %s: the setup key was stored in a memory-only vault and lost on restart - set a master passphrase (Settings -> Vault), then recreate the credential", row.Name)
+		default:
+			return nil, fmt.Errorf("profile %s: setup key not found in the vault - recreate the credential %q", row.Name, cred.Name)
 		}
+	}
+	if setupKey == "" {
+		return nil, fmt.Errorf("profile %s: setup key credential holds an empty secret", row.Name)
 	}
 	device := cfg.DeviceName
 	if device == "" {
@@ -142,10 +183,7 @@ func (a *App) ensureNetbirdTunnel(row *store.NetworkProfile) (tunnelDialer, erro
 	if cfg.ManagementURL != "" {
 		args = append(args, "--management", cfg.ManagementURL)
 	}
-	var env []string
-	if setupKey != "" {
-		env = append(env, "SSHTOOL_NB_SETUP_KEY="+setupKey)
-	}
+	env := []string{"SSHTOOL_NB_SETUP_KEY=" + setupKey}
 	p, err := a.nbman.Ensure(row.ID, row.Name, exe, args, env)
 	if err != nil {
 		return nil, err
@@ -438,7 +476,7 @@ func (a *App) NetworkProfileCreateNetbird(name, managementURL, deviceName, setup
 	}
 	cfg := NetbirdConfig{
 		Kind:                 kindNetbird,
-		ManagementURL:        managementURL,
+		ManagementURL:        normalizeMgmtURL(managementURL),
 		DeviceName:           deviceName,
 		SetupKeyCredentialID: setupKeyCredentialID,
 		Mode:                 wg.ModeAlways,
@@ -469,7 +507,7 @@ func (a *App) NetworkProfileUpdateNetbird(id, name, managementURL, deviceName, s
 		return nil, fmt.Errorf("bad config: %w", err)
 	}
 	cfg.Kind = kindNetbird
-	cfg.ManagementURL = managementURL
+	cfg.ManagementURL = normalizeMgmtURL(managementURL)
 	cfg.DeviceName = deviceName
 	if setupKeyCredentialID != "" {
 		cfg.SetupKeyCredentialID = setupKeyCredentialID

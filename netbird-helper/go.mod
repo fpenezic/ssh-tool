@@ -1,8 +1,8 @@
 module ssh-tool/netbird-helper
 
-go 1.26
+go 1.25.5
 
-require github.com/netbirdio/netbird v0.74.2
+require github.com/netbirdio/netbird v0.73.2
 
 require (
 	cunicu.li/go-rosenpass v0.5.42 // indirect
@@ -125,18 +125,24 @@ require (
 // client must mirror them. THIS is why the helper is a separate
 // module: the forks (wireguard-go, ice, circl, ...) stay out of the
 // main application's dependency tree entirely.
+//
+// Pinned to v0.73.2 (matches the working remote-tool nbconn sidecar).
+// v0.74.2's embed client regressed on Windows: it tried to create a
+// real wt0 adapter and bind udp 51820 instead of running userspace /
+// netstack, panicking on teardown. The replace SET must match the
+// version - do not bump one without the other.
+replace golang.zx2c4.com/wireguard => github.com/netbirdio/wireguard-go v0.0.0-20260523085312-4b4a4e36017f
+
+replace github.com/pion/ice/v4 => github.com/netbirdio/ice/v4 v4.0.0-20250908184934-6202be846b51
+
+replace github.com/cloudflare/circl => codeberg.org/cunicu/circl v0.0.0-20230801113412-fec58fc7b5f6
+
 replace github.com/kardianos/service => github.com/netbirdio/service v0.0.0-20240911161631-f62744f42502
 
 replace github.com/getlantern/systray => github.com/netbirdio/systray v0.0.0-20231030152038-ef1ed2a27949
 
-replace golang.zx2c4.com/wireguard => github.com/netbirdio/wireguard-go v0.0.0-20260628102922-2834bebf6c1a
-
-replace github.com/cloudflare/circl => codeberg.org/cunicu/circl v0.0.0-20230801113412-fec58fc7b5f6
-
-replace github.com/pion/ice/v4 => github.com/netbirdio/ice/v4 v4.0.0-20250908184934-6202be846b51
+replace github.com/mailru/easyjson => github.com/netbirdio/easyjson v0.9.0
 
 replace github.com/dexidp/dex => github.com/netbirdio/dex v0.244.1-0.20260512110716-8d70ad8647c1
 
 replace github.com/dexidp/dex/api/v2 => github.com/netbirdio/dex/api/v2 v2.0.0-20260512110716-8d70ad8647c1
-
-replace github.com/mailru/easyjson => github.com/netbirdio/easyjson v0.9.0

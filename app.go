@@ -374,6 +374,12 @@ func (a *App) initialise() {
 		// just refresh the UI's tunnel state (status pill, VPN badge).
 		EventsEmit("network_tunnel_changed", profileID)
 	})
+	// Ensure the plugins dir exists so a user can drop a helper binary
+	// in by hand (airgap / portable) without creating it first. The
+	// download path also creates it, but this covers the manual case.
+	if err := os.MkdirAll(pluginsDir(), 0o755); err != nil {
+		log.Printf("plugins dir: %v", err)
+	}
 	// First-hop dialer for connections resolved to a network profile:
 	// vault-resolve the WG secrets, lazily start (or reuse) the
 	// userspace tunnel, hand its netstack DialContext to the SSH layer.

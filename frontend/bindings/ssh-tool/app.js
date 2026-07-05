@@ -1558,7 +1558,7 @@ export function PluginRemove(name) {
 }
 
 /**
- * PluginsStatus reports every known plugin's install state.
+ * PluginsStatus reports every known plugin's install state + version.
  * @returns {$CancellablePromise<$models.PluginInfo[]>}
  */
 export function PluginsStatus() {

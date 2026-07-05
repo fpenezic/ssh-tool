@@ -5,49 +5,88 @@
     {
       "title": "Tree with folder inheritance",
       "body": "Credentials, jump hosts and SSH options cascade from the folder down. Live connections light up green and bubble a count to the parent folder.",
-      "keys": ["drag", "Ctrl+click", "Del"],
+      "keys": [
+        "drag",
+        "Ctrl+click",
+        "Del"
+      ],
       "art": "tree"
     },
     {
       "title": "Quick palette & live filter",
       "body": "Ctrl+K fuzzy-jumps to any host, tunnel or bookmark. Enter connects. Type > for app commands: lock the vault, open a workspace, check for updates. The sidebar filter narrows the tree for browse / right-click work without collapsing folders.",
-      "keys": ["Ctrl+K", "arrows", "Enter"],
+      "keys": [
+        "Ctrl+K",
+        "arrows",
+        "Enter"
+      ],
       "art": "palette"
     },
     {
       "title": "Tabs, splits, broadcast input",
       "body": "Multi-tab terminal with horizontal and vertical splits. Toggle broadcast to fan keystrokes out to multiple named groups at once - a session can sit in several groups in parallel. Themes, paste guard, search built in.",
-      "keys": ["Ctrl+Shift+B", "Ctrl+F", "Ctrl+wheel"],
+      "keys": [
+        "Ctrl+Shift+B",
+        "Ctrl+F",
+        "Ctrl+wheel"
+      ],
       "art": "terminal"
     },
     {
       "title": "Live tcpdump panel",
       "body": "Stream packets straight into a side panel. Sudo handled via your saved password if the host needs it. Capped at 5000 packets server-side; brief output by default.",
-      "keys": ["right-click", "tcpdump"],
+      "keys": [
+        "right-click",
+        "tcpdump"
+      ],
       "art": "tcpdump"
     },
     {
       "title": "HTTP & SOAP probe",
       "body": "One-off REST/SOAP requests with a \"Route via\" dropdown of your active SOCKS5 forwards. Endpoints behind a VPN-style tunnel become reachable without leaving the app.",
-      "keys": ["JSON", "XML", "Form"],
+      "keys": [
+        "JSON",
+        "XML",
+        "Form"
+      ],
       "art": "http"
+    },
+    {
+      "title": "Overlay-network profiles",
+      "body": "Reach hosts on a private network - a client's WireGuard, a Hetzner internal net, a NetBird tailnet - by routing the SSH hop through a userspace tunnel. No system VPN, several up at once. WireGuard is built in; NetBird is a one-click plugin. A folder-level Network setting sends every host under it through the same tunnel.",
+      "keys": [
+        "WireGuard",
+        "NetBird",
+        "auto"
+      ],
+      "art": "network"
     },
     {
       "title": "Dynamic inventory",
       "body": "Folders that auto-populate from Proxmox VE, Hetzner Cloud, DigitalOcean, Linode, Vultr, Scaleway, AWS EC2 and Ansible inventory files. Tags / labels filter what shows; stopped guests appear greyed with a \"connect anyway\" prompt. API tokens live in the vault.",
-      "keys": ["refresh", "tag filter"],
+      "keys": [
+        "refresh",
+        "tag filter"
+      ],
       "art": "dynamic"
     },
     {
       "title": "VNC console, in-app",
       "body": "Open a Proxmox VM/LXC console or any VNC host as a tab, rendered by noVNC inside the app - no external client, no X server. Proxmox reuses your inventory API token; generic hosts dial direct or tunnel the RFB port through the connection's SSH session.",
-      "keys": ["Open console", "Ctrl+Alt+Del"],
+      "keys": [
+        "Open console",
+        "Ctrl+Alt+Del"
+      ],
       "art": "vnc"
     },
     {
       "title": "Runs on Android too",
       "body": "The same app - the same Go core, vault and SSH stack - runs on an Android phone (DeX-ready). Unlock with a fingerprint, a single-pane touch layout, an on-screen key bar for the keys a phone keyboard lacks, pinch-to-zoom font size, and a foreground service that keeps sessions alive in the background. opkssh login opens your browser; ssh-tool:// links open the app.",
-      "keys": ["fingerprint", "key bar", "pinch"],
+      "keys": [
+        "fingerprint",
+        "key bar",
+        "pinch"
+      ],
       "art": "mobile"
     }
   ],
@@ -81,6 +120,11 @@
       "icon": "forward",
       "title": "Port forwards + isolated browser",
       "body": "Local, remote and dynamic SOCKS5 forwards. One click launches an isolated browser pinned to the SOCKS port."
+    },
+    {
+      "icon": "shield",
+      "title": "Userspace VPN profiles",
+      "body": "Route a connection's first SSH hop through WireGuard or NetBird without a TUN adapter, admin rights, or system routes. Assign a profile to a folder and the whole tree rides the tunnel. Auto-mode dials direct when you're on-site, tunnel when remote. NetBird ships as an optional plugin."
     },
     {
       "icon": "clock",

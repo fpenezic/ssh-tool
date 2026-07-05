@@ -985,6 +985,13 @@
   let nbManagement = $state("");
   let nbDevice = $state("");
   let nbCredId = $state("");
+  // Inline "create setup-key credential" (the picker only lists
+  // existing api_token creds; this avoids a trip to the Credentials
+  // tab mid-flow).
+  let nbNewKeyOpen = $state(false);
+  let nbNewKeyName = $state("");
+  let nbNewKeySecret = $state("");
+  let nbNewKeyBusy = $state(false);
   // Plugins
   let plugins = $state<import("./api").PluginInfo[]>([]);
   let pluginBusy = $state(false);
@@ -1027,6 +1034,30 @@
     try { await api.pluginRemove(name); await refreshPlugins(); }
     catch (e: any) { toast.err(errMsg(e)); }
     finally { pluginBusy = false; }
+  }
+
+  async function nbCreateSetupKey() {
+    if (!nbNewKeyName.trim() || !nbNewKeySecret) {
+      toast.err("Name and setup key are required");
+      return;
+    }
+    nbNewKeyBusy = true;
+    try {
+      const res: any = await api.credentialsCreate({
+        kind: "api_token",
+        name: nbNewKeyName.trim(),
+        api_token_id: "",
+        api_token_secret: nbNewKeySecret,
+      } as any);
+      await credentials.load();
+      const newId = res?.credential?.id ?? res?.id;
+      if (newId) nbCredId = newId;
+      nbNewKeyOpen = false;
+      nbNewKeyName = "";
+      nbNewKeySecret = "";
+      toast.ok("Setup-key credential created");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { nbNewKeyBusy = false; }
   }
 
   async function npCreateNetbird() {
@@ -2207,17 +2238,26 @@
           <strong>{pl.name === "netbird" ? "NetBird" : pl.name}</strong>
           {#if !pl.supported}
             <span class="np-pill">not on this platform</span>
+          {:else if pl.installed && pl.update_available}
+            <span class="np-pill paused">update available</span>
           {:else if pl.installed}
-            <span class="np-pill running">installed</span>
+            <span class="np-pill running">installed{pl.version ? ` ${pl.version}` : ""}</span>
           {:else}
             <span class="np-pill">not installed</span>
           {/if}
           {#if pl.installed}<span class="np-meta">{pl.path}</span>{/if}
         </div>
         {#if pl.supported}
+          {#if pl.update_available}
+            <p class="hint" style="margin:0.2rem 0">
+              Installed {pl.version || "(unknown)"}, app is {versionInfo?.version ?? "?"}. Reinstall to match.
+            </p>
+          {/if}
           <div class="np-actions">
             {#if pl.installed}
-              <button onclick={() => pluginDownload(pl.name)} disabled={pluginBusy}>Reinstall / update</button>
+              <button class:primary={pl.update_available} onclick={() => pluginDownload(pl.name)} disabled={pluginBusy}>
+                {pl.update_available ? "Update" : "Reinstall"}
+              </button>
               <button class="danger" onclick={() => pluginRemove(pl.name)} disabled={pluginBusy}>Remove</button>
             {:else}
               <button class="primary" onclick={() => pluginDownload(pl.name)} disabled={pluginBusy}>Download</button>
@@ -2318,18 +2358,42 @@
         <input bind:value={nbDevice} placeholder="ssh-tool-laptop" />
       </label>
       <label>
-        <span>Setup key credential</span>
-        <SearchableSelect
-          bind:value={nbCredId}
-          options={apiTokenCredOptions}
-          placeholder="Pick an API-token credential holding the setup key…"
-        />
-        <span class="hint inline">
-          Store the NetBird setup key as an API-token credential (Credentials
-          tab). Use a <strong>reusable</strong> key if you sync this profile
-          across machines - each machine registers as its own peer.
+        <span class="row" style="justify-content:space-between; align-items:center; gap:0.5rem">
+          Setup key credential
+          <button type="button" class="token-add" onclick={() => (nbNewKeyOpen = !nbNewKeyOpen)}>
+            {nbNewKeyOpen ? "Cancel" : "+ New"}
+          </button>
         </span>
+        {#if !nbNewKeyOpen}
+          <SearchableSelect
+            bind:value={nbCredId}
+            options={apiTokenCredOptions}
+            placeholder="Pick an API-token credential holding the setup key…"
+          />
+          <span class="hint inline">
+            A NetBird <strong>setup key</strong> (from Setup Keys in the
+            dashboard - a UUID like <code>A1B2C3D4-...</code>), NOT a
+            personal access token. Use a <strong>reusable</strong> key if
+            you sync this profile across machines - each registers as its
+            own peer.
+          </span>
+        {/if}
       </label>
+      {#if nbNewKeyOpen}
+        <div class="np-card" style="gap:0.5rem">
+          <label>
+            <span>Credential name</span>
+            <input bind:value={nbNewKeyName} placeholder="netbird-setup-key" />
+          </label>
+          <label>
+            <span>Setup key <span class="hint inline">(from NetBird dashboard -&gt; Setup Keys, not a PAT)</span></span>
+            <PasswordInput bind:value={nbNewKeySecret} placeholder="e.g. A1B2C3D4-E5F6-..." />
+          </label>
+          <div class="row" style="gap:0.5rem">
+            <button class="primary" onclick={nbCreateSetupKey} disabled={nbNewKeyBusy || !nbNewKeyName.trim() || !nbNewKeySecret}>Create</button>
+          </div>
+        </div>
+      {/if}
       <div class="row" style="gap:0.5rem">
         {#if npEditingId}
           <button class="primary" onclick={npSaveNetbird} disabled={npBusy || !npName.trim()}>Save changes</button>
@@ -3770,6 +3834,10 @@
     gap: 0.25rem;
     font-size: 0.85rem;
     cursor: pointer;
+  }
+  .token-add {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.5rem;
   }
 
   .settings {

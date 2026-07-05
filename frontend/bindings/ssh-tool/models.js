@@ -2114,6 +2114,26 @@ export class PluginInfo {
              */
             this["path"] = "";
         }
+        if (!("version" in $$source)) {
+            /**
+             * Version is the installed helper's stamped version ("" if it
+             * couldn't be read, "dev" for un-stamped local builds).
+             * @member
+             * @type {string}
+             */
+            this["version"] = "";
+        }
+        if (!("update_available" in $$source)) {
+            /**
+             * UpdateAvailable is true when the installed helper's version
+             * differs from the running app - after an app update, the bundled
+             * helper is a version behind and should be re-downloaded. Helper
+             * and app share the release tag, so equality means up to date.
+             * @member
+             * @type {boolean}
+             */
+            this["update_available"] = false;
+        }
         if (!("supported" in $$source)) {
             /**
              * Supported=false when this platform has no helper build
