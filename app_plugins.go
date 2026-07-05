@@ -129,6 +129,42 @@ func (a *App) PluginsStatus() []PluginInfo {
 	return out
 }
 
+// appReleaseTag returns the published release tag this app was built
+// from, or "" for a local dev build that isn't tied to a tag.
+//
+// A tagged build stamps appVersion with exactly the tag: "v0.48.0" or
+// a prerelease "v0.48.0-rc1". An untagged build stamps `git describe`
+// output, "<tag>-<N>-g<sha>", where N is the commit count since the
+// tag - that trailing "-<N>-g<sha>" is what tells a dev build apart
+// from a real prerelease. "dev"/"" is a plain `go run`.
+func appReleaseTag() string {
+	v := appVersion
+	if v == "" || v == "dev" || !strings.HasPrefix(v, "v") {
+		return ""
+	}
+	// `git describe` suffix "-<N>-g<sha>": a dev build ahead of a tag.
+	// A real prerelease ("-rc1", "-beta2") has no "-g<hex>" segment.
+	if i := strings.LastIndex(v, "-g"); i >= 0 {
+		// Everything after the last "-g" is a short hash on a dev build.
+		if isHex(v[i+2:]) {
+			return ""
+		}
+	}
+	return v
+}
+
+func isHex(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
 // PluginDownload fetches the plugin binary for this platform from the
 // app's own GitHub release, verifies the sha256 digest and installs
 // it under DataDir/plugins. Returns the installed path.
@@ -144,17 +180,25 @@ func (a *App) PluginDownload(name string) (string, error) {
 	}
 
 	ua := "ssh-tool/" + appVersion
+	// Fetch the release the helper should come from. app and helper are
+	// built from the same tag, so the exact tag matching this app is the
+	// right source - INCLUDING prereleases (an -rcN app must pull the
+	// helper from its own -rcN release, not the latest stable). The tag
+	// this app was built from is derived from appVersion:
+	//   "v0.48.0"      -> v0.48.0        (clean release)
+	//   "v0.48.0-rc1"  -> v0.48.0-rc1    (prerelease, exact)
+	//   "v0.47.0-11-g<sha>" / "dev" -> latest stable (a local dev build
+	//     that isn't tied to any published tag; best effort)
+	tag := appReleaseTag()
 	var rel *updater.ReleaseInfo
 	var err error
-	// Prefer the release matching the running app so app + helper
-	// always come from the same tag; dev builds fall back to latest.
-	if strings.HasPrefix(appVersion, "v") && !strings.Contains(appVersion, "-") {
-		rel, err = updater.FetchGitHubByTag(updateGitHubRepo, appVersion, ua)
+	if tag != "" {
+		rel, err = updater.FetchGitHubByTag(updateGitHubRepo, tag, ua)
 	} else {
 		rel, err = updater.FetchGitHubLatest(updateGitHubRepo, ua)
 	}
 	if err != nil {
-		return "", fmt.Errorf("fetch release: %w", err)
+		return "", fmt.Errorf("fetch release %s: %w", tag, err)
 	}
 	asset, ok := rel.AssetsByName[pluginAssetName(name)]
 	if !ok {
