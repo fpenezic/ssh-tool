@@ -2,6 +2,12 @@ html {
     background: var(--base);
     text-align: left;
     color: var(--text);
+    /* Default (Mocha) is dark. color-scheme tells the engine to render
+       NATIVE controls - the <select> dropdown popup, scrollbars, form
+       widgets - in dark. Without it WebKitGTK (Linux) draws the select
+       popup list white-on-white regardless of our CSS, since the popup
+       is an OS-drawn menu we can't style. Overridden per theme below. */
+    color-scheme: dark;
     --row-pad-y: 0.2rem;
     --row-sub-gap: 0.05rem;
     --ui-font-size: 13px;
@@ -75,6 +81,8 @@ html.theme-hc {
 /* Catppuccin Latte - light theme. Same alias block, different
    layer values. Activated by .theme-light on <html>. */
 html.theme-light {
+    /* Latte is light - native controls (select popup, scrollbars) match. */
+    color-scheme: light;
     --base:     #eff1f5;
     --mantle:   #e6e9ef;
     --crust:    #dce0e8;
