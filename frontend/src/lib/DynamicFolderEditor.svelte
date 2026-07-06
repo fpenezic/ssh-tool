@@ -11,6 +11,7 @@
 
   import { api } from "./api";
   import { errMsg } from "./connectErrors";
+  import { withTakeover } from "./connectionActions.svelte";
   import { tree, selection, credentials } from "./stores.svelte";
   import PasswordInput from "./PasswordInput.svelte";
   import { clickOutside } from "./clickOutside";
@@ -343,15 +344,20 @@
   async function refreshNow() {
     if (!existingFolderId) return;
     err = null;
-    try {
-      await api.dynamicFolderRefreshNow(existingFolderId);
-      // Manager fires event → store reloads. Just refresh the
-      // local info panel.
-      const d = await api.dynamicFolderGet(existingFolderId);
-      if (d) info = { lastPulled: d.last_pulled_at ?? null, lastError: d.last_error ?? "" };
-    } catch (e: any) {
-      err = errMsg(e);
+    // A manual refresh may need the folder's network profile tunnel. If
+    // that profile is live on another machine, offer a take-over
+    // (withTakeover) instead of a raw "network profile ... busy" error,
+    // then retry the refresh once the tunnel is free.
+    const outcome = await withTakeover(() => api.dynamicFolderRefreshNow(existingFolderId!));
+    if (!outcome.ok && outcome.cancelled) return; // user declined - quiet
+    if (!outcome.ok) {
+      err = errMsg(outcome.error);
+      return;
     }
+    // Manager fires event → store reloads. Just refresh the
+    // local info panel.
+    const d = await api.dynamicFolderGet(existingFolderId);
+    if (d) info = { lastPulled: d.last_pulled_at ?? null, lastError: d.last_error ?? "" };
   }
 
   function providerLabel(p: ProviderId): string {

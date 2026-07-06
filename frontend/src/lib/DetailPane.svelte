@@ -711,29 +711,10 @@
   async function connectDynamicMany() {
     const sel = selection.selectedDynamicEntries();
     if (sel.length === 0) return;
-    const results = await Promise.allSettled(sel.map(async ({ folderId, entryId }) => {
-      const r = await api.sshConnectDynamic(folderId, entryId);
-      // Look up the entry to pull name/hostname for the session store.
-      const entry = (tree.dynamicEntries[folderId] ?? []).find((e) => e.id === entryId);
-      sessions.add({
-        sessionId: r.session_id,
-        connectionId: "dyn:" + entryId,
-        name: entry?.name ?? entryId,
-        hostname: entry?.hostname ?? "",
-        status: "connected",
-      });
-      paneTabs.addTab(r.session_id, entry?.name ?? entryId);
-    }));
-    const failed = results.filter((r) => r.status === "rejected").length;
-    if (failed === 0) {
-      view.setTab("terminal");
-    } else {
-      // Leave the user on the dynamic-multi pane so they can see
-      // which ones connected (live tabs visible in the bar) and
-      // which didn't (count in the alert below). Better surfacing
-      // would be inline-per-entry but that's another iteration.
-      console.warn(`${failed} of ${sel.length} dynamic connects failed`);
-    }
+    // Delegate to the shared action so dynamic hosts get the same
+    // network-profile take-over prompt as everything else (their first
+    // hop routes through the folder's profile too).
+    await connectionActions.connectDynamicMany(sel);
   }
 
   // Batch-exec a command across selected dynamic entries. We reuse

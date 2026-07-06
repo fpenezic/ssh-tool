@@ -1014,6 +1014,63 @@
   async function refreshPlugins() {
     try { plugins = (await api.pluginsStatus()) ?? []; } catch { /* ignore */ }
   }
+
+  // Passive presence: while the Network section is open, poll each
+  // WireGuard profile's presence so the card can show "up on <machine>"
+  // when the tunnel is live on another synced machine, and offer a
+  // remote disconnect. NetBird is excluded - each machine is its own
+  // peer, so there's no single-owner conflict to surface. Keyed by
+  // profile id -> the foreign owner (or absent when free / ours).
+  let npRemoteOwners = $state<Record<string, import("./api").RemoteOwner>>({});
+  let npDisconnecting = $state<Record<string, boolean>>({});
+
+  async function pollNpPresence() {
+    const wg = networkProfiles.list.filter((p) => p.kind === "wireguard");
+    if (wg.length === 0) { npRemoteOwners = {}; return; }
+    const next: Record<string, import("./api").RemoteOwner> = {};
+    await Promise.all(wg.map(async (p) => {
+      try {
+        const ro = await api.networkProfilePresence(p.id);
+        if (ro.active) next[p.id] = ro;
+      } catch { /* transient - just omit this cycle */ }
+    }));
+    npRemoteOwners = next;
+  }
+
+  $effect(() => {
+    if (activeSection !== "network") return;
+    // Depend on the list so a create/delete re-primes the poll set.
+    void networkProfiles.list.length;
+    pollNpPresence();
+    const t = setInterval(pollNpPresence, 8000);
+    return () => clearInterval(t);
+  });
+
+  // Ask the machine that holds a WG profile's tunnel to drop it. Not a
+  // take-over (we don't bring it up here) - just frees it. Shows a short
+  // "disconnecting" state, then re-polls to confirm the owner cleared.
+  async function npDisconnectRemote(np: NetworkProfileInfo) {
+    npDisconnecting = { ...npDisconnecting, [np.id]: true };
+    try {
+      const estimate = await api.networkProfileDisconnectRemote(np.id);
+      if (estimate > 0) {
+        // Poll until the owner's record clears or the estimate elapses.
+        const deadline = Date.now() + (estimate + 5) * 1000;
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 3000));
+          try {
+            const ro = await api.networkProfilePresence(np.id);
+            if (!ro.active) break;
+          } catch { /* keep waiting */ }
+        }
+      }
+      await pollNpPresence();
+    } catch (e: any) {
+      toast.err(errMsg(e));
+    } finally {
+      npDisconnecting = { ...npDisconnecting, [np.id]: false };
+    }
+  }
   async function pluginDownload(name: string) {
     pluginBusy = true;
     try {
@@ -2287,6 +2344,11 @@
           {:else}
             <span class="np-pill">idle</span>
           {/if}
+          {#if npRemoteOwners[np.id]}
+            <span class="np-pill remote" title="This WireGuard tunnel is live on another synced machine. Only one machine can hold it at a time.">
+              up on {npRemoteOwners[np.id].machine_name}
+            </span>
+          {/if}
           <span class="np-meta">
             {#if np.kind === "netbird"}
               {np.netbird?.device_name || "ssh-tool"}
@@ -2317,6 +2379,15 @@
           <button onclick={() => npTest(np)} disabled={npBusy || np.paused}>Test</button>
           {#if np.status.running}
             <button onclick={() => api.networkProfileStop(np.id).catch((e) => toast.err(errMsg(e)))}>Stop tunnel</button>
+          {/if}
+          {#if npRemoteOwners[np.id]}
+            <button
+              onclick={() => npDisconnectRemote(np)}
+              disabled={npDisconnecting[np.id]}
+              title="Ask {npRemoteOwners[np.id].machine_name} to drop this tunnel so it's free"
+            >
+              {npDisconnecting[np.id] ? "Disconnecting…" : `Disconnect on ${npRemoteOwners[np.id].machine_name}`}
+            </button>
           {/if}
           <button onclick={() => npStartEdit(np)}>Edit</button>
           <button class="danger" onclick={() => npDelete(np)}>Delete</button>
@@ -3806,6 +3877,7 @@
   }
   .np-pill.running { background: var(--green); color: var(--on-accent); }
   .np-pill.paused  { background: var(--yellow); color: var(--on-accent); }
+  .np-pill.remote  { background: var(--mauve); color: var(--on-accent); text-transform: none; }
   .np-actions {
     display: flex;
     align-items: end;

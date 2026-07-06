@@ -1367,6 +1367,22 @@ export function NetworkProfileDelete(id) {
 }
 
 /**
+ * NetworkProfileDisconnectRemote asks the machine that currently owns a
+ * profile's tunnel to drop it, WITHOUT authorising a local bring-up
+ * afterwards. This is the plain "free it up over there" action from
+ * Settings - distinct from TakeOver, which also marks a local force so
+ * the requester's own connect proceeds once the owner releases. No-op
+ * (ok=false) when there's no live foreign owner. Returns the same
+ * upper-bound estimate so the UI can show a short "disconnecting"
+ * countdown.
+ * @param {string} profileID
+ * @returns {$CancellablePromise<number>}
+ */
+export function NetworkProfileDisconnectRemote(profileID) {
+    return $Call.ByID(2350863086, profileID);
+}
+
+/**
  * NetworkProfilePresence reports whether a profile's tunnel is live on
  * another synced machine right now. The connect flow calls this before
  * bringing a WG tunnel up so it can offer a take-over instead of

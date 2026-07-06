@@ -22,6 +22,16 @@ in alpha upstream.
   really want both up. Presence is published through the existing sync
   channel (a small plaintext presence file, no secrets), so it only
   works when sync is configured; single-machine users see nothing new.
+  The take-over offer now covers every connect path - saved
+  connections, bulk connect, dynamic-folder hosts, and a manual
+  dynamic-folder refresh - not just single saved connections.
+
+- **See and free a busy profile from Settings.** Settings -> Network
+  profiles now shows an "up on <machine>" badge for a WireGuard profile
+  whose tunnel is live on another synced machine, with a "Disconnect on
+  <machine>" button that asks that machine to drop it - a plain hand
+  free-up without bringing the tunnel up locally (distinct from the
+  take-over the connect flow offers).
 
 ### Fixed
 

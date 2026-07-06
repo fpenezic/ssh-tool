@@ -380,3 +380,36 @@ func (a *App) NetworkProfileTakeOver(profileID string) (int, error) {
 func (a *App) NetworkProfileConnectAnyway(profileID string) {
 	a.markForce(profileID)
 }
+
+// NetworkProfileDisconnectRemote asks the machine that currently owns a
+// profile's tunnel to drop it, WITHOUT authorising a local bring-up
+// afterwards. This is the plain "free it up over there" action from
+// Settings - distinct from TakeOver, which also marks a local force so
+// the requester's own connect proceeds once the owner releases. No-op
+// (ok=false) when there's no live foreign owner. Returns the same
+// upper-bound estimate so the UI can show a short "disconnecting"
+// countdown.
+func (a *App) NetworkProfileDisconnectRemote(profileID string) (int, error) {
+	t, ok := a.presenceTransport()
+	if !ok {
+		return 0, nil
+	}
+	defer t.Close()
+	f, err := presence.Load(t, syncNotFound)
+	if err != nil {
+		return 0, err
+	}
+	self := a.machineID()
+	if f.LiveOwner(profileID, self) == nil {
+		return 0, nil // already free / ours
+	}
+	nonce := presence.NewNonce(self)
+	if _, done := f.RequestKill(profileID, self, machineName(), nonce); !done {
+		return 0, nil
+	}
+	if err := presence.Save(t, f); err != nil {
+		return 0, err
+	}
+	log.Printf("presence: requested remote disconnect of profile %s", profileID)
+	return int(2*presencePoll.Seconds()) + 15, nil
+}

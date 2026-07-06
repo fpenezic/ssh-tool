@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tree, credentials, selection, sessions, paneTabs, view } from "./stores.svelte";
-  import { connectionActions } from "./connectionActions.svelte";
+  import { connectionActions, withTakeover } from "./connectionActions.svelte";
   import { api } from "./api";
   import { IconGlobe, dynamicEntryIcon } from "./iconMap";
   import { explain as explainConnectError, unwrapRaw as unwrapConnectErr } from "./connectErrors";
@@ -260,11 +260,20 @@
     const hasAdvanced = cid || ouser || opass;
     connecting = true;
     try {
-      const res = hasJump
-        ? await api.sshConnectDynamicWithJumpOverride(folderId, entry.id, cid, ouser, opass, ojumpHost, ojumpCred)
+      // Dynamic hosts route their first hop through the folder's network
+      // profile; withTakeover surfaces the take-over dialog if that
+      // profile is live on another machine instead of a raw failure.
+      const outcome = await withTakeover(() => hasJump
+        ? api.sshConnectDynamicWithJumpOverride(folderId, entry.id, cid, ouser, opass, ojumpHost, ojumpCred)
         : hasAdvanced
-          ? await api.sshConnectDynamicAdvanced(folderId, entry.id, cid, ouser, opass)
-          : await api.sshConnectDynamic(folderId, entry.id);
+          ? api.sshConnectDynamicAdvanced(folderId, entry.id, cid, ouser, opass)
+          : api.sshConnectDynamic(folderId, entry.id));
+      if (!outcome.ok && outcome.cancelled) return; // user declined - quiet
+      if (!outcome.ok) {
+        connectionActions.recordConnectError(synthConnId, outcome.error);
+        return;
+      }
+      const res = outcome.value;
       sessions.add({
         sessionId: res.session_id,
         connectionId: "dyn:" + entry.id,
@@ -274,8 +283,6 @@
       });
       paneTabs.addTab(res.session_id, entry.name);
       view.setTab("terminal");
-    } catch (e: any) {
-      connectionActions.recordConnectError(synthConnId, e);
     } finally {
       connecting = false;
     }

@@ -32,6 +32,35 @@ function isTransientConnectError(e: unknown): boolean {
   );
 }
 
+// withTakeover wraps any connect/refresh attempt so a "profile is live
+// on another machine" failure surfaces the take-over dialog instead of
+// a raw error. On the user taking over (or connecting anyway) the
+// attempt is retried once; on cancel the caller sees `cancelled` and
+// should treat it as a quiet no-op (no error toast). Shared by every
+// connect path (saved connections, bulk, dynamic entries, dynamic
+// double-click) and the manual dynamic-folder refresh so they all offer
+// the same hand-over instead of only connectOne.
+type TakeoverOutcome<T> =
+  | { ok: true; value: T }
+  | { ok: false; cancelled: true }
+  | { ok: false; cancelled: false; error: unknown };
+
+export async function withTakeover<T>(attempt: () => Promise<T>): Promise<TakeoverOutcome<T>> {
+  try {
+    return { ok: true, value: await attempt() };
+  } catch (firstErr) {
+    const busy = isBusyElsewhere(firstErr);
+    if (!busy) return { ok: false, cancelled: false, error: firstErr };
+    const decision = await presenceTakeover.ask(busy.profileId, busy.owner);
+    if (decision !== "retry") return { ok: false, cancelled: true };
+    try {
+      return { ok: true, value: await attempt() };
+    } catch (retryErr) {
+      return { ok: false, cancelled: false, error: retryErr };
+    }
+  }
+}
+
 // FolderPicker modal state
 interface MoveTarget {
   connIds: string[];
@@ -168,32 +197,22 @@ class ConnectionActionsStore {
       ? api.sshConnectWithOverride(c.id, override)
       : api.sshConnect(c.id);
     try {
+      // A synced WG profile up on another machine offers a take-over
+      // (withTakeover); a transient failure gets one silent retry.
+      const res = await withTakeover(attempt);
+      if (!res.ok && res.cancelled) return false; // user declined - quiet
       let r;
-      try {
+      if (res.ok) {
+        r = res.value;
+      } else if (isTransientConnectError(res.error)) {
+        // Single auto-retry on transient classes - DNS hiccup, the
+        // host wasn't up yet, brief network blip. Auth / handshake /
+        // host-key failures are never retried (same outcome twice
+        // burns the user's saved password + spams the audit log).
+        await new Promise((resolve) => setTimeout(resolve, 800));
         r = await attempt();
-      } catch (firstErr) {
-        // A synced WG profile is up on another machine: offer a
-        // take-over instead of failing. If the user takes over (or
-        // connects anyway), retry once; otherwise surface as a normal
-        // cancel (no error toast).
-        const busy = isBusyElsewhere(firstErr);
-        if (busy) {
-          const decision = await presenceTakeover.ask(busy.profileId, busy.owner);
-          if (decision === "retry") {
-            r = await attempt();
-          } else {
-            return false;
-          }
-        } else if (isTransientConnectError(firstErr)) {
-          // Single auto-retry on transient classes - DNS hiccup, the
-          // host wasn't up yet, brief network blip. Auth / handshake /
-          // host-key failures are never retried (same outcome twice
-          // burns the user's saved password + spams the audit log).
-          await new Promise((resolve) => setTimeout(resolve, 800));
-          r = await attempt();
-        } else {
-          throw firstErr;
-        }
+      } else {
+        throw res.error;
       }
       sessions.add({
         sessionId: r.session_id,
@@ -221,21 +240,24 @@ class ConnectionActionsStore {
     if (conns.length === 0) return;
     const results = await Promise.allSettled(
       conns.map(async (c) => {
-        try {
-          const r = await api.sshConnect(c.id);
-          sessions.add({
-            sessionId: r.session_id,
-            connectionId: c.id,
-            name: c.name,
-            hostname: c.hostname,
-            status: "connected",
-          });
-          paneTabs.addTab(r.session_id, c.name);
-          this.clearConnectError(c.id);
-        } catch (e) {
-          this.recordFailure(c.id, e);
-          throw e;
+        // Same take-over offer as connectOne (the singleton dialog
+        // serialises if several share a busy profile).
+        const res = await withTakeover(() => api.sshConnect(c.id));
+        if (!res.ok && res.cancelled) return; // user declined - quiet skip
+        if (!res.ok) {
+          this.recordFailure(c.id, res.error);
+          throw res.error;
         }
+        const r = res.value;
+        sessions.add({
+          sessionId: r.session_id,
+          connectionId: c.id,
+          name: c.name,
+          hostname: c.hostname,
+          status: "connected",
+        });
+        paneTabs.addTab(r.session_id, c.name);
+        this.clearConnectError(c.id);
       }),
     );
     if (results.some((r) => r.status === "fulfilled")) view.setTab("terminal");
@@ -253,20 +275,25 @@ class ConnectionActionsStore {
         // in the tab; the backend will resolve everything else.
         const entries = tree.dynamicEntries[t.folderId] ?? [];
         const meta = entries.find((e) => e.id === t.entryId);
-        try {
-          const r = await api.sshConnectDynamic(t.folderId, t.entryId);
-          sessions.add({
-            sessionId: r.session_id,
-            connectionId: "dyn:" + t.entryId,
-            name: meta?.name ?? t.entryId,
-            hostname: meta?.hostname ?? "",
-            status: "connected",
-          });
-          paneTabs.addTab(r.session_id, meta?.name ?? t.entryId);
-        } catch (e) {
-          this.recordConnectError("dyn:" + t.entryId, e);
-          throw e;
+        // Dynamic hosts route their first hop through the folder's
+        // network profile too, so offer the same take-over. The dialog
+        // is a singleton: if several targets share a busy profile the
+        // first prompts and the rest await that one decision.
+        const res = await withTakeover(() => api.sshConnectDynamic(t.folderId, t.entryId));
+        if (!res.ok && res.cancelled) return; // user declined - quiet skip
+        if (!res.ok) {
+          this.recordConnectError("dyn:" + t.entryId, res.error);
+          throw res.error;
         }
+        const r = res.value;
+        sessions.add({
+          sessionId: r.session_id,
+          connectionId: "dyn:" + t.entryId,
+          name: meta?.name ?? t.entryId,
+          hostname: meta?.hostname ?? "",
+          status: "connected",
+        });
+        paneTabs.addTab(r.session_id, meta?.name ?? t.entryId);
       }),
     );
     if (results.some((r) => r.status === "fulfilled")) view.setTab("terminal");
