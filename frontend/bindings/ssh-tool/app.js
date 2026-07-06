@@ -1351,6 +1351,24 @@ export function NetworkProfileCreateNetbird(name, managementURL, deviceName, set
 }
 
 /**
+ * NetworkProfileCreateTailscale stores a Tailscale profile: control URL
+ * (blank for Tailscale's own), hostname, and a reference to the
+ * api_token credential that holds the auth key. Nothing secret lives on
+ * the row. Requires the Tailscale plugin so the config can't be created
+ * and then fail to run with no explanation.
+ * @param {string} name
+ * @param {string} controlURL
+ * @param {string} hostname
+ * @param {string} authKeyCredentialID
+ * @returns {$CancellablePromise<$models.NetworkProfileInfo | null>}
+ */
+export function NetworkProfileCreateTailscale(name, controlURL, hostname, authKeyCredentialID) {
+    return $Call.ByID(4040170686, name, controlURL, hostname, authKeyCredentialID).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType73($result);
+    }));
+}
+
+/**
  * NetworkProfileDelete stops the tunnel and removes the row + vault
  * secrets. Connections still referencing the id fail to connect with
  * "not found" - visible, not silent.
@@ -1491,6 +1509,23 @@ export function NetworkProfileUpdateNetbird(id, name, managementURL, deviceName,
 }
 
 /**
+ * NetworkProfileUpdateTailscale edits a Tailscale profile's fields,
+ * preserving its policy (mode/paused). Restarts the helper so the new
+ * config takes effect.
+ * @param {string} id
+ * @param {string} name
+ * @param {string} controlURL
+ * @param {string} hostname
+ * @param {string} authKeyCredentialID
+ * @returns {$CancellablePromise<$models.NetworkProfileInfo | null>}
+ */
+export function NetworkProfileUpdateTailscale(id, name, controlURL, hostname, authKeyCredentialID) {
+    return $Call.ByID(3328904449, id, name, controlURL, hostname, authKeyCredentialID).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType73($result);
+    }));
+}
+
+/**
  * NetworkProfilesList returns every stored profile with live status.
  * @returns {$CancellablePromise<$models.NetworkProfileInfo[]>}
  */
@@ -1589,8 +1624,8 @@ export function Ping(name) {
 
 /**
  * PluginDownload fetches the plugin binary for this platform from the
- * app's own GitHub release, verifies the sha256 digest and installs
- * it under DataDir/plugins. Returns the installed path.
+ * newest compatible helper release, verifies the sha256 digest and
+ * installs it under DataDir/plugins. Returns the installed path.
  * @param {string} name
  * @returns {$CancellablePromise<string>}
  */
@@ -2382,6 +2417,14 @@ export function SshWrite(sessionID, dataB64) {
  */
 export function SuggestNetbirdDeviceName() {
     return $Call.ByID(437887354);
+}
+
+/**
+ * SuggestTailscaleHostname is the default the create form pre-fills.
+ * @returns {$CancellablePromise<string>}
+ */
+export function SuggestTailscaleHostname() {
+    return $Call.ByID(1280886878);
 }
 
 /**

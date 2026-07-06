@@ -1864,7 +1864,7 @@ export class NetworkProfileInfo {
         }
         if (!("kind" in $$source)) {
             /**
-             * "wireguard" | "netbird"
+             * "wireguard" | "netbird" | "tailscale"
              * @member
              * @type {string}
              */
@@ -1900,6 +1900,14 @@ export class NetworkProfileInfo {
              */
             this["netbird"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Tailscale only
+             * @member
+             * @type {TailscaleConfig | null | undefined}
+             */
+            this["tailscale"] = undefined;
+        }
         if (!("status" in $$source)) {
             /**
              * @member
@@ -1933,7 +1941,8 @@ export class NetworkProfileInfo {
     static createFrom($$source = {}) {
         const $$createField5_0 = $$createType6;
         const $$createField6_0 = $$createType8;
-        const $$createField7_0 = $$createType9;
+        const $$createField7_0 = $$createType10;
+        const $$createField8_0 = $$createType11;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("profile" in $$parsedSource) {
             $$parsedSource["profile"] = $$createField5_0($$parsedSource["profile"]);
@@ -1941,8 +1950,11 @@ export class NetworkProfileInfo {
         if ("netbird" in $$parsedSource) {
             $$parsedSource["netbird"] = $$createField6_0($$parsedSource["netbird"]);
         }
+        if ("tailscale" in $$parsedSource) {
+            $$parsedSource["tailscale"] = $$createField7_0($$parsedSource["tailscale"]);
+        }
         if ("status" in $$parsedSource) {
-            $$parsedSource["status"] = $$createField7_0($$parsedSource["status"]);
+            $$parsedSource["status"] = $$createField8_0($$parsedSource["status"]);
         }
         return new NetworkProfileInfo(/** @type {Partial<NetworkProfileInfo>} */($$parsedSource));
     }
@@ -2505,7 +2517,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType11;
+        const $$createField1_0 = $$createType13;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -3066,6 +3078,76 @@ export class TabDragPayload {
 }
 
 /**
+ * TailscaleConfig is the stored (secretless) Tailscale profile: the
+ * auth key lives in the referenced api_token credential, node state
+ * under DataDir/tailscale/<profileID>/. ControlURL is blank for
+ * Tailscale's own control plane, set for a self-hosted Headscale.
+ */
+export class TailscaleConfig {
+    /**
+     * Creates a new TailscaleConfig instance.
+     * @param {Partial<TailscaleConfig>} [$$source = {}] - The source object to create the TailscaleConfig.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * "tailscale"
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("control_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["control_url"] = "";
+        }
+        if (!("hostname" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hostname"] = "";
+        }
+        if (!("auth_key_credential_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["auth_key_credential_id"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["mode"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["paused"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TailscaleConfig instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TailscaleConfig}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new TailscaleConfig(/** @type {Partial<TailscaleConfig>} */($$parsedSource));
+    }
+}
+
+/**
  * TcpdumpActiveForSession returns the dumpID of a capture already
  * running for this session, or "" if none. A window that didn't start
  * the capture (after a tab detach / redock moved the session here) calls
@@ -3269,7 +3351,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType13;
+        const $$createField0_0 = $$createType15;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -3386,7 +3468,7 @@ export class TcpdumpStartInput {
      * @returns {TcpdumpStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType14;
+        const $$createField10_0 = $$createType16;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("port_overrides" in $$parsedSource) {
             $$parsedSource["port_overrides"] = $$createField10_0($$parsedSource["port_overrides"]);
@@ -3568,9 +3650,11 @@ const $$createType5 = $Create.Nullable($$createType4);
 const $$createType6 = wg$0.Profile.createFrom;
 const $$createType7 = NetbirdConfig.createFrom;
 const $$createType8 = $Create.Nullable($$createType7);
-const $$createType9 = wg$0.Status.createFrom;
-const $$createType10 = ssh$0.SftpEntry.createFrom;
-const $$createType11 = $Create.Array($$createType10);
-const $$createType12 = ssh$0.ParsedPacket.createFrom;
+const $$createType9 = TailscaleConfig.createFrom;
+const $$createType10 = $Create.Nullable($$createType9);
+const $$createType11 = wg$0.Status.createFrom;
+const $$createType12 = ssh$0.SftpEntry.createFrom;
 const $$createType13 = $Create.Array($$createType12);
-const $$createType14 = $Create.Map($Create.Any, $Create.Any);
+const $$createType14 = ssh$0.ParsedPacket.createFrom;
+const $$createType15 = $Create.Array($$createType14);
+const $$createType16 = $Create.Map($Create.Any, $Create.Any);

@@ -978,13 +978,17 @@
   let npName = $state("");
   let npConf = $state("");
   let npEditingId = $state<string | null>(null);
-  let npEditKind = $state<"wireguard" | "netbird">("wireguard");
-  let npKind = $state<"wireguard" | "netbird">("wireguard");
+  let npEditKind = $state<"wireguard" | "netbird" | "tailscale">("wireguard");
+  let npKind = $state<"wireguard" | "netbird" | "tailscale">("wireguard");
   let npBusy = $state(false);
   // NetBird form fields
   let nbManagement = $state("");
   let nbDevice = $state("");
   let nbCredId = $state("");
+  // Tailscale form fields
+  let tsControl = $state("");
+  let tsHostname = $state("");
+  let tsCredId = $state("");
   // Inline "create setup-key credential" (the picker only lists
   // existing api_token creds; this avoids a trip to the Credentials
   // tab mid-flow).
@@ -996,6 +1000,7 @@
   let plugins = $state<import("./api").PluginInfo[]>([]);
   let pluginBusy = $state(false);
   const nbInstalled = $derived(plugins.some((p) => p.name === "netbird" && p.installed));
+  const tsInstalled = $derived(plugins.some((p) => p.name === "tailscale" && p.installed));
   // api_token credentials for the setup-key picker.
   const apiTokenCredOptions = $derived(
     credentials.list
@@ -1027,6 +1032,17 @@
     if (nbDevice.trim() !== "") return;
     api.suggestNetbirdDeviceName()
       .then((n) => { if (!npEditingId && npKind === "netbird" && nbDevice.trim() === "") nbDevice = n; })
+      .catch(() => {});
+  });
+
+  // Same pre-fill for the Tailscale hostname (see the NetBird effect
+  // above). Suggests "<hostname>" as the tailnet node name.
+  $effect(() => {
+    if (activeSection !== "network") return;
+    if (npEditingId || npKind !== "tailscale") return;
+    if (tsHostname.trim() !== "") return;
+    api.suggestTailscaleHostname()
+      .then((n) => { if (!npEditingId && npKind === "tailscale" && tsHostname.trim() === "") tsHostname = n; })
       .catch(() => {});
   });
 
@@ -1154,6 +1170,28 @@
     finally { npBusy = false; }
   }
 
+  async function npCreateTailscale() {
+    npBusy = true;
+    try {
+      await api.networkProfileCreateTailscale(npName.trim(), tsControl.trim(), tsHostname.trim(), tsCredId);
+      npCancelEdit();
+      await networkProfiles.load(true);
+      toast.ok("Tailscale profile added");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
+  async function npSaveTailscale() {
+    if (!npEditingId) return;
+    npBusy = true;
+    try {
+      await api.networkProfileUpdateTailscale(npEditingId, npName.trim(), tsControl.trim(), tsHostname.trim(), tsCredId);
+      npCancelEdit();
+      await networkProfiles.load(true);
+      toast.ok("Profile saved");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
+
   async function npCreate() {
     npBusy = true;
     try {
@@ -1174,6 +1212,12 @@
       nbCredId = np.netbird?.setup_key_credential_id ?? "";
       return;
     }
+    if (np.kind === "tailscale") {
+      tsControl = np.tailscale?.control_url ?? "";
+      tsHostname = np.tailscale?.hostname ?? "";
+      tsCredId = np.tailscale?.auth_key_credential_id ?? "";
+      return;
+    }
     // WireGuard: prefill with the stored config; secrets render as
     // **KEEP** placeholders, which the backend translates back to
     // "keep the vault value" on save. Clearing the textarea keeps the
@@ -1187,6 +1231,7 @@
     npEditingId = null;
     npName = ""; npConf = "";
     nbManagement = ""; nbDevice = ""; nbCredId = "";
+    tsControl = ""; tsHostname = ""; tsCredId = "";
   }
   async function npSaveEdit() {
     if (!npEditingId) return;
@@ -2307,7 +2352,7 @@
     {#each plugins as pl (pl.name)}
       <div class="np-card">
         <div class="np-head">
-          <strong>{pl.name === "netbird" ? "NetBird" : pl.name}</strong>
+          <strong>{pl.name === "netbird" ? "NetBird" : pl.name === "tailscale" ? "Tailscale" : pl.name}</strong>
           {#if !pl.supported}
             <span class="np-pill">not on this platform</span>
           {:else if pl.installed && pl.update_available}
@@ -2349,7 +2394,7 @@
       <div class="np-card">
         <div class="np-head">
           <strong>{np.name}</strong>
-          <span class="np-kind">{np.kind === "netbird" ? "NetBird" : "WireGuard"}</span>
+          <span class="np-kind">{np.kind === "netbird" ? "NetBird" : np.kind === "tailscale" ? "Tailscale" : "WireGuard"}</span>
           {#if np.paused}
             <span class="np-pill paused">paused</span>
           {:else if np.status.running}
@@ -2368,6 +2413,10 @@
             {#if np.kind === "netbird"}
               {np.netbird?.device_name || "ssh-tool"}
               {#if np.netbird?.management_url}&nbsp;· {np.netbird.management_url}{/if}
+              {#if np.status.running && (np.status.peers ?? 0) > 0}&nbsp;· {np.status.peers} peer{np.status.peers === 1 ? "" : "s"}{/if}
+            {:else if np.kind === "tailscale"}
+              {np.tailscale?.hostname || "ssh-tool"}
+              {#if np.tailscale?.control_url}&nbsp;· {np.tailscale.control_url}{/if}
               {#if np.status.running && (np.status.peers ?? 0) > 0}&nbsp;· {np.status.peers} peer{np.status.peers === 1 ? "" : "s"}{/if}
             {:else}
               {np.profile.addresses?.join(", ")}
@@ -2420,6 +2469,7 @@
         <span class="hint" style="margin:0">Type:</span>
         <label class="np-kindpick"><input type="radio" bind:group={npKind} value="wireguard" /> WireGuard</label>
         <label class="np-kindpick"><input type="radio" bind:group={npKind} value="netbird" /> NetBird</label>
+        <label class="np-kindpick"><input type="radio" bind:group={npKind} value="tailscale" /> Tailscale</label>
       </div>
     {/if}
 
@@ -2486,6 +2536,43 @@
           <button onclick={npCancelEdit}>Cancel</button>
         {:else}
           <button class="primary" onclick={npCreateNetbird} disabled={npBusy || !nbInstalled || !npName.trim() || !nbCredId}>Add profile</button>
+        {/if}
+      </div>
+    {:else if (npEditingId ? npEditKind : npKind) === "tailscale"}
+      {#if !tsInstalled}
+        <p class="hint warn-note">
+          The Tailscale plugin is not installed. Install it in the Plugins
+          card above before creating a Tailscale profile.
+        </p>
+      {/if}
+      <label>
+        <span>Control URL <span class="hint inline">(blank = Tailscale's own; set for self-hosted Headscale)</span></span>
+        <input bind:value={tsControl} placeholder="https://headscale.example.com" />
+      </label>
+      <label>
+        <span>Hostname <span class="hint inline">(tailnet node name)</span></span>
+        <input bind:value={tsHostname} placeholder="laptop" />
+      </label>
+      <label>
+        <span>Auth key credential</span>
+        <SearchableSelect
+          bind:value={tsCredId}
+          options={apiTokenCredOptions}
+          placeholder="Pick an API-token credential holding the auth key…"
+        />
+        <span class="hint inline">
+          A Tailscale <strong>auth key</strong> (Settings -&gt; Keys in the
+          admin console - starts with <code>tskey-auth-</code>). Use a
+          <strong>reusable</strong> key if you sync this profile across
+          machines - each registers as its own node.
+        </span>
+      </label>
+      <div class="row" style="gap:0.5rem">
+        {#if npEditingId}
+          <button class="primary" onclick={npSaveTailscale} disabled={npBusy || !npName.trim()}>Save changes</button>
+          <button onclick={npCancelEdit}>Cancel</button>
+        {:else}
+          <button class="primary" onclick={npCreateTailscale} disabled={npBusy || !tsInstalled || !npName.trim() || !tsCredId}>Add profile</button>
         {/if}
       </div>
     {:else}

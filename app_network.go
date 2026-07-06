@@ -38,6 +38,7 @@ const directProbeTimeout = 3 * time.Second
 const (
 	kindWireguard = "wireguard"
 	kindNetbird   = "netbird"
+	kindTailscale = "tailscale"
 )
 
 // NetbirdConfig is the stored (secretless) NetBird profile: the setup
@@ -50,6 +51,19 @@ type NetbirdConfig struct {
 	SetupKeyCredentialID string `json:"setup_key_credential_id"`
 	Mode                 string `json:"mode,omitempty"`
 	Paused               bool   `json:"paused,omitempty"`
+}
+
+// TailscaleConfig is the stored (secretless) Tailscale profile: the
+// auth key lives in the referenced api_token credential, node state
+// under DataDir/tailscale/<profileID>/. ControlURL is blank for
+// Tailscale's own control plane, set for a self-hosted Headscale.
+type TailscaleConfig struct {
+	Kind              string `json:"kind"` // "tailscale"
+	ControlURL        string `json:"control_url"`
+	Hostname          string `json:"hostname"`
+	AuthKeyCredentialID string `json:"auth_key_credential_id"`
+	Mode              string `json:"mode,omitempty"`
+	Paused            bool   `json:"paused,omitempty"`
 }
 
 // profilePolicy is the kind/mode/paused triple every profile kind
@@ -80,6 +94,8 @@ func (a *App) ensureTunnel(row *store.NetworkProfile) (tunnelDialer, error) {
 	switch parsePolicy(row.ConfigJSON).Kind {
 	case kindNetbird:
 		return a.ensureNetbirdTunnel(row)
+	case kindTailscale:
+		return a.ensureTailscaleTunnel(row)
 	default:
 		return a.ensureWgTunnel(row.ID)
 	}
@@ -109,6 +125,90 @@ func (a *App) tunnelStatus(profileID string) wg.Status {
 // state (device keys). Removed on profile delete.
 func netbirdStateDir(profileID string) string {
 	return filepath.Join(store.DataDir(), "netbird", profileID)
+}
+
+func tailscaleStateDir(profileID string) string {
+	return filepath.Join(store.DataDir(), "tailscale", profileID)
+}
+
+// resolveHelperSecret reads the secret (NetBird setup key / Tailscale
+// auth key) from a profile's referenced api_token credential and the
+// vault. Shared by both helper kinds - the vault-state error messages
+// are identical. profileName only feeds the error text. credID "" is a
+// hard error (no credential assigned).
+func (a *App) resolveHelperSecret(profileName, credID, secretLabel string) (string, error) {
+	if credID == "" {
+		return "", fmt.Errorf("profile %s: no %s credential assigned", profileName, secretLabel)
+	}
+	cred, err := a.db.GetCredential(credID)
+	if err != nil {
+		return "", fmt.Errorf("profile %s: %s credential: %w", profileName, secretLabel, err)
+	}
+	if cred == nil {
+		return "", fmt.Errorf("profile %s: %s credential not found (was it deleted?)", profileName, secretLabel)
+	}
+	if cred.VaultKey == nil {
+		return "", fmt.Errorf("profile %s: credential %q holds no secret in the vault - recreate it with the %s as the secret", profileName, cred.Name, secretLabel)
+	}
+	secret, ok, verr := a.vault.Get(*cred.VaultKey)
+	if verr != nil {
+		return "", fmt.Errorf("profile %s: %s: %w", profileName, secretLabel, verr)
+	}
+	if !ok {
+		switch a.vault.Status().Kind {
+		case creds.StatusLocked:
+			return "", fmt.Errorf("profile %s: vault is locked - unlock it, then retry", profileName)
+		case creds.StatusNotInitialized:
+			return "", fmt.Errorf("profile %s: the %s was stored in a memory-only vault and lost on restart - set a master passphrase (Settings -> Vault), then recreate the credential", profileName, secretLabel)
+		default:
+			return "", fmt.Errorf("profile %s: %s not found in the vault - recreate the credential %q", profileName, secretLabel, cred.Name)
+		}
+	}
+	if secret == "" {
+		return "", fmt.Errorf("profile %s: %s credential holds an empty secret", profileName, secretLabel)
+	}
+	return secret, nil
+}
+
+// ensureTailscaleTunnel spawns (or reuses) the ssh-tool-tailscale helper
+// for the profile. The auth key is resolved from the referenced
+// api_token credential and passed via env; once registered, the state
+// dir carries node credentials and a missing key is fine.
+func (a *App) ensureTailscaleTunnel(row *store.NetworkProfile) (tunnelDialer, error) {
+	if p := a.nbman.Get(row.ID); p != nil {
+		a.wgTouch(row.ID)
+		return p, nil
+	}
+	var cfg TailscaleConfig
+	if err := json.Unmarshal([]byte(row.ConfigJSON), &cfg); err != nil {
+		return nil, fmt.Errorf("profile %s: bad config: %w", row.Name, err)
+	}
+	exe, ok := pluginPath("tailscale")
+	if !ok {
+		return nil, fmt.Errorf("Tailscale plugin is not installed - download it in Settings -> Network profiles")
+	}
+	authKey, err := a.resolveHelperSecret(row.Name, cfg.AuthKeyCredentialID, "auth-key")
+	if err != nil {
+		return nil, err
+	}
+	hostname := cfg.Hostname
+	if hostname == "" {
+		hostname = defaultTailscaleHostname()
+	}
+	args := []string{"--state-dir", tailscaleStateDir(row.ID), "--hostname", hostname}
+	if cfg.ControlURL != "" {
+		args = append(args, "--control", cfg.ControlURL)
+	}
+	env := []string{"SSHTOOL_TS_AUTHKEY=" + authKey}
+	p, err := a.nbman.Ensure(row.ID, row.Name, exe, args, env)
+	if err != nil {
+		return nil, err
+	}
+	a.wgTouch(row.ID)
+	a.recordAudit("network.tunnel.start", row.ID, map[string]string{"name": row.Name, "kind": kindTailscale})
+	go a.presencePublish(row.ID, kindTailscale)
+	EventsEmit("network_tunnel_changed", row.ID)
+	return p, nil
 }
 
 // normalizeMgmtURL tolerates a management URL typed without a scheme
@@ -405,12 +505,13 @@ func secretlessJSON(p *wg.Profile) (string, error) {
 type NetworkProfileInfo struct {
 	ID        string         `json:"id"`
 	Name      string         `json:"name"`
-	Kind      string         `json:"kind"` // "wireguard" | "netbird"
-	Mode      string         `json:"mode"`
-	Paused    bool           `json:"paused"`
-	Profile   wg.Profile     `json:"profile"`            // WG only
-	Netbird   *NetbirdConfig `json:"netbird,omitempty"`  // NetBird only
-	Status    wg.Status      `json:"status"`
+	Kind      string           `json:"kind"` // "wireguard" | "netbird" | "tailscale"
+	Mode      string           `json:"mode"`
+	Paused    bool             `json:"paused"`
+	Profile   wg.Profile       `json:"profile"`             // WG only
+	Netbird   *NetbirdConfig   `json:"netbird,omitempty"`   // NetBird only
+	Tailscale *TailscaleConfig `json:"tailscale,omitempty"` // Tailscale only
+	Status    wg.Status        `json:"status"`
 	CreatedAt int64          `json:"created_at"`
 	UpdatedAt int64          `json:"updated_at"`
 }
@@ -423,11 +524,16 @@ func (a *App) infoFor(row store.NetworkProfile) NetworkProfileInfo {
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 		Status: a.tunnelStatus(row.ID),
 	}
-	if pol.Kind == kindNetbird {
+	switch pol.Kind {
+	case kindNetbird:
 		var nb NetbirdConfig
 		_ = json.Unmarshal([]byte(row.ConfigJSON), &nb)
 		info.Netbird = &nb
-	} else {
+	case kindTailscale:
+		var ts TailscaleConfig
+		_ = json.Unmarshal([]byte(row.ConfigJSON), &ts)
+		info.Tailscale = &ts
+	default:
 		_ = json.Unmarshal([]byte(row.ConfigJSON), &info.Profile)
 		info.Profile.ID = row.ID
 		info.Profile.Name = row.Name
@@ -516,6 +622,41 @@ func (a *App) SuggestNetbirdDeviceName() string {
 	return defaultNetbirdDeviceName()
 }
 
+// defaultTailscaleHostname derives a tailnet node name from this
+// machine's hostname. Sanitised to the Tailscale host label charset
+// (alphanumerics + hyphen only, max 63; NO dot - Tailscale reserves it
+// for the MagicDNS FQDN and would rewrite it to a hyphen anyway). No
+// ".ssh-tool" suffix for the same reason. Falls back to "ssh-tool".
+func defaultTailscaleHostname() string {
+	return tailscaleHostnameFrom(machineName())
+}
+
+func tailscaleHostnameFrom(host string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(host) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	base := strings.Trim(b.String(), "-")
+	if base == "" {
+		return "ssh-tool"
+	}
+	if len(base) > 63 {
+		base = strings.Trim(base[:63], "-")
+	}
+	return base
+}
+
+// SuggestTailscaleHostname is the default the create form pre-fills.
+func (a *App) SuggestTailscaleHostname() string {
+	return defaultTailscaleHostname()
+}
+
 func (a *App) NetworkProfileCreateNetbird(name, managementURL, deviceName, setupKeyCredentialID string) (*NetworkProfileInfo, error) {
 	if _, ok := pluginPath("netbird"); !ok {
 		return nil, fmt.Errorf("NetBird plugin is not installed - download it first")
@@ -571,6 +712,71 @@ func (a *App) NetworkProfileUpdateNetbird(id, name, managementURL, deviceName, s
 	}
 	a.tunnelStop(id)
 	a.recordAudit("network.profile.update", id, map[string]string{"name": name, "kind": kindNetbird})
+	EventsEmit("network_tunnel_changed", id)
+	info := a.infoFor(*updated)
+	return &info, nil
+}
+
+// NetworkProfileCreateTailscale stores a Tailscale profile: control URL
+// (blank for Tailscale's own), hostname, and a reference to the
+// api_token credential that holds the auth key. Nothing secret lives on
+// the row. Requires the Tailscale plugin so the config can't be created
+// and then fail to run with no explanation.
+func (a *App) NetworkProfileCreateTailscale(name, controlURL, hostname, authKeyCredentialID string) (*NetworkProfileInfo, error) {
+	if _, ok := pluginPath("tailscale"); !ok {
+		return nil, fmt.Errorf("Tailscale plugin is not installed - download it first")
+	}
+	if authKeyCredentialID == "" {
+		return nil, fmt.Errorf("an auth-key credential is required")
+	}
+	cfg := TailscaleConfig{
+		Kind:                kindTailscale,
+		ControlURL:          normalizeMgmtURL(controlURL),
+		Hostname:            hostname,
+		AuthKeyCredentialID: authKeyCredentialID,
+		Mode:                wg.ModeAlways,
+	}
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	row, err := a.db.CreateNetworkProfile(name, string(b))
+	if err != nil {
+		return nil, err
+	}
+	a.recordAudit("network.profile.create", row.ID, map[string]string{"name": name, "kind": kindTailscale})
+	info := a.infoFor(*row)
+	return &info, nil
+}
+
+// NetworkProfileUpdateTailscale edits a Tailscale profile's fields,
+// preserving its policy (mode/paused). Restarts the helper so the new
+// config takes effect.
+func (a *App) NetworkProfileUpdateTailscale(id, name, controlURL, hostname, authKeyCredentialID string) (*NetworkProfileInfo, error) {
+	row, err := a.db.GetNetworkProfile(id)
+	if err != nil {
+		return nil, err
+	}
+	var cfg TailscaleConfig
+	if err := json.Unmarshal([]byte(row.ConfigJSON), &cfg); err != nil {
+		return nil, fmt.Errorf("bad config: %w", err)
+	}
+	cfg.Kind = kindTailscale
+	cfg.ControlURL = normalizeMgmtURL(controlURL)
+	cfg.Hostname = hostname
+	if authKeyCredentialID != "" {
+		cfg.AuthKeyCredentialID = authKeyCredentialID
+	}
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := a.db.UpdateNetworkProfile(id, name, string(b))
+	if err != nil {
+		return nil, err
+	}
+	a.tunnelStop(id)
+	a.recordAudit("network.profile.update", id, map[string]string{"name": name, "kind": kindTailscale})
 	EventsEmit("network_tunnel_changed", id)
 	info := a.infoFor(*updated)
 	return &info, nil
@@ -654,11 +860,15 @@ func (a *App) NetworkProfileDelete(id string) error {
 		return err
 	}
 	a.tunnelStop(id)
-	// WG secrets live in the vault keyed by profile; NetBird keeps its
-	// registration state on disk. Clean up whichever this profile has.
-	if parsePolicy(row.ConfigJSON).Kind == kindNetbird {
+	// WG secrets live in the vault keyed by profile; NetBird/Tailscale
+	// keep their registration state on disk. Clean up whichever this
+	// profile has.
+	switch parsePolicy(row.ConfigJSON).Kind {
+	case kindNetbird:
 		_ = os.RemoveAll(netbirdStateDir(id))
-	} else {
+	case kindTailscale:
+		_ = os.RemoveAll(tailscaleStateDir(id))
+	default:
 		var p wg.Profile
 		_ = json.Unmarshal([]byte(row.ConfigJSON), &p)
 		_ = a.vault.Delete(wgPrivateKeyVaultKey(id))

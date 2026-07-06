@@ -152,14 +152,24 @@ export interface NetbirdConfig {
   paused?: boolean;
 }
 
+export interface TailscaleConfig {
+  kind: string;
+  control_url: string;
+  hostname: string;
+  auth_key_credential_id: string;
+  mode?: "always" | "auto";
+  paused?: boolean;
+}
+
 export interface NetworkProfileInfo {
   id: string;
   name: string;
-  kind: "wireguard" | "netbird";
+  kind: "wireguard" | "netbird" | "tailscale";
   mode: "always" | "auto" | "";
   paused: boolean;
   profile: WgProfile;
   netbird?: NetbirdConfig;
+  tailscale?: TailscaleConfig;
   status: WgStatus;
   created_at: number;
   updated_at: number;
@@ -610,6 +620,10 @@ export const api = {
     G.NetworkProfileCreateNetbird(name, managementURL, deviceName, setupKeyCredentialId) as unknown as Promise<NetworkProfileInfo>,
   networkProfileUpdateNetbird: (id: string, name: string, managementURL: string, deviceName: string, setupKeyCredentialId: string) =>
     G.NetworkProfileUpdateNetbird(id, name, managementURL, deviceName, setupKeyCredentialId) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileCreateTailscale: (name: string, controlURL: string, hostname: string, authKeyCredentialId: string) =>
+    G.NetworkProfileCreateTailscale(name, controlURL, hostname, authKeyCredentialId) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileUpdateTailscale: (id: string, name: string, controlURL: string, hostname: string, authKeyCredentialId: string) =>
+    G.NetworkProfileUpdateTailscale(id, name, controlURL, hostname, authKeyCredentialId) as unknown as Promise<NetworkProfileInfo>,
   pluginsStatus: () => G.PluginsStatus() as unknown as Promise<PluginInfo[]>,
   pluginDownload: (name: string) => G.PluginDownload(name) as unknown as Promise<string>,
   pluginRemove: (name: string) => G.PluginRemove(name),
@@ -623,6 +637,8 @@ export const api = {
     G.NetworkProfileDisconnectRemote(profileId) as unknown as Promise<number>,
   suggestNetbirdDeviceName: () =>
     G.SuggestNetbirdDeviceName() as unknown as Promise<string>,
+  suggestTailscaleHostname: () =>
+    G.SuggestTailscaleHostname() as unknown as Promise<string>,
   snippetsList: (connectionId: string) =>
     G.SnippetsList(connectionId) as unknown as Promise<Snippet[]>,
   snippetCreate: (input: SnippetInput) =>

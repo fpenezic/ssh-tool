@@ -56,6 +56,7 @@ export {
     SyncSftpConfigInput,
     SyncStatusResult,
     TabDragPayload,
+    TailscaleConfig,
     TcpdumpActiveInfo,
     TcpdumpProbeResult,
     TcpdumpRouteQuery,

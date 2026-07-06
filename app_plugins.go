@@ -29,8 +29,8 @@ import (
 	"ssh-tool/internal/updater"
 )
 
-// knownPlugins is the set the UI offers. Tailscale will join here.
-var knownPlugins = []string{"netbird"}
+// knownPlugins is the set the UI offers.
+var knownPlugins = []string{"netbird", "tailscale"}
 
 func pluginsDir() string {
 	return filepath.Join(store.DataDir(), "plugins")
