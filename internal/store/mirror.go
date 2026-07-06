@@ -40,6 +40,12 @@ func (d *DB) MirrorFrom(srcPath string) error {
 		"credential_refs",
 		"credential_history",
 		"credential_secret_history",
+		// network_profiles has no FK dependency; it must be listed or a
+		// live pull mirrors every table EXCEPT the VPN profiles, so a
+		// second machine gets the connections that inherit a profile but
+		// never the profile itself. (Cold whole-file restore is fine -
+		// this list is only the live-apply path.)
+		"network_profiles",
 		"connections",
 		"port_forwards",
 		"broadcast_groups",

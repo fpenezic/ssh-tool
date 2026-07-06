@@ -25,15 +25,17 @@ in alpha upstream.
 
 ### Fixed
 
-- **Network profiles didn't sync.** Creating, editing or deleting a
-  WireGuard / NetBird profile didn't mark the profile as changed, so
-  auto-sync never pushed it - a second machine only received a profile
-  if some unrelated edit happened to trigger a push around the same
-  time. The upshot was profiles that never arrived on the other
-  machine and inventory folders logging "network profile <id> not
-  found" on every refresh because a connection's inherited profile
-  pointed at a row that never came across. Profiles are now part of the
-  sync change signal, so they push like everything else. The upgrade
+- **Network profiles didn't sync.** Two independent gaps, both fixed:
+  creating / editing / deleting a WireGuard / NetBird profile didn't
+  mark the profile as changed, so auto-sync never pushed it; and even
+  when a snapshot did carry a profile, the live pull (the no-restart
+  apply) mirrored every table EXCEPT network_profiles, so the pulling
+  machine got the connections that inherit a VPN profile but never the
+  profile itself. The visible symptoms were profiles that never arrived
+  on the other machine and inventory folders logging "network profile
+  <id> not found" on every refresh (a connection's inherited profile
+  pointing at a row that never came across). Profiles are now part of
+  the sync change signal AND the live-pull mirror. The upgrade
   re-baselines silently: a machine that already has profiles pushes
   them on next launch; a machine without any doesn't push an empty
   update over one that has them.

@@ -16,6 +16,13 @@ func TestMirrorFromReplacesProfile(t *testing.T) {
 	if _, err := src.CreateConnection(NewConnection{Name: "web-01", Hostname: "h", FolderID: &sf.ID}); err != nil {
 		t.Fatal(err)
 	}
+	// A network profile on the source. Regression guard: a live pull
+	// must mirror network_profiles or a second machine gets the
+	// connections that inherit a VPN profile but never the profile.
+	np, err := src.CreateNetworkProfile("hetzner-wg", `{"kind":"wireguard"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = src.SetSetting("recent_connections_count", "20") // machine-local on dst
 	_ = src.SetSetting("default_terminal_type", "xterm") // real profile setting
 	_ = src.Close()
@@ -50,6 +57,13 @@ func TestMirrorFromReplacesProfile(t *testing.T) {
 	}
 	if conns[0].FolderID == nil || *conns[0].FolderID != folders[0].ID {
 		t.Fatalf("connection FK to folder broken: %+v", conns[0].FolderID)
+	}
+
+	// Network profile came across (regression guard for the live-pull
+	// mirror omitting network_profiles).
+	nps, _ := dst.ListNetworkProfiles()
+	if len(nps) != 1 || nps[0].Name != "hetzner-wg" || nps[0].ID != np.ID {
+		t.Fatalf("network profile not mirrored: %+v", nps)
 	}
 
 	// Machine-local + sync keys preserved; profile setting overwritten.
