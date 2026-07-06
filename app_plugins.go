@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"ssh-tool/internal/store"
+	"ssh-tool/internal/tunnelhelper"
 	"ssh-tool/internal/updater"
 )
 
@@ -112,17 +113,23 @@ func (a *App) PluginsStatus() []PluginInfo {
 	// helper into the plugins dir by hand still works: pluginPath
 	// finds it regardless of this flag.
 	supported := runtime.GOOS == "windows" || runtime.GOOS == "linux"
+	// Latest published helper-release version, fetched once here (best
+	// effort, short timeout). Helpers ship on their own helper-vN tag now,
+	// decoupled from the app version, so "update available" compares the
+	// installed helper against the newest helper RELEASE, not the app.
+	// Empty on any failure (offline, rate-limited) -> we simply don't flag
+	// an update rather than nagging or blocking the card.
+	latestHelper := a.latestHelperVersion()
 	for _, name := range knownPlugins {
 		p, ok := pluginPath(name)
 		info := PluginInfo{Name: name, Installed: ok, Path: p, Supported: supported}
 		if ok {
 			info.Version = pluginVersion(p)
-			// Only flag an update when we could read a real version and
-			// it differs from the app. A "dev" app or unreadable helper
-			// version stays quiet - we don't nag on dev builds.
+			// Flag an update only when we could read a real installed
+			// version AND know the latest helper release AND they differ.
+			// A "dev" helper (un-stamped local build) never nags.
 			if info.Version != "" && info.Version != "dev" &&
-				appVersion != "dev" && appVersion != "" &&
-				info.Version != appVersion {
+				latestHelper != "" && info.Version != latestHelper {
 				info.UpdateAvailable = true
 			}
 		}
@@ -131,45 +138,21 @@ func (a *App) PluginsStatus() []PluginInfo {
 	return out
 }
 
-// appReleaseTag returns the published release tag this app was built
-// from, or "" for a local dev build that isn't tied to a tag.
-//
-// A tagged build stamps appVersion with exactly the tag: "v0.48.0" or
-// a prerelease "v0.48.0-rc1". An untagged build stamps `git describe`
-// output, "<tag>-<N>-g<sha>", where N is the commit count since the
-// tag - that trailing "-<N>-g<sha>" is what tells a dev build apart
-// from a real prerelease. "dev"/"" is a plain `go run`.
-func appReleaseTag() string {
-	v := appVersion
-	if v == "" || v == "dev" || !strings.HasPrefix(v, "v") {
+// latestHelperVersion returns the tag of the newest helper release this
+// app can speak to (helper-v<=MaxProtocol), or "" if it can't be
+// determined right now. Best effort: any error yields "" so PluginsStatus
+// degrades to "no update flagged" rather than failing.
+func (a *App) latestHelperVersion() string {
+	rel, err := updater.FetchGitHubHelperRelease(updateGitHubRepo, tunnelhelper.MaxProtocol(), "ssh-tool/"+appVersion)
+	if err != nil {
 		return ""
 	}
-	// `git describe` suffix "-<N>-g<sha>": a dev build ahead of a tag.
-	// A real prerelease ("-rc1", "-beta2") has no "-g<hex>" segment.
-	if i := strings.LastIndex(v, "-g"); i >= 0 {
-		// Everything after the last "-g" is a short hash on a dev build.
-		if isHex(v[i+2:]) {
-			return ""
-		}
-	}
-	return v
-}
-
-func isHex(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return false
-		}
-	}
-	return true
+	return rel.Version
 }
 
 // PluginDownload fetches the plugin binary for this platform from the
-// app's own GitHub release, verifies the sha256 digest and installs
-// it under DataDir/plugins. Returns the installed path.
+// newest compatible helper release, verifies the sha256 digest and
+// installs it under DataDir/plugins. Returns the installed path.
 func (a *App) PluginDownload(name string) (string, error) {
 	valid := false
 	for _, k := range knownPlugins {
@@ -182,25 +165,14 @@ func (a *App) PluginDownload(name string) (string, error) {
 	}
 
 	ua := "ssh-tool/" + appVersion
-	// Fetch the release the helper should come from. app and helper are
-	// built from the same tag, so the exact tag matching this app is the
-	// right source - INCLUDING prereleases (an -rcN app must pull the
-	// helper from its own -rcN release, not the latest stable). The tag
-	// this app was built from is derived from appVersion:
-	//   "v0.48.0"      -> v0.48.0        (clean release)
-	//   "v0.48.0-rc1"  -> v0.48.0-rc1    (prerelease, exact)
-	//   "v0.47.0-11-g<sha>" / "dev" -> latest stable (a local dev build
-	//     that isn't tied to any published tag; best effort)
-	tag := appReleaseTag()
-	var rel *updater.ReleaseInfo
-	var err error
-	if tag != "" {
-		rel, err = updater.FetchGitHubByTag(updateGitHubRepo, tag, ua)
-	} else {
-		rel, err = updater.FetchGitHubLatest(updateGitHubRepo, ua)
-	}
+	// Helpers ship on their own helper-vN tag now, decoupled from the app
+	// version (docs/helper-release-plan.md). Pull from the newest helper
+	// release whose protocol major this app speaks - so a helper can be
+	// patched without an app release, and updating the app doesn't force a
+	// helper re-download unless the protocol major actually changed.
+	rel, err := updater.FetchGitHubHelperRelease(updateGitHubRepo, tunnelhelper.MaxProtocol(), ua)
 	if err != nil {
-		return "", fmt.Errorf("fetch release %s: %w", tag, err)
+		return "", fmt.Errorf("fetch helper release: %w", err)
 	}
 	asset, ok := rel.AssetsByName[pluginAssetName(name)]
 	if !ok {

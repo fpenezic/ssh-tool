@@ -72,6 +72,81 @@ func FetchGitHubByTag(repo, tag, userAgent string) (*ReleaseInfo, error) {
 		userAgent)
 }
 
+// FetchGitHubHelperRelease returns the newest published release whose
+// tag is "helper-v<major>" with major <= maxMajor - i.e. the newest
+// helper release this app can still speak to. The helpers ship on their
+// own tag namespace, decoupled from the app version (see
+// docs/helper-release-plan.md); the app picks the highest compatible
+// major, and within it the most recent release. Returns an error if the
+// list can't be fetched or no compatible helper release exists yet.
+func FetchGitHubHelperRelease(repo string, maxMajor int, userAgent string) (*ReleaseInfo, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=100", repo)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("github releases API returned %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, err
+	}
+	var list []ghReleasePayload
+	if err := json.Unmarshal(body, &list); err != nil {
+		return nil, fmt.Errorf("malformed github releases list: %w", err)
+	}
+	// GitHub returns releases newest-first, so the first tag matching the
+	// highest compatible major wins. Track the best major seen so a
+	// helper-v1 release isn't picked over a newer helper-v2 the app also
+	// supports (both <= maxMajor).
+	bestMajor := -1
+	var best *ghReleasePayload
+	for i := range list {
+		major, ok := helperTagMajor(list[i].TagName)
+		if !ok || major > maxMajor {
+			continue
+		}
+		if major > bestMajor {
+			bestMajor = major
+			best = &list[i]
+		}
+	}
+	if best == nil {
+		return nil, fmt.Errorf("no helper release found (tag helper-v<=%d) in %s", maxMajor, repo)
+	}
+	raw, err := json.Marshal(best)
+	if err != nil {
+		return nil, err
+	}
+	return parseGitHubRelease(raw)
+}
+
+// helperTagMajor parses "helper-v<N>" -> N. Reports ok=false for any
+// other tag shape (app tags, malformed).
+func helperTagMajor(tag string) (int, bool) {
+	rest, ok := strings.CutPrefix(tag, "helper-v")
+	if !ok || rest == "" {
+		return 0, false
+	}
+	n := 0
+	for _, c := range rest {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, true
+}
+
 func fetchGitHubRelease(url, userAgent string) (*ReleaseInfo, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

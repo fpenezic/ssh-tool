@@ -88,3 +88,9 @@ wails_windows_amd64.syso
 
 # Generated from ssh-tool.desktop.in by generate:dotdesktop; edit the .in
 build/linux/ssh-tool.desktop
+
+# Local sidecar helper build outputs (CI builds + publishes these)
+netbird-helper/netbird-helper
+netbird-helper/ssh-tool-netbird-*
+tailscale-helper/tailscale-helper
+tailscale-helper/ssh-tool-tailscale-*

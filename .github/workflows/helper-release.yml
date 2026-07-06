@@ -1,0 +1,117 @@
+# Helper release workflow. Sidecar tunnel helpers (NetBird today,
+# Tailscale next) ship on their OWN tag namespace - "helper-vN" - so
+# they evolve on a cadence decoupled from the app version. The app pulls
+# the newest helper-v<=maxProtocol release (see app_plugins.go +
+# docs/helper-release-plan.md).
+#
+# Triggered by a helper-vN tag. Builds every helper for every platform
+# and publishes them to a single GitHub release named after the tag.
+# The app-release workflow (release.yml) no longer builds helpers.
+name: helper-release
+
+on:
+  push:
+    tags:
+      - "helper-v[0-9]+"
+
+permissions:
+  contents: write # gh release create
+
+jobs:
+  # One matrix per (provider x platform). netbird needs CGO on Windows
+  # (a plain CGO_ENABLED=0 cross build misbehaves - builds a real wt0
+  # adapter instead of userspace), cross-compiled with Zig as the C
+  # toolchain. Linux builds native per arch. Asset names stay
+  # ssh-tool-<provider>-<os>-<arch>[.exe] so the app finds them by
+  # platform. Version stamp = the helper tag (NOT the app version).
+  build-helpers:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - provider: netbird
+            dir: netbird-helper
+            platform: linux-amd64
+            runner: ubuntu-24.04
+            goos: linux
+            goarch: amd64
+            cc: ""
+            out: ssh-tool-netbird-linux-amd64
+          - provider: netbird
+            dir: netbird-helper
+            platform: linux-arm64
+            runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            cc: ""
+            out: ssh-tool-netbird-linux-arm64
+          - provider: netbird
+            dir: netbird-helper
+            platform: windows-amd64
+            runner: ubuntu-24.04
+            goos: windows
+            goarch: amd64
+            cc: zig-windows-amd64
+            out: ssh-tool-netbird-windows-amd64.exe
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.dir }}/go.mod
+      - name: Install Zig (for Windows cross CGO)
+        if: ${{ matrix.goos == 'windows' }}
+        run: |
+          ZIG_VERSION=0.14.0
+          curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" \
+            | sudo tar -xJ -C /opt
+          sudo ln -sf /opt/zig-linux-x86_64-${ZIG_VERSION}/zig /usr/local/bin/zig
+          printf '#!/bin/sh\nexec zig cc -target x86_64-windows-gnu -fno-sanitize=all "$@"\n' \
+            | sudo tee /usr/local/bin/zig-windows-amd64 >/dev/null
+          sudo chmod +x /usr/local/bin/zig-windows-amd64
+      - name: Build helper
+        working-directory: ${{ matrix.dir }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "1"
+          CC: ${{ matrix.cc }}
+        run: |
+          # Stamp the helper tag (helper-vN) as the helper version, so the
+          # app's update check compares against the helper release, not the
+          # app.
+          ver="${{ github.ref_name }}"
+          go build -trimpath -ldflags="-w -s -X main.version=${ver}" \
+            -o "../bin/${{ matrix.out }}" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: bin/${{ matrix.out }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [build-helpers]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: bin
+          merge-multiple: true
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.ref_name }}"
+          # Idempotent: a re-run uploads into the existing release rather
+          # than failing on create.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" bin/* --clobber
+          else
+            gh release create "$tag" bin/* \
+              --title "$tag" \
+              --notes "Sidecar tunnel helpers (NetBird$([ -d tailscale-helper ] && echo ', Tailscale')). Downloaded automatically by ssh-tool; see the app's Settings > Network profiles > Plugins."
+          fi

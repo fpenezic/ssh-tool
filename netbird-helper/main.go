@@ -11,7 +11,7 @@
 //
 // Protocol (line-delimited JSON on stdout):
 //
-//	{"event":"ready","socks":"127.0.0.1:PORT"}   peer up, proxy listening
+//	{"event":"ready","socks":"127.0.0.1:PORT","protocol":1}  peer up, proxy listening
 //	{"event":"status","peers":N}                 every 15s
 //	{"event":"error","error":"..."}              fatal startup problem
 //
@@ -50,6 +50,12 @@ func fatal(format string, args ...any) {
 // The app uses it to tell whether an installed helper is older than the
 // running app and should be re-downloaded. "dev" for un-stamped builds.
 var version = "dev"
+
+// protocolVersion is the helper wire-protocol version, announced in the
+// ready event. The app rejects a helper outside the range it speaks. See
+// tunnelhelper.go (minProtocol/maxProtocol) and docs/helper-release-plan.md.
+// Bump only on a breaking protocol change.
+const protocolVersion = 1
 
 func main() {
 	management := flag.String("management", "", "management URL (empty = netbird.io cloud)")
@@ -135,7 +141,7 @@ func main() {
 	}
 	go serveSocks(ln, client)
 
-	emit(map[string]string{"event": "ready", "socks": ln.Addr().String()})
+	emit(map[string]any{"event": "ready", "socks": ln.Addr().String(), "protocol": protocolVersion})
 
 	// Status heartbeat: connected peer count. Also proves liveness.
 	go func() {

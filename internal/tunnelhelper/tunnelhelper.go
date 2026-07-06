@@ -4,10 +4,14 @@
 // package is provider-agnostic - it only speaks the helper protocol:
 //
 //	stdout, line JSON:
-//	  {"event":"ready","socks":"127.0.0.1:PORT"}
+//	  {"event":"ready","socks":"127.0.0.1:PORT","protocol":N}
 //	  {"event":"status","peers":N}
 //	  {"event":"error","error":"..."}
 //	stdin: closed by us -> helper shuts down.
+//
+// The ready event carries a protocol version the app validates against
+// minProtocol/maxProtocol; a mismatch is rejected with an actionable
+// "update" error instead of run. See checkProtocol.
 //
 // Keeping the heavy overlay clients out of the main binary is the
 // whole point - see netbird-helper/ for why (module replaces + size).
@@ -67,7 +71,32 @@ type helperEvent struct {
 	Socks string `json:"socks"`
 	Peers int    `json:"peers"`
 	Error string `json:"error"`
+	// Protocol is the helper protocol version, carried on the ready
+	// event. Absent (0) means a pre-versioning helper from the app-tag
+	// era, which the app treats as too old. See protocol version range
+	// below and docs/helper-release-plan.md.
+	Protocol int `json:"protocol"`
 }
+
+// Protocol version range the app speaks. The helper announces its own
+// version in the ready event; a value outside [minProtocol, maxProtocol]
+// is rejected with an actionable "update" error rather than run.
+//
+// Bump maxProtocol only on a BREAKING wire change (new required field,
+// changed shutdown semantics). Additive optional fields need no bump.
+// minProtocol rises only when the app genuinely drops the ability to
+// drive an older helper. A helper that omits the field reports 0, which
+// is below minProtocol and so is flagged for a re-download.
+const (
+	minProtocol = 1
+	maxProtocol = 1
+)
+
+// MaxProtocol is the highest helper protocol version this app speaks.
+// The helper releases share this integer as their tag major
+// (helper-v<MaxProtocol>), so the plugin downloader uses it to pick the
+// right helper release. See docs/helper-release-plan.md.
+func MaxProtocol() int { return maxProtocol }
 
 // Manager owns the running helper processes, keyed by profile id.
 // Same lazy contract as wg.Manager.
@@ -210,6 +239,23 @@ func stopProc(p *Proc) {
 	}
 }
 
+// checkProtocol validates the helper's announced protocol version
+// against the range the app speaks, returning an actionable error that
+// names which side is out of date. nil = compatible.
+func checkProtocol(v int) error {
+	if v < minProtocol {
+		// 0 = a pre-versioning helper (app-tag era) or one older than the
+		// app now supports. The fix is on the helper side.
+		return fmt.Errorf("tunnel helper is out of date (protocol %d, need %d) - update it from Settings > Network profiles > Plugins", v, minProtocol)
+	}
+	if v > maxProtocol {
+		// The helper is newer than this app can drive; the app is the
+		// stale side.
+		return fmt.Errorf("tunnel helper is newer than this app supports (protocol %d, app speaks up to %d) - update ssh-tool", v, maxProtocol)
+	}
+	return nil
+}
+
 func spawn(profileID, name, exePath string, args, env []string) (*Proc, error) {
 	cmd := exec.Command(exePath, args...)
 	cmd.Env = append(cmd.Environ(), env...)
@@ -252,9 +298,13 @@ func spawn(profileID, name, exePath string, args, env []string) (*Proc, error) {
 			}
 			switch ev.Event {
 			case "ready":
-				p.socksAddr = ev.Socks
 				if !got {
 					got = true
+					if perr := checkProtocol(ev.Protocol); perr != nil {
+						readyCh <- perr
+						break
+					}
+					p.socksAddr = ev.Socks
 					readyCh <- nil
 				}
 			case "status":

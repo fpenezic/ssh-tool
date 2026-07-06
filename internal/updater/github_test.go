@@ -73,3 +73,26 @@ func TestAssetPlatformKey(t *testing.T) {
 		}
 	}
 }
+
+func TestHelperTagMajor(t *testing.T) {
+	cases := []struct {
+		tag     string
+		want    int
+		wantOK  bool
+	}{
+		{"helper-v1", 1, true},
+		{"helper-v2", 2, true},
+		{"helper-v10", 10, true},
+		{"helper-v", 0, false},      // no number
+		{"helper-vx", 0, false},     // non-numeric
+		{"v0.49.0", 0, false},       // app tag
+		{"helper-v1.2", 0, false},   // not a bare major
+		{"", 0, false},
+	}
+	for _, c := range cases {
+		got, ok := helperTagMajor(c.tag)
+		if ok != c.wantOK || (ok && got != c.want) {
+			t.Errorf("helperTagMajor(%q) = (%d,%v), want (%d,%v)", c.tag, got, ok, c.want, c.wantOK)
+		}
+	}
+}

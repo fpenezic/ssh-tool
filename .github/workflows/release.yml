@@ -239,85 +239,17 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Sidecar plugin binaries (NetBird). Separate Go module under
-  # netbird-helper/ so its heavy replace set (wireguard-go fork etc.)
-  # never touches the main app. Named ssh-tool-netbird-<os>-<arch>[.exe]
-  # so app.go's PluginDownload can find them by platform. Version is
-  # stamped from the tag so the app can tell an installed helper is a
-  # release behind (PluginsStatus).
-  #
-  # netbird needs CGO on Windows (a plain CGO_ENABLED=0 cross-compile
-  # misbehaves - it builds a real wt0 adapter instead of userspace).
-  # Linux builds native per arch (host CC); Windows cross-compiles with
-  # Zig as the C toolchain (`zig cc -target x86_64-windows-gnu`), which
-  # is what the local build that first got NetBird working on Windows
-  # used - do not swap it for a bare mingw without re-testing.
-  build-helpers:
-    needs: test
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux-amd64
-            runner: ubuntu-24.04
-            goos: linux
-            goarch: amd64
-            cc: ""
-            out: ssh-tool-netbird-linux-amd64
-          - platform: linux-arm64
-            runner: ubuntu-24.04-arm
-            goos: linux
-            goarch: arm64
-            cc: ""
-            out: ssh-tool-netbird-linux-arm64
-          - platform: windows-amd64
-            runner: ubuntu-24.04
-            goos: windows
-            goarch: amd64
-            cc: zig-windows-amd64
-            out: ssh-tool-netbird-windows-amd64.exe
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: netbird-helper/go.mod
-      - name: Install Zig (for Windows cross CGO)
-        if: ${{ matrix.goos == 'windows' }}
-        run: |
-          ZIG_VERSION=0.14.0
-          curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" \
-            | sudo tar -xJ -C /opt
-          sudo ln -sf /opt/zig-linux-x86_64-${ZIG_VERSION}/zig /usr/local/bin/zig
-          # thin wrapper: `zig cc -target ...` as a single CC value
-          printf '#!/bin/sh\nexec zig cc -target x86_64-windows-gnu -fno-sanitize=all "$@"\n' \
-            | sudo tee /usr/local/bin/zig-windows-amd64 >/dev/null
-          sudo chmod +x /usr/local/bin/zig-windows-amd64
-      - name: Build helper
-        working-directory: netbird-helper
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "1"
-          CC: ${{ matrix.cc }}
-        run: |
-          ver="${{ github.ref_name }}"
-          go build -trimpath -ldflags="-w -s -X main.version=${ver}" \
-            -o "../bin/${{ matrix.out }}" .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.out }}
-          path: bin/${{ matrix.out }}
-          if-no-files-found: error
-          retention-days: 7
+  # Sidecar tunnel helpers are NOT built here anymore. They ship on
+  # their own "helper-vN" tag via .github/workflows/helper-release.yml,
+  # decoupled from the app version. The app downloads the newest
+  # compatible helper release at runtime (app_plugins.go). See
+  # docs/helper-release-plan.md.
 
   # Full release: plain semver tags only. Creates the GitHub Release;
   # sshtool.app mirrors it (metadata sync + download redirect), which
   # is how pre-0.45 installs polling only sshtool.app still see it.
   publish:
-    needs: [build, build-android, build-helpers]
+    needs: [build, build-android]
     if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-24.04
     steps:
@@ -354,7 +286,7 @@ jobs:
   # Pre-release tags (vX.Y.Z-suffix): artifacts land as a GitHub
   # prerelease for testers; sshtool.app is never touched.
   prerelease:
-    needs: [build, build-android, build-helpers]
+    needs: [build, build-android]
     if: ${{ contains(github.ref_name, '-') }}
     runs-on: ubuntu-24.04
     steps:
