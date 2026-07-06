@@ -72,7 +72,7 @@ func (a *App) syncAutoApplyEnabled() bool {
 // upgrade re-baselines silently instead of pushing an unchanged
 // profile. The body after the "|" is the content; the tag before it
 // is metadata only.
-const syncFingerprintFormat = "fp2"
+const syncFingerprintFormat = "fp3"
 
 func (a *App) syncFingerprint() string {
 	return syncFingerprintFormat + "|" + a.syncFingerprintBodyNow()
@@ -172,10 +172,28 @@ func (a *App) reconcileSyncStampOnStart() {
 	// Compare content bodies with the format tag stripped. If only the
 	// tag changed, re-baseline silently; if the body changed too, it's
 	// a real edit - leave the stamp so the dirty path pushes it.
-	if syncFingerprintBody(cur) == syncFingerprintBody(stamped) {
+	//
+	// fp3 added the network_profiles segment to the body. On an upgrade
+	// from fp2 a machine with NO profiles gains only an empty
+	// "network_profiles=0;" segment - that is a format change, not new
+	// content, so canonicalise it out of both sides before comparing.
+	// A machine that HAS profiles carries "network_profiles=N/T;" (N>0),
+	// which does NOT cancel out, so its body genuinely differs and the
+	// dirty path pushes it - which is exactly what finally ships the
+	// profiles to the other machine.
+	if canonSyncBody(syncFingerprintBody(cur)) == canonSyncBody(syncFingerprintBody(stamped)) {
 		writeSyncStamp(cur)
 		log.Printf("auto-sync: re-baselined stamp (fingerprint format change, no content push)")
 	}
+}
+
+// canonSyncBody removes segments that carry no content when empty, so a
+// pure format upgrade (a new zero-valued segment) compares equal to the
+// old body. Only the empty network_profiles segment is stripped; a
+// populated one (network_profiles=N/T with N>0) is real content and
+// stays.
+func canonSyncBody(body string) string {
+	return strings.Replace(body, "network_profiles=0;", "", 1)
 }
 
 // autoSyncReady gates every background action: feature on, URL set,

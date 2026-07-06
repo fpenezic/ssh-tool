@@ -179,6 +179,15 @@ func (d *DB) ContentFingerprint() string {
 		{"dynamic_entries", ""},
 		{"images", ""},
 		{"pinned_dynamic_entries", ""},
+		// network_profiles: userspace WireGuard / NetBird VPN profiles.
+		// MUST be signed or a created/edited/deleted profile never
+		// dirties the sync fingerprint, so auto-sync never pushes it and
+		// a second machine never receives the profile (it only rode along
+		// when some OTHER table's edit happened to trigger a push). That
+		// left orphan network_profile_id references pointing at a profile
+		// row the other machine never got - inventory then logs "network
+		// profile <id> not found" on every refresh.
+		{"network_profiles", "updated_at"},
 		// app_settings deliberately excluded: sync writes
 		// sync_generation / sync_last_at into it on every push, which
 		// would re-dirty the profile immediately. None of the

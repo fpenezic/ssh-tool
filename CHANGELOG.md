@@ -7,6 +7,37 @@ in alpha upstream.
 
 ---
 
+## [0.49.0] - Remote-disconnect for synced VPN profiles
+
+### Added
+
+- **Take over a WireGuard / NetBird profile that's live on another
+  machine.** When the same network profile is shared over sync, only
+  one machine can hold its userspace tunnel up at a time. Try to
+  connect through a profile another machine already has up and the app
+  now offers to take it over: it writes a kill request through sync,
+  shows a countdown while the other machine tears its tunnel down, then
+  connects - no more racing the disconnect button not knowing what's
+  happening on the other end. "Connect anyway" is still there if you
+  really want both up. Presence is published through the existing sync
+  channel (a small plaintext presence file, no secrets), so it only
+  works when sync is configured; single-machine users see nothing new.
+
+### Fixed
+
+- **Network profiles didn't sync.** Creating, editing or deleting a
+  WireGuard / NetBird profile didn't mark the profile as changed, so
+  auto-sync never pushed it - a second machine only received a profile
+  if some unrelated edit happened to trigger a push around the same
+  time. The upshot was profiles that never arrived on the other
+  machine and inventory folders logging "network profile <id> not
+  found" on every refresh because a connection's inherited profile
+  pointed at a row that never came across. Profiles are now part of the
+  sync change signal, so they push like everything else. The upgrade
+  re-baselines silently: a machine that already has profiles pushes
+  them on next launch; a machine without any doesn't push an empty
+  update over one that has them.
+
 ## [0.48.2] - No console flash on Windows
 
 ### Fixed
