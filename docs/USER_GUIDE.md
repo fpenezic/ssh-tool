@@ -23,7 +23,7 @@ implemented.
 6. [SFTP file browser](#sftp-file-browser)
 6b. [VNC console](#vnc-console)
 7. [Port forwards](#port-forwards)
-7b. [Network profiles (WireGuard / NetBird)](#network-profiles)
+7b. [Network profiles (WireGuard / NetBird / Tailscale)](#network-profiles)
 8. [Broadcast input (multi-session)](#broadcast-input)
 9. [Multi-window: detach + redock](#multi-window)
 10. [Workspaces](#workspaces)
@@ -754,7 +754,7 @@ SSH session and starts the tunnel if needed.
 ---
 
 <a id="network-profiles"></a>
-## 7b. Network profiles (WireGuard / NetBird)
+## 7b. Network profiles (WireGuard / NetBird / Tailscale)
 
 A network profile routes a connection's **first SSH hop** through an
 overlay VPN, so you can reach hosts that only live on a private
@@ -861,6 +861,41 @@ checking in.
 
 For a full step-by-step (which key, groups, access policies, common
 errors) see **`docs/netbird-setup.md`**.
+
+### Tailscale profiles
+
+Tailscale works exactly like NetBird from ssh-tool's side - it needs
+the optional **Tailscale plugin** (install it from the Plugins card,
+downloaded and checksum-verified), runs as a userspace node (no TUN
+adapter, no admin), and is **desktop only** (the helper is a separate
+process Android can't spawn). Each machine registers as its own node,
+so a synced profile is safe across machines (no single-owner conflict,
+unlike WireGuard).
+
+A Tailscale profile needs three things:
+
+- **Control URL** - blank uses Tailscale's own coordination server; set
+  it only for a self-hosted **Headscale** (a bare host is normalised to
+  `https://`).
+- **Hostname** - the name this node registers under in your tailnet
+  (pre-filled from your machine's hostname). Tailscale lower-cases it
+  and MagicDNS exposes it as `<hostname>.<tailnet>.ts.net`.
+- **Auth key** - stored as an API-token credential. In the Tailscale
+  admin console: **Settings -> Keys -> Generate auth key**. The key
+  starts with `tskey-auth-`.
+
+**Which key.** Use a **reusable** auth key if you sync this profile
+across machines - each machine registers as its own node. Mark it
+**ephemeral** for laptops if you want the node auto-removed after it's
+offline for a while (it re-registers on reconnect). Tag the key
+(**tags**) or rely on your tailnet ACLs so the node is allowed to reach
+the hosts you need - registration alone does not grant access, the ACL
+policy does. If SSH through the tunnel connects but times out reaching
+the target, the node is almost certainly not permitted by the ACL.
+
+Each machine keeps its Tailscale node state locally (under the data
+dir), not synced. Deleting the profile removes that state and the node
+stops checking in.
 
 ---
 

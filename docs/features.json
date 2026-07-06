@@ -53,10 +53,11 @@
     },
     {
       "title": "Overlay-network profiles",
-      "body": "Reach hosts on a private network - a client's WireGuard, a Hetzner internal net, a NetBird tailnet - by routing the SSH hop through a userspace tunnel. No system VPN, several up at once. WireGuard is built in; NetBird is a one-click plugin. A folder-level Network setting sends every host under it through the same tunnel.",
+      "body": "Reach hosts on a private network - a client's WireGuard, a Hetzner internal net, a NetBird or Tailscale overlay - by routing the SSH hop through a userspace tunnel. No system VPN, several up at once. WireGuard is built in; NetBird and Tailscale are one-click plugins. A folder-level Network setting sends every host under it through the same tunnel.",
       "keys": [
         "WireGuard",
         "NetBird",
+        "Tailscale",
         "auto"
       ],
       "art": "network"
@@ -124,7 +125,7 @@
     {
       "icon": "shield",
       "title": "Userspace VPN profiles",
-      "body": "Route a connection's first SSH hop through WireGuard or NetBird without a TUN adapter, admin rights, or system routes. Assign a profile to a folder and the whole tree rides the tunnel. Auto-mode dials direct when you're on-site, tunnel when remote. NetBird ships as an optional plugin."
+      "body": "Route a connection's first SSH hop through WireGuard, NetBird or Tailscale without a TUN adapter, admin rights, or system routes. Assign a profile to a folder and the whole tree rides the tunnel. Auto-mode dials direct when you're on-site, tunnel when remote. NetBird and Tailscale ship as optional plugins."
     },
     {
       "icon": "clock",

@@ -10,6 +10,8 @@ Cross-platform SSH connection manager that replaces Devolutions RDM
 for daily use. Tree of connections with folders + inheritance,
 encrypted credential vault, multi-tab terminal with split panes,
 port forwards (incl. SOCKS5 with isolated-browser launcher),
+userspace VPN profiles (WireGuard built in; NetBird + Tailscale as
+optional sidecar plugins),
 opkssh certificate auth, dynamic inventory from Proxmox, Hetzner,
 DigitalOcean, Linode, Vultr, Scaleway, AWS EC2, Ansible static
 inventory (`.ini` / `.yml`), userspace WireGuard network profiles
@@ -443,7 +445,32 @@ everything mobile is behind a build tag or an `isMobile` check.
     is pure-Go netstack and compiles for android, so WG profiles work on
     mobile. NetBird needs the sidecar helper PROCESS, which android can't
     spawn - `PluginsStatus` reports `supported=false` off desktop and the
-    UI hides / disables the NetBird path there.
+    UI hides / disables the NetBird path there. Tailscale (gotcha 33) is
+    the same: desktop-only sidecar.
+
+33. **Helpers ship on their OWN `helper-vN` release, decoupled from the
+    app version - and speak a versioned protocol.** Two sidecar kinds now:
+    `netbird-helper/` (CGO, wireguard-go fork, needs Zig for the Windows
+    cross-build) and `tailscale-helper/` (tsnet, pure Go, CGO-free).
+    Both are separate go modules - never import either into the main app.
+    Key points:
+    - The helper `ready` event carries `"protocol":N`. The app declares a
+      supported range in `internal/tunnelhelper` (minProtocol/maxProtocol,
+      currently 1..1) and rejects a mismatch with an actionable error. A
+      helper with no protocol field = 0 = the pre-split app-era build =
+      "update the helper". See `checkProtocol`.
+    - Helpers are built + published by `.github/workflows/helper-release.yml`
+      on a `helper-v<N>` tag (major == protocol major), NOT by the app
+      release. `release.yml` no longer builds helpers. The app downloads
+      the newest `helper-v<=maxProtocol>` release at runtime
+      (`updater.FetchGitHubHelperRelease`, `PluginDownload`), and
+      "update available" compares the installed helper against that
+      release, not the app version.
+    - One `tunnelhelper.Manager` (`app.nbman`) drives BOTH kinds - it's
+      keyed by profile id and just spawns whatever exe `pluginPath(name)`
+      resolves. `ensureTailscaleTunnel` mirrors `ensureNetbirdTunnel`;
+      `resolveHelperSecret` is the shared vault/credential lookup.
+    - Design + migration notes: `docs/helper-release-plan.md`.
 
 ## Branch / commit conventions
 

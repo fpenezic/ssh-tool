@@ -7,6 +7,33 @@ in alpha upstream.
 
 ---
 
+## [0.50.0] - Tailscale + helpers on their own release track
+
+### Added
+
+- **Tailscale network profiles.** Tailscale joins WireGuard and NetBird
+  as a userspace tunnel kind: route a connection's first SSH hop through
+  your tailnet with no TUN adapter and no admin. Like NetBird it runs as
+  an optional one-click plugin and each machine registers as its own
+  node, so a synced profile is safe across machines. A profile takes a
+  control URL (blank for Tailscale's own, set for self-hosted
+  Headscale), a hostname (pre-filled from the machine name), and a
+  reusable `tskey-auth-` key stored as a credential. Desktop only (the
+  helper is a separate process Android can't spawn). See the guide's
+  Network-profiles section.
+
+### Changed
+
+- **VPN helpers now update on their own schedule.** The NetBird (and new
+  Tailscale) sidecar helpers ship on a separate release track, decoupled
+  from the app version, so a helper can be patched without an app update
+  and updating the app no longer forces a helper re-download unless the
+  underlying protocol actually changed. The helper and app negotiate a
+  protocol version on start; a mismatch now reports a clear "update the
+  helper" / "update ssh-tool" message instead of failing obscurely.
+  First upgrade from 0.49.0 re-downloads the helper once (it predates
+  the versioned protocol), then stays decoupled.
+
 ## [0.49.0] - Remote-disconnect for synced VPN profiles
 
 ### Added

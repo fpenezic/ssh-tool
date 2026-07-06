@@ -94,9 +94,14 @@ Add a `protocol` integer to the `ready` event:
   0) only far enough to give the "update your helper" message, not to
   run it.
 
-## Then: Tailscale (separate plan)
+## Status
 
-Once the split + protocol v1 are in and released as `helper-v1`:
+Done and shipped in v0.50.0 / helper-v1: the split, protocol v1, the
+NetBird helper on the new track, AND the Tailscale helper below.
+
+## Tailscale (implemented)
+
+Built on the split + protocol v1 base, released together as helper-v1:
 - `tailscale-helper/` module: tsnet userspace + the same SOCKS5 + the
   same protocol (ready/status/error, protocol:1).
 - Auth: Tailscale auth key (`tskey-auth-...`) stored as an api_token
