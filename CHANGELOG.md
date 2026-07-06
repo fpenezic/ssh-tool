@@ -25,6 +25,14 @@ in alpha upstream.
 
 ### Fixed
 
+- **"Tunnel running on another machine" never showed.** Presence
+  identified each machine by a UUID kept in the store - which the store
+  syncs, so both machines ended up with the SAME id and each read the
+  other's presence record as its own, hiding the conflict entirely.
+  Presence now identifies a machine by its stable hardware/OS id (the
+  same value the auto-unlock sidecar is bound to), which never travels
+  through sync, so two machines sharing a profile always differ.
+
 - **Network profiles didn't sync.** Two independent gaps, both fixed:
   creating / editing / deleting a WireGuard / NetBird profile didn't
   mark the profile as changed, so auto-sync never pushed it; and even

@@ -260,6 +260,23 @@ func deriveMachineKey() ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
+// StableMachineID exposes the hardware/OS-derived machine identifier
+// (the same value the sidecar key is bound to) for callers that need a
+// per-machine identity that does NOT travel through the synced store -
+// e.g. tunnel presence, where two machines sharing a profile must have
+// DISTINCT ids. A store-persisted UUID is unsuitable there: it rides the
+// sync snapshot and both machines end up with the same id, so each reads
+// the other's presence record as its own. This is derived fresh from the
+// local machine every call and never written to the store. Empty string
+// only in the impossible case that even the hostname is unavailable.
+func StableMachineID() string {
+	id, err := machineID()
+	if err != nil {
+		return ""
+	}
+	return id
+}
+
 func machineID() (string, error) {
 	for _, p := range []string{"/etc/machine-id", "/var/lib/dbus/machine-id"} {
 		b, err := os.ReadFile(p)

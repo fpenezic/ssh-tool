@@ -24,11 +24,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"ssh-tool/internal/creds"
 	"ssh-tool/internal/presence"
 	"ssh-tool/internal/syncer"
 )
-
-const machineIDSettingKey = "machine_id"
 
 // presencePoll is how often an owning machine re-reads presence while
 // a tunnel is up, to spot a kill-request. The UI countdown for a
@@ -52,30 +51,28 @@ type presenceState struct {
 	force map[string]bool
 }
 
-// machineID returns this install's stable presence id, generating and
-// persisting one on first use. Distinct from the sync device label
-// (hostname) - two installs on machines with the same hostname must
-// still differ.
+// machineID returns this install's presence id: the hardware/OS-derived
+// machine identifier (creds.StableMachineID), cached for the process
+// lifetime. It MUST NOT be a store-persisted UUID - that rides the sync
+// snapshot, so two machines sharing a profile would end up with the same
+// id and each would read the other's presence record as its own (the
+// bug that made "running on another machine" never show). The stable id
+// is derived from /etc/machine-id (Linux), the hardware UUID (macOS) or
+// the registry (Windows) and never travels through sync.
 func (a *App) machineID() string {
 	a.presence.mu.Lock()
+	defer a.presence.mu.Unlock()
 	if a.presence.machine != "" {
-		id := a.presence.machine
-		a.presence.mu.Unlock()
-		return id
+		return a.presence.machine
 	}
-	a.presence.mu.Unlock()
-
-	if v, ok, _ := a.db.GetSetting(machineIDSettingKey); ok && v != "" {
-		a.presence.mu.Lock()
-		a.presence.machine = v
-		a.presence.mu.Unlock()
-		return v
+	id := creds.StableMachineID()
+	if id == "" {
+		// Impossible in practice (hostname is the last fallback); use a
+		// process-random id so presence just treats every record as
+		// foreign rather than silently matching.
+		id = "unknown-" + uuid.NewString()
 	}
-	id := uuid.NewString()
-	_ = a.db.SetSetting(machineIDSettingKey, id)
-	a.presence.mu.Lock()
 	a.presence.machine = id
-	a.presence.mu.Unlock()
 	return id
 }
 
