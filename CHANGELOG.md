@@ -26,6 +26,12 @@ in alpha upstream.
   connections, bulk connect, dynamic-folder hosts, and a manual
   dynamic-folder refresh - not just single saved connections.
 
+- **Dynamic-folder hosts and guests sort by name.** Proxmox (and other
+  provider) entries render alphabetically now, case-insensitive and
+  numeric-aware (web-2 before web-10). Guests are one flat alphabetical
+  list across the whole cluster - in a multi-node Proxmox setup you find
+  a VM by its name, not by which node it runs on.
+
 - **See and free a busy profile from Settings.** Settings -> Network
   profiles now shows an "up on <machine>" badge for a WireGuard profile
   whose tunnel is live on another synced machine, with a "Disconnect on

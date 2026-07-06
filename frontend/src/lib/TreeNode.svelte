@@ -270,13 +270,21 @@
       }
       return false;
     };
+    // Sort both buckets by name, case-insensitive and numeric-aware so
+    // web-2 sorts before web-10. Guests are a single flat alphabetical
+    // list regardless of which cluster node hosts them - in a multi-node
+    // Proxmox setup you find a VM by its name, not by hunting the node
+    // it happens to run on. The provider returns entries in API order
+    // (unsorted), so the ordering has to happen here.
+    const byName = (a: { name: string }, b: { name: string }) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
     return {
       // PVE hypervisor nodes + generic-host entries (Ansible static
       // inventory, future flat sources) share the "hosts" bucket -
       // neither has the hypervisor guest/host distinction the
       // "guests" bucket implies.
-      hosts: entries.filter((e) => (e.kind === "host" || e.kind === "server") && passes(e)),
-      guests: entries.filter((e) => (e.kind === "guest_vm" || e.kind === "guest_lxc") && passes(e)),
+      hosts: entries.filter((e) => (e.kind === "host" || e.kind === "server") && passes(e)).sort(byName),
+      guests: entries.filter((e) => (e.kind === "guest_vm" || e.kind === "guest_lxc") && passes(e)).sort(byName),
     };
   });
   const conns = $derived.by(() => {
