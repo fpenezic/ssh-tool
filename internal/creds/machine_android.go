@@ -2,6 +2,22 @@
 
 package creds
 
+import "os"
+
+// StableMachineID on Android returns the device hostname. There is no
+// /etc/machine-id here (see the note above), and the value is only used
+// for tunnel presence, not for the sidecar key (which is disabled on
+// Android). Distinctness across devices is what presence needs, and the
+// hostname provides that; an empty string only if even that is absent,
+// which the presence caller treats as "every record is foreign" (fail
+// safe, never a false self-match).
+func StableMachineID() string {
+	if h, err := os.Hostname(); err == nil && h != "" {
+		return h
+	}
+	return ""
+}
+
 // Machine-bound auto-unlock is disabled on Android. There is no stable
 // machine-id (and the Linux /etc/machine-id derivation in machine.go is
 // absent on Android), so the sidecar would fall back to a weak
