@@ -40,7 +40,7 @@ tasks:
           ARCH: '{{.ARCH | default "arm64"}}'
     vars:
       APP_VERSION:
-        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
+        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo dev)}"
       APP_COMMIT:
         sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
       BUILD_FLAGS: '{{if eq .PRODUCTION "true"}}-tags production,android -trimpath -buildvcs=false -ldflags="-w -s -X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"{{else}}-tags android,debug -buildvcs=false -gcflags=all="-l" -ldflags="-X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"{{end}}'
@@ -97,7 +97,7 @@ tasks:
           -o build/android/app/src/main/jniLibs/$JNI_DIR/libwails.so
     vars:
       APP_VERSION:
-        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
+        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo dev)}"
       APP_COMMIT:
         sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
       BUILD_FLAGS: '{{if eq .PRODUCTION "true"}}-tags production,android -trimpath -buildvcs=false -ldflags="-w -s -X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"{{else}}-tags android,debug -buildvcs=false -gcflags=all="-l" -ldflags="-X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"{{end}}'
@@ -137,10 +137,15 @@ tasks:
         # default "1.0". versionName = git describe (no leading v);
         # versionCode = a monotonic int derived from the semver
         # (major*1e6 + minor*1e3 + patch), so newer always sorts higher.
-        VNAME="$(git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo 0.0.0)"
+        # Prefer SSHTOOL_VERSION (CI pins the exact tag) over git describe,
+        # which now also sees non-semver tags like helper-vN and could
+        # resolve to something the semver regex can't parse - that yielded
+        # an empty SEMVER and versionCode 0, which gradle rejects.
+        VNAME="$(printf '%s' "${SSHTOOL_VERSION:-$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null)}" | sed 's/^v//')"
+        [ -z "$VNAME" ] && VNAME=0.0.0
         SEMVER="$(printf '%s' "$VNAME" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
         VCODE="$(printf '%s' "$SEMVER" | awk -F. '{printf "%d", $1*1000000 + $2*1000 + $3}')"
-        [ -z "$VCODE" ] && VCODE=1
+        if [ -z "$VCODE" ] || [ "$VCODE" = "0" ]; then VCODE=1; fi
         ./gradlew assembleDebug -PversionName="$VNAME" -PversionCode="$VCODE"
         cp app/build/outputs/apk/debug/app-debug.apk "../../{{.BIN_DIR}}/{{.APP_NAME}}.apk"
         echo "APK created: {{.BIN_DIR}}/{{.APP_NAME}}.apk (versionName=$VNAME versionCode=$VCODE)"

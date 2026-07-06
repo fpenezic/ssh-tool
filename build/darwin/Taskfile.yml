@@ -21,7 +21,7 @@ tasks:
       # Version + commit injected from git, same as linux/windows -
       # without this the status bar shows "dev" on tagged builds.
       APP_VERSION:
-        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
+        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo dev)}"
       APP_COMMIT:
         sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
       BUILD_FLAGS: '-tags production -trimpath -buildvcs=false -ldflags="-w -s -X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"'

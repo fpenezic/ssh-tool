@@ -58,7 +58,7 @@ tasks:
       # than one tag (e.g. v0.48.0 + a leftover v0.48.0-rc2) and can
       # stamp the wrong one. Falls back to describe for local builds.
       APP_VERSION:
-        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
+        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo dev)}"
       APP_COMMIT:
         sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
       BUILD_FLAGS: '{{if eq .DEV "true"}}{{if .EXTRA_TAGS}}-tags {{.EXTRA_TAGS}} {{end}}-buildvcs=false -gcflags=all="-l" -ldflags="-X main.appName=ssh-tool-dev -X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"{{else}}-tags production{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui -X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}}"{{end}}'
