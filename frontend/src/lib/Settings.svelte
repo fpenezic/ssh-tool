@@ -989,6 +989,11 @@
   let tsControl = $state("");
   let tsHostname = $state("");
   let tsCredId = $state("");
+  // Inline "create auth-key credential" (mirrors the NetBird one).
+  let tsNewKeyOpen = $state(false);
+  let tsNewKeyName = $state("");
+  let tsNewKeySecret = $state("");
+  let tsNewKeyBusy = $state(false);
   // Inline "create setup-key credential" (the picker only lists
   // existing api_token creds; this avoids a trip to the Credentials
   // tab mid-flow).
@@ -1170,6 +1175,30 @@
     finally { npBusy = false; }
   }
 
+  async function tsCreateAuthKey() {
+    if (!tsNewKeyName.trim() || !tsNewKeySecret) {
+      toast.err("Name and auth key are required");
+      return;
+    }
+    tsNewKeyBusy = true;
+    try {
+      const res: any = await api.credentialsCreate({
+        kind: "api_token",
+        name: tsNewKeyName.trim(),
+        api_token_id: "",
+        api_token_secret: tsNewKeySecret,
+      } as any);
+      await credentials.load();
+      const newId = res?.credential?.id ?? res?.id;
+      if (newId) tsCredId = newId;
+      tsNewKeyOpen = false;
+      tsNewKeyName = "";
+      tsNewKeySecret = "";
+      toast.ok("Auth-key credential created");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { tsNewKeyBusy = false; }
+  }
+
   async function npCreateTailscale() {
     npBusy = true;
     try {
@@ -1232,6 +1261,7 @@
     npName = ""; npConf = "";
     nbManagement = ""; nbDevice = ""; nbCredId = "";
     tsControl = ""; tsHostname = ""; tsCredId = "";
+    tsNewKeyOpen = false; tsNewKeyName = ""; tsNewKeySecret = "";
   }
   async function npSaveEdit() {
     if (!npEditingId) return;
@@ -2554,19 +2584,41 @@
         <input bind:value={tsHostname} placeholder="laptop" />
       </label>
       <label>
-        <span>Auth key credential</span>
-        <SearchableSelect
-          bind:value={tsCredId}
-          options={apiTokenCredOptions}
-          placeholder="Pick an API-token credential holding the auth key…"
-        />
-        <span class="hint inline">
-          A Tailscale <strong>auth key</strong> (Settings -&gt; Keys in the
-          admin console - starts with <code>tskey-auth-</code>). Use a
-          <strong>reusable</strong> key if you sync this profile across
-          machines - each registers as its own node.
+        <span class="row" style="justify-content:space-between; align-items:center; gap:0.5rem">
+          Auth key credential
+          <button type="button" class="token-add" onclick={() => (tsNewKeyOpen = !tsNewKeyOpen)}>
+            {tsNewKeyOpen ? "Cancel" : "+ New"}
+          </button>
         </span>
+        {#if !tsNewKeyOpen}
+          <SearchableSelect
+            bind:value={tsCredId}
+            options={apiTokenCredOptions}
+            placeholder="Pick an API-token credential holding the auth key…"
+          />
+          <span class="hint inline">
+            A Tailscale <strong>auth key</strong> (Settings -&gt; Keys in the
+            admin console - starts with <code>tskey-auth-</code>). Use a
+            <strong>reusable</strong> key if you sync this profile across
+            machines - each registers as its own node.
+          </span>
+        {/if}
       </label>
+      {#if tsNewKeyOpen}
+        <div class="np-card" style="gap:0.5rem">
+          <label>
+            <span>Credential name</span>
+            <input bind:value={tsNewKeyName} placeholder="tailscale-auth-key" />
+          </label>
+          <label>
+            <span>Auth key <span class="hint inline">(from Tailscale admin -&gt; Settings -&gt; Keys)</span></span>
+            <PasswordInput bind:value={tsNewKeySecret} placeholder="tskey-auth-..." />
+          </label>
+          <div class="row" style="gap:0.5rem">
+            <button class="primary" onclick={tsCreateAuthKey} disabled={tsNewKeyBusy || !tsNewKeyName.trim() || !tsNewKeySecret}>Create</button>
+          </div>
+        </div>
+      {/if}
       <div class="row" style="gap:0.5rem">
         {#if npEditingId}
           <button class="primary" onclick={npSaveTailscale} disabled={npBusy || !npName.trim()}>Save changes</button>
