@@ -1015,6 +1015,21 @@
     try { plugins = (await api.pluginsStatus()) ?? []; } catch { /* ignore */ }
   }
 
+  // Pre-fill the NetBird device name with "<hostname>.ssh-tool" the
+  // first time the create form shows the NetBird fields, so a peer is
+  // recognisable in the dashboard without the user typing anything. Only
+  // when creating (not editing an existing profile) and only while the
+  // field is still empty, so it never clobbers a value the user typed or
+  // an existing profile's name.
+  $effect(() => {
+    if (activeSection !== "network") return;
+    if (npEditingId || npKind !== "netbird") return;
+    if (nbDevice.trim() !== "") return;
+    api.suggestNetbirdDeviceName()
+      .then((n) => { if (!npEditingId && npKind === "netbird" && nbDevice.trim() === "") nbDevice = n; })
+      .catch(() => {});
+  });
+
   // Passive presence: while the Network section is open, poll each
   // WireGuard profile's presence so the card can show "up on <machine>"
   // when the tunnel is live on another synced machine, and offer a
@@ -2426,7 +2441,7 @@
       </label>
       <label>
         <span>Device name</span>
-        <input bind:value={nbDevice} placeholder="ssh-tool-laptop" />
+        <input bind:value={nbDevice} placeholder="laptop.ssh-tool" />
       </label>
       <label>
         <span class="row" style="justify-content:space-between; align-items:center; gap:0.5rem">

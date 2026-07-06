@@ -1338,11 +1338,6 @@ export function NetworkProfileCreate(name, confText) {
 }
 
 /**
- * NetworkProfileCreateNetbird stores a NetBird profile: management
- * URL, device name and a reference to the api_token credential that
- * holds the setup key. Nothing secret lives on the row. Requires the
- * NetBird plugin so the config can't be created and then fail to run
- * with no explanation.
  * @param {string} name
  * @param {string} managementURL
  * @param {string} deviceName
@@ -2378,6 +2373,15 @@ export function SshSystemCommand(connectionID) {
  */
 export function SshWrite(sessionID, dataB64) {
     return $Call.ByID(3443123936, sessionID, dataB64);
+}
+
+/**
+ * SuggestNetbirdDeviceName is the default the create form pre-fills:
+ * "<hostname>.ssh-tool". The user can still edit it before saving.
+ * @returns {$CancellablePromise<string>}
+ */
+export function SuggestNetbirdDeviceName() {
+    return $Call.ByID(437887354);
 }
 
 /**

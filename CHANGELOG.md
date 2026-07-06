@@ -26,6 +26,13 @@ in alpha upstream.
   connections, bulk connect, dynamic-folder hosts, and a manual
   dynamic-folder refresh - not just single saved connections.
 
+- **NetBird device name defaults to "<hostname>.ssh-tool".** The
+  create form pre-fills the device name from this machine's hostname so
+  a peer is recognisable in the NetBird dashboard and distinct per
+  machine, instead of every peer registering as a bare "ssh-tool". Still
+  editable before saving; a profile left blank falls back to the same
+  derived name at connect time.
+
 - **Dynamic-folder hosts and guests sort by name.** Proxmox (and other
   provider) entries render alphabetically now, case-insensitive and
   numeric-aware (web-2 before web-10). Guests are one flat alphabetical

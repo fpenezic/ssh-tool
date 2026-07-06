@@ -621,6 +621,8 @@ export const api = {
     G.NetworkProfileConnectAnyway(profileId),
   networkProfileDisconnectRemote: (profileId: string) =>
     G.NetworkProfileDisconnectRemote(profileId) as unknown as Promise<number>,
+  suggestNetbirdDeviceName: () =>
+    G.SuggestNetbirdDeviceName() as unknown as Promise<string>,
   snippetsList: (connectionId: string) =>
     G.SnippetsList(connectionId) as unknown as Promise<Snippet[]>,
   snippetCreate: (input: SnippetInput) =>

@@ -180,7 +180,7 @@ func (a *App) ensureNetbirdTunnel(row *store.NetworkProfile) (tunnelDialer, erro
 	}
 	device := cfg.DeviceName
 	if device == "" {
-		device = "ssh-tool"
+		device = defaultNetbirdDeviceName()
 	}
 	args := []string{"--state-dir", netbirdStateDir(row.ID), "--device", device}
 	if cfg.ManagementURL != "" {
@@ -481,6 +481,41 @@ func (a *App) NetworkProfileCreate(name, confText string) (*NetworkProfileInfo, 
 // holds the setup key. Nothing secret lives on the row. Requires the
 // NetBird plugin so the config can't be created and then fail to run
 // with no explanation.
+// defaultNetbirdDeviceName derives a NetBird peer name from this
+// machine's hostname plus a ".ssh-tool" suffix, so a peer registered by
+// this app is recognisable in the NetBird dashboard and distinct per
+// machine. Sanitised to the character set NetBird accepts for a device
+// name (alphanumerics, hyphen, dot): whitespace and anything else
+// collapses to a hyphen. Falls back to a bare "ssh-tool" if the
+// hostname is empty or sanitises to nothing.
+func defaultNetbirdDeviceName() string {
+	return netbirdDeviceNameFrom(machineName())
+}
+
+func netbirdDeviceNameFrom(host string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(host) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '-' || r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	base := strings.Trim(b.String(), "-.")
+	if base == "" {
+		return "ssh-tool"
+	}
+	return base + ".ssh-tool"
+}
+
+// SuggestNetbirdDeviceName is the default the create form pre-fills:
+// "<hostname>.ssh-tool". The user can still edit it before saving.
+func (a *App) SuggestNetbirdDeviceName() string {
+	return defaultNetbirdDeviceName()
+}
+
 func (a *App) NetworkProfileCreateNetbird(name, managementURL, deviceName, setupKeyCredentialID string) (*NetworkProfileInfo, error) {
 	if _, ok := pluginPath("netbird"); !ok {
 		return nil, fmt.Errorf("NetBird plugin is not installed - download it first")
