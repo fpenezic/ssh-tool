@@ -1905,6 +1905,20 @@ export function SaveTextFile(suggestedName, content) {
 }
 
 /**
+ * SendPromptNotification posts an OS toast for a blocking prompt. No-op when
+ * the window is focused (you're already looking at ssh-tool), when the toast
+ * setting is off, or when the platform/authorization refuses. Called from the
+ * frontend when an approval / host-key modal appears; the taskbar flash is
+ * handled separately by RequestAttention.
+ * @param {string} title
+ * @param {string} body
+ * @returns {$CancellablePromise<void>}
+ */
+export function SendPromptNotification(title, body) {
+    return $Call.ByID(2460147150, title, body);
+}
+
+/**
  * SetConnectionPassword stores a per-connection password in the vault and
  * records the vault-key reference on the connection row.
  * @param {string} connectionID

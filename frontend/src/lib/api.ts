@@ -922,6 +922,7 @@ export const api = {
   appWslExePath: () => G.AppWslExePath() as unknown as Promise<string>,
   requestAttention: () => G.RequestAttention(),
   clearAttention: () => G.ClearAttention(),
+  sendPromptNotification: (title: string, body: string) => G.SendPromptNotification(title, body),
 
   settingsGet: (key: string) => G.SettingsGet(key) as unknown as Promise<string>,
   settingsSet: (key: string, value: string) => G.SettingsSet(key, value),

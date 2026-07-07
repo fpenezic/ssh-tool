@@ -93,6 +93,8 @@ func main() {
 
 	// Expose to the runtime shim so EventsEmit/dialogs find the same App.
 	initRuntime(app)
+	// Ask for notification permission once (macOS needs it; no-op elsewhere).
+	requestNotificationAuth()
 	// And hand the app reference to App so it can open new windows.
 	appInst.app = app
 

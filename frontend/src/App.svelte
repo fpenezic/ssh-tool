@@ -587,6 +587,10 @@
   // Listen for host key challenges emitted by the Go backend during SSH connect.
   EventsOn("host_key_challenge", (data: any) => {
     api.requestAttention().catch(() => {});
+    api.sendPromptNotification(
+      "Host key verification",
+      `Confirm the host key for ${data.hostname ?? "a host"} to continue connecting.`,
+    ).catch(() => {});
     hostKeyStore.set({
       challengeId: data.challenge_id,
       hostname: data.hostname,
@@ -602,6 +606,13 @@
   // LLM (MCP bridge) command-approval requests.
   EventsOn("mcp_approval_request", (data: any) => {
     api.requestAttention().catch(() => {});
+    const verb = data.kind === "connect" ? "open a connection"
+      : data.kind === "type" ? "type into the terminal"
+      : "run a command";
+    api.sendPromptNotification(
+      "LLM approval needed",
+      `An LLM wants to ${verb} on ${data.session_name ?? "a session"}.`,
+    ).catch(() => {});
     mcpApprovalStore.enqueue({
       approvalId: data.approval_id,
       sessionId: data.session_id,

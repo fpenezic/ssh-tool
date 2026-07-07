@@ -132,6 +132,7 @@ func buildApp(appInst *App) *application.App {
 		},
 		Services: []application.Service{
 			application.NewService(appInst),
+			application.NewService(notifier),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

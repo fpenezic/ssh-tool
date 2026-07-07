@@ -42,6 +42,7 @@
   // LLM (MCP) bridge access.
   let mcpEnabled = $state<boolean>(false);
   let mcpTcp = $state<boolean>(false);
+  let notificationsEnabled = $state<boolean>(true);
   let mcpReadonlyExtra = $state<string>("");
   let mcpExePath = $state<string>("");
   let mcpWslExePath = $state<string>("");
@@ -321,7 +322,17 @@
     try { mcpReadonlyExtra = (await api.settingsGet("mcp_readonly_extra")) ?? ""; } catch { /* ignore */ }
     try { mcpExePath = (await api.appExePath()) ?? ""; } catch { /* ignore */ }
     try { mcpWslExePath = (await api.appWslExePath()) ?? ""; } catch { /* ignore */ }
+    try {
+      const v = await api.settingsGet("notifications_enabled");
+      notificationsEnabled = v === "" || v === "1" || v === "true"; // default on
+    } catch { /* default on */ }
   });
+
+  async function toggleNotifications(next: boolean) {
+    notificationsEnabled = next;
+    try { await api.settingsSet("notifications_enabled", next ? "1" : "0"); }
+    catch (e) { console.warn("notifications toggle:", e); }
+  }
 
   async function toggleMcp(next: boolean) {
     mcpEnabled = next;
@@ -3948,6 +3959,22 @@
           loopback pipe on Windows) an MCP client can connect to. Nothing is
           exposed to the network, and no session is reachable until you
           explicitly share it with the pane's Share-with-LLM button.
+        </span>
+      </span>
+    </label>
+
+    <label class="toggle">
+      <input
+        type="checkbox"
+        checked={notificationsEnabled}
+        onchange={(e) => toggleNotifications((e.target as HTMLInputElement).checked)}
+      />
+      <span>
+        <strong>Desktop notifications for prompts that need you</strong>
+        <span class="hint inline">
+          - when the app is in the background, pop an OS notification (plus a
+          taskbar flash) for a blocking prompt - an LLM approval request or a
+          host-key confirmation - so you don't leave it waiting unseen.
         </span>
       </span>
     </label>
