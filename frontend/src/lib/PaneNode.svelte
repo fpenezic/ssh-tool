@@ -6,19 +6,21 @@
   import SftpPane from "./SftpPane.svelte";
   import VncPane from "./VncPane.svelte";
   import PaneNodeSelf from "./PaneNode.svelte";
-  import { paneTabs, sessions, drag, tree, view, type PaneNode } from "./stores.svelte";
+  import { paneTabs, sessions, drag, tree, view, mcpShared, type PaneNode } from "./stores.svelte";
   import { api } from "./api";
   import { copyText, copySensitive } from "./clipboard";
   import {
     IconHost, IconUser, IconLock, IconClipboardCopy, IconFolder,
     IconRotateCw, IconSplitH, IconSplitV, IconX, IconBroadcast,
     IconActivity, IconGlobe, IconTunnel, IconSearch, IconSettings, IconVpn,
+    IconTerminal,
   } from "./iconMap";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
   import { focusActiveTerminal } from "./terminalFocus";
   import HttpModal from "./HttpModal.svelte";
   import TunnelPopover from "./TunnelPopover.svelte";
+  import LlmSharePopover from "./LlmSharePopover.svelte";
   import { isMobile } from "./platform";
 
   interface Props {
@@ -251,6 +253,7 @@
   );
   let showHttp = $state(false);
   let showTunnels = $state(false);
+  let showLlmShare = $state(false);
 
   // Live count of forwards that are currently listening on this
   // pane's session. Shown as a small badge on the tunnels button so
@@ -533,6 +536,22 @@
                   connectionId={paneSession.connectionId}
                   sessionId={paneSession.status === "connected" ? paneSession.sessionId : ""}
                   onClose={() => (showTunnels = false)}
+                />
+              {/if}
+            </div>
+            <div class="tunnel-anchor">
+              <button
+                class="llm-share"
+                class:has-active={paneSession?.status === "connected" && mcpShared.has(paneSession.sessionId)}
+                title="Share this session with an LLM (MCP)"
+                onclick={(e) => { e.stopPropagation(); showLlmShare = !showLlmShare; }}
+              >
+                <IconTerminal size={13} />
+              </button>
+              {#if showLlmShare && paneSession}
+                <LlmSharePopover
+                  sessionId={paneSession.status === "connected" ? paneSession.sessionId : ""}
+                  onClose={() => (showLlmShare = false)}
                 />
               {/if}
             </div>
@@ -860,6 +879,7 @@
   .pane-actions button.http      { color: var(--sapphire); }
   .pane-actions button.tunnels   { color: var(--lavender); }
   .pane-actions button.tunnels.has-active { color: var(--green); }
+  .pane-actions button.llm-share.has-active { color: var(--blue); }
   .tunnel-anchor { position: relative; display: inline-flex; }
   .pane-actions button.close:hover {
     background: var(--red);

@@ -3947,7 +3947,7 @@
           - starts a local-only bridge (a unix socket on Linux/macOS, a
           loopback pipe on Windows) an MCP client can connect to. Nothing is
           exposed to the network, and no session is reachable until you
-          explicitly share it from a session's tunnels menu.
+          explicitly share it with the pane's Share-with-LLM button.
         </span>
       </span>
     </label>
@@ -3977,9 +3977,10 @@
       </p>
 
       <p class="hint">
-        Then share a session: open its tunnels menu (cable button) and pick
-        <strong>Share with LLM</strong>. The LLM sees only shared sessions, and
-        can also search and open your saved connections (with your approval).
+        Then share a session: click the <strong>Share with LLM</strong> button
+        in the pane toolbar (terminal icon, next to tunnels). The LLM sees only
+        shared sessions, and can also search and open your saved connections
+        (with your approval).
       </p>
 
       <label class="toggle">

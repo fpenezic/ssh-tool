@@ -28,8 +28,8 @@ in alpha upstream.
   it can help you debug - read what's on screen, pull logs, propose and
   run commands. It's off by default: enable it under
   **Settings -> LLM (MCP) access**, register ssh-tool once with your LLM
-  client, then share a specific session from its tunnels menu
-  (**Share with LLM**, read-only or read+run). The registration command
+  client, then share a specific session with the **Share with LLM**
+  button in the pane toolbar (read-only or read+run). The registration command
   is shown for Claude Code and as an `mcp.json` block for LM Studio (any
   MCP client works the same way). The bridge is local-only (a unix
   socket on Linux/macOS, a loopback pipe on Windows) - nothing is

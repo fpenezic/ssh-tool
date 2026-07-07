@@ -799,11 +799,12 @@ Setup, once:
 
 Then, per session:
 
-3. Connect the session, open its tunnels popover (cable button) and
-   pick **Share with LLM** - *Read only* (the LLM can read scrollback
-   and run allowlisted read-only commands) or *Read + run* (adds the
-   ability to run other commands and type into the terminal, each
-   gated). The LLM only ever sees sessions you have shared.
+3. Connect the session and click the **Share with LLM** button in the
+   pane toolbar (the terminal-icon button next to tunnels) - *Read only*
+   (the LLM can read scrollback and run allowlisted read-only commands)
+   or *Read + run* (adds the ability to run other commands and type into
+   the terminal, each gated). The button turns blue while the session is
+   shared. The LLM only ever sees sessions you have shared.
 
 What the LLM can do:
 
