@@ -1831,6 +1831,99 @@ export class LocalShellOpenResult {
 }
 
 /**
+ * McpActivity is one recorded LLM action, surfaced to the activity panel.
+ */
+export class McpActivity {
+    /**
+     * Creates a new McpActivity instance.
+     * @param {Partial<McpActivity>} [$$source = {}] - The source object to create the McpActivity.
+     */
+    constructor($$source = {}) {
+        if (!("seq" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["seq"] = 0;
+        }
+        if (!("ts" in $$source)) {
+            /**
+             * unix seconds
+             * @member
+             * @type {number}
+             */
+            this["ts"] = 0;
+        }
+        if (!("session_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["session_id"] = "";
+        }
+        if (!("session" in $$source)) {
+            /**
+             * friendly name at the time
+             * @member
+             * @type {string}
+             */
+            this["session"] = "";
+        }
+        if (!("kind" in $$source)) {
+            /**
+             * run | type | connect | read
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("command" in $$source)) {
+            /**
+             * command / typed text / connection label
+             * @member
+             * @type {string}
+             */
+            this["command"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["output"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * "ok" | "error" | "" (n/a)
+             * @member
+             * @type {string | undefined}
+             */
+            this["exit"] = undefined;
+        }
+        if (!("gate" in $$source)) {
+            /**
+             * auto | approved | denied | n/a
+             * @member
+             * @type {string}
+             */
+            this["gate"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new McpActivity instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {McpActivity}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new McpActivity(/** @type {Partial<McpActivity>} */($$parsedSource));
+    }
+}
+
+/**
  * McpGrantInfo is the IPC-friendly view of a shared session.
  */
 export class McpGrantInfo {

@@ -13,8 +13,9 @@
     // Empty when the pane has no live session (controls disable).
     sessionId: string;
     onClose: () => void;
+    onViewActivity?: () => void;
   }
-  let { sessionId, onClose }: Props = $props();
+  let { sessionId, onClose, onViewActivity }: Props = $props();
 
   let bridgeOn = $state(false);
   let level = $state<"" | McpGrantLevel>("");
@@ -98,6 +99,10 @@
       <button class="btn stop" onclick={unshare}><IconStop size={11} /> Stop</button>
     </div>
   {/if}
+
+  {#if bridgeOn && onViewActivity}
+    <button class="link activity" onclick={onViewActivity}>View LLM activity ›</button>
+  {/if}
 </div>
 
 <style>
@@ -137,4 +142,9 @@
     cursor: pointer; font: inherit; font-size: 0.78rem;
     padding: 0.25rem 0; text-decoration: underline;
   }
+  .link.activity {
+    display: block; margin-top: 0.5rem; padding-top: 0.4rem;
+    border-top: 1px solid var(--surface0); text-decoration: none; width: 100%; text-align: left;
+  }
+  .link.activity:hover { color: var(--lavender); }
 </style>

@@ -21,6 +21,7 @@
   import HttpModal from "./HttpModal.svelte";
   import TunnelPopover from "./TunnelPopover.svelte";
   import LlmSharePopover from "./LlmSharePopover.svelte";
+  import McpActivityPanel from "./McpActivityPanel.svelte";
   import { isMobile } from "./platform";
 
   interface Props {
@@ -254,6 +255,7 @@
   let showHttp = $state(false);
   let showTunnels = $state(false);
   let showLlmShare = $state(false);
+  let showLlmActivity = $state(false);
 
   // Live count of forwards that are currently listening on this
   // pane's session. Shown as a small badge on the tunnels button so
@@ -552,6 +554,13 @@
                 <LlmSharePopover
                   sessionId={paneSession.status === "connected" ? paneSession.sessionId : ""}
                   onClose={() => (showLlmShare = false)}
+                  onViewActivity={() => { showLlmShare = false; showLlmActivity = true; }}
+                />
+              {/if}
+              {#if showLlmActivity && paneSession}
+                <McpActivityPanel
+                  sessionId={paneSession.status === "connected" ? paneSession.sessionId : ""}
+                  onClose={() => (showLlmActivity = false)}
                 />
               {/if}
             </div>

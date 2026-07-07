@@ -39,6 +39,7 @@ export {
     LoadTextFileResult,
     LocalShellInfo,
     LocalShellOpenResult,
+    McpActivity,
     McpGrantInfo,
     NetbirdConfig,
     NetworkProfileInfo,

@@ -15,7 +15,8 @@
   import { errMsg } from "./connectErrors";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
-  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn } from "./iconMap";
+  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot } from "./iconMap";
+  import McpActivityPanel from "./McpActivityPanel.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
   import { terminalPrefs } from "./terminalPrefs.svelte";
   import type { ServerStats } from "./api";
@@ -38,6 +39,8 @@
   // a hidden detached window might still hold a session with a live
   // forward. 3s matches the per-pane PaneNode poll cadence.
   let tunnelCount = $state(0);
+  let mcpBridgeOn = $state(false);
+  let showMcpActivity = $state(false);
   let tunnelTimer: ReturnType<typeof setInterval> | null = null;
 
   // Vault state tracked here so the pill below can show locked /
@@ -91,6 +94,7 @@
     tunnelTimer = setInterval(refreshTunnels, 3000);
     refreshVault();
     unsubVault = EventsOn("vault_locked", () => { vaultLocked = true; });
+    api.settingsGet("mcp_bridge_enabled").then((v) => { mcpBridgeOn = v === "1" || v === "true"; }).catch(() => {});
   });
   onDestroy(() => {
     if (tunnelTimer) clearInterval(tunnelTimer);
@@ -392,6 +396,21 @@
     </button>
   {/if}
 
+  {#if mcpBridgeOn}
+    <div class="mcp-anchor">
+      <button
+        class="seg mcp"
+        title="LLM activity - what shared sessions the LLM has done"
+        onclick={() => (showMcpActivity = !showMcpActivity)}
+      >
+        <IconBot size={11} />
+      </button>
+      {#if showMcpActivity}
+        <McpActivityPanel placement="up" onClose={() => (showMcpActivity = false)} />
+      {/if}
+    </div>
+  {/if}
+
   {#if broadcast.totalMembers() > 1}
     <span class="seg bcast" title="{broadcast.totalMembers()} sessions across all broadcast groups">
       <IconBroadcast size={11} />
@@ -562,6 +581,8 @@
     white-space: nowrap;
   }
   .seg.tunnels { color: var(--green); }
+  .seg.mcp { color: var(--blue); }
+  .mcp-anchor { position: relative; display: inline-flex; }
   .seg.sync-ahead {
     color: var(--blue);
     cursor: pointer;

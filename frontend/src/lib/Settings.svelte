@@ -43,6 +43,7 @@
   let mcpEnabled = $state<boolean>(false);
   let mcpTcp = $state<boolean>(false);
   let notificationsEnabled = $state<boolean>(true);
+  let mcpAuditEnabled = $state<boolean>(true);
   let mcpReadonlyExtra = $state<string>("");
   let mcpExePath = $state<string>("");
   let mcpWslExePath = $state<string>("");
@@ -326,12 +327,22 @@
       const v = await api.settingsGet("notifications_enabled");
       notificationsEnabled = v === "" || v === "1" || v === "true"; // default on
     } catch { /* default on */ }
+    try {
+      const v = await api.settingsGet("mcp_audit_enabled");
+      mcpAuditEnabled = v === "" || v === "1" || v === "true"; // default on
+    } catch { /* default on */ }
   });
 
   async function toggleNotifications(next: boolean) {
     notificationsEnabled = next;
     try { await api.settingsSet("notifications_enabled", next ? "1" : "0"); }
     catch (e) { console.warn("notifications toggle:", e); }
+  }
+
+  async function toggleMcpAudit(next: boolean) {
+    mcpAuditEnabled = next;
+    try { await api.settingsSet("mcp_audit_enabled", next ? "1" : "0"); }
+    catch (e) { console.warn("mcp audit toggle:", e); }
   }
 
   async function toggleMcp(next: boolean) {
@@ -3975,6 +3986,23 @@
           - when the app is in the background, pop an OS notification (plus a
           taskbar flash) for a blocking prompt - an LLM approval request or a
           host-key confirmation - so you don't leave it waiting unseen.
+        </span>
+      </span>
+    </label>
+
+    <label class="toggle">
+      <input
+        type="checkbox"
+        checked={mcpAuditEnabled}
+        onchange={(e) => toggleMcpAudit((e.target as HTMLInputElement).checked)}
+      />
+      <span>
+        <strong>Keep a persistent log of LLM activity (audit)</strong>
+        <span class="hint inline">
+          - record every command the LLM runs, types or connects (with output)
+          to the local audit log so it survives restarts. The live LLM-activity
+          panel (robot icon in the status bar / pane toolbar) works either way;
+          this only controls the durable copy.
         </span>
       </span>
     </label>
