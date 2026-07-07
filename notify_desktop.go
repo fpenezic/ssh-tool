@@ -23,20 +23,25 @@ var notifier = notifications.New()
 // handled separately by RequestAttention.
 func (a *App) SendPromptNotification(title, body string) {
 	if a.windowFocused.Load() {
+		log.Printf("notification: skipped (window focused): %s", title)
 		return
 	}
 	if !a.notificationsEnabled() {
+		log.Printf("notification: skipped (disabled): %s", title)
 		return
 	}
 	if notifier == nil {
+		log.Printf("notification: skipped (no notifier): %s", title)
 		return
 	}
 	if err := notifier.SendNotification(notifications.NotificationOptions{
 		Title: title,
 		Body:  body,
 	}); err != nil {
-		log.Printf("notification: %v", err)
+		log.Printf("notification: send failed: %v", err)
+		return
 	}
+	log.Printf("notification: sent %q", title)
 }
 
 // notificationsEnabled reads the toggle (default true when unset).
@@ -58,7 +63,10 @@ func requestNotificationAuth() {
 	if notifier == nil {
 		return
 	}
-	if _, err := notifier.RequestNotificationAuthorization(); err != nil {
-		log.Printf("notification auth: %v", err)
+	ok, err := notifier.RequestNotificationAuthorization()
+	if err != nil {
+		log.Printf("notification auth: error: %v", err)
+		return
 	}
+	log.Printf("notification auth: granted=%v", ok)
 }

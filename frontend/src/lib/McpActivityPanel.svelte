@@ -121,16 +121,10 @@
 </div>
 
 <style>
+  /* Shared visual shell for both placements. */
   .pop {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
     z-index: 200;
-  }
-  .pop.up {
-    top: auto;
-    bottom: calc(100% + 4px);
-    width: min(560px, 90vw);
+    width: min(560px, 96vw);
     max-height: 65vh;
     display: flex;
     flex-direction: column;
@@ -138,7 +132,21 @@
     border: 1px solid var(--surface0);
     border-radius: 6px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-    font-size: 0.78rem;
+    font-size: 0.82rem;
+  }
+  /* Toolbar (pane): drop below the anchor, aligned to its right edge. */
+  .pop:not(.up) {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+  }
+  /* Status bar (global): pin to the bottom-right of the window so a
+     560px panel never overflows off the left edge of a right-aligned
+     status-bar button. */
+  .pop.up {
+    position: fixed;
+    right: 8px;
+    bottom: 34px;
   }
   header {
     display: flex; align-items: center; justify-content: space-between;
@@ -153,11 +161,11 @@
   .controls { display: flex; gap: 0.4rem; padding: 0.4rem 0.6rem; }
   .search {
     flex: 1; background: var(--mantle); border: 1px solid var(--surface1);
-    border-radius: 3px; color: var(--text); padding: 0.2rem 0.4rem; font: inherit; font-size: 0.75rem;
+    border-radius: 3px; color: var(--text); padding: 0.25rem 0.4rem; font: inherit; font-size: 0.82rem;
   }
   .controls select {
     background: var(--mantle); border: 1px solid var(--surface1);
-    border-radius: 3px; color: var(--text); font: inherit; font-size: 0.75rem;
+    border-radius: 3px; color: var(--text); font: inherit; font-size: 0.82rem;
   }
   .empty { padding: 1rem 0.6rem; color: var(--overlay0); text-align: center; }
   .list { list-style: none; margin: 0; padding: 0.2rem; overflow-y: auto; }
@@ -174,8 +182,8 @@
   .chev.open { transform: rotate(90deg); }
   .chev-spacer { width: 11px; flex-shrink: 0; }
   .kind {
-    flex-shrink: 0; padding: 0.02rem 0.35rem; border-radius: 3px;
-    font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+    flex-shrink: 0; padding: 0.05rem 0.4rem; border-radius: 3px;
+    font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
     background: var(--surface1); color: var(--subtext0);
   }
   .kind.run { background: var(--blue); color: var(--base); }
@@ -185,21 +193,21 @@
   .sess { color: var(--overlay1); flex-shrink: 0; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cmd {
     flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-family: ui-monospace, monospace; font-size: 0.74rem;
+    font-family: ui-monospace, monospace; font-size: 0.8rem;
   }
-  .exit { flex-shrink: 0; font-size: 0.66rem; padding: 0 0.25rem; border-radius: 2px; }
+  .exit { flex-shrink: 0; font-size: 0.72rem; padding: 0 0.25rem; border-radius: 2px; }
   .exit.ok { color: var(--green); }
   .exit.err { color: var(--red); }
   .gate {
-    flex-shrink: 0; font-size: 0.64rem; padding: 0.02rem 0.3rem; border-radius: 999px;
+    flex-shrink: 0; font-size: 0.7rem; padding: 0.05rem 0.35rem; border-radius: 999px;
   }
   .gate.auto { background: var(--surface1); color: var(--overlay1); }
   .gate.approved { background: var(--green); color: var(--base); }
   .gate.denied { background: var(--red); color: var(--base); }
   .output {
-    margin: 0 0.4rem 0.4rem 2rem; padding: 0.4rem 0.5rem;
+    margin: 0 0.4rem 0.4rem 2rem; padding: 0.45rem 0.55rem;
     background: var(--crust); border: 1px solid var(--surface1); border-radius: 4px;
-    font-family: ui-monospace, monospace; font-size: 0.7rem; color: var(--subtext1);
-    white-space: pre-wrap; word-break: break-all; max-height: 22vh; overflow-y: auto;
+    font-family: ui-monospace, monospace; font-size: 0.78rem; color: var(--subtext1);
+    white-space: pre-wrap; word-break: break-all; max-height: 30vh; overflow-y: auto;
   }
 </style>
