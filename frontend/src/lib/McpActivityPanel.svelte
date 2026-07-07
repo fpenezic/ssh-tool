@@ -19,14 +19,26 @@
   }
   let { sessionId = "", placement = "down", onClose }: Props = $props();
 
+  // Oldest first, newest at the bottom - reads like a terminal. The IPC
+  // returns newest-first, so reverse on load; live events append.
   let items = $state<McpActivity[]>([]);
   let kindFilter = $state<"" | "run" | "type" | "connect" | "read">("");
   let search = $state("");
   let expanded = $state<Set<number>>(new Set());
   let unsub: (() => void) | null = null;
+  let listEl = $state<HTMLElement | null>(null);
+
+  function scrollToBottom() {
+    // Wait a tick so the new row is in the DOM before measuring.
+    requestAnimationFrame(() => { if (listEl) listEl.scrollTop = listEl.scrollHeight; });
+  }
 
   async function load() {
-    try { items = (await api.mcpActivityList(sessionId)) ?? []; } catch { /* ignore */ }
+    try {
+      const rows = (await api.mcpActivityList(sessionId)) ?? [];
+      items = rows.reverse(); // newest-first -> oldest-first
+      scrollToBottom();
+    } catch { /* ignore */ }
   }
 
   onMount(() => {
@@ -34,9 +46,10 @@
     unsub = EventsOn("mcp_activity", (e: any) => {
       const a = e as McpActivity;
       if (sessionId && a.session_id !== sessionId) return;
-      // Newest first; prepend, dedupe by seq, cap to match the backend ring.
       if (items.some((x) => x.seq === a.seq)) return;
-      items = [a, ...items].slice(0, 500);
+      // Append (newest at the bottom), cap to the backend ring size.
+      items = [...items, a].slice(-500);
+      scrollToBottom();
     });
   });
   onDestroy(() => { if (unsub) unsub(); });
@@ -89,7 +102,7 @@
   {#if filtered.length === 0}
     <div class="empty">No LLM activity{search || kindFilter ? " matches the filter" : " yet"}.</div>
   {:else}
-    <ul class="list">
+    <ul class="list" bind:this={listEl}>
       {#each filtered as a (a.seq)}
         <li class="row">
           <button
