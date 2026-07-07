@@ -88,9 +88,14 @@ type App struct {
 	// approvals). See app_mcp.go. Nil-safe: initialised in initialise().
 	mcp *mcpState
 	// mcpListener is the local socket the bridge subprocess connects to; nil
-	// when the bridge is disabled. Guarded by mcpListenerMu. Desktop only.
-	mcpListenerMu sync.Mutex
-	mcpListener   net.Listener
+	// when the bridge is disabled. mcpTCPListener is the optional loopback TCP
+	// listener for cross-boundary clients (WSL Claude Code -> Windows app), used
+	// only when mcp_bridge_tcp is on; it requires a token on the first line.
+	// All guarded by mcpListenerMu. Desktop only.
+	mcpListenerMu  sync.Mutex
+	mcpListener    net.Listener
+	mcpTCPListener net.Listener
+	mcpTCPToken    string
 
 	pendingHostKeysMu sync.Mutex
 	pendingHostKeys   map[string]chan bool
@@ -4031,6 +4036,9 @@ func (a *App) SettingsSet(key, value string) error {
 		} else {
 			a.stopMcpListener()
 		}
+	}
+	if key == "mcp_bridge_tcp" {
+		a.setMcpTCP(value == "1" || value == "true")
 	}
 	return nil
 }

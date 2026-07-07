@@ -334,6 +334,17 @@ These still bite. The archive of older / now-handled traps lives in
     unknown -> prompt). Scrollback returned to the LLM is framed as
     UNTRUSTED data - it is not an instruction channel; only a run/type
     tool call touches the host, and that is allowlisted-or-gated.
+    Tools: list_sessions, read_terminal, run, type_into_terminal, plus
+    list_connections (name + folder path only, Sensitive connections
+    omitted) and connect (approval-gated `SshConnect` then auto-share).
+    WSL->Windows: an optional token-guarded loopback-TCP leg
+    (`mcp_bridge_tcp`, `startMcpTCP`, addr+token in
+    `<DataDir>/mcp-bridge.tcp`) - the bridge's `dialMcp` prefers it when
+    present (WSL2 forwards localhost to the host but can't see the pipe).
+    Do NOT add `/mnt/c` exec paths for this - the Windows `.exe` is the
+    bridge, launched from WSL, and it talks to the Windows app over
+    loopback; the app stays WSL-agnostic. A shared session shows a badge
+    on its terminal tab (mcpShared store, fed by `mcp_grants_changed`).
 
 ### Android / mobile gotchas
 

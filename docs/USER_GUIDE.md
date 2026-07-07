@@ -782,9 +782,19 @@ Setup, once:
    to shared sessions*. This starts a local-only bridge (a unix
    socket on Linux/macOS, a loopback pipe on Windows). Nothing is
    exposed to the network.
-2. Register ssh-tool with your LLM client using the exact command
-   shown on that page, e.g.
-   `claude mcp add ssh-tool -- /path/to/ssh-tool --mcp-bridge`.
+2. Register ssh-tool with your LLM client. The Settings page shows
+   the exact command with your binary's path. For **Claude Code**:
+   `claude mcp add ssh-tool -- /path/to/ssh-tool --mcp-bridge`. For
+   **LM Studio** (or any MCP client), point the server's `command`
+   at the same binary with the `--mcp-bridge` argument - the Settings
+   page shows a ready-to-paste `mcp.json` block.
+
+   **Running the client in WSL while ssh-tool runs on Windows?** Turn
+   on *Also listen on loopback TCP* in the LLM settings. WSL forwards
+   `localhost` to Windows but can't see the Windows pipe, so the
+   bridge uses a token-guarded `127.0.0.1` port instead. Register the
+   Windows binary from WSL:
+   `claude mcp add ssh-tool -- /mnt/c/path/to/ssh-tool.exe --mcp-bridge`.
 
 Then, per session:
 
@@ -808,9 +818,16 @@ What the LLM can do:
 - **type_into_terminal** - on approval, types text into your live
   terminal **without pressing Enter**, so you review it and submit it
   yourself.
+- **list_connections / connect** - the LLM can also search your saved
+  connections (by name or folder only - hostnames aren't exposed
+  until a connect) and open one. Opening a session always asks you to
+  approve first, and the new session is then shared with the LLM
+  automatically so it can start working.
 
-Shared sessions are listed (and revocable) in Settings, and every
-grant is dropped automatically when the session disconnects.
+A session shared with the LLM shows a small terminal-icon badge on
+its tab, so you can always see at a glance which sessions the LLM can
+see. Shared sessions are listed (and revocable) in Settings, and
+every grant is dropped automatically when the session disconnects.
 
 ### Quick palette shortcut
 

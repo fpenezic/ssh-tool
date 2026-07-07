@@ -8,3 +8,4 @@ package main
 
 func (a *App) startMcpListener() {}
 func (a *App) stopMcpListener()  {}
+func (a *App) setMcpTCP(_ bool)  {}

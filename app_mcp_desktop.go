@@ -3,14 +3,20 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"crypto/subtle"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"ssh-tool/internal/store"
@@ -63,9 +69,84 @@ func (a *App) startMcpListener() {
 	log.Printf("mcp bridge: listening on %s", addr)
 
 	go a.acceptMcp(ln)
+
+	// Optional loopback TCP leg for cross-boundary clients (WSL Claude Code
+	// reaching the Windows app: WSL2 forwards localhost to the host). Guarded
+	// by a token so a random loopback process can't attach. Off by default.
+	if a.boolSetting("mcp_bridge_tcp") {
+		a.startMcpTCP()
+	}
 }
 
-// stopMcpListener tears down the listener (setting toggled off / shutdown).
+// startMcpTCP binds a loopback TCP listener + writes a 0600 "host:port\ntoken"
+// file the bridge reads. Caller holds mcpListenerMu.
+func (a *App) startMcpTCP() {
+	if a.mcpTCPListener != nil {
+		return
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		log.Printf("mcp bridge: tcp listen: %v", err)
+		return
+	}
+	a.mcpTCPToken = uuid.NewString()
+	a.mcpTCPListener = ln
+	if err := os.WriteFile(mcpTCPPath(),
+		[]byte(ln.Addr().String()+"\n"+a.mcpTCPToken), 0o600); err != nil {
+		log.Printf("mcp bridge: write tcp addr file: %v", err)
+	}
+	log.Printf("mcp bridge: tcp listening on %s", ln.Addr())
+	go a.acceptMcpTCP(ln)
+}
+
+// mcpTCPPath is the rendezvous file for the TCP leg (loopback addr + token).
+func mcpTCPPath() string {
+	return filepath.Join(store.DataDir(), "mcp-bridge.tcp")
+}
+
+// acceptMcpTCP accepts loopback TCP connections, requiring the token as the
+// first newline-terminated line before handing off to the MCP server.
+func (a *App) acceptMcpTCP(ln net.Listener) {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		go func(c net.Conn) {
+			defer c.Close()
+			br := bufio.NewReader(c)
+			if !a.checkMcpTCPToken(c, br) {
+				return
+			}
+			// Serve MCP reading from br (which may hold bytes buffered past the
+			// token line) and writing to the raw conn.
+			server := a.buildMcpServer()
+			transport := &mcp.IOTransport{Reader: io.NopCloser(br), Writer: c}
+			if err := server.Run(a.ctx, transport); err != nil {
+				log.Printf("mcp bridge (tcp): session ended: %v", err)
+			}
+		}(conn)
+	}
+}
+
+// checkMcpTCPToken reads the first line off br and compares it constant-time to
+// the session token. Enforces a short deadline so a silent client can't pin the
+// goroutine.
+func (a *App) checkMcpTCPToken(c net.Conn, br *bufio.Reader) bool {
+	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
+	line, err := br.ReadString('\n')
+	if err != nil {
+		return false
+	}
+	_ = c.SetReadDeadline(time.Time{}) // clear deadline for the MCP phase
+	got := strings.TrimSpace(line)
+	a.mcpListenerMu.Lock()
+	want := a.mcpTCPToken
+	a.mcpListenerMu.Unlock()
+	return want != "" && subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
+}
+
+// stopMcpListener tears down both listeners (setting toggled off / shutdown).
 func (a *App) stopMcpListener() {
 	a.mcpListenerMu.Lock()
 	defer a.mcpListenerMu.Unlock()
@@ -73,6 +154,32 @@ func (a *App) stopMcpListener() {
 		_ = a.mcpListener.Close()
 		a.mcpListener = nil
 		log.Printf("mcp bridge: stopped")
+	}
+	a.stopMcpTCPLocked()
+}
+
+// stopMcpTCPLocked tears down just the TCP leg. Caller holds mcpListenerMu.
+func (a *App) stopMcpTCPLocked() {
+	if a.mcpTCPListener != nil {
+		_ = a.mcpTCPListener.Close()
+		a.mcpTCPListener = nil
+		a.mcpTCPToken = ""
+		_ = os.Remove(mcpTCPPath())
+		log.Printf("mcp bridge: tcp stopped")
+	}
+}
+
+// SetMcpTCP toggles the loopback TCP leg live (used by the WSL/cross-boundary
+// path). Only meaningful while the bridge is enabled.
+func (a *App) setMcpTCP(on bool) {
+	a.mcpListenerMu.Lock()
+	defer a.mcpListenerMu.Unlock()
+	if on {
+		if a.mcpListener != nil { // bridge running -> add the TCP leg
+			a.startMcpTCP()
+		}
+	} else {
+		a.stopMcpTCPLocked()
 	}
 }
 
@@ -102,10 +209,6 @@ func (a *App) serveMcpConn(conn net.Conn) {
 
 type mcpEmptyArgs struct{}
 
-type mcpSessionIDArgs struct {
-	SessionID string `json:"session_id" jsonschema:"the id of a shared session (from list_sessions)"`
-}
-
 type mcpReadArgs struct {
 	SessionID string `json:"session_id" jsonschema:"the id of a shared session"`
 	MaxBytes  int    `json:"max_bytes,omitempty" jsonschema:"max bytes of scrollback tail to return (default all, capped)"`
@@ -119,6 +222,15 @@ type mcpRunArgs struct {
 type mcpTypeArgs struct {
 	SessionID string `json:"session_id" jsonschema:"the id of a shared session"`
 	Text      string `json:"text" jsonschema:"text to type into the live terminal; no newline is sent, the user reviews and presses Enter"`
+}
+
+type mcpListConnArgs struct {
+	Query string `json:"query,omitempty" jsonschema:"case-insensitive substring to match against connection name or folder path; empty returns all"`
+}
+
+type mcpConnectArgs struct {
+	ConnectionID string `json:"connection_id" jsonschema:"the id of a saved connection (from list_connections)"`
+	Level        string `json:"level,omitempty" jsonschema:"access to grant once connected: read or read-run (default read-run)"`
 }
 
 // buildMcpServer registers the four session tools on a new server instance.
@@ -175,7 +287,48 @@ func (a *App) buildMcpServer() *mcp.Server {
 		return textResult(out), nil, nil
 	})
 
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "list_connections",
+		Description: "Search the user's saved SSH connections by name or folder. Returns " +
+			"connection ids you can pass to connect(). For privacy only the name and folder " +
+			"path are returned - hostnames and other details are not exposed until you connect.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpListConnArgs) (*mcp.CallToolResult, any, error) {
+		conns, err := a.mcpListConnections(in.Query)
+		if err != nil {
+			return errResult(err), nil, nil
+		}
+		return textResult(formatConnections(conns)), nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "connect",
+		Description: "Open an SSH session for a saved connection (from list_connections) and " +
+			"share it with you so you can work on it. The user is asked to approve before the " +
+			"session opens. Returns the new session_id.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpConnectArgs) (*mcp.CallToolResult, any, error) {
+		out, err := a.mcpConnect(in.ConnectionID, in.Level)
+		if err != nil {
+			return errResult(err), nil, nil
+		}
+		return textResult(out), nil, nil
+	})
+
 	return server
+}
+
+func formatConnections(conns []mcpConnectionInfo) string {
+	if len(conns) == 0 {
+		return "No matching connections."
+	}
+	var b []byte
+	for _, c := range conns {
+		loc := c.Folder
+		if loc == "" {
+			loc = "(root)"
+		}
+		b = append(b, []byte(fmt.Sprintf("- %s  [%s]  id=%s\n", c.Name, loc, c.ConnectionID))...)
+	}
+	return string(b)
 }
 
 func textResult(s string) *mcp.CallToolResult {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, mcpApprovalStore, decodePaneLayout, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
+  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, mcpApprovalStore, mcpShared, decodePaneLayout, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
   import { isMobile } from "./lib/platform";
   import { installMobileBackNav } from "./lib/mobileBackNav";
   import { api } from "./lib/api";
@@ -605,6 +605,12 @@
       command: data.command,
     });
   });
+
+  // Keep the "shared with LLM" tab markers in sync.
+  EventsOn("mcp_grants_changed", (data: any) => {
+    mcpShared.setFrom((data as { session_id: string }[]) ?? []);
+  });
+  api.mcpListGrants().then((g) => mcpShared.setFrom(g ?? [])).catch(() => {});
 
   // Load saved layout once at boot so the sidebar comes up at the
   // last-used width instead of the 320 default.

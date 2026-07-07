@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	sshlayer "ssh-tool/internal/ssh"
+	"ssh-tool/internal/store"
 )
 
 // AppExePath returns the absolute path of the running ssh-tool binary, so the
@@ -340,4 +341,129 @@ func (a *App) sessionDisplayName(sessionID string) string {
 		}
 	}
 	return sessionID
+}
+
+// ----- Connection search + connect (find and open a session) -----
+
+// mcpConnectionInfo is what list_connections returns to the LLM. Deliberately
+// SHARE-MINIMAL: name + folder path only, no hostname / port / user / tags /
+// notes, so searching doesn't leak infrastructure detail before a connect.
+type mcpConnectionInfo struct {
+	ConnectionID string `json:"connection_id"`
+	Name         string `json:"name"`
+	Folder       string `json:"folder"` // "/"-joined folder path, "" at root
+}
+
+// mcpListConnections returns saved connections whose name or folder path
+// matches query (case-insensitive substring; empty query returns all). Only
+// exposed when the bridge is enabled. Connections flagged Sensitive are
+// omitted entirely - they never surface to the LLM.
+func (a *App) mcpListConnections(query string) ([]mcpConnectionInfo, error) {
+	conns, err := a.db.ListConnections(nil)
+	if err != nil {
+		return nil, err
+	}
+	paths := a.folderPathIndex()
+	q := strings.ToLower(strings.TrimSpace(query))
+	out := []mcpConnectionInfo{}
+	for _, c := range conns {
+		if c.Sensitive {
+			continue // never expose sensitive connections to the LLM
+		}
+		folder := ""
+		if c.FolderID != nil {
+			folder = paths[*c.FolderID]
+		}
+		if q != "" &&
+			!strings.Contains(strings.ToLower(c.Name), q) &&
+			!strings.Contains(strings.ToLower(folder), q) {
+			continue
+		}
+		out = append(out, mcpConnectionInfo{
+			ConnectionID: c.ID, Name: c.Name, Folder: folder,
+		})
+	}
+	return out, nil
+}
+
+// folderPathIndex builds folderID -> "/"-joined path (e.g. "prod/db"). Cheap
+// enough to recompute per call; the tree is small.
+func (a *App) folderPathIndex() map[string]string {
+	folders, err := a.db.ListFolders()
+	if err != nil {
+		return map[string]string{}
+	}
+	byID := map[string]store.Folder{}
+	for _, f := range folders {
+		byID[f.ID] = f
+	}
+	cache := map[string]string{}
+	var path func(id string, depth int) string
+	path = func(id string, depth int) string {
+		if p, ok := cache[id]; ok {
+			return p
+		}
+		f, ok := byID[id]
+		if !ok || depth > 64 { // guard against a cycle in bad data
+			return ""
+		}
+		var p string
+		if f.ParentID != nil && *f.ParentID != "" {
+			parent := path(*f.ParentID, depth+1)
+			if parent != "" {
+				p = parent + "/" + f.Name
+			} else {
+				p = f.Name
+			}
+		} else {
+			p = f.Name
+		}
+		cache[id] = p
+		return p
+	}
+	for id := range byID {
+		cache[id] = path(id, 0)
+	}
+	return cache
+}
+
+// mcpConnect opens a session for connectionID after the user approves, then
+// auto-shares that session with the LLM at the given level so the LLM can
+// immediately work on it. Requires the bridge enabled; the approval prompt is
+// the gate (opening a session spends credentials and may trigger a host-key
+// prompt). A Sensitive connection is refused.
+func (a *App) mcpConnect(connectionID, level string) (string, error) {
+	lvl := mcpGrantLevel(level)
+	if lvl != mcpGrantReadOnly && lvl != mcpGrantReadRun {
+		lvl = mcpGrantReadRun // default to the more useful level
+	}
+	conn, err := a.db.GetConnection(connectionID)
+	if err != nil || conn == nil {
+		return "", fmt.Errorf("connection not found")
+	}
+	if conn.Sensitive {
+		return "", fmt.Errorf("connection is marked sensitive and cannot be opened by the LLM")
+	}
+
+	folder := ""
+	if conn.FolderID != nil {
+		folder = a.folderPathIndex()[*conn.FolderID]
+	}
+	label := conn.Name
+	if folder != "" {
+		label = folder + "/" + conn.Name
+	}
+	if a.requestApproval("", label, "connect", label) != mcpDecisionRun {
+		return "", fmt.Errorf("connect denied by user")
+	}
+
+	res, err := a.SshConnect(connectionID)
+	if err != nil {
+		return "", fmt.Errorf("connect: %w", err)
+	}
+	// Auto-share the freshly opened session so the LLM can act on it. Ignore a
+	// share error (session exists; sharing is best-effort convenience).
+	_ = a.McpShareSession(res.SessionID, string(lvl))
+	return fmt.Sprintf("connected: session_id=%s (%s), shared at level=%s",
+		res.SessionID, label, lvl), nil
 }

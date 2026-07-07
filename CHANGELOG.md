@@ -28,16 +28,23 @@ in alpha upstream.
   it can help you debug - read what's on screen, pull logs, propose and
   run commands. It's off by default: enable it under
   **Settings -> LLM (MCP) access**, register ssh-tool once with your LLM
-  client (the exact `claude mcp add ...` command is shown), then share a
-  specific session from its tunnels menu (**Share with LLM**, read-only
-  or read+run). The bridge is local-only (a unix socket on Linux/macOS,
-  a loopback pipe on Windows) - nothing is exposed to the network, and
-  no session is reachable until you share it. Read-only commands run on
-  their own; anything that could change state pops an approval prompt
-  where you Run it, type it into your terminal without pressing Enter, or
-  Deny. Terminal output handed to the LLM is treated as untrusted data,
-  never as instructions. Grants are cleared when the session
-  disconnects. Desktop only.
+  client, then share a specific session from its tunnels menu
+  (**Share with LLM**, read-only or read+run). The registration command
+  is shown for Claude Code and as an `mcp.json` block for LM Studio (any
+  MCP client works the same way). The bridge is local-only (a unix
+  socket on Linux/macOS, a loopback pipe on Windows) - nothing is
+  exposed to the network, and no session is reachable until you share
+  it. Read-only commands run on their own; anything that could change
+  state pops an approval prompt where you Run it, type it into your
+  terminal without pressing Enter, or Deny. The LLM can also **search
+  your saved connections and open one** (by name/folder only - hostnames
+  aren't exposed until a connect, which you approve, and the new session
+  is then shared automatically). A shared session shows a badge on its
+  tab so you always know what the LLM can see. If your LLM client runs
+  in WSL while ssh-tool runs on Windows, enable the optional
+  token-guarded loopback-TCP listener. Terminal output handed to the LLM
+  is treated as untrusted data, never as instructions. Grants are
+  cleared when the session disconnects. Desktop only.
 
 ## [0.51.0] - Credential expiry + dark dropdowns on Linux
 

@@ -8,36 +8,55 @@
 
   interface Props {
     sessionName: string;
-    kind: "run" | "type";
+    kind: "run" | "type" | "connect";
     command: string;
     queueLength?: number;
     onRespond: (decision: McpDecision) => void;
   }
   let { sessionName, kind, command, queueLength = 0, onRespond }: Props = $props();
+
+  const title = $derived(
+    kind === "run" ? "run a command"
+    : kind === "type" ? "type into the terminal"
+    : "open a connection",
+  );
 </script>
 
 <div class="overlay" role="dialog" aria-modal="true">
   <div class="modal">
     <header>
       <span class="icon"><IconTerminal size={18} /></span>
-      <h1>LLM wants to {kind === "run" ? "run a command" : "type into the terminal"}</h1>
+      <h1>LLM wants to {title}</h1>
     </header>
-    <p>
-      An external LLM is requesting to
-      {kind === "run" ? "run this command on" : "type this into"}
-      <strong>{sessionName}</strong>. Review it before allowing.
-    </p>
-    <pre class="cmd">{command}</pre>
+    {#if kind === "connect"}
+      <p>
+        An external LLM is requesting to open an SSH session for
+        <strong>{command}</strong> and work on it. Approving spends the saved
+        credentials for this connection.
+      </p>
+    {:else}
+      <p>
+        An external LLM is requesting to
+        {kind === "run" ? "run this command on" : "type this into"}
+        <strong>{sessionName}</strong>. Review it before allowing.
+      </p>
+      <pre class="cmd">{command}</pre>
+    {/if}
 
     {#if kind === "type"}
       <p class="hint">
         On approval the text is typed at the prompt without pressing Enter -
         you review it in the terminal and submit it yourself.
       </p>
-    {:else}
+    {:else if kind === "run"}
       <p class="hint">
         This command isn't on the read-only allowlist, so it needs your
         approval. It runs on a side channel and its output goes back to the LLM.
+      </p>
+    {:else}
+      <p class="hint">
+        The session opens as if you clicked Connect, and is then shared with the
+        LLM. A host-key prompt may still appear the first time.
       </p>
     {/if}
 
@@ -51,6 +70,8 @@
       <button onclick={() => onRespond("deny")}>Deny</button>
       {#if kind === "run"}
         <button class="primary" onclick={() => onRespond("run")}>Run command</button>
+      {:else if kind === "connect"}
+        <button class="primary" onclick={() => onRespond("run")}>Connect</button>
       {:else}
         <button class="primary" onclick={() => onRespond("type")}>Type into terminal</button>
       {/if}

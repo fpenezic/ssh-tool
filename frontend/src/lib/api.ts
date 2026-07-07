@@ -1421,7 +1421,7 @@ export interface McpApprovalRequest {
   approval_id: string;
   session_id: string;
   session_name: string;
-  kind: "run" | "type";
+  kind: "run" | "type" | "connect";
   command: string;
 }
 

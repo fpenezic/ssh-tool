@@ -41,6 +41,7 @@
 
   // LLM (MCP) bridge access.
   let mcpEnabled = $state<boolean>(false);
+  let mcpTcp = $state<boolean>(false);
   let mcpReadonlyExtra = $state<string>("");
   let mcpExePath = $state<string>("");
   let externalTerminal = $state<"windowsterminal" | "powershell" | "cmd" | "wsl">("windowsterminal");
@@ -312,6 +313,10 @@
       const v = await api.settingsGet("mcp_bridge_enabled");
       mcpEnabled = v === "1" || v === "true";
     } catch { /* default off */ }
+    try {
+      const v = await api.settingsGet("mcp_bridge_tcp");
+      mcpTcp = v === "1" || v === "true";
+    } catch { /* default off */ }
     try { mcpReadonlyExtra = (await api.settingsGet("mcp_readonly_extra")) ?? ""; } catch { /* ignore */ }
     try { mcpExePath = (await api.appExePath()) ?? ""; } catch { /* ignore */ }
   });
@@ -320,6 +325,12 @@
     mcpEnabled = next;
     try { await api.settingsSet("mcp_bridge_enabled", next ? "1" : "0"); }
     catch (e) { console.warn("mcp toggle:", e); }
+  }
+
+  async function toggleMcpTcp(next: boolean) {
+    mcpTcp = next;
+    try { await api.settingsSet("mcp_bridge_tcp", next ? "1" : "0"); }
+    catch (e) { console.warn("mcp tcp toggle:", e); }
   }
 
   async function saveMcpReadonlyExtra() {
@@ -3942,13 +3953,50 @@
     {#if mcpEnabled}
       <h3 style="margin-top:1.2rem">Register with your LLM client</h3>
       <p class="hint">
-        Add ssh-tool as an MCP server once. For Claude Code:
+        Add ssh-tool as an MCP server once. It runs as a small bridge process
+        the client launches (<code>{mcpExePath || "ssh-tool"} --mcp-bridge</code>).
       </p>
+
+      <p class="hint"><strong>Claude Code:</strong></p>
       <pre class="cmd-block">claude mcp add ssh-tool -- {mcpExePath || "ssh-tool"} --mcp-bridge</pre>
+
+      <p class="hint"><strong>LM Studio</strong> (Program -> Edit mcp.json):</p>
+      <pre class="cmd-block">{`{
+  "mcpServers": {
+    "ssh-tool": {
+      "command": "${mcpExePath || "ssh-tool"}",
+      "args": ["--mcp-bridge"]
+    }
+  }
+}`}</pre>
+      <p class="hint">
+        Any MCP client works the same way - point its "command" at the path
+        above with the <code>--mcp-bridge</code> argument.
+      </p>
+
       <p class="hint">
         Then share a session: open its tunnels menu (cable button) and pick
-        <strong>Share with LLM</strong>. The LLM sees only shared sessions.
+        <strong>Share with LLM</strong>. The LLM sees only shared sessions, and
+        can also search and open your saved connections (with your approval).
       </p>
+
+      <label class="toggle">
+        <input
+          type="checkbox"
+          checked={mcpTcp}
+          onchange={(e) => toggleMcpTcp((e.target as HTMLInputElement).checked)}
+        />
+        <span>
+          <strong>Also listen on loopback TCP (for WSL / cross-boundary clients)</strong>
+          <span class="hint inline">
+            - needed when the LLM client runs in WSL but ssh-tool runs on
+            Windows (WSL forwards localhost to the host but can't see the
+            Windows pipe). Binds 127.0.0.1 only, guarded by a token the bridge
+            reads from a private file. Leave off if the client runs on the same
+            OS as ssh-tool.
+          </span>
+        </span>
+      </label>
 
       <h3 style="margin-top:1.2rem">Auto-run allowlist</h3>
       <p class="hint">
