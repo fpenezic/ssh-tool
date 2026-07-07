@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, mcpApprovalStore, mcpShared, decodePaneLayout, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
+  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, mcpApprovalStore, mcpShared, mcpBridge, decodePaneLayout, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
   import { isMobile } from "./lib/platform";
   import { installMobileBackNav } from "./lib/mobileBackNav";
   import { api } from "./lib/api";
@@ -310,10 +310,12 @@
   let quitPromptCount = $state<number | null>(null);
   EventsOn("quit_request", (count: any) => {
     quitPromptCount = typeof count === "number" ? count : Number(count ?? 0);
+    api.requestAttention().catch(() => {});
   });
 
   async function confirmQuitAccept() {
     quitPromptCount = null;
+    api.clearAttention().catch(() => {});
     try { await api.confirmQuit(); } catch (e) { console.error("confirm quit failed", e); }
   }
 
@@ -530,6 +532,7 @@
   }
   function confirmQuitCancel() {
     quitPromptCount = null;
+    api.clearAttention().catch(() => {});
   }
 
   // Dynamic-inventory folder refresh notification - reload entries
@@ -583,6 +586,11 @@
 
   // Listen for host key challenges emitted by the Go backend during SSH connect.
   EventsOn("host_key_challenge", (data: any) => {
+    api.requestAttention().catch(() => {});
+    api.sendPromptNotification(
+      "Host key verification",
+      `Confirm the host key for ${data.hostname ?? "a host"} to continue connecting.`,
+    ).catch(() => {});
     hostKeyStore.set({
       challengeId: data.challenge_id,
       hostname: data.hostname,
@@ -597,6 +605,14 @@
 
   // LLM (MCP bridge) command-approval requests.
   EventsOn("mcp_approval_request", (data: any) => {
+    api.requestAttention().catch(() => {});
+    const verb = data.kind === "connect" ? "open a connection"
+      : data.kind === "type" ? "type into the terminal"
+      : "run a command";
+    api.sendPromptNotification(
+      "LLM approval needed",
+      `An LLM wants to ${verb} on ${data.session_name ?? "a session"}.`,
+    ).catch(() => {});
     mcpApprovalStore.enqueue({
       approvalId: data.approval_id,
       sessionId: data.session_id,
@@ -611,6 +627,28 @@
     mcpShared.setFrom((data as { session_id: string }[]) ?? []);
   });
   api.mcpListGrants().then((g) => mcpShared.setFrom(g ?? [])).catch(() => {});
+
+  // Whether the MCP bridge is enabled - gates the robot affordances.
+  EventsOn("mcp_bridge_toggled", (on: any) => { mcpBridge.setEnabled(!!on); });
+  api.settingsGet("mcp_bridge_enabled").then((v) => mcpBridge.setEnabled(v === "1" || v === "true")).catch(() => {});
+
+  // The LLM opened a session via the MCP bridge's connect tool. The backend
+  // holds the live session but no tab exists (the frontend normally creates
+  // it after its own connect). Add the tab + switch to it so the user sees it.
+  EventsOn("mcp_session_opened", (data: any) => {
+    if (isDetached) return; // only the main window owns tab creation here
+    const sid = data.session_id as string;
+    if (!sid || sessions.tabs.find((s) => s.sessionId === sid)) return;
+    sessions.add({
+      sessionId: sid,
+      connectionId: data.connection_id ?? "",
+      name: data.name ?? "",
+      hostname: data.hostname ?? "",
+      status: "connected",
+    });
+    paneTabs.addTab(sid, data.name ?? "session");
+    view.setTab("terminal");
+  });
 
   // Load saved layout once at boot so the sidebar comes up at the
   // last-used width instead of the 320 default.
@@ -1052,6 +1090,7 @@
         // Shift first so the next queued challenge is rendered
         // immediately; the IPC call awaits but the UI doesn't block.
         hostKeyStore.clear();
+        if (hostKeyStore.queue.length === 0) api.clearAttention().catch(() => {});
         await api.sshRespondHostKey(c.challengeId, accept, remember, c.hostname, c.port, c.keyType, c.keyB64, c.fingerprint);
       }}
     />
@@ -1066,6 +1105,7 @@
       onRespond={async (decision) => {
         const a = mcpApprovalStore.pending!;
         mcpApprovalStore.shift();
+        if (mcpApprovalStore.queue.length === 0) api.clearAttention().catch(() => {});
         await api.mcpApprovalRespond(a.approvalId, decision);
       }}
     />

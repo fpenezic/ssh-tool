@@ -1951,6 +1951,16 @@ class McpSharedStore {
 }
 export const mcpShared = new McpSharedStore();
 
+// Whether the MCP bridge is enabled (mcp_bridge_enabled setting). Drives
+// whether the robot affordances (pane Share-with-LLM button, status-bar robot)
+// are shown at all - no point offering LLM sharing when the bridge is off.
+// Seeded on demand and kept live via the mcp_bridge_toggled event.
+class McpBridgeStore {
+  enabled = $state(false);
+  setEnabled(v: boolean) { this.enabled = v; }
+}
+export const mcpBridge = new McpBridgeStore();
+
 class ExpandedFoldersStore {
   // Explicit per-ID override. Absent = fall back to depth default (depth 0 → expanded).
   private map = $state<Map<string, boolean>>(new Map());

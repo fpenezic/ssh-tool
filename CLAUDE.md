@@ -345,6 +345,19 @@ These still bite. The archive of older / now-handled traps lives in
     bridge, launched from WSL, and it talks to the Windows app over
     loopback; the app stays WSL-agnostic. A shared session shows a badge
     on its terminal tab (mcpShared store, fed by `mcp_grants_changed`).
+    Every tool call is recorded via `recordActivity` (in-memory ring cap
+    500, output cap 16KB; emitted as `mcp_activity`; optionally mirrored
+    to audit.db as action `mcp_run`/etc behind `mcp_audit_enabled`) and
+    shown in `McpActivityPanel` (status bar = all sessions, robot popover
+    = one session). The robot affordances (pane Share button, status-bar
+    segment) hide when the bridge is off - pane gated on `mcpBridge.enabled`
+    (fed by `mcp_bridge_toggled`), status-bar segment on `mcpShared.size`.
+    Blocking prompts (MCP approval, host-key) flash the taskbar
+    (`RequestAttention`, Windows FlashWindowEx, only when unfocused via the
+    `windowFocused` atomic) AND pop an OS toast (`SendPromptNotification`,
+    Wails notifications service; Windows needs a non-empty `ID` or it fails
+    silently). `docs/MCP_SYSTEM_PROMPT.md` is the paste-in system prompt for
+    LLM clients.
 
 ### Android / mobile gotchas
 

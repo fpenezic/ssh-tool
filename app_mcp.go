@@ -97,13 +97,102 @@ type mcpState struct {
 
 	approvalsMu sync.Mutex
 	approvals   map[string]chan mcpDecision // approvalID -> response channel
+
+	// activity is a bounded ring of what the LLM did, newest last. Feeds the
+	// live LLM-activity panel; a copy is also written to audit.db when the
+	// mcp_audit_enabled setting is on. In-memory so the panel works even
+	// without persistence; capped so a chatty LLM can't grow it unbounded.
+	activityMu sync.Mutex
+	activity   []McpActivity
+	activitySeq int64
 }
+
+// mcpActivityCap bounds the in-memory activity ring.
+const mcpActivityCap = 500
+
+// mcpActivityOutputCap bounds how much command output is retained per entry
+// (both in memory and in audit.db) so a huge journalctl dump can't bloat state.
+const mcpActivityOutputCap = 16 * 1024
 
 func newMcpState() *mcpState {
 	return &mcpState{
 		grants:    map[string]mcpGrantLevel{},
 		approvals: map[string]chan mcpDecision{},
 	}
+}
+
+// McpActivity is one recorded LLM action, surfaced to the activity panel.
+type McpActivity struct {
+	Seq       int64  `json:"seq"`
+	TS        int64  `json:"ts"` // unix seconds
+	SessionID string `json:"session_id"`
+	Session   string `json:"session"` // friendly name at the time
+	Kind      string `json:"kind"`    // run | type | connect | read
+	Command   string `json:"command"` // command / typed text / connection label
+	Output    string `json:"output,omitempty"`
+	Exit      string `json:"exit,omitempty"` // "ok" | "error" | "" (n/a)
+	Gate      string `json:"gate"`           // auto | approved | denied | n/a
+}
+
+// recordActivity appends an entry to the ring (and audit.db when enabled). It
+// never blocks the caller on a persistence error. Output is capped.
+func (a *App) recordActivity(e McpActivity) {
+	if len(e.Output) > mcpActivityOutputCap {
+		e.Output = e.Output[:mcpActivityOutputCap] + "\n...[truncated]"
+	}
+	e.TS = time.Now().Unix()
+
+	a.mcp.activityMu.Lock()
+	a.mcp.activitySeq++
+	e.Seq = a.mcp.activitySeq
+	a.mcp.activity = append(a.mcp.activity, e)
+	if len(a.mcp.activity) > mcpActivityCap {
+		a.mcp.activity = a.mcp.activity[len(a.mcp.activity)-mcpActivityCap:]
+	}
+	a.mcp.activityMu.Unlock()
+
+	// Live panel refresh.
+	EventsEmit("mcp_activity", e)
+
+	// Optional durable copy.
+	if a.mcpAuditEnabled() {
+		a.recordAudit("mcp_"+e.Kind, e.Session, map[string]string{
+			"session_id": e.SessionID,
+			"command":    e.Command,
+			"exit":       e.Exit,
+			"gate":       e.Gate,
+			"output":     e.Output,
+		})
+	}
+}
+
+// mcpAuditEnabled reports whether LLM activity is persisted to audit.db
+// (default true when unset - it's a security record).
+func (a *App) mcpAuditEnabled() bool {
+	if a.db == nil {
+		return false
+	}
+	v, ok, err := a.db.GetSetting("mcp_audit_enabled")
+	if err != nil || !ok || v == "" {
+		return true
+	}
+	return v == "1" || v == "true"
+}
+
+// McpActivityList returns the recorded activity (newest first), optionally
+// filtered to one session. Used by the activity panel.
+func (a *App) McpActivityList(sessionID string) []McpActivity {
+	a.mcp.activityMu.Lock()
+	defer a.mcp.activityMu.Unlock()
+	out := make([]McpActivity, 0, len(a.mcp.activity))
+	for i := len(a.mcp.activity) - 1; i >= 0; i-- {
+		e := a.mcp.activity[i]
+		if sessionID != "" && e.SessionID != sessionID {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 // ----- Grant management (frontend IPC) -----
@@ -290,6 +379,13 @@ func (a *App) mcpReadTerminal(sessionID string, maxBytes int) (string, error) {
 	if maxBytes < len(data) {
 		data = data[len(data)-maxBytes:]
 	}
+	// Record the read (without storing the scrollback itself - it's large and
+	// the user can already see it in the terminal; the point is to log that the
+	// LLM looked).
+	a.recordActivity(McpActivity{
+		SessionID: sessionID, Session: a.sessionDisplayName(sessionID),
+		Kind: "read", Command: "read terminal scrollback", Gate: "auto",
+	})
 	return string(data), nil
 }
 
@@ -313,13 +409,17 @@ func (a *App) mcpRun(sessionID, command string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("session not connected")
 	}
+	name := a.sessionDisplayName(sessionID)
+	gate := "auto"
 	if !sshlayer.IsReadOnly(command, a.mcpReadOnlyExtra()) {
-		name := a.sessionDisplayName(sessionID)
 		switch a.requestApproval(sessionID, name, "run", command) {
 		case mcpDecisionRun, mcpDecisionType:
-			// User approved. (type on a run request is treated as approve-run;
-			// the modal only offers run/deny for the run kind, but be lenient.)
+			gate = "approved"
 		default:
+			a.recordActivity(McpActivity{
+				SessionID: sessionID, Session: name, Kind: "run",
+				Command: command, Gate: "denied",
+			})
 			return "", fmt.Errorf("command denied by user")
 		}
 	}
@@ -328,6 +428,14 @@ func (a *App) mcpRun(sessionID, command string) (string, error) {
 		return "", fmt.Errorf("session has no live client")
 	}
 	out, err := sshlayer.RunCapture(client, command)
+	exit := "ok"
+	if err != nil {
+		exit = "error"
+	}
+	a.recordActivity(McpActivity{
+		SessionID: sessionID, Session: name, Kind: "run",
+		Command: command, Output: out, Exit: exit, Gate: gate,
+	})
 	if err != nil && len(out) == 0 {
 		return "", fmt.Errorf("run: %w", err)
 	}
@@ -348,11 +456,19 @@ func (a *App) mcpType(sessionID, text string) (string, error) {
 	name := a.sessionDisplayName(sessionID)
 	decision := a.requestApproval(sessionID, name, "type", text)
 	if decision != mcpDecisionType && decision != mcpDecisionRun {
+		a.recordActivity(McpActivity{
+			SessionID: sessionID, Session: name, Kind: "type",
+			Command: text, Gate: "denied",
+		})
 		return "", fmt.Errorf("typing denied by user")
 	}
 	if err := sess.Write([]byte(text)); err != nil {
 		return "", fmt.Errorf("type: %w", err)
 	}
+	a.recordActivity(McpActivity{
+		SessionID: sessionID, Session: name, Kind: "type",
+		Command: text, Gate: "approved",
+	})
 	return "typed into terminal (no newline sent; user must press Enter)", nil
 }
 
@@ -483,16 +599,43 @@ func (a *App) mcpConnect(connectionID, level string) (string, error) {
 		label = folder + "/" + conn.Name
 	}
 	if a.requestApproval("", label, "connect", label) != mcpDecisionRun {
+		a.recordActivity(McpActivity{
+			Kind: "connect", Session: label, Command: label, Gate: "denied",
+		})
 		return "", fmt.Errorf("connect denied by user")
 	}
 
 	res, err := a.SshConnect(connectionID)
 	if err != nil {
+		a.recordActivity(McpActivity{
+			Kind: "connect", Session: label, Command: label,
+			Gate: "approved", Exit: "error", Output: err.Error(),
+		})
 		return "", fmt.Errorf("connect: %w", err)
 	}
 	// Auto-share the freshly opened session so the LLM can act on it. Ignore a
 	// share error (session exists; sharing is best-effort convenience).
 	_ = a.McpShareSession(res.SessionID, string(lvl))
+	a.recordActivity(McpActivity{
+		SessionID: res.SessionID, Session: label, Kind: "connect",
+		Command: label, Gate: "approved", Exit: "ok",
+	})
+
+	// The frontend normally creates the terminal tab itself right after its own
+	// SshConnect call (see DetailPane). A session opened headlessly by the MCP
+	// bridge bypasses that, so the app would hold a live session with no tab.
+	// Emit an event the frontend listens for to add the tab + switch to it.
+	hostname := ""
+	if conn.Hostname != "" {
+		hostname = conn.Hostname
+	}
+	EventsEmit("mcp_session_opened", map[string]string{
+		"session_id":    res.SessionID,
+		"connection_id": connectionID,
+		"name":          conn.Name,
+		"hostname":      hostname,
+	})
+
 	return fmt.Sprintf("connected: session_id=%s (%s), shared at level=%s",
 		res.SessionID, label, lvl), nil
 }

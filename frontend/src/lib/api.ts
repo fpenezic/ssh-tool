@@ -918,8 +918,13 @@ export const api = {
   mcpListGrants: () => G.McpListGrants() as unknown as Promise<McpGrantInfo[]>,
   mcpApprovalRespond: (approvalId: string, decision: McpDecision) =>
     G.McpApprovalRespond(approvalId, decision),
+  mcpActivityList: (sessionId: string) =>
+    G.McpActivityList(sessionId) as unknown as Promise<McpActivity[]>,
   appExePath: () => G.AppExePath() as unknown as Promise<string>,
   appWslExePath: () => G.AppWslExePath() as unknown as Promise<string>,
+  requestAttention: () => G.RequestAttention(),
+  clearAttention: () => G.ClearAttention(),
+  sendPromptNotification: (title: string, body: string) => G.SendPromptNotification(title, body),
 
   settingsGet: (key: string) => G.SettingsGet(key) as unknown as Promise<string>,
   settingsSet: (key: string, value: string) => G.SettingsSet(key, value),
@@ -1415,6 +1420,20 @@ export interface McpGrantInfo {
   name: string;
   hostname: string;
   level: McpGrantLevel;
+}
+
+// One recorded LLM action (event: "mcp_activity" for live, McpActivityList for
+// history). Output is capped server-side.
+export interface McpActivity {
+  seq: number;
+  ts: number;
+  session_id: string;
+  session: string;
+  kind: "run" | "type" | "connect" | "read";
+  command: string;
+  output?: string;
+  exit?: "ok" | "error" | "";
+  gate: "auto" | "approved" | "denied" | "n/a" | "";
 }
 
 // Event payload for the approval modal (event: "mcp_approval_request").

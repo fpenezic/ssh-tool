@@ -42,8 +42,13 @@
   // LLM (MCP) bridge access.
   let mcpEnabled = $state<boolean>(false);
   let mcpTcp = $state<boolean>(false);
+  let notificationsEnabled = $state<boolean>(true);
+  let mcpAuditEnabled = $state<boolean>(true);
   let mcpReadonlyExtra = $state<string>("");
   let mcpExePath = $state<string>("");
+  // JSON-safe form of the exe path for the LM Studio mcp.json block: backslashes
+  // in a Windows path (C:\...) must be doubled or the JSON is invalid.
+  const mcpExeJson = $derived(JSON.stringify(mcpExePath || "ssh-tool"));
   let mcpWslExePath = $state<string>("");
   let externalTerminal = $state<"windowsterminal" | "powershell" | "cmd" | "wsl">("windowsterminal");
 
@@ -321,7 +326,27 @@
     try { mcpReadonlyExtra = (await api.settingsGet("mcp_readonly_extra")) ?? ""; } catch { /* ignore */ }
     try { mcpExePath = (await api.appExePath()) ?? ""; } catch { /* ignore */ }
     try { mcpWslExePath = (await api.appWslExePath()) ?? ""; } catch { /* ignore */ }
+    try {
+      const v = await api.settingsGet("notifications_enabled");
+      notificationsEnabled = v === "" || v === "1" || v === "true"; // default on
+    } catch { /* default on */ }
+    try {
+      const v = await api.settingsGet("mcp_audit_enabled");
+      mcpAuditEnabled = v === "" || v === "1" || v === "true"; // default on
+    } catch { /* default on */ }
   });
+
+  async function toggleNotifications(next: boolean) {
+    notificationsEnabled = next;
+    try { await api.settingsSet("notifications_enabled", next ? "1" : "0"); }
+    catch (e) { console.warn("notifications toggle:", e); }
+  }
+
+  async function toggleMcpAudit(next: boolean) {
+    mcpAuditEnabled = next;
+    try { await api.settingsSet("mcp_audit_enabled", next ? "1" : "0"); }
+    catch (e) { console.warn("mcp audit toggle:", e); }
+  }
 
   async function toggleMcp(next: boolean) {
     mcpEnabled = next;
@@ -3952,6 +3977,39 @@
       </span>
     </label>
 
+    <label class="toggle">
+      <input
+        type="checkbox"
+        checked={notificationsEnabled}
+        onchange={(e) => toggleNotifications((e.target as HTMLInputElement).checked)}
+      />
+      <span>
+        <strong>Desktop notifications for prompts that need you</strong>
+        <span class="hint inline">
+          - when the app is in the background, pop an OS notification (plus a
+          taskbar flash) for a blocking prompt - an LLM approval request or a
+          host-key confirmation - so you don't leave it waiting unseen.
+        </span>
+      </span>
+    </label>
+
+    <label class="toggle">
+      <input
+        type="checkbox"
+        checked={mcpAuditEnabled}
+        onchange={(e) => toggleMcpAudit((e.target as HTMLInputElement).checked)}
+      />
+      <span>
+        <strong>Keep a persistent log of LLM activity (audit)</strong>
+        <span class="hint inline">
+          - record every command the LLM runs, types or connects (with output)
+          to the local audit log so it survives restarts. The live LLM-activity
+          panel (robot icon in the status bar / pane toolbar) works either way;
+          this only controls the durable copy.
+        </span>
+      </span>
+    </label>
+
     {#if mcpEnabled}
       <h3 style="margin-top:1.2rem">Register with your LLM client</h3>
       <p class="hint">
@@ -3966,7 +4024,7 @@
       <pre class="cmd-block">{`{
   "mcpServers": {
     "ssh-tool": {
-      "command": "${mcpExePath || "ssh-tool"}",
+      "command": ${mcpExeJson},
       "args": ["--mcp-bridge"]
     }
   }
@@ -3981,6 +4039,11 @@
         in the pane toolbar (robot icon, next to tunnels). The LLM sees only
         shared sessions, and can also search and open your saved connections
         (with your approval).
+      </p>
+      <p class="hint">
+        Tip: paste the ssh-tool system prompt (docs/MCP_SYSTEM_PROMPT.md) into
+        your LLM client's CLAUDE.md / system prompt so it uses these tools well
+        and treats terminal output as untrusted.
       </p>
 
       <label class="toggle">

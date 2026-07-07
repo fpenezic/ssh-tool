@@ -11,11 +11,12 @@
   // broadcast manager). Kept lean - full controls remain in their
   // existing pane toolbars.
 
-  import { sessions, paneTabs, view, tree } from "./stores.svelte";
+  import { sessions, paneTabs, view, tree, mcpShared } from "./stores.svelte";
   import { errMsg } from "./connectErrors";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
-  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn } from "./iconMap";
+  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot } from "./iconMap";
+  import McpActivityPanel from "./McpActivityPanel.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
   import { terminalPrefs } from "./terminalPrefs.svelte";
   import type { ServerStats } from "./api";
@@ -38,6 +39,7 @@
   // a hidden detached window might still hold a session with a live
   // forward. 3s matches the per-pane PaneNode poll cadence.
   let tunnelCount = $state(0);
+  let showMcpActivity = $state(false);
   let tunnelTimer: ReturnType<typeof setInterval> | null = null;
 
   // Vault state tracked here so the pill below can show locked /
@@ -392,6 +394,22 @@
     </button>
   {/if}
 
+  {#if mcpShared.size > 0}
+    <div class="mcp-anchor">
+      <button
+        class="seg mcp"
+        title="{mcpShared.size} session{mcpShared.size === 1 ? '' : 's'} shared with an LLM - click for activity"
+        onclick={() => (showMcpActivity = !showMcpActivity)}
+      >
+        <IconBot size={11} />
+        <span>{mcpShared.size}</span>
+      </button>
+      {#if showMcpActivity}
+        <McpActivityPanel placement="up" onClose={() => (showMcpActivity = false)} />
+      {/if}
+    </div>
+  {/if}
+
   {#if broadcast.totalMembers() > 1}
     <span class="seg bcast" title="{broadcast.totalMembers()} sessions across all broadcast groups">
       <IconBroadcast size={11} />
@@ -562,6 +580,8 @@
     white-space: nowrap;
   }
   .seg.tunnels { color: var(--green); }
+  .seg.mcp { color: var(--blue); }
+  .mcp-anchor { position: relative; display: inline-flex; }
   .seg.sync-ahead {
     color: var(--blue);
     cursor: pointer;

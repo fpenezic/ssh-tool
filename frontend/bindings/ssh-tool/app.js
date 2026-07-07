@@ -410,6 +410,14 @@ export function CheckForUpdate() {
 }
 
 /**
+ * ClearAttention stops any taskbar flash. Safe to call unconditionally.
+ * @returns {$CancellablePromise<void>}
+ */
+export function ClearAttention() {
+    return $Call.ByID(847334888);
+}
+
+/**
  * ClearConnectionPassword removes the per-connection password from the vault
  * and clears the vault-key reference.
  * @param {string} connectionID
@@ -1321,6 +1329,18 @@ export function LogDir() {
 }
 
 /**
+ * McpActivityList returns the recorded activity (newest first), optionally
+ * filtered to one session. Used by the activity panel.
+ * @param {string} sessionID
+ * @returns {$CancellablePromise<$models.McpActivity[]>}
+ */
+export function McpActivityList(sessionID) {
+    return $Call.ByID(3296548654, sessionID).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType71($result);
+    }));
+}
+
+/**
  * McpApprovalRespond is called by the frontend modal. decision is
  * "run" | "type" | "deny".
  * @param {string} approvalID
@@ -1337,7 +1357,7 @@ export function McpApprovalRespond(approvalID, decision) {
  */
 export function McpListGrants() {
     return $Call.ByID(4125482104).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType71($result);
+        return $$createType73($result);
     }));
 }
 
@@ -1373,7 +1393,7 @@ export function McpUnshareSession(sessionID) {
  */
 export function MobaXtermImport(text, rootFolderID) {
     return $Call.ByID(753160963, text, rootFolderID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType73($result);
+        return $$createType75($result);
     }));
 }
 
@@ -1398,7 +1418,7 @@ export function NetworkProfileConnectAnyway(profileID) {
  */
 export function NetworkProfileCreate(name, confText) {
     return $Call.ByID(4293406034, name, confText).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType75($result);
+        return $$createType77($result);
     }));
 }
 
@@ -1411,7 +1431,7 @@ export function NetworkProfileCreate(name, confText) {
  */
 export function NetworkProfileCreateNetbird(name, managementURL, deviceName, setupKeyCredentialID) {
     return $Call.ByID(221245506, name, managementURL, deviceName, setupKeyCredentialID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType75($result);
+        return $$createType77($result);
     }));
 }
 
@@ -1429,7 +1449,7 @@ export function NetworkProfileCreateNetbird(name, managementURL, deviceName, set
  */
 export function NetworkProfileCreateTailscale(name, controlURL, hostname, authKeyCredentialID) {
     return $Call.ByID(4040170686, name, controlURL, hostname, authKeyCredentialID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType75($result);
+        return $$createType77($result);
     }));
 }
 
@@ -1471,7 +1491,7 @@ export function NetworkProfileDisconnectRemote(profileID) {
  */
 export function NetworkProfilePresence(profileID) {
     return $Call.ByID(2437634475, profileID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType76($result);
+        return $$createType78($result);
     }));
 }
 
@@ -1499,7 +1519,7 @@ export function NetworkProfileRenderConf(id) {
  */
 export function NetworkProfileSetPolicy(id, mode, paused) {
     return $Call.ByID(783029456, id, mode, paused).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType75($result);
+        return $$createType77($result);
     }));
 }
 
@@ -1537,7 +1557,7 @@ export function NetworkProfileTakeOver(profileID) {
  */
 export function NetworkProfileTest(id) {
     return $Call.ByID(3728857406, id).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType78($result);
+        return $$createType80($result);
     }));
 }
 
@@ -1552,7 +1572,7 @@ export function NetworkProfileTest(id) {
  */
 export function NetworkProfileUpdate(id, name, confText) {
     return $Call.ByID(1523773567, id, name, confText).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType75($result);
+        return $$createType77($result);
     }));
 }
 
@@ -1569,7 +1589,7 @@ export function NetworkProfileUpdate(id, name, confText) {
  */
 export function NetworkProfileUpdateNetbird(id, name, managementURL, deviceName, setupKeyCredentialID) {
     return $Call.ByID(2424817853, id, name, managementURL, deviceName, setupKeyCredentialID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType75($result);
+        return $$createType77($result);
     }));
 }
 
@@ -1586,7 +1606,7 @@ export function NetworkProfileUpdateNetbird(id, name, managementURL, deviceName,
  */
 export function NetworkProfileUpdateTailscale(id, name, controlURL, hostname, authKeyCredentialID) {
     return $Call.ByID(3328904449, id, name, controlURL, hostname, authKeyCredentialID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType75($result);
+        return $$createType77($result);
     }));
 }
 
@@ -1596,7 +1616,7 @@ export function NetworkProfileUpdateTailscale(id, name, controlURL, hostname, au
  */
 export function NetworkProfilesList() {
     return $Call.ByID(983369255).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType79($result);
+        return $$createType81($result);
     }));
 }
 
@@ -1636,7 +1656,7 @@ export function OpenURL(url) {
  */
 export function OpksshCertStatus(credentialID) {
     return $Call.ByID(2850976259, credentialID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType81($result);
+        return $$createType83($result);
     }));
 }
 
@@ -1714,7 +1734,7 @@ export function PluginRemove(name) {
  */
 export function PluginsStatus() {
     return $Call.ByID(119024773).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType83($result);
+        return $$createType85($result);
     }));
 }
 
@@ -1727,7 +1747,7 @@ export function PluginsStatus() {
  */
 export function ProfileStats() {
     return $Call.ByID(3283721229).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType85($result);
+        return $$createType87($result);
     }));
 }
 
@@ -1741,7 +1761,7 @@ export function ProfileStats() {
  */
 export function PuttyRegImport(text, rootFolderID) {
     return $Call.ByID(3401251516, text, rootFolderID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType87($result);
+        return $$createType89($result);
     }));
 }
 
@@ -1758,7 +1778,7 @@ export function PuttyRegImport(text, rootFolderID) {
  */
 export function RdmImport(jsonText, rootFolderID) {
     return $Call.ByID(3457719183, jsonText, rootFolderID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType89($result);
+        return $$createType91($result);
     }));
 }
 
@@ -1769,7 +1789,7 @@ export function RdmImport(jsonText, rootFolderID) {
  */
 export function RecordingActive() {
     return $Call.ByID(2560532950).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType91($result);
+        return $$createType93($result);
     }));
 }
 
@@ -1804,7 +1824,7 @@ export function RecordingRead(path) {
  */
 export function RecordingStart(sessionID) {
     return $Call.ByID(185130520, sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType92($result);
+        return $$createType94($result);
     }));
 }
 
@@ -1816,7 +1836,7 @@ export function RecordingStart(sessionID) {
  */
 export function RecordingStop(sessionID) {
     return $Call.ByID(1444310460, sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType92($result);
+        return $$createType94($result);
     }));
 }
 
@@ -1836,7 +1856,7 @@ export function RecordingsDir() {
  */
 export function RecordingsList() {
     return $Call.ByID(103046209).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType94($result);
+        return $$createType96($result);
     }));
 }
 
@@ -1871,6 +1891,19 @@ export function RegisterURLScheme() {
 }
 
 /**
+ * RequestAttention flashes the taskbar button to pull the user's eye to a
+ * blocking prompt (MCP approval, host-key TOFU, warn-before-quit) they might
+ * miss while the window is in the background. No-op when the window already has
+ * focus, or where the platform has no flash (macOS flash is a no-op in Wails;
+ * the dock bounce would need a separate API). Frontend modals call this on
+ * appear and ClearAttention on answer; focus also auto-clears (main_desktop.go).
+ * @returns {$CancellablePromise<void>}
+ */
+export function RequestAttention() {
+    return $Call.ByID(924544552);
+}
+
+/**
  * SaveTextFile pops a native Save dialog and writes content there.
  * Used by the connection-export flow so the user can drop a TOML
  * archive on disk without leaving the app. Empty path returned =
@@ -1881,6 +1914,20 @@ export function RegisterURLScheme() {
  */
 export function SaveTextFile(suggestedName, content) {
     return $Call.ByID(523683609, suggestedName, content);
+}
+
+/**
+ * SendPromptNotification posts an OS toast for a blocking prompt. No-op when
+ * the window is focused (you're already looking at ssh-tool), when the toast
+ * setting is off, or when the platform/authorization refuses. Called from the
+ * frontend when an approval / host-key modal appears; the taskbar flash is
+ * handled separately by RequestAttention.
+ * @param {string} title
+ * @param {string} body
+ * @returns {$CancellablePromise<void>}
+ */
+export function SendPromptNotification(title, body) {
+    return $Call.ByID(2460147150, title, body);
 }
 
 /**
@@ -1958,7 +2005,7 @@ export function SftpCancelTransfer(transferID) {
  */
 export function SftpList(sessionID, remotePath) {
     return $Call.ByID(1007414552, sessionID, remotePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType96($result);
+        return $$createType98($result);
     }));
 }
 
@@ -2019,7 +2066,7 @@ export function SftpPickUploadSource() {
  */
 export function SftpReadPreview(sessionID, remotePath, maxBytes) {
     return $Call.ByID(40448224, sessionID, remotePath, maxBytes).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType98($result);
+        return $$createType100($result);
     }));
 }
 
@@ -2103,7 +2150,7 @@ export function SftpStartUploadDir(sessionID, localRoot, remoteRoot) {
  */
 export function SftpStat(sessionID, remotePath) {
     return $Call.ByID(3650982466, sessionID, remotePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType100($result);
+        return $$createType102($result);
     }));
 }
 
@@ -2121,7 +2168,7 @@ export function ShowFromTray() {
  */
 export function SnippetCreate($in) {
     return $Call.ByID(2046363730, $in).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType102($result);
+        return $$createType104($result);
     }));
 }
 
@@ -2152,7 +2199,7 @@ export function SnippetSendToSession(snippetID, sessionID) {
  */
 export function SnippetUpdate(id, $in) {
     return $Call.ByID(3571698559, id, $in).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType102($result);
+        return $$createType104($result);
     }));
 }
 
@@ -2166,7 +2213,7 @@ export function SnippetUpdate(id, $in) {
  */
 export function SnippetsList(connectionID) {
     return $Call.ByID(285056807, connectionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType103($result);
+        return $$createType105($result);
     }));
 }
 
@@ -2184,7 +2231,7 @@ export function SshActiveSessionCount() {
  */
 export function SshActiveSessions() {
     return $Call.ByID(3292933058).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType105($result);
+        return $$createType107($result);
     }));
 }
 
@@ -2220,7 +2267,7 @@ export function SshCancelReconnect(oldSessionID) {
  */
 export function SshConfigImport(text, rootFolderID) {
     return $Call.ByID(1631847250, text, rootFolderID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType107($result);
+        return $$createType109($result);
     }));
 }
 
@@ -2230,7 +2277,7 @@ export function SshConfigImport(text, rootFolderID) {
  */
 export function SshConnect(connectionID) {
     return $Call.ByID(1360707181, connectionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType109($result);
+        return $$createType111($result);
     }));
 }
 
@@ -2250,7 +2297,7 @@ export function SshConnect(connectionID) {
  */
 export function SshConnectAdvanced(connectionID, overrideCredentialID, overrideUsername, overridePassword) {
     return $Call.ByID(2119326771, connectionID, overrideCredentialID, overrideUsername, overridePassword).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType109($result);
+        return $$createType111($result);
     }));
 }
 
@@ -2266,7 +2313,7 @@ export function SshConnectAdvanced(connectionID, overrideCredentialID, overrideU
  */
 export function SshConnectDynamic(folderID, entryID) {
     return $Call.ByID(2365660006, folderID, entryID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType109($result);
+        return $$createType111($result);
     }));
 }
 
@@ -2283,7 +2330,7 @@ export function SshConnectDynamic(folderID, entryID) {
  */
 export function SshConnectDynamicAdvanced(folderID, entryID, overrideCredentialID, overrideUsername, overridePassword) {
     return $Call.ByID(213420756, folderID, entryID, overrideCredentialID, overrideUsername, overridePassword).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType109($result);
+        return $$createType111($result);
     }));
 }
 
@@ -2304,7 +2351,7 @@ export function SshConnectDynamicAdvanced(folderID, entryID, overrideCredentialI
  */
 export function SshConnectDynamicWithJumpOverride(folderID, entryID, overrideCredentialID, overrideUsername, overridePassword, jumpHostOverride, jumpCredentialOverride) {
     return $Call.ByID(2027454034, folderID, entryID, overrideCredentialID, overrideUsername, overridePassword, jumpHostOverride, jumpCredentialOverride).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType109($result);
+        return $$createType111($result);
     }));
 }
 
@@ -2319,7 +2366,7 @@ export function SshConnectDynamicWithJumpOverride(folderID, entryID, overrideCre
  */
 export function SshConnectDynamicWithOverride(folderID, entryID, overrideCredentialID) {
     return $Call.ByID(4083963130, folderID, entryID, overrideCredentialID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType109($result);
+        return $$createType111($result);
     }));
 }
 
@@ -2336,7 +2383,7 @@ export function SshConnectDynamicWithOverride(folderID, entryID, overrideCredent
  */
 export function SshConnectWithOverride(connectionID, overrideCredentialID) {
     return $Call.ByID(1062713217, connectionID, overrideCredentialID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType109($result);
+        return $$createType111($result);
     }));
 }
 
@@ -2388,7 +2435,7 @@ export function SshGetScrollback(sessionID) {
  */
 export function SshGiveInternet(sessionID, remotePort) {
     return $Call.ByID(2637720437, sessionID, remotePort).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType111($result);
+        return $$createType113($result);
     }));
 }
 
@@ -2402,7 +2449,7 @@ export function SshGiveInternet(sessionID, remotePort) {
  */
 export function SshLaunchBrowser(forwardID, url) {
     return $Call.ByID(2568987350, forwardID, url).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType113($result);
+        return $$createType115($result);
     }));
 }
 
@@ -2467,7 +2514,7 @@ export function SshRespondHostKey(challengeID, accept, remember, hostname, port,
  */
 export function SshServerStats(sessionID) {
     return $Call.ByID(3459360229, sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType115($result);
+        return $$createType117($result);
     }));
 }
 
@@ -2536,7 +2583,7 @@ export function SyncAutoSet(enabled, checkMinutes) {
  */
 export function SyncConfigGet() {
     return $Call.ByID(2749435992).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType116($result);
+        return $$createType118($result);
     }));
 }
 
@@ -2562,7 +2609,7 @@ export function SyncConfigSet(url, username, webdavPassword, passphrase) {
  */
 export function SyncPull() {
     return $Call.ByID(2202462297).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType118($result);
+        return $$createType120($result);
     }));
 }
 
@@ -2582,7 +2629,7 @@ export function SyncPull() {
  */
 export function SyncPullLive() {
     return $Call.ByID(3365936299).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType120($result);
+        return $$createType122($result);
     }));
 }
 
@@ -2596,7 +2643,7 @@ export function SyncPullLive() {
  */
 export function SyncPush(force) {
     return $Call.ByID(2771076962, force).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType122($result);
+        return $$createType124($result);
     }));
 }
 
@@ -2613,7 +2660,7 @@ export function SyncSftpConfigSet($in) {
  */
 export function SyncStatus() {
     return $Call.ByID(683898348).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType124($result);
+        return $$createType126($result);
     }));
 }
 
@@ -2632,7 +2679,7 @@ export function SyncTransportSet(transport) {
  */
 export function TcpdumpActiveForSession(sessionID) {
     return $Call.ByID(2189909377, sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType126($result);
+        return $$createType128($result);
     }));
 }
 
@@ -2650,7 +2697,7 @@ export function TcpdumpActiveForSession(sessionID) {
  */
 export function TcpdumpCheckRoute(sessionID, queries) {
     return $Call.ByID(1969483991, sessionID, queries).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType128($result);
+        return $$createType130($result);
     }));
 }
 
@@ -2670,7 +2717,7 @@ export function TcpdumpListInterfaces(sessionID) {
  */
 export function TcpdumpProbe(sessionID) {
     return $Call.ByID(4172900560, sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType130($result);
+        return $$createType132($result);
     }));
 }
 
@@ -2693,7 +2740,7 @@ export function TcpdumpProvidePassword(dumpID, password) {
  */
 export function TcpdumpSnapshot(dumpID) {
     return $Call.ByID(2792891634, dumpID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType132($result);
+        return $$createType134($result);
     }));
 }
 
@@ -2781,7 +2828,7 @@ export function VaultLock(forgetSidecar) {
  */
 export function VaultStatus() {
     return $Call.ByID(704376449).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType133($result);
+        return $$createType135($result);
     }));
 }
 
@@ -2828,7 +2875,7 @@ export function VncLastError(sessionID) {
  */
 export function VncOpenConnection(connectionID) {
     return $Call.ByID(40425702, connectionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType135($result);
+        return $$createType137($result);
     }));
 }
 
@@ -2843,7 +2890,7 @@ export function VncOpenConnection(connectionID) {
  */
 export function VncOpenPinnedProxmox(connectionID) {
     return $Call.ByID(3943515215, connectionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType135($result);
+        return $$createType137($result);
     }));
 }
 
@@ -2858,7 +2905,7 @@ export function VncOpenPinnedProxmox(connectionID) {
  */
 export function VncOpenProxmox(folderID, entryID) {
     return $Call.ByID(2470244949, folderID, entryID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType135($result);
+        return $$createType137($result);
     }));
 }
 
@@ -2870,7 +2917,7 @@ export function VncOpenProxmox(folderID, entryID) {
  */
 export function VncSessionList() {
     return $Call.ByID(1649682954).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType136($result);
+        return $$createType138($result);
     }));
 }
 
@@ -2881,7 +2928,7 @@ export function VncSessionList() {
  */
 export function WindowAcceptTabDrag() {
     return $Call.ByID(1574582034).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType138($result);
+        return $$createType140($result);
     }));
 }
 
@@ -2980,7 +3027,7 @@ export function WindowStartTabDrag(tabID, sessions, layout) {
  */
 export function WorkspaceCreate(name, layoutJSON) {
     return $Call.ByID(2050853866, name, layoutJSON).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType140($result);
+        return $$createType142($result);
     }));
 }
 
@@ -3010,7 +3057,7 @@ export function WorkspaceTouchLastOpened(id) {
  */
 export function WorkspaceUpdate(id, name, layoutJSON) {
     return $Call.ByID(1777295735, id, name, layoutJSON).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType140($result);
+        return $$createType142($result);
     }));
 }
 
@@ -3021,7 +3068,7 @@ export function WorkspaceUpdate(id, name, layoutJSON) {
  */
 export function WorkspacesList() {
     return $Call.ByID(3941184719).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType141($result);
+        return $$createType143($result);
     }));
 }
 
@@ -3096,75 +3143,77 @@ const $$createType66 = $models.LocalShellInfo.createFrom;
 const $$createType67 = $Create.Array($$createType66);
 const $$createType68 = $models.LocalShellOpenResult.createFrom;
 const $$createType69 = $Create.Nullable($$createType68);
-const $$createType70 = $models.McpGrantInfo.createFrom;
+const $$createType70 = $models.McpActivity.createFrom;
 const $$createType71 = $Create.Array($$createType70);
-const $$createType72 = mobaxterm$0.Summary.createFrom;
-const $$createType73 = $Create.Nullable($$createType72);
-const $$createType74 = $models.NetworkProfileInfo.createFrom;
+const $$createType72 = $models.McpGrantInfo.createFrom;
+const $$createType73 = $Create.Array($$createType72);
+const $$createType74 = mobaxterm$0.Summary.createFrom;
 const $$createType75 = $Create.Nullable($$createType74);
-const $$createType76 = $models.RemoteOwner.createFrom;
-const $$createType77 = wg$0.Status.createFrom;
-const $$createType78 = $Create.Nullable($$createType77);
-const $$createType79 = $Create.Array($$createType74);
-const $$createType80 = $models.OpksshCertStatusResult.createFrom;
-const $$createType81 = $Create.Nullable($$createType80);
-const $$createType82 = $models.PluginInfo.createFrom;
-const $$createType83 = $Create.Array($$createType82);
-const $$createType84 = $models.ProfileStats.createFrom;
-const $$createType85 = $Create.Nullable($$createType84);
-const $$createType86 = puttyreg$0.Summary.createFrom;
+const $$createType76 = $models.NetworkProfileInfo.createFrom;
+const $$createType77 = $Create.Nullable($$createType76);
+const $$createType78 = $models.RemoteOwner.createFrom;
+const $$createType79 = wg$0.Status.createFrom;
+const $$createType80 = $Create.Nullable($$createType79);
+const $$createType81 = $Create.Array($$createType76);
+const $$createType82 = $models.OpksshCertStatusResult.createFrom;
+const $$createType83 = $Create.Nullable($$createType82);
+const $$createType84 = $models.PluginInfo.createFrom;
+const $$createType85 = $Create.Array($$createType84);
+const $$createType86 = $models.ProfileStats.createFrom;
 const $$createType87 = $Create.Nullable($$createType86);
-const $$createType88 = rdm$0.Summary.createFrom;
+const $$createType88 = puttyreg$0.Summary.createFrom;
 const $$createType89 = $Create.Nullable($$createType88);
-const $$createType90 = $models.RecordingState.createFrom;
-const $$createType91 = $Create.Array($$createType90);
-const $$createType92 = $Create.Nullable($$createType90);
-const $$createType93 = recorder$0.FileInfo.createFrom;
-const $$createType94 = $Create.Array($$createType93);
-const $$createType95 = $models.SftpListResult.createFrom;
-const $$createType96 = $Create.Nullable($$createType95);
-const $$createType97 = $models.SftpPreview.createFrom;
+const $$createType90 = rdm$0.Summary.createFrom;
+const $$createType91 = $Create.Nullable($$createType90);
+const $$createType92 = $models.RecordingState.createFrom;
+const $$createType93 = $Create.Array($$createType92);
+const $$createType94 = $Create.Nullable($$createType92);
+const $$createType95 = recorder$0.FileInfo.createFrom;
+const $$createType96 = $Create.Array($$createType95);
+const $$createType97 = $models.SftpListResult.createFrom;
 const $$createType98 = $Create.Nullable($$createType97);
-const $$createType99 = ssh$0.SftpEntry.createFrom;
+const $$createType99 = $models.SftpPreview.createFrom;
 const $$createType100 = $Create.Nullable($$createType99);
-const $$createType101 = store$0.Snippet.createFrom;
+const $$createType101 = ssh$0.SftpEntry.createFrom;
 const $$createType102 = $Create.Nullable($$createType101);
-const $$createType103 = $Create.Array($$createType101);
-const $$createType104 = $models.ActiveSessionInfo.createFrom;
-const $$createType105 = $Create.Array($$createType104);
-const $$createType106 = sshconfig$0.Summary.createFrom;
-const $$createType107 = $Create.Nullable($$createType106);
-const $$createType108 = $models.SshConnectResult.createFrom;
+const $$createType103 = store$0.Snippet.createFrom;
+const $$createType104 = $Create.Nullable($$createType103);
+const $$createType105 = $Create.Array($$createType103);
+const $$createType106 = $models.ActiveSessionInfo.createFrom;
+const $$createType107 = $Create.Array($$createType106);
+const $$createType108 = sshconfig$0.Summary.createFrom;
 const $$createType109 = $Create.Nullable($$createType108);
-const $$createType110 = $models.GiveInternetResult.createFrom;
+const $$createType110 = $models.SshConnectResult.createFrom;
 const $$createType111 = $Create.Nullable($$createType110);
-const $$createType112 = $models.BrowserLaunchResult.createFrom;
+const $$createType112 = $models.GiveInternetResult.createFrom;
 const $$createType113 = $Create.Nullable($$createType112);
-const $$createType114 = ssh$0.ServerStats.createFrom;
+const $$createType114 = $models.BrowserLaunchResult.createFrom;
 const $$createType115 = $Create.Nullable($$createType114);
-const $$createType116 = $models.SyncConfig.createFrom;
-const $$createType117 = syncer$0.PullResult.createFrom;
-const $$createType118 = $Create.Nullable($$createType117);
-const $$createType119 = $models.SyncPullLiveResult.createFrom;
+const $$createType116 = ssh$0.ServerStats.createFrom;
+const $$createType117 = $Create.Nullable($$createType116);
+const $$createType118 = $models.SyncConfig.createFrom;
+const $$createType119 = syncer$0.PullResult.createFrom;
 const $$createType120 = $Create.Nullable($$createType119);
-const $$createType121 = syncer$0.PushResult.createFrom;
+const $$createType121 = $models.SyncPullLiveResult.createFrom;
 const $$createType122 = $Create.Nullable($$createType121);
-const $$createType123 = $models.SyncStatusResult.createFrom;
+const $$createType123 = syncer$0.PushResult.createFrom;
 const $$createType124 = $Create.Nullable($$createType123);
-const $$createType125 = $models.TcpdumpActiveInfo.createFrom;
+const $$createType125 = $models.SyncStatusResult.createFrom;
 const $$createType126 = $Create.Nullable($$createType125);
-const $$createType127 = ssh$0.RouteResult.createFrom;
-const $$createType128 = $Create.Array($$createType127);
-const $$createType129 = $models.TcpdumpProbeResult.createFrom;
-const $$createType130 = $Create.Nullable($$createType129);
-const $$createType131 = $models.TcpdumpSnapshotResult.createFrom;
+const $$createType127 = $models.TcpdumpActiveInfo.createFrom;
+const $$createType128 = $Create.Nullable($$createType127);
+const $$createType129 = ssh$0.RouteResult.createFrom;
+const $$createType130 = $Create.Array($$createType129);
+const $$createType131 = $models.TcpdumpProbeResult.createFrom;
 const $$createType132 = $Create.Nullable($$createType131);
-const $$createType133 = creds$0.Status.createFrom;
-const $$createType134 = $models.VncSession.createFrom;
-const $$createType135 = $Create.Nullable($$createType134);
-const $$createType136 = $Create.Array($$createType134);
-const $$createType137 = $models.TabDragPayload.createFrom;
-const $$createType138 = $Create.Nullable($$createType137);
-const $$createType139 = store$0.Workspace.createFrom;
+const $$createType133 = $models.TcpdumpSnapshotResult.createFrom;
+const $$createType134 = $Create.Nullable($$createType133);
+const $$createType135 = creds$0.Status.createFrom;
+const $$createType136 = $models.VncSession.createFrom;
+const $$createType137 = $Create.Nullable($$createType136);
+const $$createType138 = $Create.Array($$createType136);
+const $$createType139 = $models.TabDragPayload.createFrom;
 const $$createType140 = $Create.Nullable($$createType139);
-const $$createType141 = $Create.Array($$createType139);
+const $$createType141 = store$0.Workspace.createFrom;
+const $$createType142 = $Create.Nullable($$createType141);
+const $$createType143 = $Create.Array($$createType141);
