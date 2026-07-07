@@ -3,7 +3,7 @@
   // choices are Run (execute via side channel) or Deny. For a "type" request
   // the choice is Type-into-terminal (inject the text at the prompt with NO
   // Enter, so the user reviews and submits) or Deny.
-  import { IconTerminal } from "./iconMap";
+  import { IconBot } from "./iconMap";
   import type { McpDecision } from "./api";
 
   interface Props {
@@ -25,7 +25,7 @@
 <div class="overlay" role="dialog" aria-modal="true">
   <div class="modal">
     <header>
-      <span class="icon"><IconTerminal size={18} /></span>
+      <span class="icon"><IconBot size={18} /></span>
       <h1>LLM wants to {title}</h1>
     </header>
     {#if kind === "connect"}

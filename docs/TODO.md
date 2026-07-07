@@ -20,6 +20,19 @@ For what's already shipped, see `CHANGELOG.md`.
   unreachable; needs careful concurrency + back-off. Design captured
   in earlier discussion.
 
+- **Jump host auto/always mode** *(deferred)* - today a configured jump
+  host is unconditional ("always"). A network profile has auto (probe
+  direct first, tunnel on failure) / always / paused; the same could
+  apply to a jump host: mode `auto` = probe a direct dial to the
+  target, fall through the bastion only if that fails. The valid case
+  is "target reachable directly when on the VPN, needs the bastion when
+  off it". Not urgent - the far more common shape is `VPN -> bastion ->
+  server`, which the first-hop-tunnel + jump-chain model already
+  handles (the bastion is the first hop, so it rides the tunnel; the
+  target rides the bastion). Adding it means a per-jump probe timeout +
+  a mode field on `JumpHostSpec` + UI. Revisit if the direct-when-on-
+  VPN scenario actually comes up.
+
 - **Dynamic inventory: Proxmox notes / description** - would need a
   per-VM `/nodes/{node}/{type}/{vmid}/config` call (cached) since
   `/cluster/resources` doesn't carry it. Single extra HTTP per

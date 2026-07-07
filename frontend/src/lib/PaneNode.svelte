@@ -13,7 +13,7 @@
     IconHost, IconUser, IconLock, IconClipboardCopy, IconFolder,
     IconRotateCw, IconSplitH, IconSplitV, IconX, IconBroadcast,
     IconActivity, IconGlobe, IconTunnel, IconSearch, IconSettings, IconVpn,
-    IconTerminal,
+    IconBot,
   } from "./iconMap";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
@@ -546,7 +546,7 @@
                 title="Share this session with an LLM (MCP)"
                 onclick={(e) => { e.stopPropagation(); showLlmShare = !showLlmShare; }}
               >
-                <IconTerminal size={13} />
+                <IconBot size={13} />
               </button>
               {#if showLlmShare && paneSession}
                 <LlmSharePopover

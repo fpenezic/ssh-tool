@@ -800,7 +800,7 @@ Setup, once:
 Then, per session:
 
 3. Connect the session and click the **Share with LLM** button in the
-   pane toolbar (the terminal-icon button next to tunnels) - *Read only*
+   pane toolbar (the robot-icon button next to tunnels) - *Read only*
    (the LLM can read scrollback and run allowlisted read-only commands)
    or *Read + run* (adds the ability to run other commands and type into
    the terminal, each gated). The button turns blue while the session is
@@ -826,7 +826,7 @@ What the LLM can do:
   approve first, and the new session is then shared with the LLM
   automatically so it can start working.
 
-A session shared with the LLM shows a small terminal-icon badge on
+A session shared with the LLM shows a small robot-icon badge on
 its tab, so you can always see at a glance which sessions the LLM can
 see. Shared sessions are listed (and revocable) in Settings, and
 every grant is dropped automatically when the session disconnects.

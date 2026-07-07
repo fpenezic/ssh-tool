@@ -7,7 +7,7 @@
   import { broadcast } from "./broadcast.svelte";
   import { recording } from "./recording.svelte";
   import { connectionActions } from "./connectionActions.svelte";
-  import { IconBroadcast, IconFolder, IconTerminal } from "./iconMap";
+  import { IconBroadcast, IconFolder, IconBot } from "./iconMap";
   import BroadcastManager from "./BroadcastManager.svelte";
   import { setTabDetachDragImage } from "./dragImage";
   import { appPrefs } from "./appPrefs.svelte";
@@ -592,7 +592,7 @@
           {/if}
           {#if tabHasSharedSession(t.tabId)}
             <span class="mcp-badge" title="Shared with LLM (MCP)">
-              <IconTerminal size={10} />
+              <IconBot size={10} />
             </span>
           {/if}
           {#if tabBroadcastState(t.tabId) !== "none"}

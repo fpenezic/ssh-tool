@@ -3978,7 +3978,7 @@
 
       <p class="hint">
         Then share a session: click the <strong>Share with LLM</strong> button
-        in the pane toolbar (terminal icon, next to tunnels). The LLM sees only
+        in the pane toolbar (robot icon, next to tunnels). The LLM sees only
         shared sessions, and can also search and open your saved connections
         (with your approval).
       </p>
