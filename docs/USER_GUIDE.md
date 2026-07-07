@@ -792,9 +792,10 @@ Setup, once:
    **Running the client in WSL while ssh-tool runs on Windows?** Turn
    on *Also listen on loopback TCP* in the LLM settings. WSL forwards
    `localhost` to Windows but can't see the Windows pipe, so the
-   bridge uses a token-guarded `127.0.0.1` port instead. Register the
-   Windows binary from WSL:
-   `claude mcp add ssh-tool -- /mnt/c/path/to/ssh-tool.exe --mcp-bridge`.
+   bridge uses a token-guarded `127.0.0.1` port instead. The Settings
+   page shows a ready-to-paste command with the binary already
+   translated to its `/mnt/c/...` WSL path - run that inside your WSL
+   Claude Code.
 
 Then, per session:
 

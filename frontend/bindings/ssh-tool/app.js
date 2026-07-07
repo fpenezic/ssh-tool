@@ -133,6 +133,19 @@ export function AppVersion() {
 }
 
 /**
+ * AppWslExePath returns the running binary's path translated to the form a WSL
+ * shell uses to reach it (C:\Users\x\ssh-tool.exe -> /mnt/c/Users/x/ssh-tool.exe),
+ * so a WSL-hosted LLM client can be pointed at the Windows binary. Empty on any
+ * platform other than Windows, or on an unrecognisable path - the Settings page
+ * only shows the WSL block when this is non-empty. Pure string translation; no
+ * WSL is invoked and none is required.
+ * @returns {$CancellablePromise<string>}
+ */
+export function AppWslExePath() {
+    return $Call.ByID(2670115777);
+}
+
+/**
  * ApplyUpdate triggers the swap-and-restart helper (Windows only) and
  * quits the app. On Unix the rename already happened during Download
  * and we just exit so the user's next launch picks up the new binary.

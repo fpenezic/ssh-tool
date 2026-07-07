@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,34 @@ func (a *App) AppExePath() string {
 		return ""
 	}
 	return p
+}
+
+// AppWslExePath returns the running binary's path translated to the form a WSL
+// shell uses to reach it (C:\Users\x\ssh-tool.exe -> /mnt/c/Users/x/ssh-tool.exe),
+// so a WSL-hosted LLM client can be pointed at the Windows binary. Empty on any
+// platform other than Windows, or on an unrecognisable path - the Settings page
+// only shows the WSL block when this is non-empty. Pure string translation; no
+// WSL is invoked and none is required.
+func (a *App) AppWslExePath() string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	p, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return windowsPathToWSL(p)
+}
+
+// windowsPathToWSL maps a `C:\dir\file` path to `/mnt/c/dir/file`. Returns ""
+// if the input isn't a drive-letter absolute path.
+func windowsPathToWSL(p string) string {
+	if len(p) < 3 || p[1] != ':' || (p[2] != '\\' && p[2] != '/') {
+		return ""
+	}
+	drive := strings.ToLower(string(p[0]))
+	rest := strings.ReplaceAll(p[2:], "\\", "/")
+	return "/mnt/" + drive + rest
 }
 
 // MCP bridge: lets an external LLM (Claude Code, etc.) inspect and drive live

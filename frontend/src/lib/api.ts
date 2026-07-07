@@ -919,6 +919,7 @@ export const api = {
   mcpApprovalRespond: (approvalId: string, decision: McpDecision) =>
     G.McpApprovalRespond(approvalId, decision),
   appExePath: () => G.AppExePath() as unknown as Promise<string>,
+  appWslExePath: () => G.AppWslExePath() as unknown as Promise<string>,
 
   settingsGet: (key: string) => G.SettingsGet(key) as unknown as Promise<string>,
   settingsSet: (key: string, value: string) => G.SettingsSet(key, value),

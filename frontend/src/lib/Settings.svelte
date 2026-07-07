@@ -44,6 +44,7 @@
   let mcpTcp = $state<boolean>(false);
   let mcpReadonlyExtra = $state<string>("");
   let mcpExePath = $state<string>("");
+  let mcpWslExePath = $state<string>("");
   let externalTerminal = $state<"windowsterminal" | "powershell" | "cmd" | "wsl">("windowsterminal");
 
   // Per-platform list of in-app local shells the radio shows. Matches
@@ -319,6 +320,7 @@
     } catch { /* default off */ }
     try { mcpReadonlyExtra = (await api.settingsGet("mcp_readonly_extra")) ?? ""; } catch { /* ignore */ }
     try { mcpExePath = (await api.appExePath()) ?? ""; } catch { /* ignore */ }
+    try { mcpWslExePath = (await api.appWslExePath()) ?? ""; } catch { /* ignore */ }
   });
 
   async function toggleMcp(next: boolean) {
@@ -3997,6 +3999,14 @@
           </span>
         </span>
       </label>
+
+      {#if mcpWslExePath}
+        <p class="hint" style="margin-top:0.8rem">
+          <strong>WSL client:</strong> turn on the toggle above, then run this
+          inside your WSL Claude Code (it points at the Windows binary):
+        </p>
+        <pre class="cmd-block">claude mcp add ssh-tool -- {mcpWslExePath} --mcp-bridge</pre>
+      {/if}
 
       <h3 style="margin-top:1.2rem">Auto-run allowlist</h3>
       <p class="hint">
