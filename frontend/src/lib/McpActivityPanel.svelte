@@ -153,13 +153,13 @@
     top: calc(100% + 4px);
     right: 0;
   }
-  /* Status bar (global): pin to the bottom-right of the window so a
-     560px panel never overflows off the left edge of a right-aligned
-     status-bar button. */
+  /* Status bar (global): open above the button, aligned to its left edge
+     (the status-bar robot sits on the left, so a left-anchored panel opens
+     into the window instead of off the right side). */
   .pop.up {
-    position: fixed;
-    right: 8px;
-    bottom: 34px;
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 4px);
   }
   header {
     display: flex; align-items: center; justify-content: space-between;

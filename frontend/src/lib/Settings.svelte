@@ -46,6 +46,9 @@
   let mcpAuditEnabled = $state<boolean>(true);
   let mcpReadonlyExtra = $state<string>("");
   let mcpExePath = $state<string>("");
+  // JSON-safe form of the exe path for the LM Studio mcp.json block: backslashes
+  // in a Windows path (C:\...) must be doubled or the JSON is invalid.
+  const mcpExeJson = $derived(JSON.stringify(mcpExePath || "ssh-tool"));
   let mcpWslExePath = $state<string>("");
   let externalTerminal = $state<"windowsterminal" | "powershell" | "cmd" | "wsl">("windowsterminal");
 
@@ -4021,7 +4024,7 @@
       <pre class="cmd-block">{`{
   "mcpServers": {
     "ssh-tool": {
-      "command": "${mcpExePath || "ssh-tool"}",
+      "command": ${mcpExeJson},
       "args": ["--mcp-bridge"]
     }
   }

@@ -4,6 +4,8 @@ package main
 
 import (
 	"log"
+	"strconv"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 )
@@ -34,7 +36,10 @@ func (a *App) SendPromptNotification(title, body string) {
 		log.Printf("notification: skipped (no notifier): %s", title)
 		return
 	}
+	// Windows requires a non-empty notification ID. A per-call unique id is
+	// fine - we don't update or dismiss these programmatically.
 	if err := notifier.SendNotification(notifications.NotificationOptions{
+		ID:    "ssh-tool-prompt-" + strconv.FormatInt(time.Now().UnixNano(), 10),
 		Title: title,
 		Body:  body,
 	}); err != nil {
