@@ -20,7 +20,7 @@
     type ProxyBookmark,
   } from "./api";
   import { clickOutside } from "./clickOutside";
-  import { IconPlay, IconStop, IconExternalLink } from "./iconMap";
+  import { IconPlay, IconStop, IconExternalLink, IconGlobe, IconClipboardCopy } from "./iconMap";
 
   interface Props {
     connectionId: string;
@@ -39,6 +39,70 @@
   // the toggle while we're already starting/stopping. Keyed by
   // forward id.
   let busy = $state<Record<string, boolean>>({});
+
+  // "Give internet": ad-hoc reverse HTTP proxy so a server with no outbound
+  // net borrows this machine's connectivity. Not persisted - lives only as a
+  // running forward (kind "reverse-proxy") in `active`.
+  let giPort = $state(3182);
+  let giBusy = $state(false);
+  let copied = $state(false);
+
+  // Running reverse-proxy forwards for this session, pulled from the active
+  // list (they have no persisted spec, so the specs loop below skips them).
+  const reverseProxies = $derived(active.filter((a) => a.kind === "reverse-proxy"));
+
+  // Export block is derived from the running proxy's port, so it shows even
+  // when the popover is reopened on a proxy started earlier (state is fresh
+  // per popover mount). Built in the frontend to match the backend block.
+  const giExport = $derived(
+    reverseProxies.length > 0
+      ? exportBlockFor(reverseProxies[0].local_port)
+      : null,
+  );
+
+  function exportBlockFor(port: number): string {
+    const p = `http://127.0.0.1:${port}`;
+    return `export http_proxy=${p} https_proxy=${p} HTTP_PROXY=${p} HTTPS_PROXY=${p} no_proxy=localhost,127.0.0.1,::1`;
+  }
+
+  async function giveInternet() {
+    if (!sessionId || giBusy) return;
+    giBusy = true;
+    err = null;
+    try {
+      const res = await api.sshGiveInternet(sessionId, giPort);
+      giPort = res.remote_port;
+      active = (await api.forwardsActive(sessionId)) ?? [];
+    } catch (e) {
+      err = String((e as any)?.message ?? e);
+    } finally {
+      giBusy = false;
+    }
+  }
+
+  async function stopReverseProxy(id: string) {
+    if (busy[id]) return;
+    busy = { ...busy, [id]: true };
+    try {
+      await api.forwardsStop(id);
+      active = sessionId ? (await api.forwardsActive(sessionId)) ?? [] : [];
+    } catch (e) {
+      err = String((e as any)?.message ?? e);
+    } finally {
+      busy = { ...busy, [id]: false };
+    }
+  }
+
+  async function copyExport() {
+    if (!giExport) return;
+    try {
+      await navigator.clipboard.writeText(giExport);
+      copied = true;
+      setTimeout(() => (copied = false), 1500);
+    } catch {
+      // Clipboard denied - leave the block visible for manual copy.
+    }
+  }
 
   async function reload() {
     err = null;
@@ -119,6 +183,57 @@
 
 <div class="pop" use:clickOutside={{ onOutside: onClose }}>
   {#if err}<div class="err">{err}</div>{/if}
+
+  <!-- Give internet: reverse HTTP proxy for an offline server -->
+  <div class="gi">
+    <div class="gi-head">
+      <IconGlobe size={13} />
+      <span class="gi-title">Give internet</span>
+    </div>
+    <div class="gi-sub">
+      Lets a server with no outbound net use this machine's connection via a
+      reverse HTTP proxy.
+    </div>
+    {#if reverseProxies.length === 0}
+      <div class="gi-row">
+        <label class="gi-port">
+          port
+          <input type="number" min="1" max="65535" bind:value={giPort} disabled={!sessionId || giBusy} />
+        </label>
+        <button class="gi-btn" disabled={!sessionId || giBusy} onclick={giveInternet}>
+          {giBusy ? "Starting…" : "Give internet"}
+        </button>
+      </div>
+      {#if !sessionId}
+        <div class="gi-note">Connect the session first.</div>
+      {/if}
+    {:else}
+      {#each reverseProxies as rp (rp.id)}
+        <div class="gi-active">
+          <div class="gi-active-head">
+            <span class="gi-dot"></span>
+            <span>Proxy on server 127.0.0.1:{rp.local_port}</span>
+            <button
+              class="gi-stop"
+              disabled={!!busy[rp.id]}
+              title="Stop proxy"
+              onclick={() => stopReverseProxy(rp.id)}
+            ><IconStop size={11} /> Stop</button>
+          </div>
+          <div class="gi-bytes">↓ {rp.bytes_in} B · ↑ {rp.bytes_out} B</div>
+        </div>
+      {/each}
+      {#if giExport}
+        <div class="gi-export-wrap">
+          <div class="gi-export-label">Run this on the server:</div>
+          <pre class="gi-export">{giExport}</pre>
+          <button class="gi-copy" onclick={copyExport}>
+            <IconClipboardCopy size={11} /> {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
+      {/if}
+    {/if}
+  </div>
 
   {#if specs.length === 0}
     <div class="empty">
@@ -284,4 +399,120 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  /* Give internet section */
+  .gi {
+    padding: 0.4rem 0.5rem;
+    margin-bottom: 0.3rem;
+    background: var(--surface0);
+    border-radius: 5px;
+  }
+  .gi-head {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--text);
+    font-weight: 600;
+    font-size: 0.8rem;
+  }
+  .gi-sub {
+    color: var(--overlay0);
+    font-size: 0.7rem;
+    margin: 0.2rem 0 0.4rem;
+    line-height: 1.3;
+  }
+  .gi-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .gi-port {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    color: var(--overlay1);
+  }
+  .gi-port input {
+    width: 4.5rem;
+    background: var(--mantle);
+    border: 1px solid var(--surface1);
+    border-radius: 3px;
+    color: var(--text);
+    padding: 0.15rem 0.3rem;
+    font: inherit;
+    font-size: 0.75rem;
+  }
+  .gi-btn {
+    background: var(--blue);
+    color: var(--base);
+    border: 0;
+    border-radius: 3px;
+    padding: 0.25rem 0.55rem;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .gi-btn:hover:not(:disabled) { filter: brightness(1.1); }
+  .gi-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .gi-note { color: var(--yellow); font-size: 0.7rem; margin-top: 0.3rem; }
+  .gi-active-head {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    color: var(--text);
+  }
+  .gi-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
+  }
+  .gi-stop {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    background: transparent;
+    border: 1px solid var(--surface1);
+    color: var(--red);
+    border-radius: 3px;
+    padding: 0.1rem 0.35rem;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.7rem;
+  }
+  .gi-stop:hover:not(:disabled) { background: var(--surface1); }
+  .gi-stop:disabled { opacity: 0.4; cursor: not-allowed; }
+  .gi-bytes { color: var(--overlay0); font-size: 0.68rem; margin: 0.15rem 0 0.3rem; }
+  .gi-export-wrap { margin-top: 0.3rem; }
+  .gi-export-label { color: var(--overlay1); font-size: 0.7rem; margin-bottom: 0.2rem; }
+  .gi-export {
+    background: var(--crust);
+    border: 1px solid var(--surface1);
+    border-radius: 3px;
+    padding: 0.35rem 0.45rem;
+    margin: 0;
+    font-family: ui-monospace, monospace;
+    font-size: 0.68rem;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .gi-copy {
+    margin-top: 0.25rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: var(--surface1);
+    border: 0;
+    color: var(--text);
+    border-radius: 3px;
+    padding: 0.15rem 0.45rem;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.7rem;
+  }
+  .gi-copy:hover { background: var(--overlay0); }
 </style>

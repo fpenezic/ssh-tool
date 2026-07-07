@@ -3842,6 +3842,58 @@ func (a *App) ForwardsStop(forwardID string) error {
 	return a.forwards.Stop(forwardID)
 }
 
+// defaultGiveInternetPort is the remote loopback port the "give internet"
+// reverse proxy binds on the server by default.
+const defaultGiveInternetPort = 3182
+
+// GiveInternetResult carries back the running forward id, the remote port the
+// server-side listener actually bound, and a ready-to-paste export block the
+// user drops into the server shell to route its HTTP/HTTPS traffic through the
+// proxy.
+type GiveInternetResult struct {
+	ForwardID     string `json:"forward_id"`
+	RemotePort    uint16 `json:"remote_port"`
+	ExportCommand string `json:"export_command"`
+}
+
+// SshGiveInternet raises a reverse HTTP proxy on the session's server so a host
+// with no outbound net can borrow the local machine's connectivity. It binds
+// 127.0.0.1:remotePort on the server (loopback only) and services proxied
+// requests in-process, dialing out from the ssh-tool side (DNS resolved here).
+// remotePort 0 uses the default 3182. Stop via ForwardsStop(forward_id) or a
+// session disconnect.
+func (a *App) SshGiveInternet(sessionID string, remotePort uint16) (*GiveInternetResult, error) {
+	sess, ok := a.pool.Get(sessionID)
+	if !ok {
+		return nil, fmt.Errorf("session not connected")
+	}
+	if remotePort == 0 {
+		remotePort = defaultGiveInternetPort
+	}
+	id := uuid.NewString()
+	status, err := a.forwards.StartReverseProxy(sess, id, "127.0.0.1", remotePort)
+	if err != nil {
+		return nil, err
+	}
+	// StartReverseProxy reflects the actually-bound port (in case of 0).
+	boundPort := status.LocalPort
+	return &GiveInternetResult{
+		ForwardID:     id,
+		RemotePort:    boundPort,
+		ExportCommand: giveInternetExportBlock(boundPort),
+	}, nil
+}
+
+// giveInternetExportBlock builds the shell export block the user pastes on the
+// server. Covers the lower- and upper-case proxy vars different tools read,
+// and keeps loopback out of the proxy so local traffic isn't tunnelled back.
+func giveInternetExportBlock(port uint16) string {
+	proxy := fmt.Sprintf("http://127.0.0.1:%d", port)
+	return fmt.Sprintf(
+		"export http_proxy=%s https_proxy=%s HTTP_PROXY=%s HTTPS_PROXY=%s no_proxy=localhost,127.0.0.1,::1",
+		proxy, proxy, proxy, proxy)
+}
+
 // ForwardsAutoStartFor instantiates every spec with auto_start=1 that's
 // registered against the given connection. Called by SshConnect right after
 // the session lands.

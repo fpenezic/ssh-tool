@@ -293,6 +293,24 @@ These still bite. The archive of older / now-handled traps lives in
     re-evaluate on Set-replace inside a single key (Svelte
     deep tracking misses that).
 
+30. **"Give internet" is a reverse-proxy forward, DNS resolved
+    app-side.** `SshGiveInternet` (app.go) starts a
+    `ForwardReverseProxy` forward (`internal/ssh/forward.go`): a
+    remote listener on the server (`client.Listen`, loopback
+    `127.0.0.1:3182` by default) whose accepted conns are serviced by
+    an in-process HTTP CONNECT proxy (`internal/ssh/httpproxy.go`),
+    NOT dialed to a fixed local port like a plain `-R`. The proxy
+    `net.Dial`s the destination from the ssh-tool machine, so name
+    resolution happens on OUR side (the point: the server may have no
+    resolver). It handles both CONNECT (HTTPS tunnel) and plain-HTTP
+    absolute-URI proxying (apt/curl). Header reads are size-capped
+    (8KB). Forwards are ad-hoc (never persisted to `store.PortForward`),
+    surface only in the TunnelPopover + `ForwardsActive`, and are torn
+    down by the existing `StopAllForSession` on disconnect. The
+    reverse-proxy leg uses `tunnelBuffered` (not `tunnel`) because the
+    client side has a `bufio.Reader` that may already hold bytes read
+    past the header block (request body / TLS ClientHello).
+
 ### Android / mobile gotchas
 
 The app runs on Android (v0.36.0+). Built locally via the NDK

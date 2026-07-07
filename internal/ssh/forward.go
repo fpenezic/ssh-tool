@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -19,6 +20,11 @@ const (
 	ForwardLocal   ForwardKind = "local"   // -L  local listen -> remote dial
 	ForwardRemote  ForwardKind = "remote"  // -R  remote listen -> local dial
 	ForwardDynamic ForwardKind = "dynamic" // -D  local SOCKS5 listen
+	// ForwardReverseProxy is the "give internet" tunnel: a remote listener
+	// (like -R) whose accepted connections are serviced by an in-process HTTP
+	// proxy that dials out from the ssh-tool machine's network. Lets a server
+	// with no outbound net borrow the local box's connectivity via http_proxy.
+	ForwardReverseProxy ForwardKind = "reverse-proxy"
 )
 
 // ForwardState reports a forward's current lifecycle.
@@ -322,6 +328,105 @@ func (p *ForwardPool) acceptRemote(af *activeForward) {
 	}
 }
 
+// StartReverseProxy starts a "give internet" forward: listen on the server
+// (like -R) but service each accepted connection with an in-process HTTP
+// proxy that dials out from the ssh-tool machine's own network. remoteAddr
+// defaults to loopback so only processes on the server can reach it.
+func (p *ForwardPool) StartReverseProxy(
+	sess *Session,
+	id, remoteAddr string, remotePort uint16,
+) (*ForwardStatus, error) {
+	if remoteAddr == "" {
+		remoteAddr = "127.0.0.1"
+	}
+	client := lastClient(sess)
+	if client == nil {
+		return nil, fmt.Errorf("reverse proxy: session has no live client")
+	}
+	addr := fmt.Sprintf("%s:%d", remoteAddr, remotePort)
+	listener, err := client.Listen("tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("remote listen %s: %w", addr, err)
+	}
+	// Reflect the actually-bound port in case the caller passed 0.
+	if tcpAddr, ok := listener.Addr().(*net.TCPAddr); ok {
+		remotePort = uint16(tcpAddr.Port)
+	}
+
+	af := &activeForward{
+		id:        id,
+		kind:      ForwardReverseProxy,
+		session:   sess,
+		listener:  listener,
+		localAddr: remoteAddr,
+		localPort: remotePort,
+		state:     StateListening,
+		started:   time.Now().Unix(),
+		done:      make(chan struct{}),
+	}
+
+	go p.acceptReverseProxy(af)
+	p.register(af)
+	log.Printf("forward: reverse-proxy (give internet) %s:%d started (id=%s, session=%s)",
+		remoteAddr, remotePort, id, sess.ID)
+	s := af.snapshot()
+	return &s, nil
+}
+
+func (p *ForwardPool) acceptReverseProxy(af *activeForward) {
+	for {
+		conn, err := af.listener.Accept()
+		if err != nil {
+			if af.state == StateListening {
+				af.state = StateStopped
+			}
+			return
+		}
+		select {
+		case <-af.session.closed:
+			_ = conn.Close()
+			_ = af.listener.Close()
+			af.state = StateStopped
+			return
+		default:
+		}
+		go func(remote net.Conn) {
+			defer remote.Close()
+			br := bufio.NewReader(remote)
+			tgt, err := handleHTTPProxy(remote, br)
+			if err != nil {
+				log.Printf("forward %s: http proxy: %v", af.id, err)
+				return
+			}
+			// Dial the destination from the ssh-tool side - this is where DNS
+			// resolution and real internet access happen.
+			origin, err := net.DialTimeout("tcp", tgt.addr, 15*time.Second)
+			if err != nil {
+				log.Printf("forward %s: dial %s: %v", af.id, tgt.addr, err)
+				if tgt.connect {
+					writeProxyError(remote, "502 Bad Gateway")
+				}
+				return
+			}
+			defer origin.Close()
+			if tgt.connect {
+				if _, err := remote.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n")); err != nil {
+					return
+				}
+			} else if len(tgt.replay) > 0 {
+				// Replay the (rewritten) request line + headers to the origin.
+				if _, err := origin.Write(tgt.replay); err != nil {
+					return
+				}
+			}
+			// Anything the client already buffered past the header block (a
+			// request body, or early TLS ClientHello bytes) rides through the
+			// bufio.Reader, so tunnel from br, not the raw conn.
+			tunnelBuffered(remote, br, origin, &af.bytesIn, &af.bytesOut)
+		}(conn)
+	}
+}
+
 // Stop terminates a forward by id. No-op if it doesn't exist.
 func (p *ForwardPool) Stop(id string) error {
 	p.mu.Lock()
@@ -398,6 +503,28 @@ func tunnel(local, remote net.Conn, in, out *atomicCounter) {
 	go func() {
 		n, _ := io.Copy(local, &countingReader{r: remote, c: in})
 		_ = n
+		_ = local.(closeWriter).CloseWrite()
+		done <- struct{}{}
+	}()
+	<-done
+	_ = local.Close()
+	_ = remote.Close()
+}
+
+// tunnelBuffered is tunnel() for the reverse-proxy case, where the client
+// side (local) has a *bufio.Reader that may already hold bytes read past the
+// header block (a request body, or the TLS ClientHello for CONNECT). It copies
+// client->origin from the buffered reader so those bytes aren't lost, and
+// origin->client straight from the conn.
+func tunnelBuffered(local net.Conn, localBuf *bufio.Reader, remote net.Conn, in, out *atomicCounter) {
+	done := make(chan struct{}, 2)
+	go func() {
+		_, _ = io.Copy(remote, &countingReader{r: localBuf, c: out})
+		_ = remote.(closeWriter).CloseWrite()
+		done <- struct{}{}
+	}()
+	go func() {
+		_, _ = io.Copy(local, &countingReader{r: remote, c: in})
 		_ = local.(closeWriter).CloseWrite()
 		done <- struct{}{}
 	}()

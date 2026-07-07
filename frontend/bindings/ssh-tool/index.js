@@ -33,6 +33,7 @@ export {
     FoldersUpdateInput,
     ForwardCreateInput,
     ForwardUpdateInput,
+    GiveInternetResult,
     ImagePayload,
     ImportArchiveRequest,
     LoadTextFileResult,

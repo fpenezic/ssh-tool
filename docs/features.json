@@ -63,6 +63,16 @@
       "art": "network"
     },
     {
+      "title": "Give internet to an offline server",
+      "body": "One click on a connected session raises a reverse HTTP proxy on the server and serves the proxying in-app - no squid, no external tooling. Paste the shown export block and the server's apt/curl/pip traffic flows out through your machine. DNS resolves on your side, so the box needs no working resolver.",
+      "keys": [
+        "Give internet",
+        "http_proxy",
+        "3182"
+      ],
+      "art": "network"
+    },
+    {
       "title": "Dynamic inventory",
       "body": "Folders that auto-populate from Proxmox VE, Hetzner Cloud, DigitalOcean, Linode, Vultr, Scaleway, AWS EC2 and Ansible inventory files. Tags / labels filter what shows; stopped guests appear greyed with a \"connect anyway\" prompt. API tokens live in the vault.",
       "keys": [
@@ -120,7 +130,7 @@
     {
       "icon": "forward",
       "title": "Port forwards + isolated browser",
-      "body": "Local, remote and dynamic SOCKS5 forwards. One click launches an isolated browser pinned to the SOCKS port."
+      "body": "Local, remote and dynamic SOCKS5 forwards. One click launches an isolated browser pinned to the SOCKS port. \"Give internet\" reverse-proxies an offline server's HTTP traffic out through your machine - no squid needed."
     },
     {
       "icon": "shield",

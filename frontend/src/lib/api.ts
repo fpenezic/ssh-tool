@@ -906,6 +906,8 @@ export const api = {
   forwardsStart: (forwardId: string, sessionId: string) =>
     G.ForwardsStart(forwardId, sessionId) as unknown as Promise<ForwardStatus>,
   forwardsStop: (forwardId: string) => G.ForwardsStop(forwardId),
+  sshGiveInternet: (sessionId: string, remotePort: number) =>
+    G.SshGiveInternet(sessionId, remotePort) as unknown as Promise<GiveInternetResult>,
   sshLaunchBrowser: (forwardId: string, url: string) =>
     G.SshLaunchBrowser(forwardId, url) as unknown as Promise<{ pid: number }>,
 
@@ -1389,9 +1391,15 @@ export interface ServerStats {
   users: number;          // -1 if unknown
 }
 
+export interface GiveInternetResult {
+  forward_id: string;
+  remote_port: number;
+  export_command: string;
+}
+
 export interface ForwardStatus {
   id: string;
-  kind: "local" | "remote" | "dynamic";
+  kind: "local" | "remote" | "dynamic" | "reverse-proxy";
   session_id: string;
   local_addr: string;
   local_port: number;

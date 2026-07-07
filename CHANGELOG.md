@@ -7,6 +7,22 @@ in alpha upstream.
 
 ---
 
+## [0.52.0] - Give internet to an offline server
+
+### Added
+
+- **"Give internet" - one-click reverse proxy for a server with no
+  outbound net.** Open the tunnels popover on a connected session and
+  click **Give internet**: ssh-tool raises a reverse tunnel on the
+  server (loopback `127.0.0.1:3182` by default, overridable) and serves
+  the proxying itself - no squid, no external tooling. It shows a ready
+  to paste `export http_proxy=...` block; run that on the server and its
+  HTTP/HTTPS traffic (apt, curl, wget, pip, dnf) flows out through your
+  machine. DNS is resolved on the ssh-tool side, so the server does not
+  need a working resolver for proxied traffic. The running proxy appears
+  in the popover with live byte counters and a Stop button, and tears
+  down automatically when the session disconnects.
+
 ## [0.51.0] - Credential expiry + dark dropdowns on Linux
 
 ### Added

@@ -2311,6 +2311,23 @@ export function SshGetScrollback(sessionID) {
 }
 
 /**
+ * SshGiveInternet raises a reverse HTTP proxy on the session's server so a host
+ * with no outbound net can borrow the local machine's connectivity. It binds
+ * 127.0.0.1:remotePort on the server (loopback only) and services proxied
+ * requests in-process, dialing out from the ssh-tool side (DNS resolved here).
+ * remotePort 0 uses the default 3182. Stop via ForwardsStop(forward_id) or a
+ * session disconnect.
+ * @param {string} sessionID
+ * @param {number} remotePort
+ * @returns {$CancellablePromise<$models.GiveInternetResult | null>}
+ */
+export function SshGiveInternet(sessionID, remotePort) {
+    return $Call.ByID(2637720437, sessionID, remotePort).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType109($result);
+    }));
+}
+
+/**
  * SshLaunchBrowser opens a browser pointed at the given SOCKS5 forward.
  * Respects the user's `preferred_browser_path` setting if present;
  * otherwise platform default detection (see internal/ssh/browser.go).
@@ -2320,7 +2337,7 @@ export function SshGetScrollback(sessionID) {
  */
 export function SshLaunchBrowser(forwardID, url) {
     return $Call.ByID(2568987350, forwardID, url).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType109($result);
+        return $$createType111($result);
     }));
 }
 
@@ -2385,7 +2402,7 @@ export function SshRespondHostKey(challengeID, accept, remember, hostname, port,
  */
 export function SshServerStats(sessionID) {
     return $Call.ByID(3459360229, sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType111($result);
+        return $$createType113($result);
     }));
 }
 
@@ -2454,7 +2471,7 @@ export function SyncAutoSet(enabled, checkMinutes) {
  */
 export function SyncConfigGet() {
     return $Call.ByID(2749435992).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType112($result);
+        return $$createType114($result);
     }));
 }
 
@@ -2480,7 +2497,7 @@ export function SyncConfigSet(url, username, webdavPassword, passphrase) {
  */
 export function SyncPull() {
     return $Call.ByID(2202462297).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType114($result);
+        return $$createType116($result);
     }));
 }
 
@@ -2500,7 +2517,7 @@ export function SyncPull() {
  */
 export function SyncPullLive() {
     return $Call.ByID(3365936299).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType116($result);
+        return $$createType118($result);
     }));
 }
 
@@ -2514,7 +2531,7 @@ export function SyncPullLive() {
  */
 export function SyncPush(force) {
     return $Call.ByID(2771076962, force).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType118($result);
+        return $$createType120($result);
     }));
 }
 
@@ -2531,7 +2548,7 @@ export function SyncSftpConfigSet($in) {
  */
 export function SyncStatus() {
     return $Call.ByID(683898348).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType120($result);
+        return $$createType122($result);
     }));
 }
 
@@ -2550,7 +2567,7 @@ export function SyncTransportSet(transport) {
  */
 export function TcpdumpActiveForSession(sessionID) {
     return $Call.ByID(2189909377, sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType122($result);
+        return $$createType124($result);
     }));
 }
 
@@ -2568,7 +2585,7 @@ export function TcpdumpActiveForSession(sessionID) {
  */
 export function TcpdumpCheckRoute(sessionID, queries) {
     return $Call.ByID(1969483991, sessionID, queries).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType124($result);
+        return $$createType126($result);
     }));
 }
 
@@ -2588,7 +2605,7 @@ export function TcpdumpListInterfaces(sessionID) {
  */
 export function TcpdumpProbe(sessionID) {
     return $Call.ByID(4172900560, sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType126($result);
+        return $$createType128($result);
     }));
 }
 
@@ -2611,7 +2628,7 @@ export function TcpdumpProvidePassword(dumpID, password) {
  */
 export function TcpdumpSnapshot(dumpID) {
     return $Call.ByID(2792891634, dumpID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType128($result);
+        return $$createType130($result);
     }));
 }
 
@@ -2699,7 +2716,7 @@ export function VaultLock(forgetSidecar) {
  */
 export function VaultStatus() {
     return $Call.ByID(704376449).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType129($result);
+        return $$createType131($result);
     }));
 }
 
@@ -2746,7 +2763,7 @@ export function VncLastError(sessionID) {
  */
 export function VncOpenConnection(connectionID) {
     return $Call.ByID(40425702, connectionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType131($result);
+        return $$createType133($result);
     }));
 }
 
@@ -2761,7 +2778,7 @@ export function VncOpenConnection(connectionID) {
  */
 export function VncOpenPinnedProxmox(connectionID) {
     return $Call.ByID(3943515215, connectionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType131($result);
+        return $$createType133($result);
     }));
 }
 
@@ -2776,7 +2793,7 @@ export function VncOpenPinnedProxmox(connectionID) {
  */
 export function VncOpenProxmox(folderID, entryID) {
     return $Call.ByID(2470244949, folderID, entryID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType131($result);
+        return $$createType133($result);
     }));
 }
 
@@ -2788,7 +2805,7 @@ export function VncOpenProxmox(folderID, entryID) {
  */
 export function VncSessionList() {
     return $Call.ByID(1649682954).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType132($result);
+        return $$createType134($result);
     }));
 }
 
@@ -2799,7 +2816,7 @@ export function VncSessionList() {
  */
 export function WindowAcceptTabDrag() {
     return $Call.ByID(1574582034).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType134($result);
+        return $$createType136($result);
     }));
 }
 
@@ -2898,7 +2915,7 @@ export function WindowStartTabDrag(tabID, sessions, layout) {
  */
 export function WorkspaceCreate(name, layoutJSON) {
     return $Call.ByID(2050853866, name, layoutJSON).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType136($result);
+        return $$createType138($result);
     }));
 }
 
@@ -2928,7 +2945,7 @@ export function WorkspaceTouchLastOpened(id) {
  */
 export function WorkspaceUpdate(id, name, layoutJSON) {
     return $Call.ByID(1777295735, id, name, layoutJSON).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType136($result);
+        return $$createType138($result);
     }));
 }
 
@@ -2939,7 +2956,7 @@ export function WorkspaceUpdate(id, name, layoutJSON) {
  */
 export function WorkspacesList() {
     return $Call.ByID(3941184719).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType137($result);
+        return $$createType139($result);
     }));
 }
 
@@ -3052,33 +3069,35 @@ const $$createType104 = sshconfig$0.Summary.createFrom;
 const $$createType105 = $Create.Nullable($$createType104);
 const $$createType106 = $models.SshConnectResult.createFrom;
 const $$createType107 = $Create.Nullable($$createType106);
-const $$createType108 = $models.BrowserLaunchResult.createFrom;
+const $$createType108 = $models.GiveInternetResult.createFrom;
 const $$createType109 = $Create.Nullable($$createType108);
-const $$createType110 = ssh$0.ServerStats.createFrom;
+const $$createType110 = $models.BrowserLaunchResult.createFrom;
 const $$createType111 = $Create.Nullable($$createType110);
-const $$createType112 = $models.SyncConfig.createFrom;
-const $$createType113 = syncer$0.PullResult.createFrom;
-const $$createType114 = $Create.Nullable($$createType113);
-const $$createType115 = $models.SyncPullLiveResult.createFrom;
+const $$createType112 = ssh$0.ServerStats.createFrom;
+const $$createType113 = $Create.Nullable($$createType112);
+const $$createType114 = $models.SyncConfig.createFrom;
+const $$createType115 = syncer$0.PullResult.createFrom;
 const $$createType116 = $Create.Nullable($$createType115);
-const $$createType117 = syncer$0.PushResult.createFrom;
+const $$createType117 = $models.SyncPullLiveResult.createFrom;
 const $$createType118 = $Create.Nullable($$createType117);
-const $$createType119 = $models.SyncStatusResult.createFrom;
+const $$createType119 = syncer$0.PushResult.createFrom;
 const $$createType120 = $Create.Nullable($$createType119);
-const $$createType121 = $models.TcpdumpActiveInfo.createFrom;
+const $$createType121 = $models.SyncStatusResult.createFrom;
 const $$createType122 = $Create.Nullable($$createType121);
-const $$createType123 = ssh$0.RouteResult.createFrom;
-const $$createType124 = $Create.Array($$createType123);
-const $$createType125 = $models.TcpdumpProbeResult.createFrom;
-const $$createType126 = $Create.Nullable($$createType125);
-const $$createType127 = $models.TcpdumpSnapshotResult.createFrom;
+const $$createType123 = $models.TcpdumpActiveInfo.createFrom;
+const $$createType124 = $Create.Nullable($$createType123);
+const $$createType125 = ssh$0.RouteResult.createFrom;
+const $$createType126 = $Create.Array($$createType125);
+const $$createType127 = $models.TcpdumpProbeResult.createFrom;
 const $$createType128 = $Create.Nullable($$createType127);
-const $$createType129 = creds$0.Status.createFrom;
-const $$createType130 = $models.VncSession.createFrom;
-const $$createType131 = $Create.Nullable($$createType130);
-const $$createType132 = $Create.Array($$createType130);
-const $$createType133 = $models.TabDragPayload.createFrom;
-const $$createType134 = $Create.Nullable($$createType133);
-const $$createType135 = store$0.Workspace.createFrom;
+const $$createType129 = $models.TcpdumpSnapshotResult.createFrom;
+const $$createType130 = $Create.Nullable($$createType129);
+const $$createType131 = creds$0.Status.createFrom;
+const $$createType132 = $models.VncSession.createFrom;
+const $$createType133 = $Create.Nullable($$createType132);
+const $$createType134 = $Create.Array($$createType132);
+const $$createType135 = $models.TabDragPayload.createFrom;
 const $$createType136 = $Create.Nullable($$createType135);
-const $$createType137 = $Create.Array($$createType135);
+const $$createType137 = store$0.Workspace.createFrom;
+const $$createType138 = $Create.Nullable($$createType137);
+const $$createType139 = $Create.Array($$createType137);

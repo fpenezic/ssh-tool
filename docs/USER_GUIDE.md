@@ -744,6 +744,31 @@ There's also a global indicator in the **status bar** (bottom): a
 green cable + count of all listening forwards across the app, no
 matter which window or pane they belong to. Hidden at zero.
 
+### Give internet to an offline server
+
+If the server you're on has no outbound internet, the tunnels
+popover (cable button) has a **Give internet** section at the top.
+Click it and ssh-tool:
+
+- Raises a reverse tunnel on the server that listens on
+  `127.0.0.1:3182` (loopback only, so nothing on the server's LAN
+  can reach it). The port is overridable in the field next to the
+  button if 3182 is taken.
+- Serves the proxying **in-process** - it's a small HTTP CONNECT
+  proxy built into ssh-tool, no squid or other tooling on either
+  side.
+- Shows a ready-to-paste `export http_proxy=... https_proxy=...`
+  block. Run that in the server shell and its HTTP/HTTPS traffic
+  (apt, curl, wget, pip, dnf) flows out through your machine.
+
+DNS is resolved on your (ssh-tool) side, so the server doesn't need
+a working resolver for anything it fetches through the proxy - that
+is the whole point. The running proxy shows live byte counters and a
+Stop button in the popover, appears in the forwards list, and tears
+down automatically when the session disconnects. It is ad-hoc:
+nothing is persisted, so it's off until you click it again next
+time.
+
 ### Quick palette shortcut
 
 `Ctrl+K` matches forwards by description / parent connection name,

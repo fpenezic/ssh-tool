@@ -120,6 +120,14 @@ export const ForwardKind = {
      * -D  local SOCKS5 listen
      */
     ForwardDynamic: "dynamic",
+
+    /**
+     * ForwardReverseProxy is the "give internet" tunnel: a remote listener
+     * (like -R) whose accepted connections are serviced by an in-process HTTP
+     * proxy that dials out from the ssh-tool machine's network. Lets a server
+     * with no outbound net borrow the local box's connectivity via http_proxy.
+     */
+    ForwardReverseProxy: "reverse-proxy",
 };
 
 /**
