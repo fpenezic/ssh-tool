@@ -4,6 +4,7 @@
   import { api, type CredentialRef } from "./api";
   import { isInvalidCredDrop, applyCredDrop, type CredDragKind } from "./credentialDnd";
   import CredFolderNode from "./CredFolderNode.svelte";
+  import { expiryInfo } from "./credExpiry";
   import Icon from "./Icon.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
@@ -165,6 +166,7 @@
       {#each rootCreds as c (c.id)}
         {@const sel = selection.isCredentialSelected(c.id)}
         {@const KindIcon = credentialKindIcon(c.kind)}
+        {@const ex = expiryInfo(c.expires_at)}
         <div class="row cred-row"
           class:selected={sel}
           style="--depth: 0"
@@ -188,7 +190,12 @@
             <KindIcon size={14} />
           </Icon></span>
           <div class="meta">
-            <div class="name">{c.name}</div>
+            <div class="name">
+              {c.name}
+              {#if ex.level === "soon" || ex.level === "expired"}
+                <span class="cred-expiry {ex.level}" title={ex.label}>{ex.level === "expired" ? "expired" : ex.label}</span>
+              {/if}
+            </div>
             <div class="sub">
               <span class="kind">{c.kind}</span>
               {#if c.hint}<span class="hint-text">· {c.hint}</span>{/if}
@@ -270,6 +277,9 @@
   .sub { font-size: 0.72rem; color: var(--overlay1); margin-top: var(--row-sub-gap); }
   .kind { background: var(--surface0); padding: 0.05rem 0.3rem; border-radius: 2px; margin-right: 0.2rem; }
   .hint-text { color: var(--overlay0); }
+  .cred-expiry { margin-left: 0.35rem; padding: 0 0.3rem; border-radius: 999px; font-size: 0.65rem; font-weight: 600; vertical-align: middle; }
+  .cred-expiry.soon { background: var(--yellow); color: var(--on-accent); }
+  .cred-expiry.expired { background: var(--red); color: var(--on-accent); }
   .tree.drop-root {
     box-shadow: inset 0 0 0 2px var(--blue)55;
   }

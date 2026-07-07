@@ -68,6 +68,16 @@ export class CreateInput {
              */
             this["rotation_reminder_days"] = null;
         }
+        if (!("expires_at" in $$source)) {
+            /**
+             * ExpiresAt is the token/key expiry as a unix timestamp (nil = no
+             * expiry). Set by the user for time-limited secrets - API tokens,
+             * setup / auth keys - so the UI can warn before they lapse.
+             * @member
+             * @type {number | null}
+             */
+            this["expires_at"] = null;
+        }
         if (!("password" in $$source)) {
             /**
              * password
@@ -184,13 +194,13 @@ export class CreateInput {
      */
     static createFrom($$source = {}) {
         const $$createField4_0 = $$createType0;
-        const $$createField8_0 = $$createType2;
+        const $$createField9_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField4_0($$parsedSource["tags"]);
         }
         if ("params" in $$parsedSource) {
-            $$parsedSource["params"] = $$createField8_0($$parsedSource["params"]);
+            $$parsedSource["params"] = $$createField9_0($$parsedSource["params"]);
         }
         return new CreateInput(/** @type {Partial<CreateInput>} */($$parsedSource));
     }

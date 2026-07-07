@@ -7,6 +7,25 @@ in alpha upstream.
 
 ---
 
+## [0.51.0] - Credential expiry + dark dropdowns on Linux
+
+### Added
+
+- **Credential expiry dates.** API tokens, setup keys and auth keys are
+  usually time-limited - you can now set an **Expires** date on a
+  credential (API token, password, or SSH key) when you create or edit
+  it. The credential list shows an amber "expires in Nd" badge when one
+  is within two weeks of lapsing and a red "expired" badge once it has,
+  so a dead token is visible at a glance instead of surfacing as a
+  mystery auth failure. Leave the date blank for no expiry.
+
+### Fixed
+
+- **Native dropdowns rendered white on the dark theme (Linux).** The
+  `<select>` popup lists (credential kind, conflict mode, ...) drew
+  white-on-white under WebKitGTK because the engine wasn't told the UI
+  is dark. They now follow the theme. Windows was unaffected.
+
 ## [0.50.0] - Tailscale + helpers on their own release track
 
 ### Added

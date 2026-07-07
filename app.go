@@ -1291,6 +1291,8 @@ type CredentialsUpdateInput struct {
 	SetDefaultUsernameToNull bool            `json:"set_default_username_to_null"`
 	RotationReminderDays     *int64          `json:"rotation_reminder_days"`
 	SetReminderToNull        bool            `json:"set_reminder_to_null"`
+	ExpiresAt                *int64          `json:"expires_at"`
+	SetExpiresAtToNull       bool            `json:"set_expires_at_to_null"`
 }
 
 func (a *App) CredentialsUpdate(in CredentialsUpdateInput) (*store.CredentialRef, error) {
@@ -1326,6 +1328,8 @@ func (a *App) CredentialsUpdate(in CredentialsUpdateInput) (*store.CredentialRef
 		SetDefaultUsernameToNull: in.SetDefaultUsernameToNull,
 		RotationReminderDays:     in.RotationReminderDays,
 		SetReminderToNull:        in.SetReminderToNull,
+		ExpiresAt:                in.ExpiresAt,
+		SetExpiresAtToNull:       in.SetExpiresAtToNull,
 	})
 }
 

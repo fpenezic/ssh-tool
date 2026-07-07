@@ -934,6 +934,20 @@ export class CredentialsUpdateInput {
              */
             this["set_reminder_to_null"] = false;
         }
+        if (!("expires_at" in $$source)) {
+            /**
+             * @member
+             * @type {number | null}
+             */
+            this["expires_at"] = null;
+        }
+        if (!("set_expires_at_to_null" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["set_expires_at_to_null"] = false;
+        }
 
         Object.assign(this, $$source);
     }

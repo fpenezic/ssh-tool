@@ -41,6 +41,10 @@ type CreateInput struct {
 	Tags                 []string `json:"tags"`
 	DefaultUsername      *string  `json:"default_username"`
 	RotationReminderDays *int64   `json:"rotation_reminder_days"`
+	// ExpiresAt is the token/key expiry as a unix timestamp (nil = no
+	// expiry). Set by the user for time-limited secrets - API tokens,
+	// setup / auth keys - so the UI can warn before they lapse.
+	ExpiresAt *int64 `json:"expires_at"`
 
 	// password
 	Password string `json:"password"`
@@ -116,13 +120,16 @@ func (s *Service) createAPIToken(in CreateInput) (*CreateResult, error) {
 		return nil, fmt.Errorf("validation: api_token_secret is empty")
 	}
 	cred, err := s.DB.CreateCredential(store.NewCredential{
-		FolderID:    in.FolderID,
-		Name:        in.Name,
-		Kind:        store.CredAPIToken,
-		StorageMode: store.StorageManaged,
-		Hint:        hintStr(in.Hint),
-		Tags:        in.Tags,
-		Config:      map[string]any{"token_id": in.APITokenID},
+		FolderID:             in.FolderID,
+		Name:                 in.Name,
+		Kind:                 store.CredAPIToken,
+		StorageMode:          store.StorageManaged,
+		Hint:                 hintStr(in.Hint),
+		Tags:                 in.Tags,
+		Config:               map[string]any{"token_id": in.APITokenID},
+		DefaultUsername:      in.DefaultUsername,
+		RotationReminderDays: in.RotationReminderDays,
+		ExpiresAt:            in.ExpiresAt,
 	})
 	if err != nil {
 		return nil, err
@@ -159,6 +166,7 @@ func (s *Service) createPassword(in CreateInput) (*CreateResult, error) {
 		Config:               map[string]any{},
 		DefaultUsername:      in.DefaultUsername,
 		RotationReminderDays: in.RotationReminderDays,
+		ExpiresAt:            in.ExpiresAt,
 	})
 	if err != nil {
 		return nil, err
@@ -208,6 +216,8 @@ func (s *Service) createKeyGenerate(in CreateInput) (*CreateResult, error) {
 		Config:          cfg,
 		PublicKey:       &pubCopy,
 		DefaultUsername: in.DefaultUsername,
+		RotationReminderDays: in.RotationReminderDays,
+		ExpiresAt:            in.ExpiresAt,
 	})
 	if err != nil {
 		return nil, err
@@ -253,6 +263,8 @@ func (s *Service) createKeyImportPaste(in CreateInput) (*CreateResult, error) {
 		Config:          cfg,
 		PublicKey:       &pubCopy,
 		DefaultUsername: in.DefaultUsername,
+		RotationReminderDays: in.RotationReminderDays,
+		ExpiresAt:            in.ExpiresAt,
 	})
 	if err != nil {
 		return nil, err
@@ -297,6 +309,8 @@ func (s *Service) createKeyFileRef(in CreateInput) (*CreateResult, error) {
 		Config:          cfg,
 		PublicKey:       pubKey,
 		DefaultUsername: in.DefaultUsername,
+		RotationReminderDays: in.RotationReminderDays,
+		ExpiresAt:            in.ExpiresAt,
 	})
 	if err != nil {
 		return nil, err

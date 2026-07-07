@@ -1,6 +1,7 @@
 <script lang="ts">
   import { credentials, selection, view } from "./stores.svelte";
   import { toast } from "./toast.svelte";
+  import { expiryInfo } from "./credExpiry";
   import { expandedCredentials } from "./treeState.svelte";
   import { api, type UsageRef, type CredentialHistoryEntry, type OpksshCertStatus } from "./api";
   import { connectionActions } from "./connectionActions.svelte";
@@ -251,6 +252,7 @@
   let editName = $state("");
   let editHint = $state("");
   let editUsername = $state("");
+  let editExpires = $state(""); // YYYY-MM-DD, "" = no expiry
   let editSaving = $state(false);
   let editErr = $state<string | null>(null);
 
@@ -273,6 +275,10 @@
     editName = cred.name;
     editHint = cred.hint ?? "";
     editUsername = cred.default_username ?? "";
+    // unix -> YYYY-MM-DD (local) for the date input; "" when no expiry.
+    editExpires = cred.expires_at
+      ? new Date(cred.expires_at * 1000).toLocaleDateString("en-CA")
+      : "";
     editErr = null;
     editing = true;
   }
@@ -291,6 +297,8 @@
         hint: editHint,
         default_username: editUsername || undefined,
         set_default_username_to_null: editUsername === "" && cred.default_username !== null,
+        expires_at: editExpires ? Math.floor(new Date(editExpires + "T00:00:00").getTime() / 1000) : undefined,
+        set_expires_at_to_null: editExpires === "" && cred.expires_at !== null,
       });
       await credentials.load();
       editing = false;
@@ -672,6 +680,11 @@
         <label>Default username
           <input bind:value={editUsername} placeholder="e.g. ubuntu, admin" />
         </label>
+        {#if cred.kind === "api_token" || cred.kind === "password" || cred.kind === "key"}
+          <label>Expires <span class="hint inline">(optional - clear to remove)</span>
+            <input type="date" bind:value={editExpires} />
+          </label>
+        {/if}
         <IconPicker
           kind="credential"
           targetId={cred.id}
@@ -688,7 +701,16 @@
         {#if cred.hint}<dt>Hint</dt><dd>{cred.hint}</dd>{/if}
         {#if cred.default_username}<dt>Default user</dt><dd><code>{cred.default_username}</code></dd>{/if}
         <dt>Last rotated</dt><dd>{fmtTs(cred.last_rotated_at)}</dd>
-        {#if cred.expires_at}<dt>Expires</dt><dd>{fmtTs(cred.expires_at)}</dd>{/if}
+        {#if cred.expires_at}
+          {@const ex = expiryInfo(cred.expires_at)}
+          <dt>Expires</dt>
+          <dd>
+            {fmtTs(cred.expires_at)}
+            {#if ex.level !== "none"}
+              <span class="expiry-badge {ex.level}">{ex.label}</span>
+            {/if}
+          </dd>
+        {/if}
         {#if cred.tags?.length}
           <dt>Tags</dt>
           <dd>{#each cred.tags as t}<span class="tag">{t}</span>{/each}</dd>
@@ -1084,6 +1106,10 @@
   }
   .pubkey { word-break: break-all; white-space: pre-wrap; }
   .tag { background: var(--surface0); color: var(--text); padding: 0.1rem 0.4rem; border-radius: 2px; margin-right: 0.3rem; font-size: 0.75rem; }
+  .expiry-badge { margin-left: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 999px; font-size: 0.7rem; font-weight: 600; }
+  .expiry-badge.ok { background: var(--surface0); color: var(--subtext0); }
+  .expiry-badge.soon { background: var(--yellow); color: var(--on-accent); }
+  .expiry-badge.expired { background: var(--red); color: var(--on-accent); }
   ul { margin: 0; padding-left: 1.2rem; }
   .usage li, .history li { margin: 0.2rem 0; font-size: 0.85rem; }
   .usage li { padding-left: 0; }

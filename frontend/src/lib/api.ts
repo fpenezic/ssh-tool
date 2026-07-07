@@ -281,6 +281,10 @@ export interface GenerateKeyParams {
 // Optional folder placement shared by every credential kind.
 interface CommonCreateExtras {
   folder_id?: string;
+  // Unix timestamp when the secret expires (nil = no expiry). Honoured
+  // for the user-set secret kinds (api_token, password, key); agent /
+  // opkssh ignore it (they have no user-set expiry).
+  expires_at?: number;
 }
 
 export type CredentialCreateInput =
@@ -496,6 +500,8 @@ export const api = {
     set_default_username_to_null?: boolean;
     config?: Record<string, any>;
     set_public_key_to_null?: boolean;
+    expires_at?: number;
+    set_expires_at_to_null?: boolean;
   }) => G.CredentialsUpdate(input as any) as unknown as Promise<CredentialRef>,
   credentialsDelete: (id: string) => G.CredentialsDelete(id),
   credentialsRotatePassword: (id: string, newPassword: string) =>

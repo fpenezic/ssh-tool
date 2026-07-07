@@ -22,6 +22,9 @@
   let name = $state("");
   let hint = $state("");
   let defaultUser = $state("");
+  // Optional expiry date (YYYY-MM-DD) for time-limited secrets - API
+  // tokens, setup / auth keys. Empty = no expiry.
+  let expiresDate = $state("");
   let tagsRaw = $state("");
 
   let password = $state("");
@@ -71,6 +74,9 @@
         tags: tags(),
         default_username: defaultUser || undefined,
         folder_id: defaultFolderId ?? undefined,
+        // <input type=date> gives YYYY-MM-DD in local time; store the
+        // start of that day as a unix timestamp. Empty = no expiry.
+        expires_at: expiresDate ? Math.floor(new Date(expiresDate + "T00:00:00").getTime() / 1000) : undefined,
       };
       let input: CredentialCreateInput;
       switch (kind) {
@@ -206,6 +212,11 @@
         <label>Tags
           <input bind:value={tagsRaw} placeholder="comma,separated" />
         </label>
+        {#if kind === "api_token" || kind === "password" || kind === "key_generate" || kind === "key_import_paste" || kind === "key_file_ref"}
+          <label>Expires <span class="hint inline">(optional - warns you before a time-limited token / key lapses)</span>
+            <input type="date" bind:value={expiresDate} />
+          </label>
+        {/if}
 
         {#if kind === "password"}
           <label>Password
