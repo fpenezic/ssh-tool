@@ -410,6 +410,14 @@ export function CheckForUpdate() {
 }
 
 /**
+ * ClearAttention stops any taskbar flash. Safe to call unconditionally.
+ * @returns {$CancellablePromise<void>}
+ */
+export function ClearAttention() {
+    return $Call.ByID(847334888);
+}
+
+/**
  * ClearConnectionPassword removes the per-connection password from the vault
  * and clears the vault-key reference.
  * @param {string} connectionID
@@ -1868,6 +1876,19 @@ export function RecordingsPickDir() {
  */
 export function RegisterURLScheme() {
     return $Call.ByID(749737630);
+}
+
+/**
+ * RequestAttention flashes the taskbar button to pull the user's eye to a
+ * blocking prompt (MCP approval, host-key TOFU, warn-before-quit) they might
+ * miss while the window is in the background. No-op when the window already has
+ * focus, or where the platform has no flash (macOS flash is a no-op in Wails;
+ * the dock bounce would need a separate API). Frontend modals call this on
+ * appear and ClearAttention on answer; focus also auto-clears (main_desktop.go).
+ * @returns {$CancellablePromise<void>}
+ */
+export function RequestAttention() {
+    return $Call.ByID(924544552);
 }
 
 /**

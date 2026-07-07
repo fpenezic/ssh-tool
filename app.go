@@ -213,6 +213,12 @@ type App struct {
 	// windowHidden tracks the tray-hide state for click-to-toggle.
 	windowHidden atomic.Bool
 
+	// windowFocused tracks whether the main window currently has focus, so
+	// RequestAttention only flashes the taskbar when the app is in the
+	// background (flashing a focused window is pointless / annoying). Wired
+	// from the WindowFocus / WindowLostFocus hooks in main_desktop.go.
+	windowFocused atomic.Bool
+
 	// onDBReady runs once at the end of initialise(), after the store is
 	// open. main.go uses it to restore the saved window geometry, which
 	// needs both the window (set before Run) and the db (opened during
@@ -3775,6 +3781,27 @@ func formatJumpChain(j *store.JumpHostSpec) string {
 		parts = append(parts, piece)
 	}
 	return strings.Join(parts, ",")
+}
+
+// RequestAttention flashes the taskbar button to pull the user's eye to a
+// blocking prompt (MCP approval, host-key TOFU, warn-before-quit) they might
+// miss while the window is in the background. No-op when the window already has
+// focus, or where the platform has no flash (macOS flash is a no-op in Wails;
+// the dock bounce would need a separate API). Frontend modals call this on
+// appear and ClearAttention on answer; focus also auto-clears (main_desktop.go).
+func (a *App) RequestAttention() {
+	if a.mainWindow == nil || a.windowFocused.Load() {
+		return
+	}
+	a.mainWindow.Flash(true)
+}
+
+// ClearAttention stops any taskbar flash. Safe to call unconditionally.
+func (a *App) ClearAttention() {
+	if a.mainWindow == nil {
+		return
+	}
+	a.mainWindow.Flash(false)
 }
 
 // HideToTray hides the main window without quitting. Used by the

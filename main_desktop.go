@@ -263,6 +263,16 @@ func configurePlatform(app *application.App, appInst *App) func() {
 	// Cancel() prevents the default close/minimise handler from
 	// firing - exactly the gate we need to redirect to the tray or
 	// raise the warn-before-quit modal.
+	// Track focus so RequestAttention only flashes the taskbar when the app is
+	// backgrounded, and auto-clear any flash the moment the user looks at it.
+	mainWindow.RegisterHook(events.Common.WindowFocus, func(event *application.WindowEvent) {
+		appInst.windowFocused.Store(true)
+		mainWindow.Flash(false)
+	})
+	mainWindow.RegisterHook(events.Common.WindowLostFocus, func(event *application.WindowEvent) {
+		appInst.windowFocused.Store(false)
+	})
+
 	mainWindow.RegisterHook(events.Common.WindowMinimise, func(event *application.WindowEvent) {
 		if !appInst.shouldMinimiseToTray() {
 			return

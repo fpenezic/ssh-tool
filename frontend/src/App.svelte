@@ -310,10 +310,12 @@
   let quitPromptCount = $state<number | null>(null);
   EventsOn("quit_request", (count: any) => {
     quitPromptCount = typeof count === "number" ? count : Number(count ?? 0);
+    api.requestAttention().catch(() => {});
   });
 
   async function confirmQuitAccept() {
     quitPromptCount = null;
+    api.clearAttention().catch(() => {});
     try { await api.confirmQuit(); } catch (e) { console.error("confirm quit failed", e); }
   }
 
@@ -530,6 +532,7 @@
   }
   function confirmQuitCancel() {
     quitPromptCount = null;
+    api.clearAttention().catch(() => {});
   }
 
   // Dynamic-inventory folder refresh notification - reload entries
@@ -583,6 +586,7 @@
 
   // Listen for host key challenges emitted by the Go backend during SSH connect.
   EventsOn("host_key_challenge", (data: any) => {
+    api.requestAttention().catch(() => {});
     hostKeyStore.set({
       challengeId: data.challenge_id,
       hostname: data.hostname,
@@ -597,6 +601,7 @@
 
   // LLM (MCP bridge) command-approval requests.
   EventsOn("mcp_approval_request", (data: any) => {
+    api.requestAttention().catch(() => {});
     mcpApprovalStore.enqueue({
       approvalId: data.approval_id,
       sessionId: data.session_id,
@@ -1070,6 +1075,7 @@
         // Shift first so the next queued challenge is rendered
         // immediately; the IPC call awaits but the UI doesn't block.
         hostKeyStore.clear();
+        if (hostKeyStore.queue.length === 0) api.clearAttention().catch(() => {});
         await api.sshRespondHostKey(c.challengeId, accept, remember, c.hostname, c.port, c.keyType, c.keyB64, c.fingerprint);
       }}
     />
@@ -1084,6 +1090,7 @@
       onRespond={async (decision) => {
         const a = mcpApprovalStore.pending!;
         mcpApprovalStore.shift();
+        if (mcpApprovalStore.queue.length === 0) api.clearAttention().catch(() => {});
         await api.mcpApprovalRespond(a.approvalId, decision);
       }}
     />

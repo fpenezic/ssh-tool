@@ -920,6 +920,8 @@ export const api = {
     G.McpApprovalRespond(approvalId, decision),
   appExePath: () => G.AppExePath() as unknown as Promise<string>,
   appWslExePath: () => G.AppWslExePath() as unknown as Promise<string>,
+  requestAttention: () => G.RequestAttention(),
+  clearAttention: () => G.ClearAttention(),
 
   settingsGet: (key: string) => G.SettingsGet(key) as unknown as Promise<string>,
   settingsSet: (key: string, value: string) => G.SettingsSet(key, value),
