@@ -612,6 +612,24 @@
   });
   api.mcpListGrants().then((g) => mcpShared.setFrom(g ?? [])).catch(() => {});
 
+  // The LLM opened a session via the MCP bridge's connect tool. The backend
+  // holds the live session but no tab exists (the frontend normally creates
+  // it after its own connect). Add the tab + switch to it so the user sees it.
+  EventsOn("mcp_session_opened", (data: any) => {
+    if (isDetached) return; // only the main window owns tab creation here
+    const sid = data.session_id as string;
+    if (!sid || sessions.tabs.find((s) => s.sessionId === sid)) return;
+    sessions.add({
+      sessionId: sid,
+      connectionId: data.connection_id ?? "",
+      name: data.name ?? "",
+      hostname: data.hostname ?? "",
+      status: "connected",
+    });
+    paneTabs.addTab(sid, data.name ?? "session");
+    view.setTab("terminal");
+  });
+
   // Load saved layout once at boot so the sidebar comes up at the
   // last-used width instead of the 320 default.
   layoutPrefs.load();

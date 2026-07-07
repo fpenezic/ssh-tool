@@ -493,6 +493,22 @@ func (a *App) mcpConnect(connectionID, level string) (string, error) {
 	// Auto-share the freshly opened session so the LLM can act on it. Ignore a
 	// share error (session exists; sharing is best-effort convenience).
 	_ = a.McpShareSession(res.SessionID, string(lvl))
+
+	// The frontend normally creates the terminal tab itself right after its own
+	// SshConnect call (see DetailPane). A session opened headlessly by the MCP
+	// bridge bypasses that, so the app would hold a live session with no tab.
+	// Emit an event the frontend listens for to add the tab + switch to it.
+	hostname := ""
+	if conn.Hostname != "" {
+		hostname = conn.Hostname
+	}
+	EventsEmit("mcp_session_opened", map[string]string{
+		"session_id":    res.SessionID,
+		"connection_id": connectionID,
+		"name":          conn.Name,
+		"hostname":      hostname,
+	})
+
 	return fmt.Sprintf("connected: session_id=%s (%s), shared at level=%s",
 		res.SessionID, label, lvl), nil
 }
