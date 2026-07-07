@@ -11,7 +11,7 @@
   // broadcast manager). Kept lean - full controls remain in their
   // existing pane toolbars.
 
-  import { sessions, paneTabs, view, tree } from "./stores.svelte";
+  import { sessions, paneTabs, view, tree, mcpShared } from "./stores.svelte";
   import { errMsg } from "./connectErrors";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
@@ -39,7 +39,6 @@
   // a hidden detached window might still hold a session with a live
   // forward. 3s matches the per-pane PaneNode poll cadence.
   let tunnelCount = $state(0);
-  let mcpBridgeOn = $state(false);
   let showMcpActivity = $state(false);
   let tunnelTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -94,7 +93,6 @@
     tunnelTimer = setInterval(refreshTunnels, 3000);
     refreshVault();
     unsubVault = EventsOn("vault_locked", () => { vaultLocked = true; });
-    api.settingsGet("mcp_bridge_enabled").then((v) => { mcpBridgeOn = v === "1" || v === "true"; }).catch(() => {});
   });
   onDestroy(() => {
     if (tunnelTimer) clearInterval(tunnelTimer);
@@ -396,14 +394,15 @@
     </button>
   {/if}
 
-  {#if mcpBridgeOn}
+  {#if mcpShared.size > 0}
     <div class="mcp-anchor">
       <button
         class="seg mcp"
-        title="LLM activity - what shared sessions the LLM has done"
+        title="{mcpShared.size} session{mcpShared.size === 1 ? '' : 's'} shared with an LLM - click for activity"
         onclick={() => (showMcpActivity = !showMcpActivity)}
       >
         <IconBot size={11} />
+        <span>{mcpShared.size}</span>
       </button>
       {#if showMcpActivity}
         <McpActivityPanel placement="up" onClose={() => (showMcpActivity = false)} />
