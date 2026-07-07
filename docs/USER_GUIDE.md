@@ -744,6 +744,93 @@ There's also a global indicator in the **status bar** (bottom): a
 green cable + count of all listening forwards across the app, no
 matter which window or pane they belong to. Hidden at zero.
 
+### Give internet to an offline server
+
+If the server you're on has no outbound internet, the tunnels
+popover (cable button) has a **Give internet** section at the top.
+Click it and ssh-tool:
+
+- Raises a reverse tunnel on the server that listens on
+  `127.0.0.1:3182` (loopback only, so nothing on the server's LAN
+  can reach it). The port is overridable in the field next to the
+  button if 3182 is taken.
+- Serves the proxying **in-process** - it's a small HTTP CONNECT
+  proxy built into ssh-tool, no squid or other tooling on either
+  side.
+- Shows a ready-to-paste `export http_proxy=... https_proxy=...`
+  block. Run that in the server shell and its HTTP/HTTPS traffic
+  (apt, curl, wget, pip, dnf) flows out through your machine.
+
+DNS is resolved on your (ssh-tool) side, so the server doesn't need
+a working resolver for anything it fetches through the proxy - that
+is the whole point. The running proxy shows live byte counters and a
+Stop button in the popover, appears in the forwards list, and tears
+down automatically when the session disconnects. It is ad-hoc:
+nothing is persisted, so it's off until you click it again next
+time.
+
+### Share a session with an LLM (MCP)
+
+You can attach an external LLM client (Claude Code, etc.) to a live
+SSH session so it can help you debug - read what's on screen, pull
+logs, propose and run commands. It is **off by default** and
+desktop-only.
+
+Setup, once:
+
+1. **Settings -> LLM (MCP) access** -> tick *Allow LLM (MCP) access
+   to shared sessions*. This starts a local-only bridge (a unix
+   socket on Linux/macOS, a loopback pipe on Windows). Nothing is
+   exposed to the network.
+2. Register ssh-tool with your LLM client. The Settings page shows
+   the exact command with your binary's path. For **Claude Code**:
+   `claude mcp add ssh-tool -- /path/to/ssh-tool --mcp-bridge`. For
+   **LM Studio** (or any MCP client), point the server's `command`
+   at the same binary with the `--mcp-bridge` argument - the Settings
+   page shows a ready-to-paste `mcp.json` block.
+
+   **Running the client in WSL while ssh-tool runs on Windows?** Turn
+   on *Also listen on loopback TCP* in the LLM settings. WSL forwards
+   `localhost` to Windows but can't see the Windows pipe, so the
+   bridge uses a token-guarded `127.0.0.1` port instead. The Settings
+   page shows a ready-to-paste command with the binary already
+   translated to its `/mnt/c/...` WSL path - run that inside your WSL
+   Claude Code.
+
+Then, per session:
+
+3. Connect the session and click the **Share with LLM** button in the
+   pane toolbar (the robot-icon button next to tunnels) - *Read only*
+   (the LLM can read scrollback and run allowlisted read-only commands)
+   or *Read + run* (adds the ability to run other commands and type into
+   the terminal, each gated). The button turns blue while the session is
+   shared. The LLM only ever sees sessions you have shared.
+
+What the LLM can do:
+
+- **read_terminal** - the recent scrollback. This is handed to the
+  LLM as untrusted data; a log line that says "run X" is not a
+  command, only a tool call is.
+- **run** - runs a command on a side channel and returns the output.
+  Read-only commands (ls, cat, journalctl, systemctl status, ...)
+  run immediately; anything that could change state pops an approval
+  prompt where you **Run** it or **Deny**. You can extend the
+  auto-run allowlist in Settings; mutating commands (sudo, rm, ...)
+  always prompt.
+- **type_into_terminal** - on approval, types text into your live
+  terminal **without pressing Enter**, so you review it and submit it
+  yourself.
+- **list_connections / connect** - the LLM can also search your saved
+  connections (by name or folder only - hostnames aren't exposed
+  until a connect) and open one. Opening a session always asks you to
+  approve first, and the new session is then shared with the LLM
+  automatically so it can start working.
+
+A session shared with the LLM shows a small robot-icon badge on
+its tab, so you can always see at a glance which sessions the LLM can
+see. Shared sessions are listed (and revocable) in Settings, and
+every grant is dropped automatically when the session disconnects.
+
 ### Quick palette shortcut
 
 `Ctrl+K` matches forwards by description / parent connection name,

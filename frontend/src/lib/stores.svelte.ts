@@ -1903,6 +1903,54 @@ class HostKeyStore {
 }
 export const hostKeyStore = new HostKeyStore();
 
+// Pending MCP command-approval requests. When the bridge is active and an LLM
+// asks to run a non-allowlisted command or type into the terminal, the backend
+// emits mcp_approval_request and blocks on a channel until McpApprovalRespond.
+// Same FIFO surfacing as host-key challenges.
+export interface McpApproval {
+  approvalId: string;
+  sessionId: string;
+  sessionName: string;
+  kind: "run" | "type" | "connect";
+  command: string;
+}
+
+class McpApprovalStore {
+  queue = $state<McpApproval[]>([]);
+  get pending(): McpApproval | null {
+    return this.queue[0] ?? null;
+  }
+  enqueue(a: McpApproval) {
+    if (this.queue.some((q) => q.approvalId === a.approvalId)) return;
+    this.queue = [...this.queue, a];
+  }
+  shift() {
+    if (this.queue.length === 0) return;
+    this.queue = this.queue.slice(1);
+  }
+  clearAll() { this.queue = []; }
+}
+export const mcpApprovalStore = new McpApprovalStore();
+
+// Tracks which session ids are currently shared with the LLM (MCP bridge), so
+// the terminal tabs can show a "shared" marker. Kept live off the
+// mcp_grants_changed event; also seeded on demand.
+class McpSharedStore {
+  private ids = $state<Set<string>>(new Set());
+
+  has(sessionId: string): boolean {
+    return this.ids.has(sessionId);
+  }
+  // Replace the whole set (from mcp_grants_changed payload or a fetch).
+  setFrom(grants: { session_id: string }[]) {
+    this.ids = new Set(grants.map((g) => g.session_id));
+  }
+  get size(): number {
+    return this.ids.size;
+  }
+}
+export const mcpShared = new McpSharedStore();
+
 class ExpandedFoldersStore {
   // Explicit per-ID override. Absent = fall back to depth default (depth 0 → expanded).
   private map = $state<Map<string, boolean>>(new Map());

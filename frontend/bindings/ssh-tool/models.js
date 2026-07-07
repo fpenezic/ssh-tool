@@ -1552,6 +1552,54 @@ export class ForwardUpdateInput {
 }
 
 /**
+ * GiveInternetResult carries back the running forward id, the remote port the
+ * server-side listener actually bound, and a ready-to-paste export block the
+ * user drops into the server shell to route its HTTP/HTTPS traffic through the
+ * proxy.
+ */
+export class GiveInternetResult {
+    /**
+     * Creates a new GiveInternetResult instance.
+     * @param {Partial<GiveInternetResult>} [$$source = {}] - The source object to create the GiveInternetResult.
+     */
+    constructor($$source = {}) {
+        if (!("forward_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["forward_id"] = "";
+        }
+        if (!("remote_port" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["remote_port"] = 0;
+        }
+        if (!("export_command" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["export_command"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new GiveInternetResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {GiveInternetResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new GiveInternetResult(/** @type {Partial<GiveInternetResult>} */($$parsedSource));
+    }
+}
+
+/**
  * ImagesGet returns the bytes + mime type for a stored image. The frontend
  * turns this into a data URI for inline display.
  */
@@ -1779,6 +1827,58 @@ export class LocalShellOpenResult {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new LocalShellOpenResult(/** @type {Partial<LocalShellOpenResult>} */($$parsedSource));
+    }
+}
+
+/**
+ * McpGrantInfo is the IPC-friendly view of a shared session.
+ */
+export class McpGrantInfo {
+    /**
+     * Creates a new McpGrantInfo instance.
+     * @param {Partial<McpGrantInfo>} [$$source = {}] - The source object to create the McpGrantInfo.
+     */
+    constructor($$source = {}) {
+        if (!("session_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["session_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("hostname" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hostname"] = "";
+        }
+        if (!("level" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["level"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new McpGrantInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {McpGrantInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new McpGrantInfo(/** @type {Partial<McpGrantInfo>} */($$parsedSource));
     }
 }
 

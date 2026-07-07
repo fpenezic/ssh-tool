@@ -7,6 +7,45 @@ in alpha upstream.
 
 ---
 
+## [0.52.0] - Give internet + share a session with an LLM
+
+### Added
+
+- **"Give internet" - one-click reverse proxy for a server with no
+  outbound net.** Open the tunnels popover on a connected session and
+  click **Give internet**: ssh-tool raises a reverse tunnel on the
+  server (loopback `127.0.0.1:3182` by default, overridable) and serves
+  the proxying itself - no squid, no external tooling. It shows a ready
+  to paste `export http_proxy=...` block; run that on the server and its
+  HTTP/HTTPS traffic (apt, curl, wget, pip, dnf) flows out through your
+  machine. DNS is resolved on the ssh-tool side, so the server does not
+  need a working resolver for proxied traffic. The running proxy appears
+  in the popover with live byte counters and a Stop button, and tears
+  down automatically when the session disconnects.
+
+- **Share a live session with an LLM (MCP bridge).** You can now attach
+  an external LLM client (Claude Code, etc.) to a running SSH session so
+  it can help you debug - read what's on screen, pull logs, propose and
+  run commands. It's off by default: enable it under
+  **Settings -> LLM (MCP) access**, register ssh-tool once with your LLM
+  client, then share a specific session with the **Share with LLM**
+  button in the pane toolbar (read-only or read+run). The registration command
+  is shown for Claude Code and as an `mcp.json` block for LM Studio (any
+  MCP client works the same way). The bridge is local-only (a unix
+  socket on Linux/macOS, a loopback pipe on Windows) - nothing is
+  exposed to the network, and no session is reachable until you share
+  it. Read-only commands run on their own; anything that could change
+  state pops an approval prompt where you Run it, type it into your
+  terminal without pressing Enter, or Deny. The LLM can also **search
+  your saved connections and open one** (by name/folder only - hostnames
+  aren't exposed until a connect, which you approve, and the new session
+  is then shared automatically). A shared session shows a badge on its
+  tab so you always know what the LLM can see. If your LLM client runs
+  in WSL while ssh-tool runs on Windows, enable the optional
+  token-guarded loopback-TCP listener. Terminal output handed to the LLM
+  is treated as untrusted data, never as instructions. Grants are
+  cleared when the session disconnects. Desktop only.
+
 ## [0.51.0] - Credential expiry + dark dropdowns on Linux
 
 ### Added

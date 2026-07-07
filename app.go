@@ -84,6 +84,19 @@ type App struct {
 	metaMu      sync.Mutex
 	sessionMeta map[string]sessionMetaEntry
 
+	// mcp holds the MCP bridge state (per-session grants + pending command
+	// approvals). See app_mcp.go. Nil-safe: initialised in initialise().
+	mcp *mcpState
+	// mcpListener is the local socket the bridge subprocess connects to; nil
+	// when the bridge is disabled. mcpTCPListener is the optional loopback TCP
+	// listener for cross-boundary clients (WSL Claude Code -> Windows app), used
+	// only when mcp_bridge_tcp is on; it requires a token on the first line.
+	// All guarded by mcpListenerMu. Desktop only.
+	mcpListenerMu  sync.Mutex
+	mcpListener    net.Listener
+	mcpTCPListener net.Listener
+	mcpTCPToken    string
+
 	pendingHostKeysMu sync.Mutex
 	pendingHostKeys   map[string]chan bool
 
@@ -329,6 +342,7 @@ func (a *App) initialise() {
 	a.reconnects = make(map[string]chan struct{})
 	a.connectCancels = make(map[string]*connectCancel)
 	a.debugBuf = make(map[string][]string)
+	a.mcp = newMcpState()
 	a.broadcastGroups = map[string]map[string]bool{
 		"": make(map[string]bool),
 	}
@@ -443,6 +457,10 @@ func (a *App) initialise() {
 	if a.onDBReady != nil {
 		a.onDBReady()
 	}
+
+	// Start the MCP bridge listener if the user has enabled it (no-op on
+	// mobile / when disabled).
+	a.startMcpListener()
 }
 
 // Ping smoke command.
@@ -1056,6 +1074,7 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 	a.syncForegroundService()
 	sess.SetOnClose(func(sessionID string) {
 		a.forwards.StopAllForSession(sessionID)
+		a.clearMcpGrant(sessionID)
 		a.sessionRecordingCleanup(sessionID)
 		a.pool.Remove(sessionID)
 		a.wgRelease(sessionID)
@@ -2573,6 +2592,7 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 	autoReconnect := settings.AutoReconnect
 	sess.SetOnClose(func(id string) {
 		a.forwards.StopAllForSession(id)
+		a.clearMcpGrant(id)
 		a.sessionRecordingCleanup(id)
 		userInit := false
 		if s, ok := a.pool.Get(id); ok {
@@ -3842,6 +3862,58 @@ func (a *App) ForwardsStop(forwardID string) error {
 	return a.forwards.Stop(forwardID)
 }
 
+// defaultGiveInternetPort is the remote loopback port the "give internet"
+// reverse proxy binds on the server by default.
+const defaultGiveInternetPort = 3182
+
+// GiveInternetResult carries back the running forward id, the remote port the
+// server-side listener actually bound, and a ready-to-paste export block the
+// user drops into the server shell to route its HTTP/HTTPS traffic through the
+// proxy.
+type GiveInternetResult struct {
+	ForwardID     string `json:"forward_id"`
+	RemotePort    uint16 `json:"remote_port"`
+	ExportCommand string `json:"export_command"`
+}
+
+// SshGiveInternet raises a reverse HTTP proxy on the session's server so a host
+// with no outbound net can borrow the local machine's connectivity. It binds
+// 127.0.0.1:remotePort on the server (loopback only) and services proxied
+// requests in-process, dialing out from the ssh-tool side (DNS resolved here).
+// remotePort 0 uses the default 3182. Stop via ForwardsStop(forward_id) or a
+// session disconnect.
+func (a *App) SshGiveInternet(sessionID string, remotePort uint16) (*GiveInternetResult, error) {
+	sess, ok := a.pool.Get(sessionID)
+	if !ok {
+		return nil, fmt.Errorf("session not connected")
+	}
+	if remotePort == 0 {
+		remotePort = defaultGiveInternetPort
+	}
+	id := uuid.NewString()
+	status, err := a.forwards.StartReverseProxy(sess, id, "127.0.0.1", remotePort)
+	if err != nil {
+		return nil, err
+	}
+	// StartReverseProxy reflects the actually-bound port (in case of 0).
+	boundPort := status.LocalPort
+	return &GiveInternetResult{
+		ForwardID:     id,
+		RemotePort:    boundPort,
+		ExportCommand: giveInternetExportBlock(boundPort),
+	}, nil
+}
+
+// giveInternetExportBlock builds the shell export block the user pastes on the
+// server. Covers the lower- and upper-case proxy vars different tools read,
+// and keeps loopback out of the proxy so local traffic isn't tunnelled back.
+func giveInternetExportBlock(port uint16) string {
+	proxy := fmt.Sprintf("http://127.0.0.1:%d", port)
+	return fmt.Sprintf(
+		"export http_proxy=%s https_proxy=%s HTTP_PROXY=%s HTTPS_PROXY=%s no_proxy=localhost,127.0.0.1,::1",
+		proxy, proxy, proxy, proxy)
+}
+
 // ForwardsAutoStartFor instantiates every spec with auto_start=1 that's
 // registered against the given connection. Called by SshConnect right after
 // the session lands.
@@ -3953,7 +4025,22 @@ func (a *App) SettingsSet(key, value string) error {
 	if localStateKeys[key] {
 		return a.localSettingSet(key, value)
 	}
-	return a.db.SetSetting(key, value)
+	if err := a.db.SetSetting(key, value); err != nil {
+		return err
+	}
+	// Toggling the MCP bridge takes effect immediately: start the local
+	// listener when enabled, tear it down when disabled.
+	if key == "mcp_bridge_enabled" {
+		if value == "1" || value == "true" {
+			a.startMcpListener()
+		} else {
+			a.stopMcpListener()
+		}
+	}
+	if key == "mcp_bridge_tcp" {
+		a.setMcpTCP(value == "1" || value == "true")
+	}
+	return nil
 }
 
 func (a *App) SettingsDelete(key string) error {

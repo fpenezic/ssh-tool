@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { sessions, paneTabs, view, drag, tree, closedTabs, type PaneNode as PaneNodeType, encodePaneLayout, decodePaneLayout } from "./stores.svelte";
+  import { sessions, paneTabs, view, drag, tree, closedTabs, mcpShared, type PaneNode as PaneNodeType, encodePaneLayout, decodePaneLayout } from "./stores.svelte";
   import { api } from "./api";
   import PaneNode from "./PaneNode.svelte";
   import TcpdumpModal from "./TcpdumpModal.svelte";
@@ -7,7 +7,7 @@
   import { broadcast } from "./broadcast.svelte";
   import { recording } from "./recording.svelte";
   import { connectionActions } from "./connectionActions.svelte";
-  import { IconBroadcast, IconFolder } from "./iconMap";
+  import { IconBroadcast, IconFolder, IconBot } from "./iconMap";
   import BroadcastManager from "./BroadcastManager.svelte";
   import { setTabDetachDragImage } from "./dragImage";
   import { appPrefs } from "./appPrefs.svelte";
@@ -63,6 +63,11 @@
 
   function tabRecordingCount(tabId: string): number {
     return tabSessionIdArr(tabId).filter((sid) => recording.isRecording(sid)).length;
+  }
+
+  // Any pane in this tab shared with the LLM (MCP bridge)?
+  function tabHasSharedSession(tabId: string): boolean {
+    return tabSessionIdArr(tabId).some((sid) => mcpShared.has(sid));
   }
 
   function tabAddAllToBroadcast(tabId: string) {
@@ -585,6 +590,11 @@
                 : `Recording ${tabRecordingCount(t.tabId)} panes`}
             ></span>
           {/if}
+          {#if tabHasSharedSession(t.tabId)}
+            <span class="mcp-badge" title="Shared with LLM (MCP)">
+              <IconBot size={10} />
+            </span>
+          {/if}
           {#if tabBroadcastState(t.tabId) !== "none"}
             {@const groups = tabBroadcastGroups(t.tabId)}
             <span
@@ -921,6 +931,13 @@
   @keyframes rec-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.35; }
+  }
+  .mcp-badge {
+    display: inline-flex;
+    align-items: center;
+    color: var(--blue);
+    margin-right: 0.15rem;
+    flex-shrink: 0;
   }
   .bcast {
     display: inline-flex;

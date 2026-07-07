@@ -906,8 +906,20 @@ export const api = {
   forwardsStart: (forwardId: string, sessionId: string) =>
     G.ForwardsStart(forwardId, sessionId) as unknown as Promise<ForwardStatus>,
   forwardsStop: (forwardId: string) => G.ForwardsStop(forwardId),
+  sshGiveInternet: (sessionId: string, remotePort: number) =>
+    G.SshGiveInternet(sessionId, remotePort) as unknown as Promise<GiveInternetResult>,
   sshLaunchBrowser: (forwardId: string, url: string) =>
     G.SshLaunchBrowser(forwardId, url) as unknown as Promise<{ pid: number }>,
+
+  // MCP bridge: share live sessions with an external LLM.
+  mcpShareSession: (sessionId: string, level: McpGrantLevel) =>
+    G.McpShareSession(sessionId, level),
+  mcpUnshareSession: (sessionId: string) => G.McpUnshareSession(sessionId),
+  mcpListGrants: () => G.McpListGrants() as unknown as Promise<McpGrantInfo[]>,
+  mcpApprovalRespond: (approvalId: string, decision: McpDecision) =>
+    G.McpApprovalRespond(approvalId, decision),
+  appExePath: () => G.AppExePath() as unknown as Promise<string>,
+  appWslExePath: () => G.AppWslExePath() as unknown as Promise<string>,
 
   settingsGet: (key: string) => G.SettingsGet(key) as unknown as Promise<string>,
   settingsSet: (key: string, value: string) => G.SettingsSet(key, value),
@@ -1389,9 +1401,34 @@ export interface ServerStats {
   users: number;          // -1 if unknown
 }
 
+export interface GiveInternetResult {
+  forward_id: string;
+  remote_port: number;
+  export_command: string;
+}
+
+export type McpGrantLevel = "read" | "read-run";
+export type McpDecision = "run" | "type" | "deny";
+
+export interface McpGrantInfo {
+  session_id: string;
+  name: string;
+  hostname: string;
+  level: McpGrantLevel;
+}
+
+// Event payload for the approval modal (event: "mcp_approval_request").
+export interface McpApprovalRequest {
+  approval_id: string;
+  session_id: string;
+  session_name: string;
+  kind: "run" | "type" | "connect";
+  command: string;
+}
+
 export interface ForwardStatus {
   id: string;
-  kind: "local" | "remote" | "dynamic";
+  kind: "local" | "remote" | "dynamic" | "reverse-proxy";
   session_id: string;
   local_addr: string;
   local_port: number;

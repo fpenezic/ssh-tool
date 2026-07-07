@@ -81,6 +81,7 @@ import GlobeLock from "@lucide/svelte/icons/globe-lock";
 import Activity from "@lucide/svelte/icons/activity";
 import Search from "@lucide/svelte/icons/search";
 import Cpu from "@lucide/svelte/icons/cpu";
+import Bot from "@lucide/svelte/icons/bot";
 import MemoryStick from "@lucide/svelte/icons/memory-stick";
 import HardDrive from "@lucide/svelte/icons/hard-drive";
 import Users from "@lucide/svelte/icons/users";
@@ -93,6 +94,7 @@ export {
   Activity as IconActivity,
   Search as IconSearch,
   Cpu as IconCpu,
+  Bot as IconBot,
   MemoryStick as IconMemory,
   HardDrive as IconDisk,
   Users as IconUsers,

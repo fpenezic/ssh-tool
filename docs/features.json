@@ -63,6 +63,26 @@
       "art": "network"
     },
     {
+      "title": "Give internet to an offline server",
+      "body": "One click on a connected session raises a reverse HTTP proxy on the server and serves the proxying in-app - no squid, no external tooling. Paste the shown export block and the server's apt/curl/pip traffic flows out through your machine. DNS resolves on your side, so the box needs no working resolver.",
+      "keys": [
+        "Give internet",
+        "http_proxy",
+        "3182"
+      ],
+      "art": "network"
+    },
+    {
+      "title": "Share a session with an LLM",
+      "body": "Attach an external LLM client (Claude Code) to a live session so it can read the terminal, pull logs, and propose commands while you debug. Off by default, local-only bridge, per-session opt-in. Read-only commands auto-run; anything that changes state needs your approval. Terminal output is treated as untrusted data.",
+      "keys": [
+        "MCP",
+        "Share with LLM",
+        "approve"
+      ],
+      "art": "network"
+    },
+    {
       "title": "Dynamic inventory",
       "body": "Folders that auto-populate from Proxmox VE, Hetzner Cloud, DigitalOcean, Linode, Vultr, Scaleway, AWS EC2 and Ansible inventory files. Tags / labels filter what shows; stopped guests appear greyed with a \"connect anyway\" prompt. API tokens live in the vault.",
       "keys": [
@@ -120,7 +140,7 @@
     {
       "icon": "forward",
       "title": "Port forwards + isolated browser",
-      "body": "Local, remote and dynamic SOCKS5 forwards. One click launches an isolated browser pinned to the SOCKS port."
+      "body": "Local, remote and dynamic SOCKS5 forwards. One click launches an isolated browser pinned to the SOCKS port. \"Give internet\" reverse-proxies an offline server's HTTP traffic out through your machine - no squid needed. Share a session with an LLM (MCP) to debug together, gated and local-only."
     },
     {
       "icon": "shield",

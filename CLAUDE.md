@@ -293,6 +293,59 @@ These still bite. The archive of older / now-handled traps lives in
     re-evaluate on Set-replace inside a single key (Svelte
     deep tracking misses that).
 
+30. **"Give internet" is a reverse-proxy forward, DNS resolved
+    app-side.** `SshGiveInternet` (app.go) starts a
+    `ForwardReverseProxy` forward (`internal/ssh/forward.go`): a
+    remote listener on the server (`client.Listen`, loopback
+    `127.0.0.1:3182` by default) whose accepted conns are serviced by
+    an in-process HTTP CONNECT proxy (`internal/ssh/httpproxy.go`),
+    NOT dialed to a fixed local port like a plain `-R`. The proxy
+    `net.Dial`s the destination from the ssh-tool machine, so name
+    resolution happens on OUR side (the point: the server may have no
+    resolver). It handles both CONNECT (HTTPS tunnel) and plain-HTTP
+    absolute-URI proxying (apt/curl). Header reads are size-capped
+    (8KB). Forwards are ad-hoc (never persisted to `store.PortForward`),
+    surface only in the TunnelPopover + `ForwardsActive`, and are torn
+    down by the existing `StopAllForSession` on disconnect. The
+    reverse-proxy leg uses `tunnelBuffered` (not `tunnel`) because the
+    client side has a `bufio.Reader` that may already hold bytes read
+    past the header block (request body / TLS ClientHello).
+
+31. **MCP bridge = separate stdio subprocess proxying to the live app
+    over a local socket.** The desktop app runs the MCP server itself
+    (`app_mcp_desktop.go`): per accepted socket connection it builds an
+    `mcp.Server` (go-sdk) and runs it over an `mcp.IOTransport` on that
+    conn. `ssh-tool --mcp-bridge` (`bridge_desktop.go`) is a DUMB pipe -
+    `io.Copy` between the LLM's stdio and the socket - so MCP-over-socket
+    IS the protocol; there is no hand-rolled framing. Sessions live in
+    the running desktop process, which is why the subprocess can't hold
+    them and must proxy. Transport is local-only: unix socket (0600) on
+    Linux/macOS, loopback TCP + a 0600 addr file on Windows (no unix
+    sockets without winio) - see `app_mcp_listen_{unix,windows}.go`. The
+    whole feature is `!android && !ios`; mobile gets no-op stubs
+    (`app_mcp_mobile.go`, `bridge_mobile.go`). Off by default
+    (`mcp_bridge_enabled`); toggling the setting starts/stops the
+    listener live via `SettingsSet`. Grants are per-session, in-memory
+    only (`a.mcp.grants`), cleared in the session `SetOnClose` teardown
+    via `clearMcpGrant`. The command-approval gate copies the host-key
+    TOFU pattern exactly (register a channel, emit `mcp_approval_request`,
+    select on channel/ctx/2-min timeout -> default deny). Read-only
+    classification is `internal/ssh/cmdallow.go` `IsReadOnly` (conservative:
+    unknown -> prompt). Scrollback returned to the LLM is framed as
+    UNTRUSTED data - it is not an instruction channel; only a run/type
+    tool call touches the host, and that is allowlisted-or-gated.
+    Tools: list_sessions, read_terminal, run, type_into_terminal, plus
+    list_connections (name + folder path only, Sensitive connections
+    omitted) and connect (approval-gated `SshConnect` then auto-share).
+    WSL->Windows: an optional token-guarded loopback-TCP leg
+    (`mcp_bridge_tcp`, `startMcpTCP`, addr+token in
+    `<DataDir>/mcp-bridge.tcp`) - the bridge's `dialMcp` prefers it when
+    present (WSL2 forwards localhost to the host but can't see the pipe).
+    Do NOT add `/mnt/c` exec paths for this - the Windows `.exe` is the
+    bridge, launched from WSL, and it talks to the Windows app over
+    loopback; the app stays WSL-agnostic. A shared session shows a badge
+    on its terminal tab (mcpShared store, fed by `mcp_grants_changed`).
+
 ### Android / mobile gotchas
 
 The app runs on Android (v0.36.0+). Built locally via the NDK
