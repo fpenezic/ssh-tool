@@ -50,6 +50,13 @@ func main() {
 		os.Exit(0)
 	}
 
+	// `ssh-tool --mcp-bridge` runs as a dumb stdio<->socket pipe so an LLM
+	// client (Claude Code) can reach the running desktop app's MCP server.
+	// It does no MCP work itself and never opens a window. Desktop only.
+	if len(os.Args) > 1 && os.Args[1] == "--mcp-bridge" {
+		os.Exit(runMcpBridge())
+	}
+
 	// Tee log output through a ring buffer (for the in-app log viewer)
 	// AND a rolling file in the user-data dir so we have a persistent
 	// log trail across restarts. File path:

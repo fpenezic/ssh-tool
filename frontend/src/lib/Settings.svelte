@@ -3,6 +3,7 @@
   import { errMsg } from "./connectErrors";
   import { isMobile } from "./platform";
   import PasswordInput from "./PasswordInput.svelte";
+  import McpGrantsList from "./McpGrantsList.svelte";
   import { api, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo } from "./api";
   import { networkProfiles } from "./networkProfiles.svelte";
   import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
@@ -37,6 +38,11 @@
   let connectTimeoutSaved = $state(false);
   let closeToTray = $state<boolean>(false);
   let minimizeToTray = $state<boolean>(false);
+
+  // LLM (MCP) bridge access.
+  let mcpEnabled = $state<boolean>(false);
+  let mcpReadonlyExtra = $state<string>("");
+  let mcpExePath = $state<string>("");
   let externalTerminal = $state<"windowsterminal" | "powershell" | "cmd" | "wsl">("windowsterminal");
 
   // Per-platform list of in-app local shells the radio shows. Matches
@@ -302,7 +308,24 @@
     await terminalPrefs.load();
     await vaultPrefs.load();
     await localShellPrefs.load();
+    try {
+      const v = await api.settingsGet("mcp_bridge_enabled");
+      mcpEnabled = v === "1" || v === "true";
+    } catch { /* default off */ }
+    try { mcpReadonlyExtra = (await api.settingsGet("mcp_readonly_extra")) ?? ""; } catch { /* ignore */ }
+    try { mcpExePath = (await api.appExePath()) ?? ""; } catch { /* ignore */ }
   });
+
+  async function toggleMcp(next: boolean) {
+    mcpEnabled = next;
+    try { await api.settingsSet("mcp_bridge_enabled", next ? "1" : "0"); }
+    catch (e) { console.warn("mcp toggle:", e); }
+  }
+
+  async function saveMcpReadonlyExtra() {
+    try { await api.settingsSet("mcp_readonly_extra", mcpReadonlyExtra.trim()); }
+    catch (e) { console.warn("mcp allowlist:", e); }
+  }
 
   async function toggleCloseToTray(next: boolean) {
     closeToTray = next;
@@ -943,6 +966,7 @@
     | "audit"
     | "import"
     | "export"
+    | "llm"
     | "logs"
     | "updates"
     | "about";
@@ -950,7 +974,7 @@
   type SectionDef = {
     id: SectionId;
     title: string;
-    group: "Appearance" | "Security" | "Import / Export" | "App" | "Diagnostics";
+    group: "Appearance" | "Security" | "Import / Export" | "Integrations" | "App" | "Diagnostics";
   };
 
   const SECTIONS: SectionDef[] = [
@@ -967,6 +991,7 @@
     { id: "audit",             title: "Audit log",        group: "Security" },
     { id: "import",            title: "Import",           group: "Import / Export" },
     { id: "export",            title: "Export connections", group: "Import / Export" },
+    { id: "llm",               title: "LLM (MCP) access",  group: "Integrations" },
     { id: "updates",           title: "Updates",          group: "App" },
     { id: "logs",              title: "Logs",             group: "Diagnostics" },
     { id: "about",             title: "About",            group: "Diagnostics" },
@@ -1631,7 +1656,7 @@
 
   // Sections that are desktop-only and hidden on mobile (the backend
   // features they configure are excluded on android).
-  const MOBILE_HIDDEN_SECTIONS = new Set(["browser"]);
+  const MOBILE_HIDDEN_SECTIONS = new Set(["browser", "llm"]);
 
   // Group sections by their group label for the side nav.
   const sectionsByGroup = $derived.by(() => {
@@ -3888,6 +3913,64 @@
     {/if}
   </div>
 
+  {:else if activeSection === "llm"}
+    <h2>LLM (MCP) access to sessions</h2>
+    <p class="hint">
+      Let an external LLM client (Claude Code, etc.) connect to ssh-tool and
+      help you debug a live SSH session - read what's on screen, pull logs,
+      propose and run commands. Off by default. Reads are safe; commands that
+      change state always need your approval.
+    </p>
+
+    <label class="toggle">
+      <input
+        type="checkbox"
+        checked={mcpEnabled}
+        onchange={(e) => toggleMcp((e.target as HTMLInputElement).checked)}
+      />
+      <span>
+        <strong>Allow LLM (MCP) access to shared sessions</strong>
+        <span class="hint inline">
+          - starts a local-only bridge (a unix socket on Linux/macOS, a
+          loopback pipe on Windows) an MCP client can connect to. Nothing is
+          exposed to the network, and no session is reachable until you
+          explicitly share it from a session's tunnels menu.
+        </span>
+      </span>
+    </label>
+
+    {#if mcpEnabled}
+      <h3 style="margin-top:1.2rem">Register with your LLM client</h3>
+      <p class="hint">
+        Add ssh-tool as an MCP server once. For Claude Code:
+      </p>
+      <pre class="cmd-block">claude mcp add ssh-tool -- {mcpExePath || "ssh-tool"} --mcp-bridge</pre>
+      <p class="hint">
+        Then share a session: open its tunnels menu (cable button) and pick
+        <strong>Share with LLM</strong>. The LLM sees only shared sessions.
+      </p>
+
+      <h3 style="margin-top:1.2rem">Auto-run allowlist</h3>
+      <p class="hint">
+        Read-only commands (ls, cat, journalctl, systemctl status, ...) run
+        without a prompt. Anything else asks you first. Add extra command names
+        to auto-run here, one per line or space-separated. Mutating commands
+        (sudo, rm, ...) always prompt regardless.
+      </p>
+      <textarea
+        class="allowlist"
+        rows="3"
+        placeholder="e.g. mytool anothertool"
+        bind:value={mcpReadonlyExtra}
+        onblur={saveMcpReadonlyExtra}
+      ></textarea>
+
+      <div class="mcp-grants">
+        <h3 style="margin-top:1.2rem">Currently shared sessions</h3>
+        <McpGrantsList />
+      </div>
+    {/if}
+
   {:else if activeSection === "logs"}
   <div class="group">
     <h2>Logs</h2>
@@ -4648,6 +4731,32 @@
   }
   .toggle strong { color: var(--text); display: block; margin-bottom: 0.1rem; }
   .toggle .hint.inline { display: inline; padding: 0; margin: 0; font-size: 0.78rem; }
+  .cmd-block {
+    background: var(--crust);
+    border: 1px solid var(--surface1);
+    border-radius: 4px;
+    padding: 0.5rem 0.6rem;
+    margin: 0.4rem 0;
+    font-family: ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-all;
+    user-select: all;
+  }
+  .allowlist {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--mantle);
+    border: 1px solid var(--surface1);
+    border-radius: 4px;
+    color: var(--text);
+    padding: 0.4rem 0.5rem;
+    font: inherit;
+    font-family: ui-monospace, monospace;
+    font-size: 0.8rem;
+    resize: vertical;
+  }
   .themes {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

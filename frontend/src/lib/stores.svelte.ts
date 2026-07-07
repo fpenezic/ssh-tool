@@ -1903,6 +1903,35 @@ class HostKeyStore {
 }
 export const hostKeyStore = new HostKeyStore();
 
+// Pending MCP command-approval requests. When the bridge is active and an LLM
+// asks to run a non-allowlisted command or type into the terminal, the backend
+// emits mcp_approval_request and blocks on a channel until McpApprovalRespond.
+// Same FIFO surfacing as host-key challenges.
+export interface McpApproval {
+  approvalId: string;
+  sessionId: string;
+  sessionName: string;
+  kind: "run" | "type";
+  command: string;
+}
+
+class McpApprovalStore {
+  queue = $state<McpApproval[]>([]);
+  get pending(): McpApproval | null {
+    return this.queue[0] ?? null;
+  }
+  enqueue(a: McpApproval) {
+    if (this.queue.some((q) => q.approvalId === a.approvalId)) return;
+    this.queue = [...this.queue, a];
+  }
+  shift() {
+    if (this.queue.length === 0) return;
+    this.queue = this.queue.slice(1);
+  }
+  clearAll() { this.queue = []; }
+}
+export const mcpApprovalStore = new McpApprovalStore();
+
 class ExpandedFoldersStore {
   // Explicit per-ID override. Absent = fall back to depth default (depth 0 → expanded).
   private map = $state<Map<string, boolean>>(new Map());

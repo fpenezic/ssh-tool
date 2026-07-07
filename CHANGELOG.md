@@ -7,7 +7,7 @@ in alpha upstream.
 
 ---
 
-## [0.52.0] - Give internet to an offline server
+## [0.52.0] - Give internet + share a session with an LLM
 
 ### Added
 
@@ -22,6 +22,22 @@ in alpha upstream.
   need a working resolver for proxied traffic. The running proxy appears
   in the popover with live byte counters and a Stop button, and tears
   down automatically when the session disconnects.
+
+- **Share a live session with an LLM (MCP bridge).** You can now attach
+  an external LLM client (Claude Code, etc.) to a running SSH session so
+  it can help you debug - read what's on screen, pull logs, propose and
+  run commands. It's off by default: enable it under
+  **Settings -> LLM (MCP) access**, register ssh-tool once with your LLM
+  client (the exact `claude mcp add ...` command is shown), then share a
+  specific session from its tunnels menu (**Share with LLM**, read-only
+  or read+run). The bridge is local-only (a unix socket on Linux/macOS,
+  a loopback pipe on Windows) - nothing is exposed to the network, and
+  no session is reachable until you share it. Read-only commands run on
+  their own; anything that could change state pops an approval prompt
+  where you Run it, type it into your terminal without pressing Enter, or
+  Deny. Terminal output handed to the LLM is treated as untrusted data,
+  never as instructions. Grants are cleared when the session
+  disconnects. Desktop only.
 
 ## [0.51.0] - Credential expiry + dark dropdowns on Linux
 

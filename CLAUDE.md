@@ -311,6 +311,30 @@ These still bite. The archive of older / now-handled traps lives in
     client side has a `bufio.Reader` that may already hold bytes read
     past the header block (request body / TLS ClientHello).
 
+31. **MCP bridge = separate stdio subprocess proxying to the live app
+    over a local socket.** The desktop app runs the MCP server itself
+    (`app_mcp_desktop.go`): per accepted socket connection it builds an
+    `mcp.Server` (go-sdk) and runs it over an `mcp.IOTransport` on that
+    conn. `ssh-tool --mcp-bridge` (`bridge_desktop.go`) is a DUMB pipe -
+    `io.Copy` between the LLM's stdio and the socket - so MCP-over-socket
+    IS the protocol; there is no hand-rolled framing. Sessions live in
+    the running desktop process, which is why the subprocess can't hold
+    them and must proxy. Transport is local-only: unix socket (0600) on
+    Linux/macOS, loopback TCP + a 0600 addr file on Windows (no unix
+    sockets without winio) - see `app_mcp_listen_{unix,windows}.go`. The
+    whole feature is `!android && !ios`; mobile gets no-op stubs
+    (`app_mcp_mobile.go`, `bridge_mobile.go`). Off by default
+    (`mcp_bridge_enabled`); toggling the setting starts/stops the
+    listener live via `SettingsSet`. Grants are per-session, in-memory
+    only (`a.mcp.grants`), cleared in the session `SetOnClose` teardown
+    via `clearMcpGrant`. The command-approval gate copies the host-key
+    TOFU pattern exactly (register a channel, emit `mcp_approval_request`,
+    select on channel/ctx/2-min timeout -> default deny). Read-only
+    classification is `internal/ssh/cmdallow.go` `IsReadOnly` (conservative:
+    unknown -> prompt). Scrollback returned to the LLM is framed as
+    UNTRUSTED data - it is not an instruction channel; only a run/type
+    tool call touches the host, and that is allowlisted-or-gated.
+
 ### Android / mobile gotchas
 
 The app runs on Android (v0.36.0+). Built locally via the NDK

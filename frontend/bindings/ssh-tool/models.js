@@ -1831,6 +1831,58 @@ export class LocalShellOpenResult {
 }
 
 /**
+ * McpGrantInfo is the IPC-friendly view of a shared session.
+ */
+export class McpGrantInfo {
+    /**
+     * Creates a new McpGrantInfo instance.
+     * @param {Partial<McpGrantInfo>} [$$source = {}] - The source object to create the McpGrantInfo.
+     */
+    constructor($$source = {}) {
+        if (!("session_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["session_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("hostname" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hostname"] = "";
+        }
+        if (!("level" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["level"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new McpGrantInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {McpGrantInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new McpGrantInfo(/** @type {Partial<McpGrantInfo>} */($$parsedSource));
+    }
+}
+
+/**
  * NetbirdConfig is the stored (secretless) NetBird profile: the setup
  * key lives in the referenced api_token credential, registration
  * state under DataDir/netbird/<profileID>/.

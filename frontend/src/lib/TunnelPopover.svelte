@@ -20,7 +20,8 @@
     type ProxyBookmark,
   } from "./api";
   import { clickOutside } from "./clickOutside";
-  import { IconPlay, IconStop, IconExternalLink, IconGlobe, IconClipboardCopy } from "./iconMap";
+  import { IconPlay, IconStop, IconExternalLink, IconGlobe, IconClipboardCopy, IconTerminal } from "./iconMap";
+  import type { McpGrantLevel } from "./api";
 
   interface Props {
     connectionId: string;
@@ -104,6 +105,40 @@
     }
   }
 
+  // Share with LLM (MCP bridge). Only shown when the bridge is enabled in
+  // Settings. mcpLevel is this session's current grant ("" = not shared).
+  let mcpBridgeOn = $state(false);
+  let mcpLevel = $state<"" | McpGrantLevel>("");
+
+  async function loadMcp() {
+    try {
+      const v = await api.settingsGet("mcp_bridge_enabled");
+      mcpBridgeOn = v === "1" || v === "true";
+    } catch { mcpBridgeOn = false; }
+    if (!mcpBridgeOn || !sessionId) return;
+    try {
+      const grants = (await api.mcpListGrants()) ?? [];
+      const g = grants.find((x) => x.session_id === sessionId);
+      mcpLevel = g ? g.level : "";
+    } catch { /* ignore */ }
+  }
+
+  async function shareMcp(level: McpGrantLevel) {
+    if (!sessionId) return;
+    try {
+      await api.mcpShareSession(sessionId, level);
+      mcpLevel = level;
+    } catch (e) { err = String((e as any)?.message ?? e); }
+  }
+
+  async function unshareMcp() {
+    if (!sessionId) return;
+    try {
+      await api.mcpUnshareSession(sessionId);
+      mcpLevel = "";
+    } catch (e) { err = String((e as any)?.message ?? e); }
+  }
+
   async function reload() {
     err = null;
     try {
@@ -120,6 +155,7 @@
 
   onMount(() => {
     reload();
+    loadMcp();
     // PortForwards.svelte uses 2s polling; same here.
     pollHandle = setInterval(async () => {
       if (!sessionId) return;
@@ -234,6 +270,32 @@
       {/if}
     {/if}
   </div>
+
+  <!-- Share with LLM (only when the MCP bridge is enabled in Settings) -->
+  {#if mcpBridgeOn && sessionId}
+    <div class="llm">
+      <div class="llm-head">
+        <IconTerminal size={13} />
+        <span class="llm-title">Share with LLM</span>
+      </div>
+      {#if mcpLevel === ""}
+        <div class="llm-sub">
+          Let a connected LLM inspect this session. Reads are safe; commands
+          that change state ask you first.
+        </div>
+        <div class="llm-row">
+          <button class="llm-btn" onclick={() => shareMcp("read")}>Read only</button>
+          <button class="llm-btn primary" onclick={() => shareMcp("read-run")}>Read + run</button>
+        </div>
+      {:else}
+        <div class="llm-active">
+          <span class="llm-dot"></span>
+          <span>Shared - {mcpLevel === "read-run" ? "read + run" : "read only"}</span>
+          <button class="llm-stop" onclick={unshareMcp}>Stop sharing</button>
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   {#if specs.length === 0}
     <div class="empty">
@@ -515,4 +577,34 @@
     font-size: 0.7rem;
   }
   .gi-copy:hover { background: var(--overlay0); }
+
+  /* Share with LLM section */
+  .llm {
+    padding: 0.4rem 0.5rem;
+    margin-bottom: 0.3rem;
+    background: var(--surface0);
+    border-radius: 5px;
+  }
+  .llm-head {
+    display: flex; align-items: center; gap: 0.35rem;
+    color: var(--text); font-weight: 600; font-size: 0.8rem;
+  }
+  .llm-sub { color: var(--overlay0); font-size: 0.7rem; margin: 0.2rem 0 0.4rem; line-height: 1.3; }
+  .llm-row { display: flex; gap: 0.4rem; }
+  .llm-btn {
+    background: var(--mantle); border: 1px solid var(--surface1);
+    color: var(--text); border-radius: 3px; padding: 0.25rem 0.55rem;
+    cursor: pointer; font: inherit; font-size: 0.75rem;
+  }
+  .llm-btn:hover { background: var(--surface1); }
+  .llm-btn.primary { background: var(--blue); color: var(--base); border-color: var(--blue); font-weight: 600; }
+  .llm-btn.primary:hover { filter: brightness(1.1); }
+  .llm-active { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: var(--text); }
+  .llm-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+  .llm-stop {
+    margin-left: auto; background: transparent; border: 1px solid var(--surface1);
+    color: var(--red); border-radius: 3px; padding: 0.1rem 0.35rem;
+    cursor: pointer; font: inherit; font-size: 0.7rem;
+  }
+  .llm-stop:hover { background: var(--surface1); }
 </style>

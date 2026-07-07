@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, decodePaneLayout, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
+  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, mcpApprovalStore, decodePaneLayout, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
   import { isMobile } from "./lib/platform";
   import { installMobileBackNav } from "./lib/mobileBackNav";
   import { api } from "./lib/api";
@@ -27,6 +27,7 @@
   import type { PaletteAction } from "./lib/QuickPalette.svelte";
   import { localShellPrefs, type LocalShellKind } from "./lib/localShellPrefs.svelte.ts";
   import HostKeyModal from "./lib/HostKeyModal.svelte";
+  import McpApprovalModal from "./lib/McpApprovalModal.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import ExportConnectionsModal from "./lib/ExportConnectionsModal.svelte";
   import { exportModal } from "./lib/exportModal.svelte.ts";
@@ -594,6 +595,17 @@
     });
   });
 
+  // LLM (MCP bridge) command-approval requests.
+  EventsOn("mcp_approval_request", (data: any) => {
+    mcpApprovalStore.enqueue({
+      approvalId: data.approval_id,
+      sessionId: data.session_id,
+      sessionName: data.session_name,
+      kind: data.kind,
+      command: data.command,
+    });
+  });
+
   // Load saved layout once at boot so the sidebar comes up at the
   // last-used width instead of the 320 default.
   layoutPrefs.load();
@@ -1035,6 +1047,20 @@
         // immediately; the IPC call awaits but the UI doesn't block.
         hostKeyStore.clear();
         await api.sshRespondHostKey(c.challengeId, accept, remember, c.hostname, c.port, c.keyType, c.keyB64, c.fingerprint);
+      }}
+    />
+  {/if}
+
+  {#if mcpApprovalStore.pending}
+    <McpApprovalModal
+      sessionName={mcpApprovalStore.pending.sessionName}
+      kind={mcpApprovalStore.pending.kind}
+      command={mcpApprovalStore.pending.command}
+      queueLength={Math.max(0, mcpApprovalStore.queue.length - 1)}
+      onRespond={async (decision) => {
+        const a = mcpApprovalStore.pending!;
+        mcpApprovalStore.shift();
+        await api.mcpApprovalRespond(a.approvalId, decision);
       }}
     />
   {/if}

@@ -769,6 +769,49 @@ down automatically when the session disconnects. It is ad-hoc:
 nothing is persisted, so it's off until you click it again next
 time.
 
+### Share a session with an LLM (MCP)
+
+You can attach an external LLM client (Claude Code, etc.) to a live
+SSH session so it can help you debug - read what's on screen, pull
+logs, propose and run commands. It is **off by default** and
+desktop-only.
+
+Setup, once:
+
+1. **Settings -> LLM (MCP) access** -> tick *Allow LLM (MCP) access
+   to shared sessions*. This starts a local-only bridge (a unix
+   socket on Linux/macOS, a loopback pipe on Windows). Nothing is
+   exposed to the network.
+2. Register ssh-tool with your LLM client using the exact command
+   shown on that page, e.g.
+   `claude mcp add ssh-tool -- /path/to/ssh-tool --mcp-bridge`.
+
+Then, per session:
+
+3. Connect the session, open its tunnels popover (cable button) and
+   pick **Share with LLM** - *Read only* (the LLM can read scrollback
+   and run allowlisted read-only commands) or *Read + run* (adds the
+   ability to run other commands and type into the terminal, each
+   gated). The LLM only ever sees sessions you have shared.
+
+What the LLM can do:
+
+- **read_terminal** - the recent scrollback. This is handed to the
+  LLM as untrusted data; a log line that says "run X" is not a
+  command, only a tool call is.
+- **run** - runs a command on a side channel and returns the output.
+  Read-only commands (ls, cat, journalctl, systemctl status, ...)
+  run immediately; anything that could change state pops an approval
+  prompt where you **Run** it or **Deny**. You can extend the
+  auto-run allowlist in Settings; mutating commands (sudo, rm, ...)
+  always prompt.
+- **type_into_terminal** - on approval, types text into your live
+  terminal **without pressing Enter**, so you review it and submit it
+  yourself.
+
+Shared sessions are listed (and revocable) in Settings, and every
+grant is dropped automatically when the session disconnects.
+
 ### Quick palette shortcut
 
 `Ctrl+K` matches forwards by description / parent connection name,

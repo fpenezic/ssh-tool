@@ -84,6 +84,14 @@ type App struct {
 	metaMu      sync.Mutex
 	sessionMeta map[string]sessionMetaEntry
 
+	// mcp holds the MCP bridge state (per-session grants + pending command
+	// approvals). See app_mcp.go. Nil-safe: initialised in initialise().
+	mcp *mcpState
+	// mcpListener is the local socket the bridge subprocess connects to; nil
+	// when the bridge is disabled. Guarded by mcpListenerMu. Desktop only.
+	mcpListenerMu sync.Mutex
+	mcpListener   net.Listener
+
 	pendingHostKeysMu sync.Mutex
 	pendingHostKeys   map[string]chan bool
 
@@ -329,6 +337,7 @@ func (a *App) initialise() {
 	a.reconnects = make(map[string]chan struct{})
 	a.connectCancels = make(map[string]*connectCancel)
 	a.debugBuf = make(map[string][]string)
+	a.mcp = newMcpState()
 	a.broadcastGroups = map[string]map[string]bool{
 		"": make(map[string]bool),
 	}
@@ -443,6 +452,10 @@ func (a *App) initialise() {
 	if a.onDBReady != nil {
 		a.onDBReady()
 	}
+
+	// Start the MCP bridge listener if the user has enabled it (no-op on
+	// mobile / when disabled).
+	a.startMcpListener()
 }
 
 // Ping smoke command.
@@ -1056,6 +1069,7 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 	a.syncForegroundService()
 	sess.SetOnClose(func(sessionID string) {
 		a.forwards.StopAllForSession(sessionID)
+		a.clearMcpGrant(sessionID)
 		a.sessionRecordingCleanup(sessionID)
 		a.pool.Remove(sessionID)
 		a.wgRelease(sessionID)
@@ -2573,6 +2587,7 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 	autoReconnect := settings.AutoReconnect
 	sess.SetOnClose(func(id string) {
 		a.forwards.StopAllForSession(id)
+		a.clearMcpGrant(id)
 		a.sessionRecordingCleanup(id)
 		userInit := false
 		if s, ok := a.pool.Get(id); ok {
@@ -4005,7 +4020,19 @@ func (a *App) SettingsSet(key, value string) error {
 	if localStateKeys[key] {
 		return a.localSettingSet(key, value)
 	}
-	return a.db.SetSetting(key, value)
+	if err := a.db.SetSetting(key, value); err != nil {
+		return err
+	}
+	// Toggling the MCP bridge takes effect immediately: start the local
+	// listener when enabled, tear it down when disabled.
+	if key == "mcp_bridge_enabled" {
+		if value == "1" || value == "true" {
+			a.startMcpListener()
+		} else {
+			a.stopMcpListener()
+		}
+	}
+	return nil
 }
 
 func (a *App) SettingsDelete(key string) error {
