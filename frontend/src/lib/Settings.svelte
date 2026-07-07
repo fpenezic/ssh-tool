@@ -4040,6 +4040,11 @@
         shared sessions, and can also search and open your saved connections
         (with your approval).
       </p>
+      <p class="hint">
+        Tip: paste the ssh-tool system prompt (docs/MCP_SYSTEM_PROMPT.md) into
+        your LLM client's CLAUDE.md / system prompt so it uses these tools well
+        and treats terminal output as untrusted.
+      </p>
 
       <label class="toggle">
         <input

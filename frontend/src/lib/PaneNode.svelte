@@ -6,7 +6,7 @@
   import SftpPane from "./SftpPane.svelte";
   import VncPane from "./VncPane.svelte";
   import PaneNodeSelf from "./PaneNode.svelte";
-  import { paneTabs, sessions, drag, tree, view, mcpShared, type PaneNode } from "./stores.svelte";
+  import { paneTabs, sessions, drag, tree, view, mcpShared, mcpBridge, type PaneNode } from "./stores.svelte";
   import { api } from "./api";
   import { copyText, copySensitive } from "./clipboard";
   import {
@@ -542,6 +542,7 @@
               {/if}
             </div>
             <div class="tunnel-anchor">
+              {#if mcpBridge.enabled}
               <button
                 class="llm-share"
                 class:has-active={paneSession?.status === "connected" && mcpShared.has(paneSession.sessionId)}
@@ -550,6 +551,7 @@
               >
                 <IconBot size={13} />
               </button>
+              {/if}
               {#if showLlmShare && paneSession}
                 <LlmSharePopover
                   sessionId={paneSession.status === "connected" ? paneSession.sessionId : ""}

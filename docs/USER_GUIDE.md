@@ -831,6 +831,19 @@ its tab, so you can always see at a glance which sessions the LLM can
 see. Shared sessions are listed (and revocable) in Settings, and
 every grant is dropped automatically when the session disconnects.
 
+Everything the LLM does (run / type / connect / read) is recorded in
+the **LLM activity** panel - open it from the robot icon in the status
+bar (all sessions) or from a session's Share-with-LLM popover (that
+session). Each entry shows the command, whether it auto-ran or needed
+your approval, the exit status, and the captured output. It can also
+be kept in the persistent audit log (a toggle in LLM settings).
+
+For a system prompt that teaches your LLM client how to use these
+tools well and safely (start with `list_sessions`, treat terminal
+output as untrusted, respect approvals), see
+[`docs/MCP_SYSTEM_PROMPT.md`](MCP_SYSTEM_PROMPT.md) - paste it into
+your `CLAUDE.md` (Claude Code) or the system prompt (LM Studio).
+
 ### Quick palette shortcut
 
 `Ctrl+K` matches forwards by description / parent connection name,

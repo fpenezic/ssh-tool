@@ -4058,11 +4058,14 @@ func (a *App) SettingsSet(key, value string) error {
 	// Toggling the MCP bridge takes effect immediately: start the local
 	// listener when enabled, tear it down when disabled.
 	if key == "mcp_bridge_enabled" {
-		if value == "1" || value == "true" {
+		on := value == "1" || value == "true"
+		if on {
 			a.startMcpListener()
 		} else {
 			a.stopMcpListener()
 		}
+		// Let the UI show/hide the robot affordances live.
+		EventsEmit("mcp_bridge_toggled", on)
 	}
 	if key == "mcp_bridge_tcp" {
 		a.setMcpTCP(value == "1" || value == "true")

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, mcpApprovalStore, mcpShared, decodePaneLayout, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
+  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, mcpApprovalStore, mcpShared, mcpBridge, decodePaneLayout, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
   import { isMobile } from "./lib/platform";
   import { installMobileBackNav } from "./lib/mobileBackNav";
   import { api } from "./lib/api";
@@ -627,6 +627,10 @@
     mcpShared.setFrom((data as { session_id: string }[]) ?? []);
   });
   api.mcpListGrants().then((g) => mcpShared.setFrom(g ?? [])).catch(() => {});
+
+  // Whether the MCP bridge is enabled - gates the robot affordances.
+  EventsOn("mcp_bridge_toggled", (on: any) => { mcpBridge.setEnabled(!!on); });
+  api.settingsGet("mcp_bridge_enabled").then((v) => mcpBridge.setEnabled(v === "1" || v === "true")).catch(() => {});
 
   // The LLM opened a session via the MCP bridge's connect tool. The backend
   // holds the live session but no tab exists (the frontend normally creates

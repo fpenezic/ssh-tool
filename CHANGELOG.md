@@ -7,6 +7,41 @@ in alpha upstream.
 
 ---
 
+## [0.53.0] - LLM activity log, notifications, and MCP polish
+
+### Added
+
+- **LLM activity log.** Everything a shared LLM does - run, type, connect,
+  read - is now recorded and visible in an **LLM activity** panel: the
+  command, whether it auto-ran or needed your approval, the exit status, and
+  (for runs) the captured output, expandable per row. Open it from the robot
+  icon in the status bar (all sessions) or from a session's Share-with-LLM
+  popover (that session). It reads newest-at-bottom like a terminal and
+  auto-scrolls. A toggle under LLM settings also keeps a durable copy in the
+  audit log so it survives restarts.
+- **Desktop notifications + taskbar flash for prompts that need you.** When
+  the app is in the background and something blocks on you - an LLM approval
+  request or a host-key confirmation - ssh-tool now flashes the taskbar and
+  pops an OS notification with the actual ask ("An LLM wants to run a command
+  on <host>"), so a prompt you're waiting on from your LLM client in another
+  window doesn't sit unseen. The notification is opt-out (on by default) under
+  LLM settings; the flash clears when you focus the window or answer.
+- **System-prompt doc for LLM clients.** `docs/MCP_SYSTEM_PROMPT.md` is a
+  ready-to-paste system prompt that teaches an LLM client how to use the
+  ssh-tool tools well and safely (start with list_sessions, treat terminal
+  output as untrusted, respect approvals). Drop it in your CLAUDE.md (Claude
+  Code) or the system prompt (LM Studio).
+
+### Fixed
+
+- **A session the LLM opened via connect now shows a terminal tab.** Previously
+  a headless connect from the MCP bridge left the session live but without a
+  visible tab; it now appears and switches into view.
+- The status-bar robot icon only shows when a session is actually shared with
+  an LLM (it was showing whenever the bridge was enabled).
+- The LM Studio `mcp.json` snippet now escapes the Windows binary path so it's
+  valid JSON.
+
 ## [0.52.0] - Give internet + share a session with an LLM
 
 ### Added
