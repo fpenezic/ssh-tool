@@ -113,11 +113,13 @@ import Cable from "@lucide/svelte/icons/cable";
 import Play from "@lucide/svelte/icons/play";
 import Square from "@lucide/svelte/icons/square";
 import ExternalLink from "@lucide/svelte/icons/external-link";
+import PictureInPicture from "@lucide/svelte/icons/picture-in-picture";
 export {
   Cable as IconTunnel,
   Play as IconPlay,
   Square as IconStop,
   ExternalLink as IconExternalLink,
+  PictureInPicture as IconPopOut,
 };
 
 // Dynamic-inventory entry kinds. Host shares IconHost (server tower)

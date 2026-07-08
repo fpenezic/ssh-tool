@@ -1254,6 +1254,36 @@ class PaneTreeStore {
     return { tabRemoved: false };
   }
 
+  // Pop ONE pane out of a split tab into its own new tab, leaving the rest of
+  // the split intact. Unlike ungroupTab (which splits every pane into its own
+  // tab) this moves a single connection out. The session stays live - it just
+  // moves to a new tab. No-op if the pane isn't in a split.
+  movePaneToOwnTab(tabId: string, paneId: string) {
+    const tab = this.tabs.find((t) => t.tabId === tabId);
+    if (!tab || tab.root.kind !== "split") return;
+    const leaf = findLeaf(tab.root, paneId);
+    if (!leaf) return;
+    const remaining = removePane(tab.root, paneId);
+    if (!remaining) return; // shouldn't happen for a split with >1 leaf
+    const firstLeaf = firstLeafIn(remaining);
+    const newTab: PaneTab = {
+      tabId: genId("tab"),
+      title: leaf.sessionId,
+      rootPaneId: leaf.id,
+      root: leaf,
+      activePaneId: leaf.id,
+      // Carry the group label so a popped pane keeps its group.
+      groupName: tab.groupName,
+      groupColor: tab.groupColor,
+    };
+    this.tabs = [
+      ...this.tabs.map((t) =>
+        t.tabId === tabId ? { ...t, root: remaining, activePaneId: firstLeaf?.id ?? "" } : t
+      ),
+      newTab,
+    ];
+  }
+
   // Adjust the ratio of a split node.
   setSplitRatio(tabId: string, splitId: string, ratio: number) {
     const clamped = Math.max(0.1, Math.min(0.9, ratio));

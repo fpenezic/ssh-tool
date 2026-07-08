@@ -97,6 +97,17 @@
   // false for them -> written locally, never broadcast.
   let userInput = false;
 
+  // replaying is true while we write the scrollback snapshot into a freshly
+  // mounted terminal (initial mount, and crucially detach/redock into a new
+  // window). The replayed bytes can contain the remote app's terminal QUERIES
+  // (Device Attributes `ESC[c`, OSC 10/11 colour, cursor position); xterm
+  // answers them via onData, and without this guard those answers get written
+  // straight to the PTY, landing at the remote shell prompt as garbage like
+  // `2RR0;276;0c10;rgb:4c4c/...`. The remote already received the real answers
+  // when the queries first ran live, so re-sending them on replay is always
+  // wrong. Suppress non-user onData while replaying.
+  let replaying = false;
+
   // ---------- paste guard ----------
   //
   // We intercept the browser-level `paste` event on the terminal host
@@ -695,6 +706,11 @@
       // letter typed on the soft keyboard while "Ctrl" is latched becomes
       // its control byte here, since it bypasses the bar's own buttons.
       // No-op on desktop (the latch is only ever set by the mobile bar).
+      // While replaying the scrollback snapshot into a fresh terminal, any
+      // non-user onData is a report response to a query embedded in the
+      // replayed history. It must NOT reach the PTY (the remote already
+      // answered it live); otherwise it lands as garbage at the shell prompt.
+      if (replaying && !fromUser) return;
       const data = keyBarMods.apply(raw);
       const bytes = enc.encode(data);
       // Always write to this session - xterm's onData is the source of
@@ -991,8 +1007,16 @@
       try {
         const snap = await scrollbackIPC(sid);
         if (snap.b64) {
-          try { t.write(stripDECRQM(fromB64(snap.b64))); }
-          catch (err) { console.warn("[term] snapshot write threw", err); }
+          // Guard onData while xterm parses the replayed snapshot so query
+          // responses in the history don't get echoed to the PTY. The write
+          // callback fires once parsing completes; clear the flag there. Also
+          // clear it defensively on a short timer in case the callback is
+          // missed (empty write, throw).
+          replaying = true;
+          const clearReplay = () => { replaying = false; };
+          setTimeout(clearReplay, 250);
+          try { t.write(stripDECRQM(fromB64(snap.b64)), clearReplay); }
+          catch (err) { console.warn("[term] snapshot write threw", err); replaying = false; }
         }
         watermark = snap.cum ?? 0;
       } catch {

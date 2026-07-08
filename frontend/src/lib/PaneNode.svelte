@@ -11,7 +11,7 @@
   import { copyText, copySensitive } from "./clipboard";
   import {
     IconHost, IconUser, IconLock, IconClipboardCopy, IconFolder,
-    IconRotateCw, IconSplitH, IconSplitV, IconX, IconBroadcast,
+    IconRotateCw, IconSplitH, IconSplitV, IconX, IconBroadcast, IconPopOut,
     IconActivity, IconGlobe, IconTunnel, IconSearch, IconSettings, IconVpn,
     IconBot,
   } from "./iconMap";
@@ -33,6 +33,18 @@
   const activePaneId = $derived(
     paneTabs.tabs.find((t) => t.tabId === tabId)?.activePaneId ?? ""
   );
+
+  // True when this pane is one of several in a split tab, so it can be popped
+  // out to its own tab ("ungroup this connection").
+  const isInSplit = $derived(
+    paneTabs.tabs.find((t) => t.tabId === tabId)?.root.kind === "split"
+  );
+
+  function popToOwnTab() {
+    if (node.kind !== "pane") return;
+    paneTabs.movePaneToOwnTab(tabId, node.id);
+    focusActiveTerminal();
+  }
 
   // ----- Resize handle for split nodes -----
 
@@ -650,6 +662,9 @@
           {#if !isVncPane && !isMobile}
             <button title="Split right" onclick={(e) => { e.stopPropagation(); splitLeaf("horizontal"); }}><IconSplitH size={13} /></button>
             <button title="Split down"  onclick={(e) => { e.stopPropagation(); splitLeaf("vertical"); }}><IconSplitV size={13} /></button>
+          {/if}
+          {#if isInSplit && !isMobile}
+            <button title="Move this pane to its own tab" onclick={(e) => { e.stopPropagation(); popToOwnTab(); }}><IconPopOut size={13} /></button>
           {/if}
           <button title="Close pane"  class="close" onclick={(e) => { e.stopPropagation(); closeLeaf(); }}><IconX size={13} /></button>
         </div>
