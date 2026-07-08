@@ -91,9 +91,15 @@ type App struct {
 	// when the bridge is disabled. mcpTCPListener is the optional loopback TCP
 	// listener for cross-boundary clients (WSL Claude Code -> Windows app), used
 	// only when mcp_bridge_tcp is on; it requires a token on the first line.
+	// Both legs now require a token on the first line: mcpLocalToken guards the
+	// primary socket (defence in depth over the 0600 perms - and a real boundary
+	// on the Windows loopback leg, which any local process can reach), mcpTCPToken
+	// guards the TCP leg. The bridge subprocess reads each from its rendezvous
+	// file (0600) and sends it before any MCP traffic.
 	// All guarded by mcpListenerMu. Desktop only.
 	mcpListenerMu  sync.Mutex
 	mcpListener    net.Listener
+	mcpLocalToken  string
 	mcpTCPListener net.Listener
 	mcpTCPToken    string
 
@@ -3909,7 +3915,13 @@ type GiveInternetResult struct {
 // requests in-process, dialing out from the ssh-tool side (DNS resolved here).
 // remotePort 0 uses the default 3182. Stop via ForwardsStop(forward_id) or a
 // session disconnect.
-func (a *App) SshGiveInternet(sessionID string, remotePort uint16) (*GiveInternetResult, error) {
+//
+// allowInternal lifts the default refusal to proxy to internal/private/loopback
+// destinations. It defaults to false: without it a process on the borrowing
+// server could pivot through the proxy into the operator's own localhost and
+// LAN (the proxy dials from OUR network). Only pass true when the user has
+// explicitly accepted that.
+func (a *App) SshGiveInternet(sessionID string, remotePort uint16, allowInternal bool) (*GiveInternetResult, error) {
 	sess, ok := a.pool.Get(sessionID)
 	if !ok {
 		return nil, fmt.Errorf("session not connected")
@@ -3918,7 +3930,7 @@ func (a *App) SshGiveInternet(sessionID string, remotePort uint16) (*GiveInterne
 		remotePort = defaultGiveInternetPort
 	}
 	id := uuid.NewString()
-	status, err := a.forwards.StartReverseProxy(sess, id, "127.0.0.1", remotePort)
+	status, err := a.forwards.StartReverseProxy(sess, id, "127.0.0.1", remotePort, allowInternal)
 	if err != nil {
 		return nil, err
 	}

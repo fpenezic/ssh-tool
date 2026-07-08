@@ -46,6 +46,11 @@
   let giPort = $state(3182);
   let giBusy = $state(false);
   let copied = $state(false);
+  // Off by default: the proxy dials from THIS machine's network, so allowing
+  // internal targets lets a process on the borrowing server reach our own
+  // localhost / LAN. Only the public internet is proxied unless the user opts
+  // in here.
+  let giAllowInternal = $state(false);
 
   // Running reverse-proxy forwards for this session, pulled from the active
   // list (they have no persisted spec, so the specs loop below skips them).
@@ -70,7 +75,7 @@
     giBusy = true;
     err = null;
     try {
-      const res = await api.sshGiveInternet(sessionId, giPort);
+      const res = await api.sshGiveInternet(sessionId, giPort, giAllowInternal);
       giPort = res.remote_port;
       active = (await api.forwardsActive(sessionId)) ?? [];
     } catch (e) {
@@ -204,6 +209,13 @@
           {giBusy ? "Starting…" : "Give internet"}
         </button>
       </div>
+      <label class="gi-allow" title="By default the proxy only reaches the public internet. Enable to also let the server reach this machine's own localhost and private LAN through the proxy.">
+        <input type="checkbox" bind:checked={giAllowInternal} disabled={!sessionId || giBusy} />
+        Allow reaching my local/private network
+      </label>
+      {#if giAllowInternal}
+        <div class="gi-warn">The server will be able to reach your localhost and LAN through the proxy.</div>
+      {/if}
       {#if !sessionId}
         <div class="gi-note">Connect the session first.</div>
       {/if}
@@ -457,6 +469,22 @@
   .gi-btn:hover:not(:disabled) { filter: brightness(1.1); }
   .gi-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .gi-note { color: var(--yellow); font-size: 0.7rem; margin-top: 0.3rem; }
+  .gi-allow {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.7rem;
+    color: var(--overlay1);
+    margin-top: 0.4rem;
+    cursor: pointer;
+  }
+  .gi-allow input { margin: 0; cursor: pointer; }
+  .gi-warn {
+    color: var(--yellow);
+    font-size: 0.68rem;
+    margin-top: 0.25rem;
+    line-height: 1.3;
+  }
   .gi-active-head {
     display: flex;
     align-items: center;

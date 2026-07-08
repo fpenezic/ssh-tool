@@ -269,6 +269,11 @@ export interface AuditEvent {
 export interface VaultStatus {
   state: "not_initialized" | "locked" | "unlocked";
   auto_unlock_available?: boolean;
+  // How strongly the auto-unlock sidecar is bound to this machine. "weak" =
+  // the v1 format whose key derivation can fall back to the hostname (macOS,
+  // or a container with no /etc/machine-id); the UI warns on it. Absent when
+  // there is no sidecar.
+  sidecar_strength?: "strong" | "weak" | "none";
 }
 
 export interface GenerateKeyParams {
@@ -910,8 +915,8 @@ export const api = {
   forwardsStart: (forwardId: string, sessionId: string) =>
     G.ForwardsStart(forwardId, sessionId) as unknown as Promise<ForwardStatus>,
   forwardsStop: (forwardId: string) => G.ForwardsStop(forwardId),
-  sshGiveInternet: (sessionId: string, remotePort: number) =>
-    G.SshGiveInternet(sessionId, remotePort) as unknown as Promise<GiveInternetResult>,
+  sshGiveInternet: (sessionId: string, remotePort: number, allowInternal = false) =>
+    G.SshGiveInternet(sessionId, remotePort, allowInternal) as unknown as Promise<GiveInternetResult>,
   sshLaunchBrowser: (forwardId: string, url: string) =>
     G.SshLaunchBrowser(forwardId, url) as unknown as Promise<{ pid: number }>,
 

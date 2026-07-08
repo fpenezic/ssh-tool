@@ -43,6 +43,13 @@ func mcpSocketPath() string {
 	return filepath.Join(store.DataDir(), "mcp-bridge.sock")
 }
 
+// mcpLocalTokenPath is the 0600 file holding the per-run token that guards the
+// primary local socket. Separate from mcpSocketPath because on unix that path
+// IS the socket. The bridge reads this and sends the token as the first line.
+func mcpLocalTokenPath() string {
+	return filepath.Join(store.DataDir(), "mcp-bridge.token")
+}
+
 // startMcpListener starts (or is a no-op if already running / disabled) the
 // local MCP socket listener. Called from initialise() and whenever the setting
 // is toggled on. Safe to call repeatedly; it self-guards on a.mcpListener.
@@ -66,6 +73,17 @@ func (a *App) startMcpListener() {
 		return
 	}
 	a.mcpListener = ln
+	// Per-run token guarding this socket (defence in depth over 0600, and a real
+	// boundary on the Windows loopback leg). Written 0600 next to the socket for
+	// the same-user bridge to read.
+	a.mcpLocalToken = uuid.NewString()
+	if err := os.WriteFile(mcpLocalTokenPath(), []byte(a.mcpLocalToken), 0o600); err != nil {
+		log.Printf("mcp bridge: write token file: %v", err)
+		_ = ln.Close()
+		a.mcpListener = nil
+		a.mcpLocalToken = ""
+		return
+	}
 	log.Printf("mcp bridge: listening on %s", addr)
 
 	go a.acceptMcp(ln)
@@ -130,9 +148,18 @@ func (a *App) acceptMcpTCP(ln net.Listener) {
 }
 
 // checkMcpTCPToken reads the first line off br and compares it constant-time to
-// the session token. Enforces a short deadline so a silent client can't pin the
-// goroutine.
+// the TCP-leg token.
 func (a *App) checkMcpTCPToken(c net.Conn, br *bufio.Reader) bool {
+	a.mcpListenerMu.Lock()
+	want := a.mcpTCPToken
+	a.mcpListenerMu.Unlock()
+	return a.checkMcpToken(c, br, want)
+}
+
+// checkMcpToken reads the first newline-terminated line off br and compares it
+// constant-time to want. Enforces a short deadline so a silent client can't pin
+// the goroutine, then clears it for the MCP phase. An empty want always fails.
+func (a *App) checkMcpToken(c net.Conn, br *bufio.Reader, want string) bool {
 	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
 	line, err := br.ReadString('\n')
 	if err != nil {
@@ -140,9 +167,6 @@ func (a *App) checkMcpTCPToken(c net.Conn, br *bufio.Reader) bool {
 	}
 	_ = c.SetReadDeadline(time.Time{}) // clear deadline for the MCP phase
 	got := strings.TrimSpace(line)
-	a.mcpListenerMu.Lock()
-	want := a.mcpTCPToken
-	a.mcpListenerMu.Unlock()
 	return want != "" && subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }
 
@@ -153,6 +177,8 @@ func (a *App) stopMcpListener() {
 	if a.mcpListener != nil {
 		_ = a.mcpListener.Close()
 		a.mcpListener = nil
+		a.mcpLocalToken = ""
+		_ = os.Remove(mcpLocalTokenPath())
 		log.Printf("mcp bridge: stopped")
 	}
 	a.stopMcpTCPLocked()
@@ -195,11 +221,19 @@ func (a *App) acceptMcp(ln net.Listener) {
 
 // serveMcpConn runs a fresh MCP server over one accepted connection. Each LLM
 // client (bridge subprocess) gets its own server + session; tools are scoped
-// to the user's current grants at call time.
+// to the user's current grants at call time. The connection must present the
+// local token as its first line before any MCP traffic.
 func (a *App) serveMcpConn(conn net.Conn) {
 	defer conn.Close()
+	br := bufio.NewReader(conn)
+	a.mcpListenerMu.Lock()
+	want := a.mcpLocalToken
+	a.mcpListenerMu.Unlock()
+	if !a.checkMcpToken(conn, br, want) {
+		return
+	}
 	server := a.buildMcpServer()
-	transport := &mcp.IOTransport{Reader: conn, Writer: conn}
+	transport := &mcp.IOTransport{Reader: io.NopCloser(br), Writer: conn}
 	if err := server.Run(a.ctx, transport); err != nil {
 		log.Printf("mcp bridge: session ended: %v", err)
 	}

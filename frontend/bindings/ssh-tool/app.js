@@ -2429,12 +2429,19 @@ export function SshGetScrollback(sessionID) {
  * requests in-process, dialing out from the ssh-tool side (DNS resolved here).
  * remotePort 0 uses the default 3182. Stop via ForwardsStop(forward_id) or a
  * session disconnect.
+ * 
+ * allowInternal lifts the default refusal to proxy to internal/private/loopback
+ * destinations. It defaults to false: without it a process on the borrowing
+ * server could pivot through the proxy into the operator's own localhost and
+ * LAN (the proxy dials from OUR network). Only pass true when the user has
+ * explicitly accepted that.
  * @param {string} sessionID
  * @param {number} remotePort
+ * @param {boolean} allowInternal
  * @returns {$CancellablePromise<$models.GiveInternetResult | null>}
  */
-export function SshGiveInternet(sessionID, remotePort) {
-    return $Call.ByID(2637720437, sessionID, remotePort).then(/** @type {($result: any) => any} */(($result) => {
+export function SshGiveInternet(sessionID, remotePort, allowInternal) {
+    return $Call.ByID(2637720437, sessionID, remotePort, allowInternal).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType113($result);
     }));
 }

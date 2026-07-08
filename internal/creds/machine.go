@@ -229,6 +229,38 @@ func OpenForMachine(blob []byte) ([]byte, error) {
 	return aead.Open(nil, nonce, ct, nil)
 }
 
+// SidecarStrengthKind classifies how strongly an existing auto-unlock sidecar
+// is bound to this machine.
+type SidecarStrengthKind string
+
+const (
+	SidecarStrengthNone   SidecarStrengthKind = "none"   // no sidecar present
+	SidecarStrengthWeak   SidecarStrengthKind = "weak"   // v1: derivation may fall back to hostname
+	SidecarStrengthStrong SidecarStrengthKind = "strong" // v2: DPAPI / machine-id-only
+)
+
+// SidecarStrength reports the binding strength of the sidecar next to
+// vaultPath. "weak" means the v1 format is in use, whose key derivation can
+// fall back to the hostname - an attacker who steals the vault file plus the
+// sidecar and can guess/spoof the hostname could auto-unlock. The UI surfaces
+// this so a user on macOS or a container without /etc/machine-id knows their
+// auto-unlock is not machine-strong. Reads only the version field; never
+// decrypts.
+func SidecarStrength(vaultPath string) SidecarStrengthKind {
+	raw, err := os.ReadFile(SidecarPath(vaultPath))
+	if err != nil {
+		return SidecarStrengthNone
+	}
+	var sc sidecarFile
+	if err := json.Unmarshal(raw, &sc); err != nil {
+		return SidecarStrengthNone
+	}
+	if sc.Version == sidecarVersionStrong {
+		return SidecarStrengthStrong
+	}
+	return SidecarStrengthWeak
+}
+
 // DeleteSidecar removes the auto-unlock file. Used when the user wants to
 // require the passphrase on next launch.
 func DeleteSidecar(vaultPath string) error {

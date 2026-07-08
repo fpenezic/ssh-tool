@@ -346,6 +346,17 @@ export class Status {
              */
             this["auto_unlock_available"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * SidecarStrength reports how strongly an existing auto-unlock sidecar is
+             * bound to this machine ("strong" | "weak" | "none"). "weak" means the v1
+             * format whose key derivation can fall back to the hostname; the UI warns
+             * on it. Empty when no sidecar / not applicable.
+             * @member
+             * @type {string | undefined}
+             */
+            this["sidecar_strength"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

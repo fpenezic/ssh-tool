@@ -77,13 +77,21 @@ const (
 type Status struct {
 	Kind                StatusKind `json:"state"`
 	AutoUnlockAvailable bool       `json:"auto_unlock_available,omitempty"`
+	// SidecarStrength reports how strongly an existing auto-unlock sidecar is
+	// bound to this machine ("strong" | "weak" | "none"). "weak" means the v1
+	// format whose key derivation can fall back to the hostname; the UI warns
+	// on it. Empty when no sidecar / not applicable.
+	SidecarStrength string `json:"sidecar_strength,omitempty"`
 }
 
 func (v *Vault) Status() Status {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if v.file != nil {
-		return Status{Kind: StatusUnlocked}
+		return Status{
+			Kind:            StatusUnlocked,
+			SidecarStrength: string(SidecarStrength(v.path)),
+		}
 	}
 	if !FileExists(v.path) {
 		return Status{Kind: StatusNotInitialized}
@@ -91,6 +99,7 @@ func (v *Vault) Status() Status {
 	return Status{
 		Kind:                StatusLocked,
 		AutoUnlockAvailable: SidecarExists(v.path),
+		SidecarStrength:     string(SidecarStrength(v.path)),
 	}
 }
 

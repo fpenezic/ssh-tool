@@ -70,6 +70,13 @@ type activeForward struct {
 	remoteHost string
 	remotePort uint16
 
+	// allowInternal, for reverse-proxy (give-internet) forwards only, lifts the
+	// default refusal to dial internal/private/loopback destinations on the
+	// ssh-tool side. Off unless the user explicitly opts in - otherwise a
+	// process on the borrowing server could reach the operator's own localhost
+	// and LAN through the proxy.
+	allowInternal bool
+
 	state ForwardState
 	errMsg string
 
@@ -335,6 +342,7 @@ func (p *ForwardPool) acceptRemote(af *activeForward) {
 func (p *ForwardPool) StartReverseProxy(
 	sess *Session,
 	id, remoteAddr string, remotePort uint16,
+	allowInternal bool,
 ) (*ForwardStatus, error) {
 	if remoteAddr == "" {
 		remoteAddr = "127.0.0.1"
@@ -354,15 +362,16 @@ func (p *ForwardPool) StartReverseProxy(
 	}
 
 	af := &activeForward{
-		id:        id,
-		kind:      ForwardReverseProxy,
-		session:   sess,
-		listener:  listener,
-		localAddr: remoteAddr,
-		localPort: remotePort,
-		state:     StateListening,
-		started:   time.Now().Unix(),
-		done:      make(chan struct{}),
+		id:            id,
+		kind:          ForwardReverseProxy,
+		session:       sess,
+		listener:      listener,
+		localAddr:     remoteAddr,
+		localPort:     remotePort,
+		allowInternal: allowInternal,
+		state:         StateListening,
+		started:       time.Now().Unix(),
+		done:          make(chan struct{}),
 	}
 
 	go p.acceptReverseProxy(af)
@@ -397,6 +406,23 @@ func (p *ForwardPool) acceptReverseProxy(af *activeForward) {
 			if err != nil {
 				log.Printf("forward %s: http proxy: %v", af.id, err)
 				return
+			}
+			// SSRF guard: unless the user opted into internal targets, refuse
+			// to dial the operator's own loopback / private LAN. The borrowing
+			// server is only meant to reach the public internet through us; a
+			// process on that host must not pivot into our network. Resolution
+			// happens here (app side) so a name pointing at an internal IP is
+			// caught too. Fail closed on unresolvable names.
+			if !af.allowInternal {
+				dialHost, _, splitErr := net.SplitHostPort(tgt.addr)
+				if splitErr != nil {
+					dialHost = tgt.addr
+				}
+				if blocked, reason := isInternalDestHost(dialHost); blocked {
+					log.Printf("forward %s: refused internal target %s (%s)", af.id, tgt.addr, reason)
+					writeProxyError(remote, "403 Forbidden")
+					return
+				}
 			}
 			// Dial the destination from the ssh-tool side - this is where DNS
 			// resolution and real internet access happen.

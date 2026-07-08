@@ -44,7 +44,9 @@
   let mcpTcp = $state<boolean>(false);
   let notificationsEnabled = $state<boolean>(true);
   let mcpAuditEnabled = $state<boolean>(true);
+  let mcpAuditOutput = $state<boolean>(false);
   let mcpReadonlyExtra = $state<string>("");
+  let vaultSidecarStrength = $state<"strong" | "weak" | "none" | "">("");
   let mcpExePath = $state<string>("");
   // JSON-safe form of the exe path for the LM Studio mcp.json block: backslashes
   // in a Windows path (C:\...) must be doubled or the JSON is invalid.
@@ -334,6 +336,14 @@
       const v = await api.settingsGet("mcp_audit_enabled");
       mcpAuditEnabled = v === "" || v === "1" || v === "true"; // default on
     } catch { /* default on */ }
+    try {
+      const v = await api.settingsGet("mcp_audit_output");
+      mcpAuditOutput = v === "1" || v === "true"; // default OFF
+    } catch { /* default off */ }
+    try {
+      const st = await api.vaultStatus();
+      vaultSidecarStrength = st.sidecar_strength ?? "";
+    } catch { /* ignore */ }
   });
 
   async function toggleNotifications(next: boolean) {
@@ -346,6 +356,12 @@
     mcpAuditEnabled = next;
     try { await api.settingsSet("mcp_audit_enabled", next ? "1" : "0"); }
     catch (e) { console.warn("mcp audit toggle:", e); }
+  }
+
+  async function toggleMcpAuditOutput(next: boolean) {
+    mcpAuditOutput = next;
+    try { await api.settingsSet("mcp_audit_output", next ? "1" : "0"); }
+    catch (e) { console.warn("mcp audit output toggle:", e); }
   }
 
   async function toggleMcp(next: boolean) {
@@ -2896,6 +2912,18 @@
       hit Lock somewhere). Set an idle timeout below to re-lock it
       automatically.
     </p>
+    {#if vaultSidecarStrength === "weak"}
+      <div class="warn-note hint">
+        <strong>Auto-unlock is weakly bound to this machine.</strong>
+        This platform stores the auto-unlock sidecar in the older format,
+        whose key can fall back to the hostname. Someone who steals both the
+        vault file and the sidecar, and can guess or spoof this machine's
+        hostname, could unlock it. Your typed passphrase and the encrypted
+        vault itself are unaffected - this only concerns the convenience
+        auto-unlock. To require the passphrase on every launch instead, use
+        "Lock vault now" (it forgets the sidecar).
+      </div>
+    {/if}
     <label class="num">
       <span>Auto-lock after idle (minutes)</span>
       <input
@@ -4002,13 +4030,32 @@
       <span>
         <strong>Keep a persistent log of LLM activity (audit)</strong>
         <span class="hint inline">
-          - record every command the LLM runs, types or connects (with output)
-          to the local audit log so it survives restarts. The live LLM-activity
-          panel (robot icon in the status bar / pane toolbar) works either way;
-          this only controls the durable copy.
+          - record every command the LLM runs, types or connects to the local
+          audit log so it survives restarts. The live LLM-activity panel (robot
+          icon in the status bar / pane toolbar) works either way; this only
+          controls the durable copy.
         </span>
       </span>
     </label>
+
+    {#if mcpAuditEnabled}
+      <label class="toggle" style="margin-left:1.6rem">
+        <input
+          type="checkbox"
+          checked={mcpAuditOutput}
+          onchange={(e) => toggleMcpAuditOutput((e.target as HTMLInputElement).checked)}
+        />
+        <span>
+          <strong>Also store command output in the audit log</strong>
+          <span class="hint inline">
+            - off by default. Command output can contain secrets the LLM read
+            (a <code>.env</code> file, environment variables, kubernetes
+            secrets), and the audit log is a plaintext file on disk - not
+            encrypted like the vault. Enable only if you accept that.
+          </span>
+        </span>
+      </label>
+    {/if}
 
     {#if mcpEnabled}
       <h3 style="margin-top:1.2rem">Register with your LLM client</h3>

@@ -8,6 +8,62 @@ import (
 	"strings"
 )
 
+// isInternalDestHost reports whether host (a bare host or IP, no port) resolves
+// to - or literally is - an address the give-internet proxy must refuse by
+// default: loopback, RFC1918 / unique-local private ranges, link-local
+// (incl. cloud metadata 169.254.169.254), or unspecified. A hostile process on
+// the borrowing server would otherwise use the proxy to reach the operator's
+// own localhost and LAN, since ssh-tool dials from ITS network, not the
+// server's. Names are resolved here (the whole feature resolves DNS app-side)
+// so a name pointing at an internal IP is caught too.
+//
+// Returns (true, reason) when the destination is internal and should be
+// blocked. Unresolvable names are treated as blocked - fail closed - with the
+// resolve error as the reason.
+func isInternalDestHost(host string) (bool, string) {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return true, "empty host"
+	}
+	// Strip IPv6 brackets if a literal slipped through without a port.
+	host = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
+
+	var ips []net.IP
+	if ip := net.ParseIP(host); ip != nil {
+		ips = []net.IP{ip}
+	} else {
+		resolved, err := net.LookupIP(host)
+		if err != nil || len(resolved) == 0 {
+			return true, fmt.Sprintf("cannot resolve %q", host)
+		}
+		ips = resolved
+	}
+	for _, ip := range ips {
+		if isInternalIP(ip) {
+			return true, fmt.Sprintf("%s is an internal/private address", ip)
+		}
+	}
+	return false, ""
+}
+
+// isInternalIP is the range check behind isInternalDestHost.
+func isInternalIP(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsUnspecified() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsPrivate() {
+		return true
+	}
+	// ip.IsPrivate covers 10/8, 172.16/12, 192.168/16 and fc00::/7. Add the
+	// carrier-grade NAT range 100.64/10 (RFC 6598), which IsPrivate omits but
+	// which routes to internal infra on many networks.
+	if v4 := ip.To4(); v4 != nil {
+		if v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127 {
+			return true
+		}
+	}
+	return false
+}
+
 // Minimal forward HTTP proxy for the "give internet" reverse tunnel. A
 // server with no outbound net reaches this over a reverse forward and points
 // its http_proxy/https_proxy at it; ssh-tool dials the real destination from

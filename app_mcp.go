@@ -154,16 +154,38 @@ func (a *App) recordActivity(e McpActivity) {
 	// Live panel refresh.
 	EventsEmit("mcp_activity", e)
 
-	// Optional durable copy.
+	// Optional durable copy. Command output is NOT persisted by default: it can
+	// contain secrets the LLM read (cat .env, env, kubectl get secret -o yaml),
+	// and audit.db is a plaintext file on disk, not sealed like the vault /
+	// backup envelope. The command, gate, and exit - the real audit signal - are
+	// always recorded; the output only when the user explicitly turns on
+	// mcp_audit_output (accepting that secrets may land on disk).
 	if a.mcpAuditEnabled() {
-		a.recordAudit("mcp_"+e.Kind, e.Session, map[string]string{
+		meta := map[string]string{
 			"session_id": e.SessionID,
 			"command":    e.Command,
 			"exit":       e.Exit,
 			"gate":       e.Gate,
-			"output":     e.Output,
-		})
+		}
+		if a.mcpAuditOutputEnabled() {
+			meta["output"] = e.Output
+		}
+		a.recordAudit("mcp_"+e.Kind, e.Session, meta)
 	}
+}
+
+// mcpAuditOutputEnabled reports whether command OUTPUT (not just the command
+// line) is persisted to audit.db. Default OFF - output can carry secrets and
+// audit.db is unsealed plaintext. Opt in via the mcp_audit_output setting.
+func (a *App) mcpAuditOutputEnabled() bool {
+	if a.db == nil {
+		return false
+	}
+	v, ok, err := a.db.GetSetting("mcp_audit_output")
+	if err != nil || !ok {
+		return false
+	}
+	return v == "1" || v == "true"
 }
 
 // mcpAuditEnabled reports whether LLM activity is persisted to audit.db

@@ -55,5 +55,21 @@ func dialMcp() (net.Conn, error) {
 			}
 		}
 	}
-	return dialLocal(mcpSocketPath())
+	conn, err := dialLocal(mcpSocketPath())
+	if err != nil {
+		return nil, err
+	}
+	// Present the local token as the first line before any MCP traffic. The app
+	// writes it 0600 next to the socket; a same-user bridge can read it, an
+	// unrelated local process guessing the socket path cannot.
+	token, terr := os.ReadFile(mcpLocalTokenPath())
+	if terr != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("read mcp token: %w", terr)
+	}
+	if _, werr := conn.Write([]byte(strings.TrimSpace(string(token)) + "\n")); werr != nil {
+		_ = conn.Close()
+		return nil, werr
+	}
+	return conn, nil
 }
