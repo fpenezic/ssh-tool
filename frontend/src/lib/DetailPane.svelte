@@ -745,6 +745,15 @@
     try { await api.sshCancelConnect(conn.id); } catch (e) { console.warn(e); }
   }
 
+  // Show a connect failure as a toast (in addition to the inline banner at
+  // the top of the form), so it's visible even when the user has scrolled the
+  // form down. Accepts a raw error or an already-explained message string.
+  function notifyConnectFailure(err: unknown) {
+    const msg = typeof err === "string" ? err : errMsg(err);
+    const name = conn?.name ? `${conn.name}: ` : "";
+    toast.err(`${name}${msg}`);
+  }
+
   async function connect() {
     if (!conn) return;
     connecting = true;
@@ -777,9 +786,14 @@
           connectionActions.clearConnectError(conn.id);
         } catch (e) {
           connectionActions.recordConnectError(conn.id, e);
+          notifyConnectFailure(e);
         }
       } else {
-        await connectionActions.connectOne(conn.id);
+        // connectOne swallows the error (records the inline banner, returns
+        // false). Surface a toast on failure too, so it's visible when the
+        // user has scrolled the form down past the top-of-form banner.
+        const ok = await connectionActions.connectOne(conn.id);
+        if (!ok && connectErr) notifyConnectFailure(connectErr);
       }
       await tree.load();
     } finally {
