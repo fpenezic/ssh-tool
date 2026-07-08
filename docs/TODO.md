@@ -98,6 +98,21 @@ Field ask: "MobaXterm has X11, can we?" Analysis below picks the
 targets that fit a webview app and pay off, and parks the ones that
 don't.
 
+- **kubectl / OpenShift integration - WON'T DO (discussed, declined).**
+  Two shapes were considered. A local in-app "kubectl terminal" (like
+  the VNC tab) would mean either bundling a kubectl binary (~50MB per
+  platform, and its version must track the cluster - a maintenance
+  sink) or shelling out to the user's local kubectl (then ssh-tool is
+  just a thin wrapper around something they already have), plus an SSH
+  tunnel to the API server. A full pod/logs/exec UI is a separate
+  product that k9s / Lens already do well. And kubectl already works
+  fine in a normal ssh-tool terminal on a host that has it - there's
+  nothing to "integrate". The only piece that WOULD fit naturally, if
+  ever wanted: a `kubeconfig` credential type + auto-exporting
+  `KUBECONFIG` into a remote shell on connect (vault-based, no
+  bundling) - but that wasn't asked for. Revisit only if that narrow
+  vault-export need comes up.
+
 - **noVNC console tab - SHIPPED in v0.35.0.** Both targets landed:
   Proxmox VM/LXC console ("Open console" on a dynamic entry, reusing
   the inventory API token via vncproxy + vncwebsocket) and generic VNC
