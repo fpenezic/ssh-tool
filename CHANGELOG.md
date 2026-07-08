@@ -35,6 +35,8 @@ in alpha upstream.
 - **The connection detail header stays visible while the form scrolls** - the
   name, Save, Connect, Use-different-credential and Delete actions no longer
   scroll out of reach on a long form.
+- **Connect failures also raise a toast**, so a failed connection is visible
+  even when you've scrolled the form down past the top-of-form error banner.
 
 ## [0.53.0] - LLM activity log, notifications, and MCP polish
 
