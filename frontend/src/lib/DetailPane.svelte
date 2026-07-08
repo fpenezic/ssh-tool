@@ -1446,6 +1446,19 @@
     display: flex; align-items: center; justify-content: space-between;
     border-bottom: 1px solid var(--surface0);
     padding-bottom: 0.5rem; margin-bottom: 1rem;
+    /* Keep the name + Save / Connect / Use-different-credential / Delete
+       actions visible while the form scrolls. The .detail container has
+       1rem top / 1.25rem side padding; pull the sticky header out to the
+       container edges and re-pad it so its background covers the full width
+       and it sits flush at the top. */
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--base);
+    margin: -1rem -1.25rem 1rem;
+    padding: 1rem 1.25rem 0.5rem;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.5rem;
   }
   .head-actions { display: flex; gap: 0.5rem; }
   .fav-toggle {
