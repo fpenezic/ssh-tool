@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, mcpApprovalStore, mcpShared, mcpBridge, decodePaneLayout, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
+  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, mcpApprovalStore, mcpShared, mcpBridge, decodePaneLayoutsMulti, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
   import { isMobile } from "./lib/platform";
   import { installMobileBackNav } from "./lib/mobileBackNav";
   import { api } from "./lib/api";
@@ -246,7 +246,9 @@
       const sessionIds = sids ? sids.split(",") : [];
       if (sessionIds.length === 0) return;
       const wanted = new Set(sessionIds);
-      const layout = decodePaneLayout(layoutBlob ?? "");
+      // A redock can carry MULTIPLE tabs (the whole detached window). Decode
+      // them all so none are lost.
+      const layouts = decodePaneLayoutsMulti(layoutBlob ?? "");
       try {
         // Hydrate SessionStore for every session referenced by the
         // redock. Layout restore (below) maps tree leaves onto these.
@@ -285,8 +287,8 @@
         // and group metadata come back intact. Fall back to one tab
         // per session when the detached window predates the layout
         // payload (defensive - both sides ship in the same release).
-        if (layout) {
-          paneTabs.addTabFromLayout(layout);
+        if (layouts.length > 0) {
+          for (const lay of layouts) paneTabs.addTabFromLayout(lay);
         } else {
           for (const s of live) {
             if (!wanted.has(s.session_id)) continue;
