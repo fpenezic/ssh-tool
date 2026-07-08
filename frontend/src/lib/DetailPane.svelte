@@ -1403,7 +1403,10 @@
 {/if}
 
 <style>
-  .detail { padding: 1rem 1.25rem; overflow: auto; color: var(--text); }
+  /* No top padding: the scrollport top must equal the content top so the
+     sticky header can sit flush at top:0 with no gap for content to show
+     through. The header supplies its own top padding. */
+  .detail { padding: 0 1.25rem 1rem; overflow: auto; color: var(--text); }
   /* Small explanatory note under a form field (e.g. keepalive). */
   .linklike {
     background: none;
@@ -1455,7 +1458,10 @@
     top: 0;
     z-index: 5;
     background: var(--base);
-    margin: -1rem -1.25rem 1rem;
+    /* .detail has no top padding now; pull out to the side edges only and
+       supply the top spacing here so the header sits flush at top:0 with no
+       gap above it for scrolling content to show through. */
+    margin: 0 -1.25rem 1rem;
     padding: 1rem 1.25rem 0.5rem;
     flex-wrap: wrap;
     gap: 0.4rem 0.5rem;
