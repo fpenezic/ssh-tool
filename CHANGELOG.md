@@ -7,6 +7,35 @@ in alpha upstream.
 
 ---
 
+## [0.54.0] - Multi-window tab moves, split/detach fixes
+
+### Added
+
+- **Send a tab to another window.** Right-click a tab and pick
+  **Send to <window>** to move it to any other open window - useful for
+  pushing a terminal onto a second monitor without opening a new window.
+  (A native drag can't cross window boundaries in a WebView, so this is a
+  menu action.) The session stays live; works between the main window and
+  detached windows in any direction.
+- **Move a single pane to its own tab.** A split pane's toolbar now has a
+  button to pop just that one pane out into its own tab, leaving the rest of
+  the split intact (unlike "Ungroup tabs", which splits every pane out).
+
+### Fixed
+
+- **Detaching a tab no longer spills query-response garbage into the remote
+  shell.** Rebuilding the terminal on detach replayed the scrollback, which
+  could make xterm re-answer terminal queries (colour / device-attributes) in
+  the replayed history and send those answers to the shell as junk like
+  `2RR0;276;0c10;rgb:...`. Those responses are now suppressed during replay.
+- **Redocking a detached window brings back all its tabs.** Previously only
+  the first tab returned and the rest were lost with their sessions left live
+  in the background (visible in the counter and as green in the tree, but
+  unreachable).
+- **The connection detail header stays visible while the form scrolls** - the
+  name, Save, Connect, Use-different-credential and Delete actions no longer
+  scroll out of reach on a long form.
+
 ## [0.53.0] - LLM activity log, notifications, and MCP polish
 
 ### Added
