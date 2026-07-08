@@ -515,16 +515,21 @@ func (a *App) sessionDisplayName(sessionID string) string {
 // mcpConnectionInfo is what list_connections returns to the LLM. Deliberately
 // SHARE-MINIMAL: name + folder path only, no hostname / port / user / tags /
 // notes, so searching doesn't leak infrastructure detail before a connect.
+// Dynamic=true marks a host pulled from a dynamic inventory folder (Proxmox,
+// Hetzner, ...) rather than a saved connection; the connection_id carries the
+// info mcpConnect needs to route it (see the dyn: prefix).
 type mcpConnectionInfo struct {
 	ConnectionID string `json:"connection_id"`
 	Name         string `json:"name"`
 	Folder       string `json:"folder"` // "/"-joined folder path, "" at root
+	Dynamic      bool   `json:"dynamic,omitempty"`
 }
 
-// mcpListConnections returns saved connections whose name or folder path
-// matches query (case-insensitive substring; empty query returns all). Only
-// exposed when the bridge is enabled. Connections flagged Sensitive are
-// omitted entirely - they never surface to the LLM.
+// mcpListConnections returns saved connections AND dynamic-inventory hosts
+// whose name or folder path matches query (case-insensitive substring; empty
+// query returns all). Only exposed when the bridge is enabled. Saved
+// connections flagged Sensitive are omitted entirely - they never surface to
+// the LLM.
 func (a *App) mcpListConnections(query string) ([]mcpConnectionInfo, error) {
 	conns, err := a.db.ListConnections(nil)
 	if err != nil {
@@ -532,6 +537,11 @@ func (a *App) mcpListConnections(query string) ([]mcpConnectionInfo, error) {
 	}
 	paths := a.folderPathIndex()
 	q := strings.ToLower(strings.TrimSpace(query))
+	matches := func(name, folder string) bool {
+		return q == "" ||
+			strings.Contains(strings.ToLower(name), q) ||
+			strings.Contains(strings.ToLower(folder), q)
+	}
 	out := []mcpConnectionInfo{}
 	for _, c := range conns {
 		if c.Sensitive {
@@ -541,14 +551,39 @@ func (a *App) mcpListConnections(query string) ([]mcpConnectionInfo, error) {
 		if c.FolderID != nil {
 			folder = paths[*c.FolderID]
 		}
-		if q != "" &&
-			!strings.Contains(strings.ToLower(c.Name), q) &&
-			!strings.Contains(strings.ToLower(folder), q) {
+		if !matches(c.Name, folder) {
 			continue
 		}
 		out = append(out, mcpConnectionInfo{
 			ConnectionID: c.ID, Name: c.Name, Folder: folder,
 		})
+	}
+
+	// Dynamic-inventory hosts. These aren't rows in `connections`; they're
+	// cached children of dynamic folders, connected via SshConnectDynamic
+	// (folderID, entryID). Encode both ids into the connection_id as
+	// "dyn:<folderID>:<entryID>" so mcpConnect can route them without a new
+	// tool argument.
+	folders, ferr := a.db.ListDynamicFolders()
+	if ferr == nil {
+		for _, df := range folders {
+			folder := paths[df.FolderID]
+			entries, eerr := a.db.ListDynamicEntries(df.FolderID)
+			if eerr != nil {
+				continue
+			}
+			for _, e := range entries {
+				if !matches(e.Name, folder) {
+					continue
+				}
+				out = append(out, mcpConnectionInfo{
+					ConnectionID: "dyn:" + df.FolderID + ":" + e.ID,
+					Name:         e.Name,
+					Folder:       folder,
+					Dynamic:      true,
+				})
+			}
+		}
 	}
 	return out, nil
 }
@@ -599,26 +634,54 @@ func (a *App) folderPathIndex() map[string]string {
 // immediately work on it. Requires the bridge enabled; the approval prompt is
 // the gate (opening a session spends credentials and may trigger a host-key
 // prompt). A Sensitive connection is refused.
+//
+// connectionID is either a saved-connection id, or "dyn:<folderID>:<entryID>"
+// for a dynamic-inventory host (as returned by list_connections). The two are
+// resolved to a common (name, hostname, folder, connect-func) shape and share
+// the approval + post-connect wiring below.
 func (a *App) mcpConnect(connectionID, level string) (string, error) {
 	lvl := mcpGrantLevel(level)
 	if lvl != mcpGrantReadOnly && lvl != mcpGrantReadRun {
 		lvl = mcpGrantReadRun // default to the more useful level
 	}
-	conn, err := a.db.GetConnection(connectionID)
-	if err != nil || conn == nil {
-		return "", fmt.Errorf("connection not found")
-	}
-	if conn.Sensitive {
-		return "", fmt.Errorf("connection is marked sensitive and cannot be opened by the LLM")
+
+	var (
+		name, hostname, folder string
+		connect                func() (*SshConnectResult, error)
+	)
+
+	if strings.HasPrefix(connectionID, "dyn:") {
+		// "dyn:<folderID>:<entryID>". Both ids are UUIDs (no ':'), so a Cut on
+		// the first colon splits them cleanly.
+		rest := strings.TrimPrefix(connectionID, "dyn:")
+		folderID, entryID, ok := strings.Cut(rest, ":")
+		if !ok {
+			return "", fmt.Errorf("malformed dynamic id %q", connectionID)
+		}
+		entry, err := a.db.GetDynamicEntry(entryID)
+		if err != nil || entry == nil || entry.FolderID != folderID {
+			return "", fmt.Errorf("dynamic host not found")
+		}
+		name, hostname, folder = entry.Name, entry.Hostname, a.folderPathIndex()[folderID]
+		connect = func() (*SshConnectResult, error) { return a.SshConnectDynamic(folderID, entryID) }
+	} else {
+		conn, err := a.db.GetConnection(connectionID)
+		if err != nil || conn == nil {
+			return "", fmt.Errorf("connection not found")
+		}
+		if conn.Sensitive {
+			return "", fmt.Errorf("connection is marked sensitive and cannot be opened by the LLM")
+		}
+		name, hostname = conn.Name, conn.Hostname
+		if conn.FolderID != nil {
+			folder = a.folderPathIndex()[*conn.FolderID]
+		}
+		connect = func() (*SshConnectResult, error) { return a.SshConnect(connectionID) }
 	}
 
-	folder := ""
-	if conn.FolderID != nil {
-		folder = a.folderPathIndex()[*conn.FolderID]
-	}
-	label := conn.Name
+	label := name
 	if folder != "" {
-		label = folder + "/" + conn.Name
+		label = folder + "/" + name
 	}
 	if a.requestApproval("", label, "connect", label) != mcpDecisionRun {
 		a.recordActivity(McpActivity{
@@ -627,7 +690,7 @@ func (a *App) mcpConnect(connectionID, level string) (string, error) {
 		return "", fmt.Errorf("connect denied by user")
 	}
 
-	res, err := a.SshConnect(connectionID)
+	res, err := connect()
 	if err != nil {
 		a.recordActivity(McpActivity{
 			Kind: "connect", Session: label, Command: label,
@@ -647,14 +710,10 @@ func (a *App) mcpConnect(connectionID, level string) (string, error) {
 	// SshConnect call (see DetailPane). A session opened headlessly by the MCP
 	// bridge bypasses that, so the app would hold a live session with no tab.
 	// Emit an event the frontend listens for to add the tab + switch to it.
-	hostname := ""
-	if conn.Hostname != "" {
-		hostname = conn.Hostname
-	}
 	EventsEmit("mcp_session_opened", map[string]string{
 		"session_id":    res.SessionID,
 		"connection_id": connectionID,
-		"name":          conn.Name,
+		"name":          name,
 		"hostname":      hostname,
 	})
 

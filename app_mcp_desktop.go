@@ -323,9 +323,11 @@ func (a *App) buildMcpServer() *mcp.Server {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "list_connections",
-		Description: "Search the user's saved SSH connections by name or folder. Returns " +
-			"connection ids you can pass to connect(). For privacy only the name and folder " +
-			"path are returned - hostnames and other details are not exposed until you connect.",
+		Description: "Search the user's saved SSH connections and dynamic-inventory hosts " +
+			"(Proxmox, Hetzner, and other cloud providers) by name or folder. Returns " +
+			"connection ids you can pass to connect(); entries marked (dynamic) are live " +
+			"inventory hosts. For privacy only the name and folder path are returned - " +
+			"hostnames and other details are not exposed until you connect.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpListConnArgs) (*mcp.CallToolResult, any, error) {
 		conns, err := a.mcpListConnections(in.Query)
 		if err != nil {
@@ -360,7 +362,11 @@ func formatConnections(conns []mcpConnectionInfo) string {
 		if loc == "" {
 			loc = "(root)"
 		}
-		b = append(b, []byte(fmt.Sprintf("- %s  [%s]  id=%s\n", c.Name, loc, c.ConnectionID))...)
+		kind := ""
+		if c.Dynamic {
+			kind = "  (dynamic)"
+		}
+		b = append(b, []byte(fmt.Sprintf("- %s  [%s]%s  id=%s\n", c.Name, loc, kind, c.ConnectionID))...)
 	}
 	return string(b)
 }

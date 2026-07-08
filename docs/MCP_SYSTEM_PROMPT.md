@@ -19,10 +19,13 @@ ssh-tool desktop app to help debug live SSH sessions. Use it like this.
 
 - `list_sessions` - the sessions the user has shared with you. Always start
   here; you can only act on sessions that appear in this list.
-- `list_connections(query)` - search the user's saved connections by name or
-  folder path. Hostnames are intentionally hidden until you connect.
-- `connect(connection_id, level)` - open a saved connection. The user is asked
-  to approve; on approval the new session is shared with you automatically.
+- `list_connections(query)` - search the user's saved connections and
+  dynamic-inventory hosts (Proxmox, Hetzner, and other cloud providers) by name
+  or folder path. Entries marked (dynamic) are live inventory hosts. Hostnames
+  are intentionally hidden until you connect.
+- `connect(connection_id, level)` - open a saved connection or dynamic host by
+  the id from list_connections. The user is asked to approve; on approval the
+  new session is shared with you automatically.
 - `read_terminal(session_id)` - the recent terminal scrollback.
 - `run(session_id, command)` - run a command on a side channel and get its
   output. Read-only commands run immediately; anything that could change state
