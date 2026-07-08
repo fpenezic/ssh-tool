@@ -37,6 +37,21 @@ func SidecarPath(vaultPath string) string { return vaultPath + sidecarSuffix }
 // SidecarExists always reports false: auto-unlock is off on Android.
 func SidecarExists(string) bool { return false }
 
+// SidecarStrengthKind / SidecarStrength are kept for API parity with the
+// desktop machine.go so vault.go compiles. Auto-unlock is disabled on Android
+// (the user types the passphrase each launch), so there is never a sidecar to
+// classify - always "none".
+type SidecarStrengthKind string
+
+const (
+	SidecarStrengthNone   SidecarStrengthKind = "none"
+	SidecarStrengthWeak   SidecarStrengthKind = "weak"
+	SidecarStrengthStrong SidecarStrengthKind = "strong"
+)
+
+// SidecarStrength always reports none: no auto-unlock sidecar on Android.
+func SidecarStrength(string) SidecarStrengthKind { return SidecarStrengthNone }
+
 // WriteSidecar is a no-op on Android.
 func WriteSidecar(string, string) error { return nil }
 

@@ -7,6 +7,18 @@ in alpha upstream.
 
 ---
 
+## [0.55.1] - Android build fix
+
+### Fixed
+
+- **Android build.** The v0.55.0 auto-unlock strength warning added a
+  `SidecarStrength` helper to the desktop machine layer but not to the
+  Android stub (auto-unlock is disabled there), breaking the Android
+  compile. Added the parity stub (always reports "none"). Desktop
+  unaffected.
+
+---
+
 ## [0.55.0] - Security hardening
 
 A pass over the newer network- and LLM-facing surfaces. No behaviour you
