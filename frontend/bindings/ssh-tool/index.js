@@ -66,5 +66,6 @@ export {
     TcpdumpSnapshotResult,
     TcpdumpStartInput,
     UpdateCheckResult,
-    VncSession
+    VncSession,
+    WindowTarget
 } from "./models.js";

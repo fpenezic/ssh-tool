@@ -359,6 +359,24 @@ These still bite. The archive of older / now-handled traps lives in
     silently). `docs/MCP_SYSTEM_PROMPT.md` is the paste-in system prompt for
     LLM clients.
 
+32. **Cross-window tab moves go through a backend pending-drag slot, not
+    native drag.** A WebView drag can't cross OS window boundaries (the
+    drag ends when the pointer leaves the source window), so moving a tab
+    to another window is a menu action ("Send to <window>"), not a drop.
+    The mechanism reuses the detach/redock plumbing: the source stashes the
+    tab in `a.pendingTabDrag` (`WindowSendTab`), a name-targeted
+    `window_receive_tab` event fires, and only the window whose `selfWindowName`
+    matches claims the payload via `WindowAcceptTabDrag` and reconstructs it.
+    The main window is named `"main"`; detached ones `detached-<tabID>`.
+    Session ownership is transferred in `detachedSessions` so window-close
+    teardown disconnects the right sessions (else dangling green sessions).
+    Redock ships EVERY tab (`encodePaneLayouts` -> `{tabs:[...]}`,
+    `decodePaneLayoutsMulti`), not just `tabs[0]` - the multi-tab-loss bug.
+    `decodePaneLayout` still returns the first tab so single-tab callers
+    (send-to-window, initial detach `?layout=`) are unaffected. On detach
+    replay, non-user xterm `onData` is suppressed while `replaying` so query
+    responses in the scrollback don't land in the remote shell as garbage.
+
 ### Android / mobile gotchas
 
 The app runs on Android (v0.36.0+). Built locally via the NDK

@@ -13,7 +13,7 @@
   import { onMount } from "svelte";
   import { errMsg } from "./connectErrors";
   import { api } from "./api";
-  import { sessions, paneTabs, view, decodePaneLayout, encodePaneLayout } from "./stores.svelte";
+  import { sessions, paneTabs, view, decodePaneLayout, encodePaneLayouts } from "./stores.svelte";
   import { vncSessions } from "./vncState.svelte.ts";
   import TerminalArea from "./TerminalArea.svelte";
   import { broadcast } from "./broadcast.svelte";
@@ -159,12 +159,11 @@
   });
 
   async function redock() {
-    // Ship the current pane layout back so the main window can rebuild
-    // splits / group meta instead of flattening sessions into separate
-    // tabs. Single-tab redock for now - addTabFromLayout regenerates
-    // tab/pane ids so collisions with the main window are impossible.
-    const cur = paneTabs.tabs[0];
-    const layout = cur ? encodePaneLayout(cur) : "";
+    // Ship the layout of EVERY tab in this window back so the main window
+    // rebuilds them all (splits / group meta intact) instead of losing all
+    // but the first. addTabFromLayout regenerates tab/pane ids so collisions
+    // with the main window are impossible.
+    const layout = paneTabs.tabs.length > 0 ? encodePaneLayouts(paneTabs.tabs) : "";
     try {
       await api.windowRedockTab(detachedTabKey, ownedSessions, layout);
     } catch (e) {

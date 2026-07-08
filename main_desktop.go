@@ -190,6 +190,7 @@ func buildApp(appInst *App) *application.App {
 // cleanup func (single-instance listener shutdown) to defer, or nil.
 func configurePlatform(app *application.App, appInst *App) func() {
 	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:             "main",
 		Title:            appName,
 		Width:            1200,
 		Height:           800,

@@ -5663,6 +5663,126 @@ func (a *App) WindowCancelTabDrag() {
 	a.pendingTabDragMu.Unlock()
 }
 
+// WindowTarget is one open window a tab can be sent to.
+type WindowTarget struct {
+	Name  string `json:"name"`  // internal window name ("main", "detached-<id>")
+	Label string `json:"label"` // human label for the menu
+}
+
+// WindowListTargets returns the other open windows the caller can send a tab
+// to (excluding itself). Used by the "Send to window" tab menu so a tab can be
+// moved between windows on different monitors without a native cross-window
+// drag (which WebView can't do). callerName is the caller's own window name so
+// it isn't listed as a destination.
+func (a *App) WindowListTargets(callerName string) []WindowTarget {
+	out := []WindowTarget{}
+	if a.app == nil {
+		return out
+	}
+	for _, w := range a.app.Window.GetAll() {
+		name := w.Name()
+		if name == "" || name == callerName {
+			continue
+		}
+		label := "Main window"
+		if name != "main" {
+			// A detached window - label it by the session(s) it holds so
+			// multiple detached windows are distinguishable in the menu.
+			label = a.detachedWindowLabel(name)
+		}
+		out = append(out, WindowTarget{Name: name, Label: label})
+	}
+	return out
+}
+
+// detachedWindowLabel builds a menu label for a detached window from the
+// session names it holds ("Window: db-prod-01" / "Window: db-prod-01 +2").
+func (a *App) detachedWindowLabel(windowName string) string {
+	a.detachedMu.Lock()
+	sids := append([]string(nil), a.detachedSessions[windowName]...)
+	a.detachedMu.Unlock()
+	if len(sids) == 0 {
+		return "Detached window"
+	}
+	a.metaMu.Lock()
+	first := ""
+	if meta, ok := a.sessionMeta[sids[0]]; ok {
+		if meta.name != "" {
+			first = meta.name
+		} else {
+			first = meta.hostname
+		}
+	}
+	a.metaMu.Unlock()
+	if first == "" {
+		return "Detached window"
+	}
+	if len(sids) > 1 {
+		return fmt.Sprintf("Window: %s +%d", first, len(sids)-1)
+	}
+	return "Window: " + first
+}
+
+// WindowSendTab hands a tab to another open window. It stashes the tab payload
+// in the shared pending-drag slot (same mechanism as detach redock) and emits
+// a targeted event the destination window listens for; the destination pulls
+// the payload via WindowAcceptTabDrag and reconstructs the tab, and the source
+// removes it locally. No new window is opened.
+func (a *App) WindowSendTab(callerName, targetName, tabID, sessions, layout string) error {
+	if a.app == nil {
+		return fmt.Errorf("application not initialised")
+	}
+	if _, ok := a.app.Window.GetByName(targetName); !ok {
+		return fmt.Errorf("target window not found")
+	}
+	// Transfer session ownership so window-close teardown disconnects the
+	// right sessions: drop them from the caller's detached set and, if the
+	// target is a detached window, add them to its set. The main window isn't
+	// tracked in detachedSessions (it owns everything else), so sending to/from
+	// "main" just means adding/removing from the detached side.
+	sids := parseCSVList(sessions)
+	if len(sids) > 0 {
+		a.detachedMu.Lock()
+		if a.detachedSessions == nil {
+			a.detachedSessions = map[string][]string{}
+		}
+		if callerName != "main" {
+			a.detachedSessions[callerName] = removeStrings(a.detachedSessions[callerName], sids)
+		}
+		if targetName != "main" {
+			a.detachedSessions[targetName] = append(a.detachedSessions[targetName], sids...)
+		}
+		a.detachedMu.Unlock()
+	}
+	a.pendingTabDragMu.Lock()
+	a.pendingTabDrag = &TabDragPayload{TabID: tabID, Sessions: sessions, Layout: layout}
+	a.pendingTabDragMu.Unlock()
+	// Targeted by name in the payload; every window listens and the matching
+	// one claims it. (Wails emits globally; we filter on the target field.)
+	EventsEmit("window_receive_tab", map[string]string{
+		"target": targetName,
+	})
+	return nil
+}
+
+// removeStrings returns xs without any element present in drop.
+func removeStrings(xs, drop []string) []string {
+	if len(xs) == 0 {
+		return xs
+	}
+	dropSet := make(map[string]bool, len(drop))
+	for _, d := range drop {
+		dropSet[d] = true
+	}
+	out := xs[:0:0]
+	for _, x := range xs {
+		if !dropSet[x] {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
 // ----- Verbose connect debug buffer -----
 
 const debugBufCap = 256
