@@ -2992,6 +2992,21 @@ export function WindowDetachTabAt(tabID, screenX, screenY, sessions, layout) {
 }
 
 /**
+ * WindowListTargets returns the other open windows the caller can send a tab
+ * to (excluding itself). Used by the "Send to window" tab menu so a tab can be
+ * moved between windows on different monitors without a native cross-window
+ * drag (which WebView can't do). callerName is the caller's own window name so
+ * it isn't listed as a destination.
+ * @param {string} callerName
+ * @returns {$CancellablePromise<$models.WindowTarget[]>}
+ */
+export function WindowListTargets(callerName) {
+    return $Call.ByID(2387681781, callerName).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType142($result);
+    }));
+}
+
+/**
  * WindowRedockTab tells the main window that a detached tab should come back.
  * sessions is the comma-separated list of session IDs the detached window owns.
  * layout is an opaque base64 blob with the pane tree so the main
@@ -3004,6 +3019,23 @@ export function WindowDetachTabAt(tabID, screenX, screenY, sessions, layout) {
  */
 export function WindowRedockTab(tabID, sessions, layout) {
     return $Call.ByID(1336970294, tabID, sessions, layout);
+}
+
+/**
+ * WindowSendTab hands a tab to another open window. It stashes the tab payload
+ * in the shared pending-drag slot (same mechanism as detach redock) and emits
+ * a targeted event the destination window listens for; the destination pulls
+ * the payload via WindowAcceptTabDrag and reconstructs the tab, and the source
+ * removes it locally. No new window is opened.
+ * @param {string} callerName
+ * @param {string} targetName
+ * @param {string} tabID
+ * @param {string} sessions
+ * @param {string} layout
+ * @returns {$CancellablePromise<void>}
+ */
+export function WindowSendTab(callerName, targetName, tabID, sessions, layout) {
+    return $Call.ByID(1518492598, callerName, targetName, tabID, sessions, layout);
 }
 
 /**
@@ -3027,7 +3059,7 @@ export function WindowStartTabDrag(tabID, sessions, layout) {
  */
 export function WorkspaceCreate(name, layoutJSON) {
     return $Call.ByID(2050853866, name, layoutJSON).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType142($result);
+        return $$createType144($result);
     }));
 }
 
@@ -3057,7 +3089,7 @@ export function WorkspaceTouchLastOpened(id) {
  */
 export function WorkspaceUpdate(id, name, layoutJSON) {
     return $Call.ByID(1777295735, id, name, layoutJSON).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType142($result);
+        return $$createType144($result);
     }));
 }
 
@@ -3068,7 +3100,7 @@ export function WorkspaceUpdate(id, name, layoutJSON) {
  */
 export function WorkspacesList() {
     return $Call.ByID(3941184719).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType143($result);
+        return $$createType145($result);
     }));
 }
 
@@ -3214,6 +3246,8 @@ const $$createType137 = $Create.Nullable($$createType136);
 const $$createType138 = $Create.Array($$createType136);
 const $$createType139 = $models.TabDragPayload.createFrom;
 const $$createType140 = $Create.Nullable($$createType139);
-const $$createType141 = store$0.Workspace.createFrom;
-const $$createType142 = $Create.Nullable($$createType141);
-const $$createType143 = $Create.Array($$createType141);
+const $$createType141 = $models.WindowTarget.createFrom;
+const $$createType142 = $Create.Array($$createType141);
+const $$createType143 = store$0.Workspace.createFrom;
+const $$createType144 = $Create.Nullable($$createType143);
+const $$createType145 = $Create.Array($$createType143);

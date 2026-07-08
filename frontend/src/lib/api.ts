@@ -731,6 +731,10 @@ export const api = {
   windowAcceptTabDrag: () =>
     G.WindowAcceptTabDrag() as unknown as Promise<{ tab_id: string; sessions: string; layout: string } | null>,
   windowCancelTabDrag: () => G.WindowCancelTabDrag(),
+  windowListTargets: (callerName: string) =>
+    G.WindowListTargets(callerName) as unknown as Promise<{ name: string; label: string }[]>,
+  windowSendTab: (callerName: string, targetName: string, tabId: string, sessions: string, layout: string) =>
+    G.WindowSendTab(callerName, targetName, tabId, sessions, layout),
   connectionCopyInfo: (connectionId: string) =>
     G.ConnectionCopyInfo(connectionId) as unknown as Promise<{
       username: string;

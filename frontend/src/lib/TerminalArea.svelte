@@ -10,6 +10,8 @@
   import { IconBroadcast, IconFolder, IconBot } from "./iconMap";
   import BroadcastManager from "./BroadcastManager.svelte";
   import { setTabDetachDragImage } from "./dragImage";
+  import { onMount, onDestroy } from "svelte";
+  import { EventsOn } from "./wailsRuntime";
   import { appPrefs } from "./appPrefs.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { focusActiveTerminal } from "./terminalFocus";
@@ -182,6 +184,9 @@
   // detached window reconstructs its pane tree, so we must NOT use t.tabId
   // when registering the pending drag; we need the original key instead.
   const detachedTabKey = new URLSearchParams(window.location.search).get("detached") ?? "";
+  // This window's own backend name, for "Send to window" routing.
+  const selfWindowName = isDetachedWindow ? `detached-${detachedTabKey}` : "main";
+  let sendTargets = $state<{ name: string; label: string }[]>([]);
   let draggingTabId: string | null = null;
   // Per-tab reorder hint shown while the user drags a tab over
   // another tab's label. side === "left" draws a thin bar on the
@@ -191,6 +196,7 @@
   let ctxMenu = $state<{ tabId: string; x: number; y: number } | null>(null);
 
   function openCtxMenu(e: MouseEvent, tabId: string) {
+    refreshSendTargets();
     e.preventDefault();
     ctxMenu = { tabId, x: e.clientX, y: e.clientY };
   }
@@ -278,48 +284,97 @@
     }
   }
 
+  // Reconstruct a tab in THIS window from a pending-drag payload (used by the
+  // detached-drop redock AND the "Send to window" receive). Does not remove
+  // anything from the source - the caller decides that.
+  async function reconstructTabFromPayload(p: { tab_id: string; sessions: string; layout: string }) {
+    const sessionIds = p.sessions ? p.sessions.split(",") : [];
+    const live = (await api.sshActiveSessions()) ?? [];
+    // Ensure every session the tab references exists in this window's store.
+    for (const s of live) {
+      if (!sessionIds.includes(s.session_id)) continue;
+      if (!sessions.tabs.find((t) => t.sessionId === s.session_id)) {
+        sessions.add({
+          sessionId: s.session_id,
+          connectionId: s.connection_id,
+          name: s.name,
+          hostname: s.hostname,
+          status: "connected",
+        });
+      }
+    }
+    const layout = decodePaneLayout(p.layout ?? "");
+    if (layout) {
+      paneTabs.addTabFromLayout(layout);
+    } else {
+      for (const sid of sessionIds) {
+        const s = live.find((x) => x.session_id === sid);
+        if (!s) continue;
+        paneTabs.addTab(s.session_id, s.name);
+      }
+    }
+    view.setTab("terminal");
+  }
+
   async function onTabBarDrop(e: DragEvent) {
     if (isDetachedWindow) return;
     e.preventDefault();
     try {
       const p = await api.windowAcceptTabDrag();
       if (!p) return;
-      const sessionIds = p.sessions ? p.sessions.split(",") : [];
-      const live = (await api.sshActiveSessions()) ?? [];
-      // First make sure every session referenced by the dragged tab
-      // exists in this window's SessionStore. Layout restore (below)
-      // expects them already-present.
-      for (const s of live) {
-        if (!sessionIds.includes(s.session_id)) continue;
-        if (!sessions.tabs.find((t) => t.sessionId === s.session_id)) {
-          sessions.add({
-            sessionId: s.session_id,
-            connectionId: s.connection_id,
-            name: s.name,
-            hostname: s.hostname,
-            status: "connected",
-          });
-        }
-      }
-      // Prefer the serialized layout so splits / titles / group meta
-      // survive the redock. Fall back to one-tab-per-session when the
-      // payload was produced by an older client without ?layout=.
-      const layout = decodePaneLayout(p.layout ?? "");
-      if (layout) {
-        paneTabs.addTabFromLayout(layout);
-      } else {
-        for (const sid of sessionIds) {
-          const s = live.find((x) => x.session_id === sid);
-          if (!s) continue;
-          paneTabs.addTab(s.session_id, s.name);
-        }
-      }
-      view.setTab("terminal");
+      await reconstructTabFromPayload(p);
+      // Redock: the source is a detached window; close it.
       await api.windowCloseSelf("detached-" + p.tab_id);
     } catch {
       // No pending drag - silently ignore
     }
   }
+
+  // ----- "Send to window" (cross-monitor tab move, no new window) -----
+
+  // Load the list of other open windows this tab can be sent to. Called when
+  // the context menu opens so it's fresh.
+  async function refreshSendTargets() {
+    try { sendTargets = (await api.windowListTargets(selfWindowName)) ?? []; }
+    catch { sendTargets = []; }
+  }
+
+  // Send a tab to another open window: register the payload, tell the target
+  // to claim it, then remove the tab locally. The session stays alive.
+  async function sendTabToWindow(tabId: string, targetName: string) {
+    const sids = tabSessionIds(tabId);
+    const layout = tabLayoutBlob(tabId);
+    // Use the detached window's original key when we're a detached window, so
+    // the target reconstructs the right pane tree; else the live tabId.
+    const key = isDetachedWindow ? detachedTabKey : tabId;
+    try {
+      await api.windowSendTab(selfWindowName, targetName, key, sids, layout);
+      // Remove the tab from THIS window without disconnecting its sessions -
+      // the target now owns them. removeTab keeps the pool intact.
+      paneTabs.removeTab(tabId);
+      if (paneTabs.tabs.length === 0 && isDetachedWindow) {
+        // A detached window that just gave away its only tab should close.
+        await api.windowCloseSelf(selfWindowName);
+      }
+    } catch (e) {
+      console.warn("send tab to window failed", e);
+    }
+  }
+
+  // Receive a tab sent to this window from another one. The backend emits
+  // window_receive_tab globally with the intended target's name; only that
+  // window claims the pending payload.
+  let unsubReceive: (() => void) | null = null;
+  onMount(() => {
+    unsubReceive = EventsOn("window_receive_tab", async (data: any) => {
+      if ((data?.target ?? "") !== selfWindowName) return;
+      try {
+        const p = await api.windowAcceptTabDrag();
+        if (p) await reconstructTabFromPayload(p);
+      } catch { /* nothing pending */ }
+    });
+  });
+  onDestroy(() => { unsubReceive?.(); });
 
   async function duplicateTab(tabId: string) {
     const connId = tabConnectionId(tabId);
@@ -673,6 +728,11 @@
       <button onclick={() => { detachTab(ctxMenu!.tabId); closeCtxMenu(); }}>
         ↗ Detach to new window
       </button>
+      {#each sendTargets as w (w.name)}
+        <button onclick={() => { sendTabToWindow(ctxMenu!.tabId, w.name); closeCtxMenu(); }}>
+          → Send to {w.label}
+        </button>
+      {/each}
       {#if tabActiveSessionId(ctxMenu.tabId)}
         {@const recSid = tabActiveSessionId(ctxMenu.tabId)!}
         {#if recording.isRecording(recSid)}

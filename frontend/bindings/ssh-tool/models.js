@@ -3847,6 +3847,46 @@ export class VncSession {
     }
 }
 
+/**
+ * WindowTarget is one open window a tab can be sent to.
+ */
+export class WindowTarget {
+    /**
+     * Creates a new WindowTarget instance.
+     * @param {Partial<WindowTarget>} [$$source = {}] - The source object to create the WindowTarget.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * internal window name ("main", "detached-<id>")
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("label" in $$source)) {
+            /**
+             * human label for the menu
+             * @member
+             * @type {string}
+             */
+            this["label"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new WindowTarget instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {WindowTarget}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new WindowTarget(/** @type {Partial<WindowTarget>} */($$parsedSource));
+    }
+}
+
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = store$0.InheritableSettings.createFrom;
