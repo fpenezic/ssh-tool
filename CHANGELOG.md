@@ -7,6 +7,52 @@ in alpha upstream.
 
 ---
 
+## [0.55.0] - Security hardening
+
+A pass over the newer network- and LLM-facing surfaces. No behaviour you
+rely on day to day changes; the defaults just got safer.
+
+### Changed
+
+- **Give internet now only reaches the public internet by default.** The
+  reverse proxy dials out from this machine's network, so previously a
+  process on the borrowing server could ask it to reach your own localhost
+  or private LAN. It now refuses internal / private / loopback / link-local
+  targets (including cloud-metadata `169.254.169.254`) unless you tick the
+  new **Allow reaching my local/private network** box in the tunnels
+  popover. Names are resolved on this side, so a hostname pointing at an
+  internal IP is caught too.
+- **The LLM activity log no longer stores command output by default.**
+  Output could contain secrets the LLM read (a `.env` file, environment
+  variables, kubernetes secrets), and the audit log is a plaintext file on
+  disk. The command, gate decision, and exit status - the actual audit
+  trail - are still recorded. A new **Also store command output in the
+  audit log** toggle (under the audit setting) re-enables full capture if
+  you want it.
+- **The local MCP bridge socket now requires a token too.** The
+  cross-boundary TCP leg already did; the primary socket now matches it, so
+  an unrelated local process that finds the socket can no longer attach and
+  read shared-session scrollback. The bridge subprocess reads the token
+  from a `0600` file, same as before - no setup change.
+
+### Fixed
+
+- **The LLM can now see dynamic-inventory hosts.** `list_connections` (the
+  MCP bridge search) only returned saved connections, so hosts pulled from a
+  Proxmox / Hetzner / cloud dynamic folder were invisible to a connected LLM.
+  They now appear (marked "dynamic") and `connect` can open them.
+
+### Added
+
+- **Auto-unlock strength warning.** On platforms where the machine-bound
+  auto-unlock uses the older format (macOS, or a container with no
+  `/etc/machine-id`), the Vault settings page now says so - its key can
+  fall back to the hostname, which is weaker binding. Your passphrase and
+  the encrypted vault are unaffected; this only concerns the convenience
+  auto-unlock.
+
+---
+
 ## [0.54.0] - Multi-window tab moves, split/detach fixes
 
 ### Added
