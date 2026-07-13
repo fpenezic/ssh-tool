@@ -7,6 +7,56 @@ in alpha upstream.
 
 ---
 
+## [0.56.0] - Dead sessions get noticed; recording asks first
+
+### Fixed
+
+- **A session whose chain died silently now gets noticed.** Behind a
+  jump host, a session could hang forever with the tab still green:
+  keystrokes went nowhere, no output ever came, and the only way out
+  was closing the tab by hand.
+
+  Nothing below the SSH layer can see this happen. The TCP socket
+  your machine owns goes to the JUMP, and the far hop rides inside it
+  as an SSH channel - so when a firewall or VPN on the jump's far side
+  drops that flow without notice, your socket stays perfectly healthy.
+  The jump is still up; the kernel is right. Only a probe travelling
+  the whole chain and back can tell that the far end has stopped
+  answering.
+
+  That probe now always runs. Keepalive set to 0 means "send no
+  keepalive traffic", not "never notice that the link is gone", so a
+  session with no keepalive configured still gets a slow
+  detection-only probe (once a minute). Probes also gained a deadline
+  - previously one could block forever on a dead chain, which is why
+  even a configured keepalive prevented drops without ever detecting
+  one. When a probe goes unanswered the session now disconnects the
+  normal way: the tab turns red, and auto-reconnect kicks in if you
+  have it on.
+
+- **Launching ssh-tool while it is already running raises the existing
+  window** instead of quietly starting a second copy of the whole
+  application. Two instances each opened the database and each held
+  their own picture of your connection tree, which meant one could
+  overwrite an edit you had just made in the other, with no error
+  anywhere.
+
+### Added
+
+- **Recording asks before it starts.** A recording writes everything
+  the session prints to a plaintext file - a config you `cat`, a token
+  a command echoes back - so it no longer begins on a single
+  unconfirmed click. The prompt names the destination folder and can
+  be turned off ("Ask before starting a recording") if you record
+  routinely.
+
+- **Session recording is its own settings section** (under Security),
+  instead of being buried at the bottom of the Terminal page. It
+  decides whether the contents of your sessions land on disk
+  unencrypted, which is where it belongs.
+
+---
+
 ## [0.55.2] - Numeric fields could not be saved
 
 ### Fixed
