@@ -80,7 +80,10 @@
   let newOverrideProto = $state("http");
 
   function addPortOverride() {
-    const portNum = parseInt(newOverridePort.trim(), 10);
+    // newOverridePort is typed string but bound to <input type="number">, so
+    // Svelte hands back a number once the user types - .trim() threw and the
+    // add button did nothing. Coerce before parsing.
+    const portNum = parseInt(String(newOverridePort ?? "").trim(), 10);
     if (!Number.isFinite(portNum) || portNum <= 0 || portNum > 65535) return;
     const portStr = String(portNum);
     if (portOverrides.some((o) => o.port === portStr)) return;

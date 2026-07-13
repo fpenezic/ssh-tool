@@ -26,6 +26,17 @@
   // refreshed via the network_tunnel_changed event inside the store.
   $effect(() => { networkProfiles.load().catch(() => {}); });
 
+  // The numeric editor fields are typed `string` but bound to <input
+  // type="number">, which makes Svelte coerce the value to a number as soon
+  // as the user types. Calling .trim() on that threw and killed the save
+  // handler before it reached the IPC call - the Save button lit up but
+  // clicking it did nothing. Normalise to a trimmed string instead of
+  // trusting the declared type.
+  function numText(v: string | number | undefined | null): string {
+    if (v === undefined || v === null) return "";
+    return String(v).trim();
+  }
+
   // Stable option list for the credential dropdown - same shape both
   // editor instances need. flatGrouped() returns { cred, label } items
   // where `label` includes the folder path so duplicates by name are
@@ -117,12 +128,12 @@
     return (
       editingFolder.name !== folder.name ||
       editingFolder.username !== (s.username ?? "") ||
-      editingFolder.port !== (s.port?.toString() ?? "") ||
+      numText(editingFolder.port) !== (s.port?.toString() ?? "") ||
       editingFolder.authRef !== (s.auth_ref ?? "") ||
       editingFolder.colorTag !== (s.color_tag ?? "") ||
       editingFolder.autoReconnect !== encodeBool(s.auto_reconnect) ||
       editingFolder.verbose !== encodeBool(s.verbose) ||
-      editingFolder.keepalive !== (s.keepalive_interval !== undefined ? String(s.keepalive_interval) : "") ||
+      numText(editingFolder.keepalive) !== (s.keepalive_interval !== undefined ? String(s.keepalive_interval) : "") ||
       editingFolder.networkProfile !== encodeNetProfile(s.network_profile_id) ||
       JSON.stringify(editingFolder.jumpHost ?? null) !== JSON.stringify(s.jump_host ?? null)
     );
@@ -134,14 +145,18 @@
     folderSaving = true;
     const settings = { ...folder.settings };
     settings.username = editingFolder.username.trim() || undefined;
-    settings.port = editingFolder.port ? parseInt(editingFolder.port, 10) : undefined;
+    {
+      const p = numText(editingFolder.port);
+      const n = p === "" ? NaN : parseInt(p, 10);
+      settings.port = isNaN(n) ? undefined : n;
+    }
     settings.auth_ref = editingFolder.authRef || undefined;
     settings.jump_host = editingFolder.jumpHost;
     settings.color_tag = editingFolder.colorTag || undefined;
     settings.auto_reconnect = decodeBool(editingFolder.autoReconnect);
     settings.verbose = decodeBool(editingFolder.verbose);
     {
-      const k = editingFolder.keepalive.trim();
+      const k = numText(editingFolder.keepalive);
       if (k === "") {
         settings.keepalive_interval = undefined;
       } else {
@@ -286,14 +301,14 @@
       editing.hostname !== conn.hostname ||
       editing.notes !== (conn.notes ?? "") ||
       editing.username !== (o.username ?? "") ||
-      editing.port !== (o.port?.toString() ?? "") ||
+      numText(editing.port) !== (o.port?.toString() ?? "") ||
       editing.authRef !== (o.auth_ref ?? "") ||
       editing.colorTag !== (o.color_tag ?? "") ||
       editing.autoReconnect !== encodeBool(o.auto_reconnect) ||
       editing.verbose !== encodeBool(o.verbose) ||
-      editing.keepalive !== (o.keepalive_interval !== undefined ? String(o.keepalive_interval) : "") ||
+      numText(editing.keepalive) !== (o.keepalive_interval !== undefined ? String(o.keepalive_interval) : "") ||
       editing.vncEnabled !== encodeBool(o.vnc_enabled) ||
-      editing.vncPort !== (o.vnc_port !== undefined ? String(o.vnc_port) : "") ||
+      numText(editing.vncPort) !== (o.vnc_port !== undefined ? String(o.vnc_port) : "") ||
       editing.vncTunnel !== encodeBool(o.vnc_use_tunnel) ||
       editing.networkProfile !== encodeNetProfile(o.network_profile_id) ||
       JSON.stringify(editing.jumpHost ?? null) !== JSON.stringify(o.jump_host ?? null) ||
@@ -318,14 +333,18 @@
     if (!conn || !editing) return;
     const overrides = { ...conn.overrides };
     overrides.username = editing.username.trim() || undefined;
-    overrides.port = editing.port ? parseInt(editing.port, 10) : undefined;
+    {
+      const p = numText(editing.port);
+      const n = p === "" ? NaN : parseInt(p, 10);
+      overrides.port = isNaN(n) ? undefined : n;
+    }
     overrides.auth_ref = editing.authRef || undefined;
     overrides.jump_host = editing.jumpHost;
     overrides.color_tag = editing.colorTag || undefined;
     overrides.auto_reconnect = decodeBool(editing.autoReconnect);
     overrides.verbose = decodeBool(editing.verbose);
     {
-      const k = editing.keepalive.trim();
+      const k = numText(editing.keepalive);
       if (k === "") {
         overrides.keepalive_interval = undefined;
       } else {
@@ -335,7 +354,7 @@
     }
     overrides.vnc_enabled = decodeBool(editing.vncEnabled);
     {
-      const p = editing.vncPort.trim();
+      const p = numText(editing.vncPort);
       if (p === "") {
         overrides.vnc_port = undefined;
       } else {

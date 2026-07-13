@@ -71,6 +71,15 @@
     savedAt = null; saveError = null;
   });
 
+  // portVal / keepaliveVal are typed string but bound to <input type="number">,
+  // which makes Svelte hand back a number the moment the user types. Calling
+  // .trim() on that threw and aborted the whole patch build, so Apply silently
+  // did nothing. Normalise to a trimmed string first.
+  function numText(v: string | number | undefined | null): string {
+    if (v === undefined || v === null) return "";
+    return String(v).trim();
+  }
+
   function buildPatch(): { patch: InheritableSettings; clear: string[] } {
     const patch: InheritableSettings = {};
     const clear: string[] = [];
@@ -79,8 +88,8 @@
     else if (usernameMode === "set") patch.username = usernameVal.trim();
 
     if (portMode === "inherit") clear.push("port");
-    else if (portMode === "set" && portVal.trim()) {
-      const n = parseInt(portVal.trim(), 10);
+    else if (portMode === "set" && numText(portVal)) {
+      const n = parseInt(numText(portVal), 10);
       if (!isNaN(n)) patch.port = n;
     }
 
@@ -97,8 +106,8 @@
     else if (colorMode === "set") patch.color_tag = colorVal;
 
     if (keepaliveMode === "inherit") clear.push("keepalive_interval");
-    else if (keepaliveMode === "set" && keepaliveVal.trim()) {
-      const n = parseInt(keepaliveVal.trim(), 10);
+    else if (keepaliveMode === "set" && numText(keepaliveVal)) {
+      const n = parseInt(numText(keepaliveVal), 10);
       if (!isNaN(n)) patch.keepalive_interval = n;
     }
 

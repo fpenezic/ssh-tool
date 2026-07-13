@@ -7,6 +7,28 @@ in alpha upstream.
 
 ---
 
+## [0.55.2] - Numeric fields could not be saved
+
+### Fixed
+
+- **Keepalive was impossible to set.** Typing a value into the
+  keepalive field (on a connection or a folder) lit up the Save
+  button, but clicking it did nothing at all - no error, no toast,
+  nothing saved. The same silent dead-end hit the VNC port field,
+  the keepalive and port fields in the batch editor (Apply did
+  nothing), and the "add port override" button in the tcpdump
+  capture dialog.
+
+  All of these are `<input type="number">` fields whose backing
+  variable is declared as a string. Svelte hands back a number for
+  a numeric input as soon as the user types, so the save handler's
+  `.trim()` call threw before it ever reached the backend, and the
+  exception was swallowed. The dirty check compared the same number
+  against a string, which is why Save lit up but nothing else
+  happened. The numeric fields are now normalised before use.
+
+---
+
 ## [0.55.1] - Android build fix
 
 ### Fixed
