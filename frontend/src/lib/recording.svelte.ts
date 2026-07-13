@@ -8,6 +8,7 @@
 import { api, type RecordingState } from "./api";
 import { EventsOn } from "./wailsRuntime";
 import { toast } from "./toast.svelte";
+import { showConfirm } from "./confirmModal.svelte.ts";
 
 class RecordingStore {
   // sessionId -> .cast path. Reassigned on every change (Svelte 5
@@ -49,7 +50,34 @@ class RecordingStore {
     return sessionId in this.active;
   }
 
+  // Confirm before starting, unless the user turned the prompt off. A
+  // recording writes every byte the session prints to a plaintext file on
+  // disk - anything you cat, any token a command echoes back - so starting
+  // one by a misclick is worth a speed bump. Off-switch lives in Settings ->
+  // Session recording for people who record routinely.
   async start(sessionId: string) {
+    // Read the opt-out outside the try below: a failed settings read must not
+    // surface as "Recording failed", and an unreadable setting falls back to
+    // asking, which is the safe side.
+    let optedOut = false;
+    try {
+      const v = await api.settingsGet("recording_confirm_disabled");
+      optedOut = v === "1" || v === "true";
+    } catch { /* ask */ }
+
+    if (!optedOut) {
+      const dir = await api.recordingsDir().catch(() => "");
+      const ok = await showConfirm({
+        title: "Start recording this session?",
+        message:
+          "Everything the session prints will be written to a plaintext .cast file" +
+          (dir ? " in " + dir : "") +
+          " - including anything sensitive that scrolls past. Keystrokes are not recorded.",
+        okLabel: "Start recording",
+      });
+      if (!ok) return;
+    }
+
     try {
       const st = await api.recordingStart(sessionId);
       toast.info("Recording started: " + st.path, 4000);

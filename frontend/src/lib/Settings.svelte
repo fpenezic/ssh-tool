@@ -45,6 +45,7 @@
   let notificationsEnabled = $state<boolean>(true);
   let mcpAuditEnabled = $state<boolean>(true);
   let mcpAuditOutput = $state<boolean>(false);
+  let recordingConfirm = $state<boolean>(true);
   let mcpReadonlyExtra = $state<string>("");
   let vaultSidecarStrength = $state<"strong" | "weak" | "none" | "">("");
   let mcpExePath = $state<string>("");
@@ -344,6 +345,12 @@
       const st = await api.vaultStatus();
       vaultSidecarStrength = st.sidecar_strength ?? "";
     } catch { /* ignore */ }
+    try {
+      // Stored inverted (recording_confirm_DISABLED) so the safe behaviour is
+      // the one you get with no setting written at all.
+      const v = await api.settingsGet("recording_confirm_disabled");
+      recordingConfirm = !(v === "1" || v === "true"); // default ON
+    } catch { /* default on */ }
   });
 
   async function toggleNotifications(next: boolean) {
@@ -362,6 +369,15 @@
     mcpAuditOutput = next;
     try { await api.settingsSet("mcp_audit_output", next ? "1" : "0"); }
     catch (e) { console.warn("mcp audit output toggle:", e); }
+  }
+
+  async function toggleRecordingConfirm(e: Event) {
+    const next = (e.target as HTMLInputElement).checked;
+    recordingConfirm = next;
+    // Inverted on the way out: the setting records the OPT-OUT, so an unset
+    // key means "ask", which is the behaviour we want by default.
+    try { await api.settingsSet("recording_confirm_disabled", next ? "0" : "1"); }
+    catch (err) { console.warn("recording confirm toggle:", err); }
   }
 
   async function toggleMcp(next: boolean) {
@@ -1011,6 +1027,7 @@
     | "connection"
     | "network"
     | "terminal"
+    | "recording"
     | "browser"
     | "snippets"
     | "workspaces"
@@ -1039,6 +1056,7 @@
     { id: "browser",           title: "Browser launcher", group: "Appearance" },
     { id: "snippets",          title: "Snippets",         group: "Appearance" },
     { id: "workspaces",        title: "Workspaces",       group: "Appearance" },
+    { id: "recording",         title: "Session recording", group: "Security" },
     { id: "vault",             title: "Vault",            group: "Security" },
     { id: "backup",            title: "Backup & restore", group: "Security" },
     { id: "sync",              title: "Sync",             group: "Security" },
@@ -2418,6 +2436,7 @@
     </div>
   </div>
 
+  {:else if activeSection === "recording"}
   <div class="group">
     <h2>Session recording</h2>
     <p class="hint">
@@ -2426,6 +2445,11 @@
       file - replayable with asciinema or any web player. Output only:
       keystrokes are never written to the file, so typed passwords
       can't leak into a recording.
+    </p>
+    <p class="hint">
+      What the session prints does land in the file, in plaintext - a
+      <code>cat</code> of a config, a token a command echoes back. The file is
+      not encrypted; treat it like the terminal it came from.
     </p>
     {#if recordingsDirPath}
       <p class="hint">
@@ -2440,6 +2464,21 @@
         Open folder
       </button>
     </div>
+
+    <label class="check" style="margin-top:0.9rem">
+      <input
+        type="checkbox"
+        checked={recordingConfirm}
+        onchange={toggleRecordingConfirm}
+      />
+      <span>
+        <strong>Ask before starting a recording</strong>
+        <span class="field-note">
+          - a confirmation step so a misclick doesn't quietly start writing the
+          session to disk. Turn it off if you record routinely.
+        </span>
+      </span>
+    </label>
   </div>
 
   {:else if activeSection === "network"}
