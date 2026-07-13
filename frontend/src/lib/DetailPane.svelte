@@ -955,7 +955,7 @@
         </span>
       </label>
 
-      <label title="Anti-idle: send an SSH keepalive every N seconds so a bastion or firewall doesn't drop connections under this folder when they're quiet. Inherited by connections; blank inherits the parent folder, 0 turns it off.">
+      <label title="Anti-idle: send an SSH keepalive every N seconds so a bastion or firewall doesn't drop connections under this folder when they're quiet. Inherited by connections; blank inherits the parent folder, 0 sends nothing. A dead connection is still detected either way - with 0 it just takes up to a minute longer.">
         Keepalive / anti-idle (s)
         <input
           type="number"
@@ -965,7 +965,7 @@
           bind:value={editingFolder.keepalive}
           placeholder="(inherit · 0 = off)"
         />
-        <span class="field-note">Stops idle drops. Inherited by connections. Blank = inherit, 0 = off.</span>
+        <span class="field-note">Stops idle drops. Inherited by connections. Blank = inherit, 0 = send nothing (a dead link is still detected, just slower).</span>
       </label>
 
       {#if savedHint}
@@ -1191,7 +1191,7 @@
             Settings -&gt; Network profiles</button>.
         </span>
       </label>
-      <label title="Anti-idle: send an SSH keepalive every N seconds so a bastion or firewall doesn't drop the connection when it's quiet. Blank inherits the folder's value; 0 turns it off.">
+      <label title="Anti-idle: send an SSH keepalive every N seconds so a bastion or firewall doesn't drop the connection when it's quiet. Blank inherits the folder's value; 0 sends nothing. A dead connection is still detected either way - with 0 it just takes up to a minute longer.">
         Keepalive / anti-idle (s)
         <input
           type="number"
@@ -1201,7 +1201,7 @@
           bind:value={editing.keepalive}
           placeholder="(inherit · 0 = off)"
         />
-        <span class="field-note">Stops idle drops. Blank = inherit folder, 0 = off.</span>
+        <span class="field-note">Stops idle drops. Blank = inherit folder, 0 = send nothing (a dead link is still detected, just slower).</span>
       </label>
 
       {#if !isMobile}

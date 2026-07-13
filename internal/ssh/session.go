@@ -636,10 +636,12 @@ func Connect(
 		cleanup(clients)
 	}()
 
-	// Keepalive (optional, simple impl)
-	if settings.KeepaliveInterval > 0 {
-		go runKeepalive(s, time.Duration(settings.KeepaliveInterval)*time.Second)
-	}
+	// Keepalive always runs, even when the setting is 0 ("off"). Off means
+	// "don't hold the link open with artificial traffic" - it cannot mean
+	// "don't notice when the link dies", because the probe is the only thing
+	// that CAN notice. See runKeepalive for why nothing below the SSH layer
+	// sees a dead chain.
+	go runKeepalive(s, keepaliveInterval(settings.KeepaliveInterval))
 
 	// Save sess pointer for resize; channel-based interface for full control
 	s.channel = sessionAsChannel{sess: sess}
@@ -827,14 +829,95 @@ func utf8RuneLen(b byte) int {
 	}
 }
 
+// keepaliveIdleProbe is how often we probe a session whose keepalive setting
+// is 0 ("off"). Rare enough to be indistinguishable from no traffic for the
+// purpose of a NAT timeout - it is not there to keep the link open, only to
+// find out that it is gone.
+const keepaliveIdleProbe = 60 * time.Second
+
+// keepaliveMinInterval floors the probe tick. The UI steps the field in 5s
+// but nothing stops a hand-typed 1, and a 1s SSH keepalive is pointless
+// traffic anyway - it also leaves no room for a probe timeout that is both
+// meaningful and shorter than the tick.
+const keepaliveMinInterval = 5 * time.Second
+
+// keepaliveInterval maps the user's setting (seconds; 0 = off) onto the tick
+// the probe loop actually runs at.
+func keepaliveInterval(setting uint32) time.Duration {
+	if setting == 0 {
+		return keepaliveIdleProbe
+	}
+	d := time.Duration(setting) * time.Second
+	if d < keepaliveMinInterval {
+		d = keepaliveMinInterval
+	}
+	return d
+}
+
+// keepaliveProbeTimeout bounds a single probe: half the interval, capped at
+// 30s. Half - never the whole tick - so a slow probe can never still be in
+// flight when the next one starts.
+func keepaliveProbeTimeout(every time.Duration) time.Duration {
+	t := every / 2
+	if t > 30*time.Second {
+		t = 30 * time.Second
+	}
+	return t
+}
+
+// runKeepalive probes the far end of the chain on an interval. It serves two
+// distinct purposes, and only the second one is unconditional:
+//
+//   - With a keepalive interval set, the probe traffic KEEPS the path open,
+//     stopping a NAT or firewall on the way from evicting an idle flow.
+//   - Always, the probe is the only thing that can DETECT that the path has
+//     died. Nothing below the SSH layer can: with a jump host, the TCP socket
+//     this machine owns goes to the JUMP, and the far hop rides inside it as
+//     an SSH channel. When that far hop dies (a firewall or VPN on the jump's
+//     far side drops the flow with no RST), the local socket stays perfectly
+//     ESTABLISHED - the jump is still up, so the kernel is right. Wait() never
+//     returns, the tab stays green, keystrokes disappear into a dead channel,
+//     and the only way out is closing the tab by hand. Confirmed in the field:
+//     netstat showed the same ESTABLISHED line before and after the break.
+//
+// s.conn is the LAST hop's connection (rawConn is reassigned on every hop of
+// the chain), so the request travels the whole chain and back - which is
+// exactly the path whose death we need to observe.
+//
+// A probe that errors or times out means the chain is gone. Closing the
+// transport is all we do: that unblocks sess.Wait(), and the ordinary death
+// path takes it from there (emits session_state=disconnected, fires onClose,
+// which the app layer turns into auto-reconnect - the close is not
+// user-initiated, so WasUserInitiated stays false). No bespoke teardown here;
+// the point is to trip the existing one.
 func runKeepalive(s *Session, every time.Duration) {
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
+	timeout := keepaliveProbeTimeout(every)
 	for {
 		select {
 		case <-ticker.C:
-			_, _, err := s.conn.SendRequest("keepalive@ssh-tool", true, nil)
-			if err != nil {
+			// SendRequest with wantReply blocks until the peer answers. On a
+			// dead chain that is forever - no error is ever returned, which is
+			// why the old loop could not detect anything even when it ran.
+			// Run it aside and impose our own deadline.
+			done := make(chan error, 1)
+			go func() {
+				_, _, err := s.conn.SendRequest("keepalive@ssh-tool", true, nil)
+				done <- err
+			}()
+			select {
+			case err := <-done:
+				if err != nil {
+					log.Printf("session %s: keepalive failed (%v) - closing transport", s.ID, err)
+					_ = s.conn.Close()
+					return
+				}
+			case <-time.After(timeout):
+				log.Printf("session %s: keepalive unanswered for %s - link is dead, closing transport", s.ID, timeout)
+				_ = s.conn.Close()
+				return
+			case <-s.closed:
 				return
 			}
 		case <-s.closed:
