@@ -40,21 +40,27 @@ var appVersion = "dev"
 var appCommit = "unknown"
 
 func main() {
-	// Desktop pre-flight: relaunch handshake (wait for the old instance
-	// to release store.db + its single-instance listener), the deep-link
-	// single-instance hand-off, and the WSL GTK/WebKit env workarounds.
-	// All no-ops on mobile, where there is no second process, no deep
-	// link argv, and no GTK. Returns true if this process should exit
-	// immediately (it handed a deep link to an already-running instance).
-	if platformPreflight() {
-		os.Exit(0)
-	}
-
 	// `ssh-tool --mcp-bridge` runs as a dumb stdio<->socket pipe so an LLM
 	// client (Claude Code) can reach the running desktop app's MCP server.
 	// It does no MCP work itself and never opens a window. Desktop only.
+	//
+	// This is checked BEFORE the pre-flight below, and must stay that way:
+	// the bridge is not an app launch, so the single-instance guard would
+	// hand its argv to the running app and exit before the pipe was ever
+	// opened - which is to say the bridge would silently do nothing. It also
+	// has no use for the relaunch handshake or the GTK env fixups.
 	if len(os.Args) > 1 && os.Args[1] == "--mcp-bridge" {
 		os.Exit(runMcpBridge())
+	}
+
+	// Desktop pre-flight: relaunch handshake (wait for the old instance
+	// to release store.db + its single-instance listener), the
+	// single-instance hand-off, and the WSL GTK/WebKit env workarounds.
+	// All no-ops on mobile, where there is no second process, no deep
+	// link argv, and no GTK. Returns true if this process should exit
+	// immediately (it handed off to an already-running instance).
+	if platformPreflight() {
+		os.Exit(0)
 	}
 
 	// Tee log output through a ring buffer (for the in-app log viewer)

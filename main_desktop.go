@@ -89,13 +89,31 @@ func platformPreflight() bool {
 	// its single-instance listener is still up.
 	waitForParentExit()
 
-	// Single-instance guard - only kicks in when this launch carries
-	// a deep-link arg (ssh-tool://… or --import-url=…). Without a
-	// deep link the process must start normally; Wails v3 spawns
-	// child processes for detached terminal windows and an
-	// unconditional hand-off would break that flow (the detach
-	// process would exit instead of becoming its own window).
-	if parseDeepLinkArg(os.Args[1:]) != "" || parseOpenDirArg(os.Args[1:]) != "" {
+	// Single-instance guard. Every launch hands its argv to the running
+	// instance and exits, not just the ones carrying a deep link: launching
+	// the app while it is already running now raises the existing window
+	// instead of starting a second copy of the whole application.
+	//
+	// The guard used to be conditional on a deep-link / --open-dir arg, on the
+	// grounds that Wails v3 spawns child processes for detached terminal
+	// windows and an unconditional hand-off would kill them. That is not what
+	// Wails does: WindowDetachTabAt calls app.Window.NewWithOptions, which is
+	// a window in THIS process. Nothing re-executes the binary except
+	// relaunchApp, exempted below. So a plain double-click on the icon quietly
+	// started a second full instance.
+	//
+	// Two instances is not a cosmetic problem. Both open store.db, and both
+	// hold their own in-memory tree: SQLite's locks keep the FILE consistent,
+	// but they cannot stop the second instance from writing its stale snapshot
+	// over an edit the first one just made. The edit is gone, with no error
+	// anywhere. (They also fight over the MCP listener and each run their own
+	// backup scheduler.)
+	//
+	// The relaunch child is the one exception: waitForParentExit() above has
+	// already blocked until the old instance released store.db, so there is
+	// nothing left to hand off to - and handing off to a dying listener is
+	// exactly the race that env var exists to avoid.
+	if os.Getenv("SSH_TOOL_WAIT_PID") == "" {
 		if trySendToRunning(os.Args[1:]) {
 			return true
 		}
