@@ -3,6 +3,7 @@
   import { api } from "./api";
   import PaneNode from "./PaneNode.svelte";
   import ShareDialog from "./ShareDialog.svelte";
+  import { projectTabs, realSessionIds } from "./shareProject";
   import TcpdumpModal from "./TcpdumpModal.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
   import { broadcast } from "./broadcast.svelte";
@@ -45,6 +46,61 @@
     try {
       for (const s of (await api.shareActive()) ?? []) await api.shareStop(s.share_id);
     } catch { /* ignore */ }
+  }
+
+  // Re-project one share's current tabs and push the update to guests. Called
+  // when a shared tab's layout changes (on-the-fly split) or a tab is added.
+  async function resyncShare(shareId: string) {
+    const tabIds = shareShared.tabsOf(shareId);
+    const chosen = paneTabs.tabs.filter((t) => tabIds.includes(t.tabId));
+    if (chosen.length === 0) return;
+    const proj = projectTabs(chosen, (sid) => {
+      const s = sessions.tabs.find((x) => x.sessionId === sid);
+      return s?.name ?? s?.hostname ?? sid;
+    });
+    const activeIdx = Math.max(0, chosen.findIndex((t) => t.tabId === paneTabs.activeTabId));
+    shareShared.recordShare(shareId, realSessionIds(chosen), chosen.map((t) => t.tabId));
+    try {
+      await api.shareUpdate(shareId, {
+        bind_ip: "", port: 0, level: "read", scrollback: false,
+        active_tab: activeIdx, tabs_blob: proj.tabsBlob, sessions: proj.sessions,
+      });
+    } catch { /* ignore */ }
+  }
+
+  // Auto-sync: when the pane layout of any shared tab changes (a split, a pane
+  // close), re-push that share. Keyed on a cheap serialisation of the shared
+  // tabs' trees so it only fires on real structural change, debounced so a
+  // drag-resize doesn't spam updates.
+  let resyncTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    if (!shareBridge.enabled) return;
+    const shares = shareShared.activeShareTabs();
+    if (shares.length === 0) return;
+    // Touch the layout of every shared tab so the effect tracks it.
+    const sig = shares
+      .map((sh) => sh.tabIds
+        .map((tid) => JSON.stringify(paneTabs.tabs.find((t) => t.tabId === tid)?.root ?? null))
+        .join("|"))
+      .join("#");
+    void sig; // the read above is what makes this reactive
+    clearTimeout(resyncTimer);
+    resyncTimer = setTimeout(() => {
+      for (const { shareId } of shareShared.activeShareTabs()) resyncShare(shareId);
+    }, 250);
+  });
+
+  function addTabToShare(tabId: string, shareId: string) {
+    const tab = paneTabs.tabs.find((t) => t.tabId === tabId);
+    if (!tab) return;
+    shareShared.addTabToShare(shareId, tabId, realSessionIds([tab]));
+    resyncShare(shareId);
+  }
+  // Shares that DON'T already include a given tab (for the "add to share" menu).
+  function sharesWithoutTab(tabId: string): { shareId: string; label: string }[] {
+    return shareShared.activeShareTabs()
+      .filter((sh) => !sh.tabIds.includes(tabId))
+      .map((sh) => ({ shareId: sh.shareId, label: sh.tabIds.length + " tab(s)" }));
   }
 
   function tabSessionIdArr(tabId: string): string[] {
@@ -782,6 +838,11 @@
         <button onclick={() => { openShareDialog(ctxMenu!.tabId); closeCtxMenu(); }}>
           Share to browser…
         </button>
+        {#each sharesWithoutTab(ctxMenu.tabId) as sh (sh.shareId)}
+          <button onclick={() => { addTabToShare(ctxMenu!.tabId, sh.shareId); closeCtxMenu(); }}>
+            Add to share ({sh.label})
+          </button>
+        {/each}
       {/if}
       {#each sendTargets as w (w.name)}
         <button onclick={() => { sendTabToWindow(ctxMenu!.tabId, w.name); closeCtxMenu(); }}>

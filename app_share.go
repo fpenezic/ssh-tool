@@ -242,6 +242,28 @@ func (a *App) ShareStart(in ShareStartInput) (*shareserver.StartResult, error) {
 	return res, nil
 }
 
+// ShareUpdate re-syncs a live share after the host changed a shared tab's
+// layout (on-the-fly split) or added a tab. Same input shape as ShareStart;
+// existing sessions keep their slots, new ones are added and streamed. Guests
+// re-render from a fresh manifest.
+func (a *App) ShareUpdate(shareID string, in ShareStartInput) error {
+	if a.share == nil {
+		return fmt.Errorf("session sharing is disabled")
+	}
+	sessions := make([]shareserver.SharedSession, 0, len(in.Sessions))
+	for _, s := range in.Sessions {
+		cols, rows := a.termSize(s.RealID)
+		state := "connected"
+		if _, ok := a.shareResolver(s.RealID); !ok {
+			state = "disconnected"
+		}
+		sessions = append(sessions, shareserver.SharedSession{
+			RealID: s.RealID, Name: s.Name, Cols: cols, Rows: rows, State: state,
+		})
+	}
+	return a.share.UpdateShare(shareID, in.ActiveTab, []byte(in.TabsBlob), sessions)
+}
+
 // ShareStop ends one share.
 func (a *App) ShareStop(shareID string) error {
 	if a.share == nil {

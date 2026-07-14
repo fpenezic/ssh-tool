@@ -2251,6 +2251,19 @@ export function ShareStop(shareID) {
 }
 
 /**
+ * ShareUpdate re-syncs a live share after the host changed a shared tab's
+ * layout (on-the-fly split) or added a tab. Same input shape as ShareStart;
+ * existing sessions keep their slots, new ones are added and streamed. Guests
+ * re-render from a fresh manifest.
+ * @param {string} shareID
+ * @param {$models.ShareStartInput} $in
+ * @returns {$CancellablePromise<void>}
+ */
+export function ShareUpdate(shareID, $in) {
+    return $Call.ByID(1760527617, shareID, $in);
+}
+
+/**
  * ShowFromTray restores the main window.
  * @returns {$CancellablePromise<void>}
  */

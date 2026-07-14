@@ -194,6 +194,53 @@ func (s *Server) PublishSize(realID string, cols, rows uint16) {
 	s.hub.PublishSize(realID, cols, rows)
 }
 
+// UpdateShare changes a live share's tab layout: a new pane tree (an on-the-fly
+// split) and/or new sessions (add-tab). Existing sessions keep their slot so
+// their stream isn't interrupted; new sessions get fresh slots, are attached to
+// the hub, and get their snapshot. Every attached guest receives a fresh
+// manifest (and a snap per new session), then re-renders.
+func (s *Server) UpdateShare(shareID string, activeTab int, tabsBlob []byte, sessions []SharedSession) error {
+	s.mu.Lock()
+	sh := s.byID[shareID]
+	conns := append([]*guestConn(nil), s.conns[shareID]...)
+	s.mu.Unlock()
+	if sh == nil {
+		return fmt.Errorf("share: unknown share %s", shareID)
+	}
+
+	newSlots := sh.updateTabs(tabsBlob, sessions, activeTab)
+
+	// Attach every guest to the new sessions' hub entries so live output flows.
+	for _, slot := range newSlots {
+		realID, ok := sh.realForSlot(slot)
+		if !ok {
+			continue
+		}
+		for _, c := range conns {
+			s.hub.attach(realID, c)
+		}
+	}
+
+	// Re-manifest every guest, then snapshot EVERY slot (not just new ones):
+	// the guest re-renders its tab tree from the fresh manifest, which
+	// re-mounts its terminals, so they all need a fresh snapshot to repaint.
+	sh.mapMu.RLock()
+	allPairs := make([][2]string, 0, len(sh.realBySlot))
+	for slot, realID := range sh.realBySlot {
+		allPairs = append(allPairs, [2]string{slot, realID})
+	}
+	sh.mapMu.RUnlock()
+	_ = newSlots
+	for _, c := range conns {
+		s.sendManifest(c, sh)
+		for _, p := range allPairs {
+			s.sendSnap(c, sh, p[0], p[1])
+		}
+	}
+	go s.onChange()
+	return nil
+}
+
 // SetActiveTab records the host's active tab index and tells every attached
 // guest, so a passive viewer follows along. The index is into the share's own
 // projected tab list (the frontend maps its tab id to that index).
@@ -393,9 +440,15 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, share *shareSe
 
 	// Send the manifest + per-session snapshots, then start streaming.
 	s.sendManifest(gc, share)
+	share.mapMu.RLock()
+	slotPairs := make([][2]string, 0, len(share.realBySlot))
 	for slot, realID := range share.realBySlot {
-		s.hub.attach(realID, gc)
-		s.sendSnap(gc, share, slot, realID)
+		slotPairs = append(slotPairs, [2]string{slot, realID})
+	}
+	share.mapMu.RUnlock()
+	for _, p := range slotPairs {
+		s.hub.attach(p[1], gc)
+		s.sendSnap(gc, share, p[0], p[1])
 	}
 
 	go s.onChange()
@@ -417,16 +470,23 @@ func (s *Server) runApproval(share *shareSession, remoteIP, fpWords string) bool
 }
 
 func (s *Server) sendManifest(gc *guestConn, share *shareSession) {
+	// meta / tabsBlob are mutable (add-tab, on-the-fly split), so read them
+	// under their locks.
+	share.mapMu.RLock()
 	sessions := make([]ManifestSession, 0, len(share.meta))
 	for slot, m := range share.meta {
 		sessions = append(sessions, ManifestSession{
 			ID: slot, Name: m.Name, Cols: m.Cols, Rows: m.Rows, State: m.State,
 		})
 	}
+	share.mapMu.RUnlock()
+
+	share.tabsBlobMu.Lock()
+	blob := share.tabsBlob
+	share.tabsBlobMu.Unlock()
+
 	var tabs []ManifestTab
-	// tabsBlob is the projected {tabs:[...]} JSON from the frontend; unmarshal
-	// into the manifest tab list.
-	_ = unmarshalTabs(share.tabsBlob, &tabs)
+	_ = unmarshalTabs(blob, &tabs)
 	gc.sendJSON(Frame{T: TManifest, Manifest: &Manifest{
 		ShareID:   share.id,
 		Level:     share.level,
@@ -477,7 +537,13 @@ func (s *Server) SessionClosed(realID string) {
 // allSessionsGoneLocked reports whether none of a share's sessions still
 // resolve. Caller holds s.mu.
 func (s *Server) allSessionsGoneLocked(sh *shareSession) bool {
+	sh.mapMu.RLock()
+	reals := make([]string, 0, len(sh.slotByReal))
 	for realID := range sh.slotByReal {
+		reals = append(reals, realID)
+	}
+	sh.mapMu.RUnlock()
+	for _, realID := range reals {
 		if _, ok := s.hub.resolve(realID); ok {
 			return false
 		}

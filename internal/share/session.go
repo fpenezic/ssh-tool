@@ -34,11 +34,17 @@ type shareSession struct {
 	tabsBlob   []byte // the projected manifest tabs (opaque JSON from the frontend)
 	created    time.Time
 
-	// slot <-> real id, the security-critical mapping. Immutable after
-	// ShareStart, so no lock is needed for reads.
+	// slot <-> real id, the security-critical mapping. Mutable: the host can add
+	// tabs/sessions to a live share (on-the-fly split, add-tab), which mints new
+	// slots. Existing sessions KEEP their slot so a guest's live stream for them
+	// isn't disrupted. Guarded by mapMu (RWMutex - reads on the hot path via
+	// slotFor, writes only on update).
+	mapMu      sync.RWMutex
 	realBySlot map[string]string
 	slotByReal map[string]string
 	meta       map[string]SharedSession // slot -> metadata for the manifest
+	tabsBlobMu sync.Mutex               // guards tabsBlob (swapped on update)
+	nextSlot   int                      // next slot number to assign
 
 	// used flips true on the first successful guest attach; an unused share's
 	// token expires (GC), a used one lives until the share stops.
@@ -82,8 +88,9 @@ func newShareSession(id, bind, hostName string, level Level, scrollback bool,
 		slotByReal: make(map[string]string, len(sessions)),
 		meta:       make(map[string]SharedSession, len(sessions)),
 	}
-	for i, sess := range sessions {
-		slot := slotName(i)
+	for _, sess := range sessions {
+		s.nextSlot++
+		slot := slotName(s.nextSlot - 1)
 		s.realBySlot[slot] = sess.RealID
 		s.slotByReal[sess.RealID] = slot
 		sess.RealID = "" // do not keep the real id in the guest-facing meta copy
@@ -95,6 +102,8 @@ func newShareSession(id, bind, hostName string, level Level, scrollback bool,
 // resolveSlot maps a guest slot to a real session id. ok=false for any slot not
 // in this share - the caller treats that as a protocol violation.
 func (s *shareSession) resolveSlot(slot string) (realID string, ok bool) {
+	s.mapMu.RLock()
+	defer s.mapMu.RUnlock()
 	realID, ok = s.realBySlot[slot]
 	return
 }
@@ -102,7 +111,56 @@ func (s *shareSession) resolveSlot(slot string) (realID string, ok bool) {
 // slotFor maps a real session id to this share's slot, or "" if the session
 // isn't part of this share.
 func (s *shareSession) slotFor(realID string) string {
+	s.mapMu.RLock()
+	defer s.mapMu.RUnlock()
 	return s.slotByReal[realID]
+}
+
+// updateTabs replaces the share's tab layout and adds any new sessions as fresh
+// slots, keeping existing sessions on their current slot. Returns the slots
+// newly created (so the caller can snapshot + stream them). newBlob is the
+// re-projected {tabs:[...]} JSON.
+func (s *shareSession) updateTabs(newBlob []byte, sessions []SharedSession, activeTab int) []string {
+	s.mapMu.Lock()
+	var newSlots []string
+	for _, sess := range sessions {
+		if _, exists := s.slotByReal[sess.RealID]; exists {
+			continue // keep the existing slot; its stream is uninterrupted
+		}
+		s.nextSlot++
+		slot := slotName(s.nextSlot - 1)
+		s.realBySlot[slot] = sess.RealID
+		s.slotByReal[sess.RealID] = slot
+		real := sess.RealID
+		sess.RealID = ""
+		s.meta[slot] = sess
+		newSlots = append(newSlots, slot)
+		_ = real
+	}
+	s.mapMu.Unlock()
+
+	s.tabsBlobMu.Lock()
+	s.tabsBlob = newBlob
+	s.tabsBlobMu.Unlock()
+
+	s.setActiveTab(activeTab)
+	return newSlots
+}
+
+// slotMeta returns the metadata for a slot (for snapshotting a new session).
+func (s *shareSession) slotMeta(slot string) (SharedSession, bool) {
+	s.mapMu.RLock()
+	defer s.mapMu.RUnlock()
+	m, ok := s.meta[slot]
+	return m, ok
+}
+
+// realForSlot resolves a slot to its real id under the lock.
+func (s *shareSession) realForSlot(slot string) (string, bool) {
+	s.mapMu.RLock()
+	defer s.mapMu.RUnlock()
+	r, ok := s.realBySlot[slot]
+	return r, ok
 }
 
 func (s *shareSession) markUsed() {

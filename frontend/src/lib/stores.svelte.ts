@@ -2064,6 +2064,21 @@ class ShareSharedStore {
     this.slotOwners.set(shareId, new Set(realIds));
     this.tabOrder.set(shareId, tabIds);
   }
+  // Every active share and the tab ids it covers, for re-sync on layout change.
+  activeShareTabs(): { shareId: string; tabIds: string[] }[] {
+    return [...this.tabOrder].map(([shareId, tabIds]) => ({ shareId, tabIds }));
+  }
+  tabsOf(shareId: string): string[] {
+    return [...(this.tabOrder.get(shareId) ?? [])];
+  }
+  // Add a tab to a live share's coverage (append; keeps order).
+  addTabToShare(shareId: string, tabId: string, realIds: string[]) {
+    const tabs = this.tabOrder.get(shareId) ?? [];
+    if (!tabs.includes(tabId)) this.tabOrder.set(shareId, [...tabs, tabId]);
+    const owners = this.slotOwners.get(shareId) ?? new Set<string>();
+    for (const r of realIds) owners.add(r);
+    this.slotOwners.set(shareId, owners);
+  }
   realIdsFor(shareId: string): string[] {
     return [...(this.slotOwners.get(shareId) ?? [])];
   }

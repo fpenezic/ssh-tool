@@ -939,6 +939,8 @@ export const api = {
   shareStart: (input: ShareStartInput) =>
     G.ShareStart(input as any) as unknown as Promise<ShareStartResult>,
   shareStop: (shareId: string) => G.ShareStop(shareId),
+  shareUpdate: (shareId: string, input: ShareStartInput) =>
+    G.ShareUpdate(shareId, input as any),
   shareKick: (shareId: string, remoteIp: string) => G.ShareKick(shareId, remoteIp),
   shareActive: () => G.ShareActive() as unknown as Promise<ShareStatus[]>,
   shareSetActiveTab: (shareId: string, index: number) => G.ShareSetActiveTab(shareId, index),

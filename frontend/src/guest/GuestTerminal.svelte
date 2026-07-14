@@ -63,26 +63,22 @@
     if (!host || !term) return;
     const wrap = host.parentElement;
     if (!wrap) return;
+    // In a split pane the terminal mounts before flex has assigned the box its
+    // size, so clientWidth/Height can be 0 on the first pass. Fitting to 0
+    // would collapse the font to its minimum (a blank/tiny terminal - the
+    // "split doesn't work" symptom). Skip until there's real space; the
+    // ResizeObserver fires recomputeScale again once layout settles.
+    if (wrap.clientWidth < 2 || wrap.clientHeight < 2) return;
     const core = (term as any)._core?._renderService?.dimensions?.css?.cell;
     const cellW = core?.width || BASE_FONT * 0.6;
     const cellH = core?.height || BASE_FONT * 1.2;
-    // Natural pixel size of the grid at the CURRENT font, then how much room
-    // we have relative to it.
     const natW = cellW * curCols;
     const natH = cellH * curRows;
     const fit = Math.min(wrap.clientWidth / natW, wrap.clientHeight / natH);
-    const targetFont = Math.max(6, Math.min(Math.floor(fontSize * fit * zoom), 40));
+    const targetFont = Math.max(6, Math.min(Math.round(fontSize * fit * zoom), 40));
     if (targetFont !== fontSize) {
       fontSize = targetFont;
       term.options.fontSize = targetFont;
-      // Re-measure after the font change settles, so the next fit is accurate.
-      requestAnimationFrame(() => {
-        if (host && term) {
-          const c2 = (term as any)._core?._renderService?.dimensions?.css?.cell;
-          // no-op read to force layout; fit converges within a click or two
-          void c2;
-        }
-      });
     }
   }
 
