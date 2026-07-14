@@ -60,15 +60,16 @@ func (s *shareSession) info() ShareInfo {
 
 // Server owns the HTTPS listener and the share registry.
 type Server struct {
-	guestFS  fs.FS // serves guest.html + assets (the embedded dist subtree)
-	hostName string
-	certPath string
-	keyPath  string
-	cert     *Cert
-	hub      *Hub
-	approve  ApprovalFunc
-	audit    AuditHooks
-	onChange func() // emitted after any share mutation (share_changed)
+	guestFS    fs.FS // serves guest.html + assets (the embedded dist subtree)
+	hostName   string
+	certPath   string
+	keyPath    string
+	cert       *Cert
+	hub        *Hub
+	approve    ApprovalFunc
+	audit      AuditHooks
+	onChange   func() // emitted after any share mutation (share_changed)
+	onGuestTab func(shareID, remoteIP string, index int)
 
 	mu      sync.Mutex
 	srv     *http.Server
@@ -99,6 +100,9 @@ type Config struct {
 	Approve  ApprovalFunc // nil => auto-approve (dev/test)
 	Audit    AuditHooks
 	OnChange func() // called after any share mutation; nil ok
+	// OnGuestTab fires when a guest switches tabs (informational; host UI shows
+	// where the guest is looking). nil ok.
+	OnGuestTab func(shareID, remoteIP string, index int)
 }
 
 // NewServer builds a server from a Config. Nothing binds until Start.
@@ -116,6 +120,7 @@ func NewServer(cfg Config) *Server {
 		approve:     cfg.Approve,
 		audit:       cfg.Audit,
 		onChange:    onChange,
+		onGuestTab:  cfg.OnGuestTab,
 		byID:        make(map[string]*shareSession),
 		byToken:     make(map[string]*shareSession),
 		conns:       make(map[string][]*guestConn),
@@ -347,6 +352,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, share *shareSe
 	gc := newGuestConn(s.hub, share, c, remoteIP)
 	gc.auditInput = s.audit.Input
 	gc.auditViolation = s.audit.Violation
+	gc.onGuestTab = s.onGuestTab
 
 	// Tell the guest we're waiting, with the fingerprint words to compare.
 	gc.sendJSON(Frame{T: TPending, Pending: &Pending{

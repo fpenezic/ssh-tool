@@ -661,6 +661,13 @@
     shareShared.setFrom(shares, (id) => shareShared.realIdsFor(id));
   });
 
+  // A guest switched to a different tab than the host - show where they are.
+  EventsOn("share_guest_tab", (data: any) => {
+    if (data?.share_id !== undefined && data?.index !== undefined) {
+      shareShared.guestViewingTab(data.share_id, data.index);
+    }
+  });
+
   // Whether sharing is enabled - gates the share affordances.
   EventsOn("share_toggled", (on: any) => { shareBridge.setEnabled(!!on); });
   api.settingsGet("share_enabled").then((v) => shareBridge.setEnabled(v === "1" || v === "true")).catch(() => {});

@@ -106,6 +106,11 @@ export class GuestClient {
     this.send({ t: "ready", ready: { sid: slot } });
   }
 
+  // reportTab tells the host which tab the guest is looking at (informational).
+  reportTab(index: number) {
+    this.send({ t: "guest_tab", guest_tab: { index } });
+  }
+
   // sendInput forwards a keystroke (control shares only; the host enforces).
   sendInput(slot: string, data: Uint8Array) {
     this.send({ t: "input", input: { sid: slot, b64: toB64(data) } });

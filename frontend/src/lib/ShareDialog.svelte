@@ -201,6 +201,15 @@
     width: min(32rem, 92vw);
     max-height: 90vh;
     overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+  .modal * {
+    box-sizing: border-box;
+  }
+  .modal input,
+  .modal select {
+    max-width: 100%;
   }
   h2 {
     margin: 0 0 1rem;

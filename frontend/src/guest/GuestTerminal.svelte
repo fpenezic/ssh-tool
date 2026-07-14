@@ -28,13 +28,16 @@
   // intentional - untrack keeps svelte-check from flagging the initial capture.
   let curCols = $state(untrack(() => cols));
   let curRows = $state(untrack(() => rows));
-  let scale = $state(1);
 
   // Suppress the guest xterm's own answers to queries embedded in the replayed
   // scrollback (DA1/DSR/OSC). Cleared shortly after the snapshot is written.
   // The backend ready-gate is the real protection; this stops local echo noise.
   let replaying = true;
   let userInput = false;
+
+  const BASE_FONT = 14;
+  let fontSize = $state(BASE_FONT);
+  let zoom = $state(1);
 
   const sink: SessionSink = {
     write(data: Uint8Array) {
@@ -52,25 +55,37 @@
     },
   };
 
+  // Fit by FONT SIZE, not CSS transform. A scaled canvas is blurry (it
+  // resamples the rasterised glyphs); changing xterm's fontSize re-rasterises
+  // crisply. We keep the host's exact cols/rows and pick the largest font that
+  // still fits the browser box, times the user's zoom.
   function recomputeScale() {
     if (!host || !term) return;
     const wrap = host.parentElement;
     if (!wrap) return;
-    // The xterm renders at its natural cell size; scale the whole element so
-    // the fixed grid fills the available box, preserving aspect. Allow scaling
-    // UP (not just down) so a small host terminal isn't unreadably tiny in a
-    // big browser window - capped so it doesn't blow up past legibility.
-    const natW = host.scrollWidth || host.clientWidth || 1;
-    const natH = host.scrollHeight || host.clientHeight || 1;
-    const availW = wrap.clientWidth;
-    const availH = wrap.clientHeight;
-    const fit = Math.min(availW / natW, availH / natH);
-    const withZoom = fit * zoom;
-    scale = Math.max(0.3, Math.min(withZoom, 4));
+    const core = (term as any)._core?._renderService?.dimensions?.css?.cell;
+    const cellW = core?.width || BASE_FONT * 0.6;
+    const cellH = core?.height || BASE_FONT * 1.2;
+    // Natural pixel size of the grid at the CURRENT font, then how much room
+    // we have relative to it.
+    const natW = cellW * curCols;
+    const natH = cellH * curRows;
+    const fit = Math.min(wrap.clientWidth / natW, wrap.clientHeight / natH);
+    const targetFont = Math.max(6, Math.min(Math.floor(fontSize * fit * zoom), 40));
+    if (targetFont !== fontSize) {
+      fontSize = targetFont;
+      term.options.fontSize = targetFont;
+      // Re-measure after the font change settles, so the next fit is accurate.
+      requestAnimationFrame(() => {
+        if (host && term) {
+          const c2 = (term as any)._core?._renderService?.dimensions?.css?.cell;
+          // no-op read to force layout; fit converges within a click or two
+          void c2;
+        }
+      });
+    }
   }
 
-  // User zoom multiplier on top of the fit scale (+/- buttons).
-  let zoom = $state(1);
   function zoomIn() {
     zoom = Math.min(zoom * 1.15, 3);
     recomputeScale();
@@ -90,7 +105,7 @@
       cols: curCols,
       rows: curRows,
       fontFamily: "'JetBrains Mono', 'Cascadia Mono', Menlo, monospace",
-      fontSize: 14,
+      fontSize: fontSize,
       cursorBlink: false,
       // Read-only guests can't type; xterm's stdin is disabled entirely.
       disableStdin: level !== "control",
@@ -147,11 +162,7 @@
 </script>
 
 <div class="term-box">
-  <div
-    class="term-scale"
-    bind:this={host}
-    style="transform: scale({scale}); transform-origin: top left;"
-  ></div>
+  <div class="term-scale" bind:this={host}></div>
   <div class="zoom-bar">
     <button title="Zoom out" onclick={zoomOut}>-</button>
     <button title="Reset zoom" onclick={zoomReset}>{Math.round(zoom * 100)}%</button>

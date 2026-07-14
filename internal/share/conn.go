@@ -59,6 +59,7 @@ type guestConn struct {
 	// doesn't import the audit store. May be nil in tests.
 	auditInput     func(share ShareInfo, remoteIP, realID string, data []byte)
 	auditViolation func(share ShareInfo, remoteIP, reason string)
+	onGuestTab     func(shareID, remoteIP string, index int)
 }
 
 func newGuestConn(hub *Hub, share *shareSession, ws *websocket.Conn, remoteIP string) *guestConn {
@@ -171,6 +172,11 @@ func (c *guestConn) dispatch(f *Frame) error {
 	case TReady:
 		if f.Ready != nil {
 			c.markReady(f.Ready.Sid)
+		}
+		return nil
+	case TGuestTab:
+		if f.GuestTab != nil && c.onGuestTab != nil {
+			c.onGuestTab(c.share.id, c.remoteIP, f.GuestTab.Index)
 		}
 		return nil
 	case TPing:

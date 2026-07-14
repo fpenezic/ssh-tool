@@ -86,7 +86,7 @@
             class="tab"
             class:active={i === activeTab}
             style={tab.groupColor ? `border-bottom-color:${tab.groupColor}` : ""}
-            onclick={() => { activeTab = i; following = false; }}
+            onclick={() => { activeTab = i; following = false; client.reportTab(i); }}
           >
             {tab.title}
           </button>

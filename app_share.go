@@ -83,6 +83,11 @@ func (a *App) buildShareServer() (*shareserver.Server, error) {
 		Approve:  a.requestGuestApproval,
 		Audit:    a.shareAuditHooks(),
 		OnChange: func() { EventsEmit("share_changed", a.shareActiveList()) },
+		OnGuestTab: func(shareID, remoteIP string, index int) {
+			EventsEmit("share_guest_tab", map[string]any{
+				"share_id": shareID, "remote_ip": remoteIP, "index": index,
+			})
+		},
 	}), nil
 }
 

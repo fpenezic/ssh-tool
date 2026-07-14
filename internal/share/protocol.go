@@ -7,11 +7,11 @@ package share
 // base64-in-JSON would cost 33% plus an escape pass on every chunk, and the
 // websocket, unlike a Wails event, has no JSON-only constraint.
 //
-// The guest->host surface is deliberately tiny: three verbs (input, ready,
-// ping). Every additional verb is attack surface. There is no resize frame
-// (the host owns the PTY size; the guest letterboxes), no tab-switch frame
-// (tab switching is client-side; the guest already streams every shared
-// session), and no level-upgrade frame (changing a share's level is stop +
+// The guest->host surface is deliberately tiny: input (the only one that
+// touches the host PTY), ready, guest_tab (informational - which tab the guest
+// is looking at, moves nothing), and ping. Every additional verb is attack
+// surface. There is no resize frame (the host owns the PTY size; the guest
+// letterboxes) and no level-upgrade frame (changing a share's level is stop +
 // restart).
 
 import (
@@ -45,9 +45,10 @@ type Frame struct {
 	Pong      *struct{}  `json:"pong,omitempty"`
 
 	// guest -> host
-	Input *Input    `json:"input,omitempty"`
-	Ready *Ready    `json:"ready,omitempty"`
-	Ping  *struct{} `json:"ping,omitempty"`
+	Input    *Input    `json:"input,omitempty"`
+	Ready    *Ready    `json:"ready,omitempty"`
+	GuestTab *GuestTab `json:"guest_tab,omitempty"`
+	Ping     *struct{} `json:"ping,omitempty"`
 }
 
 // Frame type discriminators.
@@ -61,9 +62,10 @@ const (
 	TBye       = "bye"
 	TPong      = "pong"
 
-	TInput = "input"
-	TReady = "ready"
-	TPing  = "ping"
+	TInput    = "input"
+	TReady    = "ready"
+	TGuestTab = "guest_tab"
+	TPing     = "ping"
 )
 
 // Pending is sent immediately on WS accept, before the host approves. The guest
@@ -170,6 +172,14 @@ type Input struct {
 // can never be injected into the host PTY. Structural, not client-trusted.
 type Ready struct {
 	Sid string `json:"sid"`
+}
+
+// GuestTab tells the host which tab the guest is now looking at (they clicked
+// away from follow mode). Purely informational - it moves nothing on the host,
+// it just lets the host UI show "your guest is looking at tab X". Index is into
+// the share's tab list.
+type GuestTab struct {
+	Index int `json:"index"`
 }
 
 // --- binary output frame -------------------------------------------------

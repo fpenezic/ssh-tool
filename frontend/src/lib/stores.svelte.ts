@@ -2030,6 +2030,9 @@ class ShareSharedStore {
   // shareId -> the tabIds it shares, IN ORDER, so a host tab switch can be
   // reported to guests as the tab's index within that share.
   private tabOrder = new Map<string, string[]>();
+  // tabIds a guest is currently looking at (reported by any guest that clicked
+  // away from follow mode). Drives the "your guest is here" tab marker.
+  private guestViewing = $state<Set<string>>(new Set());
 
   has(sessionId: string): boolean {
     return this.sessionsWithGuest.has(sessionId);
@@ -2077,6 +2080,26 @@ class ShareSharedStore {
       if (idx >= 0) out.push({ shareId, index: idx });
     }
     return out;
+  }
+
+  // A guest reported it's looking at index `idx` within share `shareId`. Map it
+  // back to the host's tabId so the tab bar can show where the guest is.
+  guestViewingTab(shareId: string, idx: number) {
+    const tabIds = this.tabOrder.get(shareId) ?? [];
+    const tabId = tabIds[idx];
+    if (!tabId) return;
+    const next = new Set(this.guestViewing);
+    // A guest can only be on one tab of a given share at a time; clear this
+    // share's other tabs first.
+    for (const t of tabIds) next.delete(t);
+    next.add(tabId);
+    this.guestViewing = next;
+  }
+  isGuestViewing(tabId: string): boolean {
+    return this.guestViewing.has(tabId);
+  }
+  clearGuestViewing() {
+    this.guestViewing = new Set();
   }
 }
 export const shareShared = new ShareSharedStore();

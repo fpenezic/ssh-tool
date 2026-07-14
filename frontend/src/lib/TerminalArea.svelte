@@ -697,6 +697,9 @@
                 : "Shared to a browser guest (read-only)"}
             >●</span>
           {/if}
+          {#if shareShared.isGuestViewing(t.tabId)}
+            <span class="guest-eye" title="Your guest is looking at this tab">👁</span>
+          {/if}
           {#if tabBroadcastState(t.tabId) !== "none"}
             {@const groups = tabBroadcastGroups(t.tabId)}
             <span
@@ -1104,6 +1107,11 @@
   .share-badge.control {
     color: var(--red);
     animation: rec-pulse 1.6s ease-in-out infinite;
+  }
+  .guest-eye {
+    font-size: 0.72rem;
+    margin-right: 0.15rem;
+    flex-shrink: 0;
   }
   .bcast {
     display: inline-flex;
