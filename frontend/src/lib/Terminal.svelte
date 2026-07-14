@@ -436,6 +436,22 @@
       copySelection(true);
       return false;
     }
+    // Ctrl+C with a selection - copy and clear it (Windows mode only). This
+    // is what Windows Terminal, PuTTY and the VS Code terminal do, and the
+    // clear is what makes it safe: the NEXT Ctrl+C has no selection to catch
+    // on, so it interrupts. Without clearing, a stale selection would keep
+    // swallowing the interrupt.
+    //
+    // Windows mode only, deliberately. In Linux mode selecting already copies,
+    // so Ctrl+C-as-copy would add nothing while taking the interrupt hostage
+    // to every leftover selection - and leftover selections are the norm there
+    // precisely because selecting is how you copy.
+    if (mode === "windows" && e.ctrlKey && !e.shiftKey && !e.altKey &&
+        (e.key === "c" || e.key === "C") && term?.hasSelection()) {
+      copySelection(true);
+      term.clearSelection();
+      return false;
+    }
     // Ctrl+Shift+V - paste (Windows + Linux)
     if ((mode === "windows" || mode === "linux") &&
         e.ctrlKey && e.shiftKey && (e.key === "V" || e.key === "v")) {
@@ -453,9 +469,10 @@
         return false;
       }
     }
-    // Everything else - let xterm handle it. Plain Ctrl+C falls through
-    // here and xterm sends it as SIGINT (0x03), which is exactly what
-    // we want in all three modes.
+    // Everything else - let xterm handle it. Plain Ctrl+C falls through here
+    // and xterm sends it as SIGINT (0x03). That is every Ctrl+C in Linux and
+    // Mac mode, and in Windows mode every one that isn't sitting on a
+    // selection (handled above).
     return true;
   }
 

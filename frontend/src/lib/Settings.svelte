@@ -2268,8 +2268,9 @@
           <div class="mode-name">Windows</div>
           <div class="mode-desc">
             Ctrl+Shift+C copy · Ctrl+Shift+V paste · right-click is smart
-            (copy when selection exists, paste otherwise). Ctrl+C is
-            always SIGINT.
+            (copy when selection exists, paste otherwise). Ctrl+C copies
+            and clears the selection when there is one, so the next Ctrl+C
+            interrupts; with nothing selected it is SIGINT as usual.
           </div>
         </div>
       </label>
