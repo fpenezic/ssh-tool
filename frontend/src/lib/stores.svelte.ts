@@ -977,27 +977,12 @@ export interface SessionTab {
 // PaneNode is a binary tree: each tab has a root node which is either a
 // leaf (one terminal) or a split (two children oriented horizontally or
 // vertically with a resize ratio in [0,1]).
-export type PaneNode = PaneLeaf | PaneSplit;
-
-export interface PaneLeaf {
-  kind: "pane";
-  id: string;       // unique within the tab; used as a focus key
-  sessionId: string;
-  // What's rendered in this leaf. terminal/sftp share one SSH session
-  // (the SFTP client layers on top of the existing ssh.Client), so
-  // toggling doesn't reconnect. "vnc" renders a noVNC console - it never
-  // splits or toggles (the tab is locked to a single full leaf).
-  view?: "terminal" | "sftp" | "vnc";
-}
-
-export interface PaneSplit {
-  kind: "split";
-  id: string;
-  direction: "horizontal" | "vertical"; // horizontal = side-by-side
-  ratio: number;    // 0..1, fraction taken by `a`
-  a: PaneNode;
-  b: PaneNode;
-}
+// PaneNode / PaneLeaf / PaneSplit / SerializedPaneTab live in panetypes.ts so
+// the guest bundle can import the shape without pulling in this store (and the
+// Wails runtime it depends on). Re-exported here so existing import sites are
+// unchanged.
+export type { PaneNode, PaneLeaf, PaneSplit, SerializedPaneTab } from "./panetypes";
+import type { PaneNode, PaneLeaf, SerializedPaneTab } from "./panetypes";
 
 export interface PaneTab {
   tabId: string;          // stable per tab so the bar doesn't lose track
@@ -1452,14 +1437,6 @@ export const closedTabs = new ClosedTabStore();
 // windows (detach → detached window URL, detached → main on redock).
 // Only the structural state lives here; sessions themselves are
 // global (backend pool) and looked up by id on restore.
-export interface SerializedPaneTab {
-  title: string;
-  root: PaneNode;
-  groupName?: string;
-  groupColor?: string;
-  locked?: boolean;
-}
-
 export function serializePaneTab(t: PaneTab): SerializedPaneTab {
   return {
     title: t.title,
