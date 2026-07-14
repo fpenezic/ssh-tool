@@ -13,6 +13,7 @@
   import { api, type BatchHostResult, type SnippetInput, type Snippet } from "./api";
   import { selection, tree } from "./stores.svelte";
   import { clickOutside } from "./clickOutside";
+  import { toast } from "./toast.svelte";
 
   interface Props {
     onClose: () => void;
@@ -176,6 +177,95 @@
   const okCount = $derived(results.filter((r) => r.state === "ok" && r.exit_code === 0).length);
   const nonZeroCount = $derived(results.filter((r) => r.state === "ok" && r.exit_code !== 0).length);
   const errCount = $derived(results.filter((r) => r.state === "error").length);
+
+  // A copied batch is nearly always on its way into a chat window, so what
+  // matters is that it lands there readable: the host name as a heading and
+  // the output inside a code block, which is exactly what a <pre> becomes when
+  // Teams / Slack / Outlook paste HTML. Copying plain text loses that - the
+  // whole thing arrives as one undifferentiated wall.
+  //
+  // Only failures carry their status. On a healthy host the exit code and the
+  // timing are noise to whoever receives this; on a host that refused or
+  // errored, the absence of output IS the message, so say why.
+  function statusNote(r: BatchHostResult): string {
+    if (r.state === "error") return r.error?.trim() || "failed";
+    if (r.state === "skipped") return "skipped";
+    if (r.exit_code !== 0) return `exit ${r.exit_code}`;
+    return "";
+  }
+
+  function hostLabel(r: BatchHostResult): string {
+    return r.name && r.name !== r.hostname ? `${r.name} (${r.hostname})` : (r.hostname || r.name);
+  }
+
+  function bodyOf(r: BatchHostResult): string {
+    const body = [r.stdout, r.stderr].filter((s) => s && s.trim()).join("\n");
+    return body.replace(/\s+$/, "");
+  }
+
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  function resultsAsHtml(): string {
+    const out: string[] = [`<p><code>${esc(command.trim())}</code></p>`];
+    for (const r of results) {
+      const note = statusNote(r);
+      out.push(`<p><b>${esc(hostLabel(r))}</b>${note ? ` - ${esc(note)}` : ""}</p>`);
+      const body = bodyOf(r);
+      if (body) out.push(`<pre>${esc(body)}</pre>`);
+    }
+    return out.join("\n");
+  }
+
+  // Plain-text twin, used as the text/plain flavour of the same clipboard write
+  // (and as the fallback when the async clipboard API is unavailable).
+  function resultsAsText(): string {
+    const parts: string[] = [`$ ${command.trim()}`, ""];
+    for (const r of results) {
+      const note = statusNote(r);
+      parts.push(hostLabel(r) + (note ? ` - ${note}` : ""));
+      const body = bodyOf(r);
+      // A host that failed says so in its header; "(no output)" underneath
+      // would just repeat it. Only a host that SUCCEEDED and printed nothing
+      // needs the line, otherwise its block would look truncated.
+      if (body) parts.push(body);
+      else if (!note) parts.push("(no output)");
+      parts.push("");
+    }
+    return parts.join("\n");
+  }
+
+  let copiedHint = $state(false);
+  async function copyAll() {
+    const text = resultsAsText();
+    try {
+      // Write both flavours: rich targets pick up text/html and render the
+      // code blocks, plain targets (an editor, a shell) get the same content
+      // without markup.
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([resultsAsHtml()], { type: "text/html" }),
+            "text/plain": new Blob([text], { type: "text/plain" }),
+          }),
+        ]);
+      } else {
+        await api.clipboardSetText(text);
+      }
+      copiedHint = true;
+      setTimeout(() => { copiedHint = false; }, 1600);
+    } catch (e: any) {
+      // Rich write can be refused (permissions, unfocused document); plain
+      // text through the Go side always works, and is better than nothing.
+      try {
+        await api.clipboardSetText(text);
+        copiedHint = true;
+        setTimeout(() => { copiedHint = false; }, 1600);
+      } catch {
+        toast.err("Copy failed: " + errMsg(e));
+      }
+    }
+  }
 </script>
 
 <div class="overlay" role="dialog" aria-modal="true" tabindex="-1"
@@ -298,6 +388,14 @@
         {#if errCount > 0}<span class="pill bad">✕ {errCount}</span>{/if}
         {#if running}<span class="dim">running…</span>{/if}
         <div class="spacer"></div>
+        <button
+          class="copy-all"
+          onclick={copyAll}
+          disabled={running}
+          title="Copy every host's output, each block labelled with the host it came from"
+        >
+          {copiedHint ? "✓ Copied" : "Copy all"}
+        </button>
         <label class="expand-toggle">
           <input type="checkbox" bind:checked={expandAll} />
           <span>Expand all</span>
@@ -463,6 +561,17 @@
   .pill.bad { background: var(--surface0); color: var(--red); }
   .dim { color: var(--overlay0); font-size: 0.72rem; }
   .summary .spacer { flex: 1; }
+  .copy-all {
+    font-size: 0.72rem;
+    padding: 0.15rem 0.6rem;
+    border-radius: 4px;
+    border: 1px solid var(--surface1);
+    background: var(--surface0);
+    color: var(--subtext1);
+    cursor: pointer;
+  }
+  .copy-all:hover:not(:disabled) { background: var(--surface1); color: var(--text); }
+  .copy-all:disabled { opacity: 0.5; cursor: default; }
   .expand-toggle {
     display: flex; align-items: center; gap: 0.3rem;
     font-size: 0.72rem; color: var(--subtext0);
@@ -490,6 +599,13 @@
     padding: 0.35rem 0.55rem;
     cursor: pointer;
     list-style: none;
+    /* Dragging a selection across several hosts should pick up the host
+       names, not just the output blocks - the output is meaningless to
+       whoever you paste it to without them. WebKit treats <summary> as a
+       control and drops its text from a range selection unless the text is
+       explicitly selectable. */
+    -webkit-user-select: text;
+    user-select: text;
   }
   .host summary::-webkit-details-marker { display: none; }
   .state-dot {

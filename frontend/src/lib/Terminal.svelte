@@ -459,12 +459,23 @@
     return true;
   }
 
+  // onSelectionChange fires continuously while the mouse is being dragged, so
+  // the copy is silent per event and the toast is deferred until the selection
+  // has settled - otherwise a single drag across ten lines would fire ten
+  // toasts. A short idle window is enough: dragging produces events far faster
+  // than this, releasing the mouse produces none.
+  let selectToastTimer: ReturnType<typeof setTimeout> | undefined;
+
   function onSelectionChange() {
     // Linux convention: selecting text auto-copies. Closest we get to
     // the X primary selection without a real primary clipboard.
     if (copyPastePrefs.mode !== "linux") return;
     if (!term?.hasSelection()) return;
     copySelection();
+    clearTimeout(selectToastTimer);
+    selectToastTimer = setTimeout(() => {
+      if (term?.hasSelection()) toast.ok("Copied");
+    }, 250);
   }
 
   async function onContextMenu(e: MouseEvent) {
@@ -1204,6 +1215,7 @@
   }
 
   onDestroy(() => {
+    clearTimeout(selectToastTimer);
     resizeObs?.disconnect();
     host?.removeEventListener("paste", onHostPaste, { capture: true } as any);
     host?.removeEventListener("wheel", onWheel, { capture: true } as any);
