@@ -7,6 +7,39 @@ in alpha upstream.
 
 ---
 
+## [0.57.0] - Sending batch results to someone
+
+### Added
+
+- **"Copy all" in the batch command runner.** Running a command across
+  a dozen hosts is easy; handing the result to a colleague was not.
+  Dragging a selection across the results picked up the output but
+  dropped the host names, so what you pasted was a wall of text with
+  nothing saying which host each part came from.
+
+  The button copies everything with each host named, and pastes into
+  Teams, Slack or Outlook as a heading per host with its output in a
+  real code block. An editor or a shell gets the same content as plain
+  text. Healthy hosts are just name and output - the exit code and the
+  timing are noise to whoever you are sending this to. A host that timed
+  out or exited non-zero says so, because there the absence of output is
+  the whole point.
+
+  Dragging a selection still works and now picks up the host names too;
+  that path stays raw (timings and exit codes included) for when you
+  want exactly what is on screen.
+
+- **Ctrl+C copies a selection in Windows copy/paste mode**, the way
+  Windows Terminal and PuTTY do, and clears the selection as it goes -
+  so the next Ctrl+C interrupts as usual. With nothing selected it is
+  SIGINT, unchanged. Linux and macOS modes are untouched: selecting
+  already copies in Linux mode, so Ctrl+C stays an interrupt there.
+
+- **Selecting text in Linux mode now confirms the copy** with a toast.
+  It was already copying silently, which left you guessing.
+
+---
+
 ## [0.56.0] - Dead sessions get noticed; recording asks first
 
 ### Fixed
