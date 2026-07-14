@@ -2049,6 +2049,7 @@ class ShareSharedStore {
   setFrom(shares: ShareStatusLite[], realIdsFor: (shareId: string) => string[]) {
     const withGuest = new Set<string>();
     const controlled = new Set<string>();
+    const alive = new Set(shares.map((sh) => sh.share_id));
     for (const sh of shares) {
       if (sh.guests.length === 0) continue;
       for (const rid of realIdsFor(sh.share_id)) {
@@ -2058,6 +2059,13 @@ class ShareSharedStore {
     }
     this.sessionsWithGuest = withGuest;
     this.sessionsControlled = controlled;
+    // Forget shares that no longer exist - otherwise their tab badges, the
+    // "Add to share" menu entries, and the auto-resync effect all keep firing
+    // for a share that's already gone.
+    for (const shareId of [...this.tabOrder.keys()]) {
+      if (!alive.has(shareId)) this.forgetShare(shareId);
+    }
+    if (alive.size === 0) this.guestViewing = new Set();
   }
   // Remember which sessions a share covers, so setFrom can attribute guests.
   recordShare(shareId: string, realIds: string[], tabIds: string[]) {

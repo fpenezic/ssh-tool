@@ -68,26 +68,37 @@
     } catch { /* ignore */ }
   }
 
-  // Auto-sync: when the pane layout of any shared tab changes (a split, a pane
-  // close), re-push that share. Keyed on a cheap serialisation of the shared
-  // tabs' trees so it only fires on real structural change, debounced so a
-  // drag-resize doesn't spam updates.
+  // Auto-sync: re-push a share ONLY when the pane layout of one of its tabs
+  // actually changes (a split, a pane close). We track a per-share signature of
+  // its tabs' trees and resync only the shares whose signature changed - so
+  // opening an unrelated session, switching tabs, or a periodic re-render does
+  // NOT trigger a resync (which was redrawing the guest for no reason).
+  const shareSigs = new Map<string, string>();
   let resyncTimer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
     if (!shareBridge.enabled) return;
     const shares = shareShared.activeShareTabs();
-    if (shares.length === 0) return;
-    // Touch the layout of every shared tab so the effect tracks it.
-    const sig = shares
-      .map((sh) => sh.tabIds
+    // Compute each share's current signature (reactive read of its trees).
+    const changed: string[] = [];
+    const seen = new Set<string>();
+    for (const sh of shares) {
+      seen.add(sh.shareId);
+      const sig = sh.tabIds
         .map((tid) => JSON.stringify(paneTabs.tabs.find((t) => t.tabId === tid)?.root ?? null))
-        .join("|"))
-      .join("#");
-    void sig; // the read above is what makes this reactive
+        .join("#");
+      if (shareSigs.get(sh.shareId) !== sig) {
+        // Skip the very first observation of a share (its manifest already has
+        // this layout from ShareStart); only real subsequent changes resync.
+        if (shareSigs.has(sh.shareId)) changed.push(sh.shareId);
+        shareSigs.set(sh.shareId, sig);
+      }
+    }
+    for (const id of [...shareSigs.keys()]) if (!seen.has(id)) shareSigs.delete(id);
+    if (changed.length === 0) return;
     clearTimeout(resyncTimer);
     resyncTimer = setTimeout(() => {
-      for (const { shareId } of shareShared.activeShareTabs()) resyncShare(shareId);
-    }, 250);
+      for (const shareId of changed) resyncShare(shareId);
+    }, 300);
   });
 
   function addTabToShare(tabId: string, shareId: string) {
@@ -754,7 +765,7 @@
             >●</span>
           {/if}
           {#if shareShared.isGuestViewing(t.tabId)}
-            <span class="guest-eye" title="Your guest is looking at this tab">👁</span>
+            <span class="guest-watching" title="Your guest is looking at this tab"></span>
           {/if}
           {#if tabBroadcastState(t.tabId) !== "none"}
             {@const groups = tabBroadcastGroups(t.tabId)}
@@ -1169,9 +1180,16 @@
     color: var(--red);
     animation: rec-pulse 1.6s ease-in-out infinite;
   }
-  .guest-eye {
-    font-size: 0.72rem;
-    margin-right: 0.15rem;
+  /* A small ring marking the tab a guest is currently looking at. Distinct
+     from the filled share dot (a guest is attached) - this is a hollow ring
+     (a guest's gaze). No emoji, per house style. */
+  .guest-watching {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border: 1.5px solid var(--sky, #89dceb);
+    border-radius: 50%;
+    margin-right: 0.2rem;
     flex-shrink: 0;
   }
   .bcast {

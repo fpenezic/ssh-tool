@@ -43,6 +43,9 @@
     write(data: Uint8Array) {
       term?.write(data);
     },
+    clear() {
+      term?.clear();
+    },
     resize(c: number, r: number) {
       curCols = c;
       curRows = r;

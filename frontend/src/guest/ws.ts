@@ -50,6 +50,9 @@ export type Phase =
 export interface SessionSink {
   // write appends decoded PTY bytes (already watermark-deduped) to the terminal.
   write(data: Uint8Array): void;
+  // clear resets the terminal (before writing a fresh snapshot on re-manifest,
+  // so a re-sync doesn't append a duplicate copy of the scrollback).
+  clear(): void;
   // resize sets the host PTY dimensions (guest letterboxes to these).
   resize(cols: number, rows: number): void;
   // state marks a session connected/disconnected.
@@ -167,8 +170,11 @@ export class GuestClient {
 
   private onSnap(snap: { sid: string; b64: string; cum: number }) {
     this.watermark.set(snap.sid, snap.cum);
+    const sink = this.sinks.get(snap.sid);
+    // Clear first so a re-manifest snapshot replaces the scrollback rather than
+    // appending a second copy of it (the duplicated "Last login" lines).
+    sink?.clear();
     if (snap.b64) {
-      const sink = this.sinks.get(snap.sid);
       sink?.write(fromB64(snap.b64));
     }
     // Acknowledge as soon as the snapshot is applied. If the sink isn't
