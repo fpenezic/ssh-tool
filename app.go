@@ -1111,9 +1111,11 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 	sess.SetOnClose(func(sessionID string) {
 		a.forwards.StopAllForSession(sessionID)
 		a.clearMcpGrant(sessionID)
-		a.shareSessionClosed(sessionID)
 		a.sessionRecordingCleanup(sessionID)
 		a.pool.Remove(sessionID)
+		// After pool.Remove, so the share server sees this session as gone and
+		// can end a share whose last session just closed.
+		a.shareSessionClosed(sessionID)
 		a.wgRelease(sessionID)
 		a.metaMu.Lock()
 		delete(a.sessionMeta, sessionID)
@@ -2630,13 +2632,14 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 	sess.SetOnClose(func(id string) {
 		a.forwards.StopAllForSession(id)
 		a.clearMcpGrant(id)
-		a.shareSessionClosed(id)
 		a.sessionRecordingCleanup(id)
 		userInit := false
 		if s, ok := a.pool.Get(id); ok {
 			userInit = s.WasUserInitiated()
 		}
 		a.pool.Remove(id)
+		// After pool.Remove, so a share whose last session just closed ends.
+		a.shareSessionClosed(id)
 		a.wgRelease(id)
 		a.syncForegroundService()
 		a.metaMu.Lock()
@@ -3144,8 +3147,9 @@ func (a *App) LocalShellOpen(kind, dir string, cols, rows uint16) (*LocalShellOp
 	// ghost session id (SSH cleanup does the same dance).
 	sess.SetOnClose(func(id string) {
 		a.sessionRecordingCleanup(id)
-		a.shareSessionClosed(id) // local shells are shareable; end their shares
 		a.localPool.Remove(id)
+		// After localPool.Remove, so a share whose last session just closed ends.
+		a.shareSessionClosed(id) // local shells are shareable; end their shares
 		a.broadcastMu.Lock()
 		evicted := false
 		for _, g := range a.broadcastGroups {
