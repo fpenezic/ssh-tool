@@ -1069,8 +1069,12 @@
     margin-right: 0.15rem;
     flex-shrink: 0;
   }
+  /* The banner stays a grid child even when inactive - display:none would
+     remove it from the grid, shifting .term-area into the middle `auto` row
+     (0 height) instead of the `1fr` row, which blanked the terminal. So it
+     collapses via height/padding/border, keeping the row count stable. */
   .control-guest-banner {
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.8rem;
@@ -1078,10 +1082,15 @@
     color: var(--base);
     font-size: 0.82rem;
     font-weight: 600;
-    padding: 0.3rem 0.6rem;
+    height: 0;
+    padding: 0;
+    overflow: hidden;
+    visibility: hidden;
   }
   .control-guest-banner.shown {
-    display: flex;
+    height: auto;
+    padding: 0.3rem 0.6rem;
+    visibility: visible;
   }
   .control-guest-banner button {
     background: var(--base);

@@ -604,7 +604,9 @@
   .seg.share { color: var(--green); }
   .seg.share .dot { font-size: 0.7rem; }
   .mcp-anchor { position: relative; display: inline-flex; }
-  .share-pop { position: absolute; bottom: 100%; right: 0; margin-bottom: 0.3rem; z-index: 60; }
+  /* The share segment sits on the LEFT of the status bar (before the spacer),
+     so anchor the popover to the left edge - right:0 pushed it off-screen. */
+  .share-pop { position: absolute; bottom: 100%; left: 0; margin-bottom: 0.3rem; z-index: 60; }
   .seg.sync-ahead {
     color: var(--blue);
     cursor: pointer;
