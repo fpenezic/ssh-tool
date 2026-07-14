@@ -1129,6 +1129,16 @@ class PaneTreeStore {
     );
   }
 
+  // A human title for a leaf: the session's name (or hostname), falling back to
+  // the sessionId only if the session is unknown. Used when a split is broken
+  // into per-leaf tabs (pop / ungroup) so the new tabs get a real name instead
+  // of a raw session UUID. `sessions` is defined later in this module but this
+  // runs at call time, so the reference resolves.
+  private leafTitle(leaf: PaneLeaf): string {
+    const s = sessions.tabs.find((x) => x.sessionId === leaf.sessionId);
+    return s?.name ?? s?.hostname ?? leaf.sessionId;
+  }
+
   // Title of the currently active tab, or null when no tab is active.
   // Used to reflect the active connection in the OS window/taskbar title.
   activeTitle(): string | null {
@@ -1253,7 +1263,7 @@ class PaneTreeStore {
     const firstLeaf = firstLeafIn(remaining);
     const newTab: PaneTab = {
       tabId: genId("tab"),
-      title: leaf.sessionId,
+      title: this.leafTitle(leaf),
       rootPaneId: leaf.id,
       root: leaf,
       activePaneId: leaf.id,
@@ -1294,7 +1304,7 @@ class PaneTreeStore {
     const [first, ...rest] = leaves;
     const newTabs: PaneTab[] = rest.map((leaf) => ({
       tabId: genId("tab"),
-      title: leaf.sessionId,
+      title: this.leafTitle(leaf),
       rootPaneId: leaf.id,
       root: leaf,
       activePaneId: leaf.id,

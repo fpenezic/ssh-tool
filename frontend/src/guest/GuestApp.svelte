@@ -27,13 +27,20 @@
   let sessionMap = $state(new Map<string, ManifestSession>());
 
   onMount(() => {
+    let firstManifest = true;
     client.onPhase = (p) => {
       phase = p;
       if (p.kind === "live") {
         const m = new Map<string, ManifestSession>();
         for (const s of p.manifest.sessions) m.set(s.id, s);
         sessionMap = m;
-        activeTab = p.manifest.active_tab ?? 0;
+        // Only jump to the host's active tab on the FIRST manifest. A re-manifest
+        // (split / add-tab) must not yank the guest back to another tab, and if
+        // they've stopped following, never move them.
+        if (firstManifest && following) activeTab = p.manifest.active_tab ?? 0;
+        // Clamp in case a tab was removed.
+        if (activeTab >= p.manifest.tabs.length) activeTab = Math.max(0, p.manifest.tabs.length - 1);
+        firstManifest = false;
       }
     };
     // Follow the host's active tab, unless the guest has taken manual control
@@ -104,7 +111,13 @@
     <div class="stage">
       {#each manifest.tabs as tab, i (i)}
         <div class="tab-view" class:hidden={i !== activeTab}>
-          <GuestPane node={tab.root} sessions={sessionMap} level={manifest.level} {client} />
+          <!-- Key on the tree structure so a re-manifest that changes the pane
+               layout (a split) fully re-creates the pane tree rather than
+               reconciling a leaf into a split in place, which left the old
+               single terminal showing. -->
+          {#key JSON.stringify(tab.root)}
+            <GuestPane node={tab.root} sessions={sessionMap} level={manifest.level} {client} />
+          {/key}
         </div>
       {/each}
     </div>
