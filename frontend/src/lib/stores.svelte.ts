@@ -1012,6 +1012,13 @@ function genId(prefix: string): string {
 class PaneTreeStore {
   tabs = $state<PaneTab[]>([]);
   activeTabId = $state<string | null>(null);
+  // Bumped on every structural layout change (split, close pane, ungroup, pop).
+  // A share auto-resync watches this rather than diffing tree signatures, which
+  // proved unreliable.
+  layoutVersion = $state(0);
+  bumpLayout() {
+    this.layoutVersion++;
+  }
 
   addTab(sessionId: string, title: string): PaneTab {
     const leafId = genId("pane");
@@ -1198,6 +1205,7 @@ class PaneTreeStore {
       });
       return { ...t, root: newRoot, activePaneId: newLeafId };
     });
+    this.bumpLayout();
   }
 
   setActivePane(tabId: string, paneId: string) {
@@ -1224,6 +1232,7 @@ class PaneTreeStore {
       }));
       return { ...t, root: newRoot, activePaneId: newLeafId };
     });
+    this.bumpLayout();
   }
 
   // Remove a pane from the tree. If the pane is the last one in the tab,
@@ -1246,6 +1255,7 @@ class PaneTreeStore {
     this.tabs = this.tabs.map((t) =>
       t.tabId === tabId ? { ...t, root: newRoot, activePaneId: firstLeaf?.id ?? "" } : t
     );
+    this.bumpLayout();
     return { tabRemoved: false };
   }
 
@@ -1277,6 +1287,7 @@ class PaneTreeStore {
       ),
       newTab,
     ];
+    this.bumpLayout();
   }
 
   // Adjust the ratio of a split node.
@@ -1318,6 +1329,7 @@ class PaneTreeStore {
       ),
       ...newTabs,
     ];
+    this.bumpLayout();
   }
 
   // Remove the tab and return all sessionIds it contained.

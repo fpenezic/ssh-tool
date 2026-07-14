@@ -70,37 +70,26 @@
     } catch { /* ignore */ }
   }
 
-  // Auto-sync: re-push a share ONLY when the pane layout of one of its tabs
-  // actually changes (a split, a pane close). We track a per-share signature of
-  // its tabs' trees and resync only the shares whose signature changed - so
-  // opening an unrelated session, switching tabs, or a periodic re-render does
-  // NOT trigger a resync (which was redrawing the guest for no reason).
-  const shareSigs = new Map<string, string>();
+  // Auto-sync: re-push every active share when the pane layout changes (a
+  // split, a pane close, ungroup, pop). We watch paneTabs.layoutVersion - a
+  // counter bumped on every structural mutation - rather than diffing tree
+  // signatures, which didn't fire reliably. Debounced so a drag-resize (which
+  // does NOT bump layoutVersion) or a rapid sequence collapses to one push. The
+  // first observation is skipped: ShareStart's manifest already has the current
+  // layout, so only real subsequent changes resync.
+  let lastLayoutVersion = -1;
   let resyncTimer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
-    if (!shareBridge.enabled) return;
-    const shares = shareShared.activeShareTabs();
-    // Compute each share's current signature (reactive read of its trees).
-    const changed: string[] = [];
-    const seen = new Set<string>();
-    for (const sh of shares) {
-      seen.add(sh.shareId);
-      const sig = sh.tabIds
-        .map((tid) => JSON.stringify(paneTabs.tabs.find((t) => t.tabId === tid)?.root ?? null))
-        .join("#");
-      if (shareSigs.get(sh.shareId) !== sig) {
-        // Skip the very first observation of a share (its manifest already has
-        // this layout from ShareStart); only real subsequent changes resync.
-        if (shareSigs.has(sh.shareId)) changed.push(sh.shareId);
-        shareSigs.set(sh.shareId, sig);
-      }
-    }
-    for (const id of [...shareSigs.keys()]) if (!seen.has(id)) shareSigs.delete(id);
-    if (changed.length === 0) return;
+    const v = paneTabs.layoutVersion;
+    if (!shareBridge.enabled) { lastLayoutVersion = v; return; }
+    if (shareShared.activeShareTabs().length === 0) { lastLayoutVersion = v; return; }
+    if (lastLayoutVersion === -1) { lastLayoutVersion = v; return; } // first pass
+    if (v === lastLayoutVersion) return;
+    lastLayoutVersion = v;
     clearTimeout(resyncTimer);
     resyncTimer = setTimeout(() => {
-      for (const shareId of changed) resyncShare(shareId);
-    }, 300);
+      for (const { shareId } of shareShared.activeShareTabs()) resyncShare(shareId);
+    }, 250);
   });
 
   function addTabToShare(tabId: string, shareId: string) {
