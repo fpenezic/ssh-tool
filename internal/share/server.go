@@ -33,16 +33,29 @@ const tokenTTL = 30 * time.Minute
 // fingerprint words are shown to the host. Supplied by the App.
 type ApprovalFunc func(shareID, remoteIP, fpWords string) bool
 
-// AuditFunc hooks the app's audit log. All may be nil in tests.
+// ShareInfo is the public identity of a share handed to audit hooks (the
+// internal shareSession stays private).
+type ShareInfo struct {
+	ID    string
+	Level Level
+	Bind  string
+}
+
+// AuditHooks hooks the app's audit log. All may be nil in tests.
 type AuditHooks struct {
-	Attach    func(share *shareSession, remoteIP string)
-	Detach    func(share *shareSession, remoteIP string, dur time.Duration)
+	Attach    func(share ShareInfo, remoteIP string)
+	Detach    func(share ShareInfo, remoteIP string, dur time.Duration)
 	Approve   func(shareID, remoteIP, fpWords string)
 	Deny      func(shareID, remoteIP string)
-	Input     func(share *shareSession, remoteIP, realID string, data []byte)
-	Violation func(share *shareSession, remoteIP, reason string)
-	Start     func(share *shareSession)
+	Input     func(share ShareInfo, remoteIP, realID string, data []byte)
+	Violation func(share ShareInfo, remoteIP, reason string)
+	Start     func(share ShareInfo)
 	Stop      func(shareID string)
+}
+
+// info returns the public snapshot of a shareSession.
+func (s *shareSession) info() ShareInfo {
+	return ShareInfo{ID: s.id, Level: s.level, Bind: s.bind}
 }
 
 // Server owns the HTTPS listener and the share registry.
@@ -163,6 +176,18 @@ func (s *Server) Start(shareID string, p StartParams) (*StartResult, error) {
 // ActiveShares returns the UI snapshot.
 func (s *Server) ActiveShares() []ShareStatus { return s.listActive() }
 
+// Publish fans a PTY output chunk to every guest of realID. Called from the
+// app's output sink, on the hot path - never blocks. Nil-safe delegation to the
+// hub.
+func (s *Server) Publish(realID string, data []byte, cum uint64) {
+	s.hub.Publish(realID, data, cum)
+}
+
+// PublishSize tells guests the host PTY resized.
+func (s *Server) PublishSize(realID string, cols, rows uint16) {
+	s.hub.PublishSize(realID, cols, rows)
+}
+
 // Fingerprint returns the current cert's fingerprint, loading/creating it if
 // needed (for Settings display before any share is started).
 func (s *Server) Fingerprint() (Fingerprint, error) {
@@ -239,7 +264,7 @@ func (s *Server) register(share *shareSession, bindAddr string, cert *Cert) (str
 	s.byID[share.id] = share
 	s.byToken[share.token] = share
 	if s.audit.Start != nil {
-		s.audit.Start(share)
+		s.audit.Start(share.info())
 	}
 	go s.onChange()
 	return fmt.Sprintf("https://%s/s/%s", s.bind, share.token), nil
@@ -339,7 +364,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, share *shareSe
 	share.markUsed()
 	s.attachConn(share, gc)
 	if s.audit.Attach != nil {
-		s.audit.Attach(share, remoteIP)
+		s.audit.Attach(share.info(), remoteIP)
 	}
 
 	// Send the manifest + per-session snapshots, then start streaming.
@@ -355,7 +380,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, share *shareSe
 	// Teardown.
 	s.detachConn(share, gc)
 	if s.audit.Detach != nil {
-		s.audit.Detach(share, remoteIP, time.Since(gc.joinedAt))
+		s.audit.Detach(share.info(), remoteIP, time.Since(gc.joinedAt))
 	}
 	go s.onChange()
 }

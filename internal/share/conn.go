@@ -57,8 +57,8 @@ type guestConn struct {
 
 	// auditInput / auditViolation are supplied by the App so the share package
 	// doesn't import the audit store. May be nil in tests.
-	auditInput     func(share *shareSession, remoteIP, realID string, data []byte)
-	auditViolation func(share *shareSession, remoteIP, reason string)
+	auditInput     func(share ShareInfo, remoteIP, realID string, data []byte)
+	auditViolation func(share ShareInfo, remoteIP, reason string)
 }
 
 func newGuestConn(hub *Hub, share *shareSession, ws *websocket.Conn, remoteIP string) *guestConn {
@@ -218,7 +218,7 @@ func (c *guestConn) handleInput(in *Input) error {
 		return nil // gone; the state frame already told the guest
 	}
 	if c.auditInput != nil {
-		c.auditInput(c.share, c.remoteIP, realID, data)
+		c.auditInput(c.share.info(), c.remoteIP, realID, data)
 	}
 	return sess.Write(data)
 }
@@ -240,7 +240,7 @@ func (c *guestConn) isReady(slot string) bool {
 // visible to the host.
 func (c *guestConn) violation(reason string) {
 	if c.auditViolation != nil {
-		c.auditViolation(c.share, c.remoteIP, reason)
+		c.auditViolation(c.share.info(), c.remoteIP, reason)
 	}
 	c.kill(ByeRevoked)
 }

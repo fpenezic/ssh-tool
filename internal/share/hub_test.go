@@ -184,7 +184,7 @@ func TestReadOnlyRejectsInput(t *testing.T) {
 
 	var violated string
 	gc := newGuestConn(hub, share, nil, "1.2.3.4")
-	gc.auditViolation = func(_ *shareSession, _, reason string) { violated = reason }
+	gc.auditViolation = func(_ ShareInfo, _, reason string) { violated = reason }
 	gc.markReady("s1")
 
 	err := gc.handleInput(&Input{Sid: "s1", B64: "cm0gLXJmIC8K"}) // "rm -rf /\n"
@@ -210,7 +210,7 @@ func TestControlUnknownSlotRejected(t *testing.T) {
 
 	var violated string
 	gc := newGuestConn(hub, share, nil, "1.2.3.4")
-	gc.auditViolation = func(_ *shareSession, _, reason string) { violated = reason }
+	gc.auditViolation = func(_ ShareInfo, _, reason string) { violated = reason }
 
 	if err := gc.handleInput(&Input{Sid: "s99", B64: "eA=="}); err != errClose {
 		t.Fatalf("expected errClose for unknown slot, got %v", err)
@@ -258,7 +258,7 @@ func TestControlOversizedRejected(t *testing.T) {
 	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelControl, true, nil,
 		[]SharedSession{{RealID: "real1", Name: "n"}})
 	gc := newGuestConn(hub, share, nil, "1.2.3.4")
-	gc.auditViolation = func(*shareSession, string, string) {}
+	gc.auditViolation = func(ShareInfo, string, string) {}
 	gc.markReady("s1")
 
 	big := bytes.Repeat([]byte("A"), maxInputFrame+1)

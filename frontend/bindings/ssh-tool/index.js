@@ -53,6 +53,8 @@ export {
     ScrollbackSnapshot,
     SftpListResult,
     SftpPreview,
+    ShareSessionInput,
+    ShareStartInput,
     SshConnectResult,
     SyncConfig,
     SyncPullLiveResult,
