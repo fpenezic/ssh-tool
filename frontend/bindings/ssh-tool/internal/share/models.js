@@ -167,6 +167,13 @@ export class ShareStatus {
              */
             this["bind"] = "";
         }
+        if (!("session_ids" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["session_ids"] = [];
+        }
         if (!("guests" in $$source)) {
             /**
              * @member
@@ -184,10 +191,14 @@ export class ShareStatus {
      * @returns {ShareStatus}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType1;
+        const $$createField3_0 = $$createType0;
+        const $$createField4_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("session_ids" in $$parsedSource) {
+            $$parsedSource["session_ids"] = $$createField3_0($$parsedSource["session_ids"]);
+        }
         if ("guests" in $$parsedSource) {
-            $$parsedSource["guests"] = $$createField3_0($$parsedSource["guests"]);
+            $$parsedSource["guests"] = $$createField4_0($$parsedSource["guests"]);
         }
         return new ShareStatus(/** @type {Partial<ShareStatus>} */($$parsedSource));
     }
@@ -248,7 +259,7 @@ export class StartResult {
      * @returns {StartResult}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType2;
+        const $$createField3_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("fingerprint" in $$parsedSource) {
             $$parsedSource["fingerprint"] = $$createField3_0($$parsedSource["fingerprint"]);
@@ -258,6 +269,7 @@ export class StartResult {
 }
 
 // Private type creation functions
-const $$createType0 = GuestStatus.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = Fingerprint.createFrom;
+const $$createType0 = $Create.Array($Create.Any);
+const $$createType1 = GuestStatus.createFrom;
+const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = Fingerprint.createFrom;

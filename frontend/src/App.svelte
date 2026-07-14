@@ -657,8 +657,7 @@
 
   // Active shares changed (start / attach / detach / stop) - refresh the badges.
   EventsOn("share_changed", (data: any) => {
-    const shares = (data as any[]) ?? [];
-    shareShared.setFrom(shares, (id) => shareShared.realIdsFor(id));
+    shareShared.setFrom((data as any[]) ?? []);
   });
 
   // A guest switched to a different tab than the host - show where they are.

@@ -2787,6 +2787,14 @@ export class ShareSessionInput {
      * @param {Partial<ShareSessionInput>} [$$source = {}] - The source object to create the ShareSessionInput.
      */
     constructor($$source = {}) {
+        if (!("slot" in $$source)) {
+            /**
+             * guest slot assigned by the frontend projection
+             * @member
+             * @type {string}
+             */
+            this["slot"] = "";
+        }
         if (!("real_id" in $$source)) {
             /**
              * @member

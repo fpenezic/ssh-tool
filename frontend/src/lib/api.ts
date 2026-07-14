@@ -1450,7 +1450,7 @@ export interface ShareStartInput {
   scrollback: boolean;
   active_tab: number;
   tabs_blob: string; // projected {tabs:[...]} JSON, sessionIds -> guest slots
-  sessions: { real_id: string; name: string }[];
+  sessions: { slot: string; real_id: string; name: string }[];
 }
 
 export interface ShareFingerprint {

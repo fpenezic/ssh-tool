@@ -54,12 +54,14 @@
     const tabIds = shareShared.tabsOf(shareId);
     const chosen = paneTabs.tabs.filter((t) => tabIds.includes(t.tabId));
     if (chosen.length === 0) return;
+    // Carry the existing slot assignment so sessions keep their slots (their
+    // guest streams aren't disrupted, and the backend routing stays in sync).
     const proj = projectTabs(chosen, (sid) => {
       const s = sessions.tabs.find((x) => x.sessionId === sid);
       return s?.name ?? s?.hostname ?? sid;
-    });
+    }, shareShared.slotMapFor(shareId));
     const activeIdx = Math.max(0, chosen.findIndex((t) => t.tabId === paneTabs.activeTabId));
-    shareShared.recordShare(shareId, realSessionIds(chosen), chosen.map((t) => t.tabId));
+    shareShared.recordShare(shareId, realSessionIds(chosen), chosen.map((t) => t.tabId), proj.slotByReal);
     try {
       await api.shareUpdate(shareId, {
         bind_ip: "", port: 0, level: "read", scrollback: false,

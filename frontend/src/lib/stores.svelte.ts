@@ -2021,6 +2021,7 @@ export const shareApprovalStore = new ShareApprovalStore();
 interface ShareStatusLite {
   share_id: string;
   level: string;
+  session_ids: string[];
   guests: { remote_ip: string }[];
 }
 class ShareSharedStore {
@@ -2033,6 +2034,9 @@ class ShareSharedStore {
   // tabIds a guest is currently looking at (reported by any guest that clicked
   // away from follow mode). Drives the "your guest is here" tab marker.
   private guestViewing = $state<Set<string>>(new Set());
+  // shareId -> its stable slot assignment (real sessionId -> slot), carried
+  // across re-projections so a session keeps its slot / uninterrupted stream.
+  private slotMaps = new Map<string, Map<string, string>>();
 
   has(sessionId: string): boolean {
     return this.sessionsWithGuest.has(sessionId);
@@ -2046,13 +2050,15 @@ class ShareSharedStore {
   // The share_changed payload is the full active-share list. Since the payload
   // doesn't carry which real session each share covers, the caller supplies a
   // resolver mapping shareId -> real session ids (known when the share started).
-  setFrom(shares: ShareStatusLite[], realIdsFor: (shareId: string) => string[]) {
+  // Fed by share_changed. session_ids in the payload is authoritative, so any
+  // window (main or detached) attributes badges without local share state.
+  setFrom(shares: ShareStatusLite[]) {
     const withGuest = new Set<string>();
     const controlled = new Set<string>();
     const alive = new Set(shares.map((sh) => sh.share_id));
     for (const sh of shares) {
       if (sh.guests.length === 0) continue;
-      for (const rid of realIdsFor(sh.share_id)) {
+      for (const rid of sh.session_ids ?? []) {
         withGuest.add(rid);
         if (sh.level === "control") controlled.add(rid);
       }
@@ -2068,9 +2074,13 @@ class ShareSharedStore {
     if (alive.size === 0) this.guestViewing = new Set();
   }
   // Remember which sessions a share covers, so setFrom can attribute guests.
-  recordShare(shareId: string, realIds: string[], tabIds: string[]) {
+  recordShare(shareId: string, realIds: string[], tabIds: string[], slotMap?: Map<string, string>) {
     this.slotOwners.set(shareId, new Set(realIds));
     this.tabOrder.set(shareId, tabIds);
+    if (slotMap) this.slotMaps.set(shareId, new Map(slotMap));
+  }
+  slotMapFor(shareId: string): Map<string, string> | undefined {
+    return this.slotMaps.get(shareId);
   }
   // Every active share and the tab ids it covers, for re-sync on layout change.
   activeShareTabs(): { shareId: string; tabIds: string[] }[] {
@@ -2093,6 +2103,7 @@ class ShareSharedStore {
   forgetShare(shareId: string) {
     this.slotOwners.delete(shareId);
     this.tabOrder.delete(shareId);
+    this.slotMaps.delete(shareId);
   }
   // For a host tab switch: every (shareId, index) pair where the switched-to
   // tab appears in that share. Guests of those shares get an active_tab frame.

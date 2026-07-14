@@ -194,6 +194,7 @@ type ShareStartInput struct {
 }
 
 type ShareSessionInput struct {
+	Slot   string `json:"slot"` // guest slot assigned by the frontend projection
 	RealID string `json:"real_id"`
 	Name   string `json:"name"`
 }
@@ -216,6 +217,7 @@ func (a *App) ShareStart(in ShareStartInput) (*shareserver.StartResult, error) {
 			state = "disconnected"
 		}
 		sessions = append(sessions, shareserver.SharedSession{
+			Slot:   s.Slot,
 			RealID: s.RealID,
 			Name:   s.Name,
 			Cols:   cols,
@@ -258,7 +260,7 @@ func (a *App) ShareUpdate(shareID string, in ShareStartInput) error {
 			state = "disconnected"
 		}
 		sessions = append(sessions, shareserver.SharedSession{
-			RealID: s.RealID, Name: s.Name, Cols: cols, Rows: rows, State: state,
+			Slot: s.Slot, RealID: s.RealID, Name: s.Name, Cols: cols, Rows: rows, State: state,
 		})
 	}
 	return a.share.UpdateShare(shareID, in.ActiveTab, []byte(in.TabsBlob), sessions)

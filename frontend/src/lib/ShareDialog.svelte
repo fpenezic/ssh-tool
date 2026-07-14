@@ -82,9 +82,10 @@
         sessions: proj.sessions,
       });
       result = res;
-      // Remember which real sessions this share covers (badge attribution) and
-      // the tab order (so a host tab switch maps to a guest tab index).
-      shareShared.recordShare(res.share_id, realSessionIds(chosen), chosen.map((t) => t.tabId));
+      // Remember which real sessions this share covers (badge attribution), the
+      // tab order (host tab switch -> guest tab index), and the slot assignment
+      // (carried forward on resync so sessions keep their slots).
+      shareShared.recordShare(res.share_id, realSessionIds(chosen), chosen.map((t) => t.tabId), proj.slotByReal);
       if (res.regenerated) {
         toast.info(
           "Your certificate fingerprint changed because you're sharing on a new network. Guests who saved the old one will see a different fingerprint.",

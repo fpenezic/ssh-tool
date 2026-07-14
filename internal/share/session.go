@@ -13,9 +13,13 @@ import (
 	"time"
 )
 
-// SharedSession is one session offered inside a share, before slot assignment.
-// The App builds these from the tabs the host picked.
+// SharedSession is one session offered inside a share. The FRONTEND assigns the
+// guest slot (it owns the pane-tree projection and rewrites the tree to slots),
+// and the backend just honours it - so the slot in the manifest tree always
+// matches the slot the hub routes by. Two independent numbering schemes (one on
+// each side) drift apart after an add-tab/remove-tab and mis-route output.
 type SharedSession struct {
+	Slot   string // guest slot ("s1"), assigned by the frontend projection
 	RealID string // the real pool session id
 	Name   string
 	Cols   uint16
@@ -44,7 +48,6 @@ type shareSession struct {
 	slotByReal map[string]string
 	meta       map[string]SharedSession // slot -> metadata for the manifest
 	tabsBlobMu sync.Mutex               // guards tabsBlob (swapped on update)
-	nextSlot   int                      // next slot number to assign
 
 	// used flips true on the first successful guest attach; an unused share's
 	// token expires (GC), a used one lives until the share stops.
@@ -89,8 +92,7 @@ func newShareSession(id, bind, hostName string, level Level, scrollback bool,
 		meta:       make(map[string]SharedSession, len(sessions)),
 	}
 	for _, sess := range sessions {
-		s.nextSlot++
-		slot := slotName(s.nextSlot - 1)
+		slot := sess.Slot
 		s.realBySlot[slot] = sess.RealID
 		s.slotByReal[sess.RealID] = slot
 		sess.RealID = "" // do not keep the real id in the guest-facing meta copy
@@ -122,21 +124,28 @@ func (s *shareSession) slotFor(realID string) string {
 // re-projected {tabs:[...]} JSON.
 func (s *shareSession) updateTabs(newBlob []byte, sessions []SharedSession, activeTab int) []string {
 	s.mapMu.Lock()
+	// Rebuild the maps from the frontend's authoritative slot assignment. The
+	// frontend re-projects the whole shared set on every change and keeps a
+	// session on its existing slot, so a session that was already shared maps
+	// to the SAME slot here - its stream is uninterrupted - and any slot not in
+	// the new set is dropped (a removed tab).
+	newReal := make(map[string]string, len(sessions))
+	newSlot := make(map[string]string, len(sessions))
+	newMeta := make(map[string]SharedSession, len(sessions))
 	var newSlots []string
 	for _, sess := range sessions {
-		if _, exists := s.slotByReal[sess.RealID]; exists {
-			continue // keep the existing slot; its stream is uninterrupted
+		slot := sess.Slot
+		if _, existed := s.realBySlot[slot]; !existed {
+			newSlots = append(newSlots, slot)
 		}
-		s.nextSlot++
-		slot := slotName(s.nextSlot - 1)
-		s.realBySlot[slot] = sess.RealID
-		s.slotByReal[sess.RealID] = slot
-		real := sess.RealID
+		newReal[slot] = sess.RealID
+		newSlot[sess.RealID] = slot
 		sess.RealID = ""
-		s.meta[slot] = sess
-		newSlots = append(newSlots, slot)
-		_ = real
+		newMeta[slot] = sess
 	}
+	s.realBySlot = newReal
+	s.slotByReal = newSlot
+	s.meta = newMeta
 	s.mapMu.Unlock()
 
 	s.tabsBlobMu.Lock()

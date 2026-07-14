@@ -677,11 +677,20 @@ func (s *Server) listActive() []ShareStatus {
 				Level:    string(sh.level),
 			})
 		}
+		// Real session ids this share covers, so any window (main or detached)
+		// can attribute the tab badge without holding the share's local state.
+		sh.mapMu.RLock()
+		sessionIDs := make([]string, 0, len(sh.slotByReal))
+		for realID := range sh.slotByReal {
+			sessionIDs = append(sessionIDs, realID)
+		}
+		sh.mapMu.RUnlock()
 		out = append(out, ShareStatus{
-			ShareID: id,
-			Level:   string(sh.level),
-			Bind:    sh.bind,
-			Guests:  guests,
+			ShareID:    id,
+			Level:      string(sh.level),
+			Bind:       sh.bind,
+			SessionIDs: sessionIDs,
+			Guests:     guests,
 		})
 	}
 	return out
@@ -689,10 +698,11 @@ func (s *Server) listActive() []ShareStatus {
 
 // ShareStatus / GuestStatus are IPC-friendly snapshots.
 type ShareStatus struct {
-	ShareID string        `json:"share_id"`
-	Level   string        `json:"level"`
-	Bind    string        `json:"bind"`
-	Guests  []GuestStatus `json:"guests"`
+	ShareID    string        `json:"share_id"`
+	Level      string        `json:"level"`
+	Bind       string        `json:"bind"`
+	SessionIDs []string      `json:"session_ids"`
+	Guests     []GuestStatus `json:"guests"`
 }
 
 type GuestStatus struct {

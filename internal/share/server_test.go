@@ -23,7 +23,7 @@ func TestSessionClosedEndsLastShare(t *testing.T) {
 
 	srv := NewServer(Config{Resolve: resolve})
 	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelControl, true, 0, nil,
-		[]SharedSession{{RealID: "real1", Name: "n"}})
+		[]SharedSession{{Slot: "s1", RealID: "real1", Name: "n"}})
 	srv.mu.Lock()
 	srv.byID[share.id] = share
 	srv.byToken[share.token] = share
@@ -67,7 +67,7 @@ func TestSessionClosedKeepsMultiSessionShare(t *testing.T) {
 	}
 	srv := NewServer(Config{Resolve: resolve})
 	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelRead, true, 0, nil,
-		[]SharedSession{{RealID: "real1", Name: "a"}, {RealID: "real2", Name: "b"}})
+		[]SharedSession{{Slot: "s1", RealID: "real1", Name: "a"}, {Slot: "s2", RealID: "real2", Name: "b"}})
 	srv.mu.Lock()
 	srv.byID[share.id] = share
 	srv.byToken[share.token] = share

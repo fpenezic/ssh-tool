@@ -12,26 +12,42 @@ import type { PaneTab } from "./stores.svelte";
 export interface ProjectedShare {
   // {tabs:[...]} JSON to hand the backend as ShareStartInput.tabs_blob.
   tabsBlob: string;
-  // slot -> real session, in slot order (s1, s2, …).
-  sessions: { real_id: string; name: string }[];
+  // slot -> real session. slot is authoritative: the backend honours it, so the
+  // manifest tree and the hub routing agree.
+  sessions: { slot: string; real_id: string; name: string }[];
+  // The slot assignment, to carry forward on the next re-projection so a
+  // session keeps its slot (its guest stream isn't disrupted).
+  slotByReal: Map<string, string>;
 }
 
-// projectTabs walks the selected tabs, assigns a stable slot to each distinct
-// real session id (first occurrence wins), rewrites the leaves, and downgrades
-// sftp/vnc leaves to an "unavailable" placeholder (a browser guest has neither).
+// projectTabs walks the selected tabs and rewrites each leaf's real sessionId to
+// a guest slot. A session already in `existing` KEEPS its slot; new sessions get
+// the next free slot number. sftp/vnc leaves become an "unavailable" placeholder
+// (a browser guest has neither).
 export function projectTabs(
   tabs: PaneTab[],
   sessionName: (sessionId: string) => string,
+  existing?: Map<string, string>,
 ): ProjectedShare {
-  const slotByReal = new Map<string, string>();
-  const sessions: { real_id: string; name: string }[] = [];
+  const slotByReal = new Map<string, string>(existing ?? []);
+  const sessions: { slot: string; real_id: string; name: string }[] = [];
+  const usedSlots = new Set(slotByReal.values());
+  let nextN = 1;
+  function freeSlot(): string {
+    while (usedSlots.has("s" + nextN)) nextN++;
+    const slot = "s" + nextN;
+    usedSlots.add(slot);
+    return slot;
+  }
 
   function slotFor(realId: string): string {
     let slot = slotByReal.get(realId);
     if (!slot) {
-      slot = "s" + (sessions.length + 1);
+      slot = freeSlot();
       slotByReal.set(realId, slot);
-      sessions.push({ real_id: realId, name: sessionName(realId) });
+    }
+    if (!sessions.some((s) => s.real_id === realId)) {
+      sessions.push({ slot, real_id: realId, name: sessionName(realId) });
     }
     return slot;
   }
@@ -58,6 +74,7 @@ export function projectTabs(
   return {
     tabsBlob: JSON.stringify({ tabs: projected }),
     sessions,
+    slotByReal,
   };
 }
 
