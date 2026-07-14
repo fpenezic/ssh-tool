@@ -2027,6 +2027,9 @@ class ShareSharedStore {
   private sessionsWithGuest = $state<Set<string>>(new Set());
   private sessionsControlled = $state<Set<string>>(new Set());
   private slotOwners = new Map<string, Set<string>>(); // shareId -> its real sessionIds
+  // shareId -> the tabIds it shares, IN ORDER, so a host tab switch can be
+  // reported to guests as the tab's index within that share.
+  private tabOrder = new Map<string, string[]>();
 
   has(sessionId: string): boolean {
     return this.sessionsWithGuest.has(sessionId);
@@ -2054,14 +2057,26 @@ class ShareSharedStore {
     this.sessionsControlled = controlled;
   }
   // Remember which sessions a share covers, so setFrom can attribute guests.
-  recordShare(shareId: string, realIds: string[]) {
+  recordShare(shareId: string, realIds: string[], tabIds: string[]) {
     this.slotOwners.set(shareId, new Set(realIds));
+    this.tabOrder.set(shareId, tabIds);
   }
   realIdsFor(shareId: string): string[] {
     return [...(this.slotOwners.get(shareId) ?? [])];
   }
   forgetShare(shareId: string) {
     this.slotOwners.delete(shareId);
+    this.tabOrder.delete(shareId);
+  }
+  // For a host tab switch: every (shareId, index) pair where the switched-to
+  // tab appears in that share. Guests of those shares get an active_tab frame.
+  shareIndexFor(tabId: string): { shareId: string; index: number }[] {
+    const out: { shareId: string; index: number }[] = [];
+    for (const [shareId, tabIds] of this.tabOrder) {
+      const idx = tabIds.indexOf(tabId);
+      if (idx >= 0) out.push({ shareId, index: idx });
+    }
+    return out;
   }
 }
 export const shareShared = new ShareSharedStore();

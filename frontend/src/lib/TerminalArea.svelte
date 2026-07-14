@@ -30,6 +30,17 @@
   const activeTabHasControlGuest = $derived(
     paneTabs.activeTabId ? tabHasControlGuest(paneTabs.activeTabId) : false,
   );
+
+  // Tell guests when the host switches tabs, so a following guest tracks it.
+  // Fires for every share that includes the newly-active tab, with the tab's
+  // index within that share (guests may share a subset in a different order).
+  $effect(() => {
+    const tabId = paneTabs.activeTabId;
+    if (!tabId || !shareBridge.enabled) return;
+    for (const { shareId, index } of shareShared.shareIndexFor(tabId)) {
+      api.shareSetActiveTab(shareId, index).catch(() => {});
+    }
+  });
   async function stopAllShares() {
     try {
       for (const s of (await api.shareActive()) ?? []) await api.shareStop(s.share_id);

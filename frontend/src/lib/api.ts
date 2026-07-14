@@ -941,6 +941,7 @@ export const api = {
   shareStop: (shareId: string) => G.ShareStop(shareId),
   shareKick: (shareId: string, remoteIp: string) => G.ShareKick(shareId, remoteIp),
   shareActive: () => G.ShareActive() as unknown as Promise<ShareStatus[]>,
+  shareSetActiveTab: (shareId: string, index: number) => G.ShareSetActiveTab(shareId, index),
   shareInterfaces: () => G.ShareInterfaces() as unknown as Promise<ShareInterface[]>,
   shareFingerprint: () => G.ShareFingerprint() as unknown as Promise<ShareFingerprint>,
   shareRegenerateCert: () => G.ShareRegenerateCert() as unknown as Promise<ShareFingerprint>,
