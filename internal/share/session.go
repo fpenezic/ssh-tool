@@ -44,17 +44,36 @@ type shareSession struct {
 	// token expires (GC), a used one lives until the share stops.
 	usedMu sync.Mutex
 	used   bool
+
+	// activeTab is the host's currently-focused tab index, updated live so
+	// passive guests can follow. Guarded by its own mutex (read on attach,
+	// written on host tab switch).
+	activeTabMu sync.Mutex
+	activeTab   int
+}
+
+func (s *shareSession) setActiveTab(i int) {
+	s.activeTabMu.Lock()
+	s.activeTab = i
+	s.activeTabMu.Unlock()
+}
+
+func (s *shareSession) getActiveTab() int {
+	s.activeTabMu.Lock()
+	defer s.activeTabMu.Unlock()
+	return s.activeTab
 }
 
 // newShareSession assigns sequential guest slots (s1, s2, ...) to the given
 // sessions and mints a token.
 func newShareSession(id, bind, hostName string, level Level, scrollback bool,
-	tabsBlob []byte, sessions []SharedSession) *shareSession {
+	activeTab int, tabsBlob []byte, sessions []SharedSession) *shareSession {
 	s := &shareSession{
 		id:         id,
 		token:      randToken(),
 		level:      level,
 		scrollback: scrollback,
+		activeTab:  activeTab,
 		bind:       bind,
 		hostName:   hostName,
 		tabsBlob:   tabsBlob,

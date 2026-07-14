@@ -35,13 +35,14 @@ type Frame struct {
 	T string `json:"t"`
 
 	// host -> guest
-	Pending  *Pending  `json:"pending,omitempty"`
-	Manifest *Manifest `json:"manifest,omitempty"`
-	Snap     *Snap     `json:"snap,omitempty"`
-	Size     *Size     `json:"size,omitempty"`
-	State    *State    `json:"state,omitempty"`
-	Bye      *Bye      `json:"bye,omitempty"`
-	Pong     *struct{} `json:"pong,omitempty"`
+	Pending   *Pending   `json:"pending,omitempty"`
+	Manifest  *Manifest  `json:"manifest,omitempty"`
+	Snap      *Snap      `json:"snap,omitempty"`
+	Size      *Size      `json:"size,omitempty"`
+	State     *State     `json:"state,omitempty"`
+	ActiveTab *ActiveTab `json:"active_tab,omitempty"`
+	Bye       *Bye       `json:"bye,omitempty"`
+	Pong      *struct{}  `json:"pong,omitempty"`
 
 	// guest -> host
 	Input *Input    `json:"input,omitempty"`
@@ -51,13 +52,14 @@ type Frame struct {
 
 // Frame type discriminators.
 const (
-	TPending  = "pending"
-	TManifest = "manifest"
-	TSnap     = "snap"
-	TSize     = "size"
-	TState    = "state"
-	TBye      = "bye"
-	TPong     = "pong"
+	TPending   = "pending"
+	TManifest  = "manifest"
+	TSnap      = "snap"
+	TSize      = "size"
+	TState     = "state"
+	TActiveTab = "active_tab"
+	TBye       = "bye"
+	TPong      = "pong"
 
 	TInput = "input"
 	TReady = "ready"
@@ -78,11 +80,12 @@ type Pending struct {
 // the guest may see: the projected tab trees (with guest-scoped session slots)
 // and the per-session metadata. Real pool UUIDs never appear here.
 type Manifest struct {
-	ShareID  string            `json:"share_id"`
-	Level    Level             `json:"level"`
-	HostName string            `json:"host_name"`
-	Tabs     []ManifestTab     `json:"tabs"`
-	Sessions []ManifestSession `json:"sessions"`
+	ShareID   string            `json:"share_id"`
+	Level     Level             `json:"level"`
+	HostName  string            `json:"host_name"`
+	ActiveTab int               `json:"active_tab"` // index of the host's active tab
+	Tabs      []ManifestTab     `json:"tabs"`
+	Sessions  []ManifestSession `json:"sessions"`
 }
 
 // ManifestTab mirrors SerializedPaneTab (frontend panetypes.ts) with sessionIds
@@ -130,6 +133,13 @@ type State struct {
 	Sid    string `json:"sid"`
 	State  string `json:"state"`
 	Reason string `json:"reason,omitempty"`
+}
+
+// ActiveTab tells the guest which tab the host is now looking at, so a passive
+// viewer can follow along. Guest-following is best-effort; the guest may also
+// click its own tabs.
+type ActiveTab struct {
+	Index int `json:"index"`
 }
 
 // Bye is the host ending the connection. Reason is one of the byeReason values;

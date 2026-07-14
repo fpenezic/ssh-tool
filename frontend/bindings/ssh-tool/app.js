@@ -2219,6 +2219,17 @@ export function ShareRegenerateCert() {
 }
 
 /**
+ * ShareSetActiveTab tells a share's guests which tab the host switched to.
+ * Best-effort; a no-op when sharing is off or the share is unknown.
+ * @param {string} shareID
+ * @param {number} index
+ * @returns {$CancellablePromise<void>}
+ */
+export function ShareSetActiveTab(shareID, index) {
+    return $Call.ByID(2594821033, shareID, index);
+}
+
+/**
  * ShareStart mints a share and returns the guest URL + fingerprint. Errors if
  * sharing isn't enabled.
  * @param {$models.ShareStartInput} $in

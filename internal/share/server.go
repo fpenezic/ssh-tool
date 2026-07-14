@@ -129,6 +129,7 @@ type StartParams struct {
 	Port       uint16          // 8443
 	Level      Level           // read | control
 	Scrollback bool            // include history on join
+	ActiveTab  int             // index of the host's active tab at share time
 	TabsBlob   []byte          // projected {tabs:[...]} JSON from the frontend
 	Sessions   []SharedSession // the real sessions behind this share
 }
@@ -159,7 +160,7 @@ func (s *Server) Start(shareID string, p StartParams) (*StartResult, error) {
 		return nil, err
 	}
 	bindAddr := net.JoinHostPort(p.BindIP, itoa(int(port)))
-	share := newShareSession(shareID, bindAddr, s.hostName, p.Level, p.Scrollback, p.TabsBlob, p.Sessions)
+	share := newShareSession(shareID, bindAddr, s.hostName, p.Level, p.Scrollback, p.ActiveTab, p.TabsBlob, p.Sessions)
 	url, err := s.register(share, bindAddr, cert)
 	if err != nil {
 		return nil, err
@@ -186,6 +187,23 @@ func (s *Server) Publish(realID string, data []byte, cum uint64) {
 // PublishSize tells guests the host PTY resized.
 func (s *Server) PublishSize(realID string, cols, rows uint16) {
 	s.hub.PublishSize(realID, cols, rows)
+}
+
+// SetActiveTab records the host's active tab index and tells every attached
+// guest, so a passive viewer follows along. The index is into the share's own
+// projected tab list (the frontend maps its tab id to that index).
+func (s *Server) SetActiveTab(shareID string, index int) {
+	s.mu.Lock()
+	sh := s.byID[shareID]
+	conns := append([]*guestConn(nil), s.conns[shareID]...)
+	s.mu.Unlock()
+	if sh == nil {
+		return
+	}
+	sh.setActiveTab(index)
+	for _, c := range conns {
+		c.sendJSON(Frame{T: TActiveTab, ActiveTab: &ActiveTab{Index: index}})
+	}
 }
 
 // Fingerprint returns the current cert's fingerprint, loading/creating it if
@@ -404,11 +422,12 @@ func (s *Server) sendManifest(gc *guestConn, share *shareSession) {
 	// into the manifest tab list.
 	_ = unmarshalTabs(share.tabsBlob, &tabs)
 	gc.sendJSON(Frame{T: TManifest, Manifest: &Manifest{
-		ShareID:  share.id,
-		Level:    share.level,
-		HostName: s.hostName,
-		Tabs:     tabs,
-		Sessions: sessions,
+		ShareID:   share.id,
+		Level:     share.level,
+		HostName:  s.hostName,
+		ActiveTab: share.getActiveTab(),
+		Tabs:      tabs,
+		Sessions:  sessions,
 	}})
 }
 

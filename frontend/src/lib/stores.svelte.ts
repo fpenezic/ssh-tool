@@ -1984,6 +1984,98 @@ class McpSharedStore {
 }
 export const mcpShared = new McpSharedStore();
 
+// ----- browser session sharing -----
+
+export interface ShareApproval {
+  approvalId: string;
+  shareId: string;
+  remoteIp: string;
+  fingerprint: string; // the words to compare out-of-band
+  level: string;
+  tabs: string[];
+}
+
+// FIFO queue of pending guest-join approvals (clone of McpApprovalStore).
+class ShareApprovalStore {
+  queue = $state<ShareApproval[]>([]);
+  get pending(): ShareApproval | null {
+    return this.queue[0] ?? null;
+  }
+  enqueue(a: ShareApproval) {
+    if (this.queue.some((q) => q.approvalId === a.approvalId)) return;
+    this.queue = [...this.queue, a];
+  }
+  shift() {
+    if (this.queue.length === 0) return;
+    this.queue = this.queue.slice(1);
+  }
+  clearAll() {
+    this.queue = [];
+  }
+}
+export const shareApprovalStore = new ShareApprovalStore();
+
+// Tracks which sessions currently have a browser guest attached, and whether
+// any guest on that session can type (control) - drives the tab badge (quiet)
+// and the loud control indicator. Fed by the share_changed event.
+interface ShareStatusLite {
+  share_id: string;
+  level: string;
+  guests: { remote_ip: string }[];
+}
+class ShareSharedStore {
+  private sessionsWithGuest = $state<Set<string>>(new Set());
+  private sessionsControlled = $state<Set<string>>(new Set());
+  private slotOwners = new Map<string, Set<string>>(); // shareId -> its real sessionIds
+
+  has(sessionId: string): boolean {
+    return this.sessionsWithGuest.has(sessionId);
+  }
+  isControlled(sessionId: string): boolean {
+    return this.sessionsControlled.has(sessionId);
+  }
+  get guestCount(): number {
+    return this.sessionsWithGuest.size;
+  }
+  // The share_changed payload is the full active-share list. Since the payload
+  // doesn't carry which real session each share covers, the caller supplies a
+  // resolver mapping shareId -> real session ids (known when the share started).
+  setFrom(shares: ShareStatusLite[], realIdsFor: (shareId: string) => string[]) {
+    const withGuest = new Set<string>();
+    const controlled = new Set<string>();
+    for (const sh of shares) {
+      if (sh.guests.length === 0) continue;
+      for (const rid of realIdsFor(sh.share_id)) {
+        withGuest.add(rid);
+        if (sh.level === "control") controlled.add(rid);
+      }
+    }
+    this.sessionsWithGuest = withGuest;
+    this.sessionsControlled = controlled;
+  }
+  // Remember which sessions a share covers, so setFrom can attribute guests.
+  recordShare(shareId: string, realIds: string[]) {
+    this.slotOwners.set(shareId, new Set(realIds));
+  }
+  realIdsFor(shareId: string): string[] {
+    return [...(this.slotOwners.get(shareId) ?? [])];
+  }
+  forgetShare(shareId: string) {
+    this.slotOwners.delete(shareId);
+  }
+}
+export const shareShared = new ShareSharedStore();
+
+// Whether session sharing is enabled (share_enabled setting). Gates the share
+// affordances (the "Share to browser" menu item, the status-bar share segment).
+class ShareBridgeStore {
+  enabled = $state(false);
+  setEnabled(v: boolean) {
+    this.enabled = v;
+  }
+}
+export const shareBridge = new ShareBridgeStore();
+
 // Whether the MCP bridge is enabled (mcp_bridge_enabled setting). Drives
 // whether the robot affordances (pane Share-with-LLM button, status-bar robot)
 // are shown at all - no point offering LLM sharing when the bridge is off.

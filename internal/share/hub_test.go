@@ -100,7 +100,7 @@ func TestJoinRaceNoGapNoDup(t *testing.T) {
 	})
 
 	// A share mapping slot "s1" -> "real1", scrollback ON.
-	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelRead, true, nil,
+	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelRead, true, 0, nil,
 		[]SharedSession{{RealID: "real1", Name: "n"}})
 
 	// Emit some history BEFORE the guest joins.
@@ -144,7 +144,7 @@ func TestJoinRaceNoGapNoDup(t *testing.T) {
 func TestScrollbackOffStartsClean(t *testing.T) {
 	fake := &fakeSession{}
 	hub := newHub(func(id string) (Sourced, bool) { return fake, id == "real1" })
-	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelRead, false, nil,
+	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelRead, false, 0, nil,
 		[]SharedSession{{RealID: "real1", Name: "n"}})
 
 	// History the guest must NOT see.
@@ -179,7 +179,7 @@ func TestReadOnlyRejectsInput(t *testing.T) {
 	written := false
 	fake := &writeRecorder{onWrite: func() { written = true }}
 	hub := newHub(func(id string) (Sourced, bool) { return fake, id == "real1" })
-	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelRead, true, nil,
+	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelRead, true, 0, nil,
 		[]SharedSession{{RealID: "real1", Name: "n"}})
 
 	var violated string
@@ -205,7 +205,7 @@ func TestControlUnknownSlotRejected(t *testing.T) {
 	written := false
 	fake := &writeRecorder{onWrite: func() { written = true }}
 	hub := newHub(func(id string) (Sourced, bool) { return fake, id == "real1" })
-	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelControl, true, nil,
+	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelControl, true, 0, nil,
 		[]SharedSession{{RealID: "real1", Name: "n"}})
 
 	var violated string
@@ -229,7 +229,7 @@ func TestControlBeforeReadyDropped(t *testing.T) {
 	written := false
 	fake := &writeRecorder{onWrite: func() { written = true }}
 	hub := newHub(func(id string) (Sourced, bool) { return fake, id == "real1" })
-	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelControl, true, nil,
+	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelControl, true, 0, nil,
 		[]SharedSession{{RealID: "real1", Name: "n"}})
 	gc := newGuestConn(hub, share, nil, "1.2.3.4")
 	// NOT ready.
@@ -255,7 +255,7 @@ func TestControlBeforeReadyDropped(t *testing.T) {
 func TestControlOversizedRejected(t *testing.T) {
 	fake := &writeRecorder{}
 	hub := newHub(func(id string) (Sourced, bool) { return fake, id == "real1" })
-	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelControl, true, nil,
+	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelControl, true, 0, nil,
 		[]SharedSession{{RealID: "real1", Name: "n"}})
 	gc := newGuestConn(hub, share, nil, "1.2.3.4")
 	gc.auditViolation = func(ShareInfo, string, string) {}

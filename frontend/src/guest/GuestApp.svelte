@@ -6,6 +6,9 @@
 
   let phase = $state<Phase>({ kind: "connecting" });
   let activeTab = $state(0);
+  // While true the guest mirrors the host's active tab. Clicking a tab drops
+  // out of follow mode so the guest can look around independently.
+  let following = $state(true);
 
   // The websocket URL is this page's own origin with /ws appended: the guest
   // was served from https://<bind>/s/<token>, so /s/<token>/ws is the socket.
@@ -30,7 +33,13 @@
         const m = new Map<string, ManifestSession>();
         for (const s of p.manifest.sessions) m.set(s.id, s);
         sessionMap = m;
+        activeTab = p.manifest.active_tab ?? 0;
       }
+    };
+    // Follow the host's active tab, unless the guest has taken manual control
+    // by clicking a tab themselves.
+    client.onActiveTab = (index) => {
+      if (following) activeTab = index;
     };
     client.connect();
     return () => client.close();
@@ -77,14 +86,19 @@
             class="tab"
             class:active={i === activeTab}
             style={tab.groupColor ? `border-bottom-color:${tab.groupColor}` : ""}
-            onclick={() => (activeTab = i)}
+            onclick={() => { activeTab = i; following = false; }}
           >
             {tab.title}
           </button>
         {/each}
       </div>
-      <div class="badge" class:control={manifest.level === "control"}>
-        {manifest.level === "control" ? "can type" : "read-only"}
+      <div class="topbar-right">
+        {#if !following}
+          <button class="follow-btn" onclick={() => (following = true)}>Follow host</button>
+        {/if}
+        <div class="badge" class:control={manifest.level === "control"}>
+          {manifest.level === "control" ? "can type" : "read-only"}
+        </div>
       </div>
     </div>
     <div class="stage">
@@ -186,6 +200,21 @@
   .tab.active {
     color: #cdd6f4;
     border-bottom-color: #89b4fa;
+  }
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .follow-btn {
+    background: #89b4fa;
+    color: #11111b;
+    border: none;
+    border-radius: 999px;
+    padding: 0.15rem 0.7rem;
+    font-size: 0.72rem;
+    cursor: pointer;
+    font-weight: 600;
   }
   .badge {
     font-size: 0.72rem;

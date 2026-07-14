@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { sessions, paneTabs, view, drag, tree, closedTabs, mcpShared, type PaneNode as PaneNodeType, encodePaneLayout, decodePaneLayout } from "./stores.svelte";
+  import { sessions, paneTabs, view, drag, tree, closedTabs, mcpShared, shareBridge, shareShared, type PaneNode as PaneNodeType, encodePaneLayout, decodePaneLayout } from "./stores.svelte";
   import { api } from "./api";
   import PaneNode from "./PaneNode.svelte";
+  import ShareDialog from "./ShareDialog.svelte";
   import TcpdumpModal from "./TcpdumpModal.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
   import { broadcast } from "./broadcast.svelte";
@@ -16,6 +17,24 @@
   import { showPrompt } from "./promptModal.svelte.ts";
   import { focusActiveTerminal } from "./terminalFocus";
   let broadcastManagerOpen = $state(false);
+  let shareDialogOpen = $state(false);
+  // The ShareDialog defaults its tab selection to the ACTIVE tab, so switch to
+  // the right-clicked tab first, then open.
+  function openShareDialog(tabId: string) {
+    paneTabs.activateTab(tabId);
+    shareDialogOpen = true;
+  }
+  // Loud indicator: a control guest on the currently-visible tab means someone
+  // can type here right now. The pulsing red tab badge covers other tabs; this
+  // banner makes the active one impossible to forget.
+  const activeTabHasControlGuest = $derived(
+    paneTabs.activeTabId ? tabHasControlGuest(paneTabs.activeTabId) : false,
+  );
+  async function stopAllShares() {
+    try {
+      for (const s of (await api.shareActive()) ?? []) await api.shareStop(s.share_id);
+    } catch { /* ignore */ }
+  }
 
   function tabSessionIdArr(tabId: string): string[] {
     const tab = paneTabs.tabs.find((t) => t.tabId === tabId);
@@ -70,6 +89,14 @@
   // Any pane in this tab shared with the LLM (MCP bridge)?
   function tabHasSharedSession(tabId: string): boolean {
     return tabSessionIdArr(tabId).some((sid) => mcpShared.has(sid));
+  }
+  // Any pane in this tab has a browser guest attached?
+  function tabHasGuest(tabId: string): boolean {
+    return tabSessionIdArr(tabId).some((sid) => shareShared.has(sid));
+  }
+  // ...and can any of them type (control)? Drives the louder badge.
+  function tabHasControlGuest(tabId: string): boolean {
+    return tabSessionIdArr(tabId).some((sid) => shareShared.isControlled(sid));
   }
 
   function tabAddAllToBroadcast(tabId: string) {
@@ -650,6 +677,15 @@
               <IconBot size={10} />
             </span>
           {/if}
+          {#if tabHasGuest(t.tabId)}
+            <span
+              class="share-badge"
+              class:control={tabHasControlGuest(t.tabId)}
+              title={tabHasControlGuest(t.tabId)
+                ? "A browser guest can type in this session"
+                : "Shared to a browser guest (read-only)"}
+            >●</span>
+          {/if}
           {#if tabBroadcastState(t.tabId) !== "none"}
             {@const groups = tabBroadcastGroups(t.tabId)}
             <span
@@ -728,6 +764,11 @@
       <button onclick={() => { detachTab(ctxMenu!.tabId); closeCtxMenu(); }}>
         ↗ Detach to new window
       </button>
+      {#if shareBridge.enabled}
+        <button onclick={() => { openShareDialog(ctxMenu!.tabId); closeCtxMenu(); }}>
+          Share to browser…
+        </button>
+      {/if}
       {#each sendTargets as w (w.name)}
         <button onclick={() => { sendTabToWindow(ctxMenu!.tabId, w.name); closeCtxMenu(); }}>
           → Send to {w.label}
@@ -769,6 +810,12 @@
     </div>
   {/if}
 
+  <!-- Always in the DOM (grid needs a stable child count); collapses to 0
+       height when there's no control guest. -->
+  <div class="control-guest-banner" class:shown={activeTabHasControlGuest}>
+    <span>A browser guest can type in this terminal.</span>
+    <button onclick={stopAllShares}>End sharing</button>
+  </div>
   <div class="term-area">
     {#each paneTabs.tabs as t (t.tabId)}
       <div class="tab-content" class:active={paneTabs.activeTabId === t.tabId}>
@@ -801,18 +848,22 @@
 
 
 <BroadcastManager open={broadcastManagerOpen} onClose={() => (broadcastManagerOpen = false)} />
+{#if shareDialogOpen}
+  <ShareDialog onClose={() => (shareDialogOpen = false)} />
+{/if}
 
 
 <style>
   .area {
     display: grid;
-    /* Tab row grows to fit however many wrapped rows it needs; the
-       terminal pane below takes the rest. Previously this was a
-       fixed 32px which clipped the second row of wrapped tabs even
-       though .tabbar's flex-wrap was actually placing them
-       correctly - they were just invisible under the next grid
-       row. */
-    grid-template-rows: auto 1fr;
+    /* Tab row grows to fit however many wrapped rows it needs; the optional
+       control-guest banner takes its own auto row; the terminal pane takes the
+       rest. The banner row collapses to 0 when absent (no banner element), so
+       this is safe with or without it. Previously grid-template-rows was
+       `auto 1fr` with only two rows - adding the banner as a third child pushed
+       the terminal into an implicit 0-height row, so the red banner filled the
+       screen and the terminal vanished. */
+    grid-template-rows: auto auto 1fr;
     height: 100%;
     background: var(--mantle);
     overflow: hidden;
@@ -998,6 +1049,41 @@
     color: var(--blue);
     margin-right: 0.15rem;
     flex-shrink: 0;
+  }
+  .share-badge {
+    display: inline-flex;
+    align-items: center;
+    color: var(--green);
+    font-size: 0.7rem;
+    margin-right: 0.15rem;
+    flex-shrink: 0;
+  }
+  .control-guest-banner {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 0.8rem;
+    background: var(--red);
+    color: var(--base);
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.3rem 0.6rem;
+  }
+  .control-guest-banner.shown {
+    display: flex;
+  }
+  .control-guest-banner button {
+    background: var(--base);
+    color: var(--red);
+    border: none;
+    border-radius: 5px;
+    padding: 0.15rem 0.7rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .share-badge.control {
+    color: var(--red);
+    animation: rec-pulse 1.6s ease-in-out infinite;
   }
   .bcast {
     display: inline-flex;

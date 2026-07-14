@@ -2855,6 +2855,14 @@ export class ShareStartInput {
              */
             this["scrollback"] = false;
         }
+        if (!("active_tab" in $$source)) {
+            /**
+             * index of the host's active tab
+             * @member
+             * @type {number}
+             */
+            this["active_tab"] = 0;
+        }
         if (!("tabs_blob" in $$source)) {
             /**
              * TabsBlob is the frontend-projected {tabs:[...]} JSON (pane trees with
@@ -2883,10 +2891,10 @@ export class ShareStartInput {
      * @returns {ShareStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType15;
+        const $$createField6_0 = $$createType15;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
-            $$parsedSource["sessions"] = $$createField5_0($$parsedSource["sessions"]);
+            $$parsedSource["sessions"] = $$createField6_0($$parsedSource["sessions"]);
         }
         return new ShareStartInput(/** @type {Partial<ShareStartInput>} */($$parsedSource));
     }

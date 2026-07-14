@@ -25,6 +25,7 @@ export interface Manifest {
   share_id: string;
   level: Level;
   host_name: string;
+  active_tab: number;
   tabs: SerializedPaneTab[];
   sessions: ManifestSession[];
 }
@@ -67,6 +68,8 @@ export class GuestClient {
 
   // onPhase is the single UI subscription point.
   onPhase: (p: Phase) => void = () => {};
+  // onActiveTab fires when the host switches tabs, so a following guest can too.
+  onActiveTab: (index: number) => void = () => {};
 
   constructor(private url: string) {}
 
@@ -145,6 +148,9 @@ export class GuestClient {
         break;
       case "state":
         this.sinks.get(frame.state.sid)?.state(frame.state.state, frame.state.reason ?? "");
+        break;
+      case "active_tab":
+        this.onActiveTab(frame.active_tab?.index ?? 0);
         break;
       case "bye":
         this.onBye(frame.bye?.reason ?? "");

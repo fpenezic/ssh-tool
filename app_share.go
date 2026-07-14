@@ -179,6 +179,7 @@ type ShareStartInput struct {
 	Port       uint16 `json:"port"`
 	Level      string `json:"level"`      // "read" | "control"
 	Scrollback bool   `json:"scrollback"` // include existing history
+	ActiveTab  int    `json:"active_tab"` // index of the host's active tab
 	// TabsBlob is the frontend-projected {tabs:[...]} JSON (pane trees with
 	// sessionIds already rewritten to guest slots). Opaque to the backend.
 	TabsBlob string `json:"tabs_blob"`
@@ -222,6 +223,7 @@ func (a *App) ShareStart(in ShareStartInput) (*shareserver.StartResult, error) {
 		Port:       in.Port,
 		Level:      level,
 		Scrollback: in.Scrollback,
+		ActiveTab:  in.ActiveTab,
 		TabsBlob:   []byte(in.TabsBlob),
 		Sessions:   sessions,
 	})
@@ -258,6 +260,14 @@ func (a *App) ShareKick(shareID, remoteIP string) error {
 // ShareActive returns the UI snapshot of active shares + attached guests.
 func (a *App) ShareActive() []shareserver.ShareStatus {
 	return a.shareActiveList()
+}
+
+// ShareSetActiveTab tells a share's guests which tab the host switched to.
+// Best-effort; a no-op when sharing is off or the share is unknown.
+func (a *App) ShareSetActiveTab(shareID string, index int) {
+	if a.share != nil {
+		a.share.SetActiveTab(shareID, index)
+	}
 }
 
 func (a *App) shareActiveList() []shareserver.ShareStatus {

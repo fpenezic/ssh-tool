@@ -57,12 +57,31 @@
     const wrap = host.parentElement;
     if (!wrap) return;
     // The xterm renders at its natural cell size; scale the whole element so
-    // the fixed grid fits the available box, preserving aspect.
+    // the fixed grid fills the available box, preserving aspect. Allow scaling
+    // UP (not just down) so a small host terminal isn't unreadably tiny in a
+    // big browser window - capped so it doesn't blow up past legibility.
     const natW = host.scrollWidth || host.clientWidth || 1;
     const natH = host.scrollHeight || host.clientHeight || 1;
     const availW = wrap.clientWidth;
     const availH = wrap.clientHeight;
-    scale = Math.min(availW / natW, availH / natH, 1);
+    const fit = Math.min(availW / natW, availH / natH);
+    const withZoom = fit * zoom;
+    scale = Math.max(0.3, Math.min(withZoom, 4));
+  }
+
+  // User zoom multiplier on top of the fit scale (+/- buttons).
+  let zoom = $state(1);
+  function zoomIn() {
+    zoom = Math.min(zoom * 1.15, 3);
+    recomputeScale();
+  }
+  function zoomOut() {
+    zoom = Math.max(zoom / 1.15, 0.4);
+    recomputeScale();
+  }
+  function zoomReset() {
+    zoom = 1;
+    recomputeScale();
   }
 
   onMount(() => {
@@ -84,6 +103,10 @@
     term.open(host);
 
     if (level === "control") {
+      // Without focus the xterm never receives keystrokes, so onData never
+      // fires and nothing reaches the host. Focus on mount and on click.
+      term.focus();
+      host.addEventListener("click", () => term?.focus());
       term.onKey(() => {
         userInput = true;
       });
@@ -129,6 +152,11 @@
     bind:this={host}
     style="transform: scale({scale}); transform-origin: top left;"
   ></div>
+  <div class="zoom-bar">
+    <button title="Zoom out" onclick={zoomOut}>-</button>
+    <button title="Reset zoom" onclick={zoomReset}>{Math.round(zoom * 100)}%</button>
+    <button title="Zoom in" onclick={zoomIn}>+</button>
+  </div>
   {#if disconnected}
     <div class="term-overlay">
       <div class="msg">Session disconnected</div>
@@ -150,6 +178,31 @@
   }
   .term-scale {
     display: inline-block;
+  }
+  .zoom-bar {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: flex;
+    gap: 2px;
+    background: rgba(17, 17, 27, 0.85);
+    border: 1px solid #313244;
+    border-radius: 6px;
+    padding: 2px;
+    z-index: 5;
+  }
+  .zoom-bar button {
+    background: transparent;
+    border: none;
+    color: #cdd6f4;
+    cursor: pointer;
+    font-size: 0.8rem;
+    min-width: 1.9rem;
+    padding: 0.15rem 0.3rem;
+    border-radius: 4px;
+  }
+  .zoom-bar button:hover {
+    background: #313244;
   }
   .term-overlay {
     position: absolute;
