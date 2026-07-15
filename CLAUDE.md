@@ -38,6 +38,10 @@ Author wants 300+ connections, daily-driver UX, full opkssh support
 
 Backend (Go 1.26):
 - Wails v3 alpha2.117 (`github.com/wailsapp/wails/v3`) - desktop shell + IPC.
+  When bumping this in go.mod, bump `WAILS3_VERSION` in
+  `.github/workflows/release.yml` to match: the release build regenerates
+  `frontend/bindings/` with the CLI that env pins (`build:frontend` ->
+  `generate:bindings`), so a stale CLI ships bindings from the wrong version.
 - SQLite via `modernc.org/sqlite` (pure Go, no CGO).
 - SSH: `golang.org/x/crypto/ssh` + `.../ssh/agent`.
 - Vault: Argon2id KDF + XChaCha20-Poly1305 AEAD. File-only persistence

@@ -28,7 +28,7 @@ permissions:
   contents: write # gh release create
 
 env:
-  WAILS3_VERSION: v3.0.0-alpha2.111
+  WAILS3_VERSION: v3.0.0-alpha2.117
 
 jobs:
   test:
