@@ -40,6 +40,10 @@ in alpha upstream.
   tabs (ungroup, or popping a pane out) named the new tabs with a raw
   session id instead of the connection name.
 
+- **Dragging the window between monitors with different scaling** (say a
+  125% laptop screen and a 100% external) no longer leaves the interface
+  rendered tiny at the old scale (Wails runtime bump).
+
 ### Known issues
 
 - Grouping two already-shared tabs and then ungrouping them drops the
