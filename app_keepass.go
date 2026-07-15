@@ -359,6 +359,15 @@ func (a *App) KeepassRefresh(id string) (string, error) {
 	return string(fresh), nil
 }
 
+// KeepassPickFile opens a native Open File dialog for choosing a local .kdbx,
+// so the settings form doesn't make the user type a Windows path by hand.
+// Empty result = cancelled. Desktop only (OpenFileDialog is a no-op on mobile).
+func (a *App) KeepassPickFile() (string, error) {
+	return OpenFileDialog(OpenFileDialogOptions{
+		Title: "Choose a KeePass .kdbx database",
+	})
+}
+
 // KeepassBrowse returns the entry tree for the credential picker.
 func (a *App) KeepassBrowse(id string) ([]keepass.GroupInfo, error) {
 	if a.keepass == nil {

@@ -77,6 +77,15 @@
     editing = null;
   }
 
+  async function browseFile() {
+    try {
+      const picked = await api.keepassPickFile();
+      if (picked) form.path = picked;
+    } catch (e) {
+      toast.err("File picker: " + errMsg(e));
+    }
+  }
+
   async function save() {
     if (!form.name.trim()) {
       toast.err("Name is required");
@@ -224,7 +233,10 @@
 
     {#if form.source === "local"}
       <label>Path to .kdbx
-        <input bind:value={form.path} placeholder="/home/you/secrets.kdbx" />
+        <div class="path-row">
+          <input bind:value={form.path} placeholder="/home/you/secrets.kdbx" />
+          <button type="button" onclick={browseFile}>Browse…</button>
+        </div>
       </label>
     {:else if form.source === "webdav"}
       <label>URL
@@ -293,6 +305,9 @@
     max-width: 520px;
   }
   .kp-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
+  .path-row { display: flex; gap: 6px; align-items: stretch; }
+  .path-row input { flex: 1; min-width: 0; }
+  .path-row button { flex-shrink: 0; white-space: nowrap; }
   .kp-form input, .kp-form select, .kp-form textarea {
     width: 100%; box-sizing: border-box;
   }

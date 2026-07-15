@@ -679,6 +679,7 @@ export const api = {
   keepassRefresh: (id: string) => G.KeepassRefresh(id) as unknown as Promise<string>,
   keepassBrowse: (id: string) =>
     G.KeepassBrowse(id) as unknown as Promise<KeepassGroupInfo[]>,
+  keepassPickFile: () => G.KeepassPickFile() as unknown as Promise<string>,
   keepassEnsureCredential: (input: {
     db_id: string;
     entry_uuid: string;

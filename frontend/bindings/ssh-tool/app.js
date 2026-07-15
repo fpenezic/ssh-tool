@@ -1273,6 +1273,16 @@ export function KeepassList() {
 }
 
 /**
+ * KeepassPickFile opens a native Open File dialog for choosing a local .kdbx,
+ * so the settings form doesn't make the user type a Windows path by hand.
+ * Empty result = cancelled. Desktop only (OpenFileDialog is a no-op on mobile).
+ * @returns {$CancellablePromise<string>}
+ */
+export function KeepassPickFile() {
+    return $Call.ByID(1177995322);
+}
+
+/**
  * KeepassRefresh forces a re-fetch and returns the resulting freshness.
  * @param {string} id
  * @returns {$CancellablePromise<string>}
