@@ -945,7 +945,7 @@
         </label>
       </div>
 
-      <label>Credential
+      <label class="span-2">Credential
         <div class="cred-picker-row">
           <SearchableSelect
             bind:value={editingFolder.authRef}
@@ -2093,14 +2093,14 @@
     margin-top: 0.6rem;
   }
   .vnc-grid .span-2 { grid-column: 1 / -1; }
-  /* Two columns matching the form grid: the picker sits in the left column
-     (same width as the Name input) and the button in the right column (where
-     the Hostname input is), so they line up with the fields above. The label
-     spans both columns (.span-2) to make this possible. */
+  /* Picker takes the same left-column width as the Name input; the button
+     sits directly to its right (not stranded in the far column). The label
+     spans both form columns (.span-2) so the picker can be a full field wide.
+     Wraps to a stack on skinny windows. */
   .cred-picker-row {
     display: grid;
-    grid-template-columns: repeat(2, minmax(280px, 1fr));
-    gap: 0.6rem 1rem;
+    grid-template-columns: minmax(0, calc(50% - 0.5rem)) auto;
+    gap: 0.6rem;
     align-items: center;
     margin-top: 4px;
   }
@@ -2108,9 +2108,12 @@
     min-width: 0;
   }
   .kp-btn {
-    justify-self: start;
     white-space: nowrap;
     font-size: 0.8rem;
+  }
+  @media (max-width: 620px) {
+    .cred-picker-row { grid-template-columns: 1fr; }
+    .kp-btn { justify-self: start; }
   }
   .kp-badge {
     display: inline-block;
