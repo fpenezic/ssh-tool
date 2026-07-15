@@ -262,6 +262,32 @@ update params + download progress shipped right after; what remains):
   platform authenticators by default. Deferred.
 - **HashiCorp Vault / Vaultwarden sync** - `kind=external` credential
   that fetches the secret at use-time from a remote secret store.
+- **KeePass as a live credential backend** *(discussed 2026-07-15,
+  design agreed, not started)*. KeePass stays the source of truth;
+  ssh-tool reads secrets from the `.kdbx` at connect time by entry
+  reference, never storing the password itself. Decisions made:
+  - **Read the `.kdbx` file directly** (pure-Go `gokeepasslib`), NOT
+    the KeePassXC socket. Cross-platform for free (Win/Linux/Android,
+    no platform branch), fits the CGO_ENABLED=0 stack, no binary dep.
+  - **Reference entries by UUID** (stable across rename/move), not
+    group path.
+  - **One kdbx to start** (single path in settings, one unlock); add
+    multiple files later if needed.
+  - **Unlock: master password + optional key file**, derived key held
+    in memory only while ssh-tool is unlocked, wiped on Lock (same
+    lifecycle + threat model as the existing vault).
+  - Scope roughly half of the session-share effort. Shape: new
+    `internal/keepass` package (open / unlock / lookup by UUID ->
+    username+password); a `keepass:<uuid>` credential reference the
+    resolver routes to the keepass layer instead of `db.GetCredential`
+    (session.go:378-382); settings for the kdbx path + unlock UI
+    (mirror the vault-unlock flow); a credential picker that browses
+    kdbx entries and stores the UUID.
+  - Passwords first; SSH keys stored in a KeePass entry (KeePassXC
+    SSH-agent attachments / fields) are a follow-up.
+  - Open UX question: surface kdbx entries in the SAME credential
+    picker as vault creds (one unified list, better UX, more wiring)
+    vs a separate "KeePass" source. Decide at design time.
 - **History retention** - opt-in keep last N old password values for
   rollback. Backed by the existing vault, key `conn_pass_history:{id}`.
 
