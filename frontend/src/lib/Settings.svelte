@@ -4,6 +4,7 @@
   import { isMobile } from "./platform";
   import PasswordInput from "./PasswordInput.svelte";
   import McpGrantsList from "./McpGrantsList.svelte";
+  import KeepassSettings from "./KeepassSettings.svelte";
   import { api, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo } from "./api";
   import { networkProfiles } from "./networkProfiles.svelte";
   import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
@@ -1082,6 +1083,7 @@
     | "snippets"
     | "workspaces"
     | "vault"
+    | "keepass"
     | "backup"
     | "sync"
     | "audit"
@@ -1109,6 +1111,7 @@
     { id: "workspaces",        title: "Workspaces",       group: "Appearance" },
     { id: "recording",         title: "Session recording", group: "Security" },
     { id: "vault",             title: "Vault",            group: "Security" },
+    { id: "keepass",           title: "KeePass",          group: "Security" },
     { id: "backup",            title: "Backup & restore", group: "Security" },
     { id: "sync",              title: "Sync",             group: "Security" },
     { id: "audit",             title: "Audit log",        group: "Security" },
@@ -3089,6 +3092,11 @@
         {rotateBusy ? "Rotating…" : "Rotate passphrase"}
       </button>
     </div>
+  </div>
+
+  {:else if activeSection === "keepass"}
+  <div class="group group-wide">
+    <KeepassSettings />
   </div>
 
   {:else if activeSection === "audit"}

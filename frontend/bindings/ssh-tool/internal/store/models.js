@@ -1162,6 +1162,137 @@ export class JumpHostSpec {
 }
 
 /**
+ * KeepassDatabase is a registered .kdbx ssh-tool reads secrets from. The master
+ * password and key file are NOT stored here - MasterRef / KeyfileRef point at
+ * vault accounts. For remote sources the file is fetched and cached under
+ * DataDir; Path then points at the cache and URL at the origin.
+ */
+export class KeepassDatabase {
+    /**
+     * Creates a new KeepassDatabase instance.
+     * @param {Partial<KeepassDatabase>} [$$source = {}] - The source object to create the KeepassDatabase.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("source" in $$source)) {
+            /**
+             * @member
+             * @type {KeepassSource}
+             */
+            this["source"] = KeepassSource.$zero;
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["url"] = "";
+        }
+        if (!("master_ref" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["master_ref"] = "";
+        }
+        if (!("keyfile_ref" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["keyfile_ref"] = "";
+        }
+        if (!("remote_config" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in string]?: string }}
+             */
+            this["remote_config"] = {};
+        }
+        if (!("last_fetched_at" in $$source)) {
+            /**
+             * @member
+             * @type {number | null}
+             */
+            this["last_fetched_at"] = null;
+        }
+        if (!("last_etag" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["last_etag"] = "";
+        }
+        if (!("created_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["created_at"] = 0;
+        }
+        if (!("updated_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["updated_at"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new KeepassDatabase instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {KeepassDatabase}
+     */
+    static createFrom($$source = {}) {
+        const $$createField7_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("remote_config" in $$parsedSource) {
+            $$parsedSource["remote_config"] = $$createField7_0($$parsedSource["remote_config"]);
+        }
+        return new KeepassDatabase(/** @type {Partial<KeepassDatabase>} */($$parsedSource));
+    }
+}
+
+/**
+ * KeepassSource is where a KeePass database file lives.
+ * @readonly
+ * @enum {string}
+ */
+export const KeepassSource = {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero: "",
+
+    KeepassLocal: "local",
+    KeepassWebDAV: "webdav",
+    KeepassSFTP: "sftp",
+};
+
+/**
  * PortForward is the persisted spec of a forward (not its running state).
  * Auto-start ones get instantiated whenever the parent connection connects.
  */

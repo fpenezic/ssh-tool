@@ -184,6 +184,53 @@ export interface PluginInfo {
   supported: boolean;
 }
 
+export interface KeepassDatabaseInfo {
+  id: string;
+  name: string;
+  source: "local" | "webdav" | "sftp";
+  path: string;
+  url: string;
+  master_ref: string;
+  keyfile_ref: string;
+  remote_config: Record<string, string>;
+  last_fetched_at: number | null;
+  last_etag: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface KeepassSaveInput {
+  id?: string;
+  name: string;
+  source: string;
+  path?: string;
+  url?: string;
+  master?: string;
+  set_master?: boolean;
+  key_file?: string;
+  set_key_file?: boolean;
+  remote_config?: Record<string, string>;
+  remote_pass?: string;
+  set_remote?: boolean;
+}
+
+export interface KeepassEntryInfo {
+  uuid: string;
+  title: string;
+  username: string;
+  has_pass: boolean;
+  attachments: string[] | null;
+  custom_keys: string[] | null;
+  group_path: string;
+}
+
+export interface KeepassGroupInfo {
+  name: string;
+  path: string;
+  groups: KeepassGroupInfo[] | null;
+  entries: KeepassEntryInfo[] | null;
+}
+
 export interface RemoteOwner {
   active: boolean;
   machine_name: string;
@@ -356,6 +403,17 @@ export type CredentialCreateInput =
       api_token_secret: string;
       hint?: string;
       tags?: string[];
+    } & CommonCreateExtras)
+  | ({
+      kind: "keepass";
+      name: string;
+      keepass_db_id: string;
+      keepass_entry_uuid: string;
+      keepass_field: string;
+      keepass_is_key?: boolean;
+      hint?: string;
+      tags?: string[];
+      default_username?: string;
     } & CommonCreateExtras);
 
 export interface CredentialCreateResult {
@@ -612,6 +670,15 @@ export const api = {
   logDir: () => G.LogDir() as unknown as Promise<string>,
   appVersion: () => G.AppVersion() as unknown as Promise<AppVersionInfo>,
   profileStats: () => G.ProfileStats() as unknown as Promise<ProfileStats>,
+
+  keepassList: () =>
+    G.KeepassList() as unknown as Promise<KeepassDatabaseInfo[]>,
+  keepassSave: (input: KeepassSaveInput) =>
+    G.KeepassSave(input as unknown as Parameters<typeof G.KeepassSave>[0]) as unknown as Promise<KeepassDatabaseInfo>,
+  keepassDelete: (id: string) => G.KeepassDelete(id),
+  keepassRefresh: (id: string) => G.KeepassRefresh(id) as unknown as Promise<string>,
+  keepassBrowse: (id: string) =>
+    G.KeepassBrowse(id) as unknown as Promise<KeepassGroupInfo[]>,
 
   networkProfilesList: () =>
     G.NetworkProfilesList() as unknown as Promise<NetworkProfileInfo[]>,

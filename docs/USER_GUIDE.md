@@ -343,6 +343,10 @@ Each credential has a **kind** that determines auth behaviour:
 - **vault** - placeholder for external secret managers (HashiCorp
   Vault, Bitwarden/Vaultwarden). Schema in place; integrations not
   yet implemented.
+- **From KeePass** - the secret is read out of a registered KeePass
+  `.kdbx` at connect time by entry reference; nothing is copied into
+  ssh-tool's own store. Picked as "From KeePass database" in the
+  credential editor. See the KeePass section below.
 
 ### Storage modes
 
@@ -431,6 +435,52 @@ header). Modal walks through:
 ### Icon
 
 Credentials accept the same custom-icon upload as connections.
+
+### KeePass databases
+
+ssh-tool can read secrets straight out of a KeePass `.kdbx` file
+instead of storing them itself. KeePass stays the source of truth -
+the file is opened **read-only** and never written to.
+
+**Register a database** in Settings → KeePass:
+
+- **Source** - a local file path, or a remote file over **WebDAV** or
+  **SFTP**.
+- **Master password** and an optional **key file** - these are sealed
+  in ssh-tool's own vault, so unlocking ssh-tool once opens KeePass
+  too. There is no second prompt per connection.
+- For remote sources, the transport credentials (WebDAV password, or
+  SFTP password / host / user) are sealed in the vault as well.
+
+**Reference an entry** from the credential editor: choose **From
+KeePass database**, pick the database, browse to the entry, and pick
+the field:
+
+- the entry **password**, or
+- a **custom field** holding a PEM private key, or
+- an **attachment** (a private key file stored inside the entry).
+
+The field type decides how it's used - an attachment or a key-looking
+custom field authenticates as a private key; anything else as a
+password. Entries are referenced by their **UUID**, so renaming or
+moving them in KeePass does not break the link (only deleting the
+entry does).
+
+**Freshness for remote databases:**
+
+- The file is fetched when you unlock the vault, and again on connect
+  whenever the cached copy is more than a few minutes old - using a
+  conditional request so an unchanged file isn't re-downloaded.
+- If the remote is unreachable, the last cached copy is used and you
+  are told it is **stale** rather than silently authenticating with
+  old data.
+- **Refresh** in Settings → KeePass forces a pull - use it right after
+  adding an entry in KeePass Desktop.
+- The cached file is stored encrypted (it is the original KeePass
+  blob, worthless without the vault-held master).
+
+Decrypted databases live in memory only and are **wiped the moment the
+vault locks**, exactly like the vault's own secrets.
 
 ---
 

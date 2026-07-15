@@ -377,6 +377,33 @@ These still bite. The archive of older / now-handled traps lives in
     replay, non-user xterm `onData` is suppressed while `replaying` so query
     responses in the scrollback don't land in the remote shell as garbage.
 
+33. **KeePass is a read-only live secret backend, routed via a package-var
+    hook - not a new credential kind.** `internal/keepass` parses `.kdbx`
+    with `gokeepasslib/v3` (pure Go, CGO-free, android-safe; `tobischo/argon2`
+    is a pure-Go x/crypto fork). A credential does NOT get a new `Kind`: it
+    stays `password` or `key` with `StorageMode=external` and a
+    `config_json.keepass_ref {db_id, entry_uuid, field}` (store v18 table
+    `keepass_databases` holds the file + vault-account pointers, never
+    secrets). `sshlayer.ResolveAuth` calls the package var
+    `sshlayer.KeepassResolveHook` (wired in `app_keepass.go`, exactly like
+    `BrowserOpenHook` gotcha 28) BEFORE the kind switch; `handled=false` means
+    "not a KeePass cred, fall through". Field routing: `password` ->
+    `ssh.Password`; an attachment or non-standard String field -> parsed as a
+    signer. The decrypted DB lives ONLY in `keepass.Manager` memory and is
+    dropped in `VaultLock` via `a.forgetKeepass()` - same lifecycle as the
+    vault (opkssh untouched, keeps its own vault-backed refresh). Freshness for
+    remote (WebDAV/SFTP) files: fetch-on-unlock + fetch-on-connect when the
+    open is older than `staleAfter` (5 min), conditional GET via `If-None-Match`
+    for WebDAV, and a stale-on-offline fallback (serve the still-open decrypted
+    copy marked `FreshStale` rather than break an in-flight connect) - NEVER a
+    background timer poll. Cached blob is the ENCRYPTED `.kdbx` under
+    `<DataDir>/keepass-cache/<id>.kdbx` (0600), worthless without the
+    vault-held master. The manager (`app.keepass`) is built in `initialise()`
+    after db+vault; the parser (`keepass.go`/`browse.go`) has zero app-internal
+    imports so it stays unit-testable (see the encode-then-decode fixtures -
+    v4 binaries go through `db.AddBinary`, which routes to the InnerHeader; a
+    manual `Meta.Binaries.Add` won't be found on decode).
+
 ### Android / mobile gotchas
 
 The app runs on Android (v0.36.0+). Built locally via the NDK

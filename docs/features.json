@@ -137,6 +137,11 @@
       "body": "Passwords, keys and API tokens sealed with Argon2id + XChaCha20-Poly1305. Machine-bound auto-unlock (DPAPI on Windows, machine-id on Linux), idle auto-lock, strength meter."
     },
     {
+      "icon": "key",
+      "title": "KeePass as a live backend",
+      "body": "Reference a KeePass .kdbx entry directly - the password or private key is read from the file at connect time and never copied into ssh-tool. Local file or remote over WebDAV / SFTP, opened read-only. The database master is sealed in the vault, so one unlock opens both; remote copies are fetched fresh with a conditional request and fall back to the last cached copy (flagged stale) when the remote is down."
+    },
+    {
       "icon": "split",
       "title": "Tabs, splits, broadcast",
       "body": "Multi-tab terminal with horizontal/vertical splits, paste guard, themes, search. Broadcast input to multiple named groups in parallel - one session can broadcast to several groups at once."

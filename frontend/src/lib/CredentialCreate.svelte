@@ -18,7 +18,7 @@
   }
   let { onClose, defaultFolderId = null }: Props = $props();
 
-  let kind = $state<"password" | "key_generate" | "key_import_paste" | "key_file_ref" | "agent" | "opkssh" | "api_token">("password");
+  let kind = $state<"password" | "key_generate" | "key_import_paste" | "key_file_ref" | "agent" | "opkssh" | "api_token" | "keepass">("password");
   let name = $state("");
   let hint = $state("");
   let defaultUser = $state("");
@@ -50,6 +50,85 @@
 
   let apiTokenID = $state("");
   let apiTokenSecret = $state("");
+
+  // keepass reference
+  let kpDatabases = $state<{ id: string; name: string }[]>([]);
+  let kpDbId = $state("");
+  let kpEntries = $state<{ uuid: string; title: string; group: string; fields: string[]; is_key_field: (f: string) => boolean }[]>([]);
+  let kpEntryUuid = $state("");
+  let kpField = $state("password");
+  let kpFieldOptions = $state<string[]>([]);
+  let kpLoadingEntries = $state(false);
+  let kpErr = $state<string | null>(null);
+
+  async function loadKeepassDatabases() {
+    try {
+      const list = await api.keepassList();
+      kpDatabases = list.map((d) => ({ id: d.id, name: d.name }));
+    } catch (e) {
+      kpErr = errMsg(e);
+    }
+  }
+
+  async function loadKeepassEntries() {
+    kpEntryUuid = "";
+    kpEntries = [];
+    kpFieldOptions = [];
+    if (!kpDbId) return;
+    kpLoadingEntries = true;
+    kpErr = null;
+    try {
+      const tree = await api.keepassBrowse(kpDbId);
+      const flat: typeof kpEntries = [];
+      const walk = (groups: typeof tree) => {
+        for (const g of groups || []) {
+          for (const e of g.entries || []) {
+            const attach = e.attachments || [];
+            const custom = e.custom_keys || [];
+            const fields = [
+              ...(e.has_pass ? ["password"] : []),
+              ...custom,
+              ...attach,
+            ];
+            flat.push({
+              uuid: e.uuid,
+              title: e.title || "(untitled)",
+              group: e.group_path,
+              fields,
+              is_key_field: (f: string) => attach.includes(f) || (f !== "password" && custom.includes(f)),
+            });
+          }
+          walk(g.groups || []);
+        }
+      };
+      walk(tree);
+      kpEntries = flat;
+    } catch (e) {
+      kpErr = errMsg(e);
+    } finally {
+      kpLoadingEntries = false;
+    }
+  }
+
+  function onKeepassEntryChange() {
+    const entry = kpEntries.find((e) => e.uuid === kpEntryUuid);
+    kpFieldOptions = entry ? entry.fields : [];
+    kpField = kpFieldOptions[0] || "password";
+  }
+
+  function keepassFieldIsKey(): boolean {
+    const entry = kpEntries.find((e) => e.uuid === kpEntryUuid);
+    return entry ? entry.is_key_field(kpField) : false;
+  }
+
+  // Load the database list the first time the user switches to the KeePass kind.
+  let kpLoaded = false;
+  $effect(() => {
+    if (kind === "keepass" && !kpLoaded) {
+      kpLoaded = true;
+      loadKeepassDatabases();
+    }
+  });
 
   let busy = $state(false);
   let err = $state<string | null>(null);
@@ -142,6 +221,21 @@
             api_token_secret: apiTokenSecret,
           } as CredentialCreateInput;
           break;
+        case "keepass":
+          if (!kpDbId || !kpEntryUuid) {
+            err = "Pick a KeePass database and entry";
+            busy = false;
+            return;
+          }
+          input = {
+            ...base,
+            kind: "keepass",
+            keepass_db_id: kpDbId,
+            keepass_entry_uuid: kpEntryUuid,
+            keepass_field: kpField,
+            keepass_is_key: keepassFieldIsKey(),
+          } as CredentialCreateInput;
+          break;
       }
       const result = await api.credentialsCreate(input);
       await credentials.load();
@@ -198,6 +292,7 @@
             <option value="agent">SSH agent</option>
             <option value="opkssh">opkssh profile</option>
             <option value="api_token">API token (proxmox, hetzner, …)</option>
+            <option value="keepass">From KeePass database</option>
           </select>
         </label>
         <label>Name *
@@ -306,6 +401,51 @@
             it's stored exactly as you enter it and handed to the
             integration that asks for it by credential id.
           </p>
+        {:else if kind === "keepass"}
+          {#if kpDatabases.length === 0}
+            <p class="hint">
+              No KeePass databases registered. Add one in Settings → KeePass
+              first, then come back here.
+            </p>
+          {:else}
+            <label>KeePass database
+              <select bind:value={kpDbId} onchange={loadKeepassEntries}>
+                <option value="">Select a database…</option>
+                {#each kpDatabases as d (d.id)}
+                  <option value={d.id}>{d.name}</option>
+                {/each}
+              </select>
+            </label>
+            {#if kpLoadingEntries}
+              <p class="hint">Loading entries… (unlocks the .kdbx)</p>
+            {:else if kpDbId}
+              <label>Entry
+                <select bind:value={kpEntryUuid} onchange={onKeepassEntryChange}>
+                  <option value="">Select an entry…</option>
+                  {#each kpEntries as e (e.uuid)}
+                    <option value={e.uuid}>{e.group ? e.group + " / " : ""}{e.title}</option>
+                  {/each}
+                </select>
+              </label>
+              {#if kpEntryUuid && kpFieldOptions.length > 0}
+                <label>Field
+                  <select bind:value={kpField}>
+                    {#each kpFieldOptions as f}
+                      <option value={f}>{f}</option>
+                    {/each}
+                  </select>
+                </label>
+                <p class="hint">
+                  {keepassFieldIsKey()
+                    ? "Resolved as a private key at connect time."
+                    : "Resolved as a password at connect time."}
+                  The secret is read from KeePass on connect and never copied
+                  into this app.
+                </p>
+              {/if}
+            {/if}
+          {/if}
+          {#if kpErr}<p class="hint" style="color:var(--danger,#e66)">{kpErr}</p>{/if}
         {/if}
 
         {#if err}<div class="err">{err}</div>{/if}

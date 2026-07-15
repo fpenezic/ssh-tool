@@ -16,6 +16,8 @@ export {
     ImageSummary,
     InheritableSettings,
     JumpHostSpec,
+    KeepassDatabase,
+    KeepassSource,
     PortForward,
     ProxyBookmark,
     ResolvedSettings,

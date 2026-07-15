@@ -1700,6 +1700,128 @@ export class ImportArchiveRequest {
 }
 
 /**
+ * KeepassSaveInput is the create/update payload from the settings UI. Secrets
+ * (master, key file, remote password) are passed inline here and sealed into
+ * the vault by this method - they are never stored in the row.
+ */
+export class KeepassSaveInput {
+    /**
+     * Creates a new KeepassSaveInput instance.
+     * @param {Partial<KeepassSaveInput>} [$$source = {}] - The source object to create the KeepassSaveInput.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * empty => create
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("source" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["source"] = "";
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["url"] = "";
+        }
+        if (!("master" in $$source)) {
+            /**
+             * "" leaves an existing master unchanged on update
+             * @member
+             * @type {string}
+             */
+            this["master"] = "";
+        }
+        if (!("set_master" in $$source)) {
+            /**
+             * true when Master should be written (incl. clearing)
+             * @member
+             * @type {boolean}
+             */
+            this["set_master"] = false;
+        }
+        if (!("key_file" in $$source)) {
+            /**
+             * raw key-file bytes as string
+             * @member
+             * @type {string}
+             */
+            this["key_file"] = "";
+        }
+        if (!("set_key_file" in $$source)) {
+            /**
+             * true when KeyFile should be written
+             * @member
+             * @type {boolean}
+             */
+            this["set_key_file"] = false;
+        }
+        if (!("remote_config" in $$source)) {
+            /**
+             * host/user/port/username; NOT secrets
+             * @member
+             * @type {{ [_ in string]?: string }}
+             */
+            this["remote_config"] = {};
+        }
+        if (!("remote_pass" in $$source)) {
+            /**
+             * remote transport password, sealed to vault
+             * @member
+             * @type {string}
+             */
+            this["remote_pass"] = "";
+        }
+        if (!("set_remote" in $$source)) {
+            /**
+             * true when RemotePass should be written
+             * @member
+             * @type {boolean}
+             */
+            this["set_remote"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new KeepassSaveInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {KeepassSaveInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField9_0 = $$createType6;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("remote_config" in $$parsedSource) {
+            $$parsedSource["remote_config"] = $$createField9_0($$parsedSource["remote_config"]);
+        }
+        return new KeepassSaveInput(/** @type {Partial<KeepassSaveInput>} */($$parsedSource));
+    }
+}
+
+/**
  * LoadTextFileResult carries the picked archive path + its UTF-8
  * contents. Empty path = user cancelled the picker.
  */
@@ -2146,10 +2268,10 @@ export class NetworkProfileInfo {
      * @returns {NetworkProfileInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType6;
-        const $$createField6_0 = $$createType8;
-        const $$createField7_0 = $$createType10;
-        const $$createField8_0 = $$createType11;
+        const $$createField5_0 = $$createType7;
+        const $$createField6_0 = $$createType9;
+        const $$createField7_0 = $$createType11;
+        const $$createField8_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("profile" in $$parsedSource) {
             $$parsedSource["profile"] = $$createField5_0($$parsedSource["profile"]);
@@ -2724,7 +2846,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType13;
+        const $$createField1_0 = $$createType14;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -2899,7 +3021,7 @@ export class ShareStartInput {
      * @returns {ShareStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType15;
+        const $$createField6_0 = $$createType16;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField6_0($$parsedSource["sessions"]);
@@ -3685,7 +3807,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType17;
+        const $$createField0_0 = $$createType18;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -3802,7 +3924,7 @@ export class TcpdumpStartInput {
      * @returns {TcpdumpStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType18;
+        const $$createField10_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("port_overrides" in $$parsedSource) {
             $$parsedSource["port_overrides"] = $$createField10_0($$parsedSource["port_overrides"]);
@@ -4021,16 +4143,16 @@ const $$createType2 = $Create.Nullable($$createType1);
 const $$createType3 = $Create.Nullable($$createType0);
 const $$createType4 = $Create.Map($Create.Any, $Create.Any);
 const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = wg$0.Profile.createFrom;
-const $$createType7 = NetbirdConfig.createFrom;
-const $$createType8 = $Create.Nullable($$createType7);
-const $$createType9 = TailscaleConfig.createFrom;
-const $$createType10 = $Create.Nullable($$createType9);
-const $$createType11 = wg$0.Status.createFrom;
-const $$createType12 = ssh$0.SftpEntry.createFrom;
-const $$createType13 = $Create.Array($$createType12);
-const $$createType14 = ShareSessionInput.createFrom;
-const $$createType15 = $Create.Array($$createType14);
-const $$createType16 = ssh$0.ParsedPacket.createFrom;
-const $$createType17 = $Create.Array($$createType16);
-const $$createType18 = $Create.Map($Create.Any, $Create.Any);
+const $$createType6 = $Create.Map($Create.Any, $Create.Any);
+const $$createType7 = wg$0.Profile.createFrom;
+const $$createType8 = NetbirdConfig.createFrom;
+const $$createType9 = $Create.Nullable($$createType8);
+const $$createType10 = TailscaleConfig.createFrom;
+const $$createType11 = $Create.Nullable($$createType10);
+const $$createType12 = wg$0.Status.createFrom;
+const $$createType13 = ssh$0.SftpEntry.createFrom;
+const $$createType14 = $Create.Array($$createType13);
+const $$createType15 = ShareSessionInput.createFrom;
+const $$createType16 = $Create.Array($$createType15);
+const $$createType17 = ssh$0.ParsedPacket.createFrom;
+const $$createType18 = $Create.Array($$createType17);

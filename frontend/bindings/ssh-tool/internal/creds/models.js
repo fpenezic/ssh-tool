@@ -183,6 +183,39 @@ export class CreateInput {
              */
             this["api_token_secret"] = "";
         }
+        if (!("keepass_db_id" in $$source)) {
+            /**
+             * keepass - a reference into a registered .kdbx. No secret is passed or
+             * stored; the secret is read from KeePass at connect time.
+             * @member
+             * @type {string}
+             */
+            this["keepass_db_id"] = "";
+        }
+        if (!("keepass_entry_uuid" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["keepass_entry_uuid"] = "";
+        }
+        if (!("keepass_field" in $$source)) {
+            /**
+             * "password" | custom field | attachment key
+             * @member
+             * @type {string}
+             */
+            this["keepass_field"] = "";
+        }
+        if (!("keepass_is_key" in $$source)) {
+            /**
+             * KeepassIsKey marks the referenced field as a private key (so the resolver
+             * parses it as a signer) rather than a password.
+             * @member
+             * @type {boolean}
+             */
+            this["keepass_is_key"] = false;
+        }
 
         Object.assign(this, $$source);
     }

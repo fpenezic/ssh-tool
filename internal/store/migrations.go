@@ -359,6 +359,30 @@ var migrations = []struct {
 		    updated_at  INTEGER NOT NULL
 		);`,
 	},
+	{
+		18,
+		// A KeePass database ssh-tool reads secrets from at connect time. The
+		// .kdbx is never written to; only the encrypted file is cached locally
+		// (source=local means path IS the live file; remote means path is a
+		// cache under DataDir fetched from url). The master password and
+		// optional key file live in the vault under the referenced accounts,
+		// NEVER here - this row holds only pointers. A credential references an
+		// entry via config_json.keepass_ref {db_id, entry_uuid, field}.
+		`CREATE TABLE keepass_databases (
+		    id              TEXT PRIMARY KEY,
+		    name            TEXT NOT NULL UNIQUE,
+		    source          TEXT NOT NULL,          -- 'local' | 'webdav' | 'sftp'
+		    path            TEXT NOT NULL DEFAULT '', -- local file path, or empty for remote
+		    url             TEXT NOT NULL DEFAULT '', -- remote URL / sftp target, empty for local
+		    master_ref      TEXT NOT NULL DEFAULT '', -- vault account holding the master password
+		    keyfile_ref     TEXT NOT NULL DEFAULT '', -- vault account holding the key file, empty if none
+		    remote_cfg_json TEXT NOT NULL DEFAULT '{}', -- source-specific fetch config (host, user, etc.)
+		    last_fetched_at INTEGER,                 -- unix seconds of last successful remote fetch
+		    last_etag       TEXT NOT NULL DEFAULT '', -- conditional-GET validator for webdav
+		    created_at      INTEGER NOT NULL,
+		    updated_at      INTEGER NOT NULL
+		);`,
+	},
 }
 
 // LatestSchemaVersion is the version a freshly-migrated DB lands on.

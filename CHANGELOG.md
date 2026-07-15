@@ -7,6 +7,40 @@ in alpha upstream.
 
 ---
 
+## [0.59.0] - Read secrets straight out of KeePass
+
+### Added
+
+- **KeePass as a live credential backend.** Point ssh-tool at a KeePass
+  `.kdbx` file and reference its entries directly: the password (or
+  private key) is read out of KeePass at connect time and never copied
+  into ssh-tool's own store. KeePass stays the source of truth - the
+  file is opened read-only and never written to.
+
+  - **Register databases in Settings -> KeePass.** Local file, or remote
+    over WebDAV / SFTP. The database's master password (and optional key
+    file) are sealed in this app's vault, so unlocking ssh-tool once
+    opens KeePass too - no second prompt per connection.
+  - **Reference an entry from the credential editor.** Pick "From
+    KeePass database", choose the database, browse to the entry, and pick
+    the field - the entry's password, a custom field, or an attachment
+    (for a private key stored as a file inside KeePass). Entries are
+    referenced by their stable UUID, so renaming or moving them in
+    KeePass doesn't break the link.
+  - **Remote databases stay fresh, safely.** A remote `.kdbx` is fetched
+    when you unlock and again whenever the cached copy is more than a few
+    minutes old, using a conditional request so an unchanged file isn't
+    re-downloaded. If the remote is unreachable the last cached copy is
+    used and you're told it's stale rather than silently authenticating
+    with old data. A Refresh button forces a pull after you've just added
+    an entry. The cached file is stored encrypted - it's the original
+    KeePass blob, worthless without the vault-held master.
+  - Decrypted databases live in memory only and are wiped the moment the
+    vault locks, exactly like the vault's own secrets. opkssh is
+    unaffected - it keeps its own vault-backed lifecycle.
+
+---
+
 ## [0.58.0] - Share a live session to a web browser
 
 ### Added

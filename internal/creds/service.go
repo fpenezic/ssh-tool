@@ -73,6 +73,15 @@ type CreateInput struct {
 	// api_token
 	APITokenID     string `json:"api_token_id"`
 	APITokenSecret string `json:"api_token_secret"`
+
+	// keepass - a reference into a registered .kdbx. No secret is passed or
+	// stored; the secret is read from KeePass at connect time.
+	KeepassDBID      string `json:"keepass_db_id"`
+	KeepassEntryUUID string `json:"keepass_entry_uuid"`
+	KeepassField     string `json:"keepass_field"` // "password" | custom field | attachment key
+	// KeepassIsKey marks the referenced field as a private key (so the resolver
+	// parses it as a signer) rather than a password.
+	KeepassIsKey bool `json:"keepass_is_key"`
 }
 
 // CreateResult mirrors the Rust struct; public_key + fingerprint surfaced to
@@ -106,9 +115,54 @@ func (s *Service) Create(in CreateInput) (*CreateResult, error) {
 		return s.createOpkssh(in)
 	case "api_token":
 		return s.createAPIToken(in)
+	case "keepass":
+		return s.createKeepass(in)
 	default:
 		return nil, fmt.Errorf("unknown credential kind: %s", in.Kind)
 	}
+}
+
+// createKeepass stores a credential that resolves its secret from a KeePass
+// entry at connect time. Nothing is written to the vault - only the reference
+// (db id + entry UUID + field) lives in the credential config. The credential
+// kind is CredKey when the field is a private key, else CredPassword, so the
+// SSH layer builds the right auth method. StorageMode is External: the secret
+// lives outside our stores entirely.
+func (s *Service) createKeepass(in CreateInput) (*CreateResult, error) {
+	if in.KeepassDBID == "" || in.KeepassEntryUUID == "" {
+		return nil, fmt.Errorf("validation: keepass reference is incomplete")
+	}
+	field := in.KeepassField
+	if field == "" {
+		field = "password"
+	}
+	kind := store.CredPassword
+	if in.KeepassIsKey {
+		kind = store.CredKey
+	}
+	cred, err := s.DB.CreateCredential(store.NewCredential{
+		FolderID:             in.FolderID,
+		Name:                 in.Name,
+		Kind:                 kind,
+		StorageMode:          store.StorageExternal,
+		Hint:                 hintStr(in.Hint),
+		Tags:                 in.Tags,
+		Config: map[string]any{
+			"keepass_ref": map[string]any{
+				"db_id":      in.KeepassDBID,
+				"entry_uuid": in.KeepassEntryUUID,
+				"field":      field,
+			},
+		},
+		DefaultUsername:      in.DefaultUsername,
+		RotationReminderDays: in.RotationReminderDays,
+		ExpiresAt:            in.ExpiresAt,
+	})
+	if err != nil {
+		return nil, err
+	}
+	_, _ = s.DB.AppendHistory(cred.ID, "created (keepass reference)", "user", false)
+	return &CreateResult{Credential: cred}, nil
 }
 
 // createAPIToken stores an opaque token: identifier (e.g.

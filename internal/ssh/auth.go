@@ -117,10 +117,31 @@ func InlineAuthMethods(password, keyPEM, keyPassphrase string) ([]ssh.AuthMethod
 	return methods, nil
 }
 
+// KeepassResolveHook, when set by the host (app.go), resolves a credential's
+// KeePass reference to its secret. Wired as a package var - like BrowserOpenHook
+// (gotcha 28) - so the ssh layer routes through the KeePass manager without
+// importing it or the manager reaching into every ResolveAuth call site.
+// Returns the secret and whether the credential actually carried a keepass_ref
+// (handled=false => not a KeePass credential, fall through to the normal path).
+var KeepassResolveHook func(cred *store.CredentialRef) (secret string, handled bool, err error)
+
 // ResolveAuth turns a credential reference into AuthMaterial. Side-effecting
 // for `opkssh` (may run the OIDC login) and `agent` (opens UDS connection).
 // ctx cancels an in-flight opkssh OIDC login; the other kinds ignore it.
 func ResolveAuth(ctx context.Context, cred *store.CredentialRef, vault *creds.Vault) (*AuthMaterial, error) {
+	// A credential carrying a KeePass reference resolves through the hook
+	// regardless of its kind: a "password" cred yields a password auth method,
+	// a "key" cred yields a signer. The secret is pulled from the .kdbx in
+	// memory and never persisted.
+	if KeepassResolveHook != nil {
+		secret, handled, err := KeepassResolveHook(cred)
+		if err != nil {
+			return nil, err
+		}
+		if handled {
+			return keepassAuthMaterial(cred, secret)
+		}
+	}
 	switch cred.Kind {
 	case store.CredPassword:
 		return resolvePassword(cred, vault)
@@ -135,6 +156,26 @@ func ResolveAuth(ctx context.Context, cred *store.CredentialRef, vault *creds.Va
 	default:
 		return nil, fmt.Errorf("unknown credential kind: %s", cred.Kind)
 	}
+}
+
+// keepassAuthMaterial turns a secret pulled from a KeePass entry into auth
+// material. For a key credential the secret is a PEM private key; for anything
+// else it is treated as a password.
+func keepassAuthMaterial(cred *store.CredentialRef, secret string) (*AuthMaterial, error) {
+	if secret == "" {
+		return nil, fmt.Errorf("keepass credential %s resolved to an empty secret", cred.Name)
+	}
+	if cred.Kind == store.CredKey {
+		signer, err := ssh.ParsePrivateKey([]byte(secret))
+		if err != nil {
+			if _, missing := err.(*ssh.PassphraseMissingError); missing {
+				return nil, fmt.Errorf("keepass key %s is passphrase-protected; store an unencrypted key or the passphrase separately", cred.Name)
+			}
+			return nil, fmt.Errorf("parse keepass key %s: %w", cred.Name, err)
+		}
+		return &AuthMaterial{Signers: []ssh.Signer{signer}}, nil
+	}
+	return &AuthMaterial{Password: secret}, nil
 }
 
 func resolvePassword(cred *store.CredentialRef, vault *creds.Vault) (*AuthMaterial, error) {

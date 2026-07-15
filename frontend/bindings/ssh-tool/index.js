@@ -36,6 +36,7 @@ export {
     GiveInternetResult,
     ImagePayload,
     ImportArchiveRequest,
+    KeepassSaveInput,
     LoadTextFileResult,
     LocalShellInfo,
     LocalShellOpenResult,

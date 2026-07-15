@@ -64,6 +64,8 @@ require (
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/spf13/afero v1.14.0 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
+	github.com/tobischo/argon2 v0.1.0 // indirect
+	github.com/tobischo/gokeepasslib/v3 v3.6.2 // indirect
 	github.com/u-root/u-root v0.16.0 // indirect
 	github.com/valyala/fastjson v1.6.4 // indirect
 	github.com/yeqown/go-qrcode/v2 v2.2.5 // indirect
