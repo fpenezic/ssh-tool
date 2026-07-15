@@ -61,6 +61,23 @@
     }
   }
 
+  let refreshing = $state(false);
+  // Force a fresh pull from the remote (or re-read the local file), then
+  // re-list - so an entry just added in KeePass Desktop shows up.
+  async function refreshDb() {
+    if (!dbId) return;
+    refreshing = true;
+    err = null;
+    try {
+      await api.keepassRefresh(dbId);
+      await loadTree();
+    } catch (e) {
+      err = errMsg(e);
+    } finally {
+      refreshing = false;
+    }
+  }
+
   function fieldsFor(e: KeepassEntryInfo): string[] {
     return [
       ...(e.has_pass ? ["password"] : []),
@@ -146,11 +163,18 @@
         </label>
 
         {#if dbId}
-          <input
-            class="search"
-            bind:value={search}
-            placeholder="Search entries by title / username / group…"
-          />
+          <div class="search-row">
+            <input
+              class="search"
+              bind:value={search}
+              placeholder="Search entries by title / username / group…"
+            />
+            <button type="button" class="refresh-btn" onclick={refreshDb}
+              disabled={refreshing || loading}
+              title="Re-read the database (picks up entries just added in KeePass)">
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
         {/if}
 
         {#if loading}
@@ -247,7 +271,9 @@
   .close { background: none; border: none; cursor: pointer; font-size: 1rem; }
   .body { padding: 12px 14px; overflow: hidden; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
   .db-row { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
-  .search { width: 100%; box-sizing: border-box; }
+  .search-row { display: flex; gap: 6px; align-items: stretch; }
+  .search { flex: 1; min-width: 0; box-sizing: border-box; }
+  .refresh-btn { flex-shrink: 0; white-space: nowrap; font-size: 0.8rem; }
   .tree { overflow-y: auto; border: 1px solid var(--border, #333); border-radius: 6px; padding: 4px; min-height: 180px; max-height: 40vh; }
   .group-head {
     display: block; width: 100%; text-align: left; background: none; border: none;

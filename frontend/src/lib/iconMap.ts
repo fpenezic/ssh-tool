@@ -85,6 +85,7 @@ import Bot from "@lucide/svelte/icons/bot";
 import MemoryStick from "@lucide/svelte/icons/memory-stick";
 import HardDrive from "@lucide/svelte/icons/hard-drive";
 import Users from "@lucide/svelte/icons/users";
+import Database from "@lucide/svelte/icons/database";
 export {
   LoaderCircle as IconLoading,
   Radio as IconBroadcast,
@@ -98,7 +99,16 @@ export {
   MemoryStick as IconMemory,
   HardDrive as IconDisk,
   Users as IconUsers,
+  Database as IconDatabase,
 };
+
+// credentialIconFor picks the list/picker icon for a credential, accounting
+// for the KeePass-backed case (kind is still password/key, but the secret
+// lives in a .kdbx - show a database icon so it reads apart at a glance).
+export function credentialIconFor(c: { kind: string; config?: Record<string, unknown> }) {
+  if (c.config && c.config.keepass_ref) return Database;
+  return credentialKindIcon(c.kind);
+}
 
 // Split layout icons (separate so we can import lazily if needed)
 import Columns2 from "@lucide/svelte/icons/columns-2";

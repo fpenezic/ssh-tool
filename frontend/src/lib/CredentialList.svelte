@@ -9,7 +9,7 @@
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
-  import { credentialKindIcon, IconFolderPlus, IconPlus, IconRotateCw, IconKey, IconExpandAll, IconCollapseAll } from "./iconMap";
+  import { credentialIconFor, IconFolderPlus, IconPlus, IconRotateCw, IconKey, IconExpandAll, IconCollapseAll } from "./iconMap";
   import { connectionActions } from "./connectionActions.svelte";
 
   interface Props {
@@ -165,7 +165,8 @@
 
       {#each rootCreds as c (c.id)}
         {@const sel = selection.isCredentialSelected(c.id)}
-        {@const KindIcon = credentialKindIcon(c.kind)}
+        {@const KindIcon = credentialIconFor(c)}
+        {@const isKeepass = !!c.config?.keepass_ref}
         {@const ex = expiryInfo(c.expires_at)}
         <div class="row cred-row"
           class:selected={sel}
@@ -197,7 +198,7 @@
               {/if}
             </div>
             <div class="sub">
-              <span class="kind">{c.kind}</span>
+              <span class="kind">{isKeepass ? "keepass" : c.kind}</span>
               {#if c.hint}<span class="hint-text">· {c.hint}</span>{/if}
             </div>
           </div>

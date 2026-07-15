@@ -79,11 +79,11 @@
   }) {
     kpPickerOpen = false;
     try {
-      // The auto-created credential lands at the credential-tree root. It must
-      // NOT inherit the connection's folder_id: that id lives in the connection
-      // tree (folders), while credential.folder_id references credential_folders
-      // - a different namespace, so reusing it hits a foreign-key error. The
-      // user can move the credential into a credential folder afterwards.
+      // folder_id null lets the backend file the credential under the
+      // auto-created "KeePass" credential folder. It must NOT inherit the
+      // connection's folder_id: that id lives in the connection tree (folders),
+      // while credential.folder_id references credential_folders - a different
+      // namespace, so reusing it hits a foreign-key error.
       const cred = await api.keepassEnsureCredential({
         db_id: r.db_id,
         entry_uuid: r.entry_uuid,

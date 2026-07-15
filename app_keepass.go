@@ -408,6 +408,18 @@ func (a *App) KeepassEnsureCredential(in KeepassEnsureCredentialInput) (*store.C
 	}
 	name = a.uniqueCredentialName(name, existing)
 
+	// Auto-created KeePass credentials collect under a single "KeePass"
+	// credential folder so they don't clutter the root. The caller's FolderID,
+	// when set, wins (an explicit choice); otherwise we ensure the default
+	// folder. Note: a connection's folder_id must NEVER be passed here - it
+	// lives in a different tree (see onKeepassPick).
+	folderID := in.FolderID
+	if folderID == nil {
+		if fid, err := a.ensureKeepassCredFolder(); err == nil {
+			folderID = fid
+		}
+	}
+
 	var defUser *string
 	if u := strings.TrimSpace(in.Username); u != "" {
 		defUser = &u
@@ -415,7 +427,7 @@ func (a *App) KeepassEnsureCredential(in KeepassEnsureCredentialInput) (*store.C
 	res, err := a.credSvc.Create(creds.CreateInput{
 		Kind:             "keepass",
 		Name:             name,
-		FolderID:         in.FolderID,
+		FolderID:         folderID,
 		DefaultUsername:  defUser,
 		KeepassDBID:      in.DBID,
 		KeepassEntryUUID: in.EntryUUID,
@@ -427,6 +439,31 @@ func (a *App) KeepassEnsureCredential(in KeepassEnsureCredentialInput) (*store.C
 	}
 	a.recordAudit("keepass.credential.create", res.Credential.ID, map[string]string{"name": name})
 	return res.Credential, nil
+}
+
+// keepassCredFolderName is the credential folder auto-created KeePass
+// references collect under.
+const keepassCredFolderName = "KeePass"
+
+// ensureKeepassCredFolder returns the id of the "KeePass" credential folder at
+// the root, creating it on first use. Best-effort: on any error the caller
+// falls back to the root (folder_id nil).
+func (a *App) ensureKeepassCredFolder() (*string, error) {
+	folders, err := a.db.ListCredentialFolders()
+	if err != nil {
+		return nil, err
+	}
+	for i := range folders {
+		if folders[i].ParentID == nil && folders[i].Name == keepassCredFolderName {
+			id := folders[i].ID
+			return &id, nil
+		}
+	}
+	f, err := a.db.CreateCredentialFolder(keepassCredFolderName, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &f.ID, nil
 }
 
 // uniqueCredentialName appends " (2)", " (3)", ... until the name is free,
