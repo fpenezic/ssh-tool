@@ -2093,27 +2093,26 @@
     margin-top: 0.6rem;
   }
   .vnc-grid .span-2 { grid-column: 1 / -1; }
-  /* Picker takes the same left-column width as the Name input; the button
-     sits directly to its right (not stranded in the far column). The label
-     spans both form columns (.span-2) so the picker can be a full field wide.
-     Wraps to a stack on skinny windows. */
+  /* Picker keeps the same left-column width as the Name input; the button is
+     a compact chip directly to its right (it does NOT stretch to fill the
+     column). The label spans both form columns (.span-2) so the picker can be
+     a full field wide. Wraps on skinny windows. */
   .cred-picker-row {
-    display: grid;
-    grid-template-columns: minmax(0, calc(50% - 0.5rem)) auto;
-    gap: 0.6rem;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    gap: 0.6rem;
     margin-top: 4px;
   }
   .cred-picker-row :global(.search-select) {
+    flex: 0 1 calc(50% - 0.5rem);
     min-width: 0;
   }
   .kp-btn {
+    flex: 0 0 auto;
+    width: auto;
     white-space: nowrap;
     font-size: 0.8rem;
-  }
-  @media (max-width: 620px) {
-    .cred-picker-row { grid-template-columns: 1fr; }
-    .kp-btn { justify-self: start; }
   }
   .kp-badge {
     display: inline-block;
