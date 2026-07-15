@@ -79,12 +79,11 @@
   }) {
     kpPickerOpen = false;
     try {
-      // File the auto-created credential under the same folder the editor's
-      // subject lives in (best effort; null = root).
-      const folderId =
-        kpPickerTarget === "folder"
-          ? (folder?.id ?? null)
-          : (conn?.folder_id ?? null);
+      // The auto-created credential lands at the credential-tree root. It must
+      // NOT inherit the connection's folder_id: that id lives in the connection
+      // tree (folders), while credential.folder_id references credential_folders
+      // - a different namespace, so reusing it hits a foreign-key error. The
+      // user can move the credential into a credential folder afterwards.
       const cred = await api.keepassEnsureCredential({
         db_id: r.db_id,
         entry_uuid: r.entry_uuid,
@@ -92,7 +91,7 @@
         is_key: r.is_key,
         name: r.name,
         username: r.username,
-        folder_id: folderId,
+        folder_id: null,
       });
       await credentials.load();
       if (kpPickerTarget === "folder" && editingFolder) {
@@ -959,7 +958,7 @@
           </button>
         </div>
         {#if editingFolder.authRef && keepassCredIds.has(editingFolder.authRef)}
-          <span class="kp-badge">🔑 KeePass-backed - secret read from the .kdbx at connect</span>
+          <span class="kp-badge">KeePass-backed - secret read from the .kdbx at connect</span>
         {/if}
       </label>
 
@@ -1177,7 +1176,7 @@
           </button>
         </div>
         {#if editing.authRef && keepassCredIds.has(editing.authRef)}
-          <span class="kp-badge">🔑 KeePass-backed - secret read from the .kdbx at connect</span>
+          <span class="kp-badge">KeePass-backed - secret read from the .kdbx at connect</span>
         {/if}
         {#if inhAuth.from && !editing.authRef}
           {@const inhCredName = credentials.byId(String(inhAuth.value))?.name ?? String(inhAuth.value)}
@@ -2099,9 +2098,10 @@
     gap: 6px;
     align-items: stretch;
   }
-  .cred-picker-row :global(.searchable-select),
-  .cred-picker-row > :first-child {
-    flex: 1;
+  /* SearchableSelect's root is .search-select; make it take the row's free
+     space (its .trigger is width:100%, so it fills whatever the root gets). */
+  .cred-picker-row :global(.search-select) {
+    flex: 1 1 auto;
     min-width: 0;
   }
   .kp-btn {
