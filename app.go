@@ -39,6 +39,7 @@ import (
 	"ssh-tool/internal/local"
 	"ssh-tool/internal/recorder"
 	"ssh-tool/internal/resolver"
+	shareserver "ssh-tool/internal/share"
 	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/store"
 	"ssh-tool/internal/syncer"
@@ -102,6 +103,15 @@ type App struct {
 	mcpLocalToken  string
 	mcpTCPListener net.Listener
 	mcpTCPToken    string
+
+	// share is the browser session-share server (internal/share). Nil until
+	// the share_enabled setting is on. Desktop only; mobile has no server.
+	// See app_share.go. shareApprovals holds the pending guest-approval
+	// channels, mirroring the MCP approval gate.
+	share            *shareserver.Server
+	shareLifecycleMu sync.Mutex
+	shareApprovals   map[string]chan bool
+	shareApprMu      sync.Mutex
 
 	pendingHostKeysMu sync.Mutex
 	pendingHostKeys   map[string]chan bool
@@ -311,6 +321,9 @@ func (s wailsSink) EmitOutput(sessionID string, data []byte, cum uint64) {
 	if s.app != nil && s.app.recorder != nil {
 		s.app.recorder.Write(sessionID, data)
 	}
+	if s.app != nil && s.app.share != nil {
+		s.app.share.Publish(sessionID, data, cum) // never blocks; see share.Hub
+	}
 	EventsEmit("pty_output:"+sessionID, sshlayer.OutputPayload{
 		B64: sshlayer.EncodeBase64(data),
 		Cum: cum,
@@ -338,6 +351,13 @@ func NewApp() *App {
 func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.ctx = ctx
 	a.initialise()
+	return nil
+}
+
+// ServiceShutdown is the v3 counterpart, called on app quit. Tear the share
+// server down so attached guests get a clean bye and no listener lingers.
+func (a *App) ServiceShutdown() error {
+	a.stopShareServer()
 	return nil
 }
 
@@ -473,6 +493,10 @@ func (a *App) initialise() {
 	// Start the MCP bridge listener if the user has enabled it (no-op on
 	// mobile / when disabled).
 	a.startMcpListener()
+
+	// Bring the share server up if sharing is enabled (no-op on mobile /
+	// when disabled). Does not bind until the first ShareStart.
+	a.startShareServer()
 }
 
 // Ping smoke command.
@@ -1089,6 +1113,9 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 		a.clearMcpGrant(sessionID)
 		a.sessionRecordingCleanup(sessionID)
 		a.pool.Remove(sessionID)
+		// After pool.Remove, so the share server sees this session as gone and
+		// can end a share whose last session just closed.
+		a.shareSessionClosed(sessionID)
 		a.wgRelease(sessionID)
 		a.metaMu.Lock()
 		delete(a.sessionMeta, sessionID)
@@ -2611,6 +2638,8 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 			userInit = s.WasUserInitiated()
 		}
 		a.pool.Remove(id)
+		// After pool.Remove, so a share whose last session just closed ends.
+		a.shareSessionClosed(id)
 		a.wgRelease(id)
 		a.syncForegroundService()
 		a.metaMu.Lock()
@@ -3103,6 +3132,9 @@ func (a *App) LocalShellOpen(kind, dir string, cols, rows uint16) (*LocalShellOp
 	// banner / prompt isn't lost. Mirrors the SSH pumpOutput path.
 	sess.SetOutputSink(func(data []byte, cum uint64) {
 		a.recorder.Write(sess.ID, data)
+		if a.share != nil {
+			a.share.Publish(sess.ID, data, cum) // local shells are shareable too
+		}
 		EventsEmit("pty_output:"+sess.ID, sshlayer.OutputPayload{
 			B64: sshlayer.EncodeBase64(data),
 			Cum: cum,
@@ -3116,6 +3148,8 @@ func (a *App) LocalShellOpen(kind, dir string, cols, rows uint16) (*LocalShellOp
 	sess.SetOnClose(func(id string) {
 		a.sessionRecordingCleanup(id)
 		a.localPool.Remove(id)
+		// After localPool.Remove, so a share whose last session just closed ends.
+		a.shareSessionClosed(id) // local shells are shareable; end their shares
 		a.broadcastMu.Lock()
 		evicted := false
 		for _, g := range a.broadcastGroups {
@@ -3190,6 +3224,9 @@ func (a *App) noteTermSize(sessionID string, cols, rows uint16) {
 	a.termSizeMu.Lock()
 	a.termSizes[sessionID] = [2]uint16{cols, rows}
 	a.termSizeMu.Unlock()
+	if a.share != nil {
+		a.share.PublishSize(sessionID, cols, rows) // guests letterbox to this
+	}
 }
 
 func (a *App) termSize(sessionID string) (cols, rows uint16) {
@@ -4081,6 +4118,17 @@ func (a *App) SettingsSet(key, value string) error {
 	}
 	if key == "mcp_bridge_tcp" {
 		a.setMcpTCP(value == "1" || value == "true")
+	}
+	// Toggling session sharing: bring the server up (IPC surface live) or tear
+	// every active share down. Mirrors the MCP arm.
+	if key == "share_enabled" {
+		on := value == "1" || value == "true"
+		if on {
+			a.startShareServer()
+		} else {
+			a.stopShareServer()
+		}
+		EventsEmit("share_toggled", on)
 	}
 	return nil
 }

@@ -46,6 +46,10 @@
   let mcpAuditEnabled = $state<boolean>(true);
   let mcpAuditOutput = $state<boolean>(false);
   let recordingConfirm = $state<boolean>(true);
+  let shareEnabled = $state<boolean>(false);
+  let shareAuditOutput = $state<boolean>(false);
+  let shareFingerprint = $state<string>("");
+  let shareFingerprintShort = $state<string>("");
   let mcpReadonlyExtra = $state<string>("");
   let vaultSidecarStrength = $state<"strong" | "weak" | "none" | "">("");
   let mcpExePath = $state<string>("");
@@ -351,6 +355,14 @@
       const v = await api.settingsGet("recording_confirm_disabled");
       recordingConfirm = !(v === "1" || v === "true"); // default ON
     } catch { /* default on */ }
+    try {
+      const v = await api.settingsGet("share_enabled");
+      shareEnabled = v === "1" || v === "true"; // default OFF
+    } catch { /* default off */ }
+    try {
+      const v = await api.settingsGet("share_audit_output");
+      shareAuditOutput = v === "1" || v === "true"; // default OFF
+    } catch { /* default off */ }
   });
 
   async function toggleNotifications(next: boolean) {
@@ -384,6 +396,44 @@
     mcpEnabled = next;
     try { await api.settingsSet("mcp_bridge_enabled", next ? "1" : "0"); }
     catch (e) { console.warn("mcp toggle:", e); }
+  }
+
+  async function toggleShare(next: boolean) {
+    shareEnabled = next;
+    try {
+      await api.settingsSet("share_enabled", next ? "1" : "0");
+      if (next) await loadShareFingerprint();
+    } catch (e) { console.warn("share toggle:", e); }
+  }
+
+  async function toggleShareAuditOutput(e: Event) {
+    const next = (e.target as HTMLInputElement).checked;
+    shareAuditOutput = next;
+    try { await api.settingsSet("share_audit_output", next ? "1" : "0"); }
+    catch (err) { console.warn("share audit output toggle:", err); }
+  }
+
+  async function loadShareFingerprint() {
+    try {
+      const fp = await api.shareFingerprint();
+      shareFingerprint = fp.Words;
+      shareFingerprintShort = fp.Short;
+    } catch (e) { console.warn("share fingerprint:", e); }
+  }
+
+  async function regenerateShareCert() {
+    if (!(await showConfirm({
+      title: "Regenerate sharing certificate?",
+      message: "Every guest who saved your current fingerprint will see a different one. Only do this if you think the certificate was compromised.",
+      okLabel: "Regenerate",
+      danger: true,
+    }))) return;
+    try {
+      const fp = await api.shareRegenerateCert();
+      shareFingerprint = fp.Words;
+      shareFingerprintShort = fp.Short;
+      toast.ok("Certificate regenerated");
+    } catch (e) { toast.err("Regenerate failed: " + errMsg(e)); }
   }
 
   async function toggleMcpTcp(next: boolean) {
@@ -1038,6 +1088,7 @@
     | "import"
     | "export"
     | "llm"
+    | "sharing"
     | "logs"
     | "updates"
     | "about";
@@ -1064,6 +1115,7 @@
     { id: "import",            title: "Import",           group: "Import / Export" },
     { id: "export",            title: "Export connections", group: "Import / Export" },
     { id: "llm",               title: "LLM (MCP) access",  group: "Integrations" },
+    { id: "sharing",           title: "Sharing",          group: "Integrations" },
     { id: "updates",           title: "Updates",          group: "App" },
     { id: "logs",              title: "Logs",             group: "Diagnostics" },
     { id: "about",             title: "About",            group: "Diagnostics" },
@@ -4180,6 +4232,71 @@
       </div>
     {/if}
 
+  {:else if activeSection === "sharing"}
+    <h2>Share a session to a browser</h2>
+    <p class="hint">
+      Let a colleague watch - or, with your explicit approval, type into - a
+      live session from a plain web browser, no ssh-tool needed on their side.
+      Off by default. When on, right-click a tab and choose "Share to browser".
+      The connection is encrypted; you confirm a short word-code with your guest
+      to be sure no one is intercepting it, and every guest waits for you to
+      allow them in.
+    </p>
+
+    <label class="toggle">
+      <input
+        type="checkbox"
+        checked={shareEnabled}
+        onchange={(e) => toggleShare((e.target as HTMLInputElement).checked)}
+      />
+      <span>
+        <strong>Enable session sharing</strong>
+        <span class="hint inline">
+          - makes the "Share to browser" action available. Each share picks its
+          own network interface and is reachable only while it's running; a
+          guest sees nothing until you approve them.
+        </span>
+      </span>
+    </label>
+
+    {#if shareEnabled}
+      <div class="group" style="margin-top:1rem">
+        <h3>Certificate fingerprint</h3>
+        <p class="hint">
+          Read these words to your guest (by phone or chat) so they can confirm
+          they're really connected to you. They stay the same across shares and
+          restarts - a change means either you regenerated the certificate or
+          something is wrong.
+        </p>
+        {#if shareFingerprint}
+          <div class="fp-readout">{shareFingerprint}</div>
+          <div class="hint" style="font-family:monospace">{shareFingerprintShort}</div>
+        {:else}
+          <button onclick={loadShareFingerprint}>Show fingerprint</button>
+        {/if}
+        <div style="margin-top:0.6rem">
+          <button onclick={regenerateShareCert}>Regenerate certificate…</button>
+        </div>
+      </div>
+
+      <label class="toggle" style="margin-top:1rem">
+        <input
+          type="checkbox"
+          checked={shareAuditOutput}
+          onchange={toggleShareAuditOutput}
+        />
+        <span>
+          <strong>Record guest keystrokes in the audit log</strong>
+          <span class="hint inline">
+            - off by default. Who joined, when, and from where is always logged;
+            this also stores what a controlling guest TYPES. The audit log is a
+            plaintext file on disk, and guest keystrokes can include passwords -
+            enable only if you accept that.
+          </span>
+        </span>
+      </label>
+    {/if}
+
   {:else if activeSection === "logs"}
   <div class="group">
     <h2>Logs</h2>
@@ -4915,6 +5032,13 @@
     text-decoration: underline;
     cursor: pointer;
     font: inherit;
+  }
+  .fp-readout {
+    font-family: monospace;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--blue);
+    margin: 0.3rem 0;
   }
   .toggle {
     display: flex;

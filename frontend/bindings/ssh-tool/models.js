@@ -2781,6 +2781,133 @@ export class SftpPreview {
     }
 }
 
+export class ShareSessionInput {
+    /**
+     * Creates a new ShareSessionInput instance.
+     * @param {Partial<ShareSessionInput>} [$$source = {}] - The source object to create the ShareSessionInput.
+     */
+    constructor($$source = {}) {
+        if (!("slot" in $$source)) {
+            /**
+             * guest slot assigned by the frontend projection
+             * @member
+             * @type {string}
+             */
+            this["slot"] = "";
+        }
+        if (!("real_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["real_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ShareSessionInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ShareSessionInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ShareSessionInput(/** @type {Partial<ShareSessionInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * ShareStartInput is the frontend's request to start a share.
+ */
+export class ShareStartInput {
+    /**
+     * Creates a new ShareStartInput instance.
+     * @param {Partial<ShareStartInput>} [$$source = {}] - The source object to create the ShareStartInput.
+     */
+    constructor($$source = {}) {
+        if (!("bind_ip" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["bind_ip"] = "";
+        }
+        if (!("port" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["port"] = 0;
+        }
+        if (!("level" in $$source)) {
+            /**
+             * "read" | "control"
+             * @member
+             * @type {string}
+             */
+            this["level"] = "";
+        }
+        if (!("scrollback" in $$source)) {
+            /**
+             * include existing history
+             * @member
+             * @type {boolean}
+             */
+            this["scrollback"] = false;
+        }
+        if (!("active_tab" in $$source)) {
+            /**
+             * index of the host's active tab
+             * @member
+             * @type {number}
+             */
+            this["active_tab"] = 0;
+        }
+        if (!("tabs_blob" in $$source)) {
+            /**
+             * TabsBlob is the frontend-projected {tabs:[...]} JSON (pane trees with
+             * sessionIds already rewritten to guest slots). Opaque to the backend.
+             * @member
+             * @type {string}
+             */
+            this["tabs_blob"] = "";
+        }
+        if (!("sessions" in $$source)) {
+            /**
+             * Sessions pairs each guest slot with the real session id + metadata, in
+             * the SAME order the slots appear in TabsBlob.
+             * @member
+             * @type {ShareSessionInput[]}
+             */
+            this["sessions"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ShareStartInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ShareStartInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField6_0 = $$createType15;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("sessions" in $$parsedSource) {
+            $$parsedSource["sessions"] = $$createField6_0($$parsedSource["sessions"]);
+        }
+        return new ShareStartInput(/** @type {Partial<ShareStartInput>} */($$parsedSource));
+    }
+}
+
 export class SshConnectResult {
     /**
      * Creates a new SshConnectResult instance.
@@ -3558,7 +3685,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType15;
+        const $$createField0_0 = $$createType17;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -3675,7 +3802,7 @@ export class TcpdumpStartInput {
      * @returns {TcpdumpStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType16;
+        const $$createField10_0 = $$createType18;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("port_overrides" in $$parsedSource) {
             $$parsedSource["port_overrides"] = $$createField10_0($$parsedSource["port_overrides"]);
@@ -3902,6 +4029,8 @@ const $$createType10 = $Create.Nullable($$createType9);
 const $$createType11 = wg$0.Status.createFrom;
 const $$createType12 = ssh$0.SftpEntry.createFrom;
 const $$createType13 = $Create.Array($$createType12);
-const $$createType14 = ssh$0.ParsedPacket.createFrom;
+const $$createType14 = ShareSessionInput.createFrom;
 const $$createType15 = $Create.Array($$createType14);
-const $$createType16 = $Create.Map($Create.Any, $Create.Any);
+const $$createType16 = ssh$0.ParsedPacket.createFrom;
+const $$createType17 = $Create.Array($$createType16);
+const $$createType18 = $Create.Map($Create.Any, $Create.Any);

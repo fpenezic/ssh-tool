@@ -37,6 +37,7 @@ type Session struct {
 	done chan struct{}
 
 	mu         sync.Mutex
+	writeMu    sync.Mutex // serialises Write; see Write
 	closedOnce sync.Once
 	onClose    func(sessionID string)
 
@@ -147,7 +148,17 @@ func (s *Session) pumpOutput() {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
 			cum := s.scrollback.append(chunk)
-			if sink := s.outputSink; sink != nil {
+			// Read the sink under the lock: SetOutputSink writes it under
+			// s.mu, and an unsynchronised read here is a data race (-race
+			// flags it). Benign in practice today - the sink is installed
+			// before the pump starts - but a correctness fix, and load-bearing
+			// once a second consumer (session sharing) is involved. The lock
+			// is dropped before calling the sink so a slow sink can't stall
+			// SetOutputSink.
+			s.mu.Lock()
+			sink := s.outputSink
+			s.mu.Unlock()
+			if sink != nil {
 				sink(chunk, cum)
 			}
 		}
@@ -192,8 +203,14 @@ func (s *Session) SetOnClose(fn func(string)) {
 	s.mu.Unlock()
 }
 
-// Write forwards keystrokes from the frontend into the shell.
+// Write forwards keystrokes from the frontend into the shell. Serialised for
+// the same reason as the SSH Session.Write: with session sharing a full-control
+// guest is a second concurrent writer, and interleaved pty.Write calls would
+// tear multi-byte input. Dedicated mutex, not s.mu (which is held across the
+// sink call in pumpOutput).
 func (s *Session) Write(data []byte) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	_, err := s.pty.Write(data)
 	return err
 }

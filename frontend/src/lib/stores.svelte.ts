@@ -977,27 +977,12 @@ export interface SessionTab {
 // PaneNode is a binary tree: each tab has a root node which is either a
 // leaf (one terminal) or a split (two children oriented horizontally or
 // vertically with a resize ratio in [0,1]).
-export type PaneNode = PaneLeaf | PaneSplit;
-
-export interface PaneLeaf {
-  kind: "pane";
-  id: string;       // unique within the tab; used as a focus key
-  sessionId: string;
-  // What's rendered in this leaf. terminal/sftp share one SSH session
-  // (the SFTP client layers on top of the existing ssh.Client), so
-  // toggling doesn't reconnect. "vnc" renders a noVNC console - it never
-  // splits or toggles (the tab is locked to a single full leaf).
-  view?: "terminal" | "sftp" | "vnc";
-}
-
-export interface PaneSplit {
-  kind: "split";
-  id: string;
-  direction: "horizontal" | "vertical"; // horizontal = side-by-side
-  ratio: number;    // 0..1, fraction taken by `a`
-  a: PaneNode;
-  b: PaneNode;
-}
+// PaneNode / PaneLeaf / PaneSplit / SerializedPaneTab live in panetypes.ts so
+// the guest bundle can import the shape without pulling in this store (and the
+// Wails runtime it depends on). Re-exported here so existing import sites are
+// unchanged.
+export type { PaneNode, PaneLeaf, PaneSplit, SerializedPaneTab } from "./panetypes";
+import type { PaneNode, PaneLeaf, SerializedPaneTab } from "./panetypes";
 
 export interface PaneTab {
   tabId: string;          // stable per tab so the bar doesn't lose track
@@ -1027,6 +1012,13 @@ function genId(prefix: string): string {
 class PaneTreeStore {
   tabs = $state<PaneTab[]>([]);
   activeTabId = $state<string | null>(null);
+  // Bumped on every structural layout change (split, close pane, ungroup, pop).
+  // A share auto-resync watches this rather than diffing tree signatures, which
+  // proved unreliable.
+  layoutVersion = $state(0);
+  bumpLayout() {
+    this.layoutVersion++;
+  }
 
   addTab(sessionId: string, title: string): PaneTab {
     const leafId = genId("pane");
@@ -1144,6 +1136,16 @@ class PaneTreeStore {
     );
   }
 
+  // A human title for a leaf: the session's name (or hostname), falling back to
+  // the sessionId only if the session is unknown. Used when a split is broken
+  // into per-leaf tabs (pop / ungroup) so the new tabs get a real name instead
+  // of a raw session UUID. `sessions` is defined later in this module but this
+  // runs at call time, so the reference resolves.
+  private leafTitle(leaf: PaneLeaf): string {
+    const s = sessions.tabs.find((x) => x.sessionId === leaf.sessionId);
+    return s?.name ?? s?.hostname ?? leaf.sessionId;
+  }
+
   // Title of the currently active tab, or null when no tab is active.
   // Used to reflect the active connection in the OS window/taskbar title.
   activeTitle(): string | null {
@@ -1203,6 +1205,7 @@ class PaneTreeStore {
       });
       return { ...t, root: newRoot, activePaneId: newLeafId };
     });
+    this.bumpLayout();
   }
 
   setActivePane(tabId: string, paneId: string) {
@@ -1229,6 +1232,7 @@ class PaneTreeStore {
       }));
       return { ...t, root: newRoot, activePaneId: newLeafId };
     });
+    this.bumpLayout();
   }
 
   // Remove a pane from the tree. If the pane is the last one in the tab,
@@ -1251,6 +1255,7 @@ class PaneTreeStore {
     this.tabs = this.tabs.map((t) =>
       t.tabId === tabId ? { ...t, root: newRoot, activePaneId: firstLeaf?.id ?? "" } : t
     );
+    this.bumpLayout();
     return { tabRemoved: false };
   }
 
@@ -1268,7 +1273,7 @@ class PaneTreeStore {
     const firstLeaf = firstLeafIn(remaining);
     const newTab: PaneTab = {
       tabId: genId("tab"),
-      title: leaf.sessionId,
+      title: this.leafTitle(leaf),
       rootPaneId: leaf.id,
       root: leaf,
       activePaneId: leaf.id,
@@ -1282,6 +1287,7 @@ class PaneTreeStore {
       ),
       newTab,
     ];
+    this.bumpLayout();
   }
 
   // Adjust the ratio of a split node.
@@ -1309,7 +1315,7 @@ class PaneTreeStore {
     const [first, ...rest] = leaves;
     const newTabs: PaneTab[] = rest.map((leaf) => ({
       tabId: genId("tab"),
-      title: leaf.sessionId,
+      title: this.leafTitle(leaf),
       rootPaneId: leaf.id,
       root: leaf,
       activePaneId: leaf.id,
@@ -1323,6 +1329,7 @@ class PaneTreeStore {
       ),
       ...newTabs,
     ];
+    this.bumpLayout();
   }
 
   // Remove the tab and return all sessionIds it contained.
@@ -1452,14 +1459,6 @@ export const closedTabs = new ClosedTabStore();
 // windows (detach → detached window URL, detached → main on redock).
 // Only the structural state lives here; sessions themselves are
 // global (backend pool) and looked up by id on restore.
-export interface SerializedPaneTab {
-  title: string;
-  root: PaneNode;
-  groupName?: string;
-  groupColor?: string;
-  locked?: boolean;
-}
-
 export function serializePaneTab(t: PaneTab): SerializedPaneTab {
   return {
     title: t.title,
@@ -2006,6 +2005,170 @@ class McpSharedStore {
   }
 }
 export const mcpShared = new McpSharedStore();
+
+// ----- browser session sharing -----
+
+export interface ShareApproval {
+  approvalId: string;
+  shareId: string;
+  remoteIp: string;
+  fingerprint: string; // the words to compare out-of-band
+  level: string;
+  tabs: string[];
+}
+
+// FIFO queue of pending guest-join approvals (clone of McpApprovalStore).
+class ShareApprovalStore {
+  queue = $state<ShareApproval[]>([]);
+  get pending(): ShareApproval | null {
+    return this.queue[0] ?? null;
+  }
+  enqueue(a: ShareApproval) {
+    if (this.queue.some((q) => q.approvalId === a.approvalId)) return;
+    this.queue = [...this.queue, a];
+  }
+  shift() {
+    if (this.queue.length === 0) return;
+    this.queue = this.queue.slice(1);
+  }
+  clearAll() {
+    this.queue = [];
+  }
+}
+export const shareApprovalStore = new ShareApprovalStore();
+
+// Tracks which sessions currently have a browser guest attached, and whether
+// any guest on that session can type (control) - drives the tab badge (quiet)
+// and the loud control indicator. Fed by the share_changed event.
+interface ShareStatusLite {
+  share_id: string;
+  level: string;
+  session_ids: string[];
+  guests: { remote_ip: string }[];
+}
+class ShareSharedStore {
+  private sessionsWithGuest = $state<Set<string>>(new Set());
+  private sessionsControlled = $state<Set<string>>(new Set());
+  private slotOwners = new Map<string, Set<string>>(); // shareId -> its real sessionIds
+  // shareId -> the tabIds it shares, IN ORDER, so a host tab switch can be
+  // reported to guests as the tab's index within that share.
+  private tabOrder = new Map<string, string[]>();
+  // tabIds a guest is currently looking at (reported by any guest that clicked
+  // away from follow mode). Drives the "your guest is here" tab marker.
+  private guestViewing = $state<Set<string>>(new Set());
+  // shareId -> its stable slot assignment (real sessionId -> slot), carried
+  // across re-projections so a session keeps its slot / uninterrupted stream.
+  private slotMaps = new Map<string, Map<string, string>>();
+
+  has(sessionId: string): boolean {
+    return this.sessionsWithGuest.has(sessionId);
+  }
+  isControlled(sessionId: string): boolean {
+    return this.sessionsControlled.has(sessionId);
+  }
+  get guestCount(): number {
+    return this.sessionsWithGuest.size;
+  }
+  // The share_changed payload is the full active-share list. Since the payload
+  // doesn't carry which real session each share covers, the caller supplies a
+  // resolver mapping shareId -> real session ids (known when the share started).
+  // Fed by share_changed. session_ids in the payload is authoritative, so any
+  // window (main or detached) attributes badges without local share state.
+  setFrom(shares: ShareStatusLite[]) {
+    const withGuest = new Set<string>();
+    const controlled = new Set<string>();
+    const alive = new Set(shares.map((sh) => sh.share_id));
+    for (const sh of shares) {
+      if (sh.guests.length === 0) continue;
+      for (const rid of sh.session_ids ?? []) {
+        withGuest.add(rid);
+        if (sh.level === "control") controlled.add(rid);
+      }
+    }
+    this.sessionsWithGuest = withGuest;
+    this.sessionsControlled = controlled;
+    // Forget shares that no longer exist - otherwise their tab badges, the
+    // "Add to share" menu entries, and the auto-resync effect all keep firing
+    // for a share that's already gone.
+    for (const shareId of [...this.tabOrder.keys()]) {
+      if (!alive.has(shareId)) this.forgetShare(shareId);
+    }
+    if (alive.size === 0) this.guestViewing = new Set();
+  }
+  // Remember which sessions a share covers, so setFrom can attribute guests.
+  recordShare(shareId: string, realIds: string[], tabIds: string[], slotMap?: Map<string, string>) {
+    this.slotOwners.set(shareId, new Set(realIds));
+    this.tabOrder.set(shareId, tabIds);
+    if (slotMap) this.slotMaps.set(shareId, new Map(slotMap));
+  }
+  slotMapFor(shareId: string): Map<string, string> | undefined {
+    return this.slotMaps.get(shareId);
+  }
+  // Every active share and the tab ids it covers, for re-sync on layout change.
+  activeShareTabs(): { shareId: string; tabIds: string[] }[] {
+    return [...this.tabOrder].map(([shareId, tabIds]) => ({ shareId, tabIds }));
+  }
+  tabsOf(shareId: string): string[] {
+    return [...(this.tabOrder.get(shareId) ?? [])];
+  }
+  // Add a tab to a live share's coverage (append; keeps order).
+  addTabToShare(shareId: string, tabId: string, realIds: string[]) {
+    const tabs = this.tabOrder.get(shareId) ?? [];
+    if (!tabs.includes(tabId)) this.tabOrder.set(shareId, [...tabs, tabId]);
+    const owners = this.slotOwners.get(shareId) ?? new Set<string>();
+    for (const r of realIds) owners.add(r);
+    this.slotOwners.set(shareId, owners);
+  }
+  realIdsFor(shareId: string): string[] {
+    return [...(this.slotOwners.get(shareId) ?? [])];
+  }
+  forgetShare(shareId: string) {
+    this.slotOwners.delete(shareId);
+    this.tabOrder.delete(shareId);
+    this.slotMaps.delete(shareId);
+  }
+  // For a host tab switch: every (shareId, index) pair where the switched-to
+  // tab appears in that share. Guests of those shares get an active_tab frame.
+  shareIndexFor(tabId: string): { shareId: string; index: number }[] {
+    const out: { shareId: string; index: number }[] = [];
+    for (const [shareId, tabIds] of this.tabOrder) {
+      const idx = tabIds.indexOf(tabId);
+      if (idx >= 0) out.push({ shareId, index: idx });
+    }
+    return out;
+  }
+
+  // A guest reported it's looking at index `idx` within share `shareId`. Map it
+  // back to the host's tabId so the tab bar can show where the guest is.
+  guestViewingTab(shareId: string, idx: number) {
+    const tabIds = this.tabOrder.get(shareId) ?? [];
+    const tabId = tabIds[idx];
+    if (!tabId) return;
+    const next = new Set(this.guestViewing);
+    // A guest can only be on one tab of a given share at a time; clear this
+    // share's other tabs first.
+    for (const t of tabIds) next.delete(t);
+    next.add(tabId);
+    this.guestViewing = next;
+  }
+  isGuestViewing(tabId: string): boolean {
+    return this.guestViewing.has(tabId);
+  }
+  clearGuestViewing() {
+    this.guestViewing = new Set();
+  }
+}
+export const shareShared = new ShareSharedStore();
+
+// Whether session sharing is enabled (share_enabled setting). Gates the share
+// affordances (the "Share to browser" menu item, the status-bar share segment).
+class ShareBridgeStore {
+  enabled = $state(false);
+  setEnabled(v: boolean) {
+    this.enabled = v;
+  }
+}
+export const shareBridge = new ShareBridgeStore();
 
 // Whether the MCP bridge is enabled (mcp_bridge_enabled setting). Drives
 // whether the robot affordances (pane Share-with-LLM button, status-bar robot)

@@ -7,6 +7,53 @@ in alpha upstream.
 
 ---
 
+## [0.58.0] - Share a live session to a web browser
+
+### Added
+
+- **Share a live SSH (or local) session to a plain web browser.** Turn
+  it on in Settings -> Sharing, then right-click a tab and choose
+  "Share to browser". A colleague opens the link in any browser - no
+  ssh-tool needed on their side - and watches your terminal live.
+  Read-only by default, or full control, where the guest types into the
+  same terminal as you (tmux-style).
+
+  - **You approve every guest.** When someone opens the link you get a
+    prompt showing their IP and a short word-code (like
+    "cobalt-otter-viola-medley"); you confirm that code with them
+    out-of-band, so a leaked link is worthless without your approval.
+  - **You pick which tabs to share and which network interface to serve
+    on**, and whether the guest sees the existing scrollback or only new
+    output. A full-control guest is shown loudly - a red banner and a
+    tab marker - and can be kicked, or all sharing stopped, in one click
+    from the status bar.
+  - **Live layout.** Splitting a shared tab, adding a tab to a share, and
+    switching tabs all follow through to the guest; the guest can follow
+    your active tab or look around on their own.
+
+  The connection is encrypted (a self-signed certificate whose
+  fingerprint is the word-code you compare). Both machines must be able
+  to reach each other - use it on a LAN or over an existing VPN /
+  WireGuard profile; there's no cloud relay. If the chosen port (8443 by
+  default) is already in use, the share falls back to a free one.
+
+- Also fixed a long-standing bug where breaking a split into separate
+  tabs (ungroup, or popping a pane out) named the new tabs with a raw
+  session id instead of the connection name.
+
+- **Dragging the window between monitors with different scaling** (say a
+  125% laptop screen and a 100% external) no longer leaves the interface
+  rendered tiny at the old scale (Wails runtime bump).
+
+### Known issues
+
+- Grouping two already-shared tabs and then ungrouping them drops the
+  second tab from the share; re-add it with "Add to share". A share of a
+  single tab, splitting/ungrouping a single shared tab, and adding tabs
+  all work correctly.
+
+---
+
 ## [0.57.0] - Sending batch results to someone
 
 ### Added

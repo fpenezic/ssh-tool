@@ -171,6 +171,21 @@ archive bundle. Exports never include credential secrets by default.
   into the active terminal.
 - **Markdown notes** per connection (mini-runbook).
 
+### Sharing a session
+
+- **Share a live session to a plain web browser** - a colleague opens
+  a link and watches your terminal, or (with your explicit approval)
+  types into it. You pick the tabs, the network interface, and
+  read-only vs full control; you approve every guest and compare a
+  short word-code with them so a leaked link is useless. Encrypted
+  over a self-signed cert, no cloud relay (LAN or your own VPN).
+  Splits, tab switches and added tabs follow through live.
+- **Share a session with an external LLM (MCP)** - a local-only bridge
+  lets an MCP client (Claude Code, LM Studio) read the terminal, pull
+  logs, and propose commands. Off by default, per-session grants,
+  read-only auto-runs and state-changing commands gated on approval;
+  terminal output is treated as untrusted and every action is logged.
+
 ### File transfer + forwarding
 
 - **SFTP browser** per session with native OS drag-and-drop upload.

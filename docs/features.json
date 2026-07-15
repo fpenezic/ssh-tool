@@ -83,6 +83,15 @@
       "art": "robot"
     },
     {
+      "title": "Share a session to a browser",
+      "body": "A colleague opens a link in any browser and watches your terminal live - or types into it, if you allow full control. You approve every guest and compare a short word-code to be sure it's them.",
+      "keys": [
+        "right-click tab",
+        "Share to browser"
+      ],
+      "art": "globe2"
+    },
+    {
       "title": "Dynamic inventory",
       "body": "Folders that auto-populate from Proxmox VE, Hetzner Cloud, DigitalOcean, Linode, Vultr, Scaleway, AWS EC2 and Ansible inventory files. Tags / labels filter what shows; stopped guests appear greyed with a \"connect anyway\" prompt. API tokens live in the vault.",
       "keys": [
@@ -146,6 +155,11 @@
       "icon": "robot",
       "title": "Debug with an LLM (MCP)",
       "body": "Share a live SSH session with an external LLM client (Claude Code, LM Studio, any MCP server) so it can read the terminal, pull logs, search and open your saved connections, and propose commands. Off by default and local-only: no session is reachable until you share it, read-only commands auto-run, and anything that changes state needs your approval. Terminal output is treated as untrusted data, and every action is recorded in an activity log."
+    },
+    {
+      "icon": "globe2",
+      "title": "Share a session to a browser",
+      "body": "Let a colleague watch - or, with your approval, type into - a live session from a plain web browser, no ssh-tool on their side. You pick the tabs, the network interface, and read-only vs full control; every guest waits for your OK, and you confirm a short word-code with them so a leaked link is worthless. Encrypted over a self-signed certificate; splits, tab switches, and added tabs follow through live. LAN or over your own VPN - no cloud relay."
     },
     {
       "icon": "shield",

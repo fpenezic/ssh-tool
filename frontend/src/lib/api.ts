@@ -935,6 +935,21 @@ export const api = {
   clearAttention: () => G.ClearAttention(),
   sendPromptNotification: (title: string, body: string) => G.SendPromptNotification(title, body),
 
+  // ----- browser session sharing -----
+  shareStart: (input: ShareStartInput) =>
+    G.ShareStart(input as any) as unknown as Promise<ShareStartResult>,
+  shareStop: (shareId: string) => G.ShareStop(shareId),
+  shareUpdate: (shareId: string, input: ShareStartInput) =>
+    G.ShareUpdate(shareId, input as any),
+  shareKick: (shareId: string, remoteIp: string) => G.ShareKick(shareId, remoteIp),
+  shareActive: () => G.ShareActive() as unknown as Promise<ShareStatus[]>,
+  shareSetActiveTab: (shareId: string, index: number) => G.ShareSetActiveTab(shareId, index),
+  shareInterfaces: () => G.ShareInterfaces() as unknown as Promise<ShareInterface[]>,
+  shareFingerprint: () => G.ShareFingerprint() as unknown as Promise<ShareFingerprint>,
+  shareRegenerateCert: () => G.ShareRegenerateCert() as unknown as Promise<ShareFingerprint>,
+  shareApprovalRespond: (approvalId: string, decision: "allow" | "deny") =>
+    G.ShareApprovalRespond(approvalId, decision),
+
   settingsGet: (key: string) => G.SettingsGet(key) as unknown as Promise<string>,
   settingsSet: (key: string, value: string) => G.SettingsSet(key, value),
   settingsDelete: (key: string) => G.SettingsDelete(key),
@@ -1423,6 +1438,62 @@ export interface GiveInternetResult {
 
 export type McpGrantLevel = "read" | "read-run";
 export type McpDecision = "run" | "type" | "deny";
+
+// ----- browser session sharing -----
+
+export type ShareLevel = "read" | "control";
+
+export interface ShareStartInput {
+  bind_ip: string;
+  port: number;
+  level: ShareLevel;
+  scrollback: boolean;
+  active_tab: number;
+  tabs_blob: string; // projected {tabs:[...]} JSON, sessionIds -> guest slots
+  sessions: { slot: string; real_id: string; name: string }[];
+}
+
+export interface ShareFingerprint {
+  Hex: string;
+  Short: string;
+  Words: string;
+}
+
+export interface ShareStartResult {
+  share_id: string;
+  url: string;
+  bind: string;
+  fingerprint: ShareFingerprint;
+  regenerated: boolean;
+}
+
+export interface ShareInterface {
+  name: string;
+  ip: string;
+}
+
+export interface ShareGuest {
+  remote_ip: string;
+  joined_at: number;
+  level: string;
+}
+
+export interface ShareStatus {
+  share_id: string;
+  level: string;
+  bind: string;
+  guests: ShareGuest[];
+}
+
+// Payload of the "share_approval_request" event.
+export interface ShareApprovalRequest {
+  approval_id: string;
+  share_id: string;
+  remote_ip: string;
+  fingerprint: string; // the words to compare
+  level: string;
+  tabs: string[];
+}
 
 export interface McpGrantInfo {
   session_id: string;

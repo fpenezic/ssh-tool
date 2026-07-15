@@ -163,6 +163,12 @@ type Session struct {
 	stdin  io.WriteCloser
 	closed chan struct{}
 
+	// writeMu serialises Write. It is deliberately separate from mu: mu
+	// guards onClose/stack/userInitiatedClose and is held across I/O in
+	// Disconnect, so sharing it with the write path would couple a hot path
+	// to a cold one and invite a deadlock. See Write.
+	writeMu sync.Mutex
+
 	mu         sync.Mutex
 	closedOnce sync.Once
 
@@ -932,8 +938,18 @@ func cleanup(clients []*ssh.Client) {
 	}
 }
 
-// Write sends keystrokes to the remote PTY.
+// Write sends keystrokes to the remote PTY. Serialised: with session
+// sharing a full-control guest is a second, genuinely concurrent writer (the
+// desktop path is serialised by the single webview event loop, a websocket
+// guest is not). Without the lock two concurrent Write calls can interleave
+// inside stdin.Write and tear a multi-byte payload - a UTF-8 rune, or an
+// escape sequence from a paste - into garbage at the remote shell. The lock
+// makes each Write atomic relative to other Writes; it cannot (and should not)
+// stop the remote interleaving host and guest input at the line level, which
+// is tmux semantics and the point of sharing.
 func (s *Session) Write(data []byte) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	_, err := s.stdin.Write(data)
 	return err
 }

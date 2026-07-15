@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, mcpApprovalStore, mcpShared, mcpBridge, decodePaneLayoutsMulti, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
+  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, mcpApprovalStore, mcpShared, mcpBridge, shareApprovalStore, shareShared, shareBridge, decodePaneLayoutsMulti, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
   import { isMobile } from "./lib/platform";
   import { installMobileBackNav } from "./lib/mobileBackNav";
   import { api } from "./lib/api";
@@ -28,6 +28,7 @@
   import { localShellPrefs, type LocalShellKind } from "./lib/localShellPrefs.svelte.ts";
   import HostKeyModal from "./lib/HostKeyModal.svelte";
   import McpApprovalModal from "./lib/McpApprovalModal.svelte";
+  import ShareApprovalModal from "./lib/ShareApprovalModal.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import ExportConnectionsModal from "./lib/ExportConnectionsModal.svelte";
   import { exportModal } from "./lib/exportModal.svelte.ts";
@@ -634,6 +635,42 @@
   EventsOn("mcp_bridge_toggled", (on: any) => { mcpBridge.setEnabled(!!on); });
   api.settingsGet("mcp_bridge_enabled").then((v) => mcpBridge.setEnabled(v === "1" || v === "true")).catch(() => {});
 
+  // ----- browser session sharing -----
+
+  // A guest opened a share link and is waiting; the host must allow/deny after
+  // comparing the fingerprint words out-of-band.
+  EventsOn("share_approval_request", (data: any) => {
+    api.requestAttention().catch(() => {});
+    api.sendPromptNotification(
+      "Someone wants to join your shared session",
+      `${data.remote_ip ?? "A guest"} is waiting - check the fingerprint before allowing.`,
+    ).catch(() => {});
+    shareApprovalStore.enqueue({
+      approvalId: data.approval_id,
+      shareId: data.share_id,
+      remoteIp: data.remote_ip,
+      fingerprint: data.fingerprint,
+      level: data.level,
+      tabs: data.tabs ?? [],
+    });
+  });
+
+  // Active shares changed (start / attach / detach / stop) - refresh the badges.
+  EventsOn("share_changed", (data: any) => {
+    shareShared.setFrom((data as any[]) ?? []);
+  });
+
+  // A guest switched to a different tab than the host - show where they are.
+  EventsOn("share_guest_tab", (data: any) => {
+    if (data?.share_id !== undefined && data?.index !== undefined) {
+      shareShared.guestViewingTab(data.share_id, data.index);
+    }
+  });
+
+  // Whether sharing is enabled - gates the share affordances.
+  EventsOn("share_toggled", (on: any) => { shareBridge.setEnabled(!!on); });
+  api.settingsGet("share_enabled").then((v) => shareBridge.setEnabled(v === "1" || v === "true")).catch(() => {});
+
   // The LLM opened a session via the MCP bridge's connect tool. The backend
   // holds the live session but no tab exists (the frontend normally creates
   // it after its own connect). Add the tab + switch to it so the user sees it.
@@ -1109,6 +1146,21 @@
         mcpApprovalStore.shift();
         if (mcpApprovalStore.queue.length === 0) api.clearAttention().catch(() => {});
         await api.mcpApprovalRespond(a.approvalId, decision);
+      }}
+    />
+  {/if}
+
+  {#if shareApprovalStore.pending}
+    <ShareApprovalModal
+      remoteIp={shareApprovalStore.pending.remoteIp}
+      fingerprint={shareApprovalStore.pending.fingerprint}
+      level={shareApprovalStore.pending.level}
+      queueLength={Math.max(0, shareApprovalStore.queue.length - 1)}
+      onRespond={async (decision) => {
+        const a = shareApprovalStore.pending!;
+        shareApprovalStore.shift();
+        if (shareApprovalStore.queue.length === 0) api.clearAttention().catch(() => {});
+        await api.shareApprovalRespond(a.approvalId, decision);
       }}
     />
   {/if}

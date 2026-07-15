@@ -844,6 +844,61 @@ output as untrusted, respect approvals), see
 [`docs/MCP_SYSTEM_PROMPT.md`](MCP_SYSTEM_PROMPT.md) - paste it into
 your `CLAUDE.md` (Claude Code) or the system prompt (LM Studio).
 
+### Share a session to a web browser
+
+Let a colleague watch - or, with your explicit approval, type into -
+a live session from a plain web browser. Nothing is installed on their
+side; they open a link and see your terminal.
+
+1. **Settings -> Sharing** -> turn on *Enable session sharing*. This is
+   off by default. While it's on, the certificate fingerprint (a short
+   word-code) is shown here, and you can regenerate it.
+
+2. **Right-click a tab -> "Share to browser".** In the dialog you pick:
+   - **which tabs** to share (defaults to the current one - it's a
+     snapshot; tabs you open later don't appear unless you add them),
+   - **read-only** (the guest can only watch) or **full control** (the
+     guest types into the same terminal as you, tmux-style),
+   - whether the guest sees the **existing scrollback** or only new
+     output (default: only new),
+   - the **network interface** to serve on (not `0.0.0.0` by default,
+     so you don't expose it on a network you forgot about) and the port
+     (8443 by default; if it's in use the share falls back to a free
+     one).
+
+3. You get a **link and a word-code** (like `cobalt-otter-viola-medley`).
+   Send the link to your guest, and send the word-code separately (by
+   phone or chat, not in the same message). When they open the link
+   their browser will warn about the self-signed certificate - that's
+   expected; they continue past it.
+
+4. When the guest connects, **you get a prompt** showing their IP address
+   and the word-code. Read the code back with them out-of-band; if it
+   matches, allow them in. A leaked link is worthless without this - no
+   session is streamed until you click Allow. The prompt flashes the
+   taskbar and pops a notification if the app is in the background.
+
+5. While a guest is attached you see a marker on the tab; a **full-control
+   guest** is shown loudly (a red banner across the top). The status-bar
+   share segment lists attached guests and lets you **kick** one or
+   **stop all sharing** in one click. Closing the shared session (or the
+   whole tab) ends the share and disconnects the guest.
+
+**Live layout.** Splitting a shared tab, switching tabs, or adding a tab
+to a share all follow through to the guest; the guest can follow your
+active tab or click around on their own ("Follow host" re-syncs).
+
+**Security model.** The connection is encrypted with a self-signed
+certificate whose fingerprint is the word-code you compare - that
+comparison, plus your per-guest approval, is what authenticates the
+session (the browser cert warning is not). Read-only is enforced on the
+backend, not just hidden in the UI. Both machines must be able to reach
+each other: use it on a LAN or over your existing WireGuard / NetBird /
+Tailscale profile. There is no cloud relay. Local shells are shareable
+too, not just SSH sessions. Optionally, guest keystrokes can be recorded
+to the audit log (off by default - the audit log is plaintext and a
+controlling guest's keystrokes can include passwords).
+
 ### Quick palette shortcut
 
 `Ctrl+K` matches forwards by description / parent connection name,

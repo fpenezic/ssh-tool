@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { sessions, paneTabs, view, drag, tree, closedTabs, mcpShared, type PaneNode as PaneNodeType, encodePaneLayout, decodePaneLayout } from "./stores.svelte";
+  import { sessions, paneTabs, view, drag, tree, closedTabs, mcpShared, shareBridge, shareShared, type PaneNode as PaneNodeType, encodePaneLayout, decodePaneLayout } from "./stores.svelte";
   import { api } from "./api";
   import PaneNode from "./PaneNode.svelte";
+  import ShareDialog from "./ShareDialog.svelte";
+  import { projectTabs, realSessionIds } from "./shareProject";
   import TcpdumpModal from "./TcpdumpModal.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
   import { broadcast } from "./broadcast.svelte";
@@ -16,6 +18,92 @@
   import { showPrompt } from "./promptModal.svelte.ts";
   import { focusActiveTerminal } from "./terminalFocus";
   let broadcastManagerOpen = $state(false);
+  let shareDialogOpen = $state(false);
+  // The ShareDialog defaults its tab selection to the ACTIVE tab, so switch to
+  // the right-clicked tab first, then open.
+  function openShareDialog(tabId: string) {
+    paneTabs.activateTab(tabId);
+    shareDialogOpen = true;
+  }
+  // Loud indicator: a control guest on the currently-visible tab means someone
+  // can type here right now. The pulsing red tab badge covers other tabs; this
+  // banner makes the active one impossible to forget.
+  const activeTabHasControlGuest = $derived(
+    paneTabs.activeTabId ? tabHasControlGuest(paneTabs.activeTabId) : false,
+  );
+
+  // Tell guests when the host switches tabs, so a following guest tracks it.
+  // Fires for every share that includes the newly-active tab, with the tab's
+  // index within that share (guests may share a subset in a different order).
+  $effect(() => {
+    const tabId = paneTabs.activeTabId;
+    if (!tabId || !shareBridge.enabled) return;
+    for (const { shareId, index } of shareShared.shareIndexFor(tabId)) {
+      api.shareSetActiveTab(shareId, index).catch(() => {});
+    }
+  });
+  async function stopAllShares() {
+    try {
+      for (const s of (await api.shareActive()) ?? []) await api.shareStop(s.share_id);
+    } catch { /* ignore */ }
+  }
+
+  // Re-project one share's current tabs and push the update to guests. Called
+  // when a shared tab's layout changes (on-the-fly split) or a tab is added.
+  async function resyncShare(shareId: string) {
+    const tabIds = shareShared.tabsOf(shareId);
+    const chosen = paneTabs.tabs.filter((t) => tabIds.includes(t.tabId));
+    if (chosen.length === 0) return;
+    // Carry the existing slot assignment so sessions keep their slots (their
+    // guest streams aren't disrupted, and the backend routing stays in sync).
+    const proj = projectTabs(chosen, (sid) => {
+      const s = sessions.tabs.find((x) => x.sessionId === sid);
+      return s?.name ?? s?.hostname ?? sid;
+    }, shareShared.slotMapFor(shareId));
+    const activeIdx = Math.max(0, chosen.findIndex((t) => t.tabId === paneTabs.activeTabId));
+    shareShared.recordShare(shareId, realSessionIds(chosen), chosen.map((t) => t.tabId), proj.slotByReal);
+    try {
+      await api.shareUpdate(shareId, {
+        bind_ip: "", port: 0, level: "read", scrollback: false,
+        active_tab: activeIdx, tabs_blob: proj.tabsBlob, sessions: proj.sessions,
+      });
+    } catch { /* ignore */ }
+  }
+
+  // Auto-sync: re-push every active share when the pane layout changes (a
+  // split, a pane close, ungroup, pop). We watch paneTabs.layoutVersion - a
+  // counter bumped on every structural mutation - rather than diffing tree
+  // signatures, which didn't fire reliably. Debounced so a drag-resize (which
+  // does NOT bump layoutVersion) or a rapid sequence collapses to one push. The
+  // first observation is skipped: ShareStart's manifest already has the current
+  // layout, so only real subsequent changes resync.
+  let lastLayoutVersion = -1;
+  let resyncTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const v = paneTabs.layoutVersion;
+    if (!shareBridge.enabled) { lastLayoutVersion = v; return; }
+    if (shareShared.activeShareTabs().length === 0) { lastLayoutVersion = v; return; }
+    if (lastLayoutVersion === -1) { lastLayoutVersion = v; return; } // first pass
+    if (v === lastLayoutVersion) return;
+    lastLayoutVersion = v;
+    clearTimeout(resyncTimer);
+    resyncTimer = setTimeout(() => {
+      for (const { shareId } of shareShared.activeShareTabs()) resyncShare(shareId);
+    }, 250);
+  });
+
+  function addTabToShare(tabId: string, shareId: string) {
+    const tab = paneTabs.tabs.find((t) => t.tabId === tabId);
+    if (!tab) return;
+    shareShared.addTabToShare(shareId, tabId, realSessionIds([tab]));
+    resyncShare(shareId);
+  }
+  // Shares that DON'T already include a given tab (for the "add to share" menu).
+  function sharesWithoutTab(tabId: string): { shareId: string; label: string }[] {
+    return shareShared.activeShareTabs()
+      .filter((sh) => !sh.tabIds.includes(tabId))
+      .map((sh) => ({ shareId: sh.shareId, label: sh.tabIds.length + " tab(s)" }));
+  }
 
   function tabSessionIdArr(tabId: string): string[] {
     const tab = paneTabs.tabs.find((t) => t.tabId === tabId);
@@ -70,6 +158,14 @@
   // Any pane in this tab shared with the LLM (MCP bridge)?
   function tabHasSharedSession(tabId: string): boolean {
     return tabSessionIdArr(tabId).some((sid) => mcpShared.has(sid));
+  }
+  // Any pane in this tab has a browser guest attached?
+  function tabHasGuest(tabId: string): boolean {
+    return tabSessionIdArr(tabId).some((sid) => shareShared.has(sid));
+  }
+  // ...and can any of them type (control)? Drives the louder badge.
+  function tabHasControlGuest(tabId: string): boolean {
+    return tabSessionIdArr(tabId).some((sid) => shareShared.isControlled(sid));
   }
 
   function tabAddAllToBroadcast(tabId: string) {
@@ -650,6 +746,18 @@
               <IconBot size={10} />
             </span>
           {/if}
+          {#if tabHasGuest(t.tabId)}
+            <span
+              class="share-badge"
+              class:control={tabHasControlGuest(t.tabId)}
+              title={tabHasControlGuest(t.tabId)
+                ? "A browser guest can type in this session"
+                : "Shared to a browser guest (read-only)"}
+            >●</span>
+          {/if}
+          {#if shareShared.isGuestViewing(t.tabId)}
+            <span class="guest-watching" title="Your guest is looking at this tab"></span>
+          {/if}
           {#if tabBroadcastState(t.tabId) !== "none"}
             {@const groups = tabBroadcastGroups(t.tabId)}
             <span
@@ -728,6 +836,16 @@
       <button onclick={() => { detachTab(ctxMenu!.tabId); closeCtxMenu(); }}>
         ↗ Detach to new window
       </button>
+      {#if shareBridge.enabled}
+        <button onclick={() => { openShareDialog(ctxMenu!.tabId); closeCtxMenu(); }}>
+          Share to browser…
+        </button>
+        {#each sharesWithoutTab(ctxMenu.tabId) as sh (sh.shareId)}
+          <button onclick={() => { addTabToShare(ctxMenu!.tabId, sh.shareId); closeCtxMenu(); }}>
+            Add to share ({sh.label})
+          </button>
+        {/each}
+      {/if}
       {#each sendTargets as w (w.name)}
         <button onclick={() => { sendTabToWindow(ctxMenu!.tabId, w.name); closeCtxMenu(); }}>
           → Send to {w.label}
@@ -769,6 +887,12 @@
     </div>
   {/if}
 
+  <!-- Always in the DOM (grid needs a stable child count); collapses to 0
+       height when there's no control guest. -->
+  <div class="control-guest-banner" class:shown={activeTabHasControlGuest}>
+    <span>A browser guest can type in this terminal.</span>
+    <button onclick={stopAllShares}>End sharing</button>
+  </div>
   <div class="term-area">
     {#each paneTabs.tabs as t (t.tabId)}
       <div class="tab-content" class:active={paneTabs.activeTabId === t.tabId}>
@@ -801,18 +925,22 @@
 
 
 <BroadcastManager open={broadcastManagerOpen} onClose={() => (broadcastManagerOpen = false)} />
+{#if shareDialogOpen}
+  <ShareDialog onClose={() => (shareDialogOpen = false)} />
+{/if}
 
 
 <style>
   .area {
     display: grid;
-    /* Tab row grows to fit however many wrapped rows it needs; the
-       terminal pane below takes the rest. Previously this was a
-       fixed 32px which clipped the second row of wrapped tabs even
-       though .tabbar's flex-wrap was actually placing them
-       correctly - they were just invisible under the next grid
-       row. */
-    grid-template-rows: auto 1fr;
+    /* Tab row grows to fit however many wrapped rows it needs; the optional
+       control-guest banner takes its own auto row; the terminal pane takes the
+       rest. The banner row collapses to 0 when absent (no banner element), so
+       this is safe with or without it. Previously grid-template-rows was
+       `auto 1fr` with only two rows - adding the banner as a third child pushed
+       the terminal into an implicit 0-height row, so the red banner filled the
+       screen and the terminal vanished. */
+    grid-template-rows: auto auto 1fr;
     height: 100%;
     background: var(--mantle);
     overflow: hidden;
@@ -997,6 +1125,62 @@
     align-items: center;
     color: var(--blue);
     margin-right: 0.15rem;
+    flex-shrink: 0;
+  }
+  .share-badge {
+    display: inline-flex;
+    align-items: center;
+    color: var(--green);
+    font-size: 0.7rem;
+    margin-right: 0.15rem;
+    flex-shrink: 0;
+  }
+  /* The banner stays a grid child even when inactive - display:none would
+     remove it from the grid, shifting .term-area into the middle `auto` row
+     (0 height) instead of the `1fr` row, which blanked the terminal. So it
+     collapses via height/padding/border, keeping the row count stable. */
+  .control-guest-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.8rem;
+    background: var(--red);
+    color: var(--base);
+    font-size: 0.82rem;
+    font-weight: 600;
+    height: 0;
+    padding: 0;
+    overflow: hidden;
+    visibility: hidden;
+  }
+  .control-guest-banner.shown {
+    height: auto;
+    padding: 0.3rem 0.6rem;
+    visibility: visible;
+  }
+  .control-guest-banner button {
+    background: var(--base);
+    color: var(--red);
+    border: none;
+    border-radius: 5px;
+    padding: 0.15rem 0.7rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .share-badge.control {
+    color: var(--red);
+    animation: rec-pulse 1.6s ease-in-out infinite;
+  }
+  /* A small ring marking the tab a guest is currently looking at. Distinct
+     from the filled share dot (a guest is attached) - this is a hollow ring
+     (a guest's gaze). No emoji, per house style. */
+  .guest-watching {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border: 1.5px solid var(--sky, #89dceb);
+    border-radius: 50%;
+    margin-right: 0.2rem;
     flex-shrink: 0;
   }
   .bcast {

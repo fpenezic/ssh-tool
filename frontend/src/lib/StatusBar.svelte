@@ -11,7 +11,8 @@
   // broadcast manager). Kept lean - full controls remain in their
   // existing pane toolbars.
 
-  import { sessions, paneTabs, view, tree, mcpShared } from "./stores.svelte";
+  import { sessions, paneTabs, view, tree, mcpShared, shareShared } from "./stores.svelte";
+  import SharePanel from "./SharePanel.svelte";
   import { errMsg } from "./connectErrors";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
@@ -40,6 +41,7 @@
   // forward. 3s matches the per-pane PaneNode poll cadence.
   let tunnelCount = $state(0);
   let showMcpActivity = $state(false);
+  let showSharePanel = $state(false);
   let tunnelTimer: ReturnType<typeof setInterval> | null = null;
 
   // Vault state tracked here so the pill below can show locked /
@@ -410,6 +412,24 @@
     </div>
   {/if}
 
+  {#if shareShared.guestCount > 0}
+    <div class="mcp-anchor">
+      <button
+        class="seg share"
+        title="{shareShared.guestCount} session{shareShared.guestCount === 1 ? '' : 's'} shared to a browser guest - click to manage"
+        onclick={() => (showSharePanel = !showSharePanel)}
+      >
+        <span class="dot">●</span>
+        <span>{shareShared.guestCount}</span>
+      </button>
+      {#if showSharePanel}
+        <div class="share-pop">
+          <SharePanel onClose={() => (showSharePanel = false)} />
+        </div>
+      {/if}
+    </div>
+  {/if}
+
   {#if broadcast.totalMembers() > 1}
     <span class="seg bcast" title="{broadcast.totalMembers()} sessions across all broadcast groups">
       <IconBroadcast size={11} />
@@ -581,7 +601,12 @@
   }
   .seg.tunnels { color: var(--green); }
   .seg.mcp { color: var(--blue); }
+  .seg.share { color: var(--green); }
+  .seg.share .dot { font-size: 0.7rem; }
   .mcp-anchor { position: relative; display: inline-flex; }
+  /* The share segment sits on the LEFT of the status bar (before the spacer),
+     so anchor the popover to the left edge - right:0 pushed it off-screen. */
+  .share-pop { position: absolute; bottom: 100%; left: 0; margin-bottom: 0.3rem; z-index: 60; }
   .seg.sync-ahead {
     color: var(--blue);
     cursor: pointer;
