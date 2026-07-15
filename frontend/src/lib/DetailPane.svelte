@@ -1163,7 +1163,7 @@
           {/if}
         </label>
       </div>
-      <label>Credential
+      <label class="span-2">Credential
         <div class="cred-picker-row">
           <SearchableSelect
             bind:value={editing.authRef}
@@ -2093,19 +2093,22 @@
     margin-top: 0.6rem;
   }
   .vnc-grid .span-2 { grid-column: 1 / -1; }
+  /* Two columns matching the form grid: the picker sits in the left column
+     (same width as the Name input) and the button in the right column (where
+     the Hostname input is), so they line up with the fields above. The label
+     spans both columns (.span-2) to make this possible. */
   .cred-picker-row {
-    display: flex;
-    gap: 6px;
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(280px, 1fr));
+    gap: 0.6rem 1rem;
+    align-items: center;
+    margin-top: 4px;
   }
-  /* SearchableSelect's root is .search-select; make it take the row's free
-     space (its .trigger is width:100%, so it fills whatever the root gets). */
   .cred-picker-row :global(.search-select) {
-    flex: 1 1 auto;
     min-width: 0;
   }
   .kp-btn {
-    flex-shrink: 0;
+    justify-self: start;
     white-space: nowrap;
     font-size: 0.8rem;
   }
