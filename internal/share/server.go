@@ -164,16 +164,18 @@ func (s *Server) Start(shareID string, p StartParams) (*StartResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	bindAddr := net.JoinHostPort(p.BindIP, itoa(int(port)))
-	share := newShareSession(shareID, bindAddr, s.hostName, p.Level, p.Scrollback, p.ActiveTab, p.TabsBlob, p.Sessions)
-	url, err := s.register(share, bindAddr, cert)
+	// Initial bind guess; register overwrites share.bind with the real one
+	// after the (possibly-fallback) listen.
+	share := newShareSession(shareID, net.JoinHostPort(p.BindIP, itoa(int(port))),
+		s.hostName, p.Level, p.Scrollback, p.ActiveTab, p.TabsBlob, p.Sessions)
+	url, err := s.register(share, p.BindIP, port, cert)
 	if err != nil {
 		return nil, err
 	}
 	return &StartResult{
 		ShareID:     shareID,
 		URL:         url,
-		Bind:        bindAddr,
+		Bind:        share.bind, // the actual bind (port may have fallen back)
 		Fingerprint: cert.Fingerprint,
 		Regenerated: regenerated,
 	}, nil
@@ -290,18 +292,20 @@ func (s *Server) RegenerateCert() (Fingerprint, error) {
 // ensureListening starts the TLS server on bindAddr if it isn't already up on
 // that address. Caller holds s.mu. A bind change (new interface) tears the old
 // listener down first.
-func (s *Server) ensureListening(bindAddr string, cert *Cert) error {
-	if s.srv != nil && s.bind == bindAddr {
+// ensureListening binds on ip, preferring preferredPort. If that port is taken
+// (another share, a second app, a leftover) it tries the next few, then falls
+// back to an OS-chosen ephemeral port - so a busy 8443 never blocks a share.
+// Already listening on this ip returns the existing bind (a share adds to the
+// running server; it doesn't move it).
+func (s *Server) ensureListening(ip string, preferredPort uint16, cert *Cert) error {
+	if s.srv != nil {
+		// Already up. Keep the existing listener; a second share reuses it.
 		s.cert = cert
 		return nil
 	}
-	if s.srv != nil {
-		_ = s.srv.Close()
-		s.srv = nil
-	}
-	ln, err := net.Listen("tcp", bindAddr)
+	ln, err := listenPreferred(ip, preferredPort)
 	if err != nil {
-		return fmt.Errorf("share listen %s: %w", bindAddr, err)
+		return err
 	}
 	tlsCfg := &tls.Config{
 		Certificates: []tls.Certificate{cert.TLS},
@@ -316,20 +320,49 @@ func (s *Server) ensureListening(bindAddr string, cert *Cert) error {
 	srv := &http.Server{Handler: mux, TLSConfig: tlsCfg}
 	s.srv = srv
 	s.ln = ln
-	s.bind = ln.Addr().String()
+	s.bind = ln.Addr().String() // the ACTUAL bind, in case we fell back
 	s.cert = cert
 	go srv.ServeTLS(ln, "", "") // cert is in TLSConfig
 	return nil
 }
 
+// listenPreferred tries ip:preferredPort, then the next few ports, then an
+// ephemeral one. Returns the listener bound to whatever it got.
+func listenPreferred(ip string, preferredPort uint16) (net.Listener, error) {
+	tryPort := func(p uint16) (net.Listener, bool) {
+		ln, err := net.Listen("tcp", net.JoinHostPort(ip, itoa(int(p))))
+		if err != nil {
+			return nil, false
+		}
+		return ln, true
+	}
+	if preferredPort != 0 {
+		for i := 0; i < 10; i++ {
+			if ln, ok := tryPort(preferredPort + uint16(i)); ok {
+				return ln, nil
+			}
+		}
+	}
+	// Ephemeral fallback.
+	ln, err := net.Listen("tcp", net.JoinHostPort(ip, "0"))
+	if err != nil {
+		return nil, fmt.Errorf("share listen %s: %w", ip, err)
+	}
+	return ln, nil
+}
+
 // register adds a share and starts the listener if needed. Returns the guest
-// URL. bindAddr is "ip:port"; cert must already cover the bind IP.
-func (s *Server) register(share *shareSession, bindAddr string, cert *Cert) (string, error) {
+// URL. cert must already cover ip. The actual bind (which may differ from
+// preferredPort if it was taken) is read back from the listener.
+func (s *Server) register(share *shareSession, ip string, preferredPort uint16, cert *Cert) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.ensureListening(bindAddr, cert); err != nil {
+	if err := s.ensureListening(ip, preferredPort, cert); err != nil {
 		return "", err
 	}
+	// Reflect the real bind (post-fallback) onto the share so its status shows
+	// the port a guest actually connects to.
+	share.bind = s.bind
 	s.gcLocked()
 	s.byID[share.id] = share
 	s.byToken[share.token] = share

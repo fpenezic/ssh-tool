@@ -167,6 +167,11 @@
       </div>
     {:else}
       <h2>Share started</h2>
+      {#if result.bind && !result.bind.endsWith(":" + port)}
+        <div class="hint" style="margin-bottom:0.5rem">
+          Port {port} was in use, so this share is on {result.bind.split(":").pop()} instead.
+        </div>
+      {/if}
       <div class="link-row">
         <input class="url" readonly value={result.url} />
         <button onclick={copyLink}>{copied ? "✓" : "Copy"}</button>
