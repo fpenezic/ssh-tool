@@ -245,6 +245,7 @@ func (a *App) keepassCreate(in KeepassSaveInput) (*store.KeepassDatabase, error)
 		return nil, err
 	}
 	a.recordAudit("keepass.add", updated.ID, map[string]string{"name": updated.Name, "source": string(updated.Source)})
+	EventsEmit("keepass_dbs_changed", nil)
 	return updated, nil
 }
 
@@ -310,6 +311,7 @@ func (a *App) keepassUpdate(in KeepassSaveInput) (*store.KeepassDatabase, error)
 	// Drop any cached open so the next resolve re-reads with new settings.
 	a.keepass.DeleteCache(in.ID)
 	a.recordAudit("keepass.update", updated.ID, map[string]string{"name": updated.Name})
+	EventsEmit("keepass_dbs_changed", nil)
 	return updated, nil
 }
 
@@ -343,6 +345,7 @@ func (a *App) KeepassDelete(id string) error {
 		return err
 	}
 	a.recordAudit("keepass.delete", id, map[string]string{"name": kdb.Name})
+	EventsEmit("keepass_dbs_changed", nil)
 	return nil
 }
 

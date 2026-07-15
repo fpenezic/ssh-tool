@@ -64,13 +64,25 @@
   );
 
   // Whether any KeePass database is registered - the "From KeePass" button is
-  // hidden entirely when none is, since it would open an empty picker.
+  // hidden entirely when none is, since it would open an empty picker. Checked
+  // on mount and re-checked live when a database is added/removed in Settings
+  // (keepass_dbs_changed), so the button appears without an app restart.
   let hasKeepass = $state(false);
+  async function refreshHasKeepass() {
+    try {
+      const dbs = await api.keepassList();
+      hasKeepass = (dbs?.length ?? 0) > 0;
+    } catch {
+      /* leave as-is */
+    }
+  }
   let keepassChecked = false;
   $effect(() => {
     if (keepassChecked) return;
     keepassChecked = true;
-    api.keepassList().then((dbs) => { hasKeepass = (dbs?.length ?? 0) > 0; }).catch(() => {});
+    refreshHasKeepass();
+    const off = EventsOn("keepass_dbs_changed", () => refreshHasKeepass());
+    return off;
   });
 
   // KeePass entry-picker modal. `target` says which editor the chosen entry's
