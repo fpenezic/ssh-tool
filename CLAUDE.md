@@ -402,7 +402,17 @@ These still bite. The archive of older / now-handled traps lives in
     after db+vault; the parser (`keepass.go`/`browse.go`) has zero app-internal
     imports so it stays unit-testable (see the encode-then-decode fixtures -
     v4 binaries go through `db.AddBinary`, which routes to the InnerHeader; a
-    manual `Meta.Binaries.Add` won't be found on decode).
+    manual `Meta.Binaries.Add` won't be found on decode). The connection
+    auth-picker path (`KeepassEnsureCredential`) auto-creates a credential for
+    the picked entry (dedup by matching keepass_ref) and files it under an
+    auto-created "KeePass" CREDENTIAL folder. Trap: `credential.folder_id`
+    references `credential_folders`, a DIFFERENT tree from a connection's
+    `folder_id` (which is in `folders`) - passing a connection folder id here
+    is a foreign-key violation, so the picker sends `folder_id: null` and the
+    backend fills in the KeePass credential folder. The "From KeePass" button
+    is gated on `keepass_dbs_changed` (emitted from create/update/delete) so it
+    appears live without an app restart. Local paths get a native Browse dialog
+    (`KeepassPickFile` -> `OpenFileDialog`, desktop-only).
 
 ### Android / mobile gotchas
 

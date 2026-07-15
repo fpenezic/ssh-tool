@@ -17,30 +17,34 @@ in alpha upstream.
   into ssh-tool's own store. KeePass stays the source of truth - the
   file is opened read-only and never written to.
 
-  - **Register databases in Settings -> KeePass.** Local file, or remote
+  - **Register databases in Settings -> KeePass.** Local file (with a
+    native Browse button so you don't type the path by hand), or remote
     over WebDAV / SFTP. The database's master password (and optional key
     file) are sealed in this app's vault, so unlocking ssh-tool once
     opens KeePass too - no second prompt per connection.
   - **Reference an entry straight from the connection.** Next to the
     Credential picker on any connection or folder there's a "From
-    KeePass" button: it opens the database as a searchable group tree,
-    and picking an entry creates (and assigns) a credential for it in one
-    step - no need to hand-build a credential first. Picking the same
-    entry again reuses it, and KeePass-backed credentials carry a key
-    badge so they're easy to tell apart from vault passwords. The
-    credential editor's "From KeePass database" kind does the same thing
-    when you want to create one up front. You choose the entry's
-    password, a custom field, or an attachment (for a private key stored
-    as a file inside KeePass); entries are referenced by their stable
-    UUID, so renaming or moving them in KeePass doesn't break the link.
+    KeePass" button (shown only once you have a database registered): it
+    opens the database as a searchable group tree, and picking an entry
+    creates (and assigns) a credential for it in one step - no need to
+    hand-build a credential first. Picking the same entry again reuses
+    it. Auto-created KeePass credentials collect under a "KeePass"
+    credential folder and show a database icon (labelled "keepass") so
+    they're easy to tell apart from vault passwords. The credential
+    editor's "From KeePass database" kind does the same thing when you
+    want to create one up front. You choose the entry's password, a
+    custom field, or an attachment (for a private key stored as a file
+    inside KeePass); entries are referenced by their stable UUID, so
+    renaming or moving them in KeePass doesn't break the link.
   - **Remote databases stay fresh, safely.** A remote `.kdbx` is fetched
     when you unlock and again whenever the cached copy is more than a few
     minutes old, using a conditional request so an unchanged file isn't
     re-downloaded. If the remote is unreachable the last cached copy is
     used and you're told it's stale rather than silently authenticating
-    with old data. A Refresh button forces a pull after you've just added
-    an entry. The cached file is stored encrypted - it's the original
-    KeePass blob, worthless without the vault-held master.
+    with old data. A Refresh button (in Settings and in the entry picker)
+    forces a pull after you've just added an entry in KeePass. The cached
+    file is stored encrypted - it's the original KeePass blob, worthless
+    without the vault-held master.
   - Decrypted databases live in memory only and are wiped the moment the
     vault locks, exactly like the vault's own secrets. opkssh is
     unaffected - it keeps its own vault-backed lifecycle.

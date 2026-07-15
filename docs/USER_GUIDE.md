@@ -444,8 +444,9 @@ the file is opened **read-only** and never written to.
 
 **Register a database** in Settings → KeePass:
 
-- **Source** - a local file path, or a remote file over **WebDAV** or
-  **SFTP**.
+- **Source** - a local file (a **Browse** button opens a native file
+  dialog so you don't type the path), or a remote file over **WebDAV**
+  or **SFTP**.
 - **Master password** and an optional **key file** - these are sealed
   in ssh-tool's own vault, so unlocking ssh-tool once opens KeePass
   too. There is no second prompt per connection.
@@ -455,13 +456,16 @@ the file is opened **read-only** and never written to.
 **Reference an entry** two ways:
 
 - Fastest: on a connection (or folder) in the detail panel, next to the
-  **Credential** picker, click **From KeePass**. A picker opens the
-  database as a collapsible group tree with a search box (title /
-  username / group); choose an entry and field, and ssh-tool creates a
-  credential for it (named after the entry) and assigns it right there.
-  Picking the same entry again reuses the same credential. KeePass-backed
-  credentials show a small key badge so you can tell them apart from
-  vault-stored passwords.
+  **Credential** picker, click **From KeePass** (the button shows only
+  once you have a database registered, and appears the moment you add
+  one - no restart). A picker opens the database as a collapsible group
+  tree with a search box (title / username / group), plus a **Refresh**
+  button to pull an entry you just added in KeePass. Choose an entry and
+  field, and ssh-tool creates a credential for it (named after the
+  entry, filed under a "KeePass" credential folder) and assigns it right
+  there. Picking the same entry again reuses the same credential.
+  KeePass-backed credentials show a **database icon** and a "keepass"
+  label so you can tell them apart from vault-stored passwords.
 - Or from the credential editor: choose **From
   KeePass database**, pick the database, browse to the entry, and pick
   the field:
@@ -484,8 +488,8 @@ entry does).
 - If the remote is unreachable, the last cached copy is used and you
   are told it is **stale** rather than silently authenticating with
   old data.
-- **Refresh** in Settings → KeePass forces a pull - use it right after
-  adding an entry in KeePass Desktop.
+- **Refresh** (in Settings → KeePass, and in the entry picker itself)
+  forces a pull - use it right after adding an entry in KeePass Desktop.
 - The cached file is stored encrypted (it is the original KeePass
   blob, worthless without the vault-held master).
 
