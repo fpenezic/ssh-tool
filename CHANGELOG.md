@@ -34,7 +34,8 @@ in alpha upstream.
   The connection is encrypted (a self-signed certificate whose
   fingerprint is the word-code you compare). Both machines must be able
   to reach each other - use it on a LAN or over an existing VPN /
-  WireGuard profile; there's no cloud relay.
+  WireGuard profile; there's no cloud relay. If the chosen port (8443 by
+  default) is already in use, the share falls back to a free one.
 
 - Also fixed a long-standing bug where breaking a split into separate
   tabs (ungroup, or popping a pane out) named the new tabs with a raw
