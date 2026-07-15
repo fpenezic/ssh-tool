@@ -945,7 +945,7 @@
         </label>
       </div>
 
-      <label class="span-2">Credential
+      <label>Credential
         <div class="cred-picker-row">
           <SearchableSelect
             bind:value={editingFolder.authRef}
@@ -1163,7 +1163,7 @@
           {/if}
         </label>
       </div>
-      <label class="span-2">Credential
+      <label>Credential
         <div class="cred-picker-row">
           <SearchableSelect
             bind:value={editing.authRef}
@@ -2093,26 +2093,26 @@
     margin-top: 0.6rem;
   }
   .vnc-grid .span-2 { grid-column: 1 / -1; }
-  /* Picker keeps the same left-column width as the Name input; the button is
-     a compact chip directly to its right (it does NOT stretch to fill the
-     column). The label spans both form columns (.span-2) so the picker can be
-     a full field wide. Wraps on skinny windows. */
+  /* The credential cell keeps its normal single-column width (same as the
+     Name field). The picker fills that width; the compact "From KeePass"
+     button sits on its own line just below, right-aligned - so the picker
+     width is never touched. */
   .cred-picker-row {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.6rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
     margin-top: 4px;
   }
   .cred-picker-row :global(.search-select) {
-    flex: 0 1 calc(50% - 0.5rem);
-    min-width: 0;
+    width: 100%;
   }
   .kp-btn {
-    flex: 0 0 auto;
+    align-self: flex-end;
     width: auto;
     white-space: nowrap;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
   }
   .kp-badge {
     display: inline-block;
