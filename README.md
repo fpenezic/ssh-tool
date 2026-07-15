@@ -30,6 +30,9 @@ test status varies).
 - **Power tools** - live tcpdump panel (smart sudo), HTTP/SOAP
   request modal over SOCKS5, parallel batch command exec across a
   multi-selection, snippet library (Ctrl+Shift+P), markdown notes.
+- **Share a session** - to a plain web browser (a colleague watches,
+  or types in with your approval; encrypted, per-guest word-code
+  confirmation, no cloud relay) or to an external LLM over MCP.
 - **opkssh** native (no external binary) certificate flow.
 - **SFTP** browser with native OS drag-and-drop upload.
 - **Port forwards** - local / remote / SOCKS5 dynamic with
@@ -55,7 +58,7 @@ test status varies).
 
 - Go 1.26+
 - Node 20+
-- [`wails3` CLI](https://wails.io) (alpha) - `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.111`
+- [`wails3` CLI](https://wails.io) (alpha) - `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.117`
 - [Task](https://taskfile.dev) - `go install github.com/go-task/task/v3/cmd/task@latest`
 
 ### Build for your platform

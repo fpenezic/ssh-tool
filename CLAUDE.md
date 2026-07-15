@@ -37,7 +37,7 @@ Author wants 300+ connections, daily-driver UX, full opkssh support
 ## Tech stack
 
 Backend (Go 1.26):
-- Wails v3 alpha2.111 (`github.com/wailsapp/wails/v3`) - desktop shell + IPC.
+- Wails v3 alpha2.117 (`github.com/wailsapp/wails/v3`) - desktop shell + IPC.
 - SQLite via `modernc.org/sqlite` (pure Go, no CGO).
 - SSH: `golang.org/x/crypto/ssh` + `.../ssh/agent`.
 - Vault: Argon2id KDF + XChaCha20-Poly1305 AEAD. File-only persistence

@@ -10,7 +10,7 @@
 
 | Module | Purpose |
 |---|---|
-| `github.com/wailsapp/wails/v3` | Desktop shell + IPC (alpha2.111) |
+| `github.com/wailsapp/wails/v3` | Desktop shell + IPC (alpha2.117) |
 | `modernc.org/sqlite` | SQLite, pure Go (no CGO) |
 | `golang.org/x/crypto/ssh` | SSH client |
 | `golang.org/x/crypto/ssh/agent` | Agent integration |
@@ -73,7 +73,7 @@ nothing is uploaded there.
 - Go: 1.26 (see `go.mod`)
 - Node: 20.x LTS
 - Wails CLI v3: matches the alpha tag pinned in `go.mod` (currently
-  alpha2.111)
+  alpha2.117)
 
 ## What we don't use, and why
 
