@@ -63,6 +63,16 @@
     new Set(credList.filter((c) => !!c.config?.keepass_ref).map((c) => c.id)),
   );
 
+  // Whether any KeePass database is registered - the "From KeePass" button is
+  // hidden entirely when none is, since it would open an empty picker.
+  let hasKeepass = $state(false);
+  let keepassChecked = false;
+  $effect(() => {
+    if (keepassChecked) return;
+    keepassChecked = true;
+    api.keepassList().then((dbs) => { hasKeepass = (dbs?.length ?? 0) > 0; }).catch(() => {});
+  });
+
   // KeePass entry-picker modal. `target` says which editor the chosen entry's
   // auto-created credential should be assigned to.
   let kpPickerOpen = $state(false);
@@ -952,10 +962,12 @@
             options={credOptions}
             placeholder="Search credentials…"
           />
-          <button type="button" class="kp-btn" onclick={() => openKeepassPicker("folder")}
-            title="Pick a secret straight from a KeePass database">
-            From KeePass
-          </button>
+          {#if hasKeepass}
+            <button type="button" class="kp-btn" onclick={() => openKeepassPicker("folder")}
+              title="Pick a secret straight from a KeePass database">
+              From KeePass
+            </button>
+          {/if}
         </div>
         {#if editingFolder.authRef && keepassCredIds.has(editingFolder.authRef)}
           <span class="kp-badge">KeePass-backed - secret read from the .kdbx at connect</span>
@@ -1170,10 +1182,12 @@
             options={credOptions}
             placeholder="Search credentials…"
           />
-          <button type="button" class="kp-btn" onclick={() => openKeepassPicker("connection")}
-            title="Pick a secret straight from a KeePass database">
-            From KeePass
-          </button>
+          {#if hasKeepass}
+            <button type="button" class="kp-btn" onclick={() => openKeepassPicker("connection")}
+              title="Pick a secret straight from a KeePass database">
+              From KeePass
+            </button>
+          {/if}
         </div>
         {#if editing.authRef && keepassCredIds.has(editing.authRef)}
           <span class="kp-badge">KeePass-backed - secret read from the .kdbx at connect</span>
