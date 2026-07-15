@@ -18,6 +18,7 @@
   import { EventsOn } from "./wailsRuntime";
   import { renderMarkdown } from "./markdown";
   import SearchableSelect from "./SearchableSelect.svelte";
+  import KeepassEntryPicker from "./KeepassEntryPicker.svelte";
   import PasswordStrengthMeter from "./PasswordStrengthMeter.svelte";
   import DynamicEntryDetail from "./DynamicEntryDetail.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
@@ -55,6 +56,57 @@
   const folder = $derived(selection.selectedFolder());
   const conn = $derived(selection.selectedConnection());
   const credList = $derived(credentials.list);
+
+  // Set of credential ids that reference a KeePass entry, so the auth picker
+  // can badge them apart from vault-backed passwords.
+  const keepassCredIds = $derived(
+    new Set(credList.filter((c) => !!c.config?.keepass_ref).map((c) => c.id)),
+  );
+
+  // KeePass entry-picker modal. `target` says which editor the chosen entry's
+  // auto-created credential should be assigned to.
+  let kpPickerOpen = $state(false);
+  let kpPickerTarget = $state<"folder" | "connection" | null>(null);
+
+  function openKeepassPicker(target: "folder" | "connection") {
+    kpPickerTarget = target;
+    kpPickerOpen = true;
+  }
+
+  async function onKeepassPick(r: {
+    db_id: string; entry_uuid: string; field: string;
+    is_key: boolean; name: string; username: string;
+  }) {
+    kpPickerOpen = false;
+    try {
+      // File the auto-created credential under the same folder the editor's
+      // subject lives in (best effort; null = root).
+      const folderId =
+        kpPickerTarget === "folder"
+          ? (folder?.id ?? null)
+          : (conn?.folder_id ?? null);
+      const cred = await api.keepassEnsureCredential({
+        db_id: r.db_id,
+        entry_uuid: r.entry_uuid,
+        field: r.field,
+        is_key: r.is_key,
+        name: r.name,
+        username: r.username,
+        folder_id: folderId,
+      });
+      await credentials.load();
+      if (kpPickerTarget === "folder" && editingFolder) {
+        editingFolder = { ...editingFolder, authRef: cred.id };
+      } else if (kpPickerTarget === "connection" && editing) {
+        editing = { ...editing, authRef: cred.id };
+      }
+      toast.ok(`Using KeePass entry "${r.name}"`);
+    } catch (e) {
+      toast.err("KeePass: " + errMsg(e));
+    } finally {
+      kpPickerTarget = null;
+    }
+  }
 
   // ----- Folder editing -----
 
@@ -895,11 +947,20 @@
       </div>
 
       <label>Credential
-        <SearchableSelect
-          bind:value={editingFolder.authRef}
-          options={credOptions}
-          placeholder="Search credentials…"
-        />
+        <div class="cred-picker-row">
+          <SearchableSelect
+            bind:value={editingFolder.authRef}
+            options={credOptions}
+            placeholder="Search credentials…"
+          />
+          <button type="button" class="kp-btn" onclick={() => openKeepassPicker("folder")}
+            title="Pick a secret straight from a KeePass database">
+            From KeePass
+          </button>
+        </div>
+        {#if editingFolder.authRef && keepassCredIds.has(editingFolder.authRef)}
+          <span class="kp-badge">🔑 KeePass-backed - secret read from the .kdbx at connect</span>
+        {/if}
       </label>
 
       <div class="span-2"><JumpChainEditor
@@ -1104,11 +1165,20 @@
         </label>
       </div>
       <label>Credential
-        <SearchableSelect
-          bind:value={editing.authRef}
-          options={credOptions}
-          placeholder="Search credentials…"
-        />
+        <div class="cred-picker-row">
+          <SearchableSelect
+            bind:value={editing.authRef}
+            options={credOptions}
+            placeholder="Search credentials…"
+          />
+          <button type="button" class="kp-btn" onclick={() => openKeepassPicker("connection")}
+            title="Pick a secret straight from a KeePass database">
+            From KeePass
+          </button>
+        </div>
+        {#if editing.authRef && keepassCredIds.has(editing.authRef)}
+          <span class="kp-badge">🔑 KeePass-backed - secret read from the .kdbx at connect</span>
+        {/if}
         {#if inhAuth.from && !editing.authRef}
           {@const inhCredName = credentials.byId(String(inhAuth.value))?.name ?? String(inhAuth.value)}
           <span class="inh-hint">inherited from <strong>{inhAuth.from.name}</strong>: {inhCredName}</span>
@@ -1432,6 +1502,13 @@
   <BatchExecModal
     onClose={() => (batchExecOpen = false)}
     hostsOverride={batchExecHosts}
+  />
+{/if}
+
+{#if kpPickerOpen}
+  <KeepassEntryPicker
+    onClose={() => { kpPickerOpen = false; kpPickerTarget = null; }}
+    onPick={onKeepassPick}
   />
 {/if}
 
@@ -2017,6 +2094,27 @@
     margin-top: 0.6rem;
   }
   .vnc-grid .span-2 { grid-column: 1 / -1; }
+  .cred-picker-row {
+    display: flex;
+    gap: 6px;
+    align-items: stretch;
+  }
+  .cred-picker-row :global(.searchable-select),
+  .cred-picker-row > :first-child {
+    flex: 1;
+    min-width: 0;
+  }
+  .kp-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-size: 0.8rem;
+  }
+  .kp-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    color: var(--overlay1, #9399b2);
+    margin-top: 0.2rem;
+  }
   .inh-hint {
     font-size: 0.7rem;
     color: var(--overlay0);

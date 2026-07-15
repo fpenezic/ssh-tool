@@ -21,12 +21,18 @@ in alpha upstream.
     over WebDAV / SFTP. The database's master password (and optional key
     file) are sealed in this app's vault, so unlocking ssh-tool once
     opens KeePass too - no second prompt per connection.
-  - **Reference an entry from the credential editor.** Pick "From
-    KeePass database", choose the database, browse to the entry, and pick
-    the field - the entry's password, a custom field, or an attachment
-    (for a private key stored as a file inside KeePass). Entries are
-    referenced by their stable UUID, so renaming or moving them in
-    KeePass doesn't break the link.
+  - **Reference an entry straight from the connection.** Next to the
+    Credential picker on any connection or folder there's a "From
+    KeePass" button: it opens the database as a searchable group tree,
+    and picking an entry creates (and assigns) a credential for it in one
+    step - no need to hand-build a credential first. Picking the same
+    entry again reuses it, and KeePass-backed credentials carry a key
+    badge so they're easy to tell apart from vault passwords. The
+    credential editor's "From KeePass database" kind does the same thing
+    when you want to create one up front. You choose the entry's
+    password, a custom field, or an attachment (for a private key stored
+    as a file inside KeePass); entries are referenced by their stable
+    UUID, so renaming or moving them in KeePass doesn't break the link.
   - **Remote databases stay fresh, safely.** A remote `.kdbx` is fetched
     when you unlock and again whenever the cached copy is more than a few
     minutes old, using a conditional request so an unchanged file isn't

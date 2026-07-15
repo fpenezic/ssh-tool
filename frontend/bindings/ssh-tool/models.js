@@ -1700,6 +1700,85 @@ export class ImportArchiveRequest {
 }
 
 /**
+ * KeepassEnsureCredentialInput picks a KeePass entry+field straight from the
+ * connection auth picker. The app finds an existing credential that already
+ * references the exact same entry+field (so choosing it twice reuses one) or
+ * creates a fresh one, and returns it ready to assign as auth_ref.
+ */
+export class KeepassEnsureCredentialInput {
+    /**
+     * Creates a new KeepassEnsureCredentialInput instance.
+     * @param {Partial<KeepassEnsureCredentialInput>} [$$source = {}] - The source object to create the KeepassEnsureCredentialInput.
+     */
+    constructor($$source = {}) {
+        if (!("db_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["db_id"] = "";
+        }
+        if (!("entry_uuid" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["entry_uuid"] = "";
+        }
+        if (!("field" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["field"] = "";
+        }
+        if (!("is_key" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["is_key"] = false;
+        }
+        if (!("name" in $$source)) {
+            /**
+             * suggested name (entry title); deduped if taken
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("username" in $$source)) {
+            /**
+             * entry username -> credential default_username
+             * @member
+             * @type {string}
+             */
+            this["username"] = "";
+        }
+        if (!("folder_id" in $$source)) {
+            /**
+             * credential folder to file it under
+             * @member
+             * @type {string | null}
+             */
+            this["folder_id"] = null;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new KeepassEnsureCredentialInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {KeepassEnsureCredentialInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new KeepassEnsureCredentialInput(/** @type {Partial<KeepassEnsureCredentialInput>} */($$parsedSource));
+    }
+}
+
+/**
  * KeepassSaveInput is the create/update payload from the settings UI. Secrets
  * (master, key file, remote password) are passed inline here and sealed into
  * the vault by this method - they are never stored in the row.

@@ -1251,6 +1251,18 @@ export function KeepassDelete(id) {
 }
 
 /**
+ * KeepassEnsureCredential returns a credential referencing the given KeePass
+ * entry+field, creating one if none exists yet.
+ * @param {$models.KeepassEnsureCredentialInput} $in
+ * @returns {$CancellablePromise<store$0.CredentialRef | null>}
+ */
+export function KeepassEnsureCredential($in) {
+    return $Call.ByID(887173250, $in).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType28($result);
+    }));
+}
+
+/**
  * KeepassList returns the registered databases (no secrets).
  * @returns {$CancellablePromise<store$0.KeepassDatabase[]>}
  */

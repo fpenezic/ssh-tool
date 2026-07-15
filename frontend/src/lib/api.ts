@@ -679,6 +679,16 @@ export const api = {
   keepassRefresh: (id: string) => G.KeepassRefresh(id) as unknown as Promise<string>,
   keepassBrowse: (id: string) =>
     G.KeepassBrowse(id) as unknown as Promise<KeepassGroupInfo[]>,
+  keepassEnsureCredential: (input: {
+    db_id: string;
+    entry_uuid: string;
+    field: string;
+    is_key: boolean;
+    name: string;
+    username?: string;
+    folder_id?: string | null;
+  }) =>
+    G.KeepassEnsureCredential(input as unknown as Parameters<typeof G.KeepassEnsureCredential>[0]) as unknown as Promise<CredentialRef>,
 
   networkProfilesList: () =>
     G.NetworkProfilesList() as unknown as Promise<NetworkProfileInfo[]>,

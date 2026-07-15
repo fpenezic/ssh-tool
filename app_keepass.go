@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"ssh-tool/internal/creds"
 	"ssh-tool/internal/keepass"
 	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/store"
@@ -364,6 +365,86 @@ func (a *App) KeepassBrowse(id string) ([]keepass.GroupInfo, error) {
 		return nil, fmt.Errorf("keepass not initialised")
 	}
 	return a.keepass.Browse(id)
+}
+
+// KeepassEnsureCredentialInput picks a KeePass entry+field straight from the
+// connection auth picker. The app finds an existing credential that already
+// references the exact same entry+field (so choosing it twice reuses one) or
+// creates a fresh one, and returns it ready to assign as auth_ref.
+type KeepassEnsureCredentialInput struct {
+	DBID      string  `json:"db_id"`
+	EntryUUID string  `json:"entry_uuid"`
+	Field     string  `json:"field"`
+	IsKey     bool    `json:"is_key"`
+	Name      string  `json:"name"`      // suggested name (entry title); deduped if taken
+	Username  string  `json:"username"`  // entry username -> credential default_username
+	FolderID  *string `json:"folder_id"` // credential folder to file it under
+}
+
+// KeepassEnsureCredential returns a credential referencing the given KeePass
+// entry+field, creating one if none exists yet.
+func (a *App) KeepassEnsureCredential(in KeepassEnsureCredentialInput) (*store.CredentialRef, error) {
+	if in.DBID == "" || in.EntryUUID == "" {
+		return nil, fmt.Errorf("keepass reference is incomplete")
+	}
+	field := in.Field
+	if field == "" {
+		field = "password"
+	}
+	// Dedup: reuse an existing credential pointing at the same entry+field.
+	existing, err := a.db.ListCredentials()
+	if err != nil {
+		return nil, err
+	}
+	for i := range existing {
+		ref := store.ParseKeepassRef(existing[i].Config)
+		if ref != nil && ref.DBID == in.DBID && ref.EntryUUID == in.EntryUUID && ref.Field == field {
+			return &existing[i], nil
+		}
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		name = "KeePass entry"
+	}
+	name = a.uniqueCredentialName(name, existing)
+
+	var defUser *string
+	if u := strings.TrimSpace(in.Username); u != "" {
+		defUser = &u
+	}
+	res, err := a.credSvc.Create(creds.CreateInput{
+		Kind:             "keepass",
+		Name:             name,
+		FolderID:         in.FolderID,
+		DefaultUsername:  defUser,
+		KeepassDBID:      in.DBID,
+		KeepassEntryUUID: in.EntryUUID,
+		KeepassField:     field,
+		KeepassIsKey:     in.IsKey,
+	})
+	if err != nil {
+		return nil, err
+	}
+	a.recordAudit("keepass.credential.create", res.Credential.ID, map[string]string{"name": name})
+	return res.Credential, nil
+}
+
+// uniqueCredentialName appends " (2)", " (3)", ... until the name is free,
+// since credential names are unique.
+func (a *App) uniqueCredentialName(base string, existing []store.CredentialRef) string {
+	taken := make(map[string]bool, len(existing))
+	for i := range existing {
+		taken[existing[i].Name] = true
+	}
+	if !taken[base] {
+		return base
+	}
+	for n := 2; ; n++ {
+		cand := fmt.Sprintf("%s (%d)", base, n)
+		if !taken[cand] {
+			return cand
+		}
+	}
 }
 
 // ---------- vault account naming ----------

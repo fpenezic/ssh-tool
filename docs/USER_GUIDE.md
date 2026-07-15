@@ -452,9 +452,19 @@ the file is opened **read-only** and never written to.
 - For remote sources, the transport credentials (WebDAV password, or
   SFTP password / host / user) are sealed in the vault as well.
 
-**Reference an entry** from the credential editor: choose **From
-KeePass database**, pick the database, browse to the entry, and pick
-the field:
+**Reference an entry** two ways:
+
+- Fastest: on a connection (or folder) in the detail panel, next to the
+  **Credential** picker, click **From KeePass**. A picker opens the
+  database as a collapsible group tree with a search box (title /
+  username / group); choose an entry and field, and ssh-tool creates a
+  credential for it (named after the entry) and assigns it right there.
+  Picking the same entry again reuses the same credential. KeePass-backed
+  credentials show a small key badge so you can tell them apart from
+  vault-stored passwords.
+- Or from the credential editor: choose **From
+  KeePass database**, pick the database, browse to the entry, and pick
+  the field:
 
 - the entry **password**, or
 - a **custom field** holding a PEM private key, or
