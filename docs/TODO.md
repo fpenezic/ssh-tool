@@ -538,6 +538,8 @@ id off the scaffold default and stamped the build version. Built locally
   exists; structure is the missing piece.
 - **`as any` cast cleanup** in `api.ts` - once the autogen post-
   processor lands.
-- **Dynamic inventory: error visibility** - last error currently
-  hidden behind a red `!` dot tooltip. Could surface as a toast +
-  retry button if the user is actively expanding a broken folder.
+- ~~**Dynamic inventory: error visibility**~~ *(already done)* -
+  `TreeNode.svelte` shows a red `!` dot on a broken dynamic folder
+  (click-to-retry via `retryDynamicRefresh` -> `dynamicFolderRefreshNow`)
+  and fires a toast the first time the user expands it, so the failure
+  isn't missed. The tooltip carries the last error.
