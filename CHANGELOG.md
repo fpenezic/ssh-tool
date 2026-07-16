@@ -7,6 +7,18 @@ in alpha upstream.
 
 ---
 
+## [0.62.2] - Copy password / username for KeePass & Bitwarden
+
+### Fixed
+
+- **The connection "copy password" and "copy username" buttons now work
+  for KeePass- and Bitwarden-backed credentials.** Copy password
+  previously failed with a "no vault secret" error because these
+  credentials keep no secret in the local vault - the value is read live
+  from the .kdbx / server. It is now resolved the same way a connection
+  resolves it, and copy username falls back to the entry's stored
+  username.
+
 ## [0.62.1] - Auth prompt fixes
 
 ### Fixed
