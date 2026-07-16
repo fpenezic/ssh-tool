@@ -16,6 +16,19 @@ import (
 // (chromium-family vs firefox) and apply the right flag set.
 type LaunchOptions struct {
 	PreferredPath string // explicit binary; empty = auto-detect
+
+	// Persistent uses a stable, reused profile dir (logins and cookies
+	// survive between launches) instead of a throwaway isolated one. Useful
+	// when the tunnelled site needs saved credentials. It is still a
+	// DEDICATED profile, separate from the user's everyday browser - not the
+	// default profile - so the proxy applies reliably and normal browsing
+	// isn't tunnelled.
+	Persistent bool
+
+	// ProfileBaseDir is the app's data dir, under which the persistent
+	// profile lives. Passed in because this package can't import the store.
+	// Empty falls back to the OS temp area (isolated behaviour).
+	ProfileBaseDir string
 }
 
 // LaunchIsolatedBrowser opens a browser pointed at a SOCKS5 proxy, in an
@@ -39,9 +52,9 @@ func LaunchIsolatedBrowser(socksAddr string, socksPort uint16, url string, opts 
 
 	switch engine {
 	case engineChromium:
-		return launchChromium(bin, socksAddr, socksPort, url)
+		return launchChromium(bin, socksAddr, socksPort, url, opts)
 	case engineFirefox:
-		return launchFirefox(bin, socksAddr, socksPort, url)
+		return launchFirefox(bin, socksAddr, socksPort, url, opts)
 	default:
 		return 0, fmt.Errorf("unknown browser engine for %s", bin)
 	}
@@ -113,8 +126,8 @@ func resolveBrowser(preferredPath string) (string, browserEngine, error) {
 
 // ----- chromium-family launch -----
 
-func launchChromium(bin, socksAddr string, socksPort uint16, url string) (int, error) {
-	profile, err := chromiumProfileDir()
+func launchChromium(bin, socksAddr string, socksPort uint16, url string, opts LaunchOptions) (int, error) {
+	profile, err := chromiumProfileDir(opts)
 	if err != nil {
 		return 0, err
 	}
@@ -153,10 +166,15 @@ func proxyHostForBrowser(bin, socksAddr string) string {
 	return socksAddr
 }
 
-// chromiumProfileDir picks a writable, isolated user-data-dir for this
-// launch. We use the user's temp area + a timestamp suffix so concurrent
-// "Open in browser" clicks each get their own profile.
-func chromiumProfileDir() (string, error) {
+// chromiumProfileDir picks the user-data-dir for this launch. Isolated mode
+// (default) uses the temp area + a timestamp so concurrent "Open in browser"
+// clicks each get their own throwaway profile. Persistent mode uses a single
+// stable dir under the app data dir so logins/cookies survive between
+// launches - still a dedicated profile, not the user's default one.
+func chromiumProfileDir(opts LaunchOptions) (string, error) {
+	if opts.Persistent {
+		return persistentProfileDir(opts.ProfileBaseDir, "chromium")
+	}
 	// On WSL → Windows browser, the user-data-dir must be a Windows path.
 	if isWSL() {
 		winTemp, err := winEnv("TEMP")
@@ -176,16 +194,68 @@ func chromiumProfileDir() (string, error) {
 	return dir, nil
 }
 
+// persistentProfileDir returns a stable per-engine profile dir under base,
+// creating it. On WSL the browser is the Windows host's, so the dir must be a
+// Windows path - we place it under the Windows LOCALAPPDATA rather than the
+// (Linux) data dir the browser can't see.
+func persistentProfileDir(base, engine string) (string, error) {
+	if isWSL() {
+		root, err := winEnv("LOCALAPPDATA")
+		if err != nil || root == "" {
+			root = `C:\Windows\Temp`
+		}
+		// A Windows path; the browser (Windows-side) creates it itself.
+		return fmt.Sprintf(`%s\ssh-tool\browser-%s`, root, engine), nil
+	}
+	if base == "" {
+		// Fall back to a stable temp dir rather than a random one.
+		base = filepath.Join(os.TempDir(), "ssh-tool")
+	}
+	dir := filepath.Join(base, "browser-profiles", engine)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("persistent profile dir: %w", err)
+	}
+	return dir, nil
+}
+
 // ----- firefox launch -----
 
-func launchFirefox(bin, socksAddr string, socksPort uint16, url string) (int, error) {
-	profile, err := os.MkdirTemp("", "ssh-tool-firefox-*")
-	if err != nil {
-		return 0, fmt.Errorf("temp profile: %w", err)
+func launchFirefox(bin, socksAddr string, socksPort uint16, url string, opts LaunchOptions) (int, error) {
+	var profile string
+	if opts.Persistent {
+		p, err := persistentProfileDir(opts.ProfileBaseDir, "firefox")
+		if err != nil {
+			return 0, err
+		}
+		// On WSL the dir is a Windows path the browser creates itself; we
+		// can't write user.js into it from the Linux side. Fall back to a
+		// Linux-visible stable dir for the profile so prefs land, and let
+		// Firefox (Windows) open it - Firefox accepts a UNC/native path via
+		// -profile. To keep this simple and correct across both, use a
+		// Linux-side stable dir when not on WSL, and on WSL a stable Windows
+		// dir written through the \\wsl$ bridge is out of scope: fall back to
+		// an ephemeral profile there so proxy prefs are guaranteed written.
+		if isWSL() {
+			tmp, err := os.MkdirTemp("", "ssh-tool-firefox-*")
+			if err != nil {
+				return 0, fmt.Errorf("temp profile: %w", err)
+			}
+			profile = tmp
+		} else {
+			profile = p
+		}
+	} else {
+		tmp, err := os.MkdirTemp("", "ssh-tool-firefox-*")
+		if err != nil {
+			return 0, fmt.Errorf("temp profile: %w", err)
+		}
+		profile = tmp
 	}
 	// Firefox needs the proxy preference written into prefs.js (well,
-	// user.js, which Firefox copies into prefs.js on first launch). It
-	// has no command-line flag for SOCKS.
+	// user.js, which Firefox copies into prefs.js on every launch). It
+	// has no command-line flag for SOCKS. Rewriting user.js each launch is
+	// harmless - Firefox re-applies it and the proxy stays correct even for
+	// a persistent profile.
 	prefs := fmt.Sprintf(`
 user_pref("network.proxy.type", 1);
 user_pref("network.proxy.socks", "%s");

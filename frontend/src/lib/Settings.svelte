@@ -32,6 +32,16 @@
   import { updateCheck } from "./updateCheck.svelte";
 
   let browserPath = $state("");
+  let browserPersistent = $state(false);
+
+  async function toggleBrowserPersistent(on: boolean) {
+    browserPersistent = on;
+    try {
+      await api.settingsSet("browser_persistent_profile", on ? "true" : "false");
+    } catch (e) {
+      console.warn("browser_persistent_profile set:", e);
+    }
+  }
   let savedPath = $state("");
   let savedAt = $state<string | null>(null);
 
@@ -284,6 +294,7 @@
       const v = await api.settingsGet("preferred_browser_path");
       browserPath = v ?? "";
       savedPath = v ?? "";
+      browserPersistent = (await api.settingsGet("browser_persistent_profile")) === "true";
     } catch (e) {
       console.warn("settings load:", e);
     }
@@ -2845,7 +2856,8 @@
     <p class="hint">
       When you click <strong>Open in browser</strong> on a SOCKS5 forward, we
       try to launch a chromium-family or Firefox-family browser with the proxy
-      preconfigured and an isolated profile.
+      preconfigured. By default the profile is isolated (fresh each time); the
+      Profile option below keeps it persistent so saved logins survive.
     </p>
     <p class="hint">
       Leave the field below empty for auto-detection (preferred). Pin a path
@@ -2869,6 +2881,26 @@
     <p class="hint">
       Currently active: <code>{savedPath || "(auto-detect)"}</code>
     </p>
+
+    <h2 style="margin-top:1.5rem">Profile</h2>
+    <label class="row" style="align-items:flex-start;gap:0.5rem">
+      <input
+        type="checkbox"
+        checked={browserPersistent}
+        onchange={(e) => toggleBrowserPersistent((e.target as HTMLInputElement).checked)}
+      />
+      <span>
+        <strong>Use a persistent browser profile</strong>
+        <span class="hint" style="display:block">
+          Keeps logins and cookies between launches, so a tunnelled site that
+          needs your saved credentials stays signed in. Still a dedicated
+          profile - separate from your everyday browser, so normal browsing
+          isn't routed through the tunnel. Off (default) opens a fresh isolated
+          profile each time. Works with both Chromium- and Firefox-family
+          browsers (on WSL, a persistent Firefox profile falls back to isolated).
+        </span>
+      </span>
+    </label>
   </div>
 
   {:else if activeSection === "snippets"}
