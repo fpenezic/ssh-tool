@@ -340,13 +340,18 @@ Each credential has a **kind** that determines auth behaviour:
   YAML editable in the credential detail panel. Browser-based OIDC
   flow runs on first use; cert + key live in the vault. No
   `~/.ssh/` or `~/.opk/` files touched.
-- **vault** - placeholder for external secret managers (HashiCorp
-  Vault, Bitwarden/Vaultwarden). Schema in place; integrations not
-  yet implemented.
+- **vault** - placeholder for other external secret managers
+  (e.g. HashiCorp Vault). Schema in place; integration not yet
+  implemented.
 - **From KeePass** - the secret is read out of a registered KeePass
   `.kdbx` at connect time by entry reference; nothing is copied into
   ssh-tool's own store. Picked as "From KeePass database" in the
   credential editor. See the KeePass section below.
+- **From Bitwarden** - the secret is read out of a registered
+  Vaultwarden / Bitwarden server at connect time by item reference
+  (organizations and collections included); nothing is copied into
+  ssh-tool's own store. Picked as "From Bitwarden server" in the
+  credential editor. See the Bitwarden section below.
 
 ### Storage modes
 
@@ -495,6 +500,54 @@ entry does).
 
 Decrypted databases live in memory only and are **wiped the moment the
 vault locks**, exactly like the vault's own secrets.
+
+### Vaultwarden / Bitwarden servers
+
+ssh-tool can also read secrets straight out of a self-hosted
+**Vaultwarden** (or Bitwarden) server, **organizations and collections
+included**. Like KeePass, the server stays the source of truth - it is
+read **only** and never written to; the secret is decrypted at connect
+time and never copied into ssh-tool's own store.
+
+**Register a server** in Settings → Bitwarden:
+
+- **Server URL** - e.g. `https://vault.example.com`.
+- **API key** - sign-in uses an API key, not your password. On the
+  server, open **Settings → Security → Keys** and view the API key
+  (a client id + client secret). In ssh-tool, pick an existing API-key
+  credential or click **Create** to add one inline.
+- **Master password** - sealed in ssh-tool's own vault and used only to
+  decrypt the fetched vault. It is **write-only**: entered once, never
+  shown again, and never sent to the server.
+- **Network profile** (optional) - if the server is only reachable over
+  a VPN, choose a **WireGuard** profile to dial the sync through.
+
+**Reference an item** the same two ways as KeePass:
+
+- Fastest: on a connection or folder, click **From Bitwarden** next to
+  the Credential picker (shown once a server is registered, live - no
+  restart). The picker opens the vault as an **Organization → Collection
+  → Item** tree with a search box and a **Sync** button. Choose an item
+  and field, and ssh-tool creates and assigns a credential for it, filed
+  under a "Bitwarden" credential folder. Bitwarden-backed credentials
+  show a **shield icon** and a "bitwarden" label.
+- Or from the credential editor: **From Bitwarden server**, pick the
+  server, item, and field.
+
+Resolvable fields: the item **password** or **username**, a **custom
+field**, or a native **SSH-key** item's private key (which authenticates
+as a key). Items are referenced by id, so renaming them on the server
+does not break the link.
+
+**Freshness and offline** mirror KeePass: the vault syncs on unlock and
+re-checks when a cached copy is older than a few minutes; a **Sync**
+button forces a pull. If the server is unreachable, a cached copy is
+used and marked **stale** rather than breaking a connect. The cache is
+sealed with your vault, and decrypted vaults are wiped from memory the
+moment the vault locks.
+
+Sign-in is API-key only (no email/password or interactive 2FA login),
+and the server needs a certificate your OS trusts.
 
 ---
 

@@ -260,8 +260,19 @@ update params + download progress shipped right after; what remains):
   Hello / Touch ID / Linux Polkit. WebAuthn API would need to be
   bridged from Wails since the webview's WebAuthn calls don't see
   platform authenticators by default. Deferred.
-- **HashiCorp Vault / Vaultwarden sync** - `kind=external` credential
-  that fetches the secret at use-time from a remote secret store.
+- **HashiCorp Vault** - `kind=external` credential that fetches the
+  secret at use-time from a remote secret store. (Bitwarden /
+  Vaultwarden shipped separately, see below.)
+- ~~**Vaultwarden / Bitwarden as a live credential backend**~~
+  *(shipped v0.60.0)*. `internal/bitwarden` (native EncString crypto,
+  no new deps), bitwarden_servers table (v19), credential
+  `config_json.bitwarden_ref {server_id, cipher_id, field}`, resolver
+  via `sshlayer.BitwardenResolveHook`. API-key login + /api/sync,
+  organizations/collections, native SSH-key items. Master sealed in the
+  vault (write-only), API key a normal api_token credential. Sealed sync
+  cache with stale-on-offline; WireGuard-profile routing. Wiped on Lock.
+  Follow-ups not done: TOTP auto-fill; write-back; email+password / 2FA
+  login; sidecar-SOCKS (Netbird/Tailscale) routing; self-signed certs.
 - ~~**KeePass as a live credential backend**~~ *(shipped v0.59.0)*.
   `internal/keepass` (read-only `gokeepasslib/v3`), keepass_databases
   table (v18), credential `config_json.keepass_ref {db_id, entry_uuid,

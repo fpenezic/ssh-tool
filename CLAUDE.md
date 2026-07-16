@@ -87,7 +87,7 @@ ssh-tool/
 ├─ wails3_runtime.go       shim: EventsEmit (+ mobile enqueue) / BrowserOpenURL
 ├─ Taskfile.yml            top-level task routing (android: namespace too)
 ├─ internal/
-│  ├─ store/               SQLite + migrations + CRUD (DB schema at v17; audit log in a separate audit.db)
+│  ├─ store/               SQLite + migrations + CRUD (DB schema at v19; audit log in a separate audit.db)
 │  ├─ importer/
 │  │   ├─ rdm/             Devolutions RDM JSON importer (3-pass)
 │  │   ├─ sshconfig/       ~/.ssh/config importer
@@ -417,6 +417,51 @@ These still bite. The archive of older / now-handled traps lives in
     is gated on `keepass_dbs_changed` (emitted from create/update/delete) so it
     appears live without an app restart. Local paths get a native Browse dialog
     (`KeepassPickFile` -> `OpenFileDialog`, desktop-only).
+
+34. **Vaultwarden / Bitwarden is the HTTP sibling of KeePass (gotcha 33) -
+    same read-only live-backend shape, different source + real crypto.**
+    `internal/bitwarden` (no app imports, unit-testable) implements the
+    Bitwarden EncString scheme natively: AES-256-CBC + HMAC-SHA256, PKCS7,
+    HKDF master-key stretch, RSA-OAEP org-key unwrap, PBKDF2 / Argon2id KDFs -
+    all stdlib + `golang.org/x/crypto`, ZERO new deps. Decrypt chain: API-key
+    (`client_credentials`) login -> `/api/sync` -> derive master key from the
+    account's `Kdf` field -> unwrap userKey (stretched-master-key-decrypts
+    `profile.Key`) -> for each org, decrypt the RSA private key with userKey
+    then RSA-OAEP-unwrap the org key. A cipher with `organizationId` decrypts
+    with its org key, else userKey - `Vault.keyFor` is the router. A credential
+    does NOT get a new `Kind`: it stays `password`/`key` with
+    `StorageMode=external` and `config_json.bitwarden_ref {server_id, cipher_id,
+    field}`; `sshlayer.BitwardenResolveHook` (package var, gotcha 28 pattern) is
+    called right after the KeePass hook, before the kind switch. Two auth secrets
+    per server, DELIBERATELY split: the **master password** is written through
+    the Settings form and sealed to a hidden vault account
+    (`bitwarden:<id>:master`), write-only / never returned (like the KeePass
+    master); the **API key** (client_id + client_secret) is a NORMAL `api_token`
+    credential (token_id = client_id, vault secret = client_secret) picked via
+    the credential picker with inline create - visible, rotatable, flows through
+    backup/sync. Store v19 table `bitwarden_servers` holds only pointers + a
+    `network_profile_id`. Cache/freshness copy KeePass exactly: fetch-on-unlock +
+    fetch-on-connect-if-stale (5 min), stale-on-offline fallback (serve the
+    in-memory decrypt marked `FreshStale`, or the on-disk cache), NO timer poll.
+    The cache blob is the sync JSON SEALED with the app vault
+    (`Vault.Seal`/`Open` over `UnlockedVault.SealBlob`/`OpenBlob`, 0600 under
+    `<DataDir>/bitwarden-cache`) - large blobs must NOT bloat the JSON account
+    store. Decrypted vaults live only in `bitwarden.Manager` memory, dropped in
+    `VaultLock` via `forgetBitwarden()` (zeroes key material). The manager is
+    testable because `Syncer`/`Sealer`/`SecretReader`/`CredentialLookup` are all
+    injected - the production `Syncer` (`bitwardenSyncer`, app.go) routes the
+    HTTP through the server's WireGuard profile via `wgDialerFor` installed as
+    the transport's `DialContext`; Netbird/Tailscale are sidecar-SOCKS only and
+    fall back to a direct dial, so the settings dropdown offers WireGuard
+    profiles only. `EventsEmit("bitwarden_servers_changed")` gates the
+    "From Bitwarden" connection-pane button live. Same credential_folders-vs-
+    folders FK trap as KeePass: the picker sends `folder_id: null` and the
+    backend files auto-created creds under a "Bitwarden" CREDENTIAL folder.
+    Bitwarden native SSH-key items resolve via the `privatekey` field ->
+    `externalAuthMaterial` (shared with KeePass) parses the PEM to a signer.
+    Out of scope v1: write-back, TOTP auto-fill, non-API-key login
+    (email+password/2FA), self-signed certs (needs a cert the OS trust store
+    accepts).
 
 ### Android / mobile gotchas
 

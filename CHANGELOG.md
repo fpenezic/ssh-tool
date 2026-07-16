@@ -7,6 +7,41 @@ in alpha upstream.
 
 ---
 
+## [0.60.0] - Read secrets straight out of Vaultwarden / Bitwarden
+
+### Added
+
+- **Vaultwarden / Bitwarden as a live credential backend.** Point
+  ssh-tool at a self-hosted Vaultwarden (or Bitwarden) server and
+  reference its items directly, **organizations and collections
+  included**: the password or SSH key is decrypted from the server's
+  vault at connect time and never copied into ssh-tool's own store. The
+  server stays the source of truth - it is read-only, never written to.
+
+  - **Register servers in Settings -> Bitwarden.** Sign-in uses an API
+    key (Settings -> Security -> Keys on your server), picked from your
+    credentials with an inline "Create" button so you can add one without
+    leaving the form. The master password is sealed in this app's vault
+    and used only to decrypt the fetched vault - it is write-only (never
+    shown again) and never leaves your machine.
+  - **Reference an item straight from the connection.** Next to the
+    Credential picker on any connection or folder there's a "From
+    Bitwarden" button (shown once you have a server registered): it opens
+    the vault as a searchable Organization -> Collection -> Item tree, and
+    picking an item creates and assigns a credential for it in one step.
+    Password, username, custom fields, and native SSH-key items are all
+    resolvable; picking the same item again reuses the existing credential.
+  - **Behind a VPN.** A server reachable only over the tunnel can be
+    dialed through a WireGuard network profile (chosen per server in the
+    settings form), the same way an SSH first hop is.
+  - **Fresh when it matters, resilient when offline.** Items are synced on
+    unlock and re-checked when a cached copy is older than a few minutes,
+    so a teammate's just-added org item shows up without a restart; a Sync
+    button forces a pull. If the server is unreachable, a still-open or
+    on-disk cache is used (marked stale) rather than breaking a connect.
+    The cache is sealed with your vault and worthless without it. Locking
+    the vault drops every decrypted server from memory.
+
 ## [0.59.0] - Read secrets straight out of KeePass
 
 ### Added
