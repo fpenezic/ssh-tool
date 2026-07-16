@@ -518,8 +518,12 @@ id off the scaffold default and stamped the build version. Built locally
 - **Tests for backup layer** - round-trip Create/Restore, checksum
   failure path, pending-restore swap, scheduler interval gating and
   prune-N retention.
-- **Tests for SSH auth resolution** - ResolveAuth paths,
-  `ssh.AuthMethod` shape per credential kind.
+- ~~**Tests for SSH auth resolution**~~ *(done)* - `internal/ssh/
+  auth_test.go` covers externalAuthMaterial (KeePass/Bitwarden output),
+  the ResolveAuth hook routing (KeePass then Bitwarden, before the kind
+  switch), interactiveAuthMethods gating, and ToAuthMethods shape.
+  Still uncovered: the vault-backed resolvePassword/resolveKey/resolveAgent
+  paths (need a vault fixture - folds into the vault-layer test item).
 - **slog migration** - verbose lines (opkssh, ssh hops, vault)
   would benefit from field-based filtering. Rolling log file
   exists; structure is the missing piece.
