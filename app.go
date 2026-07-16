@@ -127,6 +127,13 @@ type App struct {
 	pendingHostKeysMu sync.Mutex
 	pendingHostKeys   map[string]chan bool
 
+	// Interactive auth prompts (username + keyboard-interactive/password
+	// fallback) use the same register-channel / emit-event / block-on-channel
+	// pattern as the host-key challenge. Each pending prompt maps its id to a
+	// channel the frontend response is delivered on.
+	pendingAuthPromptsMu sync.Mutex
+	pendingAuthPrompts   map[string]chan authPromptReply
+
 	transfersMu sync.Mutex
 	transfers   map[string]chan struct{} // transferID -> cancel channel
 
@@ -381,6 +388,7 @@ func (a *App) initialise() {
 	updater.CleanupOldBinary()
 
 	a.pendingHostKeys = make(map[string]chan bool)
+	a.pendingAuthPrompts = make(map[string]chan authPromptReply)
 	a.transfers = make(map[string]chan struct{})
 	a.reconnects = make(map[string]chan struct{})
 	a.connectCancels = make(map[string]*connectCancel)
@@ -423,6 +431,7 @@ func (a *App) initialise() {
 	a.credSvc = &creds.Service{DB: db, Vault: vault}
 	a.initKeepass()
 	a.initBitwarden()
+	a.initAuthPrompts()
 	a.pool = sshlayer.NewPool()
 	a.localPool = local.NewPool()
 	a.vncBridge = sshlayer.NewVncBridge()

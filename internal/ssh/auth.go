@@ -62,6 +62,34 @@ func ContainsVaultLocked(err error) bool {
 	return false
 }
 
+// UsernamePromptHook, when set by the host (app.go), asks the user for a
+// username interactively when a hop has none configured - so a connection can
+// be left without a fixed user (e.g. one key shared across several server
+// accounts) and the user is prompted at connect time instead of failing.
+// label identifies the hop. An error (or empty username) aborts the connect.
+// Wired as a package var like the host-key challenge, so the ssh layer stays
+// decoupled from the event/IPC plumbing.
+var UsernamePromptHook func(label, host string, port int) (string, error)
+
+// InteractiveAuthPrompt carries one server-issued challenge to the user.
+type InteractiveAuthPrompt struct {
+	// Echo reports whether the answer should be shown as typed (name entry)
+	// versus masked (password / verification code).
+	Echo bool
+	Text string
+}
+
+// InteractiveAuthHook, when set by the host, answers a server's
+// keyboard-interactive (and plain password) challenges - so a server that
+// requires a typed password and/or a 2FA code (PAM: publickey,password,
+// keyboard-interactive) can be reached without pre-storing the secret, and so a
+// stored key that the server rejects falls back to a live prompt. It is only
+// consulted AFTER the configured methods (key / stored password / opkssh) have
+// been offered, because it is appended last in the method list. name/instruction
+// are the server's, echos pair 1:1 with prompts; the returned answers must
+// pair 1:1 with prompts too. label identifies the hop for the UI.
+var InteractiveAuthHook func(label, host string, port int, name, instruction string, prompts []InteractiveAuthPrompt) (answers []string, err error)
+
 // AuthMaterial is the resolved per-hop authentication state, ready to be
 // turned into ssh.AuthMethod values.
 type AuthMaterial struct {
@@ -85,6 +113,49 @@ func (m *AuthMaterial) ToAuthMethods() []ssh.AuthMethod {
 		methods = append(methods, ssh.Password(m.Password))
 	}
 	return methods
+}
+
+// interactiveAuthMethods returns the live-prompt fallback methods for a hop,
+// backed by InteractiveAuthHook. Appended LAST so key / stored-password /
+// opkssh are tried first and the user is only prompted when those fail or the
+// server demands keyboard-interactive. Returns nil when no hook is set.
+//
+// Both keyboard-interactive and a plain password callback are offered: a PAM
+// "publickey,password,keyboard-interactive" server drives the former (it can
+// carry a password prompt AND a 2FA code); a server offering only "password"
+// with no stored secret is covered by the latter.
+func interactiveAuthMethods(label, host string, port int) []ssh.AuthMethod {
+	if InteractiveAuthHook == nil {
+		return nil
+	}
+	ki := ssh.KeyboardInteractive(func(name, instruction string, questions []string, echos []bool) ([]string, error) {
+		if len(questions) == 0 {
+			// The protocol allows an info-only exchange with no questions; a
+			// nil answer set acknowledges it without prompting the user.
+			return nil, nil
+		}
+		prompts := make([]InteractiveAuthPrompt, len(questions))
+		for i, q := range questions {
+			echo := false
+			if i < len(echos) {
+				echo = echos[i]
+			}
+			prompts[i] = InteractiveAuthPrompt{Echo: echo, Text: q}
+		}
+		return InteractiveAuthHook(label, host, port, name, instruction, prompts)
+	})
+	pw := ssh.PasswordCallback(func() (string, error) {
+		answers, err := InteractiveAuthHook(label, host, port, "", "",
+			[]InteractiveAuthPrompt{{Echo: false, Text: "Password:"}})
+		if err != nil {
+			return "", err
+		}
+		if len(answers) == 0 {
+			return "", fmt.Errorf("no password provided")
+		}
+		return answers[0], nil
+	})
+	return []ssh.AuthMethod{ki, pw}
 }
 
 // InlineAuthMethods builds SSH auth methods from raw secret material that

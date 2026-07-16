@@ -416,9 +416,30 @@ func Connect(
 		if i == len(chain)-1 && settings.PasswordOverride != nil {
 			methods = append(methods, ssh.Password(*settings.PasswordOverride))
 		}
+		// The last hop gets interactive fallback methods (keyboard-interactive +
+		// password callback) appended LAST, so configured auth is tried first and
+		// the user is only prompted when it fails or the server demands it (PAM
+		// 2FA). Only the target hop - a jump host asking interactively mid-chain
+		// would be surprising and is rare.
+		if i == len(chain)-1 {
+			methods = append(methods, interactiveAuthMethods(h.Label, h.Hostname, int(h.Port))...)
+		}
 		if h.Username == "" {
-			cleanup(clients)
-			return nil, fmt.Errorf("%s: no username", h.Label)
+			// No configured username: prompt for one instead of failing, so a
+			// connection can be left user-less (e.g. one key across several
+			// accounts) and the user picks at connect time.
+			if UsernamePromptHook != nil {
+				user, perr := UsernamePromptHook(h.Label, h.Hostname, int(h.Port))
+				if perr != nil {
+					cleanup(clients)
+					return nil, fmt.Errorf("%s: %w", h.Label, perr)
+				}
+				h.Username = strings.TrimSpace(user)
+			}
+			if h.Username == "" {
+				cleanup(clients)
+				return nil, fmt.Errorf("%s: no username", h.Label)
+			}
 		}
 		if len(methods) == 0 {
 			cleanup(clients)

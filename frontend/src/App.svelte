@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, mcpApprovalStore, mcpShared, mcpBridge, shareApprovalStore, shareShared, shareBridge, decodePaneLayoutsMulti, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
+  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, authPromptStore, mcpApprovalStore, mcpShared, mcpBridge, shareApprovalStore, shareShared, shareBridge, decodePaneLayoutsMulti, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
   import { isMobile } from "./lib/platform";
   import { installMobileBackNav } from "./lib/mobileBackNav";
   import { api } from "./lib/api";
@@ -27,6 +27,7 @@
   import type { PaletteAction } from "./lib/QuickPalette.svelte";
   import { localShellPrefs, type LocalShellKind } from "./lib/localShellPrefs.svelte.ts";
   import HostKeyModal from "./lib/HostKeyModal.svelte";
+  import AuthPromptModal from "./lib/AuthPromptModal.svelte";
   import McpApprovalModal from "./lib/McpApprovalModal.svelte";
   import ShareApprovalModal from "./lib/ShareApprovalModal.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
@@ -606,6 +607,43 @@
     });
   });
 
+  // Interactive username prompt (hop has no configured user).
+  EventsOn("username_prompt", (data: any) => {
+    api.requestAttention().catch(() => {});
+    api.sendPromptNotification(
+      "Username required",
+      `Enter a username to connect to ${data.host ?? "the server"}.`,
+    ).catch(() => {});
+    authPromptStore.enqueue({
+      promptId: data.prompt_id,
+      kind: "username",
+      label: data.label ?? "",
+      host: data.host ?? "",
+      port: data.port ?? 22,
+      questions: [{ echo: true, text: "Username" }],
+    });
+  });
+
+  // Interactive keyboard-interactive / password prompt (server 2FA or a
+  // rejected key falling back to a live password).
+  EventsOn("auth_prompt", (data: any) => {
+    api.requestAttention().catch(() => {});
+    api.sendPromptNotification(
+      "Authentication required",
+      `${data.host ?? "The server"} is asking for a password or verification code.`,
+    ).catch(() => {});
+    authPromptStore.enqueue({
+      promptId: data.prompt_id,
+      kind: "auth",
+      label: data.label ?? "",
+      host: data.host ?? "",
+      port: data.port ?? 22,
+      name: data.name ?? "",
+      instruction: data.instruction ?? "",
+      questions: (data.questions ?? []).map((q: any) => ({ echo: !!q.echo, text: q.text ?? "" })),
+    });
+  });
+
   // LLM (MCP bridge) command-approval requests.
   EventsOn("mcp_approval_request", (data: any) => {
     api.requestAttention().catch(() => {});
@@ -1131,6 +1169,26 @@
         hostKeyStore.clear();
         if (hostKeyStore.queue.length === 0) api.clearAttention().catch(() => {});
         await api.sshRespondHostKey(c.challengeId, accept, remember, c.hostname, c.port, c.keyType, c.keyB64, c.fingerprint);
+      }}
+    />
+  {/if}
+
+  {#if authPromptStore.pending}
+    <AuthPromptModal
+      promptId={authPromptStore.pending.promptId}
+      kind={authPromptStore.pending.kind}
+      label={authPromptStore.pending.label}
+      host={authPromptStore.pending.host}
+      port={authPromptStore.pending.port}
+      name={authPromptStore.pending.name}
+      instruction={authPromptStore.pending.instruction}
+      questions={authPromptStore.pending.questions}
+      queueLength={Math.max(0, authPromptStore.queue.length - 1)}
+      onRespond={async (answers) => {
+        const p = authPromptStore.pending!;
+        authPromptStore.shift();
+        if (authPromptStore.queue.length === 0) api.clearAttention().catch(() => {});
+        await api.sshRespondAuthPrompt(p.promptId, answers ?? [], answers === null);
       }}
     />
   {/if}
