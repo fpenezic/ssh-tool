@@ -7,6 +7,20 @@ in alpha upstream.
 
 ---
 
+## [0.62.0] - Persistent browser profile option
+
+### Added
+
+- **Keep a persistent browser profile for the SOCKS launcher.** Settings ->
+  Browser launcher has a new "Use a persistent browser profile" toggle. Off
+  (default) opens a fresh isolated profile each time, as before. On, the
+  launcher reuses a dedicated profile so logins and cookies survive between
+  launches - handy when a tunnelled site needs your saved credentials. It is
+  still a dedicated profile, kept separate from your everyday browser, so the
+  proxy applies reliably and normal browsing isn't tunnelled. Works with both
+  Chromium- and Firefox-family browsers (on WSL a persistent Firefox profile
+  falls back to isolated).
+
 ## [0.61.0] - Interactive username and password / 2FA prompts
 
 ### Added
