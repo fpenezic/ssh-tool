@@ -691,6 +691,30 @@ with the old and new fingerprints side by side.
 Multiple host-key prompts queue (e.g. parallel "Connect all"); the
 modal shows "N more queued" so you know what's coming.
 
+### Interactive username and password / 2FA prompts
+
+ssh-tool does not force every connection to have a stored username and
+credential up front:
+
+- **No username?** If a connection (its target host) has no username
+  configured, ssh-tool asks for one when you connect instead of failing.
+  Useful when one key logs into several accounts on a server - leave the
+  username blank and pick it each time.
+- **Password or 2FA at the server's request.** If your stored key is
+  rejected, or the server requires a typed password and/or a
+  verification code (keyboard-interactive / PAM 2FA - e.g. a server
+  offering `publickey,password,keyboard-interactive`), a prompt appears
+  and your answers are passed straight through. Your configured auth
+  (key, saved password, opkssh) is always tried first; the prompt only
+  shows when that is not enough or the server insists.
+
+A connection with no credential at all is fully promptable - you are
+asked for the username, then for whatever the server challenges you with.
+These prompts apply to the connection's **target host**; jump hosts in a
+chain still use their configured credentials. Like the host-key modal,
+the prompt flashes the taskbar and raises an OS notification when
+ssh-tool is in the background.
+
 ### Auto-close on clean exit
 
 If a remote shell exits cleanly (`Ctrl+D`, `exit 0`), the tab closes

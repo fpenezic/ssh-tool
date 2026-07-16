@@ -2745,6 +2745,19 @@ export function SshResize(sessionID, cols, rows) {
 }
 
 /**
+ * SshRespondAuthPrompt is called by the frontend to answer a username or
+ * keyboard-interactive prompt. cancel=true (or a nil answers slice on cancel)
+ * aborts the connect.
+ * @param {string} promptID
+ * @param {string[]} answers
+ * @param {boolean} cancel
+ * @returns {$CancellablePromise<void>}
+ */
+export function SshRespondAuthPrompt(promptID, answers, cancel) {
+    return $Call.ByID(1159676702, promptID, answers, cancel);
+}
+
+/**
  * SshRespondHostKey is called by the frontend after the user decides on a
  * host key challenge. remember=true persists the key to known_hosts.
  * @param {string} challengeID

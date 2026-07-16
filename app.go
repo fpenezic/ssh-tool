@@ -127,6 +127,13 @@ type App struct {
 	pendingHostKeysMu sync.Mutex
 	pendingHostKeys   map[string]chan bool
 
+	// Interactive auth prompts (username + keyboard-interactive/password
+	// fallback) use the same register-channel / emit-event / block-on-channel
+	// pattern as the host-key challenge. Each pending prompt maps its id to a
+	// channel the frontend response is delivered on.
+	pendingAuthPromptsMu sync.Mutex
+	pendingAuthPrompts   map[string]chan authPromptReply
+
 	transfersMu sync.Mutex
 	transfers   map[string]chan struct{} // transferID -> cancel channel
 
@@ -381,6 +388,7 @@ func (a *App) initialise() {
 	updater.CleanupOldBinary()
 
 	a.pendingHostKeys = make(map[string]chan bool)
+	a.pendingAuthPrompts = make(map[string]chan authPromptReply)
 	a.transfers = make(map[string]chan struct{})
 	a.reconnects = make(map[string]chan struct{})
 	a.connectCancels = make(map[string]*connectCancel)
@@ -423,6 +431,7 @@ func (a *App) initialise() {
 	a.credSvc = &creds.Service{DB: db, Vault: vault}
 	a.initKeepass()
 	a.initBitwarden()
+	a.initAuthPrompts()
 	a.pool = sshlayer.NewPool()
 	a.localPool = local.NewPool()
 	a.vncBridge = sshlayer.NewVncBridge()
@@ -1078,10 +1087,9 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 	}
 
 	// Per-connection password override doesn't apply (no row). Inherit
-	// cascade still resolves credentials from the folder chain.
-	if settings.AuthRef == nil && settings.PasswordOverride == nil {
-		return nil, fmt.Errorf("dynamic folder has no credential to inherit; set one on the folder")
-	}
+	// cascade still resolves credentials from the folder chain. No configured
+	// auth no longer fails fast: the SSH layer's interactive prompt fallback
+	// (sshlayer.InteractiveAuthHook) asks at connect time instead.
 	if settings.Username == nil && settings.AuthRef != nil {
 		if cred, err2 := a.db.GetCredential(*settings.AuthRef); err2 == nil && cred.DefaultUsername != nil {
 			settings.Username = cred.DefaultUsername
@@ -2568,10 +2576,12 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 		settings.PasswordOverride = &op
 	}
 
-	// If no auth method is available at all, fail fast with a clear message.
-	if settings.AuthRef == nil && settings.PasswordOverride == nil {
-		return nil, fmt.Errorf("no credential and no password set for this connection")
-	}
+	// No configured auth used to fail fast here. It no longer does: the SSH
+	// layer offers an interactive keyboard-interactive / password fallback on
+	// the target hop (sshlayer.InteractiveAuthHook, wired in initAuthPrompts),
+	// so a connection with no credential is prompted at connect time instead of
+	// refused. The layer still errors cleanly if the server offers no method the
+	// prompt can satisfy.
 
 	// If no username resolved from folder/connection tree, fall back to the
 	// credential's default_username (useful for imported credentials).

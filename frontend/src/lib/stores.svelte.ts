@@ -1958,6 +1958,48 @@ class HostKeyStore {
 }
 export const hostKeyStore = new HostKeyStore();
 
+// Interactive SSH auth prompts. Two kinds share one FIFO queue and one modal:
+//  - "username": the hop has no configured user; ask for one before handshake.
+//  - "auth": the server issued a keyboard-interactive (or plain password)
+//    challenge - a typed password and/or a 2FA code - after the configured
+//    methods were offered. questions carry the server's prompt lines.
+// The backend blocks the connect on a per-prompt channel until
+// SshRespondAuthPrompt delivers the answers (or a cancel).
+export interface AuthPromptQuestion {
+  echo: boolean; // show the answer as typed (name) vs masked (password/code)
+  text: string;
+}
+
+export interface AuthPrompt {
+  promptId: string;
+  kind: "username" | "auth";
+  label: string;
+  host: string;
+  port: number;
+  name?: string; // server-provided title (auth kind)
+  instruction?: string; // server-provided instruction (auth kind)
+  questions: AuthPromptQuestion[];
+}
+
+class AuthPromptStore {
+  queue = $state<AuthPrompt[]>([]);
+  get pending(): AuthPrompt | null {
+    return this.queue[0] ?? null;
+  }
+  enqueue(p: AuthPrompt) {
+    if (this.queue.some((q) => q.promptId === p.promptId)) return;
+    this.queue = [...this.queue, p];
+  }
+  shift() {
+    if (this.queue.length === 0) return;
+    this.queue = this.queue.slice(1);
+  }
+  clearAll() {
+    this.queue = [];
+  }
+}
+export const authPromptStore = new AuthPromptStore();
+
 // Pending MCP command-approval requests. When the bridge is active and an LLM
 // asks to run a non-allowlisted command or type into the terminal, the backend
 // emits mcp_approval_request and blocks on a channel until McpApprovalRespond.

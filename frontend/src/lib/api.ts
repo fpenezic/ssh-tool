@@ -1116,6 +1116,9 @@ export const api = {
   sshRespondHostKey: (challengeId: string, accept: boolean, remember: boolean, hostname: string, port: number, keyType: string, keyB64: string, fingerprint: string) =>
     G.SshRespondHostKey(challengeId, accept, remember, hostname, port, keyType, keyB64, fingerprint),
 
+  sshRespondAuthPrompt: (promptId: string, answers: string[], cancel: boolean) =>
+    G.SshRespondAuthPrompt(promptId, answers, cancel),
+
   imagesGet: (id: string) =>
     G.ImagesGet(id) as unknown as Promise<{ mime: string; b64: string }>,
 

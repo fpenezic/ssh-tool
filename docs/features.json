@@ -147,6 +147,11 @@
       "body": "Reference a Vaultwarden or Bitwarden item directly, organizations and collections included - the password or SSH key is decrypted from the server at connect time and never copied into ssh-tool. Sign-in via API key; the master password is sealed in the vault, write-only. Reachable behind a WireGuard profile. Items sync on unlock and re-check when stale; when the server is down the sealed cache serves the secret flagged stale rather than breaking a connect."
     },
     {
+      "icon": "lock",
+      "title": "Interactive username and 2FA prompts",
+      "body": "Leave a connection without a username and pick it at connect time - handy when one key logs into several accounts. When the server asks for a typed password or a verification code (keyboard-interactive / PAM 2FA), or a stored key is rejected, ssh-tool prompts and passes your answer through instead of failing. Configured auth is tried first; jump hosts keep their fixed credentials."
+    },
+    {
       "icon": "split",
       "title": "Tabs, splits, broadcast",
       "body": "Multi-tab terminal with horizontal/vertical splits, paste guard, themes, search. Broadcast input to multiple named groups in parallel - one session can broadcast to several groups at once."
