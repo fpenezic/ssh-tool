@@ -105,6 +105,12 @@ type EventSink interface {
 
 const scrollbackCap = 256 * 1024 // 256 KB - enough for ~2000 lines
 
+// clientVersionString is the SSH identification string we present. Must start
+// with "SSH-2.0-". We mimic a current OpenSSH so servers / middleboxes that
+// gate on the client version (dropping the x/crypto default "SSH-2.0-Go")
+// accept us. The trailing token still identifies ssh-tool for server admins.
+const clientVersionString = "SSH-2.0-OpenSSH_9.6 ssh-tool"
+
 // scrollbackBuf is a mutex-protected append buffer capped at scrollbackCap.
 // Old bytes are dropped from the front when the cap is exceeded.
 //
@@ -468,6 +474,14 @@ func Connect(
 			HostKeyCallback:   hostKeyCB,
 			HostKeyAlgorithms: pinnedAlgos,
 			Timeout:           connectTimeout,
+			// Present an OpenSSH-style version string. golang.org/x/crypto
+			// defaults to "SSH-2.0-Go", which some servers and SSH-aware
+			// middleboxes (Crowdsec, appsec proxies, sshd Match on client
+			// version) treat as a non-standard client and drop right after
+			// auth - the connection authenticates, then the server closes it
+			// before any channel opens (observed as EOF / "forcibly closed" on
+			// the first NewSession). A realistic version string avoids that.
+			ClientVersion: clientVersionString,
 			BannerCallback: func(banner string) error {
 				if banner != "" {
 					bannerBuf = append(bannerBuf, banner...)
