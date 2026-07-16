@@ -140,8 +140,8 @@ func newTestManager(t *testing.T, fake *fakeInfisical) (*Manager, store.Infisica
 	lookup := func(string) (Credentials, error) {
 		return Credentials{ClientID: "id", ClientSecret: "sec"}, nil
 	}
-	m := NewManagerWithClient(db, secrets, plainSealer{}, lookup, func(url string) *Client {
-		return NewClient(url)
+	m := NewManagerWithClient(db, secrets, plainSealer{}, lookup, func(s store.InfisicalServer) *Client {
+		return NewClient(s.ServerURL)
 	}, t.TempDir())
 	return m, *srv
 }

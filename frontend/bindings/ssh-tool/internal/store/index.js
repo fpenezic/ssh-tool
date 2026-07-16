@@ -15,6 +15,7 @@ export {
     DynamicFolder,
     Folder,
     ImageSummary,
+    InfisicalServer,
     InheritableSettings,
     JumpHostSpec,
     KeepassDatabase,

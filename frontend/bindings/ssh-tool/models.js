@@ -1858,6 +1858,160 @@ export class ImportArchiveRequest {
 }
 
 /**
+ * InfisicalEnsureCredentialInput picks an Infisical secret straight from the
+ * connection auth picker.
+ */
+export class InfisicalEnsureCredentialInput {
+    /**
+     * Creates a new InfisicalEnsureCredentialInput instance.
+     * @param {Partial<InfisicalEnsureCredentialInput>} [$$source = {}] - The source object to create the InfisicalEnsureCredentialInput.
+     */
+    constructor($$source = {}) {
+        if (!("server_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["server_id"] = "";
+        }
+        if (!("project_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["project_id"] = "";
+        }
+        if (!("environment" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["environment"] = "";
+        }
+        if (!("secret_path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["secret_path"] = "";
+        }
+        if (!("key" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["key"] = "";
+        }
+        if (!("is_key" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["is_key"] = false;
+        }
+        if (!("name" in $$source)) {
+            /**
+             * suggested name; deduped if taken
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("username" in $$source)) {
+            /**
+             * -> credential default_username
+             * @member
+             * @type {string}
+             */
+            this["username"] = "";
+        }
+        if (!("folder_id" in $$source)) {
+            /**
+             * credential folder to file it under
+             * @member
+             * @type {string | null}
+             */
+            this["folder_id"] = null;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new InfisicalEnsureCredentialInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {InfisicalEnsureCredentialInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new InfisicalEnsureCredentialInput(/** @type {Partial<InfisicalEnsureCredentialInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * InfisicalSaveInput is the create/update payload from the settings UI. There is
+ * no master password - the only secret is the API key, referenced by id.
+ */
+export class InfisicalSaveInput {
+    /**
+     * Creates a new InfisicalSaveInput instance.
+     * @param {Partial<InfisicalSaveInput>} [$$source = {}] - The source object to create the InfisicalSaveInput.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * empty => create
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("server_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["server_url"] = "";
+        }
+        if (!("api_key_cred_id" in $$source)) {
+            /**
+             * credential id (api_token) holding client_id/secret
+             * @member
+             * @type {string}
+             */
+            this["api_key_cred_id"] = "";
+        }
+        if (!("network_profile_id" in $$source)) {
+            /**
+             * WireGuard profile to dial through, "" = direct
+             * @member
+             * @type {string}
+             */
+            this["network_profile_id"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new InfisicalSaveInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {InfisicalSaveInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new InfisicalSaveInput(/** @type {Partial<InfisicalSaveInput>} */($$parsedSource));
+    }
+}
+
+/**
  * KeepassEnsureCredentialInput picks a KeePass entry+field straight from the
  * connection auth picker. The app finds an existing credential that already
  * references the exact same entry+field (so choosing it twice reuses one) or

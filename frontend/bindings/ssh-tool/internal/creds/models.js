@@ -249,6 +249,52 @@ export class CreateInput {
              */
             this["bitwarden_is_key"] = false;
         }
+        if (!("infisical_server_id" in $$source)) {
+            /**
+             * infisical - a reference into a registered Infisical server. No secret is
+             * passed or stored; the value is read from the server at connect time.
+             * @member
+             * @type {string}
+             */
+            this["infisical_server_id"] = "";
+        }
+        if (!("infisical_project_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["infisical_project_id"] = "";
+        }
+        if (!("infisical_environment" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["infisical_environment"] = "";
+        }
+        if (!("infisical_secret_path" in $$source)) {
+            /**
+             * "" => "/"
+             * @member
+             * @type {string}
+             */
+            this["infisical_secret_path"] = "";
+        }
+        if (!("infisical_key" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["infisical_key"] = "";
+        }
+        if (!("infisical_is_key" in $$source)) {
+            /**
+             * InfisicalIsKey marks the referenced secret value as a private key.
+             * @member
+             * @type {boolean}
+             */
+            this["infisical_is_key"] = false;
+        }
 
         Object.assign(this, $$source);
     }

@@ -38,6 +38,8 @@ export {
     GiveInternetResult,
     ImagePayload,
     ImportArchiveRequest,
+    InfisicalEnsureCredentialInput,
+    InfisicalSaveInput,
     KeepassEnsureCredentialInput,
     KeepassSaveInput,
     LoadTextFileResult,

@@ -91,6 +91,16 @@ type CreateInput struct {
 	BitwardenField    string `json:"bitwarden_field"` // "password" | "username" | "privatekey" | custom field
 	// BitwardenIsKey marks the referenced field as a private key.
 	BitwardenIsKey bool `json:"bitwarden_is_key"`
+
+	// infisical - a reference into a registered Infisical server. No secret is
+	// passed or stored; the value is read from the server at connect time.
+	InfisicalServerID    string `json:"infisical_server_id"`
+	InfisicalProjectID   string `json:"infisical_project_id"`
+	InfisicalEnvironment string `json:"infisical_environment"`
+	InfisicalSecretPath  string `json:"infisical_secret_path"` // "" => "/"
+	InfisicalKey         string `json:"infisical_key"`
+	// InfisicalIsKey marks the referenced secret value as a private key.
+	InfisicalIsKey bool `json:"infisical_is_key"`
 }
 
 // CreateResult mirrors the Rust struct; public_key + fingerprint surfaced to
@@ -128,6 +138,8 @@ func (s *Service) Create(in CreateInput) (*CreateResult, error) {
 		return s.createKeepass(in)
 	case "bitwarden":
 		return s.createBitwarden(in)
+	case "infisical":
+		return s.createInfisical(in)
 	default:
 		return nil, fmt.Errorf("unknown credential kind: %s", in.Kind)
 	}
@@ -215,6 +227,50 @@ func (s *Service) createBitwarden(in CreateInput) (*CreateResult, error) {
 		return nil, err
 	}
 	_, _ = s.DB.AppendHistory(cred.ID, "created (bitwarden reference)", "user", false)
+	return &CreateResult{Credential: cred}, nil
+}
+
+// createInfisical stores a credential that resolves its secret from an Infisical
+// secret at connect time. Nothing is written to the local vault - only the
+// reference (server + project + environment + path + key) lives in the
+// credential config. Kind is CredKey when the value is a private key, else
+// CredPassword. StorageMode is External. Mirrors createBitwarden.
+func (s *Service) createInfisical(in CreateInput) (*CreateResult, error) {
+	if in.InfisicalServerID == "" || in.InfisicalProjectID == "" || in.InfisicalEnvironment == "" || in.InfisicalKey == "" {
+		return nil, fmt.Errorf("validation: infisical reference is incomplete")
+	}
+	path := in.InfisicalSecretPath
+	if path == "" {
+		path = "/"
+	}
+	kind := store.CredPassword
+	if in.InfisicalIsKey {
+		kind = store.CredKey
+	}
+	cred, err := s.DB.CreateCredential(store.NewCredential{
+		FolderID:    in.FolderID,
+		Name:        in.Name,
+		Kind:        kind,
+		StorageMode: store.StorageExternal,
+		Hint:        hintStr(in.Hint),
+		Tags:        in.Tags,
+		Config: map[string]any{
+			"infisical_ref": map[string]any{
+				"server_id":   in.InfisicalServerID,
+				"project_id":  in.InfisicalProjectID,
+				"environment": in.InfisicalEnvironment,
+				"secret_path": path,
+				"key":         in.InfisicalKey,
+			},
+		},
+		DefaultUsername:      in.DefaultUsername,
+		RotationReminderDays: in.RotationReminderDays,
+		ExpiresAt:            in.ExpiresAt,
+	})
+	if err != nil {
+		return nil, err
+	}
+	_, _ = s.DB.AppendHistory(cred.ID, "created (infisical reference)", "user", false)
 	return &CreateResult{Credential: cred}, nil
 }
 
