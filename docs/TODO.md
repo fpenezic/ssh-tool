@@ -38,11 +38,12 @@ For what's already shipped, see `CHANGELOG.md`.
   `/cluster/resources` doesn't carry it. Single extra HTTP per
   detail-pane open, low priority.
 
-- **Dynamic inventory: more providers** - AWS EC2 shipped
-  (`internal/inventory/aws_ec2.go`); still open: Hetzner Robot
-  (dedicated servers), libvirt. (DigitalOcean, Linode, Vultr, Scaleway
-  also shipped - see CLAUDE.md.) Pattern is established
-  (`proxmox.go` / `hetzner.go`); each is ~150 lines.
+- **Dynamic inventory: more providers** - still open: **Hetzner Robot**
+  (dedicated servers - a different API from the shipped Hetzner Cloud in
+  `hetzner.go`) and **libvirt**. Already shipped: Proxmox, Hetzner Cloud,
+  DigitalOcean, Linode, Vultr, Scaleway, AWS EC2, Ansible
+  (`internal/inventory/`). Pattern is established (`proxmox.go` /
+  `hetzner.go`); each new one is ~150 lines.
 
 - **Dynamic inventory: filter persistence per folder** - currently
   the visibility settings (hide-stopped, tag whitelist/blacklist)
