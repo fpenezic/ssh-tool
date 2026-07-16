@@ -38,10 +38,12 @@ For what's already shipped, see `CHANGELOG.md`.
   `/cluster/resources` doesn't carry it. Single extra HTTP per
   detail-pane open, low priority.
 
-- **Dynamic inventory: more providers** - AWS EC2, Hetzner Robot
-  (dedicated servers), DigitalOcean, libvirt. Pattern is established
-  (see `internal/inventory/proxmox.go` and `hetzner.go`); each is
-  ~150 lines.
+- **Dynamic inventory: more providers** - still open: **Hetzner Robot**
+  (dedicated servers - a different API from the shipped Hetzner Cloud in
+  `hetzner.go`) and **libvirt**. Already shipped: Proxmox, Hetzner Cloud,
+  DigitalOcean, Linode, Vultr, Scaleway, AWS EC2, Ansible
+  (`internal/inventory/`). Pattern is established (`proxmox.go` /
+  `hetzner.go`); each new one is ~150 lines.
 
 - **Dynamic inventory: filter persistence per folder** - currently
   the visibility settings (hide-stopped, tag whitelist/blacklist)
@@ -183,36 +185,36 @@ Mediums + selected Lows tracked here.
   platforms with per-OS FFI / CGO surface and needs its own test
   matrix (rotation across user accounts, machine-id absence,
   fallback chain). Treat as a standalone v0.x project.
-- **Pending-restore staging is plaintext until next start.**
-  `pending-restore/store.db` sits decrypted between Restore() and
-  the swap that runs at next sql.Open. Seal it with the just-typed
-  passphrase; ApplyPending unseals before rename.
-- **Heap zeroing on Lock.** Derived 32-byte AEAD key and the
-  `memory map[string]string` cache are GC'd, not wiped. Convert the
-  cache to `map[string][]byte` so Lock() can scrub. Same for the
-  passphrase `[]byte` in deriveKey / Init / Unlock paths.
+- ~~**Pending-restore staging is plaintext until next start.**~~
+  *(done)* Restore now seals `store.db.enc` / `vault.enc.enc` with the
+  just-typed passphrase (`sealStaged`), and ApplyPending unseals via a
+  machine-sealed READY passphrase before the swap. Covered by
+  `apply_prune_test.go`.
+- ~~**Heap zeroing on Lock.**~~ *(done)* The cache is
+  `memory map[string][]byte` and `Lock()` `wipeBytes()`-scrubs each
+  entry in place before dropping it (vault.go). Covered by
+  `vault_test.go`.
 - **Password override sent to server even after key auth succeeds.**
   A honeypot SSH server failing pubkey then accepting password can
   harvest the override. Mitigation: UI warning when both are set on
   the same connection; can't gate at config-build time.
-- **Pre-auth banner painted to terminal.** `BannerCallback` writes
-  raw server bytes before HostKeyCallback returns. xterm.js sanitises
-  most dangerous sequences but title-set / OSC slip through. Buffer
-  banner; emit only after auth completes.
-- **Vault on-disk size leaks entry count + secret-length class.**
-  `MarshalIndent` plus per-entry base64 ciphertext (no padding) makes
-  the file size profile distinctive. Pad ciphertexts to size buckets
-  (64 B / 1 KiB / 4 KiB / 16 KiB) before sealing.
+- ~~**Pre-auth banner painted to terminal.**~~ *(done)* `session.go`
+  buffers the banner in `bannerBuf` and emits it only after the SSH
+  handshake (incl. the host-key callback) completes, with cum=0 so it
+  doesn't touch the scrollback watermark.
+- ~~**Vault on-disk size leaks entry count + secret-length class.**~~
+  *(done)* `padPlaintext` prefixes the length and pads each entry's
+  plaintext to a size bucket (`padSizeFor`) before sealing;
+  `unpadPlaintext` reverses it and tolerates legacy unpadded entries.
 - **Inventory: Proxmox `base_url` accepts arbitrary hostnames.**
   Token sent in Authorization header against whatever URL the user
   pastes. Surface the resolved host before first refresh; consider
   reusing the SSRF guard from `FetchArchiveURL` here.
-- **Backup-layer tests + vault-layer tests.** Both crypto layers have
-  zero unit coverage; the audit found bugs that a basic round-trip
-  test would not catch but a tamper test would (flip header byte,
-  expect Open() failure under v2).
-- **Stray DEBUG log in app.go around `ConnectionsCreate`.** Removed
-  per audit Low; keep an eye out for new ones before open-sourcing.
+- ~~**Backup-layer tests + vault-layer tests.**~~ *(done)* Both crypto
+  layers now have unit coverage incl. tamper rejection: `backup_test.go`
+  + `apply_prune_test.go`, `vault_test.go`. See the Tech-debt section.
+- ~~**Stray DEBUG log in app.go around `ConnectionsCreate`.**~~ *(done)*
+  Removed; none remain (verified 2026-07-16).
 
 From the 2026-06-09 review (sha256 verification + backend-derived
 update params + download progress shipped right after; what remains):
@@ -243,9 +245,9 @@ update params + download progress shipped right after; what remains):
 
 ## Vault / credentials
 
-- **Manual "Lock vault now" from status bar.** Previously wired and
-  removed when the status bar got busier. Re-add as a small button
-  next to the vault state pill, or as a Ctrl+Shift+L shortcut.
+- ~~**Manual "Lock vault now" from status bar.**~~ *(done)* The status
+  bar has a "Lock vault" segment (`lockVaultNow` in `StatusBar.svelte`),
+  and Settings has an equivalent (`onLockNow`).
 - **Bulk credential rotation** - select N password creds, walk
   through them with a "Set new password" prompt, push to each
   remote via the ssh-copy-id helper (next item).
@@ -511,20 +513,35 @@ id off the scaffold default and stamped the build version. Built locally
   or wire a Wails autogen post-processor that emits cleaner TS
   without the `convertValues` class member. Right now we cast at
   the boundary.
-- **Tests for vault layer** - file_vault, machine sidecar, end-to-
-  end facade. Also cover Lock() wiping the memory mirror and Put()
-  refusing writes when locked (the regressions that motivated
-  v0.12.8).
-- **Tests for backup layer** - round-trip Create/Restore, checksum
-  failure path, pending-restore swap, scheduler interval gating and
-  prune-N retention.
-- **Tests for SSH auth resolution** - ResolveAuth paths,
-  `ssh.AuthMethod` shape per credential kind.
+- **Tests for vault layer** - *(facade done)* `internal/creds/
+  vault_test.go` covers the Vault facade end-to-end: Put/Get round-trip,
+  Lock() wiping the memory mirror + Put/Seal/Open refusing when locked
+  (the v0.12.8 regressions), Unlock-from-disk across a simulated restart,
+  wrong-passphrase, ChangePassphrase rotation, Seal/Open (round-trip +
+  cross-vault isolation + tamper detection), Delete. Still uncovered: the
+  machine sidecar (WriteSidecar/ReadSidecar, v1-vs-v2 format, machine-id
+  binding) - needs platform-specific fixtures.
+- ~~**Tests for backup layer**~~ *(done)* - `backup_test.go`
+  (pre-existing) covers Create/Restore round-trip, encrypted staging,
+  the pre-restore safety snapshot, wrong-passphrase, and tamper
+  rejection; `apply_prune_test.go` adds the ApplyPending deferred swap
+  (stage -> swap -> verify the backup's data survived + cleanup), the
+  no-op-when-nothing-staged path, prune-N retention (newest kept, manual
+  backups untouched, keep=0 no-op), and the scheduler's lastAutoBackupAt
+  interval gate.
+- ~~**Tests for SSH auth resolution**~~ *(done)* - `internal/ssh/
+  auth_test.go` covers externalAuthMaterial (KeePass/Bitwarden output),
+  the ResolveAuth hook routing (KeePass then Bitwarden, before the kind
+  switch), interactiveAuthMethods gating, and ToAuthMethods shape.
+  Still uncovered: the vault-backed resolvePassword/resolveKey/resolveAgent
+  paths (need a vault fixture - folds into the vault-layer test item).
 - **slog migration** - verbose lines (opkssh, ssh hops, vault)
   would benefit from field-based filtering. Rolling log file
   exists; structure is the missing piece.
 - **`as any` cast cleanup** in `api.ts` - once the autogen post-
   processor lands.
-- **Dynamic inventory: error visibility** - last error currently
-  hidden behind a red `!` dot tooltip. Could surface as a toast +
-  retry button if the user is actively expanding a broken folder.
+- ~~**Dynamic inventory: error visibility**~~ *(already done)* -
+  `TreeNode.svelte` shows a red `!` dot on a broken dynamic folder
+  (click-to-retry via `retryDynamicRefresh` -> `dynamicFolderRefreshNow`)
+  and fires a toast the first time the user expands it, so the failure
+  isn't missed. The tooltip carries the last error.

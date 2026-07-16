@@ -5545,6 +5545,24 @@ func (a *App) ConnectionRevealPassword(connectionID string) (string, error) {
 	if c.Kind != store.CredPassword {
 		return "", fmt.Errorf("credential is not a password (kind=%s)", c.Kind)
 	}
+	// External-backed password credentials (KeePass / Bitwarden) hold no vault
+	// secret - the value lives in the .kdbx or on the server and is resolved at
+	// use time. Route through the same managers the connect path uses so
+	// "reveal / copy password" works for them too.
+	if ref := store.ParseKeepassRef(c.Config); ref != nil && a.keepass != nil {
+		secret, _, err := a.keepass.Resolve(*ref)
+		if err != nil {
+			return "", err
+		}
+		return secret, nil
+	}
+	if ref := store.ParseBitwardenRef(c.Config); ref != nil && a.bitwarden != nil {
+		secret, _, err := a.bitwarden.Resolve(*ref)
+		if err != nil {
+			return "", err
+		}
+		return secret, nil
+	}
 	return a.credSvc.RevealSecret(*s.AuthRef)
 }
 
@@ -5574,6 +5592,13 @@ func (a *App) ConnectionCopyInfo(connectionID string) (*ConnectionCopyInfo, erro
 	if s.AuthRef != nil {
 		if c, err := a.db.GetCredential(*s.AuthRef); err == nil {
 			out.HasPassword = c.Kind == store.CredPassword
+			// Fall back to the credential's default_username when the tree
+			// resolves none - this is where the KeePass / Bitwarden picker
+			// stores the entry's username, and it mirrors what the connect
+			// path does (session.go).
+			if out.Username == "" && c.DefaultUsername != nil {
+				out.Username = *c.DefaultUsername
+			}
 		}
 	}
 	if cmd, err := a.SshSystemCommand(connectionID); err == nil {
