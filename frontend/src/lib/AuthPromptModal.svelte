@@ -25,6 +25,16 @@
 
   const title = $derived(kind === "username" ? "Username required" : "Authentication required");
 
+  // Focus the first field on mount. HTML autofocus is unreliable for a
+  // dynamically mounted modal (and doesn't re-fire), so grab the first input
+  // via an action and focus it. A microtask defer lets the overlay settle so
+  // the focus sticks.
+  function setFirst(node: HTMLInputElement, index: number) {
+    if (index === 0) {
+      queueMicrotask(() => node.focus());
+    }
+  }
+
   function submit() {
     onRespond([...answers]);
   }
@@ -66,13 +76,12 @@
       {#each questions as q, i (i)}
         <label>
           <span class="q">{kind === "username" ? "Username" : q.text}</span>
-          <!-- svelte-ignore a11y_autofocus -->
           {#if q.echo || kind === "username"}
             <input type="text" bind:value={answers[i]} autocomplete="off"
-              autofocus={i === 0} />
+              use:setFirst={i} />
           {:else}
             <input type="password" bind:value={answers[i]} autocomplete="off"
-              autofocus={i === 0} />
+              use:setFirst={i} />
           {/if}
         </label>
       {/each}
