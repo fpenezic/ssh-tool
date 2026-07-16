@@ -86,6 +86,7 @@ import MemoryStick from "@lucide/svelte/icons/memory-stick";
 import HardDrive from "@lucide/svelte/icons/hard-drive";
 import Users from "@lucide/svelte/icons/users";
 import Database from "@lucide/svelte/icons/database";
+import ShieldIcon from "@lucide/svelte/icons/shield";
 export {
   LoaderCircle as IconLoading,
   Radio as IconBroadcast,
@@ -107,6 +108,7 @@ export {
 // lives in a .kdbx - show a database icon so it reads apart at a glance).
 export function credentialIconFor(c: { kind: string; config?: Record<string, unknown> }) {
   if (c.config && c.config.keepass_ref) return Database;
+  if (c.config && c.config.bitwarden_ref) return ShieldIcon;
   return credentialKindIcon(c.kind);
 }
 

@@ -167,6 +167,7 @@
         {@const sel = selection.isCredentialSelected(c.id)}
         {@const KindIcon = credentialIconFor(c)}
         {@const isKeepass = !!c.config?.keepass_ref}
+        {@const isBitwarden = !!c.config?.bitwarden_ref}
         {@const ex = expiryInfo(c.expires_at)}
         <div class="row cred-row"
           class:selected={sel}
@@ -198,7 +199,7 @@
               {/if}
             </div>
             <div class="sub">
-              <span class="kind">{isKeepass ? "keepass" : c.kind}</span>
+              <span class="kind">{isKeepass ? "keepass" : isBitwarden ? "bitwarden" : c.kind}</span>
               {#if c.hint}<span class="hint-text">· {c.hint}</span>{/if}
             </div>
           </div>

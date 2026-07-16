@@ -353,6 +353,156 @@ export class BatchExecInput {
     }
 }
 
+/**
+ * BitwardenEnsureCredentialInput picks a Bitwarden item+field straight from the
+ * connection auth picker.
+ */
+export class BitwardenEnsureCredentialInput {
+    /**
+     * Creates a new BitwardenEnsureCredentialInput instance.
+     * @param {Partial<BitwardenEnsureCredentialInput>} [$$source = {}] - The source object to create the BitwardenEnsureCredentialInput.
+     */
+    constructor($$source = {}) {
+        if (!("server_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["server_id"] = "";
+        }
+        if (!("cipher_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["cipher_id"] = "";
+        }
+        if (!("field" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["field"] = "";
+        }
+        if (!("is_key" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["is_key"] = false;
+        }
+        if (!("name" in $$source)) {
+            /**
+             * suggested name (item title); deduped if taken
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("username" in $$source)) {
+            /**
+             * item username -> credential default_username
+             * @member
+             * @type {string}
+             */
+            this["username"] = "";
+        }
+        if (!("folder_id" in $$source)) {
+            /**
+             * credential folder to file it under
+             * @member
+             * @type {string | null}
+             */
+            this["folder_id"] = null;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new BitwardenEnsureCredentialInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {BitwardenEnsureCredentialInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new BitwardenEnsureCredentialInput(/** @type {Partial<BitwardenEnsureCredentialInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * BitwardenSaveInput is the create/update payload from the settings UI. The
+ * master password is passed inline here and sealed into the vault by this method
+ * - it is never stored in the row and never returned. The API key is a normal
+ * credential referenced by id (APIKeyCredID).
+ */
+export class BitwardenSaveInput {
+    /**
+     * Creates a new BitwardenSaveInput instance.
+     * @param {Partial<BitwardenSaveInput>} [$$source = {}] - The source object to create the BitwardenSaveInput.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * empty => create
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("server_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["server_url"] = "";
+        }
+        if (!("api_key_cred_id" in $$source)) {
+            /**
+             * credential id (api_token) holding client_id/secret
+             * @member
+             * @type {string}
+             */
+            this["api_key_cred_id"] = "";
+        }
+        if (!("master" in $$source)) {
+            /**
+             * "" leaves an existing master unchanged on update
+             * @member
+             * @type {string}
+             */
+            this["master"] = "";
+        }
+        if (!("set_master" in $$source)) {
+            /**
+             * true when Master should be written (incl. clearing)
+             * @member
+             * @type {boolean}
+             */
+            this["set_master"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new BitwardenSaveInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {BitwardenSaveInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new BitwardenSaveInput(/** @type {Partial<BitwardenSaveInput>} */($$parsedSource));
+    }
+}
+
 export class BrowserLaunchResult {
     /**
      * Creates a new BrowserLaunchResult instance.

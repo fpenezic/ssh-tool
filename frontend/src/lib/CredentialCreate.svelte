@@ -3,7 +3,7 @@
   import { errMsg } from "./connectErrors";
   import { toast } from "./toast.svelte";
   import { copyText } from "./clipboard";
-  import { api, type CredentialCreateInput } from "./api";
+  import { api, type CredentialCreateInput, type BitwardenCipherInfo } from "./api";
   import PasswordStrengthMeter from "./PasswordStrengthMeter.svelte";
   import PasswordInput from "./PasswordInput.svelte";
   import { clickOutside } from "./clickOutside";
@@ -18,7 +18,7 @@
   }
   let { onClose, defaultFolderId = null }: Props = $props();
 
-  let kind = $state<"password" | "key_generate" | "key_import_paste" | "key_file_ref" | "agent" | "opkssh" | "api_token" | "keepass">("password");
+  let kind = $state<"password" | "key_generate" | "key_import_paste" | "key_file_ref" | "agent" | "opkssh" | "api_token" | "keepass" | "bitwarden">("password");
   let name = $state("");
   let hint = $state("");
   let defaultUser = $state("");
@@ -130,6 +130,83 @@
     }
   });
 
+  // bitwarden reference
+  let bwServers = $state<{ id: string; name: string }[]>([]);
+  let bwServerId = $state("");
+  let bwItems = $state<{ id: string; title: string; group: string; fields: string[]; is_key_field: (f: string) => boolean }[]>([]);
+  let bwCipherId = $state("");
+  let bwField = $state("password");
+  let bwFieldOptions = $state<string[]>([]);
+  let bwLoadingItems = $state(false);
+  let bwErr = $state<string | null>(null);
+
+  async function loadBitwardenServers() {
+    try {
+      const list = await api.bitwardenList();
+      bwServers = list.map((s) => ({ id: s.id, name: s.name }));
+    } catch (e) {
+      bwErr = errMsg(e);
+    }
+  }
+
+  async function loadBitwardenItems() {
+    bwCipherId = "";
+    bwItems = [];
+    bwFieldOptions = [];
+    if (!bwServerId) return;
+    bwLoadingItems = true;
+    bwErr = null;
+    try {
+      const tree = await api.bitwardenBrowse(bwServerId);
+      const flat: typeof bwItems = [];
+      for (const g of tree || []) {
+        const push = (c: BitwardenCipherInfo, path: string) => {
+          const custom = c.custom_keys || [];
+          const fields = [
+            ...(c.has_password ? ["password"] : []),
+            ...(c.is_ssh_key ? ["privatekey"] : []),
+            ...(c.username ? ["username"] : []),
+            ...custom,
+          ];
+          flat.push({
+            id: c.id,
+            title: c.name || "(untitled)",
+            group: path,
+            fields,
+            is_key_field: (f: string) => f === "privatekey",
+          });
+        };
+        for (const c of g.ciphers || []) push(c, g.name);
+        for (const col of g.collections || []) {
+          for (const c of col.ciphers || []) push(c, g.name + " / " + col.name);
+        }
+      }
+      bwItems = flat;
+    } catch (e) {
+      bwErr = errMsg(e);
+    } finally {
+      bwLoadingItems = false;
+    }
+  }
+
+  function onBitwardenItemChange() {
+    const item = bwItems.find((i) => i.id === bwCipherId);
+    bwFieldOptions = item ? item.fields : [];
+    bwField = bwFieldOptions[0] || "password";
+  }
+
+  function bitwardenFieldIsKey(): boolean {
+    return bwField === "privatekey";
+  }
+
+  let bwLoaded = false;
+  $effect(() => {
+    if (kind === "bitwarden" && !bwLoaded) {
+      bwLoaded = true;
+      loadBitwardenServers();
+    }
+  });
+
   let busy = $state(false);
   let err = $state<string | null>(null);
   let resultPub = $state<string | null>(null);
@@ -236,6 +313,21 @@
             keepass_is_key: keepassFieldIsKey(),
           } as CredentialCreateInput;
           break;
+        case "bitwarden":
+          if (!bwServerId || !bwCipherId) {
+            err = "Pick a Bitwarden server and item";
+            busy = false;
+            return;
+          }
+          input = {
+            ...base,
+            kind: "bitwarden",
+            bitwarden_server_id: bwServerId,
+            bitwarden_cipher_id: bwCipherId,
+            bitwarden_field: bwField,
+            bitwarden_is_key: bitwardenFieldIsKey(),
+          } as CredentialCreateInput;
+          break;
       }
       const result = await api.credentialsCreate(input);
       await credentials.load();
@@ -293,6 +385,7 @@
             <option value="opkssh">opkssh profile</option>
             <option value="api_token">API token (proxmox, hetzner, …)</option>
             <option value="keepass">From KeePass database</option>
+            <option value="bitwarden">From Bitwarden server</option>
           </select>
         </label>
         <label>Name *
@@ -446,6 +539,51 @@
             {/if}
           {/if}
           {#if kpErr}<p class="hint" style="color:var(--danger,#e66)">{kpErr}</p>{/if}
+        {:else if kind === "bitwarden"}
+          {#if bwServers.length === 0}
+            <p class="hint">
+              No Bitwarden servers registered. Add one in Settings - Bitwarden
+              first, then come back here.
+            </p>
+          {:else}
+            <label>Bitwarden server
+              <select bind:value={bwServerId} onchange={loadBitwardenItems}>
+                <option value="">Select a server…</option>
+                {#each bwServers as s (s.id)}
+                  <option value={s.id}>{s.name}</option>
+                {/each}
+              </select>
+            </label>
+            {#if bwLoadingItems}
+              <p class="hint">Loading items… (syncs and unlocks the vault)</p>
+            {:else if bwServerId}
+              <label>Item
+                <select bind:value={bwCipherId} onchange={onBitwardenItemChange}>
+                  <option value="">Select an item…</option>
+                  {#each bwItems as i (i.id)}
+                    <option value={i.id}>{i.group ? i.group + " / " : ""}{i.title}</option>
+                  {/each}
+                </select>
+              </label>
+              {#if bwCipherId && bwFieldOptions.length > 0}
+                <label>Field
+                  <select bind:value={bwField}>
+                    {#each bwFieldOptions as f}
+                      <option value={f}>{f}</option>
+                    {/each}
+                  </select>
+                </label>
+                <p class="hint">
+                  {bitwardenFieldIsKey()
+                    ? "Resolved as a private key at connect time."
+                    : "Resolved as a password at connect time."}
+                  The secret is read from the server on connect and never copied
+                  into this app.
+                </p>
+              {/if}
+            {/if}
+          {/if}
+          {#if bwErr}<p class="hint" style="color:var(--danger,#e66)">{bwErr}</p>{/if}
         {/if}
 
         {#if err}<div class="err">{err}</div>{/if}

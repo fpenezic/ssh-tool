@@ -19,6 +19,7 @@
   import { renderMarkdown } from "./markdown";
   import SearchableSelect from "./SearchableSelect.svelte";
   import KeepassEntryPicker from "./KeepassEntryPicker.svelte";
+  import BitwardenEntryPicker from "./BitwardenEntryPicker.svelte";
   import PasswordStrengthMeter from "./PasswordStrengthMeter.svelte";
   import DynamicEntryDetail from "./DynamicEntryDetail.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
@@ -63,6 +64,11 @@
     new Set(credList.filter((c) => !!c.config?.keepass_ref).map((c) => c.id)),
   );
 
+  // Same, for Bitwarden-backed credentials.
+  const bitwardenCredIds = $derived(
+    new Set(credList.filter((c) => !!c.config?.bitwarden_ref).map((c) => c.id)),
+  );
+
   // Whether any KeePass database is registered - the "From KeePass" button is
   // hidden entirely when none is, since it would open an empty picker. Checked
   // on mount and re-checked live when a database is added/removed in Settings
@@ -82,6 +88,25 @@
     keepassChecked = true;
     refreshHasKeepass();
     const off = EventsOn("keepass_dbs_changed", () => refreshHasKeepass());
+    return off;
+  });
+
+  // Whether any Bitwarden server is registered - same live-gate as KeePass.
+  let hasBitwarden = $state(false);
+  async function refreshHasBitwarden() {
+    try {
+      const srvs = await api.bitwardenList();
+      hasBitwarden = (srvs?.length ?? 0) > 0;
+    } catch {
+      /* leave as-is */
+    }
+  }
+  let bitwardenChecked = false;
+  $effect(() => {
+    if (bitwardenChecked) return;
+    bitwardenChecked = true;
+    refreshHasBitwarden();
+    const off = EventsOn("bitwarden_servers_changed", () => refreshHasBitwarden());
     return off;
   });
 
@@ -126,6 +151,47 @@
       toast.err("KeePass: " + errMsg(e));
     } finally {
       kpPickerTarget = null;
+    }
+  }
+
+  // Bitwarden item-picker modal, same shape as the KeePass one.
+  let bwPickerOpen = $state(false);
+  let bwPickerTarget = $state<"folder" | "connection" | null>(null);
+
+  function openBitwardenPicker(target: "folder" | "connection") {
+    bwPickerTarget = target;
+    bwPickerOpen = true;
+  }
+
+  async function onBitwardenPick(r: {
+    server_id: string; cipher_id: string; field: string;
+    is_key: boolean; name: string; username: string;
+  }) {
+    bwPickerOpen = false;
+    try {
+      // folder_id null: the backend files the credential under the auto-created
+      // "Bitwarden" credential folder. Never pass a connection's folder_id here -
+      // same credential_folders vs folders namespace trap as KeePass.
+      const cred = await api.bitwardenEnsureCredential({
+        server_id: r.server_id,
+        cipher_id: r.cipher_id,
+        field: r.field,
+        is_key: r.is_key,
+        name: r.name,
+        username: r.username,
+        folder_id: null,
+      });
+      await credentials.load();
+      if (bwPickerTarget === "folder" && editingFolder) {
+        editingFolder = { ...editingFolder, authRef: cred.id };
+      } else if (bwPickerTarget === "connection" && editing) {
+        editing = { ...editing, authRef: cred.id };
+      }
+      toast.ok(`Using Bitwarden item "${r.name}"`);
+    } catch (e) {
+      toast.err("Bitwarden: " + errMsg(e));
+    } finally {
+      bwPickerTarget = null;
     }
   }
 
@@ -980,9 +1046,18 @@
               From KeePass
             </button>
           {/if}
+          {#if hasBitwarden}
+            <button type="button" class="kp-btn" onclick={() => openBitwardenPicker("folder")}
+              title="Pick a secret straight from a Bitwarden server">
+              From Bitwarden
+            </button>
+          {/if}
         </div>
         {#if editingFolder.authRef && keepassCredIds.has(editingFolder.authRef)}
           <span class="kp-badge">KeePass-backed - secret read from the .kdbx at connect</span>
+        {/if}
+        {#if editingFolder.authRef && bitwardenCredIds.has(editingFolder.authRef)}
+          <span class="kp-badge">Bitwarden-backed - secret read from the server at connect</span>
         {/if}
       </label>
 
@@ -1200,9 +1275,18 @@
               From KeePass
             </button>
           {/if}
+          {#if hasBitwarden}
+            <button type="button" class="kp-btn" onclick={() => openBitwardenPicker("connection")}
+              title="Pick a secret straight from a Bitwarden server">
+              From Bitwarden
+            </button>
+          {/if}
         </div>
         {#if editing.authRef && keepassCredIds.has(editing.authRef)}
           <span class="kp-badge">KeePass-backed - secret read from the .kdbx at connect</span>
+        {/if}
+        {#if editing.authRef && bitwardenCredIds.has(editing.authRef)}
+          <span class="kp-badge">Bitwarden-backed - secret read from the server at connect</span>
         {/if}
         {#if inhAuth.from && !editing.authRef}
           {@const inhCredName = credentials.byId(String(inhAuth.value))?.name ?? String(inhAuth.value)}
@@ -1534,6 +1618,13 @@
   <KeepassEntryPicker
     onClose={() => { kpPickerOpen = false; kpPickerTarget = null; }}
     onPick={onKeepassPick}
+  />
+{/if}
+
+{#if bwPickerOpen}
+  <BitwardenEntryPicker
+    onClose={() => { bwPickerOpen = false; bwPickerTarget = null; }}
+    onPick={onBitwardenPick}
   />
 {/if}
 

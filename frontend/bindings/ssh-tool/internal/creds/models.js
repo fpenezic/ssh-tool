@@ -216,6 +216,39 @@ export class CreateInput {
              */
             this["keepass_is_key"] = false;
         }
+        if (!("bitwarden_server_id" in $$source)) {
+            /**
+             * bitwarden - a reference into a registered Vaultwarden / Bitwarden server.
+             * No secret is passed or stored; the secret is read from the server's vault
+             * at connect time.
+             * @member
+             * @type {string}
+             */
+            this["bitwarden_server_id"] = "";
+        }
+        if (!("bitwarden_cipher_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["bitwarden_cipher_id"] = "";
+        }
+        if (!("bitwarden_field" in $$source)) {
+            /**
+             * "password" | "username" | "privatekey" | custom field
+             * @member
+             * @type {string}
+             */
+            this["bitwarden_field"] = "";
+        }
+        if (!("bitwarden_is_key" in $$source)) {
+            /**
+             * BitwardenIsKey marks the referenced field as a private key.
+             * @member
+             * @type {boolean}
+             */
+            this["bitwarden_is_key"] = false;
+        }
 
         Object.assign(this, $$source);
     }

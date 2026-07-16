@@ -4,6 +4,7 @@
 
 export {
     AuditEvent,
+    BitwardenServer,
     Connection,
     CredentialFolder,
     CredentialHistoryEntry,

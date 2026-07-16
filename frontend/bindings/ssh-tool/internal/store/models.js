@@ -75,6 +75,98 @@ export class AuditEvent {
 }
 
 /**
+ * BitwardenServer is a registered Vaultwarden / Bitwarden server ssh-tool reads
+ * secrets from at connect time. Neither the master password nor the API key is
+ * stored here: MasterRef points at a hidden sealed vault account
+ * (bitwarden:<id>:master), APIKeyRef points at the vault account behind a normal
+ * API-key credential. A credential references an item via
+ * config_json.bitwarden_ref {server_id, cipher_id, field}.
+ */
+export class BitwardenServer {
+    /**
+     * Creates a new BitwardenServer instance.
+     * @param {Partial<BitwardenServer>} [$$source = {}] - The source object to create the BitwardenServer.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("server_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["server_url"] = "";
+        }
+        if (!("api_key_ref" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["api_key_ref"] = "";
+        }
+        if (!("master_ref" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["master_ref"] = "";
+        }
+        if (!("last_synced_at" in $$source)) {
+            /**
+             * @member
+             * @type {number | null}
+             */
+            this["last_synced_at"] = null;
+        }
+        if (!("last_hash" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["last_hash"] = "";
+        }
+        if (!("created_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["created_at"] = 0;
+        }
+        if (!("updated_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["updated_at"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new BitwardenServer instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {BitwardenServer}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new BitwardenServer(/** @type {Partial<BitwardenServer>} */($$parsedSource));
+    }
+}
+
+/**
  * Connection is a leaf in the tree.
  */
 export class Connection {

@@ -231,6 +231,55 @@ export interface KeepassGroupInfo {
   entries: KeepassEntryInfo[] | null;
 }
 
+export interface BitwardenServerInfo {
+  id: string;
+  name: string;
+  server_url: string;
+  api_key_ref: string;
+  master_ref: string;
+  last_synced_at: number | null;
+  last_hash: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface BitwardenSaveInput {
+  id?: string;
+  name: string;
+  server_url: string;
+  api_key_cred_id: string;
+  master?: string;
+  set_master?: boolean;
+}
+
+// Bitwarden cipher (item) for the picker; decrypted metadata only.
+export interface BitwardenCipherInfo {
+  id: string;
+  name: string;
+  username: string;
+  type: number;
+  is_ssh_key: boolean;
+  has_password: boolean;
+  has_totp: boolean;
+  custom_keys: string[] | null;
+  attachments: string[] | null;
+}
+
+export interface BitwardenCollectionInfo {
+  id: string;
+  name: string;
+  ciphers: BitwardenCipherInfo[] | null;
+}
+
+// A browse node: the personal vault (org_id "") or an organization, holding
+// collections plus any uncollected items.
+export interface BitwardenGroupInfo {
+  org_id: string;
+  name: string;
+  collections: BitwardenCollectionInfo[] | null;
+  ciphers: BitwardenCipherInfo[] | null;
+}
+
 export interface RemoteOwner {
   active: boolean;
   machine_name: string;
@@ -411,6 +460,17 @@ export type CredentialCreateInput =
       keepass_entry_uuid: string;
       keepass_field: string;
       keepass_is_key?: boolean;
+      hint?: string;
+      tags?: string[];
+      default_username?: string;
+    } & CommonCreateExtras)
+  | ({
+      kind: "bitwarden";
+      name: string;
+      bitwarden_server_id: string;
+      bitwarden_cipher_id: string;
+      bitwarden_field: string;
+      bitwarden_is_key?: boolean;
       hint?: string;
       tags?: string[];
       default_username?: string;
@@ -690,6 +750,25 @@ export const api = {
     folder_id?: string | null;
   }) =>
     G.KeepassEnsureCredential(input as unknown as Parameters<typeof G.KeepassEnsureCredential>[0]) as unknown as Promise<CredentialRef>,
+
+  bitwardenList: () =>
+    G.BitwardenList() as unknown as Promise<BitwardenServerInfo[]>,
+  bitwardenSave: (input: BitwardenSaveInput) =>
+    G.BitwardenSave(input as unknown as Parameters<typeof G.BitwardenSave>[0]) as unknown as Promise<BitwardenServerInfo>,
+  bitwardenDelete: (id: string) => G.BitwardenDelete(id),
+  bitwardenSync: (id: string) => G.BitwardenSync(id) as unknown as Promise<string>,
+  bitwardenBrowse: (id: string) =>
+    G.BitwardenBrowse(id) as unknown as Promise<BitwardenGroupInfo[]>,
+  bitwardenEnsureCredential: (input: {
+    server_id: string;
+    cipher_id: string;
+    field: string;
+    is_key: boolean;
+    name: string;
+    username?: string;
+    folder_id?: string | null;
+  }) =>
+    G.BitwardenEnsureCredential(input as unknown as Parameters<typeof G.BitwardenEnsureCredential>[0]) as unknown as Promise<CredentialRef>,
 
   networkProfilesList: () =>
     G.NetworkProfilesList() as unknown as Promise<NetworkProfileInfo[]>,

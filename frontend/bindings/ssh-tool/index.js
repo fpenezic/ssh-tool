@@ -16,6 +16,8 @@ export {
     BackupCreateResult,
     BackupRestoreInput,
     BatchExecInput,
+    BitwardenEnsureCredentialInput,
+    BitwardenSaveInput,
     BrowserLaunchResult,
     ConnectionCopyInfo,
     ConnectionsBatchUpdateInput,
