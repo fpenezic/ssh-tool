@@ -7,6 +7,19 @@ in alpha upstream.
 
 ---
 
+## [0.62.1] - Auth prompt fixes
+
+### Fixed
+
+- **The authentication prompt now focuses its first field on open**, so you
+  can type the password / verification code straight away without clicking
+  into the box first.
+- **ssh-tool now presents an OpenSSH-style client version string.** The
+  underlying library's default ("SSH-2.0-Go") is treated as a non-standard
+  client by some servers and SSH-aware middleboxes, which could drop the
+  connection right after authentication; the connection now identifies as a
+  normal OpenSSH-family client.
+
 ## [0.62.0] - Persistent browser profile option
 
 ### Added
