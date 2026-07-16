@@ -1087,10 +1087,9 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 	}
 
 	// Per-connection password override doesn't apply (no row). Inherit
-	// cascade still resolves credentials from the folder chain.
-	if settings.AuthRef == nil && settings.PasswordOverride == nil {
-		return nil, fmt.Errorf("dynamic folder has no credential to inherit; set one on the folder")
-	}
+	// cascade still resolves credentials from the folder chain. No configured
+	// auth no longer fails fast: the SSH layer's interactive prompt fallback
+	// (sshlayer.InteractiveAuthHook) asks at connect time instead.
 	if settings.Username == nil && settings.AuthRef != nil {
 		if cred, err2 := a.db.GetCredential(*settings.AuthRef); err2 == nil && cred.DefaultUsername != nil {
 			settings.Username = cred.DefaultUsername
@@ -2577,10 +2576,12 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 		settings.PasswordOverride = &op
 	}
 
-	// If no auth method is available at all, fail fast with a clear message.
-	if settings.AuthRef == nil && settings.PasswordOverride == nil {
-		return nil, fmt.Errorf("no credential and no password set for this connection")
-	}
+	// No configured auth used to fail fast here. It no longer does: the SSH
+	// layer offers an interactive keyboard-interactive / password fallback on
+	// the target hop (sshlayer.InteractiveAuthHook, wired in initAuthPrompts),
+	// so a connection with no credential is prompted at connect time instead of
+	// refused. The layer still errors cleanly if the server offers no method the
+	// prompt can satisfy.
 
 	// If no username resolved from folder/connection tree, fall back to the
 	// credential's default_username (useful for imported credentials).
