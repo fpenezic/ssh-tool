@@ -18,7 +18,7 @@
   }
   let { onClose, defaultFolderId = null }: Props = $props();
 
-  let kind = $state<"password" | "key_generate" | "key_import_paste" | "key_file_ref" | "agent" | "opkssh" | "api_token" | "keepass" | "bitwarden">("password");
+  let kind = $state<"password" | "key_generate" | "key_import_paste" | "key_file_ref" | "agent" | "opkssh" | "api_token" | "keepass" | "bitwarden" | "infisical">("password");
   let name = $state("");
   let hint = $state("");
   let defaultUser = $state("");
@@ -207,6 +207,75 @@
     }
   });
 
+  // infisical reference
+  let infServers = $state<{ id: string; name: string }[]>([]);
+  let infServerId = $state("");
+  // Flat list of secrets across the tree: each carries the project + environment
+  // + folder path + key needed to build the ref.
+  let infItems = $state<{
+    id: string; // synthetic: projectId|environment|path|key
+    projectId: string; environment: string; path: string; key: string;
+    title: string; group: string; isKey: boolean;
+  }[]>([]);
+  let infItemId = $state("");
+  let infLoadingItems = $state(false);
+  let infErr = $state<string | null>(null);
+
+  async function loadInfisicalServers() {
+    try {
+      const list = await api.infisicalList();
+      infServers = list.map((s) => ({ id: s.id, name: s.name }));
+    } catch (e) {
+      infErr = errMsg(e);
+    }
+  }
+
+  async function loadInfisicalItems() {
+    infItemId = "";
+    infItems = [];
+    if (!infServerId) return;
+    infLoadingItems = true;
+    infErr = null;
+    try {
+      const tree = await api.infisicalBrowse(infServerId);
+      const flat: typeof infItems = [];
+      for (const g of tree || []) {
+        for (const env of g.environments || []) {
+          for (const e of env.entries || []) {
+            const p = e.path && e.path !== "/" ? e.path + " · " : "";
+            flat.push({
+              id: `${g.project_id}|${env.slug}|${e.path}|${e.key}`,
+              projectId: g.project_id,
+              environment: env.slug,
+              path: e.path || "/",
+              key: e.key,
+              title: p + e.key,
+              group: g.name + " / " + env.name,
+              isKey: e.is_key,
+            });
+          }
+        }
+      }
+      infItems = flat;
+    } catch (e) {
+      infErr = errMsg(e);
+    } finally {
+      infLoadingItems = false;
+    }
+  }
+
+  function selectedInfItem() {
+    return infItems.find((i) => i.id === infItemId) || null;
+  }
+
+  let infLoaded = false;
+  $effect(() => {
+    if (kind === "infisical" && !infLoaded) {
+      infLoaded = true;
+      loadInfisicalServers();
+    }
+  });
+
   let busy = $state(false);
   let err = $state<string | null>(null);
   let resultPub = $state<string | null>(null);
@@ -328,6 +397,25 @@
             bitwarden_is_key: bitwardenFieldIsKey(),
           } as CredentialCreateInput;
           break;
+        case "infisical": {
+          const item = selectedInfItem();
+          if (!infServerId || !item) {
+            err = "Pick an Infisical server and secret";
+            busy = false;
+            return;
+          }
+          input = {
+            ...base,
+            kind: "infisical",
+            infisical_server_id: infServerId,
+            infisical_project_id: item.projectId,
+            infisical_environment: item.environment,
+            infisical_secret_path: item.path,
+            infisical_key: item.key,
+            infisical_is_key: item.isKey,
+          } as CredentialCreateInput;
+          break;
+        }
       }
       const result = await api.credentialsCreate(input);
       await credentials.load();
@@ -386,6 +474,7 @@
             <option value="api_token">API token (proxmox, hetzner, …)</option>
             <option value="keepass">From KeePass database</option>
             <option value="bitwarden">From Bitwarden server</option>
+            <option value="infisical">From Infisical server</option>
           </select>
         </label>
         <label>Name *
@@ -584,6 +673,44 @@
             {/if}
           {/if}
           {#if bwErr}<p class="hint" style="color:var(--danger,#e66)">{bwErr}</p>{/if}
+        {:else if kind === "infisical"}
+          {#if infServers.length === 0}
+            <p class="hint">
+              No Infisical servers registered. Add one in Settings - Infisical
+              first, then come back here.
+            </p>
+          {:else}
+            <label>Infisical server
+              <select bind:value={infServerId} onchange={loadInfisicalItems}>
+                <option value="">Select a server…</option>
+                {#each infServers as s (s.id)}
+                  <option value={s.id}>{s.name}</option>
+                {/each}
+              </select>
+            </label>
+            {#if infLoadingItems}
+              <p class="hint">Reading secrets…</p>
+            {:else if infServerId}
+              <label>Secret
+                <select bind:value={infItemId}>
+                  <option value="">Select a secret…</option>
+                  {#each infItems as i (i.id)}
+                    <option value={i.id}>{i.group} / {i.title}</option>
+                  {/each}
+                </select>
+              </label>
+              {#if infItemId}
+                <p class="hint">
+                  {selectedInfItem()?.isKey
+                    ? "Resolved as a private key at connect time."
+                    : "Resolved as a password at connect time."}
+                  The value is read from the server on connect and never copied
+                  into this app.
+                </p>
+              {/if}
+            {/if}
+          {/if}
+          {#if infErr}<p class="hint" style="color:var(--danger,#e66)">{infErr}</p>{/if}
         {/if}
 
         {#if err}<div class="err">{err}</div>{/if}
