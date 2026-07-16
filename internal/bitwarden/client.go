@@ -1,14 +1,21 @@
 package bitwarden
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 )
+
+// DialContext dials a host:port, optionally through a tunnel. Matches
+// http.Transport.DialContext and ssh.ContextDialer so the app can route a
+// server behind a WireGuard profile.
+type DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 
 // Client talks to a Vaultwarden / Bitwarden server: API-key login and the vault
 // sync. It performs no decryption - it returns the raw sync JSON, which OpenVault
@@ -26,9 +33,26 @@ type Credentials struct {
 
 // NewClient builds a client for a server base URL (e.g. https://vault.example.com).
 func NewClient(server string) *Client {
+	return NewClientWithDialer(server, nil)
+}
+
+// NewClientWithDialer is NewClient with an optional dialer, so a server reachable
+// only through a WireGuard profile can be routed via that tunnel. A nil dialer
+// uses the default direct transport.
+func NewClientWithDialer(server string, dial DialContext) *Client {
+	hc := &http.Client{Timeout: 30 * time.Second}
+	if dial != nil {
+		// Clone the default transport so TLS defaults, proxy handling, and
+		// timeouts stay intact; only swap the dial step.
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dial(ctx, network, addr)
+		}
+		hc.Transport = tr
+	}
 	return &Client{
 		server: strings.TrimRight(server, "/"),
-		http:   &http.Client{Timeout: 30 * time.Second},
+		http:   hc,
 	}
 }
 

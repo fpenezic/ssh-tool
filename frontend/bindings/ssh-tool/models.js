@@ -472,6 +472,14 @@ export class BitwardenSaveInput {
              */
             this["api_key_cred_id"] = "";
         }
+        if (!("network_profile_id" in $$source)) {
+            /**
+             * WireGuard profile to dial through, "" = direct
+             * @member
+             * @type {string}
+             */
+            this["network_profile_id"] = "";
+        }
         if (!("master" in $$source)) {
             /**
              * "" leaves an existing master unchanged on update

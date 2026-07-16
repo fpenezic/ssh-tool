@@ -237,6 +237,7 @@ export interface BitwardenServerInfo {
   server_url: string;
   api_key_ref: string;
   master_ref: string;
+  network_profile_id: string;
   last_synced_at: number | null;
   last_hash: string;
   created_at: number;
@@ -248,6 +249,7 @@ export interface BitwardenSaveInput {
   name: string;
   server_url: string;
   api_key_cred_id: string;
+  network_profile_id?: string;
   master?: string;
   set_master?: boolean;
 }

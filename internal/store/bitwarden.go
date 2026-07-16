@@ -14,15 +14,16 @@ import (
 // API-key credential. A credential references an item via
 // config_json.bitwarden_ref {server_id, cipher_id, field}.
 type BitwardenServer struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	ServerURL    string `json:"server_url"`
-	APIKeyRef    string `json:"api_key_ref"`
-	MasterRef    string `json:"master_ref"`
-	LastSyncedAt *int64 `json:"last_synced_at"`
-	LastHash     string `json:"last_hash"`
-	CreatedAt    int64  `json:"created_at"`
-	UpdatedAt    int64  `json:"updated_at"`
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	ServerURL        string `json:"server_url"`
+	APIKeyRef        string `json:"api_key_ref"`
+	MasterRef        string `json:"master_ref"`
+	NetworkProfileID string `json:"network_profile_id"` // WireGuard profile to dial through, empty = direct
+	LastSyncedAt     *int64 `json:"last_synced_at"`
+	LastHash         string `json:"last_hash"`
+	CreatedAt        int64  `json:"created_at"`
+	UpdatedAt        int64  `json:"updated_at"`
 }
 
 // BitwardenRef is the reference a credential's config_json carries to point at a
@@ -70,11 +71,11 @@ func (d *DB) CreateBitwardenServer(s BitwardenServer) (*BitwardenServer, error) 
 	s.CreatedAt, s.UpdatedAt = ts, ts
 	_, err := d.conn.Exec(
 		`INSERT INTO bitwarden_servers
-		 (id, name, server_url, api_key_ref, master_ref, last_synced_at, last_hash,
-		  created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.ID, s.Name, s.ServerURL, s.APIKeyRef, s.MasterRef, s.LastSyncedAt,
-		s.LastHash, s.CreatedAt, s.UpdatedAt,
+		 (id, name, server_url, api_key_ref, master_ref, network_profile_id,
+		  last_synced_at, last_hash, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.ID, s.Name, s.ServerURL, s.APIKeyRef, s.MasterRef, s.NetworkProfileID,
+		s.LastSyncedAt, s.LastHash, s.CreatedAt, s.UpdatedAt,
 	)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
@@ -87,8 +88,8 @@ func (d *DB) CreateBitwardenServer(s BitwardenServer) (*BitwardenServer, error) 
 
 func (d *DB) GetBitwardenServer(id string) (*BitwardenServer, error) {
 	row := d.conn.QueryRow(
-		`SELECT id, name, server_url, api_key_ref, master_ref, last_synced_at,
-		        last_hash, created_at, updated_at
+		`SELECT id, name, server_url, api_key_ref, master_ref, network_profile_id,
+		        last_synced_at, last_hash, created_at, updated_at
 		 FROM bitwarden_servers WHERE id = ?`, id,
 	)
 	return scanBitwarden(row)
@@ -96,8 +97,8 @@ func (d *DB) GetBitwardenServer(id string) (*BitwardenServer, error) {
 
 func (d *DB) ListBitwardenServers() ([]BitwardenServer, error) {
 	rows, err := d.conn.Query(
-		`SELECT id, name, server_url, api_key_ref, master_ref, last_synced_at,
-		        last_hash, created_at, updated_at
+		`SELECT id, name, server_url, api_key_ref, master_ref, network_profile_id,
+		        last_synced_at, last_hash, created_at, updated_at
 		 FROM bitwarden_servers ORDER BY name`,
 	)
 	if err != nil {
@@ -123,9 +124,9 @@ func (d *DB) UpdateBitwardenServer(s BitwardenServer) (*BitwardenServer, error) 
 	}
 	_, err := d.conn.Exec(
 		`UPDATE bitwarden_servers SET
-		   name=?, server_url=?, api_key_ref=?, master_ref=?, updated_at=?
+		   name=?, server_url=?, api_key_ref=?, master_ref=?, network_profile_id=?, updated_at=?
 		 WHERE id=?`,
-		s.Name, s.ServerURL, s.APIKeyRef, s.MasterRef, now(), s.ID,
+		s.Name, s.ServerURL, s.APIKeyRef, s.MasterRef, s.NetworkProfileID, now(), s.ID,
 	)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
@@ -180,8 +181,8 @@ func scanBitwarden(s scanner) (*BitwardenServer, error) {
 		lastSynced sql.NullInt64
 	)
 	err := s.Scan(
-		&b.ID, &b.Name, &b.ServerURL, &b.APIKeyRef, &b.MasterRef, &lastSynced,
-		&b.LastHash, &b.CreatedAt, &b.UpdatedAt,
+		&b.ID, &b.Name, &b.ServerURL, &b.APIKeyRef, &b.MasterRef, &b.NetworkProfileID,
+		&lastSynced, &b.LastHash, &b.CreatedAt, &b.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {

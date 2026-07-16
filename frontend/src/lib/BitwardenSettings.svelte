@@ -5,10 +5,13 @@
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
   import { errMsg } from "./connectErrors";
-  import { api, type BitwardenServerInfo, type CredentialRef } from "./api";
+  import { api, type BitwardenServerInfo, type CredentialRef, type NetworkProfileInfo } from "./api";
 
   let servers = $state<BitwardenServerInfo[]>([]);
   let creds = $state<CredentialRef[]>([]);
+  // Only WireGuard profiles expose an in-process dialer for this HTTP path;
+  // Netbird / Tailscale are sidecar-SOCKS only and not offered here.
+  let wgProfiles = $state<NetworkProfileInfo[]>([]);
   let loading = $state(true);
   let syncing = $state<Record<string, boolean>>({});
 
@@ -18,6 +21,7 @@
     name: "",
     serverURL: "",
     apiKeyCredID: "",
+    networkProfileID: "",
     master: "",
   });
   let saving = $state(false);
@@ -38,10 +42,14 @@
   async function load() {
     loading = true;
     try {
-      [servers, creds] = await Promise.all([
+      const [srvs, cs, profs] = await Promise.all([
         api.bitwardenList(),
         api.credentialsList(),
+        api.networkProfilesList().catch(() => [] as NetworkProfileInfo[]),
       ]);
+      servers = srvs;
+      creds = cs;
+      wgProfiles = (profs ?? []).filter((p) => p.kind === "wireguard");
     } catch (e) {
       toast.err("Load Bitwarden servers: " + errMsg(e));
     } finally {
@@ -52,7 +60,7 @@
 
   function openNew() {
     editing = "";
-    form = { name: "", serverURL: "", apiKeyCredID: "", master: "" };
+    form = { name: "", serverURL: "", apiKeyCredID: "", networkProfileID: "", master: "" };
     showApiForm = false;
   }
 
@@ -62,6 +70,7 @@
       name: s.name,
       serverURL: s.server_url,
       apiKeyCredID: s.api_key_ref,
+      networkProfileID: s.network_profile_id,
       master: "",
     };
     showApiForm = false;
@@ -116,6 +125,7 @@
         name: form.name.trim(),
         server_url: form.serverURL.trim(),
         api_key_cred_id: form.apiKeyCredID,
+        network_profile_id: form.networkProfileID,
         master: form.master,
         // On create, seal the master only if one was typed. On edit, a
         // non-empty field means "replace it"; blank means "keep the current".
@@ -253,6 +263,21 @@
           {creatingApi ? "Creating…" : "Create API key"}
         </button>
       </div>
+    {/if}
+
+    {#if wgProfiles.length > 0}
+      <label>Network profile <span class="hint-inline">(optional)</span>
+        <select bind:value={form.networkProfileID}>
+          <option value="">Direct - no tunnel</option>
+          {#each wgProfiles as p (p.id)}
+            <option value={p.id}>{p.name}</option>
+          {/each}
+        </select>
+      </label>
+      <p class="hint sub">
+        Route sync traffic through a WireGuard profile when the server is only
+        reachable over the tunnel. Netbird / Tailscale are not offered here.
+      </p>
     {/if}
 
     <label>Master password {#if editing}<span class="hint-inline">(leave blank to keep)</span>{/if}

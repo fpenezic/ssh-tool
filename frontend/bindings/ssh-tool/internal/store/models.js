@@ -123,6 +123,14 @@ export class BitwardenServer {
              */
             this["master_ref"] = "";
         }
+        if (!("network_profile_id" in $$source)) {
+            /**
+             * WireGuard profile to dial through, empty = direct
+             * @member
+             * @type {string}
+             */
+            this["network_profile_id"] = "";
+        }
         if (!("last_synced_at" in $$source)) {
             /**
              * @member

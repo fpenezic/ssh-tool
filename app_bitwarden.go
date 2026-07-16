@@ -33,6 +33,24 @@ type bitwardenSealer struct{ a *App }
 func (s bitwardenSealer) Seal(plaintext []byte) ([]byte, error) { return s.a.vault.Seal(plaintext) }
 func (s bitwardenSealer) Open(sealed []byte) ([]byte, error)    { return s.a.vault.Open(sealed) }
 
+// bitwardenSyncer logs in + syncs, routing through the server's WireGuard
+// profile when one is set. Netbird / Tailscale profiles are sidecar-SOCKS only
+// and are not applied to this HTTP path (a direct dial is used); the settings UI
+// therefore only offers WireGuard profiles.
+type bitwardenSyncer struct{ a *App }
+
+func (s bitwardenSyncer) Sync(srv store.BitwardenServer, creds bitwarden.Credentials) ([]byte, error) {
+	var dial bitwarden.DialContext
+	if srv.NetworkProfileID != "" {
+		d, err := s.a.wgDialerFor(srv.NetworkProfileID)
+		if err != nil {
+			return nil, fmt.Errorf("bitwarden: network profile %s: %w", srv.NetworkProfileID, err)
+		}
+		dial = bitwarden.DialContext(d)
+	}
+	return bitwarden.NewClientWithDialer(srv.ServerURL, dial).LoginAndSync(creds)
+}
+
 // initBitwarden builds the manager. Called from initialise() after db + vault
 // are set. Idempotent-safe.
 func (a *App) initBitwarden() {
@@ -40,7 +58,7 @@ func (a *App) initBitwarden() {
 		return
 	}
 	cacheDir := filepath.Join(store.DataDir(), "bitwarden-cache")
-	a.bitwarden = bitwarden.NewManager(a.db, bitwardenSecrets{a}, bitwardenSealer{a}, a.bitwardenAPIKeyLookup, cacheDir)
+	a.bitwarden = bitwarden.NewManagerWithSyncer(a.db, bitwardenSecrets{a}, bitwardenSealer{a}, a.bitwardenAPIKeyLookup, bitwardenSyncer{a}, cacheDir)
 	// Route SSH auth resolution through the manager for any credential carrying a
 	// bitwarden_ref. handled=false means "not a Bitwarden credential".
 	sshlayer.BitwardenResolveHook = func(cred *store.CredentialRef) (string, bool, error) {
@@ -105,12 +123,13 @@ func (a *App) BitwardenList() ([]store.BitwardenServer, error) {
 // - it is never stored in the row and never returned. The API key is a normal
 // credential referenced by id (APIKeyCredID).
 type BitwardenSaveInput struct {
-	ID           string `json:"id"` // empty => create
-	Name         string `json:"name"`
-	ServerURL    string `json:"server_url"`
-	APIKeyCredID string `json:"api_key_cred_id"` // credential id (api_token) holding client_id/secret
-	Master       string `json:"master"`          // "" leaves an existing master unchanged on update
-	SetMaster    bool   `json:"set_master"`      // true when Master should be written (incl. clearing)
+	ID               string `json:"id"` // empty => create
+	Name             string `json:"name"`
+	ServerURL        string `json:"server_url"`
+	APIKeyCredID     string `json:"api_key_cred_id"`    // credential id (api_token) holding client_id/secret
+	NetworkProfileID string `json:"network_profile_id"` // WireGuard profile to dial through, "" = direct
+	Master           string `json:"master"`             // "" leaves an existing master unchanged on update
+	SetMaster        bool   `json:"set_master"`         // true when Master should be written (incl. clearing)
 }
 
 // BitwardenSave creates or updates a server registration, sealing the master
@@ -127,9 +146,10 @@ func (a *App) BitwardenSave(in BitwardenSaveInput) (*store.BitwardenServer, erro
 
 func (a *App) bitwardenCreate(in BitwardenSaveInput) (*store.BitwardenServer, error) {
 	srv := store.BitwardenServer{
-		Name:      in.Name,
-		ServerURL: strings.TrimRight(strings.TrimSpace(in.ServerURL), "/"),
-		APIKeyRef: in.APIKeyCredID,
+		Name:             in.Name,
+		ServerURL:        strings.TrimRight(strings.TrimSpace(in.ServerURL), "/"),
+		APIKeyRef:        in.APIKeyCredID,
+		NetworkProfileID: in.NetworkProfileID,
 	}
 	created, err := a.db.CreateBitwardenServer(srv)
 	if err != nil {
@@ -160,6 +180,7 @@ func (a *App) bitwardenUpdate(in BitwardenSaveInput) (*store.BitwardenServer, er
 	existing.Name = in.Name
 	existing.ServerURL = strings.TrimRight(strings.TrimSpace(in.ServerURL), "/")
 	existing.APIKeyRef = in.APIKeyCredID
+	existing.NetworkProfileID = in.NetworkProfileID
 	if in.SetMaster {
 		acct := a.bitwardenMasterAccount(in.ID)
 		if in.Master == "" {

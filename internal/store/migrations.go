@@ -393,15 +393,16 @@ var migrations = []struct {
 		// SEALED under DataDir, never here. A credential references an item via
 		// config_json.bitwarden_ref {server_id, cipher_id, field}.
 		`CREATE TABLE bitwarden_servers (
-		    id             TEXT PRIMARY KEY,
-		    name           TEXT NOT NULL UNIQUE,
-		    server_url     TEXT NOT NULL,            -- https://vault.example.com
-		    api_key_ref    TEXT NOT NULL DEFAULT '', -- vault account behind the API-key credential
-		    master_ref     TEXT NOT NULL DEFAULT '', -- vault account holding the master password
-		    last_synced_at INTEGER,                  -- unix seconds of last successful sync
-		    last_hash      TEXT NOT NULL DEFAULT '', -- content hash of the last sync payload
-		    created_at     INTEGER NOT NULL,
-		    updated_at     INTEGER NOT NULL
+		    id                 TEXT PRIMARY KEY,
+		    name               TEXT NOT NULL UNIQUE,
+		    server_url         TEXT NOT NULL,            -- https://vault.example.com
+		    api_key_ref        TEXT NOT NULL DEFAULT '', -- vault account behind the API-key credential
+		    master_ref         TEXT NOT NULL DEFAULT '', -- vault account holding the master password
+		    network_profile_id TEXT NOT NULL DEFAULT '', -- WireGuard profile to dial the server through, empty = direct
+		    last_synced_at     INTEGER,                  -- unix seconds of last successful sync
+		    last_hash          TEXT NOT NULL DEFAULT '', -- content hash of the last sync payload
+		    created_at         INTEGER NOT NULL,
+		    updated_at         INTEGER NOT NULL
 		);`,
 	},
 }

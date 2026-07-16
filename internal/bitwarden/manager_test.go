@@ -35,7 +35,7 @@ type fakeSyncer struct {
 	offline bool
 }
 
-func (f *fakeSyncer) Sync(_ string, _ Credentials) ([]byte, error) {
+func (f *fakeSyncer) Sync(_ store.BitwardenServer, _ Credentials) ([]byte, error) {
 	atomic.AddInt32(&f.calls, 1)
 	if f.offline {
 		return nil, errors.New("network down")

@@ -66,18 +66,21 @@ var ErrVaultLocked = errors.New("bitwarden: vault is locked")
 // and secret. Injected so the manager can log in without importing creds.
 type CredentialLookup func(apiKeyRef string) (Credentials, error)
 
-// Syncer logs in and pulls a server's vault, returning the raw sync JSON.
-// Injected so tests can supply a fake without a live server; production wires
-// the HTTP Client.
+// Syncer logs in and pulls a server's vault, returning the raw sync JSON. It is
+// given the whole server row so a production implementation can route the HTTP
+// through the server's network profile. Injected so tests can supply a fake
+// without a live server.
 type Syncer interface {
-	Sync(serverURL string, creds Credentials) ([]byte, error)
+	Sync(srv store.BitwardenServer, creds Credentials) ([]byte, error)
 }
 
-// httpSyncer is the production Syncer backed by the HTTP Client.
+// httpSyncer is the production Syncer backed by the HTTP Client, with no tunnel
+// (direct dial). The app replaces it with a profile-aware syncer via
+// NewManagerWithSyncer.
 type httpSyncer struct{}
 
-func (httpSyncer) Sync(serverURL string, creds Credentials) ([]byte, error) {
-	return NewClient(serverURL).LoginAndSync(creds)
+func (httpSyncer) Sync(srv store.BitwardenServer, creds Credentials) ([]byte, error) {
+	return NewClient(srv.ServerURL).LoginAndSync(creds)
 }
 
 type openState struct {
@@ -99,10 +102,16 @@ type Manager struct {
 	open map[string]*openState // serverID -> decrypted state
 }
 
-// NewManager wires the manager with the production HTTP syncer. cacheDir holds
+// NewManager wires the manager with a direct-dial HTTP syncer. cacheDir holds
 // the sealed sync blobs.
 func NewManager(db *store.DB, secrets SecretReader, sealer Sealer, lookup CredentialLookup, cacheDir string) *Manager {
 	return newManager(db, secrets, sealer, lookup, httpSyncer{}, cacheDir)
+}
+
+// NewManagerWithSyncer is NewManager with a caller-supplied Syncer, so the app
+// can route sync traffic through a server's WireGuard profile.
+func NewManagerWithSyncer(db *store.DB, secrets SecretReader, sealer Sealer, lookup CredentialLookup, syncer Syncer, cacheDir string) *Manager {
+	return newManager(db, secrets, sealer, lookup, syncer, cacheDir)
 }
 
 // newManager is the injectable constructor (tests supply a fake Syncer).
@@ -249,7 +258,7 @@ func (m *Manager) loadSync(srv store.BitwardenServer) ([]byte, Freshness, error)
 		return nil, "", fmt.Errorf("bitwarden: api key unavailable and no cache: %w", err)
 	}
 
-	raw, err := m.syncer.Sync(srv.ServerURL, creds)
+	raw, err := m.syncer.Sync(srv, creds)
 	if err != nil {
 		if cached, cerr := m.readCache(srv.ID); cerr == nil {
 			return cached, FreshStale, nil
