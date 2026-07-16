@@ -519,9 +519,14 @@ id off the scaffold default and stamped the build version. Built locally
   cross-vault isolation + tamper detection), Delete. Still uncovered: the
   machine sidecar (WriteSidecar/ReadSidecar, v1-vs-v2 format, machine-id
   binding) - needs platform-specific fixtures.
-- **Tests for backup layer** - round-trip Create/Restore, checksum
-  failure path, pending-restore swap, scheduler interval gating and
-  prune-N retention.
+- ~~**Tests for backup layer**~~ *(done)* - `backup_test.go`
+  (pre-existing) covers Create/Restore round-trip, encrypted staging,
+  the pre-restore safety snapshot, wrong-passphrase, and tamper
+  rejection; `apply_prune_test.go` adds the ApplyPending deferred swap
+  (stage -> swap -> verify the backup's data survived + cleanup), the
+  no-op-when-nothing-staged path, prune-N retention (newest kept, manual
+  backups untouched, keep=0 no-op), and the scheduler's lastAutoBackupAt
+  interval gate.
 - ~~**Tests for SSH auth resolution**~~ *(done)* - `internal/ssh/
   auth_test.go` covers externalAuthMaterial (KeePass/Bitwarden output),
   the ResolveAuth hook routing (KeePass then Bitwarden, before the kind
