@@ -125,6 +125,12 @@ func InlineAuthMethods(password, keyPEM, keyPassphrase string) ([]ssh.AuthMethod
 // (handled=false => not a KeePass credential, fall through to the normal path).
 var KeepassResolveHook func(cred *store.CredentialRef) (secret string, handled bool, err error)
 
+// BitwardenResolveHook is the Vaultwarden / Bitwarden sibling of
+// KeepassResolveHook: it resolves a credential's bitwarden_ref to its secret via
+// the Bitwarden manager. Same contract (handled=false => not a Bitwarden
+// credential, fall through).
+var BitwardenResolveHook func(cred *store.CredentialRef) (secret string, handled bool, err error)
+
 // ResolveAuth turns a credential reference into AuthMaterial. Side-effecting
 // for `opkssh` (may run the OIDC login) and `agent` (opens UDS connection).
 // ctx cancels an in-flight opkssh OIDC login; the other kinds ignore it.
@@ -139,7 +145,18 @@ func ResolveAuth(ctx context.Context, cred *store.CredentialRef, vault *creds.Va
 			return nil, err
 		}
 		if handled {
-			return keepassAuthMaterial(cred, secret)
+			return externalAuthMaterial(cred, secret)
+		}
+	}
+	// A credential carrying a Bitwarden reference resolves the same way, from the
+	// server's decrypted vault in memory.
+	if BitwardenResolveHook != nil {
+		secret, handled, err := BitwardenResolveHook(cred)
+		if err != nil {
+			return nil, err
+		}
+		if handled {
+			return externalAuthMaterial(cred, secret)
 		}
 	}
 	switch cred.Kind {
@@ -158,20 +175,20 @@ func ResolveAuth(ctx context.Context, cred *store.CredentialRef, vault *creds.Va
 	}
 }
 
-// keepassAuthMaterial turns a secret pulled from a KeePass entry into auth
-// material. For a key credential the secret is a PEM private key; for anything
-// else it is treated as a password.
-func keepassAuthMaterial(cred *store.CredentialRef, secret string) (*AuthMaterial, error) {
+// externalAuthMaterial turns a secret pulled from an external backend (KeePass
+// or Bitwarden) into auth material. For a key credential the secret is a PEM
+// private key; for anything else it is treated as a password.
+func externalAuthMaterial(cred *store.CredentialRef, secret string) (*AuthMaterial, error) {
 	if secret == "" {
-		return nil, fmt.Errorf("keepass credential %s resolved to an empty secret", cred.Name)
+		return nil, fmt.Errorf("external credential %s resolved to an empty secret", cred.Name)
 	}
 	if cred.Kind == store.CredKey {
 		signer, err := ssh.ParsePrivateKey([]byte(secret))
 		if err != nil {
 			if _, missing := err.(*ssh.PassphraseMissingError); missing {
-				return nil, fmt.Errorf("keepass key %s is passphrase-protected; store an unencrypted key or the passphrase separately", cred.Name)
+				return nil, fmt.Errorf("external key %s is passphrase-protected; store an unencrypted key or the passphrase separately", cred.Name)
 			}
-			return nil, fmt.Errorf("parse keepass key %s: %w", cred.Name, err)
+			return nil, fmt.Errorf("parse external key %s: %w", cred.Name, err)
 		}
 		return &AuthMaterial{Signers: []ssh.Signer{signer}}, nil
 	}

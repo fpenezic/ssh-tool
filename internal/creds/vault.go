@@ -276,6 +276,30 @@ func (v *Vault) Get(account string) (string, bool, error) {
 	return s, true, nil
 }
 
+// Seal encrypts arbitrary bytes with the unlocked vault's data key, for at-rest
+// caches too large for the account store (e.g. a Bitwarden sync payload). Errors
+// when the vault is locked.
+func (v *Vault) Seal(plaintext []byte) ([]byte, error) {
+	v.mu.Lock()
+	file := v.file
+	v.mu.Unlock()
+	if file == nil {
+		return nil, errors.New("vault is locked; unlock it before sealing data")
+	}
+	return file.SealBlob(plaintext)
+}
+
+// Open reverses Seal.
+func (v *Vault) Open(sealed []byte) ([]byte, error) {
+	v.mu.Lock()
+	file := v.file
+	v.mu.Unlock()
+	if file == nil {
+		return nil, errors.New("vault is locked; unlock it before opening data")
+	}
+	return file.OpenBlob(sealed)
+}
+
 // Delete removes from memory and the file vault (if unlocked).
 func (v *Vault) Delete(account string) error {
 	v.mu.Lock()

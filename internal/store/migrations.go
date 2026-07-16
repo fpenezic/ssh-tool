@@ -383,6 +383,27 @@ var migrations = []struct {
 		    updated_at      INTEGER NOT NULL
 		);`,
 	},
+	{
+		19,
+		// A Vaultwarden / Bitwarden server ssh-tool reads secrets from at connect
+		// time (the HTTP sibling of keepass_databases). Neither the master
+		// password nor the API key is stored here: master_ref points at a hidden
+		// sealed vault account (bitwarden:<id>:master), api_key_ref at the vault
+		// account behind a normal API-key credential. The synced vault is cached
+		// SEALED under DataDir, never here. A credential references an item via
+		// config_json.bitwarden_ref {server_id, cipher_id, field}.
+		`CREATE TABLE bitwarden_servers (
+		    id             TEXT PRIMARY KEY,
+		    name           TEXT NOT NULL UNIQUE,
+		    server_url     TEXT NOT NULL,            -- https://vault.example.com
+		    api_key_ref    TEXT NOT NULL DEFAULT '', -- vault account behind the API-key credential
+		    master_ref     TEXT NOT NULL DEFAULT '', -- vault account holding the master password
+		    last_synced_at INTEGER,                  -- unix seconds of last successful sync
+		    last_hash      TEXT NOT NULL DEFAULT '', -- content hash of the last sync payload
+		    created_at     INTEGER NOT NULL,
+		    updated_at     INTEGER NOT NULL
+		);`,
+	},
 }
 
 // LatestSchemaVersion is the version a freshly-migrated DB lands on.

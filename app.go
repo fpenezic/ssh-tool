@@ -36,6 +36,7 @@ import (
 	"ssh-tool/internal/importer/rdm"
 	"ssh-tool/internal/importer/sshconfig"
 	"ssh-tool/internal/inventory"
+	"ssh-tool/internal/bitwarden"
 	"ssh-tool/internal/keepass"
 	"ssh-tool/internal/local"
 	"ssh-tool/internal/recorder"
@@ -118,6 +119,10 @@ type App struct {
 	// Decrypted databases are held in memory and dropped on VaultLock. See
 	// app_keepass.go.
 	keepass *keepass.Manager
+
+	// Vaultwarden / Bitwarden manager: decrypted server vaults held in memory,
+	// dropped on VaultLock. See app_bitwarden.go.
+	bitwarden *bitwarden.Manager
 
 	pendingHostKeysMu sync.Mutex
 	pendingHostKeys   map[string]chan bool
@@ -417,6 +422,7 @@ func (a *App) initialise() {
 	}
 	a.credSvc = &creds.Service{DB: db, Vault: vault}
 	a.initKeepass()
+	a.initBitwarden()
 	a.pool = sshlayer.NewPool()
 	a.localPool = local.NewPool()
 	a.vncBridge = sshlayer.NewVncBridge()
@@ -1652,6 +1658,7 @@ func (a *App) VaultAutoUnlock() (bool, error) {
 func (a *App) VaultLock(forgetSidecar bool) {
 	a.vault.Lock(forgetSidecar)
 	a.forgetKeepass()
+	a.forgetBitwarden()
 	a.recordAudit("vault.lock", "", map[string]string{"forget_sidecar": boolStr(forgetSidecar)})
 }
 

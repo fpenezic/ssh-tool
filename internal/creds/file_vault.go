@@ -141,6 +141,39 @@ func unpadPlaintext(padded []byte) []byte {
 	return padded
 }
 
+// SealBlob encrypts arbitrary bytes with the vault's data key, returning a
+// self-contained nonce||ciphertext blob. Used for large at-rest caches (e.g.
+// the Bitwarden sync payload) that shouldn't bloat the JSON account store.
+func (v *UnlockedVault) SealBlob(plaintext []byte) ([]byte, error) {
+	aead, err := chacha20poly1305.NewX(v.key)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+	ct := aead.Seal(nil, nonce, plaintext, nil)
+	return append(nonce, ct...), nil
+}
+
+// OpenBlob reverses SealBlob.
+func (v *UnlockedVault) OpenBlob(blob []byte) ([]byte, error) {
+	aead, err := chacha20poly1305.NewX(v.key)
+	if err != nil {
+		return nil, err
+	}
+	ns := aead.NonceSize()
+	if len(blob) < ns {
+		return nil, errors.New("sealed blob too short")
+	}
+	pt, err := aead.Open(nil, blob[:ns], blob[ns:], nil)
+	if err != nil {
+		return nil, ErrWrongPassphrase
+	}
+	return pt, nil
+}
+
 func encrypt(key, plaintext []byte) (vaultItem, error) {
 	aead, err := chacha20poly1305.NewX(key)
 	if err != nil {

@@ -82,6 +82,15 @@ type CreateInput struct {
 	// KeepassIsKey marks the referenced field as a private key (so the resolver
 	// parses it as a signer) rather than a password.
 	KeepassIsKey bool `json:"keepass_is_key"`
+
+	// bitwarden - a reference into a registered Vaultwarden / Bitwarden server.
+	// No secret is passed or stored; the secret is read from the server's vault
+	// at connect time.
+	BitwardenServerID string `json:"bitwarden_server_id"`
+	BitwardenCipherID string `json:"bitwarden_cipher_id"`
+	BitwardenField    string `json:"bitwarden_field"` // "password" | "username" | "privatekey" | custom field
+	// BitwardenIsKey marks the referenced field as a private key.
+	BitwardenIsKey bool `json:"bitwarden_is_key"`
 }
 
 // CreateResult mirrors the Rust struct; public_key + fingerprint surfaced to
@@ -117,6 +126,8 @@ func (s *Service) Create(in CreateInput) (*CreateResult, error) {
 		return s.createAPIToken(in)
 	case "keepass":
 		return s.createKeepass(in)
+	case "bitwarden":
+		return s.createBitwarden(in)
 	default:
 		return nil, fmt.Errorf("unknown credential kind: %s", in.Kind)
 	}
@@ -162,6 +173,48 @@ func (s *Service) createKeepass(in CreateInput) (*CreateResult, error) {
 		return nil, err
 	}
 	_, _ = s.DB.AppendHistory(cred.ID, "created (keepass reference)", "user", false)
+	return &CreateResult{Credential: cred}, nil
+}
+
+// createBitwarden stores a credential that resolves its secret from a
+// Vaultwarden / Bitwarden item at connect time. Nothing is written to the local
+// vault - only the reference (server id + cipher id + field) lives in the
+// credential config. The kind is CredKey when the field is a private key, else
+// CredPassword. StorageMode is External. Mirrors createKeepass.
+func (s *Service) createBitwarden(in CreateInput) (*CreateResult, error) {
+	if in.BitwardenServerID == "" || in.BitwardenCipherID == "" {
+		return nil, fmt.Errorf("validation: bitwarden reference is incomplete")
+	}
+	field := in.BitwardenField
+	if field == "" {
+		field = "password"
+	}
+	kind := store.CredPassword
+	if in.BitwardenIsKey {
+		kind = store.CredKey
+	}
+	cred, err := s.DB.CreateCredential(store.NewCredential{
+		FolderID:    in.FolderID,
+		Name:        in.Name,
+		Kind:        kind,
+		StorageMode: store.StorageExternal,
+		Hint:        hintStr(in.Hint),
+		Tags:        in.Tags,
+		Config: map[string]any{
+			"bitwarden_ref": map[string]any{
+				"server_id": in.BitwardenServerID,
+				"cipher_id": in.BitwardenCipherID,
+				"field":     field,
+			},
+		},
+		DefaultUsername:      in.DefaultUsername,
+		RotationReminderDays: in.RotationReminderDays,
+		ExpiresAt:            in.ExpiresAt,
+	})
+	if err != nil {
+		return nil, err
+	}
+	_, _ = s.DB.AppendHistory(cred.ID, "created (bitwarden reference)", "user", false)
 	return &CreateResult{Credential: cred}, nil
 }
 
