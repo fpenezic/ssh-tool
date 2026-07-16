@@ -511,10 +511,14 @@ id off the scaffold default and stamped the build version. Built locally
   or wire a Wails autogen post-processor that emits cleaner TS
   without the `convertValues` class member. Right now we cast at
   the boundary.
-- **Tests for vault layer** - file_vault, machine sidecar, end-to-
-  end facade. Also cover Lock() wiping the memory mirror and Put()
-  refusing writes when locked (the regressions that motivated
-  v0.12.8).
+- **Tests for vault layer** - *(facade done)* `internal/creds/
+  vault_test.go` covers the Vault facade end-to-end: Put/Get round-trip,
+  Lock() wiping the memory mirror + Put/Seal/Open refusing when locked
+  (the v0.12.8 regressions), Unlock-from-disk across a simulated restart,
+  wrong-passphrase, ChangePassphrase rotation, Seal/Open (round-trip +
+  cross-vault isolation + tamper detection), Delete. Still uncovered: the
+  machine sidecar (WriteSidecar/ReadSidecar, v1-vs-v2 format, machine-id
+  binding) - needs platform-specific fixtures.
 - **Tests for backup layer** - round-trip Create/Restore, checksum
   failure path, pending-restore swap, scheduler interval gating and
   prune-N retention.
