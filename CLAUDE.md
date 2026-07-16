@@ -463,6 +463,33 @@ These still bite. The archive of older / now-handled traps lives in
     (email+password/2FA), self-signed certs (needs a cert the OS trust store
     accepts).
 
+35. **Interactive auth prompts (username + keyboard-interactive/password)
+    reuse the host-key TOFU plumbing and are wired via package-var hooks.**
+    `internal/ssh` exposes `UsernamePromptHook` and `InteractiveAuthHook`
+    (package vars, gotcha 28 pattern); `app_auth_prompt.go` `initAuthPrompts`
+    points them at IPC-backed impls that register a channel, emit an event
+    (`username_prompt` / `auth_prompt`), and block on it with a 2-min
+    cancel-default timeout - a direct clone of the host-key challenge
+    (gotcha 9). `SshRespondAuthPrompt(promptID, answers, cancel)` delivers the
+    reply. TWO distinct concerns, one modal (`AuthPromptModal`, FIFO
+    `authPromptStore`): (a) a hop with no configured username is prompted at
+    `session.go` where it used to hard-fail with "no username" - username is
+    SSH-handshake state so it MUST be collected before dial, not mid-flight;
+    (b) `interactiveAuthMethods` appends `ssh.KeyboardInteractive` +
+    `ssh.PasswordCallback` LAST on the TARGET hop only (not jump hosts - a
+    bastion asking interactively mid-chain is surprising; jump hosts are
+    expected to carry fixed creds), so key/stored-password/opkssh are tried
+    first and the prompt fires only when they fail or the server demands it
+    (PAM `publickey,password,keyboard-interactive`). Always on, no setting.
+    TRAP that cost a round of testing: two fail-fast guards in app.go
+    (`sshConnectInternal` and the dynamic-inventory connect) refused a connect
+    when `AuthRef == nil && PasswordOverride == nil` - they predate this
+    feature and short-circuit it, so a fully credential-less connection never
+    reached the prompt (a connection WITH a cred but no username already worked,
+    since that path cleared the guard). Both guards were removed; the SSH layer
+    now offers the interactive method regardless and still errors cleanly if the
+    server has no method the prompt can satisfy.
+
 ### Android / mobile gotchas
 
 The app runs on Android (v0.36.0+). Built locally via the NDK

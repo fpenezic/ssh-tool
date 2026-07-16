@@ -7,6 +7,27 @@ in alpha upstream.
 
 ---
 
+## [0.61.0] - Interactive username and password / 2FA prompts
+
+### Added
+
+- **Prompt for a username at connect time.** A connection can now be left
+  without a username - instead of failing, ssh-tool asks for one when you
+  connect. Handy when the same key authenticates several accounts on a
+  server and you pick which to log in as each time.
+- **Password and 2FA prompts when the server asks.** If a stored key is
+  rejected, or the server requires a typed password and/or a verification
+  code (keyboard-interactive / PAM 2FA), ssh-tool now shows a prompt and
+  passes your answers through, instead of the connection dying. Your
+  configured auth (key, saved password, opkssh) is still tried first - the
+  prompt only appears when that isn't enough or the server demands it. A
+  connection with no credential at all is fully promptable: username, then
+  the server's password / code challenge.
+
+  Prompts apply to the connection's target host; jump hosts still use their
+  configured credentials. The prompt window flashes the taskbar and pops an
+  OS notification when ssh-tool isn't focused.
+
 ## [0.60.0] - Read secrets straight out of Vaultwarden / Bitwarden
 
 ### Added
