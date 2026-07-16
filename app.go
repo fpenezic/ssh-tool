@@ -4099,8 +4099,13 @@ func (a *App) SshLaunchBrowser(forwardID, url string) (*BrowserLaunchResult, err
 			return nil, fmt.Errorf("forward %s is not a dynamic (SOCKS) forward", forwardID)
 		}
 		preferred, _, _ := a.db.GetSetting("preferred_browser_path")
+		// When browser_persistent_profile is on, reuse a dedicated profile
+		// (keeps logins / saved creds) instead of a throwaway isolated one.
+		persistent := a.boolSetting("browser_persistent_profile")
 		pid, err := sshlayer.LaunchIsolatedBrowser(s.LocalAddr, s.LocalPort, url, sshlayer.LaunchOptions{
-			PreferredPath: preferred,
+			PreferredPath:  preferred,
+			Persistent:     persistent,
+			ProfileBaseDir: store.DataDir(),
 		})
 		if err != nil {
 			return nil, err

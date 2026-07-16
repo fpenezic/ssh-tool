@@ -859,10 +859,18 @@ isolated browser instance routed through the SOCKS5 port. Bookmarks
 are per-forward - common URLs you've launched via this forward
 appear as quick-launch buttons.
 
-The launched browser uses a temporary profile so cookies and history
-don't pollute your normal browsing. Configure the browser binary in
-**Settings → Browser launcher** (Chrome, Chromium, Firefox, Edge are
-all supported - pick the binary path).
+By default the launched browser uses a temporary isolated profile so
+cookies and history don't pollute your normal browsing. Configure the
+browser binary in **Settings → Browser launcher** (Chrome, Chromium,
+Firefox, Edge are all supported - pick the binary path).
+
+If a tunnelled site needs your saved logins, turn on **Use a persistent
+browser profile** in the same settings section: the launcher then reuses
+a dedicated profile so cookies and sign-ins survive between launches. It
+stays separate from your everyday browser, so the proxy applies reliably
+and normal browsing isn't routed through the tunnel. Works with both
+Chromium- and Firefox-family browsers (on WSL a persistent Firefox
+profile falls back to isolated).
 
 ### Tunnels from the terminal view
 
