@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // schema migrations are versioned and applied in order; only those above the
@@ -425,6 +426,19 @@ var migrations = []struct {
 		    updated_at         INTEGER NOT NULL
 		);`,
 	},
+	{
+		21,
+		// Repair migration. bitwarden_servers.network_profile_id was added
+		// to migration 19's CREATE TABLE *after* migration 19 had already
+		// shipped (the WireGuard-routing feature amended it in place). A DB
+		// that ran the original migration 19 therefore has the table WITHOUT
+		// the column, and the amended CREATE never re-runs - so every
+		// bitwarden_servers read failed with "no such column:
+		// network_profile_id". Add it here. The runner treats a
+		// duplicate-column error on an ADD COLUMN as a no-op, so DBs created
+		// by the amended migration 19 (column already present) are fine too.
+		`ALTER TABLE bitwarden_servers ADD COLUMN network_profile_id TEXT NOT NULL DEFAULT '';`,
+	},
 }
 
 // LatestSchemaVersion is the version a freshly-migrated DB lands on.
@@ -454,6 +468,15 @@ func (d *DB) SchemaVersion() (int64, error) {
 	return n, nil
 }
 
+// isDuplicateColumnErr reports whether err is SQLite's "duplicate column
+// name" error from an ADD COLUMN that hit an already-present column. Used
+// to make idempotent column-add repair migrations no-op on DBs that
+// already have the column. Matched on the message text - modernc/sqlite
+// surfaces it as "duplicate column name: <col>".
+func isDuplicateColumnErr(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "duplicate column name")
+}
+
 func runMigrations(db *sql.DB) error {
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -481,8 +504,16 @@ func runMigrations(db *sql.DB) error {
 			return fmt.Errorf("begin migration %d: %w", m.version, err)
 		}
 		if _, err := tx.Exec(m.sql); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("apply migration %d: %w", m.version, err)
+			// An idempotent "ADD COLUMN" repair migration (see v21) may hit a
+			// column that already exists on DBs which got it another way -
+			// a fresh CREATE TABLE that already carries it. SQLite has no
+			// "ADD COLUMN IF NOT EXISTS", so tolerate the duplicate-column
+			// error and still record the version as applied. Any OTHER error
+			// (or a non-ADD-COLUMN statement) is fatal as before.
+			if !isDuplicateColumnErr(err) {
+				_ = tx.Rollback()
+				return fmt.Errorf("apply migration %d: %w", m.version, err)
+			}
 		}
 		if _, err := tx.Exec(
 			"INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('version', ?)",

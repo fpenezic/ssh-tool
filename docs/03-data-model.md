@@ -2,7 +2,7 @@
 
 The DB lives at `DataDir/ssh-tool.db` (SQLite via `modernc.org/sqlite`,
 WAL mode, foreign keys on). Schema is versioned in `schema_meta.value`
-and migrated in order on every startup. Current head: **v17**. The audit log lives in a separate audit.db (machine-local, not in this schema).
+and migrated in order on every startup. Current head: **v21**. The audit log lives in a separate audit.db (machine-local, not in this schema).
 
 The canonical migration source is `internal/store/migrations.go`. This
 doc summarises the current shape and lists each migration's purpose.
@@ -214,6 +214,10 @@ Vault keys for various features:
 | 15 | pinned_dynamic_entries (dynamic-inventory host → permanent connection mapping) |
 | 16 | vnc_password_vault_key on connections (per-connection VNC/RFB password key) |
 | 17 | network_profiles (WireGuard + NetBird overlay profiles; secretless config, secrets in vault) |
+| 18 | keepass_databases (live KeePass .kdbx backend; file + vault-account pointers, no secrets) |
+| 19 | bitwarden_servers (live Vaultwarden/Bitwarden backend; pointers + network_profile_id, no secrets) |
+| 20 | infisical_servers (per-request Infisical backend; pointers + network_profile_id, no master/hash) |
+| 21 | repair: ADD COLUMN bitwarden_servers.network_profile_id (v19 was amended in place after shipping; runner tolerates duplicate-column on re-add) |
 
 Migration runner: `runMigrations` in `internal/store/migrations.go`.
 Each migration applies inside a transaction; failure rolls back and
