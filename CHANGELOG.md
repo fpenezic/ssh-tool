@@ -7,6 +7,20 @@ in alpha upstream.
 
 ---
 
+## [0.66.0] - PuTTY .ppk keys + SuperPuTTY import
+
+### Added
+
+- **Import PuTTY `.ppk` private keys directly.** The key importer now accepts a
+  PuTTY `.ppk` (v2 or v3) as well as OpenSSH/PEM - paste it into the private-key
+  box, or use **Browse .ppk** on the file-reference kind. It is converted to
+  OpenSSH and stored in the vault (an encrypted `.ppk` asks for its passphrase);
+  no manual `puttygen` step.
+- **SuperPuTTY session import.** Load a SuperPuTTY `Sessions.xml`
+  (Settings -> Import -> SuperPuTTY) to bring your SSH sessions and their folder
+  tree across. Non-SSH protocols are skipped; SuperPuTTY stores no passwords, so
+  attach credentials afterwards.
+
 ## [0.65.0] - LLM auto-run (YOLO) mode + in-app system prompt
 
 ### Added

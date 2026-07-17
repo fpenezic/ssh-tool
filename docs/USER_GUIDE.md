@@ -393,6 +393,13 @@ When a credential is selected:
 - **Rotate** - generates a new key (with optional passphrase) or
   imports a pasted private key in PEM/OpenSSH format. For password
   credentials, rotate writes a new password into the vault.
+- **PuTTY .ppk keys** - the key importer accepts a PuTTY `.ppk` (v2 or
+  v3) as well as OpenSSH/PEM: paste it into the private-key box, or use
+  **Browse .ppk** on the file-reference kind. It is converted to OpenSSH
+  and stored in the vault (an encrypted `.ppk` asks for its passphrase);
+  no manual `puttygen` step. A picked `.ppk` is absorbed into the vault
+  rather than left as a file link, since the key is only usable once
+  converted.
 - **Used by** - lists the folders / connections referencing this
   credential. Each entry is a shortcut: click it to switch to the
   Connections view, expand the ancestor folders, select the row and
@@ -2025,8 +2032,8 @@ key-round, lock, etc.) - emoji placeholders have been replaced. See
 
 All import/export flows live in **Settings → Import / Export**.
 The **Import** section is one page with a source picker at the top:
-Devolutions RDM, OpenSSH config, MobaXterm, PuTTY / KiTTY, and
-ssh-tool archive. Every import is additive - existing rows are
+Devolutions RDM, OpenSSH config, MobaXterm, PuTTY / KiTTY, SuperPuTTY,
+and ssh-tool archive. Every import is additive - existing rows are
 never modified, re-running is safe.
 
 ### Devolutions RDM JSON import
@@ -2081,6 +2088,14 @@ Only `Protocol=ssh` sessions import (serial / telnet are skipped);
 KiTTY registry exports parse identically. UTF-16 `.reg` files (the
 `reg.exe` default) are handled. PuTTY never stores passwords, so
 nothing is lost in the move.
+
+### SuperPuTTY import
+
+SuperPuTTY keeps its sessions in a `Sessions.xml` file (usually
+`%APPDATA%\SuperPuTTY\Sessions.xml`). Load it in **Settings → Import →
+SuperPuTTY**. SSH sessions become connections and the SessionId folder
+tree is rebuilt; RDP / telnet / other protocols are counted and skipped.
+SuperPuTTY stores no passwords, so attach credentials afterwards.
 
 ### Export connections / archive
 
