@@ -7,6 +7,18 @@ in alpha upstream.
 
 ---
 
+## [0.68.2] - Fix Bitwarden "no such column" error on older profiles
+
+### Fixed
+
+- **Bitwarden settings no longer fail with "no such column: network_profile_id".**
+  A DB created before the WireGuard-routing feature was missing that column, and
+  the schema change that added it only applied to brand-new databases. A repair
+  migration now adds the column to existing databases, so listing and editing
+  Bitwarden servers works again.
+
+---
+
 ## [0.68.1] - Update check ignores helper releases
 
 ### Fixed
