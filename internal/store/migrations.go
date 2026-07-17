@@ -405,6 +405,26 @@ var migrations = []struct {
 		    updated_at         INTEGER NOT NULL
 		);`,
 	},
+	{
+		20,
+		// An Infisical server ssh-tool reads secrets from at connect time (the
+		// per-request sibling of bitwarden_servers). Infisical decrypts
+		// server-side, so there is NO master password and NO synced/cached vault
+		// blob here - only the machine-identity API key (a normal api_token
+		// credential pointed at by api_key_ref). A credential references a secret
+		// via config_json.infisical_ref {server_id, project_id, environment,
+		// secret_path, key}.
+		`CREATE TABLE infisical_servers (
+		    id                 TEXT PRIMARY KEY,
+		    name               TEXT NOT NULL UNIQUE,
+		    server_url         TEXT NOT NULL,            -- https://infisical.example.com
+		    api_key_ref        TEXT NOT NULL DEFAULT '', -- credential id (api_token) holding client_id/secret
+		    network_profile_id TEXT NOT NULL DEFAULT '', -- WireGuard profile to dial the server through, empty = direct
+		    last_used_at       INTEGER,                  -- unix seconds of last successful read
+		    created_at         INTEGER NOT NULL,
+		    updated_at         INTEGER NOT NULL
+		);`,
+	},
 }
 
 // LatestSchemaVersion is the version a freshly-migrated DB lands on.

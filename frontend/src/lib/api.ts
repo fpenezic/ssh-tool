@@ -282,6 +282,48 @@ export interface BitwardenGroupInfo {
   ciphers: BitwardenCipherInfo[] | null;
 }
 
+export interface InfisicalServerInfo {
+  id: string;
+  name: string;
+  server_url: string;
+  api_key_ref: string;
+  network_profile_id: string;
+  last_used_at: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface InfisicalSaveInput {
+  id?: string;
+  name: string;
+  server_url: string;
+  api_key_cred_id: string;
+  network_profile_id?: string;
+}
+
+// One selectable secret in the picker: a key at a folder path in an environment.
+export interface InfisicalEntryInfo {
+  key: string;
+  path: string;
+  has_value: boolean;
+  comment: string;
+  is_key: boolean;
+}
+
+// One environment (dev / prod ...) with its secrets.
+export interface InfisicalEnvInfo {
+  name: string;
+  slug: string;
+  entries: InfisicalEntryInfo[] | null;
+}
+
+// A browse node: one project (workspace) holding its environments.
+export interface InfisicalGroupInfo {
+  project_id: string;
+  name: string;
+  environments: InfisicalEnvInfo[] | null;
+}
+
 export interface RemoteOwner {
   active: boolean;
   machine_name: string;
@@ -473,6 +515,19 @@ export type CredentialCreateInput =
       bitwarden_cipher_id: string;
       bitwarden_field: string;
       bitwarden_is_key?: boolean;
+      hint?: string;
+      tags?: string[];
+      default_username?: string;
+    } & CommonCreateExtras)
+  | ({
+      kind: "infisical";
+      name: string;
+      infisical_server_id: string;
+      infisical_project_id: string;
+      infisical_environment: string;
+      infisical_secret_path?: string;
+      infisical_key: string;
+      infisical_is_key?: boolean;
       hint?: string;
       tags?: string[];
       default_username?: string;
@@ -771,6 +826,27 @@ export const api = {
     folder_id?: string | null;
   }) =>
     G.BitwardenEnsureCredential(input as unknown as Parameters<typeof G.BitwardenEnsureCredential>[0]) as unknown as Promise<CredentialRef>,
+
+  infisicalList: () =>
+    G.InfisicalList() as unknown as Promise<InfisicalServerInfo[]>,
+  infisicalSave: (input: InfisicalSaveInput) =>
+    G.InfisicalSave(input as unknown as Parameters<typeof G.InfisicalSave>[0]) as unknown as Promise<InfisicalServerInfo>,
+  infisicalDelete: (id: string) => G.InfisicalDelete(id),
+  infisicalTestLogin: (id: string) => G.InfisicalTestLogin(id),
+  infisicalBrowse: (id: string) =>
+    G.InfisicalBrowse(id) as unknown as Promise<InfisicalGroupInfo[]>,
+  infisicalEnsureCredential: (input: {
+    server_id: string;
+    project_id: string;
+    environment: string;
+    secret_path: string;
+    key: string;
+    is_key: boolean;
+    name: string;
+    username?: string;
+    folder_id?: string | null;
+  }) =>
+    G.InfisicalEnsureCredential(input as unknown as Parameters<typeof G.InfisicalEnsureCredential>[0]) as unknown as Promise<CredentialRef>,
 
   networkProfilesList: () =>
     G.NetworkProfilesList() as unknown as Promise<NetworkProfileInfo[]>,

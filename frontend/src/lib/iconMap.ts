@@ -87,6 +87,7 @@ import HardDrive from "@lucide/svelte/icons/hard-drive";
 import Users from "@lucide/svelte/icons/users";
 import Database from "@lucide/svelte/icons/database";
 import ShieldIcon from "@lucide/svelte/icons/shield";
+import LockKeyhole from "@lucide/svelte/icons/lock-keyhole";
 export {
   LoaderCircle as IconLoading,
   Radio as IconBroadcast,
@@ -109,6 +110,7 @@ export {
 export function credentialIconFor(c: { kind: string; config?: Record<string, unknown> }) {
   if (c.config && c.config.keepass_ref) return Database;
   if (c.config && c.config.bitwarden_ref) return ShieldIcon;
+  if (c.config && c.config.infisical_ref) return LockKeyhole;
   return credentialKindIcon(c.kind);
 }
 

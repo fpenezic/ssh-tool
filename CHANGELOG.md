@@ -7,6 +7,29 @@ in alpha upstream.
 
 ---
 
+## [0.63.0] - Infisical secret backend
+
+### Added
+
+- **Read SSH secrets straight out of an Infisical server at connect time.**
+  Infisical joins KeePass and Bitwarden as a live credential backend: pick a
+  secret from a project/environment and a connection resolves its value from
+  the server every time it connects - nothing is copied into the local vault.
+  Register a server under Settings - Infisical (name, URL, and a machine-
+  identity API key you can create inline), then use "From Infisical" on any
+  connection's credential row, or create a "From Infisical server" credential
+  directly. The picker browses your projects, environments and secrets
+  (nested folders included), with search.
+- Infisical is the simplest backend of the three: it decrypts server-side, so
+  there is no master password and no vault sync - just the API key. Each
+  secret is read fresh on connect; if the server is briefly unreachable the
+  last value seen is used so an in-flight connect keeps working. The access
+  token is held only in memory and dropped when the vault locks.
+- A server can be reached through a WireGuard network profile when it is only
+  available over the tunnel. "Test login" verifies the API key from Settings.
+- Copy password / username works for Infisical-backed connections, same as
+  the other backends.
+
 ## [0.62.2] - Copy password / username for KeePass & Bitwarden
 
 ### Fixed

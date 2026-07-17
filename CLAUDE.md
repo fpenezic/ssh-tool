@@ -490,6 +490,48 @@ These still bite. The archive of older / now-handled traps lives in
     now offers the interactive method regardless and still errors cleanly if the
     server has no method the prompt can satisfy.
 
+36. **Infisical is the THIRD external secret backend - the per-request,
+    zero-crypto sibling of Bitwarden (gotcha 34).** `internal/infisical` (no app
+    imports, unit-testable) reads SSH secrets straight out of an Infisical server
+    at connect time. Unlike KeePass/Bitwarden there is NO client-side crypto and
+    NO master password: Infisical decrypts server-side and returns plaintext over
+    TLS, so a resolve is a single HTTP read and the only secret is the machine-
+    identity API key (Universal Auth client_id/client_secret, a normal `api_token`
+    credential - identical to the Bitwarden API key). The chain (proven against a
+    live server via a spike, since removed): `POST /api/v1/auth/universal-auth/
+    login` {clientId, clientSecret} -> access token (30-day TTL) cached in memory;
+    `GET /api/v1/workspace` -> projects + environments (the browse tree source -
+    NOT `/api/v1/projects`, which 404s); `GET /api/v3/secrets/raw/<key>?
+    workspaceId=..&environment=..&secretPath=..` -> {secret:{secretValue}}
+    plaintext. A credential does NOT get a new `Kind`: it stays `password`/`key`
+    with `StorageMode=external` and `config_json.infisical_ref {server_id,
+    project_id, environment, secret_path, key}` - FIVE fields (vs Bitwarden's
+    three) because a secret is addressed by project + environment + folder path +
+    key, not one cipher UUID. A ref like `cloudflare/password` is folder path
+    `/cloudflare` + key `password` (`splitSecretRef`). `sshlayer.
+    InfisicalResolveHook` (package var, gotcha 28) is called right after the
+    Bitwarden hook, before the kind switch; handled=false = "not an Infisical
+    cred, fall through". Store v20 table `infisical_servers` holds only pointers
+    (no master_ref, no last_hash - per-request, not synced). Freshness is NOT the
+    Bitwarden full-vault-sync model: every resolve fetches the one secret fresh;
+    on a failed fetch the LAST-KNOWN VALUE PER REF, sealed with the app vault
+    under `<DataDir>/infisical-cache/<serverID>-<hash8(ref)>.sealed` (0600), is
+    served marked `FreshStale` so an in-flight connect survives a brief outage.
+    The in-memory access token is dropped in `VaultLock` via `forgetInfisical()`;
+    a 401 triggers a transparent re-login + retry. Same WireGuard-only routing as
+    Bitwarden (`infisicalClientFor` -> `wgDialerFor`; Netbird/Tailscale are
+    sidecar-SOCKS only and fall back to a direct dial, so the settings dropdown
+    offers WireGuard profiles only). Same credential_folders-vs-folders FK trap:
+    the picker sends `folder_id: null` and the backend files auto-created creds
+    under an "Infisical" CREDENTIAL folder. `EventsEmit("infisical_servers_
+    changed")` gates the "From Infisical" connection-pane button live. The
+    "Sync" affordance the Bitwarden settings has is replaced by "Test login"
+    (there is nothing to sync - reads are per-request); it just verifies the API
+    key logs in. Also wired into `ConnectionRevealPassword` (the v0.62.2
+    copy-password regression class) alongside the keepass_ref / bitwarden_ref
+    branches. Out of scope v1: write-back, non-Universal-Auth login, dynamic
+    secret leasing, self-signed cert trust.
+
 ### Android / mobile gotchas
 
 The app runs on Android (v0.36.0+). Built locally via the NDK

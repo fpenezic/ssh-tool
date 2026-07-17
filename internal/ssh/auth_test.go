@@ -119,9 +119,10 @@ func TestResolveAuthHookRouting(t *testing.T) {
 	// Clean slate.
 	KeepassResolveHook = nil
 	BitwardenResolveHook = nil
-	defer func() { KeepassResolveHook = nil; BitwardenResolveHook = nil }()
+	InfisicalResolveHook = nil
+	defer func() { KeepassResolveHook = nil; BitwardenResolveHook = nil; InfisicalResolveHook = nil }()
 
-	var keepassCalled, bitwardenCalled bool
+	var keepassCalled, bitwardenCalled, infisicalCalled bool
 
 	// KeePass hook handles a cred whose config carries a keepass marker.
 	KeepassResolveHook = func(cred *store.CredentialRef) (string, bool, error) {
@@ -135,6 +136,13 @@ func TestResolveAuthHookRouting(t *testing.T) {
 		bitwardenCalled = true
 		if _, ok := cred.Config["bitwarden_ref"]; ok {
 			return "bw-secret", true, nil
+		}
+		return "", false, nil
+	}
+	InfisicalResolveHook = func(cred *store.CredentialRef) (string, bool, error) {
+		infisicalCalled = true
+		if _, ok := cred.Config["infisical_ref"]; ok {
+			return "inf-secret", true, nil
 		}
 		return "", false, nil
 	}
@@ -174,5 +182,24 @@ func TestResolveAuthHookRouting(t *testing.T) {
 	}
 	if !keepassCalled || !bitwardenCalled {
 		t.Fatalf("expected both hooks tried: keepass=%v bitwarden=%v", keepassCalled, bitwardenCalled)
+	}
+
+	// An Infisical-backed credential falls through KeePass + Bitwarden
+	// (handled=false) and is resolved by the Infisical hook.
+	keepassCalled, bitwardenCalled, infisicalCalled = false, false, false
+	infCred := &store.CredentialRef{
+		Name:   "inf",
+		Kind:   store.CredPassword,
+		Config: map[string]any{"infisical_ref": map[string]any{"server_id": "s", "project_id": "p", "environment": "prod", "key": "k"}},
+	}
+	m, err = ResolveAuth(nil, infCred, nil)
+	if err != nil {
+		t.Fatalf("resolve infisical: %v", err)
+	}
+	if m.Password != "inf-secret" {
+		t.Fatalf("infisical secret: got %q", m.Password)
+	}
+	if !keepassCalled || !bitwardenCalled || !infisicalCalled {
+		t.Fatalf("expected all hooks tried: keepass=%v bitwarden=%v infisical=%v", keepassCalled, bitwardenCalled, infisicalCalled)
 	}
 }

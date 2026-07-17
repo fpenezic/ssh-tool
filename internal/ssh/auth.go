@@ -202,6 +202,12 @@ var KeepassResolveHook func(cred *store.CredentialRef) (secret string, handled b
 // credential, fall through).
 var BitwardenResolveHook func(cred *store.CredentialRef) (secret string, handled bool, err error)
 
+// InfisicalResolveHook is the Infisical sibling: it resolves a credential's
+// infisical_ref to its secret via the Infisical manager (a single server-side-
+// decrypted read). Same contract (handled=false => not an Infisical credential,
+// fall through).
+var InfisicalResolveHook func(cred *store.CredentialRef) (secret string, handled bool, err error)
+
 // ResolveAuth turns a credential reference into AuthMaterial. Side-effecting
 // for `opkssh` (may run the OIDC login) and `agent` (opens UDS connection).
 // ctx cancels an in-flight opkssh OIDC login; the other kinds ignore it.
@@ -230,6 +236,17 @@ func ResolveAuth(ctx context.Context, cred *store.CredentialRef, vault *creds.Va
 			return externalAuthMaterial(cred, secret)
 		}
 	}
+	// A credential carrying an Infisical reference resolves the same way, from a
+	// single server-side-decrypted read.
+	if InfisicalResolveHook != nil {
+		secret, handled, err := InfisicalResolveHook(cred)
+		if err != nil {
+			return nil, err
+		}
+		if handled {
+			return externalAuthMaterial(cred, secret)
+		}
+	}
 	switch cred.Kind {
 	case store.CredPassword:
 		return resolvePassword(cred, vault)
@@ -246,9 +263,9 @@ func ResolveAuth(ctx context.Context, cred *store.CredentialRef, vault *creds.Va
 	}
 }
 
-// externalAuthMaterial turns a secret pulled from an external backend (KeePass
-// or Bitwarden) into auth material. For a key credential the secret is a PEM
-// private key; for anything else it is treated as a password.
+// externalAuthMaterial turns a secret pulled from an external backend (KeePass,
+// Bitwarden, or Infisical) into auth material. For a key credential the secret
+// is a PEM private key; for anything else it is treated as a password.
 func externalAuthMaterial(cred *store.CredentialRef, secret string) (*AuthMaterial, error) {
 	if secret == "" {
 		return nil, fmt.Errorf("external credential %s resolved to an empty secret", cred.Name)

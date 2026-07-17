@@ -1016,6 +1016,93 @@ export class ImageSummary {
 }
 
 /**
+ * InfisicalServer is a registered Infisical instance ssh-tool reads secrets from
+ * at connect time (the per-request sibling of bitwarden_servers). There is no
+ * master password - Infisical decrypts server-side, so the only secret is the
+ * machine-identity API key, held behind a normal api_token credential pointed at
+ * by APIKeyRef. A credential references a secret via
+ * config_json.infisical_ref {server_id, project_id, environment, secret_path, key}.
+ */
+export class InfisicalServer {
+    /**
+     * Creates a new InfisicalServer instance.
+     * @param {Partial<InfisicalServer>} [$$source = {}] - The source object to create the InfisicalServer.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("server_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["server_url"] = "";
+        }
+        if (!("api_key_ref" in $$source)) {
+            /**
+             * credential id (api_token) holding client_id/secret
+             * @member
+             * @type {string}
+             */
+            this["api_key_ref"] = "";
+        }
+        if (!("network_profile_id" in $$source)) {
+            /**
+             * WireGuard profile to dial through, empty = direct
+             * @member
+             * @type {string}
+             */
+            this["network_profile_id"] = "";
+        }
+        if (!("last_used_at" in $$source)) {
+            /**
+             * @member
+             * @type {number | null}
+             */
+            this["last_used_at"] = null;
+        }
+        if (!("created_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["created_at"] = 0;
+        }
+        if (!("updated_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["updated_at"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new InfisicalServer instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {InfisicalServer}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new InfisicalServer(/** @type {Partial<InfisicalServer>} */($$parsedSource));
+    }
+}
+
+/**
  * InheritableSettings: every field is a pointer (or empty map / nil pointer
  * helper struct) so we can distinguish "unset, inherit from parent" from
  * "explicitly set to zero value".

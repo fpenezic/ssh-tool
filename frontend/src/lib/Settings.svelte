@@ -6,6 +6,7 @@
   import McpGrantsList from "./McpGrantsList.svelte";
   import KeepassSettings from "./KeepassSettings.svelte";
   import BitwardenSettings from "./BitwardenSettings.svelte";
+  import InfisicalSettings from "./InfisicalSettings.svelte";
   import { api, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo } from "./api";
   import { networkProfiles } from "./networkProfiles.svelte";
   import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
@@ -1097,6 +1098,7 @@
     | "vault"
     | "keepass"
     | "bitwarden"
+    | "infisical"
     | "backup"
     | "sync"
     | "audit"
@@ -1126,6 +1128,7 @@
     { id: "vault",             title: "Vault",            group: "Security" },
     { id: "keepass",           title: "KeePass",          group: "Security" },
     { id: "bitwarden",         title: "Bitwarden",        group: "Security" },
+    { id: "infisical",         title: "Infisical",        group: "Security" },
     { id: "backup",            title: "Backup & restore", group: "Security" },
     { id: "sync",              title: "Sync",             group: "Security" },
     { id: "audit",             title: "Audit log",        group: "Security" },
@@ -3137,6 +3140,11 @@
   {:else if activeSection === "bitwarden"}
   <div class="group group-wide">
     <BitwardenSettings />
+  </div>
+
+  {:else if activeSection === "infisical"}
+  <div class="group group-wide">
+    <InfisicalSettings />
   </div>
 
   {:else if activeSection === "audit"}

@@ -28,6 +28,7 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 
 	"ssh-tool/internal/backup"
+	"ssh-tool/internal/bitwarden"
 	"ssh-tool/internal/creds"
 	"ssh-tool/internal/exporter"
 	"ssh-tool/internal/httpc"
@@ -35,8 +36,8 @@ import (
 	"ssh-tool/internal/importer/puttyreg"
 	"ssh-tool/internal/importer/rdm"
 	"ssh-tool/internal/importer/sshconfig"
+	"ssh-tool/internal/infisical"
 	"ssh-tool/internal/inventory"
-	"ssh-tool/internal/bitwarden"
 	"ssh-tool/internal/keepass"
 	"ssh-tool/internal/local"
 	"ssh-tool/internal/recorder"
@@ -123,6 +124,10 @@ type App struct {
 	// Vaultwarden / Bitwarden manager: decrypted server vaults held in memory,
 	// dropped on VaultLock. See app_bitwarden.go.
 	bitwarden *bitwarden.Manager
+
+	// Infisical manager: per-request secret reads, access tokens cached in
+	// memory and dropped on VaultLock. See app_infisical.go.
+	infisical *infisical.Manager
 
 	pendingHostKeysMu sync.Mutex
 	pendingHostKeys   map[string]chan bool
@@ -431,6 +436,7 @@ func (a *App) initialise() {
 	a.credSvc = &creds.Service{DB: db, Vault: vault}
 	a.initKeepass()
 	a.initBitwarden()
+	a.initInfisical()
 	a.initAuthPrompts()
 	a.pool = sshlayer.NewPool()
 	a.localPool = local.NewPool()
@@ -1667,6 +1673,7 @@ func (a *App) VaultLock(forgetSidecar bool) {
 	a.vault.Lock(forgetSidecar)
 	a.forgetKeepass()
 	a.forgetBitwarden()
+	a.forgetInfisical()
 	a.recordAudit("vault.lock", "", map[string]string{"forget_sidecar": boolStr(forgetSidecar)})
 }
 
@@ -5545,10 +5552,10 @@ func (a *App) ConnectionRevealPassword(connectionID string) (string, error) {
 	if c.Kind != store.CredPassword {
 		return "", fmt.Errorf("credential is not a password (kind=%s)", c.Kind)
 	}
-	// External-backed password credentials (KeePass / Bitwarden) hold no vault
-	// secret - the value lives in the .kdbx or on the server and is resolved at
-	// use time. Route through the same managers the connect path uses so
-	// "reveal / copy password" works for them too.
+	// External-backed password credentials (KeePass / Bitwarden / Infisical) hold
+	// no vault secret - the value lives in the .kdbx or on the server and is
+	// resolved at use time. Route through the same managers the connect path uses
+	// so "reveal / copy password" works for them too.
 	if ref := store.ParseKeepassRef(c.Config); ref != nil && a.keepass != nil {
 		secret, _, err := a.keepass.Resolve(*ref)
 		if err != nil {
@@ -5558,6 +5565,13 @@ func (a *App) ConnectionRevealPassword(connectionID string) (string, error) {
 	}
 	if ref := store.ParseBitwardenRef(c.Config); ref != nil && a.bitwarden != nil {
 		secret, _, err := a.bitwarden.Resolve(*ref)
+		if err != nil {
+			return "", err
+		}
+		return secret, nil
+	}
+	if ref := store.ParseInfisicalRef(c.Config); ref != nil && a.infisical != nil {
+		secret, _, err := a.infisical.Resolve(*ref)
 		if err != nil {
 			return "", err
 		}
@@ -5593,8 +5607,8 @@ func (a *App) ConnectionCopyInfo(connectionID string) (*ConnectionCopyInfo, erro
 		if c, err := a.db.GetCredential(*s.AuthRef); err == nil {
 			out.HasPassword = c.Kind == store.CredPassword
 			// Fall back to the credential's default_username when the tree
-			// resolves none - this is where the KeePass / Bitwarden picker
-			// stores the entry's username, and it mirrors what the connect
+			// resolves none - this is where the KeePass / Bitwarden / Infisical
+			// picker stores the entry's username, and it mirrors what the connect
 			// path does (session.go).
 			if out.Username == "" && c.DefaultUsername != nil {
 				out.Username = *c.DefaultUsername
