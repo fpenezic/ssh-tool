@@ -36,7 +36,7 @@
         <div class="meta">
           <span class="name">{g.name || g.session_id}</span>
           <span class="host">{g.hostname}</span>
-          <span class="level {g.level}">{g.level === "read-run" ? "read + run" : "read only"}</span>
+          <span class="level {g.level}">{g.level === "read-run-yolo" ? "auto-run (YOLO)" : g.level === "read-run" ? "read + run" : "read only"}</span>
         </div>
         <button class="revoke" onclick={() => unshare(g.session_id)}>Stop sharing</button>
       </li>
@@ -59,6 +59,7 @@
     background: var(--surface1); color: var(--subtext0);
   }
   .level.read-run { background: var(--peach); color: var(--on-accent); }
+  .level.read-run-yolo { background: var(--red); color: var(--base); font-weight: 700; }
   .revoke {
     background: transparent; border: 1px solid var(--surface1);
     color: var(--red); border-radius: 3px; padding: 0.15rem 0.5rem;

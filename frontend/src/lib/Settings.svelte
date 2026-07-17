@@ -22,6 +22,7 @@
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
+  import { MCP_SYSTEM_PROMPT, MCP_SYSTEM_PROMPT_HINT } from "./mcpSystemPrompt";
   import { copyText } from "./clipboard";
   import { localShellPrefs } from "./localShellPrefs.svelte.ts";
   import { recordingsModal } from "./recording.svelte";
@@ -459,6 +460,15 @@
   async function saveMcpReadonlyExtra() {
     try { await api.settingsSet("mcp_readonly_extra", mcpReadonlyExtra.trim()); }
     catch (e) { console.warn("mcp allowlist:", e); }
+  }
+
+  async function copyMcpSystemPrompt() {
+    try {
+      await navigator.clipboard.writeText(MCP_SYSTEM_PROMPT);
+      toast.ok("System prompt copied. " + MCP_SYSTEM_PROMPT_HINT);
+    } catch {
+      toast.err("Copy failed - clipboard unavailable");
+    }
   }
 
   async function toggleCloseToTray(next: boolean) {
@@ -4236,9 +4246,9 @@
         (with your approval).
       </p>
       <p class="hint">
-        Tip: paste the ssh-tool system prompt (docs/MCP_SYSTEM_PROMPT.md) into
-        your LLM client's CLAUDE.md / system prompt so it uses these tools well
-        and treats terminal output as untrusted.
+        Paste the ssh-tool system prompt into your LLM client so it uses these
+        tools well and treats terminal output as untrusted.
+        <button class="link-btn" onclick={copyMcpSystemPrompt}>Copy system prompt</button>
       </p>
 
       <label class="toggle">
