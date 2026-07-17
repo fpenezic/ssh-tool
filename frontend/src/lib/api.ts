@@ -1674,7 +1674,7 @@ export interface GiveInternetResult {
   export_command: string;
 }
 
-export type McpGrantLevel = "read" | "read-run";
+export type McpGrantLevel = "read" | "read-run" | "read-run-yolo";
 export type McpDecision = "run" | "type" | "deny";
 
 // ----- browser session sharing -----

@@ -8,6 +8,8 @@
   import { clickOutside } from "./clickOutside";
   import { view } from "./stores.svelte";
   import { IconStop } from "./iconMap";
+  import { MCP_SYSTEM_PROMPT, MCP_SYSTEM_PROMPT_HINT } from "./mcpSystemPrompt";
+  import { toast } from "./toast.svelte.ts";
 
   interface Props {
     // Empty when the pane has no live session (controls disable).
@@ -60,6 +62,21 @@
     onClose();
     view.setTabSettingsSection("llm");
   }
+
+  async function copyPrompt() {
+    try {
+      await navigator.clipboard.writeText(MCP_SYSTEM_PROMPT);
+      toast.ok("System prompt copied. " + MCP_SYSTEM_PROMPT_HINT);
+    } catch {
+      toast.err("Copy failed - clipboard unavailable");
+    }
+  }
+
+  function levelLabel(l: "" | McpGrantLevel): string {
+    if (l === "read-run-yolo") return "auto-run (YOLO)";
+    if (l === "read-run") return "read + run";
+    return "read only";
+  }
 </script>
 
 <div class="pop" use:clickOutside={{ onOutside: onClose }}>
@@ -85,21 +102,38 @@
       <button class="btn" onclick={() => share("read")}>Read only</button>
       <button class="btn primary" onclick={() => share("read-run")}>Read + run</button>
     </div>
-  {:else}
-    <div class="active">
-      <span class="dot"></span>
-      <span>Shared - {level === "read-run" ? "read + run" : "read only"}</span>
+    <button class="btn yolo" onclick={() => share("read-run-yolo")}>Auto-run (YOLO)</button>
+    <div class="yolo-warn">
+      Auto-runs commands without asking. Catastrophic commands still prompt.
     </div>
+  {:else}
+    <div class="active" class:yolo-active={level === "read-run-yolo"}>
+      <span class="dot"></span>
+      <span>Shared - {levelLabel(level)}</span>
+    </div>
+    {#if level === "read-run-yolo"}
+      <div class="yolo-warn">
+        Commands run without asking (catastrophic ones still prompt).
+      </div>
+    {/if}
     <div class="row">
       {#if level === "read"}
         <button class="btn" onclick={() => share("read-run")}>Upgrade to read + run</button>
-      {:else}
+        <button class="btn yolo" onclick={() => share("read-run-yolo")}>Auto-run (YOLO)</button>
+      {:else if level === "read-run"}
         <button class="btn" onclick={() => share("read")}>Downgrade to read only</button>
+        <button class="btn yolo" onclick={() => share("read-run-yolo")}>Auto-run (YOLO)</button>
+      {:else}
+        <button class="btn" onclick={() => share("read-run")}>Back to read + run</button>
+        <button class="btn" onclick={() => share("read")}>Read only</button>
       {/if}
       <button class="btn stop" onclick={unshare}><IconStop size={11} /> Stop</button>
     </div>
   {/if}
 
+  {#if bridgeOn && sessionId}
+    <button class="link prompt" onclick={copyPrompt}>Copy LLM system prompt</button>
+  {/if}
   {#if bridgeOn && onViewActivity}
     <button class="link activity" onclick={onViewActivity}>View LLM activity ›</button>
   {/if}
@@ -135,16 +169,31 @@
   .btn.primary { background: var(--blue); color: var(--base); border-color: var(--blue); font-weight: 600; }
   .btn.primary:hover { filter: brightness(1.1); }
   .btn.stop { color: var(--red); }
+  .btn.yolo {
+    margin-top: 0.4rem; width: 100%; justify-content: center;
+    background: transparent; color: var(--red); border-color: var(--red);
+    font-weight: 600;
+  }
+  .btn.yolo:hover { background: color-mix(in srgb, var(--red) 15%, transparent); }
+  .yolo-warn {
+    margin-top: 0.35rem; font-size: 0.7rem; line-height: 1.3;
+    color: var(--red); opacity: 0.9;
+  }
   .active { display: flex; align-items: center; gap: 0.4rem; color: var(--text); }
+  .active.yolo-active .dot { background: var(--red); }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
   .link {
     background: transparent; border: 0; color: var(--blue);
     cursor: pointer; font: inherit; font-size: 0.78rem;
     padding: 0.25rem 0; text-decoration: underline;
   }
-  .link.activity {
+  .link.prompt {
     display: block; margin-top: 0.5rem; padding-top: 0.4rem;
     border-top: 1px solid var(--surface0); text-decoration: none; width: 100%; text-align: left;
+  }
+  .link.prompt:hover { color: var(--lavender); }
+  .link.activity {
+    display: block; margin-top: 0.25rem; text-decoration: none; width: 100%; text-align: left;
   }
   .link.activity:hover { color: var(--lavender); }
 </style>

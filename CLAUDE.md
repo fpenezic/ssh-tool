@@ -338,6 +338,20 @@ These still bite. The archive of older / now-handled traps lives in
     unknown -> prompt). Scrollback returned to the LLM is framed as
     UNTRUSTED data - it is not an instruction channel; only a run/type
     tool call touches the host, and that is allowlisted-or-gated.
+    THREE grant levels (`app_mcp.go`): `read`, `read-run` (exec+type,
+    gated), and `read-run-yolo` (auto-approves writes WITHOUT a prompt -
+    an explicit per-session opt-in, never a default). YOLO still routes
+    catastrophic commands through the approval modal via
+    `cmdallow.go` `IsDangerous` (a deliberately NARROW, catastrophic-only
+    deny-list - recursive rm/chmod/chown on root-ish paths, mkfs/wipefs/
+    dd-to-device, shutdown/reboot, fork bomb - NOT the broad
+    `mutationTokens` set, or YOLO would prompt on mkdir/touch/git and
+    defeat itself). `canRun(lvl)` is the shared authorisation check; the
+    activity gate is recorded as `"yolo"` for auto-approved writes. The
+    LLM system prompt is a frontend const (`mcpSystemPrompt.ts`, the
+    single source of truth) surfaced by a "Copy system prompt" button in
+    Settings->LLM + the share popover; `docs/MCP_SYSTEM_PROMPT.md` is the
+    hand-synced human-readable mirror.
     Tools: list_sessions, read_terminal, run, type_into_terminal, plus
     list_connections (name + folder path only, Sensitive connections
     omitted) and connect (approval-gated `SshConnect` then auto-share).
@@ -360,8 +374,7 @@ These still bite. The archive of older / now-handled traps lives in
     (`RequestAttention`, Windows FlashWindowEx, only when unfocused via the
     `windowFocused` atomic) AND pop an OS toast (`SendPromptNotification`,
     Wails notifications service; Windows needs a non-empty `ID` or it fails
-    silently). `docs/MCP_SYSTEM_PROMPT.md` is the paste-in system prompt for
-    LLM clients.
+    silently).
 
 32. **Cross-window tab moves go through a backend pending-drag slot, not
     native drag.** A WebView drag can't cross OS window boundaries (the

@@ -250,7 +250,7 @@ type mcpReadArgs struct {
 
 type mcpRunArgs struct {
 	SessionID string `json:"session_id" jsonschema:"the id of a shared session"`
-	Command   string `json:"command" jsonschema:"the shell command to run; read-only commands auto-run, others need user approval"`
+	Command   string `json:"command" jsonschema:"the shell command to run; read-only commands auto-run, state-changing ones ask the user to approve (unless the session is in auto-run/YOLO mode, where only catastrophic commands still prompt)"`
 }
 
 type mcpTypeArgs struct {

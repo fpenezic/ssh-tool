@@ -71,9 +71,19 @@ type mcpGrantLevel string
 
 const (
 	mcpGrantNone     mcpGrantLevel = ""
-	mcpGrantReadOnly mcpGrantLevel = "read"      // scrollback + allowlisted reads
-	mcpGrantReadRun  mcpGrantLevel = "read-run"  // adds gated exec + type
+	mcpGrantReadOnly mcpGrantLevel = "read"     // scrollback + allowlisted reads
+	mcpGrantReadRun  mcpGrantLevel = "read-run" // adds gated exec + type
+	// mcpGrantReadRunYolo auto-approves exec + type WITHOUT a per-command prompt,
+	// EXCEPT for catastrophic commands (sshlayer.IsDangerous), which still prompt.
+	// An explicit, per-session opt-in; never a default.
+	mcpGrantReadRunYolo mcpGrantLevel = "read-run-yolo"
 )
+
+// canRun reports whether a grant level authorises exec + type (both the
+// approval-gated read-run and the auto-approving yolo).
+func canRun(lvl mcpGrantLevel) bool {
+	return lvl == mcpGrantReadRun || lvl == mcpGrantReadRunYolo
+}
 
 // mcpApprovalTimeout bounds how long a gated command waits for the user before
 // defaulting to deny. Same value as the host-key challenge.
@@ -235,8 +245,8 @@ func (a *App) McpShareSession(sessionID, level string) error {
 		return fmt.Errorf("session not connected")
 	}
 	lvl := mcpGrantLevel(level)
-	if lvl != mcpGrantReadOnly && lvl != mcpGrantReadRun {
-		return fmt.Errorf("level must be read or read-run")
+	if lvl != mcpGrantReadOnly && lvl != mcpGrantReadRun && lvl != mcpGrantReadRunYolo {
+		return fmt.Errorf("level must be read, read-run or read-run-yolo")
 	}
 	a.mcp.mu.Lock()
 	a.mcp.grants[sessionID] = lvl
@@ -424,7 +434,8 @@ func (a *App) mcpReadOnlyExtra() []string {
 // gated by the allowlist / approval. Requires a read-run grant. Returns the
 // combined output.
 func (a *App) mcpRun(sessionID, command string) (string, error) {
-	if a.grantLevel(sessionID) != mcpGrantReadRun {
+	lvl := a.grantLevel(sessionID)
+	if !canRun(lvl) {
 		return "", fmt.Errorf("session not shared for running commands")
 	}
 	sess, ok := a.pool.Get(sessionID)
@@ -434,15 +445,22 @@ func (a *App) mcpRun(sessionID, command string) (string, error) {
 	name := a.sessionDisplayName(sessionID)
 	gate := "auto"
 	if !sshlayer.IsReadOnly(command, a.mcpReadOnlyExtra()) {
-		switch a.requestApproval(sessionID, name, "run", command) {
-		case mcpDecisionRun, mcpDecisionType:
-			gate = "approved"
-		default:
-			a.recordActivity(McpActivity{
-				SessionID: sessionID, Session: name, Kind: "run",
-				Command: command, Gate: "denied",
-			})
-			return "", fmt.Errorf("command denied by user")
+		// Under YOLO a non-read-only command auto-runs UNLESS it is catastrophic
+		// (IsDangerous), in which case it still goes through the approval modal -
+		// the hard guardrail the YOLO grant can't bypass.
+		if lvl == mcpGrantReadRunYolo && !sshlayer.IsDangerous(command) {
+			gate = "yolo"
+		} else {
+			switch a.requestApproval(sessionID, name, "run", command) {
+			case mcpDecisionRun, mcpDecisionType:
+				gate = "approved"
+			default:
+				a.recordActivity(McpActivity{
+					SessionID: sessionID, Session: name, Kind: "run",
+					Command: command, Gate: "denied",
+				})
+				return "", fmt.Errorf("command denied by user")
+			}
 		}
 	}
 	client := sess.TargetClient()
@@ -468,7 +486,8 @@ func (a *App) mcpRun(sessionID, command string) (string, error) {
 // approve) writes it WITHOUT a trailing newline so it sits at the prompt for
 // the user to review and press Enter. Requires a read-run grant.
 func (a *App) mcpType(sessionID, text string) (string, error) {
-	if a.grantLevel(sessionID) != mcpGrantReadRun {
+	lvl := a.grantLevel(sessionID)
+	if !canRun(lvl) {
 		return "", fmt.Errorf("session not shared for running commands")
 	}
 	sess, ok := a.pool.Get(sessionID)
@@ -476,20 +495,28 @@ func (a *App) mcpType(sessionID, text string) (string, error) {
 		return "", fmt.Errorf("session not connected")
 	}
 	name := a.sessionDisplayName(sessionID)
-	decision := a.requestApproval(sessionID, name, "type", text)
-	if decision != mcpDecisionType && decision != mcpDecisionRun {
-		a.recordActivity(McpActivity{
-			SessionID: sessionID, Session: name, Kind: "type",
-			Command: text, Gate: "denied",
-		})
-		return "", fmt.Errorf("typing denied by user")
+	gate := "approved"
+	// Type lands text at the prompt WITHOUT a newline, so nothing executes until
+	// the user presses Enter. Under YOLO that review step is the control, so we
+	// skip the approval modal; otherwise it prompts as before.
+	if lvl == mcpGrantReadRunYolo {
+		gate = "yolo"
+	} else {
+		decision := a.requestApproval(sessionID, name, "type", text)
+		if decision != mcpDecisionType && decision != mcpDecisionRun {
+			a.recordActivity(McpActivity{
+				SessionID: sessionID, Session: name, Kind: "type",
+				Command: text, Gate: "denied",
+			})
+			return "", fmt.Errorf("typing denied by user")
+		}
 	}
 	if err := sess.Write([]byte(text)); err != nil {
 		return "", fmt.Errorf("type: %w", err)
 	}
 	a.recordActivity(McpActivity{
 		SessionID: sessionID, Session: name, Kind: "type",
-		Command: text, Gate: "approved",
+		Command: text, Gate: gate,
 	})
 	return "typed into terminal (no newline sent; user must press Enter)", nil
 }
@@ -641,8 +668,8 @@ func (a *App) folderPathIndex() map[string]string {
 // the approval + post-connect wiring below.
 func (a *App) mcpConnect(connectionID, level string) (string, error) {
 	lvl := mcpGrantLevel(level)
-	if lvl != mcpGrantReadOnly && lvl != mcpGrantReadRun {
-		lvl = mcpGrantReadRun // default to the more useful level
+	if lvl != mcpGrantReadOnly && lvl != mcpGrantReadRun && lvl != mcpGrantReadRunYolo {
+		lvl = mcpGrantReadRun // default to the useful-but-gated level, never yolo
 	}
 
 	var (

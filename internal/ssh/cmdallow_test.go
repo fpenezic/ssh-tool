@@ -100,3 +100,90 @@ func TestIsReadOnlyExtraAllowlist(t *testing.T) {
 		t.Errorf("extra allowlist must not bypass redirection rejection")
 	}
 }
+
+func TestIsDangerous(t *testing.T) {
+	dangerous := []string{
+		// Recursive delete of root-ish / wildcard targets.
+		"rm -rf /",
+		"rm -rf /*",
+		"rm -fr /",
+		"rm -r --force /",
+		"rm -rf ~",
+		"rm -rf $HOME",
+		"rm -rf .",
+		"rm -rf /etc",
+		"rm -rf /usr/*",
+		"rm --recursive /var",
+		"sudo rm -rf / --no-preserve-root",
+		// Disk / filesystem destroyers.
+		"mkfs.ext4 /dev/sda1",
+		"mkfs -t xfs /dev/sdb",
+		"wipefs -a /dev/sda",
+		"blkdiscard /dev/nvme0n1",
+		"dd if=/dev/zero of=/dev/sda bs=1M",
+		"shred -n 3 /dev/sdb",
+		"fdisk /dev/sda",
+		"parted /dev/sda",
+		"mkswap /dev/sdb2",
+		// Block-device redirects.
+		"echo x > /dev/sda",
+		"cat img >> /dev/nvme0n1",
+		// Power / availability.
+		"shutdown -h now",
+		"reboot",
+		"poweroff",
+		"halt",
+		"init 0",
+		"telinit 6",
+		"swapoff -a",
+		// Mass permission / ownership on root.
+		"chmod -R 000 /",
+		"chown -R nobody /etc",
+		"chmod -R 777 /usr",
+		// Fork bomb.
+		":(){ :|:& };:",
+		// Buried in a pipeline / sequence.
+		"cd /tmp && rm -rf /",
+		"true; mkfs.ext4 /dev/sda1",
+	}
+	for _, c := range dangerous {
+		if !IsDangerous(c) {
+			t.Errorf("IsDangerous(%q) = false, want true (catastrophic)", c)
+		}
+	}
+
+	safe := []string{
+		// Scoped deletes - fine, auto-run under YOLO.
+		"rm -rf /tmp/build",
+		"rm -rf ./node_modules",
+		"rm -rf /var/lib/myapp/cache",
+		"rm file.txt",
+		"rm -f /tmp/lock",
+		// dd / chmod to a normal target.
+		"dd if=/dev/zero of=./disk.img bs=1M count=100",
+		"chmod 644 /etc/nginx/nginx.conf",
+		"chmod -R 755 /var/www/myapp",
+		"chown www-data:www-data /var/www/app/index.html",
+		// Ordinary mutations YOLO should auto-run.
+		"mkdir -p /opt/app/data",
+		"touch /var/run/app.pid",
+		"systemctl restart nginx",
+		"apt-get install -y curl",
+		"git checkout main",
+		"echo hi > /tmp/x",
+		"cp a.conf b.conf",
+		// Reads.
+		"ls -la /",
+		"cat /etc/passwd",
+		"df -h",
+		// swapoff a specific device is not the -a nuke.
+		"swapoff /dev/sdb2",
+		// init to a normal runlevel.
+		"init 3",
+	}
+	for _, c := range safe {
+		if IsDangerous(c) {
+			t.Errorf("IsDangerous(%q) = true, want false (not catastrophic)", c)
+		}
+	}
+}

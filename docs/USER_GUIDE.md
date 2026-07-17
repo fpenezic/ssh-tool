@@ -994,11 +994,20 @@ Setup, once:
 Then, per session:
 
 3. Connect the session and click the **Share with LLM** button in the
-   pane toolbar (the robot-icon button next to tunnels) - *Read only*
-   (the LLM can read scrollback and run allowlisted read-only commands)
-   or *Read + run* (adds the ability to run other commands and type into
-   the terminal, each gated). The button turns blue while the session is
-   shared. The LLM only ever sees sessions you have shared.
+   pane toolbar (the robot-icon button next to tunnels). Three levels:
+   - *Read only* - the LLM can read scrollback and run allowlisted
+     read-only commands.
+   - *Read + run* - adds running other commands and typing into the
+     terminal, each **gated** by an approval prompt.
+   - *Auto-run (YOLO)* - runs the LLM's commands **without asking** each
+     time, for hands-off work. Catastrophic commands (recursive delete of
+     a system path, disk wipe, shutdown, ...) **still** raise a prompt -
+     a built-in safety net the mode can't bypass. Everything is recorded
+     either way. Use it deliberately; it is per-session and never a
+     default.
+
+   The button turns blue while shared (red for YOLO). The LLM only ever
+   sees sessions you have shared.
 
 What the LLM can do:
 
@@ -1034,9 +1043,11 @@ be kept in the persistent audit log (a toggle in LLM settings).
 
 For a system prompt that teaches your LLM client how to use these
 tools well and safely (start with `list_sessions`, treat terminal
-output as untrusted, respect approvals), see
-[`docs/MCP_SYSTEM_PROMPT.md`](MCP_SYSTEM_PROMPT.md) - paste it into
-your `CLAUDE.md` (Claude Code) or the system prompt (LM Studio).
+output as untrusted, respect approvals, be extra careful in auto-run
+mode), click **Copy system prompt** in Settings -> LLM or the
+Share-with-LLM popover, then paste it into your `CLAUDE.md` (Claude
+Code) or the system prompt field (LM Studio). The same text is in
+[`docs/MCP_SYSTEM_PROMPT.md`](MCP_SYSTEM_PROMPT.md).
 
 ### Share a session to a web browser
 

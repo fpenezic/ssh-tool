@@ -74,7 +74,7 @@
     },
     {
       "title": "Share a session with an LLM (MCP)",
-      "body": "Attach an external LLM client (Claude Code, LM Studio, any MCP client) to a live session so it can read the terminal, pull logs, search and open your saved connections, and propose commands while you debug. Off by default, local-only bridge, per-session opt-in. Read-only commands auto-run; anything that changes state needs your approval. Terminal output is treated as untrusted data, and every action is logged in an activity panel.",
+      "body": "Attach an external LLM client (Claude Code, LM Studio, any MCP client) to a live session so it can read the terminal, pull logs, search and open your saved connections, and propose commands while you debug. Off by default, local-only bridge, per-session opt-in. Read-only commands auto-run; state-changing ones need your approval - or share a session in auto-run (YOLO) mode for hands-off work, where only catastrophic commands still prompt. Terminal output is treated as untrusted data, and every action is logged in an activity panel.",
       "keys": [
         "MCP",
         "Share with LLM",
@@ -164,7 +164,7 @@
     {
       "icon": "robot",
       "title": "Debug with an LLM (MCP)",
-      "body": "Share a live SSH session with an external LLM client (Claude Code, LM Studio, any MCP server) so it can read the terminal, pull logs, search and open your saved connections, and propose commands. Off by default and local-only: no session is reachable until you share it, read-only commands auto-run, and anything that changes state needs your approval. Terminal output is treated as untrusted data, and every action is recorded in an activity log."
+      "body": "Share a live SSH session with an external LLM client (Claude Code, LM Studio, any MCP server) so it can read the terminal, pull logs, search and open your saved connections, and propose commands. Off by default and local-only: no session is reachable until you share it, read-only commands auto-run, and state-changing ones need your approval - or pick auto-run (YOLO) mode for hands-off work, where only catastrophic commands still prompt. Terminal output is treated as untrusted data, and every action is recorded in an activity log."
     },
     {
       "icon": "globe2",
