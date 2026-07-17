@@ -224,7 +224,7 @@
     {
       "icon": "import",
       "title": "Import from your old tool",
-      "body": "Bring 600+ Devolutions RDM entries in one pass, your ~/.ssh/config with ProxyJump chains intact, PuTTY / KiTTY registry exports, or MobaXterm session files. All imports are additive and safe to re-run."
+      "body": "Bring 600+ Devolutions RDM entries in one pass, your ~/.ssh/config with ProxyJump chains intact, PuTTY / KiTTY registry exports, SuperPuTTY Sessions.xml, or MobaXterm session files - and import PuTTY .ppk private keys directly (converted to OpenSSH on the way in). All imports are additive and safe to re-run."
     },
     {
       "icon": "phone",
