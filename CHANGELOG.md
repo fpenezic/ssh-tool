@@ -7,6 +7,23 @@ in alpha upstream.
 
 ---
 
+## [0.68.0] - Settings reorg: External secrets, Network group, tidier nav
+
+### Changed
+
+- **KeePass, Bitwarden, and Infisical now share one "External secrets" section.**
+  Instead of three separate side-nav rows, there is a single entry with a tab
+  picker inside - the sidebar stays short as more backends are added. Ctrl-K still
+  finds each one directly (`keepass`, `bitwarden`, `infisical`) and jumps straight
+  to its tab.
+- **Network profiles moved out of Appearance into its own "Network" group.** VPN /
+  WireGuard / NetBird / Tailscale profiles were filed under Appearance, which never
+  made sense; they now sit in a dedicated group.
+- **Updates folded into Diagnostics.** The one-item "App" group is gone; Updates
+  sits alongside Logs and About.
+
+---
+
 ## [0.67.2] - Palette jumps to Settings, network-profile kind fix
 
 ### Added
