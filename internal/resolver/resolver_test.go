@@ -159,6 +159,40 @@ func TestDefaultsApply(t *testing.T) {
 	if r.TerminalType != "xterm-256color" {
 		t.Fatalf("term: %s", r.TerminalType)
 	}
+	if r.InitialCommand != "" {
+		t.Fatalf("initial command should default empty, got %q", r.InitialCommand)
+	}
+}
+
+func TestInitialCommandInheritedAndOverridden(t *testing.T) {
+	// A folder sets an initial command; a child connection with no override
+	// inherits it.
+	f := folder("root", nil, store.InheritableSettings{
+		InitialCommand: ptr("cd /var/www"),
+	})
+	c := conn("c1", ptr("root"), "h", store.InheritableSettings{})
+	r := ResolveWith(c, []store.Folder{f})
+	if r.InitialCommand != "cd /var/www" {
+		t.Fatalf("inherited initial command: got %q", r.InitialCommand)
+	}
+
+	// A connection override wins over the folder.
+	c2 := conn("c2", ptr("root"), "h", store.InheritableSettings{
+		InitialCommand: ptr("tmux new -A -s main"),
+	})
+	r2 := ResolveWith(c2, []store.Folder{f})
+	if r2.InitialCommand != "tmux new -A -s main" {
+		t.Fatalf("override initial command: got %q", r2.InitialCommand)
+	}
+
+	// An explicit "" override breaks the inherited command.
+	c3 := conn("c3", ptr("root"), "h", store.InheritableSettings{
+		InitialCommand: ptr(""),
+	})
+	r3 := ResolveWith(c3, []store.Folder{f})
+	if r3.InitialCommand != "" {
+		t.Fatalf("explicit-empty should strip inherited, got %q", r3.InitialCommand)
+	}
 }
 
 func TestDeepInheritanceThreeLevels(t *testing.T) {

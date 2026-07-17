@@ -60,6 +60,12 @@ type InheritableSettings struct {
 	BroadcastGroupID  *string           `json:"broadcast_group_id,omitempty"`
 	KeepaliveInterval *uint32           `json:"keepalive_interval,omitempty"`
 	TerminalType      *string           `json:"terminal_type,omitempty"`
+	// InitialCommand is run in the shell right after connect (e.g.
+	// "cd /var/www", "tmux new -A -s main"). nil means inherit from
+	// folder ancestry; "" means explicitly none (breaks an inherited
+	// command). Sent to the TARGET hop's PTY only, with a trailing
+	// newline, so it runs and lands in the user's own scrollback.
+	InitialCommand *string `json:"initial_command,omitempty"`
 	// AutoReconnect: when true, sessions that drop without a user
 	// Disconnect trigger an exponential-backoff reconnect loop (capped).
 	// nil means "inherit from folder ancestry"; false means "explicitly
@@ -168,6 +174,8 @@ type ResolvedSettings struct {
 	BroadcastGroupID  *string           `json:"broadcast_group_id"`
 	KeepaliveInterval uint32            `json:"keepalive_interval"`
 	TerminalType      string            `json:"terminal_type"`
+	// InitialCommand is run in the shell right after connect ("" = none).
+	InitialCommand    string            `json:"initial_command"`
 	AutoReconnect     bool              `json:"auto_reconnect"`
 	Verbose           bool              `json:"verbose"`
 	// VncPort is the resolved RFB port for the VNC console action,

@@ -629,6 +629,14 @@ func Connect(
 		NetworkVia: networkVia,
 	}
 
+	// Run the connection's configured initial command in the shell. Sent to the
+	// TARGET hop's PTY only (this is the one interactive shell), with a trailing
+	// newline so it executes; it lands in the user's own scrollback like anything
+	// they'd type. Empty = nothing sent.
+	if cmd := strings.TrimSpace(settings.InitialCommand); cmd != "" {
+		_, _ = stdin.Write([]byte(cmd + "\n"))
+	}
+
 	// Output pump. We ALWAYS allocate a PTY (RequestPty above), and a PTY
 	// merges the remote's stdout + stderr onto the single channel master -
 	// the SSH extended-data (stderr) stream carries nothing for a shell
