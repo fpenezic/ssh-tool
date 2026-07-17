@@ -7,7 +7,7 @@
   import KeepassSettings from "./KeepassSettings.svelte";
   import BitwardenSettings from "./BitwardenSettings.svelte";
   import InfisicalSettings from "./InfisicalSettings.svelte";
-  import { api, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo } from "./api";
+  import { api, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type SuperPuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo } from "./api";
   import { networkProfiles } from "./networkProfiles.svelte";
   import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
   import FolderPicker from "./FolderPicker.svelte";
@@ -712,7 +712,7 @@
   // One Settings section, many sources. The picker at the top selects
   // which importer's flow renders below; each keeps its own state so
   // switching sources doesn't wipe a summary you were reading.
-  type ImportSource = "rdm" | "sshconfig" | "mobaxterm" | "putty" | "archive";
+  type ImportSource = "rdm" | "sshconfig" | "mobaxterm" | "putty" | "superputty" | "archive";
   // Ordered by expected traffic: our own archive format first (also
   // hosts the ssh-tool:// handler registration), then the common
   // tool migrations, RDM last.
@@ -721,6 +721,7 @@
     { id: "archive", name: "ssh-tool archive", desc: "TOML / JSON export from another ssh-tool" },
     { id: "sshconfig", name: "ssh_config", desc: "OpenSSH client config - Host blocks, ProxyJump" },
     { id: "putty", name: "PuTTY / KiTTY", desc: ".reg registry export - SSH sessions" },
+    { id: "superputty", name: "SuperPuTTY", desc: "Sessions.xml - SSH sessions + folders" },
     { id: "mobaxterm", name: "MobaXterm", desc: ".mxtsessions export - SSH sessions + bookmark folders" },
     { id: "rdm", name: "Devolutions RDM", desc: "JSON export - folders, connections, jumps, icons" },
   ];
@@ -788,6 +789,32 @@
     } finally {
       puttyBusy = false;
       if (puttyInputEl) puttyInputEl.value = "";
+    }
+  }
+
+  // ----- SuperPuTTY import -----
+
+  let superInputEl: HTMLInputElement | undefined = $state();
+  let superBusy = $state(false);
+  let superError = $state<string | null>(null);
+  let superSummary = $state<SuperPuttyImportSummary | null>(null);
+  let superTargetFolderID = $state(""); // "" = root
+
+  async function onSuperPuttyFile(e: Event) {
+    const f = (e.target as HTMLInputElement).files?.[0];
+    if (!f) return;
+    superBusy = true;
+    superError = null;
+    superSummary = null;
+    try {
+      const text = await readImportFile(f);
+      superSummary = await api.superPuttyImport(text, superTargetFolderID || undefined);
+      await tree.load();
+    } catch (err) {
+      superError = errMsg(err);
+    } finally {
+      superBusy = false;
+      if (superInputEl) superInputEl.value = "";
     }
   }
 
@@ -3930,6 +3957,57 @@
           <details>
             <summary>Warnings</summary>
             <ul>{#each puttySummary.warnings as w}<li>{w}</li>{/each}</ul>
+          </details>
+        {/if}
+      </div>
+    {/if}
+  </div>
+
+  {:else if importSource === "superputty"}
+  <div class="group">
+    <h2>SuperPuTTY</h2>
+    <p class="hint">
+      SuperPuTTY keeps its sessions in a <code>Sessions.xml</code> file
+      (usually <code>%APPDATA%\SuperPuTTY\Sessions.xml</code>). Load it
+      here - SSH sessions and their folder tree come along; RDP / telnet /
+      other types are skipped. SuperPuTTY stores no passwords, so nothing
+      is lost - attach credentials afterwards.
+    </p>
+    <label>Target folder
+      <select bind:value={superTargetFolderID} disabled={superBusy}>
+        <option value="">(root)</option>
+        {#each rdmFolderOptions as f (f.id)}
+          <option value={f.id}>{folderLabel(f)}</option>
+        {/each}
+      </select>
+    </label>
+    <div class="row">
+      <input
+        type="file"
+        accept=".xml,text/xml,text/plain"
+        bind:this={superInputEl}
+        onchange={onSuperPuttyFile}
+        disabled={superBusy}
+      />
+      {#if superBusy}<span class="hint">Importing…</span>{/if}
+    </div>
+    {#if superError}<div class="err">{superError}</div>{/if}
+    {#if superSummary}
+      <div class="import-summary ok">
+        <strong>SuperPuTTY import:</strong>
+        <ul>
+          <li>Connections created: {superSummary.connections_created}</li>
+          <li>Folders created: {superSummary.folders_created}</li>
+          <li>Skipped (name conflict): {superSummary.connections_skipped}</li>
+          <li>Skipped (not SSH): {superSummary.skipped_non_ssh}</li>
+          {#if superSummary.warnings.length}
+            <li class="warn">Warnings: {superSummary.warnings.length}</li>
+          {/if}
+        </ul>
+        {#if superSummary.warnings.length}
+          <details>
+            <summary>Warnings</summary>
+            <ul>{#each superSummary.warnings as w}<li>{w}</li>{/each}</ul>
           </details>
         {/if}
       </div>

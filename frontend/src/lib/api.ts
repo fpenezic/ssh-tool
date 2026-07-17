@@ -1209,6 +1209,8 @@ export const api = {
     nn(G.MobaXtermImport(text, rootFolderID ?? "")) as Promise<MobaXtermImportSummary>,
   puttyRegImport: (text: string, rootFolderID?: string) =>
     nn(G.PuttyRegImport(text, rootFolderID ?? "")) as Promise<PuttyImportSummary>,
+  superPuttyImport: (text: string, rootFolderID?: string) =>
+    nn(G.SuperPuttyImport(text, rootFolderID ?? "")) as Promise<SuperPuttyImportSummary>,
 
   saveTextFile: (suggestedName: string, content: string) =>
     G.SaveTextFile(suggestedName, content) as unknown as Promise<string>,
@@ -1347,6 +1349,16 @@ export interface MobaXtermImportSummary {
 }
 
 export interface PuttyImportSummary {
+  connections_created: number;
+  connections_skipped: number;
+  skipped_non_ssh: number;
+  warnings: string[];
+}
+
+// SuperPuTTY rebuilds a folder tree, so it carries folders_created (unlike the
+// flat PuTTY-reg summary). Same shape as the MobaXterm summary.
+export interface SuperPuttyImportSummary {
+  folders_created: number;
   connections_created: number;
   connections_skipped: number;
   skipped_non_ssh: number;

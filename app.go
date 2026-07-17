@@ -36,6 +36,7 @@ import (
 	"ssh-tool/internal/importer/puttyreg"
 	"ssh-tool/internal/importer/rdm"
 	"ssh-tool/internal/importer/sshconfig"
+	"ssh-tool/internal/importer/superputty"
 	"ssh-tool/internal/infisical"
 	"ssh-tool/internal/inventory"
 	"ssh-tool/internal/keepass"
@@ -4307,6 +4308,20 @@ func (a *App) PuttyRegImport(text string, rootFolderID string) (*puttyreg.Summar
 		return nil, err
 	}
 	return puttyreg.Apply(a.db, entries, sum, rootFolderID)
+}
+
+// SuperPuttyImport parses a SuperPuTTY Sessions.xml and creates one connection
+// per Proto=SSH session, rebuilding the SessionId folder tree under
+// rootFolderID. SuperPuTTY stores no passwords, so nothing secret is lost.
+func (a *App) SuperPuttyImport(text string, rootFolderID string) (*superputty.Summary, error) {
+	if strings.TrimSpace(text) == "" {
+		return nil, fmt.Errorf("empty import payload")
+	}
+	entries, sum, err := superputty.Parse(text)
+	if err != nil {
+		return nil, err
+	}
+	return superputty.Apply(a.db, entries, sum, rootFolderID)
 }
 
 // PathIsDir reports whether path is a directory. Used by the SFTP
