@@ -49,6 +49,30 @@ func (a *App) SendPromptNotification(title, body string) {
 	log.Printf("notification: sent %q", title)
 }
 
+// SendUpdateNotification posts an OS toast that a newer version is available.
+// Unlike SendPromptNotification it does NOT skip when the window is focused - an
+// update is informational, not a blocking prompt you're already staring at, and
+// a user who has ssh-tool open all day would otherwise never see it. It still
+// respects the notifications_enabled toggle. The caller (CheckForUpdate) gates
+// this so it fires at most once per new version.
+func (a *App) SendUpdateNotification(title, body string) {
+	if !a.notificationsEnabled() {
+		return
+	}
+	if notifier == nil {
+		return
+	}
+	if err := notifier.SendNotification(notifications.NotificationOptions{
+		ID:    "ssh-tool-update-" + strconv.FormatInt(time.Now().UnixNano(), 10),
+		Title: title,
+		Body:  body,
+	}); err != nil {
+		log.Printf("update notification: send failed: %v", err)
+		return
+	}
+	log.Printf("update notification: sent %q", title)
+}
+
 // notificationsEnabled reads the toggle (default true when unset).
 func (a *App) notificationsEnabled() bool {
 	if a.db == nil {

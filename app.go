@@ -5212,6 +5212,98 @@ type UpdateCheckResult struct {
 // pointed `update_check_base_url` at their own server.
 const updateGitHubRepo = "fpenezic/ssh-tool"
 
+// resolvedRelease is the newest release resolved from whichever source
+// answered (GitHub Releases, or the legacy /api/latest). It carries both the
+// metadata the UI shows and the platform asset the downloader needs, so a
+// single resolve serves both CheckForUpdate and DownloadUpdate.
+type resolvedRelease struct {
+	Version      string
+	ReleasedAt   string
+	ChangelogURL string
+	AssetURL     string
+	AssetSHA256  string
+	AssetSize    int64
+}
+
+// resolveLatestRelease queries the newest release from the primary source
+// (GitHub Releases) with a fallback to the legacy release server's
+// /api/latest, honouring a user-set `update_check_base_url`. It is the single
+// place update metadata is fetched from - both the periodic check and the
+// download-time re-resolve go through it, so the download can never act on a
+// version staler than what is live right now (the notif-loop bug).
+func (a *App) resolveLatestRelease() (*resolvedRelease, error) {
+	customBase, _, _ := a.db.GetSetting("update_check_base_url")
+	if customBase == "" {
+		gh, err := updater.FetchGitHubLatest(updateGitHubRepo,
+			fmt.Sprintf("ssh-tool/%s", appVersion))
+		if err == nil {
+			out := &resolvedRelease{
+				Version:      gh.Version,
+				ReleasedAt:   gh.ReleasedAt,
+				ChangelogURL: gh.ChangelogURL,
+			}
+			if asset, ok := gh.Assets[platformAssetKey()]; ok {
+				out.AssetURL = asset.URL
+				out.AssetSHA256 = asset.SHA256
+				out.AssetSize = asset.Size
+			}
+			return out, nil
+		}
+		// GitHub unreachable / rate-limited: fall through to the
+		// legacy release server.
+	}
+
+	base := "https://sshtool.app"
+	if customBase != "" {
+		base = strings.TrimRight(customBase, "/")
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest("GET", base+"/api/latest", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", fmt.Sprintf("ssh-tool/%s", appVersion))
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("release server returned %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var payload struct {
+		Version      string `json:"version"`
+		ReleasedAt   string `json:"released_at"`
+		ChangelogURL string `json:"changelog_url"`
+		Assets       map[string]struct {
+			URL    string `json:"url"`
+			SHA256 string `json:"sha256"`
+			Size   int64  `json:"size"`
+		} `json:"assets"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("malformed /api/latest response: %w", err)
+	}
+
+	out := &resolvedRelease{
+		Version:      payload.Version,
+		ReleasedAt:   payload.ReleasedAt,
+		ChangelogURL: payload.ChangelogURL,
+	}
+	if asset, ok := payload.Assets[platformAssetKey()]; ok {
+		out.AssetURL = asset.URL
+		out.AssetSHA256 = asset.SHA256
+		out.AssetSize = asset.Size
+	}
+	return out, nil
+}
+
 // CheckForUpdate resolves the newest release and compares against
 // the build-time injected version. Primary source is GitHub
 // Releases; on any error there it falls back to the legacy release
@@ -5229,91 +5321,51 @@ func (a *App) CheckForUpdate() UpdateCheckResult {
 		return res
 	}
 
-	customBase, _, _ := a.db.GetSetting("update_check_base_url")
-	if customBase == "" {
-		gh, err := updater.FetchGitHubLatest(updateGitHubRepo,
-			fmt.Sprintf("ssh-tool/%s", appVersion))
-		if err == nil {
-			res.Latest = gh.Version
-			res.ReleasedAt = gh.ReleasedAt
-			res.ChangelogURL = gh.ChangelogURL
-			if asset, ok := gh.Assets[platformAssetKey()]; ok {
-				res.DownloadURL = asset.URL
-				res.DownloadSize = asset.Size
-				// Stash URL + digest backend-side; DownloadUpdate acts
-				// on these instead of trusting frontend parameters.
-				a.updateMu.Lock()
-				a.updateAssetURL = asset.URL
-				a.updateAssetSHA256 = asset.SHA256
-				a.updateApplyScript = ""
-				a.updateMu.Unlock()
-			}
-			res.IsNewer = semverGreater(gh.Version, appVersion)
-			return res
-		}
-		// GitHub unreachable / rate-limited: fall through to the
-		// legacy release server.
-	}
-
-	base := "https://sshtool.app"
-	if customBase != "" {
-		base = strings.TrimRight(customBase, "/")
-	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest("GET", base+"/api/latest", nil)
-	if err != nil {
-		res.Error = err.Error()
-		return res
-	}
-	req.Header.Set("User-Agent", fmt.Sprintf("ssh-tool/%s", appVersion))
-	resp, err := client.Do(req)
-	if err != nil {
-		res.Error = err.Error()
-		return res
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		res.Error = fmt.Sprintf("release server returned %d", resp.StatusCode)
-		return res
-	}
-	body, err := io.ReadAll(resp.Body)
+	rel, err := a.resolveLatestRelease()
 	if err != nil {
 		res.Error = err.Error()
 		return res
 	}
 
-	var payload struct {
-		Version      string `json:"version"`
-		ReleasedAt   string `json:"released_at"`
-		ChangelogURL string `json:"changelog_url"`
-		Assets       map[string]struct {
-			URL    string `json:"url"`
-			SHA256 string `json:"sha256"`
-			Size   int64  `json:"size"`
-		} `json:"assets"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		res.Error = "malformed /api/latest response: " + err.Error()
-		return res
-	}
-
-	res.Latest = payload.Version
-	res.ReleasedAt = payload.ReleasedAt
-	res.ChangelogURL = payload.ChangelogURL
-	if asset, ok := payload.Assets[platformAssetKey()]; ok {
-		res.DownloadURL = asset.URL
-		res.DownloadSize = asset.Size
-		// Stash URL + manifest hash backend-side; DownloadUpdate acts
-		// on these instead of trusting frontend-supplied parameters.
+	res.Latest = rel.Version
+	res.ReleasedAt = rel.ReleasedAt
+	res.ChangelogURL = rel.ChangelogURL
+	res.DownloadURL = rel.AssetURL
+	res.DownloadSize = rel.AssetSize
+	if rel.AssetURL != "" {
+		// Stash URL + digest backend-side so ApplyUpdate and any UI that reads
+		// it stays consistent; DownloadUpdate re-resolves rather than trusting
+		// this stash, so a newer release between check and download is picked up.
 		a.updateMu.Lock()
-		a.updateAssetURL = asset.URL
-		a.updateAssetSHA256 = asset.SHA256
+		a.updateAssetURL = rel.AssetURL
+		a.updateAssetSHA256 = rel.AssetSHA256
 		a.updateApplyScript = "" // a fresh check invalidates any older staged script
 		a.updateMu.Unlock()
 	}
-	res.IsNewer = semverGreater(payload.Version, appVersion)
+	res.IsNewer = semverGreater(rel.Version, appVersion)
+	if res.IsNewer {
+		a.maybeNotifyUpdate(rel.Version)
+	}
 	return res
+}
+
+// maybeNotifyUpdate posts an OS toast when a newer version is found, gated so it
+// fires at most once per version: it records the last-notified version in
+// settings and skips when it matches. This is what stops the 6-hourly periodic
+// check from re-toasting the same version, while still surfacing a genuinely
+// newer one that shows up later.
+func (a *App) maybeNotifyUpdate(version string) {
+	if version == "" {
+		return
+	}
+	if last, ok, _ := a.db.GetSetting("update_notified_version"); ok && last == version {
+		return
+	}
+	_ = a.db.SetSetting("update_notified_version", version)
+	a.SendUpdateNotification(
+		"ssh-tool update available",
+		fmt.Sprintf("Version %s is available (you're on %s). Open ssh-tool to update.", version, appVersion),
+	)
 }
 
 // ReleaseNotes carries the markdown changelog for a single version.
@@ -5405,21 +5457,37 @@ type UpdateDownloadProgress struct {
 	Total int64 `json:"total"`
 }
 
-// DownloadUpdate streams the asset captured by the last CheckForUpdate
-// into a staging slot next to the running binary, verifying its sha256
-// against the manifest value before any swap. It deliberately takes no
-// URL parameter - the backend only downloads what it derived from its
-// own update check, never what the webview asks for. On Unix the swap
-// happens during Download itself (renames are safe over a running
-// binary). On Windows the swap is deferred to an apply script that
+// DownloadUpdate re-resolves the newest release at download time and streams
+// its asset into a staging slot next to the running binary, verifying its
+// sha256 against the manifest value before any swap. It deliberately takes no
+// URL parameter - the backend only downloads what IT resolves, never what the
+// webview asks for. Re-resolving (rather than trusting the stash from the last
+// CheckForUpdate) means that when a newer release ships between the check and
+// the click, the download pulls THAT version - otherwise the app downloads the
+// stale version, restart still sees a newer one, and the update prompt loops.
+// On Unix the swap happens during Download itself (renames are safe over a
+// running binary). On Windows the swap is deferred to an apply script that
 // ApplyUpdate spawns just before the app exits.
 func (a *App) DownloadUpdate() (*updater.DownloadResult, error) {
-	a.updateMu.Lock()
-	url, wantSHA := a.updateAssetURL, a.updateAssetSHA256
-	a.updateMu.Unlock()
-	if url == "" {
-		return nil, fmt.Errorf("no update available - run a check for updates first")
+	rel, err := a.resolveLatestRelease()
+	if err != nil {
+		return nil, fmt.Errorf("re-check for the latest release before downloading: %w", err)
 	}
+	if rel.AssetURL == "" {
+		return nil, fmt.Errorf("no downloadable asset for this platform in release %s", rel.Version)
+	}
+	// Only download when the resolved release is actually newer than what is
+	// running - guards against a download click racing a just-applied update.
+	if !semverGreater(rel.Version, appVersion) {
+		return nil, fmt.Errorf("already on the latest version (%s)", appVersion)
+	}
+	url, wantSHA := rel.AssetURL, rel.AssetSHA256
+	// Keep the stash in step with what we are about to download so ApplyUpdate
+	// and any UI reading it stay consistent.
+	a.updateMu.Lock()
+	a.updateAssetURL = rel.AssetURL
+	a.updateAssetSHA256 = rel.AssetSHA256
+	a.updateMu.Unlock()
 
 	// Throttle progress events: at most one per 150ms, plus the final
 	// chunk so the bar lands on 100%.
