@@ -285,6 +285,15 @@
     return tagsRaw.split(",").map((s) => s.trim()).filter(Boolean);
   }
 
+  async function browsePuttyKey() {
+    try {
+      const path = await api.pickPuttyKeyFile();
+      if (path) keyPath = path;
+    } catch (e) {
+      err = errMsg(e);
+    }
+  }
+
   async function submit() {
     if (!name.trim()) {
       err = "Name is required";
@@ -532,20 +541,27 @@
             <PasswordInput bind:value={passphrase} placeholder="optional" />
           </label>
         {:else if kind === "key_import_paste"}
-          <label>Private key (OpenSSH format)
-            <textarea bind:value={privateText} rows="6" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."></textarea>
+          <label>Private key (OpenSSH or PuTTY .ppk)
+            <textarea bind:value={privateText} rows="6" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----...  or  PuTTY-User-Key-File-3: ..."></textarea>
           </label>
           <label>Passphrase
             <PasswordInput bind:value={importPass} placeholder="if key is encrypted" />
           </label>
+          <p class="hint-text">A PuTTY .ppk is converted to OpenSSH and stored in the vault.</p>
         {:else if kind === "key_file_ref"}
           <label>Key path
-            <input bind:value={keyPath} placeholder="~/.ssh/id_ed25519" />
+            <div class="path-row">
+              <input bind:value={keyPath} placeholder="~/.ssh/id_ed25519  or  a .ppk" />
+              <button type="button" onclick={browsePuttyKey}>Browse .ppk…</button>
+            </div>
           </label>
           <label>Passphrase
             <PasswordInput bind:value={fileRefPass} placeholder="if key is encrypted" />
           </label>
-          <p class="hint-text">File stays on disk. We store path + passphrase (in keychain) only.</p>
+          <p class="hint-text">
+            An OpenSSH/PEM file stays on disk (we store the path + passphrase only).
+            A <strong>.ppk</strong> is converted to OpenSSH and stored in the vault.
+          </p>
         {:else if kind === "agent"}
           <label>Socket path
             <input bind:value={agentSocket} placeholder="leave empty for $SSH_AUTH_SOCK" />
@@ -765,6 +781,9 @@
   input:focus, textarea:focus, select:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
   textarea { font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem; }
   .hint-text { color: var(--overlay0); font-size: 0.75rem; margin: 0; }
+  .path-row { display: flex; gap: 0.4rem; align-items: stretch; }
+  .path-row input { flex: 1; min-width: 0; }
+  .path-row button { flex-shrink: 0; white-space: nowrap; }
   .row { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.4rem; }
   button {
     background: var(--surface0); color: var(--text); border: 0;

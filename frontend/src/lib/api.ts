@@ -1133,6 +1133,8 @@ export const api = {
 
   pickAnsibleInventoryFile: () =>
     G.PickAnsibleInventoryFile() as unknown as Promise<string>,
+  pickPuttyKeyFile: () =>
+    G.PickPuttyKeyFile() as unknown as Promise<string>,
 
   forwardsList: (connectionId: string) =>
     G.ForwardsList(connectionId) as unknown as Promise<PortForward[]>,

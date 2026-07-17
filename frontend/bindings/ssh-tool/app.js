@@ -1902,6 +1902,16 @@ export function PickAnsibleInventoryFile() {
 }
 
 /**
+ * PickPuttyKeyFile opens a native Open File dialog for a PuTTY .ppk private
+ * key, so the key-import editor doesn't make the user paste or type the path.
+ * The .ppk is converted to OpenSSH and stored in the vault at import time.
+ * @returns {$CancellablePromise<string>}
+ */
+export function PickPuttyKeyFile() {
+    return $Call.ByID(3616064479);
+}
+
+/**
  * PinDynamicEntry promotes a single dynamic entry into a real connection.
  * Reads the dynamic_entry, lifts provider-specific vars (Ansible) into
  * the new connection's overrides, records the pin so the next refresh
