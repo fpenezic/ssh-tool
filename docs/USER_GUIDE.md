@@ -549,6 +549,51 @@ moment the vault locks.
 Sign-in is API-key only (no email/password or interactive 2FA login),
 and the server needs a certificate your OS trusts.
 
+### Infisical servers
+
+ssh-tool can also read secrets straight out of an **Infisical** server.
+It is the simplest of the three external backends: Infisical decrypts
+**server-side**, so there is **no master password** and **no vault sync**
+- the value comes back over TLS and is read fresh on every connect,
+never copied into ssh-tool's own store.
+
+**Register a server** in Settings → Infisical:
+
+- **Server URL** - e.g. `https://infisical.example.com`.
+- **API key** - sign-in uses a **machine identity** (Universal Auth). On
+  the server, create a machine identity and a Universal Auth key (a
+  client id + client secret), and add the identity as a **member of the
+  project** whose secrets you want to read. In ssh-tool, pick an existing
+  API-key credential or click **Create** to add one inline.
+- **Network profile** (optional) - if the server is only reachable over a
+  VPN, choose a **WireGuard** profile to dial through.
+- **Test login** verifies the API key works.
+
+**Reference a secret** the same two ways as the other backends:
+
+- Fastest: on a connection or folder, click **From Infisical** next to
+  the Credential picker (shown once a server is registered, live - no
+  restart). The picker opens a **Project → Environment → secret** tree
+  (nested folder paths shown as a prefix on the key) with a search box.
+  Choose a secret, and ssh-tool creates and assigns a credential for it,
+  filed under an "Infisical" credential folder. Infisical-backed
+  credentials show a **lock icon** and an "infisical" label.
+- Or from the credential editor: **From Infisical server**, pick the
+  server and secret.
+
+A secret whose value is a PEM private key is offered as an **SSH key**
+(authenticates as a key); anything else is used as a password. Secrets
+are referenced by project + environment + path + key.
+
+**Freshness and offline**: every connect reads the secret fresh (a single
+request). If the server is briefly unreachable, the **last value seen**
+for that secret - sealed with your vault on disk - is used and marked
+**stale** rather than breaking a connect. The access token lives only in
+memory and is dropped the moment the vault locks.
+
+Sign-in is Universal-Auth (API key) only, and the server needs a
+certificate your OS trusts.
+
 ---
 
 <a id="terminal-sessions"></a>

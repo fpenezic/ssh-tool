@@ -138,13 +138,8 @@
     },
     {
       "icon": "key",
-      "title": "KeePass as a live backend",
-      "body": "Reference a KeePass .kdbx entry directly - the password or private key is read from the file at connect time and never copied into ssh-tool. Local file or remote over WebDAV / SFTP, opened read-only. The database master is sealed in the vault, so one unlock opens both; remote copies are fetched fresh with a conditional request and fall back to the last cached copy (flagged stale) when the remote is down."
-    },
-    {
-      "icon": "shield",
-      "title": "Vaultwarden / Bitwarden as a live backend",
-      "body": "Reference a Vaultwarden or Bitwarden item directly, organizations and collections included - the password or SSH key is decrypted from the server at connect time and never copied into ssh-tool. Sign-in via API key; the master password is sealed in the vault, write-only. Reachable behind a WireGuard profile. Items sync on unlock and re-check when stale; when the server is down the sealed cache serves the secret flagged stale rather than breaking a connect."
+      "title": "Live external secret backends",
+      "body": "Reference a secret in KeePass, Vaultwarden / Bitwarden, or Infisical directly - the password or SSH key is read from the source at connect time and never copied into ssh-tool. KeePass reads a .kdbx (local or remote over WebDAV / SFTP, read-only); Bitwarden decrypts items from the server, organizations and collections included; Infisical reads secrets by project, environment and path. Sign-in is by API key (KeePass and Bitwarden also seal a master in the vault); each backend is reachable behind a WireGuard profile. Reads are fresh, and when the source is briefly unreachable the last value seen is served, flagged stale, rather than breaking a connect."
     },
     {
       "icon": "lock",
