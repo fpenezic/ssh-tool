@@ -145,7 +145,8 @@
             onmousemove={() => (activeIdx = i)}
             onclick={() => pickOption(o.value)}
           >
-            {o.label}
+            <span class="row-label">{o.label}</span>
+            {#if o.group}<span class="row-group">{o.group}</span>{/if}
           </button>
         {/each}
         {#if filtered.length === 0}
@@ -204,7 +205,9 @@
   }
   .list { overflow-y: auto; flex: 1; padding: 0.2rem 0; }
   .row {
-    display: block;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
     width: 100%;
     text-align: left;
     background: transparent;
@@ -215,6 +218,17 @@
     font: inherit;
     font-size: 0.85rem;
     border-left: 2px solid transparent;
+  }
+  .row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-group {
+    margin-left: auto;
+    flex-shrink: 0;
+    color: var(--overlay0);
+    font-size: 0.72rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 45%;
   }
   .row.active { background: var(--surface0); border-left-color: var(--blue); }
   .row.selected { color: var(--blue); font-weight: 500; }

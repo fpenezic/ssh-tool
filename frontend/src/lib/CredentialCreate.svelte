@@ -482,9 +482,11 @@
             <option value="agent">SSH agent</option>
             <option value="opkssh">opkssh profile</option>
             <option value="api_token">API token (proxmox, hetzner, …)</option>
-            <option value="keepass">From KeePass database</option>
-            <option value="bitwarden">From Bitwarden server</option>
-            <option value="infisical">From Infisical server</option>
+            <optgroup label="External secret managers">
+              <option value="keepass">From KeePass database</option>
+              <option value="bitwarden">From Bitwarden server</option>
+              <option value="infisical">From Infisical server</option>
+            </optgroup>
           </select>
         </label>
         <label>Name *

@@ -7,6 +7,20 @@ in alpha upstream.
 
 ---
 
+## [0.67.1] - Grouped credential kinds, subtitles in searchable pickers
+
+### Changed
+
+- **The "New credential" kind list groups the external secret managers.** KeePass,
+  Bitwarden, and Infisical now sit under an "External secret managers" heading in
+  the dropdown instead of being loose among the built-in kinds.
+- **Searchable pickers show the folder / collection / environment as a subtitle.**
+  When you pick a KeePass entry, Bitwarden item, or Infisical secret, each row now
+  shows its group on the right, so two entries with the same name are easy to tell
+  apart. The group text is searchable too.
+
+---
+
 ## [0.67.0] - Initial command on connect, searchable pickers, full update notes
 
 ### Added
