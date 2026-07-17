@@ -69,6 +69,7 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		BroadcastGroupID:  firstNonNil(over.BroadcastGroupID, base.BroadcastGroupID),
 		KeepaliveInterval: firstNonNilU32(over.KeepaliveInterval, base.KeepaliveInterval),
 		TerminalType:      firstNonNil(over.TerminalType, base.TerminalType),
+		InitialCommand:    firstNonNil(over.InitialCommand, base.InitialCommand),
 		AutoReconnect:     firstNonNilBool(over.AutoReconnect, base.AutoReconnect),
 		Verbose:           firstNonNilBool(over.Verbose, base.Verbose),
 		VncEnabled:        firstNonNilBool(over.VncEnabled, base.VncEnabled),
@@ -117,6 +118,10 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 	if s.TerminalType != nil {
 		term = *s.TerminalType
 	}
+	initialCmd := ""
+	if s.InitialCommand != nil {
+		initialCmd = *s.InitialCommand
+	}
 	vncPort := uint16(5900)
 	if s.VncPort != nil && *s.VncPort != 0 {
 		vncPort = *s.VncPort
@@ -147,6 +152,7 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 		BroadcastGroupID:  s.BroadcastGroupID,
 		KeepaliveInterval: keepalive,
 		TerminalType:      term,
+		InitialCommand:    initialCmd,
 		AutoReconnect:     s.AutoReconnect != nil && *s.AutoReconnect,
 		Verbose:           s.Verbose != nil && *s.Verbose,
 		VncEnabled:        s.VncEnabled != nil && *s.VncEnabled,

@@ -139,7 +139,8 @@ seconds.
 
 - Folders form a tree. Each folder has **inheritable settings**:
   default username, default port, default credential, jump host
-  chain, color tag, auto-reconnect, verbose connect log.
+  chain, color tag, auto-reconnect, verbose connect log, initial
+  command.
 - Connections live under a folder (or at root). They override any
   inherited setting per-connection.
 
@@ -257,6 +258,12 @@ Two-column grid (auto-fit on narrow widths). Fields:
 - **Keepalive interval (s)** - seconds between SSH keepalive global
   requests. Empty = inherit, 0 = off. Useful for connections behind
   NAT that drop idle TCP sessions after 1-5 minutes.
+- **Initial command** - a command run in the shell right after connect,
+  e.g. `cd /var/www`, `tmux new -A -s main`, or
+  `source venv/bin/activate`. Set it on a folder to give every
+  connection under it the same landing spot; a connection can override
+  or (with an empty value) opt out. It runs on the target host only (not
+  jump hosts) and shows in your scrollback like anything you'd type.
 - **Tags** - chip editor with type-and-enter.
 - **Notes** - markdown textarea with an **Edit / Preview** toggle.
   Supports headings (`#` through `######`), `**bold**`, `*italic*`,
