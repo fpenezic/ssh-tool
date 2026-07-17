@@ -6,6 +6,7 @@ require (
 	github.com/aymanbagabas/go-pty v0.2.3
 	github.com/coder/websocket v1.8.14
 	github.com/google/uuid v1.6.0
+	github.com/kayrus/putty v1.0.5
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/openpubkey/openpubkey v0.23.0
 	github.com/openpubkey/opkssh v0.14.0
