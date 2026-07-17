@@ -7,6 +7,24 @@ in alpha upstream.
 
 ---
 
+## [0.65.0] - LLM auto-run (YOLO) mode + in-app system prompt
+
+### Added
+
+- **Auto-run ("YOLO") share level for LLM sessions.** Alongside *Read only* and
+  *Read + run*, you can now share a session so the LLM's commands run **without a
+  per-command approval prompt** - for hands-off work. It is an explicit,
+  per-session opt-in (never a default) and the share button turns red so it's
+  obvious. A built-in safety net still forces a prompt for genuinely
+  catastrophic commands - recursive delete of a system path, disk wipe,
+  shutdown, fork bomb, and the like - which auto-run can't bypass. Every command
+  is recorded either way.
+- **Copy the LLM system prompt from inside the app.** A **Copy system prompt**
+  button in Settings -> LLM and in the Share-with-LLM popover puts the ssh-tool
+  system prompt on your clipboard, ready to paste into Claude Code's `CLAUDE.md`
+  or your MCP client's system-prompt field. The prompt now also tells the model
+  to be extra careful in auto-run mode.
+
 ## [0.64.0] - Update notifications and a stale-download fix
 
 ### Added
