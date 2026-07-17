@@ -96,3 +96,35 @@ func TestHelperTagMajor(t *testing.T) {
 		}
 	}
 }
+
+func TestFilterReleaseList(t *testing.T) {
+	// Newest-first, with a prerelease and a draft mixed in.
+	list := []ghReleasePayload{
+		{TagName: "v0.66.0", Body: "notes 66"},
+		{TagName: "v0.66.0-rc1", Prerelease: true, Body: "rc"},
+		{TagName: "v0.65.0", Body: "notes 65"},
+		{TagName: "v0.64.0", Body: "notes 64"},
+		{TagName: "v0.63.0-draft", Draft: true, Body: "draft"},
+		{TagName: "v0.63.0", Body: "notes 63"},
+	}
+	// Simple numeric-ish tag compare good enough for the test range
+	// (0.63 < x <= 0.66); the app supplies the real semver comparator.
+	rank := map[string]int{"v0.63.0": 63, "v0.64.0": 64, "v0.65.0": 65, "v0.66.0": 66}
+	inRange := func(tag string) bool {
+		r, ok := rank[tag]
+		return ok && r > 63 && r <= 66
+	}
+	got := filterReleaseList(list, inRange)
+	want := []string{"v0.66.0", "v0.65.0", "v0.64.0"} // not 0.63 (=from), not rc/draft
+	if len(got) != len(want) {
+		t.Fatalf("got %d releases, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i].Version != want[i] {
+			t.Fatalf("at %d: got %q, want %q", i, got[i].Version, want[i])
+		}
+		if got[i].NotesMD == "" {
+			t.Fatalf("%s has no notes", got[i].Version)
+		}
+	}
+}

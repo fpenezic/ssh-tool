@@ -48,6 +48,8 @@ type ghReleasePayload struct {
 	PublishedAt string `json:"published_at"`
 	HTMLURL     string `json:"html_url"`
 	Body        string `json:"body"`
+	Draft       bool   `json:"draft"`
+	Prerelease  bool   `json:"prerelease"`
 	Assets      []struct {
 		Name               string `json:"name"`
 		Size               int64  `json:"size"`
@@ -128,6 +130,66 @@ func FetchGitHubHelperRelease(repo string, maxMajor int, userAgent string) (*Rel
 		return nil, err
 	}
 	return parseGitHubRelease(raw)
+}
+
+// FetchGitHubReleasesBetween lists the repo's releases and returns those the
+// caller's inRange predicate accepts (typically: version > installed && <=
+// latest), keeping GitHub's newest-first order and skipping drafts /
+// prereleases. Used to show the changelog of every version a user skips when the
+// updater jumps them straight to the latest. inRange receives the raw tag name
+// (e.g. "v0.65.0"); the app supplies the semver comparison so the updater stays
+// free of that dependency.
+func FetchGitHubReleasesBetween(repo, userAgent string, inRange func(tag string) bool) ([]ReleaseInfo, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=100", repo)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("github releases API returned %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+	if err != nil {
+		return nil, err
+	}
+	var list []ghReleasePayload
+	if err := json.Unmarshal(body, &list); err != nil {
+		return nil, fmt.Errorf("malformed github releases list: %w", err)
+	}
+	return filterReleaseList(list, inRange), nil
+}
+
+// filterReleaseList keeps the non-draft/non-prerelease releases inRange accepts,
+// preserving order (GitHub returns newest-first). Split out so the range +
+// draft/prerelease filter is unit-testable without HTTP.
+func filterReleaseList(list []ghReleasePayload, inRange func(tag string) bool) []ReleaseInfo {
+	var out []ReleaseInfo
+	for i := range list {
+		if list[i].TagName == "" || list[i].Draft || list[i].Prerelease {
+			continue
+		}
+		if !inRange(list[i].TagName) {
+			continue
+		}
+		raw, mErr := json.Marshal(list[i])
+		if mErr != nil {
+			continue
+		}
+		info, pErr := parseGitHubRelease(raw)
+		if pErr != nil {
+			continue
+		}
+		out = append(out, *info)
+	}
+	return out
 }
 
 // helperTagMajor parses "helper-v<N>" -> N. Reports ok=false for any

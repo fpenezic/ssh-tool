@@ -5473,6 +5473,42 @@ func (a *App) FetchReleaseNotes(version string) ReleaseNotes {
 	return out
 }
 
+// FetchReleaseNotesRange returns the release notes for every version in
+// (fromVersion, toVersion] - i.e. newer than what is installed, up to and
+// including the latest. Since DownloadUpdate re-resolves the newest release and
+// can skip several versions, the update dialog uses this to show all the
+// in-between changelogs (newest first), not just the latest. Falls back to a
+// single FetchReleaseNotes(toVersion) if the list can't be fetched, so the modal
+// is never empty.
+func (a *App) FetchReleaseNotesRange(fromVersion, toVersion string) []ReleaseNotes {
+	single := func() []ReleaseNotes { return []ReleaseNotes{a.FetchReleaseNotes(toVersion)} }
+
+	// The legacy release server has no list endpoint; only GitHub does. If the
+	// user pointed update_check_base_url elsewhere, just show the target's notes.
+	if customBase, _, _ := a.db.GetSetting("update_check_base_url"); customBase != "" {
+		return single()
+	}
+
+	inRange := func(tag string) bool {
+		// tag newer than installed AND not newer than the target.
+		return semverGreater(tag, fromVersion) && !semverGreater(tag, toVersion)
+	}
+	rels, err := updater.FetchGitHubReleasesBetween(updateGitHubRepo,
+		fmt.Sprintf("ssh-tool/%s", appVersion), inRange)
+	if err != nil || len(rels) == 0 {
+		return single()
+	}
+	out := make([]ReleaseNotes, 0, len(rels))
+	for _, r := range rels {
+		out = append(out, ReleaseNotes{
+			Version:    r.Version,
+			ReleasedAt: r.ReleasedAt,
+			NotesMD:    r.NotesMD,
+		})
+	}
+	return out
+}
+
 // UpdateDownloadProgress is streamed on the `update_download_progress`
 // event while DownloadUpdate runs. Total is -1 when the server sent no
 // Content-Length; the UI falls back to an indeterminate bar.
