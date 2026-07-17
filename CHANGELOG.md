@@ -7,7 +7,7 @@ in alpha upstream.
 
 ---
 
-## [0.67.2] - Jump to any Settings section from the command palette
+## [0.67.2] - Palette jumps to Settings, network-profile kind fix
 
 ### Added
 
@@ -16,6 +16,17 @@ in alpha upstream.
   you straight there - no more hunting down the side-nav. Every section is
   reachable, and each carries extra search terms (e.g. `2fa` and `vaultwarden`
   find Bitwarden, `vpn` finds Network profiles, `mcp` and `yolo` find LLM access).
+
+### Fixed
+
+- **Toggling a NetBird or Tailscale profile's connect policy no longer turns it
+  into a WireGuard profile.** Switching always/auto or pausing a profile rewrote
+  its stored config through a WireGuard-shaped serializer that dropped the profile
+  kind and the provider fields (management URL, device name, control URL, ...), so
+  the profile silently degraded into a broken WireGuard one. The policy toggle now
+  patches only the mode/paused fields and leaves everything else intact. Profiles
+  already damaged by an earlier version must be re-created; this stops it happening
+  again.
 
 ---
 
