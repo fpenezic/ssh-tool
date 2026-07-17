@@ -7,6 +7,25 @@ in alpha upstream.
 
 ---
 
+## [0.67.0] - Initial command on connect, searchable pickers, full update notes
+
+### Added
+
+- **Run a command automatically on connect.** Connections and folders gain an
+  **Initial command** setting - `cd /var/www`, `tmux new -A -s main`,
+  `source venv/bin/activate`, etc. Set it on a folder and every connection under
+  it lands the same way; a connection can override it or opt out. It runs on the
+  target host only and appears in your scrollback like anything you'd type.
+- **Searchable secret pickers.** When creating a credential from KeePass,
+  Bitwarden, or Infisical, the entry/item/secret dropdown is now a search box, so
+  picking one out of many is a type, not a scroll.
+
+### Changed
+
+- **The update dialog shows every version's changelog**, not just the newest.
+  Since the updater jumps you straight to the latest release, the notes now list
+  each version between the one you're on and the latest, newest first.
+
 ## [0.66.0] - PuTTY .ppk keys + SuperPuTTY import
 
 ### Added
