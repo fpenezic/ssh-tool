@@ -7,6 +7,24 @@ in alpha upstream.
 
 ---
 
+## [0.64.0] - Update notifications and a stale-download fix
+
+### Added
+
+- **A new version now raises an OS notification.** When the periodic update
+  check finds a newer release, ssh-tool posts a system notification (in
+  addition to the in-app pill), so you learn about it even with the window in
+  the background. It fires at most once per version, and respects the
+  notifications toggle.
+
+### Fixed
+
+- **The updater no longer downloads a stale version.** If a newer release
+  shipped between an update check and clicking download, ssh-tool used to
+  download the version from the earlier check, then prompt again after
+  restart - a loop. It now re-checks for the newest release at download time
+  and pulls that one.
+
 ## [0.63.0] - Infisical secret backend
 
 ### Added
