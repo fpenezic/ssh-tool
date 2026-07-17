@@ -13,6 +13,7 @@
   import FolderPicker from "./FolderPicker.svelte";
   import type { Folder } from "./api";
   import { copyPastePrefs, type CopyPasteMode } from "./copyPastePrefs.svelte";
+  import { SETTINGS_SECTIONS, type SectionId, type SectionDef } from "./settingsSections";
   import { terminalPrefs, DEFAULT_FONT_FAMILY, DEFAULT_SCROLLBACK } from "./terminalPrefs.svelte";
   import { appPrefs } from "./appPrefs.svelte";
   import { vaultPrefs } from "./vaultPrefs.svelte";
@@ -1123,60 +1124,10 @@
   // a side nav keeps the visible area small and scoped to one task
   // (terminal vs. import vs. logs etc.). State is persisted in the
   // settings DB so the next open lands where you were.
-  type SectionId =
-    | "appearance"
-    | "connection"
-    | "network"
-    | "terminal"
-    | "recording"
-    | "browser"
-    | "snippets"
-    | "workspaces"
-    | "vault"
-    | "keepass"
-    | "bitwarden"
-    | "infisical"
-    | "backup"
-    | "sync"
-    | "audit"
-    | "import"
-    | "export"
-    | "llm"
-    | "sharing"
-    | "logs"
-    | "updates"
-    | "about";
-
-  type SectionDef = {
-    id: SectionId;
-    title: string;
-    group: "Appearance" | "Security" | "Import / Export" | "Integrations" | "App" | "Diagnostics";
-  };
-
-  const SECTIONS: SectionDef[] = [
-    { id: "appearance",        title: "Appearance",       group: "Appearance" },
-    { id: "connection",        title: "Connection",       group: "Appearance" },
-    { id: "network",           title: "Network profiles", group: "Appearance" },
-    { id: "terminal",          title: "Terminal",         group: "Appearance" },
-    { id: "browser",           title: "Browser launcher", group: "Appearance" },
-    { id: "snippets",          title: "Snippets",         group: "Appearance" },
-    { id: "workspaces",        title: "Workspaces",       group: "Appearance" },
-    { id: "recording",         title: "Session recording", group: "Security" },
-    { id: "vault",             title: "Vault",            group: "Security" },
-    { id: "keepass",           title: "KeePass",          group: "Security" },
-    { id: "bitwarden",         title: "Bitwarden",        group: "Security" },
-    { id: "infisical",         title: "Infisical",        group: "Security" },
-    { id: "backup",            title: "Backup & restore", group: "Security" },
-    { id: "sync",              title: "Sync",             group: "Security" },
-    { id: "audit",             title: "Audit log",        group: "Security" },
-    { id: "import",            title: "Import",           group: "Import / Export" },
-    { id: "export",            title: "Export connections", group: "Import / Export" },
-    { id: "llm",               title: "LLM (MCP) access",  group: "Integrations" },
-    { id: "sharing",           title: "Sharing",          group: "Integrations" },
-    { id: "updates",           title: "Updates",          group: "App" },
-    { id: "logs",              title: "Logs",             group: "Diagnostics" },
-    { id: "about",             title: "About",            group: "Diagnostics" },
-  ];
+  // Section list + metadata live in ./settingsSections so the command
+  // palette (App.svelte) can build a "Settings: X" jump action per
+  // section without duplicating the list.
+  const SECTIONS: SectionDef[] = SETTINGS_SECTIONS;
 
   let activeSection = $state<SectionId>("terminal");
 

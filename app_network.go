@@ -83,6 +83,31 @@ func parsePolicy(configJSON string) profilePolicy {
 	return p
 }
 
+// patchPolicyJSON sets the mode/paused fields on a stored profile's
+// config JSON without touching anything else. It decodes into a
+// generic map so it is agnostic to the profile kind - a NetBird or
+// Tailscale config keeps its "kind" and provider fields intact, where
+// decoding through a typed wg.Profile would drop every field that
+// struct doesn't declare. Used by the policy toggle (always/auto,
+// pause), which applies to all three kinds.
+func patchPolicyJSON(configJSON, mode string, paused bool) (string, error) {
+	m := map[string]json.RawMessage{}
+	if strings.TrimSpace(configJSON) != "" {
+		if err := json.Unmarshal([]byte(configJSON), &m); err != nil {
+			return "", err
+		}
+	}
+	modeJSON, _ := json.Marshal(mode)
+	pausedJSON, _ := json.Marshal(paused)
+	m["mode"] = modeJSON
+	m["paused"] = pausedJSON
+	out, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
 // tunnelDialer is what both tunnel kinds hand the SSH layer.
 type tunnelDialer interface {
 	DialContext(ctx context.Context, network, addr string) (net.Conn, error)
@@ -905,15 +930,15 @@ func (a *App) NetworkProfileSetPolicy(id, mode string, paused bool) (*NetworkPro
 	if err != nil {
 		return nil, err
 	}
-	var p wg.Profile
-	if err := json.Unmarshal([]byte(row.ConfigJSON), &p); err != nil {
-		return nil, fmt.Errorf("bad config: %w", err)
-	}
-	p.Mode = mode
-	p.Paused = paused
-	cfg, err := secretlessJSON(&p)
+	// Patch only mode/paused in the raw config JSON, preserving the
+	// kind field and every provider-specific field. Unmarshalling into
+	// a concrete wg.Profile (which has no Kind field) and re-marshalling
+	// would SILENTLY DROP the "kind" - turning a NetBird / Tailscale
+	// profile into a broken WireGuard one on every policy toggle. That
+	// is the bug this map-patch avoids; it is kind-agnostic by design.
+	cfg, err := patchPolicyJSON(row.ConfigJSON, mode, paused)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("bad config: %w", err)
 	}
 	updated, err := a.db.UpdateNetworkProfile(id, row.Name, cfg)
 	if err != nil {
