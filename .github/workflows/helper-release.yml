@@ -116,7 +116,21 @@ jobs:
           # app's update check compares against the helper release, not the
           # app.
           ver="${{ github.ref_name }}"
-          go build -trimpath -ldflags="-w -s -X main.version=${ver}" \
+          # Also stamp the embedded NetBird library's own version var so the
+          # NetBird management console reports the real client version
+          # (e.g. 0.73.2) instead of "development". The value comes from the
+          # netbird module pin in go.mod, so it always matches what the embed
+          # actually runs - no manual sync. netbird-helper only (Tailscale's
+          # tsnet reports its own version fine).
+          nbver=""
+          if [ "${{ matrix.dir }}" = "netbird-helper" ]; then
+            nbver="$(go list -m -f '{{.Version}}' github.com/netbirdio/netbird | sed 's/^v//')"
+          fi
+          nbflag=""
+          if [ -n "$nbver" ]; then
+            nbflag="-X github.com/netbirdio/netbird/version.version=${nbver}"
+          fi
+          go build -trimpath -ldflags="-w -s -X main.version=${ver} ${nbflag}" \
             -o "../bin/${{ matrix.out }}" .
       - uses: actions/upload-artifact@v4
         with:
