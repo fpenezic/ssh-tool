@@ -6,6 +6,7 @@
   import { api, type CredentialCreateInput, type BitwardenCipherInfo } from "./api";
   import PasswordStrengthMeter from "./PasswordStrengthMeter.svelte";
   import PasswordInput from "./PasswordInput.svelte";
+  import SearchableSelect from "./SearchableSelect.svelte";
   import { clickOutside } from "./clickOutside";
 
   interface Props {
@@ -618,12 +619,12 @@
               <p class="hint">Loading entries… (unlocks the .kdbx)</p>
             {:else if kpDbId}
               <label>Entry
-                <select bind:value={kpEntryUuid} onchange={onKeepassEntryChange}>
-                  <option value="">Select an entry…</option>
-                  {#each kpEntries as e (e.uuid)}
-                    <option value={e.uuid}>{e.group ? e.group + " / " : ""}{e.title}</option>
-                  {/each}
-                </select>
+                <SearchableSelect
+                  bind:value={kpEntryUuid}
+                  options={kpEntries.map((e) => ({ value: e.uuid, label: e.title, group: e.group || undefined }))}
+                  placeholder="Search entries…"
+                  onChange={onKeepassEntryChange}
+                />
               </label>
               {#if kpEntryUuid && kpFieldOptions.length > 0}
                 <label>Field
@@ -663,12 +664,12 @@
               <p class="hint">Loading items… (syncs and unlocks the vault)</p>
             {:else if bwServerId}
               <label>Item
-                <select bind:value={bwCipherId} onchange={onBitwardenItemChange}>
-                  <option value="">Select an item…</option>
-                  {#each bwItems as i (i.id)}
-                    <option value={i.id}>{i.group ? i.group + " / " : ""}{i.title}</option>
-                  {/each}
-                </select>
+                <SearchableSelect
+                  bind:value={bwCipherId}
+                  options={bwItems.map((i) => ({ value: i.id, label: i.title, group: i.group || undefined }))}
+                  placeholder="Search items…"
+                  onChange={onBitwardenItemChange}
+                />
               </label>
               {#if bwCipherId && bwFieldOptions.length > 0}
                 <label>Field
@@ -708,12 +709,11 @@
               <p class="hint">Reading secrets…</p>
             {:else if infServerId}
               <label>Secret
-                <select bind:value={infItemId}>
-                  <option value="">Select a secret…</option>
-                  {#each infItems as i (i.id)}
-                    <option value={i.id}>{i.group} / {i.title}</option>
-                  {/each}
-                </select>
+                <SearchableSelect
+                  bind:value={infItemId}
+                  options={infItems.map((i) => ({ value: i.id, label: i.title, group: i.group }))}
+                  placeholder="Search secrets…"
+                />
               </label>
               {#if infItemId}
                 <p class="hint">

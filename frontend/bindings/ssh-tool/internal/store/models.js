@@ -1188,6 +1188,18 @@ export class InheritableSettings {
         }
         if (/** @type {any} */(false)) {
             /**
+             * InitialCommand is run in the shell right after connect (e.g.
+             * "cd /var/www", "tmux new -A -s main"). nil means inherit from
+             * folder ancestry; "" means explicitly none (breaks an inherited
+             * command). Sent to the TARGET hop's PTY only, with a trailing
+             * newline, so it runs and lands in the user's own scrollback.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["initial_command"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * AutoReconnect: when true, sessions that drop without a user
              * Disconnect trigger an exponential-backoff reconnect loop (capped).
              * nil means "inherit from folder ancestry"; false means "explicitly
@@ -1702,6 +1714,14 @@ export class ResolvedSettings {
              * @type {string}
              */
             this["terminal_type"] = "";
+        }
+        if (!("initial_command" in $$source)) {
+            /**
+             * InitialCommand is run in the shell right after connect ("" = none).
+             * @member
+             * @type {string}
+             */
+            this["initial_command"] = "";
         }
         if (!("auto_reconnect" in $$source)) {
             /**

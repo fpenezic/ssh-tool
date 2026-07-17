@@ -279,6 +279,7 @@
     verbose: string;
     keepalive: string;
     networkProfile: string;
+    initialCommand: string;
   } | null>(null);
 
   function encodeBool(v: boolean | undefined): string {
@@ -320,6 +321,7 @@
           ? String(folder.settings.keepalive_interval)
           : "",
         networkProfile: encodeNetProfile(folder.settings.network_profile_id),
+        initialCommand: folder.settings.initial_command ?? "",
       };
     } else {
       editingFolder = null;
@@ -341,6 +343,7 @@
       editingFolder.verbose !== encodeBool(s.verbose) ||
       numText(editingFolder.keepalive) !== (s.keepalive_interval !== undefined ? String(s.keepalive_interval) : "") ||
       editingFolder.networkProfile !== encodeNetProfile(s.network_profile_id) ||
+      editingFolder.initialCommand !== (s.initial_command ?? "") ||
       JSON.stringify(editingFolder.jumpHost ?? null) !== JSON.stringify(s.jump_host ?? null)
     );
   });
@@ -371,6 +374,7 @@
       }
     }
     settings.network_profile_id = decodeNetProfile(editingFolder.networkProfile);
+    settings.initial_command = editingFolder.initialCommand.trim() || undefined;
     try {
       await api.foldersUpdate({ id: folder.id, name: editingFolder.name, settings });
       await tree.load();
@@ -421,6 +425,7 @@
     vncPort: string;
     vncTunnel: string;
     networkProfile: string;
+    initialCommand: string;
     tags: string[];
   } | null>(null);
   let newTagInput = $state("");
@@ -484,6 +489,7 @@
           : "",
         vncTunnel: encodeBool(conn.overrides?.vnc_use_tunnel),
         networkProfile: encodeNetProfile(conn.overrides?.network_profile_id),
+        initialCommand: conn.overrides?.initial_command ?? "",
         tags: [...(conn.tags ?? [])],
       };
       newTagInput = "";
@@ -517,6 +523,7 @@
       numText(editing.vncPort) !== (o.vnc_port !== undefined ? String(o.vnc_port) : "") ||
       editing.vncTunnel !== encodeBool(o.vnc_use_tunnel) ||
       editing.networkProfile !== encodeNetProfile(o.network_profile_id) ||
+      editing.initialCommand !== (o.initial_command ?? "") ||
       JSON.stringify(editing.jumpHost ?? null) !== JSON.stringify(o.jump_host ?? null) ||
       !tagsEq
     );
@@ -570,6 +577,7 @@
     }
     overrides.vnc_use_tunnel = decodeBool(editing.vncTunnel);
     overrides.network_profile_id = decodeNetProfile(editing.networkProfile);
+    overrides.initial_command = editing.initialCommand.trim() || undefined;
     await api.connectionsUpdate({
       id: conn.id,
       name: editing.name,
@@ -1203,6 +1211,15 @@
         <span class="field-note">Stops idle drops. Inherited by connections. Blank = inherit, 0 = send nothing (a dead link is still detected, just slower).</span>
       </label>
 
+      <label class="span-2" title="A command run in the shell right after connect - e.g. cd /var/www, tmux new -A -s main, source venv/bin/activate. Inherited by connections; blank inherits the parent folder.">
+        Initial command
+        <input
+          bind:value={editingFolder.initialCommand}
+          placeholder="(inherit) e.g. cd /var/www"
+        />
+        <span class="field-note">Run in the shell on connect. Inherited by connections. Blank = inherit.</span>
+      </label>
+
       {#if savedHint}
         <div class="span-2 save-row"><span class="saved-pill">✓ {savedHint}</span></div>
       {/if}
@@ -1466,6 +1483,15 @@
           placeholder="(inherit · 0 = off)"
         />
         <span class="field-note">Stops idle drops. Blank = inherit folder, 0 = send nothing (a dead link is still detected, just slower).</span>
+      </label>
+
+      <label class="span-2" title="A command run in the shell right after connect - e.g. cd /var/www, tmux new -A -s main, source venv/bin/activate. Blank inherits the folder's value.">
+        Initial command
+        <input
+          bind:value={editing.initialCommand}
+          placeholder="(inherit) e.g. cd /var/www"
+        />
+        <span class="field-note">Run in the shell on connect. Blank = inherit folder.</span>
       </label>
 
       {#if !isMobile}

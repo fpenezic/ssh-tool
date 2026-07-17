@@ -23,8 +23,8 @@
   }
   let { onClose }: Props = $props();
 
-  let notesMD = $state<string>("");
-  let releasedAt = $state<string>("");
+  // One entry per version between the installed one and latest (newest first).
+  let notes = $state<{ version: string; releasedAt: string; html: string }[]>([]);
   let loading = $state(true);
   let errMsg = $state<string>("");
 
@@ -42,20 +42,25 @@
   let progTotal = $state(0);
   const progPct = $derived(progTotal > 0 ? Math.min(100, Math.round((progRead / progTotal) * 100)) : 0);
 
-  const renderedNotes = $derived(notesMD ? renderMarkdown(notesMD) : "");
-
   function fmtMB(bytes: number): string {
     return `${Math.round((bytes / 1024 / 1024) * 10) / 10} MB`;
   }
 
   onMount(async () => {
     try {
-      const r = await api.fetchReleaseNotes(updateCheck.latest);
-      if (r.error) {
-        errMsg = r.error;
+      // Show every version between what's installed and the latest, since the
+      // download jumps straight to the newest.
+      const list = await api.fetchReleaseNotesRange(updateCheck.current, updateCheck.latest);
+      const good = (list ?? []).filter((r) => !r.error && (r.notes_md ?? "").trim() !== "");
+      if (good.length === 0) {
+        const only = (list ?? [])[0];
+        errMsg = only?.error || "No release notes available.";
       } else {
-        notesMD = r.notes_md ?? "";
-        releasedAt = r.released_at ?? "";
+        notes = good.map((r) => ({
+          version: r.version,
+          releasedAt: r.released_at ?? "",
+          html: renderMarkdown(r.notes_md ?? ""),
+        }));
       }
     } catch (e: any) {
       errMsg = humanError(e);
@@ -136,8 +141,8 @@
       <span class="chip current">{updateCheck.current}</span>
       <span class="arrow">→</span>
       <span class="chip new">{updateCheck.latest}</span>
-      {#if releasedAt}
-        <span class="released">released {fmtDate(releasedAt)}</span>
+      {#if notes.length > 1}
+        <span class="released">{notes.length} versions</span>
       {/if}
     </div>
   </header>
@@ -151,8 +156,16 @@
         You can still view the full changelog on the
         <button class="linkish" onclick={openReleasesPage}>releases page</button>.
       </p>
-    {:else if renderedNotes}
-      <div class="notes">{@html renderedNotes}</div>
+    {:else if notes.length > 0}
+      {#each notes as n (n.version)}
+        <section class="version-notes">
+          <div class="version-head">
+            <span class="v-tag">{n.version}</span>
+            {#if n.releasedAt}<span class="released">released {fmtDate(n.releasedAt)}</span>{/if}
+          </div>
+          <div class="notes">{@html n.html}</div>
+        </section>
+      {/each}
     {:else}
       <p class="hint">No release notes were posted for this version.</p>
     {/if}
@@ -261,6 +274,13 @@
   .chip.new { background: var(--blue); color: var(--on-accent); }
   .arrow { color: var(--overlay0); }
   .released { color: var(--overlay0); margin-left: 0.4rem; }
+  .version-notes { margin-bottom: 1rem; }
+  .version-notes + .version-notes { border-top: 1px solid var(--surface0); padding-top: 0.75rem; }
+  .version-head { display: flex; align-items: baseline; gap: 0.4rem; margin-bottom: 0.3rem; }
+  .v-tag {
+    font-weight: 700; color: var(--blue); font-family: ui-monospace, monospace;
+    font-size: 0.9rem;
+  }
   .body {
     padding: 0.75rem 1rem;
     overflow-y: auto;

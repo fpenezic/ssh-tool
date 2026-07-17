@@ -53,6 +53,7 @@ export interface InheritableSettings {
   broadcast_group_id?: string;
   keepalive_interval?: number;
   terminal_type?: string;
+  initial_command?: string;
   auto_reconnect?: boolean;
   verbose?: boolean;
   vnc_enabled?: boolean;
@@ -104,6 +105,7 @@ export interface ResolvedSettings {
   broadcast_group_id: string | null;
   keepalive_interval: number;
   terminal_type: string;
+  initial_command: string;
   auto_reconnect: boolean;
   verbose: boolean;
   vnc_enabled: boolean;
@@ -1130,6 +1132,13 @@ export const api = {
       notes_md: string;
       error?: string;
     }>,
+  fetchReleaseNotesRange: (fromVersion: string, toVersion: string) =>
+    G.FetchReleaseNotesRange(fromVersion, toVersion) as unknown as Promise<{
+      version: string;
+      released_at: string;
+      notes_md: string;
+      error?: string;
+    }[]>,
 
   pickAnsibleInventoryFile: () =>
     G.PickAnsibleInventoryFile() as unknown as Promise<string>,
