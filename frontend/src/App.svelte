@@ -25,7 +25,7 @@
   import { toast } from "./lib/toast.svelte.ts";
   import { showConfirm } from "./lib/confirmModal.svelte.ts";
   import type { PaletteAction } from "./lib/QuickPalette.svelte";
-  import { SETTINGS_SECTIONS } from "./lib/settingsSections";
+  import { SETTINGS_SECTIONS, EXTERNAL_TABS } from "./lib/settingsSections";
   import { localShellPrefs, type LocalShellKind } from "./lib/localShellPrefs.svelte.ts";
   import HostKeyModal from "./lib/HostKeyModal.svelte";
   import AuthPromptModal from "./lib/AuthPromptModal.svelte";
@@ -521,6 +521,17 @@
       hint: "open",
       keywords: ["settings", s.title, s.group, ...(s.keywords ?? [])],
       run: () => view.setTabSettingsSection(s.id),
+    })),
+    // The three external secret managers live behind one "External
+    // secrets" section but each is still directly findable - the id
+    // deep-links to its tab (Settings.setTabSettingsSection routes
+    // keepass/bitwarden/infisical to the section + tab).
+    ...EXTERNAL_TABS.map((t): PaletteAction => ({
+      id: "settings:external:" + t.id,
+      title: `Settings: ${t.title}`,
+      hint: "open",
+      keywords: ["settings", "external secrets", t.title, ...t.keywords],
+      run: () => view.setTabSettingsSection(t.id),
     })),
   ];
 

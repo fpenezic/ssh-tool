@@ -14,9 +14,7 @@ export type SectionId =
   | "snippets"
   | "workspaces"
   | "vault"
-  | "keepass"
-  | "bitwarden"
-  | "infisical"
+  | "external"
   | "backup"
   | "sync"
   | "audit"
@@ -28,12 +26,30 @@ export type SectionId =
   | "updates"
   | "about";
 
+// The three external secret managers share one "External secrets"
+// side-nav section with an in-section tab picker (so the sidebar
+// doesn't grow a row per backend). These are the tab ids. They are
+// ALSO accepted as deep-link targets (palette "bitwarden", the
+// From-KeePass credential flow, a restored settings_active_section)
+// and mapped to section "external" + the matching tab.
+export type ExternalTabId = "keepass" | "bitwarden" | "infisical";
+
+export const EXTERNAL_TABS: { id: ExternalTabId; title: string; keywords: string[] }[] = [
+  { id: "keepass",   title: "KeePass",   keywords: ["kdbx", "secret", "password manager", "external"] },
+  { id: "bitwarden", title: "Bitwarden", keywords: ["vaultwarden", "secret", "password manager", "external", "2fa"] },
+  { id: "infisical", title: "Infisical", keywords: ["secret", "password manager", "external"] },
+];
+
+export function isExternalTab(id: string): id is ExternalTabId {
+  return id === "keepass" || id === "bitwarden" || id === "infisical";
+}
+
 export type SectionGroup =
   | "Appearance"
+  | "Network"
   | "Security"
   | "Import / Export"
   | "Integrations"
-  | "App"
   | "Diagnostics";
 
 export type SectionDef = {
@@ -50,16 +66,14 @@ export type SectionDef = {
 export const SETTINGS_SECTIONS: SectionDef[] = [
   { id: "appearance",  title: "Appearance",        group: "Appearance",     keywords: ["theme", "colors", "font", "look"] },
   { id: "connection",  title: "Connection",        group: "Appearance",     keywords: ["defaults", "keepalive", "timeout"] },
-  { id: "network",     title: "Network profiles",  group: "Appearance",     keywords: ["wireguard", "netbird", "tailscale", "vpn", "wg"] },
   { id: "terminal",    title: "Terminal",          group: "Appearance",     keywords: ["xterm", "font", "webgl", "scrollback", "cursor"] },
   { id: "browser",     title: "Browser launcher",  group: "Appearance",     keywords: ["socks", "proxy", "chrome", "profile"] },
   { id: "snippets",    title: "Snippets",          group: "Appearance",     keywords: ["commands", "macros"] },
   { id: "workspaces",  title: "Workspaces",        group: "Appearance",     keywords: ["layout", "tabs", "session set"] },
+  { id: "network",     title: "Network profiles",  group: "Network",        keywords: ["wireguard", "netbird", "tailscale", "vpn", "wg", "tunnel"] },
   { id: "recording",   title: "Session recording", group: "Security",       keywords: ["asciicast", "asciinema", "capture", "replay"] },
   { id: "vault",       title: "Vault",             group: "Security",       keywords: ["passphrase", "lock", "encryption", "master", "auto-unlock"] },
-  { id: "keepass",     title: "KeePass",           group: "Security",       keywords: ["kdbx", "secret", "password manager", "external"] },
-  { id: "bitwarden",   title: "Bitwarden",         group: "Security",       keywords: ["vaultwarden", "secret", "password manager", "external"] },
-  { id: "infisical",   title: "Infisical",         group: "Security",       keywords: ["secret", "password manager", "external"] },
+  { id: "external",    title: "External secrets",  group: "Security",       keywords: ["keepass", "kdbx", "bitwarden", "vaultwarden", "infisical", "secret", "password manager", "2fa"] },
   { id: "backup",      title: "Backup & restore",  group: "Security",       keywords: ["snapshot", "export", "restore", "auto-backup"] },
   { id: "sync",        title: "Sync",              group: "Security",       keywords: ["webdav", "push", "pull", "profile sync"] },
   { id: "audit",       title: "Audit log",         group: "Security",       keywords: ["history", "log", "activity"] },
@@ -67,7 +81,7 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
   { id: "export",      title: "Export connections", group: "Import / Export", keywords: ["backup", "csv", "dump"] },
   { id: "llm",         title: "LLM (MCP) access",  group: "Integrations",   keywords: ["mcp", "claude", "ai", "bridge", "yolo", "agent"] },
   { id: "sharing",     title: "Sharing",           group: "Integrations",   keywords: ["broadcast", "share", "collaborate"] },
-  { id: "updates",     title: "Updates",           group: "App",            keywords: ["version", "upgrade", "release", "changelog"] },
+  { id: "updates",     title: "Updates",           group: "Diagnostics",    keywords: ["version", "upgrade", "release", "changelog"] },
   { id: "logs",        title: "Logs",              group: "Diagnostics",    keywords: ["debug", "diagnostics", "troubleshoot"] },
   { id: "about",       title: "About",             group: "Diagnostics",    keywords: ["version", "credits", "license", "profile stats"] },
 ];

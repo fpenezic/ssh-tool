@@ -13,7 +13,7 @@
   import FolderPicker from "./FolderPicker.svelte";
   import type { Folder } from "./api";
   import { copyPastePrefs, type CopyPasteMode } from "./copyPastePrefs.svelte";
-  import { SETTINGS_SECTIONS, type SectionId, type SectionDef } from "./settingsSections";
+  import { SETTINGS_SECTIONS, EXTERNAL_TABS, isExternalTab, type SectionId, type SectionDef, type ExternalTabId } from "./settingsSections";
   import { terminalPrefs, DEFAULT_FONT_FAMILY, DEFAULT_SCROLLBACK } from "./terminalPrefs.svelte";
   import { appPrefs } from "./appPrefs.svelte";
   import { vaultPrefs } from "./vaultPrefs.svelte";
@@ -1130,6 +1130,20 @@
   const SECTIONS: SectionDef[] = SETTINGS_SECTIONS;
 
   let activeSection = $state<SectionId>("terminal");
+  // Which backend tab is showing inside the "External secrets" section.
+  let externalTab = $state<ExternalTabId>("keepass");
+
+  // Deep-link / restore helper: keepass|bitwarden|infisical map to the
+  // "external" section with that tab pre-selected; anything else is a
+  // plain section id. Returns null for an unknown id.
+  function resolveSection(id: string | null | undefined): SectionId | null {
+    if (!id) return null;
+    if (isExternalTab(id)) {
+      externalTab = id;
+      return "external";
+    }
+    return SECTIONS.some((s) => s.id === id) ? (id as SectionId) : null;
+  }
 
   // ----- Network profiles (WireGuard + NetBird) -----
   let npName = $state("");
@@ -1809,8 +1823,8 @@
     // lands somewhere sensible.
     api.settingsGet("settings_active_section").then((v) => {
       if (v?.startsWith("import-")) v = "import";
-      const valid = SECTIONS.some((s) => s.id === v);
-      if (valid) activeSection = v as SectionId;
+      const resolved = resolveSection(v);
+      if (resolved) activeSection = resolved;
     }).catch(() => {});
   });
 
@@ -1821,9 +1835,11 @@
   $effect(() => {
     const pin = view.pendingSettingsSection;
     if (!pin) return;
-    const valid = SECTIONS.some((s) => s.id === pin);
-    if (valid) {
-      activeSection = pin as SectionId;
+    const resolved = resolveSection(pin);
+    if (resolved) {
+      activeSection = resolved;
+      // Persist the concrete section id (keepass/bitwarden/infisical
+      // resolve to "external"); restore re-derives the tab from it.
       api.settingsSet("settings_active_section", pin).catch(console.warn);
     }
     view.pendingSettingsSection = null;
@@ -3120,19 +3136,26 @@
     </div>
   </div>
 
-  {:else if activeSection === "keepass"}
+  {:else if activeSection === "external"}
   <div class="group group-wide">
-    <KeepassSettings />
-  </div>
-
-  {:else if activeSection === "bitwarden"}
-  <div class="group group-wide">
-    <BitwardenSettings />
-  </div>
-
-  {:else if activeSection === "infisical"}
-  <div class="group group-wide">
-    <InfisicalSettings />
+    <div class="ext-tabs" role="tablist">
+      {#each EXTERNAL_TABS as t (t.id)}
+        <button
+          role="tab"
+          class="ext-tab"
+          class:active={externalTab === t.id}
+          aria-selected={externalTab === t.id}
+          onclick={() => (externalTab = t.id)}
+        >{t.title}</button>
+      {/each}
+    </div>
+    {#if externalTab === "keepass"}
+      <KeepassSettings />
+    {:else if externalTab === "bitwarden"}
+      <BitwardenSettings />
+    {:else if externalTab === "infisical"}
+      <InfisicalSettings />
+    {/if}
   </div>
 
   {:else if activeSection === "audit"}
@@ -5457,6 +5480,32 @@
   .group.group-wide {
     max-width: 1200px;
     width: 100%;
+  }
+  /* Tab strip inside the "External secrets" section - one row per
+     backend (KeePass / Bitwarden / Infisical) so they share a single
+     side-nav entry instead of three. */
+  .ext-tabs {
+    display: flex;
+    gap: 0.25rem;
+    border-bottom: 1px solid var(--surface0);
+    margin-bottom: 1rem;
+  }
+  .ext-tab {
+    background: transparent;
+    color: var(--subtext0);
+    border: 0;
+    border-bottom: 2px solid transparent;
+    padding: 0.45rem 0.9rem;
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    margin-bottom: -1px;
+  }
+  .ext-tab:hover { color: var(--text); }
+  .ext-tab.active {
+    color: var(--blue);
+    border-bottom-color: var(--blue);
+    font-weight: 500;
   }
   .audit-tbl-wrap {
     width: 100%;
