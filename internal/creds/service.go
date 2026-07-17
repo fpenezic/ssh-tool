@@ -406,6 +406,25 @@ func (s *Service) createKeyImportPaste(in CreateInput) (*CreateResult, error) {
 	if in.PrivateOpenSSH == "" {
 		return nil, fmt.Errorf("validation: empty key text")
 	}
+	// A pasted PuTTY .ppk is converted to OpenSSH up front; the passphrase (if
+	// any) is consumed by the conversion and the stored key is unencrypted, so
+	// the rest of this function treats it exactly like a pasted OpenSSH key.
+	keyText := in.PrivateOpenSSH
+	passphrase := in.Passphrase
+	if IsPPK([]byte(keyText)) {
+		pw := ""
+		if passphrase != nil {
+			pw = *passphrase
+		}
+		converted, err := ConvertPPKToOpenSSH([]byte(keyText), pw)
+		if err != nil {
+			return nil, err
+		}
+		keyText = converted
+		passphrase = nil // the converted key is unencrypted
+	}
+	in.PrivateOpenSSH = keyText
+	in.Passphrase = passphrase
 	parsed, err := ParsePrivate(in.PrivateOpenSSH, in.Passphrase)
 	if err != nil {
 		return nil, err
@@ -451,6 +470,27 @@ func (s *Service) createKeyImportPaste(in CreateInput) (*CreateResult, error) {
 
 func (s *Service) createKeyFileRef(in CreateInput) (*CreateResult, error) {
 	path := expandHome(in.KeyPath)
+
+	// A .ppk on disk can't be a live file reference: the connect-time resolver
+	// (resolveKey, StorageFileRef) only parses OpenSSH. So if the picked file is
+	// a .ppk, read + convert it and import it as a MANAGED key (OpenSSH in the
+	// vault) instead of linking to the file. A non-ppk file keeps the existing
+	// file-ref behaviour.
+	if raw, err := os.ReadFile(path); err == nil && IsPPK(raw) {
+		pw := ""
+		if in.Passphrase != nil {
+			pw = *in.Passphrase
+		}
+		converted, cErr := ConvertPPKToOpenSSH(raw, pw)
+		if cErr != nil {
+			return nil, cErr
+		}
+		pasteIn := in
+		pasteIn.PrivateOpenSSH = converted
+		pasteIn.Passphrase = nil // converted key is unencrypted
+		return s.createKeyImportPaste(pasteIn)
+	}
+
 	cfg := map[string]any{
 		"key_path":       path,
 		"has_passphrase": in.Passphrase != nil && *in.Passphrase != "",

@@ -4728,6 +4728,15 @@ func (a *App) PickAnsibleInventoryFile() (string, error) {
 	})
 }
 
+// PickPuttyKeyFile opens a native Open File dialog for a PuTTY .ppk private
+// key, so the key-import editor doesn't make the user paste or type the path.
+// The .ppk is converted to OpenSSH and stored in the vault at import time.
+func (a *App) PickPuttyKeyFile() (string, error) {
+	return OpenFileDialog(OpenFileDialogOptions{
+		Title: "Choose a PuTTY .ppk key",
+	})
+}
+
 // SftpStartDownload begins streaming a remote file to localPath, emitting
 // progress as "sftp_progress:<transferId>" events. Returns the
 // transferId so the frontend can correlate the events and call
