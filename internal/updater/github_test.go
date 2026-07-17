@@ -1,6 +1,9 @@
 package updater
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseGitHubRelease(t *testing.T) {
 	body := []byte(`{
@@ -126,5 +129,43 @@ func TestFilterReleaseList(t *testing.T) {
 		if got[i].NotesMD == "" {
 			t.Fatalf("%s has no notes", got[i].Version)
 		}
+	}
+}
+
+func TestPickLatestApp(t *testing.T) {
+	// Model the exact regression: a re-published helper-v1 lands FIRST in
+	// GitHub's newest-first list (most recent published_at), but the app
+	// update check must still pick the newest v* app release, never the
+	// helper.
+	list := []ghReleasePayload{
+		{TagName: "helper-v1"},                // freshly re-published, newest by date
+		{TagName: "v0.68.0"},                  // the real latest app release
+		{TagName: "v0.67.2"},
+		{TagName: "v0.68.1-rc1", Prerelease: true},
+		{TagName: "v0.60.0-draft", Draft: true},
+	}
+	isAppTag := func(tag string) bool {
+		return strings.HasPrefix(tag, "v") && !strings.HasPrefix(tag, "helper-")
+	}
+	// Numeric-ish rank good enough for this range.
+	rank := map[string]int{"v0.67.2": 6702, "v0.68.0": 6800}
+	newer := func(a, b string) bool { return rank[a] > rank[b] }
+
+	best := pickLatestApp(list, isAppTag, newer)
+	if best == nil {
+		t.Fatal("pickLatestApp returned nil")
+	}
+	if best.TagName != "v0.68.0" {
+		t.Fatalf("picked %q, want v0.68.0 (helper/rc/draft must not win)", best.TagName)
+	}
+}
+
+func TestPickLatestApp_NoAppReleases(t *testing.T) {
+	list := []ghReleasePayload{{TagName: "helper-v1"}, {TagName: "helper-v2"}}
+	isAppTag := func(tag string) bool {
+		return strings.HasPrefix(tag, "v") && !strings.HasPrefix(tag, "helper-")
+	}
+	if best := pickLatestApp(list, isAppTag, func(a, b string) bool { return false }); best != nil {
+		t.Fatalf("expected nil when no app releases, got %q", best.TagName)
 	}
 }

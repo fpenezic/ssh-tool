@@ -7,6 +7,19 @@ in alpha upstream.
 
 ---
 
+## [0.68.1] - Update check ignores helper releases
+
+### Fixed
+
+- **The update check no longer offers a "helper-v1" build as an app update.** It
+  used GitHub's "latest release" endpoint, which flags whichever release was
+  published most recently - so re-publishing a sidecar-helper release (helpers
+  ship on a separate tag namespace) made the app report the helper as the latest
+  version. The check now lists releases and picks the newest actual app version,
+  ignoring helper tags entirely.
+
+---
+
 ## [0.68.0] - Settings reorg: External secrets, Network group, tidier nav
 
 ### Changed
