@@ -891,13 +891,16 @@ export function CredentialsUsage(id) {
 }
 
 /**
- * DownloadUpdate streams the asset captured by the last CheckForUpdate
- * into a staging slot next to the running binary, verifying its sha256
- * against the manifest value before any swap. It deliberately takes no
- * URL parameter - the backend only downloads what it derived from its
- * own update check, never what the webview asks for. On Unix the swap
- * happens during Download itself (renames are safe over a running
- * binary). On Windows the swap is deferred to an apply script that
+ * DownloadUpdate re-resolves the newest release at download time and streams
+ * its asset into a staging slot next to the running binary, verifying its
+ * sha256 against the manifest value before any swap. It deliberately takes no
+ * URL parameter - the backend only downloads what IT resolves, never what the
+ * webview asks for. Re-resolving (rather than trusting the stash from the last
+ * CheckForUpdate) means that when a newer release ships between the check and
+ * the click, the download pulls THAT version - otherwise the app downloads the
+ * stale version, restart still sees a newer one, and the update prompt loops.
+ * On Unix the swap happens during Download itself (renames are safe over a
+ * running binary). On Windows the swap is deferred to an apply script that
  * ApplyUpdate spawns just before the app exits.
  * @returns {$CancellablePromise<updater$0.DownloadResult | null>}
  */
@@ -2142,6 +2145,21 @@ export function SaveTextFile(suggestedName, content) {
  */
 export function SendPromptNotification(title, body) {
     return $Call.ByID(2460147150, title, body);
+}
+
+/**
+ * SendUpdateNotification posts an OS toast that a newer version is available.
+ * Unlike SendPromptNotification it does NOT skip when the window is focused - an
+ * update is informational, not a blocking prompt you're already staring at, and
+ * a user who has ssh-tool open all day would otherwise never see it. It still
+ * respects the notifications_enabled toggle. The caller (CheckForUpdate) gates
+ * this so it fires at most once per new version.
+ * @param {string} title
+ * @param {string} body
+ * @returns {$CancellablePromise<void>}
+ */
+export function SendUpdateNotification(title, body) {
+    return $Call.ByID(1563098045, title, body);
 }
 
 /**
