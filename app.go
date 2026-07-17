@@ -5258,8 +5258,15 @@ type resolvedRelease struct {
 func (a *App) resolveLatestRelease() (*resolvedRelease, error) {
 	customBase, _, _ := a.db.GetSetting("update_check_base_url")
 	if customBase == "" {
-		gh, err := updater.FetchGitHubLatest(updateGitHubRepo,
-			fmt.Sprintf("ssh-tool/%s", appVersion))
+		// Pick the newest APP release, not GitHub's /releases/latest:
+		// the helpers publish on their own helper-vN tag namespace, and a
+		// re-published helper release would otherwise be flagged "latest"
+		// by GitHub (most-recent published_at) and offered to users as an
+		// app update. isAppTag keeps only v* app tags; semverGreater ranks
+		// them.
+		gh, err := updater.FetchGitHubLatestApp(updateGitHubRepo,
+			fmt.Sprintf("ssh-tool/%s", appVersion),
+			isAppReleaseTag, semverGreater)
 		if err == nil {
 			out := &resolvedRelease{
 				Version:      gh.Version,
@@ -5616,6 +5623,19 @@ func looksLikeSemver(s string) bool {
 // server uses (windows-amd64, linux-amd64, darwin-arm64, …).
 func platformAssetKey() string {
 	return runtime.GOOS + "-" + runtime.GOARCH
+}
+
+// isAppReleaseTag reports whether a GitHub tag is an app release tag
+// ("v1.2.3") as opposed to a helper tag ("helper-v1") or anything else.
+// Used to keep the update check from ever offering a helper release as
+// an app update.
+func isAppReleaseTag(tag string) bool {
+	tag = strings.TrimSpace(tag)
+	if !strings.HasPrefix(tag, "v") {
+		return false
+	}
+	_, ok := parseSemver(tag)
+	return ok
 }
 
 // semverGreater reports whether `a` parses to a strictly higher

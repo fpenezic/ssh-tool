@@ -58,14 +58,6 @@ type ghReleasePayload struct {
 	} `json:"assets"`
 }
 
-// FetchGitHubLatest returns the newest non-prerelease release of
-// owner/repo.
-func FetchGitHubLatest(repo, userAgent string) (*ReleaseInfo, error) {
-	return fetchGitHubRelease(
-		fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo),
-		userAgent)
-}
-
 // FetchGitHubByTag returns the release for one specific tag (used for
 // release notes of a version that is not necessarily the latest).
 func FetchGitHubByTag(repo, tag, userAgent string) (*ReleaseInfo, error) {
@@ -130,6 +122,71 @@ func FetchGitHubHelperRelease(repo string, maxMajor int, userAgent string) (*Rel
 		return nil, err
 	}
 	return parseGitHubRelease(raw)
+}
+
+// FetchGitHubLatestApp returns the newest APP release of owner/repo. It
+// lists releases and picks the highest-semver tag among the app tags,
+// deliberately NOT using GitHub's /releases/latest endpoint: that
+// endpoint flags whichever non-draft release was published most
+// recently, so re-publishing a helper-vN release (a separate tag
+// namespace) would make GitHub report the helper as "latest" and the
+// app would offer its own users a "helper-v1" update. isAppTag filters
+// to app releases (helper-* and any other namespace are skipped);
+// newer(a, b) reports whether tag a is a strictly newer app version
+// than b - injected so the updater stays free of a semver dependency,
+// same pattern as FetchGitHubReleasesBetween.
+func FetchGitHubLatestApp(repo, userAgent string, isAppTag func(tag string) bool, newer func(a, b string) bool) (*ReleaseInfo, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=100", repo)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("github releases API returned %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+	if err != nil {
+		return nil, err
+	}
+	var list []ghReleasePayload
+	if err := json.Unmarshal(body, &list); err != nil {
+		return nil, fmt.Errorf("malformed github releases list: %w", err)
+	}
+	best := pickLatestApp(list, isAppTag, newer)
+	if best == nil {
+		return nil, fmt.Errorf("no app release found in %s", repo)
+	}
+	raw, err := json.Marshal(best)
+	if err != nil {
+		return nil, err
+	}
+	return parseGitHubRelease(raw)
+}
+
+// pickLatestApp selects the highest-version app release from a GitHub
+// releases list. Split out for unit testing without HTTP. Skips drafts,
+// prereleases, and non-app tags; among the rest returns the one no other
+// release is newer than.
+func pickLatestApp(list []ghReleasePayload, isAppTag func(tag string) bool, newer func(a, b string) bool) *ghReleasePayload {
+	var best *ghReleasePayload
+	for i := range list {
+		r := &list[i]
+		if r.TagName == "" || r.Draft || r.Prerelease || !isAppTag(r.TagName) {
+			continue
+		}
+		if best == nil || newer(r.TagName, best.TagName) {
+			best = r
+		}
+	}
+	return best
 }
 
 // FetchGitHubReleasesBetween lists the repo's releases and returns those the
