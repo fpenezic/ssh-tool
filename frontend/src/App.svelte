@@ -25,6 +25,7 @@
   import { toast } from "./lib/toast.svelte.ts";
   import { showConfirm } from "./lib/confirmModal.svelte.ts";
   import type { PaletteAction } from "./lib/QuickPalette.svelte";
+  import { SETTINGS_SECTIONS } from "./lib/settingsSections";
   import { localShellPrefs, type LocalShellKind } from "./lib/localShellPrefs.svelte.ts";
   import HostKeyModal from "./lib/HostKeyModal.svelte";
   import AuthPromptModal from "./lib/AuthPromptModal.svelte";
@@ -509,6 +510,18 @@
         }
       },
     },
+    // One "Settings: X" jump per Settings section, so Ctrl-K "bitwarden"
+    // (or "wireguard", "2fa"...) lands directly on the right pane
+    // instead of the palette only knowing about connections. Keywords
+    // come from the shared section list; title + group are always
+    // searchable.
+    ...SETTINGS_SECTIONS.map((s): PaletteAction => ({
+      id: "settings:" + s.id,
+      title: `Settings: ${s.title}`,
+      hint: "open",
+      keywords: ["settings", s.title, s.group, ...(s.keywords ?? [])],
+      run: () => view.setTabSettingsSection(s.id),
+    })),
   ];
 
   // Close the term menu on outside click.

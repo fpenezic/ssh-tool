@@ -7,6 +7,18 @@ in alpha upstream.
 
 ---
 
+## [0.67.2] - Jump to any Settings section from the command palette
+
+### Added
+
+- **The Ctrl-K command palette now finds Settings sections.** Type `bitwarden`,
+  `wireguard`, `terminal`, `backup` (etc.) and a "Settings: <section>" row takes
+  you straight there - no more hunting down the side-nav. Every section is
+  reachable, and each carries extra search terms (e.g. `2fa` and `vaultwarden`
+  find Bitwarden, `vpn` finds Network profiles, `mcp` and `yolo` find LLM access).
+
+---
+
 ## [0.67.1] - Grouped credential kinds, subtitles in searchable pickers
 
 ### Changed
