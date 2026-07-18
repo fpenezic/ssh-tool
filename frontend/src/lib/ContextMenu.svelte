@@ -58,7 +58,12 @@
         disabled={item.disabled}
         onclick={() => contextMenu.pick(item)}
       >
-        {#if item.icon}<span class="ico">{item.icon}</span>{/if}
+        {#if item.iconComponent}
+          {@const Ico = item.iconComponent}
+          <span class="ico"><Ico size={14} /></span>
+        {:else if item.icon}
+          <span class="ico">{item.icon}</span>
+        {/if}
         <span class="lbl">{item.label}</span>
       </button>
     {/each}
@@ -99,6 +104,6 @@
   .item:disabled { color: var(--overlay0); cursor: not-allowed; }
   .item.danger { color: var(--red); }
   .item.danger:hover { background: var(--red); color: var(--on-accent); }
-  .ico { width: 1.2rem; text-align: center; }
+  .ico { width: 1.2rem; display: inline-flex; align-items: center; justify-content: center; }
   .lbl { flex: 1; }
 </style>

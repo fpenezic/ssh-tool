@@ -35,7 +35,14 @@ func TestMigration21AddsBitwardenNetworkProfileID(t *testing.T) {
 		    last_hash      TEXT NOT NULL DEFAULT '',
 		    created_at     INTEGER NOT NULL,
 		    updated_at     INTEGER NOT NULL
-		);`)
+		);
+		-- Later migrations (v22) touch connections/folders/credential_refs/
+		-- credential_folders; a real DB at v20 always has them. Minimal stubs
+		-- so those ALTERs have a target.
+		CREATE TABLE connections (id TEXT PRIMARY KEY);
+		CREATE TABLE folders (id TEXT PRIMARY KEY);
+		CREATE TABLE credential_refs (id TEXT PRIMARY KEY);
+		CREATE TABLE credential_folders (id TEXT PRIMARY KEY);`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +82,53 @@ func TestMigration21IdempotentWhenColumnPresent(t *testing.T) {
 	if err := db.QueryRow(`SELECT value FROM schema_meta WHERE key='version'`).Scan(&v); err != nil {
 		t.Fatal(err)
 	}
-	if v != "21" {
-		t.Fatalf("schema version = %q, want 21", v)
+	if v != "23" {
+		t.Fatalf("schema version = %q, want 23", v)
+	}
+}
+
+// The reported bug: a DB that ran the ORIGINAL 2-table form of migration
+// 22 (icon columns on connections + folders only) is recorded at v22 and
+// never re-runs it, so credential_refs / credential_folders lack
+// icon_name and every credential read fails. Migration 23 must add the
+// missing credential icon columns while skipping the ones v22 already
+// created.
+func TestMigration23RepairsCredentialIconColumns(t *testing.T) {
+	path := t.TempDir() + "/legacy22.db"
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Simulate a DB pinned at v22 with the OLD 2-table icon shape:
+	// connections + folders already have icon_name/icon_color;
+	// credential_refs + credential_folders do NOT.
+	_, err = db.Exec(`
+		CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+		INSERT INTO schema_meta (key, value) VALUES ('version', '22');
+		CREATE TABLE connections (id TEXT PRIMARY KEY, icon_name TEXT, icon_color TEXT);
+		CREATE TABLE folders (id TEXT PRIMARY KEY, icon_name TEXT, icon_color TEXT);
+		CREATE TABLE credential_refs (id TEXT PRIMARY KEY);
+		CREATE TABLE credential_folders (id TEXT PRIMARY KEY);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runMigrations(db); err != nil {
+		t.Fatalf("runMigrations: %v", err)
+	}
+
+	// The failing reads from the field report must now work.
+	if _, err := db.Query(`SELECT icon_name, icon_color FROM credential_refs`); err != nil {
+		t.Fatalf("credential_refs icon columns still missing: %v", err)
+	}
+	if _, err := db.Query(`SELECT icon_name, icon_color FROM credential_folders`); err != nil {
+		t.Fatalf("credential_folders icon columns still missing: %v", err)
+	}
+	// And the columns v22 already had must be untouched (no duplicate error
+	// aborted the migration).
+	if _, err := db.Query(`SELECT icon_name FROM connections`); err != nil {
+		t.Fatalf("connections icon_name lost: %v", err)
 	}
 }

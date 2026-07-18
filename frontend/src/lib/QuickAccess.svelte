@@ -72,7 +72,7 @@
       <span class="chev">{collapsed ? "▸" : "▾"}</span>
       <span class="title">Quick access</span>
       <span class="counts">
-        {#if favs.length}<span class="badge fav">★{favs.length}</span>{/if}
+        {#if favs.length}<span class="badge fav"><IconStar size={10} fill="currentColor" />{favs.length}</span>{/if}
         {#if recent.length}<span class="badge rec">{recent.length}</span>{/if}
       </span>
     </button>
@@ -141,6 +141,9 @@
   .qa-header .title { flex: 1; text-align: left; }
   .qa-header .counts { display: flex; gap: 0.25rem; }
   .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
     background: var(--surface0);
     color: var(--subtext0);
     border-radius: 999px;

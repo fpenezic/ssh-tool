@@ -13,8 +13,13 @@ type Folder struct {
 	SortOrder   int64               `json:"sort_order"`
 	Settings    InheritableSettings `json:"settings"`
 	IconImageID *string             `json:"icon_image_id"`
-	CreatedAt   int64               `json:"created_at"`
-	UpdatedAt   int64               `json:"updated_at"`
+	// IconName is a built-in (lucide) icon key; IconColor is a palette
+	// name (see frontend palette.ts) tinting it. Mutually exclusive with
+	// IconImageID - setting one clears the other. Both nil = default icon.
+	IconName    *string `json:"icon_name"`
+	IconColor   *string `json:"icon_color"`
+	CreatedAt   int64   `json:"created_at"`
+	UpdatedAt   int64   `json:"updated_at"`
 }
 
 // Connection is a leaf in the tree.
@@ -30,6 +35,10 @@ type Connection struct {
 	Favorite         bool                `json:"favorite"`
 	Sensitive        bool                `json:"sensitive"`
 	IconImageID      *string             `json:"icon_image_id"`
+	// IconName / IconColor: built-in lucide icon + palette colour, same
+	// semantics as on Folder. Mutually exclusive with IconImageID.
+	IconName         *string             `json:"icon_name"`
+	IconColor        *string             `json:"icon_color"`
 	LastUsedAt       *int64              `json:"last_used_at"`
 	CreatedAt        int64               `json:"created_at"`
 	UpdatedAt        int64               `json:"updated_at"`
@@ -224,6 +233,10 @@ type CredentialFolder struct {
 	ParentID  *string `json:"parent_id"`
 	Name      string  `json:"name"`
 	SortOrder int64   `json:"sort_order"`
+	// Built-in (lucide) icon + palette colour. Credential folders never
+	// had an uploaded-image icon, so these are the only icon fields.
+	IconName  *string `json:"icon_name"`
+	IconColor *string `json:"icon_color"`
 	CreatedAt int64   `json:"created_at"`
 	UpdatedAt int64   `json:"updated_at"`
 }
@@ -246,6 +259,10 @@ type CredentialRef struct {
 	RotationReminderDays *int64         `json:"rotation_reminder_days"`
 	RetainHistory        bool           `json:"retain_history"`
 	IconImageID          *string        `json:"icon_image_id"`
+	// IconName / IconColor: built-in lucide icon + palette colour, same
+	// semantics as on Connection. Mutually exclusive with IconImageID.
+	IconName             *string        `json:"icon_name"`
+	IconColor            *string        `json:"icon_color"`
 	CreatedAt            int64          `json:"created_at"`
 	UpdatedAt            int64          `json:"updated_at"`
 }

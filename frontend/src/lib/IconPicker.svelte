@@ -10,13 +10,25 @@
   import { errMsg } from "./connectErrors";
   import { imageCache } from "./images.svelte";
   import { clickOutside } from "./clickOutside";
+  import { BUILTIN_ICONS } from "./builtinIcons";
+  import { palette, resolveColorTag } from "./palette";
+  import IconImage from "@lucide/svelte/icons/image";
 
   type Props = {
-    kind: "folder" | "connection" | "credential";
+    // "credentialFolder" is named-icon only (no uploaded-image column).
+    kind: "folder" | "connection" | "credential" | "credentialFolder";
     targetId: string;
-    currentIconId: string | null;
+    // Credential folders have no uploaded image; pass null.
+    currentIconId?: string | null;
     fallbackEmoji: string;
+    // Currently-selected built-in icon (lucide name) + palette colour, so
+    // the picker can highlight it and pre-select the swatch.
+    currentIconName?: string | null;
+    currentIconColor?: string | null;
     onChange?: (imageId: string | null) => void;
+    // Fired when a built-in icon (or clear) is chosen. name="" means
+    // cleared. The parent refreshes the row from the store.
+    onNamedChange?: (name: string, color: string) => void;
   };
 
   async function setIcon(imageId: string) {
@@ -29,7 +41,71 @@
     }
   }
 
-  let { kind, targetId, currentIconId, fallbackEmoji, onChange }: Props = $props();
+  let {
+    kind,
+    targetId,
+    currentIconId = null,
+    fallbackEmoji,
+    currentIconName = null,
+    currentIconColor = null,
+    onChange,
+    onNamedChange,
+  }: Props = $props();
+
+  // All four kinds support built-in icons. Only credential folders lack an
+  // uploaded-image option (they never had an icon_image_id column).
+  const supportsNamed = true;
+  const supportsUpload = $derived(kind !== "credentialFolder");
+
+  // Which picker tab is showing: the uploaded-image library, or the
+  // built-in lucide set.
+  let pickerTab = $state<"builtin" | "library">("builtin");
+
+  // The colour swatch selected for the built-in icon. Defaults to the
+  // first palette colour; if the target already has a built-in colour we
+  // adopt it once the picker opens (see the effect below) so a picked
+  // icon is always visibly tinted.
+  let namedColor = $state<string>(palette[0].name);
+  let seededColor = false;
+  $effect(() => {
+    if (!seededColor && currentIconColor) {
+      namedColor = currentIconColor;
+      seededColor = true;
+    }
+  });
+
+  async function setNamed(name: string, color: string) {
+    if (kind === "folder") {
+      await api.iconSetFolderNamed(targetId, name, color);
+    } else if (kind === "connection") {
+      await api.iconSetConnectionNamed(targetId, name, color);
+    } else if (kind === "credential") {
+      await api.iconSetCredentialNamed(targetId, name, color);
+    } else {
+      await api.iconSetCredentialFolderNamed(targetId, name, color);
+    }
+  }
+
+  async function pickBuiltin(name: string) {
+    err = null;
+    try {
+      await setNamed(name, namedColor);
+      onNamedChange?.(name, namedColor);
+      pickerOpen = false;
+    } catch (e: any) {
+      err = errMsg(e);
+    }
+  }
+
+  async function clearBuiltin() {
+    err = null;
+    try {
+      await setNamed("", "");
+      onNamedChange?.("", "");
+    } catch (e: any) {
+      err = errMsg(e);
+    }
+  }
 
   let uploading = $state(false);
   let err = $state<string | null>(null);
@@ -70,6 +146,9 @@
   }
 
   const dataUrl = $derived(currentIconId ? imageCache.peek(currentIconId) : null);
+  const currentBuiltin = $derived(
+    currentIconName ? BUILTIN_ICONS.find((b) => b.name === currentIconName) : undefined,
+  );
   $effect(() => {
     if (currentIconId) imageCache.ensure(currentIconId);
   });
@@ -136,16 +215,27 @@
     <div class="preview">
       {#if dataUrl}
         <img src={dataUrl} alt="icon" />
-      {:else}
+      {:else if currentBuiltin}
+        {@const BI = currentBuiltin.icon}
+        <span class="builtin-preview" style={currentIconColor ? `color:${resolveColorTag(currentIconColor)}` : undefined}>
+          <BI size={20} />
+        </span>
+      {:else if fallbackEmoji}
         <span class="emoji">{fallbackEmoji}</span>
+      {:else}
+        <span class="builtin-preview"><IconImage size={18} /></span>
       {/if}
     </div>
-    <button type="button" disabled={uploading} onclick={() => fileInput?.click()}>
-      {uploading ? "…" : "Upload"}
-    </button>
+    {#if supportsUpload}
+      <button type="button" disabled={uploading} onclick={() => fileInput?.click()}>
+        {uploading ? "…" : "Upload"}
+      </button>
+    {/if}
     <button type="button" onclick={openPicker}>Choose…</button>
     {#if currentIconId}
       <button type="button" class="danger" onclick={clearIcon}>Clear</button>
+    {:else if currentIconName}
+      <button type="button" class="danger" onclick={clearBuiltin}>Clear</button>
     {/if}
     <input
       bind:this={fileInput}
@@ -172,7 +262,56 @@
         <strong>Choose icon</strong>
         <button type="button" class="close" onclick={() => (pickerOpen = false)}>✕</button>
       </header>
-      {#if !pickerLoaded}
+
+      {#if supportsUpload}
+        <div class="ptabs" role="tablist">
+          <button
+            role="tab"
+            class="ptab"
+            class:active={pickerTab === "builtin"}
+            aria-selected={pickerTab === "builtin"}
+            onclick={() => (pickerTab = "builtin")}
+          >Built-in</button>
+          <button
+            role="tab"
+            class="ptab"
+            class:active={pickerTab === "library"}
+            aria-selected={pickerTab === "library"}
+            onclick={() => (pickerTab = "library")}
+          >Uploaded library</button>
+        </div>
+      {/if}
+
+      {#if !supportsUpload || pickerTab === "builtin"}
+        <div class="swatches">
+          <span class="swatch-label">Colour</span>
+          {#each palette as p (p.name)}
+            <button
+              type="button"
+              class="swatch"
+              class:sel={namedColor === p.name}
+              style={`background:${resolveColorTag(p.name)}`}
+              title={p.name}
+              aria-label={p.name}
+              onclick={() => (namedColor = p.name)}
+            ></button>
+          {/each}
+        </div>
+        <div class="grid">
+          {#each BUILTIN_ICONS as bi (bi.name)}
+            {@const BI = bi.icon}
+            <button
+              type="button"
+              class="cell"
+              class:current={bi.name === currentIconName}
+              title={bi.label}
+              onclick={() => pickBuiltin(bi.name)}
+            >
+              <span class="bi" style={`color:${resolveColorTag(namedColor)}`}><BI size={20} /></span>
+            </button>
+          {/each}
+        </div>
+      {:else if !pickerLoaded}
         <div class="loading">Loading…</div>
       {:else if existing.length === 0}
         <div class="empty">No icons in the library yet - upload one first.</div>
@@ -206,6 +345,27 @@
 <style>
   .icon-picker { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--subtext0); }
   .row { display: flex; align-items: center; gap: 0.4rem; }
+  .builtin-preview { display: inline-flex; align-items: center; justify-content: center; }
+
+  .ptabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--surface0); margin-bottom: 0.6rem; }
+  .ptab {
+    background: transparent; color: var(--subtext0);
+    border: 0; border-bottom: 2px solid transparent;
+    padding: 0.35rem 0.7rem; font: inherit; font-size: 0.8rem;
+    cursor: pointer; margin-bottom: -1px; border-radius: 0;
+  }
+  .ptab:hover { color: var(--text); background: transparent; }
+  .ptab.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+  .swatches { display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
+  .swatch-label { color: var(--subtext0); font-size: 0.75rem; margin-right: 0.2rem; }
+  .swatch {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid transparent; padding: 0; cursor: pointer;
+  }
+  .swatch:hover { border-color: var(--surface2, var(--surface1)); }
+  .swatch.sel { border-color: var(--text); }
+  .bi { display: inline-flex; align-items: center; justify-content: center; }
   .preview {
     width: 28px; height: 28px;
     display: flex; align-items: center; justify-content: center;

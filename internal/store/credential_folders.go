@@ -26,7 +26,7 @@ func (d *DB) CreateCredentialFolder(name string, parentID *string) (*CredentialF
 
 func (d *DB) GetCredentialFolder(id string) (*CredentialFolder, error) {
 	row := d.conn.QueryRow(
-		`SELECT id, parent_id, name, sort_order, created_at, updated_at
+		`SELECT id, parent_id, name, sort_order, icon_name, icon_color, created_at, updated_at
 		 FROM credential_folders WHERE id = ?`, id,
 	)
 	return scanCredentialFolder(row)
@@ -34,7 +34,7 @@ func (d *DB) GetCredentialFolder(id string) (*CredentialFolder, error) {
 
 func (d *DB) ListCredentialFolders() ([]CredentialFolder, error) {
 	rows, err := d.conn.Query(
-		`SELECT id, parent_id, name, sort_order, created_at, updated_at
+		`SELECT id, parent_id, name, sort_order, icon_name, icon_color, created_at, updated_at
 		 FROM credential_folders ORDER BY sort_order, name`,
 	)
 	if err != nil {
@@ -120,7 +120,8 @@ func (d *DB) DeleteCredentialFolder(id string) error {
 func scanCredentialFolder(s scanner) (*CredentialFolder, error) {
 	var f CredentialFolder
 	var parentID sql.NullString
-	err := s.Scan(&f.ID, &parentID, &f.Name, &f.SortOrder, &f.CreatedAt, &f.UpdatedAt)
+	var iconName, iconColor sql.NullString
+	err := s.Scan(&f.ID, &parentID, &f.Name, &f.SortOrder, &iconName, &iconColor, &f.CreatedAt, &f.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -129,6 +130,12 @@ func scanCredentialFolder(s scanner) (*CredentialFolder, error) {
 	}
 	if parentID.Valid {
 		f.ParentID = &parentID.String
+	}
+	if iconName.Valid {
+		f.IconName = &iconName.String
+	}
+	if iconColor.Valid {
+		f.IconColor = &iconColor.String
 	}
 	return &f, nil
 }

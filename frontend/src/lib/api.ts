@@ -71,6 +71,8 @@ export interface Folder {
   sort_order: number;
   settings: InheritableSettings;
   icon_image_id: string | null;
+  icon_name: string | null;
+  icon_color: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -87,6 +89,8 @@ export interface Connection {
   favorite: boolean;
   sensitive: boolean;
   icon_image_id: string | null;
+  icon_name: string | null;
+  icon_color: string | null;
   last_used_at: number | null;
   created_at: number;
   updated_at: number;
@@ -350,6 +354,8 @@ export interface CredentialFolder {
   parent_id: string | null;
   name: string;
   sort_order: number;
+  icon_name: string | null;
+  icon_color: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -371,6 +377,8 @@ export interface CredentialRef {
   rotation_reminder_days: number | null;
   retain_history: boolean;
   icon_image_id: string | null;
+  icon_name: string | null;
+  icon_color: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -653,6 +661,10 @@ export const api = {
   imagesSetFolder: (folderId: string, imageId: string) => G.ImagesSetFolder(folderId, imageId),
   imagesSetConnection: (connId: string, imageId: string) => G.ImagesSetConnection(connId, imageId),
   imagesSetCredential: (credId: string, imageId: string) => G.ImagesSetCredential(credId, imageId),
+  iconSetFolderNamed: (folderId: string, name: string, color: string) => G.IconSetFolderNamed(folderId, name, color),
+  iconSetConnectionNamed: (connId: string, name: string, color: string) => G.IconSetConnectionNamed(connId, name, color),
+  iconSetCredentialNamed: (credId: string, name: string, color: string) => G.IconSetCredentialNamed(credId, name, color),
+  iconSetCredentialFolderNamed: (folderId: string, name: string, color: string) => G.IconSetCredentialFolderNamed(folderId, name, color),
   connectionsBatchUpdate: (input: {
     ids: string[];
     patch: InheritableSettings;

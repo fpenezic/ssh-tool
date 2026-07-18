@@ -51,7 +51,7 @@ func (d *DB) CreateConnection(in NewConnection) (*Connection, error) {
 func (d *DB) GetConnection(id string) (*Connection, error) {
 	row := d.conn.QueryRow(
 		`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
-		        notes, favorite, sensitive, icon_image_id, last_used_at, created_at, updated_at,
+		        notes, favorite, sensitive, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
 		        password_vault_key, vnc_password_vault_key
 		 FROM connections WHERE id = ?`, id,
 	)
@@ -66,7 +66,7 @@ func (d *DB) ListConnections(folderID *string) ([]Connection, error) {
 	if folderID != nil {
 		rows, err = d.conn.Query(
 			`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
-			        notes, favorite, sensitive, icon_image_id, last_used_at, created_at, updated_at,
+			        notes, favorite, sensitive, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
 			        password_vault_key, vnc_password_vault_key
 			 FROM connections WHERE folder_id = ? ORDER BY sort_order, name`,
 			*folderID,
@@ -74,7 +74,7 @@ func (d *DB) ListConnections(folderID *string) ([]Connection, error) {
 	} else {
 		rows, err = d.conn.Query(
 			`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
-			        notes, favorite, sensitive, icon_image_id, last_used_at, created_at, updated_at,
+			        notes, favorite, sensitive, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
 			        password_vault_key, vnc_password_vault_key
 			 FROM connections ORDER BY sort_order, name`,
 		)
@@ -387,7 +387,7 @@ func (d *DB) RecentConnections(limit int) ([]Connection, error) {
 	}
 	rows, err := d.conn.Query(
 		`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
-		        notes, favorite, sensitive, icon_image_id, last_used_at, created_at, updated_at,
+		        notes, favorite, sensitive, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
 		        password_vault_key, vnc_password_vault_key
 		 FROM connections
 		 WHERE last_used_at IS NOT NULL
@@ -414,7 +414,7 @@ func (d *DB) RecentConnections(limit int) ([]Connection, error) {
 func (d *DB) FavoriteConnections() ([]Connection, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
-		        notes, favorite, sensitive, icon_image_id, last_used_at, created_at, updated_at,
+		        notes, favorite, sensitive, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
 		        password_vault_key, vnc_password_vault_key
 		 FROM connections
 		 WHERE favorite = 1
@@ -446,13 +446,15 @@ func scanConnection(s scanner) (*Connection, error) {
 		notes        string
 		fav, sens    int64
 		iconID       sql.NullString
+		iconName     sql.NullString
+		iconColor    sql.NullString
 		lastUsed     sql.NullInt64
 		passVaultKey sql.NullString
 		vncVaultKey  sql.NullString
 	)
 	err := s.Scan(
 		&c.ID, &folderID, &c.Name, &c.Hostname, &c.SortOrder,
-		&overridesRaw, &tagsRaw, &notes, &fav, &sens, &iconID, &lastUsed,
+		&overridesRaw, &tagsRaw, &notes, &fav, &sens, &iconID, &iconName, &iconColor, &lastUsed,
 		&c.CreatedAt, &c.UpdatedAt, &passVaultKey, &vncVaultKey,
 	)
 	if err != nil {
@@ -466,6 +468,12 @@ func scanConnection(s scanner) (*Connection, error) {
 	}
 	if iconID.Valid {
 		c.IconImageID = &iconID.String
+	}
+	if iconName.Valid {
+		c.IconName = &iconName.String
+	}
+	if iconColor.Valid {
+		c.IconColor = &iconColor.String
 	}
 	if passVaultKey.Valid {
 		c.PasswordVaultKey = &passVaultKey.String

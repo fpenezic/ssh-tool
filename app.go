@@ -4236,6 +4236,31 @@ func (a *App) ImagesSetCredential(credID, imageID string) error {
 	return a.db.SetCredentialIcon(credID, imageID)
 }
 
+// IconSetFolderNamed sets a built-in (lucide) icon + palette colour on a
+// folder. Empty name clears it (folder reverts to the default icon).
+// Clears any uploaded image - a folder has one icon source at a time.
+func (a *App) IconSetFolderNamed(folderID, name, color string) error {
+	return a.db.SetFolderNamedIcon(folderID, name, color)
+}
+
+// IconSetConnectionNamed sets a built-in icon + palette colour on a
+// connection. Empty name clears it. Clears any uploaded image.
+func (a *App) IconSetConnectionNamed(connID, name, color string) error {
+	return a.db.SetConnectionNamedIcon(connID, name, color)
+}
+
+// IconSetCredentialNamed sets a built-in icon + palette colour on a
+// credential. Empty name clears it. Clears any uploaded image.
+func (a *App) IconSetCredentialNamed(credID, name, color string) error {
+	return a.db.SetCredentialNamedIcon(credID, name, color)
+}
+
+// IconSetCredentialFolderNamed sets a built-in icon + palette colour on a
+// credential folder (no uploaded-image option for these). Empty clears.
+func (a *App) IconSetCredentialFolderNamed(folderID, name, color string) error {
+	return a.db.SetCredentialFolderNamedIcon(folderID, name, color)
+}
+
 // ----- RDM import -----
 
 // RdmImport parses a Devolutions RDM JSON export and merges it into the

@@ -6,6 +6,7 @@
   import { api, type UsageRef, type CredentialHistoryEntry, type OpksshCertStatus } from "./api";
   import { connectionActions } from "./connectionActions.svelte";
   import { IconFolder, IconHost } from "./iconMap";
+  import Icon from "./Icon.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import IconPicker from "./IconPicker.svelte";
@@ -628,7 +629,12 @@
         <input class="edit-name" bind:value={folderRenameVal}
           onkeydown={(e) => { if (e.key === "Enter") saveFolderRename(); if (e.key === "Escape") folderRenaming = false; }} />
       {:else}
-        <h1><IconFolder size={18} /> {credFolder.name}</h1>
+        <h1>
+          <Icon imageId={null} iconName={credFolder.icon_name} iconColor={credFolder.icon_color} size={18}>
+            <IconFolder size={18} />
+          </Icon>
+          {credFolder.name}
+        </h1>
       {/if}
       <div class="head-actions">
         {#if folderRenaming}
@@ -645,6 +651,16 @@
       </div>
     </header>
     {#if folderRenameErr}<div class="err">{folderRenameErr}</div>{/if}
+    <div class="folder-icon-row">
+      <IconPicker
+        kind="credentialFolder"
+        targetId={credFolder.id}
+        currentIconName={credFolder.icon_name}
+        currentIconColor={credFolder.icon_color}
+        fallbackEmoji=""
+        onNamedChange={() => credentials.load()}
+      />
+    </div>
   {:else if !cred}
     <div class="empty">
       <p>Select a credential on the left.</p>
@@ -689,8 +705,11 @@
           kind="credential"
           targetId={cred.id}
           currentIconId={cred.icon_image_id ?? null}
+          currentIconName={cred.icon_name}
+          currentIconColor={cred.icon_color}
           fallbackEmoji="🔑"
           onChange={() => credentials.load()}
+          onNamedChange={() => credentials.load()}
         />
         {#if editErr}<div class="err">{editErr}</div>{/if}
       </div>

@@ -2,8 +2,13 @@
 // and Sidebar both push onto it. Rendered by App.svelte so it can sit
 // above the rest of the UI without z-index gymnastics inside the tree.
 
+import type { Component } from "svelte";
+
 export interface MenuItem {
   label: string;
+  // A lucide icon component (preferred, renders identically on every
+  // platform). `icon` (a text glyph) is the legacy fallback.
+  iconComponent?: Component<{ size?: number }>;
   icon?: string;
   danger?: boolean;
   disabled?: boolean;

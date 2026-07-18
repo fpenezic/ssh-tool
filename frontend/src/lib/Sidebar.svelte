@@ -5,7 +5,8 @@
   import { computeIntent, isInvalidDrop, applyDrop, applyDropToRoot, applyMultiDrop, applyMultiDropToRoot, type DragKind } from "./treeDnd";
   import { setMultiDragImage } from "./dragImage";
   import QuickAccess from "./QuickAccess.svelte";
-  import { IconFolderPlus, IconPlus, IconRotateCw, IconHost, IconLoading, IconX, IconGlobe, IconExpandAll, IconCollapseAll } from "./iconMap";
+  import { IconFolderPlus, IconPlus, IconRotateCw, IconHost, IconLoading, IconX, IconGlobe, IconExpandAll, IconCollapseAll,
+    IconRefresh, IconPlay, IconExternalLink, IconStar, IconMoveToFolder, IconDownload, IconTrash } from "./iconMap";
   import { expandedConnections } from "./treeState.svelte";
   import TagFilter from "./TagFilter.svelte";
   import { tagFilter } from "./tagFilter.svelte.ts";
@@ -27,9 +28,9 @@
     if (t?.closest('[role="treeitem"]')) return;
     e.preventDefault();
     contextMenu.show(e, [
-      { label: "New connection",     icon: "+", onSelect: addConnection },
-      { label: "New folder",         icon: "+", onSelect: addRootFolder },
-      { label: "New dynamic folder…", icon: "⟳", onSelect: () => dynEditor.showNew(null) },
+      { label: "New connection",     iconComponent: IconHost, onSelect: addConnection },
+      { label: "New folder",         iconComponent: IconFolderPlus, onSelect: addRootFolder },
+      { label: "New dynamic folder…", iconComponent: IconRefresh, onSelect: () => dynEditor.showNew(null) },
     ]);
   }
 
@@ -40,29 +41,29 @@
     contextMenu.show(e, [
       {
         label: ids.length > 1 ? `Connect all (${ids.length})` : "Connect",
-        icon: "▶",
+        iconComponent: IconPlay,
         onSelect: () => connectionActions.connectMany(ids),
       },
       ...(ids.length === 1 ? [{
         label: "Open in external terminal",
-        icon: "↗",
+        iconComponent: IconExternalLink,
         onSelect: () => connectionActions.launchExternal(ids[0]),
       }] : []),
       {
         label: allFav
           ? (ids.length > 1 ? "Remove from favourites" : "Remove favourite")
           : (ids.length > 1 ? "Mark as favourites" : "Mark as favourite"),
-        icon: allFav ? "☆" : "★",
+        iconComponent: IconStar,
         onSelect: () => connectionActions.toggleFavorites(ids),
       },
       {
         label: ids.length > 1 ? `Move ${ids.length} connections to…` : "Move to folder…",
-        icon: "↪",
+        iconComponent: IconMoveToFolder,
         onSelect: () => connectionActions.openMoveTo(ids, []),
       },
       {
         label: ids.length > 1 ? `Export ${ids.length}…` : "Export…",
-        icon: "⤓",
+        iconComponent: IconDownload,
         onSelect: () => {
           const name = ids.length === 1
             ? (tree.connectionById(ids[0])?.name ?? "connection")
@@ -72,7 +73,7 @@
       },
       {
         label: ids.length > 1 ? `Delete ${ids.length} connections` : "Delete connection",
-        icon: "🗑",
+        iconComponent: IconTrash,
         danger: true,
         onSelect: () => connectionActions.openDeleteConnections(ids),
       },

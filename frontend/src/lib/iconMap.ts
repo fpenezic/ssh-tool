@@ -13,6 +13,7 @@ import Zap from "@lucide/svelte/icons/zap";
 import Layers from "@lucide/svelte/icons/layers";
 import FolderPlus from "@lucide/svelte/icons/folder-plus";
 import Server from "@lucide/svelte/icons/server";
+import Info from "@lucide/svelte/icons/info";
 import Monitor from "@lucide/svelte/icons/monitor";
 import Key from "@lucide/svelte/icons/key";
 import KeyRound from "@lucide/svelte/icons/key-round";
@@ -38,6 +39,10 @@ import Clipboard from "@lucide/svelte/icons/clipboard";
 import ClipboardCopy from "@lucide/svelte/icons/clipboard-copy";
 import Eye from "@lucide/svelte/icons/eye";
 import EyeOff from "@lucide/svelte/icons/eye-off";
+import Download from "@lucide/svelte/icons/download";
+import Copy from "@lucide/svelte/icons/copy";
+import Pencil from "@lucide/svelte/icons/pencil";
+import FolderInput from "@lucide/svelte/icons/folder-input";
 
 export {
   Folder as IconFolder,
@@ -45,6 +50,7 @@ export {
   Layers as IconWorkspace,
   FolderPlus as IconFolderPlus,
   Server as IconHost,
+  Info as IconInfo,
   Monitor as IconMonitor,
   Key as IconKey,
   KeyRound as IconKeyRound,
@@ -56,6 +62,10 @@ export {
   RotateCw as IconRotateCw,
   RefreshCw as IconRefresh,
   Trash as IconTrash,
+  Download as IconDownload,
+  Copy as IconCopy,
+  Pencil as IconPencil,
+  FolderInput as IconMoveToFolder,
   History as IconHistory,
   Star as IconStar,
   Link as IconLink,

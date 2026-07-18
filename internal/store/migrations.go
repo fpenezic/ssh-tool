@@ -439,6 +439,45 @@ var migrations = []struct {
 		// by the amended migration 19 (column already present) are fine too.
 		`ALTER TABLE bitwarden_servers ADD COLUMN network_profile_id TEXT NOT NULL DEFAULT '';`,
 	},
+	{
+		22,
+		// Built-in icons: a connection/folder/credential/credential-folder can
+		// carry a named lucide icon (icon_name) tinted by a palette colour
+		// (icon_color) instead of an uploaded image. Both nil = default icon;
+		// mutually exclusive with icon_image_id (the app clears one when the
+		// other is set). credential_folders never had an icon at all, so they
+		// gain both a named icon here (no icon_image_id column - named only).
+		// Nullable so absence = "no built-in icon chosen".
+		`ALTER TABLE connections ADD COLUMN icon_name TEXT;
+		 ALTER TABLE connections ADD COLUMN icon_color TEXT;
+		 ALTER TABLE folders ADD COLUMN icon_name TEXT;
+		 ALTER TABLE folders ADD COLUMN icon_color TEXT;
+		 ALTER TABLE credential_refs ADD COLUMN icon_name TEXT;
+		 ALTER TABLE credential_refs ADD COLUMN icon_color TEXT;
+		 ALTER TABLE credential_folders ADD COLUMN icon_name TEXT;
+		 ALTER TABLE credential_folders ADD COLUMN icon_color TEXT;`,
+	},
+	{
+		23,
+		// Repair migration. Migration 22 originally added icon_name/icon_color
+		// to connections + folders ONLY; the credential_refs +
+		// credential_folders columns were appended to v22's SQL afterwards.
+		// A DB that ran the earlier 2-table form of v22 is recorded at
+		// version 22 and never re-runs it, so credential reads fail with
+		// "no such column: icon_name". Re-add all four icon columns here; the
+		// runner adds each statement independently and tolerates a
+		// duplicate-column error, so the columns v22 already created are
+		// skipped and only the missing credential ones are added. Idempotent
+		// on fresh DBs too (every column already exists -> all no-ops).
+		`ALTER TABLE connections ADD COLUMN icon_name TEXT;
+		 ALTER TABLE connections ADD COLUMN icon_color TEXT;
+		 ALTER TABLE folders ADD COLUMN icon_name TEXT;
+		 ALTER TABLE folders ADD COLUMN icon_color TEXT;
+		 ALTER TABLE credential_refs ADD COLUMN icon_name TEXT;
+		 ALTER TABLE credential_refs ADD COLUMN icon_color TEXT;
+		 ALTER TABLE credential_folders ADD COLUMN icon_name TEXT;
+		 ALTER TABLE credential_folders ADD COLUMN icon_color TEXT;`,
+	},
 }
 
 // LatestSchemaVersion is the version a freshly-migrated DB lands on.
@@ -477,6 +516,34 @@ func isDuplicateColumnErr(err error) bool {
 	return err != nil && strings.Contains(strings.ToLower(err.Error()), "duplicate column name")
 }
 
+// splitSQLStatements splits a migration's SQL into individual statements
+// on the semicolon boundary, dropping blank fragments. Line comments
+// (`-- ...`) are stripped FIRST so a fragment that is only a trailing
+// comment isn't handed to the driver as a bogus statement, and so a
+// comment's own text (which may contain words like "per-connection")
+// can't be misparsed. Our migration SQL contains no string literals
+// with embedded semicolons, so a plain split is otherwise safe.
+func splitSQLStatements(sqlText string) []string {
+	// Drop `--` line comments.
+	var b strings.Builder
+	for _, line := range strings.Split(sqlText, "\n") {
+		if i := strings.Index(line, "--"); i >= 0 {
+			line = line[:i]
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	parts := strings.Split(b.String(), ";")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if strings.TrimSpace(p) == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
 func runMigrations(db *sql.DB) error {
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -503,14 +570,16 @@ func runMigrations(db *sql.DB) error {
 		if err != nil {
 			return fmt.Errorf("begin migration %d: %w", m.version, err)
 		}
-		if _, err := tx.Exec(m.sql); err != nil {
-			// An idempotent "ADD COLUMN" repair migration (see v21) may hit a
-			// column that already exists on DBs which got it another way -
-			// a fresh CREATE TABLE that already carries it. SQLite has no
-			// "ADD COLUMN IF NOT EXISTS", so tolerate the duplicate-column
-			// error and still record the version as applied. Any OTHER error
-			// (or a non-ADD-COLUMN statement) is fatal as before.
-			if !isDuplicateColumnErr(err) {
+		// Execute statement-by-statement so a duplicate-column error on ONE
+		// idempotent ADD COLUMN doesn't abort the sibling statements. This
+		// matters for repair migrations (v21, v23) that re-add a set of
+		// columns where SOME may already exist on a DB that ran an earlier
+		// form of the migration - SQLite has no "ADD COLUMN IF NOT EXISTS",
+		// and a single multi-statement Exec would stop at the first
+		// duplicate, leaving the rest unapplied. The duplicate is tolerated
+		// per statement; any OTHER error is fatal as before.
+		for _, stmt := range splitSQLStatements(m.sql) {
+			if _, err := tx.Exec(stmt); err != nil && !isDuplicateColumnErr(err) {
 				_ = tx.Rollback()
 				return fmt.Errorf("apply migration %d: %w", m.version, err)
 			}

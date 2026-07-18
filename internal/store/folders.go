@@ -46,7 +46,7 @@ func (d *DB) CreateFolder(in NewFolder) (*Folder, error) {
 
 func (d *DB) GetFolder(id string) (*Folder, error) {
 	row := d.conn.QueryRow(
-		`SELECT id, parent_id, name, sort_order, settings_json, icon_image_id, created_at, updated_at
+		`SELECT id, parent_id, name, sort_order, settings_json, icon_image_id, icon_name, icon_color, created_at, updated_at
 		 FROM folders WHERE id = ?`, id,
 	)
 	return scanFolder(row)
@@ -54,7 +54,7 @@ func (d *DB) GetFolder(id string) (*Folder, error) {
 
 func (d *DB) ListFolders() ([]Folder, error) {
 	rows, err := d.conn.Query(
-		`SELECT id, parent_id, name, sort_order, settings_json, icon_image_id, created_at, updated_at
+		`SELECT id, parent_id, name, sort_order, settings_json, icon_image_id, icon_name, icon_color, created_at, updated_at
 		 FROM folders ORDER BY sort_order, name`,
 	)
 	if err != nil {
@@ -177,8 +177,10 @@ func scanFolder(s scanner) (*Folder, error) {
 		parentID    sql.NullString
 		settingsRaw string
 		iconID      sql.NullString
+		iconName    sql.NullString
+		iconColor   sql.NullString
 	)
-	err := s.Scan(&f.ID, &parentID, &f.Name, &f.SortOrder, &settingsRaw, &iconID, &f.CreatedAt, &f.UpdatedAt)
+	err := s.Scan(&f.ID, &parentID, &f.Name, &f.SortOrder, &settingsRaw, &iconID, &iconName, &iconColor, &f.CreatedAt, &f.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -190,6 +192,12 @@ func scanFolder(s scanner) (*Folder, error) {
 	}
 	if iconID.Valid {
 		f.IconImageID = &iconID.String
+	}
+	if iconName.Valid {
+		f.IconName = &iconName.String
+	}
+	if iconColor.Valid {
+		f.IconColor = &iconColor.String
 	}
 	if err := json.Unmarshal([]byte(settingsRaw), &f.Settings); err != nil {
 		return nil, fmt.Errorf("unmarshal folder settings: %w", err)
