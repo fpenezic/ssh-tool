@@ -83,6 +83,12 @@ export interface Connection {
   name: string;
   hostname: string;
   sort_order: number;
+  // "ssh" (default) or "local". A local connection spawns a local PTY
+  // running overrides.initial_command instead of dialing SSH.
+  protocol: string;
+  // Shell for a local connection: null = auto, else bash/zsh/sh/
+  // powershell/cmd/wsl. Ignored for SSH connections.
+  local_shell_kind?: string | null;
   overrides: InheritableSettings;
   tags: string[];
   notes: string;
@@ -597,6 +603,8 @@ export const api = {
     overrides?: InheritableSettings;
     tags?: string[];
     notes?: string;
+    protocol?: string;
+    localShellKind?: string | null;
   }) =>
     nn(G.ConnectionsCreate({
       folder_id: input.folderId,
@@ -606,6 +614,8 @@ export const api = {
       overrides: input.overrides ?? ({} as InheritableSettings),
       tags: input.tags ?? [],
       notes: input.notes ?? "",
+      protocol: input.protocol ?? "ssh",
+      local_shell_kind: input.localShellKind ?? null,
     } as any)),
   connectionsUpdate: (input: {
     id: string;
@@ -619,6 +629,9 @@ export const api = {
     notes?: string;
     favorite?: boolean;
     sensitive?: boolean;
+    protocol?: string;
+    localShellKind?: string | null;
+    clearLocalShellKind?: boolean;
   }) =>
     G.ConnectionsUpdate({
       id: input.id,
@@ -632,6 +645,9 @@ export const api = {
       notes: input.notes,
       favorite: input.favorite,
       sensitive: input.sensitive,
+      protocol: input.protocol,
+      local_shell_kind: input.localShellKind,
+      clear_local_shell_kind: input.clearLocalShellKind ?? false,
     } as any),
   connectionsDelete: (id: string) => G.ConnectionsDelete(id),
   connectionsClone: (id: string) => G.ConnectionsClone(id) as Promise<Connection | null>,
@@ -1010,6 +1026,14 @@ export const api = {
 
   localShellOpen: (kind: string, dir: string, cols: number, rows: number) =>
     G.LocalShellOpen(kind, dir, cols, rows) as unknown as Promise<{
+      session_id: string;
+      kind: string;
+      display: string;
+    }>,
+  // Open a saved "local" connection: a local PTY running its
+  // initial_command (telnet client, serial console, "claude", ...).
+  localConnect: (connectionId: string) =>
+    G.LocalConnect(connectionId) as unknown as Promise<{
       session_id: string;
       kind: string;
       display: string;

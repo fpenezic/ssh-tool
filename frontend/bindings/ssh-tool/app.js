@@ -1543,6 +1543,21 @@ export function LoadTextFile(title) {
 }
 
 /**
+ * LocalConnect opens a saved "local" connection: a local PTY running the
+ * connection's InitialCommand (telnet client, serial console, "claude", a
+ * REPL, ...). It resolves the connection's settings for the command and
+ * picks the shell from local_shell_kind, then shares the same spawn path as
+ * the ad-hoc LocalShellOpen launcher. Errors if the connection isn't local.
+ * @param {string} connectionID
+ * @returns {$CancellablePromise<$models.LocalShellOpenResult | null>}
+ */
+export function LocalConnect(connectionID) {
+    return $Call.ByID(4248307494, connectionID).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType82($result);
+    }));
+}
+
+/**
  * @param {string} sessionID
  * @returns {$CancellablePromise<void>}
  */
@@ -1556,7 +1571,7 @@ export function LocalShellDisconnect(sessionID) {
  */
 export function LocalShellGetScrollback(sessionID) {
     return $Call.ByID(4083141096, sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType81($result);
+        return $$createType83($result);
     }));
 }
 
@@ -1565,7 +1580,7 @@ export function LocalShellGetScrollback(sessionID) {
  */
 export function LocalShellList() {
     return $Call.ByID(401932158).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType83($result);
+        return $$createType85($result);
     }));
 }
 
@@ -1583,7 +1598,7 @@ export function LocalShellList() {
  */
 export function LocalShellOpen(kind, dir, cols, rows) {
     return $Call.ByID(2863600362, kind, dir, cols, rows).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType85($result);
+        return $$createType82($result);
     }));
 }
 
@@ -2836,7 +2851,7 @@ export function SshGetConnectDebug(connectionID) {
  */
 export function SshGetScrollback(sessionID) {
     return $Call.ByID(1742244993, sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType81($result);
+        return $$createType83($result);
     }));
 }
 
@@ -3638,11 +3653,11 @@ const $$createType77 = $Create.Array($$createType76);
 const $$createType78 = $Create.Nullable($$createType76);
 const $$createType79 = $models.LoadTextFileResult.createFrom;
 const $$createType80 = $Create.Nullable($$createType79);
-const $$createType81 = $models.ScrollbackSnapshot.createFrom;
-const $$createType82 = $models.LocalShellInfo.createFrom;
-const $$createType83 = $Create.Array($$createType82);
-const $$createType84 = $models.LocalShellOpenResult.createFrom;
-const $$createType85 = $Create.Nullable($$createType84);
+const $$createType81 = $models.LocalShellOpenResult.createFrom;
+const $$createType82 = $Create.Nullable($$createType81);
+const $$createType83 = $models.ScrollbackSnapshot.createFrom;
+const $$createType84 = $models.LocalShellInfo.createFrom;
+const $$createType85 = $Create.Array($$createType84);
 const $$createType86 = $models.McpActivity.createFrom;
 const $$createType87 = $Create.Array($$createType86);
 const $$createType88 = $models.McpGrantInfo.createFrom;

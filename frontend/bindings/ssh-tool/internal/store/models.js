@@ -218,6 +218,30 @@ export class Connection {
              */
             this["sort_order"] = 0;
         }
+        if (!("protocol" in $$source)) {
+            /**
+             * Protocol selects how a connect is dialed: "ssh" (default - the
+             * full SSH chain) or "local" (spawn a local PTY and run
+             * InitialCommand). A local connection ignores hostname/port/auth/
+             * jump; it is a saved local shell (telnet client, serial console,
+             * "claude", a REPL, ...). Real column, defaulting to "ssh" so every
+             * existing connection is unchanged.
+             * @member
+             * @type {string}
+             */
+            this["protocol"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * LocalShellKind picks the shell for a "local" connection: nil / ""
+             * = auto (per-platform default), else one of the kinds resolveShell
+             * accepts ("bash"/"zsh"/"sh"/"powershell"/"cmd"/"wsl"). Ignored for
+             * SSH connections.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["local_shell_kind"] = undefined;
+        }
         if (!("overrides" in $$source)) {
             /**
              * @member
@@ -327,14 +351,14 @@ export class Connection {
      * @returns {Connection}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType1;
-        const $$createField6_0 = $$createType2;
+        const $$createField7_0 = $$createType1;
+        const $$createField8_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("overrides" in $$parsedSource) {
-            $$parsedSource["overrides"] = $$createField5_0($$parsedSource["overrides"]);
+            $$parsedSource["overrides"] = $$createField7_0($$parsedSource["overrides"]);
         }
         if ("tags" in $$parsedSource) {
-            $$parsedSource["tags"] = $$createField6_0($$parsedSource["tags"]);
+            $$parsedSource["tags"] = $$createField8_0($$parsedSource["tags"]);
         }
         return new Connection(/** @type {Partial<Connection>} */($$parsedSource));
     }

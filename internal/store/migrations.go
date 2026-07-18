@@ -478,6 +478,17 @@ var migrations = []struct {
 		 ALTER TABLE credential_folders ADD COLUMN icon_name TEXT;
 		 ALTER TABLE credential_folders ADD COLUMN icon_color TEXT;`,
 	},
+	{
+		24,
+		// Local-shell connections. `protocol` selects the dial path:
+		// "ssh" (default - unchanged behaviour for every existing row) or
+		// "local" (spawn a local PTY running the connection's
+		// InitialCommand - telnet client, serial console, "claude", ...).
+		// `local_shell_kind` picks the shell for a local connection
+		// (NULL = auto). Both no-ops for SSH connections.
+		`ALTER TABLE connections ADD COLUMN protocol TEXT NOT NULL DEFAULT 'ssh';
+		 ALTER TABLE connections ADD COLUMN local_shell_kind TEXT;`,
+	},
 }
 
 // LatestSchemaVersion is the version a freshly-migrated DB lands on.

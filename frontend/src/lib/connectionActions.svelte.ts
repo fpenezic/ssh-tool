@@ -192,6 +192,10 @@ class ConnectionActionsStore {
   async connectOne(id: string, opts?: { overrideCredentialId?: string }): Promise<boolean> {
     const c = tree.connectionById(id);
     if (!c) return false;
+    // Local-shell connection: spawn a local PTY running its initial
+    // command (telnet / serial / "claude" / a REPL). No SSH dial, no
+    // credential override, no WG take-over - none of that applies.
+    if (c.protocol === "local") return this.connectLocal(c);
     const override = opts?.overrideCredentialId ?? "";
     const attempt = async () => override
       ? api.sshConnectWithOverride(c.id, override)
@@ -231,6 +235,30 @@ class ConnectionActionsStore {
     }
   }
 
+  // connectLocal opens a saved local-shell connection. The session is
+  // tagged kind:"local" so the pane correctly disables SFTP / VNC /
+  // reconnect (they don't apply to a local PTY).
+  async connectLocal(c: Connection): Promise<boolean> {
+    try {
+      const r = await api.localConnect(c.id);
+      sessions.add({
+        sessionId: r.session_id,
+        connectionId: c.id,
+        name: c.name,
+        hostname: r.display || r.kind,
+        status: "connected",
+        kind: "local",
+      });
+      paneTabs.addTab(r.session_id, c.name);
+      view.setTab("terminal");
+      this.clearConnectError(c.id);
+      return true;
+    } catch (e) {
+      this.recordFailure(c.id, e);
+      return false;
+    }
+  }
+
   // Connect to many connections. Pushes a tab per success; failures
   // land in lastConnectError keyed by connectionID.
   async connectMany(ids: string[]) {
@@ -240,6 +268,13 @@ class ConnectionActionsStore {
     if (conns.length === 0) return;
     const results = await Promise.allSettled(
       conns.map(async (c) => {
+        // Local-shell connections don't dial SSH; route them through the
+        // local path (which adds its own session + tab).
+        if (c.protocol === "local") {
+          const ok = await this.connectLocal(c);
+          if (!ok) throw new Error("local connect failed");
+          return;
+        }
         // Same take-over offer as connectOne (the singleton dialog
         // serialises if several share a busy profile).
         const res = await withTakeover(() => api.sshConnect(c.id));
@@ -473,6 +508,24 @@ class ConnectionActionsStore {
       await tree.load();
       if (conn?.id) selection.select({ kind: "connection", id: conn.id });
     } catch (e) { console.error("create connection:", e); }
+  }
+
+  // Create a local-shell connection under a folder (telnet / serial /
+  // "claude" / any command). Name-only prompt; shell + command are set in
+  // the editor.
+  async addLocalConnectionUnder(folderId: string | null) {
+    const name = await showPrompt("Local shell connection name?");
+    if (!name?.trim()) return;
+    try {
+      const conn: any = await api.connectionsCreate({
+        folderId: folderId ?? undefined,
+        name: name.trim(),
+        hostname: "",
+        protocol: "local",
+      });
+      await tree.load();
+      if (conn?.id) selection.select({ kind: "connection", id: conn.id });
+    } catch (e) { console.error("create local connection:", e); }
   }
 
   async renameFolder(folderId: string) {

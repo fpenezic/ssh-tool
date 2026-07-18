@@ -227,6 +227,11 @@
       "body": "Bring 600+ Devolutions RDM entries in one pass, your ~/.ssh/config with ProxyJump chains intact, PuTTY / KiTTY registry exports, SuperPuTTY Sessions.xml, or MobaXterm session files - and import PuTTY .ppk private keys directly (converted to OpenSSH on the way in). All imports are additive and safe to re-run."
     },
     {
+      "icon": "split",
+      "title": "Local-shell connections",
+      "body": "Save a local terminal as a tree entry, not just an SSH host: pick a shell (or auto) and a command it runs on open. A telnet client to a console server, a serial console (screen /dev/ttyUSB0), a REPL, docker exec, or Claude Code on a double-click. Name it, tag it, give it an icon, favourite it - it opens like any connection, and exiting the shell closes the tab. Nothing SSH gets in the way: no host, port, credential or forwards on a local entry."
+    },
+    {
       "icon": "phone",
       "title": "Android app",
       "body": "The same Go core, vault and SSH stack on an Android phone (arm64, DeX-ready). Biometric vault unlock backed by the device Keystore, a single-pane touch layout with system-back navigation, an on-screen key bar (Esc/Tab/Ctrl/arrows/^C^D...), pinch-to-zoom font size, and a foreground service that keeps SSH sessions alive when backgrounded. opkssh login opens the system browser; ssh-tool:// deep links open the app. Sideload the APK - no store account needed."

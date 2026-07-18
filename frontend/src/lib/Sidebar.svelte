@@ -6,7 +6,7 @@
   import { setMultiDragImage } from "./dragImage";
   import QuickAccess from "./QuickAccess.svelte";
   import { IconFolderPlus, IconPlus, IconRotateCw, IconHost, IconLoading, IconX, IconGlobe, IconExpandAll, IconCollapseAll,
-    IconRefresh, IconPlay, IconExternalLink, IconStar, IconMoveToFolder, IconDownload, IconTrash } from "./iconMap";
+    IconRefresh, IconPlay, IconExternalLink, IconStar, IconMoveToFolder, IconDownload, IconTrash, IconTerminal } from "./iconMap";
   import { expandedConnections } from "./treeState.svelte";
   import TagFilter from "./TagFilter.svelte";
   import { tagFilter } from "./tagFilter.svelte.ts";
@@ -29,6 +29,7 @@
     e.preventDefault();
     contextMenu.show(e, [
       { label: "New connection",     iconComponent: IconHost, onSelect: addConnection },
+      { label: "New local shell…",   iconComponent: IconTerminal, onSelect: addLocalConnection },
       { label: "New folder",         iconComponent: IconFolderPlus, onSelect: addRootFolder },
       { label: "New dynamic folder…", iconComponent: IconRefresh, onSelect: () => dynEditor.showNew(null) },
     ]);
@@ -157,16 +158,30 @@
     );
   });
 
+  // Where a "new folder / connection" from the header toolbar lands:
+  // - a selected folder -> inside it
+  // - a selected connection -> alongside it (same parent folder), so the
+  //   user doesn't have to DnD out of root after creating
+  // - nothing selected -> root
+  // Returns undefined for root (the create IPCs treat undefined as root).
+  function targetFolderId(): string | undefined {
+    const cur = selection.current;
+    if (cur.kind === "folder") return cur.id;
+    if (cur.kind === "connection") {
+      return tree.connectionById(cur.id)?.folder_id ?? undefined;
+    }
+    return undefined;
+  }
+
   async function addRootFolder() {
     const name = await showPrompt("Folder name?");
     if (!name) return;
-    await api.foldersCreate({ name });
+    await api.foldersCreate({ name, parentId: targetFolderId() });
     await tree.load();
   }
 
   async function addConnection() {
-    const folderId =
-      selection.current.kind === "folder" ? selection.current.id : undefined;
+    const folderId = targetFolderId();
     const name = await showPrompt("Connection name?");
     if (!name) return;
     const hostname = await showPrompt("Hostname?") ?? "";
@@ -174,6 +189,23 @@
       folderId,
       name,
       hostname,
+    });
+    await tree.load();
+    selection.select({ kind: "connection", id: conn.id });
+  }
+
+  // Create a local-shell connection (telnet client, serial console,
+  // "claude", any command). Just a name prompt - shell kind + the command
+  // are set in the editor. Starts with shell = auto, no command.
+  async function addLocalConnection() {
+    const folderId = targetFolderId();
+    const name = await showPrompt("Local shell connection name?");
+    if (!name) return;
+    const conn = await api.connectionsCreate({
+      folderId,
+      name,
+      hostname: "",
+      protocol: "local",
     });
     await tree.load();
     selection.select({ kind: "connection", id: conn.id });
@@ -414,6 +446,9 @@
       </button>
       <button onclick={addConnection} title="New connection" class="iconbtn">
         <IconPlus size={14} /><IconHost size={14} />
+      </button>
+      <button onclick={addLocalConnection} title="New local shell connection (telnet / serial / claude / any command)" class="iconbtn">
+        <IconPlus size={14} /><IconTerminal size={14} />
       </button>
       <button onclick={() => dynEditor.showNew(null)} title="New dynamic folder (cloud / hypervisor)" class="iconbtn">
         <IconGlobe size={14} />

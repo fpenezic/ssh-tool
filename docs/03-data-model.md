@@ -2,7 +2,7 @@
 
 The DB lives at `DataDir/ssh-tool.db` (SQLite via `modernc.org/sqlite`,
 WAL mode, foreign keys on). Schema is versioned in `schema_meta.value`
-and migrated in order on every startup. Current head: **v23**. The audit log lives in a separate audit.db (machine-local, not in this schema).
+and migrated in order on every startup. Current head: **v24**. The audit log lives in a separate audit.db (machine-local, not in this schema).
 
 The canonical migration source is `internal/store/migrations.go`. This
 doc summarises the current shape and lists each migration's purpose.
@@ -220,6 +220,7 @@ Vault keys for various features:
 | 21 | repair: ADD COLUMN bitwarden_servers.network_profile_id (v19 was amended in place after shipping; runner tolerates duplicate-column on re-add) |
 | 22 | icon_name + icon_color on connections + folders (built-in lucide icon + palette colour; mutually exclusive with icon_image_id) |
 | 23 | repair + extend: icon_name/icon_color also on credential_refs + credential_folders (v22 was amended in place to add these after shipping a 2-table form; runner now applies ALTERs per-statement and tolerates duplicate-column) |
+| 24 | protocol + local_shell_kind on connections (local-shell connections: "ssh" default vs "local" - a saved local PTY running the connection's initial_command; telnet/serial/"claude"/REPL) |
 
 Migration runner: `runMigrations` in `internal/store/migrations.go`.
 Each migration applies inside a transaction; failure rolls back and

@@ -220,6 +220,7 @@ that wear it.
 
 - **New subfolder…**
 - **New connection here…**
+- **New local shell here…** - a local-shell connection (see below)
 - **Rename…**
 - **Move to folder…**
 - **Export folder…** - bundles the whole subtree (every nested
@@ -278,6 +279,44 @@ Two-column grid (auto-fit on narrow widths). Fields:
 The header carries: favourite toggle (★), Connect button, **Use
 different credential…** toggle, Resolved settings (collapsed; shows
 the merged settings JSON for debugging).
+
+### Local-shell connections
+
+A connection is normally an SSH host, but it can also be a saved
+**local shell**: a terminal that opens on *this* machine and runs a
+command, instead of dialling SSH. This turns any "a shell that runs
+one thing" target into a first-class tree entry you can name, tag,
+icon, favourite, and open with a double-click:
+
+- **telnet** to a console server or old switch - command `telnet 10.0.0.5`
+- **serial console** - `screen /dev/ttyUSB0`, `wsl -e picocom -b 115200 /dev/ttyUSB0`
+- **Claude Code** on a keystroke - command `claude` (or
+  `cd ~/project && claude -c`)
+- a REPL, `docker exec -it db psql`, `kubectl exec`, mosh, anything
+
+Create one from **New local shell…** in the tree toolbar (the `+`
+terminal button), the right-click menu, or **New local shell here…**
+under a folder. A local connection's editor is trimmed to what
+applies:
+
+- **Shell** - which shell to launch: *Auto* (a sensible per-OS
+  default - WSL then PowerShell on Windows, `$SHELL` then bash/zsh
+  elsewhere) or a specific one (bash / zsh / sh / PowerShell / cmd /
+  WSL).
+- **Command** - what the shell runs on open (the point of the
+  connection). Blank just gives you an interactive shell. It is
+  written to the shell and runs with a trailing newline, landing in
+  your scrollback like anything you'd type.
+
+Host, port, credential, jump host, VNC, port-forwards, keepalive and
+the SSH quick-actions are hidden - none apply to a local shell.
+Exiting the shell (`exit` / Ctrl-D, or the command finishing) closes
+the tab, same as an SSH session.
+
+Local connections sync like any other tree entry (they ride the
+whole-profile snapshot). A machine where a given shell or command
+doesn't exist simply fails to launch it - nothing special is done to
+scope them per-device.
 
 ### One-shot credential / username / password override
 

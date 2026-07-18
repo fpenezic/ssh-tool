@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -82,8 +83,11 @@ func TestMigration21IdempotentWhenColumnPresent(t *testing.T) {
 	if err := db.QueryRow(`SELECT value FROM schema_meta WHERE key='version'`).Scan(&v); err != nil {
 		t.Fatal(err)
 	}
-	if v != "23" {
-		t.Fatalf("schema version = %q, want 23", v)
+	// Assert we landed on the head, not a hard-coded number, so adding a
+	// later migration doesn't spuriously fail this idempotency test.
+	want := fmt.Sprintf("%d", LatestSchemaVersion())
+	if v != want {
+		t.Fatalf("schema version = %q, want %q", v, want)
 	}
 }
 

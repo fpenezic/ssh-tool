@@ -12,9 +12,36 @@ const TAG_BG_KEY = "ui_tag_bg";
 const ACTIVE_ROW_KEY = "ui_active_row_emphasis";
 const TAB_TIMER_KEY = "ui_tab_timer";
 const THEME_KEY = "ui_theme";
+// localStorage mirror of the theme, read synchronously at boot before the
+// WebView paints. The authoritative value lives in the settings DB, but
+// settingsGet is an async IPC round-trip - reconciling it only after the
+// first paint flashes the default (dark) theme for a frame before flipping
+// to latte. localStorage is synchronous and lets main.ts apply the class
+// before mount. See applyCachedThemeEarly.
+const THEME_CACHE_KEY = "ui_theme_cache";
 
 export type Density = "compact" | "comfortable" | "cozy";
 export type UITheme = "mocha" | "latte" | "hc";
+
+// Toggle the theme classes on <html>. Shared by the early boot path and
+// the reactive apply() so both stay in sync. "mocha" = no class (the
+// default :root values apply).
+function applyThemeClasses(theme: UITheme) {
+  const root = document.documentElement;
+  root.classList.toggle("theme-light", theme === "latte");
+  root.classList.toggle("theme-hc", theme === "hc");
+}
+
+// applyCachedThemeEarly runs from main.ts before Svelte mounts. It reads the
+// last-known theme from localStorage and applies the class so the first
+// paint already matches, killing the dark->latte flash. The async load()
+// later reconciles against the settings DB (normally a no-op).
+export function applyCachedThemeEarly() {
+  try {
+    const v = localStorage.getItem(THEME_CACHE_KEY);
+    if (v === "mocha" || v === "latte" || v === "hc") applyThemeClasses(v);
+  } catch { /* localStorage unavailable (rare) - fall through to async load */ }
+}
 
 const MIN_FONT = 11;
 const MAX_FONT = 18;
@@ -71,6 +98,9 @@ class AppPrefs {
       const v = await api.settingsGet(THEME_KEY);
       if (v === "mocha" || v === "latte" || v === "hc") this.uiTheme = v;
     } catch { /* missing key fine */ }
+    // Refresh the synchronous boot cache so the next launch paints this
+    // theme from the first frame (no dark->latte flash).
+    try { localStorage.setItem(THEME_CACHE_KEY, this.uiTheme); } catch { /* ignore */ }
     this.loaded = true;
     this.apply();
   }
@@ -79,6 +109,7 @@ class AppPrefs {
     if (this.uiTheme === t) return;
     this.uiTheme = t;
     api.settingsSet(THEME_KEY, t).catch(console.warn);
+    try { localStorage.setItem(THEME_CACHE_KEY, t); } catch { /* ignore */ }
     this.apply();
   }
 
@@ -139,11 +170,8 @@ class AppPrefs {
     root.style.setProperty("--row-pad-y", rowY);
     root.style.setProperty("--row-sub-gap", subGap);
     root.style.setProperty("--ui-font-size", `${this.baseFontSize}px`);
-    // Theme is selected by class on <html>; CSS in style.css
-    // reads it. Only one of theme-light / theme-hc is set at a
-    // time; "mocha" = no class (the default :root values apply).
-    root.classList.toggle("theme-light", this.uiTheme === "latte");
-    root.classList.toggle("theme-hc", this.uiTheme === "hc");
+    // Theme is selected by class on <html>; CSS in style.css reads it.
+    applyThemeClasses(this.uiTheme);
   }
 }
 

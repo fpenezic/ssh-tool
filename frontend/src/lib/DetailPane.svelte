@@ -11,6 +11,7 @@
   import BatchExecModal from "./BatchExecModal.svelte";
   import ColorPicker from "./ColorPicker.svelte";
   import IconPicker from "./IconPicker.svelte";
+  import Icon from "./Icon.svelte";
   import { IconFolder, IconHost, IconLock, IconUser, IconClipboardCopy, IconTerminal, IconMonitor, IconStar } from "./iconMap";
   import DeleteConfirm from "./DeleteConfirm.svelte";
   import { connectionActions } from "./connectionActions.svelte";
@@ -426,9 +427,47 @@
     vncTunnel: string;
     networkProfile: string;
     initialCommand: string;
+    localShellKind: string;
     tags: string[];
   } | null>(null);
   let newTagInput = $state("");
+
+  // A local-shell connection ("telnet", serial console, "claude", ...):
+  // no SSH host/port/auth/jump/VNC - just a shell kind + a command. The
+  // editor hides the SSH-only fields when this is true.
+  const isLocal = $derived(conn?.protocol === "local");
+
+  // Shell-kind options for a local connection, per platform (mirrors the
+  // nav launcher's list in App.svelte). "" = auto. resolveShell validates
+  // these on the backend.
+  const localShellKindOptions: { value: string; label: string }[] = (() => {
+    const nav =
+      typeof navigator !== "undefined"
+        ? (((navigator as any).userAgentData?.platform ?? navigator.platform ?? navigator.userAgent) as string).toLowerCase()
+        : "";
+    if (nav.includes("win")) {
+      return [
+        { value: "", label: "Auto (WSL if present, else PowerShell)" },
+        { value: "wsl", label: "WSL" },
+        { value: "powershell", label: "PowerShell" },
+        { value: "cmd", label: "Command Prompt" },
+      ];
+    }
+    if (nav.includes("mac")) {
+      return [
+        { value: "", label: "Auto ($SHELL, else zsh)" },
+        { value: "zsh", label: "zsh" },
+        { value: "bash", label: "bash" },
+        { value: "sh", label: "sh" },
+      ];
+    }
+    return [
+      { value: "", label: "Auto ($SHELL, else bash)" },
+      { value: "bash", label: "bash" },
+      { value: "zsh", label: "zsh" },
+      { value: "sh", label: "sh" },
+    ];
+  })();
 
   // Walk a JumpHostSpec linked list (outer = closest to target,
   // innermost via = furthest bastion) and return bastion-first
@@ -490,6 +529,7 @@
         vncTunnel: encodeBool(conn.overrides?.vnc_use_tunnel),
         networkProfile: encodeNetProfile(conn.overrides?.network_profile_id),
         initialCommand: conn.overrides?.initial_command ?? "",
+        localShellKind: conn.local_shell_kind ?? "",
         tags: [...(conn.tags ?? [])],
       };
       newTagInput = "";
@@ -524,6 +564,7 @@
       editing.vncTunnel !== encodeBool(o.vnc_use_tunnel) ||
       editing.networkProfile !== encodeNetProfile(o.network_profile_id) ||
       editing.initialCommand !== (o.initial_command ?? "") ||
+      editing.localShellKind !== (conn.local_shell_kind ?? "") ||
       JSON.stringify(editing.jumpHost ?? null) !== JSON.stringify(o.jump_host ?? null) ||
       !tagsEq
     );
@@ -578,6 +619,7 @@
     overrides.vnc_use_tunnel = decodeBool(editing.vncTunnel);
     overrides.network_profile_id = decodeNetProfile(editing.networkProfile);
     overrides.initial_command = editing.initialCommand.trim() || undefined;
+    const localKind = editing.localShellKind.trim();
     await api.connectionsUpdate({
       id: conn.id,
       name: editing.name,
@@ -585,6 +627,11 @@
       notes: editing.notes,
       overrides,
       tags: editing.tags,
+      // For a local connection, persist the chosen shell kind ("" = auto
+      // -> clear back to NULL). Harmless for SSH connections (they never
+      // read it), but only send it when local to avoid touching the column.
+      localShellKind: isLocal ? (localKind || null) : undefined,
+      clearLocalShellKind: isLocal && localKind === "",
     }).then(async () => {
       await tree.load();
       if (conn) {
@@ -1236,7 +1283,10 @@
           title={conn.favorite ? "Remove from favourites" : "Mark as favourite"}
           onclick={toggleFavorite}
         ><IconStar size={16} fill={conn.favorite ? "currentColor" : "none"} /></button>
-        <IconHost size={18} /> {conn.name}
+        <Icon imageId={conn.icon_image_id} iconName={conn.icon_name} iconColor={conn.icon_color} size={18}>
+          {#if isLocal}<IconTerminal size={18} />{:else}<IconHost size={18} />{/if}
+        </Icon>
+        {conn.name}
       </h1>
       <div class="head-actions">
         <button
@@ -1264,13 +1314,15 @@
             Cancel
           </button>
         {/if}
-        <button
-          class="ghost"
-          title="Use a different credential just for the next connect attempt"
-          onclick={() => (showOverride = !showOverride)}
-        >
-          {showOverride ? "✕" : "Use different credential…"}
-        </button>
+        {#if !isLocal}
+          <button
+            class="ghost"
+            title="Use a different credential just for the next connect attempt"
+            onclick={() => (showOverride = !showOverride)}
+          >
+            {showOverride ? "✕" : "Use different credential…"}
+          </button>
+        {/if}
         <button class="danger" onclick={deleteConn}>Delete</button>
       </div>
     </header>
@@ -1337,7 +1389,20 @@
     {@const inhJump = tree.inheritedFieldForConnection(conn.id, "jump_host")}
     <div class="form">
       <label title="A label for this connection in the tree - any text you like.">Name<input bind:value={editing.name} placeholder="My server" /></label>
-      <label title="The address to connect to: a DNS hostname or an IP. This is what SSH dials, not the display name above.">Hostname / IP address<input bind:value={editing.hostname} placeholder="host.example.com or 10.0.0.5" /></label>
+      {#if isLocal}
+        <label class="span-2" title="Which local shell to launch. Auto picks a sensible default for this OS. The Initial command below runs inside it.">
+          Shell
+          <select bind:value={editing.localShellKind}>
+            {#each localShellKindOptions as opt (opt.value)}
+              <option value={opt.value}>{opt.label}</option>
+            {/each}
+          </select>
+          <span class="field-note">A local-shell connection runs on this machine - no host, no SSH. The Initial command below is what it runs (e.g. <code>telnet 10.0.0.5</code>, <code>claude</code>).</span>
+        </label>
+      {:else}
+        <label title="The address to connect to: a DNS hostname or an IP. This is what SSH dials, not the display name above.">Hostname / IP address<input bind:value={editing.hostname} placeholder="host.example.com or 10.0.0.5" /></label>
+      {/if}
+      {#if !isLocal}
       <div class="row">
         <label class="grow">
           Username
@@ -1439,6 +1504,7 @@
           </span>
         {/if}
       </div>
+      {/if}
       <div class="span-2"><ColorPicker
         value={editing.colorTag}
         onChange={(v) => { if (editing) editing = { ...editing, colorTag: v }; }}
@@ -1454,6 +1520,8 @@
         onChange={() => tree.load()}
         onNamedChange={() => tree.load()}
       /></div>
+
+      {#if !isLocal}
       <label>Auto-reconnect
         <select bind:value={editing.autoReconnect}>
           <option value="">(inherit from folder)</option>
@@ -1495,17 +1563,24 @@
         />
         <span class="field-note">Stops idle drops. Blank = inherit folder, 0 = send nothing (a dead link is still detected, just slower).</span>
       </label>
+      {/if}
 
       <label class="span-2" title="A command run in the shell right after connect - e.g. cd /var/www, tmux new -A -s main, source venv/bin/activate. Blank inherits the folder's value.">
-        Initial command
+        {isLocal ? "Command" : "Initial command"}
         <input
           bind:value={editing.initialCommand}
-          placeholder="(inherit) e.g. cd /var/www"
+          placeholder={isLocal ? "e.g. telnet 10.0.0.5   ·   claude   ·   screen /dev/ttyUSB0" : "(inherit) e.g. cd /var/www"}
         />
-        <span class="field-note">Run in the shell on connect. Blank = inherit folder.</span>
+        <span class="field-note">
+          {#if isLocal}
+            The command this connection runs in the shell (the point of a local connection). Blank = just an interactive shell.
+          {:else}
+            Run in the shell on connect. Blank = inherit folder.
+          {/if}
+        </span>
       </label>
 
-      {#if !isMobile}
+      {#if !isMobile && !isLocal}
       <div class="span-2 vnc-section" class:on={editing.vncEnabled === "on"}>
         <div class="vnc-head">
           <button type="button"
@@ -1611,6 +1686,7 @@
       {/if}
     </div>
 
+    {#if !isLocal}
     <PortForwards connection={conn} />
 
     <div class="quick-actions">
@@ -1635,7 +1711,9 @@
       </div>
       {#if copiedHint}<div class="ok-hint">{copiedHint}</div>{/if}
     </div>
+    {/if}
 
+    {#if !isLocal}
     <details class="resolved" open>
       <summary><h2>Resolved &amp; inherited</h2></summary>
       {#if resolveErr}
@@ -1718,6 +1796,7 @@
         <div class="muted">resolving…</div>
       {/if}
     </details>
+    {/if}
   {/if}
 </section>
 

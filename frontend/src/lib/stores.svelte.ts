@@ -1880,7 +1880,13 @@ class SessionStore {
         paneTabs.closePane(tab.tabId, leafId);
       }
     }
-    api.sshDisconnect(sessionId).catch(() => {});
+    // Route the disconnect to the right backend. For a local shell the
+    // PTY is usually already reaped (this path is triggered by its own
+    // exit), so this is a best-effort no-op - but firing sshDisconnect at
+    // a local session id is just wrong.
+    const kind = this.tabs.find((t) => t.sessionId === sessionId)?.kind;
+    if (kind === "local") api.localShellDisconnect(sessionId).catch(() => {});
+    else api.sshDisconnect(sessionId).catch(() => {});
     this.remove(sessionId);
     if (paneTabs.tabs.length === 0) {
       // Match closeTab() behaviour: bounce to Connections if nothing

@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 
 	pty "github.com/aymanbagabas/go-pty"
@@ -35,6 +36,10 @@ type Session struct {
 	pty  pty.Pty
 	cmd  *pty.Cmd
 	done chan struct{}
+
+	// initialCommand is written to the PTY once, right after Start, when
+	// non-empty. See SpawnRequest.InitialCommand.
+	initialCommand string
 
 	mu         sync.Mutex
 	writeMu    sync.Mutex // serialises Write; see Write
@@ -67,6 +72,14 @@ type SpawnRequest struct {
 	// for the wsl kind too: wsl.exe inherits the Windows cwd and maps
 	// it to the /mnt/... equivalent itself.
 	Dir string
+
+	// InitialCommand is written to the shell's stdin (with a trailing
+	// newline) right after it starts, so it auto-runs and lands in the
+	// user's own scrollback - identical semantics to the SSH layer's
+	// InitialCommand. Empty runs nothing. This is what turns a saved
+	// "local" connection into a telnet client / serial console / REPL /
+	// "claude" launcher: the command IS the connection.
+	InitialCommand string
 }
 
 // Spawn creates a new Session and starts the child. The caller is
@@ -124,11 +137,12 @@ func Spawn(req SpawnRequest) (*Session, error) {
 	}
 
 	sess := &Session{
-		Kind:    kind,
-		Display: display,
-		pty:     p,
-		cmd:     cmd,
-		done:    make(chan struct{}),
+		Kind:           kind,
+		Display:        display,
+		pty:            p,
+		cmd:            cmd,
+		done:           make(chan struct{}),
+		initialCommand: strings.TrimSpace(req.InitialCommand),
 	}
 	return sess, nil
 }
@@ -138,6 +152,14 @@ func Spawn(req SpawnRequest) (*Session, error) {
 func (s *Session) Start() {
 	go s.pumpOutput()
 	go s.waitAndClose()
+	// Auto-run the connection's initial command (telnet ..., claude,
+	// screen /dev/ttyUSB0, ...). The shell buffers stdin, so writing right
+	// after Start is safe even before the first prompt renders; the newline
+	// runs it once the shell is ready. Fire-and-forget via Write so the
+	// writeMu serialisation with keystrokes is respected.
+	if s.initialCommand != "" {
+		_ = s.Write([]byte(s.initialCommand + "\n"))
+	}
 }
 
 func (s *Session) pumpOutput() {
