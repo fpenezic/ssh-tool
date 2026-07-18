@@ -1248,6 +1248,55 @@ export function HttpDo(req) {
 }
 
 /**
+ * IconSetConnectionNamed sets a built-in icon + palette colour on a
+ * connection. Empty name clears it. Clears any uploaded image.
+ * @param {string} connID
+ * @param {string} name
+ * @param {string} color
+ * @returns {$CancellablePromise<void>}
+ */
+export function IconSetConnectionNamed(connID, name, color) {
+    return $Call.ByID(3543892261, connID, name, color);
+}
+
+/**
+ * IconSetCredentialFolderNamed sets a built-in icon + palette colour on a
+ * credential folder (no uploaded-image option for these). Empty clears.
+ * @param {string} folderID
+ * @param {string} name
+ * @param {string} color
+ * @returns {$CancellablePromise<void>}
+ */
+export function IconSetCredentialFolderNamed(folderID, name, color) {
+    return $Call.ByID(1388291986, folderID, name, color);
+}
+
+/**
+ * IconSetCredentialNamed sets a built-in icon + palette colour on a
+ * credential. Empty name clears it. Clears any uploaded image.
+ * @param {string} credID
+ * @param {string} name
+ * @param {string} color
+ * @returns {$CancellablePromise<void>}
+ */
+export function IconSetCredentialNamed(credID, name, color) {
+    return $Call.ByID(756034834, credID, name, color);
+}
+
+/**
+ * IconSetFolderNamed sets a built-in (lucide) icon + palette colour on a
+ * folder. Empty name clears it (folder reverts to the default icon).
+ * Clears any uploaded image - a folder has one icon source at a time.
+ * @param {string} folderID
+ * @param {string} name
+ * @param {string} color
+ * @returns {$CancellablePromise<void>}
+ */
+export function IconSetFolderNamed(folderID, name, color) {
+    return $Call.ByID(2218370233, folderID, name, color);
+}
+
+/**
  * @param {string} id
  * @returns {$CancellablePromise<$models.ImagePayload | null>}
  */

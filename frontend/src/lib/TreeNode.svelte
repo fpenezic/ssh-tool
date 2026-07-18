@@ -8,7 +8,9 @@
   import { api, type Folder } from "./api";
   import TreeNodeSelf from "./TreeNode.svelte";
   import Icon from "./Icon.svelte";
-  import { IconFolder, IconHost, IconLoading, IconX, IconStar, IconGlobe, dynamicEntryIcon } from "./iconMap";
+  import { IconFolder, IconHost, IconLoading, IconX, IconStar, IconGlobe, dynamicEntryIcon,
+    IconFolderPlus, IconKey, IconPencil, IconTrash, IconSettings, IconRefresh, IconPlay,
+    IconExternalLink, IconMonitor, IconCopy, IconDownload, IconMoveToFolder } from "./iconMap";
   import { computeIntent, isInvalidDrop, applyDrop, applyMultiDrop, type DragKind, type DropIntent } from "./treeDnd";
   import { setMultiDragImage } from "./dragImage";
   import { contextMenu } from "./contextMenu.svelte.ts";
@@ -389,29 +391,29 @@
     const isDyn = tree.isDynamic(folder.id);
     contextMenu.show(e, [
       ...(isMobile && single ? [
-        { label: "Folder settings…", icon: "⚙", onSelect: () => selection.selectFolderById(folder.id) },
+        { label: "Folder settings…", iconComponent: IconSettings, onSelect: () => selection.selectFolderById(folder.id) },
       ] : []),
       ...(single && !isDyn ? [
-        { label: "New subfolder…",       icon: "📁", onSelect: () => connectionActions.addSubfolderUnder(folder.id) },
-        { label: "New connection here…", icon: "🖥", onSelect: () => connectionActions.addConnectionUnder(folder.id) },
-        { label: "New dynamic subfolder…", icon: "⟳", onSelect: () => dynEditor.showNew(folder.id) },
-        { label: "Rename…",              icon: "✎", onSelect: () => connectionActions.renameFolder(folder.id) },
+        { label: "New subfolder…",       iconComponent: IconFolderPlus, onSelect: () => connectionActions.addSubfolderUnder(folder.id) },
+        { label: "New connection here…", iconComponent: IconHost, onSelect: () => connectionActions.addConnectionUnder(folder.id) },
+        { label: "New dynamic subfolder…", iconComponent: IconRefresh, onSelect: () => dynEditor.showNew(folder.id) },
+        { label: "Rename…",              iconComponent: IconPencil, onSelect: () => connectionActions.renameFolder(folder.id) },
       ] : []),
       ...(single && isDyn ? [
-        { label: "Refresh now",            icon: "⟳", onSelect: () => api.dynamicFolderRefreshNow(folder.id).catch(console.warn) },
-        { label: "Edit dynamic config…",   icon: "⚙", onSelect: () => dynEditor.showEdit(folder.id) },
-        { label: "Rename…",                icon: "✎", onSelect: () => connectionActions.renameFolder(folder.id) },
+        { label: "Refresh now",            iconComponent: IconRefresh, onSelect: () => api.dynamicFolderRefreshNow(folder.id).catch(console.warn) },
+        { label: "Edit dynamic config…",   iconComponent: IconSettings, onSelect: () => dynEditor.showEdit(folder.id) },
+        { label: "Rename…",                iconComponent: IconPencil, onSelect: () => connectionActions.renameFolder(folder.id) },
       ] : []),
       {
         label: single ? "Move to folder…" : `Move ${ids.length} folders to…`,
-        icon: "↪",
+        iconComponent: IconMoveToFolder,
         onSelect: () => connectionActions.openMoveTo([], ids),
       },
       {
         label: single
           ? `Export folder…`
           : `Export ${ids.length} folders…`,
-        icon: "⤓",
+        iconComponent: IconDownload,
         onSelect: () => {
           const baseName = single
             ? (tree.folderById(folder.id)?.name ?? "folder")
@@ -424,7 +426,7 @@
       },
       {
         label: single ? "Delete folder" : `Delete ${ids.length} folders`,
-        icon: "🗑",
+        iconComponent: IconTrash,
         danger: true,
         onSelect: () => connectionActions.openDeleteFolders(ids),
       },
@@ -438,34 +440,34 @@
     contextMenu.show(e, [
       {
         label: ids.length > 1 ? `Connect all (${ids.length})` : "Connect",
-        icon: "▶",
+        iconComponent: IconPlay,
         onSelect: () => connectionActions.connectMany(ids),
       },
       ...(ids.length === 1 ? [{
         label: "Open in external terminal",
-        icon: "↗",
+        iconComponent: IconExternalLink,
         onSelect: () => connectionActions.launchExternal(ids[0]),
       }] : []),
       ...(ids.length === 1 && tree.connectionById(ids[0])?.overrides?.vnc_enabled ? [{
         label: "Open VNC console",
-        icon: "🖳",
+        iconComponent: IconMonitor,
         onSelect: () => connectionActions.openVncConnection(ids[0]),
       }] : []),
       {
         label: allFav
           ? (ids.length > 1 ? "Remove from favourites" : "Remove favourite")
           : (ids.length > 1 ? "Mark as favourites" : "Mark as favourite"),
-        icon: allFav ? "☆" : "★",
+        iconComponent: IconStar,
         onSelect: () => connectionActions.toggleFavorites(ids),
       },
       ...(ids.length === 1 ? [{
         label: "Clone connection",
-        icon: "⎘",
+        iconComponent: IconCopy,
         onSelect: () => connectionActions.cloneConnection(ids[0]),
       }] : []),
       {
         label: ids.length > 1 ? `Export ${ids.length}…` : "Export…",
-        icon: "⤓",
+        iconComponent: IconDownload,
         onSelect: () => {
           const name = ids.length === 1
             ? (tree.connectionById(ids[0])?.name ?? "connection")
@@ -475,12 +477,12 @@
       },
       {
         label: ids.length > 1 ? `Move ${ids.length} connections to…` : "Move to folder…",
-        icon: "↪",
+        iconComponent: IconMoveToFolder,
         onSelect: () => connectionActions.openMoveTo(ids, []),
       },
       {
         label: ids.length > 1 ? `Delete ${ids.length} connections` : "Delete connection",
-        icon: "🗑",
+        iconComponent: IconTrash,
         danger: true,
         onSelect: () => connectionActions.openDeleteConnections(ids),
       },
@@ -693,7 +695,7 @@
         &nbsp;
       {/if}
     </span>
-    <span class="icon" class:dyn-icon={isDynamicFolder}><Icon imageId={folder.icon_image_id}>
+    <span class="icon" class:dyn-icon={isDynamicFolder}><Icon imageId={folder.icon_image_id} iconName={folder.icon_name} iconColor={folder.icon_color} size={14}>
       {#if isDynamicFolder}
         <IconGlobe size={14} />
       {:else}
@@ -885,12 +887,12 @@
           }}
           ondrop={(e) => handleConnDrop(e, conn.id)}
         >
-          <span class="chev">{isLive ? "●" : " "}</span>
+          <span class="chev dot">{isLive ? "●" : " "}</span>
           <span class="icon">
             {#if isConn}
               <IconLoading size={14} class="spin" />
             {:else}
-              <Icon imageId={conn.icon_image_id}>
+              <Icon imageId={conn.icon_image_id} iconName={conn.icon_name} iconColor={conn.icon_color} size={14}>
                 <IconHost size={14} />
               </Icon>
             {/if}
@@ -974,7 +976,10 @@
   .row.conn.tagged.active-session.selected:not(.anchor) {
     box-shadow: inset 3px 0 0 var(--tag-color), inset 5px 0 0 var(--blue), inset -3px 0 0 var(--teal);
   }
-  .chev { width: 1rem; color: var(--overlay0); font-size: 0.85rem; text-align: center; }
+  .chev { width: 1rem; color: var(--overlay0); font-size: 1.05rem; line-height: 1; text-align: center; }
+  /* The connection-row live indicator reuses .chev for alignment but is a
+     status dot, not an expand caret - keep it small. */
+  .chev.dot { font-size: 0.7rem; }
   /* Touch: bigger rows + a wider chevron hit area so folders are easy to
      expand with a fingertip. The whole folder row also toggles on tap
      (see onFolderRowClick), this just makes the chevron itself forgiving. */

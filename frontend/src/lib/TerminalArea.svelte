@@ -9,7 +9,8 @@
   import { broadcast } from "./broadcast.svelte";
   import { recording } from "./recording.svelte";
   import { connectionActions } from "./connectionActions.svelte";
-  import { IconBroadcast, IconFolder, IconBot } from "./iconMap";
+  import { IconBroadcast, IconFolder, IconBot, IconHost } from "./iconMap";
+  import Icon from "./Icon.svelte";
   import BroadcastManager from "./BroadcastManager.svelte";
   import { setTabDetachDragImage } from "./dragImage";
   import { onMount, onDestroy } from "svelte";
@@ -316,6 +317,22 @@
     }
     walk(t.root);
     return id;
+  }
+
+  // The tab's connection icon (custom image / built-in named icon), so
+  // the tab bar shows the same glyph as the tree row. Returns null for
+  // local shells and dynamic-inventory tabs (no stored connection) - the
+  // caller falls back to the default terminal glyph.
+  function tabIconFor(tabId: string): { imageId: string | null; name: string | null; color: string | null } | null {
+    const cid = tabConnectionId(tabId);
+    if (!cid || cid.startsWith("dyn:")) return null;
+    const c = tree.connectionById(cid);
+    if (!c) return null;
+    return {
+      imageId: c.icon_image_id ?? null,
+      name: c.icon_name ?? null,
+      color: c.icon_color ?? null,
+    };
   }
 
   // Returns the tab's connection id IF that connection has VNC enabled
@@ -769,6 +786,15 @@
               {#if groups.length > 1}<span class="bcast-groups">{groups.join(",")}</span>{/if}
             </span>
           {/if}
+          {#each [tabIconFor(t.tabId)] as tabIcon (t.tabId)}
+            {#if tabIcon && (tabIcon.imageId || tabIcon.name)}
+              <span class="tab-icon">
+                <Icon imageId={tabIcon.imageId} iconName={tabIcon.name} iconColor={tabIcon.color} size={13}>
+                  <IconHost size={13} />
+                </Icon>
+              </span>
+            {/if}
+          {/each}
           <span class="tab-label-segs">
             {#if segs.length === 0}
               {tabTitle(t.tabId)}
@@ -1061,6 +1087,12 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+  .tab-icon {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-right: 0.25rem;
   }
   .tab-label-segs {
     display: inline-flex;

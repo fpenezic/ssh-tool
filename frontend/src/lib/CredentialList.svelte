@@ -189,7 +189,7 @@
           ondragend={() => drag.end()}
         >
           <span class="chev"> </span>
-          <span class="icon"><Icon imageId={c.icon_image_id}>
+          <span class="icon"><Icon imageId={c.icon_image_id} iconName={c.icon_name} iconColor={c.icon_color} size={14}>
             <KindIcon size={14} />
           </Icon></span>
           <div class="meta">

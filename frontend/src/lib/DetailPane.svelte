@@ -11,7 +11,7 @@
   import BatchExecModal from "./BatchExecModal.svelte";
   import ColorPicker from "./ColorPicker.svelte";
   import IconPicker from "./IconPicker.svelte";
-  import { IconFolder, IconHost, IconLock, IconUser, IconClipboardCopy, IconTerminal } from "./iconMap";
+  import { IconFolder, IconHost, IconLock, IconUser, IconClipboardCopy, IconTerminal, IconMonitor, IconStar } from "./iconMap";
   import DeleteConfirm from "./DeleteConfirm.svelte";
   import { connectionActions } from "./connectionActions.svelte";
   import { explain as explainConnectError, unwrapRaw as unwrapConnectErr, errMsg } from "./connectErrors";
@@ -1161,8 +1161,11 @@
           kind="folder"
           targetId={folder.id}
           currentIconId={folder.icon_image_id}
+          currentIconName={folder.icon_name}
+          currentIconColor={folder.icon_color}
           fallbackEmoji="📁"
           onChange={() => tree.load()}
+          onNamedChange={() => tree.load()}
         /></div>
       {/if}
 
@@ -1232,7 +1235,7 @@
           class:active={conn.favorite}
           title={conn.favorite ? "Remove from favourites" : "Mark as favourite"}
           onclick={toggleFavorite}
-        >{conn.favorite ? "★" : "☆"}</button>
+        ><IconStar size={16} fill={conn.favorite ? "currentColor" : "none"} /></button>
         <IconHost size={18} /> {conn.name}
       </h1>
       <div class="head-actions">
@@ -1249,6 +1252,11 @@
         <button class="primary" disabled={connecting} onclick={connect}>
           {connecting ? (connectStage ?? "Connecting…") : (overrideCredId ? "Connect (override)" : "Connect")}
         </button>
+        {#if conn.overrides?.vnc_enabled}
+          <button class="vnc-btn" title="Open the VNC console for this host" onclick={openVncConsole}>
+            <IconMonitor size={13} /> VNC
+          </button>
+        {/if}
         {#if connecting}
           <!-- Abort a connect stuck on opkssh OIDC login (closed browser /
                wrong config) without restarting the app. -->
@@ -1440,8 +1448,11 @@
         kind="connection"
         targetId={conn.id}
         currentIconId={conn.icon_image_id}
+        currentIconName={conn.icon_name}
+        currentIconColor={conn.icon_color}
         fallbackEmoji="🖥"
         onChange={() => tree.load()}
+        onNamedChange={() => tree.load()}
       /></div>
       <label>Auto-reconnect
         <select bind:value={editing.autoReconnect}>
@@ -1812,12 +1823,13 @@
   }
   .head-actions { display: flex; gap: 0.5rem; }
   .fav-toggle {
+    display: inline-flex;
+    align-items: center;
     background: transparent;
     border: 0;
     color: var(--surface2);
     cursor: pointer;
     font: inherit;
-    font-size: 1.2rem;
     padding: 0 0.3rem;
     margin-right: 0.1rem;
   }
@@ -2321,6 +2333,20 @@
     cursor: pointer;
   }
   .vnc-open:hover { background: var(--surface3, var(--surface2)); }
+  /* VNC quick-launch in the connection header, next to Connect. */
+  .vnc-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.82rem;
+    padding: 0.35rem 0.7rem;
+    background: var(--surface1);
+    color: var(--text);
+    border: 1px solid var(--surface2);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .vnc-btn:hover { background: var(--surface2); border-color: var(--overlay0); }
   .vnc-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;

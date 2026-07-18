@@ -14,7 +14,7 @@
   import { expiryInfo } from "./credExpiry";
   import CredFolderNodeSelf from "./CredFolderNode.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
-  import { IconFolder, credentialKindIcon } from "./iconMap";
+  import { IconFolder, credentialKindIcon, IconFolderPlus, IconKey, IconPencil, IconTrash } from "./iconMap";
   import Icon from "./Icon.svelte";
   import { contextMenu } from "./contextMenu.svelte.ts";
 
@@ -122,10 +122,10 @@
 
   function openContext(e: MouseEvent) {
     contextMenu.show(e, [
-      { label: "New subfolder…",     icon: "📁", onSelect: () => addSubfolder() },
-      { label: "New credential here…", icon: "🔑", onSelect: () => addCredentialHere() },
-      { label: "Rename…",            icon: "✎", onSelect: () => renameFolder() },
-      { label: "Delete folder",      icon: "🗑", danger: true, onSelect: () => deleteFolder() },
+      { label: "New subfolder…",     iconComponent: IconFolderPlus, onSelect: () => addSubfolder() },
+      { label: "New credential here…", iconComponent: IconKey, onSelect: () => addCredentialHere() },
+      { label: "Rename…",            iconComponent: IconPencil, onSelect: () => renameFolder() },
+      { label: "Delete folder",      iconComponent: IconTrash, danger: true, onSelect: () => deleteFolder() },
     ]);
   }
 
@@ -197,7 +197,9 @@
     onclick={(e) => { e.stopPropagation(); toggle(); }}
     title={open ? "Collapse" : "Expand"}
   >{hasChildren ? (open ? "▾" : "▸") : " "}</button>
-  <span class="icon"><IconFolder size={14} /></span>
+  <span class="icon"><Icon imageId={null} iconName={folder.icon_name} iconColor={folder.icon_color} size={14}>
+    <IconFolder size={14} />
+  </Icon></span>
   <span class="name">{folder.name}</span>
   {#if hasChildren}<span class="count">{subFolders.length + folderCreds.length}</span>{/if}
 </div>
@@ -230,7 +232,7 @@
       ondragend={() => drag.end()}
     >
       <span class="chev"> </span>
-      <span class="icon"><Icon imageId={c.icon_image_id}>
+      <span class="icon"><Icon imageId={c.icon_image_id} iconName={c.icon_name} iconColor={c.icon_color} size={14}>
         <KindIcon size={14} />
       </Icon></span>
       <div class="meta">
@@ -264,9 +266,9 @@
   .row.selected { background: var(--surface1); }
   .row:focus { outline: 1px solid var(--blue); outline-offset: -1px; }
   .chev {
-    width: 1rem; color: var(--overlay0); font-size: 0.85rem; text-align: center;
+    width: 1rem; color: var(--overlay0); text-align: center;
     background: transparent; border: 0; padding: 0; cursor: pointer;
-    font: inherit; line-height: 1;
+    font: inherit; font-size: 1.05rem; line-height: 1;
   }
   .chev:hover { color: var(--text); }
   .icon { width: 1.2rem; text-align: center; font-size: 0.85rem; }

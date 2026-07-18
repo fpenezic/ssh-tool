@@ -260,6 +260,22 @@ export class Connection {
              */
             this["icon_image_id"] = null;
         }
+        if (!("icon_name" in $$source)) {
+            /**
+             * IconName / IconColor: built-in lucide icon + palette colour, same
+             * semantics as on Folder. Mutually exclusive with IconImageID.
+             * @member
+             * @type {string | null}
+             */
+            this["icon_name"] = null;
+        }
+        if (!("icon_color" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["icon_color"] = null;
+        }
         if (!("last_used_at" in $$source)) {
             /**
              * @member
@@ -360,6 +376,22 @@ export class CredentialFolder {
              * @type {number}
              */
             this["sort_order"] = 0;
+        }
+        if (!("icon_name" in $$source)) {
+            /**
+             * Built-in (lucide) icon + palette colour. Credential folders never
+             * had an uploaded-image icon, so these are the only icon fields.
+             * @member
+             * @type {string | null}
+             */
+            this["icon_name"] = null;
+        }
+        if (!("icon_color" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["icon_color"] = null;
         }
         if (!("created_at" in $$source)) {
             /**
@@ -603,6 +635,22 @@ export class CredentialRef {
              * @type {string | null}
              */
             this["icon_image_id"] = null;
+        }
+        if (!("icon_name" in $$source)) {
+            /**
+             * IconName / IconColor: built-in lucide icon + palette colour, same
+             * semantics as on Connection. Mutually exclusive with IconImageID.
+             * @member
+             * @type {string | null}
+             */
+            this["icon_name"] = null;
+        }
+        if (!("icon_color" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["icon_color"] = null;
         }
         if (!("created_at" in $$source)) {
             /**
@@ -933,6 +981,23 @@ export class Folder {
              * @type {string | null}
              */
             this["icon_image_id"] = null;
+        }
+        if (!("icon_name" in $$source)) {
+            /**
+             * IconName is a built-in (lucide) icon key; IconColor is a palette
+             * name (see frontend palette.ts) tinting it. Mutually exclusive with
+             * IconImageID - setting one clears the other. Both nil = default icon.
+             * @member
+             * @type {string | null}
+             */
+            this["icon_name"] = null;
+        }
+        if (!("icon_color" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["icon_color"] = null;
         }
         if (!("created_at" in $$source)) {
             /**

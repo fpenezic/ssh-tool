@@ -95,25 +95,58 @@ func (d *DB) ListImageIDs() ([]ImageSummary, error) {
 	return out, rows.Err()
 }
 
-// SetFolderIcon updates the icon_image_id on a folder. Pass empty string to clear.
+// SetFolderIcon updates the icon_image_id on a folder. Pass empty string to
+// clear. Setting an uploaded image clears any built-in icon (they are
+// mutually exclusive - one icon source at a time).
 func (d *DB) SetFolderIcon(folderID, imageID string) error {
 	var v interface{}
 	if imageID != "" {
 		v = imageID
 	}
-	_, err := d.conn.Exec("UPDATE folders SET icon_image_id = ?, updated_at = ? WHERE id = ?",
+	_, err := d.conn.Exec("UPDATE folders SET icon_image_id = ?, icon_name = NULL, icon_color = NULL, updated_at = ? WHERE id = ?",
 		v, time.Now().Unix(), folderID)
 	return err
 }
 
 // SetConnectionIcon updates the icon_image_id on a connection. Pass empty
-// string to clear.
+// string to clear. Setting an uploaded image clears any built-in icon.
 func (d *DB) SetConnectionIcon(connID, imageID string) error {
 	var v interface{}
 	if imageID != "" {
 		v = imageID
 	}
-	_, err := d.conn.Exec("UPDATE connections SET icon_image_id = ?, updated_at = ? WHERE id = ?",
+	_, err := d.conn.Exec("UPDATE connections SET icon_image_id = ?, icon_name = NULL, icon_color = NULL, updated_at = ? WHERE id = ?",
 		v, time.Now().Unix(), connID)
+	return err
+}
+
+// SetFolderNamedIcon sets a built-in (lucide) icon + palette colour on a
+// folder, clearing any uploaded image. Pass an empty name to clear the
+// built-in icon (falls back to the default). color may be empty.
+func (d *DB) SetFolderNamedIcon(folderID, name, color string) error {
+	var n, c interface{}
+	if name != "" {
+		n = name
+		if color != "" {
+			c = color
+		}
+	}
+	_, err := d.conn.Exec("UPDATE folders SET icon_name = ?, icon_color = ?, icon_image_id = NULL, updated_at = ? WHERE id = ?",
+		n, c, time.Now().Unix(), folderID)
+	return err
+}
+
+// SetConnectionNamedIcon sets a built-in icon + palette colour on a
+// connection, clearing any uploaded image. Empty name clears it.
+func (d *DB) SetConnectionNamedIcon(connID, name, color string) error {
+	var n, c interface{}
+	if name != "" {
+		n = name
+		if color != "" {
+			c = color
+		}
+	}
+	_, err := d.conn.Exec("UPDATE connections SET icon_name = ?, icon_color = ?, icon_image_id = NULL, updated_at = ? WHERE id = ?",
+		n, c, time.Now().Unix(), connID)
 	return err
 }

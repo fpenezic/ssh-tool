@@ -71,7 +71,7 @@ func (d *DB) GetCredential(id string) (*CredentialRef, error) {
 		`SELECT id, folder_id, name, kind, storage_mode, hint, tags_json, config_json,
 		        public_key, vault_key, default_username, last_rotated_at,
 		        expires_at, rotation_reminder_days, retain_history, icon_image_id,
-		        created_at, updated_at
+		        icon_name, icon_color, created_at, updated_at
 		 FROM credential_refs WHERE id = ?`, id,
 	)
 	return scanCredential(row)
@@ -82,7 +82,7 @@ func (d *DB) ListCredentials() ([]CredentialRef, error) {
 		`SELECT id, folder_id, name, kind, storage_mode, hint, tags_json, config_json,
 		        public_key, vault_key, default_username, last_rotated_at,
 		        expires_at, rotation_reminder_days, retain_history, icon_image_id,
-		        created_at, updated_at
+		        icon_name, icon_color, created_at, updated_at
 		 FROM credential_refs ORDER BY name`,
 	)
 	if err != nil {
@@ -211,9 +211,46 @@ func (d *DB) UpdateCredential(in UpdateCredential) (*CredentialRef, error) {
 }
 
 func (d *DB) SetCredentialIcon(id, imageID string) error {
+	// Setting an uploaded image clears any built-in icon - one icon
+	// source at a time.
 	_, err := d.conn.Exec(
-		"UPDATE credential_refs SET icon_image_id=?, updated_at=? WHERE id=?",
+		"UPDATE credential_refs SET icon_image_id=?, icon_name=NULL, icon_color=NULL, updated_at=? WHERE id=?",
 		imageID, now(), id,
+	)
+	return err
+}
+
+// SetCredentialNamedIcon sets a built-in icon + palette colour on a
+// credential, clearing any uploaded image. Empty name clears it.
+func (d *DB) SetCredentialNamedIcon(id, name, color string) error {
+	var n, c interface{}
+	if name != "" {
+		n = name
+		if color != "" {
+			c = color
+		}
+	}
+	_, err := d.conn.Exec(
+		"UPDATE credential_refs SET icon_name=?, icon_color=?, icon_image_id=NULL, updated_at=? WHERE id=?",
+		n, c, now(), id,
+	)
+	return err
+}
+
+// SetCredentialFolderNamedIcon sets a built-in icon + palette colour on a
+// credential folder. Credential folders have no uploaded-image option, so
+// this is their only icon. Empty name clears it.
+func (d *DB) SetCredentialFolderNamedIcon(id, name, color string) error {
+	var n, c interface{}
+	if name != "" {
+		n = name
+		if color != "" {
+			c = color
+		}
+	}
+	_, err := d.conn.Exec(
+		"UPDATE credential_folders SET icon_name=?, icon_color=?, updated_at=? WHERE id=?",
+		n, c, now(), id,
 	)
 	return err
 }
@@ -500,11 +537,13 @@ func scanCredential(s scanner) (*CredentialRef, error) {
 		remDays         sql.NullInt64
 		retain          int64
 		iconImageID     sql.NullString
+		iconName        sql.NullString
+		iconColor       sql.NullString
 	)
 	err := s.Scan(
 		&c.ID, &folderID, &c.Name, &kind, &mode, &c.Hint, &tagsRaw, &cfgRaw,
 		&pubkey, &vaultKey, &defUser, &lastRot, &expAt, &remDays, &retain, &iconImageID,
-		&c.CreatedAt, &c.UpdatedAt,
+		&iconName, &iconColor, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -547,6 +586,12 @@ func scanCredential(s scanner) (*CredentialRef, error) {
 	c.RetainHistory = retain != 0
 	if iconImageID.Valid {
 		c.IconImageID = &iconImageID.String
+	}
+	if iconName.Valid {
+		c.IconName = &iconName.String
+	}
+	if iconColor.Valid {
+		c.IconColor = &iconColor.String
 	}
 	return &c, nil
 }
