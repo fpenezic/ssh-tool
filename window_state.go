@@ -137,25 +137,15 @@ func (s *windowStateSaver) applyPending() {
 	s.mu.Unlock()
 
 	if ws.Width > 0 && ws.Height > 0 {
-		// Off-screen rescue: keep the saved size but let the window
-		// open centred on the primary display instead of restoring a
-		// position the user can't reach.
-		if !rectOnScreen(ws) {
-			winlog("applyPending: saved rect %+v is off-screen, recentring", ws)
-			if app := application.Get(); app != nil && app.Screen != nil {
-				if prim := primaryScreen(app.Screen.GetAll()); prim != nil {
-					wa := prim.WorkArea
-					if ws.Width > wa.Width {
-						ws.Width = wa.Width
-					}
-					if ws.Height > wa.Height {
-						ws.Height = wa.Height
-					}
-					ws.X = wa.X + (wa.Width-ws.Width)/2
-					ws.Y = wa.Y + (wa.Height-ws.Height)/2
-				}
-			}
-		}
+		// Restore the SAVED bounds verbatim - they encode which monitor
+		// the window was on. The off-screen rescue does NOT run here: at
+		// restore time (early startup) the display list is often
+		// incomplete on Windows - a secondary monitor may not be
+		// enumerated yet - so rectOnScreen would false-negative a window
+		// that was legitimately on that monitor and recenter it onto the
+		// primary. That was the "closed on monitor 2, reopens on monitor
+		// 1" bug. The rescue is deferred to scheduleOffScreenRescue, which
+		// re-checks once the screen list is reliable.
 		winlog("applyPending: SetBounds %+v", ws)
 		s.win.SetBounds(application.Rect{X: ws.X, Y: ws.Y, Width: ws.Width, Height: ws.Height})
 		after := s.win.Bounds()
@@ -174,6 +164,58 @@ func (s *windowStateSaver) applyPending() {
 	s.applied = true
 	s.mu.Unlock()
 	winlog("applyPending: done")
+	s.scheduleOffScreenRescue()
+}
+
+// scheduleOffScreenRescue re-checks, after the display list has had time
+// to fully enumerate, whether the restored window ended up genuinely
+// off every monitor - and only then recenters it onto the primary. This
+// is deliberately deferred: doing the check at restore time races
+// Windows' display enumeration and would wrongly "rescue" a window that
+// is simply on a monitor the OS hasn't reported yet. Runs once.
+func (s *windowStateSaver) scheduleOffScreenRescue() {
+	time.AfterFunc(1500*time.Millisecond, func() {
+		s.mu.Lock()
+		win := s.win
+		s.mu.Unlock()
+		if win == nil {
+			return
+		}
+		if win.IsMinimised() {
+			return // -32000,-32000 placeholder; not a real off-screen
+		}
+		b := win.Bounds()
+		cur := windowState{X: b.X, Y: b.Y, Width: b.Width, Height: b.Height}
+		if cur.Width <= 0 || cur.Height <= 0 {
+			return
+		}
+		if rectOnScreen(cur) {
+			return // on a monitor - nothing to rescue
+		}
+		app := application.Get()
+		if app == nil || app.Screen == nil {
+			return
+		}
+		prim := primaryScreen(app.Screen.GetAll())
+		if prim == nil {
+			return
+		}
+		winlog("rescue: window %+v is off every screen, recentring on primary", cur)
+		wa := prim.WorkArea
+		w, h := cur.Width, cur.Height
+		if w > wa.Width {
+			w = wa.Width
+		}
+		if h > wa.Height {
+			h = wa.Height
+		}
+		win.SetBounds(application.Rect{
+			X:      wa.X + (wa.Width-w)/2,
+			Y:      wa.Y + (wa.Height-h)/2,
+			Width:  w,
+			Height: h,
+		})
+	})
 }
 
 // primaryScreen picks the primary display, falling back to the first.
