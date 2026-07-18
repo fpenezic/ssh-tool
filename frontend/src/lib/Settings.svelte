@@ -2431,56 +2431,58 @@
       across those events.
     </p>
 
-    <label class="toggle">
-      <input
-        type="checkbox"
-        checked={terminalPrefs.closeOnCleanExit}
-        onchange={(e) => terminalPrefs.setCloseOnCleanExit((e.target as HTMLInputElement).checked)}
-      />
-      <span>
-        <strong>Auto-close tab on clean exit</strong>
-        <span class="hint inline">
-          - when the remote shell exits normally (Ctrl+D, <code>exit 0</code>),
-          close the tab automatically. Non-zero exits and network drops stay
-          open so you can see what happened.
-        </span>
-      </span>
-    </label>
+    <fieldset class="check-cards">
+      <label class:active={terminalPrefs.closeOnCleanExit}>
+        <input
+          type="checkbox"
+          checked={terminalPrefs.closeOnCleanExit}
+          onchange={(e) => terminalPrefs.setCloseOnCleanExit((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Auto-close tab on clean exit</div>
+          <div class="mode-desc">
+            When the remote shell exits normally (Ctrl+D, <code>exit 0</code>),
+            close the tab automatically. Non-zero exits and network drops stay
+            open so you can see what happened.
+          </div>
+        </div>
+      </label>
 
-    <label class="toggle">
-      <input
-        type="checkbox"
-        checked={terminalPrefs.disableWebgl}
-        onchange={(e) => terminalPrefs.setDisableWebgl((e.target as HTMLInputElement).checked)}
-      />
-      <span>
-        <strong>Disable WebGL renderer (use canvas fallback)</strong>
-        <span class="hint inline">
-          - on by default: the WebGL glyph atlas can spontaneously corrupt
-          into garbled text on some GPUs. Untick to opt back into WebGL
-          for faster rendering of heavy output. Reopen each terminal tab
-          for the change to take effect.
-        </span>
-      </span>
-    </label>
+      <label class:active={terminalPrefs.disableWebgl}>
+        <input
+          type="checkbox"
+          checked={terminalPrefs.disableWebgl}
+          onchange={(e) => terminalPrefs.setDisableWebgl((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Disable WebGL renderer (use canvas fallback)</div>
+          <div class="mode-desc">
+            On by default: the WebGL glyph atlas can spontaneously corrupt
+            into garbled text on some GPUs. Untick to opt back into WebGL
+            for faster rendering of heavy output. Reopen each terminal tab
+            for the change to take effect.
+          </div>
+        </div>
+      </label>
 
-    <label class="toggle">
-      <input
-        type="checkbox"
-        checked={terminalPrefs.serverStatsEnabled}
-        onchange={(e) => terminalPrefs.setServerStatsEnabled((e.target as HTMLInputElement).checked)}
-      />
-      <span>
-        <strong>Show server status for the focused session</strong>
-        <span class="hint inline">
-          - the status bar shows load, memory, disk and logged-in users for
-          the SSH host of whichever pane is focused, refreshed every 10s.
-          Off by default: it runs a small read-only probe (reads /proc, df,
-          who) on the remote, so only enable it for hosts where that's
-          wanted. Non-Linux hosts / network gear simply show nothing.
-        </span>
-      </span>
-    </label>
+      <label class:active={terminalPrefs.serverStatsEnabled}>
+        <input
+          type="checkbox"
+          checked={terminalPrefs.serverStatsEnabled}
+          onchange={(e) => terminalPrefs.setServerStatsEnabled((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Show server status for the focused session</div>
+          <div class="mode-desc">
+            The status bar shows load, memory, disk and logged-in users for
+            the SSH host of whichever pane is focused, refreshed every 10s.
+            Off by default: it runs a small read-only probe (reads /proc, df,
+            who) on the remote, so only enable it for hosts where that's
+            wanted. Non-Linux hosts / network gear simply show nothing.
+          </div>
+        </div>
+      </label>
+    </fieldset>
 
     <p class="hint">Color scheme</p>
     <div class="themes">
@@ -2542,20 +2544,22 @@
       </button>
     </div>
 
-    <label class="check" style="margin-top:0.9rem">
-      <input
-        type="checkbox"
-        checked={recordingConfirm}
-        onchange={toggleRecordingConfirm}
-      />
-      <span>
-        <strong>Ask before starting a recording</strong>
-        <span class="field-note">
-          - a confirmation step so a misclick doesn't quietly start writing the
-          session to disk. Turn it off if you record routinely.
-        </span>
-      </span>
-    </label>
+    <fieldset class="check-cards">
+      <label class:active={recordingConfirm}>
+        <input
+          type="checkbox"
+          checked={recordingConfirm}
+          onchange={toggleRecordingConfirm}
+        />
+        <div>
+          <div class="mode-name">Ask before starting a recording</div>
+          <div class="mode-desc">
+            A confirmation step so a misclick doesn't quietly start writing the
+            session to disk. Turn it off if you record routinely.
+          </div>
+        </div>
+      </label>
+    </fieldset>
   </div>
 
   {:else if activeSection === "network"}
@@ -2890,24 +2894,26 @@
     </p>
 
     <h2 style="margin-top:1.5rem">Profile</h2>
-    <label class="row" style="align-items:flex-start;gap:0.5rem">
-      <input
-        type="checkbox"
-        checked={browserPersistent}
-        onchange={(e) => toggleBrowserPersistent((e.target as HTMLInputElement).checked)}
-      />
-      <span>
-        <strong>Use a persistent browser profile</strong>
-        <span class="hint" style="display:block">
-          Keeps logins and cookies between launches, so a tunnelled site that
-          needs your saved credentials stays signed in. Still a dedicated
-          profile - separate from your everyday browser, so normal browsing
-          isn't routed through the tunnel. Off (default) opens a fresh isolated
-          profile each time. Works with both Chromium- and Firefox-family
-          browsers (on WSL, a persistent Firefox profile falls back to isolated).
-        </span>
-      </span>
-    </label>
+    <fieldset class="check-cards">
+      <label class:active={browserPersistent}>
+        <input
+          type="checkbox"
+          checked={browserPersistent}
+          onchange={(e) => toggleBrowserPersistent((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Use a persistent browser profile</div>
+          <div class="mode-desc">
+            Keeps logins and cookies between launches, so a tunnelled site that
+            needs your saved credentials stays signed in. Still a dedicated
+            profile - separate from your everyday browser, so normal browsing
+            isn't routed through the tunnel. Off (default) opens a fresh isolated
+            profile each time. Works with both Chromium- and Firefox-family
+            browsers (on WSL, a persistent Firefox profile falls back to isolated).
+          </div>
+        </div>
+      </label>
+    </fieldset>
   </div>
 
   {:else if activeSection === "snippets"}
@@ -3318,20 +3324,22 @@
     </p>
 
     <h3 style="margin-top:0.8rem">Automatic daily backup</h3>
-    <label class="toggle">
-      <input
-        type="checkbox"
-        checked={autoBackupPrefs.enabled}
-        onchange={(e) => saveAutoBackupPrefs({ ...autoBackupPrefs, enabled: (e.target as HTMLInputElement).checked })}
-      />
-      <span>
-        <strong>Run a backup in the background every 24 hours</strong>
-        <span class="hint inline">
-          - needs the vault auto-unlock sidecar; if the vault is locked
-          and no sidecar is set up, the run is silently skipped.
-        </span>
-      </span>
-    </label>
+    <fieldset class="check-cards">
+      <label class:active={autoBackupPrefs.enabled}>
+        <input
+          type="checkbox"
+          checked={autoBackupPrefs.enabled}
+          onchange={(e) => saveAutoBackupPrefs({ ...autoBackupPrefs, enabled: (e.target as HTMLInputElement).checked })}
+        />
+        <div>
+          <div class="mode-name">Run a backup in the background every 24 hours</div>
+          <div class="mode-desc">
+            Needs the vault auto-unlock sidecar; if the vault is locked
+            and no sidecar is set up, the run is silently skipped.
+          </div>
+        </div>
+      </label>
+    </fieldset>
     <label class="num">
       <span>Keep last N backups</span>
       <input
@@ -4198,73 +4206,79 @@
       change state always need your approval.
     </p>
 
-    <label class="toggle">
-      <input
-        type="checkbox"
-        checked={mcpEnabled}
-        onchange={(e) => toggleMcp((e.target as HTMLInputElement).checked)}
-      />
-      <span>
-        <strong>Allow LLM (MCP) access to shared sessions</strong>
-        <span class="hint inline">
-          - starts a local-only bridge (a unix socket on Linux/macOS, a
-          loopback pipe on Windows) an MCP client can connect to. Nothing is
-          exposed to the network, and no session is reachable until you
-          explicitly share it with the pane's Share-with-LLM button.
-        </span>
-      </span>
-    </label>
-
-    <label class="toggle">
-      <input
-        type="checkbox"
-        checked={notificationsEnabled}
-        onchange={(e) => toggleNotifications((e.target as HTMLInputElement).checked)}
-      />
-      <span>
-        <strong>Desktop notifications for prompts that need you</strong>
-        <span class="hint inline">
-          - when the app is in the background, pop an OS notification (plus a
-          taskbar flash) for a blocking prompt - an LLM approval request or a
-          host-key confirmation - so you don't leave it waiting unseen.
-        </span>
-      </span>
-    </label>
-
-    <label class="toggle">
-      <input
-        type="checkbox"
-        checked={mcpAuditEnabled}
-        onchange={(e) => toggleMcpAudit((e.target as HTMLInputElement).checked)}
-      />
-      <span>
-        <strong>Keep a persistent log of LLM activity (audit)</strong>
-        <span class="hint inline">
-          - record every command the LLM runs, types or connects to the local
-          audit log so it survives restarts. The live LLM-activity panel (robot
-          icon in the status bar / pane toolbar) works either way; this only
-          controls the durable copy.
-        </span>
-      </span>
-    </label>
-
-    {#if mcpAuditEnabled}
-      <label class="toggle" style="margin-left:1.6rem">
+    <fieldset class="check-cards">
+      <label class:active={mcpEnabled}>
         <input
           type="checkbox"
-          checked={mcpAuditOutput}
-          onchange={(e) => toggleMcpAuditOutput((e.target as HTMLInputElement).checked)}
+          checked={mcpEnabled}
+          onchange={(e) => toggleMcp((e.target as HTMLInputElement).checked)}
         />
-        <span>
-          <strong>Also store command output in the audit log</strong>
-          <span class="hint inline">
-            - off by default. Command output can contain secrets the LLM read
-            (a <code>.env</code> file, environment variables, kubernetes
-            secrets), and the audit log is a plaintext file on disk - not
-            encrypted like the vault. Enable only if you accept that.
-          </span>
-        </span>
+        <div>
+          <div class="mode-name">Allow LLM (MCP) access to shared sessions</div>
+          <div class="mode-desc">
+            Starts a local-only bridge (a unix socket on Linux/macOS, a
+            loopback pipe on Windows) an MCP client can connect to. Nothing is
+            exposed to the network, and no session is reachable until you
+            explicitly share it with the pane's Share-with-LLM button.
+          </div>
+        </div>
       </label>
+    </fieldset>
+
+    <fieldset class="check-cards">
+      <label class:active={notificationsEnabled}>
+        <input
+          type="checkbox"
+          checked={notificationsEnabled}
+          onchange={(e) => toggleNotifications((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Desktop notifications for prompts that need you</div>
+          <div class="mode-desc">
+            When the app is in the background, pop an OS notification (plus a
+            taskbar flash) for a blocking prompt - an LLM approval request or a
+            host-key confirmation - so you don't leave it waiting unseen.
+          </div>
+        </div>
+      </label>
+
+      <label class:active={mcpAuditEnabled}>
+        <input
+          type="checkbox"
+          checked={mcpAuditEnabled}
+          onchange={(e) => toggleMcpAudit((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Keep a persistent log of LLM activity (audit)</div>
+          <div class="mode-desc">
+            Record every command the LLM runs, types or connects to the local
+            audit log so it survives restarts. The live LLM-activity panel (robot
+            icon in the status bar / pane toolbar) works either way; this only
+            controls the durable copy.
+          </div>
+        </div>
+      </label>
+    </fieldset>
+
+    {#if mcpAuditEnabled}
+      <fieldset class="check-cards" style="margin-left:1.6rem">
+        <label class:active={mcpAuditOutput}>
+          <input
+            type="checkbox"
+            checked={mcpAuditOutput}
+            onchange={(e) => toggleMcpAuditOutput((e.target as HTMLInputElement).checked)}
+          />
+          <div>
+            <div class="mode-name">Also store command output in the audit log</div>
+            <div class="mode-desc">
+              Off by default. Command output can contain secrets the LLM read
+              (a <code>.env</code> file, environment variables, kubernetes
+              secrets), and the audit log is a plaintext file on disk - not
+              encrypted like the vault. Enable only if you accept that.
+            </div>
+          </div>
+        </label>
+      </fieldset>
     {/if}
 
     {#if mcpEnabled}
@@ -4303,23 +4317,25 @@
         <button class="link-btn" onclick={copyMcpSystemPrompt}>Copy system prompt</button>
       </p>
 
-      <label class="toggle">
-        <input
-          type="checkbox"
-          checked={mcpTcp}
-          onchange={(e) => toggleMcpTcp((e.target as HTMLInputElement).checked)}
-        />
-        <span>
-          <strong>Also listen on loopback TCP (for WSL / cross-boundary clients)</strong>
-          <span class="hint inline">
-            - needed when the LLM client runs in WSL but ssh-tool runs on
-            Windows (WSL forwards localhost to the host but can't see the
-            Windows pipe). Binds 127.0.0.1 only, guarded by a token the bridge
-            reads from a private file. Leave off if the client runs on the same
-            OS as ssh-tool.
-          </span>
-        </span>
-      </label>
+      <fieldset class="check-cards">
+        <label class:active={mcpTcp}>
+          <input
+            type="checkbox"
+            checked={mcpTcp}
+            onchange={(e) => toggleMcpTcp((e.target as HTMLInputElement).checked)}
+          />
+          <div>
+            <div class="mode-name">Also listen on loopback TCP (for WSL / cross-boundary clients)</div>
+            <div class="mode-desc">
+              Needed when the LLM client runs in WSL but ssh-tool runs on
+              Windows (WSL forwards localhost to the host but can't see the
+              Windows pipe). Binds 127.0.0.1 only, guarded by a token the bridge
+              reads from a private file. Leave off if the client runs on the same
+              OS as ssh-tool.
+            </div>
+          </div>
+        </label>
+      </fieldset>
 
       {#if mcpWslExePath}
         <p class="hint" style="margin-top:0.8rem">
@@ -4361,21 +4377,23 @@
       allow them in.
     </p>
 
-    <label class="toggle">
-      <input
-        type="checkbox"
-        checked={shareEnabled}
-        onchange={(e) => toggleShare((e.target as HTMLInputElement).checked)}
-      />
-      <span>
-        <strong>Enable session sharing</strong>
-        <span class="hint inline">
-          - makes the "Share to browser" action available. Each share picks its
-          own network interface and is reachable only while it's running; a
-          guest sees nothing until you approve them.
-        </span>
-      </span>
-    </label>
+    <fieldset class="check-cards">
+      <label class:active={shareEnabled}>
+        <input
+          type="checkbox"
+          checked={shareEnabled}
+          onchange={(e) => toggleShare((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Enable session sharing</div>
+          <div class="mode-desc">
+            Makes the "Share to browser" action available. Each share picks its
+            own network interface and is reachable only while it's running; a
+            guest sees nothing until you approve them.
+          </div>
+        </div>
+      </label>
+    </fieldset>
 
     {#if shareEnabled}
       <div class="group" style="margin-top:1rem">
@@ -4397,22 +4415,24 @@
         </div>
       </div>
 
-      <label class="toggle" style="margin-top:1rem">
-        <input
-          type="checkbox"
-          checked={shareAuditOutput}
-          onchange={toggleShareAuditOutput}
-        />
-        <span>
-          <strong>Record guest keystrokes in the audit log</strong>
-          <span class="hint inline">
-            - off by default. Who joined, when, and from where is always logged;
-            this also stores what a controlling guest TYPES. The audit log is a
-            plaintext file on disk, and guest keystrokes can include passwords -
-            enable only if you accept that.
-          </span>
-        </span>
-      </label>
+      <fieldset class="check-cards" style="margin-top:1rem">
+        <label class:active={shareAuditOutput}>
+          <input
+            type="checkbox"
+            checked={shareAuditOutput}
+            onchange={toggleShareAuditOutput}
+          />
+          <div>
+            <div class="mode-name">Record guest keystrokes in the audit log</div>
+            <div class="mode-desc">
+              Off by default. Who joined, when, and from where is always logged;
+              this also stores what a controlling guest TYPES. The audit log is a
+              plaintext file on disk, and guest keystrokes can include passwords -
+              enable only if you accept that.
+            </div>
+          </div>
+        </label>
+      </fieldset>
     {/if}
 
   {:else if activeSection === "logs"}
@@ -5123,7 +5143,13 @@
     margin: 0;
   }
   fieldset.check-cards label:hover { border-color: var(--surface1); }
-  fieldset.check-cards label.active { border-color: var(--blue); background: var(--mantle); }
+  /* Same active visual as the radio (.modes) cards: accent border +
+     subtle accent-tinted fill, so checkbox and radio option cards
+     read identically across Settings. */
+  fieldset.check-cards label.active {
+    border-color: var(--accent);
+    background: color-mix(in oklab, var(--accent) 6%, transparent);
+  }
   fieldset.check-cards input[type="checkbox"] {
     margin-top: 0.2rem;
     flex-shrink: 0;
@@ -5158,30 +5184,6 @@
     color: var(--blue);
     margin: 0.3rem 0;
   }
-  .toggle {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
-    padding: 0.5rem 0.7rem;
-    background: var(--mantle);
-    border: 1px solid var(--surface0);
-    border-radius: 4px;
-    margin: 0.5rem 0 0.7rem;
-    cursor: pointer;
-    font-size: 0.85rem;
-  }
-  .toggle input {
-    margin-top: 0.2rem;
-    flex-shrink: 0;
-    /* Use the app's accent for the checked fill; without this the
-       default WebKit/WebView2 rendering on Windows draws a tiny
-       grey check on a near-black box which is effectively
-       invisible against our dark settings panel. accent-color is
-       the modern one-liner that styles native checkbox + radio. */
-    accent-color: var(--blue);
-  }
-  .toggle strong { color: var(--text); display: block; margin-bottom: 0.1rem; }
-  .toggle .hint.inline { display: inline; padding: 0; margin: 0; font-size: 0.78rem; }
   .cmd-block {
     background: var(--crust);
     border: 1px solid var(--surface1);
