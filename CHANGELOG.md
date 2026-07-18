@@ -7,6 +7,50 @@ in alpha upstream.
 
 ---
 
+## [0.69.0] - Built-in icons, UI polish, consistent cross-platform glyphs
+
+### Added
+
+- **Built-in icons with a colour, for connections, folders, credentials, and
+  credential folders.** Pick from a curated set (server, database, container,
+  cloud, router, shield, terminal, and more) and tint it with any of the eight
+  palette colours - no need to hunt down and upload an image. Set it from the
+  editor; the icon shows in the tree and next to the connection name in its
+  terminal tab. Uploaded images still work and take priority; choosing one clears
+  the other.
+- **VNC quick-launch in the connection header.** Connections with VNC enabled get
+  a VNC button next to Connect, so you can open the console without the right-click
+  menu.
+- **First-run vault explainer.** The "set master passphrase" screen has an
+  expandable "(i) What is this, and why?" section covering what the vault protects,
+  how the encryption works, when you're asked for the passphrase, and why there is
+  no reset.
+
+### Changed
+
+- **Icons are consistent across Windows, macOS, Android, and Linux.** Interface
+  glyphs that used to be plain text/emoji characters (the info marker, favourite
+  stars, and every right-click menu icon) are now drawn from the icon set, so they
+  look the same everywhere instead of relying on each platform's emoji rendering.
+- **Larger, easier-to-read folder expand/collapse arrows** in both the connection
+  and credential trees.
+- **Settings checkboxes all look the same now.** A few toggles rendered
+  differently - one had its checkbox centered, another had no card border - while
+  most sit in a bordered "card". Every checkbox is now a card matching the radio
+  option cards, including the same accent highlight when selected.
+
+### Fixed
+
+- **The window reopens on the monitor it was closed on (multi-display setups).**
+  On Windows the display list can enumerate late during startup, so a window that
+  was on a secondary monitor was judged "off-screen" and recentered onto the
+  primary. The saved position is now restored verbatim, and the off-screen safety
+  check that recenters an unreachable window is deferred until the display list is
+  reliable - so a genuinely off-screen window is still rescued, but a window on a
+  second monitor is left where it belongs.
+
+---
+
 ## [0.68.2] - Fix Bitwarden "no such column" error on older profiles
 
 ### Fixed
