@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { errMsg } from "./connectErrors";
   import { api } from "./api";
-  import { IconLock } from "./iconMap";
+  import { IconLock, IconInfo } from "./iconMap";
   import { isMobile } from "./platform";
   import { EventsOn } from "./wailsRuntime";
   import PasswordInput from "./PasswordInput.svelte";
@@ -179,6 +179,39 @@
           passphrase to protect it. <strong>Forgetting it means all stored
           credentials become unrecoverable.</strong>
         </p>
+        <details class="vault-info">
+          <summary><IconInfo size={13} /> What is this, and why?</summary>
+          <ul>
+            <li>
+              <strong>What it protects.</strong> Passwords, SSH private keys,
+              API tokens and other secrets are sealed in a single encrypted
+              file (<code>vault.enc</code>). Nothing sensitive is ever written
+              to the database or logs in plaintext.
+            </li>
+            <li>
+              <strong>How.</strong> The passphrase is stretched with Argon2id
+              and used to encrypt the vault with XChaCha20-Poly1305. The
+              passphrase itself is never stored - only you can derive the key,
+              which is why losing it is unrecoverable.
+            </li>
+            <li>
+              <strong>When you're asked for it.</strong> Once per app start (to
+              unlock), and before any action that reads or writes a secret. You
+              can lock it again at any time from the status bar.
+            </li>
+            <li>
+              <strong>Staying convenient.</strong> Optionally enable the
+              machine-bound auto-unlock below so you're not prompted every
+              launch on this trusted device - the passphrase is still required
+              on any other machine.
+            </li>
+            <li>
+              <strong>Choosing one.</strong> Use a long, memorable passphrase
+              you don't use elsewhere. There is no reset and no backdoor;
+              consider keeping a copy in a separate password manager.
+            </li>
+          </ul>
+        </details>
       {:else}
         <p>Enter your master passphrase to unlock stored credentials.</p>
         {#if autoUnlockAvailable}
@@ -278,6 +311,35 @@
     background: var(--crust); padding: 0.4rem 0.6rem;
     border-left: 3px solid var(--yellow);
     border-radius: 3px; font-size: 0.78rem;
+  }
+  .vault-info {
+    margin: 0.2rem 0 0.4rem;
+    font-size: 0.78rem;
+    color: var(--subtext0);
+  }
+  .vault-info summary {
+    cursor: pointer;
+    color: var(--blue);
+    user-select: none;
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .vault-info summary::-webkit-details-marker { display: none; }
+  .vault-info ul {
+    margin: 0.5rem 0 0;
+    padding-left: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  .vault-info li { line-height: 1.45; }
+  .vault-info code {
+    background: var(--crust);
+    padding: 0 0.25rem;
+    border-radius: 2px;
+    font-size: 0.72rem;
   }
   label {
     display: flex; flex-direction: column; gap: 0.25rem;
