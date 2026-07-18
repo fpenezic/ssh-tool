@@ -387,6 +387,19 @@
     void mobileCanGoBack;
     mobileBackTick?.();
   });
+  // Single source of truth for "the terminal view has nothing to show".
+  // When the last tab closes, the {#if paneTabs.tabs.length > 0} guard
+  // unmounts TerminalArea; if view.tab were left on "terminal" the body
+  // would render blank (a white screen). Several close paths call
+  // view.setTab("connections") imperatively, but they are easy to miss
+  // (e.g. the tab-bar X vs Ctrl+D took different code paths), so make the
+  // bounce reactive here: no live terminal tabs => never sit on the
+  // terminal view. Cheap and closes the hole regardless of which path ran.
+  $effect(() => {
+    if (paneTabs.tabs.length === 0 && view.tab === "terminal") {
+      view.setTab("connections");
+    }
+  });
   const localShellOptions: { kind: string; label: string; short: string }[] = isWin
     ? [
         { kind: "wsl",        label: "WSL (default distro)", short: "WSL" },

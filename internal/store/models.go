@@ -16,33 +16,45 @@ type Folder struct {
 	// IconName is a built-in (lucide) icon key; IconColor is a palette
 	// name (see frontend palette.ts) tinting it. Mutually exclusive with
 	// IconImageID - setting one clears the other. Both nil = default icon.
-	IconName    *string `json:"icon_name"`
-	IconColor   *string `json:"icon_color"`
-	CreatedAt   int64   `json:"created_at"`
-	UpdatedAt   int64   `json:"updated_at"`
+	IconName  *string `json:"icon_name"`
+	IconColor *string `json:"icon_color"`
+	CreatedAt int64   `json:"created_at"`
+	UpdatedAt int64   `json:"updated_at"`
 }
 
 // Connection is a leaf in the tree.
 type Connection struct {
-	ID               string              `json:"id"`
-	FolderID         *string             `json:"folder_id"`
-	Name             string              `json:"name"`
-	Hostname         string              `json:"hostname"`
-	SortOrder        int64               `json:"sort_order"`
-	Overrides        InheritableSettings `json:"overrides"`
-	Tags             []string            `json:"tags"`
-	Notes            string              `json:"notes"`
-	Favorite         bool                `json:"favorite"`
-	Sensitive        bool                `json:"sensitive"`
-	IconImageID      *string             `json:"icon_image_id"`
+	ID        string  `json:"id"`
+	FolderID  *string `json:"folder_id"`
+	Name      string  `json:"name"`
+	Hostname  string  `json:"hostname"`
+	SortOrder int64   `json:"sort_order"`
+	// Protocol selects how a connect is dialed: "ssh" (default - the
+	// full SSH chain) or "local" (spawn a local PTY and run
+	// InitialCommand). A local connection ignores hostname/port/auth/
+	// jump; it is a saved local shell (telnet client, serial console,
+	// "claude", a REPL, ...). Real column, defaulting to "ssh" so every
+	// existing connection is unchanged.
+	Protocol string `json:"protocol"`
+	// LocalShellKind picks the shell for a "local" connection: nil / ""
+	// = auto (per-platform default), else one of the kinds resolveShell
+	// accepts ("bash"/"zsh"/"sh"/"powershell"/"cmd"/"wsl"). Ignored for
+	// SSH connections.
+	LocalShellKind *string             `json:"local_shell_kind,omitempty"`
+	Overrides      InheritableSettings `json:"overrides"`
+	Tags           []string            `json:"tags"`
+	Notes          string              `json:"notes"`
+	Favorite       bool                `json:"favorite"`
+	Sensitive      bool                `json:"sensitive"`
+	IconImageID    *string             `json:"icon_image_id"`
 	// IconName / IconColor: built-in lucide icon + palette colour, same
 	// semantics as on Folder. Mutually exclusive with IconImageID.
-	IconName         *string             `json:"icon_name"`
-	IconColor        *string             `json:"icon_color"`
-	LastUsedAt       *int64              `json:"last_used_at"`
-	CreatedAt        int64               `json:"created_at"`
-	UpdatedAt        int64               `json:"updated_at"`
-	PasswordVaultKey *string             `json:"password_vault_key,omitempty"`
+	IconName         *string `json:"icon_name"`
+	IconColor        *string `json:"icon_color"`
+	LastUsedAt       *int64  `json:"last_used_at"`
+	CreatedAt        int64   `json:"created_at"`
+	UpdatedAt        int64   `json:"updated_at"`
+	PasswordVaultKey *string `json:"password_vault_key,omitempty"`
 	// VncPasswordVaultKey points at the vault entry holding this
 	// connection's VNC (RFB) password, when set. Same lifecycle as
 	// PasswordVaultKey - a real column, not part of overrides_json,
@@ -184,9 +196,9 @@ type ResolvedSettings struct {
 	KeepaliveInterval uint32            `json:"keepalive_interval"`
 	TerminalType      string            `json:"terminal_type"`
 	// InitialCommand is run in the shell right after connect ("" = none).
-	InitialCommand    string            `json:"initial_command"`
-	AutoReconnect     bool              `json:"auto_reconnect"`
-	Verbose           bool              `json:"verbose"`
+	InitialCommand string `json:"initial_command"`
+	AutoReconnect  bool   `json:"auto_reconnect"`
+	Verbose        bool   `json:"verbose"`
 	// VncPort is the resolved RFB port for the VNC console action,
 	// defaulting to 5900 when unset anywhere in the chain. VncUseTunnel
 	// says whether to reach it through the connection's SSH session.
@@ -261,10 +273,10 @@ type CredentialRef struct {
 	IconImageID          *string        `json:"icon_image_id"`
 	// IconName / IconColor: built-in lucide icon + palette colour, same
 	// semantics as on Connection. Mutually exclusive with IconImageID.
-	IconName             *string        `json:"icon_name"`
-	IconColor            *string        `json:"icon_color"`
-	CreatedAt            int64          `json:"created_at"`
-	UpdatedAt            int64          `json:"updated_at"`
+	IconName  *string `json:"icon_name"`
+	IconColor *string `json:"icon_color"`
+	CreatedAt int64   `json:"created_at"`
+	UpdatedAt int64   `json:"updated_at"`
 }
 
 // CredentialHistoryEntry is a metadata-only audit record (or pointer to a

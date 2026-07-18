@@ -1229,24 +1229,28 @@ func (a *App) ConnectionsGet(id string) (*store.Connection, error) {
 }
 
 type ConnectionsCreateInput struct {
-	FolderID  *string                   `json:"folder_id"`
-	Name      string                    `json:"name"`
-	Hostname  string                    `json:"hostname"`
-	SortOrder int64                     `json:"sort_order"`
-	Overrides store.InheritableSettings `json:"overrides"`
-	Tags      []string                  `json:"tags"`
-	Notes     string                    `json:"notes"`
+	FolderID       *string                   `json:"folder_id"`
+	Name           string                    `json:"name"`
+	Hostname       string                    `json:"hostname"`
+	SortOrder      int64                     `json:"sort_order"`
+	Overrides      store.InheritableSettings `json:"overrides"`
+	Tags           []string                  `json:"tags"`
+	Notes          string                    `json:"notes"`
+	Protocol       string                    `json:"protocol"`
+	LocalShellKind *string                   `json:"local_shell_kind"`
 }
 
 func (a *App) ConnectionsCreate(in ConnectionsCreateInput) (*store.Connection, error) {
 	return a.db.CreateConnection(store.NewConnection{
-		FolderID:  in.FolderID,
-		Name:      in.Name,
-		Hostname:  in.Hostname,
-		SortOrder: in.SortOrder,
-		Overrides: in.Overrides,
-		Tags:      in.Tags,
-		Notes:     in.Notes,
+		FolderID:       in.FolderID,
+		Name:           in.Name,
+		Hostname:       in.Hostname,
+		SortOrder:      in.SortOrder,
+		Overrides:      in.Overrides,
+		Tags:           in.Tags,
+		Notes:          in.Notes,
+		Protocol:       in.Protocol,
+		LocalShellKind: in.LocalShellKind,
 	})
 }
 
@@ -1262,21 +1266,29 @@ type ConnectionsUpdateInput struct {
 	Notes       *string                    `json:"notes"`
 	Favorite    *bool                      `json:"favorite"`
 	Sensitive   *bool                      `json:"sensitive"`
+	Protocol    *string                    `json:"protocol"`
+	// LocalShellKind: non-nil replaces the shell kind. ClearLocalShellKind
+	// forces it back to auto (NULL).
+	LocalShellKind      *string `json:"local_shell_kind"`
+	ClearLocalShellKind bool    `json:"clear_local_shell_kind"`
 }
 
 func (a *App) ConnectionsUpdate(in ConnectionsUpdateInput) (*store.Connection, error) {
 	return a.db.UpdateConnection(store.UpdateConnection{
-		ID:          in.ID,
-		FolderID:    in.FolderID,
-		ClearFolder: in.ClearFolder,
-		Name:        in.Name,
-		Hostname:    in.Hostname,
-		SortOrder:   in.SortOrder,
-		Overrides:   in.Overrides,
-		Tags:        in.Tags,
-		Notes:       in.Notes,
-		Favorite:    in.Favorite,
-		Sensitive:   in.Sensitive,
+		ID:                  in.ID,
+		FolderID:            in.FolderID,
+		ClearFolder:         in.ClearFolder,
+		Name:                in.Name,
+		Hostname:            in.Hostname,
+		SortOrder:           in.SortOrder,
+		Overrides:           in.Overrides,
+		Tags:                in.Tags,
+		Notes:               in.Notes,
+		Favorite:            in.Favorite,
+		Sensitive:           in.Sensitive,
+		Protocol:            in.Protocol,
+		LocalShellKind:      in.LocalShellKind,
+		ClearLocalShellKind: in.ClearLocalShellKind,
 	})
 }
 
@@ -1290,13 +1302,15 @@ func (a *App) ConnectionsClone(id string) (*store.Connection, error) {
 		return nil, err
 	}
 	return a.db.CreateConnection(store.NewConnection{
-		FolderID:  src.FolderID,
-		Name:      "Copy of " + src.Name,
-		Hostname:  src.Hostname,
-		SortOrder: src.SortOrder,
-		Overrides: src.Overrides,
-		Tags:      src.Tags,
-		Notes:     src.Notes,
+		FolderID:       src.FolderID,
+		Name:           "Copy of " + src.Name,
+		Hostname:       src.Hostname,
+		SortOrder:      src.SortOrder,
+		Overrides:      src.Overrides,
+		Tags:           src.Tags,
+		Notes:          src.Notes,
+		Protocol:       src.Protocol,
+		LocalShellKind: src.LocalShellKind,
 	})
 }
 
@@ -3150,12 +3164,48 @@ type LocalShellOpenResult struct {
 // pty_output:<sessionID> channel as SSH so the xterm component
 // doesn't need to know which kind it is.
 func (a *App) LocalShellOpen(kind, dir string, cols, rows uint16) (*LocalShellOpenResult, error) {
-	sess, err := local.Spawn(local.SpawnRequest{
+	return a.openLocalShell(local.SpawnRequest{
 		Kind: kind,
 		Cols: cols,
 		Rows: rows,
 		Dir:  dir,
 	})
+}
+
+// LocalConnect opens a saved "local" connection: a local PTY running the
+// connection's InitialCommand (telnet client, serial console, "claude", a
+// REPL, ...). It resolves the connection's settings for the command and
+// picks the shell from local_shell_kind, then shares the same spawn path as
+// the ad-hoc LocalShellOpen launcher. Errors if the connection isn't local.
+func (a *App) LocalConnect(connectionID string) (*LocalShellOpenResult, error) {
+	if a.db == nil {
+		return nil, fmt.Errorf("store not ready")
+	}
+	conn, err := a.db.GetConnection(connectionID)
+	if err != nil {
+		return nil, err
+	}
+	if conn.Protocol != "local" {
+		return nil, fmt.Errorf("connection %q is not a local-shell connection", conn.Name)
+	}
+	settings, err := resolver.ResolveConnection(a.db, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	kind := ""
+	if conn.LocalShellKind != nil {
+		kind = *conn.LocalShellKind
+	}
+	return a.openLocalShell(local.SpawnRequest{
+		Kind:           kind,
+		InitialCommand: settings.InitialCommand,
+	})
+}
+
+// openLocalShell is the shared spawn + wiring path for both the ad-hoc
+// local-shell launcher and saved local connections.
+func (a *App) openLocalShell(req local.SpawnRequest) (*LocalShellOpenResult, error) {
+	sess, err := local.Spawn(req)
 	if err != nil {
 		return nil, err
 	}
@@ -3197,6 +3247,14 @@ func (a *App) LocalShellOpen(kind, dir string, cols, rows uint16) (*LocalShellOp
 		}
 		EventsEmit("session_exit:"+id, 0)
 		EventsEmit("local_session_closed:"+id, true)
+		// Mirror the SSH close path: the frontend's SessionStore listens on
+		// session_state:<id> for the "disconnected" transition (updates the
+		// tab badge and, when clean, auto-closes the tab). Without this a
+		// local shell that exits via `exit` / Ctrl-D reaped its PTY backend-
+		// side but left the tab hanging with a dead cursor - the UI never
+		// heard about it. A local shell exit is always the user being done,
+		// so mark it clean so it auto-closes like `exit 0` over SSH.
+		EventsEmit("session_state:"+id, sshlayer.SessionState{State: "disconnected", Reason: "shell exited", Clean: true})
 	})
 
 	a.localPool.Add(sess)

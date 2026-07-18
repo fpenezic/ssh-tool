@@ -7,6 +7,52 @@ in alpha upstream.
 
 ---
 
+## [0.70.0] - Local-shell connections, more icons, close + theme fixes
+
+### Added
+
+- **Local-shell connections.** A connection can now be a saved local terminal
+  instead of an SSH host: pick a shell (or Auto) and a command it runs on open.
+  Use it for a telnet client to a console server (`telnet 10.0.0.5`), a serial
+  console (`screen /dev/ttyUSB0`), a REPL, `docker exec`, or Claude Code on a
+  double-click (`claude`). It lives in the tree like any connection - name, tags,
+  icon, favourite, folder inheritance for the command - and opens with a
+  double-click. Exiting the shell (`exit` / Ctrl-D, or the command finishing)
+  closes the tab. Create one from the new local-shell button in the tree toolbar,
+  the right-click menu, or "New local shell here…" under a folder. The editor
+  hides everything SSH-only (host, port, credential, jump host, VNC, forwards).
+- **More built-in icons.** Added device / OS / role icons: phone, laptop, NAS,
+  Apple, printer, camera / NVR, a robot (Claude Code) and sparkles, a console
+  server and a serial plug, and a lightbulb - alongside the existing set.
+
+### Changed
+
+- **New folder / connection / local shell from the toolbar now lands in context.**
+  With a folder selected they're created inside it; with a connection selected
+  they're created alongside it in the same folder; with nothing selected, at the
+  root. No more creating at the root and dragging into place.
+- **The connection header icon matches the tree.** The editor header showed a
+  fixed server glyph even when the connection had its own icon; it now renders the
+  connection's actual icon (uploaded image, built-in icon, or the default),
+  consistent with the tree row.
+
+### Fixed
+
+- **Closing the last terminal tab no longer leaves a blank window.** Closing the
+  final tab from the tab-bar "✕" (or a VNC tab) could leave the app on an empty
+  white screen instead of returning to Connections. It now reliably bounces back
+  to the connections view whenever the last tab closes, regardless of how it was
+  closed.
+- **Local terminals now close on exit.** A local shell (WSL / cmd / PowerShell /
+  bash) that you exited with `exit` or Ctrl-D left the tab hanging with a dead,
+  blinking cursor - the shell had ended but the tab never noticed. It now closes
+  (or shows a disconnected state) exactly like an SSH session.
+- **No more dark-theme flash on launch when using the light (Latte) theme.** The
+  window painted the default dark theme for a frame before switching to your saved
+  theme; the theme is now applied before the first paint.
+
+---
+
 ## [0.69.0] - Built-in icons, UI polish, consistent cross-platform glyphs
 
 ### Added

@@ -10,7 +10,7 @@
   import Icon from "./Icon.svelte";
   import { IconFolder, IconHost, IconLoading, IconX, IconStar, IconGlobe, dynamicEntryIcon,
     IconFolderPlus, IconKey, IconPencil, IconTrash, IconSettings, IconRefresh, IconPlay,
-    IconExternalLink, IconMonitor, IconCopy, IconDownload, IconMoveToFolder } from "./iconMap";
+    IconExternalLink, IconMonitor, IconCopy, IconDownload, IconMoveToFolder, IconTerminal } from "./iconMap";
   import { computeIntent, isInvalidDrop, applyDrop, applyMultiDrop, type DragKind, type DropIntent } from "./treeDnd";
   import { setMultiDragImage } from "./dragImage";
   import { contextMenu } from "./contextMenu.svelte.ts";
@@ -396,6 +396,7 @@
       ...(single && !isDyn ? [
         { label: "New subfolder…",       iconComponent: IconFolderPlus, onSelect: () => connectionActions.addSubfolderUnder(folder.id) },
         { label: "New connection here…", iconComponent: IconHost, onSelect: () => connectionActions.addConnectionUnder(folder.id) },
+        { label: "New local shell here…", iconComponent: IconTerminal, onSelect: () => connectionActions.addLocalConnectionUnder(folder.id) },
         { label: "New dynamic subfolder…", iconComponent: IconRefresh, onSelect: () => dynEditor.showNew(folder.id) },
         { label: "Rename…",              iconComponent: IconPencil, onSelect: () => connectionActions.renameFolder(folder.id) },
       ] : []),
@@ -903,6 +904,8 @@
             <span class="conn-hint">connecting…</span>
           {:else if connectErrId === conn.id}
             <span class="conn-err" title={connectErr ?? ""}><IconX size={12} /></span>
+          {:else if conn.protocol === "local"}
+            <span class="host mono">{conn.overrides?.initial_command || "local shell"}</span>
           {:else if conn.hostname}
             <span class="host">{conn.hostname}</span>
           {/if}

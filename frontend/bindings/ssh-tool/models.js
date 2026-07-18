@@ -766,6 +766,20 @@ export class ConnectionsCreateInput {
              */
             this["notes"] = "";
         }
+        if (!("protocol" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["protocol"] = "";
+        }
+        if (!("local_shell_kind" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["local_shell_kind"] = null;
+        }
 
         Object.assign(this, $$source);
     }
@@ -871,6 +885,29 @@ export class ConnectionsUpdateInput {
              * @type {boolean | null}
              */
             this["sensitive"] = null;
+        }
+        if (!("protocol" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["protocol"] = null;
+        }
+        if (!("local_shell_kind" in $$source)) {
+            /**
+             * LocalShellKind: non-nil replaces the shell kind. ClearLocalShellKind
+             * forces it back to auto (NULL).
+             * @member
+             * @type {string | null}
+             */
+            this["local_shell_kind"] = null;
+        }
+        if (!("clear_local_shell_kind" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["clear_local_shell_kind"] = false;
         }
 
         Object.assign(this, $$source);

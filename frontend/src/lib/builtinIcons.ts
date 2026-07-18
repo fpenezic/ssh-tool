@@ -20,8 +20,14 @@ import Wifi from "@lucide/svelte/icons/wifi";
 import Globe from "@lucide/svelte/icons/globe";
 import Earth from "@lucide/svelte/icons/earth";
 import HardDrive from "@lucide/svelte/icons/hard-drive";
+import HardDriveDownload from "@lucide/svelte/icons/hard-drive-download";
 import Cpu from "@lucide/svelte/icons/cpu";
 import Monitor from "@lucide/svelte/icons/monitor";
+import Laptop from "@lucide/svelte/icons/laptop";
+import Smartphone from "@lucide/svelte/icons/smartphone";
+import Apple from "@lucide/svelte/icons/apple";
+import Printer from "@lucide/svelte/icons/printer";
+import Cctv from "@lucide/svelte/icons/cctv";
 import Terminal from "@lucide/svelte/icons/terminal";
 import ShieldCheck from "@lucide/svelte/icons/shield-check";
 import Lock from "@lucide/svelte/icons/lock";
@@ -41,6 +47,11 @@ import Cog from "@lucide/svelte/icons/cog";
 import House from "@lucide/svelte/icons/house";
 import Building from "@lucide/svelte/icons/building";
 import Folder from "@lucide/svelte/icons/folder";
+import Bot from "@lucide/svelte/icons/bot";
+import Sparkles from "@lucide/svelte/icons/sparkles";
+import RadioTower from "@lucide/svelte/icons/radio-tower";
+import Plug from "@lucide/svelte/icons/plug";
+import Lightbulb from "@lucide/svelte/icons/lightbulb";
 
 export type BuiltinIcon = { name: string; label: string; icon: Component };
 
@@ -56,8 +67,14 @@ export const BUILTIN_ICONS: BuiltinIcon[] = [
   { name: "globe", label: "Globe / Public", icon: Globe },
   { name: "earth", label: "Earth / Region", icon: Earth },
   { name: "hard-drive", label: "Storage / Disk", icon: HardDrive },
+  { name: "hard-drive-download", label: "NAS / Backup", icon: HardDriveDownload },
   { name: "cpu", label: "CPU / Compute", icon: Cpu },
   { name: "monitor", label: "Workstation / Windows", icon: Monitor },
+  { name: "laptop", label: "Laptop", icon: Laptop },
+  { name: "smartphone", label: "Phone / Mobile", icon: Smartphone },
+  { name: "apple", label: "Apple / macOS", icon: Apple },
+  { name: "printer", label: "Printer", icon: Printer },
+  { name: "cctv", label: "Camera / NVR", icon: Cctv },
   { name: "terminal", label: "Shell / Linux", icon: Terminal },
   { name: "shield-check", label: "Security / Firewall", icon: ShieldCheck },
   { name: "lock", label: "Lock / Vault", icon: Lock },
@@ -77,6 +94,11 @@ export const BUILTIN_ICONS: BuiltinIcon[] = [
   { name: "house", label: "Home / Lab", icon: House },
   { name: "building", label: "Office / Datacenter", icon: Building },
   { name: "folder", label: "Folder", icon: Folder },
+  { name: "bot", label: "AI / Claude Code", icon: Bot },
+  { name: "sparkles", label: "AI / Assistant", icon: Sparkles },
+  { name: "radio-tower", label: "Console server / Serial-over-IP", icon: RadioTower },
+  { name: "plug", label: "Serial / Direct", icon: Plug },
+  { name: "lightbulb", label: "IoT / Smart home / Idea", icon: Lightbulb },
 ];
 
 const byName = new Map(BUILTIN_ICONS.map((b) => [b.name, b]));

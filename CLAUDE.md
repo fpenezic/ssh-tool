@@ -88,7 +88,7 @@ ssh-tool/
 ├─ wails3_runtime.go       shim: EventsEmit (+ mobile enqueue) / BrowserOpenURL
 ├─ Taskfile.yml            top-level task routing (android: namespace too)
 ├─ internal/
-│  ├─ store/               SQLite + migrations + CRUD (DB schema at v23; audit log in a separate audit.db)
+│  ├─ store/               SQLite + migrations + CRUD (DB schema at v24; audit log in a separate audit.db)
 │  ├─ importer/
 │  │   ├─ rdm/             Devolutions RDM JSON importer (3-pass)
 │  │   ├─ sshconfig/       ~/.ssh/config importer
