@@ -122,6 +122,14 @@ right:
   Hidden at zero.
 - Broadcast indicator when a group is active (with member count).
 - Focused connection name + host (Terminal view only).
+- **Server status** readout (load / memory / disk / users) for the
+  focused SSH session, when that optional feature is enabled in
+  Settings. Click it for a **System status** popup: CPU load against
+  core count, memory + swap, every real filesystem (pseudo/temp
+  mounts like tmpfs and /boot/efi are hidden), uptime, kernel, and
+  the logged-in users by name. A refresh button re-probes on demand.
+  It reads the remote host of the focused session over a read-only
+  side channel - the same probe the readout uses.
 - Update-available pill when a newer release is published.
 - Version pill on the right - click to jump to Settings → About.
 

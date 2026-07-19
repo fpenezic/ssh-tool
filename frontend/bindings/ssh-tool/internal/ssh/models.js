@@ -95,6 +95,74 @@ export class BatchHostResult {
 }
 
 /**
+ * DiskPart is one real (non-pseudo) filesystem in the popup's storage list.
+ * Sizes are in 1024-byte blocks (df -Pk), so the frontend can render absolute
+ * used/total alongside the percentage.
+ */
+export class DiskPart {
+    /**
+     * Creates a new DiskPart instance.
+     * @param {Partial<DiskPart>} [$$source = {}] - The source object to create the DiskPart.
+     */
+    constructor($$source = {}) {
+        if (!("mount" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["mount"] = "";
+        }
+        if (!("fs" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["fs"] = "";
+        }
+        if (!("size_kb" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["size_kb"] = 0;
+        }
+        if (!("used_kb" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["used_kb"] = 0;
+        }
+        if (!("avail_kb" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["avail_kb"] = 0;
+        }
+        if (!("used_pct" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["used_pct"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DiskPart instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {DiskPart}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DiskPart(/** @type {Partial<DiskPart>} */($$parsedSource));
+    }
+}
+
+/**
  * ForwardKind tags which of the three SSH forwarding modes a Forward
  * represents.
  * @readonly
@@ -527,6 +595,11 @@ export class RouteResult {
  * is best-effort: a host that doesn't answer a given section (network gear,
  * a stripped container, a non-Linux box) leaves that metric zeroed and OK
  * reflects whether ANY section parsed.
+ * 
+ * The first block (Load/MemUsedPct/DiskUsedPct/Users) drives the compact
+ * status-bar readout. The rest is the richer detail the "System status"
+ * popup shows; all of it is optional and back-compatible - an older frontend
+ * simply ignores the extra fields.
  */
 export class ServerStats {
     /**
@@ -586,6 +659,77 @@ export class ServerStats {
              */
             this["users"] = 0;
         }
+        if (!("hostname" in $$source)) {
+            /**
+             * Detail fields for the popup. Zero / empty / nil when unknown.
+             * @member
+             * @type {string}
+             */
+            this["hostname"] = "";
+        }
+        if (!("kernel" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["kernel"] = "";
+        }
+        if (!("uptime_sec" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["uptime_sec"] = 0;
+        }
+        if (!("ncpu" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["ncpu"] = 0;
+        }
+        if (!("mem_total_kb" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["mem_total_kb"] = 0;
+        }
+        if (!("mem_avail_kb" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["mem_avail_kb"] = 0;
+        }
+        if (!("swap_total_kb" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["swap_total_kb"] = 0;
+        }
+        if (!("swap_free_kb" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["swap_free_kb"] = 0;
+        }
+        if (!("user_names" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["user_names"] = [];
+        }
+        if (!("partitions" in $$source)) {
+            /**
+             * @member
+             * @type {DiskPart[]}
+             */
+            this["partitions"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -596,7 +740,15 @@ export class ServerStats {
      * @returns {ServerStats}
      */
     static createFrom($$source = {}) {
+        const $$createField15_0 = $$createType3;
+        const $$createField16_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("user_names" in $$parsedSource) {
+            $$parsedSource["user_names"] = $$createField15_0($$parsedSource["user_names"]);
+        }
+        if ("partitions" in $$parsedSource) {
+            $$parsedSource["partitions"] = $$createField16_0($$parsedSource["partitions"]);
+        }
         return new ServerStats(/** @type {Partial<ServerStats>} */($$parsedSource));
     }
 }
@@ -698,3 +850,6 @@ export class SftpEntry {
 const $$createType0 = $Create.Map($Create.Any, $Create.Any);
 const $$createType1 = PacketDecode.createFrom;
 const $$createType2 = $Create.Nullable($$createType1);
+const $$createType3 = $Create.Array($Create.Any);
+const $$createType4 = DiskPart.createFrom;
+const $$createType5 = $Create.Array($$createType4);

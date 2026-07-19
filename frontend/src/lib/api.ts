@@ -1720,6 +1720,15 @@ export interface PortForward {
   bookmarks: ProxyBookmark[];
 }
 
+export interface DiskPart {
+  mount: string;
+  fs: string;
+  size_kb: number;
+  used_kb: number;
+  avail_kb: number;
+  used_pct: number;
+}
+
 export interface ServerStats {
   ok: boolean;
   load1: number;
@@ -1728,6 +1737,17 @@ export interface ServerStats {
   mem_used_pct: number;   // 0..100, -1 if unknown
   disk_used_pct: number;  // 0..100 for /, -1 if unknown
   users: number;          // -1 if unknown
+  // Detail fields for the System status popup. Zero / empty / null when unknown.
+  hostname: string;
+  kernel: string;
+  uptime_sec: number;
+  ncpu: number;
+  mem_total_kb: number;
+  mem_avail_kb: number;
+  swap_total_kb: number;
+  swap_free_kb: number;
+  user_names: string[] | null;
+  partitions: DiskPart[] | null;
 }
 
 export interface GiveInternetResult {
