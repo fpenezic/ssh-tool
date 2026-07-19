@@ -31,8 +31,10 @@
   import { api } from "./api";
   import { EventsOn } from "./wailsRuntime";
   import UpdateModal from "./UpdateModal.svelte";
+  import ServerStatusModal from "./ServerStatusModal.svelte";
 
   let updateModalOpen = $state(false);
+  let statusModalOpen = $state(false);
 
   // Global running-tunnel count, polled on a slow interval. We don't
   // gate this on session count because the badge belongs to the
@@ -509,7 +511,11 @@
   {/if}
 
   {#if serverStats}
-    <span class="seg stats" title="Server status for the focused session (refreshed every 10s)">
+    <button
+      class="seg stats"
+      onclick={() => (statusModalOpen = true)}
+      title="Server status for the focused session (refreshed every 10s) - click for full system status"
+    >
       <span class="stat" title="Load average (1 / 5 / 15 min): {serverStats.load1.toFixed(2)} / {serverStats.load5.toFixed(2)} / {serverStats.load15.toFixed(2)}">
         <IconCpu size={11} />{serverStats.load1.toFixed(2)}
       </span>
@@ -528,7 +534,16 @@
           <IconUsers size={11} />{serverStats.users}
         </span>
       {/if}
-    </span>
+    </button>
+  {/if}
+
+  {#if statusModalOpen && serverStats && focusedSessionId}
+    <ServerStatusModal
+      initial={serverStats}
+      connName={focusedConnName}
+      sessionId={focusedSessionId}
+      onClose={() => (statusModalOpen = false)}
+    />
   {/if}
 
 

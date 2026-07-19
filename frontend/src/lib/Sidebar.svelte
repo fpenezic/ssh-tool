@@ -90,7 +90,7 @@
     connectingId = connId;
     connectErrId = null;
     connectErr   = null;
-    const ok = await connectionActions.connectOne(connId);
+    const ok = await connectionActions.connectDefault(connId);
     if (!ok) {
       const last = connectionActions.lastConnectError[connId];
       connectErrId = connId;

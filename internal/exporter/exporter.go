@@ -89,11 +89,15 @@ type ArchiveImage struct {
 }
 
 type ArchiveFolder struct {
-	ID          string                    `json:"id" toml:"id"`
-	ParentID    *string                   `json:"parent_id,omitempty" toml:"parent_id,omitempty"`
-	Name        string                    `json:"name" toml:"name"`
-	IconImageID *string                   `json:"icon_image_id,omitempty" toml:"icon_image_id,omitempty"`
-	Settings    store.InheritableSettings `json:"settings" toml:"settings"`
+	ID          string  `json:"id" toml:"id"`
+	ParentID    *string `json:"parent_id,omitempty" toml:"parent_id,omitempty"`
+	Name        string  `json:"name" toml:"name"`
+	IconImageID *string `json:"icon_image_id,omitempty" toml:"icon_image_id,omitempty"`
+	// IconName / IconColor carry a built-in (lucide) icon + palette colour.
+	// Mutually exclusive with IconImageID. Cleared by StripIcon.
+	IconName  *string                   `json:"icon_name,omitempty" toml:"icon_name,omitempty"`
+	IconColor *string                   `json:"icon_color,omitempty" toml:"icon_color,omitempty"`
+	Settings  store.InheritableSettings `json:"settings" toml:"settings"`
 	// Dynamic carries the provider config when this folder is a
 	// dynamic-inventory folder (Proxmox, Hetzner, ...). Without it the
 	// folder imported as a plain empty folder. Cached entries are NOT
@@ -121,15 +125,22 @@ var dynCredConfigKeys = []string{
 }
 
 type ArchiveConnection struct {
-	ID          string                    `json:"id" toml:"id"`
-	FolderID    *string                   `json:"folder_id,omitempty" toml:"folder_id,omitempty"`
-	Name        string                    `json:"name" toml:"name"`
-	Hostname    string                    `json:"hostname" toml:"hostname"`
-	Overrides   store.InheritableSettings `json:"overrides" toml:"overrides"`
-	Tags        []string                  `json:"tags,omitempty" toml:"tags,omitempty"`
-	Notes       string                    `json:"notes,omitempty" toml:"notes,omitempty"`
-	Favorite    bool                      `json:"favorite,omitempty" toml:"favorite,omitempty"`
-	IconImageID *string                   `json:"icon_image_id,omitempty" toml:"icon_image_id,omitempty"`
+	ID       string  `json:"id" toml:"id"`
+	FolderID *string `json:"folder_id,omitempty" toml:"folder_id,omitempty"`
+	Name     string  `json:"name" toml:"name"`
+	Hostname string  `json:"hostname" toml:"hostname"`
+	// Protocol / LocalShellKind carry local-shell connections across an
+	// export. Omitted (empty) means "ssh" so archives predating this field
+	// import as SSH connections, unchanged.
+	Protocol       string                    `json:"protocol,omitempty" toml:"protocol,omitempty"`
+	LocalShellKind *string                   `json:"local_shell_kind,omitempty" toml:"local_shell_kind,omitempty"`
+	Overrides      store.InheritableSettings `json:"overrides" toml:"overrides"`
+	Tags           []string                  `json:"tags,omitempty" toml:"tags,omitempty"`
+	Notes          string                    `json:"notes,omitempty" toml:"notes,omitempty"`
+	Favorite       bool                      `json:"favorite,omitempty" toml:"favorite,omitempty"`
+	IconImageID    *string                   `json:"icon_image_id,omitempty" toml:"icon_image_id,omitempty"`
+	IconName       *string                   `json:"icon_name,omitempty" toml:"icon_name,omitempty"`
+	IconColor      *string                   `json:"icon_color,omitempty" toml:"icon_color,omitempty"`
 }
 
 type ArchivePortForward struct {
@@ -146,9 +157,11 @@ type ArchivePortForward struct {
 }
 
 type ArchiveCredFolder struct {
-	ID       string  `json:"id" toml:"id"`
-	ParentID *string `json:"parent_id,omitempty" toml:"parent_id,omitempty"`
-	Name     string  `json:"name" toml:"name"`
+	ID        string  `json:"id" toml:"id"`
+	ParentID  *string `json:"parent_id,omitempty" toml:"parent_id,omitempty"`
+	Name      string  `json:"name" toml:"name"`
+	IconName  *string `json:"icon_name,omitempty" toml:"icon_name,omitempty"`
+	IconColor *string `json:"icon_color,omitempty" toml:"icon_color,omitempty"`
 }
 
 type ArchiveCredential struct {
@@ -163,6 +176,8 @@ type ArchiveCredential struct {
 	PublicKey       *string              `json:"public_key,omitempty" toml:"public_key,omitempty"`
 	DefaultUsername *string              `json:"default_username,omitempty" toml:"default_username,omitempty"`
 	IconImageID     *string              `json:"icon_image_id,omitempty" toml:"icon_image_id,omitempty"`
+	IconName        *string              `json:"icon_name,omitempty" toml:"icon_name,omitempty"`
+	IconColor       *string              `json:"icon_color,omitempty" toml:"icon_color,omitempty"`
 }
 
 // EncryptedSecretBlock carries the KDF parameters used + the ciphertexts.
@@ -213,6 +228,12 @@ type Options struct {
 	// StripIcon clears IconImageID on folders + connections and drops
 	// the icon Images section. Re-imports get default Lucide icons.
 	StripIcon bool
+	// StripLocal drops local-shell connections (protocol == "local")
+	// from the export entirely. They are machine-specific (a shell kind
+	// and a command that only make sense on the machine they were made
+	// on - WSL, a serial device path, a locally-installed binary), so
+	// they are rarely worth sharing or migrating.
+	StripLocal bool
 	// ConvertAuthRefToInherit rewrites every connection's AuthRef
 	// override to nil so the connection inherits credentials from
 	// its folder ancestry on import. Useful when sharing connections
@@ -323,6 +344,8 @@ func Build(
 			ParentID:    parentID,
 			Name:        f.Name,
 			IconImageID: f.IconImageID,
+			IconName:    f.IconName,
+			IconColor:   f.IconColor,
 			Settings:    f.Settings,
 		})
 	}
@@ -353,6 +376,11 @@ func Build(
 		if !keepConn[c.ID] {
 			continue
 		}
+		// Local-shell connections are machine-specific; drop them when
+		// asked (they also carry no vault password to seal).
+		if opts.StripLocal && c.Protocol == "local" {
+			continue
+		}
 		if c.PasswordVaultKey != nil && *c.PasswordVaultKey != "" {
 			connPassKeys[c.ID] = *c.PasswordVaultKey
 		}
@@ -365,15 +393,19 @@ func Build(
 			folderID = nil
 		}
 		arc.Connections = append(arc.Connections, ArchiveConnection{
-			ID:          c.ID,
-			FolderID:    folderID,
-			Name:        c.Name,
-			Hostname:    c.Hostname,
-			Overrides:   c.Overrides,
-			Tags:        c.Tags,
-			Notes:       c.Notes,
-			Favorite:    c.Favorite,
-			IconImageID: c.IconImageID,
+			ID:             c.ID,
+			FolderID:       folderID,
+			Name:           c.Name,
+			Hostname:       c.Hostname,
+			Protocol:       c.Protocol,
+			LocalShellKind: c.LocalShellKind,
+			Overrides:      c.Overrides,
+			Tags:           c.Tags,
+			Notes:          c.Notes,
+			Favorite:       c.Favorite,
+			IconImageID:    c.IconImageID,
+			IconName:       c.IconName,
+			IconColor:      c.IconColor,
 		})
 
 		// Forwards (incl. SOCKS bookmarks) per kept connection.
@@ -468,6 +500,8 @@ func Build(
 				PublicKey:       c.PublicKey,
 				DefaultUsername: c.DefaultUsername,
 				IconImageID:     c.IconImageID,
+				IconName:        c.IconName,
+				IconColor:       c.IconColor,
 			})
 			if c.VaultKey == nil || *c.VaultKey == "" {
 				continue // no managed secret to wrap
@@ -543,9 +577,11 @@ func Build(
 				continue
 			}
 			arc.CredentialFolders = append(arc.CredentialFolders, ArchiveCredFolder{
-				ID:       f.ID,
-				ParentID: f.ParentID,
-				Name:     f.Name,
+				ID:        f.ID,
+				ParentID:  f.ParentID,
+				Name:      f.Name,
+				IconName:  f.IconName,
+				IconColor: f.IconColor,
 			})
 		}
 	}
@@ -634,12 +670,22 @@ func applyStrips(arc *Archive, opts Options) {
 	if opts.StripIcon {
 		for i := range arc.Folders {
 			arc.Folders[i].IconImageID = nil
+			arc.Folders[i].IconName = nil
+			arc.Folders[i].IconColor = nil
 		}
 		for i := range arc.Connections {
 			arc.Connections[i].IconImageID = nil
+			arc.Connections[i].IconName = nil
+			arc.Connections[i].IconColor = nil
 		}
 		for i := range arc.Credentials {
 			arc.Credentials[i].IconImageID = nil
+			arc.Credentials[i].IconName = nil
+			arc.Credentials[i].IconColor = nil
+		}
+		for i := range arc.CredentialFolders {
+			arc.CredentialFolders[i].IconName = nil
+			arc.CredentialFolders[i].IconColor = nil
 		}
 	}
 	if opts.StripTags {

@@ -489,16 +489,65 @@
   });
   onDestroy(() => { unsubReceive?.(); });
 
+  // The session that the tab's active pane (or first leaf) points at.
+  // Duplicate keys off the SESSION, not a tree lookup: a tab can be a
+  // local shell (saved or ad-hoc) or a dynamic-inventory host, none of
+  // which resolve through tree.connectionById - the old code silently
+  // returned for those, which is why Duplicate "sporadically" did nothing.
+  function tabPrimarySession(tabId: string) {
+    const t = paneTabs.tabs.find((x) => x.tabId === tabId);
+    if (!t) return null;
+    let sid: string | null = null;
+    function walk(n: PaneNodeType) {
+      if (sid) return;
+      if (n.kind === "pane") sid = n.sessionId;
+      else { walk(n.a); walk(n.b); }
+    }
+    walk(t.root);
+    if (!sid) return null;
+    return sessions.tabs.find((x) => x.sessionId === sid) ?? null;
+  }
+
   async function duplicateTab(tabId: string) {
-    const connId = tabConnectionId(tabId);
-    if (!connId) return;
-    const conn = tree.connectionById(connId);
-    if (!conn) return;
+    const sess = tabPrimarySession(tabId);
+    if (!sess) return;
     try {
-      const r = await api.sshConnect(connId);
+      // Local shell: a saved local connection re-runs its command; an
+      // ad-hoc shell (no connection) re-spawns the same shell kind.
+      if (sess.kind === "local") {
+        const conn = sess.connectionId ? tree.connectionById(sess.connectionId) : null;
+        if (conn && conn.protocol === "local") {
+          const r = await api.localConnect(conn.id);
+          sessions.add({
+            sessionId: r.session_id, connectionId: conn.id,
+            name: conn.name, hostname: r.display || r.kind,
+            status: "connected", kind: "local",
+          });
+          paneTabs.addTab(r.session_id, conn.name);
+        } else {
+          // Ad-hoc local shell: hostname carries the resolved shell kind.
+          // Only pass it back through when it's a kind the spawner accepts
+          // as input; the auto-resolved "shell" (Linux/macOS $SHELL) is not,
+          // so fall back to "" (auto) and get the same default shell.
+          const spawnKinds = ["wsl", "powershell", "cmd", "bash", "zsh", "sh", "fish"];
+          const kind = spawnKinds.includes(sess.hostname) ? sess.hostname : "";
+          const r = await api.localShellOpen(kind, "", 120, 32);
+          sessions.add({
+            sessionId: r.session_id, connectionId: "",
+            name: r.display, hostname: r.kind,
+            status: "connected", kind: "local",
+          });
+          paneTabs.addTab(r.session_id, r.display);
+        }
+        return;
+      }
+      // SSH connection: re-dial the same connection.
+      const conn = sess.connectionId ? tree.connectionById(sess.connectionId) : null;
+      if (!conn) return; // dynamic-inventory / unknown - nothing to re-dial
+      const r = await api.sshConnect(conn.id);
       sessions.add({
         sessionId: r.session_id,
-        connectionId: connId,
+        connectionId: conn.id,
         name: conn.name,
         hostname: conn.hostname,
         status: "connected",

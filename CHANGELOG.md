@@ -7,6 +7,52 @@ in alpha upstream.
 
 ---
 
+## [0.71.0] - System status popup, export/import + local-shell fixes
+
+### Added
+
+- **System status popup.** Click the server-status readout in the status bar
+  (load / memory / disk / users) for a full "at a glance" view of the focused
+  session's remote host: CPU load against core count, memory and swap, every
+  real filesystem with used / total / free, plus uptime, kernel, and the
+  logged-in users by name. Pseudo and temporary mounts (tmpfs, overlay,
+  loop-mounted snaps, the EFI partition, /run and the kernel virtual
+  filesystems) are hidden so only disks you care about show. Bars are colour
+  coded per metric - a disk at 80% and any real swap use turn amber, and each
+  goes red at its own critical point. A refresh button re-probes on demand; it
+  uses the same read-only side channel as the status-bar readout, so nothing
+  new runs on the host. Closing the popup hands keyboard focus back to the
+  terminal. The readout (and popup) stay gated behind the existing optional
+  server-status setting.
+
+### Fixed
+
+- **Export now carries built-in icons.** Exporting a folder or the whole app
+  dropped the built-in (named) icons and their colours on connections, folders,
+  credentials, and credential folders; they now round-trip. A new "local-shell
+  connections" option in the export dialog (on by default) leaves machine-local
+  terminals out of a shared export, and the strip wording is clearer about what
+  each tick removes.
+- **Importing a connection with a missing credential no longer leaves a dangling
+  reference.** If the referenced credential was not in the archive, the import
+  kept its original id - a phantom UUID you had to find and replace by hand. It
+  now falls back to inherit (so the folder default applies) and warns about any
+  references it dropped.
+- **Duplicate tab works for every session type.** Right-click - Duplicate tab
+  silently did nothing for local shells, ad-hoc local terminals, and dynamic
+  panes (it always tried an SSH dial); it now re-opens the right kind of session.
+- **Local-shell panes regained the broadcast and scrollback-search buttons**
+  that were stripped along with the SSH-only toolbar.
+- **VNC "connecting" overlay is readable on the Latte theme.** The text used an
+  undefined colour token and inherited a dark colour on the dark scrim; it is
+  now pinned to a light colour that reads on every theme.
+- **Per-connection "Open VNC on connect".** A host you only ever reach over VNC
+  (a Windows box) can now open its VNC console on double-click instead of an SSH
+  terminal - a checkbox next to the VNC console toggle. Batch-connect and the
+  explicit SSH actions still open a terminal.
+
+---
+
 ## [0.70.0] - Local-shell connections, more icons, close + theme fixes
 
 ### Added

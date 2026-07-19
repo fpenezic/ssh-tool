@@ -14,6 +14,7 @@
 
 <script lang="ts">
   import { tree, selection, sessions, paneTabs, view } from "./stores.svelte";
+  import { connectionActions } from "./connectionActions.svelte";
   import { api } from "./api";
   import { fuzzyMatch, highlightSegments, type FuzzyMatch } from "./fuzzy";
   import { clickOutside } from "./clickOutside";
@@ -418,25 +419,15 @@
       return;
     }
     // Connection: connect immediately (the whole point of the palette).
+    // Route through connectDefault so local-shell and VNC-default
+    // connections do the right thing (not a blind SSH dial).
     const c = r.entry.conn;
     onClose();
     queueMicrotask(async () => {
-      try {
-        console.debug("[quick-palette] connecting", c.id, c.name);
-        const res = await api.sshConnect(c.id);
-        console.debug("[quick-palette] connected", res);
-        sessions.add({
-          sessionId: res.session_id,
-          connectionId: c.id,
-          name: c.name,
-          hostname: c.hostname,
-          status: "connected",
-        });
-        paneTabs.addTab(res.session_id, c.name);
-        view.setTab("terminal");
-      } catch (e) {
-        console.error("[quick-palette] connect failed", c.id, e);
-        toast.err(`Connect failed: ${(e as any)?.message ?? String(e)}`);
+      const ok = await connectionActions.connectDefault(c.id);
+      if (!ok) {
+        const last = connectionActions.lastConnectError[c.id];
+        toast.err(`Connect failed: ${last?.message ?? "connect failed"}`);
       }
     });
   }

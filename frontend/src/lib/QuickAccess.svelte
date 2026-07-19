@@ -45,7 +45,7 @@
   async function quickConnect(c: Connection) {
     if (connectingId === c.id) return;
     connectingId = c.id;
-    await connectionActions.connectOne(c.id);
+    await connectionActions.connectDefault(c.id);
     connectingId = null;
   }
 

@@ -425,6 +425,7 @@
     vncEnabled: string;
     vncPort: string;
     vncTunnel: string;
+    vncDefault: string;
     networkProfile: string;
     initialCommand: string;
     localShellKind: string;
@@ -527,6 +528,7 @@
           ? String(conn.overrides.vnc_port)
           : "",
         vncTunnel: encodeBool(conn.overrides?.vnc_use_tunnel),
+        vncDefault: encodeBool(conn.overrides?.vnc_default),
         networkProfile: encodeNetProfile(conn.overrides?.network_profile_id),
         initialCommand: conn.overrides?.initial_command ?? "",
         localShellKind: conn.local_shell_kind ?? "",
@@ -562,6 +564,7 @@
       editing.vncEnabled !== encodeBool(o.vnc_enabled) ||
       numText(editing.vncPort) !== (o.vnc_port !== undefined ? String(o.vnc_port) : "") ||
       editing.vncTunnel !== encodeBool(o.vnc_use_tunnel) ||
+      editing.vncDefault !== encodeBool(o.vnc_default) ||
       editing.networkProfile !== encodeNetProfile(o.network_profile_id) ||
       editing.initialCommand !== (o.initial_command ?? "") ||
       editing.localShellKind !== (conn.local_shell_kind ?? "") ||
@@ -617,6 +620,7 @@
       }
     }
     overrides.vnc_use_tunnel = decodeBool(editing.vncTunnel);
+    overrides.vnc_default = decodeBool(editing.vncDefault);
     overrides.network_profile_id = decodeNetProfile(editing.networkProfile);
     overrides.initial_command = editing.initialCommand.trim() || undefined;
     const localKind = editing.localShellKind.trim();
@@ -1599,6 +1603,14 @@
           {/if}
         </div>
         {#if editing.vncEnabled === "on"}
+        <label class="vnc-default-check" title="When ticked, double-click / Enter on this connection opens the VNC console instead of an SSH terminal - for a host you only reach over VNC (a Windows box, a KVM-over-IP console). SSH stays available from the right-click menu.">
+          <input
+            type="checkbox"
+            checked={editing.vncDefault === "on"}
+            onchange={(e) => { if (editing) editing = { ...editing, vncDefault: e.currentTarget.checked ? "on" : "off" }; }}
+          />
+          <span>Open VNC on connect (double-click skips SSH)</span>
+        </label>
         <div class="vnc-grid">
           <label>RFB port
             <input
@@ -2371,6 +2383,32 @@
   }
   .vnc-head .vnc-spacer { flex: 1 1 auto; }
   .vnc-title { font-weight: 600; }
+  .vnc-section .vnc-default-check {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.45rem;
+    width: 100%;
+    margin: 0.55rem 0 0;
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.82rem;
+    color: var(--subtext0);
+    cursor: pointer;
+    text-align: left;
+  }
+  .vnc-section .vnc-default-check input {
+    accent-color: var(--blue);
+    margin: 0;
+    width: auto;
+    flex: 0 0 auto;
+    /* Undo the global input box styling so the checkbox renders native. */
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+  }
   /* Toggle switch (matches a modern on/off control). */
   .vnc-switch {
     position: relative;
