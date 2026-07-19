@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ssh-tool/internal/store"
@@ -378,5 +379,164 @@ func TestIconRoundTrip(t *testing.T) {
 	}
 	if arcStripped.Folders[0].IconImageID != nil || arcStripped.Connections[0].IconImageID != nil {
 		t.Fatalf("StripIcon left icon refs")
+	}
+}
+
+// A connection whose auth_ref points at a credential NOT in the archive
+// (credential-less share, or a stripped credential subtree) must import
+// with auth_ref DROPPED to nil - inherit from the folder - not left as a
+// dangling uuid the user has to hunt down and replace by hand.
+func TestDanglingAuthRefDroppedToInherit(t *testing.T) {
+	src := openTestDB(t)
+	cred, err := src.CreateCredential(store.NewCredential{
+		Name: "deploy", Kind: store.CredPassword, StorageMode: store.StorageManaged,
+	})
+	if err != nil {
+		t.Fatalf("create cred: %v", err)
+	}
+	ref := cred.ID
+	conn, err := src.CreateConnection(store.NewConnection{
+		Name: "web-01", Hostname: "h",
+		Overrides: store.InheritableSettings{AuthRef: &ref},
+	})
+	if err != nil {
+		t.Fatalf("create conn: %v", err)
+	}
+	_ = conn
+
+	// Export WITHOUT credentials - the auth_ref rides along but the
+	// credential itself does not.
+	arc, err := Build(src, nil, nil, Options{IncludeCredentials: false}, noSecrets)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if len(arc.Connections) != 1 || arc.Connections[0].Overrides.AuthRef == nil {
+		t.Fatalf("archive should carry the auth_ref: %+v", arc.Connections)
+	}
+
+	// Import into a fresh DB that has never seen this credential id.
+	dst := openTestDB(t)
+	sum, err := Apply(dst, arc, ImportOptions{}, rejectSecrets)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	conns, _ := dst.ListConnections(nil)
+	if len(conns) != 1 {
+		t.Fatalf("want 1 conn, got %d", len(conns))
+	}
+	if conns[0].Overrides.AuthRef != nil {
+		t.Fatalf("dangling auth_ref should be dropped to nil (inherit), got %q", *conns[0].Overrides.AuthRef)
+	}
+	// The drop should surface as a warning.
+	found := false
+	for _, w := range sum.Warnings {
+		if strings.Contains(w, "credential reference") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a dropped-credential warning, got %v", sum.Warnings)
+	}
+}
+
+// A local-shell connection round-trips: protocol + local_shell_kind
+// survive export/import; StripLocal drops it entirely.
+func TestLocalShellConnectionRoundTrip(t *testing.T) {
+	src := openTestDB(t)
+	kind := "wsl"
+	if _, err := src.CreateConnection(store.NewConnection{
+		Name: "telnet-sw1", Protocol: "local", LocalShellKind: &kind,
+		Overrides: store.InheritableSettings{InitialCommand: strptr("telnet 10.0.0.5")},
+	}); err != nil {
+		t.Fatalf("create local conn: %v", err)
+	}
+	if _, err := src.CreateConnection(store.NewConnection{
+		Name: "web-01", Hostname: "h",
+	}); err != nil {
+		t.Fatalf("create ssh conn: %v", err)
+	}
+
+	// Default export keeps both; protocol/kind survive.
+	arc, err := Build(src, nil, nil, Options{}, noSecrets)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	dst := openTestDB(t)
+	if _, err := Apply(dst, arc, ImportOptions{}, rejectSecrets); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	conns, _ := dst.ListConnections(nil)
+	var local *store.Connection
+	for i := range conns {
+		if conns[i].Protocol == "local" {
+			local = &conns[i]
+		}
+	}
+	if local == nil {
+		t.Fatalf("local connection missing after import: %+v", conns)
+	}
+	if local.LocalShellKind == nil || *local.LocalShellKind != "wsl" {
+		t.Fatalf("local_shell_kind lost: %+v", local.LocalShellKind)
+	}
+	if local.Overrides.InitialCommand == nil || *local.Overrides.InitialCommand != "telnet 10.0.0.5" {
+		t.Fatalf("initial command lost: %+v", local.Overrides.InitialCommand)
+	}
+
+	// StripLocal drops it - only the SSH connection survives.
+	arcStripped, err := Build(src, nil, nil, Options{StripLocal: true}, noSecrets)
+	if err != nil {
+		t.Fatalf("build stripped: %v", err)
+	}
+	if len(arcStripped.Connections) != 1 || arcStripped.Connections[0].Protocol == "local" {
+		t.Fatalf("StripLocal should leave only the SSH connection, got %+v", arcStripped.Connections)
+	}
+}
+
+func strptr(s string) *string { return &s }
+
+// Built-in (lucide) named icons + palette colour must travel in the
+// archive and restore on import; StripIcon must drop them too.
+func TestNamedIconRoundTrip(t *testing.T) {
+	src := openTestDB(t)
+	folder, _ := src.CreateFolder(store.NewFolder{Name: "Infra"})
+	conn, _ := src.CreateConnection(store.NewConnection{Name: "web-01", Hostname: "h", FolderID: &folder.ID})
+	if err := src.SetFolderNamedIcon(folder.ID, "server", "blue"); err != nil {
+		t.Fatalf("set folder named icon: %v", err)
+	}
+	if err := src.SetConnectionNamedIcon(conn.ID, "database", "green"); err != nil {
+		t.Fatalf("set conn named icon: %v", err)
+	}
+
+	arc, err := Build(src, nil, nil, Options{}, noSecrets)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if arc.Folders[0].IconName == nil || *arc.Folders[0].IconName != "server" || arc.Folders[0].IconColor == nil || *arc.Folders[0].IconColor != "blue" {
+		t.Fatalf("folder named icon not in archive: %+v", arc.Folders[0])
+	}
+	if arc.Connections[0].IconName == nil || *arc.Connections[0].IconName != "database" {
+		t.Fatalf("conn named icon not in archive: %+v", arc.Connections[0])
+	}
+
+	dst := openTestDB(t)
+	if _, err := Apply(dst, arc, ImportOptions{}, rejectSecrets); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	folders, _ := dst.ListFolders()
+	if len(folders) != 1 || folders[0].IconName == nil || *folders[0].IconName != "server" || folders[0].IconColor == nil || *folders[0].IconColor != "blue" {
+		t.Fatalf("folder named icon lost on import: %+v", folders)
+	}
+	conns, _ := dst.ListConnections(nil)
+	if len(conns) != 1 || conns[0].IconName == nil || *conns[0].IconName != "database" || conns[0].IconColor == nil || *conns[0].IconColor != "green" {
+		t.Fatalf("conn named icon lost on import: %+v", conns)
+	}
+
+	// StripIcon drops the named icons from the archive.
+	arcStripped, err := Build(src, nil, nil, Options{StripIcon: true}, noSecrets)
+	if err != nil {
+		t.Fatalf("build stripped: %v", err)
+	}
+	if arcStripped.Folders[0].IconName != nil || arcStripped.Connections[0].IconName != nil {
+		t.Fatalf("StripIcon left named icons: %+v %+v", arcStripped.Folders[0], arcStripped.Connections[0])
 	}
 }

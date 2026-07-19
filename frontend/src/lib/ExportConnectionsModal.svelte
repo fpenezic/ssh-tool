@@ -28,6 +28,9 @@
   let stripTags = $state(false);
   let stripColor = $state(false);
   let stripIcon = $state(false);
+  // Local-shell connections are machine-specific (a shell kind + a
+  // command tied to this box); default to leaving them out of a share.
+  let stripLocal = $state(true);
   let convertAuthRefToInherit = $state(true);
   let body = $state<string | null>(null);
   let err = $state<string | null>(null);
@@ -52,6 +55,7 @@
         strip_tags: stripTags,
         strip_color: stripColor,
         strip_icon: stripIcon,
+        strip_local: stripLocal,
         convert_auth_ref_to_inherit: convertAuthRefToInherit,
       });
       body = res.body;
@@ -69,6 +73,7 @@
     void stripTags;
     void stripColor;
     void stripIcon;
+    void stripLocal;
     void convertAuthRefToInherit;
     generate();
   });
@@ -135,7 +140,12 @@
     </div>
 
     <div class="strip">
-      <div class="strip-title">Strip from export</div>
+      <div class="strip-title">Leave out of the export</div>
+      <p class="strip-note">Anything you tick here is <strong>removed from the exported file</strong>. Unticked items are included.</p>
+      <label class="check">
+        <input type="checkbox" bind:checked={stripLocal} />
+        <span>Local-shell connections <span class="dim">(telnet / serial / claude etc. - machine-specific, rarely useful elsewhere)</span></span>
+      </label>
       <label class="check">
         <input type="checkbox" bind:checked={stripNotes} />
         <span>Notes <span class="dim">(connection-level free text)</span></span>
@@ -233,6 +243,13 @@
     letter-spacing: 0.05em;
     margin-bottom: 0.15rem;
   }
+  .strip-note {
+    font-size: 0.74rem;
+    color: var(--subtext0);
+    margin: 0 0 0.3rem;
+    line-height: 1.4;
+  }
+  .strip-note strong { color: var(--text); font-weight: 600; }
   .strip .check { display: inline-flex; align-items: flex-start; gap: 0.4rem; font-size: 0.8rem; cursor: pointer; }
   .strip .check input { margin-top: 0.2rem; accent-color: var(--blue); flex-shrink: 0; }
   .strip .dim { color: var(--overlay0); font-size: 0.74rem; }

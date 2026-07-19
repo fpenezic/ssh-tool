@@ -428,25 +428,30 @@
     align-items: center;
     justify-content: center;
     gap: 0.8rem;
-    background: rgba(0, 0, 0, 0.55);
-    color: var(--text1);
+    background: rgba(0, 0, 0, 0.62);
+    /* The overlay sits on a fixed dark scrim regardless of theme, so the
+       text must stay light in both themes. --text1 was undefined (fell
+       back to the inherited body colour, which is DARK under Latte -
+       dark text on a dark scrim, unreadable). Pin a light colour. */
+    color: #dce0e8;
     font-size: 0.9rem;
     text-align: center;
     padding: 1rem;
   }
-  .vnc-overlay.error { color: var(--err, #e66); }
+  .vnc-overlay.error { color: #f5a3a3; }
   .vnc-overlay button {
     padding: 0.3rem 0.8rem;
-    background: var(--surface2);
-    color: var(--text1);
-    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.14);
+    color: #dce0e8;
+    border: 1px solid rgba(255, 255, 255, 0.24);
     border-radius: 4px;
     cursor: pointer;
   }
+  .vnc-overlay button:hover { background: rgba(255, 255, 255, 0.22); }
   .spinner {
     width: 26px;
     height: 26px;
-    border: 3px solid var(--surface2);
+    border: 3px solid rgba(255, 255, 255, 0.25);
     border-top-color: var(--accent, #58a);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;

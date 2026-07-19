@@ -4438,6 +4438,7 @@ type ExportSubtreeRequest struct {
 	StripTags               bool     `json:"strip_tags"`
 	StripColor              bool     `json:"strip_color"`
 	StripIcon               bool     `json:"strip_icon"`
+	StripLocal              bool     `json:"strip_local"`
 	ConvertAuthRefToInherit bool     `json:"convert_auth_ref_to_inherit"`
 }
 
@@ -4461,6 +4462,7 @@ func (a *App) ExportSubtree(req ExportSubtreeRequest) (*ExportSubtreeResult, err
 		StripTags:               req.StripTags,
 		StripColor:              req.StripColor,
 		StripIcon:               req.StripIcon,
+		StripLocal:              req.StripLocal,
 		ConvertAuthRefToInherit: req.ConvertAuthRefToInherit,
 	}, func(credID, vaultKey string) ([]byte, bool, error) {
 		s, ok, err := a.vault.Get(vaultKey)

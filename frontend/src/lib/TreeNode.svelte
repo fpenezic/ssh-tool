@@ -73,7 +73,7 @@
     connectingId = connId;
     connectErrId = null;
     connectErr   = null;
-    const ok = await connectionActions.connectOne(connId);
+    const ok = await connectionActions.connectDefault(connId);
     if (!ok) {
       // Surface a brief inline marker. The full error + debug log
       // lives in DetailPane via connectionActions.lastConnectError.

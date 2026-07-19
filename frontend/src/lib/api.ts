@@ -59,6 +59,7 @@ export interface InheritableSettings {
   vnc_enabled?: boolean;
   vnc_port?: number;
   vnc_use_tunnel?: boolean;
+  vnc_default?: boolean;
   // "" = explicitly direct (breaks an inherited profile); id = a
   // network_profiles row; absent = inherit.
   network_profile_id?: string;
@@ -121,6 +122,7 @@ export interface ResolvedSettings {
   vnc_enabled: boolean;
   vnc_port: number;
   vnc_use_tunnel: boolean;
+  vnc_default: boolean;
   network_profile_id: string | null;
 }
 
@@ -1271,6 +1273,7 @@ export const api = {
     strip_tags?: boolean;
     strip_color?: boolean;
     strip_icon?: boolean;
+    strip_local?: boolean;
     convert_auth_ref_to_inherit?: boolean;
   }) => G.ExportSubtree(req as any) as unknown as Promise<ExportSubtreeResult>,
   fetchArchiveURL: (url: string) =>

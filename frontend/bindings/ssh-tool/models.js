@@ -1371,6 +1371,13 @@ export class ExportSubtreeRequest {
              */
             this["strip_icon"] = false;
         }
+        if (!("strip_local" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["strip_local"] = false;
+        }
         if (!("convert_auth_ref_to_inherit" in $$source)) {
             /**
              * @member

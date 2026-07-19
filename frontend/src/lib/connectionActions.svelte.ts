@@ -189,6 +189,28 @@ class ConnectionActionsStore {
   // Connect to a single connection. Adds the session + tab on success,
   // records the failure (message + buffered debug) on error so the
   // editor pane can show it.
+  // The DEFAULT connect action for a double-click / Enter on a
+  // connection. Normally SSH, but a connection with "VNC as default"
+  // set (vnc_default + vnc_enabled resolved true) opens the VNC console
+  // instead - for a host reached only over VNC (a Windows box, a
+  // KVM-over-IP console). The explicit Connect button and batch connects
+  // still go through connectOne (SSH); this only governs the default
+  // gesture. Falls back to SSH if resolving fails.
+  async connectDefault(id: string): Promise<boolean> {
+    const c = tree.connectionById(id);
+    if (!c) return false;
+    if (c.protocol === "local") return this.connectLocal(c);
+    try {
+      const r = await api.connectionsResolve(id);
+      if (r?.vnc_enabled && r?.vnc_default) {
+        return this.openVncConnection(id);
+      }
+    } catch {
+      // resolve failed - fall through to a normal SSH connect
+    }
+    return this.connectOne(id);
+  }
+
   async connectOne(id: string, opts?: { overrideCredentialId?: string }): Promise<boolean> {
     const c = tree.connectionById(id);
     if (!c) return false;

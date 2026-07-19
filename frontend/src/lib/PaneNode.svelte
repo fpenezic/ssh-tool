@@ -616,6 +616,36 @@
           </div>
         {/if}
 
+        <!-- Local-shell group: the SSH toolbar is hidden for a local pane, but
+             broadcast fan-out and scrollback search apply to a local PTY too.
+             (SFTP / tcpdump / HTTP / tunnels / copy-host stay SSH-only; LLM
+             share needs a side-channel a local shell doesn't have, so it's
+             not offered here.) -->
+        {#if isLocalPane && !isMobile}
+          <div class="action-group">
+            <button
+              class="search-btn"
+              class:active={searchActive}
+              title="Search the scrollback (Ctrl+Shift+F)"
+              onclick={(e) => {
+                e.stopPropagation();
+                if (node.kind === "pane") {
+                  window.dispatchEvent(new CustomEvent("terminal:search", { detail: { sessionId: node.sessionId } }));
+                }
+              }}
+            ><IconSearch size={13} /></button>
+            <button
+              class="bcast-btn"
+              class:active={node.kind === "pane" && broadcast.hasInAnyGroup(node.sessionId)}
+              title={paneBroadcastTitle()}
+              onclick={(e) => {
+                e.stopPropagation();
+                if (node.kind === "pane") broadcast.toggle(node.sessionId);
+              }}
+            ><IconBroadcast size={13} /></button>
+          </div>
+        {/if}
+
         <!-- VNC console group: status pill + console controls, inline in the
              pane header so VncPane keeps the full area for the screen. State
              flows up from VncPane via $bindable; handlers via onControls. No

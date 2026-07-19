@@ -112,6 +112,13 @@ type InheritableSettings struct {
 	// the remote's loopback, like a localhost-bound x11vnc). When false
 	// the bridge dials host:vnc_port directly. Tri-state inheritance.
 	VncUseTunnel *bool `json:"vnc_use_tunnel,omitempty"`
+	// VncDefault makes the VNC console the DEFAULT connect action for a
+	// connection (double-click / Enter open the console instead of an SSH
+	// terminal). For a host reached only over VNC (a Windows box, a
+	// KVM-over-IP / IPMI console) this avoids a pointless SSH attempt.
+	// SSH stays available via the right-click menu. Only meaningful when
+	// VncEnabled resolves true. Tri-state inheritance.
+	VncDefault *bool `json:"vnc_default,omitempty"`
 	// NetworkProfileID routes the FIRST SSH hop through a userspace
 	// WireGuard tunnel (internal/wg). nil = inherit from ancestry;
 	// "" = explicitly direct (breaks an inherited profile); otherwise
@@ -205,6 +212,10 @@ type ResolvedSettings struct {
 	VncEnabled   bool   `json:"vnc_enabled"`
 	VncPort      uint16 `json:"vnc_port"`
 	VncUseTunnel bool   `json:"vnc_use_tunnel"`
+	// VncDefault: the VNC console is the default connect action (double-
+	// click opens it instead of an SSH terminal). Only honoured when
+	// VncEnabled is true.
+	VncDefault bool `json:"vnc_default"`
 	// NetworkProfileID: non-nil when the first hop should dial through
 	// the userspace WireGuard tunnel of this network profile. An
 	// explicit "" override normalizes to nil here.

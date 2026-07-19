@@ -1344,6 +1344,19 @@ export class InheritableSettings {
         }
         if (/** @type {any} */(false)) {
             /**
+             * VncDefault makes the VNC console the DEFAULT connect action for a
+             * connection (double-click / Enter open the console instead of an SSH
+             * terminal). For a host reached only over VNC (a Windows box, a
+             * KVM-over-IP / IPMI console) this avoids a pointless SSH attempt.
+             * SSH stays available via the right-click menu. Only meaningful when
+             * VncEnabled resolves true. Tri-state inheritance.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["vnc_default"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * NetworkProfileID routes the FIRST SSH hop through a userspace
              * WireGuard tunnel (internal/wg). nil = inherit from ancestry;
              * "" = explicitly direct (breaks an inherited profile); otherwise
@@ -1849,6 +1862,16 @@ export class ResolvedSettings {
              * @type {boolean}
              */
             this["vnc_use_tunnel"] = false;
+        }
+        if (!("vnc_default" in $$source)) {
+            /**
+             * VncDefault: the VNC console is the default connect action (double-
+             * click opens it instead of an SSH terminal). Only honoured when
+             * VncEnabled is true.
+             * @member
+             * @type {boolean}
+             */
+            this["vnc_default"] = false;
         }
         if (!("network_profile_id" in $$source)) {
             /**

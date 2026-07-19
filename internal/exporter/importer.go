@@ -161,6 +161,29 @@ func Apply(
 	folderIDMap := map[string]string{}
 	credIDMap := map[string]string{}
 
+	// resolveAuthRef maps an archive credential id to its final local id.
+	// Resolvable when the credential is in this archive (credIDMap, filled
+	// by the credentials pass below) or already exists locally by that id
+	// (credByID - e.g. re-importing onto the same machine). Anything else
+	// is unknown and gets dropped to "inherit" by the remap helpers.
+	resolveAuthRef := func(id string) (string, bool) {
+		if newID, ok := credIDMap[id]; ok {
+			return newID, true
+		}
+		if _, ok := credByID[id]; ok {
+			return id, true
+		}
+		return "", false
+	}
+	// Collect dropped (dangling) auth_refs into one deduped warning so the
+	// user sees that some connections fell back to inheriting a credential.
+	droppedAuthRefs := map[string]bool{}
+	noteDropped := func(ids []string) {
+		for _, id := range ids {
+			droppedAuthRefs[id] = true
+		}
+	}
+
 	// ----- Icon images -----
 	// Inserted first so folder / connection / credential passes can
 	// link remapped icon ids as they create rows. PutImage is
@@ -201,6 +224,24 @@ func Apply(
 		if err := link(newImgID); err != nil {
 			sum.Warnings = append(sum.Warnings,
 				fmt.Sprintf("%s %s: icon link: %v", what, name, err))
+		}
+	}
+
+	// setNamedIcon restores a built-in (lucide) icon + colour. Mutually
+	// exclusive with an uploaded image, so it's only applied when the
+	// archive carried a name and no image link succeeded above; the store
+	// setters clear icon_image_id anyway. No-op on dry-run / no name.
+	setNamedIcon := func(iconName, iconColor *string, link func(name, color string) error, what, name string) {
+		if opts.DryRun || iconName == nil || *iconName == "" {
+			return
+		}
+		color := ""
+		if iconColor != nil {
+			color = *iconColor
+		}
+		if err := link(*iconName, color); err != nil {
+			sum.Warnings = append(sum.Warnings,
+				fmt.Sprintf("%s %s: named icon: %v", what, name, err))
 		}
 	}
 
@@ -260,6 +301,9 @@ func Apply(
 			}
 			credFolderIDMap[f.ID] = created.ID
 			cfByParentName[cfKey{newParent, f.Name}] = created.ID
+			setNamedIcon(f.IconName, f.IconColor, func(n, c string) error {
+				return db.SetCredentialFolderNamedIcon(created.ID, n, c)
+			}, "credential folder", f.Name)
 		}
 	}
 
@@ -313,6 +357,9 @@ func Apply(
 		setIcon(c.IconImageID, func(imgID string) error {
 			return db.SetCredentialIcon(newCred.ID, imgID)
 		}, "cred", c.Name)
+		setNamedIcon(c.IconName, c.IconColor, func(n, col string) error {
+			return db.SetCredentialNamedIcon(newCred.ID, n, col)
+		}, "cred", c.Name)
 		// Unwrap + restore secret if archive carries one.
 		if arc.EncryptedSecrets != nil {
 			if _, present := arc.EncryptedSecrets.CipherBy[c.ID]; !present {
@@ -364,7 +411,8 @@ func Apply(
 				sum.FoldersUpdated = append(sum.FoldersUpdated, f.Name)
 				folderIDMap[f.ID] = existing.ID
 				if !opts.DryRun {
-					settings := remapAuthRefInSettings(f.Settings, credIDMap)
+					settings, dropped := remapAuthRefInSettings(f.Settings, resolveAuthRef)
+					noteDropped(dropped)
 					if _, err := db.UpdateFolder(store.UpdateFolder{
 						ID:       existing.ID,
 						Name:     &f.Name,
@@ -375,6 +423,9 @@ func Apply(
 					}
 					setIcon(f.IconImageID, func(imgID string) error {
 						return db.SetFolderIcon(existing.ID, imgID)
+					}, "folder", f.Name)
+					setNamedIcon(f.IconName, f.IconColor, func(n, col string) error {
+						return db.SetFolderNamedIcon(existing.ID, n, col)
 					}, "folder", f.Name)
 					if f.Dynamic != nil {
 						df := store.DynamicFolder{
@@ -415,7 +466,8 @@ func Apply(
 			t := opts.TargetFolderID
 			newParentID = &t
 		}
-		settings := remapAuthRefInSettings(f.Settings, credIDMap)
+		settings, droppedF := remapAuthRefInSettings(f.Settings, resolveAuthRef)
+		noteDropped(droppedF)
 		if opts.DryRun {
 			folderIDMap[f.ID] = f.ID // synthetic so children remap cleanly
 			continue
@@ -433,6 +485,9 @@ func Apply(
 		folderIDMap[f.ID] = created.ID
 		setIcon(f.IconImageID, func(imgID string) error {
 			return db.SetFolderIcon(created.ID, imgID)
+		}, "folder", f.Name)
+		setNamedIcon(f.IconName, f.IconColor, func(n, col string) error {
+			return db.SetFolderNamedIcon(created.ID, n, col)
 		}, "folder", f.Name)
 		// Dynamic-inventory side table. Cached entries are not part of
 		// the archive - the first refresh on this side repopulates them.
@@ -476,22 +531,30 @@ func Apply(
 						t := opts.TargetFolderID
 						newFolderID = &t
 					}
-					overrides := remapAuthRefInSettings(c.Overrides, credIDMap)
+					overrides, droppedC := remapAuthRefInSettings(c.Overrides, resolveAuthRef)
+					noteDropped(droppedC)
+					protocol := c.Protocol
 					if _, err := db.UpdateConnection(store.UpdateConnection{
-						ID:        existing.ID,
-						FolderID:  newFolderID,
-						Name:      &c.Name,
-						Hostname:  &c.Hostname,
-						Overrides: &overrides,
-						Tags:      &c.Tags,
-						Notes:     &c.Notes,
-						Favorite:  &c.Favorite,
+						ID:                  existing.ID,
+						FolderID:            newFolderID,
+						Name:                &c.Name,
+						Hostname:            &c.Hostname,
+						Protocol:            &protocol,
+						LocalShellKind:      c.LocalShellKind,
+						ClearLocalShellKind: c.LocalShellKind == nil,
+						Overrides:           &overrides,
+						Tags:                &c.Tags,
+						Notes:               &c.Notes,
+						Favorite:            &c.Favorite,
 					}); err != nil {
 						sum.Warnings = append(sum.Warnings,
 							fmt.Sprintf("conn %s overwrite: %v", c.Name, err))
 					}
 					setIcon(c.IconImageID, func(imgID string) error {
 						return db.SetConnectionIcon(existing.ID, imgID)
+					}, "conn", c.Name)
+					setNamedIcon(c.IconName, c.IconColor, func(n, col string) error {
+						return db.SetConnectionNamedIcon(existing.ID, n, col)
 					}, "conn", c.Name)
 				}
 				connIDMap[c.ID] = existing.ID
@@ -513,14 +576,17 @@ func Apply(
 				t := opts.TargetFolderID
 				newFolderID = &t
 			}
-			overrides := remapAuthRefInSettings(c.Overrides, credIDMap)
+			overrides, droppedC := remapAuthRefInSettings(c.Overrides, resolveAuthRef)
+			noteDropped(droppedC)
 			created, err := db.CreateConnection(store.NewConnection{
-				FolderID:  newFolderID,
-				Name:      c.Name,
-				Hostname:  c.Hostname,
-				Overrides: overrides,
-				Tags:      c.Tags,
-				Notes:     c.Notes,
+				FolderID:       newFolderID,
+				Name:           c.Name,
+				Hostname:       c.Hostname,
+				Protocol:       c.Protocol,
+				LocalShellKind: c.LocalShellKind,
+				Overrides:      overrides,
+				Tags:           c.Tags,
+				Notes:          c.Notes,
 			})
 			if err != nil {
 				sum.Warnings = append(sum.Warnings,
@@ -530,6 +596,9 @@ func Apply(
 			connIDMap[c.ID] = created.ID
 			setIcon(c.IconImageID, func(imgID string) error {
 				return db.SetConnectionIcon(created.ID, imgID)
+			}, "conn", c.Name)
+			setNamedIcon(c.IconName, c.IconColor, func(n, col string) error {
+				return db.SetConnectionNamedIcon(created.ID, n, col)
 			}, "conn", c.Name)
 		}
 	}
@@ -621,6 +690,16 @@ func Apply(
 		sum.ForwardsCreated++
 	}
 
+	// Surface dropped dangling credential references as one warning. These
+	// are auth_refs that pointed at a credential not in the archive (and
+	// not present locally) - typically a credential-less share; the
+	// affected connections/folders now inherit their folder's credential
+	// instead of carrying a broken id.
+	if n := len(droppedAuthRefs); n > 0 {
+		sum.Warnings = append(sum.Warnings,
+			fmt.Sprintf("%d credential reference(s) not in the archive were dropped; affected connections now inherit their folder's credential", n))
+	}
+
 	return sum, nil
 }
 
@@ -641,36 +720,51 @@ func remapFolderID(oldID *string, m map[string]string) *string {
 // remapAuthRefInSettings walks an InheritableSettings and rewrites
 // AuthRef (and AuthRefs inside any JumpHost chain) to the new
 // credential id. Returns a copy - never mutates the original.
-func remapAuthRefInSettings(s store.InheritableSettings, m map[string]string) store.InheritableSettings {
+//
+// resolve reports the final local id for an archive credential id and
+// whether it is known at all. An AuthRef that resolves is rewritten; one
+// that doesn't (credential wasn't in the archive and doesn't exist
+// locally - the common case when the archive was shared without
+// credentials, or a credential subtree was stripped) is DROPPED to nil so
+// the connection cleanly falls back to inheriting its folder's
+// credential, instead of pointing at a dangling uuid the user then has to
+// hunt down and replace by hand. Dropped ids are appended to dropped.
+func remapAuthRefInSettings(s store.InheritableSettings, resolve func(id string) (string, bool)) (store.InheritableSettings, []string) {
+	var dropped []string
 	out := s
 	if out.AuthRef != nil {
-		if newID, ok := m[*out.AuthRef]; ok {
+		if newID, ok := resolve(*out.AuthRef); ok {
 			out.AuthRef = &newID
+		} else {
+			dropped = append(dropped, *out.AuthRef)
+			out.AuthRef = nil
 		}
-		// If the credential wasn't in the archive (and wasn't pre-
-		// existing), we leave the old id intact; the user can fix
-		// the broken auth_ref manually. Failing the whole connection
-		// over a missing credential would be worse UX.
 	}
 	if out.JumpHost != nil && out.JumpHost.Chain != nil {
-		newChain := remapJumpChain(*out.JumpHost.Chain, m)
+		newChain, d := remapJumpChain(*out.JumpHost.Chain, resolve)
+		dropped = append(dropped, d...)
 		out.JumpHost = &store.JumpHostOverride{Kind: out.JumpHost.Kind, Chain: &newChain}
 	}
-	return out
+	return out, dropped
 }
 
-func remapJumpChain(spec store.JumpHostSpec, m map[string]string) store.JumpHostSpec {
+func remapJumpChain(spec store.JumpHostSpec, resolve func(id string) (string, bool)) (store.JumpHostSpec, []string) {
+	var dropped []string
 	out := spec
 	if out.AuthRef != nil {
-		if newID, ok := m[*out.AuthRef]; ok {
+		if newID, ok := resolve(*out.AuthRef); ok {
 			out.AuthRef = &newID
+		} else {
+			dropped = append(dropped, *out.AuthRef)
+			out.AuthRef = nil
 		}
 	}
 	if out.Via != nil {
-		via := remapJumpChain(*out.Via, m)
+		via, d := remapJumpChain(*out.Via, resolve)
+		dropped = append(dropped, d...)
 		out.Via = &via
 	}
-	return out
+	return out, dropped
 }
 
 // topoSortFolders orders the slice so every entry's parent appears
