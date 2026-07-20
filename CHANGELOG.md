@@ -7,6 +7,37 @@ in alpha upstream.
 
 ---
 
+## [0.71.1] - Share-to-browser and VNC-over-WireGuard fixes
+
+### Fixed
+
+- **Share to browser now honours the interface you pick.** Switching off the
+  default network interface (on Windows the WSL/Hyper-V vEthernet often sorted
+  first) had no effect: the guest URL still came out on the old address because
+  the server reused its existing listener instead of rebinding. It now rebinds
+  to the chosen interface when no share is currently active (a live share on the
+  old address blocks the move, with a clear error, so guests are never cut off).
+  The interface picker also sorts real LAN adapters ahead of host-only virtual
+  ones (Hyper-V / WSL vEthernet, VMware, VirtualBox, docker), so the default
+  selection lands on an address a guest on your network can actually reach.
+  Overlay adapters (WireGuard, Tailscale, ZeroTier) stay selectable as before.
+
+- **VNC over a network profile (userspace WireGuard) now connects.** A direct
+  VNC dial ignored the connection's network profile and used the OS routing
+  table, which has no route to a userspace WireGuard tunnel - so a VNC host
+  reachable only over the tunnel came back "unreachable" even with the profile
+  forced to always-on. The direct dial now goes through the tunnel, matching the
+  first SSH hop.
+
+- **VNC through a jump host over a network profile no longer times out.** The
+  VNC jump path did not normalise its connect timeout, so the first-hop dial
+  through the tunnel was built with an already-expired deadline and failed
+  instantly (a jump with no network profile worked, one with a profile timed
+  out). The jump chain now applies the same default connect timeout as a normal
+  SSH connect.
+
+---
+
 ## [0.71.0] - System status popup, export/import + local-shell fixes
 
 ### Added

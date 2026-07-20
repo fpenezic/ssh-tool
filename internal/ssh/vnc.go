@@ -31,6 +31,8 @@ import (
 
 	"github.com/coder/websocket"
 	gossh "golang.org/x/crypto/ssh"
+
+	"ssh-tool/internal/store"
 )
 
 // tokenTTL bounds how long a minted token stays usable before its first
@@ -185,6 +187,23 @@ func NewTCPUpstream(addr string) func(ctx context.Context) (VncUpstream, error) 
 	return func(ctx context.Context) (VncUpstream, error) {
 		d := net.Dialer{Timeout: 10 * time.Second}
 		conn, err := d.DialContext(ctx, "tcp", addr)
+		if err != nil {
+			return nil, fmt.Errorf("vnc dial %s: %w", addr, err)
+		}
+		return conn, nil
+	}
+}
+
+// NewProfileTCPUpstream is NewTCPUpstream that honours a network profile: when
+// settings pins a NetworkProfileID it dials the RFB port through that profile's
+// userspace WireGuard tunnel (via firstHopDial), exactly like the first SSH
+// hop does. Without a profile it is a plain TCP dial. This is the direct,
+// no-jump VNC path; a plain net.Dial there ignored the tunnel entirely, so a
+// VNC host reachable only over WG came back "unreachable" even with the profile
+// forced on.
+func NewProfileTCPUpstream(settings *store.ResolvedSettings, addr string) func(ctx context.Context) (VncUpstream, error) {
+	return func(ctx context.Context) (VncUpstream, error) {
+		conn, _, err := firstHopDial(ctx, settings, addr, 10*time.Second)
 		if err != nil {
 			return nil, fmt.Errorf("vnc dial %s: %w", addr, err)
 		}

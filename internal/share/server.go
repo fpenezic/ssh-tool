@@ -299,9 +299,26 @@ func (s *Server) RegenerateCert() (Fingerprint, error) {
 // running server; it doesn't move it).
 func (s *Server) ensureListening(ip string, preferredPort uint16, cert *Cert) error {
 	if s.srv != nil {
-		// Already up. Keep the existing listener; a second share reuses it.
-		s.cert = cert
-		return nil
+		// Already up. If the caller wants the SAME interface, reuse the
+		// listener (a second share adds to the running server). If they picked
+		// a DIFFERENT interface, we must move: the guest URL is built from the
+		// actual bind, so reusing the old listener would hand out a URL on the
+		// wrong IP (the bug where switching off the Hyper-V/WSL default did
+		// nothing). We can only move when no share is currently bound here -
+		// tearing the listener down would kill live guests otherwise.
+		if curIP, _, err := net.SplitHostPort(s.bind); err == nil && curIP == ip {
+			s.cert = cert
+			return nil
+		}
+		if len(s.byID) > 0 {
+			return fmt.Errorf("share: already listening on %s; stop active shares before binding a different interface", s.bind)
+		}
+		// No active shares: safe to tear the old listener down and rebind.
+		_ = s.ln.Close()
+		_ = s.srv.Close()
+		s.srv = nil
+		s.ln = nil
+		s.bind = ""
 	}
 	ln, err := listenPreferred(ip, preferredPort)
 	if err != nil {

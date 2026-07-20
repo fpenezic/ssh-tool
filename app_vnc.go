@@ -328,8 +328,10 @@ func (a *App) VncOpenConnection(connectionID string) (*VncSession, error) {
 				return nil, e
 			}
 			if jumpClient == nil {
-				// No jump host - plain TCP dial.
-				up, derr := sshlayer.NewTCPUpstream(addr)(ctx)
+				// No jump host - TCP dial, honouring a network profile so a
+				// host reachable only over the connection's userspace WireGuard
+				// tunnel is dialed through it (a plain net.Dial ignored WG).
+				up, derr := sshlayer.NewProfileTCPUpstream(settings, addr)(ctx)
 				if derr != nil {
 					a.setVncError(connID, fmt.Errorf("vnc direct dial %s: %w", addr, derr))
 				}

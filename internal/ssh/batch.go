@@ -245,6 +245,16 @@ func dialChain(
 	if len(chain) == 0 {
 		return nil, func() {}, fmt.Errorf("empty chain")
 	}
+	// Normalise the timeout like Connect does. This matters for the first
+	// hop through a network profile: firstHopDial wraps the dial in
+	// context.WithTimeout(ctx, connectTimeout), so a zero here would build an
+	// already-expired context and the tunnel dial fails instantly. (Without a
+	// profile the non-zero path uses net.DialTimeout, where 0 means "no
+	// deadline" - which is why a jump with no network profile worked and one
+	// with a profile timed out. See app_vnc.go, which passes 0.)
+	if connectTimeout <= 0 {
+		connectTimeout = 20 * time.Second
+	}
 
 	var (
 		clients []*ssh.Client
