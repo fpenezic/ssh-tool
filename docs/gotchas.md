@@ -598,6 +598,14 @@ everything mobile is behind a build tag or an `isMobile` check.
     `defer` in `Connect` (armed until `connectDone`) covers that, else the
     pool refcount leaks and the bastion never idle-stops. See
     `app_jumppool.go` + `docs/shared-bastion-design.md`.
+    - Batch exec (`buildChainQuiet`) uses the SAME pool via `JumpPrefixHook`,
+      dialing the target through the shared prefix with
+      `dialChainFrom(initialPrev=shared, ...)`; its teardown composes
+      `cleanup()` (closes only the target it opened) then `release()` (drops
+      the pool ref). `dialChainFrom` with `initialPrev != nil` skips the
+      TCP/network-profile first-hop dial and rides `prev.Dial` for the first
+      hop, and its cleanup never closes `initialPrev`. VNC-through-jump
+      (`BuildJumpChain`) is still deliberately NOT pooled - single console.
 
 ---
 

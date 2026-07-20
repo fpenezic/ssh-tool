@@ -11,13 +11,22 @@
   import { clickOutside } from "./clickOutside";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
+  import { focusActiveTerminal } from "./terminalFocus";
 
   type Props = {
     open: boolean;
     onClose: () => void;
   };
 
-  let { open, onClose }: Props = $props();
+  let { open, onClose: onCloseProp }: Props = $props();
+
+  // Hand keyboard focus back to the active terminal on close, so typing
+  // resumes without a manual click (matches SnippetPalette / the status
+  // popup). Every close path (X, Esc, click-outside) goes through this.
+  function onClose() {
+    onCloseProp();
+    focusActiveTerminal();
+  }
 
   type LiveSession = { session_id: string; name: string; kind: string | undefined };
 

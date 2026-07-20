@@ -208,7 +208,36 @@ func buildChainQuiet(
 	algoLookup HostKeyAlgoLookup,
 	connectTimeout time.Duration,
 ) (*ssh.Client, func(), error) {
-	c, cleanup, _, err := dialChain(context.Background(), db, vault, buildHopChain(settings), settings, hostKeyCB, algoLookup, connectTimeout)
+	chain := buildHopChain(settings)
+
+	// Shared bastion: when the connection has jump hops and the pool is
+	// wired, dial the jump prefix ONCE through the pool and reuse it for
+	// this target - so a batch across many hosts behind one bastion opens
+	// one connection to it, not one per host (which trips MaxStartups the
+	// same way a bulk Connect-all did). Falls back to building the whole
+	// chain when there's no jump, no pool, or the hook declines.
+	if len(chain) > 1 && JumpPrefixHook != nil {
+		shared, release, _, err := JumpPrefixHook(context.Background(), settings, JumpPrefixDeps{
+			DB: db, Vault: vault, HostKeyCB: hostKeyCB,
+			AlgoLookup: algoLookup, ConnectTimeout: connectTimeout,
+		})
+		if err != nil {
+			return nil, func() {}, fmt.Errorf("shared bastion: %w", err)
+		}
+		if shared != nil {
+			// Dial only the target hop through the shared prefix.
+			c, cleanup, _, derr := dialChainFrom(context.Background(), shared, db, vault,
+				chain[len(chain)-1:], settings, hostKeyCB, algoLookup, connectTimeout)
+			if derr != nil {
+				release()
+				return nil, func() {}, derr
+			}
+			// Compose teardown: close the target, then drop the pool ref.
+			return c, func() { cleanup(); release() }, nil
+		}
+	}
+
+	c, cleanup, _, err := dialChain(context.Background(), db, vault, chain, settings, hostKeyCB, algoLookup, connectTimeout)
 	return c, cleanup, err
 }
 
@@ -262,6 +291,26 @@ func dialChain(
 	algoLookup HostKeyAlgoLookup,
 	connectTimeout time.Duration,
 ) (*ssh.Client, func(), string, error) {
+	return dialChainFrom(ctx, nil, db, vault, chain, settings, hostKeyCB, algoLookup, connectTimeout)
+}
+
+// dialChainFrom is dialChain that can start FROM an existing client
+// (initialPrev, e.g. a shared bastion from the jump pool): when non-nil,
+// the first hop in `chain` is dialed through it as a direct-tcpip channel
+// rather than a fresh TCP+network-profile dial, and the returned cleanup
+// does NOT close initialPrev (the pool owns it). With initialPrev nil this
+// behaves exactly like the old dialChain.
+func dialChainFrom(
+	ctx context.Context,
+	initialPrev *ssh.Client,
+	db *store.DB,
+	vault *creds.Vault,
+	chain []hop,
+	settings *store.ResolvedSettings,
+	hostKeyCB ssh.HostKeyCallback,
+	algoLookup HostKeyAlgoLookup,
+	connectTimeout time.Duration,
+) (*ssh.Client, func(), string, error) {
 	if len(chain) == 0 {
 		return nil, func() {}, "", fmt.Errorf("empty chain")
 	}
@@ -278,9 +327,10 @@ func dialChain(
 
 	var (
 		clients    []*ssh.Client
-		prev       *ssh.Client
+		prev       = initialPrev
 		networkVia string // first hop transport, for the caller's indicator
 	)
+	// Only close clients WE opened; initialPrev belongs to the pool.
 	closeAll := func() { cleanup(clients) }
 
 	for i, h := range chain {
@@ -332,7 +382,8 @@ func dialChain(
 		}
 		addr := fmt.Sprintf("%s:%d", h.Hostname, h.Port)
 		var client *ssh.Client
-		if i == 0 {
+		if prev == nil {
+			// True first hop: fresh TCP (or network-profile) dial.
 			conn, via, err := firstHopDial(ctx, settings, addr, connectTimeout)
 			if err != nil {
 				closeAll()

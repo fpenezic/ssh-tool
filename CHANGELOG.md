@@ -7,6 +7,29 @@ in alpha upstream.
 
 ---
 
+## [0.72.1] - Batch exec shares the bastion; broadcast focus; Connect-all guard
+
+### Fixed
+
+- **"Run command" (batch exec) now reuses one connection to a shared jump
+  host**, the same way bulk connect does. Running a command across many
+  hosts behind one bastion used to open a separate connection to the
+  bastion per host - the same simultaneous-handshake problem that made
+  bulk connect trip a bastion's rate limit. It now dials the bastion once
+  and runs each host's command through a channel on it.
+
+- **Closing the broadcast panel returns keyboard focus to the terminal**,
+  so you can keep typing without clicking first (matching the snippet and
+  system-status popups).
+
+- **"Connect all" from the multi-select panel now honours the same guards
+  as everywhere else** - the "connecting to N in the background" message,
+  the confirmation past five hosts, shared-bastion reuse and the connect
+  stagger. This entry point had its own parallel-connect path that skipped
+  all of that.
+
+---
+
 ## [0.72.0] - Faster bulk connect: shared bastion, host-key accept-all
 
 ### Added

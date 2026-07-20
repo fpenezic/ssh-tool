@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tree, credentials, selection, sessions, paneTabs, view } from "./stores.svelte";
+  import { tree, credentials, selection } from "./stores.svelte";
   import { errMsg } from "./connectErrors";
   import { connectionActions } from "./connectionActions.svelte";
   import { api, type Connection, type InheritableSettings, type JumpHostOverride } from "./api";
@@ -157,35 +157,20 @@
 
   let connectingAll = $state(false);
   let showBatchExec = $state(false);
-  let connectErrors = $state<string[]>([]);
 
   async function connectAll() {
     if (connectingAll || conns.length === 0) return;
     connectingAll = true;
-    connectErrors = [];
-    // Fire connects in parallel; surface failures but don't abort the rest.
-    const results = await Promise.allSettled(
-      conns.map(async (c) => {
-        const r = await api.sshConnect(c.id);
-        sessions.add({
-          sessionId: r.session_id,
-          connectionId: c.id,
-          name: c.name,
-          hostname: c.hostname,
-          status: "connected",
-        });
-        paneTabs.addTab(r.session_id, c.name);
-      })
-    );
-    const errs: string[] = [];
-    results.forEach((r, i) => {
-      if (r.status === "rejected") {
-        errs.push(`${conns[i].name}: ${(r.reason as any)?.message ?? r.reason}`);
-      }
-    });
-    connectErrors = errs;
-    connectingAll = false;
-    if (errs.length < conns.length) view.setTab("terminal");
+    // Delegate to the shared action so multi-connect gets the same
+    // >5-hosts confirm, background toast, shared-bastion reuse, stagger
+    // and per-connection error handling as every other Connect-all entry
+    // point. (This panel used to fire its own bare parallel connects,
+    // bypassing all of that.)
+    try {
+      await connectionActions.connectMany(ids);
+    } finally {
+      connectingAll = false;
+    }
   }
 
   function clearSelection() {
@@ -212,13 +197,6 @@
       <button onclick={clearSelection}>Clear selection</button>
     </div>
   </header>
-
-  {#if connectErrors.length > 0}
-    <div class="err">
-      <strong>{connectErrors.length} connection{connectErrors.length === 1 ? "" : "s"} failed:</strong>
-      <ul>{#each connectErrors as e}<li>{e}</li>{/each}</ul>
-    </div>
-  {/if}
 
   <div class="list">
     {#each conns as c}
@@ -452,10 +430,4 @@
   }
   .ok { color: var(--green); font-size: 0.8rem; }
   .bad { color: var(--red); font-size: 0.8rem; }
-  .err {
-    color: var(--red); background: var(--mantle); padding: 0.5rem 0.7rem;
-    border-left: 3px solid var(--red); border-radius: 4px;
-    margin-bottom: 0.6rem; font-size: 0.82rem;
-  }
-  .err ul { margin: 0.3rem 0 0 1.2rem; }
 </style>
