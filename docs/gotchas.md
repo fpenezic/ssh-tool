@@ -578,6 +578,27 @@ everything mobile is behind a build tag or an `isMobile` check.
       `resolveHelperSecret` is the shared vault/credential lookup.
     - Design + migration notes: `docs/helper-release-plan.md`.
 
+34. **Shared bastion pool: a pooled session must NOT close its jump
+    prefix.** `Connect` normally puts every hop's client in
+    `Session.stack`, and both teardown paths (`Disconnect` + the Wait
+    goroutine) call `cleanup(stack)`, closing all of them. When the
+    `JumpPrefixHook` (app `jumpPool`) hands back a SHARED bastion client,
+    `Connect` skips building hops `0..n-2` and dials only the target
+    through the shared client - so `stack` holds ONLY the target. Closing
+    the shared prefix is the POOL's job (refcounted, via the `release`
+    the session stores in `releasePrefix` and calls once through
+    `releaseSharedPrefix`). If you ever put shared clients back into
+    `stack`, `cleanup` will drop every sibling session behind that
+    bastion. The share key is `ssh.JumpPrefixKey` - the resolved jump
+    PREFIX (hosts+user+authRef of every hop except the target) plus the
+    network-profile id, NOT the folder: two connections share iff they
+    resolve to the same prefix. Teardown order on quit: sessions first,
+    then `jumpPool.stopAll()`, then WG (a prefix may ride a WG tunnel).
+    A connect that fails AFTER acquiring the prefix must release it - a
+    `defer` in `Connect` (armed until `connectDone`) covers that, else the
+    pool refcount leaks and the bastion never idle-stops. See
+    `app_jumppool.go` + `docs/shared-bastion-design.md`.
+
 ---
 
 # Archive

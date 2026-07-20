@@ -35,6 +35,41 @@ type ContextDialer func(ctx context.Context, network, addr string) (net.Conn, er
 // channel and never consult this.
 var FirstHopDialerHook func(settings *store.ResolvedSettings) (ContextDialer, error)
 
+// JumpPrefixHook, when non-nil, is consulted by Connect for a chain that
+// has jump hops. It returns a SHARED *ssh.Client for the jump prefix
+// (every hop except the final target) so that N connections behind the
+// same bastion reuse ONE connection to it instead of each dialing their
+// own - the fix for a bulk Connect-all tripping the bastion's MaxStartups
+// (handshakes failing with EOF).
+//
+// Contract:
+//   - Returns (nil, nil, nil) to decline: Connect then builds the whole
+//     chain itself (the pre-pool behaviour). Used when there is no jump,
+//     the pool is disabled, or the app layer chose not to share.
+//   - On success returns the bastion client the target should dial
+//     through, a `release` the session MUST call exactly once on teardown
+//     (the pool refcounts and owns closing the shared clients), and the
+//     first-hop transport string ("", "tunnel", "direct") to record as
+//     NetworkVia.
+//   - An error ABORTS the connect (a pinned network profile that failed,
+//     a bastion that won't come up) - same rule as FirstHopDialerHook.
+//
+// The hook builds the prefix at most once per shared key; concurrent
+// connects for the same bastion wait for the first to bring it up.
+var JumpPrefixHook func(ctx context.Context, settings *store.ResolvedSettings, deps JumpPrefixDeps) (client *ssh.Client, release func(), networkVia string, err error)
+
+// JumpPrefixDeps carries what the pool's build step needs to dial a jump
+// prefix - the same inputs Connect uses for its own hops. Passed through
+// so the pool can live in the app layer without importing Connect's
+// internals.
+type JumpPrefixDeps struct {
+	DB             *store.DB
+	Vault          *creds.Vault
+	HostKeyCB      ssh.HostKeyCallback
+	AlgoLookup     HostKeyAlgoLookup
+	ConnectTimeout time.Duration
+}
+
 // DialPathKey is the context key under which firstHopDial passes a
 // *string to the custom dialer; the dialer records which transport
 // it actually used ("tunnel", or "direct" when an auto/paused policy
@@ -193,6 +228,14 @@ type Session struct {
 	// app layer uses this to decide whether to retry.
 	userInitiatedClose bool
 
+	// releasePrefix drops this session's claim on a SHARED jump-prefix
+	// client (bastion multiplexing). nil for sessions that own their whole
+	// chain. Called exactly once from whichever teardown path fires first;
+	// the pool refcounts and only the pool closes the shared clients, so
+	// this session's `stack` holds ONLY the clients it owns (the target).
+	releasePrefix    func()
+	releasePrefixOnce sync.Once
+
 	// scrollback accumulates raw PTY bytes so newly mounted terminals
 	// (after detach/redock or UI reload) can replay the session history.
 	scrollback scrollbackBuf
@@ -237,6 +280,44 @@ func (s *Session) TargetClient() *ssh.Client {
 		return nil
 	}
 	return s.stack[len(s.stack)-1]
+}
+
+// JumpPrefixKey derives a stable identity for the JUMP PREFIX of a
+// connection (every hop except the final target), used by the app layer's
+// bastion pool to decide which connections may share one connection to
+// the bastion. Returns "" when there is no jump host - a direct target is
+// never pooled.
+//
+// The key is the resolved prefix, not the tree position: same
+// hostname:port|user|authRef sequence => same key, so two connections in
+// different folders that share a bastion pool together, and a child that
+// overrides the inherited jump does NOT wrongly share. The network
+// profile id is prefixed because a WG profile changes the transport used
+// to reach the bastion - the same bastion reached direct vs through a
+// tunnel must not share a client.
+func JumpPrefixKey(s *store.ResolvedSettings) string {
+	chain := buildHopChain(s)
+	if len(chain) <= 1 {
+		return "" // no jump prefix
+	}
+	prof := ""
+	if s.NetworkProfileID != nil {
+		prof = *s.NetworkProfileID
+	}
+	var b strings.Builder
+	b.WriteString("np=")
+	b.WriteString(prof)
+	for _, h := range chain[:len(chain)-1] {
+		authRef := ""
+		if h.AuthRef != nil {
+			authRef = *h.AuthRef
+		}
+		// The user can be resolved late (from the credential's default),
+		// but for keying the configured value is enough: two connections
+		// with the same authRef resolve to the same user anyway.
+		fmt.Fprintf(&b, "\x1f%s:%d|%s|%s", h.Hostname, h.Port, h.Username, authRef)
+	}
+	return b.String()
 }
 
 // hop describes one step of the connect chain (jump host or target).
@@ -371,9 +452,52 @@ func Connect(
 		// networkVia records the first hop's transport ("", "tunnel",
 		// "direct") so the app layer can surface a VPN indicator.
 		networkVia string
+		// releasePrefix drops a shared jump-prefix claim on teardown; nil
+		// unless the pool handed us a shared bastion below.
+		releasePrefix func()
 	)
 
+	// Shared bastion: if the chain has jump hops and the pool gives us a
+	// shared prefix client, dial the target THROUGH it and skip building
+	// hops 0..n-2 ourselves. `prev` becomes the shared bastion, so the
+	// loop starts at the target hop and takes the direct-tcpip (`else`)
+	// branch - the same path a normal second hop uses. `clients` then
+	// holds ONLY the target, so cleanup never touches the shared prefix
+	// (the pool refcounts and owns closing it). No jump, no pool, or a
+	// declining hook -> startHop stays 0 and the full chain is built as
+	// before.
+	startHop := 0
+	if len(chain) > 1 && JumpPrefixHook != nil {
+		shared, release, via, err := JumpPrefixHook(ctx, settings, JumpPrefixDeps{
+			DB: db, Vault: vault, HostKeyCB: hostKeyCB,
+			AlgoLookup: algoLookup, ConnectTimeout: connectTimeout,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("shared bastion: %w", err)
+		}
+		if shared != nil {
+			prev = shared
+			releasePrefix = release
+			networkVia = via
+			startHop = len(chain) - 1
+			debug("shared bastion prefix reused for hops 0..%d; dialing target through it", startHop-1)
+		}
+	}
+	// If we acquired a shared prefix but Connect then fails before the
+	// Session takes ownership of releasePrefix, drop the claim here so the
+	// pool's refcount doesn't leak (and the bastion can idle-stop). The
+	// happy path clears releasePrefix into the Session and nils this out.
+	connectDone := false
+	defer func() {
+		if !connectDone && releasePrefix != nil {
+			releasePrefix()
+		}
+	}()
+
 	for i, h := range chain {
+		if i < startHop {
+			continue // covered by the shared jump-prefix client
+		}
 		progress("Connecting to " + h.Label)
 		sink.EmitState(sessionID, SessionState{
 			State: "auth_in_progress",
@@ -621,12 +745,13 @@ func Connect(
 	}
 
 	s := &Session{
-		ID:         sessionID,
-		conn:       rawConn,
-		stack:      clients,
-		stdin:      stdin,
-		closed:     make(chan struct{}),
-		NetworkVia: networkVia,
+		ID:            sessionID,
+		conn:          rawConn,
+		stack:         clients,
+		stdin:         stdin,
+		closed:        make(chan struct{}),
+		NetworkVia:    networkVia,
+		releasePrefix: releasePrefix,
 	}
 
 	// Run the connection's configured initial command in the shell. Sent to the
@@ -683,6 +808,7 @@ func Connect(
 		})
 		sink.EmitState(sessionID, SessionState{State: "disconnected", Reason: reason, Clean: clean})
 		cleanup(clients)
+		s.releaseSharedPrefix()
 	}()
 
 	// Keepalive always runs, even when the setting is 0 ("off"). Off means
@@ -695,6 +821,7 @@ func Connect(
 	// Save sess pointer for resize; channel-based interface for full control
 	s.channel = sessionAsChannel{sess: sess}
 	sink.EmitState(sessionID, SessionState{State: "connected"})
+	connectDone = true // Session owns releasePrefix now; disarm the defer.
 	return s, nil
 }
 
@@ -1025,11 +1152,22 @@ func (s *Session) Disconnect() {
 		_ = ch.sess.Close()
 	}
 	cleanup(stack)
+	s.releaseSharedPrefix()
 	s.closedOnce.Do(func() {
 		close(s.closed)
 		s.CloseSFTP()
 		if onClose != nil {
 			onClose(id)
+		}
+	})
+}
+
+// releaseSharedPrefix drops this session's claim on a pooled jump-prefix
+// client, at most once. No-op for sessions that own their whole chain.
+func (s *Session) releaseSharedPrefix() {
+	s.releasePrefixOnce.Do(func() {
+		if s.releasePrefix != nil {
+			s.releasePrefix()
 		}
 	})
 }

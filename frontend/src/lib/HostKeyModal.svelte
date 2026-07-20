@@ -11,12 +11,20 @@
     oldFingerprint?: string;
     keyB64: string;
     onRespond: (accept: boolean, remember: boolean) => void;
+    // Trust & remember this one AND every other queued UNKNOWN host in one
+    // click. Only offered for unknown keys with a queue behind them (a bulk
+    // Connect-all); "changed" keys are never bulk-accepted - each is a
+    // possible MITM the user must eyeball individually.
+    onAcceptAll?: () => void;
     // How many more challenges are queued behind this one. 0 means this
     // is the last; >0 surfaces a "(N more queued)" hint so the user
     // knows what's coming after they respond.
     queueLength?: number;
+    // How many of the queued challenges (including this head) are "unknown"
+    // - the count the Accept-all button would act on.
+    unknownCount?: number;
   }
-  let { challengeId, hostname, port, keyType, fingerprint, status, oldFingerprint, keyB64, onRespond, queueLength = 0 }: Props = $props();
+  let { challengeId, hostname, port, keyType, fingerprint, status, oldFingerprint, keyB64, onRespond, onAcceptAll, queueLength = 0, unknownCount = 0 }: Props = $props();
 </script>
 
 <div class="overlay" role="dialog" aria-modal="true">
@@ -65,6 +73,14 @@
         {status === "changed" ? "Update & trust" : "Trust & remember"}
       </button>
     </div>
+
+    {#if status === "unknown" && onAcceptAll && unknownCount > 1}
+      <div class="row accept-all-row">
+        <button class="accept-all" onclick={() => onAcceptAll?.()}>
+          Trust &amp; remember all {unknownCount} unknown hosts
+        </button>
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -107,6 +123,12 @@
   .fp.old { color: var(--red); }
   .fp.new { color: var(--green); }
   .row { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+  .accept-all-row { margin-top: 0.5rem; }
+  button.accept-all {
+    background: transparent; color: var(--subtext0);
+    border: 1px solid var(--surface1); font-size: 0.8rem;
+  }
+  button.accept-all:hover { background: var(--surface0); color: var(--text); }
   button {
     background: var(--surface0); color: var(--text); border: 0;
     padding: 0.4rem 0.85rem; border-radius: 3px;

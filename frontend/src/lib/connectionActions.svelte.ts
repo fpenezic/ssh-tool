@@ -7,9 +7,57 @@ import { api, type Connection } from "./api";
 import { tree, sessions, paneTabs, view, selection, credentials } from "./stores.svelte";
 import { vncSessions } from "./vncState.svelte.ts";
 import { showPrompt } from "./promptModal.svelte.ts";
+import { showConfirm } from "./confirmModal.svelte.ts";
 import { toast } from "./toast.svelte.ts";
 import { unwrapRaw } from "./connectErrors";
 import { presenceTakeover, isBusyElsewhere } from "./presenceTakeover.svelte.ts";
+
+// Above this many hosts in one Connect-all, ask for confirmation first -
+// a whole-folder Enter shouldn't silently open dozens of sessions.
+const BULK_CONNECT_CONFIRM_THRESHOLD = 5;
+
+// Cap how many connects handshake at once. Firing N dials in the same
+// tick hammers a shared jump host with N simultaneous handshakes; a
+// bastion's MaxStartups then RSTs some (seen as "handshake failed: EOF")
+// and the batch stalls on retries. A small pool keeps the bastion under
+// its start limit while the batch still runs concurrently overall.
+const BULK_CONNECT_MAX_CONCURRENT = 4;
+
+// Extra stagger between starting each worker's dial, so even within the
+// pool the handshakes don't all land in the exact same tick.
+const BULK_CONNECT_STAGGER_MS = 150;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// runPooled runs task(item, index) over items with at most `limit`
+// in flight at once, staggering each start by staggerMs. Never rejects
+// (like Promise.allSettled) - returns the settled results in input order
+// so callers can count successes.
+async function runPooled<T>(
+  items: T[],
+  limit: number,
+  staggerMs: number,
+  task: (item: T, index: number) => Promise<void>,
+): Promise<PromiseSettledResult<void>[]> {
+  const results: PromiseSettledResult<void>[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      if (staggerMs > 0) await sleep(staggerMs);
+      try {
+        await task(items[i], i);
+        results[i] = { status: "fulfilled", value: undefined };
+      } catch (e) {
+        results[i] = { status: "rejected", reason: e };
+      }
+    }
+  };
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
 
 // isTransientConnectError flags failures worth a single auto-retry.
 // Excludes anything credential / cryptographic so a wrong password
@@ -288,8 +336,26 @@ class ConnectionActionsStore {
       .map((id) => tree.connectionById(id))
       .filter((c): c is Connection => !!c);
     if (conns.length === 0) return;
-    const results = await Promise.allSettled(
-      conns.map(async (c) => {
+    // A large batch is easy to trigger by accident (Enter on a whole
+    // folder of hosts), so confirm first past a threshold. Small batches
+    // just go, with a toast so the user knows the connects are running in
+    // the background rather than nothing having happened.
+    if (conns.length > BULK_CONNECT_CONFIRM_THRESHOLD) {
+      const ok = await showConfirm({
+        title: "Connect to multiple hosts",
+        message: `This will open ${conns.length} SSH connections at once. Continue?`,
+        okLabel: `Connect ${conns.length}`,
+      });
+      if (!ok) return;
+    }
+    if (conns.length > 1) {
+      toast.info(`Connecting to ${conns.length} connections in the background...`);
+    }
+    const results = await runPooled(
+      conns,
+      BULK_CONNECT_MAX_CONCURRENT,
+      BULK_CONNECT_STAGGER_MS,
+      async (c) => {
         // Local-shell connections don't dial SSH; route them through the
         // local path (which adds its own session + tab).
         if (c.protocol === "local") {
@@ -315,7 +381,7 @@ class ConnectionActionsStore {
         });
         paneTabs.addTab(r.session_id, c.name);
         this.clearConnectError(c.id);
-      }),
+      },
     );
     if (results.some((r) => r.status === "fulfilled")) view.setTab("terminal");
   }
@@ -326,8 +392,22 @@ class ConnectionActionsStore {
   // don't block the rest.
   async connectDynamicMany(targets: Array<{ folderId: string; entryId: string }>) {
     if (targets.length === 0) return;
-    const results = await Promise.allSettled(
-      targets.map(async (t) => {
+    if (targets.length > BULK_CONNECT_CONFIRM_THRESHOLD) {
+      const ok = await showConfirm({
+        title: "Connect to multiple hosts",
+        message: `This will open ${targets.length} SSH connections at once. Continue?`,
+        okLabel: `Connect ${targets.length}`,
+      });
+      if (!ok) return;
+    }
+    if (targets.length > 1) {
+      toast.info(`Connecting to ${targets.length} connections in the background...`);
+    }
+    const results = await runPooled(
+      targets,
+      BULK_CONNECT_MAX_CONCURRENT,
+      BULK_CONNECT_STAGGER_MS,
+      async (t) => {
         // Reach into the cached entry to surface name + hostname
         // in the tab; the backend will resolve everything else.
         const entries = tree.dynamicEntries[t.folderId] ?? [];
@@ -351,7 +431,7 @@ class ConnectionActionsStore {
           status: "connected",
         });
         paneTabs.addTab(r.session_id, meta?.name ?? t.entryId);
-      }),
+      },
     );
     if (results.some((r) => r.status === "fulfilled")) view.setTab("terminal");
   }

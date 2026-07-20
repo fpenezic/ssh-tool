@@ -82,6 +82,10 @@ type App struct {
 	wgSessProfile map[string]string      // sessionID -> profileID
 	wgStopTimers  map[string]*time.Timer // profileID -> linger stop
 
+	// Shared bastion (jump) multiplexing: one connection to a bastion,
+	// reused by every target behind it. See app_jumppool.go.
+	jumpPool *jumpPool
+
 	// Tunnel presence + remote-disconnect across synced machines.
 	// See app_presence.go.
 	presence presenceState
@@ -440,6 +444,7 @@ func (a *App) initialise() {
 	a.initInfisical()
 	a.initAuthPrompts()
 	a.pool = sshlayer.NewPool()
+	a.jumpPool = newJumpPool()
 	a.localPool = local.NewPool()
 	a.vncBridge = sshlayer.NewVncBridge()
 	a.vncSessions = map[string]*vncSessionMeta{}
@@ -471,6 +476,13 @@ func (a *App) initialise() {
 		// wgDialerFor applies the profile's connect policy (always /
 		// auto-with-direct-probe / paused). See app_network.go.
 		return a.wgDialerFor(*s.NetworkProfileID)
+	}
+	// Shared bastion multiplexing: when several connections sit behind the
+	// same jump prefix, dial that prefix once and reuse it. See
+	// app_jumppool.go. Returning (nil, nil, "", nil) declines (no jump),
+	// leaving Connect to build the whole chain itself.
+	sshlayer.JumpPrefixHook = func(ctx context.Context, s *store.ResolvedSettings, deps sshlayer.JumpPrefixDeps) (*gossh.Client, func(), string, error) {
+		return a.jumpPool.acquire(ctx, s, deps)
 	}
 	// Same tunnels for dynamic-inventory API calls (a Proxmox that is
 	// only reachable over VPN). Manual refreshes may start the tunnel;

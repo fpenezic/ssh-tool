@@ -664,7 +664,13 @@ certificate your OS trusts.
 
 - Double-click a connection in the tree, click **Connect**, or hit
   Enter while a connection is anchored.
-- Multi-select + **Connect all** opens N tabs in parallel.
+- Multi-select + **Connect all** opens N tabs in parallel. Connections
+  that share a jump host reuse ONE connection to that bastion (a channel
+  per target through it), so a large batch behind a single bastion comes
+  up fast without tripping its connection-rate limit. Connecting to more
+  than five at once asks for confirmation first. If several targets have
+  host keys you have not seen, the host-key prompt offers a single
+  **Trust & remember all** for every unknown host in the batch.
 - Each session lives in the **Terminal** view; the top nav grows a
   Terminal tab once at least one session exists.
 
@@ -795,7 +801,10 @@ Subsequent connects compare; a changed key shows a sterner modal
 with the old and new fingerprints side by side.
 
 Multiple host-key prompts queue (e.g. parallel "Connect all"); the
-modal shows "N more queued" so you know what's coming.
+modal shows "N more queued" so you know what's coming. When several
+queued hosts are unknown, a **Trust & remember all** button accepts
+every queued unknown host at once. A changed key is never part of that -
+it always requires an individual decision.
 
 ### Interactive username and password / 2FA prompts
 

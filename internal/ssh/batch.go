@@ -208,7 +208,8 @@ func buildChainQuiet(
 	algoLookup HostKeyAlgoLookup,
 	connectTimeout time.Duration,
 ) (*ssh.Client, func(), error) {
-	return dialChain(db, vault, buildHopChain(settings), settings, hostKeyCB, algoLookup, connectTimeout)
+	c, cleanup, _, err := dialChain(context.Background(), db, vault, buildHopChain(settings), settings, hostKeyCB, algoLookup, connectTimeout)
+	return c, cleanup, err
 }
 
 // BuildJumpChain connects ONLY the jump hops of settings (everything before
@@ -225,15 +226,34 @@ func BuildJumpChain(
 	algoLookup HostKeyAlgoLookup,
 	connectTimeout time.Duration,
 ) (*ssh.Client, func(), error) {
+	c, cleanup, _, err := BuildJumpChainVia(context.Background(), db, vault, settings, hostKeyCB, algoLookup, connectTimeout)
+	return c, cleanup, err
+}
+
+// BuildJumpChainVia is BuildJumpChain that also reports the first hop's
+// transport ("", "tunnel", "direct"), and dials the first hop under the
+// given context so a caller can observe the network path via DialPathKey.
+// The shared-bastion pool uses this to record NetworkVia for the sessions
+// that ride the prefix.
+func BuildJumpChainVia(
+	ctx context.Context,
+	db *store.DB,
+	vault *creds.Vault,
+	settings *store.ResolvedSettings,
+	hostKeyCB ssh.HostKeyCallback,
+	algoLookup HostKeyAlgoLookup,
+	connectTimeout time.Duration,
+) (*ssh.Client, func(), string, error) {
 	full := buildHopChain(settings)
 	// The last hop is the target itself; drop it - we want the bastion(s).
 	if len(full) <= 1 {
-		return nil, func() {}, nil // no jump host
+		return nil, func() {}, "", nil // no jump host
 	}
-	return dialChain(db, vault, full[:len(full)-1], settings, hostKeyCB, algoLookup, connectTimeout)
+	return dialChain(ctx, db, vault, full[:len(full)-1], settings, hostKeyCB, algoLookup, connectTimeout)
 }
 
 func dialChain(
+	ctx context.Context,
 	db *store.DB,
 	vault *creds.Vault,
 	chain []hop,
@@ -241,9 +261,9 @@ func dialChain(
 	hostKeyCB ssh.HostKeyCallback,
 	algoLookup HostKeyAlgoLookup,
 	connectTimeout time.Duration,
-) (*ssh.Client, func(), error) {
+) (*ssh.Client, func(), string, error) {
 	if len(chain) == 0 {
-		return nil, func() {}, fmt.Errorf("empty chain")
+		return nil, func() {}, "", fmt.Errorf("empty chain")
 	}
 	// Normalise the timeout like Connect does. This matters for the first
 	// hop through a network profile: firstHopDial wraps the dial in
@@ -257,8 +277,9 @@ func dialChain(
 	}
 
 	var (
-		clients []*ssh.Client
-		prev    *ssh.Client
+		clients    []*ssh.Client
+		prev       *ssh.Client
+		networkVia string // first hop transport, for the caller's indicator
 	)
 	closeAll := func() { cleanup(clients) }
 
@@ -268,7 +289,7 @@ func dialChain(
 			cred, err := db.GetCredential(*h.AuthRef)
 			if err != nil {
 				closeAll()
-				return nil, func() {}, fmt.Errorf("%s: get credential %s: %w", h.Label, *h.AuthRef, err)
+				return nil, func() {}, "", fmt.Errorf("%s: get credential %s: %w", h.Label, *h.AuthRef, err)
 			}
 			if h.Username == "" && cred.DefaultUsername != nil {
 				h.Username = *cred.DefaultUsername
@@ -281,7 +302,7 @@ func dialChain(
 				isLastHop := i == len(chain)-1
 				if !(isLastHop && settings.PasswordOverride != nil) {
 					closeAll()
-					return nil, func() {}, fmt.Errorf("%s: %w", h.Label, err)
+					return nil, func() {}, "", fmt.Errorf("%s: %w", h.Label, err)
 				}
 			} else {
 				methods = auth.ToAuthMethods()
@@ -292,11 +313,11 @@ func dialChain(
 		}
 		if h.Username == "" {
 			closeAll()
-			return nil, func() {}, fmt.Errorf("%s: no username", h.Label)
+			return nil, func() {}, "", fmt.Errorf("%s: no username", h.Label)
 		}
 		if len(methods) == 0 {
 			closeAll()
-			return nil, func() {}, fmt.Errorf("%s: no credential assigned and no password set", h.Label)
+			return nil, func() {}, "", fmt.Errorf("%s: no credential assigned and no password set", h.Label)
 		}
 		var pinnedAlgos []string
 		if algoLookup != nil {
@@ -312,34 +333,35 @@ func dialChain(
 		addr := fmt.Sprintf("%s:%d", h.Hostname, h.Port)
 		var client *ssh.Client
 		if i == 0 {
-			conn, _, err := firstHopDial(context.Background(), settings, addr, connectTimeout)
+			conn, via, err := firstHopDial(ctx, settings, addr, connectTimeout)
 			if err != nil {
 				closeAll()
-				return nil, func() {}, fmt.Errorf("%s: dial: %w", h.Label, err)
+				return nil, func() {}, "", fmt.Errorf("%s: dial: %w", h.Label, err)
 			}
+			networkVia = via
 			sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
 			if err != nil {
 				_ = conn.Close()
 				closeAll()
-				return nil, func() {}, fmt.Errorf("%s: ssh handshake: %w", h.Label, err)
+				return nil, func() {}, "", fmt.Errorf("%s: ssh handshake: %w", h.Label, err)
 			}
 			client = ssh.NewClient(sshConn, chans, reqs)
 		} else {
 			netConn, err := prev.Dial("tcp", addr)
 			if err != nil {
 				closeAll()
-				return nil, func() {}, fmt.Errorf("%s: dial through jump: %w", h.Label, err)
+				return nil, func() {}, "", fmt.Errorf("%s: dial through jump: %w", h.Label, err)
 			}
 			sshConn, chans, reqs, err := ssh.NewClientConn(netConn, addr, cfg)
 			if err != nil {
 				_ = netConn.Close()
 				closeAll()
-				return nil, func() {}, fmt.Errorf("%s: ssh handshake: %w", h.Label, err)
+				return nil, func() {}, "", fmt.Errorf("%s: ssh handshake: %w", h.Label, err)
 			}
 			client = ssh.NewClient(sshConn, chans, reqs)
 		}
 		clients = append(clients, client)
 		prev = client
 	}
-	return clients[len(clients)-1], closeAll, nil
+	return clients[len(clients)-1], closeAll, networkVia, nil
 }

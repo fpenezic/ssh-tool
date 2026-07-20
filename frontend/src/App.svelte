@@ -1199,6 +1199,7 @@
       oldFingerprint={hostKeyStore.pending.oldFingerprint}
       keyB64={hostKeyStore.pending.keyB64}
       queueLength={Math.max(0, hostKeyStore.queue.length - 1)}
+      unknownCount={hostKeyStore.queue.filter((q) => q.status === "unknown").length}
       onRespond={async (accept, remember) => {
         const c = hostKeyStore.pending!;
         // Shift first so the next queued challenge is rendered
@@ -1206,6 +1207,19 @@
         hostKeyStore.clear();
         if (hostKeyStore.queue.length === 0) api.clearAttention().catch(() => {});
         await api.sshRespondHostKey(c.challengeId, accept, remember, c.hostname, c.port, c.keyType, c.keyB64, c.fingerprint);
+      }}
+      onAcceptAll={() => {
+        // Trust & remember every queued UNKNOWN host at once (a bulk
+        // Connect-all). "changed" keys are a possible MITM, so they stay
+        // in the queue for individual review. Pull the unknowns out of the
+        // store up front, then answer each - each challenge has its own
+        // blocked goroutine keyed by challengeId, so order doesn't matter.
+        const unknowns = hostKeyStore.queue.filter((q) => q.status === "unknown");
+        hostKeyStore.queue = hostKeyStore.queue.filter((q) => q.status !== "unknown");
+        if (hostKeyStore.queue.length === 0) api.clearAttention().catch(() => {});
+        for (const c of unknowns) {
+          api.sshRespondHostKey(c.challengeId, true, true, c.hostname, c.port, c.keyType, c.keyB64, c.fingerprint).catch(() => {});
+        }
       }}
     />
   {/if}

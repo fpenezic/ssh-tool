@@ -7,6 +7,45 @@ in alpha upstream.
 
 ---
 
+## [0.72.0] - Faster bulk connect: shared bastion, host-key accept-all
+
+### Added
+
+- **Shared bastion connections for bulk connect.** Connecting to many
+  hosts that all sit behind the same jump host now opens ONE connection to
+  that bastion and rides a channel per target through it, instead of one
+  full SSH connection to the bastion per target. Previously a Connect-all
+  onto a dozen hosts behind one bastion fired a dozen simultaneous
+  handshakes at it, tripping the bastion's connection-rate limit
+  (`MaxStartups`) so some failed with "handshake failed: EOF" and the
+  batch stalled for ~10s on retries. Now the same batch comes up in a few
+  seconds with no failures. The shared connection is reused across
+  connections that resolve to the same jump prefix (whether they inherit
+  it from a common folder or configure it independently), and it is torn
+  down a few seconds after its last session closes.
+
+- **"Trust & remember all" for unknown host keys.** When a bulk connect
+  hits several hosts whose keys you have not seen before, the host-key
+  prompt now offers a single button to trust and remember every queued
+  UNKNOWN host at once, instead of clicking through each. A CHANGED host
+  key (a possible man-in-the-middle) is never bulk-accepted - each still
+  requires individual review.
+
+- **Bulk-connect feedback.** Starting a multi-host connect shows a brief
+  "Connecting to N connections in the background" message so it is clear
+  the connects are running, and connecting to more than five hosts at once
+  asks for confirmation first so a stray Enter on a whole folder does not
+  silently open dozens of sessions.
+
+### Changed
+
+- Bulk connects are throttled to a few concurrent handshakes with a small
+  stagger, as defence-in-depth for batches that span several different
+  bastions (the shared-bastion work removes the pressure on any single
+  one).
+
+---
+
 ## [0.71.1] - Share-to-browser and VNC-over-WireGuard fixes
 
 ### Fixed

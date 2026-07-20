@@ -1070,6 +1070,11 @@ func (a *App) stopTunnelsOnQuit() {
 	}
 	a.stopPresencePoll()
 
+	// Shared bastions first: a prefix may itself ride a WG tunnel, so
+	// close the prefixes before tearing the tunnels down.
+	if a.jumpPool != nil {
+		a.jumpPool.stopAll()
+	}
 	if a.wgman != nil {
 		a.wgman.StopAll()
 	}
