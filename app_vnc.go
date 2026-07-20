@@ -358,7 +358,11 @@ func (a *App) VncOpenConnection(connectionID string) (*VncSession, error) {
 	} else if settings.JumpHost != nil {
 		transport = "jump:" + settings.JumpHost.Hostname
 	}
-	return a.registerVncFor(connID, open, username, password, title, transport)
+	wgProfileID := ""
+	if settings.NetworkProfileID != nil {
+		wgProfileID = *settings.NetworkProfileID
+	}
+	return a.registerVncFor(connID, open, username, password, title, transport, wgProfileID)
 }
 
 // setVncOwned records the SSH session / chain-cleanup a lazy VNC upstream
@@ -428,18 +432,28 @@ func (a *App) setVncOwned(connectionID string, sess *sshlayer.Session, cleanup f
 // registerVnc stores the upstream factory under a new session id, mints
 // the first ws token, and returns the payload. Shared by both open paths.
 func (a *App) registerVnc(open func(ctx context.Context) (sshlayer.VncUpstream, error), username, password, title string) (*VncSession, error) {
-	return a.registerVncFor("", open, username, password, title, "proxmox")
+	// Proxmox consoles reach the API (and its VNC websocket) through the
+	// inventory tunnel path, which holds its own WG claim - no per-console
+	// hold here.
+	return a.registerVncFor("", open, username, password, title, "proxmox", "")
 }
 
 // registerVncFor is registerVnc with the owning connectionID, used by the
 // generic-connection path so its lazy upstream factory can attach the
 // session / cleanup it creates (see setVncOwned). Proxmox goes through
 // registerVnc with an empty id.
-func (a *App) registerVncFor(connectionID string, open func(ctx context.Context) (sshlayer.VncUpstream, error), username, password, title, transport string) (*VncSession, error) {
+func (a *App) registerVncFor(connectionID string, open func(ctx context.Context) (sshlayer.VncUpstream, error), username, password, title, transport, wgProfileID string) (*VncSession, error) {
 	sessionID := "vnc:" + uuid.New().String()
 	wsURL, err := a.vncBridge.Mint(open)
 	if err != nil {
 		return nil, err
+	}
+	// A console dialing through a network profile holds the tunnel up for
+	// its whole lifetime, so the idle-stop can't tear it down mid-session
+	// (the 30s wgTouch from the dial alone is not enough). Released in
+	// VncClose.
+	if wgProfileID != "" {
+		a.wgAcquire(wgProfileID, sessionID)
 	}
 	a.vncMu.Lock()
 	a.vncSessions[sessionID] = &vncSessionMeta{
@@ -449,6 +463,7 @@ func (a *App) registerVncFor(connectionID string, open func(ctx context.Context)
 		connectionID: connectionID,
 		transport:    transport,
 		open:         open,
+		wgProfileID:  wgProfileID,
 	}
 	a.vncMu.Unlock()
 	return &VncSession{SessionID: sessionID, WsURL: wsURL, Username: username, Password: password, Title: title, Transport: transport}, nil
@@ -468,6 +483,11 @@ func (a *App) VncClose(sessionID string) {
 		}
 		if m.ownedCleanup != nil {
 			m.ownedCleanup()
+		}
+		// Drop the tunnel hold this console held (no-op if it dialed
+		// directly). Last release arms the profile's normal idle linger.
+		if m.wgProfileID != "" {
+			a.wgRelease(sessionID)
 		}
 	}
 }

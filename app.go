@@ -310,6 +310,12 @@ type vncSessionMeta struct {
 	// ownedCleanup tears down a jump chain opened to reach a direct
 	// (non-loopback) RFB port behind a bastion. nil when there's no jump.
 	ownedCleanup func()
+	// wgProfileID is the network profile this console dials through, if
+	// any. A VNC console holds the tunnel up for its whole lifetime via
+	// wgAcquire(wgProfileID, sessionID); VncClose releases it. Without
+	// this the tunnel's 30s wgTouch expires mid-session and the idle-stop
+	// tears the tunnel down under a live console (dropped every 2 min).
+	wgProfileID string
 }
 
 // TabDragPayload is returned by WindowAcceptTabDrag.

@@ -44,6 +44,16 @@ in alpha upstream.
   bastions (the shared-bastion work removes the pressure on any single
   one).
 
+### Fixed
+
+- **VNC over a network profile no longer drops every two minutes.** A VNC
+  console reached through a userspace WireGuard profile did not hold the
+  tunnel open, so the profile's idle-stop tore the tunnel down mid-session
+  and the console had to re-establish it on the next frame (a visible
+  ~2-minute stall/reconnect cycle). The console now holds the tunnel up
+  for its whole lifetime and releases it on close, exactly like an SSH
+  session does.
+
 ---
 
 ## [0.71.1] - Share-to-browser and VNC-over-WireGuard fixes
