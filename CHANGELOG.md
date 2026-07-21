@@ -7,6 +7,20 @@ in alpha upstream.
 
 ---
 
+## [0.72.4] - macOS tray icon no longer tries to quit the app
+
+### Fixed
+
+- **Clicking the macOS menu-bar (tray) icon no longer tries to quit the
+  app.** Hiding to the tray hid the window, and because macOS terminates an
+  app after its last window closes, that looked like a quit - popping the
+  "disconnect and quit?" confirmation when SSH sessions were live. On macOS
+  the tray toggle, close-to-tray and minimise-to-tray now hide the whole app
+  (like Cmd+H) instead of the window, which keeps it alive in the menu bar;
+  clicking the icon again brings it back. Windows and Linux are unchanged.
+
+---
+
 ## [0.72.3] - Copy works on macOS
 
 ### Fixed

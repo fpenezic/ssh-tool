@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -204,6 +205,24 @@ func buildApp(appInst *App) *application.App {
 	})
 }
 
+// hideToTray hides the app into the tray / menu bar without letting macOS
+// treat it as "the last window closed". On macOS, window.Hide() on the only
+// window, combined with ApplicationShouldTerminateAfterLastWindowClosed,
+// triggers applicationShouldTerminate - so clicking the menu-bar tray icon
+// (or close/minimise-to-tray) tried to QUIT the app (and popped the
+// disconnect-confirm modal when SSH sessions were live). The correct macOS
+// idiom is an app-level hide (like Cmd+H): it keeps the app and its windows
+// alive, just hidden, and does not count as closing a window. Windows/Linux
+// keep the plain window Hide(), which is the normal tray pattern there.
+func hideToTray(appInst *App, w *application.WebviewWindow) {
+	if runtime.GOOS == "darwin" {
+		application.Get().Hide()
+	} else {
+		w.Hide()
+	}
+	appInst.windowHidden.Store(true)
+}
+
 // configurePlatform creates the main window, system tray, geometry
 // persistence, quit/minimise hooks and deep-link dispatch. Returns a
 // cleanup func (single-instance listener shutdown) to defer, or nil.
@@ -262,12 +281,9 @@ func configurePlatform(app *application.App, appInst *App) func() {
 		// IsVisible isn't on every platform impl, so we re-show
 		// unconditionally if hidden via our flag.
 		if appInst.windowHidden.Load() {
-			mainWindow.Show()
-			mainWindow.Focus()
-			appInst.windowHidden.Store(false)
+			appInst.ShowAndFocusMainWindow()
 		} else {
-			mainWindow.Hide()
-			appInst.windowHidden.Store(true)
+			hideToTray(appInst, mainWindow)
 		}
 	})
 
@@ -324,8 +340,7 @@ func configurePlatform(app *application.App, appInst *App) func() {
 			return
 		}
 		event.Cancel()
-		mainWindow.Hide()
-		appInst.windowHidden.Store(true)
+		hideToTray(appInst, mainWindow)
 	})
 
 	mainWindow.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
@@ -334,8 +349,7 @@ func configurePlatform(app *application.App, appInst *App) func() {
 		}
 		if appInst.shouldCloseToTray() {
 			event.Cancel()
-			mainWindow.Hide()
-			appInst.windowHidden.Store(true)
+			hideToTray(appInst, mainWindow)
 			return
 		}
 		if len(appInst.pool.IDs()) == 0 {

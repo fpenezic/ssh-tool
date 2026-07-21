@@ -3957,12 +3957,19 @@ func (a *App) ClearAttention() {
 }
 
 // HideToTray hides the main window without quitting. Used by the
-// frontend "Minimize to tray" button.
+// frontend "Minimize to tray" button. On macOS this is an app-level hide
+// (Cmd+H style) so hiding the only window doesn't trip the
+// terminate-on-last-window rule and try to quit; other platforms hide the
+// window, the normal tray pattern there.
 func (a *App) HideToTray() {
 	if a.mainWindow == nil {
 		return
 	}
-	a.mainWindow.Hide()
+	if runtime.GOOS == "darwin" {
+		application.Get().Hide()
+	} else {
+		a.mainWindow.Hide()
+	}
 	a.windowHidden.Store(true)
 }
 
@@ -3977,6 +3984,13 @@ func (a *App) ShowAndFocusMainWindow() {
 	w := a.mainWindow
 	if w == nil {
 		return
+	}
+	// On macOS the tray/close-to-tray path hides the whole app (Cmd+H style)
+	// rather than the window, so it doesn't trip the terminate-on-last-window
+	// rule. Reversing that needs an app-level Show; a window Show() alone
+	// leaves the app hidden. No-op on other platforms (dead branch off mac).
+	if runtime.GOOS == "darwin" {
+		application.Get().Show()
 	}
 	w.Show()
 	w.Restore() // no-op if not minimised; un-minimises otherwise
