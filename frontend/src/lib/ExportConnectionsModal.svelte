@@ -12,6 +12,7 @@
   import { api } from "./api";
   import { errMsg } from "./connectErrors";
   import { IconX, IconClipboardCopy, IconFile } from "./iconMap";
+  import { writeClipboard } from "./clipboard";
   import { clickOutside } from "./clickOutside";
 
   type Props = {
@@ -80,7 +81,7 @@
 
   async function copy() {
     if (!body) return;
-    await navigator.clipboard.writeText(body);
+    await writeClipboard(body);
     savedHint = "Copied";
     setTimeout(() => (savedHint = null), 1500);
   }

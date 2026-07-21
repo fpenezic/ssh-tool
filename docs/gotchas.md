@@ -764,6 +764,40 @@ as still single-line) passes through unchanged; multi-line opens
 PasteGuard. Per-session opt-out is component-local state - resets
 on fresh tab.
 
+### Shift+Enter needs preventDefault, not just return false
+The terminal maps Shift+Enter to ESC+CR (`\x1b\r`) - the bytes
+Alt+Enter already produces, which Claude Code and similar TUIs read
+as "newline, do not submit". Returning `false` from
+`attachCustomKeyEventHandler` is NOT enough: xterm still emitted a
+second bare CR via onData, so the PTY got ESC+CR then CR and the
+trailing CR read as a submit. You MUST also
+`e.preventDefault(); e.stopPropagation()` to suppress that second
+CR. (Confirmed by logging onData bytes: Alt+Enter = [27,13]; the
+stray [13] is the one to kill.)
+
+### Clipboard writes must go through writeClipboard(), not navigator
+The mac WKWebView refuses `navigator.clipboard.writeText` in most
+contexts ("clipboard unavailable") because the app isn't a secure
+context with a guaranteed user gesture - the LLM system-prompt copy
+hit this. `clipboard.ts` `writeClipboard()` tries the native Go
+clipboard (`api.clipboardSetText`) FIRST, then falls back to
+navigator; it always works on mac. `copyText` / `copySensitive`
+route through it. Any new copy button must use one of those, never
+raw `navigator.clipboard.writeText`. (The terminal selection copy
+happened to work via navigator because the pane has focus, but it
+was switched to writeClipboard too for consistency.)
+
+### macOS notifications need a signed .app (UNErrorDomain error 1)
+`RequestNotificationAuthorization` fails with `UNErrorDomain error 1`
+(not-allowed) for an unsigned `.app` or a bare `bin/` binary - the
+Wails notifier's `Startup` also refuses a binary with no bundle
+identifier outright. There is NO code fix: macOS notifications
+require the `.app` to be code-signed + notarized with an Apple
+Developer ID, and the user to grant permission in System Settings.
+The auth failure is logged best-effort and does not break anything
+else (`SendNotification` just no-ops after). Windows/Linux are
+unaffected.
+
 ---
 
 ## Dynamic inventory

@@ -5,6 +5,7 @@
   import { FitAddon } from "@xterm/addon-fit";
   import { WebglAddon } from "@xterm/addon-webgl";
   import { CanvasAddon } from "@xterm/addon-canvas";
+  import { writeClipboard } from "./clipboard";
   import { SearchAddon } from "@xterm/addon-search";
   import { WebLinksAddon } from "@xterm/addon-web-links";
   import "@xterm/xterm/css/xterm.css";
@@ -286,7 +287,7 @@
     const sel = term.getSelection();
     if (!sel) return false;
     try {
-      await navigator.clipboard.writeText(sel);
+      await writeClipboard(sel);
       if (announce) toast.ok("Copied");
       return true;
     } catch (e) {

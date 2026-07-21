@@ -7,6 +7,27 @@ in alpha upstream.
 
 ---
 
+## [0.72.3] - Copy works on macOS
+
+### Fixed
+
+- **Copy buttons work on macOS.** Copying the LLM system prompt (and other
+  copy actions in dialogs and popovers) failed on macOS with "clipboard
+  unavailable" - the mac WebView refuses the browser clipboard API outside a
+  narrow set of contexts. All copy paths now go through the native clipboard
+  first (the same route the terminal copy already used) and only fall back to
+  the browser API, so they work the same on Windows, Linux and macOS.
+
+### Notes
+
+- macOS OS notifications still require a signed, notarized `.app` and the
+  user granting notification permission; an unsigned build is refused by the
+  system (`UNErrorDomain error 1`). This is a macOS signing requirement, not
+  something the app can work around. Windows and Linux notifications are
+  unaffected.
+
+---
+
 ## [0.72.2] - Shift+Enter newline, notification click, decode copy, session restore
 
 ### Added

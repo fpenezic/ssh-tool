@@ -10,6 +10,7 @@
   import { IconStop } from "./iconMap";
   import { MCP_SYSTEM_PROMPT, MCP_SYSTEM_PROMPT_HINT } from "./mcpSystemPrompt";
   import { toast } from "./toast.svelte.ts";
+  import { writeClipboard } from "./clipboard";
 
   interface Props {
     // Empty when the pane has no live session (controls disable).
@@ -64,8 +65,10 @@
   }
 
   async function copyPrompt() {
+    // writeClipboard tries the native Go clipboard first (the mac WKWebView
+    // refuses navigator.clipboard here), then falls back to navigator.
     try {
-      await navigator.clipboard.writeText(MCP_SYSTEM_PROMPT);
+      await writeClipboard(MCP_SYSTEM_PROMPT);
       toast.ok("System prompt copied. " + MCP_SYSTEM_PROMPT_HINT);
     } catch {
       toast.err("Copy failed - clipboard unavailable");

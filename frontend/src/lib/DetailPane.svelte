@@ -2,6 +2,7 @@
   import { tree, credentials, selection, sessions, paneTabs, view } from "./stores.svelte";
   import { isMobile } from "./platform";
   import { toast } from "./toast.svelte";
+  import { writeClipboard } from "./clipboard";
   import PasswordInput from "./PasswordInput.svelte";
   import { api, type ResolvedSettings, type JumpHostOverride } from "./api";
   import { showPrompt } from "./promptModal.svelte.ts";
@@ -911,7 +912,7 @@
     if (!conn) return;
     try {
       const cmd = await api.sshSystemCommand(conn.id);
-      await navigator.clipboard.writeText(cmd);
+      await writeClipboard(cmd);
       copiedHint = "Copied: " + cmd;
       setTimeout(() => { copiedHint = null; }, 3500);
     } catch (e: any) {
@@ -940,14 +941,14 @@
     try {
       if (field === "password") {
         const pw = await api.connectionRevealPassword(conn.id);
-        await navigator.clipboard.writeText(pw);
+        await writeClipboard(pw);
         copiedHint = "Password copied (clears in 30s)";
         // Self-clearing clipboard. Schedule a wipe; if the user copied
         // something else in between, leave it alone.
         setTimeout(async () => {
           try {
             const cur = await navigator.clipboard.readText();
-            if (cur === pw) await navigator.clipboard.writeText("");
+            if (cur === pw) await writeClipboard("");
           } catch { /* best-effort */ }
         }, 30_000);
       } else {
@@ -956,7 +957,7 @@
         if (!val) {
           copiedHint = `${field === "username" ? "Username" : "Host"}: (empty)`;
         } else {
-          await navigator.clipboard.writeText(val);
+          await writeClipboard(val);
           copiedHint = `${field === "username" ? "Username" : "Host"} copied`;
         }
       }

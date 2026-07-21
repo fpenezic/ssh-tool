@@ -11,8 +11,27 @@
 // path never echoes the value into the toast.
 
 import { toast } from "./toast.svelte.ts";
+import { api } from "./api";
 
 const PASSWORD_CLEAR_MS = 30_000;
+
+// Write text to the clipboard, resilient across platforms. The mac WKWebView
+// refuses navigator.clipboard.writeText here ("clipboard unavailable") because
+// the app isn't served from a secure context with a guaranteed user gesture;
+// the native Go clipboard (api.clipboardSetText) always works and is the same
+// route the terminal copy uses. We try the native path first and only fall
+// back to navigator.clipboard if it is missing or fails, so a single code path
+// works on Windows, Linux and macOS. Throws only if BOTH routes fail, so
+// callers can still surface an error.
+export async function writeClipboard(text: string): Promise<void> {
+  try {
+    await api.clipboardSetText(text);
+    return;
+  } catch {
+    // Native path unavailable (e.g. not wired on some target) - fall through.
+  }
+  await navigator.clipboard.writeText(text);
+}
 
 // Most call sites want a confirmation toast (a button or menu action far
 // from where the user is looking). A few render their own inline hint
@@ -25,7 +44,7 @@ export interface CopyOpts {
 }
 
 export async function copyText(text: string, opts: CopyOpts = {}): Promise<void> {
-  await navigator.clipboard.writeText(text);
+  await writeClipboard(text);
   if (opts.toast !== false) toast.ok(opts.label ? `${opts.label} copied` : "Copied");
 }
 
@@ -33,13 +52,13 @@ export async function copyText(text: string, opts: CopyOpts = {}): Promise<void>
 // 30s later. If the user copies something else in between, the value
 // in the clipboard will no longer match and we leave it alone.
 export async function copySensitive(text: string, opts: CopyOpts = {}): Promise<void> {
-  await navigator.clipboard.writeText(text);
+  await writeClipboard(text);
   if (opts.toast !== false) toast.ok(`${opts.label ?? "Password"} copied - clears in 30s`);
   setTimeout(async () => {
     try {
       const cur = await navigator.clipboard.readText();
       if (cur === text) {
-        await navigator.clipboard.writeText("");
+        await writeClipboard("");
       }
     } catch {
       // Clipboard read can fail without user-gesture context in some

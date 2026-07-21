@@ -20,6 +20,7 @@
     type ProxyBookmark,
   } from "./api";
   import { clickOutside } from "./clickOutside";
+  import { writeClipboard } from "./clipboard";
   import { IconPlay, IconStop, IconExternalLink, IconGlobe, IconClipboardCopy } from "./iconMap";
 
   interface Props {
@@ -101,7 +102,7 @@
   async function copyExport() {
     if (!giExport) return;
     try {
-      await navigator.clipboard.writeText(giExport);
+      await writeClipboard(giExport);
       copied = true;
       setTimeout(() => (copied = false), 1500);
     } catch {

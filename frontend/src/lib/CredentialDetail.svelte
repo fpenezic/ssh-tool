@@ -9,6 +9,7 @@
   import Icon from "./Icon.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
+  import { writeClipboard } from "./clipboard";
   import IconPicker from "./IconPicker.svelte";
   import PasswordStrengthMeter from "./PasswordStrengthMeter.svelte";
   import PasswordInput from "./PasswordInput.svelte";
@@ -403,10 +404,10 @@
     secretHistoryErr = null;
     try {
       const v = revealedHistory[historyId] ?? (await api.credentialsRevealSecretHistory(historyId));
-      await navigator.clipboard.writeText(v);
+      await writeClipboard(v);
       toast.ok("Copied - clipboard clears in 30s");
       setTimeout(() => {
-        navigator.clipboard.writeText("").catch(() => {});
+        writeClipboard("").catch(() => {});
       }, 30_000);
     } catch (e: any) {
       secretHistoryErr = errMsg(e);
@@ -509,7 +510,7 @@
     connectionActions.openDeleteCredentials(ids);
   }
 
-  function copyText(s: string) { navigator.clipboard.writeText(s); }
+  function copyText(s: string) { writeClipboard(s).catch(() => {}); }
 
   function fmtTs(t: number | null | undefined): string {
     if (!t) return "-";
