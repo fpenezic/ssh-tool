@@ -1099,6 +1099,21 @@ What the LLM can do:
   approve first, and the new session is then shared with the LLM
   automatically so it can start working.
 
+**Create connections in bulk (Allow manage).** The Share-with-LLM
+popover has an *Allow manage (create connections)* toggle (off by
+default, never persisted). With it on, you can paste a list of servers
+into your LLM with instructions - "these go through bastion 1.2.3.4 as
+admin, on credential 'prod-key', each with a SOCKS proxy and a bookmark
+to the internal wiki" - and it will build the whole tree of folders,
+connections, port forwards and SOCKS bookmarks for you. Nothing is
+written as the LLM works: it stages a plan, then calls **commit_plan**,
+which pops a single approval modal showing the full structure (each
+host, user, via which bastion, network profile, and credential **name**).
+Approve and it is all written at once (all-or-nothing); reject and
+nothing changes. The LLM **never sets or sees a password** - a
+connection or its bastion can only reference a credential that already
+exists in your vault, by name.
+
 A session shared with the LLM shows a small robot-icon badge on
 its tab, so you can always see at a glance which sessions the LLM can
 see. Shared sessions are listed (and revocable) in Settings, and

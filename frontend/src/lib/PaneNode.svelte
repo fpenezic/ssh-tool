@@ -564,9 +564,9 @@
                 <IconBot size={13} />
               </button>
               {/if}
-              {#if showLlmShare && paneSession}
+              {#if showLlmShare}
                 <LlmSharePopover
-                  sessionId={paneSession.status === "connected" ? paneSession.sessionId : ""}
+                  sessionId={paneSession?.status === "connected" ? paneSession.sessionId : ""}
                   onClose={() => (showLlmShare = false)}
                   onViewActivity={() => { showLlmShare = false; showLlmActivity = true; }}
                 />

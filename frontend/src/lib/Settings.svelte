@@ -57,6 +57,9 @@
   // LLM (MCP) bridge access.
   let mcpEnabled = $state<boolean>(false);
   let mcpTcp = $state<boolean>(false);
+  // Store-wide "manage" grant (create folders/connections). Not persisted -
+  // read from the backend each open, dies with the process.
+  let mcpManage = $state<boolean>(false);
   let notificationsEnabled = $state<boolean>(true);
   let mcpAuditEnabled = $state<boolean>(true);
   let mcpAuditOutput = $state<boolean>(false);
@@ -346,6 +349,7 @@
       const v = await api.settingsGet("mcp_bridge_tcp");
       mcpTcp = v === "1" || v === "true";
     } catch { /* default off */ }
+    try { mcpManage = await api.mcpGetManageStore(); } catch { /* default off */ }
     try { mcpReadonlyExtra = (await api.settingsGet("mcp_readonly_extra")) ?? ""; } catch { /* ignore */ }
     try { mcpExePath = (await api.appExePath()) ?? ""; } catch { /* ignore */ }
     try { mcpWslExePath = (await api.appWslExePath()) ?? ""; } catch { /* ignore */ }
@@ -456,6 +460,13 @@
     mcpTcp = next;
     try { await api.settingsSet("mcp_bridge_tcp", next ? "1" : "0"); }
     catch (e) { console.warn("mcp tcp toggle:", e); }
+  }
+
+  async function toggleMcpManage(next: boolean) {
+    try {
+      await api.mcpSetManageStore(next);
+      mcpManage = next;
+    } catch (e) { toast.err("Manage toggle failed: " + errMsg(e)); }
   }
 
   async function saveMcpReadonlyExtra() {
@@ -4309,7 +4320,9 @@
         Then share a session: click the <strong>Share with LLM</strong> button
         in the pane toolbar (robot icon, next to tunnels). The LLM sees only
         shared sessions, and can also search and open your saved connections
-        (with your approval).
+        (with your approval). To let the LLM create connections from a pasted
+        server list, turn on <strong>Allow manage</strong> below - that needs no
+        open session.
       </p>
       <p class="hint">
         Paste the ssh-tool system prompt into your LLM client so it uses these
@@ -4332,6 +4345,24 @@
               Windows pipe). Binds 127.0.0.1 only, guarded by a token the bridge
               reads from a private file. Leave off if the client runs on the same
               OS as ssh-tool.
+            </div>
+          </div>
+        </label>
+        <label class:active={mcpManage}>
+          <input
+            type="checkbox"
+            checked={mcpManage}
+            onchange={(e) => toggleMcpManage((e.target as HTMLInputElement).checked)}
+          />
+          <div>
+            <div class="mode-name">Allow manage (create connections)</div>
+            <div class="mode-desc">
+              Lets the LLM propose new folders, connections and port forwards -
+              for example from a pasted server list - which you approve in one
+              modal before anything is written. No session needs to be open. It
+              never sets passwords; connections can only reference credentials
+              already in your vault. Off by default and not remembered between
+              runs.
             </div>
           </div>
         </label>

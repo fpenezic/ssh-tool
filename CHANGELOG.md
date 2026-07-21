@@ -7,6 +7,43 @@ in alpha upstream.
 
 ---
 
+## [0.73.0] - Let an LLM build connections from a pasted server list
+
+### Added
+
+- **LLM bulk provisioning (plan-then-commit).** With the MCP bridge on, the
+  "Share with LLM" popover has a new **Allow manage (create connections)**
+  toggle. When it is on, a connected LLM can turn a pasted list of servers into
+  new folders, connections, port forwards and SOCKS bookmarks for you - for
+  example "these ten hosts go through bastion 1.2.3.4 as admin, on credential
+  'prod-key', each with a SOCKS proxy". The LLM stages the whole structure and
+  then asks you to approve it in one modal that shows the full tree (host, user,
+  via bastion, network profile, credential NAME); on approval everything is
+  written in a single all-or-nothing transaction, on reject nothing is written.
+  The grant is off by default and never persisted - it dies with the app.
+
+- The LLM **never sets or sees a secret**. A connection (and its inline bastion)
+  can only reference an EXISTING vault credential by id - the new
+  `list_credentials` tool returns credential names and kinds only, never secret
+  material. Creating vault credentials is out of scope by design.
+
+- Folder defaults: `set_folder_settings` lets the LLM put a shared jump host,
+  credential, network profile, user, port or initial command on a folder so its
+  connections inherit them instead of repeating the same values on every host -
+  the natural way to wire up a batch that all sit behind the same bastion.
+
+- The manage grant also has a home in **Settings -> LLM (MCP) access** (an
+  "Allow manage (create connections)" toggle), so you can turn it on without an
+  open session - provisioning never needs one.
+
+- New MCP tools behind the manage grant: `list_folders`, `list_credentials`,
+  `list_network_profiles`, `create_folder`, `set_folder_settings`,
+  `create_connection`, `create_forward`, `set_socks_bookmarks`, `commit_plan`,
+  `discard_plan`. The copy-to-LLM system prompt documents the workflow so a
+  pasted prompt teaches the model how to use it.
+
+---
+
 ## [0.72.4] - macOS tray icon no longer tries to quit the app
 
 ### Fixed

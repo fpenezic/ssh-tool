@@ -1213,6 +1213,10 @@ export const api = {
     G.McpApprovalRespond(approvalId, decision),
   mcpActivityList: (sessionId: string) =>
     G.McpActivityList(sessionId) as unknown as Promise<McpActivity[]>,
+  // Store-wide "manage" grant: lets the LLM stage folder/connection/forward
+  // provisioning plans (create_* tools), committed only after an approval modal.
+  mcpSetManageStore: (on: boolean) => G.McpSetManageStore(on),
+  mcpGetManageStore: () => G.McpGetManageStore() as unknown as Promise<boolean>,
   appExePath: () => G.AppExePath() as unknown as Promise<string>,
   appWslExePath: () => G.AppWslExePath() as unknown as Promise<string>,
   requestAttention: () => G.RequestAttention(),

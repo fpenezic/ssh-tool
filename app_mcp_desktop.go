@@ -267,6 +267,237 @@ type mcpConnectArgs struct {
 	Level        string `json:"level,omitempty" jsonschema:"access to grant once connected: read or read-run (default read-run)"`
 }
 
+// --- provisioning tool arg types (manage grant) ---
+
+type mcpCreateFolderArgs struct {
+	Name   string `json:"name" jsonschema:"folder name"`
+	Parent string `json:"parent,omitempty" jsonschema:"parent folder: an existing folder id, or a plan temp id prefixed with tmp: from an earlier create_folder, or empty for root"`
+}
+
+type mcpSetFolderSettingsArgs struct {
+	Folder           string `json:"folder" jsonschema:"the folder to set defaults on: a plan temp id prefixed with tmp: from create_folder, or an existing folder id"`
+	User             string `json:"user,omitempty" jsonschema:"default SSH username for connections in this folder"`
+	Port             uint16 `json:"port,omitempty" jsonschema:"default SSH port"`
+	AuthRef          string `json:"auth_ref,omitempty" jsonschema:"id of an EXISTING vault credential (from list_credentials) connections inherit; NEVER a password"`
+	NetworkProfileID string `json:"network_profile_id,omitempty" jsonschema:"id of an existing network profile the first hop routes through"`
+	InitialCommand   string `json:"initial_command,omitempty" jsonschema:"command run in the shell right after connect"`
+	JumpHost         string `json:"jump_host,omitempty" jsonschema:"default inline bastion hostname/IP connections in this folder hop through"`
+	JumpUser         string `json:"jump_user,omitempty" jsonschema:"username for the inline bastion"`
+	JumpPort         uint16 `json:"jump_port,omitempty" jsonschema:"port for the inline bastion (default 22)"`
+	JumpAuthRef      string `json:"jump_auth_ref,omitempty" jsonschema:"id of an EXISTING vault credential for the bastion; NEVER a password"`
+}
+
+type mcpCreateConnectionArgs struct {
+	Name             string   `json:"name" jsonschema:"connection name shown in the tree"`
+	Host             string   `json:"host" jsonschema:"target hostname or IP of the server to connect to"`
+	Port             uint16   `json:"port,omitempty" jsonschema:"SSH port (default 22 when omitted)"`
+	User             string   `json:"user,omitempty" jsonschema:"SSH username"`
+	Folder           string   `json:"folder,omitempty" jsonschema:"folder to place it in: an existing folder id, a plan temp id prefixed with tmp:, or empty for root"`
+	AuthRef          string   `json:"auth_ref,omitempty" jsonschema:"id of an EXISTING vault credential (from list_credentials) to authenticate with; NEVER a password - you cannot set secrets"`
+	NetworkProfileID string   `json:"network_profile_id,omitempty" jsonschema:"id of an existing network profile (from list_network_profiles) to route the first hop through"`
+	JumpHost         string   `json:"jump_host,omitempty" jsonschema:"inline bastion hostname/IP the connection hops through (given as host, not a saved connection)"`
+	JumpUser         string   `json:"jump_user,omitempty" jsonschema:"username for the inline bastion"`
+	JumpPort         uint16   `json:"jump_port,omitempty" jsonschema:"port for the inline bastion (default 22)"`
+	JumpAuthRef      string   `json:"jump_auth_ref,omitempty" jsonschema:"id of an EXISTING vault credential for the bastion; NEVER a password"`
+	InitialCommand   string   `json:"initial_command,omitempty" jsonschema:"command run in the shell right after connect (e.g. tmux attach)"`
+	Tags             []string `json:"tags,omitempty" jsonschema:"optional tags"`
+}
+
+type mcpCreateForwardArgs struct {
+	Connection string `json:"connection" jsonschema:"the connection this forward belongs to: a plan temp id prefixed with tmp: from create_connection, or an existing connection id"`
+	Kind       string `json:"kind" jsonschema:"local, remote or dynamic (dynamic = SOCKS5 proxy)"`
+	LocalAddr  string `json:"local_addr,omitempty" jsonschema:"local bind address (default 127.0.0.1)"`
+	LocalPort  uint16 `json:"local_port,omitempty" jsonschema:"local port to listen on (local/remote forwards). For dynamic/SOCKS forwards DO NOT set this - the port is auto-assigned; bookmarks work regardless of port"`
+	RemoteHost string `json:"remote_host,omitempty" jsonschema:"target host (required for local/remote, ignored for dynamic)"`
+	RemotePort uint16 `json:"remote_port,omitempty" jsonschema:"target port (required for local/remote)"`
+	AutoStart  bool   `json:"auto_start,omitempty" jsonschema:"start this forward automatically when the connection connects"`
+	Desc       string `json:"description,omitempty" jsonschema:"optional description"`
+}
+
+type mcpBookmark struct {
+	Name string `json:"name" jsonschema:"bookmark label"`
+	URL  string `json:"url" jsonschema:"target URL to open through the SOCKS proxy"`
+}
+
+type mcpSetBookmarksArgs struct {
+	Forward   string        `json:"forward" jsonschema:"the dynamic (SOCKS) forward: a plan temp id prefixed with tmp:, or an existing forward id"`
+	Bookmarks []mcpBookmark `json:"bookmarks" jsonschema:"named URL shortcuts to open through this SOCKS proxy"`
+}
+
+// registerProvisioningTools adds the manage-grant provisioning tools. They only
+// STAGE into a pending plan; commit_plan writes it after the user approves.
+func (a *App) registerProvisioningTools(server *mcp.Server) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "list_folders",
+		Description: "List the user's connection folders with their id and full path, so you can " +
+			"target or parent by id when creating connections. Requires the manage grant.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ mcpEmptyArgs) (*mcp.CallToolResult, any, error) {
+		if !a.mcpManageAllowed() {
+			return errResult(errManageOff), nil, nil
+		}
+		paths := a.folderPathIndex()
+		var b strings.Builder
+		if len(paths) == 0 {
+			b.WriteString("No folders yet.")
+		}
+		for id, p := range paths {
+			if p == "" {
+				p = "(root-level)"
+			}
+			fmt.Fprintf(&b, "- %s  id=%s\n", p, id)
+		}
+		return textResult(b.String()), nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "list_credentials",
+		Description: "List the user's vault credentials by id, name and kind (password, key, agent, " +
+			"opkssh). Use an id as auth_ref when creating a connection. You NEVER see or set secret " +
+			"material - only reference an existing credential by id. Requires the manage grant.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ mcpEmptyArgs) (*mcp.CallToolResult, any, error) {
+		if !a.mcpManageAllowed() {
+			return errResult(errManageOff), nil, nil
+		}
+		creds, err := a.CredentialsList()
+		if err != nil {
+			return errResult(err), nil, nil
+		}
+		var b strings.Builder
+		if len(creds) == 0 {
+			b.WriteString("No credentials in the vault.")
+		}
+		for _, c := range creds {
+			fmt.Fprintf(&b, "- %s  (%s)  id=%s\n", c.Name, c.Kind, c.ID)
+		}
+		return textResult(b.String()), nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "list_network_profiles",
+		Description: "List the user's network profiles (userspace WireGuard / NetBird / Tailscale) by " +
+			"id and name, so you can route a connection's first hop through one via network_profile_id. " +
+			"Requires the manage grant.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ mcpEmptyArgs) (*mcp.CallToolResult, any, error) {
+		if !a.mcpManageAllowed() {
+			return errResult(errManageOff), nil, nil
+		}
+		profs, err := a.db.ListNetworkProfiles()
+		if err != nil {
+			return errResult(err), nil, nil
+		}
+		var b strings.Builder
+		if len(profs) == 0 {
+			b.WriteString("No network profiles.")
+		}
+		for _, p := range profs {
+			fmt.Fprintf(&b, "- %s  id=%s\n", p.Name, p.ID)
+		}
+		return textResult(b.String()), nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "create_folder",
+		Description: "Stage a new folder in the pending provisioning plan. Returns a temp id " +
+			"(use it, prefixed with tmp:, as parent/folder in later create calls). NOTHING is written " +
+			"until commit_plan, which the user must approve. Requires the manage grant.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpCreateFolderArgs) (*mcp.CallToolResult, any, error) {
+		id, err := a.planAddFolder(in.Name, in.Parent)
+		if err != nil {
+			return errResult(err), nil, nil
+		}
+		return textResult("staged folder; temp id = tmp:" + id), nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "set_folder_settings",
+		Description: "Set inheritable defaults on a folder so its connections inherit them instead of " +
+			"repeating the same jump host / credential / network profile on each one. folder is a tmp: " +
+			"temp id from create_folder or an existing folder id. Reference credentials by EXISTING id " +
+			"(auth_ref / jump_auth_ref) - never a password. Nothing is written until commit_plan. Requires the manage grant.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpSetFolderSettingsArgs) (*mcp.CallToolResult, any, error) {
+		if err := a.planSetFolderSettings(in.Folder, folderSettingsInput{
+			User: in.User, Port: in.Port, AuthRef: in.AuthRef,
+			NetworkProfileID: in.NetworkProfileID, InitialCommand: in.InitialCommand,
+			JumpHost: in.JumpHost, JumpUser: in.JumpUser, JumpPort: in.JumpPort, JumpAuthRef: in.JumpAuthRef,
+		}); err != nil {
+			return errResult(err), nil, nil
+		}
+		return textResult("staged folder defaults on " + in.Folder), nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "create_connection",
+		Description: "Stage a new SSH connection in the pending provisioning plan. Reference an EXISTING " +
+			"vault credential via auth_ref (from list_credentials) - you can never set a password. A bastion " +
+			"is given inline as jump_host/jump_user (+ optional jump_auth_ref), not a saved connection. " +
+			"Returns a temp id for attaching forwards. Nothing is written until commit_plan. Requires the manage grant.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpCreateConnectionArgs) (*mcp.CallToolResult, any, error) {
+		id, err := a.planAddConnection(planConnInput{
+			Name: in.Name, Host: in.Host, Port: in.Port, User: in.User,
+			Folder: in.Folder, AuthRef: in.AuthRef, NetworkProfileID: in.NetworkProfileID,
+			JumpHost: in.JumpHost, JumpUser: in.JumpUser, JumpPort: in.JumpPort, JumpAuthRef: in.JumpAuthRef,
+			InitialCommand: in.InitialCommand, Tags: in.Tags,
+		})
+		if err != nil {
+			return errResult(err), nil, nil
+		}
+		return textResult("staged connection; temp id = tmp:" + id), nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "create_forward",
+		Description: "Stage a port forward (local, remote, or dynamic/SOCKS5) on a connection in the " +
+			"pending plan. connection is a tmp: temp id from create_connection or an existing connection id. " +
+			"For a dynamic (SOCKS) forward do NOT set local_port - it is auto-assigned a free port at start " +
+			"and the user reaches it via bookmarks, so a fixed port is pointless. " +
+			"Nothing is written until commit_plan. Requires the manage grant.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpCreateForwardArgs) (*mcp.CallToolResult, any, error) {
+		id, err := a.planAddForward(in.Connection, in.Kind, in.LocalAddr, in.LocalPort,
+			in.RemoteHost, in.RemotePort, in.AutoStart, in.Desc)
+		if err != nil {
+			return errResult(err), nil, nil
+		}
+		return textResult("staged forward; temp id = tmp:" + id), nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "set_socks_bookmarks",
+		Description: "Attach named URL bookmarks to a dynamic (SOCKS5) forward in the pending plan. " +
+			"forward is a tmp: temp id from create_forward or an existing dynamic forward id. " +
+			"Nothing is written until commit_plan. Requires the manage grant.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpSetBookmarksArgs) (*mcp.CallToolResult, any, error) {
+		bms := make([]store.ProxyBookmark, 0, len(in.Bookmarks))
+		for _, b := range in.Bookmarks {
+			bms = append(bms, store.ProxyBookmark{Name: b.Name, URL: b.URL})
+		}
+		if err := a.planSetBookmarks(in.Forward, bms); err != nil {
+			return errResult(err), nil, nil
+		}
+		return textResult(fmt.Sprintf("staged %d bookmark(s) on forward %s", len(bms), in.Forward)), nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "commit_plan",
+		Description: "Show the full pending plan (folders, connections, forwards, bookmarks) to the user " +
+			"for approval, then - only if approved - write it all in one transaction (all-or-nothing). " +
+			"Call this once you have staged everything. Requires the manage grant.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ mcpEmptyArgs) (*mcp.CallToolResult, any, error) {
+		out, err := a.planCommit()
+		if err != nil {
+			return errResult(err), nil, nil
+		}
+		return textResult(out), nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "discard_plan",
+		Description: "Discard the pending provisioning plan without writing anything, so you can start over.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ mcpEmptyArgs) (*mcp.CallToolResult, any, error) {
+		a.planDiscard()
+		return textResult("pending plan discarded"), nil, nil
+	})
+}
+
 // buildMcpServer registers the four session tools on a new server instance.
 func (a *App) buildMcpServer() *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
@@ -348,6 +579,8 @@ func (a *App) buildMcpServer() *mcp.Server {
 		}
 		return textResult(out), nil, nil
 	})
+
+	a.registerProvisioningTools(server)
 
 	return server
 }

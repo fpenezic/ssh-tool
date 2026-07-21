@@ -1224,7 +1224,10 @@ export function GetConnectionHasVncPassword(connectionID) {
 
 /**
  * HideToTray hides the main window without quitting. Used by the
- * frontend "Minimize to tray" button.
+ * frontend "Minimize to tray" button. On macOS this is an app-level hide
+ * (Cmd+H style) so hiding the only window doesn't trip the
+ * terminate-on-last-window rule and try to quit; other platforms hide the
+ * window, the normal tray pattern there.
  * @returns {$CancellablePromise<void>}
  */
 export function HideToTray() {
@@ -1654,6 +1657,15 @@ export function McpApprovalRespond(approvalID, decision) {
 }
 
 /**
+ * McpGetManageStore returns the current manage-store grant (initial popover
+ * render).
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function McpGetManageStore() {
+    return $Call.ByID(1878546087);
+}
+
+/**
  * McpListGrants returns every currently-shared session with its level.
  * @returns {$CancellablePromise<$models.McpGrantInfo[]>}
  */
@@ -1661,6 +1673,18 @@ export function McpListGrants() {
     return $Call.ByID(4125482104).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType89($result);
     }));
+}
+
+/**
+ * McpSetManageStore toggles the store-wide "manage" grant that lets the LLM
+ * stage folder/connection/forward provisioning plans. Off by default, NOT
+ * persisted (dies with the process). Emits mcp_grants_changed so the popover
+ * reflects it.
+ * @param {boolean} on
+ * @returns {$CancellablePromise<void>}
+ */
+export function McpSetManageStore(on) {
+    return $Call.ByID(674662843, on);
 }
 
 /**

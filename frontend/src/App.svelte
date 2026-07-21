@@ -30,6 +30,7 @@
   import HostKeyModal from "./lib/HostKeyModal.svelte";
   import AuthPromptModal from "./lib/AuthPromptModal.svelte";
   import McpApprovalModal from "./lib/McpApprovalModal.svelte";
+  import McpPlanApprovalModal, { type PlanPreview } from "./lib/McpPlanApprovalModal.svelte";
   import ShareApprovalModal from "./lib/ShareApprovalModal.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import ExportConnectionsModal from "./lib/ExportConnectionsModal.svelte";
@@ -73,6 +74,9 @@
   let showPalette = $state(false);
   let showSnippetPalette = $state(false);
   let showShortcuts = $state(false);
+  // Pending LLM provisioning-plan approval (mcp_plan_approval_request). Only
+  // one is in flight at a time (commit_plan blocks until answered).
+  let planApproval = $state<PlanPreview | null>(null);
 
   // Detached-window mode: the backend opens new top-level windows with
   // URL like "/?detached=<tabId>". When that param exists we render a
@@ -700,6 +704,17 @@
     });
   });
 
+  // LLM provisioning plan ready for approval: render the whole tree in a modal.
+  EventsOn("mcp_plan_approval_request", (data: any) => {
+    api.requestAttention().catch(() => {});
+    const cn = data?.counts?.connections ?? 0;
+    api.sendPromptNotification(
+      "LLM wants to create connections",
+      `Review ${cn} connection${cn === 1 ? "" : "s"} the LLM prepared before they are added.`,
+    ).catch(() => {});
+    planApproval = data as PlanPreview;
+  });
+
   // Keep the "shared with LLM" tab markers in sync.
   EventsOn("mcp_grants_changed", (data: any) => {
     mcpShared.setFrom((data as { session_id: string }[]) ?? []);
@@ -1255,6 +1270,18 @@
         mcpApprovalStore.shift();
         if (mcpApprovalStore.queue.length === 0) api.clearAttention().catch(() => {});
         await api.mcpApprovalRespond(a.approvalId, decision);
+      }}
+    />
+  {/if}
+
+  {#if planApproval}
+    <McpPlanApprovalModal
+      preview={planApproval}
+      onRespond={async (decision) => {
+        const p = planApproval!;
+        planApproval = null;
+        api.clearAttention().catch(() => {});
+        await api.mcpApprovalRespond(p.approval_id, decision);
       }}
     />
   {/if}

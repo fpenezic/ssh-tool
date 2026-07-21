@@ -229,6 +229,21 @@ novel.
     `windowFocused` atomic) AND pop an OS toast (`SendPromptNotification`,
     Wails notifications service; Windows needs a non-empty `ID` or it fails
     silently).
+    Bulk provisioning (v0.73.0) adds a SEPARATE store-wide "manage" grant
+    (`manageStore`, `McpSetManageStore`/`McpGetManageStore`, not persisted,
+    toggle in the share popover) gating create tools. These do NOT write on
+    call: they STAGE into an in-memory `mcpPlan` (`app_mcp_plan.go`) with
+    `tmp:`-prefixed temp ids so later entries ref earlier ones; `commit_plan`
+    renders a rich preview (`McpPlanPreview`, cred/profile shown by NAME only)
+    via `requestPlanApproval` (reuses the same `approvals` channel map + a new
+    `mcp_plan_approval_request` event + `McpPlanApprovalModal`), then writes the
+    whole plan in ONE `db.WithTx` (`internal/store/tx.go`; the `*Tx` create
+    variants share SQL via `execer`-taking `insertX` helpers - keep those and
+    the non-tx methods in sync). All-or-nothing: any error rolls back, the plan
+    is discarded either way (a half-applied plan must never be re-committed).
+    HARD RULE: the LLM never sets a secret - a connection/bastion only
+    references an EXISTING vault credential by id (`auth_ref`), validated at
+    commit; `list_credentials` returns id/name/kind only.
 
 32. **Cross-window tab moves go through a backend pending-drag slot, not
     native drag.** A WebView drag can't cross OS window boundaries (the

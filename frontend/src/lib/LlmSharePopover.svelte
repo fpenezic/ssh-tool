@@ -11,6 +11,7 @@
   import { MCP_SYSTEM_PROMPT, MCP_SYSTEM_PROMPT_HINT } from "./mcpSystemPrompt";
   import { toast } from "./toast.svelte.ts";
   import { writeClipboard } from "./clipboard";
+  import { EventsOn } from "./wailsRuntime";
 
   interface Props {
     // Empty when the pane has no live session (controls disable).
@@ -22,10 +23,19 @@
 
   let bridgeOn = $state(false);
   let level = $state<"" | McpGrantLevel>("");
+  let manageOn = $state(false);
   let err = $state<string | null>(null);
   let loading = $state(true);
 
-  onMount(load);
+  onMount(() => {
+    load();
+    // Reflect manage-grant changes made elsewhere (or auto-dropped on process
+    // exit / off toggle).
+    const off = EventsOn("mcp_grants_changed", () => {
+      api.mcpGetManageStore().then((v) => (manageOn = v)).catch(() => {});
+    });
+    return off;
+  });
 
   async function load() {
     loading = true;
@@ -33,6 +43,9 @@
       const v = await api.settingsGet("mcp_bridge_enabled");
       bridgeOn = v === "1" || v === "true";
     } catch { bridgeOn = false; }
+    if (bridgeOn) {
+      try { manageOn = await api.mcpGetManageStore(); } catch { /* ignore */ }
+    }
     if (bridgeOn && sessionId) {
       try {
         const grants = (await api.mcpListGrants()) ?? [];
@@ -41,6 +54,13 @@
       } catch { /* ignore */ }
     }
     loading = false;
+  }
+
+  async function toggleManage() {
+    try {
+      await api.mcpSetManageStore(!manageOn);
+      manageOn = !manageOn;
+    } catch (e) { err = String((e as any)?.message ?? e); }
   }
 
   async function share(lvl: McpGrantLevel) {
@@ -134,7 +154,21 @@
     </div>
   {/if}
 
-  {#if bridgeOn && sessionId}
+  {#if bridgeOn && !loading}
+    <div class="manage">
+      <label class="manage-row">
+        <input type="checkbox" checked={manageOn} onchange={toggleManage} />
+        <span>Allow manage (create connections)</span>
+      </label>
+      <div class="manage-sub">
+        Lets the LLM propose new folders, connections and forwards for your
+        approval. It never sets passwords - only references existing vault
+        credentials.
+      </div>
+    </div>
+  {/if}
+
+  {#if bridgeOn}
     <button class="link prompt" onclick={copyPrompt}>Copy LLM system prompt</button>
   {/if}
   {#if bridgeOn && onViewActivity}
@@ -199,4 +233,17 @@
     display: block; margin-top: 0.25rem; text-decoration: none; width: 100%; text-align: left;
   }
   .link.activity:hover { color: var(--lavender); }
+  .manage {
+    margin-top: 0.5rem; padding-top: 0.45rem;
+    border-top: 1px solid var(--surface0);
+  }
+  .manage-row {
+    display: flex; align-items: center; gap: 0.4rem;
+    color: var(--text); cursor: pointer; user-select: none;
+  }
+  .manage-row input { cursor: pointer; }
+  .manage-sub {
+    margin-top: 0.3rem; font-size: 0.7rem; line-height: 1.35;
+    color: var(--overlay0);
+  }
 </style>

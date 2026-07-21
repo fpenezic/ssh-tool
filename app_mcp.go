@@ -105,6 +105,23 @@ type mcpState struct {
 	mu     sync.Mutex
 	grants map[string]mcpGrantLevel // sessionID -> level
 
+	// manageStore, when set, lets the LLM create folders/connections and
+	// move/rename existing connections (the create_folder / create_connection
+	// / update_connection tools). It is a store-wide grant, separate from the
+	// per-session read/run grants, because those tools act on the whole tree
+	// rather than one live session. Off by default; like the session grants it
+	// is NOT persisted, so it never outlives the process, and every write
+	// still goes through a per-action approval prompt. It never lets the LLM
+	// set a password - a connection can only reference an existing vault
+	// credential (auth_ref), never carry a secret.
+	manageStore bool
+
+	// plan is the in-memory pending provisioning plan the create_* tools
+	// stage into; commit_plan writes it in one transaction, discard_plan
+	// drops it. nil when no plan is being built. Guarded by planMu.
+	planMu sync.Mutex
+	plan   *mcpPlan
+
 	approvalsMu sync.Mutex
 	approvals   map[string]chan mcpDecision // approvalID -> response channel
 
@@ -112,8 +129,8 @@ type mcpState struct {
 	// live LLM-activity panel; a copy is also written to audit.db when the
 	// mcp_audit_enabled setting is on. In-memory so the panel works even
 	// without persistence; capped so a chatty LLM can't grow it unbounded.
-	activityMu sync.Mutex
-	activity   []McpActivity
+	activityMu  sync.Mutex
+	activity    []McpActivity
 	activitySeq int64
 }
 
@@ -309,6 +326,43 @@ func (a *App) clearMcpGrant(sessionID string) {
 	}
 }
 
+// ----- Manage-store grant (frontend IPC) -----
+
+// McpSetManageStore toggles the store-wide "manage" grant that lets the LLM
+// stage folder/connection/forward provisioning plans. Off by default, NOT
+// persisted (dies with the process). Emits mcp_grants_changed so the popover
+// reflects it.
+func (a *App) McpSetManageStore(on bool) error {
+	a.mcp.mu.Lock()
+	a.mcp.manageStore = on
+	a.mcp.mu.Unlock()
+	// If turning it off, drop any half-built plan so it can't be committed
+	// later without the grant.
+	if !on {
+		a.mcp.planMu.Lock()
+		a.mcp.plan = nil
+		a.mcp.planMu.Unlock()
+	}
+	EventsEmit("mcp_grants_changed", a.McpListGrants())
+	return nil
+}
+
+// McpGetManageStore returns the current manage-store grant (initial popover
+// render).
+func (a *App) McpGetManageStore() bool {
+	a.mcp.mu.Lock()
+	defer a.mcp.mu.Unlock()
+	return a.mcp.manageStore
+}
+
+// mcpManageAllowed reports whether the manage grant is on. The provisioning
+// tools call this first and refuse when off.
+func (a *App) mcpManageAllowed() bool {
+	a.mcp.mu.Lock()
+	defer a.mcp.mu.Unlock()
+	return a.mcp.manageStore
+}
+
 // ----- Approval gate (frontend IPC) -----
 
 // McpApprovalRequest is the event payload the frontend renders as a modal.
@@ -349,6 +403,37 @@ func (a *App) requestApproval(sessionID, sessionName, kind, command string) mcpD
 	case <-a.ctx.Done():
 		return mcpDecisionDeny
 	case <-time.After(mcpApprovalTimeout):
+		return mcpDecisionDeny
+	}
+}
+
+// requestPlanApproval emits the rich provisioning-plan approval request and
+// blocks until the user responds (approve -> mcpDecisionRun), the timeout
+// fires, or the app shuts down (both default to deny). Reuses the same
+// approvals channel plumbing as requestApproval; only the event + modal differ.
+// Uses a longer timeout than a single command - reviewing a whole tree takes a
+// beat.
+func (a *App) requestPlanApproval(preview McpPlanPreview) mcpDecision {
+	id := uuid.NewString()
+	preview.ApprovalID = id
+	ch := make(chan mcpDecision, 1)
+	a.mcp.approvalsMu.Lock()
+	a.mcp.approvals[id] = ch
+	a.mcp.approvalsMu.Unlock()
+	defer func() {
+		a.mcp.approvalsMu.Lock()
+		delete(a.mcp.approvals, id)
+		a.mcp.approvalsMu.Unlock()
+	}()
+
+	EventsEmit("mcp_plan_approval_request", preview)
+
+	select {
+	case d := <-ch:
+		return d
+	case <-a.ctx.Done():
+		return mcpDecisionDeny
+	case <-time.After(5 * time.Minute):
 		return mcpDecisionDeny
 	}
 }
