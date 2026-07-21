@@ -103,9 +103,18 @@ class LastSessionStore {
         groupColor: t.groupColor,
       };
       if (sess.kind === "local") {
-        // Recovery and openLocalShell both store the shell kind in
-        // `hostname` (cmd / powershell / wsl / bash ...).
-        out.push({ kind: "local", shellKind: sess.hostname, ...meta });
+        // A saved local-shell connection (connectionId set, non-dyn) must
+        // restore via LocalConnect so its InitialCommand re-runs (e.g. a
+        // "claude" launcher). An ad-hoc local shell has no connectionId;
+        // recovery and openLocalShell store its shell kind in `hostname`
+        // (cmd / powershell / wsl / bash ...). Distinguishing the two here
+        // is what stops a saved "claude on double-click" connection from
+        // reopening as a bare WSL prompt on restore.
+        if (sess.connectionId && !sess.connectionId.startsWith("dyn:")) {
+          out.push({ kind: "local", connectionId: sess.connectionId, ...meta });
+        } else {
+          out.push({ kind: "local", shellKind: sess.hostname, ...meta });
+        }
       } else if (sess.connectionId.startsWith("dyn:")) {
         const entryId = sess.connectionId.slice(4);
         const dyn = this.dynEntryFor(entryId, sess.hostname, sess.name);
@@ -257,8 +266,38 @@ class LastSessionStore {
       });
       paneTabs.addTab(res.session_id, entry.name);
       view.setTab("terminal");
+    } else if (kind === "local" && spec.connectionId) {
+      // A saved local-shell connection: re-run it through LocalConnect so
+      // its InitialCommand fires (a "claude" launcher, a REPL, ...). If the
+      // connection was deleted since the snapshot, fall through to nothing
+      // rather than spawning a bare shell that isn't what the user saved.
+      const conn = tree.connectionById(spec.connectionId);
+      if (!conn || conn.protocol !== "local") {
+        throw new Error(`${spec.title || "local connection"}: no longer exists`);
+      }
+      const r = await api.localConnect(conn.id);
+      sessions.add({
+        sessionId: r.session_id,
+        connectionId: conn.id,
+        name: conn.name,
+        hostname: r.display || r.kind,
+        kind: "local",
+        status: "connected",
+      });
+      paneTabs.addTab(r.session_id, conn.name);
+      view.setTab("terminal");
     } else if (kind === "local") {
-      const res = await api.localShellOpen(spec.shellKind ?? "", "", 120, 32);
+      // Ad-hoc local shell (no connectionId). hostname carries the resolved
+      // shell kind, but auto-resolve stores a canonical label the spawner
+      // won't accept back as input: on Linux/mac the auto shell is "shell"
+      // (from $SHELL), which is not a valid kind, so local.Spawn("shell")
+      // errors with "unsupported shell kind" and the restore toasts a
+      // failure. Only feed back kinds the spawner takes; anything else
+      // (incl. "shell") falls to "" = auto and gets the same default shell.
+      // Mirrors duplicateTab in TerminalArea.svelte.
+      const spawnKinds = ["wsl", "powershell", "cmd", "bash", "zsh", "sh", "fish"];
+      const shellKind = spawnKinds.includes(spec.shellKind ?? "") ? spec.shellKind! : "";
+      const res = await api.localShellOpen(shellKind, "", 120, 32);
       sessions.add({
         sessionId: res.session_id,
         connectionId: "",

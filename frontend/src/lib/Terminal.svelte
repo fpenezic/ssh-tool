@@ -469,6 +469,26 @@
         return false;
       }
     }
+    // Shift+Enter - emit ESC + CR (0x1b 0x0d), the exact bytes Alt+Enter
+    // produces natively (confirmed: Alt+Enter's onData is [27, 13], which
+    // Claude Code reads as "newline, do not submit"). A plain Enter and a
+    // Shift+Enter both reach xterm as an "Enter" keydown, so without this
+    // xterm sends the same bare CR for both and the remote app can't tell
+    // them apart - Shift+Enter submitted.
+    //
+    // Returning false alone is NOT enough here: xterm still let the bare CR
+    // through onData (seen as [13] after our ESC+CR), so the PTY got
+    // "\x1b\r" + "\r" and CC saw the trailing CR as a submit. preventDefault
+    // + stopPropagation on the DOM event stops xterm's textarea from ever
+    // producing that second CR, leaving only the ESC+CR we send.
+    if (e.key === "Enter" && e.shiftKey &&
+        !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      sendKeys("\x1b\r");
+      return false;
+    }
+
     // Everything else - let xterm handle it. Plain Ctrl+C falls through here
     // and xterm sends it as SIGINT (0x03). That is every Ctrl+C in Linux and
     // Mac mode, and in Windows mode every one that isn't sitting on a

@@ -51,6 +51,7 @@
   // mount and the `vault_locked` event App.svelte already emits.
   let vaultLocked = $state(true);
   let unsubVault: null | (() => void) = null;
+  let unsubOpenUpdate: null | (() => void) = null;
   async function refreshVault() {
     try {
       const st = await api.vaultStatus();
@@ -97,10 +98,16 @@
     tunnelTimer = setInterval(refreshTunnels, 3000);
     refreshVault();
     unsubVault = EventsOn("vault_locked", () => { vaultLocked = true; });
+    // Clicking the OS update toast raises the window (backend) and emits
+    // this so the update dialog opens straight away - the whole point of
+    // the notification is to land the user on the update, not just surface
+    // the app with nothing shown.
+    unsubOpenUpdate = EventsOn("open_update", () => { openUpdate(); });
   });
   onDestroy(() => {
     if (tunnelTimer) clearInterval(tunnelTimer);
     unsubVault?.();
+    unsubOpenUpdate?.();
   });
 
   let version = $state<string>("");
@@ -228,6 +235,12 @@
     const sid = focusedSessionId;
     if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
     if (!on || !sid) { serverStats = null; return; }
+    // Only SSH sessions have a server to probe. A local shell (or any
+    // non-SSH session) has no ssh client, so SshServerStats errors and Wails
+    // surfaces it as a noisy 422 in the console every 10s. Skip the poll for
+    // those entirely.
+    const sess = sessions.tabs.find((s) => s.sessionId === sid);
+    if (sess && sess.kind === "local") { serverStats = null; return; }
     // Probe immediately, then every 10s while focus/feature hold.
     serverStats = null;
     probeServerStats(sid);

@@ -2588,6 +2588,20 @@ export function ShareUpdate(shareID, $in) {
 }
 
 /**
+ * ShowAndFocusMainWindow raises the main window to the foreground: un-hides
+ * it from the tray, restores it if minimised, and gives it focus. This is
+ * what a clicked OS notification calls so the prompt (or update dialog) the
+ * notification is about is actually visible - a toast that doesn't bring the
+ * app forward is useless for a blocking prompt. Also clears any taskbar flash
+ * since the user has now looked at the app. Shared by the notification-click
+ * handler and any other "surface the app now" caller.
+ * @returns {$CancellablePromise<void>}
+ */
+export function ShowAndFocusMainWindow() {
+    return $Call.ByID(2544868718);
+}
+
+/**
  * ShowFromTray restores the main window.
  * @returns {$CancellablePromise<void>}
  */

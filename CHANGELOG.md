@@ -7,6 +7,51 @@ in alpha upstream.
 
 ---
 
+## [0.72.2] - Shift+Enter newline, notification click, decode copy, session restore
+
+### Added
+
+- **Copy button on every packet-decode block.** In a tcpdump capture's
+  Decode tab, hovering a DHCP transaction (the whole
+  DISCOVER -> OFFER -> REQUEST -> ACK exchange) or any other decoded packet
+  (DNS, ARP, TLS, HTTP, NTP, SNMP, ...) shows a copy button. It writes the
+  block in two clipboard flavours at once - the same way the batch-exec
+  "Copy all" does - so Teams / Slack / Outlook keep the formatting (a bold
+  header line plus a code block of the fields) while editors and shells get
+  the plain-text twin.
+
+### Fixed
+
+- **Shift+Enter inserts a newline instead of submitting** in a terminal
+  pane, so multi-line input in tools like Claude Code works without reaching
+  for Alt+Enter. The terminal was sending the same carriage return for both
+  Shift+Enter and a plain Enter, so the remote could not tell them apart; it
+  now emits the escape+return sequence that means "newline, do not submit"
+  (the same bytes Alt+Enter already produced).
+
+- **Clicking an OS notification brings ssh-tool to the foreground.** A
+  clicked update or prompt notification (host-key, MCP approval, remote
+  browser, share join) now raises and focuses the window - un-hiding it from
+  the tray and un-minimising it if needed - so the thing the notification is
+  about is actually on screen. The update notification additionally opens the
+  update dialog straight away. Previously the toast was inert and the app
+  stayed in the background.
+
+- **Reopen-last-session restores a saved local-shell connection correctly.**
+  A saved local connection (one that runs an initial command, e.g. a
+  "claude" launcher) used to come back on restart as a bare default shell,
+  losing its command. It now reconnects through the saved connection so its
+  initial command runs again. An ad-hoc local shell whose auto-resolved kind
+  the spawner could not accept back (Linux/macOS "shell") also no longer
+  fails the restore with an "unsupported shell kind" toast.
+
+- **No more console noise from the server-stats readout on local shells.**
+  The optional status-bar server-stats probe was firing against local PTY
+  sessions, which have no SSH server to query, producing a rejected request
+  every few seconds. It now runs only for SSH sessions.
+
+---
+
 ## [0.72.1] - Batch exec shares the bastion; broadcast focus; Connect-all guard
 
 ### Fixed

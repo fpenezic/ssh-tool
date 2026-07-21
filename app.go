@@ -3966,6 +3966,25 @@ func (a *App) HideToTray() {
 	a.windowHidden.Store(true)
 }
 
+// ShowAndFocusMainWindow raises the main window to the foreground: un-hides
+// it from the tray, restores it if minimised, and gives it focus. This is
+// what a clicked OS notification calls so the prompt (or update dialog) the
+// notification is about is actually visible - a toast that doesn't bring the
+// app forward is useless for a blocking prompt. Also clears any taskbar flash
+// since the user has now looked at the app. Shared by the notification-click
+// handler and any other "surface the app now" caller.
+func (a *App) ShowAndFocusMainWindow() {
+	w := a.mainWindow
+	if w == nil {
+		return
+	}
+	w.Show()
+	w.Restore() // no-op if not minimised; un-minimises otherwise
+	w.Focus()
+	w.Flash(false)
+	a.windowHidden.Store(false)
+}
+
 // SetWindowTitle updates the OS window (and taskbar) title. The
 // frontend calls this to reflect the active connection/section; Wails
 // v3 alpha doesn't propagate document.title to the native title on its

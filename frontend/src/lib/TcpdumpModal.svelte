@@ -17,6 +17,8 @@
   import { api, type TcpdumpProbeResult, type Insight, type RouteResult } from "./api";
   import { EventsOn } from "./wailsRuntime";
   import { clickOutside } from "./clickOutside";
+  import { IconCopy } from "./iconMap";
+  import { toast } from "./toast.svelte.ts";
 
   interface TcpdumpStats {
     iface: string;
@@ -724,6 +726,83 @@
       default: return "var(--subtext0)";
     }
   }
+
+  // Copy a decoded block in two clipboard flavours at once, exactly like the
+  // batch-exec "Copy all": text/html so Teams / Slack / Outlook render the
+  // layout (bold host/summary lines + a <pre> field table), and text/plain
+  // as the fallback for editors and shells. Rich write can be refused
+  // (permissions, unfocused doc), so we fall back to the plain text through
+  // the Go side, which always works.
+  async function copyRich(html: string, text: string, label: string) {
+    try {
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([html], { type: "text/html" }),
+            "text/plain": new Blob([text], { type: "text/plain" }),
+          }),
+        ]);
+      } else {
+        await api.clipboardSetText(text);
+      }
+      toast.ok(`${label} copied`);
+    } catch (e: any) {
+      try {
+        await api.clipboardSetText(text);
+        toast.ok(`${label} copied`);
+      } catch {
+        toast.err("Copy failed: " + errMsg(e));
+      }
+    }
+  }
+
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  // Plain-text form of one decoded packet: a header line (timestamp +
+  // summary) then aligned key/value rows. Keys are right-padded to the
+  // widest key so the pasted block lines up like the on-screen table.
+  function decodedToText(p: Packet): string {
+    const d = p.decoded!;
+    const entries = Object.entries(d.fields);
+    const kw = entries.reduce((w, [k]) => Math.max(w, k.length), 0);
+    const head = `${p.timestamp ? p.timestamp + "  " : ""}${d.summary}`;
+    const rows = entries.map(([k, v]) => `  ${k.padEnd(kw)}  ${v}`);
+    return [head, ...rows].join("\n");
+  }
+
+  // HTML form of one decoded packet: a bold summary line then the field
+  // table as a <pre> (which Teams/Slack/Outlook render as a code block).
+  function decodedToHtml(p: Packet): string {
+    const d = p.decoded!;
+    const entries = Object.entries(d.fields);
+    const kw = entries.reduce((w, [k]) => Math.max(w, k.length), 0);
+    const rows = entries.map(([k, v]) => `  ${esc(k.padEnd(kw))}  ${esc(v)}`);
+    const head = `<p><b>${esc(p.timestamp ? p.timestamp + "  " : "")}${esc(d.summary)}</b></p>`;
+    return rows.length ? `${head}\n<pre>${rows.join("\n")}</pre>` : head;
+  }
+
+  // Copy a whole DHCP transaction (the DISCOVER -> OFFER -> REQUEST -> ACK
+  // exchange) as one block, both flavours. This is the "copy the whole
+  // block" the user asked for.
+  function copyDhcpTx(tx: DhcpTx) {
+    const stages = tx.stages.join(" -> ");
+    const meta = `${tx.packets.length} pkt${tx.packets.length === 1 ? "" : "s"} - ${tx.firstSeen}${tx.lastSeen !== tx.firstSeen ? "..." + tx.lastSeen : ""}${tx.assignedIP ? " - " + tx.assignedIP : ""}`;
+    const text = [`dhcp  xid ${tx.xid}  ${stages}\n${meta}`, ...tx.packets.map(decodedToText)].join("\n\n");
+    const html = [
+      `<p><b>dhcp xid ${esc(tx.xid)}</b> - ${esc(stages)}<br>${esc(meta)}</p>`,
+      ...tx.packets.map(decodedToHtml),
+    ].join("\n");
+    copyRich(html, text, "Transaction");
+  }
+
+  // Copy a single non-DHCP decoded packet (DNS / ARP / ...).
+  function copyDecoded(p: Packet) {
+    const d = p.decoded!;
+    const text = `${d.type}\n${decodedToText(p)}`;
+    const html = `<p><b>${esc(d.type)}</b></p>\n${decodedToHtml(p)}`;
+    copyRich(html, text, "Packet");
+  }
 </script>
 
 <!-- Escape minimises when a capture is running (keeps it alive in the
@@ -995,6 +1074,15 @@
                 · {tx.firstSeen}{tx.lastSeen !== tx.firstSeen ? "..." + tx.lastSeen : ""}
                 {#if tx.assignedIP} · {tx.assignedIP}{/if}
               </span>
+              <!-- stopPropagation + preventDefault so the copy click doesn't
+                   toggle the <details> it lives in. -->
+              <button
+                class="copy-btn"
+                title="Copy this transaction"
+                onclick={(e) => { e.stopPropagation(); e.preventDefault(); copyDhcpTx(tx); }}
+              >
+                <IconCopy size={13} />
+              </button>
             </summary>
             {#each tx.packets as p (p.seq)}
               {@const d = p.decoded!}
@@ -1022,6 +1110,13 @@
               <span class="proto" style:color={protoColor(d.type)}>{d.type}</span>
               <span class="ts">{p.timestamp}</span>
               <span class="decode-sum">{d.summary}</span>
+              <button
+                class="copy-btn"
+                title="Copy this packet"
+                onclick={(e) => { e.stopPropagation(); e.preventDefault(); copyDecoded(p); }}
+              >
+                <IconCopy size={13} />
+              </button>
             </summary>
             <table class="decode-fields">
               <tbody>
@@ -1423,6 +1518,23 @@
     flex: 1;
     word-break: break-all;
   }
+  /* Copy button in a decode summary. Subtle until the row is hovered so it
+     doesn't compete with the packet data; matches the batch-exec copy. */
+  .copy-btn {
+    display: inline-flex;
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: var(--subtext0);
+    cursor: pointer;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    opacity: 0;
+    align-self: center;
+    flex: 0 0 auto;
+  }
+  .decode summary:hover .copy-btn { opacity: 0.7; }
+  .copy-btn:hover { opacity: 1 !important; background: var(--surface1); color: var(--text); }
   .decode-fields {
     margin: 0.3rem 0 0.5rem 2rem;
     border-collapse: collapse;

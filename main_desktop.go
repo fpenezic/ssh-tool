@@ -18,6 +18,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 )
 
 var _ embed.FS // keep the embed import for the //go:embed directive below
@@ -291,6 +292,31 @@ func configurePlatform(app *application.App, appInst *App) func() {
 	})
 	mainWindow.RegisterHook(events.Common.WindowLostFocus, func(event *application.WindowEvent) {
 		appInst.windowFocused.Store(false)
+	})
+
+	// Clicking an OS notification must bring the app forward and, for the
+	// update toast, open the update dialog. Wails delivers the click via
+	// OnNotificationResponse; DEFAULT_ACTION is a plain body click. Without
+	// this the toast is inert - the app stays backgrounded and the prompt or
+	// update it announced sits unseen, which is exactly the reported bug.
+	// Routing rides on the notification ID prefix (see notify_desktop.go):
+	// "ssh-tool-update-*" opens the update dialog, everything else just
+	// surfaces the window so the already-emitted prompt modal is visible.
+	notifier.OnNotificationResponse(func(result notifications.NotificationResult) {
+		if result.Error != nil {
+			log.Printf("notification response: error: %v", result.Error)
+			return
+		}
+		id := result.Response.ID
+		log.Printf("notification clicked: id=%q action=%q", id, result.Response.ActionIdentifier)
+		// Window ops must run on the main (UI) thread; the notification
+		// callback fires on a platform thread. InvokeAsync marshals onto it.
+		application.InvokeAsync(func() {
+			appInst.ShowAndFocusMainWindow()
+			if strings.HasPrefix(id, "ssh-tool-update-") {
+				EventsEmit("open_update", true)
+			}
+		})
 	})
 
 	mainWindow.RegisterHook(events.Common.WindowMinimise, func(event *application.WindowEvent) {
