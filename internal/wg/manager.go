@@ -51,10 +51,23 @@ type Status struct {
 type Manager struct {
 	mu      sync.Mutex
 	tunnels map[string]*Tunnel
+	// bindPhysical, when true, sources tunnel UDP from the physical NIC's
+	// address (see bind.go) instead of the default all-interfaces bind, so the
+	// handshake survives another VPN hijacking the default route. Applied to
+	// tunnels started AFTER it is set (reconnect a profile to pick up a change).
+	bindPhysical bool
 }
 
 func NewManager() *Manager {
 	return &Manager{tunnels: make(map[string]*Tunnel)}
+}
+
+// SetBindPhysical toggles physical-NIC source binding for tunnels started from
+// now on. Existing tunnels keep their current bind until restarted.
+func (m *Manager) SetBindPhysical(on bool) {
+	m.mu.Lock()
+	m.bindPhysical = on
+	m.mu.Unlock()
 }
 
 // Ensure returns the running tunnel for the profile, starting it if
@@ -66,7 +79,7 @@ func (m *Manager) Ensure(p *Profile) (*Tunnel, error) {
 	if t, ok := m.tunnels[p.ID]; ok {
 		return t, nil
 	}
-	t, err := startTunnel(p)
+	t, err := startTunnel(p, m.bindPhysical)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +93,17 @@ func (m *Manager) Get(profileID string) *Tunnel {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.tunnels[profileID]
+}
+
+// RunningIDs returns the profile ids of every currently-running tunnel.
+func (m *Manager) RunningIDs() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ids := make([]string, 0, len(m.tunnels))
+	for id := range m.tunnels {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // Stop tears down one tunnel. Existing net.Conns dialed through it
@@ -156,7 +180,7 @@ func parseI64(s string) (int64, error) {
 
 // startTunnel builds the netstack TUN + wireguard device from the
 // profile and brings it up.
-func startTunnel(p *Profile) (*Tunnel, error) {
+func startTunnel(p *Profile, bindPhysical bool) (*Tunnel, error) {
 	if p.PrivateKey == "" {
 		return nil, fmt.Errorf("profile %s: private key not available (vault locked?)", p.Name)
 	}
@@ -181,7 +205,21 @@ func startTunnel(p *Profile) (*Tunnel, error) {
 	if err != nil {
 		return nil, err
 	}
-	dev := device.NewDevice(tunDev, conn.NewDefaultBind(), device.NewLogger(device.LogLevelError, fmt.Sprintf("wg[%s] ", p.Name)))
+	// Choose the UDP bind. Default: all-interfaces (stock behaviour). When
+	// physical-NIC binding is enabled AND we can identify a physical NIC, source
+	// from it so the handshake bypasses a hijacking default route (e.g. UniFi
+	// Identity TUN Mode). If no physical NIC is found, fall back to the default
+	// bind rather than failing the tunnel.
+	var bind conn.Bind = conn.NewDefaultBind()
+	if bindPhysical {
+		if src, ok := pickPhysicalSource(); ok {
+			bind = newSourceBind(src)
+			log.Printf("wg[%s]: source-binding UDP to physical NIC %s", p.Name, src)
+		} else {
+			log.Printf("wg[%s]: physical-NIC bind requested but no physical NIC found; using default bind", p.Name)
+		}
+	}
+	dev := device.NewDevice(tunDev, bind, device.NewLogger(device.LogLevelError, fmt.Sprintf("wg[%s] ", p.Name)))
 	if err := dev.IpcSet(uapi); err != nil {
 		dev.Close()
 		return nil, fmt.Errorf("configure device: %w", err)

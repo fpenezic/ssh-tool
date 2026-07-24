@@ -907,6 +907,8 @@ export const api = {
   pluginRemove: (name: string) => G.PluginRemove(name),
   networkProfilePresence: (profileId: string) =>
     G.NetworkProfilePresence(profileId) as unknown as Promise<RemoteOwner>,
+  wgBindPhysicalGet: () => G.WgBindPhysicalGet() as unknown as Promise<boolean>,
+  wgBindPhysicalSet: (on: boolean) => G.WgBindPhysicalSet(on),
   networkProfileTakeOver: (profileId: string) =>
     G.NetworkProfileTakeOver(profileId) as unknown as Promise<number>,
   networkProfileConnectAnyway: (profileId: string) =>

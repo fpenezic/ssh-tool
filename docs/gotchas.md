@@ -622,6 +622,30 @@ everything mobile is behind a build tag or an `isMobile` check.
       hop, and its cleanup never closes `initialPrev`. VNC-through-jump
       (`BuildJumpChain`) is still deliberately NOT pooled - single console.
 
+35. **Userspace WireGuard leaks its UDP handshake into another VPN's TUN
+    unless source-bound.** `conn.NewDefaultBind()` listens on `0.0.0.0`, so
+    the OS routes the outbound handshake by the default route. A second VPN
+    that installs `0.0.0.0/0` with a lower metric (e.g. UniFi Identity "TUN
+    Mode" split tunnel - which is really a full takeover) swallows the
+    handshake and the tunnel never connects, even though the WG endpoint is a
+    public IP outside the other VPN's subnets. Fix is opt-in
+    (`wg_bind_physical` setting, `wgman.SetBindPhysical`): a custom
+    `conn.Bind` (`internal/wg/bind.go`, `sourceBind`) binds the UDP socket to
+    the physical NIC's address (`pickPhysicalSource` - first up, non-loopback,
+    non-virtual, non-VPN RFC1918 IPv4; the exclude list covers vEthernet/WSL/
+    Hyper-V/docker AND wg/openvpn/tap/tun/utun/fortinet/checkpoint/"split vpn"/
+    tailscale/zerotier). BatchSize()==1, plain `ReadFromUDPAddrPort`/
+    `WriteToUDPAddrPort` (no GSO/OOB - that's the Windows path of the stock
+    bind anyway). CRUCIAL COMPANION: the auto-mode "reachable directly?" probe
+    (`wgDialerFor`) must ALSO source-bind (`physicalDialLocalAddr` sets
+    `net.Dialer.LocalAddr`), else a host reachable only THROUGH the other VPN
+    probes as "direct" and the tunnel is skipped - the probe is meaningless
+    unless it dials over the real NIC. `StdNetEndpoint.AddrPort` is an embedded
+    FIELD, not a method (`se.AddrPort`, not `se.AddrPort()`). Toggle restarts
+    running tunnels (bind is fixed at device creation). NetBird/Tailscale are
+    NOT affected - they run their own kernel TUN via the sidecar helper and
+    dial through a loopback SOCKS5, not our UDP bind.
+
 ---
 
 # Archive

@@ -296,6 +296,16 @@
     }
   }
 
+  // Fires when the WebView performs a NATIVE copy (macOS Cmd+C, or the
+  // browser Edit menu) - as opposed to our programmatic writeClipboard paths,
+  // which don't dispatch a DOM "copy" event. Used to confirm the copy with a
+  // toast on macOS, where xterm's built-in Cmd+C can bypass our key handler so
+  // copySelection's own toast never ran. Guarded to only announce a real
+  // selection copy (not an empty one).
+  function onNativeCopy() {
+    if (term?.hasSelection()) toast.ok("Copied");
+  }
+
   async function pasteFromClipboard() {
     try {
       const text = await navigator.clipboard.readText();
@@ -462,8 +472,14 @@
     // Cmd+C / Cmd+V - copy/paste (Mac)
     if (mode === "mac" && e.metaKey && !e.ctrlKey && !e.shiftKey) {
       if (e.key === "c" || e.key === "C") {
-        copySelection(true);
-        return false;
+        // Let the WebView's native Cmd+C run (it copies the selection
+        // reliably in the mac WKWebView); the "copy" DOM event listener on
+        // host fires the toast. We do NOT return false or call
+        // copySelection here: on macOS xterm's built-in Cmd+C path can run
+        // instead of this handler, so a toast fired only from here was
+        // getting skipped even though the copy succeeded. Toasting from the
+        // native "copy" event covers both routes with no double-fire.
+        return true;
       }
       if (e.key === "v" || e.key === "V") {
         pasteFromClipboard();
@@ -796,6 +812,10 @@
     // Attach the paste interceptor in capture phase so we fire BEFORE
     // xterm's own textarea handles the paste.
     host.addEventListener("paste", onHostPaste, { capture: true });
+    // Native copy (macOS Cmd+C / Edit menu) -> confirmation toast. Our
+    // programmatic copies (writeClipboard) don't dispatch "copy", so this
+    // never double-fires with copySelection's own toast.
+    host.addEventListener("copy", onNativeCopy);
     // Ctrl+wheel zoom - capture phase + non-passive so preventDefault
     // works against the webview's page-zoom default.
     host.addEventListener("wheel", onWheel, { capture: true, passive: false });
@@ -1256,6 +1276,7 @@
     clearTimeout(selectToastTimer);
     resizeObs?.disconnect();
     host?.removeEventListener("paste", onHostPaste, { capture: true } as any);
+    host?.removeEventListener("copy", onNativeCopy);
     host?.removeEventListener("wheel", onWheel, { capture: true } as any);
     host?.removeEventListener("contextmenu", onContextMenu, { capture: true } as any);
     host?.removeEventListener("mousedown", onMouseDown, { capture: true } as any);

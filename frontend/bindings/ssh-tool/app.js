@@ -3427,6 +3427,26 @@ export function VncSessionList() {
 }
 
 /**
+ * WgBindPhysicalGet reports whether physical-NIC source binding is on.
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function WgBindPhysicalGet() {
+    return $Call.ByID(2455209971);
+}
+
+/**
+ * WgBindPhysicalSet toggles physical-NIC source binding and persists it. Any
+ * running WireGuard tunnels are restarted so the new bind takes effect
+ * immediately (the device's bind is fixed at creation). Connections dialing
+ * through a restarted tunnel reconnect on their own, same as any tunnel bounce.
+ * @param {boolean} on
+ * @returns {$CancellablePromise<void>}
+ */
+export function WgBindPhysicalSet(on) {
+    return $Call.ByID(3141019559, on);
+}
+
+/**
  * WindowAcceptTabDrag is called by the main window when a tab is dropped onto
  * its tab bar. Returns the pending drag payload and clears it.
  * @returns {$CancellablePromise<$models.TabDragPayload | null>}

@@ -458,6 +458,11 @@ func (a *App) initialise() {
 	a.termSizes = map[string][2]uint16{}
 	a.forwards = sshlayer.NewForwardPool()
 	a.wgman = wg.NewManager()
+	// Physical-NIC source binding for userspace WireGuard: off by default, opt
+	// in via the wg_bind_physical setting. Fixes the case where another VPN
+	// (e.g. UniFi Identity TUN Mode) installs a 0.0.0.0/0 default route that
+	// swallows our handshake. Read once at startup; the toggle re-applies live.
+	a.wgman.SetBindPhysical(a.boolSetting("wg_bind_physical"))
 	a.nbman = tunnelhelper.NewManager(func(profileID string) {
 		// A helper process died (crash, network, kill). Sessions that
 		// dialed through it lose their transport and drop on their own;

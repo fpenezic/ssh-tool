@@ -134,6 +134,32 @@ func (a *App) tunnelStop(profileID string) {
 	go a.presenceClear(profileID)
 }
 
+// WgBindPhysicalGet reports whether physical-NIC source binding is on.
+func (a *App) WgBindPhysicalGet() bool {
+	return a.boolSetting("wg_bind_physical")
+}
+
+// WgBindPhysicalSet toggles physical-NIC source binding and persists it. Any
+// running WireGuard tunnels are restarted so the new bind takes effect
+// immediately (the device's bind is fixed at creation). Connections dialing
+// through a restarted tunnel reconnect on their own, same as any tunnel bounce.
+func (a *App) WgBindPhysicalSet(on bool) error {
+	if err := a.db.SetSetting("wg_bind_physical", boolStr(on)); err != nil {
+		return err
+	}
+	a.wgman.SetBindPhysical(on)
+	// Restart any running WG tunnels so they pick up the new bind. Snapshot the
+	// running profile ids, stop them, and re-ensure each from its stored config.
+	for _, id := range a.wgman.RunningIDs() {
+		a.wgman.Stop(id)
+		if _, err := a.ensureWgTunnel(id); err != nil {
+			log.Printf("wg: restart %s after bind toggle: %v", id, err)
+		}
+	}
+	EventsEmit("network_tunnel_changed", "")
+	return nil
+}
+
 // tunnelStatus merges both managers' views into the wg.Status shape
 // the UI renders.
 func (a *App) tunnelStatus(profileID string) wg.Status {
@@ -329,6 +355,20 @@ func (a *App) ensureNetbirdTunnel(row *store.NetworkProfile) (tunnelDialer, erro
 //	paused      -> plain direct dial (tunnel never starts)
 //	mode auto   -> direct probe first, tunnel fallback
 //	mode always -> tunnel, errors surface
+// physicalDialLocalAddr returns the physical NIC's address as a TCP LocalAddr to
+// bind direct dials to, or nil when physical-NIC binding is off or no NIC is
+// found (nil LocalAddr = default OS behaviour).
+func (a *App) physicalDialLocalAddr() *net.TCPAddr {
+	if !a.boolSetting("wg_bind_physical") {
+		return nil
+	}
+	src, ok := wg.PhysicalSourceIP()
+	if !ok {
+		return nil
+	}
+	return &net.TCPAddr{IP: net.IP(src.AsSlice())}
+}
+
 func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 	row, err := a.db.GetNetworkProfile(profileID)
 	if err != nil {
@@ -344,9 +384,17 @@ func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 			*h = path
 		}
 	}
+	// When physical-NIC binding is on, source direct dials from the physical
+	// NIC too. Otherwise the auto-mode "direct" probe dials through whatever
+	// owns the default route - e.g. a UniFi Identity TUN Mode split tunnel -
+	// which makes a firm-routed host look "reachable directly" and wrongly
+	// skips our WireGuard tunnel. Binding the probe to the real NIC makes
+	// "reachable directly" mean "reachable over my own network", matching the
+	// tunnel's own source-bind.
+	directLocalAddr := a.physicalDialLocalAddr()
 	direct := func(ctx context.Context, network, addr string) (net.Conn, error) {
 		report(ctx, "direct")
-		var d net.Dialer
+		d := net.Dialer{LocalAddr: directLocalAddr}
 		return d.DialContext(ctx, network, addr)
 	}
 	if pol.Paused {
@@ -392,8 +440,9 @@ func (a *App) wgBackgroundDialerFor(profileID string) (sshlayer.ContextDialer, e
 	}
 	pol := parsePolicy(row.ConfigJSON)
 
+	directLocalAddr := a.physicalDialLocalAddr()
 	direct := func(ctx context.Context, network, addr string) (net.Conn, error) {
-		var d net.Dialer
+		d := net.Dialer{LocalAddr: directLocalAddr}
 		return d.DialContext(ctx, network, addr)
 	}
 	if pol.Paused {

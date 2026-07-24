@@ -7,6 +7,37 @@ in alpha upstream.
 
 ---
 
+## [0.73.1] - WireGuard survives another VPN; terminal-copy toast on macOS
+
+### Fixed
+
+- **Built-in WireGuard keeps working under another VPN that takes over
+  routing.** When a second VPN was active - notably a UniFi Identity "TUN
+  Mode" split tunnel, which installs a `0.0.0.0/0` default route with a lower
+  metric than your real adapter - the userspace WireGuard tunnel's handshake
+  was routed into that VPN and dropped, so it never connected. A new setting,
+  **Settings -> Network -> "Bind WireGuard to the physical network adapter"**
+  (off by default), sends the tunnel's traffic straight out your real network
+  adapter, bypassing the hijacking route. With it on, the auto-mode "is this
+  host reachable directly?" probe also dials from the physical adapter, so a
+  host that only looks reachable *through* the other VPN is no longer mistaken
+  for directly reachable and the WireGuard tunnel is used as intended. Running
+  tunnels restart when you toggle it. NetBird and Tailscale are unaffected -
+  they run their own tunnel adapter and don't use this path.
+
+- **WireGuard transfer counters update live.** The rx/tx (and last-handshake)
+  figures on a network profile were captured once at connect and never
+  refreshed, so they sat at 0 even while traffic flowed. They now refresh a
+  few times a minute while the Network settings are open and a tunnel is up.
+
+- **Copying from the terminal shows the "Copied" toast on macOS.** With the
+  Mac copy/paste mode, Cmd+C copied the selection but the confirmation toast
+  never appeared, because the macOS WebView's built-in Cmd+C bypassed our key
+  handler. The toast now fires on the actual copy event, so it shows whichever
+  path performs the copy.
+
+---
+
 ## [0.73.0] - Let an LLM build connections from a pasted server list
 
 ### Added

@@ -1195,13 +1195,26 @@
       .map((c) => ({ value: c.id, label: c.name })),
   );
 
+  let wgBindPhysical = $state(false);
+
   $effect(() => {
     if (activeSection === "network") {
       networkProfiles.load().catch(() => {});
       credentials.load().catch(() => {});
       refreshPlugins();
+      api.wgBindPhysicalGet().then((v) => (wgBindPhysical = v)).catch(() => {});
     }
   });
+
+  async function toggleWgBindPhysical(on: boolean) {
+    try {
+      await api.wgBindPhysicalSet(on);
+      wgBindPhysical = on;
+      networkProfiles.load(true).catch(() => {});
+    } catch (e) {
+      toast.err("WireGuard bind toggle failed: " + errMsg(e));
+    }
+  }
 
   async function refreshPlugins() {
     try { plugins = (await api.pluginsStatus()) ?? []; } catch { /* ignore */ }
@@ -1261,7 +1274,16 @@
     void networkProfiles.list.length;
     pollNpPresence();
     const t = setInterval(pollNpPresence, 8000);
-    return () => clearInterval(t);
+    // Refresh the profile list itself while a tunnel is up so the live
+    // rx/tx and last-handshake counters advance - the list otherwise only
+    // reloads on the network_tunnel_changed event (connect/disconnect), so
+    // the transfer counters stayed frozen at their connect-time value (0).
+    const statusTimer = setInterval(() => {
+      if (networkProfiles.list.some((p) => p.status?.running)) {
+        networkProfiles.load(true).catch(() => {});
+      }
+    }, 3000);
+    return () => { clearInterval(t); clearInterval(statusTimer); };
   });
 
   // Ask the machine that holds a WG profile's tunnel to drop it. Not a
@@ -2623,6 +2645,27 @@
         {/if}
       </div>
     {/each}
+
+    <fieldset class="check-cards" style="margin-top:1rem">
+      <label class:active={wgBindPhysical}>
+        <input
+          type="checkbox"
+          checked={wgBindPhysical}
+          onchange={(e) => toggleWgBindPhysical((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Bind WireGuard to the physical network adapter</div>
+          <div class="mode-desc">
+            Sends the built-in WireGuard tunnel's traffic straight out your real
+            network adapter instead of letting the OS route it. Turn this on if
+            another VPN is active (for example a UniFi Identity "TUN Mode" split
+            tunnel) that takes over the default route - without it the WireGuard
+            handshake gets swallowed by that VPN and never connects. Leave off
+            otherwise. Running tunnels restart when you change this.
+          </div>
+        </div>
+      </label>
+    </fieldset>
 
     <h3 style="margin-top:1.2rem">Profiles</h3>
 
