@@ -92,10 +92,14 @@
   });
 
   // Stick to the bottom as new lines land, unless the user scrolled up.
-  // Reading visibleLines.length makes this re-run on every append; the rAF
-  // waits out the DOM update so scrollHeight reflects the new lines.
+  // Depend on totalLines (the cumulative backend counter, always growing) and
+  // rawLines - NOT visibleLines.length, which stays flat once the ring is at
+  // its cap even as content changes, so the effect would never re-run. The
+  // rAF waits out the DOM update so scrollHeight reflects the new lines.
   $effect(() => {
-    void visibleLines.length;
+    void totalLines;
+    void rawLines;
+    void filter;
     if (!stuck || !linesEl) return;
     requestAnimationFrame(() => {
       if (linesEl && stuck) linesEl.scrollTop = linesEl.scrollHeight;
