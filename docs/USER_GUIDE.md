@@ -2506,26 +2506,37 @@ safety, copy the `.sshtool-backup` files elsewhere - they are fully
 self-contained and verified by the passphrase + checksums on
 restore.
 
-### Security → Sync (WebDAV)
+### Security → Sync
 
-Personal multi-machine sync over any WebDAV server you control
-(Nextcloud, Apache mod_dav, `rclone serve webdav`, ...). The whole
-profile travels: connections, folders, credentials, the vault,
-custom icons, settings, snippets, workspaces. The section is laid
-out as **Server** (connection details), **Status**, **Manual sync**,
-and **Automatic**.
+Personal multi-machine sync. The whole profile travels: connections,
+folders, credentials, the vault, custom icons, settings, snippets,
+workspaces. Pick a **Transport** at the top of the section, set the
+**sync passphrase** once (it applies to every backend), then use
+**Status**, **Manual sync**, and **Automatic** below.
+
+**Transports.** Five backends, all interchangeable - the snapshot and
+the push/pull logic are identical, only where it lands differs:
+
+- **WebDAV** - any server you control (Nextcloud, Apache mod_dav,
+  `rclone serve webdav`, ...). URL, username, password. HTTPS required
+  (plain http only for localhost).
+- **SSH / SFTP** - a directory on any SSH server; auth reuses a vault
+  credential or a key/password you type in.
+- **Dropbox**, **OneDrive**, **Google Drive** - your own cloud
+  account. See [Cloud sync](#cloud-sync) below.
 
 **Encrypted before upload.** The snapshot is the same sealed envelope
 backups use (argon2id + XChaCha20-Poly1305), locked with a **sync
-passphrase** independent of the vault passphrase. The server only
-ever stores ciphertext plus a tiny meta file with a version counter -
-a compromised WebDAV host learns nothing. HTTPS is required (plain
-http only for localhost); certificates verify against the OS trust
-store, so a private CA installed system-wide works.
+passphrase** independent of the vault passphrase. The remote only ever
+stores ciphertext plus a tiny meta file with a version counter - a
+compromised host learns nothing.
 
-**Server.** WebDAV URL, username, password, and the sync passphrase.
-Both secrets live in this machine's vault, so sync needs an unlocked
-vault. Use the same sync passphrase on every machine.
+**Sync passphrase - one place.** The passphrase seals the snapshot on
+whichever backend is active, so it is a single field at the top of the
+section, not per-backend. It lives in this machine's vault (sync needs
+an unlocked vault). Use the same one on every machine. Changing an
+existing passphrase asks for confirmation: it invalidates pulls of any
+snapshot sealed with the old value until you push a fresh one over it.
 
 **Manual sync.** **Push** sends this machine's profile to the server.
 **Pull** replaces this machine's profile with the server's - applied
@@ -2551,9 +2562,55 @@ machine hasn't pulled; **Force push** overwrites it deliberately.
   moment or leaves the notification, so a pull never rearranges the
   tree out from under you.
 
-**New machine setup**: fill in Server, hit Pull (applies live), and
-if prompted, unlock once with the vault passphrase from the source
+**New machine setup**: fill in the transport, hit Pull (applies live),
+and if prompted, unlock once with the vault passphrase from the source
 machine. Push and pull are recorded in the audit log.
+
+<a id="cloud-sync"></a>
+
+#### Cloud sync (Dropbox, OneDrive, Google Drive)
+
+Sync to your own consumer cloud account instead of a server. Sign-in
+is OAuth with PKCE and a loopback redirect: you click **Connect**, a
+browser tab opens, you authorize, and a refresh token is stored in
+this machine's vault. As with every backend the provider only ever
+holds the sealed snapshot - it never sees your connections or secrets.
+
+You supply your **own app credentials** (a one-time setup per
+provider), so the sync runs entirely through your own cloud account -
+there is no shared ssh-tool app and no shared rate limit. Each panel
+shows the exact **redirect URI** to register, with a Copy button.
+
+- **Dropbox.** In the [Dropbox App Console](https://www.dropbox.com/developers/apps),
+  create an app with **Scoped access** and **App folder** access.
+  Under Permissions enable `files.content.read` and
+  `files.content.write` (then Submit). Under Settings - OAuth 2, keep
+  **Allow public clients (PKCE)** on and add the redirect URI the
+  panel shows. Paste the **App key**. The sync folder inside the app
+  folder is configurable.
+- **OneDrive.** In the Azure Portal (Entra ID) register an app,
+  add a **Mobile and desktop applications** platform with the redirect
+  URI the panel shows, and grant the `Files.ReadWrite.AppFolder` +
+  `offline_access` delegated permissions. Paste the **Application
+  (client) ID**. Pick an **account type** - personal (`/consumers`),
+  work / school (`/organizations`), or either (`/common`) - to match
+  your account and the app's "Supported account types". A business-only
+  OneDrive works with the work / school option.
+  > OneDrive is not yet verified against a live account. It shares the
+  > tested Dropbox / Google sign-in and transport plumbing, but treat
+  > it as beta.
+- **Google Drive.** In the Google Cloud Console create an OAuth client
+  of type **Desktop app**, and add the `drive.appdata` scope on the
+  OAuth consent screen. Paste the **client ID** and **client secret**.
+  Google requires a secret even for a Desktop app - it is not truly
+  confidential for an installed app, but is kept in this machine's
+  vault. Google accepts any loopback port, so no redirect URI needs
+  registering.
+
+Each backend tracks its own version counter, so switching backends
+never triggers a false "this machine is ahead". To connect a fresh
+machine to the same cloud account, register the same app credentials
+there and Connect; the first Pull brings the profile down.
 
 ### Import / Export → ssh_config
 

@@ -102,6 +102,16 @@
       "art": "globe2"
     },
     {
+      "title": "Sync over your server or your cloud",
+      "body": "Keep the whole profile - connections, credentials, vault, settings - in step across machines over WebDAV, SSH/SFTP, or your own Dropbox, OneDrive or Google Drive. Everything is sealed on this machine before upload; the remote only ever holds ciphertext. Cloud sign-in is OAuth + PKCE with your own app credentials - no shared app, no rate limit.",
+      "keys": [
+        "Connect",
+        "push",
+        "pull"
+      ],
+      "art": "globe2"
+    },
+    {
       "title": "Dynamic inventory",
       "body": "Folders that auto-populate from Proxmox VE, Hetzner Cloud, DigitalOcean, Linode, Vultr, Scaleway, AWS EC2 and Ansible inventory files. Tags / labels filter what shows; stopped guests appear greyed with a \"connect anyway\" prompt. API tokens live in the vault.",
       "keys": [
@@ -218,8 +228,8 @@
     },
     {
       "icon": "globe",
-      "title": "Encrypted sync, your server",
-      "body": "Sync the whole profile - connections, credentials, vault, icons, settings - between machines over any WebDAV server or SSH/SFTP server you control. Sealed with argon2id + XChaCha20-Poly1305 before upload; the server only ever sees ciphertext. SFTP auth reuses a vault credential or a key/password you type in, so a fresh machine can bootstrap. Auto-sync pushes on change; incoming changes apply live with no restart and, optionally, in the background while you work."
+      "title": "Encrypted sync - your server or your cloud",
+      "body": "Sync the whole profile - connections, credentials, vault, icons, settings - between machines over a WebDAV or SSH/SFTP server you control, or your own Dropbox, OneDrive or Google Drive account. Sealed with argon2id + XChaCha20-Poly1305 before upload; the store only ever holds ciphertext. Cloud backends sign in with OAuth + PKCE using your own app credentials, so there is no shared app or rate limit. SFTP auth reuses a vault credential or a key/password you type in, so a fresh machine can bootstrap. Auto-sync pushes on change; incoming changes apply live with no restart and, optionally, in the background while you work."
     },
     {
       "icon": "clock",
@@ -247,7 +257,7 @@
       "body": "The same Go core, vault and SSH stack on an Android phone (arm64, DeX-ready). Biometric vault unlock backed by the device Keystore, a single-pane touch layout with system-back navigation, an on-screen key bar (Esc/Tab/Ctrl/arrows/^C^D...), pinch-to-zoom font size, and a foreground service that keeps SSH sessions alive when backgrounded. opkssh login opens the system browser; ssh-tool:// deep links open the app. Sideload the APK - no store account needed."
     },
     {
-      "icon": "tree",
+      "icon": "signal",
       "title": "Liveness probe",
       "body": "See at a glance which hosts are up: a reachability dot on connection rows inside folders you have open. Probes only what's expanded, routes through a connection's WireGuard profile or an open bastion, and never brings a tunnel up just to check. Dynamic-inventory hosts optional."
     },

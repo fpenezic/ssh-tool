@@ -7,6 +7,59 @@ in alpha upstream.
 
 ---
 
+## [0.75.0] - Cloud sync: Dropbox, OneDrive, Google Drive
+
+### Added
+
+- **Cloud-storage sync backends.** Encrypted profile sync now targets
+  consumer cloud storage in addition to WebDAV and SFTP: **Dropbox**,
+  **OneDrive**, and **Google Drive**. Pick one under Settings - Sync -
+  Transport, connect once in the browser, and push/pull works exactly as
+  before. As with every backend, the cloud provider only ever stores the
+  sealed snapshot ciphertext plus a tiny plaintext version marker - it never
+  sees your connections or secrets.
+  - Sign-in is OAuth with PKCE and a loopback redirect: click Connect, a
+    browser tab opens, you authorize, and the refresh token is kept in this
+    machine's vault. You supply your own app credentials (see below), so there
+    is no shared app or rate limit - the sync runs entirely through your own
+    cloud account.
+  - **Dropbox:** create a Scoped, App-folder app in the Dropbox App Console,
+    enable the `files.content.read` / `files.content.write` scopes, add the
+    redirect URI the panel shows, and paste the app key. Configurable app
+    folder.
+  - **OneDrive:** register a public-client (Mobile and desktop) app in the
+    Azure Portal with the `Files.ReadWrite.AppFolder` + `offline_access`
+    permissions, add the redirect URI, and paste the Application (client) ID.
+    An account-type selector covers **personal**, **work / school**, or
+    **either** accounts, so a business-only OneDrive works too.
+  - **Google Drive:** create a Desktop-app OAuth client in the Google Cloud
+    Console with the `drive.appdata` scope, then paste the client ID **and**
+    client secret. Google requires a secret even for a Desktop app; it is not
+    confidential for an installed app but is kept in this machine's vault.
+  - The exact redirect URI to register is shown in each panel with a Copy
+    button (Google accepts any loopback port automatically, so it needs no
+    registration).
+  > OneDrive has not yet been verified against a live account - it shares the
+  > tested Dropbox/Google sign-in and transport plumbing, but treat it as beta
+  > and report anything off.
+
+### Fixed
+
+- **Sync generation is now tracked per backend.** The version counter used to
+  be global, so pushing to a second backend (say Dropbox) made the first
+  (WebDAV) report a false "this machine is ahead". Each backend now tracks its
+  own remote independently; switching backends no longer triggers a spurious
+  ahead/behind or a needless force-push. Existing WebDAV syncs keep their
+  counter unchanged.
+- **The sync passphrase now lives in one place.** It seals the snapshot on
+  every backend, but each transport panel used to have its own passphrase
+  field writing the same value - so a wrong entry in one panel could silently
+  break pulls on another. It is now a single field at the top of the Sync
+  section, and changing an existing passphrase asks for confirmation first
+  (it invalidates pulls of snapshots sealed with the old one until re-pushed).
+
+---
+
 ## [0.74.0] - Snippet variables, live log tail, liveness probe, forwards survive reconnect
 
 ### Added
