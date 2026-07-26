@@ -44,15 +44,16 @@ func (d *DB) SeedDefaultSnippets() error {
 	if len(existing) > 0 {
 		return nil
 	}
+	// Keep these to commands worth a saved snippet - non-trivial invocations or
+	// ones showing the ${var} feature. Skip things nobody needs a snippet for
+	// (df -h, free -h, top).
 	defaults := []SnippetInput{
-		{Name: "Disk usage", Body: "df -h", Tags: []string{"diag", "disk"}},
-		{Name: "Memory", Body: "free -h", Tags: []string{"diag", "memory"}},
 		{Name: "Listening ports", Body: "ss -tlnp", Tags: []string{"diag", "network"}},
-		{Name: "Top processes", Body: "top -bn1 | head -20", Tags: []string{"diag", "cpu"}},
 		{Name: "Service status", Body: "systemctl status ${svc}", Tags: []string{"diag", "systemd"}},
 		{Name: "Service logs", Body: "journalctl -u ${svc} --since ${since:-1h} --no-pager", Tags: []string{"diag", "logs"}},
 		{Name: "Tail a log", Body: "tail -f ${path:-/var/log/syslog}", Tags: []string{"diag", "logs"}},
 		{Name: "Kernel messages", Body: "dmesg --ctime | tail -40", Tags: []string{"diag", "kernel"}},
+		{Name: "Top by memory", Body: "ps aux --sort=-%mem | head -12", Tags: []string{"diag", "memory"}},
 	}
 	for _, s := range defaults {
 		if _, err := d.CreateSnippet(s); err != nil {
