@@ -6815,6 +6815,7 @@ func (a *App) TcpdumpStart(in TcpdumpStartInput) (string, error) {
 	a.tcpdumps[dumpID] = h
 	a.tcpdumpBySession[in.SessionID] = dumpID
 	a.tcpdumpMu.Unlock()
+	log.Printf("tcpdump: registered session=%s dump=%s (map now has this key)", in.SessionID, dumpID)
 	// Auto-feed the cached password to the sudo prompt, if requested.
 	// The lifecycle handler already emitted "needs_password"; sending
 	// here unblocks the awaitPwd channel inside StartTcpdump before the
