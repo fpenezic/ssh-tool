@@ -650,12 +650,11 @@
         inline_password: sftpInlinePassword,
         inline_key_pem: sftpInlineKeyPem,
         inline_key_passphrase: sftpInlineKeyPassphrase,
-        passphrase: syncPassphrase,
+        passphrase: "", // passphrase is set separately (global field)
       });
       sftpInlinePassword = "";
       sftpInlineKeyPem = "";
       sftpInlineKeyPassphrase = "";
-      syncPassphrase = "";
       await syncLoadConfig();
       toast.ok("SFTP sync settings saved");
     } catch (e) {
@@ -667,16 +666,38 @@
     await copyText(oauthRedirectUri, { label: "Redirect URI" });
   }
 
+  // The snapshot passphrase is one value shared by every backend (it seals the
+  // snapshot, not the transport). Changing an EXISTING one is dangerous: any
+  // backend whose snapshot was sealed with the old value can no longer be
+  // pulled. Warn before overwriting; a first-time set needs no warning.
+  async function saveSyncPassphrase() {
+    if (!syncPassphrase.trim()) return;
+    syncErr = null;
+    if (syncCfg?.has_passphrase) {
+      const ok = confirm(
+        "Change the sync passphrase?\n\n" +
+        "This passphrase seals the encrypted snapshot on EVERY backend " +
+        "(WebDAV, SFTP, Dropbox, OneDrive, Google Drive). If you change it, " +
+        "any snapshot already pushed with the old passphrase can no longer be " +
+        "pulled until you push a fresh one over it.\n\n" +
+        "Only change this if you know the new value is correct."
+      );
+      if (!ok) return;
+    }
+    try {
+      await api.syncPassphraseSet(syncPassphrase);
+      syncPassphrase = "";
+      await syncLoadConfig();
+      toast.ok("Sync passphrase saved");
+    } catch (e) {
+      syncErr = errMsg(e);
+    }
+  }
+
   async function dropboxSaveConfig() {
     syncErr = null;
     try {
       await api.dropboxConfigSet(dropboxAppKey, dropboxFolder);
-      if (syncPassphrase.trim() !== "") {
-        // The sealing passphrase is transport-independent - persist it via the
-        // WebDAV setter, which only touches the passphrase when non-blank.
-        await api.syncConfigSet(syncUrl, syncUsername, "", syncPassphrase);
-        syncPassphrase = "";
-      }
       await syncLoadConfig();
       toast.ok("Dropbox sync settings saved");
     } catch (e) {
@@ -719,10 +740,6 @@
     onedriveConnecting = true;
     try {
       await api.onedriveConfigSet(onedriveClientId, onedriveAccountType);
-      if (syncPassphrase.trim() !== "") {
-        await api.syncConfigSet(syncUrl, syncUsername, "", syncPassphrase);
-        syncPassphrase = "";
-      }
       await api.onedriveConnect();
       await syncLoadConfig();
       toast.ok("OneDrive connected");
@@ -749,10 +766,6 @@
     gdriveConnecting = true;
     try {
       await api.gdriveConfigSet(gdriveClientId);
-      if (syncPassphrase.trim() !== "") {
-        await api.syncConfigSet(syncUrl, syncUsername, "", syncPassphrase);
-        syncPassphrase = "";
-      }
       await api.gdriveConnect();
       await syncLoadConfig();
       toast.ok("Google Drive connected");
@@ -795,9 +808,8 @@
   async function syncSaveConfig() {
     syncErr = null;
     try {
-      await api.syncConfigSet(syncUrl, syncUsername, syncPassword, syncPassphrase);
+      await api.syncConfigSet(syncUrl, syncUsername, syncPassword, "");
       syncPassword = "";
-      syncPassphrase = "";
       await syncLoadConfig();
       toast.ok("Sync settings saved");
     } catch (e) {
@@ -3765,6 +3777,19 @@
         {/if}
       </span>
     </label>
+    <label>Sync passphrase
+      <div class="row" style="gap:0.4rem; align-items:center">
+        <PasswordInput bind:value={syncPassphrase} placeholder={syncCfg?.has_passphrase ? "saved - leave blank to keep" : "seals the snapshot"} />
+        <button type="button" onclick={saveSyncPassphrase} disabled={!syncPassphrase.trim()}>
+          {syncCfg?.has_passphrase ? "Change" : "Set"}
+        </button>
+      </div>
+      <span class="field-hint">
+        Encrypts the snapshot - one value for ALL backends. Use the same one on
+        every machine. Stored in this machine's vault (sync needs an unlocked
+        vault). {#if syncCfg?.has_passphrase}A passphrase is set; leave blank to keep it.{/if}
+      </span>
+    </label>
   </div>
 
   {#if syncTransport === "webdav"}
@@ -3780,13 +3805,6 @@
     </label>
     <label>WebDAV password
       <PasswordInput bind:value={syncPassword} placeholder={syncCfg?.has_password ? "saved - leave blank to keep" : "app password / token"} />
-    </label>
-    <label>Sync passphrase
-      <PasswordInput bind:value={syncPassphrase} placeholder={syncCfg?.has_passphrase ? "saved - leave blank to keep" : "seals the snapshot"} />
-      <span class="field-hint">
-        Encrypts the snapshot. Use the same one on every machine.
-        Stored in this machine's vault, so sync needs an unlocked vault.
-      </span>
     </label>
     <div class="row" style="gap:0.5rem">
       <button class="primary" onclick={syncSaveConfig}>Save</button>
@@ -3861,12 +3879,6 @@
         </label>
       {/if}
     {/if}
-    <label>Sync passphrase
-      <PasswordInput bind:value={syncPassphrase} placeholder={syncCfg?.has_passphrase ? "saved - leave blank to keep" : "seals the snapshot"} />
-      <span class="field-hint">
-        Encrypts the snapshot. Use the same one on every machine.
-      </span>
-    </label>
     <div class="row" style="gap:0.5rem">
       <button class="primary" onclick={syncSaveSftp}>Save</button>
     </div>
@@ -3896,13 +3908,6 @@
     <label>Sync folder
       <input bind:value={dropboxFolder} placeholder="/ssh-tool" spellcheck="false" class="mono" />
       <span class="field-hint">Path inside the app folder. Created on first push.</span>
-    </label>
-    <label>Sync passphrase
-      <PasswordInput bind:value={syncPassphrase} placeholder={syncCfg?.has_passphrase ? "saved - leave blank to keep" : "seals the snapshot"} />
-      <span class="field-hint">
-        Encrypts the snapshot. Use the same one on every machine.
-        Stored in this machine's vault, so sync needs an unlocked vault.
-      </span>
     </label>
     <div class="row" style="gap:0.5rem; align-items:center">
       <button class="primary" onclick={dropboxSaveConfig}>Save</button>
@@ -3949,13 +3954,6 @@
     <label>Application (client) ID
       <input bind:value={onedriveClientId} placeholder="Azure app client ID" spellcheck="false" class="mono" />
     </label>
-    <label>Sync passphrase
-      <PasswordInput bind:value={syncPassphrase} placeholder={syncCfg?.has_passphrase ? "saved - leave blank to keep" : "seals the snapshot"} />
-      <span class="field-hint">
-        Encrypts the snapshot. Use the same one on every machine.
-        Stored in this machine's vault, so sync needs an unlocked vault.
-      </span>
-    </label>
     <div class="row" style="gap:0.5rem; align-items:center">
       {#if hasOnedriveToken}
         <span class="field-hint" style="color:var(--ok, #3a3)">Connected</span>
@@ -3987,13 +3985,6 @@
     </label>
     <label>OAuth client ID
       <input bind:value={gdriveClientId} placeholder="Google OAuth client ID" spellcheck="false" class="mono" />
-    </label>
-    <label>Sync passphrase
-      <PasswordInput bind:value={syncPassphrase} placeholder={syncCfg?.has_passphrase ? "saved - leave blank to keep" : "seals the snapshot"} />
-      <span class="field-hint">
-        Encrypts the snapshot. Use the same one on every machine.
-        Stored in this machine's vault, so sync needs an unlocked vault.
-      </span>
     </label>
     <div class="row" style="gap:0.5rem; align-items:center">
       {#if hasGdriveToken}

@@ -3318,6 +3318,20 @@ export function SyncConfigSet(url, username, webdavPassword, passphrase) {
 }
 
 /**
+ * SyncPassphraseSet stores the snapshot-sealing passphrase. It is
+ * transport-independent (one passphrase seals the snapshot on whichever backend
+ * is active), so it lives in one place in the UI rather than in every provider
+ * panel - changing it in one backend used to silently break the others, since
+ * they all read the same vault key. A blank value is rejected here so the UI
+ * can't wipe the passphrase by sending an empty field.
+ * @param {string} passphrase
+ * @returns {$CancellablePromise<void>}
+ */
+export function SyncPassphraseSet(passphrase) {
+    return $Call.ByID(1022380454, passphrase);
+}
+
+/**
  * SyncPull downloads the remote snapshot and stages it through the
  * backup-restore path. The user must quit + reopen to apply; the
  * restored profile carries its own sync_generation, so no local

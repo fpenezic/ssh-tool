@@ -982,6 +982,7 @@ export const api = {
   syncConfigSet: (url: string, username: string, webdavPassword: string, passphrase: string) =>
     G.SyncConfigSet(url, username, webdavPassword, passphrase),
   syncTransportSet: (transport: string) => G.SyncTransportSet(transport),
+  syncPassphraseSet: (passphrase: string) => G.SyncPassphraseSet(passphrase),
   syncSftpConfigSet: (input: SyncSftpConfigInput) =>
     G.SyncSftpConfigSet(input as any),
   oauthRedirectUri: () => G.OAuthRedirectURI() as Promise<string>,

@@ -1956,13 +1956,48 @@ type SyncConfig struct {
 	HasGDriveToken bool   `json:"has_gdrive_token"`
 }
 
+// syncTransportName returns the configured transport ("webdav" default). The
+// sync generation counter is scoped per transport: each backend (WebDAV, SFTP,
+// Dropbox, ...) tracks its own remote independently, so switching backends does
+// not compare one backend's generation against another's remote (which used to
+// produce a false "machine is ahead" and could clobber a working backend).
+func (a *App) syncTransportName() string {
+	if v, ok, _ := a.db.GetSetting("sync_transport"); ok && v != "" {
+		return v
+	}
+	return "webdav"
+}
+
+// syncGenerationKey is the per-transport generation setting key. WebDAV keeps
+// the legacy unscoped key ("sync_generation") for back-compat, so an existing
+// WebDAV sync keeps its counter across this change; every other transport uses
+// a scoped key.
+func (a *App) syncGenerationKey(transport string) string {
+	if transport == "" {
+		transport = a.syncTransportName()
+	}
+	if transport == "webdav" {
+		return "sync_generation"
+	}
+	return "sync_generation:" + transport
+}
+
+// syncGeneration returns the generation for the active transport.
 func (a *App) syncGeneration() int64 {
-	if v, ok, _ := a.db.GetSetting("sync_generation"); ok {
+	return a.syncGenerationFor(a.syncTransportName())
+}
+
+func (a *App) syncGenerationFor(transport string) int64 {
+	if v, ok, _ := a.db.GetSetting(a.syncGenerationKey(transport)); ok {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return n
 		}
 	}
 	return 0
+}
+
+func (a *App) setSyncGeneration(gen int64) error {
+	return a.db.SetSetting(a.syncGenerationKey(a.syncTransportName()), strconv.FormatInt(gen, 10))
 }
 
 func (a *App) SyncConfigGet() SyncConfig {
@@ -2078,6 +2113,22 @@ func (a *App) SyncConfigSet(url, username, webdavPassword, passphrase string) er
 		if err := a.vault.Put(syncVaultPassphraseKey, passphrase); err != nil {
 			return fmt.Errorf("vault: %w (unlock the vault first)", err)
 		}
+	}
+	return nil
+}
+
+// SyncPassphraseSet stores the snapshot-sealing passphrase. It is
+// transport-independent (one passphrase seals the snapshot on whichever backend
+// is active), so it lives in one place in the UI rather than in every provider
+// panel - changing it in one backend used to silently break the others, since
+// they all read the same vault key. A blank value is rejected here so the UI
+// can't wipe the passphrase by sending an empty field.
+func (a *App) SyncPassphraseSet(passphrase string) error {
+	if strings.TrimSpace(passphrase) == "" {
+		return fmt.Errorf("passphrase cannot be empty")
+	}
+	if err := a.vault.Put(syncVaultPassphraseKey, passphrase); err != nil {
+		return fmt.Errorf("vault: %w (unlock the vault first)", err)
 	}
 	return nil
 }
@@ -2565,10 +2616,10 @@ func (a *App) SyncPush(force bool) (*syncer.PushResult, error) {
 	res, err := syncer.Push(dav, store.DefaultPath(), creds.DefaultPath(), phrase,
 		appVersion, syncer.DefaultDevice(), prevGen, force,
 		func(gen int64) error {
-			return a.db.SetSetting("sync_generation", strconv.FormatInt(gen, 10))
+			return a.setSyncGeneration(gen)
 		})
 	if err != nil {
-		_ = a.db.SetSetting("sync_generation", strconv.FormatInt(prevGen, 10))
+		_ = a.setSyncGeneration(prevGen)
 		return nil, err
 	}
 	_ = a.db.SetSetting("sync_last_at", strconv.FormatInt(time.Now().Unix(), 10))
@@ -2726,9 +2777,11 @@ func (a *App) SyncPullLive() (*SyncPullLiveResult, error) {
 		}
 	}
 
-	// New clean baseline - the live store now equals the snapshot.
+	// New clean baseline - the live store now equals the snapshot. Write the
+	// generation for the active transport (per-transport counter), after the
+	// restore has repopulated the settings table.
 	a.recordSyncPushedFingerprint()
-	_ = a.db.SetSetting("sync_generation", strconv.FormatInt(meta.Generation, 10))
+	_ = a.setSyncGeneration(meta.Generation)
 	a.syncNotifiedGen = 0
 	a.recordAudit("sync.pull", "", map[string]string{
 		"generation": strconv.FormatInt(meta.Generation, 10),
