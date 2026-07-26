@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -143,6 +144,12 @@ func (a *App) probeOne(id string) string {
 	defer cancel()
 	conn, err := dialer(ctx, "tcp", addr)
 	if err != nil {
+		profile := "none"
+		if s.NetworkProfileID != nil {
+			profile = *s.NetworkProfileID
+		}
+		log.Printf("probe: %s DOWN addr=%s profile=%s bindPhysical=%v err=%v",
+			id, addr, profile, a.boolSetting("wg_bind_physical"), err)
 		return probeDown
 	}
 	_ = conn.Close()
