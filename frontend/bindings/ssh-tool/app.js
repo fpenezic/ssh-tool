@@ -914,6 +914,34 @@ export function DownloadUpdate() {
 }
 
 /**
+ * DropboxConfigSet saves the Dropbox app key and sync folder. It does not touch
+ * the connection (refresh token) - that is DropboxConnect's job.
+ * @param {string} appKey
+ * @param {string} folder
+ * @returns {$CancellablePromise<void>}
+ */
+export function DropboxConfigSet(appKey, folder) {
+    return $Call.ByID(3808801797, appKey, folder);
+}
+
+/**
+ * DropboxConnect runs the PKCE OAuth flow and stores the refresh token.
+ * @returns {$CancellablePromise<void>}
+ */
+export function DropboxConnect() {
+    return $Call.ByID(2575623681);
+}
+
+/**
+ * DropboxDisconnect clears the stored Dropbox refresh token. The app key and
+ * folder settings are left in place.
+ * @returns {$CancellablePromise<void>}
+ */
+export function DropboxDisconnect() {
+    return $Call.ByID(2012810035);
+}
+
+/**
  * @param {string} folderID
  * @returns {$CancellablePromise<store$0.DynamicEntry[]>}
  */
@@ -1202,6 +1230,32 @@ export function ForwardsUpdate($in) {
  */
 export function FrontendLog(line) {
     return $Call.ByID(956996769, line);
+}
+
+/**
+ * GDriveConfigSet saves the Google Drive app (client) ID. The connection is
+ * GDriveConnect's job.
+ * @param {string} clientID
+ * @returns {$CancellablePromise<void>}
+ */
+export function GDriveConfigSet(clientID) {
+    return $Call.ByID(2059383892, clientID);
+}
+
+/**
+ * GDriveConnect runs the PKCE OAuth flow and stores the refresh token.
+ * @returns {$CancellablePromise<void>}
+ */
+export function GDriveConnect() {
+    return $Call.ByID(3787326640);
+}
+
+/**
+ * GDriveDisconnect clears the stored Google Drive refresh token.
+ * @returns {$CancellablePromise<void>}
+ */
+export function GDriveDisconnect() {
+    return $Call.ByID(2385587988);
 }
 
 /**
@@ -2007,6 +2061,34 @@ export function NetworkProfilesList() {
     return $Call.ByID(983369255).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType101($result);
     }));
+}
+
+/**
+ * OneDriveConfigSet saves the OneDrive app (client) ID and the account type
+ * ("personal" | "work" | "both"), which selects the Microsoft login authority.
+ * The connection is OneDriveConnect's job.
+ * @param {string} clientID
+ * @param {string} accountType
+ * @returns {$CancellablePromise<void>}
+ */
+export function OneDriveConfigSet(clientID, accountType) {
+    return $Call.ByID(280374181, clientID, accountType);
+}
+
+/**
+ * OneDriveConnect runs the PKCE OAuth flow and stores the refresh token.
+ * @returns {$CancellablePromise<void>}
+ */
+export function OneDriveConnect() {
+    return $Call.ByID(3660957281);
+}
+
+/**
+ * OneDriveDisconnect clears the stored OneDrive refresh token.
+ * @returns {$CancellablePromise<void>}
+ */
+export function OneDriveDisconnect() {
+    return $Call.ByID(3253756691);
 }
 
 /**
@@ -3290,7 +3372,8 @@ export function SyncStatus() {
 }
 
 /**
- * SyncTransportSet selects the sync backend ("webdav" or "sftp").
+ * SyncTransportSet selects the sync backend ("webdav", "sftp", "dropbox",
+ * "onedrive", or "gdrive").
  * @param {string} transport
  * @returns {$CancellablePromise<void>}
  */

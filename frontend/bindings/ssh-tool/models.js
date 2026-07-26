@@ -3881,10 +3881,10 @@ export class SyncConfig {
         }
         if (!("transport" in $$source)) {
             /**
-             * Transport selects the backend: "webdav" (default) or "sftp". The
-             * WebDAV fields above (URL/Username/HasPassword) drive webdav; the
-             * SFTP fields below drive sftp. The passphrase + generation are
-             * transport-independent.
+             * Transport selects the backend: "webdav" (default), "sftp", or
+             * "dropbox". The WebDAV fields above (URL/Username/HasPassword) drive
+             * webdav; the SFTP fields below drive sftp; the Dropbox fields drive
+             * dropbox. The passphrase + generation are transport-independent.
              * @member
              * @type {string}
              */
@@ -3959,6 +3959,71 @@ export class SyncConfig {
              * @type {boolean}
              */
             this["sftp_has_key"] = false;
+        }
+        if (!("dropbox_app_key" in $$source)) {
+            /**
+             * Cloud OAuth providers. Each AppKey/ClientID is a user-supplied OAuth
+             * client ID (public by design; PKCE means there is no secret). Dropbox has
+             * a configurable app-folder path; OneDrive/GDrive use an implicit per-app
+             * folder so they carry no folder field. Has*Token reports whether an
+             * account is connected (a refresh token is in the vault) without ever
+             * exposing the token.
+             * @member
+             * @type {string}
+             */
+            this["dropbox_app_key"] = "";
+        }
+        if (!("dropbox_folder" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["dropbox_folder"] = "";
+        }
+        if (!("has_dropbox_token" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["has_dropbox_token"] = false;
+        }
+        if (!("onedrive_client_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["onedrive_client_id"] = "";
+        }
+        if (!("onedrive_account_type" in $$source)) {
+            /**
+             * OneDriveAccountType selects the Microsoft login authority: "personal"
+             * (default, /consumers), "work" (/organizations), or "both" (/common). A
+             * user with only a work/school OneDrive picks "work".
+             * @member
+             * @type {string}
+             */
+            this["onedrive_account_type"] = "";
+        }
+        if (!("has_onedrive_token" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["has_onedrive_token"] = false;
+        }
+        if (!("gdrive_client_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["gdrive_client_id"] = "";
+        }
+        if (!("has_gdrive_token" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["has_gdrive_token"] = false;
         }
 
         Object.assign(this, $$source);

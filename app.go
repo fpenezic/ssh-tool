@@ -1895,6 +1895,13 @@ const (
 	syncSftpPasswordKey      = "sync:sftp_password"
 	syncSftpKeyKey           = "sync:sftp_key"            // private key PEM
 	syncSftpKeyPassphraseKey = "sync:sftp_key_passphrase" // for an encrypted key
+	// Cloud OAuth providers (transport=dropbox|onedrive|gdrive): only the
+	// refresh token is persisted, in the vault like every other sync secret.
+	// The access token is held in memory per session (the transport builder
+	// refreshes it on demand).
+	syncDropboxTokenKey  = "sync:dropbox_refresh_token"
+	syncOneDriveTokenKey = "sync:onedrive_refresh_token"
+	syncGDriveTokenKey   = "sync:gdrive_refresh_token"
 )
 
 type SyncConfig struct {
@@ -1909,10 +1916,10 @@ type SyncConfig struct {
 	AutoApply     bool   `json:"auto_apply"`
 	CheckMinutes  int    `json:"check_minutes"`
 
-	// Transport selects the backend: "webdav" (default) or "sftp". The
-	// WebDAV fields above (URL/Username/HasPassword) drive webdav; the
-	// SFTP fields below drive sftp. The passphrase + generation are
-	// transport-independent.
+	// Transport selects the backend: "webdav" (default), "sftp", or
+	// "dropbox". The WebDAV fields above (URL/Username/HasPassword) drive
+	// webdav; the SFTP fields below drive sftp; the Dropbox fields drive
+	// dropbox. The passphrase + generation are transport-independent.
 	Transport    string `json:"transport"`
 	SftpHost     string `json:"sftp_host"`
 	SftpPort     int    `json:"sftp_port"`
@@ -1927,6 +1934,26 @@ type SyncConfig struct {
 	// presence to the UI.
 	SftpHasPassword bool `json:"sftp_has_password"`
 	SftpHasKey      bool `json:"sftp_has_key"`
+
+	// Cloud OAuth providers. Each AppKey/ClientID is a user-supplied OAuth
+	// client ID (public by design; PKCE means there is no secret). Dropbox has
+	// a configurable app-folder path; OneDrive/GDrive use an implicit per-app
+	// folder so they carry no folder field. Has*Token reports whether an
+	// account is connected (a refresh token is in the vault) without ever
+	// exposing the token.
+	DropboxAppKey   string `json:"dropbox_app_key"`
+	DropboxFolder   string `json:"dropbox_folder"`
+	HasDropboxToken bool   `json:"has_dropbox_token"`
+
+	OneDriveClientID string `json:"onedrive_client_id"`
+	// OneDriveAccountType selects the Microsoft login authority: "personal"
+	// (default, /consumers), "work" (/organizations), or "both" (/common). A
+	// user with only a work/school OneDrive picks "work".
+	OneDriveAccountType string `json:"onedrive_account_type"`
+	HasOneDriveToken    bool   `json:"has_onedrive_token"`
+
+	GDriveClientID string `json:"gdrive_client_id"`
+	HasGDriveToken bool   `json:"has_gdrive_token"`
 }
 
 func (a *App) syncGeneration() int64 {
@@ -1996,6 +2023,35 @@ func (a *App) SyncConfigGet() SyncConfig {
 	if _, ok, _ := a.vault.Get(syncSftpKeyKey); ok {
 		cfg.SftpHasKey = true
 	}
+
+	cfg.DropboxFolder = "/ssh-tool"
+	if v, ok, _ := a.db.GetSetting("sync_dropbox_folder"); ok && v != "" {
+		cfg.DropboxFolder = v
+	}
+	if v, ok, _ := a.db.GetSetting("sync_dropbox_app_key"); ok {
+		cfg.DropboxAppKey = v
+	}
+	if _, ok, _ := a.vault.Get(syncDropboxTokenKey); ok {
+		cfg.HasDropboxToken = true
+	}
+
+	if v, ok, _ := a.db.GetSetting("sync_onedrive_client_id"); ok {
+		cfg.OneDriveClientID = v
+	}
+	cfg.OneDriveAccountType = "personal"
+	if v, ok, _ := a.db.GetSetting("sync_onedrive_account_type"); ok && v != "" {
+		cfg.OneDriveAccountType = v
+	}
+	if _, ok, _ := a.vault.Get(syncOneDriveTokenKey); ok {
+		cfg.HasOneDriveToken = true
+	}
+
+	if v, ok, _ := a.db.GetSetting("sync_gdrive_client_id"); ok {
+		cfg.GDriveClientID = v
+	}
+	if _, ok, _ := a.vault.Get(syncGDriveTokenKey); ok {
+		cfg.HasGDriveToken = true
+	}
 	return cfg
 }
 
@@ -2026,10 +2082,11 @@ func (a *App) SyncConfigSet(url, username, webdavPassword, passphrase string) er
 	return nil
 }
 
-// SyncTransportSet selects the sync backend ("webdav" or "sftp").
+// SyncTransportSet selects the sync backend ("webdav", "sftp", "dropbox",
+// "onedrive", or "gdrive").
 func (a *App) SyncTransportSet(transport string) error {
 	switch transport {
-	case "webdav", "sftp":
+	case "webdav", "sftp", "dropbox", "onedrive", "gdrive":
 	default:
 		return fmt.Errorf("unknown sync transport %q", transport)
 	}
@@ -2157,6 +2214,30 @@ func (a *App) syncClient() (syncer.Transport, string, error) {
 		return t, phrase, nil
 	}
 
+	if cfg.Transport == "dropbox" {
+		t, err := a.dropboxSyncTransport(cfg)
+		if err != nil {
+			return nil, "", err
+		}
+		return t, phrase, nil
+	}
+
+	if cfg.Transport == "onedrive" {
+		t, err := a.onedriveSyncTransport(cfg)
+		if err != nil {
+			return nil, "", err
+		}
+		return t, phrase, nil
+	}
+
+	if cfg.Transport == "gdrive" {
+		t, err := a.gdriveSyncTransport(cfg)
+		if err != nil {
+			return nil, "", err
+		}
+		return t, phrase, nil
+	}
+
 	// Default: WebDAV.
 	if cfg.URL == "" {
 		return nil, "", fmt.Errorf("sync URL is not configured")
@@ -2233,6 +2314,187 @@ func (a *App) sftpSyncTransport(cfg SyncConfig) (*syncer.SFTP, error) {
 		HostKeyAlgorithms: algos,
 		Timeout:           a.connectTimeout(),
 	}, nil
+}
+
+// oauthProvider bundles the per-provider bits the shared connect/refresh code
+// needs, so Dropbox / OneDrive / GDrive share one PKCE lifecycle instead of
+// three copies. label is the human name for error messages; endpoints + the
+// vault token key drive the OAuth exchange; clientID is user-supplied.
+type oauthProvider struct {
+	label     string
+	endpoints syncer.OAuthEndpoints
+	tokenKey  string
+}
+
+// oauthLiveToken exchanges the saved refresh token for a live access token and
+// returns it alongside a refresh closure the transport calls on a 401. Any
+// rotated refresh token is re-stashed in the vault. Shared by all cloud
+// providers' transport builders.
+func (a *App) oauthLiveToken(p oauthProvider, clientID string) (string, func() (string, error), error) {
+	clientID = strings.TrimSpace(clientID)
+	if clientID == "" {
+		return "", nil, fmt.Errorf("%s app key is not configured", p.label)
+	}
+	refreshTok, ok, _ := a.vault.Get(p.tokenKey)
+	if !ok || refreshTok == "" {
+		return "", nil, fmt.Errorf("%s is not connected - use Connect first", p.label)
+	}
+	tok, err := syncer.Refresh(context.Background(), p.endpoints, clientID, refreshTok)
+	if err != nil {
+		return "", nil, fmt.Errorf("%s auth: %w", p.label, err)
+	}
+	if tok.RefreshToken != "" && tok.RefreshToken != refreshTok {
+		_ = a.vault.Put(p.tokenKey, tok.RefreshToken)
+	}
+	refresh := func() (string, error) {
+		stored, ok, _ := a.vault.Get(p.tokenKey)
+		if !ok || stored == "" {
+			return "", fmt.Errorf("%s refresh token missing", p.label)
+		}
+		t, err := syncer.Refresh(context.Background(), p.endpoints, clientID, stored)
+		if err != nil {
+			return "", err
+		}
+		if t.RefreshToken != "" && t.RefreshToken != stored {
+			_ = a.vault.Put(p.tokenKey, t.RefreshToken)
+		}
+		return t.AccessToken, nil
+	}
+	return tok.AccessToken, refresh, nil
+}
+
+// oauthConnect runs the interactive PKCE flow (browser + loopback) and stores
+// the resulting refresh token in the vault. Requires an unlocked vault.
+// Desktop-only (loopback redirect). Shared by all cloud providers' Connect IPC.
+func (a *App) oauthConnect(p oauthProvider, clientID string) error {
+	if a.vault.Status().Kind != creds.StatusUnlocked {
+		return fmt.Errorf("unlock the vault first - the %s token is stored in it", p.label)
+	}
+	clientID = strings.TrimSpace(clientID)
+	if clientID == "" {
+		return fmt.Errorf("set the %s app key first", p.label)
+	}
+	tok, err := syncer.Authorize(context.Background(), p.endpoints, clientID, func(u string) {
+		BrowserOpenURL(u)
+	})
+	if err != nil {
+		return err
+	}
+	if tok.RefreshToken == "" {
+		return fmt.Errorf("%s did not return a refresh token - check the app has offline access", p.label)
+	}
+	if err := a.vault.Put(p.tokenKey, tok.RefreshToken); err != nil {
+		return fmt.Errorf("vault: %w", err)
+	}
+	return nil
+}
+
+func dropboxProvider() oauthProvider {
+	return oauthProvider{label: "Dropbox", endpoints: syncer.DropboxEndpoints, tokenKey: syncDropboxTokenKey}
+}
+
+func onedriveProvider(accountType string) oauthProvider {
+	return oauthProvider{label: "OneDrive", endpoints: syncer.OneDriveEndpointsFor(accountType), tokenKey: syncOneDriveTokenKey}
+}
+
+func gdriveProvider() oauthProvider {
+	return oauthProvider{label: "Google Drive", endpoints: syncer.GoogleDriveEndpoints, tokenKey: syncGDriveTokenKey}
+}
+
+// dropboxSyncTransport builds the Dropbox transport from the saved refresh
+// token (via the shared OAuth lifecycle). The transport self-heals on a 401.
+func (a *App) dropboxSyncTransport(cfg SyncConfig) (*syncer.Dropbox, error) {
+	access, refresh, err := a.oauthLiveToken(dropboxProvider(), cfg.DropboxAppKey)
+	if err != nil {
+		return nil, err
+	}
+	return syncer.NewDropbox(access, cfg.DropboxFolder, refresh), nil
+}
+
+// onedriveSyncTransport builds the OneDrive transport from the saved refresh
+// token. OneDrive uses an implicit per-app folder, so there is no folder arg.
+func (a *App) onedriveSyncTransport(cfg SyncConfig) (*syncer.OneDrive, error) {
+	access, refresh, err := a.oauthLiveToken(onedriveProvider(cfg.OneDriveAccountType), cfg.OneDriveClientID)
+	if err != nil {
+		return nil, err
+	}
+	return syncer.NewOneDrive(access, refresh), nil
+}
+
+// gdriveSyncTransport builds the Google Drive transport from the saved refresh
+// token. Drive uses the implicit appDataFolder space, so there is no folder arg.
+func (a *App) gdriveSyncTransport(cfg SyncConfig) (*syncer.GoogleDrive, error) {
+	access, refresh, err := a.oauthLiveToken(gdriveProvider(), cfg.GDriveClientID)
+	if err != nil {
+		return nil, err
+	}
+	return syncer.NewGoogleDrive(access, refresh), nil
+}
+
+// DropboxConfigSet saves the Dropbox app key and sync folder. It does not touch
+// the connection (refresh token) - that is DropboxConnect's job.
+func (a *App) DropboxConfigSet(appKey, folder string) error {
+	if err := a.db.SetSetting("sync_dropbox_app_key", strings.TrimSpace(appKey)); err != nil {
+		return err
+	}
+	folder = strings.TrimSpace(folder)
+	if folder == "" {
+		folder = "/ssh-tool"
+	}
+	return a.db.SetSetting("sync_dropbox_folder", folder)
+}
+
+// DropboxConnect runs the PKCE OAuth flow and stores the refresh token.
+func (a *App) DropboxConnect() error {
+	return a.oauthConnect(dropboxProvider(), a.SyncConfigGet().DropboxAppKey)
+}
+
+// DropboxDisconnect clears the stored Dropbox refresh token. The app key and
+// folder settings are left in place.
+func (a *App) DropboxDisconnect() error {
+	return a.vault.Delete(syncDropboxTokenKey)
+}
+
+// OneDriveConfigSet saves the OneDrive app (client) ID and the account type
+// ("personal" | "work" | "both"), which selects the Microsoft login authority.
+// The connection is OneDriveConnect's job.
+func (a *App) OneDriveConfigSet(clientID, accountType string) error {
+	if err := a.db.SetSetting("sync_onedrive_client_id", strings.TrimSpace(clientID)); err != nil {
+		return err
+	}
+	switch accountType {
+	case "personal", "work", "both":
+	default:
+		accountType = "personal"
+	}
+	return a.db.SetSetting("sync_onedrive_account_type", accountType)
+}
+
+// OneDriveConnect runs the PKCE OAuth flow and stores the refresh token.
+func (a *App) OneDriveConnect() error {
+	cfg := a.SyncConfigGet()
+	return a.oauthConnect(onedriveProvider(cfg.OneDriveAccountType), cfg.OneDriveClientID)
+}
+
+// OneDriveDisconnect clears the stored OneDrive refresh token.
+func (a *App) OneDriveDisconnect() error {
+	return a.vault.Delete(syncOneDriveTokenKey)
+}
+
+// GDriveConfigSet saves the Google Drive app (client) ID. The connection is
+// GDriveConnect's job.
+func (a *App) GDriveConfigSet(clientID string) error {
+	return a.db.SetSetting("sync_gdrive_client_id", strings.TrimSpace(clientID))
+}
+
+// GDriveConnect runs the PKCE OAuth flow and stores the refresh token.
+func (a *App) GDriveConnect() error {
+	return a.oauthConnect(gdriveProvider(), a.SyncConfigGet().GDriveClientID)
+}
+
+// GDriveDisconnect clears the stored Google Drive refresh token.
+func (a *App) GDriveDisconnect() error {
+	return a.vault.Delete(syncGDriveTokenKey)
 }
 
 // SyncStatusResult compares local vs remote generation.

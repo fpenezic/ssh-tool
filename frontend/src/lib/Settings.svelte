@@ -567,6 +567,22 @@
   let sftpInlineKeyPem = $state("");   // blank = keep saved
   let sftpInlineKeyPassphrase = $state("");
   let syncCredOptions = $state<{ id: string; name: string }[]>([]);
+  // Dropbox transport: user-supplied app key (public OAuth client ID, no
+  // secret - PKCE), an app-folder path, and a connected flag driven by whether
+  // a refresh token sits in the vault.
+  let dropboxAppKey = $state("");
+  let dropboxFolder = $state("/ssh-tool");
+  let hasDropboxToken = $state(false);
+  let dropboxConnecting = $state(false);
+  // OneDrive + Google Drive: user-supplied OAuth client ID, an implicit per-app
+  // folder (no path), a connected flag from the vault token.
+  let onedriveClientId = $state("");
+  let onedriveAccountType = $state("personal"); // personal | work | both
+  let hasOnedriveToken = $state(false);
+  let onedriveConnecting = $state(false);
+  let gdriveClientId = $state("");
+  let hasGdriveToken = $state(false);
+  let gdriveConnecting = $state(false);
 
   async function syncLoadConfig() {
     try {
@@ -583,6 +599,14 @@
       sftpDir = syncCfg.sftp_dir;
       sftpAuthMode = syncCfg.sftp_auth_mode || "credential";
       sftpCredId = syncCfg.sftp_cred_id;
+      dropboxAppKey = syncCfg.dropbox_app_key;
+      dropboxFolder = syncCfg.dropbox_folder || "/ssh-tool";
+      hasDropboxToken = syncCfg.has_dropbox_token;
+      onedriveClientId = syncCfg.onedrive_client_id;
+      onedriveAccountType = syncCfg.onedrive_account_type || "personal";
+      hasOnedriveToken = syncCfg.has_onedrive_token;
+      gdriveClientId = syncCfg.gdrive_client_id;
+      hasGdriveToken = syncCfg.has_gdrive_token;
     } catch { /* ignore */ }
   }
 
@@ -628,6 +652,113 @@
       syncPassphrase = "";
       await syncLoadConfig();
       toast.ok("SFTP sync settings saved");
+    } catch (e) {
+      syncErr = errMsg(e);
+    }
+  }
+
+  async function dropboxSaveConfig() {
+    syncErr = null;
+    try {
+      await api.dropboxConfigSet(dropboxAppKey, dropboxFolder);
+      if (syncPassphrase.trim() !== "") {
+        // The sealing passphrase is transport-independent - persist it via the
+        // WebDAV setter, which only touches the passphrase when non-blank.
+        await api.syncConfigSet(syncUrl, syncUsername, "", syncPassphrase);
+        syncPassphrase = "";
+      }
+      await syncLoadConfig();
+      toast.ok("Dropbox sync settings saved");
+    } catch (e) {
+      syncErr = errMsg(e);
+    }
+  }
+
+  async function dropboxConnect() {
+    syncErr = null;
+    dropboxConnecting = true;
+    try {
+      // Persist the app key + folder first so the connect flow reads them.
+      await api.dropboxConfigSet(dropboxAppKey, dropboxFolder);
+      await api.dropboxConnect();
+      await syncLoadConfig();
+      toast.ok("Dropbox connected");
+    } catch (e) {
+      syncErr = errMsg(e);
+    } finally {
+      dropboxConnecting = false;
+    }
+  }
+
+  async function dropboxDisconnect() {
+    syncErr = null;
+    try {
+      await api.dropboxDisconnect();
+      await syncLoadConfig();
+      toast.ok("Dropbox disconnected");
+    } catch (e) {
+      syncErr = errMsg(e);
+    }
+  }
+
+  // OneDrive + Google Drive share the same connect/disconnect shape as Dropbox
+  // (user-supplied client ID, PKCE browser flow, vault-held refresh token); the
+  // only difference is which api.* call runs and that they carry no folder.
+  async function onedriveConnect() {
+    syncErr = null;
+    onedriveConnecting = true;
+    try {
+      await api.onedriveConfigSet(onedriveClientId, onedriveAccountType);
+      if (syncPassphrase.trim() !== "") {
+        await api.syncConfigSet(syncUrl, syncUsername, "", syncPassphrase);
+        syncPassphrase = "";
+      }
+      await api.onedriveConnect();
+      await syncLoadConfig();
+      toast.ok("OneDrive connected");
+    } catch (e) {
+      syncErr = errMsg(e);
+    } finally {
+      onedriveConnecting = false;
+    }
+  }
+
+  async function onedriveDisconnect() {
+    syncErr = null;
+    try {
+      await api.onedriveDisconnect();
+      await syncLoadConfig();
+      toast.ok("OneDrive disconnected");
+    } catch (e) {
+      syncErr = errMsg(e);
+    }
+  }
+
+  async function gdriveConnect() {
+    syncErr = null;
+    gdriveConnecting = true;
+    try {
+      await api.gdriveConfigSet(gdriveClientId);
+      if (syncPassphrase.trim() !== "") {
+        await api.syncConfigSet(syncUrl, syncUsername, "", syncPassphrase);
+        syncPassphrase = "";
+      }
+      await api.gdriveConnect();
+      await syncLoadConfig();
+      toast.ok("Google Drive connected");
+    } catch (e) {
+      syncErr = errMsg(e);
+    } finally {
+      gdriveConnecting = false;
+    }
+  }
+
+  async function gdriveDisconnect() {
+    syncErr = null;
+    try {
+      await api.gdriveDisconnect();
+      await syncLoadConfig();
+      toast.ok("Google Drive disconnected");
     } catch (e) {
       syncErr = errMsg(e);
     }
@@ -3600,11 +3731,25 @@
       <select value={syncTransport} onchange={(e) => syncSaveTransport((e.currentTarget as HTMLSelectElement).value)}>
         <option value="webdav">WebDAV</option>
         <option value="sftp">SSH / SFTP</option>
+        <option value="dropbox">Dropbox</option>
+        <option value="onedrive">OneDrive</option>
+        <option value="gdrive">Google Drive</option>
       </select>
       <span class="field-hint">
         {#if syncTransport === "sftp"}
           Stores the snapshot in a directory on an SSH server, authenticated
           with a credential from your vault. Rename is atomic on POSIX hosts.
+        {:else if syncTransport === "dropbox"}
+          Stores the snapshot in a Dropbox app folder. Connect once in the
+          browser; no server to run. Uses your own Dropbox app key (PKCE, no
+          secret stored).
+        {:else if syncTransport === "onedrive"}
+          Stores the snapshot in the app's OneDrive folder. Connect once in the
+          browser. Uses your own Azure app (client) ID (PKCE, no secret stored).
+        {:else if syncTransport === "gdrive"}
+          Stores the snapshot in the app's hidden Google Drive data folder.
+          Connect once in the browser. Uses your own Google OAuth client ID
+          (PKCE, no secret stored).
         {:else}
           Stores the snapshot on a WebDAV server with basic auth over https.
         {/if}
@@ -3637,7 +3782,7 @@
       <button class="primary" onclick={syncSaveConfig}>Save</button>
     </div>
   </div>
-  {:else}
+  {:else if syncTransport === "sftp"}
   <!-- 1b. SFTP server -->
   <div class="group">
     <h2>SSH / SFTP server</h2>
@@ -3714,6 +3859,119 @@
     </label>
     <div class="row" style="gap:0.5rem">
       <button class="primary" onclick={syncSaveSftp}>Save</button>
+    </div>
+  </div>
+  {:else if syncTransport === "dropbox"}
+  <!-- 1c. Dropbox -->
+  <div class="group">
+    <h2>Dropbox</h2>
+    <p class="hint">
+      Create a Dropbox app (Scoped access, App-folder) in the Dropbox App
+      Console, then paste its <strong>app key</strong> below. The app key is a
+      public client ID - there is no secret to store (PKCE). Connect once and
+      the refresh token is kept in this machine's vault.
+    </p>
+    <label>App key
+      <input bind:value={dropboxAppKey} placeholder="your Dropbox app key" spellcheck="false" class="mono" />
+    </label>
+    <label>Sync folder
+      <input bind:value={dropboxFolder} placeholder="/ssh-tool" spellcheck="false" class="mono" />
+      <span class="field-hint">Path inside the app folder. Created on first push.</span>
+    </label>
+    <label>Sync passphrase
+      <PasswordInput bind:value={syncPassphrase} placeholder={syncCfg?.has_passphrase ? "saved - leave blank to keep" : "seals the snapshot"} />
+      <span class="field-hint">
+        Encrypts the snapshot. Use the same one on every machine.
+        Stored in this machine's vault, so sync needs an unlocked vault.
+      </span>
+    </label>
+    <div class="row" style="gap:0.5rem; align-items:center">
+      <button class="primary" onclick={dropboxSaveConfig}>Save</button>
+      {#if hasDropboxToken}
+        <span class="field-hint" style="color:var(--ok, #3a3)">Connected</span>
+        <button onclick={dropboxDisconnect}>Disconnect</button>
+      {:else}
+        <button onclick={dropboxConnect} disabled={dropboxConnecting || !dropboxAppKey.trim()}>
+          {dropboxConnecting ? "Waiting for browser..." : "Connect Dropbox"}
+        </button>
+      {/if}
+    </div>
+  </div>
+  {:else if syncTransport === "onedrive"}
+  <!-- 1d. OneDrive -->
+  <div class="group">
+    <h2>OneDrive</h2>
+    <p class="hint">
+      Register an app in the Azure Portal (Entra ID) as a
+      <strong>public client / native</strong> app with a
+      <code>http://127.0.0.1</code> redirect and the
+      <code>Files.ReadWrite.AppFolder</code> + <code>offline_access</code>
+      permissions, then paste its <strong>Application (client) ID</strong>
+      below. No secret is stored (PKCE). Connect once and the refresh token is
+      kept in this machine's vault.
+    </p>
+    <label>Account type
+      <select bind:value={onedriveAccountType}>
+        <option value="personal">Personal Microsoft account</option>
+        <option value="work">Work / school account</option>
+        <option value="both">Either (personal or work/school)</option>
+      </select>
+      <span class="field-hint">
+        Pick "Work / school" if you only have a business OneDrive. This must
+        match your Azure app's "Supported account types" setting.
+      </span>
+    </label>
+    <label>Application (client) ID
+      <input bind:value={onedriveClientId} placeholder="Azure app client ID" spellcheck="false" class="mono" />
+    </label>
+    <label>Sync passphrase
+      <PasswordInput bind:value={syncPassphrase} placeholder={syncCfg?.has_passphrase ? "saved - leave blank to keep" : "seals the snapshot"} />
+      <span class="field-hint">
+        Encrypts the snapshot. Use the same one on every machine.
+        Stored in this machine's vault, so sync needs an unlocked vault.
+      </span>
+    </label>
+    <div class="row" style="gap:0.5rem; align-items:center">
+      {#if hasOnedriveToken}
+        <span class="field-hint" style="color:var(--ok, #3a3)">Connected</span>
+        <button onclick={onedriveDisconnect}>Disconnect</button>
+      {:else}
+        <button class="primary" onclick={onedriveConnect} disabled={onedriveConnecting || !onedriveClientId.trim()}>
+          {onedriveConnecting ? "Waiting for browser..." : "Connect OneDrive"}
+        </button>
+      {/if}
+    </div>
+  </div>
+  {:else if syncTransport === "gdrive"}
+  <!-- 1e. Google Drive -->
+  <div class="group">
+    <h2>Google Drive</h2>
+    <p class="hint">
+      Create an OAuth client of type <strong>Desktop app</strong> in the Google
+      Cloud Console with the <code>drive.appdata</code> scope, then paste its
+      <strong>client ID</strong> below. No secret is stored (PKCE). Connect once
+      and the refresh token is kept in this machine's vault. Personal projects
+      stay in "testing" mode - that is fine for your own account.
+    </p>
+    <label>OAuth client ID
+      <input bind:value={gdriveClientId} placeholder="Google OAuth client ID" spellcheck="false" class="mono" />
+    </label>
+    <label>Sync passphrase
+      <PasswordInput bind:value={syncPassphrase} placeholder={syncCfg?.has_passphrase ? "saved - leave blank to keep" : "seals the snapshot"} />
+      <span class="field-hint">
+        Encrypts the snapshot. Use the same one on every machine.
+        Stored in this machine's vault, so sync needs an unlocked vault.
+      </span>
+    </label>
+    <div class="row" style="gap:0.5rem; align-items:center">
+      {#if hasGdriveToken}
+        <span class="field-hint" style="color:var(--ok, #3a3)">Connected</span>
+        <button onclick={gdriveDisconnect}>Disconnect</button>
+      {:else}
+        <button class="primary" onclick={gdriveConnect} disabled={gdriveConnecting || !gdriveClientId.trim()}>
+          {gdriveConnecting ? "Waiting for browser..." : "Connect Google Drive"}
+        </button>
+      {/if}
     </div>
   </div>
   {/if}

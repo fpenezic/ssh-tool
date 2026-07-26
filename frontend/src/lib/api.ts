@@ -984,6 +984,17 @@ export const api = {
   syncTransportSet: (transport: string) => G.SyncTransportSet(transport),
   syncSftpConfigSet: (input: SyncSftpConfigInput) =>
     G.SyncSftpConfigSet(input as any),
+  dropboxConfigSet: (appKey: string, folder: string) =>
+    G.DropboxConfigSet(appKey, folder),
+  dropboxConnect: () => G.DropboxConnect(),
+  dropboxDisconnect: () => G.DropboxDisconnect(),
+  onedriveConfigSet: (clientId: string, accountType: string) =>
+    G.OneDriveConfigSet(clientId, accountType),
+  onedriveConnect: () => G.OneDriveConnect(),
+  onedriveDisconnect: () => G.OneDriveDisconnect(),
+  gdriveConfigSet: (clientId: string) => G.GDriveConfigSet(clientId),
+  gdriveConnect: () => G.GDriveConnect(),
+  gdriveDisconnect: () => G.GDriveDisconnect(),
   syncStatus: () => nn(G.SyncStatus()) as Promise<SyncStatusResult>,
   syncPush: (force: boolean) =>
     nn(G.SyncPush(force)) as Promise<{ generation: number; snapshot_size: number }>,
@@ -1642,6 +1653,14 @@ export interface SyncConfig {
   sftp_cred_name: string;
   sftp_has_password: boolean;
   sftp_has_key: boolean;
+  dropbox_app_key: string;
+  dropbox_folder: string;
+  has_dropbox_token: boolean;
+  onedrive_client_id: string;
+  onedrive_account_type: string;
+  has_onedrive_token: boolean;
+  gdrive_client_id: string;
+  has_gdrive_token: boolean;
 }
 
 export interface SyncSftpConfigInput {
