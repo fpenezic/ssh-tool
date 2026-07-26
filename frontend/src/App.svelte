@@ -42,7 +42,6 @@
   import PresenceTakeoverModal from "./lib/PresenceTakeoverModal.svelte";
   import { connectionActions } from "./lib/connectionActions.svelte";
   import DetachedWindow from "./lib/DetachedWindow.svelte";
-  import TcpdumpWindow from "./lib/TcpdumpWindow.svelte";
   import LogTailWindow from "./lib/LogTailWindow.svelte";
   import ResizeHandle from "./lib/ResizeHandle.svelte";
   import { layoutPrefs } from "./lib/layoutPrefs.svelte";
@@ -97,10 +96,6 @@
   const urlParams = routeParams();
   const detachedTab = urlParams.get("detached");
   const isDetached = detachedTab !== null;
-  // Standalone tcpdump window: /?tcpdump=<sessionId>. Renders only the
-  // embedded capture view, re-attaching to the backend capture.
-  const tcpdumpSession = urlParams.get("tcpdump");
-  const isTcpdumpWindow = tcpdumpSession !== null;
   // Standalone log-tail window: /?logtail=<sessionId>.
   const logtailSession = urlParams.get("logtail");
   const isLogtailWindow = logtailSession !== null;
@@ -1002,12 +997,7 @@
 
 <svelte:window onkeydown={onGlobalKey} />
 
-{#if isTcpdumpWindow}
-  <!-- Standalone tcpdump window: embedded capture view re-attaching to the
-       backend capture. Vault is already unlocked in the main process. -->
-  <TcpdumpWindow sessionId={tcpdumpSession!} />
-  <ToastHost />
-{:else if isLogtailWindow}
+{#if isLogtailWindow}
   <!-- Standalone log-tail window: embedded stream view re-attaching to the
        backend tail. -->
   <LogTailWindow sessionId={logtailSession!} />

@@ -6098,70 +6098,6 @@ func parseCSVList(s string) []string {
 	return filtered
 }
 
-// WindowOpenTcpdump opens a standalone window that re-attaches to the running
-// tcpdump capture for a session (URL /?tcpdump=<sessionID>). Unlike a tab
-// detach, no session is transferred and NO close handler disconnects anything:
-// the capture is a backend goroutine keyed by session, so closing the window
-// just detaches the view - the capture (and the SSH session behind it) keep
-// running under the main window. Lets the user watch a capture while typing in
-// the terminal. Returns the new window's name.
-func (a *App) WindowOpenTcpdump(sessionID string) (string, error) {
-	if a.app == nil {
-		return "", fmt.Errorf("application not initialised")
-	}
-	if sessionID == "" {
-		return "", fmt.Errorf("session id required")
-	}
-	name := fmt.Sprintf("tcpdump-%s", sessionID)
-	// Reuse an existing window for this session instead of stacking duplicates
-	// (detach clicked twice, or a stale window). Bring it forward.
-	if w, ok := a.app.Window.GetByName(name); ok {
-		application.Get().Show()
-		w.Show()
-		w.Restore()
-		w.Focus()
-		return name, nil
-	}
-	opts := application.WebviewWindowOptions{
-		Name:             name,
-		Title:            "tcpdump - ssh-tool",
-		Width:            1000,
-		Height:           700,
-		MinWidth:         600,
-		MinHeight:        400,
-		// Use BOTH a query and a hash: some WebView2 builds drop the query
-		// string on the initial navigation but keep the fragment, so the
-		// frontend's routeParams() falls back to the hash. Belt-and-suspenders.
-		URL:              "/?tcpdump=" + sessionID + "#tcpdump=" + sessionID,
-		BackgroundColour: application.NewRGB(30, 30, 46),
-		DevToolsEnabled:  true,
-	}
-	w := a.app.Window.NewWithOptions(opts)
-	// macOS opens new windows unfocused/behind unless we bring the app + window
-	// forward explicitly - otherwise the user "loses" the detached window.
-	application.Get().Show()
-	w.Show()
-	w.Focus()
-	return name, nil
-}
-
-// TcpdumpNotifyRedocked is called by a detached tcpdump window when it goes
-// away (user closed it, or stopped+closed the capture). It emits an event the
-// main window listens for so it can flip the capture's entry from "detached"
-// back to a background/minimized chip - the capture itself is untouched (it
-// keeps running on the backend, or was already stopped by the window). Also
-// closes the OS window if it is still open.
-func (a *App) TcpdumpNotifyRedocked(sessionID string) {
-	EventsEmit("tcpdump_redocked", map[string]string{"session_id": sessionID})
-	if a.app == nil {
-		return
-	}
-	name := fmt.Sprintf("tcpdump-%s", sessionID)
-	if w, ok := a.app.Window.GetByName(name); ok {
-		w.Close()
-	}
-}
-
 // WindowRedockTab tells the main window that a detached tab should come back.
 // sessions is the comma-separated list of session IDs the detached window owns.
 // layout is an opaque base64 blob with the pane tree so the main
@@ -7193,7 +7129,6 @@ func (a *App) WindowOpenLogtail(sessionID string) (string, error) {
 	}
 	name := fmt.Sprintf("logtail-%s", sessionID)
 	if w, ok := a.app.Window.GetByName(name); ok {
-		application.Get().Show()
 		w.Show()
 		w.Restore()
 		w.Focus()
@@ -7211,9 +7146,20 @@ func (a *App) WindowOpenLogtail(sessionID string) (string, error) {
 		DevToolsEnabled:  true,
 	}
 	w := a.app.Window.NewWithOptions(opts)
-	application.Get().Show()
-	w.Show()
-	w.Focus()
+	// Bring the new window forward. On macOS, doing window/app show ops
+	// synchronously right after NewWithOptions can crash Wails v3 alpha
+	// (window is still being wired on the main thread), so defer them a tick;
+	// other platforms show immediately.
+	if runtime.GOOS == "darwin" {
+		go func() {
+			time.Sleep(150 * time.Millisecond)
+			w.Show()
+			w.Focus()
+		}()
+	} else {
+		w.Show()
+		w.Focus()
+	}
 	return name, nil
 }
 

@@ -191,15 +191,6 @@
   // so the main window stops mounting its own modal for it (the capture lives
   // on the backend and both windows re-attach via the snapshot watermark). If
   // the window fails to open, leave the modal as-is.
-  async function detachTcpdump(sessionId: string) {
-    try {
-      await api.windowOpenTcpdump(sessionId);
-      tcpdump.detach(sessionId);
-    } catch (e) {
-      console.error("detach tcpdump:", e);
-    }
-  }
-
   async function detachLogtail(sessionId: string) {
     try {
       await api.windowOpenLogtail(sessionId);
@@ -503,7 +494,6 @@
   // window_receive_tab globally with the intended target's name; only that
   // window claims the pending payload.
   let unsubReceive: (() => void) | null = null;
-  let unsubTcpdumpRedock: (() => void) | null = null;
   let unsubLogtailRedock: (() => void) | null = null;
   onMount(() => {
     unsubReceive = EventsOn("window_receive_tab", async (data: any) => {
@@ -513,15 +503,8 @@
         if (p) await reconstructTabFromPayload(p);
       } catch { /* nothing pending */ }
     });
-    // A detached tcpdump window closed - bring its capture back under this
-    // window as a minimized chip (the capture is still running on the
-    // backend). Only the main window has the tcpdump store host mounted.
-    unsubTcpdumpRedock = EventsOn("tcpdump_redocked", (data: any) => {
-      const sid = data?.session_id;
-      if (sid && tcpdump.modeOf(sid) === "detached") {
-        tcpdump.minimize(sid);
-      }
-    });
+    // A detached log-tail window closed - bring its stream back under this
+    // window as a minimized chip (the stream is still running on the backend).
     unsubLogtailRedock = EventsOn("logtail_redocked", (data: any) => {
       const sid = data?.session_id;
       if (sid && logtail.modeOf(sid) === "detached") {
@@ -529,7 +512,7 @@
       }
     });
   });
-  onDestroy(() => { unsubReceive?.(); unsubTcpdumpRedock?.(); unsubLogtailRedock?.(); });
+  onDestroy(() => { unsubReceive?.(); unsubLogtailRedock?.(); });
 
   // The session that the tab's active pane (or first leaf) points at.
   // Duplicate keys off the SESSION, not a tree lookup: a tab can be a
@@ -1036,7 +1019,6 @@
       onClose={() => tcpdump.close(cap.sessionId)}
       onMinimize={() => tcpdump.minimize(cap.sessionId)}
       onStats={(s) => tcpdump.setStats(cap.sessionId, s)}
-      onDetach={() => detachTcpdump(cap.sessionId)}
     />
   {/if}
 {/each}

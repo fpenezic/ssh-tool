@@ -3292,20 +3292,6 @@ export function TcpdumpListInterfaces(sessionID) {
 }
 
 /**
- * TcpdumpNotifyRedocked is called by a detached tcpdump window when it goes
- * away (user closed it, or stopped+closed the capture). It emits an event the
- * main window listens for so it can flip the capture's entry from "detached"
- * back to a background/minimized chip - the capture itself is untouched (it
- * keeps running on the backend, or was already stopped by the window). Also
- * closes the OS window if it is still open.
- * @param {string} sessionID
- * @returns {$CancellablePromise<void>}
- */
-export function TcpdumpNotifyRedocked(sessionID) {
-    return $Call.ByID(3244836724, sessionID);
-}
-
-/**
  * @param {string} sessionID
  * @returns {$CancellablePromise<$models.TcpdumpProbeResult | null>}
  */
@@ -3629,21 +3615,6 @@ export function WindowListTargets(callerName) {
  */
 export function WindowOpenLogtail(sessionID) {
     return $Call.ByID(2785647619, sessionID);
-}
-
-/**
- * WindowOpenTcpdump opens a standalone window that re-attaches to the running
- * tcpdump capture for a session (URL /?tcpdump=<sessionID>). Unlike a tab
- * detach, no session is transferred and NO close handler disconnects anything:
- * the capture is a backend goroutine keyed by session, so closing the window
- * just detaches the view - the capture (and the SSH session behind it) keep
- * running under the main window. Lets the user watch a capture while typing in
- * the terminal. Returns the new window's name.
- * @param {string} sessionID
- * @returns {$CancellablePromise<string>}
- */
-export function WindowOpenTcpdump(sessionID) {
-    return $Call.ByID(1039740738, sessionID);
 }
 
 /**

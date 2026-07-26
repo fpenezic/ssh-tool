@@ -945,10 +945,6 @@ export const api = {
     nn(G.TcpdumpActiveForSession(sessionId)) as Promise<TcpdumpActiveInfo>,
   tcpdumpSnapshot: (dumpId: string) =>
     nn(G.TcpdumpSnapshot(dumpId)) as Promise<TcpdumpSnapshotResult>,
-  windowOpenTcpdump: (sessionId: string) =>
-    G.WindowOpenTcpdump(sessionId) as unknown as Promise<string>,
-  tcpdumpNotifyRedocked: (sessionId: string) =>
-    G.TcpdumpNotifyRedocked(sessionId),
   logtailStart: (input: LogTailStartInput) =>
     G.LogTailStart(input as any) as unknown as Promise<string>,
   logtailStop: (tailId: string) => G.LogTailStop(tailId),
