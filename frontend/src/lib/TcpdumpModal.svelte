@@ -239,15 +239,26 @@
     // probe + interface list are only needed to START a capture from the
     // Start form, so for an already-running capture we can skip them.
     let attached = false;
-    try {
-      const existing = await api.tcpdumpActiveForSession(sessionId);
-      console.log("[tcpdump] onMount active-for-session", sessionId, existing);
-      if (existing.dump_id) {
-        await attach(existing);
-        attached = true;
+    // Poll for the running capture. When embedded (a detached window), the
+    // capture may still be registering on the backend - starting tcpdump does
+    // a slow remote sudo/probe round-trip and the session->dump map is only
+    // filled when StartTcpdump returns, which can land AFTER the detach window
+    // has already opened and queried. So retry a few times before falling back
+    // to the Start form, instead of showing an empty pane forever.
+    const attempts = embedded ? 15 : 1; // ~15 x 500ms = up to 7.5s
+    for (let i = 0; i < attempts && !attached; i++) {
+      try {
+        const existing = await api.tcpdumpActiveForSession(sessionId);
+        console.log("[tcpdump] onMount active-for-session", sessionId, "attempt", i, existing);
+        if (existing.dump_id) {
+          await attach(existing);
+          attached = true;
+          break;
+        }
+      } catch (e) {
+        console.warn("[tcpdump] re-attach query failed", e);
       }
-    } catch (e) {
-      console.warn("[tcpdump] re-attach failed", e);
+      if (embedded && !attached) await new Promise((r) => setTimeout(r, 500));
     }
 
     // Skip the probe entirely when embedded and already attached - the Start
