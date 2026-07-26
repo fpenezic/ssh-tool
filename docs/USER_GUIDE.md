@@ -270,6 +270,12 @@ shows you at a glance which hosts are up.
 - A folder can opt out entirely: set **Liveness probe → Off** in the
   folder's settings (tri-state, inherited by children) for hosts you
   never want probed (for example anything that alarms on port scans).
+- **Dynamic inventory hosts** are covered by a separate toggle in the
+  same Settings section ("Also probe dynamic inventory hosts"). With it
+  on, dynamic entries (Proxmox, Hetzner, Ansible, …) get the same dot,
+  but only for entries the provider reports as **running** - a stopped
+  VM keeps its provider status and isn't probed. Each entry probes with
+  its folder's SSH port, network profile and jump host.
 
 ### Connection editor
 

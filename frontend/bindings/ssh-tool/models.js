@@ -1296,6 +1296,87 @@ export class DynamicFolderUpdateInput {
 }
 
 /**
+ * DynamicProbeRequest asks to probe a set of dynamic-inventory entries in one
+ * folder (external ids as the frontend renders them).
+ */
+export class DynamicProbeRequest {
+    /**
+     * Creates a new DynamicProbeRequest instance.
+     * @param {Partial<DynamicProbeRequest>} [$$source = {}] - The source object to create the DynamicProbeRequest.
+     */
+    constructor($$source = {}) {
+        if (!("folder_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["folder_id"] = "";
+        }
+        if (!("entry_ids" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["entry_ids"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DynamicProbeRequest instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {DynamicProbeRequest}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("entry_ids" in $$parsedSource) {
+            $$parsedSource["entry_ids"] = $$createField1_0($$parsedSource["entry_ids"]);
+        }
+        return new DynamicProbeRequest(/** @type {Partial<DynamicProbeRequest>} */($$parsedSource));
+    }
+}
+
+/**
+ * DynamicProbeResult mirrors ProbeResult but keys on the entry id.
+ */
+export class DynamicProbeResult {
+    /**
+     * Creates a new DynamicProbeResult instance.
+     * @param {Partial<DynamicProbeResult>} [$$source = {}] - The source object to create the DynamicProbeResult.
+     */
+    constructor($$source = {}) {
+        if (!("entry_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["entry_id"] = "";
+        }
+        if (!("state" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DynamicProbeResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {DynamicProbeResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DynamicProbeResult(/** @type {Partial<DynamicProbeResult>} */($$parsedSource));
+    }
+}
+
+/**
  * ExportSubtreeRequest selects what to export and how. Roots is a list
  * of folder ids whose entire subtree (and contained connections) should
  * be included. Extra is a flat list of connection ids selected outside

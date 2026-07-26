@@ -1198,6 +1198,7 @@
 
   let wgBindPhysical = $state(false);
   let livenessProbe = $state(false);
+  let livenessDynamic = $state(false);
   let livenessIntervalSec = $state(60);
 
   $effect(() => {
@@ -1209,6 +1210,7 @@
     }
     if (activeSection === "liveness") {
       api.settingsGet("liveness_probe_enabled").then((v) => (livenessProbe = v === "1")).catch(() => {});
+      api.settingsGet("liveness_probe_dynamic").then((v) => (livenessDynamic = v === "1")).catch(() => {});
       api.settingsGet("liveness_probe_interval_sec").then((v) => {
         const n = parseInt(v, 10);
         if (Number.isFinite(n) && n >= 10) livenessIntervalSec = n;
@@ -1233,6 +1235,16 @@
       probeState.setEnabled(on);
     } catch (e) {
       toast.err("Liveness probe toggle failed: " + errMsg(e));
+    }
+  }
+
+  async function toggleLivenessDynamic(on: boolean) {
+    try {
+      await api.settingsSet("liveness_probe_dynamic", on ? "1" : "0");
+      livenessDynamic = on;
+      probeState.setDynEnabled(on);
+    } catch (e) {
+      toast.err("Dynamic probe toggle failed: " + errMsg(e));
     }
   }
 
@@ -2979,6 +2991,26 @@
     </fieldset>
 
     {#if livenessProbe}
+      <fieldset class="check-cards" style="margin-top:0.8rem">
+        <label class:active={livenessDynamic}>
+          <input
+            type="checkbox"
+            checked={livenessDynamic}
+            onchange={(e) => toggleLivenessDynamic((e.target as HTMLInputElement).checked)}
+          />
+          <div>
+            <div class="mode-name">Also probe dynamic inventory hosts</div>
+            <div class="mode-desc">
+              Probe dynamic-inventory entries (Proxmox, Hetzner, Ansible, …) too,
+              not just saved connections. Only entries the provider reports as
+              running are probed - a stopped VM keeps its provider status and
+              gets no dot. Each entry uses its folder's SSH port, network
+              profile and jump host, same as connecting to it would.
+            </div>
+          </div>
+        </label>
+      </fieldset>
+
       <label class="inline-num" style="margin-top:0.8rem; display:block">
         Re-probe every
         <input

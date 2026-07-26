@@ -27,6 +27,8 @@ class ProbeStore {
   // Enabled mirrors the global setting; loaded once, refreshable from Settings.
   private enabled = false;
   private enabledLoaded = false;
+  // dynEnabled gates probing of dynamic-inventory entries (separate setting).
+  private dynEnabled = false;
   // Re-probe cadence in seconds (configurable in Settings, floored at 10s).
   private reprobeSec = DEFAULT_REPROBE_SEC;
 
@@ -34,6 +36,11 @@ class ProbeStore {
   // can appear once per rendered row; count so overlapping registers/unregisters
   // (re-render churn) don't drop a still-visible id.
   private visible = new Map<string, number>();
+  // Visible dynamic entries, keyed "dyn:<entryId>" -> { folderId, count }. Kept
+  // separate because they probe through a different backend call (folder +
+  // entry ids) and their states are keyed by the same "dyn:<entryId>" the tree
+  // rows use.
+  private dynVisible = new Map<string, { folderId: string; count: number }>();
 
   private reprobeTimer: ReturnType<typeof setInterval> | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -50,12 +57,28 @@ class ProbeStore {
       this.enabled = false;
     }
     try {
+      this.dynEnabled = (await api.settingsGet("liveness_probe_dynamic")) === "1";
+    } catch { this.dynEnabled = false; }
+    try {
       const raw = await api.settingsGet("liveness_probe_interval_sec");
       const n = parseInt(raw, 10);
       if (Number.isFinite(n) && n >= MIN_REPROBE_SEC) this.reprobeSec = n;
     } catch { /* keep default */ }
     this.enabledLoaded = true;
     return this.enabled;
+  }
+
+  setDynEnabled(on: boolean) {
+    this.dynEnabled = on;
+    if (!on) {
+      // Drop dynamic states so their dots clear immediately.
+      for (const key of [...this.states.keys()]) {
+        if (key.startsWith("dyn:")) this.states.delete(key);
+      }
+      this.version++;
+    } else if (this.enabled) {
+      this.probeVisible();
+    }
   }
 
   intervalSec(): number {
@@ -113,7 +136,35 @@ class ProbeStore {
     } else {
       this.visible.set(id, n);
     }
-    if (this.visible.size === 0) this.stopTimer();
+    this.maybeStopTimer();
+  }
+
+  // registerDynamic/unregisterDynamic track visible dynamic-inventory entries.
+  // key is "dyn:<entryId>" (the same the tree row uses); folderId is needed for
+  // the backend probe call. Requires BOTH the global and the dynamic setting.
+  registerDynamic(folderId: string, key: string) {
+    if (!this.enabled || !this.dynEnabled || !folderId || !key) return;
+    const e = this.dynVisible.get(key);
+    if (e) {
+      e.count++;
+    } else {
+      this.dynVisible.set(key, { folderId, count: 1 });
+      this.ensureTimer();
+      this.scheduleProbe();
+    }
+  }
+
+  unregisterDynamic(key: string) {
+    if (!key) return;
+    const e = this.dynVisible.get(key);
+    if (!e) return;
+    e.count--;
+    if (e.count <= 0) this.dynVisible.delete(key);
+    this.maybeStopTimer();
+  }
+
+  private maybeStopTimer() {
+    if (this.visible.size === 0 && this.dynVisible.size === 0) this.stopTimer();
   }
 
   private scheduleProbe() {
@@ -139,20 +190,38 @@ class ProbeStore {
   private async probeVisible() {
     if (!this.enabled || this.inFlight) return;
     const ids = [...this.visible.keys()];
-    if (ids.length === 0) return;
+    // Group visible dynamic entries by folder for the batched backend call.
+    const dynByFolder = new Map<string, string[]>();
+    if (this.dynEnabled) {
+      for (const [key, e] of this.dynVisible) {
+        const entryId = key.slice(4); // strip "dyn:"
+        const arr = dynByFolder.get(e.folderId) ?? [];
+        arr.push(entryId);
+        dynByFolder.set(e.folderId, arr);
+      }
+    }
+    if (ids.length === 0 && dynByFolder.size === 0) return;
     this.inFlight = true;
     try {
-      const results = await api.probeConnections(ids);
       let changed = false;
-      for (const r of results ?? []) {
-        if (this.states.get(r.connection_id) !== r.state) {
-          this.states.set(r.connection_id, r.state as ProbeState);
+      const apply = (id: string, state: ProbeState) => {
+        if (this.states.get(id) !== state) {
+          this.states.set(id, state);
           changed = true;
         }
+      };
+      if (ids.length > 0) {
+        const results = await api.probeConnections(ids);
+        for (const r of results ?? []) apply(r.connection_id, r.state as ProbeState);
       }
-      // Drop states for ids no longer visible.
+      for (const [folderId, entryIds] of dynByFolder) {
+        const results = await api.probeDynamicEntries(folderId, entryIds);
+        for (const r of results ?? []) apply("dyn:" + r.entry_id, r.state as ProbeState);
+      }
+      // Drop states for ids no longer visible (static or dynamic).
       for (const id of [...this.states.keys()]) {
-        if (!this.visible.has(id)) {
+        const live = id.startsWith("dyn:") ? this.dynVisible.has(id) : this.visible.has(id);
+        if (!live) {
           this.states.delete(id);
           changed = true;
         }

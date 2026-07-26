@@ -9,6 +9,7 @@ import (
 
 	"ssh-tool/internal/resolver"
 	sshlayer "ssh-tool/internal/ssh"
+	"ssh-tool/internal/store"
 )
 
 // probeTimeout bounds a single liveness TCP connect. Generous enough that a
@@ -77,6 +78,17 @@ func (a *App) probeOne(id string) string {
 		return probeUnknown
 	}
 	if !s.ProbeLiveness {
+		return probeUnknown
+	}
+	return a.probeResolved(s)
+}
+
+// probeResolved TCP-probes an already-resolved connection and returns its
+// state. Shared by static connections (probeOne) and dynamic-inventory entries
+// (probeDynamicOne), which resolve their host/port/profile/jump through the
+// same folder cascade.
+func (a *App) probeResolved(s *store.ResolvedSettings) string {
+	if s.Hostname == "" {
 		return probeUnknown
 	}
 	port := s.Port
@@ -152,4 +164,90 @@ func (a *App) probeOne(id string) string {
 	}
 	_ = conn.Close()
 	return probeUp
+}
+
+// DynamicProbeRequest asks to probe a set of dynamic-inventory entries in one
+// folder (external ids as the frontend renders them).
+type DynamicProbeRequest struct {
+	FolderID string   `json:"folder_id"`
+	EntryIDs []string `json:"entry_ids"`
+}
+
+// DynamicProbeResult mirrors ProbeResult but keys on the entry id.
+type DynamicProbeResult struct {
+	EntryID string `json:"entry_id"`
+	State   string `json:"state"`
+}
+
+// ProbeDynamicEntries TCP-probes dynamic-inventory entries. Gated by the
+// separate liveness_probe_dynamic setting. Only entries the provider reports as
+// "running" are probed (a stopped VM has no SSH to reach); anything else is
+// unknown. Each entry resolves its host/port/profile/jump through the same
+// folder cascade a real dynamic connect uses, then rides probeResolved.
+func (a *App) ProbeDynamicEntries(req DynamicProbeRequest) []DynamicProbeResult {
+	out := make([]DynamicProbeResult, len(req.EntryIDs))
+	if len(req.EntryIDs) == 0 {
+		return out
+	}
+	if !a.boolSetting("liveness_probe_enabled") || !a.boolSetting("liveness_probe_dynamic") {
+		for i, id := range req.EntryIDs {
+			out[i] = DynamicProbeResult{EntryID: id, State: probeUnknown}
+		}
+		return out
+	}
+
+	folders, ferr := a.db.ListFolders()
+	if ferr != nil {
+		for i, id := range req.EntryIDs {
+			out[i] = DynamicProbeResult{EntryID: id, State: probeUnknown}
+		}
+		return out
+	}
+	// Per-folder jump credential (same lookup dynamic connect uses).
+	jumpCred := ""
+	if df, err := a.db.GetDynamicFolder(req.FolderID); err == nil && df != nil {
+		if s, ok := df.Config["jump_credential_id"].(string); ok {
+			jumpCred = s
+		}
+	}
+
+	sem := make(chan struct{}, probeConcurrency)
+	var wg sync.WaitGroup
+	for i, id := range req.EntryIDs {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, id string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			out[i] = DynamicProbeResult{EntryID: id, State: a.probeDynamicOne(req.FolderID, id, folders, jumpCred)}
+		}(i, id)
+	}
+	wg.Wait()
+	return out
+}
+
+func (a *App) probeDynamicOne(folderID, entryID string, folders []store.Folder, jumpCred string) string {
+	entry, err := a.db.GetDynamicEntry(entryID)
+	if err != nil || entry == nil || entry.FolderID != folderID {
+		return probeUnknown
+	}
+	// Only probe running hosts - a stopped VM has no SSH to reach.
+	if entry.Status != "running" {
+		return probeUnknown
+	}
+	syntheticConn := store.Connection{
+		ID:        "dyn:" + entryID,
+		FolderID:  &folderID,
+		Name:      entry.Name,
+		Hostname:  entry.Hostname,
+		Overrides: store.InheritableSettings{},
+	}
+	// Lift Ansible per-host vars (port/user/jump) exactly like a real connect,
+	// so the resolved port/profile/jump match what a connect would use.
+	applyAnsibleVarsToConnection(&syntheticConn, entry.Raw, jumpCred)
+	s := resolver.ResolveWith(syntheticConn, folders)
+	if !s.ProbeLiveness {
+		return probeUnknown
+	}
+	return a.probeResolved(&s)
 }

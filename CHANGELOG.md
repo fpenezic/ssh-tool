@@ -35,7 +35,9 @@ in alpha upstream.
   on a configurable interval, default 60s), so it stays cheap even with hundreds
   of connections. It routes through a connection's WireGuard profile or an
   already-open bastion when there is one, and never brings a tunnel or bastion
-  up just to probe. Any folder can opt out in its settings.
+  up just to probe. Any folder can opt out in its settings, and a separate
+  toggle extends probing to dynamic-inventory hosts (only entries the provider
+  reports as running).
 
 ### Fixed / Changed
 

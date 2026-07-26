@@ -310,6 +310,18 @@
     return () => { for (const id of ids) probeState.unregister(id); };
   });
 
+  // Dynamic-inventory entries probe through a separate call (folder + entry
+  // ids). Register only running entries (a stopped VM has no SSH); the store
+  // no-ops unless both the global and the dynamic setting are on.
+  $effect(() => {
+    if (!expanded) return;
+    const keys = [...dynamicBuckets.hosts, ...dynamicBuckets.guests]
+      .filter((e) => e.status === "running")
+      .map((e) => "dyn:" + e.id);
+    for (const k of keys) probeState.registerDynamic(folder.id, k);
+    return () => { for (const k of keys) probeState.unregisterDynamic(k); };
+  });
+
   // Set of connection_ids that currently have at least one connected session.
   // Used to highlight tree rows for live connections.
   const liveConnIds = $derived(
@@ -756,6 +768,7 @@
           </div>
           {#each dynamicBuckets.hosts as e (e.id)}
             {@const HIc = dynamicEntryIcon(e.kind)}
+            {@const dprobe = probeState.stateOf("dyn:" + e.id)}
             <div
               class="row dyn-entry"
               class:stopped={e.status === "stopped"}
@@ -780,6 +793,9 @@
               }}
               title="Click to inspect, double-click to connect ({e.hostname})"
             >
+              <span class="dyn-probe" class:probe-up={dprobe === "up"} class:probe-down={dprobe === "down"}
+                title={dprobe === "up" ? "Reachable" : dprobe === "down" ? "Unreachable" : ""}
+              >{dprobe === "up" || dprobe === "down" ? "○" : ""}</span>
               <span class="dyn-icon"><HIc size={13} /></span>
               <span class="dyn-name">{e.name}</span>
               <span class="dyn-host mono">{e.hostname}</span>
@@ -793,6 +809,7 @@
           </div>
           {#each dynamicBuckets.guests as e (e.id)}
             {@const GIc = dynamicEntryIcon(e.kind)}
+            {@const dprobe = probeState.stateOf("dyn:" + e.id)}
             <div
               class="row dyn-entry"
               class:stopped={e.status === "stopped"}
@@ -817,6 +834,9 @@
               }}
               title="Click to inspect, double-click to connect ({e.hostname})"
             >
+              <span class="dyn-probe" class:probe-up={dprobe === "up"} class:probe-down={dprobe === "down"}
+                title={dprobe === "up" ? "Reachable" : dprobe === "down" ? "Unreachable" : ""}
+              >{dprobe === "up" || dprobe === "down" ? "○" : ""}</span>
               <span class="dyn-icon"><GIc size={13} /></span>
               <span class="dyn-kind mono">{e.kind === "guest_vm" ? "VM" : "LXC"}</span>
               <span class="dyn-name">{e.name}</span>
@@ -1003,6 +1023,10 @@
      reachable, red = unreachable. Unknown shows nothing. */
   .chev.dot.probe-up { color: var(--green); }
   .chev.dot.probe-down { color: var(--red); }
+  /* Dynamic-entry probe dot (same ○ semantics, sized to the dyn row). */
+  .dyn-probe { width: 0.8rem; text-align: center; font-size: 0.7rem; flex: none; }
+  .dyn-probe.probe-up { color: var(--green); }
+  .dyn-probe.probe-down { color: var(--red); }
   /* Touch: bigger rows + a wider chevron hit area so folders are easy to
      expand with a fingertip. The whole folder row also toggles on tap
      (see onFolderRowClick), this just makes the chevron itself forgiving. */

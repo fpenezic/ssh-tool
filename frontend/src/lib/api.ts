@@ -1260,6 +1260,8 @@ export const api = {
   settingsSet: (key: string, value: string) => G.SettingsSet(key, value),
   probeConnections: (ids: string[]) =>
     G.ProbeConnections(ids) as unknown as Promise<ProbeResult[]>,
+  probeDynamicEntries: (folderId: string, entryIds: string[]) =>
+    G.ProbeDynamicEntries({ folder_id: folderId, entry_ids: entryIds } as any) as unknown as Promise<DynamicProbeResult[]>,
   settingsDelete: (key: string) => G.SettingsDelete(key),
 
   sshRespondHostKey: (challengeId: string, accept: boolean, remember: boolean, hostname: string, port: number, keyType: string, keyB64: string, fingerprint: string) =>
@@ -1574,6 +1576,11 @@ export interface TcpdumpActiveInfo {
 
 export interface ProbeResult {
   connection_id: string;
+  state: "up" | "down" | "unknown";
+}
+
+export interface DynamicProbeResult {
+  entry_id: string;
   state: "up" | "down" | "unknown";
 }
 
