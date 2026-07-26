@@ -6882,6 +6882,11 @@ func (a *App) TcpdumpActiveForSession(sessionID string) *TcpdumpActiveInfo {
 	defer a.tcpdumpMu.Unlock()
 	dumpID := a.tcpdumpBySession[sessionID]
 	if dumpID == "" {
+		keys := make([]string, 0, len(a.tcpdumpBySession))
+		for k := range a.tcpdumpBySession {
+			keys = append(keys, k)
+		}
+		log.Printf("tcpdump: ActiveForSession(%s) MISS - live captures keyed by: %v", sessionID, keys)
 		return &TcpdumpActiveInfo{}
 	}
 	h := a.tcpdumps[dumpID]
