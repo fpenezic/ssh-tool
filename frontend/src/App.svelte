@@ -84,9 +84,6 @@
   // URL like "/?detached=<tabId>". When that param exists we render a
   // minimal layout (just TerminalArea + a Redock button) instead of
   // the full main-window UI.
-  if (typeof window !== "undefined") {
-    console.log("[app] window URL", window.location.href, "search=", window.location.search, "hash=", window.location.hash);
-  }
   // Read routing params from the query string, falling back to the hash. Some
   // WebView2 builds drop the query on the initial navigation but keep the
   // hash, so windows opened with /?tcpdump=... or /#tcpdump=... both work.

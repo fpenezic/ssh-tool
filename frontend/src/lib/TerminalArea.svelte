@@ -192,16 +192,6 @@
   // on the backend and both windows re-attach via the snapshot watermark). If
   // the window fails to open, leave the modal as-is.
   async function detachTcpdump(sessionId: string) {
-    // Diagnostic: confirm the MAIN window (where the capture runs) sees an
-    // active capture for exactly this sessionId before we hand it to the new
-    // window. If this logs dump_id:'' too, the capture is keyed under a
-    // different id than the pane's sessionId.
-    try {
-      const mine = await api.tcpdumpActiveForSession(sessionId);
-      console.log("[tcpdump] detach: main window sees for", sessionId, mine);
-    } catch (e) {
-      console.warn("[tcpdump] detach: main-window active check failed", e);
-    }
     try {
       await api.windowOpenTcpdump(sessionId);
       tcpdump.detach(sessionId);

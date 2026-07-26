@@ -249,15 +249,12 @@
     for (let i = 0; i < attempts && !attached; i++) {
       try {
         const existing = await api.tcpdumpActiveForSession(sessionId);
-        console.log("[tcpdump] onMount active-for-session", sessionId, "attempt", i, existing);
         if (existing.dump_id) {
           await attach(existing);
           attached = true;
           break;
         }
-      } catch (e) {
-        console.warn("[tcpdump] re-attach query failed", e);
-      }
+      } catch { /* transient - retry below */ }
       if (embedded && !attached) await new Promise((r) => setTimeout(r, 500));
     }
 
@@ -488,10 +485,8 @@
       // packets with the snapshot history.
       packetQueue = packetQueue.filter((p) => (p.seq ?? 0) > attachWatermark);
       packets = snap.packets as Packet[];
-      console.log("[tcpdump] attach seeded", { id, cum: snap.cum, snapPackets: packets.length, viewMode });
-    } catch (e) {
+    } catch {
       // No snapshot (capture vanished) - fall back to live-only.
-      console.warn("[tcpdump] snapshot failed", e);
     }
   }
 

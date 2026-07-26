@@ -6785,7 +6785,6 @@ func (a *App) TcpdumpStart(in TcpdumpStartInput) (string, error) {
 	var batchStopOnce sync.Once
 	stopBatch := func() { batchStopOnce.Do(func() { close(batchDone) }) }
 	onLifecycle := func(event, msg string) {
-		log.Printf("tcpdump: lifecycle session=%s dump=%s event=%s msg=%q", sid, dumpID, event, msg)
 		// Capture ended on its own (hit the packet cap, process died) -
 		// drop the session→dump index so a later window doesn't try to
 		// re-attach to a dead capture. Guard on the index still pointing
@@ -6818,7 +6817,6 @@ func (a *App) TcpdumpStart(in TcpdumpStartInput) (string, error) {
 	a.tcpdumps[dumpID] = h
 	a.tcpdumpBySession[in.SessionID] = dumpID
 	a.tcpdumpMu.Unlock()
-	log.Printf("tcpdump: registered session=%s dump=%s (map now has this key)", in.SessionID, dumpID)
 	// Auto-feed the cached password to the sudo prompt, if requested.
 	// The lifecycle handler already emitted "needs_password"; sending
 	// here unblocks the awaitPwd channel inside StartTcpdump before the
@@ -6887,11 +6885,6 @@ func (a *App) TcpdumpActiveForSession(sessionID string) *TcpdumpActiveInfo {
 	defer a.tcpdumpMu.Unlock()
 	dumpID := a.tcpdumpBySession[sessionID]
 	if dumpID == "" {
-		keys := make([]string, 0, len(a.tcpdumpBySession))
-		for k := range a.tcpdumpBySession {
-			keys = append(keys, k)
-		}
-		log.Printf("tcpdump: ActiveForSession(%s) MISS - live captures keyed by: %v", sessionID, keys)
 		return &TcpdumpActiveInfo{}
 	}
 	h := a.tcpdumps[dumpID]
