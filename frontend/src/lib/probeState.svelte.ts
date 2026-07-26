@@ -14,7 +14,8 @@ import { api } from "./api";
 
 export type ProbeState = "up" | "down" | "unknown";
 
-const REPROBE_MS = 30_000;
+const DEFAULT_REPROBE_SEC = 60;
+const MIN_REPROBE_SEC = 10;
 const DEBOUNCE_MS = 250;
 
 class ProbeStore {
@@ -26,6 +27,8 @@ class ProbeStore {
   // Enabled mirrors the global setting; loaded once, refreshable from Settings.
   private enabled = false;
   private enabledLoaded = false;
+  // Re-probe cadence in seconds (configurable in Settings, floored at 10s).
+  private reprobeSec = DEFAULT_REPROBE_SEC;
 
   // Reference counts of visible registrations per connection id. A connection
   // can appear once per rendered row; count so overlapping registers/unregisters
@@ -34,6 +37,10 @@ class ProbeStore {
 
   private reprobeTimer: ReturnType<typeof setInterval> | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  // Guards against overlapping rounds: a big "expand all" probe can take longer
+  // than the 30s interval, and firing a second round on top of it would double
+  // the socket load and thrash the worker pool. Skip if one is still running.
+  private inFlight = false;
 
   async loadEnabled(): Promise<boolean> {
     if (this.enabledLoaded) return this.enabled;
@@ -42,8 +49,27 @@ class ProbeStore {
     } catch {
       this.enabled = false;
     }
+    try {
+      const raw = await api.settingsGet("liveness_probe_interval_sec");
+      const n = parseInt(raw, 10);
+      if (Number.isFinite(n) && n >= MIN_REPROBE_SEC) this.reprobeSec = n;
+    } catch { /* keep default */ }
     this.enabledLoaded = true;
     return this.enabled;
+  }
+
+  intervalSec(): number {
+    return this.reprobeSec;
+  }
+
+  // setIntervalSec is called by the Settings input; restarts the timer with the
+  // new cadence (floored at MIN_REPROBE_SEC).
+  setIntervalSec(sec: number) {
+    this.reprobeSec = Math.max(MIN_REPROBE_SEC, Math.floor(sec) || DEFAULT_REPROBE_SEC);
+    if (this.reprobeTimer) {
+      this.stopTimer();
+      this.ensureTimer();
+    }
   }
 
   // setEnabled is called by the Settings toggle so the change takes effect
@@ -100,7 +126,7 @@ class ProbeStore {
 
   private ensureTimer() {
     if (this.reprobeTimer || !this.enabled) return;
-    this.reprobeTimer = setInterval(() => this.probeVisible(), REPROBE_MS);
+    this.reprobeTimer = setInterval(() => this.probeVisible(), this.reprobeSec * 1000);
   }
 
   private stopTimer() {
@@ -111,9 +137,10 @@ class ProbeStore {
   }
 
   private async probeVisible() {
-    if (!this.enabled) return;
+    if (!this.enabled || this.inFlight) return;
     const ids = [...this.visible.keys()];
     if (ids.length === 0) return;
+    this.inFlight = true;
     try {
       const results = await api.probeConnections(ids);
       let changed = false;
@@ -133,6 +160,8 @@ class ProbeStore {
       if (changed) this.version++;
     } catch {
       // transient - keep last states, try again next interval
+    } finally {
+      this.inFlight = false;
     }
   }
 }

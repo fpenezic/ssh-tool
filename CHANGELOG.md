@@ -28,12 +28,12 @@ in alpha upstream.
   the session is still up, and can detach into its own window so you can watch
   logs while typing (closing the window ends the tail).
 - **Liveness probe for expanded folders.** Turn on
-  **Settings -> Network -> "Liveness probe for expanded folders"** to see a
-  reachability dot on connection rows inside folders you have open: a TCP
-  connect to the SSH port shows green (reachable) or red (unreachable); hosts
-  that aren't probed stay blank. Only connections in currently-expanded folders
-  are probed (re-checked every ~30s), so it stays cheap even with hundreds of
-  connections. It routes through a connection's WireGuard profile or an
+  **Settings -> Network -> Liveness probe** to see a reachability dot on
+  connection rows inside folders you have open: a TCP connect to the SSH port
+  shows green (reachable) or red (unreachable); hosts that aren't probed stay
+  blank. Only connections in currently-expanded folders are probed (re-checked
+  on a configurable interval, default 60s), so it stays cheap even with hundreds
+  of connections. It routes through a connection's WireGuard profile or an
   already-open bastion when there is one, and never brings a tunnel or bastion
   up just to probe. Any folder can opt out in its settings.
 

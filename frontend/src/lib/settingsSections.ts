@@ -8,6 +8,7 @@ export type SectionId =
   | "appearance"
   | "connection"
   | "network"
+  | "liveness"
   | "terminal"
   | "recording"
   | "browser"
@@ -71,6 +72,7 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
   { id: "snippets",    title: "Snippets",          group: "Appearance",     keywords: ["commands", "macros"] },
   { id: "workspaces",  title: "Workspaces",        group: "Appearance",     keywords: ["layout", "tabs", "session set"] },
   { id: "network",     title: "Network profiles",  group: "Network",        keywords: ["wireguard", "netbird", "tailscale", "vpn", "wg", "tunnel"] },
+  { id: "liveness",    title: "Liveness probe",    group: "Network",        keywords: ["ping", "reachability", "up", "down", "probe", "status", "alive"] },
   { id: "recording",   title: "Session recording", group: "Security",       keywords: ["asciicast", "asciinema", "capture", "replay"] },
   { id: "vault",       title: "Vault",             group: "Security",       keywords: ["passphrase", "lock", "encryption", "master", "auto-unlock"] },
   { id: "external",    title: "External secrets",  group: "Security",       keywords: ["keepass", "kdbx", "bitwarden", "vaultwarden", "infisical", "secret", "password manager", "2fa"] },

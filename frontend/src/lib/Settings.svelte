@@ -1198,6 +1198,7 @@
 
   let wgBindPhysical = $state(false);
   let livenessProbe = $state(false);
+  let livenessIntervalSec = $state(60);
 
   $effect(() => {
     if (activeSection === "network") {
@@ -1205,7 +1206,13 @@
       credentials.load().catch(() => {});
       refreshPlugins();
       api.wgBindPhysicalGet().then((v) => (wgBindPhysical = v)).catch(() => {});
+    }
+    if (activeSection === "liveness") {
       api.settingsGet("liveness_probe_enabled").then((v) => (livenessProbe = v === "1")).catch(() => {});
+      api.settingsGet("liveness_probe_interval_sec").then((v) => {
+        const n = parseInt(v, 10);
+        if (Number.isFinite(n) && n >= 10) livenessIntervalSec = n;
+      }).catch(() => {});
     }
   });
 
@@ -1226,6 +1233,17 @@
       probeState.setEnabled(on);
     } catch (e) {
       toast.err("Liveness probe toggle failed: " + errMsg(e));
+    }
+  }
+
+  async function saveLivenessInterval(sec: number) {
+    const n = Math.max(10, Math.floor(sec) || 60);
+    livenessIntervalSec = n;
+    try {
+      await api.settingsSet("liveness_probe_interval_sec", String(n));
+      probeState.setIntervalSec(n);
+    } catch (e) {
+      toast.err("Interval save failed: " + errMsg(e));
     }
   }
 
@@ -2679,26 +2697,6 @@
         </div>
       </label>
 
-      <label class:active={livenessProbe}>
-        <input
-          type="checkbox"
-          checked={livenessProbe}
-          onchange={(e) => toggleLivenessProbe((e.target as HTMLInputElement).checked)}
-        />
-        <div>
-          <div class="mode-name">Liveness probe for expanded folders</div>
-          <div class="mode-desc">
-            Shows a reachability dot on connection rows inside folders you have
-            open: a TCP connect to the SSH port paints green (reachable) or red
-            (unreachable); hosts that aren't probed stay blank. Only connections
-            in currently-expanded folders are probed (re-checked every 30s), so
-            it scales to a large tree. Routes through a connection's WireGuard
-            profile or an already-open bastion when there is one; it never brings
-            a tunnel or bastion up just to probe. A folder can opt out in its
-            settings.
-          </div>
-        </div>
-      </label>
     </fieldset>
 
     <h3 style="margin-top:1.2rem">Profiles</h3>
@@ -2946,6 +2944,53 @@
         machine first, or use NetBird (peer-per-device) when you routinely
         connect from more than one machine.
       </p>
+    {/if}
+  </div>
+
+  {:else if activeSection === "liveness"}
+  <div class="group">
+    <h2>Liveness probe</h2>
+    <p class="hint">
+      Show a reachability dot on connection rows inside folders you have open.
+      Green means a TCP connect to the SSH port succeeded, red means it was
+      refused or timed out; hosts that aren't probed stay blank. Only
+      connections in currently-expanded folders are probed, so it stays cheap
+      on a large tree.
+    </p>
+
+    <fieldset class="check-cards" style="margin-top:1rem">
+      <label class:active={livenessProbe}>
+        <input
+          type="checkbox"
+          checked={livenessProbe}
+          onchange={(e) => toggleLivenessProbe((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Enable liveness probe</div>
+          <div class="mode-desc">
+            Routes through a connection's WireGuard profile or an already-open
+            bastion when there is one; it never brings a tunnel or bastion up
+            just to probe (a host behind a sleeping VPN or an unopened bastion
+            shows no dot rather than a false red). Any folder can opt out in its
+            own settings.
+          </div>
+        </div>
+      </label>
+    </fieldset>
+
+    {#if livenessProbe}
+      <label class="inline-num" style="margin-top:0.8rem; display:block">
+        Re-probe every
+        <input
+          type="number"
+          min="10"
+          step="5"
+          style="width:5rem"
+          value={livenessIntervalSec}
+          onchange={(e) => saveLivenessInterval(parseInt((e.target as HTMLInputElement).value, 10))}
+        />
+        seconds (minimum 10)
+      </label>
     {/if}
   </div>
 

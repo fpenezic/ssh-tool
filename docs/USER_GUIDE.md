@@ -250,8 +250,9 @@ that wear it.
 Optional reachability dots on connection rows, so opening a folder
 shows you at a glance which hosts are up.
 
-- Enable it globally under **Settings → Network → "Liveness probe for
-  expanded folders"** (off by default).
+- Enable it under **Settings → Network → Liveness probe** (off by
+  default). The re-probe interval (default 60s, minimum 10s) is
+  configurable there.
 - With it on, a hollow ○ appears on connection rows inside folders you
   have **expanded**: **green** = a TCP connect to the SSH port
   succeeded, **red** = it was refused or timed out. Rows that aren't

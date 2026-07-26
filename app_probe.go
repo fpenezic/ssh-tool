@@ -11,15 +11,17 @@ import (
 	sshlayer "ssh-tool/internal/ssh"
 )
 
-// probeTimeout bounds a single liveness TCP connect. Shorter than the auto-mode
-// directProbeTimeout (3s) because a tree dot wants a quick answer, not a
-// thorough reachability decision.
-const probeTimeout = 2 * time.Second
+// probeTimeout bounds a single liveness TCP connect. Generous enough that a
+// slow-but-reachable host (over WireGuard, through a bastion, or behind slow
+// DNS) isn't painted red just because it answered late - a false "down" on a
+// host you can clearly reach is worse than a dot that takes a moment longer.
+const probeTimeout = 4 * time.Second
 
 // probeConcurrency caps how many liveness probes run at once. The probe set is
-// already scoped to expanded folders, but a big folder can still hold dozens of
-// hosts - bound the in-flight sockets so a fan-out can't spike.
-const probeConcurrency = 16
+// scoped to expanded folders, but "expand all" can still fan out to hundreds -
+// bound the in-flight sockets while keeping enough parallelism that a big
+// expand finishes within one re-probe interval.
+const probeConcurrency = 32
 
 // ProbeState is the tri-value result of a liveness probe.
 const (
