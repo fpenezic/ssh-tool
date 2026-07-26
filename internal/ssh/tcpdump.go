@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -245,13 +246,21 @@ func StartTcpdump(
 		cmd += fmt.Sprintf(" -c %d", maxCount)
 	}
 	// Build the BPF: the user filter AND-ed with the SSH-exclusion clause.
-	// The exclusion is assembled in-shell from $SSH_CONNECTION so it uses
-	// the real client IP + port of THIS session (any SSH port). Fields:
-	// "$1=client_ip $2=client_port $3=server_ip $4=server_port".
+	//
+	// Capturing tcpdump output over the same SSH session is a feedback loop -
+	// every captured packet is streamed back over SSH, generating more SSH
+	// packets to capture. We must drop the control connection.
+	//
+	// We used to assemble this in-shell from $SSH_CONNECTION, but that is
+	// unreliable: under sudo (env_reset) or a non-standard login shell it can
+	// be empty, and the filter silently degrades to `not ( host and port )`,
+	// which lets the SSH traffic flood through (thousands of port-22 packets).
+	// Instead we derive the exclusion in Go from the live SSH connection and
+	// bake it in as a literal, with the $SSH_CONNECTION form kept only as a
+	// runtime fallback when the Go-side addresses aren't available.
 	userBPF := opts.BPFFilter
 	if opts.ExcludeSSH {
-		// e.g. not (host 203.0.113.7 and port 51234)
-		sshExcl := `not \( host $(echo $SSH_CONNECTION | awk '{print $1}') and port $(echo $SSH_CONNECTION | awk '{print $2}') \)`
+		sshExcl := sshExclusionBPF(client)
 		if userBPF != "" {
 			// Wrap the user filter so precedence is unambiguous.
 			cmd += " " + shellQuote(userBPF) + " and " + sshExcl
@@ -549,6 +558,61 @@ func (h *TcpdumpHandle) Stop() {
 	_ = h.sess.Close()
 	h.cancel()
 	h.closed = true
+}
+
+// sshExclusionBPF builds the BPF clause that drops the SSH control connection
+// this capture rides on, so tcpdump output streamed back over SSH doesn't feed
+// itself. It derives the client IP + port from the live SSH connection's local
+// address (what the server sees as the peer), which is correct whether the hop
+// went out a physical NIC or through the userspace WireGuard netstack - unlike
+// the old $SSH_CONNECTION shell form, which came back empty over WireGuard (and
+// under sudo env_reset), silently disabling the filter and flooding port 22.
+//
+// When the Go-side address is usable we emit a literal `not ( host H and port P )`
+// using our own peer IP:port as the server sees it; otherwise we fall back to
+// the $SSH_CONNECTION shell form. We deliberately do NOT exclude by the target's
+// SSH listen port alone - that would also hide any other SSH traffic the user
+// wants to see. Only this exact control connection is dropped.
+func sshExclusionBPF(client *ssh.Client) string {
+	if client != nil {
+		if la := client.LocalAddr(); la != nil {
+			if bpf, ok := sshExclusionFromAddr(la.String()); ok {
+				return bpf
+			}
+		}
+	}
+	return sshExclusionFallback
+}
+
+// sshExclusionFallback is the runtime shell form used when we can't derive the
+// peer address in Go. Unreliable over WireGuard / under sudo (see caller), but
+// better than no exclusion.
+const sshExclusionFallback = `not \( host $(echo $SSH_CONNECTION | awk '{print $1}') and port $(echo $SSH_CONNECTION | awk '{print $2}') \)`
+
+// sshExclusionFromAddr builds the literal `not ( host H and port P )` clause
+// from a "host:port" address string, returning ok=false when the address is
+// unusable or contains characters that could corrupt the BPF.
+func sshExclusionFromAddr(addr string) (string, bool) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || host == "" || port == "" {
+		return "", false
+	}
+	if strings.ContainsAny(host, " ()\\'\"`$") || !isNumericPort(port) {
+		return "", false
+	}
+	return fmt.Sprintf(`not \( host %s and port %s \)`, host, port), true
+}
+
+func isNumericPort(s string) bool {
+	if s == "" || len(s) > 5 {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // shellQuote wraps a single argument in '...' with embedded quotes
