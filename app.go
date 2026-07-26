@@ -7146,6 +7146,26 @@ func (a *App) WindowOpenLogtail(sessionID string) (string, error) {
 		DevToolsEnabled:  true,
 	}
 	w := a.app.Window.NewWithOptions(opts)
+	// Closing the detached window stops the tail entirely (user closed it ->
+	// it's done). Wire this on the BACKEND WindowClosing event, not the
+	// frontend onDestroy: an OS window close (X) tears down the webview before
+	// Svelte's onDestroy can run, so relying on the frontend left the stream
+	// running with a stuck "detached" chip in the main window (the zombie green
+	// indicator). We stop the backend stream and tell the main window to drop
+	// the entry. Deferred 500ms because Wails v3 alpha can emit a spurious
+	// WindowClosing during creation.
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		w.OnWindowEvent(events.Common.WindowClosing, func(_ *application.WindowEvent) {
+			a.logtailMu.Lock()
+			tailID := a.logtailBySession[sessionID]
+			a.logtailMu.Unlock()
+			if tailID != "" {
+				_ = a.LogTailStop(tailID)
+			}
+			EventsEmit("logtail_closed", map[string]string{"session_id": sessionID})
+		})
+	}()
 	// Bring the new window forward. On macOS, doing window/app show ops
 	// synchronously right after NewWithOptions can crash Wails v3 alpha
 	// (window is still being wired on the main thread), so defer them a tick;
@@ -7163,10 +7183,13 @@ func (a *App) WindowOpenLogtail(sessionID string) (string, error) {
 	return name, nil
 }
 
-// LogTailNotifyRedocked mirrors TcpdumpNotifyRedocked: a detached log-tail
-// window closing tells the main window to un-detach the entry.
+// LogTailNotifyRedocked is called from inside the detached window (its onClose
+// / onDestroy). It just closes the OS window; the window's WindowClosing
+// handler (wired in WindowOpenLogtail) does the actual work - stopping the
+// stream and emitting logtail_closed so the main window drops the entry. This
+// keeps a single close path whether the user hits the OS X or the in-window
+// control.
 func (a *App) LogTailNotifyRedocked(sessionID string) {
-	EventsEmit("logtail_redocked", map[string]string{"session_id": sessionID})
 	if a.app == nil {
 		return
 	}

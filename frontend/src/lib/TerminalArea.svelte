@@ -503,13 +503,11 @@
         if (p) await reconstructTabFromPayload(p);
       } catch { /* nothing pending */ }
     });
-    // A detached log-tail window closed - bring its stream back under this
-    // window as a minimized chip (the stream is still running on the backend).
-    unsubLogtailRedock = EventsOn("logtail_redocked", (data: any) => {
+    // A detached log-tail window closed - the backend stops the stream and
+    // fires this; drop the entry entirely (no lingering chip / green blink).
+    unsubLogtailRedock = EventsOn("logtail_closed", (data: any) => {
       const sid = data?.session_id;
-      if (sid && logtail.modeOf(sid) === "detached") {
-        logtail.minimize(sid);
-      }
+      if (sid) logtail.close(sid);
     });
   });
   onDestroy(() => { unsubReceive?.(); unsubLogtailRedock?.(); });
