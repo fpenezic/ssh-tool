@@ -570,6 +570,9 @@
   // Dropbox transport: user-supplied app key (public OAuth client ID, no
   // secret - PKCE), an app-folder path, and a connected flag driven by whether
   // a refresh token sits in the vault.
+  // The exact loopback redirect URI the OAuth flow uses; the user must register
+  // it verbatim in each provider's app console.
+  let oauthRedirectUri = $state("");
   let dropboxAppKey = $state("");
   let dropboxFolder = $state("/ssh-tool");
   let hasDropboxToken = $state(false);
@@ -586,6 +589,9 @@
 
   async function syncLoadConfig() {
     try {
+      if (!oauthRedirectUri) {
+        oauthRedirectUri = await api.oauthRedirectUri();
+      }
       syncCfg = await api.syncConfigGet();
       syncUrl = syncCfg.url;
       syncUsername = syncCfg.username;
@@ -3867,10 +3873,16 @@
     <h2>Dropbox</h2>
     <p class="hint">
       Create a Dropbox app (Scoped access, App-folder) in the Dropbox App
-      Console, then paste its <strong>app key</strong> below. The app key is a
-      public client ID - there is no secret to store (PKCE). Connect once and
-      the refresh token is kept in this machine's vault.
+      Console. Enable the <code>files.content.read</code> and
+      <code>files.content.write</code> scopes (Permissions tab, then Submit).
+      Under OAuth 2, add the redirect URI below exactly, and keep
+      <strong>Allow public clients (PKCE)</strong> on. Then paste the
+      <strong>app key</strong>. No secret is stored (PKCE).
     </p>
+    <label>Redirect URI (add this to your Dropbox app)
+      <input value={oauthRedirectUri} readonly spellcheck="false" class="mono" onclick={(e) => (e.currentTarget as HTMLInputElement).select()} />
+      <span class="field-hint">Must match exactly - Dropbox rejects any other value. Click to select, then copy.</span>
+    </label>
     <label>App key
       <input bind:value={dropboxAppKey} placeholder="your Dropbox app key" spellcheck="false" class="mono" />
     </label>
@@ -3903,13 +3915,16 @@
     <h2>OneDrive</h2>
     <p class="hint">
       Register an app in the Azure Portal (Entra ID) as a
-      <strong>public client / native</strong> app with a
-      <code>http://127.0.0.1</code> redirect and the
+      <strong>Mobile and desktop applications</strong> platform (public client),
+      add the redirect URI below, and grant the
       <code>Files.ReadWrite.AppFolder</code> + <code>offline_access</code>
-      permissions, then paste its <strong>Application (client) ID</strong>
-      below. No secret is stored (PKCE). Connect once and the refresh token is
-      kept in this machine's vault.
+      delegated permissions. Then paste its
+      <strong>Application (client) ID</strong>. No secret is stored (PKCE).
     </p>
+    <label>Redirect URI (add this to your Azure app)
+      <input value={oauthRedirectUri} readonly spellcheck="false" class="mono" onclick={(e) => (e.currentTarget as HTMLInputElement).select()} />
+      <span class="field-hint">Add under Authentication - Mobile and desktop applications. Must match exactly.</span>
+    </label>
     <label>Account type
       <select bind:value={onedriveAccountType}>
         <option value="personal">Personal Microsoft account</option>
@@ -3948,11 +3963,15 @@
     <h2>Google Drive</h2>
     <p class="hint">
       Create an OAuth client of type <strong>Desktop app</strong> in the Google
-      Cloud Console with the <code>drive.appdata</code> scope, then paste its
-      <strong>client ID</strong> below. No secret is stored (PKCE). Connect once
-      and the refresh token is kept in this machine's vault. Personal projects
-      stay in "testing" mode - that is fine for your own account.
+      Cloud Console and add the redirect URI below. Add the
+      <code>drive.appdata</code> scope on the OAuth consent screen, then paste
+      the <strong>client ID</strong>. No secret is stored (PKCE). A personal
+      project can stay in "testing" mode - fine for your own account.
     </p>
+    <label>Redirect URI (add this to your Google OAuth client)
+      <input value={oauthRedirectUri} readonly spellcheck="false" class="mono" onclick={(e) => (e.currentTarget as HTMLInputElement).select()} />
+      <span class="field-hint">Add under Authorized redirect URIs. Google also accepts other loopback ports, but this one is registered here.</span>
+    </label>
     <label>OAuth client ID
       <input bind:value={gdriveClientId} placeholder="Google OAuth client ID" spellcheck="false" class="mono" />
     </label>

@@ -34,7 +34,29 @@ type OAuthEndpoints struct {
 	// ExtraAuthParams are provider quirks added to the authorization URL.
 	// Dropbox needs token_access_type=offline to get a refresh token.
 	ExtraAuthParams map[string]string
+	// RedirectPort is the fixed loopback port the redirect lands on. 0 means
+	// defaultRedirectPort. Fixed (not random) because Dropbox/Azure require the
+	// redirect_uri to be pre-registered exactly.
+	RedirectPort int
 }
+
+// defaultRedirectPort is the loopback port used when a provider does not pin
+// its own. Chosen in the high user range, unlikely to collide with a service.
+const defaultRedirectPort = 53682
+
+// RedirectURIForPort is the exact redirect URI the flow listens on for a given
+// port. The provider console must have this registered verbatim. Exposed so the
+// UI can show the user precisely what to paste.
+func RedirectURIForPort(port int) string {
+	if port == 0 {
+		port = defaultRedirectPort
+	}
+	return fmt.Sprintf("http://127.0.0.1:%d/callback", port)
+}
+
+// DefaultRedirectURI is the redirect URI for the default port - what most
+// providers should register.
+func DefaultRedirectURI() string { return RedirectURIForPort(defaultRedirectPort) }
 
 // Token is the result of an authorization or refresh. RefreshToken may be empty
 // on a refresh (Dropbox does not re-issue one); callers carry the old one
@@ -67,13 +89,22 @@ func Authorize(ctx context.Context, ep OAuthEndpoints, clientID string, openBrow
 		return Token{}, err
 	}
 
-	// Ephemeral loopback listener; the OS-picked port becomes the redirect URI.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	// Loopback listener on a FIXED port. Dropbox and Azure require the
+	// redirect_uri to exactly match a pre-registered value (port included), so a
+	// random port is unusable there - the user registers this exact URI in the
+	// provider console. Google tolerates any loopback port, but a fixed one is
+	// fine for it too, so all three share one URI.
+	port := ep.RedirectPort
+	if port == 0 {
+		port = defaultRedirectPort
+	}
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return Token{}, fmt.Errorf("open loopback listener: %w", err)
+		return Token{}, fmt.Errorf("cannot open loopback listener on %s (port in use?): %w", addr, err)
 	}
 	defer ln.Close()
-	redirectURI := fmt.Sprintf("http://127.0.0.1:%d/callback", ln.Addr().(*net.TCPAddr).Port)
+	redirectURI := RedirectURIForPort(port)
 
 	authURL := buildAuthURL(ep, clientID, redirectURI, challenge, state)
 

@@ -914,8 +914,6 @@ export function DownloadUpdate() {
 }
 
 /**
- * DropboxConfigSet saves the Dropbox app key and sync folder. It does not touch
- * the connection (refresh token) - that is DropboxConnect's job.
  * @param {string} appKey
  * @param {string} folder
  * @returns {$CancellablePromise<void>}
@@ -2061,6 +2059,18 @@ export function NetworkProfilesList() {
     return $Call.ByID(983369255).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType101($result);
     }));
+}
+
+/**
+ * DropboxConfigSet saves the Dropbox app key and sync folder. It does not touch
+ * the connection (refresh token) - that is DropboxConnect's job.
+ * OAuthRedirectURI returns the exact loopback redirect URI the PKCE flow
+ * listens on. The user must register this verbatim in their Dropbox / Azure /
+ * Google app console, so the UI shows it as a copyable value.
+ * @returns {$CancellablePromise<string>}
+ */
+export function OAuthRedirectURI() {
+    return $Call.ByID(738980398);
 }
 
 /**

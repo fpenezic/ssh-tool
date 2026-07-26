@@ -984,6 +984,7 @@ export const api = {
   syncTransportSet: (transport: string) => G.SyncTransportSet(transport),
   syncSftpConfigSet: (input: SyncSftpConfigInput) =>
     G.SyncSftpConfigSet(input as any),
+  oauthRedirectUri: () => G.OAuthRedirectURI() as Promise<string>,
   dropboxConfigSet: (appKey: string, folder: string) =>
     G.DropboxConfigSet(appKey, folder),
   dropboxConnect: () => G.DropboxConnect(),

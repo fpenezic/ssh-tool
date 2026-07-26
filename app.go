@@ -2433,6 +2433,13 @@ func (a *App) gdriveSyncTransport(cfg SyncConfig) (*syncer.GoogleDrive, error) {
 
 // DropboxConfigSet saves the Dropbox app key and sync folder. It does not touch
 // the connection (refresh token) - that is DropboxConnect's job.
+// OAuthRedirectURI returns the exact loopback redirect URI the PKCE flow
+// listens on. The user must register this verbatim in their Dropbox / Azure /
+// Google app console, so the UI shows it as a copyable value.
+func (a *App) OAuthRedirectURI() string {
+	return syncer.DefaultRedirectURI()
+}
+
 func (a *App) DropboxConfigSet(appKey, folder string) error {
 	if err := a.db.SetSetting("sync_dropbox_app_key", strings.TrimSpace(appKey)); err != nil {
 		return err
