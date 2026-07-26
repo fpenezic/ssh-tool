@@ -663,6 +663,10 @@
     }
   }
 
+  async function copyRedirectUri() {
+    await copyText(oauthRedirectUri, { label: "Redirect URI" });
+  }
+
   async function dropboxSaveConfig() {
     syncErr = null;
     try {
@@ -3880,7 +3884,10 @@
       <strong>app key</strong>. No secret is stored (PKCE).
     </p>
     <label>Redirect URI (add this to your Dropbox app)
-      <input value={oauthRedirectUri} readonly spellcheck="false" class="mono" onclick={(e) => (e.currentTarget as HTMLInputElement).select()} />
+      <div class="row" style="gap:0.4rem; align-items:center">
+        <input value={oauthRedirectUri} spellcheck="false" class="mono" style="flex:1" onfocus={(e) => (e.currentTarget as HTMLInputElement).select()} oninput={(e) => (e.currentTarget as HTMLInputElement).value = oauthRedirectUri} />
+        <button type="button" onclick={copyRedirectUri}>Copy</button>
+      </div>
       <span class="field-hint">Must match exactly - Dropbox rejects any other value. Click to select, then copy.</span>
     </label>
     <label>App key
@@ -3922,7 +3929,10 @@
       <strong>Application (client) ID</strong>. No secret is stored (PKCE).
     </p>
     <label>Redirect URI (add this to your Azure app)
-      <input value={oauthRedirectUri} readonly spellcheck="false" class="mono" onclick={(e) => (e.currentTarget as HTMLInputElement).select()} />
+      <div class="row" style="gap:0.4rem; align-items:center">
+        <input value={oauthRedirectUri} spellcheck="false" class="mono" style="flex:1" onfocus={(e) => (e.currentTarget as HTMLInputElement).select()} oninput={(e) => (e.currentTarget as HTMLInputElement).value = oauthRedirectUri} />
+        <button type="button" onclick={copyRedirectUri}>Copy</button>
+      </div>
       <span class="field-hint">Add under Authentication - Mobile and desktop applications. Must match exactly.</span>
     </label>
     <label>Account type
@@ -3969,7 +3979,10 @@
       project can stay in "testing" mode - fine for your own account.
     </p>
     <label>Redirect URI (add this to your Google OAuth client)
-      <input value={oauthRedirectUri} readonly spellcheck="false" class="mono" onclick={(e) => (e.currentTarget as HTMLInputElement).select()} />
+      <div class="row" style="gap:0.4rem; align-items:center">
+        <input value={oauthRedirectUri} spellcheck="false" class="mono" style="flex:1" onfocus={(e) => (e.currentTarget as HTMLInputElement).select()} oninput={(e) => (e.currentTarget as HTMLInputElement).value = oauthRedirectUri} />
+        <button type="button" onclick={copyRedirectUri}>Copy</button>
+      </div>
       <span class="field-hint">Add under Authorized redirect URIs. Google also accepts other loopback ports, but this one is registered here.</span>
     </label>
     <label>OAuth client ID
