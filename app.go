@@ -6782,6 +6782,7 @@ func (a *App) TcpdumpStart(in TcpdumpStartInput) (string, error) {
 	var batchStopOnce sync.Once
 	stopBatch := func() { batchStopOnce.Do(func() { close(batchDone) }) }
 	onLifecycle := func(event, msg string) {
+		log.Printf("tcpdump: lifecycle session=%s dump=%s event=%s msg=%q", sid, dumpID, event, msg)
 		// Capture ended on its own (hit the packet cap, process died) -
 		// drop the session→dump index so a later window doesn't try to
 		// re-attach to a dead capture. Guard on the index still pointing
