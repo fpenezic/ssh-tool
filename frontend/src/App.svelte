@@ -42,6 +42,8 @@
   import PresenceTakeoverModal from "./lib/PresenceTakeoverModal.svelte";
   import { connectionActions } from "./lib/connectionActions.svelte";
   import DetachedWindow from "./lib/DetachedWindow.svelte";
+  import TcpdumpWindow from "./lib/TcpdumpWindow.svelte";
+  import LogTailWindow from "./lib/LogTailWindow.svelte";
   import ResizeHandle from "./lib/ResizeHandle.svelte";
   import { layoutPrefs } from "./lib/layoutPrefs.svelte";
   import { appPrefs } from "./lib/appPrefs.svelte";
@@ -85,6 +87,13 @@
   const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const detachedTab = urlParams.get("detached");
   const isDetached = detachedTab !== null;
+  // Standalone tcpdump window: /?tcpdump=<sessionId>. Renders only the
+  // embedded capture view, re-attaching to the backend capture.
+  const tcpdumpSession = urlParams.get("tcpdump");
+  const isTcpdumpWindow = tcpdumpSession !== null;
+  // Standalone log-tail window: /?logtail=<sessionId>.
+  const logtailSession = urlParams.get("logtail");
+  const isLogtailWindow = logtailSession !== null;
   // The window name is derived from the tabId in the backend
   // (WindowDetachTab) so detached windows can reference themselves
   // when closing on redock.
@@ -975,7 +984,17 @@
 
 <svelte:window onkeydown={onGlobalKey} />
 
-{#if isDetached}
+{#if isTcpdumpWindow}
+  <!-- Standalone tcpdump window: embedded capture view re-attaching to the
+       backend capture. Vault is already unlocked in the main process. -->
+  <TcpdumpWindow sessionId={tcpdumpSession!} />
+  <ToastHost />
+{:else if isLogtailWindow}
+  <!-- Standalone log-tail window: embedded stream view re-attaching to the
+       backend tail. -->
+  <LogTailWindow sessionId={logtailSession!} />
+  <ToastHost />
+{:else if isDetached}
   <!-- Detached window: shared backend, slim UI. The vault is already
        unlocked in the main process (otherwise the user couldn't have
        opened a tab to detach), so we skip VaultGate entirely. -->

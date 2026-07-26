@@ -324,6 +324,45 @@ export class ForwardStatus {
 }
 
 /**
+ * LogTailLine is one streamed log line with its 1-based sequence number (the
+ * ring watermark a re-attaching window dedupes against).
+ */
+export class LogTailLine {
+    /**
+     * Creates a new LogTailLine instance.
+     * @param {Partial<LogTailLine>} [$$source = {}] - The source object to create the LogTailLine.
+     */
+    constructor($$source = {}) {
+        if (!("text" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["text"] = "";
+        }
+        if (!("seq" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["seq"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LogTailLine instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {LogTailLine}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new LogTailLine(/** @type {Partial<LogTailLine>} */($$parsedSource));
+    }
+}
+
+/**
  * PacketDecode is the protocol-specific payload dissection. Type
  * identifies the protocol; Fields holds key/value pairs the UI
  * renders in the Decode tab; Summary is a one-line gloss for the

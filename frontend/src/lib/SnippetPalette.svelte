@@ -90,13 +90,60 @@
     row?.scrollIntoView({ block: "nearest" });
   });
 
+  // ---- ${var} / ${var:default} placeholders --------------------------------
+  // A snippet body may carry ${name} or ${name:default} tokens. When it does we
+  // prompt for values inline before sending, mirroring the backend expander in
+  // snippet_vars.go. Values are ad-hoc user input, never secrets.
+  type SnipVar = { name: string; def: string };
+
+  function parseSnippetVars(body: string): SnipVar[] {
+    const out: SnipVar[] = [];
+    const seen = new Set<string>();
+    const re = /\$\{([^}]*)\}/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(body)) !== null) {
+      const token = m[1];
+      const colon = token.indexOf(":");
+      const name = colon >= 0 ? token.slice(0, colon) : token;
+      const def = colon >= 0 ? token.slice(colon + 1) : "";
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      out.push({ name, def });
+    }
+    return out;
+  }
+
+  // The snippet awaiting variable values, plus the collected values (keyed by
+  // var name, seeded with defaults). null = no form showing.
+  let varForm = $state<{ snip: Snippet; vars: SnipVar[] } | null>(null);
+  let varValues = $state<Record<string, string>>({});
+
   async function fire(snip: Snippet) {
     if (!activeSessionId) {
       onClose();
       return;
     }
+    const vars = parseSnippetVars(snip.body);
+    if (vars.length > 0) {
+      // Open the inline var form instead of sending immediately.
+      varValues = Object.fromEntries(vars.map((v) => [v.name, v.def]));
+      varForm = { snip, vars };
+      return;
+    }
+    await send(snip, undefined);
+  }
+
+  async function send(snip: Snippet, vars: Record<string, string> | undefined) {
+    if (!activeSessionId) {
+      onClose();
+      return;
+    }
     try {
-      await api.snippetSendToSession(snip.id, activeSessionId);
+      if (vars) {
+        await api.snippetSendToSessionVars(snip.id, activeSessionId, vars);
+      } else {
+        await api.snippetSendToSession(snip.id, activeSessionId);
+      }
     } catch (e: any) {
       loadErr = errMsg(e);
       return;
@@ -114,7 +161,24 @@
     focusActiveTerminal();
   }
 
+  function submitVarForm() {
+    if (!varForm) return;
+    send(varForm.snip, { ...varValues });
+  }
+
+  function cancelVarForm() {
+    varForm = null;
+    setTimeout(() => inputEl?.focus(), 0);
+  }
+
   function onKey(e: KeyboardEvent) {
+    if (varForm) {
+      // While the var form is open, Escape backs out to the list and Enter
+      // submits; arrows are for normal text editing in the fields.
+      if (e.key === "Escape") { e.preventDefault(); cancelVarForm(); }
+      else if (e.key === "Enter") { e.preventDefault(); submitVarForm(); }
+      return;
+    }
     if (e.key === "Escape") { onClose(); return; }
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -162,6 +226,32 @@
       }
     }}
   >
+    {#if varForm}
+      <div class="varform">
+        <div class="varform-head">
+          Fill in <strong>{varForm.snip.name}</strong>
+        </div>
+        {#each varForm.vars as v, i (v.name)}
+          <label class="varrow">
+            <span class="varname">{v.name}</span>
+            <!-- svelte-ignore a11y_autofocus -->
+            <input
+              class="varinput"
+              bind:value={varValues[v.name]}
+              placeholder={v.def || v.name}
+              spellcheck="false"
+              autocomplete="off"
+              autofocus={i === 0}
+            />
+          </label>
+        {/each}
+        {#if loadErr}<div class="err">{loadErr}</div>{/if}
+        <div class="varform-actions">
+          <button class="cancel" onclick={cancelVarForm}>Back</button>
+          <button class="send" onclick={submitVarForm}>Send</button>
+        </div>
+      </div>
+    {:else}
     <input
       bind:this={inputEl}
       bind:value={query}
@@ -208,10 +298,16 @@
         </div>
       {/each}
     </div>
+    {/if}
     <footer>
-      <span><kbd>↑↓</kbd> navigate</span>
-      <span><kbd>↵</kbd> send</span>
-      <span><kbd>Esc</kbd> close</span>
+      {#if varForm}
+        <span><kbd>↵</kbd> send</span>
+        <span><kbd>Esc</kbd> back</span>
+      {:else}
+        <span><kbd>↑↓</kbd> navigate</span>
+        <span><kbd>↵</kbd> send</span>
+        <span><kbd>Esc</kbd> close</span>
+      {/if}
     </footer>
   </div>
 </div>
@@ -315,5 +411,63 @@
     border-radius: 3px;
     font-family: ui-monospace, monospace;
     font-size: 0.7rem;
+  }
+  .varform {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.8rem 0.9rem;
+  }
+  .varform-head {
+    font-size: 0.8rem;
+    color: var(--subtext0);
+  }
+  .varrow {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .varname {
+    flex: 0 0 8rem;
+    text-align: right;
+    font-family: ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--mauve);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .varinput {
+    flex: 1 1 auto;
+    background: var(--mantle);
+    color: var(--text);
+    border: 1px solid var(--surface0);
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.82rem;
+  }
+  .varinput:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
+  .varform-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.2rem;
+  }
+  .varform-actions button {
+    padding: 0.3rem 0.8rem;
+    border-radius: 4px;
+    border: 1px solid var(--surface1);
+    background: var(--surface0);
+    color: var(--text);
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .varform-actions .send {
+    background: var(--blue);
+    color: var(--crust);
+    border-color: var(--blue);
   }
 </style>

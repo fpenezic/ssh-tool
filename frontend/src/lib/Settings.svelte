@@ -3024,6 +3024,7 @@
         <label>
           <span>Body</span>
           <textarea bind:value={snippetForm.body} rows="6" placeholder="sudo tail -f /var/log/syslog"></textarea>
+          <small class="hint">Use <code>{"${var}"}</code> or <code>{"${var:default}"}</code> to prompt for values when firing (e.g. <code>{"journalctl -u ${svc} --since ${since:-1h}"}</code>).</small>
         </label>
         <label>
           <span>Tags (comma-separated)</span>

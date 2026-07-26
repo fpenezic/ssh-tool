@@ -928,6 +928,8 @@ export const api = {
   snippetDelete: (id: string) => G.SnippetDelete(id),
   snippetSendToSession: (snippetId: string, sessionId: string) =>
     G.SnippetSendToSession(snippetId, sessionId),
+  snippetSendToSessionVars: (snippetId: string, sessionId: string, vars: Record<string, string>) =>
+    G.SnippetSendToSessionVars(snippetId, sessionId, vars),
   tcpdumpProbe: (sessionId: string) =>
     nn(G.TcpdumpProbe(sessionId)) as Promise<TcpdumpProbeResult>,
   tcpdumpListInterfaces: (sessionId: string) =>
@@ -943,6 +945,23 @@ export const api = {
     nn(G.TcpdumpActiveForSession(sessionId)) as Promise<TcpdumpActiveInfo>,
   tcpdumpSnapshot: (dumpId: string) =>
     nn(G.TcpdumpSnapshot(dumpId)) as Promise<TcpdumpSnapshotResult>,
+  windowOpenTcpdump: (sessionId: string) =>
+    G.WindowOpenTcpdump(sessionId) as unknown as Promise<string>,
+  tcpdumpNotifyRedocked: (sessionId: string) =>
+    G.TcpdumpNotifyRedocked(sessionId),
+  logtailStart: (input: LogTailStartInput) =>
+    G.LogTailStart(input as any) as unknown as Promise<string>,
+  logtailStop: (tailId: string) => G.LogTailStop(tailId),
+  logtailProvidePassword: (tailId: string, password: string) =>
+    G.LogTailProvidePassword(tailId, password),
+  logtailActiveForSession: (sessionId: string) =>
+    nn(G.LogTailActiveForSession(sessionId)) as Promise<LogTailActiveInfo>,
+  logtailSnapshot: (tailId: string) =>
+    nn(G.LogTailSnapshot(tailId)) as Promise<LogTailSnapshotResult>,
+  windowOpenLogtail: (sessionId: string) =>
+    G.WindowOpenLogtail(sessionId) as unknown as Promise<string>,
+  logtailNotifyRedocked: (sessionId: string) =>
+    G.LogTailNotifyRedocked(sessionId),
   recordingStart: (sessionId: string) =>
     nn(G.RecordingStart(sessionId)) as Promise<RecordingState>,
   recordingStop: (sessionId: string) =>
@@ -1552,6 +1571,35 @@ export interface TcpdumpActiveInfo {
   insights: boolean;
   continuous: boolean;
   max_count: number;
+}
+
+export interface LogTailStartInput {
+  session_id: string;
+  kind: "journal" | "file";
+  unit: string;
+  path: string;
+  lines: number;
+  root_user: boolean;
+  sudo_no_pwd: boolean;
+  use_saved_password: boolean;
+}
+
+export interface LogTailLine {
+  text: string;
+  seq: number;
+}
+
+export interface LogTailSnapshotResult {
+  lines: LogTailLine[];
+  cum: number;
+}
+
+// A log tail already running for a session. tail_id is "" when none.
+export interface LogTailActiveInfo {
+  tail_id: string;
+  kind: string;
+  unit: string;
+  path: string;
 }
 
 export interface RecordingState {

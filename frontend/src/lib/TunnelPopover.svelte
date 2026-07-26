@@ -21,6 +21,7 @@
   } from "./api";
   import { clickOutside } from "./clickOutside";
   import { writeClipboard } from "./clipboard";
+  import { sessions } from "./stores.svelte";
   import { IconPlay, IconStop, IconExternalLink, IconGlobe, IconClipboardCopy } from "./iconMap";
 
   interface Props {
@@ -31,6 +32,14 @@
     onClose: () => void;
   }
   let { connectionId, sessionId, onClose }: Props = $props();
+
+  // True while a session for this connection is mid-reconnect: forwards are
+  // torn down and restored on success, so show "reconnecting" not "stopped".
+  const reconnecting = $derived(
+    sessions.tabs.some(
+      (t) => t.connectionId === connectionId && t.status === "reconnecting"
+    )
+  );
 
   let specs = $state<PortForward[]>([]);
   let active = $state<ForwardStatus[]>([]);
@@ -277,6 +286,8 @@
               <div class="sub err-line">{st.error}</div>
             {:else if running}
               <div class="sub">listening on {st!.local_addr}:{st!.local_port}</div>
+            {:else if reconnecting}
+              <div class="sub reconnecting">reconnecting...</div>
             {/if}
           </div>
         </li>
@@ -381,6 +392,9 @@
     color: var(--overlay0);
     font-size: 0.7rem;
     margin-top: 0.1rem;
+  }
+  .sub.reconnecting {
+    color: var(--yellow);
   }
   .bm {
     padding: 0 0.4rem 0.2rem 2.2rem;

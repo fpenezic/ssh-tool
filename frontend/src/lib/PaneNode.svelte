@@ -13,10 +13,11 @@
     IconHost, IconUser, IconLock, IconClipboardCopy, IconFolder,
     IconRotateCw, IconSplitH, IconSplitV, IconX, IconBroadcast, IconPopOut,
     IconActivity, IconGlobe, IconTunnel, IconSearch, IconSettings, IconVpn,
-    IconBot,
+    IconBot, IconFile,
   } from "./iconMap";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
+  import { logtail } from "./logtailStore.svelte";
   import { focusActiveTerminal } from "./terminalFocus";
   import HttpModal from "./HttpModal.svelte";
   import TunnelPopover from "./TunnelPopover.svelte";
@@ -263,6 +264,13 @@
   );
   const tcpdumpStats = $derived(
     node.kind === "pane" ? tcpdump.statsOf(node.sessionId) : null,
+  );
+  // Log tail store mode/stats, same window-level ownership as tcpdump.
+  const logtailMode = $derived(
+    node.kind === "pane" ? logtail.modeOf(node.sessionId) : null,
+  );
+  const logtailStats = $derived(
+    node.kind === "pane" ? logtail.statsOf(node.sessionId) : null,
   );
   let showHttp = $state(false);
   let showTunnels = $state(false);
@@ -529,6 +537,15 @@
                 : "Live tcpdump on this host"}
               onclick={(e) => { e.stopPropagation(); tcpdump.open(node.sessionId); }}
             ><IconActivity size={13} /></button>
+            <button
+              class="logtail"
+              class:running={logtailMode === "open"}
+              class:bg={logtailMode === "minimized"}
+              title={logtailMode === "minimized" && logtailStats
+                ? `log tail on ${logtailStats.source} running in background - ${logtailStats.lines} lines (click to restore)`
+                : "Live log tail (journalctl -f / tail -F) on this host"}
+              onclick={(e) => { e.stopPropagation(); logtail.open(node.sessionId); }}
+            ><IconFile size={13} /></button>
             <button
               class="http"
               title="HTTP / SOAP request (routes through this session's SOCKS5 if running)"
@@ -932,6 +949,18 @@
     animation: td-pulse 1.4s ease-in-out infinite;
   }
   @keyframes td-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .pane-actions button.logtail   { color: var(--teal); }
+  .pane-actions button.logtail.running { color: var(--on-accent); background: var(--teal); }
+  .pane-actions button.logtail.bg { position: relative; color: var(--teal); }
+  .pane-actions button.logtail.bg::after {
+    content: "";
+    position: absolute;
+    top: 1px; right: 1px;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: td-pulse 1.4s ease-in-out infinite;
+  }
   .pane-actions button.http      { color: var(--sapphire); }
   .pane-actions button.tunnels   { color: var(--lavender); }
   .pane-actions button.tunnels.has-active { color: var(--green); }

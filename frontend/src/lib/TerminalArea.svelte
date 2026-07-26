@@ -5,7 +5,9 @@
   import ShareDialog from "./ShareDialog.svelte";
   import { projectTabs, realSessionIds } from "./shareProject";
   import TcpdumpModal from "./TcpdumpModal.svelte";
+  import LogTailModal from "./LogTailModal.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
+  import { logtail } from "./logtailStore.svelte";
   import { broadcast } from "./broadcast.svelte";
   import { recording } from "./recording.svelte";
   import { connectionActions } from "./connectionActions.svelte";
@@ -185,6 +187,28 @@
     return paneTabs.findTabForSession(sessionId)?.tabId === paneTabs.activeTabId;
   }
 
+  // Open the running capture in its own top-level window and mark it detached
+  // so the main window stops mounting its own modal for it (the capture lives
+  // on the backend and both windows re-attach via the snapshot watermark). If
+  // the window fails to open, leave the modal as-is.
+  async function detachTcpdump(sessionId: string) {
+    try {
+      await api.windowOpenTcpdump(sessionId);
+      tcpdump.detach(sessionId);
+    } catch (e) {
+      console.error("detach tcpdump:", e);
+    }
+  }
+
+  async function detachLogtail(sessionId: string) {
+    try {
+      await api.windowOpenLogtail(sessionId);
+      logtail.detach(sessionId);
+    } catch (e) {
+      console.error("detach logtail:", e);
+    }
+  }
+
   async function closeTab(tabId: string) {
     const tab = paneTabs.tabs.find((t) => t.tabId === tabId);
     if (!tab) return;
@@ -221,6 +245,7 @@
       // capture for them (the overlay is window-level now, keyed by
       // sessionId - it won't unmount just because the pane tree did).
       tcpdump.close(sid);
+      logtail.close(sid);
       try {
         if (sess?.kind === "local") {
           await api.localShellDisconnect(sid);
@@ -478,6 +503,8 @@
   // window_receive_tab globally with the intended target's name; only that
   // window claims the pending payload.
   let unsubReceive: (() => void) | null = null;
+  let unsubTcpdumpRedock: (() => void) | null = null;
+  let unsubLogtailRedock: (() => void) | null = null;
   onMount(() => {
     unsubReceive = EventsOn("window_receive_tab", async (data: any) => {
       if ((data?.target ?? "") !== selfWindowName) return;
@@ -486,8 +513,23 @@
         if (p) await reconstructTabFromPayload(p);
       } catch { /* nothing pending */ }
     });
+    // A detached tcpdump window closed - bring its capture back under this
+    // window as a minimized chip (the capture is still running on the
+    // backend). Only the main window has the tcpdump store host mounted.
+    unsubTcpdumpRedock = EventsOn("tcpdump_redocked", (data: any) => {
+      const sid = data?.session_id;
+      if (sid && tcpdump.modeOf(sid) === "detached") {
+        tcpdump.minimize(sid);
+      }
+    });
+    unsubLogtailRedock = EventsOn("logtail_redocked", (data: any) => {
+      const sid = data?.session_id;
+      if (sid && logtail.modeOf(sid) === "detached") {
+        logtail.minimize(sid);
+      }
+    });
   });
-  onDestroy(() => { unsubReceive?.(); });
+  onDestroy(() => { unsubReceive?.(); unsubTcpdumpRedock?.(); unsubLogtailRedock?.(); });
 
   // The session that the tab's active pane (or first leaf) points at.
   // Duplicate keys off the SESSION, not a tree lookup: a tab can be a
@@ -987,13 +1029,27 @@
      window). The overlay is hidden when minimised or when its session
      isn't on the active tab, so you never see another tab's capture. -->
 {#each tcpdump.list() as cap (cap.sessionId)}
-  {#if paneTabs.findTabForSession(cap.sessionId)}
+  {#if paneTabs.findTabForSession(cap.sessionId) && tcpdump.modeOf(cap.sessionId) !== "detached"}
     <TcpdumpModal
       sessionId={cap.sessionId}
       hidden={tcpdump.modeOf(cap.sessionId) === "minimized" || !tcpdumpOnActiveTab(cap.sessionId)}
       onClose={() => tcpdump.close(cap.sessionId)}
       onMinimize={() => tcpdump.minimize(cap.sessionId)}
       onStats={(s) => tcpdump.setStats(cap.sessionId, s)}
+      onDetach={() => detachTcpdump(cap.sessionId)}
+    />
+  {/if}
+{/each}
+
+{#each logtail.list() as lt (lt.sessionId)}
+  {#if paneTabs.findTabForSession(lt.sessionId) && logtail.modeOf(lt.sessionId) !== "detached"}
+    <LogTailModal
+      sessionId={lt.sessionId}
+      hidden={logtail.modeOf(lt.sessionId) === "minimized" || !tcpdumpOnActiveTab(lt.sessionId)}
+      onClose={() => logtail.close(lt.sessionId)}
+      onMinimize={() => logtail.minimize(lt.sessionId)}
+      onStats={(s) => logtail.setStats(lt.sessionId, s)}
+      onDetach={() => detachLogtail(lt.sessionId)}
     />
   {/if}
 {/each}

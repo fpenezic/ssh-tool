@@ -2388,6 +2388,186 @@ export class LocalShellOpenResult {
 }
 
 /**
+ * LogTailActiveInfo describes a tail already running for a session so a window
+ * attaching after a detach can restore its context.
+ */
+export class LogTailActiveInfo {
+    /**
+     * Creates a new LogTailActiveInfo instance.
+     * @param {Partial<LogTailActiveInfo>} [$$source = {}] - The source object to create the LogTailActiveInfo.
+     */
+    constructor($$source = {}) {
+        if (!("tail_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["tail_id"] = "";
+        }
+        if (!("kind" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("unit" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["unit"] = "";
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LogTailActiveInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {LogTailActiveInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new LogTailActiveInfo(/** @type {Partial<LogTailActiveInfo>} */($$parsedSource));
+    }
+}
+
+/**
+ * LogTailSnapshotResult carries the retained line history plus the cumulative
+ * watermark the frontend dedupes against.
+ */
+export class LogTailSnapshotResult {
+    /**
+     * Creates a new LogTailSnapshotResult instance.
+     * @param {Partial<LogTailSnapshotResult>} [$$source = {}] - The source object to create the LogTailSnapshotResult.
+     */
+    constructor($$source = {}) {
+        if (!("lines" in $$source)) {
+            /**
+             * @member
+             * @type {ssh$0.LogTailLine[]}
+             */
+            this["lines"] = [];
+        }
+        if (!("cum" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["cum"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LogTailSnapshotResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {LogTailSnapshotResult}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType8;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("lines" in $$parsedSource) {
+            $$parsedSource["lines"] = $$createField0_0($$parsedSource["lines"]);
+        }
+        return new LogTailSnapshotResult(/** @type {Partial<LogTailSnapshotResult>} */($$parsedSource));
+    }
+}
+
+/**
+ * LogTailStartInput is the frontend's request for a live log follow. Auth
+ * fields mirror tcpdump (root/sudo come back from the shared probe).
+ */
+export class LogTailStartInput {
+    /**
+     * Creates a new LogTailStartInput instance.
+     * @param {Partial<LogTailStartInput>} [$$source = {}] - The source object to create the LogTailStartInput.
+     */
+    constructor($$source = {}) {
+        if (!("session_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["session_id"] = "";
+        }
+        if (!("kind" in $$source)) {
+            /**
+             * "journal" | "file"
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("unit" in $$source)) {
+            /**
+             * journal unit ("" = whole journal)
+             * @member
+             * @type {string}
+             */
+            this["unit"] = "";
+        }
+        if (!("path" in $$source)) {
+            /**
+             * file path for tail -F
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("lines" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["lines"] = 0;
+        }
+        if (!("root_user" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["root_user"] = false;
+        }
+        if (!("sudo_no_pwd" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["sudo_no_pwd"] = false;
+        }
+        if (!("use_saved_password" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["use_saved_password"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LogTailStartInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {LogTailStartInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new LogTailStartInput(/** @type {Partial<LogTailStartInput>} */($$parsedSource));
+    }
+}
+
+/**
  * McpActivity is one recorded LLM action, surfaced to the activity panel.
  */
 export class McpActivity {
@@ -2703,10 +2883,10 @@ export class NetworkProfileInfo {
      * @returns {NetworkProfileInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType7;
-        const $$createField6_0 = $$createType9;
-        const $$createField7_0 = $$createType11;
-        const $$createField8_0 = $$createType12;
+        const $$createField5_0 = $$createType9;
+        const $$createField6_0 = $$createType11;
+        const $$createField7_0 = $$createType13;
+        const $$createField8_0 = $$createType14;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("profile" in $$parsedSource) {
             $$parsedSource["profile"] = $$createField5_0($$parsedSource["profile"]);
@@ -3281,7 +3461,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType14;
+        const $$createField1_0 = $$createType16;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -3456,7 +3636,7 @@ export class ShareStartInput {
      * @returns {ShareStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType16;
+        const $$createField6_0 = $$createType18;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField6_0($$parsedSource["sessions"]);
@@ -4242,7 +4422,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType18;
+        const $$createField0_0 = $$createType20;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -4579,15 +4759,17 @@ const $$createType3 = $Create.Nullable($$createType0);
 const $$createType4 = $Create.Map($Create.Any, $Create.Any);
 const $$createType5 = $Create.Nullable($$createType4);
 const $$createType6 = $Create.Map($Create.Any, $Create.Any);
-const $$createType7 = wg$0.Profile.createFrom;
-const $$createType8 = NetbirdConfig.createFrom;
-const $$createType9 = $Create.Nullable($$createType8);
-const $$createType10 = TailscaleConfig.createFrom;
+const $$createType7 = ssh$0.LogTailLine.createFrom;
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = wg$0.Profile.createFrom;
+const $$createType10 = NetbirdConfig.createFrom;
 const $$createType11 = $Create.Nullable($$createType10);
-const $$createType12 = wg$0.Status.createFrom;
-const $$createType13 = ssh$0.SftpEntry.createFrom;
-const $$createType14 = $Create.Array($$createType13);
-const $$createType15 = ShareSessionInput.createFrom;
+const $$createType12 = TailscaleConfig.createFrom;
+const $$createType13 = $Create.Nullable($$createType12);
+const $$createType14 = wg$0.Status.createFrom;
+const $$createType15 = ssh$0.SftpEntry.createFrom;
 const $$createType16 = $Create.Array($$createType15);
-const $$createType17 = ssh$0.ParsedPacket.createFrom;
+const $$createType17 = ShareSessionInput.createFrom;
 const $$createType18 = $Create.Array($$createType17);
+const $$createType19 = ssh$0.ParsedPacket.createFrom;
+const $$createType20 = $Create.Array($$createType19);

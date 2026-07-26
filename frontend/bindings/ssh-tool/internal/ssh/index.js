@@ -8,6 +8,7 @@ export {
     ForwardKind,
     ForwardState,
     ForwardStatus,
+    LogTailLine,
     PacketDecode,
     ParsedPacket,
     RouteResult,

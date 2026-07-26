@@ -7,8 +7,13 @@
 //
 // Usage:
 //   <div use:clickOutside={{ onOutside: close }}>...</div>
+//   <div use:clickOutside={{ onOutside: close, enabled: !embedded }}>...</div>
+//
+// enabled defaults to true; pass false to keep the action mounted but inert
+// (e.g. when the same component renders both as a dismissable overlay and as
+// an embedded pane that must not close on outside clicks).
 
-type Opts = { onOutside: () => void };
+type Opts = { onOutside: () => void; enabled?: boolean };
 
 export function clickOutside(node: HTMLElement, opts: Opts) {
   let mouseDownInside = false;
@@ -20,6 +25,7 @@ export function clickOutside(node: HTMLElement, opts: Opts) {
     const upInside = node.contains(e.target as Node);
     const wasInside = mouseDownInside;
     mouseDownInside = false;
+    if (opts.enabled === false) return;
     if (!upInside && !wasInside) opts.onOutside();
   }
 

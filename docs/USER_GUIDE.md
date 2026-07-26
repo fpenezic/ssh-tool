@@ -31,6 +31,7 @@ implemented.
 11. [Quick palette (Ctrl+K)](#quick-palette)
 12. [Snippets (Ctrl+Shift+P)](#snippets)
 13. [Live tcpdump panel](#tcpdump)
+13a. [Live log tail](#logtail)
 14. [HTTP / SOAP request tool](#http-tool)
 15. [Connect feedback](#connect-feedback)
 16. [Color tags and visual cues](#color-tags)
@@ -1805,6 +1806,14 @@ apt update`, `tail -f /var/log/syslog`, `kubectl get pods -A`, etc.
 - The body is written verbatim plus a trailing newline so single-line
   snippets execute immediately. Multi-line bodies are sent as-is -
   no extra paste guard, snippets are your own content.
+- **Variables.** A body may contain `${var}` or `${var:default}`
+  placeholders. Firing a snippet that has them opens a small inline
+  form in the palette - one field per variable, defaults pre-filled -
+  and **Enter** substitutes the values and sends. Example:
+  `journalctl -u ${svc} --since ${since:-1h}` prompts for `svc` and
+  `since` (the latter defaulting to `-1h`). Values are ad-hoc, typed
+  each time, never stored; snippets with no placeholders fire
+  immediately as before.
 - **Broadcast aware.** If the origin session is part of an active
   broadcast group, the snippet body is fanned out to every member
   (SSH or local PTY) instead of just the foreground tab.
@@ -1910,6 +1919,12 @@ started it. That means:
   then continues the live stream. History captured before the
   detach is preserved up to that ring size.
 - Re-docking the tab works the same way in reverse.
+- **Detach the capture itself** to a standalone window with the
+  **detach** button (`⧉`) in the tcpdump header. This is the way to
+  watch packets while typing in the terminal: the capture pops into
+  its own window and keeps running; closing that window brings it
+  back as a background chip in the main window (nothing is stopped).
+  It re-attaches through the same ring snapshot as a tab detach.
 
 Because counts and history are surfaced in the status bar and the
 modal header, you always see what's running and where - even after
@@ -1995,6 +2010,42 @@ Limits:
   so - that's not a crash; raise **Max packets** or use Continuous.
 - For forensic-grade pcap capture, fall back to a real terminal -
   this panel is for "what's happening right now".
+
+---
+
+<a id="logtail"></a>
+## 13a. Live log tail
+
+Stream a remote log while you keep working in the terminal. Open it
+via the **file** icon in the pane toolbar (teal, next to the tcpdump
+Activity icon).
+
+Pick a source in the start form:
+
+- **journalctl** - follow the whole journal or a specific unit
+  (e.g. `nginx`). Runs `journalctl -f`.
+- **tail file** - follow a path (e.g. `/var/log/syslog`). Runs
+  `tail -F`, which survives log rotation.
+- **Seed lines** - how many existing lines to show before following
+  (default 200).
+
+Auth uses the same root/sudo probe as tcpdump (many logs need root);
+the connection's saved password is auto-fed to sudo when available,
+with a manual prompt as fallback.
+
+Once running:
+
+- A **filter** box does a live case-insensitive substring match -
+  only matching lines render; clearing it restores everything. The
+  filter is client-side and never touches the stream.
+- The stream **auto-reconnects** if the remote command drops while
+  the SSH session is still up (you'll see a brief "reconnecting"
+  note), so a flaky link doesn't end the tail.
+- **Detach** (`⧉`) pops the tail into its own window so you can
+  watch it beside the terminal; closing that window brings it back
+  as a background chip. **Minimise** (`-`) keeps it running in the
+  background. Both re-attach through a 2000-line backend ring, same
+  model as tcpdump.
 
 ---
 

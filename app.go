@@ -151,6 +151,11 @@ type App struct {
 	// reconnects: maps the OLD sessionID of a dropped session to its
 	// cancel channel. Closing the channel aborts the retry loop.
 	reconnects map[string]chan struct{}
+	// reconnectForwards: maps the OLD sessionID to the port-forward spec
+	// ids that were running when the session dropped, so the reconnect
+	// success path can restore ALL of them (not only auto_start=1) onto
+	// the fresh session. Guarded by reconnectMu.
+	reconnectForwards map[string][]string
 
 	// connectCancels maps a connect key (connectionID, or a dynamic
 	// entry key) to the in-flight connect's cancel handle. SshCancelConnect
@@ -243,6 +248,14 @@ type App struct {
 	// already-running capture instead of starting a second one. The
 	// capture's lifetime is the session's, not the originating window's.
 	tcpdumpBySession map[string]string
+
+	// logtails / logtailBySession mirror the tcpdump maps for live log tails
+	// (journalctl -f / tail -F). Same detach/re-attach model: the stream is a
+	// backend goroutine keyed by session, so a detached window re-attaches to
+	// the running tail via its ring snapshot.
+	logtailMu        sync.Mutex
+	logtails         map[string]*sshlayer.LogTailHandle
+	logtailBySession map[string]string
 
 	// quitConfirmed gates the main-window WindowClosing handler. While
 	// false and at least one SSH session is alive, the handler cancels
@@ -407,6 +420,7 @@ func (a *App) initialise() {
 	a.pendingAuthPrompts = make(map[string]chan authPromptReply)
 	a.transfers = make(map[string]chan struct{})
 	a.reconnects = make(map[string]chan struct{})
+	a.reconnectForwards = make(map[string][]string)
 	a.connectCancels = make(map[string]*connectCancel)
 	a.debugBuf = make(map[string][]string)
 	a.mcp = newMcpState()
@@ -2700,13 +2714,29 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 	connID := connectionID
 	autoReconnect := settings.AutoReconnect
 	sess.SetOnClose(func(id string) {
-		a.forwards.StopAllForSession(id)
-		a.clearMcpGrant(id)
-		a.sessionRecordingCleanup(id)
 		userInit := false
 		if s, ok := a.pool.Get(id); ok {
 			userInit = s.WasUserInitiated()
 		}
+		// Before tearing the forwards down, remember which ones were
+		// running so a reconnect can restore ALL of them (not just the
+		// auto_start=1 subset forwardsAutoStartFor handles). Only when we
+		// will actually reconnect - a user-initiated disconnect keeps none.
+		if autoReconnect && !userInit {
+			running := a.forwards.List(id)
+			if len(running) > 0 {
+				ids := make([]string, 0, len(running))
+				for _, f := range running {
+					ids = append(ids, f.ID)
+				}
+				a.reconnectMu.Lock()
+				a.reconnectForwards[id] = ids
+				a.reconnectMu.Unlock()
+			}
+		}
+		a.forwards.StopAllForSession(id)
+		a.clearMcpGrant(id)
+		a.sessionRecordingCleanup(id)
 		a.pool.Remove(id)
 		// After pool.Remove, so a share whose last session just closed ends.
 		a.shareSessionClosed(id)
@@ -5100,6 +5130,7 @@ func (a *App) runReconnect(oldID, connID string, cancel <-chan struct{}) {
 	defer func() {
 		a.reconnectMu.Lock()
 		delete(a.reconnects, oldID)
+		delete(a.reconnectForwards, oldID)
 		a.reconnectMu.Unlock()
 	}()
 
@@ -5124,12 +5155,61 @@ func (a *App) runReconnect(oldID, connID string, cancel <-chan struct{}) {
 		// pool with a fresh id; the frontend swaps the id on success.
 		res, err := a.SshConnect(connID)
 		if err == nil {
+			a.restoreForwardsOnReconnect(oldID, connID, res.SessionID)
 			EventsEmit(successEvent, ReconnectSuccess{NewSessionID: res.SessionID, NetworkVia: res.NetworkVia})
 			return
 		}
 		log.Printf("reconnect attempt %d for conn %s failed: %v", attempt, connID, err)
 	}
 	EventsEmit(failedEvent, ReconnectFailed{Reason: "max attempts exceeded"})
+}
+
+// restoreForwardsOnReconnect replays the port forwards that were running when
+// the old session dropped onto the freshly reconnected session. SshConnect has
+// already re-launched the auto_start=1 subset via forwardsAutoStartFor, so we
+// dedupe against whatever is already listening on the new session and only
+// start the manually-started remainder.
+func (a *App) restoreForwardsOnReconnect(oldID, connID, newID string) {
+	a.reconnectMu.Lock()
+	specIDs := a.reconnectForwards[oldID]
+	delete(a.reconnectForwards, oldID)
+	a.reconnectMu.Unlock()
+	if len(specIDs) == 0 {
+		return
+	}
+
+	sess, ok := a.pool.Get(newID)
+	if !ok {
+		return
+	}
+	// Already-running set on the new session (the auto_start forwards).
+	already := map[string]struct{}{}
+	for _, f := range a.forwards.List(newID) {
+		already[f.ID] = struct{}{}
+	}
+	// The spec ids that were running are keyed by connection; look them up
+	// fresh so a spec deleted meanwhile is skipped.
+	specs, err := a.db.ListPortForwards(connID)
+	if err != nil {
+		log.Printf("reconnect forward restore: list specs: %v", err)
+		return
+	}
+	byID := map[string]store.PortForward{}
+	for _, s := range specs {
+		byID[s.ID] = s
+	}
+	for _, id := range specIDs {
+		if _, dup := already[id]; dup {
+			continue
+		}
+		spec, ok := byID[id]
+		if !ok {
+			continue // spec deleted since the drop
+		}
+		if _, err := startForward(a.forwards, sess, &spec); err != nil {
+			log.Printf("reconnect forward restore %s: %v", id, err)
+		}
+	}
 }
 
 // SshCancelReconnect aborts a pending retry loop. No-op if there isn't
@@ -6018,6 +6098,53 @@ func parseCSVList(s string) []string {
 	return filtered
 }
 
+// WindowOpenTcpdump opens a standalone window that re-attaches to the running
+// tcpdump capture for a session (URL /?tcpdump=<sessionID>). Unlike a tab
+// detach, no session is transferred and NO close handler disconnects anything:
+// the capture is a backend goroutine keyed by session, so closing the window
+// just detaches the view - the capture (and the SSH session behind it) keep
+// running under the main window. Lets the user watch a capture while typing in
+// the terminal. Returns the new window's name.
+func (a *App) WindowOpenTcpdump(sessionID string) (string, error) {
+	if a.app == nil {
+		return "", fmt.Errorf("application not initialised")
+	}
+	if sessionID == "" {
+		return "", fmt.Errorf("session id required")
+	}
+	name := fmt.Sprintf("tcpdump-%s", sessionID)
+	opts := application.WebviewWindowOptions{
+		Name:             name,
+		Title:            "tcpdump - ssh-tool",
+		Width:            1000,
+		Height:           700,
+		MinWidth:         600,
+		MinHeight:        400,
+		URL:              "/?tcpdump=" + sessionID,
+		BackgroundColour: application.NewRGB(30, 30, 46),
+		DevToolsEnabled:  true,
+	}
+	a.app.Window.NewWithOptions(opts)
+	return name, nil
+}
+
+// TcpdumpNotifyRedocked is called by a detached tcpdump window when it goes
+// away (user closed it, or stopped+closed the capture). It emits an event the
+// main window listens for so it can flip the capture's entry from "detached"
+// back to a background/minimized chip - the capture itself is untouched (it
+// keeps running on the backend, or was already stopped by the window). Also
+// closes the OS window if it is still open.
+func (a *App) TcpdumpNotifyRedocked(sessionID string) {
+	EventsEmit("tcpdump_redocked", map[string]string{"session_id": sessionID})
+	if a.app == nil {
+		return
+	}
+	name := fmt.Sprintf("tcpdump-%s", sessionID)
+	if w, ok := a.app.Window.GetByName(name); ok {
+		w.Close()
+	}
+}
+
 // WindowRedockTab tells the main window that a detached tab should come back.
 // sessions is the comma-separated list of session IDs the detached window owns.
 // layout is an opaque base64 blob with the pane tree so the main
@@ -6357,7 +6484,27 @@ func (a *App) SnippetSendToSession(snippetID, sessionID string) error {
 	if err != nil {
 		return err
 	}
-	body := s.Body
+	return a.sendSnippetBody(snippetID, sessionID, s.Body)
+}
+
+// SnippetSendToSessionVars is SnippetSendToSession with ${name} / ${name:default}
+// placeholder expansion. The frontend collects values (it already parsed the
+// tokens to know what to prompt for) and passes them here; unmatched vars fall
+// back to their inline default, or are left verbatim when neither is present.
+// No secrets flow through this - vars are ad-hoc user-typed values, never vault
+// material.
+func (a *App) SnippetSendToSessionVars(snippetID, sessionID string, vars map[string]string) error {
+	s, err := a.db.GetSnippet(snippetID)
+	if err != nil {
+		return err
+	}
+	return a.sendSnippetBody(snippetID, sessionID, expandSnippetVars(s.Body, vars))
+}
+
+// sendSnippetBody is the shared send path: trailing-newline normalisation,
+// origin write, broadcast fan-out, and RecordSnippetUse. body is the already
+// (optionally) variable-expanded text.
+func (a *App) sendSnippetBody(snippetID, sessionID, body string) error {
 	if len(body) == 0 || body[len(body)-1] != '\n' {
 		body += "\n"
 	}
@@ -6793,6 +6940,267 @@ func (a *App) TcpdumpCheckRoute(sessionID string, queries []TcpdumpRouteQuery) (
 		return nil, fmt.Errorf("no valid route queries")
 	}
 	return sshlayer.CheckRoutes(target, qs)
+}
+
+// --- Log tail ---------------------------------------------------------
+
+// LogTailStartInput is the frontend's request for a live log follow. Auth
+// fields mirror tcpdump (root/sudo come back from the shared probe).
+type LogTailStartInput struct {
+	SessionID        string `json:"session_id"`
+	Kind             string `json:"kind"` // "journal" | "file"
+	Unit             string `json:"unit"` // journal unit ("" = whole journal)
+	Path             string `json:"path"` // file path for tail -F
+	Lines            int    `json:"lines"`
+	RootUser         bool   `json:"root_user"`
+	SudoNoPwd        bool   `json:"sudo_no_pwd"`
+	UseSavedPassword bool   `json:"use_saved_password"`
+}
+
+// LogTailStart launches a follow stream and returns its tailID. Lines arrive
+// as `logtail_line_batch:<tailID>` events; lifecycle as `logtail_event:<tailID>`.
+func (a *App) LogTailStart(in LogTailStartInput) (string, error) {
+	sess, ok := a.pool.Get(in.SessionID)
+	if !ok {
+		return "", fmt.Errorf("session %s not found", in.SessionID)
+	}
+	target := sess.TargetClient()
+	if target == nil {
+		return "", fmt.Errorf("session target unavailable")
+	}
+	opts := sshlayer.LogTailOptions{
+		Kind:  sshlayer.LogTailKind(in.Kind),
+		Unit:  in.Unit,
+		Path:  in.Path,
+		Lines: in.Lines,
+	}
+
+	tailID := uuid.New().String()
+
+	// Batch the live line stream, same shape as the tcpdump batcher: keep the
+	// last batchTailCap lines in a circular buffer, count the rest as skipped,
+	// flush every batchFlushEvery. Full history stays on the backend ring.
+	const (
+		batchFlushEvery = 120 * time.Millisecond
+		batchTailCap    = 400
+	)
+	var (
+		batchMu      sync.Mutex
+		batchRing    = make([]sshlayer.LogTailLine, batchTailCap)
+		batchHead    int
+		batchFilled  int
+		batchSkipped int64
+		batchTotal   int64
+	)
+	batchDone := make(chan struct{})
+	onLine := func(ln sshlayer.LogTailLine) {
+		batchMu.Lock()
+		batchTotal++
+		if batchFilled == batchTailCap {
+			batchSkipped++
+		} else {
+			batchFilled++
+		}
+		batchRing[batchHead] = ln
+		batchHead = (batchHead + 1) % batchTailCap
+		batchMu.Unlock()
+	}
+	flushBatch := func() {
+		batchMu.Lock()
+		if batchFilled == 0 {
+			batchMu.Unlock()
+			return
+		}
+		out := make([]sshlayer.LogTailLine, batchFilled)
+		start := (batchHead - batchFilled + batchTailCap) % batchTailCap
+		for i := 0; i < batchFilled; i++ {
+			out[i] = batchRing[(start+i)%batchTailCap]
+		}
+		skipped := batchSkipped
+		total := batchTotal
+		batchFilled = 0
+		batchHead = 0
+		batchSkipped = 0
+		batchMu.Unlock()
+		EventsEmit("logtail_line_batch:"+tailID, LogTailLineBatch{
+			Lines:   out,
+			Skipped: skipped,
+			Total:   total,
+		})
+	}
+	go func() {
+		t := time.NewTicker(batchFlushEvery)
+		defer t.Stop()
+		for {
+			select {
+			case <-batchDone:
+				flushBatch()
+				return
+			case <-t.C:
+				flushBatch()
+			}
+		}
+	}()
+	sid := in.SessionID
+	var batchStopOnce sync.Once
+	stopBatch := func() { batchStopOnce.Do(func() { close(batchDone) }) }
+	onLifecycle := func(event, msg string) {
+		if event == "ended" {
+			a.logtailMu.Lock()
+			if a.logtailBySession[sid] == tailID {
+				delete(a.logtailBySession, sid)
+			}
+			a.logtailMu.Unlock()
+			stopBatch()
+		}
+		EventsEmit("logtail_event:"+tailID, map[string]string{"event": event, "msg": msg})
+	}
+
+	h, err := sshlayer.StartLogTail(target, in.RootUser, in.SudoNoPwd, opts, onLine, onLifecycle)
+	if err != nil {
+		stopBatch()
+		return "", err
+	}
+	h.ID = tailID
+	a.logtailMu.Lock()
+	if a.logtails == nil {
+		a.logtails = map[string]*sshlayer.LogTailHandle{}
+	}
+	if a.logtailBySession == nil {
+		a.logtailBySession = map[string]string{}
+	}
+	a.logtails[tailID] = h
+	a.logtailBySession[in.SessionID] = tailID
+	a.logtailMu.Unlock()
+
+	if in.UseSavedPassword && !in.RootUser && !in.SudoNoPwd {
+		if pass := a.resolveSudoCandidate(in.SessionID); pass != "" {
+			h.ProvidePassword(pass)
+		}
+	}
+	return tailID, nil
+}
+
+// LogTailLineBatch is the batched line payload for logtail_line_batch events.
+type LogTailLineBatch struct {
+	Lines   []sshlayer.LogTailLine `json:"lines"`
+	Skipped int64                  `json:"skipped"`
+	Total   int64                  `json:"total"`
+}
+
+func (a *App) LogTailProvidePassword(tailID, password string) error {
+	a.logtailMu.Lock()
+	h := a.logtails[tailID]
+	a.logtailMu.Unlock()
+	if h == nil {
+		return fmt.Errorf("logtail %s not found", tailID)
+	}
+	h.ProvidePassword(password)
+	return nil
+}
+
+func (a *App) LogTailStop(tailID string) error {
+	a.logtailMu.Lock()
+	h := a.logtails[tailID]
+	delete(a.logtails, tailID)
+	for sid, tid := range a.logtailBySession {
+		if tid == tailID {
+			delete(a.logtailBySession, sid)
+		}
+	}
+	a.logtailMu.Unlock()
+	if h == nil {
+		return nil
+	}
+	h.Stop()
+	return nil
+}
+
+// LogTailActiveInfo describes a tail already running for a session so a window
+// attaching after a detach can restore its context.
+type LogTailActiveInfo struct {
+	TailID string `json:"tail_id"`
+	Kind   string `json:"kind"`
+	Unit   string `json:"unit"`
+	Path   string `json:"path"`
+}
+
+// LogTailActiveForSession returns the running tail for a session, if any.
+func (a *App) LogTailActiveForSession(sessionID string) *LogTailActiveInfo {
+	a.logtailMu.Lock()
+	defer a.logtailMu.Unlock()
+	tailID := a.logtailBySession[sessionID]
+	if tailID == "" {
+		return &LogTailActiveInfo{}
+	}
+	h := a.logtails[tailID]
+	if h == nil {
+		return &LogTailActiveInfo{}
+	}
+	return &LogTailActiveInfo{
+		TailID: tailID,
+		Kind:   string(h.Opts.Kind),
+		Unit:   h.Opts.Unit,
+		Path:   h.Opts.Path,
+	}
+}
+
+// LogTailSnapshotResult carries the retained line history plus the cumulative
+// watermark the frontend dedupes against.
+type LogTailSnapshotResult struct {
+	Lines []sshlayer.LogTailLine `json:"lines"`
+	Cum   int64                  `json:"cum"`
+}
+
+// LogTailSnapshot returns the server-side line history for a running tail.
+func (a *App) LogTailSnapshot(tailID string) (*LogTailSnapshotResult, error) {
+	a.logtailMu.Lock()
+	h := a.logtails[tailID]
+	a.logtailMu.Unlock()
+	if h == nil {
+		return &LogTailSnapshotResult{}, nil
+	}
+	lines, cum := h.Snapshot()
+	return &LogTailSnapshotResult{Lines: lines, Cum: cum}, nil
+}
+
+// WindowOpenLogtail opens a standalone window that re-attaches to the running
+// log tail for a session (URL /?logtail=<sessionID>). Same semantics as
+// WindowOpenTcpdump - no session transfer, no close-disconnect.
+func (a *App) WindowOpenLogtail(sessionID string) (string, error) {
+	if a.app == nil {
+		return "", fmt.Errorf("application not initialised")
+	}
+	if sessionID == "" {
+		return "", fmt.Errorf("session id required")
+	}
+	name := fmt.Sprintf("logtail-%s", sessionID)
+	opts := application.WebviewWindowOptions{
+		Name:             name,
+		Title:            "log tail - ssh-tool",
+		Width:            1000,
+		Height:           700,
+		MinWidth:         600,
+		MinHeight:        400,
+		URL:              "/?logtail=" + sessionID,
+		BackgroundColour: application.NewRGB(30, 30, 46),
+		DevToolsEnabled:  true,
+	}
+	a.app.Window.NewWithOptions(opts)
+	return name, nil
+}
+
+// LogTailNotifyRedocked mirrors TcpdumpNotifyRedocked: a detached log-tail
+// window closing tells the main window to un-detach the entry.
+func (a *App) LogTailNotifyRedocked(sessionID string) {
+	EventsEmit("logtail_redocked", map[string]string{"session_id": sessionID})
+	if a.app == nil {
+		return
+	}
+	name := fmt.Sprintf("logtail-%s", sessionID)
+	if w, ok := a.app.Window.GetByName(name); ok {
+		w.Close()
+	}
 }
 
 // BatchExecInput is the IPC payload the multi-select panel sends.

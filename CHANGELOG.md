@@ -7,6 +7,41 @@ in alpha upstream.
 
 ---
 
+## [0.74.0] - Snippet variables, detachable tcpdump, live log tail, forwards survive reconnect
+
+### Added
+
+- **Snippet variables.** A snippet body can now carry `${var}` or
+  `${var:default}` placeholders. When you fire a snippet that has them, the
+  palette prompts for each value (defaults pre-filled) before sending - so a
+  snippet like `journalctl -u ${svc} --since ${since:-1h}` asks for the unit
+  and time instead of being edited by hand every time. Snippets with no
+  placeholders send exactly as before. The values are ad-hoc and never stored;
+  no secrets pass through them.
+- **Detach tcpdump into its own window.** The live capture used to be a modal -
+  you either watched packets or typed in the terminal. A new "detach" button in
+  the tcpdump header pops the capture out into a separate window that keeps
+  streaming while you work in the terminal. The capture runs on the backend, so
+  closing the window just brings it back as a background chip; nothing is lost.
+  The modal + minimise still work as before.
+- **Live log tail.** A new toolbar button streams `journalctl -f` (whole
+  journal or a unit) or `tail -F` on a file from the target host, with a
+  client-side substring filter to narrow the flood. It detaches into its own
+  window exactly like tcpdump, so you can watch logs while typing, and it
+  auto-reconnects the stream if it drops while the session is still up.
+
+### Fixed / Changed
+
+- **Port forwards survive a session reconnect.** When a connection's first hop
+  dropped and auto-reconnect brought the session back, only forwards marked
+  "auto-start" used to come back - a manually-started forward was silently
+  lost. Now every forward that was running is restored onto the reconnected
+  session, and the forward list shows a "reconnecting" state during the
+  retry window instead of just "stopped". (Requires the session's
+  auto-reconnect to be on; with it off, nothing reconnects, same as before.)
+
+---
+
 ## [0.73.1] - WireGuard survives another VPN; terminal-copy toast on macOS
 
 ### Fixed

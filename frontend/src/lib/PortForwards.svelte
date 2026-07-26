@@ -33,6 +33,15 @@
       .at(-1)
   );
 
+  // While a session for this connection is mid-reconnect, its forwards are torn
+  // down and will be restored on success. Show "reconnecting" instead of the
+  // bare "stopped" so the user knows they're coming back.
+  const reconnecting = $derived(
+    sessions.tabs.some(
+      (t) => t.connectionId === connection.id && t.status === "reconnecting"
+    )
+  );
+
   async function reload() {
     err = null;
     try {
@@ -440,8 +449,13 @@
             <span class="kind kind-{spec.kind}">{spec.kind}</span>
             <span class="desc">{spec.description || "(no description)"}</span>
             {#if spec.auto_start}<span class="badge">auto</span>{/if}
-            <span class="dot" style="background: {running ? 'var(--green)' : 'var(--overlay0)'}"></span>
-            <span class="status">{running ? "listening" : "stopped"}</span>
+            {#if !running && reconnecting}
+              <span class="dot" style="background: var(--yellow)"></span>
+              <span class="status">reconnecting</span>
+            {:else}
+              <span class="dot" style="background: {running ? 'var(--green)' : 'var(--overlay0)'}"></span>
+              <span class="status">{running ? "listening" : "stopped"}</span>
+            {/if}
           </div>
           <div class="meta">
             {#if spec.kind === "dynamic"}

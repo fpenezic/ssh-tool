@@ -17,7 +17,11 @@
 // window mounts a fresh view and starts accumulating from that point;
 // the capture itself keeps running because it lives on the backend.
 
-export type TcpdumpMode = "open" | "minimized";
+// "detached" = the capture is being viewed in its own top-level window. The
+// main window keeps the entry (so the toolbar chip still shows it exists and
+// can be re-opened) but must NOT mount its own hidden modal for it, otherwise
+// two windows would fight over the same capture's attach/stop lifecycle.
+export type TcpdumpMode = "open" | "minimized" | "detached";
 
 export interface TcpdumpStats {
   iface: string;
@@ -78,6 +82,21 @@ class TcpdumpStore {
     const e = this.entries.get(sessionId);
     if (e) {
       e.mode = "minimized";
+      this.membershipVersion++;
+    }
+  }
+
+  // detach marks the capture as living in its own window. The main window's
+  // TerminalArea host must skip mounting a modal for a detached entry (the
+  // detached window owns the attach). When that window closes, the frontend
+  // calls minimize() to bring the capture back under the main window.
+  detach(sessionId: string) {
+    const e = this.entries.get(sessionId);
+    if (e) {
+      e.mode = "detached";
+      this.membershipVersion++;
+    } else {
+      this.entries.set(sessionId, { sessionId, mode: "detached", stats: null });
       this.membershipVersion++;
     }
   }

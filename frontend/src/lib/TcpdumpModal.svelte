@@ -39,8 +39,17 @@
     // Periodic stats push so the parent's toolbar chip can show live
     // counts while minimised.
     onStats?: (s: TcpdumpStats) => void;
+    // embedded renders the capture UI inline (fills its host) instead of as a
+    // fixed centered overlay with a backdrop. Used by the detached tcpdump
+    // window, which is already its own top-level window - no backdrop, no
+    // click-outside-to-dismiss.
+    embedded?: boolean;
+    // onDetach, when set, shows a "detach to window" control in the header.
+    // The capture keeps running (it lives on the backend); this window just
+    // re-attaches to it. Absent in the embedded (already-detached) view.
+    onDetach?: () => void;
   }
-  let { sessionId, onClose, hidden = false, onMinimize, onStats }: Props = $props();
+  let { sessionId, onClose, hidden = false, onMinimize, onStats, embedded = false, onDetach }: Props = $props();
 
   let probe = $state<TcpdumpProbeResult | null>(null);
   let interfaces = $state<string[]>([]);
@@ -693,6 +702,13 @@
   // history survives until the user explicitly closes it.
   function dismiss() {
     if (hidden) return; // already minimised - ignore stray outside-clicks
+    if (embedded) {
+      // In the detached window there is no backdrop/minimise. Escape must
+      // NOT stop the capture (it lives on the backend) - just detach this
+      // view; onClose closes the window and the capture keeps running.
+      onClose();
+      return;
+    }
     if (onMinimize) onMinimize();
     else closeCapture();
   }
@@ -809,11 +825,11 @@
      background) and otherwise closes. clickOutside likewise minimises
      rather than tearing down a live capture. Both fall back to onClose
      when there's nothing to keep (no minimise handler or not running). -->
-<div class="overlay" class:hidden role="dialog" aria-modal="true" tabindex="-1"
+<div class="overlay" class:hidden class:embedded role="dialog" aria-modal="true" tabindex="-1"
      onkeydown={(e) => { if (e.key === "Escape") dismiss(); }}>
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div class="modal" role="document"
-       use:clickOutside={{ onOutside: dismiss }}
+       use:clickOutside={{ onOutside: dismiss, enabled: !embedded }}
        onkeydown={(e) => e.stopPropagation()}>
     <header>
       <strong>tcpdump</strong>
@@ -828,6 +844,13 @@
           <span class="warn">sudo will prompt</span>
         {/if}
       </span>
+      {#if onDetach}
+        <button
+          class="detach"
+          onclick={onDetach}
+          title="Open in a separate window - capture keeps running so you can watch it while you type"
+        >⧉</button>
+      {/if}
       {#if onMinimize}
         <button
           class="minimize"
@@ -1194,6 +1217,15 @@
   /* Minimised: hide the overlay entirely but keep the component mounted
      so the capture + subscriptions + Insights keep running. */
   .overlay.hidden { display: none; }
+  /* Embedded (detached-window) mode: fill the host window instead of
+     floating as a centered, backdropped overlay. */
+  .overlay.embedded {
+    position: static;
+    background: none;
+    padding: 0;
+    z-index: auto;
+    height: 100%;
+  }
   .modal {
     background: var(--base); color: var(--text);
     border: 1px solid var(--surface0); border-radius: 8px;
@@ -1203,6 +1235,21 @@
     overflow: hidden;
     box-shadow: 0 20px 60px rgba(0,0,0,0.6);
   }
+  .overlay.embedded .modal {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .detach {
+    background: transparent; color: var(--subtext0); border: 0;
+    cursor: pointer; font: inherit; padding: 0 0.4rem;
+    line-height: 1; font-size: 1rem;
+  }
+  .detach:hover { color: var(--text); }
   header {
     display: flex;
     align-items: center;
