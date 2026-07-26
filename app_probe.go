@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -97,10 +98,20 @@ func (a *App) probeResolved(s *store.ResolvedSettings) string {
 	}
 	addr := net.JoinHostPort(s.Hostname, strconv.Itoa(int(port)))
 
+	profile := "none"
+	if s.NetworkProfileID != nil {
+		profile = *s.NetworkProfileID
+	}
+	jump := "none"
+	if s.JumpHost != nil {
+		jump = sshlayer.JumpPrefixKey(s)
+	}
+
 	// Jump-host connection: probe THROUGH an already-live shared bastion only.
 	if s.JumpHost != nil {
 		client := a.jumpPool.peek(sshlayer.JumpPrefixKey(s))
 		if client == nil {
+			log.Printf("probe: %s UNKNOWN (jump, no live bastion) addr=%s jumpKey=%s", addr, addr, jump)
 			return probeUnknown // no live bastion; don't build one to probe
 		}
 		// client.Dial has no context; run it in a goroutine we can time out so a
@@ -140,6 +151,7 @@ func (a *App) probeResolved(s *store.ResolvedSettings) string {
 		if derr != nil {
 			// Tunnel down (ErrTunnelWaiting) or profile error - unknown, not
 			// down, so a WG-only host behind a sleeping tunnel isn't a false red.
+			log.Printf("probe: %s UNKNOWN (wg profile=%s no live tunnel) err=%v", addr, profile, derr)
 			return probeUnknown
 		}
 		dialer = d
@@ -160,6 +172,7 @@ func (a *App) probeResolved(s *store.ResolvedSettings) string {
 	defer cancel()
 	conn, err := dialer(ctx, "tcp", addr)
 	if err != nil {
+		log.Printf("probe: %s DOWN addr=%s profile=%s jump=%s err=%v", addr, addr, profile, jump, err)
 		return probeDown
 	}
 	_ = conn.Close()
