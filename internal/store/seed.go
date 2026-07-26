@@ -54,6 +54,11 @@ func (d *DB) SeedDefaultSnippets() error {
 		{Name: "Tail a log", Body: "tail -f ${path:-/var/log/syslog}", Tags: []string{"diag", "logs"}},
 		{Name: "Kernel messages", Body: "dmesg --ctime | tail -40", Tags: []string{"diag", "kernel"}},
 		{Name: "Top by memory", Body: "ps aux --sort=-%mem | head -12", Tags: []string{"diag", "memory"}},
+		{Name: "Compose up", Body: "docker compose up -d", Tags: []string{"docker", "compose"}},
+		{Name: "Compose pull + up", Body: "docker compose pull && docker compose up -d", Tags: []string{"docker", "compose"}},
+		{Name: "Compose logs", Body: "docker compose logs -f --tail=100 ${service}", Tags: []string{"docker", "compose", "logs"}},
+		{Name: "Docker containers", Body: "docker ps -a", Tags: []string{"docker"}},
+		{Name: "Docker prune", Body: "docker system prune -af", Tags: []string{"docker", "cleanup"}},
 	}
 	for _, s := range defaults {
 		if _, err := d.CreateSnippet(s); err != nil {
