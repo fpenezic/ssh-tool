@@ -162,6 +162,26 @@ func TestDefaultsApply(t *testing.T) {
 	if r.InitialCommand != "" {
 		t.Fatalf("initial command should default empty, got %q", r.InitialCommand)
 	}
+	if !r.ProbeLiveness {
+		t.Fatalf("probe_liveness should default true when unset")
+	}
+}
+
+func TestProbeLivenessInheritedAndOverridden(t *testing.T) {
+	// A folder opts out of probing; a child connection with no override
+	// inherits the opt-out.
+	f := folder("root", nil, store.InheritableSettings{
+		ProbeLiveness: ptr(false),
+	})
+	c := conn("c1", ptr("root"), "h", store.InheritableSettings{})
+	if r := ResolveWith(c, []store.Folder{f}); r.ProbeLiveness {
+		t.Fatalf("child should inherit folder probe=off")
+	}
+	// A connection override wins over the folder opt-out.
+	c2 := conn("c2", ptr("root"), "h", store.InheritableSettings{ProbeLiveness: ptr(true)})
+	if r := ResolveWith(c2, []store.Folder{f}); !r.ProbeLiveness {
+		t.Fatalf("connection override probe=on should win over folder off")
+	}
 }
 
 func TestInitialCommandInheritedAndOverridden(t *testing.T) {

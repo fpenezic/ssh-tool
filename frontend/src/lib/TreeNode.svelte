@@ -2,6 +2,7 @@
   import { tree, selection, drag, sessions, paneTabs, view } from "./stores.svelte";
   import { errMsg } from "./connectErrors";
   import { expandedConnections } from "./treeState.svelte";
+  import { probeState } from "./probeState.svelte";
   import { tagFilter } from "./tagFilter.svelte.ts";
   import { nameFilter } from "./nameFilter.svelte.ts";
   import { appPrefs } from "./appPrefs.svelte";
@@ -295,6 +296,18 @@
     return tree.connectionsIn(folder.id).filter(
       (c) => tagFilter.connectionMatches(c.id) && nameFilter.connectionMatches(c.id),
     );
+  });
+
+  // Liveness probe: while this folder is expanded, register its connection ids
+  // as visible so the store TCP-probes them. The store no-ops when the global
+  // setting is off, and the backend returns "unknown" for probe=off folders /
+  // jump hosts without a live bastion, so no client-side resolution is needed.
+  // $effect cleanup deregisters on collapse / unmount.
+  $effect(() => {
+    if (!expanded) return;
+    const ids = conns.map((c) => c.id);
+    for (const id of ids) probeState.register(id);
+    return () => { for (const id of ids) probeState.unregister(id); };
   });
 
   // Set of connection_ids that currently have at least one connected session.
@@ -824,6 +837,7 @@
           selection.current.id === conn.id}
         {@const isConn = connectingId === conn.id}
         {@const isLive = liveConnIds.has(conn.id)}
+        {@const probe = isLive ? null : probeState.stateOf(conn.id)}
         {@const connColor = tree.resolveColorForConnection(conn.id)}
         {@const jumpChain = tree.resolveJumpChainForConnection(conn.id)}
         {@const rowTitle = jumpChain.length > 0
@@ -888,7 +902,9 @@
           }}
           ondrop={(e) => handleConnDrop(e, conn.id)}
         >
-          <span class="chev dot">{isLive ? "●" : " "}</span>
+          <span class="chev dot" class:probe-up={probe === "up"} class:probe-down={probe === "down"}
+            title={probe === "up" ? "Reachable" : probe === "down" ? "Unreachable" : ""}
+          >{isLive ? "●" : (probe === "up" || probe === "down") ? "○" : " "}</span>
           <span class="icon">
             {#if isConn}
               <IconLoading size={14} class="spin" />
@@ -983,6 +999,10 @@
   /* The connection-row live indicator reuses .chev for alignment but is a
      status dot, not an expand caret - keep it small. */
   .chev.dot { font-size: 0.7rem; }
+  /* Liveness-probe dot (hollow ○) shown when there's no live session: green =
+     reachable, red = unreachable. Unknown shows nothing. */
+  .chev.dot.probe-up { color: var(--green); }
+  .chev.dot.probe-down { color: var(--red); }
   /* Touch: bigger rows + a wider chevron hit area so folders are easy to
      expand with a fingertip. The whole folder row also toggles on tap
      (see onFolderRowClick), this just makes the chevron itself forgiving. */

@@ -245,6 +245,31 @@ that wear it.
 - Connecting state shows a small spinning loader; failed connects
   show an ✕ icon on the row (with tooltip carrying the reason).
 
+### Liveness probe
+
+Optional reachability dots on connection rows, so opening a folder
+shows you at a glance which hosts are up.
+
+- Enable it globally under **Settings → Network → "Liveness probe for
+  expanded folders"** (off by default).
+- With it on, a hollow ○ appears on connection rows inside folders you
+  have **expanded**: **green** = a TCP connect to the SSH port
+  succeeded, **red** = it was refused or timed out. Rows that aren't
+  probed show nothing. (A filled green ● still means an open session,
+  which takes precedence over the probe dot.)
+- Only connections in currently-expanded folders are probed, and they
+  are re-checked every ~30 seconds while the folder stays open. Collapse
+  the folder and probing stops. This keeps it cheap even on a tree of
+  hundreds of connections.
+- The probe uses the same path a real connect would: it routes through a
+  connection's WireGuard profile or an already-open bastion when there is
+  one. It never brings a tunnel or bastion **up** just to probe - a host
+  behind a sleeping VPN, or behind a bastion you have no live session to,
+  simply shows no dot (unknown) rather than a false red.
+- A folder can opt out entirely: set **Liveness probe → Off** in the
+  folder's settings (tri-state, inherited by children) for hosts you
+  never want probed (for example anything that alarms on port scans).
+
 ### Connection editor
 
 Two-column grid (auto-fit on narrow widths). Fields:

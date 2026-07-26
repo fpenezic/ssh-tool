@@ -135,6 +135,22 @@ func (p *jumpPool) acquire(
 	return e.client, release, e.networkVia, nil
 }
 
+// peek returns the shared bastion client for a key IF one is already live,
+// WITHOUT bumping refs or touching the idle-linger timer. It is for passive
+// callers (the liveness probe) that want to ride an existing bastion but must
+// never keep it alive or build a new one. Returns nil when no prefix is up.
+func (p *jumpPool) peek(key string) *ssh.Client {
+	if key == "" {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if e := p.entries[key]; e != nil {
+		return e.client
+	}
+	return nil
+}
+
 // stopAll closes every shared prefix. Called on app shutdown AFTER
 // sessions are torn down (a prefix may itself ride a WG tunnel).
 func (p *jumpPool) stopAll() {

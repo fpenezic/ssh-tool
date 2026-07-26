@@ -72,6 +72,7 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		InitialCommand:    firstNonNil(over.InitialCommand, base.InitialCommand),
 		AutoReconnect:     firstNonNilBool(over.AutoReconnect, base.AutoReconnect),
 		Verbose:           firstNonNilBool(over.Verbose, base.Verbose),
+		ProbeLiveness:     firstNonNilBool(over.ProbeLiveness, base.ProbeLiveness),
 		VncEnabled:        firstNonNilBool(over.VncEnabled, base.VncEnabled),
 		VncPort:           firstNonNilU16(over.VncPort, base.VncPort),
 		VncUseTunnel:      firstNonNilBool(over.VncUseTunnel, base.VncUseTunnel),
@@ -156,7 +157,11 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 		InitialCommand:    initialCmd,
 		AutoReconnect:     s.AutoReconnect != nil && *s.AutoReconnect,
 		Verbose:           s.Verbose != nil && *s.Verbose,
-		VncEnabled:        s.VncEnabled != nil && *s.VncEnabled,
+		// Default true: probe unless a folder explicitly opted out. The global
+		// switch gates whether probing runs at all; this only lets a folder
+		// exclude itself.
+		ProbeLiveness: s.ProbeLiveness == nil || *s.ProbeLiveness,
+		VncEnabled:    s.VncEnabled != nil && *s.VncEnabled,
 		VncPort:           vncPort,
 		VncUseTunnel:      s.VncUseTunnel != nil && *s.VncUseTunnel,
 		VncDefault:        s.VncDefault != nil && *s.VncDefault,

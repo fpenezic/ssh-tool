@@ -1311,6 +1311,19 @@ export class InheritableSettings {
         }
         if (/** @type {any} */(false)) {
             /**
+             * ProbeLiveness gates the tree liveness probe (a TCP connect to the SSH
+             * port that paints a green/red/unknown dot on connection rows inside
+             * expanded folders). Tri-state inheritance so a folder can be opted out
+             * (e.g. hosts that alarm on port scans, or a folder you never want probed).
+             * Unset resolves true - probing happens wherever the global switch is on
+             * unless a folder turns it off.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["probe_liveness"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * VncEnabled gates the "Open VNC console" action on a connection.
              * Most SSH hosts have no VNC server, so the console is opt-in: the
              * action and the editor's VNC fields only show when this resolves
@@ -1838,6 +1851,13 @@ export class ResolvedSettings {
              * @type {boolean}
              */
             this["verbose"] = false;
+        }
+        if (!("probe_liveness" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["probe_liveness"] = false;
         }
         if (!("vnc_enabled" in $$source)) {
             /**

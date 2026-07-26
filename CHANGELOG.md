@@ -7,7 +7,7 @@ in alpha upstream.
 
 ---
 
-## [0.74.0] - Snippet variables, detachable tcpdump, live log tail, forwards survive reconnect
+## [0.74.0] - Snippet variables, live log tail, liveness probe, forwards survive reconnect
 
 ### Added
 
@@ -18,17 +18,24 @@ in alpha upstream.
   and time instead of being edited by hand every time. Snippets with no
   placeholders send exactly as before. The values are ad-hoc and never stored;
   no secrets pass through them.
-- **Detach tcpdump into its own window.** The live capture used to be a modal -
-  you either watched packets or typed in the terminal. A new "detach" button in
-  the tcpdump header pops the capture out into a separate window that keeps
-  streaming while you work in the terminal. The capture runs on the backend, so
-  closing the window just brings it back as a background chip; nothing is lost.
-  The modal + minimise still work as before.
+- **Snippet button in the pane toolbar.** The snippet palette had only the
+  `Ctrl+Shift+P` shortcut, which wasn't discoverable. There's now an explicit
+  snippets button in each pane's tools group.
 - **Live log tail.** A new toolbar button streams `journalctl -f` (whole
   journal or a unit) or `tail -F` on a file from the target host, with a
-  client-side substring filter to narrow the flood. It detaches into its own
-  window exactly like tcpdump, so you can watch logs while typing, and it
-  auto-reconnects the stream if it drops while the session is still up.
+  client-side substring filter to narrow the flood and auto-scroll that sticks
+  to the bottom while following. It auto-reconnects the stream if it drops while
+  the session is still up, and can detach into its own window so you can watch
+  logs while typing (closing the window ends the tail).
+- **Liveness probe for expanded folders.** Turn on
+  **Settings -> Network -> "Liveness probe for expanded folders"** to see a
+  reachability dot on connection rows inside folders you have open: a TCP
+  connect to the SSH port shows green (reachable) or red (unreachable); hosts
+  that aren't probed stay blank. Only connections in currently-expanded folders
+  are probed (re-checked every ~30s), so it stays cheap even with hundreds of
+  connections. It routes through a connection's WireGuard profile or an
+  already-open bastion when there is one, and never brings a tunnel or bastion
+  up just to probe. Any folder can opt out in its settings.
 
 ### Fixed / Changed
 
@@ -39,6 +46,12 @@ in alpha upstream.
   session, and the forward list shows a "reconnecting" state during the
   retry window instead of just "stopped". (Requires the session's
   auto-reconnect to be on; with it off, nothing reconnects, same as before.)
+- **tcpdump no longer floods itself with SSH traffic over WireGuard.** The
+  built-in "exclude the SSH control connection" filter relied on a remote shell
+  variable that came back empty over a WireGuard hop (and under sudo), so the
+  capture drowned in thousands of port-22 packets. The exclusion is now computed
+  from the live SSH connection, so it works whether you reached the host
+  directly or through a tunnel.
 
 ---
 

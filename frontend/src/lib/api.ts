@@ -56,6 +56,7 @@ export interface InheritableSettings {
   initial_command?: string;
   auto_reconnect?: boolean;
   verbose?: boolean;
+  probe_liveness?: boolean;
   vnc_enabled?: boolean;
   vnc_port?: number;
   vnc_use_tunnel?: boolean;
@@ -1257,6 +1258,8 @@ export const api = {
 
   settingsGet: (key: string) => G.SettingsGet(key) as unknown as Promise<string>,
   settingsSet: (key: string, value: string) => G.SettingsSet(key, value),
+  probeConnections: (ids: string[]) =>
+    G.ProbeConnections(ids) as unknown as Promise<ProbeResult[]>,
   settingsDelete: (key: string) => G.SettingsDelete(key),
 
   sshRespondHostKey: (challengeId: string, accept: boolean, remember: boolean, hostname: string, port: number, keyType: string, keyB64: string, fingerprint: string) =>
@@ -1567,6 +1570,11 @@ export interface TcpdumpActiveInfo {
   insights: boolean;
   continuous: boolean;
   max_count: number;
+}
+
+export interface ProbeResult {
+  connection_id: string;
+  state: "up" | "down" | "unknown";
 }
 
 export interface LogTailStartInput {

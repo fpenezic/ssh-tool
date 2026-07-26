@@ -279,6 +279,7 @@
     colorTag: string;
     autoReconnect: string;
     verbose: string;
+    probeLiveness: string;
     keepalive: string;
     networkProfile: string;
     initialCommand: string;
@@ -319,6 +320,7 @@
         colorTag: folder.settings.color_tag ?? "",
         autoReconnect: encodeBool(folder.settings.auto_reconnect),
         verbose: encodeBool(folder.settings.verbose),
+        probeLiveness: encodeBool(folder.settings.probe_liveness),
         keepalive: folder.settings.keepalive_interval !== undefined
           ? String(folder.settings.keepalive_interval)
           : "",
@@ -343,6 +345,7 @@
       editingFolder.colorTag !== (s.color_tag ?? "") ||
       editingFolder.autoReconnect !== encodeBool(s.auto_reconnect) ||
       editingFolder.verbose !== encodeBool(s.verbose) ||
+      editingFolder.probeLiveness !== encodeBool(s.probe_liveness) ||
       numText(editingFolder.keepalive) !== (s.keepalive_interval !== undefined ? String(s.keepalive_interval) : "") ||
       editingFolder.networkProfile !== encodeNetProfile(s.network_profile_id) ||
       editingFolder.initialCommand !== (s.initial_command ?? "") ||
@@ -366,6 +369,7 @@
     settings.color_tag = editingFolder.colorTag || undefined;
     settings.auto_reconnect = decodeBool(editingFolder.autoReconnect);
     settings.verbose = decodeBool(editingFolder.verbose);
+    settings.probe_liveness = decodeBool(editingFolder.probeLiveness);
     {
       const k = numText(editingFolder.keepalive);
       if (k === "") {
@@ -1234,6 +1238,15 @@
           <option value="">(inherit from parent)</option>
           <option value="on">On - show TCP / handshake / auth diagnostics</option>
           <option value="off">Off</option>
+        </select>
+      </label>
+
+      <label title="Show a reachability dot (TCP connect to the SSH port) on connections in this folder while it is expanded. Needs the global liveness probe enabled in Settings.">
+        Liveness probe
+        <select bind:value={editingFolder.probeLiveness}>
+          <option value="">(inherit from parent)</option>
+          <option value="on">On - probe hosts in this folder</option>
+          <option value="off">Off - never probe this folder</option>
         </select>
       </label>
 

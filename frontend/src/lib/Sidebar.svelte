@@ -8,6 +8,7 @@
   import { IconFolderPlus, IconPlus, IconRotateCw, IconHost, IconLoading, IconX, IconGlobe, IconExpandAll, IconCollapseAll,
     IconRefresh, IconPlay, IconExternalLink, IconStar, IconMoveToFolder, IconDownload, IconTrash, IconTerminal } from "./iconMap";
   import { expandedConnections } from "./treeState.svelte";
+  import { probeState } from "./probeState.svelte";
   import TagFilter from "./TagFilter.svelte";
   import { tagFilter } from "./tagFilter.svelte.ts";
   import { nameFilter } from "./nameFilter.svelte.ts";
@@ -156,6 +157,15 @@
     return tree.connectionsIn(null).filter(
       (c) => tagFilter.connectionMatches(c.id) && nameFilter.connectionMatches(c.id),
     );
+  });
+
+  // Root connections are always visible - register them for the liveness probe
+  // (no-op when the global setting is off). Load the global flag once.
+  probeState.loadEnabled();
+  $effect(() => {
+    const ids = rootConns.map((c) => c.id);
+    for (const id of ids) probeState.register(id);
+    return () => { for (const id of ids) probeState.unregister(id); };
   });
 
   // Where a "new folder / connection" from the header toolbar lands:
@@ -533,6 +543,7 @@
         {@const sel = selection.isConnectionSelected(conn.id)}
         {@const isConn = connectingId === conn.id}
         {@const isLive = liveConnIds.has(conn.id)}
+        {@const probe = isLive ? null : probeState.stateOf(conn.id)}
         <div
           class="row conn {indicatorClass(conn.id)}"
           class:selected={sel}
@@ -583,7 +594,9 @@
           }}
           ondrop={(e) => onRootConnDrop(e, conn.id)}
         >
-          <span class="chev">{isLive ? "●" : " "}</span>
+          <span class="chev dot" class:probe-up={probe === "up"} class:probe-down={probe === "down"}
+            title={probe === "up" ? "Reachable" : probe === "down" ? "Unreachable" : ""}
+          >{isLive ? "●" : (probe === "up" || probe === "down") ? "○" : " "}</span>
           <span class="icon">
             {#if isConn}<IconLoading size={13} class="spin" />{:else}<IconHost size={13} />{/if}
           </span>
@@ -694,6 +707,9 @@
   .row.connecting { opacity: 0.7; cursor: wait; }
   .row.conn.live .name { font-weight: 600; color: var(--green); }
   .row.conn.live .chev { color: var(--green); }
+  .chev.dot { font-size: 0.7rem; }
+  .chev.dot.probe-up { color: var(--green); }
+  .chev.dot.probe-down { color: var(--red); }
   .conn-hint { color: var(--yellow); font-size: 0.72rem; margin-left: 0.3rem; }
 
   /* Empty state - shown when the tree finished loading with zero rows. */

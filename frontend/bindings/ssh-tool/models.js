@@ -3115,6 +3115,44 @@ export class PluginInfo {
 }
 
 /**
+ * ProbeResult is one connection's liveness state, returned over IPC.
+ */
+export class ProbeResult {
+    /**
+     * Creates a new ProbeResult instance.
+     * @param {Partial<ProbeResult>} [$$source = {}] - The source object to create the ProbeResult.
+     */
+    constructor($$source = {}) {
+        if (!("connection_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["connection_id"] = "";
+        }
+        if (!("state" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ProbeResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ProbeResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ProbeResult(/** @type {Partial<ProbeResult>} */($$parsedSource));
+    }
+}
+
+/**
  * ProfileStats bundles profile-wide counts for the Settings -> About
  * "Profile statistics" block. Everything comes from the store in one
  * pass; VNC is the resolved (inheritance-applied) value, not just the

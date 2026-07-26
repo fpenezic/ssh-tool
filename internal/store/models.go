@@ -97,6 +97,13 @@ type InheritableSettings struct {
 	// frontend so the user can see why a connect attempt fails. Same
 	// tri-state inheritance as AutoReconnect.
 	Verbose *bool `json:"verbose,omitempty"`
+	// ProbeLiveness gates the tree liveness probe (a TCP connect to the SSH
+	// port that paints a green/red/unknown dot on connection rows inside
+	// expanded folders). Tri-state inheritance so a folder can be opted out
+	// (e.g. hosts that alarm on port scans, or a folder you never want probed).
+	// Unset resolves true - probing happens wherever the global switch is on
+	// unless a folder turns it off.
+	ProbeLiveness *bool `json:"probe_liveness,omitempty"`
 	// VncEnabled gates the "Open VNC console" action on a connection.
 	// Most SSH hosts have no VNC server, so the console is opt-in: the
 	// action and the editor's VNC fields only show when this resolves
@@ -206,6 +213,7 @@ type ResolvedSettings struct {
 	InitialCommand string `json:"initial_command"`
 	AutoReconnect  bool   `json:"auto_reconnect"`
 	Verbose        bool   `json:"verbose"`
+	ProbeLiveness  bool   `json:"probe_liveness"`
 	// VncPort is the resolved RFB port for the VNC console action,
 	// defaulting to 5900 when unset anywhere in the chain. VncUseTunnel
 	// says whether to reach it through the connection's SSH session.

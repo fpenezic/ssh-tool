@@ -55,6 +55,7 @@ export {
     OpksshCertStatusResult,
     PinDynamicEntryInput,
     PluginInfo,
+    ProbeResult,
     ProfileStats,
     RecordingState,
     ReleaseNotes,

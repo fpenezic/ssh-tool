@@ -23,6 +23,7 @@
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
+  import { probeState } from "./probeState.svelte";
   import { MCP_SYSTEM_PROMPT, MCP_SYSTEM_PROMPT_HINT } from "./mcpSystemPrompt";
   import { copyText, writeClipboard } from "./clipboard";
   import { localShellPrefs } from "./localShellPrefs.svelte.ts";
@@ -1196,6 +1197,7 @@
   );
 
   let wgBindPhysical = $state(false);
+  let livenessProbe = $state(false);
 
   $effect(() => {
     if (activeSection === "network") {
@@ -1203,6 +1205,7 @@
       credentials.load().catch(() => {});
       refreshPlugins();
       api.wgBindPhysicalGet().then((v) => (wgBindPhysical = v)).catch(() => {});
+      api.settingsGet("liveness_probe_enabled").then((v) => (livenessProbe = v === "1")).catch(() => {});
     }
   });
 
@@ -1213,6 +1216,16 @@
       networkProfiles.load(true).catch(() => {});
     } catch (e) {
       toast.err("WireGuard bind toggle failed: " + errMsg(e));
+    }
+  }
+
+  async function toggleLivenessProbe(on: boolean) {
+    try {
+      await api.settingsSet("liveness_probe_enabled", on ? "1" : "0");
+      livenessProbe = on;
+      probeState.setEnabled(on);
+    } catch (e) {
+      toast.err("Liveness probe toggle failed: " + errMsg(e));
     }
   }
 
@@ -2662,6 +2675,27 @@
             tunnel) that takes over the default route - without it the WireGuard
             handshake gets swallowed by that VPN and never connects. Leave off
             otherwise. Running tunnels restart when you change this.
+          </div>
+        </div>
+      </label>
+
+      <label class:active={livenessProbe}>
+        <input
+          type="checkbox"
+          checked={livenessProbe}
+          onchange={(e) => toggleLivenessProbe((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Liveness probe for expanded folders</div>
+          <div class="mode-desc">
+            Shows a reachability dot on connection rows inside folders you have
+            open: a TCP connect to the SSH port paints green (reachable) or red
+            (unreachable); hosts that aren't probed stay blank. Only connections
+            in currently-expanded folders are probed (re-checked every 30s), so
+            it scales to a large tree. Routes through a connection's WireGuard
+            profile or an already-open bastion when there is one; it never brings
+            a tunnel or bastion up just to probe. A folder can opt out in its
+            settings.
           </div>
         </div>
       </label>

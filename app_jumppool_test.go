@@ -175,3 +175,38 @@ func TestJumpPoolConcurrentAcquireBuildsOnce(t *testing.T) {
 	}
 	_ = time.Now
 }
+
+func TestJumpPoolPeek(t *testing.T) {
+	p, built, _ := newTestPool()
+	deps := sshlayer.JumpPrefixDeps{}
+	s := jumpSettings("bastion", "10.0.0.1")
+	key := sshlayer.JumpPrefixKey(s)
+
+	// No prefix up yet -> peek returns nil and builds nothing.
+	if c := p.peek(key); c != nil {
+		t.Fatalf("peek returned a client with no live prefix")
+	}
+	if n := atomic.LoadInt32(built); n != 0 {
+		t.Fatalf("peek built a prefix (built=%d), it must never build", n)
+	}
+	// Empty key -> nil.
+	if c := p.peek(""); c != nil {
+		t.Fatalf("peek(\"\") should be nil")
+	}
+
+	// Bring a prefix up via acquire; peek now returns the same client without
+	// bumping refs (a later single release still tears it down on linger).
+	client, release, _, err := p.acquire(context.Background(), s, deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pc := p.peek(key); pc != client {
+		t.Fatalf("peek returned a different client than the live prefix")
+	}
+	// peek must not have bumped refs: the one release drops to zero and arms
+	// the linger (no panic, entry still present until the timer fires).
+	release()
+	if p.entries[key] == nil {
+		t.Fatalf("prefix removed immediately after single release; peek likely bumped refs")
+	}
+}
