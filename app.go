@@ -1902,6 +1902,10 @@ const (
 	syncDropboxTokenKey  = "sync:dropbox_refresh_token"
 	syncOneDriveTokenKey = "sync:onedrive_refresh_token"
 	syncGDriveTokenKey   = "sync:gdrive_refresh_token"
+	// Google requires a client secret in the token exchange even for a Desktop
+	// app (unlike Dropbox/Azure). It is not confidential for an installed app,
+	// but store it in the vault anyway rather than the plaintext settings table.
+	syncGDriveSecretKey = "sync:gdrive_client_secret"
 )
 
 type SyncConfig struct {
@@ -1953,7 +1957,10 @@ type SyncConfig struct {
 	HasOneDriveToken    bool   `json:"has_onedrive_token"`
 
 	GDriveClientID string `json:"gdrive_client_id"`
-	HasGDriveToken bool   `json:"has_gdrive_token"`
+	// HasGDriveSecret reports whether a Google client secret is stored (Google
+	// needs one even for a Desktop app). The secret itself is never returned.
+	HasGDriveSecret bool `json:"has_gdrive_secret"`
+	HasGDriveToken  bool `json:"has_gdrive_token"`
 }
 
 // syncTransportName returns the configured transport ("webdav" default). The
@@ -2083,6 +2090,9 @@ func (a *App) SyncConfigGet() SyncConfig {
 
 	if v, ok, _ := a.db.GetSetting("sync_gdrive_client_id"); ok {
 		cfg.GDriveClientID = v
+	}
+	if _, ok, _ := a.vault.Get(syncGDriveSecretKey); ok {
+		cfg.HasGDriveSecret = true
 	}
 	if _, ok, _ := a.vault.Get(syncGDriveTokenKey); ok {
 		cfg.HasGDriveToken = true
@@ -2375,6 +2385,11 @@ type oauthProvider struct {
 	label     string
 	endpoints syncer.OAuthEndpoints
 	tokenKey  string
+	// clientSecret is empty for true public clients (Dropbox, Azure). Google
+	// requires a client secret in the token exchange even for a Desktop app, so
+	// its provider carries the user-supplied secret (not confidential for an
+	// installed app - it ships in every copy, like the client ID).
+	clientSecret string
 }
 
 // oauthLiveToken exchanges the saved refresh token for a live access token and
@@ -2390,7 +2405,7 @@ func (a *App) oauthLiveToken(p oauthProvider, clientID string) (string, func() (
 	if !ok || refreshTok == "" {
 		return "", nil, fmt.Errorf("%s is not connected - use Connect first", p.label)
 	}
-	tok, err := syncer.Refresh(context.Background(), p.endpoints, clientID, refreshTok)
+	tok, err := syncer.Refresh(context.Background(), p.endpoints, clientID, p.clientSecret, refreshTok)
 	if err != nil {
 		return "", nil, fmt.Errorf("%s auth: %w", p.label, err)
 	}
@@ -2402,7 +2417,7 @@ func (a *App) oauthLiveToken(p oauthProvider, clientID string) (string, func() (
 		if !ok || stored == "" {
 			return "", fmt.Errorf("%s refresh token missing", p.label)
 		}
-		t, err := syncer.Refresh(context.Background(), p.endpoints, clientID, stored)
+		t, err := syncer.Refresh(context.Background(), p.endpoints, clientID, p.clientSecret, stored)
 		if err != nil {
 			return "", err
 		}
@@ -2425,7 +2440,7 @@ func (a *App) oauthConnect(p oauthProvider, clientID string) error {
 	if clientID == "" {
 		return fmt.Errorf("set the %s app key first", p.label)
 	}
-	tok, err := syncer.Authorize(context.Background(), p.endpoints, clientID, func(u string) {
+	tok, err := syncer.Authorize(context.Background(), p.endpoints, clientID, p.clientSecret, func(u string) {
 		BrowserOpenURL(u)
 	})
 	if err != nil {
@@ -2448,8 +2463,14 @@ func onedriveProvider(accountType string) oauthProvider {
 	return oauthProvider{label: "OneDrive", endpoints: syncer.OneDriveEndpointsFor(accountType), tokenKey: syncOneDriveTokenKey}
 }
 
-func gdriveProvider() oauthProvider {
-	return oauthProvider{label: "Google Drive", endpoints: syncer.GoogleDriveEndpoints, tokenKey: syncGDriveTokenKey}
+func gdriveProvider(clientSecret string) oauthProvider {
+	return oauthProvider{label: "Google Drive", endpoints: syncer.GoogleDriveEndpoints, tokenKey: syncGDriveTokenKey, clientSecret: clientSecret}
+}
+
+// gdriveClientSecret reads the stored Google client secret from the vault.
+func (a *App) gdriveClientSecret() string {
+	s, _, _ := a.vault.Get(syncGDriveSecretKey)
+	return s
 }
 
 // dropboxSyncTransport builds the Dropbox transport from the saved refresh
@@ -2475,7 +2496,7 @@ func (a *App) onedriveSyncTransport(cfg SyncConfig) (*syncer.OneDrive, error) {
 // gdriveSyncTransport builds the Google Drive transport from the saved refresh
 // token. Drive uses the implicit appDataFolder space, so there is no folder arg.
 func (a *App) gdriveSyncTransport(cfg SyncConfig) (*syncer.GoogleDrive, error) {
-	access, refresh, err := a.oauthLiveToken(gdriveProvider(), cfg.GDriveClientID)
+	access, refresh, err := a.oauthLiveToken(gdriveProvider(a.gdriveClientSecret()), cfg.GDriveClientID)
 	if err != nil {
 		return nil, err
 	}
@@ -2539,15 +2560,24 @@ func (a *App) OneDriveDisconnect() error {
 	return a.vault.Delete(syncOneDriveTokenKey)
 }
 
-// GDriveConfigSet saves the Google Drive app (client) ID. The connection is
-// GDriveConnect's job.
-func (a *App) GDriveConfigSet(clientID string) error {
-	return a.db.SetSetting("sync_gdrive_client_id", strings.TrimSpace(clientID))
+// GDriveConfigSet saves the Google Drive client ID and (Google-only) client
+// secret. A blank secret keeps the stored one (the UI sends blank unless
+// changed). The connection is GDriveConnect's job.
+func (a *App) GDriveConfigSet(clientID, clientSecret string) error {
+	if err := a.db.SetSetting("sync_gdrive_client_id", strings.TrimSpace(clientID)); err != nil {
+		return err
+	}
+	if strings.TrimSpace(clientSecret) != "" {
+		if err := a.vault.Put(syncGDriveSecretKey, strings.TrimSpace(clientSecret)); err != nil {
+			return fmt.Errorf("vault: %w (unlock the vault first)", err)
+		}
+	}
+	return nil
 }
 
 // GDriveConnect runs the PKCE OAuth flow and stores the refresh token.
 func (a *App) GDriveConnect() error {
-	return a.oauthConnect(gdriveProvider(), a.SyncConfigGet().GDriveClientID)
+	return a.oauthConnect(gdriveProvider(a.gdriveClientSecret()), a.SyncConfigGet().GDriveClientID)
 }
 
 // GDriveDisconnect clears the stored Google Drive refresh token.

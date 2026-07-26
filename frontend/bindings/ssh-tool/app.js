@@ -1231,13 +1231,15 @@ export function FrontendLog(line) {
 }
 
 /**
- * GDriveConfigSet saves the Google Drive app (client) ID. The connection is
- * GDriveConnect's job.
+ * GDriveConfigSet saves the Google Drive client ID and (Google-only) client
+ * secret. A blank secret keeps the stored one (the UI sends blank unless
+ * changed). The connection is GDriveConnect's job.
  * @param {string} clientID
+ * @param {string} clientSecret
  * @returns {$CancellablePromise<void>}
  */
-export function GDriveConfigSet(clientID) {
-    return $Call.ByID(2059383892, clientID);
+export function GDriveConfigSet(clientID, clientSecret) {
+    return $Call.ByID(2059383892, clientID, clientSecret);
 }
 
 /**

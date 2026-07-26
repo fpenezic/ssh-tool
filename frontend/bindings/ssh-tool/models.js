@@ -4018,6 +4018,15 @@ export class SyncConfig {
              */
             this["gdrive_client_id"] = "";
         }
+        if (!("has_gdrive_secret" in $$source)) {
+            /**
+             * HasGDriveSecret reports whether a Google client secret is stored (Google
+             * needs one even for a Desktop app). The secret itself is never returned.
+             * @member
+             * @type {boolean}
+             */
+            this["has_gdrive_secret"] = false;
+        }
         if (!("has_gdrive_token" in $$source)) {
             /**
              * @member

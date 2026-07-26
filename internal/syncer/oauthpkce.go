@@ -75,7 +75,13 @@ const authTimeout = 3 * time.Minute
 // provider's authorization URL, catches the redirect on a loopback listener,
 // and exchanges the code (with the PKCE verifier) for a token. openBrowser is
 // injected so the caller wires it to the Wails BrowserOpenURL shim.
-func Authorize(ctx context.Context, ep OAuthEndpoints, clientID string, openBrowser func(string)) (Token, error) {
+// clientSecret is optional and empty for a true public client (Dropbox, Azure):
+// PKCE replaces the secret there. Google is the exception - it requires the
+// client secret in the token exchange even for a "Desktop app" / installed
+// client and even with PKCE. That secret is not confidential for an installed
+// app (it ships in every copy, exactly like the client ID), so it is
+// user-supplied alongside the client ID rather than a real secret.
+func Authorize(ctx context.Context, ep OAuthEndpoints, clientID, clientSecret string, openBrowser func(string)) (Token, error) {
 	if clientID == "" {
 		return Token{}, fmt.Errorf("app key (client ID) is required")
 	}
@@ -165,14 +171,17 @@ func Authorize(ctx context.Context, ep OAuthEndpoints, clientID string, openBrow
 		"client_id":     {clientID},
 		"redirect_uri":  {redirectURI},
 	}
+	if clientSecret != "" {
+		form.Set("client_secret", clientSecret)
+	}
 	return exchange(ctx, ep.TokenURL, form)
 }
 
-// Refresh trades a refresh token for a fresh access token. No client secret -
-// PKCE public clients refresh with client_id + refresh_token alone. A provider
-// that omits a new refresh_token leaves Token.RefreshToken empty; the caller
-// keeps the existing one.
-func Refresh(ctx context.Context, ep OAuthEndpoints, clientID, refreshToken string) (Token, error) {
+// Refresh trades a refresh token for a fresh access token. clientSecret is
+// empty for a true public client (Dropbox/Azure) and set for Google, which
+// requires it on refresh too (see Authorize). A provider that omits a new
+// refresh_token leaves Token.RefreshToken empty; the caller keeps the old one.
+func Refresh(ctx context.Context, ep OAuthEndpoints, clientID, clientSecret, refreshToken string) (Token, error) {
 	if refreshToken == "" {
 		return Token{}, fmt.Errorf("no refresh token - connect the account first")
 	}
@@ -182,6 +191,9 @@ func Refresh(ctx context.Context, ep OAuthEndpoints, clientID, refreshToken stri
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
 		"client_id":     {clientID},
+	}
+	if clientSecret != "" {
+		form.Set("client_secret", clientSecret)
 	}
 	return exchange(ctx, ep.TokenURL, form)
 }

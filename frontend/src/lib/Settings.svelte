@@ -584,6 +584,8 @@
   let hasOnedriveToken = $state(false);
   let onedriveConnecting = $state(false);
   let gdriveClientId = $state("");
+  let gdriveClientSecret = $state(""); // Google needs a secret even for Desktop apps
+  let hasGdriveSecret = $state(false);
   let hasGdriveToken = $state(false);
   let gdriveConnecting = $state(false);
 
@@ -612,6 +614,7 @@
       onedriveAccountType = syncCfg.onedrive_account_type || "personal";
       hasOnedriveToken = syncCfg.has_onedrive_token;
       gdriveClientId = syncCfg.gdrive_client_id;
+      hasGdriveSecret = syncCfg.has_gdrive_secret;
       hasGdriveToken = syncCfg.has_gdrive_token;
     } catch { /* ignore */ }
   }
@@ -765,7 +768,8 @@
     syncErr = null;
     gdriveConnecting = true;
     try {
-      await api.gdriveConfigSet(gdriveClientId);
+      await api.gdriveConfigSet(gdriveClientId, gdriveClientSecret);
+      gdriveClientSecret = "";
       await api.gdriveConnect();
       await syncLoadConfig();
       toast.ok("Google Drive connected");
@@ -3973,7 +3977,9 @@
       Create an OAuth client of type <strong>Desktop app</strong> in the Google
       Cloud Console and add the redirect URI below. Add the
       <code>drive.appdata</code> scope on the OAuth consent screen, then paste
-      the <strong>client ID</strong>. No secret is stored (PKCE). A personal
+      the <strong>client ID</strong> and <strong>client secret</strong>. Google
+      requires the secret even for a Desktop app - for an installed app it is
+      not truly confidential, and it is kept in this machine's vault. A personal
       project can stay in "testing" mode - fine for your own account.
     </p>
     <label>Redirect URI (add this to your Google OAuth client)
@@ -3986,12 +3992,16 @@
     <label>OAuth client ID
       <input bind:value={gdriveClientId} placeholder="Google OAuth client ID" spellcheck="false" class="mono" />
     </label>
+    <label>OAuth client secret
+      <PasswordInput bind:value={gdriveClientSecret} placeholder={hasGdriveSecret ? "saved - leave blank to keep" : "Google client secret"} />
+      <span class="field-hint">From the same Desktop-app credential in the Google Cloud Console.</span>
+    </label>
     <div class="row" style="gap:0.5rem; align-items:center">
       {#if hasGdriveToken}
         <span class="field-hint" style="color:var(--ok, #3a3)">Connected</span>
         <button onclick={gdriveDisconnect}>Disconnect</button>
       {:else}
-        <button class="primary" onclick={gdriveConnect} disabled={gdriveConnecting || !gdriveClientId.trim()}>
+        <button class="primary" onclick={gdriveConnect} disabled={gdriveConnecting || !gdriveClientId.trim() || (!gdriveClientSecret.trim() && !hasGdriveSecret)}>
           {gdriveConnecting ? "Waiting for browser..." : "Connect Google Drive"}
         </button>
       {/if}

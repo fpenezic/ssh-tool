@@ -179,7 +179,7 @@ func TestRefreshOmitsSecret(t *testing.T) {
 	defer srv.Close()
 
 	ep := OAuthEndpoints{TokenURL: srv.URL}
-	if _, err := Refresh(t.Context(), ep, "app-key", "refresh-tok"); err != nil {
+	if _, err := Refresh(t.Context(), ep, "app-key", "", "refresh-tok"); err != nil {
 		t.Fatalf("Refresh: %v", err)
 	}
 	if form.Get("client_secret") != "" {
@@ -190,6 +190,26 @@ func TestRefreshOmitsSecret(t *testing.T) {
 	}
 	if form.Get("grant_type") != "refresh_token" {
 		t.Fatalf("wrong grant_type: %q", form.Get("grant_type"))
+	}
+}
+
+// TestRefreshIncludesSecretWhenSet verifies the Google path: a non-empty client
+// secret IS sent in the refresh (Google requires it even for a Desktop app).
+func TestRefreshIncludesSecretWhenSet(t *testing.T) {
+	var form url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		form, _ = url.ParseQuery(string(body))
+		io.WriteString(w, `{"access_token":"a","expires_in":3600}`)
+	}))
+	defer srv.Close()
+
+	ep := OAuthEndpoints{TokenURL: srv.URL}
+	if _, err := Refresh(t.Context(), ep, "client-id", "goog-secret", "refresh-tok"); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if form.Get("client_secret") != "goog-secret" {
+		t.Fatalf("client_secret not forwarded: %q", form.Get("client_secret"))
 	}
 }
 

@@ -994,7 +994,8 @@ export const api = {
     G.OneDriveConfigSet(clientId, accountType),
   onedriveConnect: () => G.OneDriveConnect(),
   onedriveDisconnect: () => G.OneDriveDisconnect(),
-  gdriveConfigSet: (clientId: string) => G.GDriveConfigSet(clientId),
+  gdriveConfigSet: (clientId: string, clientSecret: string) =>
+    G.GDriveConfigSet(clientId, clientSecret),
   gdriveConnect: () => G.GDriveConnect(),
   gdriveDisconnect: () => G.GDriveDisconnect(),
   syncStatus: () => nn(G.SyncStatus()) as Promise<SyncStatusResult>,
@@ -1662,6 +1663,7 @@ export interface SyncConfig {
   onedrive_account_type: string;
   has_onedrive_token: boolean;
   gdrive_client_id: string;
+  has_gdrive_secret: boolean;
   has_gdrive_token: boolean;
 }
 
