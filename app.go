@@ -6421,6 +6421,13 @@ func (a *App) SnippetCreate(in store.SnippetInput) (*store.Snippet, error) {
 	return a.db.CreateSnippet(in)
 }
 
+// SnippetLoadDefaults adds the built-in starter snippets that aren't already
+// present and returns how many were added. For existing installs the fresh-
+// store seed never touched.
+func (a *App) SnippetLoadDefaults() (int, error) {
+	return a.db.LoadDefaultSnippets()
+}
+
 func (a *App) SnippetUpdate(id string, in store.SnippetInput) (*store.Snippet, error) {
 	if in.ConnectionID != nil && *in.ConnectionID == "" {
 		in.ConnectionID = nil

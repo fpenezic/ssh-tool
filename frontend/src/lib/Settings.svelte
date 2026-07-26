@@ -233,6 +233,16 @@
     }
   }
 
+  async function loadDefaultSnippets() {
+    try {
+      const added = await api.snippetLoadDefaults();
+      await reloadSnippets();
+      toast.ok(added > 0 ? `Added ${added} default snippet${added === 1 ? "" : "s"}` : "Defaults already present");
+    } catch (e: any) {
+      toast.err("Load defaults failed: " + errMsg(e));
+    }
+  }
+
   function newSnippet() {
     snippetEditing = null;
     snippetForm = { name: "", body: "", tags: [], connection_id: null };
@@ -3095,10 +3105,13 @@
       <div class="snip-list">
         <div class="snip-list-head">
           <strong>Library</strong>
-          <button class="primary" onclick={newSnippet}>+ New</button>
+          <div style="display:flex; gap:0.4rem">
+            <button onclick={loadDefaultSnippets} title="Add the built-in starter snippets (skips any you already have)">Load defaults</button>
+            <button class="primary" onclick={newSnippet}>+ New</button>
+          </div>
         </div>
         {#if snippets.length === 0}
-          <div class="empty">No snippets yet. Add one on the right.</div>
+          <div class="empty">No snippets yet. Add one, or click <strong>Load defaults</strong>.</div>
         {:else}
           <div class="snip-rows">
             {#each snippets as s (s.id)}

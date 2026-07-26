@@ -2746,6 +2746,16 @@ export function SnippetDelete(id) {
 }
 
 /**
+ * SnippetLoadDefaults adds the built-in starter snippets that aren't already
+ * present and returns how many were added. For existing installs the fresh-
+ * store seed never touched.
+ * @returns {$CancellablePromise<number>}
+ */
+export function SnippetLoadDefaults() {
+    return $Call.ByID(2970677592);
+}
+
+/**
  * SnippetSendToSession writes the snippet body into the named session's
  * stdin (after a RecordSnippetUse bump). Trailing newline is appended
  * when missing so single-line snippets execute as the user would expect.

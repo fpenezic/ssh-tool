@@ -44,10 +44,20 @@ func (d *DB) SeedDefaultSnippets() error {
 	if len(existing) > 0 {
 		return nil
 	}
-	// Keep these to commands worth a saved snippet - non-trivial invocations or
-	// ones showing the ${var} feature. Skip things nobody needs a snippet for
-	// (df -h, free -h, top).
-	defaults := []SnippetInput{
+	for _, s := range DefaultSnippets() {
+		if _, err := d.CreateSnippet(s); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DefaultSnippets is the starter snippet set. Shared by the fresh-store seed
+// and the in-app "Load default snippets" action. Kept to commands worth a saved
+// snippet - non-trivial invocations or ones showing the ${var} feature (skip
+// trivia like df -h / free -h / top).
+func DefaultSnippets() []SnippetInput {
+	return []SnippetInput{
 		{Name: "Listening ports", Body: "ss -tlnp", Tags: []string{"diag", "network"}},
 		{Name: "Service status", Body: "systemctl status ${svc}", Tags: []string{"diag", "systemd"}},
 		{Name: "Service logs", Body: "journalctl -u ${svc} --since ${since:-1h} --no-pager", Tags: []string{"diag", "logs"}},
@@ -60,10 +70,30 @@ func (d *DB) SeedDefaultSnippets() error {
 		{Name: "Docker containers", Body: "docker ps -a", Tags: []string{"docker"}},
 		{Name: "Docker disk usage", Body: "docker system df", Tags: []string{"docker", "disk"}},
 	}
-	for _, s := range defaults {
-		if _, err := d.CreateSnippet(s); err != nil {
-			return err
-		}
+}
+
+// LoadDefaultSnippets adds any default snippets not already present (matched by
+// name + body, so re-running or partial overlap doesn't duplicate). Returns how
+// many were newly added. This is the in-app "Load default snippets" action for
+// existing installs the fresh-store seed never touched.
+func (d *DB) LoadDefaultSnippets() (int, error) {
+	existing, err := d.ListSnippets(nil)
+	if err != nil {
+		return 0, err
 	}
-	return nil
+	have := make(map[string]struct{}, len(existing))
+	for _, s := range existing {
+		have[s.Name+"\x00"+s.Body] = struct{}{}
+	}
+	added := 0
+	for _, s := range DefaultSnippets() {
+		if _, dup := have[s.Name+"\x00"+s.Body]; dup {
+			continue
+		}
+		if _, err := d.CreateSnippet(s); err != nil {
+			return added, err
+		}
+		added++
+	}
+	return added, nil
 }

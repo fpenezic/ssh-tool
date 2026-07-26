@@ -927,6 +927,8 @@ export const api = {
   snippetUpdate: (id: string, input: SnippetInput) =>
     nn(G.SnippetUpdate(id, input as any)) as Promise<Snippet>,
   snippetDelete: (id: string) => G.SnippetDelete(id),
+  snippetLoadDefaults: () =>
+    G.SnippetLoadDefaults() as unknown as Promise<number>,
   snippetSendToSession: (snippetId: string, sessionId: string) =>
     G.SnippetSendToSession(snippetId, sessionId),
   snippetSendToSessionVars: (snippetId: string, sessionId: string, vars: Record<string, string>) =>

@@ -1867,8 +1867,9 @@ Use count + last-used time are tracked so the palette can order by
 recency on an empty query.
 
 **Default snippets.** A fresh install seeds a small starter set (below).
-An existing install is never touched, so if you want them, add them by
-hand under Settings → Snippets:
+An existing install is never touched - click **Load defaults** in
+Settings → Snippets to add the ones you don't already have (it skips
+duplicates). The set:
 
 | Name | Body |
 |------|------|

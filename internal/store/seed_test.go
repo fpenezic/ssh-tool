@@ -47,3 +47,42 @@ func TestSeedDefaultSnippets(t *testing.T) {
 		t.Fatalf("re-seed changed count: %d -> %d", first, len(again))
 	}
 }
+
+func TestLoadDefaultSnippetsDedup(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "load.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	// Empty store: loads the whole set.
+	n, err := db.LoadDefaultSnippets()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if n != len(DefaultSnippets()) {
+		t.Fatalf("first load added %d, want %d", n, len(DefaultSnippets()))
+	}
+
+	// Second load: everything is already present -> adds nothing.
+	n2, err := db.LoadDefaultSnippets()
+	if err != nil {
+		t.Fatalf("load again: %v", err)
+	}
+	if n2 != 0 {
+		t.Fatalf("second load added %d, want 0 (dedup)", n2)
+	}
+
+	// Remove one, load again -> adds exactly that one back.
+	all, _ := db.ListSnippets(nil)
+	if err := db.DeleteSnippet(all[0].ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	n3, err := db.LoadDefaultSnippets()
+	if err != nil {
+		t.Fatalf("load after delete: %v", err)
+	}
+	if n3 != 1 {
+		t.Fatalf("load after removing one added %d, want 1", n3)
+	}
+}

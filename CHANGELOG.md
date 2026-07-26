@@ -21,6 +21,9 @@ in alpha upstream.
 - **Snippet button in the pane toolbar.** The snippet palette had only the
   `Ctrl+Shift+P` shortcut, which wasn't discoverable. There's now an explicit
   snippets button in each pane's tools group.
+- **Default snippets + one-click load.** A fresh install seeds a small starter
+  set of diagnostic/docker snippets. Existing installs can add them anytime with
+  **Load defaults** in Settings -> Snippets (it skips any you already have).
 - **Live log tail.** A new toolbar button streams `journalctl -f` (whole
   journal or a unit) or `tail -F` on a file from the target host, with a
   client-side substring filter to narrow the flood and auto-scroll that sticks
