@@ -6129,7 +6129,10 @@ func (a *App) WindowOpenTcpdump(sessionID string) (string, error) {
 		Height:           700,
 		MinWidth:         600,
 		MinHeight:        400,
-		URL:              "/?tcpdump=" + sessionID,
+		// Use BOTH a query and a hash: some WebView2 builds drop the query
+		// string on the initial navigation but keep the fragment, so the
+		// frontend's routeParams() falls back to the hash. Belt-and-suspenders.
+		URL:              "/?tcpdump=" + sessionID + "#tcpdump=" + sessionID,
 		BackgroundColour: application.NewRGB(30, 30, 46),
 		DevToolsEnabled:  true,
 	}
@@ -7210,7 +7213,7 @@ func (a *App) WindowOpenLogtail(sessionID string) (string, error) {
 		Height:           700,
 		MinWidth:         600,
 		MinHeight:        400,
-		URL:              "/?logtail=" + sessionID,
+		URL:              "/?logtail=" + sessionID + "#logtail=" + sessionID,
 		BackgroundColour: application.NewRGB(30, 30, 46),
 		DevToolsEnabled:  true,
 	}
