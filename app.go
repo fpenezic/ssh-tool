@@ -448,6 +448,9 @@ func (a *App) initialise() {
 	if err := db.SeedDefaults(); err != nil {
 		log.Fatalf("seed defaults: %v", err)
 	}
+	if err := db.SeedDefaultSnippets(); err != nil {
+		log.Printf("seed default snippets: %v", err) // non-fatal - empty palette is fine
+	}
 	vault := creds.NewVault()
 	vault.SetPath(creds.DefaultPath())
 

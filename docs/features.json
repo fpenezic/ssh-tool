@@ -42,6 +42,16 @@
       "art": "tcpdump"
     },
     {
+      "title": "Live log tail",
+      "body": "Follow journalctl -u <unit> or tail -F a file straight into a panel, with a live substring filter and auto-scroll. Detach it into its own window to watch logs while you type; it reconnects itself if the stream drops.",
+      "keys": [
+        "journalctl",
+        "tail -F",
+        "filter"
+      ],
+      "art": "tcpdump"
+    },
+    {
       "title": "HTTP & SOAP probe",
       "body": "One-off REST/SOAP requests with a \"Route via\" dropdown of your active SOCKS5 forwards. Endpoints behind a VPN-style tunnel become reachable without leaving the app.",
       "keys": [
@@ -235,6 +245,21 @@
       "icon": "phone",
       "title": "Android app",
       "body": "The same Go core, vault and SSH stack on an Android phone (arm64, DeX-ready). Biometric vault unlock backed by the device Keystore, a single-pane touch layout with system-back navigation, an on-screen key bar (Esc/Tab/Ctrl/arrows/^C^D...), pinch-to-zoom font size, and a foreground service that keeps SSH sessions alive when backgrounded. opkssh login opens the system browser; ssh-tool:// deep links open the app. Sideload the APK - no store account needed."
+    },
+    {
+      "icon": "tree",
+      "title": "Liveness probe",
+      "body": "See at a glance which hosts are up: a reachability dot on connection rows inside folders you have open. Probes only what's expanded, routes through a connection's WireGuard profile or an open bastion, and never brings a tunnel up just to check. Dynamic-inventory hosts optional."
+    },
+    {
+      "icon": "tcpdump",
+      "title": "Live log tail",
+      "body": "Stream journalctl -f or tail -F into a panel with a live filter; detach it to its own window and it auto-reconnects if the stream drops."
+    },
+    {
+      "icon": "palette",
+      "title": "Snippet variables",
+      "body": "Reusable command snippets with ${var} / ${var:default} placeholders that prompt for values before firing into the active session (broadcast-aware)."
     }
   ]
 }
