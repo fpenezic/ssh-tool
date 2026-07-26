@@ -1866,6 +1866,24 @@ Manage the library under **Settings → Snippets**:
 Use count + last-used time are tracked so the palette can order by
 recency on an empty query.
 
+**Default snippets.** A fresh install seeds a small starter set (below).
+An existing install is never touched, so if you want them, add them by
+hand under Settings → Snippets:
+
+| Name | Body |
+|------|------|
+| Listening ports | `ss -tlnp` |
+| Service status | `systemctl status ${svc}` |
+| Service logs | `journalctl -u ${svc} --since ${since:-1h} --no-pager` |
+| Tail a log | `tail -f ${path:-/var/log/syslog}` |
+| Kernel messages | `dmesg -T \| tail -40` |
+| Top by memory | `ps aux --sort=-%mem \| head -12` |
+| Compose up | `docker compose up -d` |
+| Compose pull + up | `docker compose pull && docker compose up -d` |
+| Compose logs | `docker compose logs -f --tail=100 ${service}` |
+| Docker containers | `docker ps -a` |
+| Docker disk usage | `docker system df` |
+
 ---
 
 <a id="tcpdump"></a>
