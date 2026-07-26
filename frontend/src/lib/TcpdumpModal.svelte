@@ -233,6 +233,27 @@
   }
 
   onMount(async () => {
+    // Re-attach FIRST, before the probe. A detached window (embedded) exists
+    // only to view a capture that's already running - it must show packets
+    // immediately, not wait on (or be blocked by) a fresh remote probe. The
+    // probe + interface list are only needed to START a capture from the
+    // Start form, so for an already-running capture we can skip them.
+    let attached = false;
+    try {
+      const existing = await api.tcpdumpActiveForSession(sessionId);
+      console.log("[tcpdump] onMount active-for-session", sessionId, existing);
+      if (existing.dump_id) {
+        await attach(existing);
+        attached = true;
+      }
+    } catch (e) {
+      console.warn("[tcpdump] re-attach failed", e);
+    }
+
+    // Skip the probe entirely when embedded and already attached - the Start
+    // form isn't reachable there anyway, and the probe is a slow remote call.
+    if (embedded && attached) return;
+
     try {
       probe = await api.tcpdumpProbe(sessionId);
     } catch (e: any) {
@@ -241,10 +262,6 @@
     }
     try {
       interfaces = await api.tcpdumpListInterfaces(sessionId);
-      // Default to "any" - it captures across every device, the safest
-      // starting point when you don't yet know which interface the
-      // traffic rides. Fall back to the first real NIC, then whatever's
-      // first, if "any" isn't offered.
       const pick = interfaces.includes("any")
         ? "any"
         : (interfaces.find((i) => i !== "lo") ?? interfaces[0]);
@@ -252,13 +269,6 @@
     } catch (e: any) {
       probeErr = `List interfaces failed: ${e?.message ?? e}`;
     }
-    // If a capture is already running for this session (this window just
-    // received the session via a detach/redock), re-attach to it instead
-    // of showing the Start form.
-    try {
-      const existing = await api.tcpdumpActiveForSession(sessionId);
-      if (existing.dump_id) await attach(existing);
-    } catch { /* no active capture - show the Start form */ }
   });
 
   // Distinguishes a deliberate close (user hit ✕ → stop the backend
@@ -467,8 +477,10 @@
       // packets with the snapshot history.
       packetQueue = packetQueue.filter((p) => (p.seq ?? 0) > attachWatermark);
       packets = snap.packets as Packet[];
-    } catch {
+      console.log("[tcpdump] attach seeded", { id, cum: snap.cum, snapPackets: packets.length, viewMode });
+    } catch (e) {
       // No snapshot (capture vanished) - fall back to live-only.
+      console.warn("[tcpdump] snapshot failed", e);
     }
   }
 

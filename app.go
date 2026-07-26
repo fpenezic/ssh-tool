@@ -6113,6 +6113,15 @@ func (a *App) WindowOpenTcpdump(sessionID string) (string, error) {
 		return "", fmt.Errorf("session id required")
 	}
 	name := fmt.Sprintf("tcpdump-%s", sessionID)
+	// Reuse an existing window for this session instead of stacking duplicates
+	// (detach clicked twice, or a stale window). Bring it forward.
+	if w, ok := a.app.Window.GetByName(name); ok {
+		application.Get().Show()
+		w.Show()
+		w.Restore()
+		w.Focus()
+		return name, nil
+	}
 	opts := application.WebviewWindowOptions{
 		Name:             name,
 		Title:            "tcpdump - ssh-tool",
@@ -6124,7 +6133,12 @@ func (a *App) WindowOpenTcpdump(sessionID string) (string, error) {
 		BackgroundColour: application.NewRGB(30, 30, 46),
 		DevToolsEnabled:  true,
 	}
-	a.app.Window.NewWithOptions(opts)
+	w := a.app.Window.NewWithOptions(opts)
+	// macOS opens new windows unfocused/behind unless we bring the app + window
+	// forward explicitly - otherwise the user "loses" the detached window.
+	application.Get().Show()
+	w.Show()
+	w.Focus()
 	return name, nil
 }
 
@@ -7175,6 +7189,13 @@ func (a *App) WindowOpenLogtail(sessionID string) (string, error) {
 		return "", fmt.Errorf("session id required")
 	}
 	name := fmt.Sprintf("logtail-%s", sessionID)
+	if w, ok := a.app.Window.GetByName(name); ok {
+		application.Get().Show()
+		w.Show()
+		w.Restore()
+		w.Focus()
+		return name, nil
+	}
 	opts := application.WebviewWindowOptions{
 		Name:             name,
 		Title:            "log tail - ssh-tool",
@@ -7186,7 +7207,10 @@ func (a *App) WindowOpenLogtail(sessionID string) (string, error) {
 		BackgroundColour: application.NewRGB(30, 30, 46),
 		DevToolsEnabled:  true,
 	}
-	a.app.Window.NewWithOptions(opts)
+	w := a.app.Window.NewWithOptions(opts)
+	application.Get().Show()
+	w.Show()
+	w.Focus()
 	return name, nil
 }
 
