@@ -68,6 +68,17 @@
   let unsubLine: (() => void) | null = null;
   let unsubEvent: (() => void) | null = null;
 
+  // Autoscroll that sticks to the bottom while following, but yields to the
+  // user: if they scroll up to read history, new lines stop yanking them down
+  // until they scroll back near the bottom. stuck tracks that intent.
+  let linesEl: HTMLDivElement | undefined = $state();
+  let stuck = $state(true);
+  function onScroll() {
+    if (!linesEl) return;
+    const gap = linesEl.scrollHeight - linesEl.scrollTop - linesEl.clientHeight;
+    stuck = gap < 40; // near enough to the bottom counts as "following"
+  }
+
   const sourceLabel = $derived(kind === "journal" ? (unit || "journal") : (path || "file"));
 
   const visibleLines = $derived.by(() => {
@@ -78,6 +89,17 @@
 
   $effect(() => {
     onStats?.({ source: sourceLabel, lines: totalLines, running });
+  });
+
+  // Stick to the bottom as new lines land, unless the user scrolled up.
+  // Reading visibleLines.length makes this re-run on every append; the rAF
+  // waits out the DOM update so scrollHeight reflects the new lines.
+  $effect(() => {
+    void visibleLines.length;
+    if (!stuck || !linesEl) return;
+    requestAnimationFrame(() => {
+      if (linesEl && stuck) linesEl.scrollTop = linesEl.scrollHeight;
+    });
   });
 
   onMount(async () => {
@@ -272,7 +294,7 @@
           <button onclick={submitPassword}>OK</button>
         </div>
       {/if}
-      <div class="lines">
+      <div class="lines" bind:this={linesEl} onscroll={onScroll}>
         {#each visibleLines as ln}
           <div class="ln">{ln}</div>
         {/each}
