@@ -1225,6 +1225,13 @@
     padding: 0;
     z-index: auto;
     height: 100%;
+    /* Full-height column so the modal (and its flex:1 rows area) get a
+       bounded height to scroll within, instead of collapsing to content. */
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: stretch;
+    min-height: 0;
   }
   .modal {
     background: var(--base); color: var(--text);
@@ -1240,6 +1247,8 @@
     max-width: none;
     max-height: none;
     height: 100%;
+    flex: 1;
+    min-height: 0;
     border: 0;
     border-radius: 0;
     box-shadow: none;

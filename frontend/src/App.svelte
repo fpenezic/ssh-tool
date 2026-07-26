@@ -826,6 +826,14 @@
     return () => window.removeEventListener("credential-create-in-folder", handler);
   });
 
+  // A pane's snippet-palette button dispatches this (the Ctrl+Shift+P
+  // shortcut isn't discoverable, so the toolbar gets an explicit control).
+  $effect(() => {
+    const handler = () => { if (vaultReady) showSnippetPalette = true; };
+    window.addEventListener("open-snippet-palette", handler);
+    return () => window.removeEventListener("open-snippet-palette", handler);
+  });
+
   // Vault auto-lock: when the user is idle for vaultPrefs.autoLockMinutes
   // we call VaultLock(false) and flip vaultReady back to false so
   // VaultGate re-prompts. Sessions / port-forwards keep running - only

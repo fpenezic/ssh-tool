@@ -518,6 +518,14 @@
              fit a phone toolbar. -->
         {#if !noSshPane && !isMobile}
           <div class="action-group">
+            <button
+              class="snippets"
+              title="Snippets - send a saved command (Ctrl+Shift+P)"
+              onclick={(e) => {
+                e.stopPropagation();
+                window.dispatchEvent(new CustomEvent("open-snippet-palette"));
+              }}
+            ><IconClipboardCopy size={13} /></button>
             {#if node.view !== "sftp"}
               <button
                 class="openSftp"
@@ -949,6 +957,7 @@
     animation: td-pulse 1.4s ease-in-out infinite;
   }
   @keyframes td-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .pane-actions button.snippets  { color: var(--yellow); }
   .pane-actions button.logtail   { color: var(--teal); }
   .pane-actions button.logtail.running { color: var(--on-accent); background: var(--teal); }
   .pane-actions button.logtail.bg { position: relative; color: var(--teal); }

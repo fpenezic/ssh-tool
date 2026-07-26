@@ -321,6 +321,10 @@
   .overlay.hidden { display: none; }
   .overlay.embedded {
     position: static; background: none; padding: 0; z-index: auto; height: 100%;
+    /* Full-height column so the modal (and its flex:1 lines area) get a
+       bounded height to scroll within, instead of collapsing to content. */
+    display: flex; flex-direction: column; align-items: stretch;
+    justify-content: stretch; min-height: 0;
   }
   .modal {
     background: var(--base); color: var(--text);
@@ -331,6 +335,7 @@
   }
   .overlay.embedded .modal {
     width: 100%; max-width: none; max-height: none; height: 100%;
+    flex: 1; min-height: 0;
     border: 0; border-radius: 0; box-shadow: none;
   }
   header {
@@ -393,7 +398,7 @@
     border-radius: 4px; padding: 0.25rem 0.7rem; cursor: pointer;
   }
   .lines {
-    flex: 1; overflow-y: auto; padding: 0.4rem 0.7rem;
+    flex: 1; min-height: 0; overflow-y: auto; padding: 0.4rem 0.7rem;
     font-family: var(--mono, ui-monospace, monospace); font-size: 0.76rem;
     line-height: 1.4; background: var(--base);
   }
