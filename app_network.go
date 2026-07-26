@@ -464,6 +464,36 @@ func (a *App) wgBackgroundDialerFor(profileID string) (sshlayer.ContextDialer, e
 	return nil, inventory.ErrTunnelWaiting
 }
 
+// wgProbeDialerFor is the liveness-probe variant. Unlike the background dialer
+// it NEVER source-binds and NEVER falls back to a plain direct dial for a
+// WG-profile host: a host reachable only over the tunnel can't be reached
+// directly anyway, and a direct probe from the physical NIC would just time out
+// and paint a false "down". So: paused -> plain direct (the profile explicitly
+// wants direct); a live tunnel -> ride it; otherwise ErrTunnelWaiting, which the
+// caller maps to "unknown" (no dot) rather than down. It never starts a tunnel.
+func (a *App) wgProbeDialerFor(profileID string) (sshlayer.ContextDialer, error) {
+	row, err := a.db.GetNetworkProfile(profileID)
+	if err != nil {
+		return nil, err
+	}
+	pol := parsePolicy(row.ConfigJSON)
+	if pol.Paused {
+		return func(ctx context.Context, network, addr string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, network, addr)
+		}, nil
+	}
+	if t := a.wgman.Get(profileID); t != nil {
+		a.wgTouch(profileID)
+		return t.DialContext, nil
+	}
+	if p := a.nbman.Get(profileID); p != nil {
+		a.wgTouch(profileID)
+		return p.DialContext, nil
+	}
+	return nil, inventory.ErrTunnelWaiting
+}
+
 func wgPrivateKeyVaultKey(profileID string) string {
 	return "wg_private_key:" + profileID
 }

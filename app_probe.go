@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -125,17 +124,22 @@ func (a *App) probeOne(id string) string {
 	// Direct / WireGuard connection.
 	var dialer sshlayer.ContextDialer
 	if s.NetworkProfileID != nil {
-		d, derr := a.wgBackgroundDialerFor(*s.NetworkProfileID)
+		d, derr := a.wgProbeDialerFor(*s.NetworkProfileID)
 		if derr != nil {
 			// Tunnel down (ErrTunnelWaiting) or profile error - unknown, not
-			// down, so a sleeping VPN doesn't paint everything red.
+			// down, so a WG-only host behind a sleeping tunnel isn't a false red.
 			return probeUnknown
 		}
 		dialer = d
 	} else {
-		localAddr := a.physicalDialLocalAddr()
+		// Plain direct dial - let the OS pick the outbound interface, exactly
+		// like a real connect. Do NOT source-bind to the physical NIC here:
+		// wg_bind_physical is a WireGuard-tunnel workaround (survive a hijacking
+		// VPN), and forcing the probe's source IP to the primary adapter makes
+		// every host on a different subnet than that adapter time out - a false
+		// "down" on hosts you can plainly reach.
 		dialer = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			d := net.Dialer{LocalAddr: localAddr}
+			var d net.Dialer
 			return d.DialContext(ctx, network, addr)
 		}
 	}
@@ -144,12 +148,6 @@ func (a *App) probeOne(id string) string {
 	defer cancel()
 	conn, err := dialer(ctx, "tcp", addr)
 	if err != nil {
-		profile := "none"
-		if s.NetworkProfileID != nil {
-			profile = *s.NetworkProfileID
-		}
-		log.Printf("probe: %s DOWN addr=%s profile=%s bindPhysical=%v err=%v",
-			id, addr, profile, a.boolSetting("wg_bind_physical"), err)
 		return probeDown
 	}
 	_ = conn.Close()
