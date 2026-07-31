@@ -15,6 +15,7 @@
   import { clickOutside } from "./clickOutside";
   import { copyText } from "./clipboard";
   import { IconCopy } from "./iconMap";
+  import { parseLine, parseQuery, groupLines, suggestQuery, type ParsedLine, type QuerySuggestion } from "./logparse";
 
   interface LogTailStats {
     source: string;
@@ -53,10 +54,16 @@
   let rawLines = $state<string[]>([]);
   let totalLines = $state(0);
   let startErr = $state<string | null>(null);
-  // Client-side grep. When set, only matching lines render (case-insensitive
-  // substring). The filter never touches the backend stream - the full history
-  // stays in rawLines so clearing the filter restores everything.
+  // Client-side filter. A bare word still greps (case-insensitive substring),
+  // but the box also understands a tiny query language - level>=warn,
+  // status=500, -noise, "quoted phrase" (see logparse.parseQuery). The filter
+  // never touches the backend stream: the full history stays in rawLines so
+  // clearing it restores everything.
   let filter = $state("");
+  // "Group similar" collapses repeated lines (same message modulo variables)
+  // into one row with a count - the noise killer. Off by default.
+  let grouped = $state(false);
+  let showHelp = $state(false); // operators cheat-sheet popover
   // Cap the retained lines so a long-running follow can't grow the DOM
   // unbounded. Matches the backend ring cap.
   const RENDER_CAP = 2000;
@@ -81,11 +88,23 @@
 
   const sourceLabel = $derived(kind === "journal" ? (unit || "journal") : (path || "file"));
 
-  const visibleLines = $derived.by(() => {
-    const f = filter.trim().toLowerCase();
-    const src = f ? rawLines.filter((l) => l.toLowerCase().includes(f)) : rawLines;
-    return src.length > RENDER_CAP ? src.slice(src.length - RENDER_CAP) : src;
+  // Parse every retained line once; recomputed only when rawLines changes.
+  const parsed = $derived<ParsedLine[]>(rawLines.map(parseLine));
+  // Compile the filter query once per keystroke, then apply.
+  const compiled = $derived(parseQuery(filter));
+  const matched = $derived(parsed.filter(compiled));
+
+  // The rendered rows: either grouped (collapsed with counts) or the flat tail,
+  // capped so the DOM stays bounded on a long follow.
+  const visibleRows = $derived.by(() => {
+    if (grouped) {
+      const groups = groupLines(matched);
+      return groups.length > RENDER_CAP ? groups.slice(groups.length - RENDER_CAP) : groups;
+    }
+    const flat = matched.map((l) => ({ line: l, count: 1, lastTs: l.ts }));
+    return flat.length > RENDER_CAP ? flat.slice(flat.length - RENDER_CAP) : flat;
   });
+  const visibleCount = $derived(matched.length);
 
   $effect(() => {
     onStats?.({ source: sourceLabel, lines: totalLines, running });
@@ -93,13 +112,14 @@
 
   // Stick to the bottom as new lines land, unless the user scrolled up.
   // Depend on totalLines (the cumulative backend counter, always growing) and
-  // rawLines - NOT visibleLines.length, which stays flat once the ring is at
+  // rawLines - NOT visibleRows.length, which stays flat once the ring is at
   // its cap even as content changes, so the effect would never re-run. The
   // rAF waits out the DOM update so scrollHeight reflects the new lines.
   $effect(() => {
     void totalLines;
     void rawLines;
     void filter;
+    void grouped;
     if (!stuck || !linesEl) return;
     requestAnimationFrame(() => {
       if (linesEl && stuck) linesEl.scrollTop = linesEl.scrollHeight;
@@ -228,8 +248,58 @@
 
   async function copyAll() {
     try {
-      await copyText(visibleLines.join("\n"), { label: "Lines" });
+      // Copy the raw text of the visible rows (grouped rows copy their
+      // representative line, prefixed with the count).
+      const text = visibleRows
+        .map((r) => (r.count > 1 ? `x${r.count}\t${r.line.raw}` : r.line.raw))
+        .join("\n");
+      await copyText(text, { label: "Lines" });
     } catch { /* ignore */ }
+  }
+
+  // ---- autocomplete ----
+  let filterEl = $state<HTMLInputElement | undefined>();
+  let suggestions = $state<QuerySuggestion[]>([]);
+  let sugIndex = $state(0);
+
+  function refreshSuggestions() {
+    const el = filterEl;
+    if (!el) { suggestions = []; return; }
+    // Sample the tail of the parsed lines so field-value suggestions reflect
+    // real data without scanning the whole ring on every keystroke.
+    const sample = parsed.length > 300 ? parsed.slice(parsed.length - 300) : parsed;
+    suggestions = suggestQuery(filter, el.selectionStart ?? filter.length, sample);
+    sugIndex = 0;
+  }
+
+  function acceptSuggestion(s: QuerySuggestion) {
+    filter = s.insert;
+    suggestions = [];
+    // Restore focus and put the caret at the end of the inserted token.
+    queueMicrotask(() => {
+      if (filterEl) {
+        filterEl.focus();
+        const pos = s.insert.length;
+        filterEl.setSelectionRange(pos, pos);
+      }
+      refreshSuggestions();
+    });
+  }
+
+  function onFilterKeydown(e: KeyboardEvent) {
+    if (suggestions.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      sugIndex = (sugIndex + 1) % suggestions.length;
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      sugIndex = (sugIndex - 1 + suggestions.length) % suggestions.length;
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      acceptSuggestion(suggestions[sugIndex]);
+    } else if (e.key === "Escape") {
+      suggestions = [];
+    }
   }
 </script>
 
@@ -286,10 +356,53 @@
       </div>
     {:else}
       <div class="toolbar">
-        <input class="filter" bind:value={filter} placeholder="filter (substring)" spellcheck="false" />
-        <span class="count">{visibleLines.length}{filter.trim() ? ` / ${rawLines.length}` : ""} lines · {totalLines} total</span>
+        <div class="filter-wrap">
+          <input
+            class="filter"
+            bind:this={filterEl}
+            bind:value={filter}
+            placeholder="filter - grep, or level>=warn status=500 -noise"
+            spellcheck="false"
+            autocomplete="off"
+            oninput={refreshSuggestions}
+            onkeydown={onFilterKeydown}
+            onfocus={refreshSuggestions}
+            onblur={() => setTimeout(() => (suggestions = []), 120)}
+          />
+          {#if suggestions.length > 0}
+            <div class="suggest">
+              {#each suggestions as s, i}
+                <button
+                  type="button"
+                  class="sug"
+                  class:active={i === sugIndex}
+                  onmousedown={(e) => { e.preventDefault(); acceptSuggestion(s); }}
+                >
+                  <span class="sug-label">{s.label}</span>
+                  {#if s.hint}<span class="sug-hint">{s.hint}</span>{/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+        <label class="chk" title="Collapse repeated lines into one row with a count">
+          <input type="checkbox" bind:checked={grouped} /> group
+        </label>
+        <span class="count">{visibleCount}{filter.trim() ? ` / ${rawLines.length}` : ""} lines · {totalLines} total</span>
+        <button class="tb help-btn" onclick={() => (showHelp = !showHelp)} title="Filter operators">?</button>
         <button class="tb" onclick={copyAll} title="Copy visible lines"><IconCopy size={13} /></button>
       </div>
+      {#if showHelp}
+        <div class="help" use:clickOutside={{ onOutside: () => (showHelp = false) }}>
+          <div><code>word</code> substring (case-insensitive)</div>
+          <div><code>"a phrase"</code> substring with spaces</div>
+          <div><code>-word</code> / <code>!word</code> exclude</div>
+          <div><code>level&gt;=warn</code> severity at least (error/warn/info/debug/trace)</div>
+          <div><code>level=error</code> exact severity</div>
+          <div><code>status=500</code> <code>method=POST</code> match a parsed field</div>
+          <div class="help-note">Terms combine with AND. Tab / Enter accepts a suggestion.</div>
+        </div>
+      {/if}
       {#if startErr}<div class="notice">{startErr}</div>{/if}
       {#if pwdPrompt}
         <div class="pwd">
@@ -299,10 +412,14 @@
         </div>
       {/if}
       <div class="lines" bind:this={linesEl} onscroll={onScroll}>
-        {#each visibleLines as ln}
-          <div class="ln">{ln}</div>
+        {#each visibleRows as row}
+          <div class="ln level-{row.line.level}">
+            {#if row.count > 1}<span class="grp-count">x{row.count}</span>{/if}
+            {#if row.line.level !== "none"}<span class="lvl-tag">{row.line.level}</span>{/if}
+            <span class="ln-text">{row.line.raw}</span>
+          </div>
         {/each}
-        {#if visibleLines.length === 0}
+        {#if visibleRows.length === 0}
           <div class="empty">{filter.trim() ? "No lines match the filter." : "Waiting for log output..."}</div>
         {/if}
       </div>
@@ -373,11 +490,37 @@
     padding: 0.4rem 0.7rem; background: var(--crust);
     border-bottom: 1px solid var(--surface0);
   }
+  .filter-wrap { position: relative; flex: 1; }
   .filter {
-    flex: 1; background: var(--mantle); color: var(--text);
+    width: 100%; box-sizing: border-box; background: var(--mantle); color: var(--text);
     border: 1px solid var(--surface0); border-radius: 4px; padding: 0.25rem 0.5rem;
     font-size: 0.8rem;
   }
+  .suggest {
+    position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 10;
+    background: var(--mantle); border: 1px solid var(--surface1); border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.35); max-height: 40vh; overflow-y: auto;
+  }
+  .sug {
+    display: flex; align-items: baseline; gap: 0.6rem; width: 100%;
+    background: transparent; border: 0; text-align: left; cursor: pointer;
+    padding: 0.28rem 0.55rem; color: var(--text); font-size: 0.78rem;
+  }
+  .sug.active, .sug:hover { background: var(--surface0); }
+  .sug-label { font-family: var(--mono, ui-monospace, monospace); }
+  .sug-hint { font-size: 0.68rem; color: var(--overlay1); }
+  .chk { display: flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; color: var(--subtext0); white-space: nowrap; cursor: pointer; }
+  .help-btn { font-weight: 700; }
+  .help {
+    position: absolute; z-index: 12; margin: 0.2rem 0.7rem; padding: 0.5rem 0.7rem;
+    background: var(--mantle); border: 1px solid var(--surface1); border-radius: 5px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.35); font-size: 0.74rem; line-height: 1.7;
+  }
+  .help code {
+    background: var(--surface0); border-radius: 3px; padding: 0 0.25rem;
+    font-family: var(--mono, ui-monospace, monospace);
+  }
+  .help-note { margin-top: 0.3rem; color: var(--overlay1); font-size: 0.68rem; }
   .count { font-size: 0.72rem; color: var(--overlay1); white-space: nowrap; }
   .tb {
     background: transparent; border: 0; color: var(--subtext0);
@@ -403,6 +546,23 @@
     line-height: 1.4; background: var(--base);
   }
   .ln { white-space: pre-wrap; word-break: break-word; }
+  /* Severity colours - tinted text, theme-aware. */
+  .ln.level-error { color: var(--red); }
+  .ln.level-warn { color: var(--yellow); }
+  .ln.level-info { color: var(--text); }
+  .ln.level-debug { color: var(--overlay1); }
+  .ln.level-trace { color: var(--overlay0); }
+  .ln.level-none { color: var(--subtext1); }
+  .lvl-tag {
+    display: inline-block; min-width: 3.4em; margin-right: 0.5rem;
+    font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.03em;
+    opacity: 0.75; vertical-align: baseline;
+  }
+  .grp-count {
+    display: inline-block; margin-right: 0.4rem; padding: 0 0.3rem;
+    background: var(--surface1); color: var(--subtext0); border-radius: 3px;
+    font-size: 0.66rem; font-weight: 600;
+  }
   .empty { color: var(--overlay0); padding: 1rem 0; text-align: center; }
   .err { color: var(--red); padding: 0.3rem 0.7rem; font-size: 0.8rem; }
 </style>
