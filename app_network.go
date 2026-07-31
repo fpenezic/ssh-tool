@@ -471,6 +471,13 @@ func (a *App) wgBackgroundDialerFor(profileID string) (sshlayer.ContextDialer, e
 // and paint a false "down". So: paused -> plain direct (the profile explicitly
 // wants direct); a live tunnel -> ride it; otherwise ErrTunnelWaiting, which the
 // caller maps to "unknown" (no dot) rather than down. It never starts a tunnel.
+//
+// By default the probe only RIDES an existing tunnel - it does not wgTouch it,
+// so a tunnel left running only for liveness dots after the last SSH session
+// closed still reaches its idle-stop instead of being held up by background
+// probing. When liveness_probe_keep_tunnel is on, the probe touches the tunnel
+// like a real dial, keeping it warm while the folder is expanded (opt-in, for
+// users who want the tunnel ready for a quick reconnect).
 func (a *App) wgProbeDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 	row, err := a.db.GetNetworkProfile(profileID)
 	if err != nil {
@@ -483,12 +490,17 @@ func (a *App) wgProbeDialerFor(profileID string) (sshlayer.ContextDialer, error)
 			return d.DialContext(ctx, network, addr)
 		}, nil
 	}
+	keepWarm := a.boolSetting("liveness_probe_keep_tunnel")
 	if t := a.wgman.Get(profileID); t != nil {
-		a.wgTouch(profileID)
+		if keepWarm {
+			a.wgTouch(profileID)
+		}
 		return t.DialContext, nil
 	}
 	if p := a.nbman.Get(profileID); p != nil {
-		a.wgTouch(profileID)
+		if keepWarm {
+			a.wgTouch(profileID)
+		}
 		return p.DialContext, nil
 	}
 	return nil, inventory.ErrTunnelWaiting

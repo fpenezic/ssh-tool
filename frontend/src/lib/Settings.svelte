@@ -1366,6 +1366,7 @@
   let wgBindPhysical = $state(false);
   let livenessProbe = $state(false);
   let livenessDynamic = $state(false);
+  let livenessKeepTunnel = $state(false);
   let livenessIntervalSec = $state(60);
 
   $effect(() => {
@@ -1378,6 +1379,7 @@
     if (activeSection === "liveness") {
       api.settingsGet("liveness_probe_enabled").then((v) => (livenessProbe = v === "1")).catch(() => {});
       api.settingsGet("liveness_probe_dynamic").then((v) => (livenessDynamic = v === "1")).catch(() => {});
+      api.settingsGet("liveness_probe_keep_tunnel").then((v) => (livenessKeepTunnel = v === "1")).catch(() => {});
       api.settingsGet("liveness_probe_interval_sec").then((v) => {
         const n = parseInt(v, 10);
         if (Number.isFinite(n) && n >= 10) livenessIntervalSec = n;
@@ -1402,6 +1404,15 @@
       probeState.setEnabled(on);
     } catch (e) {
       toast.err("Liveness probe toggle failed: " + errMsg(e));
+    }
+  }
+
+  async function toggleLivenessKeepTunnel(on: boolean) {
+    try {
+      await api.settingsSet("liveness_probe_keep_tunnel", on ? "1" : "0");
+      livenessKeepTunnel = on;
+    } catch (e) {
+      toast.err("Keep-tunnel toggle failed: " + errMsg(e));
     }
   }
 
@@ -3158,6 +3169,26 @@
     </fieldset>
 
     {#if livenessProbe}
+      <fieldset class="check-cards" style="margin-top:0.8rem">
+        <label class:active={livenessKeepTunnel}>
+          <input
+            type="checkbox"
+            checked={livenessKeepTunnel}
+            onchange={(e) => toggleLivenessKeepTunnel((e.target as HTMLInputElement).checked)}
+          />
+          <div>
+            <div class="mode-name">Keep the WireGuard tunnel warm while probing</div>
+            <div class="mode-desc">
+              Off by default: the probe rides an open tunnel but does not hold it
+              up, so a tunnel left running only for status dots stops on its own
+              once the last SSH session closes. Turn this on to keep the tunnel
+              warm while the folder stays expanded - handy for a quick reconnect,
+              at the cost of the VPN staying up with no active session.
+            </div>
+          </div>
+        </label>
+      </fieldset>
+
       <fieldset class="check-cards" style="margin-top:0.8rem">
         <label class:active={livenessDynamic}>
           <input
