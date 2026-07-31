@@ -2077,6 +2077,14 @@ Pick a source in the start form:
   (e.g. `nginx`). Runs `journalctl -f`.
 - **tail file** - follow a path (e.g. `/var/log/syslog`). Runs
   `tail -F`, which survives log rotation.
+- **container** - follow one running container's logs. Appears only
+  when a container engine is detected on the host (Docker preferred,
+  else Podman). A dropdown lists running containers (name - image);
+  runs `<engine> logs -f`. A refresh button re-lists.
+- **compose** - follow a whole Compose stack at once. A dropdown lists
+  Compose projects; runs `<engine> compose -p <project> logs -f`, so
+  every service streams together, each line prefixed with its service
+  name.
 - **Seed lines** - how many existing lines to show before following
   (default 200).
 
@@ -2084,11 +2092,30 @@ Auth uses the same root/sudo probe as tcpdump (many logs need root);
 the connection's saved password is auto-fed to sudo when available,
 with a manual prompt as fallback.
 
-Once running:
+Once running, the view understands the logs, it doesn't just scroll
+them:
 
-- A **filter** box does a live case-insensitive substring match -
-  only matching lines render; clearing it restores everything. The
-  filter is client-side and never touches the stream.
+- **Parsed / Raw toggle.** *Parsed* (default) detects the format -
+  JSON logs, journald/syslog, nginx/apache access, or a level keyword
+  in plain lines - and colours each row by severity with a level tag.
+  *Raw* shows the exact bytes the host sent, no colours or tags, for
+  copy-paste fidelity or when a format guess is off. The filter works
+  in both.
+- **Smart filter.** The filter box still greps (a bare word is a
+  case-insensitive substring), but also understands a small query
+  language, terms combined with AND:
+  - `level>=warn` / `level=error` - severity compare.
+  - `status=500`, `method=POST` - match a parsed field.
+  - `-noise` / `!noise` - exclude a substring.
+  - `"quoted phrase"` - substring with spaces.
+  Typing offers **autocomplete** for keys, level values, and real
+  field values seen in the current lines (Tab / Enter accepts). A
+  malformed query falls back to a plain substring match - it never
+  blanks the view. The filter is client-side and never touches the
+  stream.
+- **Group similar** (Parsed view) collapses repeated lines that differ
+  only by variables - numbers, IPs, ids - into one row with an `xN`
+  count, so a flapping message stops drowning out a lone new error.
 - The stream **auto-reconnects** if the remote command drops while
   the SSH session is still up (you'll see a brief "reconnecting"
   note), so a flaky link doesn't end the tail.

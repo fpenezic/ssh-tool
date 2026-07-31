@@ -43,11 +43,11 @@
     },
     {
       "title": "Live log tail",
-      "body": "Follow journalctl -u <unit> or tail -F a file straight into a panel, with a live substring filter and auto-scroll. Detach it into its own window to watch logs while you type; it reconnects itself if the stream drops.",
+      "body": "Follow journalctl, a file, a Docker/Podman container, or a whole Compose stack in a panel. Lines are parsed and coloured by severity; a smart filter (level>=warn, status=500, -noise) with autocomplete beats grep, and a group toggle collapses repeats. Detach it into its own window; it reconnects itself if the stream drops.",
       "keys": [
         "journalctl",
-        "tail -F",
-        "filter"
+        "docker/compose",
+        "level>=warn"
       ],
       "art": "tcpdump"
     },
@@ -263,8 +263,8 @@
     },
     {
       "icon": "tcpdump",
-      "title": "Live log tail",
-      "body": "Stream journalctl -f or tail -F into a panel with a live filter; detach it to its own window and it auto-reconnects if the stream drops."
+      "title": "Live log tail, parsed",
+      "body": "Follow journalctl, a file, a Docker/Podman container, or a whole Compose stack in one panel. Lines are parsed and coloured by severity (JSON, syslog, nginx access, or a level keyword); a smart filter goes beyond grep - level>=warn, status=500, -noise, quoted phrases - with autocomplete, and a group toggle collapses repeats into one counted row. Flip to raw any time. Detaches to its own window and auto-reconnects."
     },
     {
       "icon": "palette",

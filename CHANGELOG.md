@@ -7,6 +7,37 @@ in alpha upstream.
 
 ---
 
+## [0.76.0] - Smarter log tail: parsing, filter language, container logs
+
+### Added
+
+- **Container logs.** The live log tail can now follow a Docker or Podman
+  container, or a whole Compose stack, next to journalctl and tail -F. The
+  engine is auto-detected (Docker preferred, else Podman) and the
+  container / compose sources appear only when one is present. Pick a running
+  container from a dropdown (name - image) to follow `<engine> logs -f`, or a
+  Compose project to follow `<engine> compose -p <project> logs -f` - every
+  service at once, each line prefixed with its service name. A refresh button
+  re-lists. A detached container tail re-attaches with its identity.
+- **Parsed / Raw view.** The tail now understands its lines instead of just
+  scrolling them. *Parsed* (default) detects the format - JSON logs,
+  journald/syslog, nginx/apache access (level from the HTTP status), or a level
+  keyword in plain lines - and colours each row by severity with a level tag.
+  *Raw* shows the exact bytes the host sent, for copy-paste fidelity or when a
+  format guess is off. A Compose `service | ...` prefix is peeled off and the
+  inner line classified normally, so colours survive Compose output.
+- **Smart filter with autocomplete.** The filter box still greps (a bare word
+  is a case-insensitive substring), but also speaks a small query language,
+  terms combined with AND: `level>=warn` / `level=error` (severity compare),
+  `status=500` / `method=POST` (parsed-field match), `-noise` / `!noise`
+  (exclude), and `"quoted phrase"`. Typing offers autocomplete for keys, level
+  values, and real field values seen in the current lines (Tab / Enter accepts).
+  A malformed query degrades to a plain substring match - it never blanks the
+  view.
+- **Group similar.** A toggle (Parsed view) collapses repeated lines that
+  differ only by variables - numbers, IPs, ids, quoted values - into one row
+  with an `xN` count, so a flapping message stops burying a lone new error.
+
 ## [0.75.0] - Cloud sync: Dropbox, OneDrive, Google Drive
 
 ### Added
