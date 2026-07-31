@@ -21,6 +21,11 @@ const (
 	LogTailJournal LogTailKind = "journal"
 	// LogTailFile streams `tail -F` on a path (follows across rotation).
 	LogTailFile LogTailKind = "file"
+	// LogTailContainer streams `<engine> logs -f` for one container.
+	LogTailContainer LogTailKind = "container"
+	// LogTailCompose streams `<engine> compose -p <project> logs -f` for a whole
+	// compose stack (all services, each line prefixed with the service name).
+	LogTailCompose LogTailKind = "compose"
 )
 
 // LogTailOptions describes a single tail. Sudo handling mirrors tcpdump: many
@@ -34,6 +39,12 @@ type LogTailOptions struct {
 	// Lines seeds the view with the last N lines before following (journal
 	// -n, tail -n). 0 uses a sensible default.
 	Lines int
+	// Container-log fields (Kind == container / compose). Engine is the resolved
+	// binary ("docker" | "podman"); empty defaults to "docker". Container is the
+	// container id/name; Project is the compose project name.
+	Engine    string
+	Container string
+	Project   string
 }
 
 // LogTailLine is one streamed log line with its 1-based sequence number (the
@@ -140,8 +151,34 @@ func buildLogTailCommand(opts LogTailOptions) (string, error) {
 		}
 		// -F follows across truncation/rotation; -n seeds the tail.
 		return fmt.Sprintf("tail -n %d -F %s", lines, shellQuote(opts.Path)), nil
+	case LogTailContainer:
+		if strings.TrimSpace(opts.Container) == "" {
+			return "", fmt.Errorf("container required")
+		}
+		engine := containerEngine(opts.Engine)
+		// -f follow, --tail seed. Container name/id is shell-quoted.
+		return fmt.Sprintf("%s logs -f --tail %d %s", engine, lines, shellQuote(opts.Container)), nil
+	case LogTailCompose:
+		if strings.TrimSpace(opts.Project) == "" {
+			return "", fmt.Errorf("compose project required")
+		}
+		engine := containerEngine(opts.Engine)
+		// `<engine> compose -p <project> logs -f` fans in every service; each
+		// line comes prefixed with the service name.
+		return fmt.Sprintf("%s compose -p %s logs -f --tail %d", engine, shellQuote(opts.Project), lines), nil
 	default:
 		return "", fmt.Errorf("unknown log tail kind %q", opts.Kind)
+	}
+}
+
+// containerEngine returns the engine binary to invoke, defaulting to docker and
+// rejecting anything unexpected (defence against an injected engine string).
+func containerEngine(engine string) string {
+	switch strings.TrimSpace(engine) {
+	case "podman":
+		return "podman"
+	default:
+		return "docker"
 	}
 }
 

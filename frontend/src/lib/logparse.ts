@@ -81,9 +81,22 @@ const KEYWORD_LEVELS: [RegExp, LogLevel][] = [
   [/\bTRACE\b/i, "trace"],
 ];
 
+// A `docker compose logs` line is prefixed "service  | actual log line". Match
+// the service and the remainder so we can classify the inner line normally.
+const RE_COMPOSE = /^([A-Za-z0-9._-]+)\s*\|\s?(.*)$/;
+
 // parseLine classifies one raw log line. Ordered probes, first match wins, and
 // an always-safe fallback so an unrecognised line is returned verbatim.
 export function parseLine(raw: string): ParsedLine {
+  // 0. Compose prefix ("service | ..."): peel it off, classify the inner line,
+  //    and record the service as the source. Keep the original raw for copy.
+  const cm = RE_COMPOSE.exec(raw);
+  if (cm) {
+    const [, service, inner] = cm;
+    const p = parseLine(inner);
+    return { ...p, raw, source: service, msg: p.msg === inner ? inner : p.msg };
+  }
+
   // 1. JSON logs (structured logging - pino, zap, bunyan, ...).
   const trimmed = raw.trimStart();
   if (trimmed.startsWith("{")) {

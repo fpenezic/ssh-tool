@@ -932,6 +932,47 @@ export class ConnectionsUpdateInput {
     }
 }
 
+/**
+ * ContainerProbeResult tells the frontend whether a container engine is present
+ * (so it can offer / hide the container + compose log sources) and which one.
+ */
+export class ContainerProbeResult {
+    /**
+     * Creates a new ContainerProbeResult instance.
+     * @param {Partial<ContainerProbeResult>} [$$source = {}] - The source object to create the ContainerProbeResult.
+     */
+    constructor($$source = {}) {
+        if (!("engine" in $$source)) {
+            /**
+             * "docker" | "podman" | ""
+             * @member
+             * @type {string}
+             */
+            this["engine"] = "";
+        }
+        if (!("available" in $$source)) {
+            /**
+             * engine != ""
+             * @member
+             * @type {boolean}
+             */
+            this["available"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ContainerProbeResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ContainerProbeResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ContainerProbeResult(/** @type {Partial<ContainerProbeResult>} */($$parsedSource));
+    }
+}
+
 export class CredentialsRotateAPITokenInput {
     /**
      * Creates a new CredentialsRotateAPITokenInput instance.
@@ -2506,6 +2547,27 @@ export class LogTailActiveInfo {
              */
             this["path"] = "";
         }
+        if (!("engine" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["engine"] = "";
+        }
+        if (!("container" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["container"] = "";
+        }
+        if (!("project" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["project"] = "";
+        }
 
         Object.assign(this, $$source);
     }
@@ -2583,7 +2645,7 @@ export class LogTailStartInput {
         }
         if (!("kind" in $$source)) {
             /**
-             * "journal" | "file"
+             * "journal" | "file" | "container" | "compose"
              * @member
              * @type {string}
              */
@@ -2611,6 +2673,30 @@ export class LogTailStartInput {
              * @type {number}
              */
             this["lines"] = 0;
+        }
+        if (!("engine" in $$source)) {
+            /**
+             * "docker" | "podman" (container/compose)
+             * @member
+             * @type {string}
+             */
+            this["engine"] = "";
+        }
+        if (!("container" in $$source)) {
+            /**
+             * container id/name (kind=container)
+             * @member
+             * @type {string}
+             */
+            this["container"] = "";
+        }
+        if (!("project" in $$source)) {
+            /**
+             * compose project (kind=compose)
+             * @member
+             * @type {string}
+             */
+            this["project"] = "";
         }
         if (!("root_user" in $$source)) {
             /**

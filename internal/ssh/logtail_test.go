@@ -44,6 +44,46 @@ func TestBuildLogTailCommand(t *testing.T) {
 			opts: LogTailOptions{Kind: LogTailJournal, Unit: "a; rm -rf /", Lines: 10},
 			want: "journalctl -f -n 10 --no-pager -o short-iso -u 'a; rm -rf /'",
 		},
+		{
+			name: "container docker default engine",
+			opts: LogTailOptions{Kind: LogTailContainer, Container: "web", Lines: 100},
+			want: "docker logs -f --tail 100 web",
+		},
+		{
+			name: "container podman engine",
+			opts: LogTailOptions{Kind: LogTailContainer, Engine: "podman", Container: "db", Lines: 50},
+			want: "podman logs -f --tail 50 db",
+		},
+		{
+			name: "container name with space is quoted",
+			opts: LogTailOptions{Kind: LogTailContainer, Container: "my app", Lines: 20},
+			want: "docker logs -f --tail 20 'my app'",
+		},
+		{
+			name:    "container without name errors",
+			opts:    LogTailOptions{Kind: LogTailContainer, Lines: 10},
+			wantErr: true,
+		},
+		{
+			name: "compose project",
+			opts: LogTailOptions{Kind: LogTailCompose, Project: "myproj", Lines: 200},
+			want: "docker compose -p myproj logs -f --tail 200",
+		},
+		{
+			name: "compose podman engine and quoting",
+			opts: LogTailOptions{Kind: LogTailCompose, Engine: "podman", Project: "a b", Lines: 10},
+			want: "podman compose -p 'a b' logs -f --tail 10",
+		},
+		{
+			name: "unknown engine falls back to docker",
+			opts: LogTailOptions{Kind: LogTailContainer, Engine: "evil; rm", Container: "x", Lines: 10},
+			want: "docker logs -f --tail 10 x",
+		},
+		{
+			name:    "compose without project errors",
+			opts:    LogTailOptions{Kind: LogTailCompose, Lines: 10},
+			wantErr: true,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

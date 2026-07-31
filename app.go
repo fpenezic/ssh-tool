@@ -7263,10 +7263,13 @@ func (a *App) TcpdumpCheckRoute(sessionID string, queries []TcpdumpRouteQuery) (
 // fields mirror tcpdump (root/sudo come back from the shared probe).
 type LogTailStartInput struct {
 	SessionID        string `json:"session_id"`
-	Kind             string `json:"kind"` // "journal" | "file"
+	Kind             string `json:"kind"` // "journal" | "file" | "container" | "compose"
 	Unit             string `json:"unit"` // journal unit ("" = whole journal)
 	Path             string `json:"path"` // file path for tail -F
 	Lines            int    `json:"lines"`
+	Engine           string `json:"engine"`    // "docker" | "podman" (container/compose)
+	Container        string `json:"container"` // container id/name (kind=container)
+	Project          string `json:"project"`   // compose project (kind=compose)
 	RootUser         bool   `json:"root_user"`
 	SudoNoPwd        bool   `json:"sudo_no_pwd"`
 	UseSavedPassword bool   `json:"use_saved_password"`
@@ -7284,10 +7287,13 @@ func (a *App) LogTailStart(in LogTailStartInput) (string, error) {
 		return "", fmt.Errorf("session target unavailable")
 	}
 	opts := sshlayer.LogTailOptions{
-		Kind:  sshlayer.LogTailKind(in.Kind),
-		Unit:  in.Unit,
-		Path:  in.Path,
-		Lines: in.Lines,
+		Kind:      sshlayer.LogTailKind(in.Kind),
+		Unit:      in.Unit,
+		Path:      in.Path,
+		Lines:     in.Lines,
+		Engine:    in.Engine,
+		Container: in.Container,
+		Project:   in.Project,
 	}
 
 	tailID := uuid.New().String()
@@ -7434,10 +7440,13 @@ func (a *App) LogTailStop(tailID string) error {
 // LogTailActiveInfo describes a tail already running for a session so a window
 // attaching after a detach can restore its context.
 type LogTailActiveInfo struct {
-	TailID string `json:"tail_id"`
-	Kind   string `json:"kind"`
-	Unit   string `json:"unit"`
-	Path   string `json:"path"`
+	TailID    string `json:"tail_id"`
+	Kind      string `json:"kind"`
+	Unit      string `json:"unit"`
+	Path      string `json:"path"`
+	Engine    string `json:"engine"`
+	Container string `json:"container"`
+	Project   string `json:"project"`
 }
 
 // LogTailActiveForSession returns the running tail for a session, if any.
@@ -7453,11 +7462,66 @@ func (a *App) LogTailActiveForSession(sessionID string) *LogTailActiveInfo {
 		return &LogTailActiveInfo{}
 	}
 	return &LogTailActiveInfo{
-		TailID: tailID,
-		Kind:   string(h.Opts.Kind),
-		Unit:   h.Opts.Unit,
-		Path:   h.Opts.Path,
+		TailID:    tailID,
+		Kind:      string(h.Opts.Kind),
+		Unit:      h.Opts.Unit,
+		Path:      h.Opts.Path,
+		Engine:    h.Opts.Engine,
+		Container: h.Opts.Container,
+		Project:   h.Opts.Project,
 	}
+}
+
+// ContainerProbeResult tells the frontend whether a container engine is present
+// (so it can offer / hide the container + compose log sources) and which one.
+type ContainerProbeResult struct {
+	Engine    string `json:"engine"`    // "docker" | "podman" | ""
+	Available bool   `json:"available"` // engine != ""
+}
+
+// ContainerEngineProbe detects docker/podman on the session's target host.
+func (a *App) ContainerEngineProbe(sessionID string) (*ContainerProbeResult, error) {
+	target, err := a.logtailTarget(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	engine, err := sshlayer.DetectContainerEngine(target)
+	if err != nil {
+		return nil, err
+	}
+	return &ContainerProbeResult{Engine: engine, Available: engine != ""}, nil
+}
+
+// ContainerList returns the running containers for the engine on the host.
+func (a *App) ContainerList(sessionID, engine string) ([]sshlayer.ContainerInfo, error) {
+	target, err := a.logtailTarget(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return sshlayer.ListContainers(target, engine)
+}
+
+// ComposeProjectList returns the distinct compose project names on the host.
+func (a *App) ComposeProjectList(sessionID, engine string) ([]string, error) {
+	target, err := a.logtailTarget(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return sshlayer.ListComposeProjects(target, engine)
+}
+
+// logtailTarget resolves a session's target SSH client for the container
+// discovery IPC, mirroring the guard LogTailStart / TcpdumpProbe use.
+func (a *App) logtailTarget(sessionID string) (*gossh.Client, error) {
+	sess, ok := a.pool.Get(sessionID)
+	if !ok {
+		return nil, fmt.Errorf("session %s not found", sessionID)
+	}
+	target := sess.TargetClient()
+	if target == nil {
+		return nil, fmt.Errorf("session target unavailable")
+	}
+	return target, nil
 }
 
 // LogTailSnapshotResult carries the retained line history plus the cumulative

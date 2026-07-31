@@ -95,6 +95,51 @@ export class BatchHostResult {
 }
 
 /**
+ * ContainerInfo is one running container as the picker shows it.
+ */
+export class ContainerInfo {
+    /**
+     * Creates a new ContainerInfo instance.
+     * @param {Partial<ContainerInfo>} [$$source = {}] - The source object to create the ContainerInfo.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("image" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["image"] = "";
+        }
+        if (!("status" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["status"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ContainerInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ContainerInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ContainerInfo(/** @type {Partial<ContainerInfo>} */($$parsedSource));
+    }
+}
+
+/**
  * DiskPart is one real (non-pseudo) filesystem in the popup's storage list.
  * Sizes are in 1024-byte blocks (df -Pk), so the frontend can render absolute
  * used/total alongside the percentage.

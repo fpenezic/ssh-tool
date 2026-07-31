@@ -4,6 +4,7 @@
 
 export {
     BatchHostResult,
+    ContainerInfo,
     DiskPart,
     ForwardKind,
     ForwardState,

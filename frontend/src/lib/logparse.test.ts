@@ -59,6 +59,19 @@ describe("parseLine", () => {
     expect(p.level).toBe("none");
     expect(p.msg).toBe("{not really json");
   });
+
+  it("peels a compose service prefix and classifies the inner line", () => {
+    const p = parseLine('web  | 1.2.3.4 - - [x] "GET / HTTP/1.1" 500 1');
+    expect(p.source).toBe("web");
+    expect(p.level).toBe("error"); // from the inner access-log status
+    expect(p.raw).toBe('web  | 1.2.3.4 - - [x] "GET / HTTP/1.1" 500 1');
+  });
+
+  it("compose prefix over a plain warning", () => {
+    const p = parseLine("db | WARN slow query");
+    expect(p.source).toBe("db");
+    expect(p.level).toBe("warn");
+  });
 });
 
 describe("parseQuery", () => {

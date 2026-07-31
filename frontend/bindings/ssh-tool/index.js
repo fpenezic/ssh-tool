@@ -24,6 +24,7 @@ export {
     ConnectionsBatchUpdateResult,
     ConnectionsCreateInput,
     ConnectionsUpdateInput,
+    ContainerProbeResult,
     CredentialsRotateAPITokenInput,
     CredentialsRotateKeyInput,
     CredentialsUpdateInput,

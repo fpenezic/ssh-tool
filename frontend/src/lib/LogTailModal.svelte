@@ -10,7 +10,7 @@
 
   import { onMount, onDestroy } from "svelte";
   import { errMsg } from "./connectErrors";
-  import { api, type TcpdumpProbeResult } from "./api";
+  import { api, type TcpdumpProbeResult, type ContainerInfo } from "./api";
   import { EventsOn } from "./wailsRuntime";
   import { clickOutside } from "./clickOutside";
   import { copyText } from "./clipboard";
@@ -34,11 +34,21 @@
   let { sessionId, onClose, hidden = false, onMinimize, onStats, embedded = false, onDetach }: Props = $props();
 
   // ---- start form ----
-  type Kind = "journal" | "file";
+  type Kind = "journal" | "file" | "container" | "compose";
   let kind = $state<Kind>("journal");
   let unit = $state("");
   let path = $state("");
   let lines = $state(200);
+
+  // Container sources (docker / podman). engine is auto-detected on mount; the
+  // container/compose radios only appear when an engine is present.
+  let engine = $state("");
+  let containers = $state<ContainerInfo[]>([]);
+  let projects = $state<string[]>([]);
+  let container = $state("");
+  let project = $state("");
+  let listErr = $state<string | null>(null);
+  let loadingList = $state(false);
 
   let probe = $state<TcpdumpProbeResult | null>(null);
   let probeErr = $state<string | null>(null);
@@ -92,7 +102,13 @@
     stuck = gap < 40; // near enough to the bottom counts as "following"
   }
 
-  const sourceLabel = $derived(kind === "journal" ? (unit || "journal") : (path || "file"));
+  const sourceLabel = $derived(
+    kind === "journal" ? (unit || "journal")
+    : kind === "file" ? (path || "file")
+    : kind === "container" ? `${container || "container"} (${engine || "docker"})`
+    : kind === "compose" ? `${project || "compose"} (compose)`
+    : "log",
+  );
 
   // Parse every retained line once; recomputed only when rawLines changes.
   const parsed = $derived<ParsedLine[]>(rawLines.map(parseLine));
@@ -139,6 +155,11 @@
     } catch (e: any) {
       probeErr = `Probe failed: ${e?.message ?? e}`;
     }
+    // Detect a container engine so the container/compose sources can be offered.
+    try {
+      const cp = await api.containerEngineProbe(sessionId);
+      if (cp.available) engine = cp.engine;
+    } catch { /* no engine - container sources stay hidden */ }
     // Re-attach to a tail already running for this session (this window just
     // received it via a detach/open).
     try {
@@ -186,11 +207,14 @@
     });
   }
 
-  async function attach(info: { tail_id: string; kind: string; unit: string; path: string }) {
+  async function attach(info: { tail_id: string; kind: string; unit: string; path: string; engine?: string; container?: string; project?: string }) {
     tailId = info.tail_id;
     kind = (info.kind as Kind) || "journal";
     unit = info.unit || "";
     path = info.path || "";
+    engine = info.engine || engine;
+    container = info.container || "";
+    project = info.project || "";
     try {
       const snap = await api.logtailSnapshot(info.tail_id);
       attachWatermark = snap.cum ?? 0;
@@ -201,9 +225,45 @@
     bind(info.tail_id);
   }
 
+  // Load running containers for the picker (also called by a refresh button).
+  async function loadContainers() {
+    listErr = null;
+    loadingList = true;
+    try {
+      containers = await api.containerList(sessionId, engine);
+      if (!container && containers.length > 0) container = containers[0].name;
+    } catch (e: any) {
+      listErr = errMsg(e);
+    } finally {
+      loadingList = false;
+    }
+  }
+
+  async function loadProjects() {
+    listErr = null;
+    loadingList = true;
+    try {
+      projects = await api.composeProjectList(sessionId, engine);
+      if (!project && projects.length > 0) project = projects[0];
+    } catch (e: any) {
+      listErr = errMsg(e);
+    } finally {
+      loadingList = false;
+    }
+  }
+
+  // Lazily load the right list when the user switches to a container source.
+  $effect(() => {
+    if (running || tailId) return;
+    if (kind === "container" && engine && containers.length === 0) loadContainers();
+    if (kind === "compose" && engine && projects.length === 0) loadProjects();
+  });
+
   async function start() {
     startErr = null;
     if (kind === "file" && !path.trim()) { startErr = "File path required"; return; }
+    if (kind === "container" && !container.trim()) { startErr = "Pick a container"; return; }
+    if (kind === "compose" && !project.trim()) { startErr = "Pick a compose project"; return; }
     try {
       const id = await api.logtailStart({
         session_id: sessionId,
@@ -211,6 +271,9 @@
         unit: unit.trim(),
         path: path.trim(),
         lines,
+        engine,
+        container: container.trim(),
+        project: project.trim(),
         root_user: probe?.root_user ?? false,
         sudo_no_pwd: probe?.sudo_no_pwd ?? false,
         use_saved_password: useSavedPassword,
@@ -339,18 +402,49 @@
         <div class="kind-row">
           <label><input type="radio" bind:group={kind} value="journal" /> journalctl</label>
           <label><input type="radio" bind:group={kind} value="file" /> tail file</label>
+          {#if engine}
+            <label><input type="radio" bind:group={kind} value="container" /> container</label>
+            <label><input type="radio" bind:group={kind} value="compose" /> compose</label>
+          {/if}
         </div>
         {#if kind === "journal"}
           <label class="fld">
             <span>Unit (blank = whole journal)</span>
             <input bind:value={unit} placeholder="nginx" spellcheck="false" />
           </label>
-        {:else}
+        {:else if kind === "file"}
           <label class="fld">
             <span>Path</span>
             <input bind:value={path} placeholder="/var/log/syslog" spellcheck="false" />
           </label>
+        {:else if kind === "container"}
+          <label class="fld">
+            <span>Container ({engine})</span>
+            <div class="pick-row">
+              <select bind:value={container}>
+                {#if containers.length === 0}<option value="">{loadingList ? "loading..." : "no running containers"}</option>{/if}
+                {#each containers as c}
+                  <option value={c.name}>{c.name}{c.image ? ` - ${c.image}` : ""}</option>
+                {/each}
+              </select>
+              <button type="button" class="refresh" onclick={loadContainers} title="Refresh list" disabled={loadingList}>↻</button>
+            </div>
+          </label>
+        {:else if kind === "compose"}
+          <label class="fld">
+            <span>Compose project ({engine})</span>
+            <div class="pick-row">
+              <select bind:value={project}>
+                {#if projects.length === 0}<option value="">{loadingList ? "loading..." : "no compose projects"}</option>{/if}
+                {#each projects as p}
+                  <option value={p}>{p}</option>
+                {/each}
+              </select>
+              <button type="button" class="refresh" onclick={loadProjects} title="Refresh list" disabled={loadingList}>↻</button>
+            </div>
+          </label>
         {/if}
+        {#if listErr}<div class="err">{listErr}</div>{/if}
         <label class="fld">
           <span>Seed lines</span>
           <input type="number" bind:value={lines} min="0" max="5000" />
@@ -491,12 +585,20 @@
   .startform {
     display: flex; flex-direction: column; gap: 0.6rem; padding: 0.9rem;
   }
-  .kind-row { display: flex; gap: 1rem; font-size: 0.85rem; }
+  .kind-row { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; font-size: 0.85rem; }
   .fld { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; }
-  .fld input {
+  .fld input, .fld select {
     background: var(--mantle); color: var(--text);
     border: 1px solid var(--surface0); border-radius: 4px; padding: 0.35rem 0.5rem;
   }
+  .pick-row { display: flex; gap: 0.4rem; align-items: center; }
+  .pick-row select { flex: 1; min-width: 0; }
+  .refresh {
+    background: var(--surface0); color: var(--text); border: 0; border-radius: 4px;
+    padding: 0.35rem 0.6rem; cursor: pointer; font-size: 0.9rem; line-height: 1;
+  }
+  .refresh:hover { background: var(--surface1); }
+  .refresh:disabled { opacity: 0.5; cursor: default; }
   .chk { font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; }
   .primary {
     align-self: flex-start; background: var(--blue); color: var(--crust);

@@ -950,6 +950,12 @@ export const api = {
     nn(G.TcpdumpSnapshot(dumpId)) as Promise<TcpdumpSnapshotResult>,
   logtailStart: (input: LogTailStartInput) =>
     G.LogTailStart(input as any) as unknown as Promise<string>,
+  containerEngineProbe: (sessionId: string) =>
+    nn(G.ContainerEngineProbe(sessionId)) as Promise<ContainerProbeResult>,
+  containerList: (sessionId: string, engine: string) =>
+    (G.ContainerList(sessionId, engine) ?? []) as unknown as Promise<ContainerInfo[]>,
+  composeProjectList: (sessionId: string, engine: string) =>
+    (G.ComposeProjectList(sessionId, engine) ?? []) as unknown as Promise<string[]>,
   logtailStop: (tailId: string) => G.LogTailStop(tailId),
   logtailProvidePassword: (tailId: string, password: string) =>
     G.LogTailProvidePassword(tailId, password),
@@ -1602,13 +1608,27 @@ export interface DynamicProbeResult {
 
 export interface LogTailStartInput {
   session_id: string;
-  kind: "journal" | "file";
+  kind: "journal" | "file" | "container" | "compose";
   unit: string;
   path: string;
   lines: number;
+  engine: string;
+  container: string;
+  project: string;
   root_user: boolean;
   sudo_no_pwd: boolean;
   use_saved_password: boolean;
+}
+
+export interface ContainerInfo {
+  name: string;
+  image: string;
+  status: string;
+}
+
+export interface ContainerProbeResult {
+  engine: string;
+  available: boolean;
 }
 
 export interface LogTailLine {
@@ -1627,6 +1647,9 @@ export interface LogTailActiveInfo {
   kind: string;
   unit: string;
   path: string;
+  engine: string;
+  container: string;
+  project: string;
 }
 
 export interface RecordingState {
