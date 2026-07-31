@@ -60,8 +60,14 @@
   // never touches the backend stream: the full history stays in rawLines so
   // clearing it restores everything.
   let filter = $state("");
+  // View mode, like tcpdump's segment toggle. "parsed" colours by severity and
+  // shows a level tag (and enables grouping); "raw" is the plain-text view -
+  // exactly the bytes the host sent, no colours/tags/grouping - for copy-paste
+  // fidelity or when a format guess is wrong. The filter query works in both.
+  let viewMode = $state<"parsed" | "raw">("parsed");
   // "Group similar" collapses repeated lines (same message modulo variables)
-  // into one row with a count - the noise killer. Off by default.
+  // into one row with a count - the noise killer. Parsed view only, off by
+  // default.
   let grouped = $state(false);
   let showHelp = $state(false); // operators cheat-sheet popover
   // Cap the retained lines so a long-running follow can't grow the DOM
@@ -97,7 +103,7 @@
   // The rendered rows: either grouped (collapsed with counts) or the flat tail,
   // capped so the DOM stays bounded on a long follow.
   const visibleRows = $derived.by(() => {
-    if (grouped) {
+    if (viewMode === "parsed" && grouped) {
       const groups = groupLines(matched);
       return groups.length > RENDER_CAP ? groups.slice(groups.length - RENDER_CAP) : groups;
     }
@@ -120,6 +126,7 @@
     void rawLines;
     void filter;
     void grouped;
+    void viewMode;
     if (!stuck || !linesEl) return;
     requestAnimationFrame(() => {
       if (linesEl && stuck) linesEl.scrollTop = linesEl.scrollHeight;
@@ -356,6 +363,10 @@
       </div>
     {:else}
       <div class="toolbar">
+        <div class="view-toggle" role="group" aria-label="view mode">
+          <button class:active={viewMode === "parsed"} onclick={() => (viewMode = "parsed")} title="Colour by severity, show level tags">Parsed</button>
+          <button class:active={viewMode === "raw"} onclick={() => (viewMode = "raw")} title="Plain text, exactly as sent">Raw</button>
+        </div>
         <div class="filter-wrap">
           <input
             class="filter"
@@ -385,9 +396,11 @@
             </div>
           {/if}
         </div>
-        <label class="chk" title="Collapse repeated lines into one row with a count">
-          <input type="checkbox" bind:checked={grouped} /> group
-        </label>
+        {#if viewMode === "parsed"}
+          <label class="chk" title="Collapse repeated lines into one row with a count">
+            <input type="checkbox" bind:checked={grouped} /> group
+          </label>
+        {/if}
         <span class="count">{visibleCount}{filter.trim() ? ` / ${rawLines.length}` : ""} lines · {totalLines} total</span>
         <button class="tb help-btn" onclick={() => (showHelp = !showHelp)} title="Filter operators">?</button>
         <button class="tb" onclick={copyAll} title="Copy visible lines"><IconCopy size={13} /></button>
@@ -411,13 +424,17 @@
           <button onclick={submitPassword}>OK</button>
         </div>
       {/if}
-      <div class="lines" bind:this={linesEl} onscroll={onScroll}>
+      <div class="lines" class:raw={viewMode === "raw"} bind:this={linesEl} onscroll={onScroll}>
         {#each visibleRows as row}
-          <div class="ln level-{row.line.level}">
-            {#if row.count > 1}<span class="grp-count">x{row.count}</span>{/if}
-            {#if row.line.level !== "none"}<span class="lvl-tag">{row.line.level}</span>{/if}
-            <span class="ln-text">{row.line.raw}</span>
-          </div>
+          {#if viewMode === "raw"}
+            <div class="ln">{row.line.raw}</div>
+          {:else}
+            <div class="ln level-{row.line.level}">
+              {#if row.count > 1}<span class="grp-count">x{row.count}</span>{/if}
+              {#if row.line.level !== "none"}<span class="lvl-tag">{row.line.level}</span>{/if}
+              <span class="ln-text">{row.line.raw}</span>
+            </div>
+          {/if}
         {/each}
         {#if visibleRows.length === 0}
           <div class="empty">{filter.trim() ? "No lines match the filter." : "Waiting for log output..."}</div>
@@ -490,6 +507,16 @@
     padding: 0.4rem 0.7rem; background: var(--crust);
     border-bottom: 1px solid var(--surface0);
   }
+  .view-toggle {
+    display: flex; gap: 1px; background: var(--mantle);
+    border: 1px solid var(--surface0); border-radius: 3px; overflow: hidden;
+  }
+  .view-toggle button {
+    background: transparent; color: var(--subtext0); border: 0;
+    padding: 0.25rem 0.6rem; cursor: pointer; font: inherit; font-size: 0.78rem;
+  }
+  .view-toggle button:hover { background: var(--surface0); color: var(--text); }
+  .view-toggle button.active { background: var(--surface0); color: var(--text); }
   .filter-wrap { position: relative; flex: 1; }
   .filter {
     width: 100%; box-sizing: border-box; background: var(--mantle); color: var(--text);
