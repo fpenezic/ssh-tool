@@ -187,16 +187,14 @@ tasks:
       - wails3 generate bindings -f '{{.BUILD_FLAGS}}' -clean=true
 
   generate:icons:
-    summary: Generates Windows `.ico` and Mac `.icns` from an image; on macOS, `-iconcomposerinput appicon.icon -macassetdir darwin` also produces `Assets.car` from a `.icon` file (skipped on other platforms).
+    summary: Generates the Windows `.ico` from the transparent appicon.png. The macOS `darwin/icons.icns` is NOT generated here - it is a committed custom icon with a solid squircle background (see build/appicon-macos.svg), so macOS looks consistent whether the app runs or not while Windows/Linux stay transparent. Regenerate the icns from build/appicon-macos.svg if the logo changes.
     dir: build
     sources:
       - "appicon.png"
-      - "appicon.icon"
     generates:
-      - "darwin/icons.icns"
       - "windows/icon.ico"
     cmds:
-      - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico -iconcomposerinput appicon.icon -macassetdir darwin
+      - wails3 generate icons -input appicon.png -windowsfilename windows/icon.ico
 
   dev:frontend:
     summary: Runs the frontend in development mode

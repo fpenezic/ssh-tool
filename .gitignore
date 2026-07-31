@@ -6,7 +6,8 @@ vendor/
 
 # Wails build
 build/bin/
-build/darwin/icons.icns
+# build/darwin/icons.icns is committed (custom squircle macOS icon, not
+# generated from appicon.png - see build/Taskfile.yml generate:icons).
 build/darwin/*.app
 build/darwin/Assets.car
 build/darwin/Info.dev.plist

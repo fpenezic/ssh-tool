@@ -7,6 +7,41 @@ in alpha upstream.
 
 ---
 
+## [0.77.0] - Liveness probe stops holding VPN tunnels up; macOS icon
+
+### Fixed
+
+- **Liveness probe no longer keeps a WireGuard tunnel alive after the last
+  SSH session closes.** The status-dot probe rides a connection's tunnel to
+  test reachability, but it was also renewing the tunnel's idle-stop timer on
+  every probe. A tunnel that an SSH session had brought up therefore stayed up
+  for as long as the folder stayed expanded, so closing every session did not
+  bring the VPN down - the tunnel lingered minutes past its last real use. The
+  probe now only rides an existing tunnel; once the last session closes, the
+  tunnel reaches its 2-minute idle-stop regardless of expanded folders, and a
+  WG-only host behind a stopped tunnel simply shows no dot (unknown) rather
+  than being kept online just to stay lit.
+- **macOS dock icon is now consistent whether the app is running or not.** The
+  icon had a transparent background, so macOS painted its own grey rounded
+  backing when the app was not running and none while it was - two different
+  looks. The macOS icon now ships a solid dark rounded (squircle) background,
+  so it looks the same in both states. Windows and Linux keep their
+  transparent icons, matching each platform's convention.
+
+### Added
+
+- **Setting: "Keep the WireGuard tunnel warm while probing"** (Settings ->
+  Liveness, off by default). When on, the liveness probe keeps an open tunnel
+  up while its folder stays expanded, so it is ready for a quick reconnect - at
+  the cost of the VPN staying up with no active session. The probe still never
+  brings a tunnel up on its own; it only maintains one a session established.
+
+### Internal
+
+- The icon source vector now lives in the repo (`build/appicon.svg` master and
+  `build/appicon-macos.svg` for the squircle build), so future icon changes
+  regenerate from one source instead of tracing a raster.
+
 ## [0.76.0] - Smarter log tail: parsing, filter language, container logs
 
 ### Added
