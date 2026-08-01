@@ -187,7 +187,7 @@ tasks:
       - wails3 generate bindings -f '{{.BUILD_FLAGS}}' -clean=true
 
   generate:icons:
-    summary: Generates the Windows `.ico` from the transparent appicon.png. The macOS `darwin/icons.icns` is NOT generated here - it is a committed custom icon with a solid squircle background (see build/appicon-macos.svg), so macOS looks consistent whether the app runs or not while Windows/Linux stay transparent. Regenerate the icns from build/appicon-macos.svg if the logo changes.
+    summary: Generates the Windows `.ico` from appicon.png. The macOS `darwin/icons.icns` is NOT generated here - it is a committed custom icon rendered from build/appicon.svg (transparent, logo enlarged to fill the tile) so the dock icon looks the same size running or not, since the running app draws appicon.png directly. Regenerate the icns from build/appicon.svg if the logo changes.
     dir: build
     sources:
       - "appicon.png"

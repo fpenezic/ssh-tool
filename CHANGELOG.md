@@ -7,6 +7,18 @@ in alpha upstream.
 
 ---
 
+## [0.77.1] - macOS icon sizing
+
+### Fixed
+
+- **macOS dock icon is now the same look and size whether the app is running
+  or not.** v0.77.0 gave the not-running icon a dark squircle backing, but the
+  running app draws the transparent PNG directly, so the two states still
+  differed (small dark tile vs large transparent logo). Both now use the
+  transparent logo, enlarged to fill the dock tile so it matches the size of
+  neighbouring apps. The icon source (`build/appicon.svg`) carries the enlarged
+  artwork; the squircle variant was dropped.
+
 ## [0.77.0] - Liveness probe stops holding VPN tunnels up; macOS icon
 
 ### Fixed
