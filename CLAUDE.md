@@ -38,7 +38,7 @@ Author wants 300+ connections, daily-driver UX, full opkssh support
 ## Tech stack
 
 Backend (Go 1.26):
-- Wails v3 alpha2.117 (`github.com/wailsapp/wails/v3`) - desktop shell + IPC.
+- Wails v3 beta.3 (`github.com/wailsapp/wails/v3`) - desktop shell + IPC.
   When bumping this in go.mod, bump `WAILS3_VERSION` in
   `.github/workflows/release.yml` to match: the release build regenerates
   `frontend/bindings/` with the CLI that env pins (`build:frontend` ->
@@ -186,7 +186,9 @@ Android/mobile build-tag + event-transport traps. The file is split into
 
 ## Versioning workflow
 
-SemVer with `0.x` prefix while Wails v3 stays in alpha upstream.
+SemVer with `0.x` prefix while Wails v3 is still a prerelease upstream
+(alpha until 2026-08-02, beta since). `v1.0.0` waits for a real
+`v3.0.0` - beta does not count.
 Current: see latest `v*` tag on `main`.
 
 **Every user-facing change ships with a version bump.** When the
