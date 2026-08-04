@@ -4613,6 +4613,10 @@ func (a *App) SshLaunchBrowser(forwardID, url string) (*BrowserLaunchResult, err
 			PreferredPath:  preferred,
 			Persistent:     persistent,
 			ProfileBaseDir: store.DataDir(),
+			// One persistent profile per forward: a shared one makes Chromium
+			// reuse the first launch's instance (and its now-stale SOCKS port)
+			// for every other connection. See LaunchOptions.ProfileKey.
+			ProfileKey: forwardID,
 		})
 		if err != nil {
 			return nil, err

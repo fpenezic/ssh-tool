@@ -107,16 +107,36 @@ func (f *activeForward) snapshot() ForwardStatus {
 // ForwardPool owns all active forwards across all sessions. Methods are
 // safe for concurrent use.
 type ForwardPool struct {
-	mu       sync.Mutex
-	byID     map[string]*activeForward
-	bySess   map[string]map[string]struct{} // sessionID -> set of forwardIDs
+	mu     sync.Mutex
+	byID   map[string]*activeForward
+	bySess map[string]map[string]struct{} // sessionID -> set of forwardIDs
+
+	// stickyDyn remembers the OS-assigned port a dynamic (SOCKS) forward last
+	// bound, keyed by forward id, so a restart lands on the same port. An
+	// already-launched browser keeps its --proxy-server pointing at a live
+	// listener instead of a dead one (Chromium can't be re-pointed without a
+	// full restart - see internal/ssh/browser.go).
+	stickyDyn map[string]uint16
 }
 
 func NewForwardPool() *ForwardPool {
 	return &ForwardPool{
-		byID:   map[string]*activeForward{},
-		bySess: map[string]map[string]struct{}{},
+		byID:      map[string]*activeForward{},
+		bySess:    map[string]map[string]struct{}{},
+		stickyDyn: map[string]uint16{},
 	}
+}
+
+func (p *ForwardPool) stickyPort(id string) uint16 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.stickyDyn[id]
+}
+
+func (p *ForwardPool) rememberStickyPort(id string, port uint16) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.stickyDyn[id] = port
 }
 
 // StartLocal starts a -L forward: listen on localAddr:localPort, dial
@@ -202,14 +222,30 @@ func (p *ForwardPool) StartDynamic(
 	if localAddr == "" {
 		localAddr = "127.0.0.1"
 	}
-	addr := fmt.Sprintf("%s:%d", localAddr, localPort)
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return nil, fmt.Errorf("listen %s: %w", addr, err)
+	var listener net.Listener
+	var err error
+	// No explicit port: prefer the one this forward held last time (sticky),
+	// falling back to a fresh OS-assigned port if it's taken meanwhile.
+	if localPort == 0 {
+		if prev := p.stickyPort(id); prev != 0 {
+			if l, e := net.Listen("tcp", fmt.Sprintf("%s:%d", localAddr, prev)); e == nil {
+				listener = l
+			} else {
+				log.Printf("forward %s: sticky port %d unavailable (%v); taking a new one", id, prev, e)
+			}
+		}
+	}
+	if listener == nil {
+		addr := fmt.Sprintf("%s:%d", localAddr, localPort)
+		listener, err = net.Listen("tcp", addr)
+		if err != nil {
+			return nil, fmt.Errorf("listen %s: %w", addr, err)
+		}
 	}
 	if tcpAddr, ok := listener.Addr().(*net.TCPAddr); ok {
 		localPort = uint16(tcpAddr.Port)
 	}
+	p.rememberStickyPort(id, localPort)
 
 	af := &activeForward{
 		id:        id,
@@ -257,7 +293,16 @@ func (p *ForwardPool) acceptDynamic(af *activeForward, client *ssh.Client) {
 			}
 			remote, err := client.Dial("tcp", dest)
 			if err != nil {
+				// Reply with the real failure code before closing. The client
+				// then reports a proxy error naming the destination instead of
+				// a bare connection reset (see handleSocks5).
+				_ = writeReply(local, socks5ReplyForDialErr(err))
 				log.Printf("forward %s: dial %s: %v", af.id, dest, err)
+				return
+			}
+			if err := writeReply(local, replySuccess); err != nil {
+				_ = remote.Close()
+				log.Printf("forward %s: socks5 reply: %v", af.id, err)
 				return
 			}
 			tunnel(local, remote, &af.bytesIn, &af.bytesOut)

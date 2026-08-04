@@ -646,6 +646,41 @@ everything mobile is behind a build tag or an `isMobile` check.
     NOT affected - they run their own kernel TUN via the sidecar helper and
     dial through a loopback SOCKS5, not our UDP bind.
 
+36. **Chromium keeps a singleton per `--user-data-dir`, so a shared
+    persistent profile silently eats `--proxy-server`.** Launch it a second
+    time with a dir that is already in use and it just hands the URL to the
+    running instance and exits - every other switch is DROPPED. With one
+    shared `browser-profiles/chromium` that meant connection B's tabs went
+    through connection A's SOCKS port, and after a forward restart through a
+    dead port. Fix: profile dir per forward
+    (`LaunchOptions.ProfileKey` -> `browser-profiles/chromium-<forward-id>`,
+    a SIBLING of the old shared dir, never nested inside it - that dir is a
+    live profile on existing installs). COMPANION fix: dynamic forwards are
+    sticky-ported (`ForwardPool.stickyDyn`), rebinding the port they last
+    held, because a browser already launched cannot be re-pointed at a new
+    proxy port without a full restart. macOS makes this bite far harder than
+    Windows: closing the last window there leaves the process (and the
+    singleton lock) alive, so the *next* launch is never "the first" one.
+    Firefox is immune - we pass `-no-remote` (`browser.go`).
+
+37. **A macOS `.app` is a directory - `exec` on it fails.** Every file
+    picker hands out `/Applications/Brave Browser.app`, so a pinned browser
+    fell through to auto-detect with only a log line to show for it.
+    `resolveAppBundle` (`browser.go`) walks to `Contents/MacOS/`: bundle name,
+    then lowercased bundle name (Firefox), then `CFBundleExecutable` from an
+    XML `Info.plist`, then a lone executable in the dir - and gives up rather
+    than guess when several are present. Note `preferred_browser_path` is ONE
+    global setting, so a mac path also shows up on the Windows build.
+
+38. **SOCKS5: never reply "granted" before the dial succeeds.**
+    `handleSocks5` returns the destination and leaves the reply to the caller
+    (`acceptDynamic`), which dials over SSH first and then answers with the
+    real code (`socks5ReplyForDialErr`: refused / host-unreach / net-unreach).
+    Replying up front and closing on failure makes every error reach the
+    client as a bare connection reset - curl says "Recv failure", Chrome says
+    `ERR_EMPTY_RESPONSE` - which reads like "the proxy is broken" when the
+    truth is "nothing listens on that port over there".
+
 ---
 
 # Archive

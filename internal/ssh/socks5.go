@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 )
 
 // Minimal SOCKS5 server: handles the connect command (0x01), no auth (0x00),
@@ -13,23 +14,32 @@ import (
 // itself) ever speak.
 //
 // Returns the destination address (host:port) to dial through the SSH
-// transport. The caller writes the SOCKS5 success reply and then performs
-// the byte tunnel.
+// transport. The caller dials first and only then writes the reply - see
+// handleSocks5.
 
 const (
-	socks5Version  = 0x05
-	cmdConnect     = 0x01
-	atypIPv4       = 0x01
-	atypDomain     = 0x03
-	atypIPv6       = 0x04
-	replySuccess   = 0x00
+	socks5Version = 0x05
+	cmdConnect    = 0x01
+	atypIPv4      = 0x01
+	atypDomain    = 0x03
+	atypIPv6      = 0x04
+
+	replySuccess     = 0x00
+	replyGeneralFail = 0x01
+	replyNetUnreach  = 0x03
 	replyHostUnreach = 0x04
-	replyCmdUnsupp = 0x07
+	replyConnRefused = 0x05
+	replyCmdUnsupp   = 0x07
 )
 
 // handleSocks5 negotiates with the local client and returns the
-// destination address. It also writes the SOCKS5 reply that hands the
-// connection over to the tunnel phase.
+// destination address.
+//
+// It deliberately does NOT write the success reply: the caller must dial the
+// destination first and reply with the real outcome. Replying "granted" up
+// front and then closing on a failed dial makes every failure look like a
+// connection reset to the client (curl: "Recv failure", Chrome:
+// ERR_EMPTY_RESPONSE) instead of a proxy error naming the destination.
 func handleSocks5(conn net.Conn) (string, error) {
 	// --- Method negotiation ---
 	header := make([]byte, 2)
@@ -109,10 +119,30 @@ func handleSocks5(conn net.Conn) (string, error) {
 	}
 	port := binary.BigEndian.Uint16(portBuf)
 
-	if err := writeReply(conn, replySuccess); err != nil {
-		return "", err
-	}
 	return fmt.Sprintf("%s:%d", host, port), nil
+}
+
+// socks5ReplyForDialErr maps an SSH-side dial failure onto the closest
+// SOCKS5 reply code so the client can render a meaningful error. The SSH
+// transport hands us plain text ("connect failed: connection refused"), so
+// matching on the message is all we have.
+func socks5ReplyForDialErr(err error) byte {
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "refused"):
+		return replyConnRefused
+	case strings.Contains(msg, "no such host"),
+		strings.Contains(msg, "host is down"),
+		strings.Contains(msg, "no route to host"),
+		strings.Contains(msg, "host unreachable"),
+		strings.Contains(msg, "timeout"),
+		strings.Contains(msg, "timed out"):
+		return replyHostUnreach
+	case strings.Contains(msg, "network is unreachable"),
+		strings.Contains(msg, "network unreachable"):
+		return replyNetUnreach
+	}
+	return replyGeneralFail
 }
 
 // writeReply emits the canonical "success" SOCKS5 reply: BND addr/port

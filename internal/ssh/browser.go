@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -29,6 +30,16 @@ type LaunchOptions struct {
 	// profile lives. Passed in because this package can't import the store.
 	// Empty falls back to the OS temp area (isolated behaviour).
 	ProfileBaseDir string
+
+	// ProfileKey scopes the persistent profile - in practice the forward id.
+	// One profile per SOCKS forward is not cosmetic: Chromium keeps a
+	// singleton per user-data-dir, so launching it a second time with a dir
+	// that is already in use just hands the URL to the running instance and
+	// DROPS every other switch, --proxy-server included. Sharing one dir
+	// across forwards therefore silently routes the second connection's tabs
+	// through the first connection's proxy (and through a dead port once that
+	// forward restarts). Empty keeps the old single shared dir.
+	ProfileKey string
 }
 
 // LaunchIsolatedBrowser opens a browser pointed at a SOCKS5 proxy, in an
@@ -100,7 +111,7 @@ func sniffEngine(path string) browserEngine {
 // supplied and exists+executable, we use it; otherwise platform default.
 func resolveBrowser(preferredPath string) (string, browserEngine, error) {
 	if preferredPath != "" {
-		expanded := expandUserPath(preferredPath)
+		expanded := resolveAppBundle(expandUserPath(preferredPath))
 		if isExecutable(expanded) {
 			return expanded, sniffEngine(expanded), nil
 		}
@@ -173,7 +184,7 @@ func proxyHostForBrowser(bin, socksAddr string) string {
 // launches - still a dedicated profile, not the user's default one.
 func chromiumProfileDir(opts LaunchOptions) (string, error) {
 	if opts.Persistent {
-		return persistentProfileDir(opts.ProfileBaseDir, "chromium")
+		return persistentProfileDir(opts.ProfileBaseDir, "chromium", opts.ProfileKey)
 	}
 	// On WSL → Windows browser, the user-data-dir must be a Windows path.
 	if isWSL() {
@@ -194,28 +205,49 @@ func chromiumProfileDir(opts LaunchOptions) (string, error) {
 	return dir, nil
 }
 
-// persistentProfileDir returns a stable per-engine profile dir under base,
-// creating it. On WSL the browser is the Windows host's, so the dir must be a
-// Windows path - we place it under the Windows LOCALAPPDATA rather than the
-// (Linux) data dir the browser can't see.
-func persistentProfileDir(base, engine string) (string, error) {
+// persistentProfileDir returns a stable per-engine (and, when key is set,
+// per-forward) profile dir under base, creating it. On WSL the browser is the
+// Windows host's, so the dir must be a Windows path - we place it under the
+// Windows LOCALAPPDATA rather than the (Linux) data dir the browser can't see.
+func persistentProfileDir(base, engine, key string) (string, error) {
+	name := engine
+	if k := sanitizeProfileKey(key); k != "" {
+		name = engine + "-" + k
+	}
 	if isWSL() {
 		root, err := winEnv("LOCALAPPDATA")
 		if err != nil || root == "" {
 			root = `C:\Windows\Temp`
 		}
 		// A Windows path; the browser (Windows-side) creates it itself.
-		return fmt.Sprintf(`%s\ssh-tool\browser-%s`, root, engine), nil
+		return fmt.Sprintf(`%s\ssh-tool\browser-%s`, root, name), nil
 	}
 	if base == "" {
 		// Fall back to a stable temp dir rather than a random one.
 		base = filepath.Join(os.TempDir(), "ssh-tool")
 	}
-	dir := filepath.Join(base, "browser-profiles", engine)
+	dir := filepath.Join(base, "browser-profiles", name)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("persistent profile dir: %w", err)
 	}
 	return dir, nil
+}
+
+// sanitizeProfileKey keeps the key usable as a single path element on every
+// OS: forward ids are UUIDs today, but the key must never be able to escape
+// the profile root or smuggle a separator into the path.
+func sanitizeProfileKey(key string) string {
+	var b strings.Builder
+	for _, r := range key {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		}
+		if b.Len() >= 64 {
+			break
+		}
+	}
+	return b.String()
 }
 
 // ----- firefox launch -----
@@ -223,7 +255,7 @@ func persistentProfileDir(base, engine string) (string, error) {
 func launchFirefox(bin, socksAddr string, socksPort uint16, url string, opts LaunchOptions) (int, error) {
 	var profile string
 	if opts.Persistent {
-		p, err := persistentProfileDir(opts.ProfileBaseDir, "firefox")
+		p, err := persistentProfileDir(opts.ProfileBaseDir, "firefox", opts.ProfileKey)
 		if err != nil {
 			return 0, err
 		}
@@ -431,6 +463,79 @@ func isExecutable(p string) bool {
 		return true
 	}
 	return info.Mode().Perm()&0o111 != 0
+}
+
+// resolveAppBundle turns a macOS .app bundle path into the executable inside
+// it. Every file picker (and the Finder "Copy as Pathname") hands out
+// "/Applications/Brave Browser.app", which is a DIRECTORY - exec fails on it,
+// so a pinned browser silently fell back to whatever auto-detect found first.
+// Non-bundle paths pass through untouched.
+func resolveAppBundle(p string) string {
+	trimmed := strings.TrimRight(p, "/")
+	if !strings.EqualFold(filepath.Ext(trimmed), ".app") {
+		return p
+	}
+	info, err := os.Stat(trimmed)
+	if err != nil || !info.IsDir() {
+		return p
+	}
+	macOS := filepath.Join(trimmed, "Contents", "MacOS")
+	base := strings.TrimSuffix(filepath.Base(trimmed), filepath.Ext(trimmed))
+
+	// Usual case: the binary is named after the bundle ("Google Chrome",
+	// "Microsoft Edge", "Brave Browser"). Firefox lowercases it.
+	for _, cand := range []string{base, strings.ToLower(base)} {
+		if c := filepath.Join(macOS, cand); isExecutable(c) {
+			return c
+		}
+	}
+	// Then CFBundleExecutable, when Info.plist is the XML flavour.
+	if name := plistExecutable(filepath.Join(trimmed, "Contents", "Info.plist")); name != "" {
+		if c := filepath.Join(macOS, name); isExecutable(c) {
+			return c
+		}
+	}
+	// Last resort: a lone executable in Contents/MacOS. Bail out rather than
+	// guess when there are several (Firefox ships helpers next to the binary).
+	entries, err := os.ReadDir(macOS)
+	if err != nil {
+		return p
+	}
+	var found string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		c := filepath.Join(macOS, e.Name())
+		if !isExecutable(c) {
+			continue
+		}
+		if found != "" {
+			return p
+		}
+		found = c
+	}
+	if found != "" {
+		return found
+	}
+	return p
+}
+
+var plistExecRe = regexp.MustCompile(`(?s)<key>\s*CFBundleExecutable\s*</key>\s*<string>([^<]+)</string>`)
+
+// plistExecutable pulls CFBundleExecutable out of an XML Info.plist. Binary
+// plists (the common case for Apple-built apps) return "" - the caller falls
+// back to scanning Contents/MacOS.
+func plistExecutable(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) > 1<<20 {
+		return ""
+	}
+	m := plistExecRe.FindSubmatch(data)
+	if m == nil {
+		return ""
+	}
+	return strings.TrimSpace(string(m[1]))
 }
 
 // expandUserPath resolves ~/foo. Also tolerates Windows-style paths the
