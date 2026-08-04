@@ -97,7 +97,7 @@ the android-specific traps and `TODO.md` for the packaging backlog
 
 ## How releases happen
 
-SemVer with `0.x` prefix while Wails v3 stays in alpha. Author cuts
+SemVer with `0.x` prefix while Wails v3 is a prerelease. Author cuts
 releases as they go - minor for new features, patch for fixes.
 A tag push triggers GitHub Actions: tests, all platform builds
 (incl. the signed android APK) and a GitHub Release. sshtool.app

@@ -52,6 +52,9 @@ a prerelease upstream.
   radius, Windows dark-mode menu readability.
 - Versioning stays on `0.x`: `v1.0.0` waits for a stable Wails `v3.0.0`, not
   a beta.
+- Icon generation pins `-macfilename ""`. The beta CLI defaults that path to
+  `build/darwin/icon.icns`, which broke every build job; macOS keeps its
+  committed icon.
 
 ## [0.77.1] - macOS icon sizing
 

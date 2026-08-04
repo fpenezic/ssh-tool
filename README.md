@@ -6,7 +6,7 @@ Daily-driver SSH manager for sysadmins with 300+ hosts: folder-
 inherited tree, encrypted vault, multi-tab split-pane terminal,
 native multi-window, SOCKS5 forwards, batch exec, RDM import.
 
-Built on Wails v3 (alpha) + Svelte 5 + Go. Single binary, cross-
+Built on Wails v3 (beta) + Svelte 5 + Go. Single binary, cross-
 platform (Windows / Linux native; macOS scaffolding exists but
 test status varies).
 
@@ -58,7 +58,7 @@ test status varies).
 
 - Go 1.26+
 - Node 20+
-- [`wails3` CLI](https://wails.io) (alpha) - `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.117`
+- [`wails3` CLI](https://wails.io) (beta) - `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.3`
 - [Task](https://taskfile.dev) - `go install github.com/go-task/task/v3/cmd/task@latest`
 
 ### Build for your platform
@@ -118,10 +118,11 @@ intended for new contributors (or future Claude Code instances).
 
 ## Status
 
-Active development. Wails v3 is still alpha upstream, so expect
-occasional breakage when bumping. The project started as a Rust +
-Tauri app and was ported to Go - do **not** reintroduce russh-based
-code; we moved to Go specifically because `russh`'s forked `ssh-key`
+Active development. Wails v3 is still a prerelease upstream (beta
+since 2026-08-02), so expect occasional breakage when bumping. The
+project started as a Rust + Tauri app and was ported to Go - do
+**not** reintroduce russh-based code; we moved to Go specifically
+because `russh`'s forked `ssh-key`
 crate rejects opkssh "forever" certs (`valid_before=u64::MAX`) and
 rewriting them breaks the CA signature.
 
