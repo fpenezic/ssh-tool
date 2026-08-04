@@ -3,9 +3,55 @@
 All notable changes to ssh-tool are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 This project uses SemVer with a `0.x` prefix while Wails v3 remains
-in alpha upstream.
+a prerelease upstream.
 
 ---
+
+## [0.78.0] - SOCKS browser launch fixes; Wails v3 beta
+
+### Fixed
+
+- **Each SOCKS forward now gets its own browser profile.** With the
+  "persistent browser profile" setting on, every forward shared a single
+  profile directory - and Chromium keeps one instance per profile directory.
+  A second "open in browser" therefore only handed the URL to the browser
+  that was already running and threw the rest of the launch away, proxy
+  setting included. In practice: open a bookmark on connection A, then one on
+  connection B, and B's tab was quietly routed through A's SOCKS proxy. Every
+  forward now has its own profile, so each window really uses its own tunnel.
+  Logins and cookies still survive restarts; they are simply no longer shared
+  between connections. Existing profiles are left untouched, so the first
+  launch after upgrading starts logged out.
+- **A restarted SOCKS forward keeps its port.** Restarting a dynamic forward
+  used to hand out a fresh random port, which left any browser already open
+  pointing at a dead one (a browser cannot be re-pointed without a full
+  restart). A forward now rebinds the port it last held, taking a new one only
+  if it has been claimed meanwhile.
+- **This bit far harder on macOS than on Windows.** Closing the last browser
+  window on macOS leaves the process running, so the next launch was never
+  "the first" one; on Windows the process exits with its last window, which
+  hid the bug.
+- **A browser pinned in Settings as an `.app` bundle now works on macOS.**
+  `/Applications/Brave Browser.app` is a directory, so launching it failed and
+  the app silently fell back to whatever browser it found first (usually
+  Edge). The path is now resolved to the executable inside the bundle. Pasting
+  the inner binary path still works.
+- **Proxy errors say what actually went wrong.** The SOCKS server used to tell
+  the browser "connected" before it had opened the connection on the far side,
+  so a closed port or unresolvable host arrived as a bare connection reset -
+  an empty page in the browser, "Recv failure" in curl. It now answers with
+  the real reason (connection refused, host unreachable, network unreachable),
+  and the app log names the destination that failed.
+
+### Internal
+
+- Moved to Wails v3.0.0-beta.3 (from alpha2.117). Wails v3 left alpha on
+  2026-08-02. No source changes were needed; the version pin in the release
+  workflow moves with it. Notable upstream fixes now included: ordered event
+  delivery, system tray defaults and popup auto-hide, macOS frameless corner
+  radius, Windows dark-mode menu readability.
+- Versioning stays on `0.x`: `v1.0.0` waits for a stable Wails `v3.0.0`, not
+  a beta.
 
 ## [0.77.1] - macOS icon sizing
 
