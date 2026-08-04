@@ -194,7 +194,12 @@ tasks:
     generates:
       - "windows/icon.ico"
     cmds:
-      - wails3 generate icons -input appicon.png -windowsfilename windows/icon.ico
+      # -macfilename "" is load-bearing: since v3.0.0-alpha2.118 the CLI
+      # defaults it to build/darwin/icon.icns, and this task runs with
+      # dir: build, so the default resolves to build/build/darwin/ and the
+      # command dies with "no such file or directory". Empty disables macOS
+      # output, which is what we want - the icns is committed.
+      - wails3 generate icons -input appicon.png -windowsfilename windows/icon.ico -macfilename ""
 
   dev:frontend:
     summary: Runs the frontend in development mode
