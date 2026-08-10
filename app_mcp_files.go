@@ -119,14 +119,36 @@ func mcpDownloadDest(sessionID, remotePath string) (string, error) {
 // file-sharing permission existed, and an LLM that hit it told the user to go
 // enable file access in the app - a setting that does not and will not exist.
 // There is one axis: read, read-run, read-run-yolo.
-func (a *App) mcpFileSession(sessionID string) (*sshlayer.Session, error) {
-	if !canRun(a.grantLevel(sessionID)) {
-		return nil, fmt.Errorf("this session is shared read-only. The file tools need " +
-			"the same level as run: ask the user to share it as \"Read + run\" in the " +
-			"Share-with-LLM popover. There is no separate file-sharing setting")
+// Every refusal is recorded to the activity ring. Without that, a tool the LLM
+// never called and a tool the app refused look identical from the outside -
+// both leave no trace - which makes "the LLM says it can't read files"
+// impossible to diagnose. A refusal in the panel means the app said no; an
+// empty panel means the model never asked.
+func (a *App) mcpFileSession(sessionID, action string) (*sshlayer.Session, error) {
+	lvl := a.grantLevel(sessionID)
+	if !canRun(lvl) {
+		reason := "shared read-only"
+		if lvl == mcpGrantNone {
+			// Far more likely than a genuine read-only share: a session id
+			// that is not shared at all, e.g. a stale one from an earlier run.
+			reason = "not shared with the LLM (unknown or stale session id)"
+		}
+		a.recordActivity(McpActivity{
+			SessionID: sessionID, Session: a.sessionDisplayName(sessionID), Kind: "file",
+			Command: action, Exit: "error", Gate: "denied",
+			Output: "refused: session is " + reason,
+		})
+		return nil, fmt.Errorf("this session is %s. The file tools need the same level "+
+			"as run: ask the user to share it as \"Read + run\" in the Share-with-LLM "+
+			"popover. There is no separate file-sharing setting", reason)
 	}
 	sess, ok := a.pool.Get(sessionID)
 	if !ok {
+		a.recordActivity(McpActivity{
+			SessionID: sessionID, Session: a.sessionDisplayName(sessionID), Kind: "file",
+			Command: action, Exit: "error", Gate: "denied",
+			Output: "refused: session not connected",
+		})
 		return nil, fmt.Errorf("session not connected")
 	}
 	return sess, nil
@@ -151,7 +173,7 @@ func mcpHumanBytes(n int64) string {
 // mcpListFiles returns a directory listing over SFTP. Auto-gated: this is the
 // `ls` of the file tools and `ls` auto-runs under a read-run grant.
 func (a *App) mcpListFiles(sessionID, remotePath string) (string, error) {
-	sess, err := a.mcpFileSession(sessionID)
+	sess, err := a.mcpFileSession(sessionID, "list_files "+remotePath)
 	if err != nil {
 		return "", err
 	}
@@ -202,7 +224,7 @@ func (a *App) mcpListFiles(sessionID, remotePath string) (string, error) {
 // point of this tool over `cat` is that file headers and small binaries survive
 // the trip intact.
 func (a *App) mcpReadFile(sessionID, remotePath string, maxBytes int) (string, error) {
-	sess, err := a.mcpFileSession(sessionID)
+	sess, err := a.mcpFileSession(sessionID, "read_file "+remotePath)
 	if err != nil {
 		return "", err
 	}
@@ -272,7 +294,7 @@ func (a *App) mcpReadFile(sessionID, remotePath string, maxBytes int) (string, e
 // a slow transfer actually stops it instead of leaving it streaming.
 func (a *App) mcpDownloadFile(sessionID, remotePath string, cancel <-chan struct{}) (string, error) {
 	lvl := a.grantLevel(sessionID)
-	sess, err := a.mcpFileSession(sessionID)
+	sess, err := a.mcpFileSession(sessionID, "download_file "+remotePath)
 	if err != nil {
 		return "", err
 	}
