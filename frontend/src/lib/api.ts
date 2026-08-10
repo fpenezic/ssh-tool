@@ -1942,7 +1942,7 @@ export interface McpActivity {
   ts: number;
   session_id: string;
   session: string;
-  kind: "run" | "type" | "connect" | "read";
+  kind: "run" | "type" | "connect" | "read" | "file";
   command: string;
   output?: string;
   exit?: "ok" | "error" | "";
@@ -1954,7 +1954,7 @@ export interface McpApprovalRequest {
   approval_id: string;
   session_id: string;
   session_name: string;
-  kind: "run" | "type" | "connect";
+  kind: "run" | "type" | "connect" | "file";
   command: string;
 }
 

@@ -2014,7 +2014,7 @@ export interface McpApproval {
   approvalId: string;
   sessionId: string;
   sessionName: string;
-  kind: "run" | "type" | "connect";
+  kind: "run" | "type" | "connect" | "file";
   command: string;
 }
 

@@ -704,6 +704,7 @@
     api.requestAttention().catch(() => {});
     const verb = data.kind === "connect" ? "open a connection"
       : data.kind === "type" ? "type into the terminal"
+      : data.kind === "file" ? "download a file"
       : "run a command";
     api.sendPromptNotification(
       "LLM approval needed",

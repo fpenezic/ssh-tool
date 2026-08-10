@@ -2,13 +2,14 @@
   // Approval modal for an LLM (MCP bridge) command. For a "run" request the
   // choices are Run (execute via side channel) or Deny. For a "type" request
   // the choice is Type-into-terminal (inject the text at the prompt with NO
-  // Enter, so the user reviews and submits) or Deny.
+  // Enter, so the user reviews and submits) or Deny. A "file" request is
+  // download_file wanting to write a remote file to the local disk.
   import { IconBot } from "./iconMap";
   import type { McpDecision } from "./api";
 
   interface Props {
     sessionName: string;
-    kind: "run" | "type" | "connect";
+    kind: "run" | "type" | "connect" | "file";
     command: string;
     queueLength?: number;
     onRespond: (decision: McpDecision) => void;
@@ -18,6 +19,7 @@
   const title = $derived(
     kind === "run" ? "run a command"
     : kind === "type" ? "type into the terminal"
+    : kind === "file" ? "download a file"
     : "open a connection",
   );
 </script>
@@ -37,13 +39,21 @@
     {:else}
       <p>
         An external LLM is requesting to
-        {kind === "run" ? "run this command on" : "type this into"}
+        {kind === "run" ? "run this command on"
+          : kind === "file" ? "copy a file from"
+          : "type this into"}
         <strong>{sessionName}</strong>. Review it before allowing.
       </p>
       <pre class="cmd">{command}</pre>
     {/if}
 
-    {#if kind === "type"}
+    {#if kind === "file"}
+      <p class="hint">
+        The file is written to the mcp-downloads folder in the app's data
+        directory - the LLM cannot choose the destination. It could already
+        read this file; approving lets it land a copy on this machine.
+      </p>
+    {:else if kind === "type"}
       <p class="hint">
         On approval the text is typed at the prompt without pressing Enter -
         you review it in the terminal and submit it yourself.
@@ -70,6 +80,8 @@
       <button onclick={() => onRespond("deny")}>Deny</button>
       {#if kind === "run"}
         <button class="primary" onclick={() => onRespond("run")}>Run command</button>
+      {:else if kind === "file"}
+        <button class="primary" onclick={() => onRespond("run")}>Download file</button>
       {:else if kind === "connect"}
         <button class="primary" onclick={() => onRespond("run")}>Connect</button>
       {:else}

@@ -206,7 +206,8 @@ novel.
     single source of truth) surfaced by a "Copy system prompt" button in
     Settings->LLM + the share popover; `docs/MCP_SYSTEM_PROMPT.md` is the
     hand-synced human-readable mirror.
-    Tools: list_sessions, read_terminal, run, type_into_terminal, plus
+    Tools: list_sessions, read_terminal, run, type_into_terminal,
+    list_files / read_file / download_file (gotcha 39), plus
     list_connections (name + folder path only, Sensitive connections
     omitted) and connect (approval-gated `SshConnect` then auto-share).
     WSL->Windows: an optional token-guarded loopback-TCP leg
@@ -680,6 +681,27 @@ everything mobile is behind a build tag or an `isMobile` check.
     client as a bare connection reset - curl says "Recv failure", Chrome says
     `ERR_EMPTY_RESPONSE` - which reads like "the proxy is broken" when the
     truth is "nothing listens on that port over there".
+
+39. **MCP file tools: the gate has to match the shell gate, and the LLM
+    never picks the local path.** `list_files` / `read_file` /
+    `download_file` (`app_mcp_files.go`) all require read-run, the same
+    bar `run` sets. Do NOT "harden" the first two with an approval
+    prompt: `run` with `ls` / `cat` is auto-allowlisted under read-run
+    (`cmdallow.go`), so a prompt on the SFTP spelling of the same read
+    only teaches the LLM to go back to the shell - friction, zero
+    safety. `download_file` is the exception and prompts (YOLO
+    excepted) because it is the only tool in the whole surface that
+    writes to LOCAL disk. That write is why the destination is built by
+    `mcpDownloadDest`, never by the caller: always
+    `<DataDir>/mcp-downloads/<session>/<sanitised base>`, with
+    `mcpSanitizeSegment` reducing both segments to `[A-Za-z0-9._-]` and
+    stripping leading dots (so no `..`, no dotfiles hiding the result).
+    Collisions get `-2`, `-3` rather than overwriting - the use case is
+    forensics, and silently clobbering the first copy of a log destroys
+    evidence. Cancel is the tool call's `ctx.Done()`, and a failed or
+    cancelled transfer removes its partial file. Tests for the sandbox
+    properties live in `app_mcp_files_test.go`; keep them if you touch
+    the path builder, they are the local arbitrary-write guard.
 
 ---
 

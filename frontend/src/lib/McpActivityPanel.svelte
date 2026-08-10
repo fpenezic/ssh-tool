@@ -22,7 +22,7 @@
   // Oldest first, newest at the bottom - reads like a terminal. The IPC
   // returns newest-first, so reverse on load; live events append.
   let items = $state<McpActivity[]>([]);
-  let kindFilter = $state<"" | "run" | "type" | "connect" | "read">("");
+  let kindFilter = $state<"" | "run" | "type" | "connect" | "read" | "file">("");
   let search = $state("");
   let expanded = $state<Set<number>>(new Set());
   let unsub: (() => void) | null = null;
@@ -96,6 +96,7 @@
       <option value="type">type</option>
       <option value="connect">connect</option>
       <option value="read">read</option>
+      <option value="file">file</option>
     </select>
   </div>
 
@@ -203,6 +204,7 @@
   .kind.type { background: var(--mauve); color: var(--base); }
   .kind.connect { background: var(--green); color: var(--base); }
   .kind.read { background: var(--surface1); color: var(--subtext0); }
+  .kind.file { background: var(--yellow); color: var(--base); }
   .sess { color: var(--overlay1); flex-shrink: 0; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cmd {
     flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

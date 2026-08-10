@@ -1126,6 +1126,20 @@ What the LLM can do:
 - **type_into_terminal** - on approval, types text into your live
   terminal **without pressing Enter**, so you review it and submit it
   yourself.
+- **list_files / read_file** - browses directories and reads files over
+  SFTP instead of shelling out to ls and cat. Same gate as those
+  commands (read-run, no prompt), but exact sizes and binary files
+  survive the trip - a file header comes back base64 rather than
+  mangled. read_file is capped at 64 KB by default, 1 MB absolute.
+- **download_file** - copies a remote file **to your machine** and hands
+  the LLM only the local path, so a 200 MB log or a core dump never
+  travels through the conversation. This one **always asks you**
+  (except on a YOLO session), because it is the only tool that writes
+  to your local disk. The prompt names the file and its size. The
+  destination is fixed - `mcp-downloads/<session>/` inside the app's
+  data directory - so the LLM cannot aim a write anywhere else, and a
+  second copy of the same filename lands as `name-2.log` rather than
+  overwriting the first.
 - **list_connections / connect** - the LLM can also search your saved
   connections (by name or folder only - hostnames aren't exposed
   until a connect) and open one. Opening a session always asks you to
