@@ -540,6 +540,88 @@ export class BrowserLaunchResult {
 }
 
 /**
+ * ClaudeDesktopInfo is what the Settings page renders: where the config is,
+ * whether we are already in it, and whether the entry still points at this
+ * binary (it won't after the app moves, e.g. a portable build on a new path).
+ */
+export class ClaudeDesktopInfo {
+    /**
+     * Creates a new ClaudeDesktopInfo instance.
+     * @param {Partial<ClaudeDesktopInfo>} [$$source = {}] - The source object to create the ClaudeDesktopInfo.
+     */
+    constructor($$source = {}) {
+        if (!("supported" in $$source)) {
+            /**
+             * false on platforms Claude Desktop doesn't ship for
+             * @member
+             * @type {boolean}
+             */
+            this["supported"] = false;
+        }
+        if (!("path" in $$source)) {
+            /**
+             * absolute path of claude_desktop_config.json
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("exists" in $$source)) {
+            /**
+             * the file is there
+             * @member
+             * @type {boolean}
+             */
+            this["exists"] = false;
+        }
+        if (!("parseable" in $$source)) {
+            /**
+             * it parses as JSON (true when absent - we'd create it)
+             * @member
+             * @type {boolean}
+             */
+            this["parseable"] = false;
+        }
+        if (!("registered" in $$source)) {
+            /**
+             * an ssh-tool entry is present
+             * @member
+             * @type {boolean}
+             */
+            this["registered"] = false;
+        }
+        if (!("stale" in $$source)) {
+            /**
+             * present, but its command is a different binary
+             * @member
+             * @type {boolean}
+             */
+            this["stale"] = false;
+        }
+        if (!("exe_path" in $$source)) {
+            /**
+             * the command we would write
+             * @member
+             * @type {string}
+             */
+            this["exe_path"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ClaudeDesktopInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ClaudeDesktopInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ClaudeDesktopInfo(/** @type {Partial<ClaudeDesktopInfo>} */($$parsedSource));
+    }
+}
+
+/**
  * ConnectionCopyInfo bundles the bits the UI needs for quick-copy
  * buttons (username, hostname, port, ssh command). One round-trip
  * instead of N.

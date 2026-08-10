@@ -11,7 +11,7 @@
   import { networkProfiles } from "./networkProfiles.svelte";
   import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
   import FolderPicker from "./FolderPicker.svelte";
-  import type { Folder } from "./api";
+  import type { Folder, ClaudeDesktopInfo } from "./api";
   import { copyPastePrefs, type CopyPasteMode } from "./copyPastePrefs.svelte";
   import { SETTINGS_SECTIONS, EXTERNAL_TABS, isExternalTab, type SectionId, type SectionDef, type ExternalTabId } from "./settingsSections";
   import { terminalPrefs, DEFAULT_FONT_FAMILY, DEFAULT_SCROLLBACK } from "./terminalPrefs.svelte";
@@ -76,6 +76,12 @@
   // in a Windows path (C:\...) must be doubled or the JSON is invalid.
   const mcpExeJson = $derived(JSON.stringify(mcpExePath || "ssh-tool"));
   let mcpWslExePath = $state<string>("");
+  // Claude Desktop registration: status is re-read after every write so the
+  // button reflects reality rather than what we hoped the write did.
+  let claudeDesktop = $state<ClaudeDesktopInfo | null>(null);
+  let claudeDesktopBusy = $state(false);
+  let claudeDesktopMsg = $state<string>("");
+  let claudeDesktopErr = $state<string>("");
   let externalTerminal = $state<"windowsterminal" | "powershell" | "cmd" | "wsl">("windowsterminal");
 
   // Per-platform list of in-app local shells the radio shows. Matches
@@ -364,6 +370,7 @@
     try { mcpReadonlyExtra = (await api.settingsGet("mcp_readonly_extra")) ?? ""; } catch { /* ignore */ }
     try { mcpExePath = (await api.appExePath()) ?? ""; } catch { /* ignore */ }
     try { mcpWslExePath = (await api.appWslExePath()) ?? ""; } catch { /* ignore */ }
+    try { claudeDesktop = await api.claudeDesktopStatus(); } catch { /* block stays hidden */ }
     try {
       const v = await api.settingsGet("notifications_enabled");
       notificationsEnabled = v === "" || v === "1" || v === "true"; // default on
@@ -491,6 +498,27 @@
       toast.ok("System prompt copied. " + MCP_SYSTEM_PROMPT_HINT);
     } catch {
       toast.err("Copy failed - clipboard unavailable");
+    }
+  }
+
+  // Merge an ssh-tool entry into Claude Desktop's config. The backend refuses
+  // to touch a file it can't parse and backs up whatever was there, so the
+  // only thing to handle here is telling the user it worked and that Claude
+  // Desktop has to restart before it re-reads the file.
+  async function registerClaudeDesktop() {
+    claudeDesktopBusy = true;
+    claudeDesktopMsg = "";
+    claudeDesktopErr = "";
+    try {
+      const path = await api.claudeDesktopRegister();
+      claudeDesktopMsg = `Written to ${path}. Restart Claude Desktop to pick it up.`;
+      toast.ok("Added to Claude Desktop - restart it to load the server");
+    } catch (e) {
+      claudeDesktopErr = String(e);
+      toast.err("Could not write the Claude Desktop config");
+    } finally {
+      claudeDesktopBusy = false;
+      try { claudeDesktop = await api.claudeDesktopStatus(); } catch { /* keep the old view */ }
     }
   }
 
@@ -4792,6 +4820,44 @@
       <p class="hint"><strong>Claude Code:</strong></p>
       <pre class="cmd-block">claude mcp add ssh-tool -- {mcpExePath || "ssh-tool"} --mcp-bridge</pre>
 
+      {#if claudeDesktop?.supported}
+        <p class="hint"><strong>Claude Desktop:</strong></p>
+        {#if claudeDesktop.exists && !claudeDesktop.parseable}
+          <p class="hint warn-note">
+            <code>{claudeDesktop.path}</code> exists but is not valid JSON, so
+            it can't be merged into safely. Fix or remove it, then reopen this
+            page.
+          </p>
+        {:else}
+          <div class="cd-row">
+            <button
+              class="primary"
+              disabled={claudeDesktopBusy}
+              onclick={registerClaudeDesktop}
+            >
+              {claudeDesktopBusy ? "Writing…"
+                : claudeDesktop.stale ? "Update the path in Claude Desktop"
+                : claudeDesktop.registered ? "Re-register"
+                : "Add to Claude Desktop"}
+            </button>
+            {#if claudeDesktop.stale}
+              <span class="cd-state warn">registered, but pointing at another binary</span>
+            {:else if claudeDesktop.registered}
+              <span class="cd-state ok">already registered</span>
+            {/if}
+          </div>
+          <p class="hint">
+            Merges an <code>ssh-tool</code> entry into
+            <code>{claudeDesktop.path}</code>, leaving any other MCP servers in
+            there untouched and keeping a <code>.bak</code> copy of the
+            original. Claude Desktop reads the file at startup, so restart it
+            afterwards.
+          </p>
+          {#if claudeDesktopMsg}<p class="hint cd-done">{claudeDesktopMsg}</p>{/if}
+          {#if claudeDesktopErr}<p class="hint warn-note">{claudeDesktopErr}</p>{/if}
+        {/if}
+      {/if}
+
       <p class="hint"><strong>LM Studio</strong> (Program -> Edit mcp.json):</p>
       <pre class="cmd-block">{`{
   "mcpServers": {
@@ -5444,6 +5510,25 @@
     font-size: 0.88rem;
     margin: 0.4rem 0;
     line-height: 1.55;
+  }
+  /* Claude Desktop registration row: button plus a state chip. */
+  .cd-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0.5rem 0;
+    flex-wrap: wrap;
+  }
+  .cd-state {
+    font-size: 0.8rem;
+  }
+  .cd-state.ok { color: var(--green); }
+  .cd-state.warn { color: var(--yellow); }
+  .cd-done {
+    border-left: 3px solid var(--green);
+    padding: 0.4rem 0.7rem;
+    background: color-mix(in srgb, var(--green) 10%, transparent);
+    border-radius: 0 4px 4px 0;
   }
   .warn-note {
     border-left: 3px solid var(--yellow);

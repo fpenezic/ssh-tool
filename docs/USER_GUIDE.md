@@ -1089,6 +1089,13 @@ Setup, once:
 2. Register ssh-tool with your LLM client. The Settings page shows
    the exact command with your binary's path. For **Claude Code**:
    `claude mcp add ssh-tool -- /path/to/ssh-tool --mcp-bridge`. For
+   **Claude Desktop** there is an **Add to Claude Desktop** button -
+   it merges an `ssh-tool` entry into Claude Desktop's config file,
+   leaves any other MCP servers you have there alone, and keeps a
+   `.bak` of the original. Claude Desktop only reads that file at
+   startup, so restart it afterwards. If the app later moves to a
+   different path the button says *Update the path* - the registered
+   command still points at the old binary until you press it. For
    **LM Studio** (or any MCP client), point the server's `command`
    at the same binary with the `--mcp-bridge` argument - the Settings
    page shows a ready-to-paste `mcp.json` block.

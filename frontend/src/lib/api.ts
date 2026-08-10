@@ -1259,6 +1259,12 @@ export const api = {
   mcpGetManageStore: () => G.McpGetManageStore() as unknown as Promise<boolean>,
   appExePath: () => G.AppExePath() as unknown as Promise<string>,
   appWslExePath: () => G.AppWslExePath() as unknown as Promise<string>,
+  // Claude Desktop reads its MCP servers from a JSON file at startup; these
+  // inspect and merge into it (never replace - the user has other servers).
+  claudeDesktopStatus: () =>
+    G.ClaudeDesktopStatus() as unknown as Promise<ClaudeDesktopInfo>,
+  claudeDesktopRegister: () =>
+    G.ClaudeDesktopRegister() as unknown as Promise<string>,
   requestAttention: () => G.RequestAttention(),
   clearAttention: () => G.ClearAttention(),
   sendPromptNotification: (title: string, body: string) => G.SendPromptNotification(title, body),
@@ -1947,6 +1953,17 @@ export interface McpActivity {
   output?: string;
   exit?: "ok" | "error" | "";
   gate: "auto" | "approved" | "denied" | "n/a" | "";
+}
+
+// Claude Desktop MCP registration status (ClaudeDesktopStatus).
+export interface ClaudeDesktopInfo {
+  supported: boolean;  // false where Claude Desktop doesn't ship
+  path: string;        // absolute path of claude_desktop_config.json
+  exists: boolean;
+  parseable: boolean;  // true when absent - we would create it
+  registered: boolean;
+  stale: boolean;      // registered, but pointing at a different binary
+  exe_path: string;
 }
 
 // Event payload for the approval modal (event: "mcp_approval_request").

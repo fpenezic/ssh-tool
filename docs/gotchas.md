@@ -725,6 +725,23 @@ everything mobile is behind a build tag or an `isMobile` check.
     INDETERMINATE rather than a percentage off a partial denominator,
     which would run backwards.
 
+41. **Writing Claude Desktop's config: merge, back up, refuse on
+    garbage.** `ClaudeDesktopRegister` (`app_claude_desktop.go`) edits
+    ANOTHER application's file, so it unmarshals into
+    `map[string]json.RawMessage`, sets only the `ssh-tool` key inside
+    `mcpServers`, and re-marshals - every other server and every
+    unrelated top-level key survives. It writes a `.bak` first and uses
+    `writeFileAtomic` (temp file in the same dir + rename) so an
+    interrupted write can't hand Claude Desktop a truncated config. If
+    the existing file does not parse it REFUSES rather than
+    overwriting: a file we can't read is a file we can't merge into.
+    Two consequences to remember: re-marshalling through a map sorts
+    top-level keys alphabetically (harmless, but it is why the backup
+    exists), and Claude Desktop reads the file only at startup, so the
+    UI has to tell the user to restart it. `Stale` in
+    `ClaudeDesktopStatus` means the entry is there but its `command`
+    is a different binary - the portable-build-moved case.
+
 ---
 
 # Archive

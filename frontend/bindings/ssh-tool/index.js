@@ -19,6 +19,7 @@ export {
     BitwardenEnsureCredentialInput,
     BitwardenSaveInput,
     BrowserLaunchResult,
+    ClaudeDesktopInfo,
     ConnectionCopyInfo,
     ConnectionsBatchUpdateInput,
     ConnectionsBatchUpdateResult,
