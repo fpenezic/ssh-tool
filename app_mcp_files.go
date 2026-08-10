@@ -36,6 +36,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
+
 	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/store"
 )
@@ -294,7 +296,14 @@ func (a *App) mcpDownloadFile(sessionID, remotePath string, cancel <-chan struct
 	if err != nil {
 		return "", err
 	}
-	written, err := sess.SftpDownload(remotePath, dest, func(int64, int64) {}, cancel)
+	// Feed the same aggregate the UI transfers use, so an LLM pulling a large
+	// file still fills the taskbar bar - this is exactly the case where the
+	// user is not looking at the app and wants to know something is happening.
+	transferID := uuid.NewString()
+	written, err := sess.SftpDownload(remotePath, dest, func(done, total int64) {
+		a.transferProgress(transferID, done, total)
+	}, cancel)
+	a.transferFinished(transferID, err != nil)
 	if err != nil {
 		// A cancelled or failed transfer leaves a partial file behind; drop it
 		// so nothing downstream mistakes it for the real thing.

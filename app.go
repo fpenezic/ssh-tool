@@ -147,6 +147,10 @@ type App struct {
 	transfersMu sync.Mutex
 	transfers   map[string]chan struct{} // transferID -> cancel channel
 
+	// taskbar aggregates every live transfer into the single progress bar the
+	// OS draws on the app's taskbar button. See app_taskbar.go.
+	taskbar *taskbarTracker
+
 	reconnectMu sync.Mutex
 	// reconnects: maps the OLD sessionID of a dropped session to its
 	// cancel channel. Closing the channel aborts the retry loop.
@@ -419,6 +423,7 @@ func (a *App) initialise() {
 	a.pendingHostKeys = make(map[string]chan bool)
 	a.pendingAuthPrompts = make(map[string]chan authPromptReply)
 	a.transfers = make(map[string]chan struct{})
+	a.taskbar = newTaskbarTracker()
 	a.reconnects = make(map[string]chan struct{})
 	a.reconnectForwards = make(map[string][]string)
 	a.connectCancels = make(map[string]*connectCancel)
@@ -5307,9 +5312,11 @@ func (a *App) SftpStartDownload(sessionID, remotePath, localPath string) (string
 			EventsEmit(eventName, sshlayer.TransferProgress{
 				TransferID: transferID, Bytes: written, Total: total,
 			})
+			a.transferProgress(transferID, written, total)
 		}
 		_, err := sess.SftpDownload(remotePath, localPath, onProgress, cancel)
 		a.releaseTransfer(transferID)
+		a.transferFinished(transferID, err != nil)
 		p := sshlayer.TransferProgress{TransferID: transferID, Done: true}
 		if err != nil {
 			p.Err = err.Error()
@@ -5342,9 +5349,11 @@ func (a *App) SftpStartUpload(sessionID, localPath, remotePath string) (string, 
 			EventsEmit(eventName, sshlayer.TransferProgress{
 				TransferID: transferID, Bytes: written, Total: total,
 			})
+			a.transferProgress(transferID, written, total)
 		}
 		_, err := sess.SftpUpload(localPath, remotePath, onProgress, cancel)
 		a.releaseTransfer(transferID)
+		a.transferFinished(transferID, err != nil)
 		p := sshlayer.TransferProgress{TransferID: transferID, Done: true}
 		if err != nil {
 			p.Err = err.Error()
@@ -5384,9 +5393,11 @@ func (a *App) SftpStartDownloadDir(sessionID, remoteRoot, localRoot string) (str
 				FilesTotal:  p.FilesTotal,
 				CurrentPath: p.CurrentPath,
 			})
+			a.transferProgress(transferID, p.BytesDone, p.BytesTotal)
 		}
 		err := sess.SftpDownloadDir(remoteRoot, localRoot, onProgress, cancel)
 		a.releaseTransfer(transferID)
+		a.transferFinished(transferID, err != nil)
 		p := sshlayer.TransferProgress{TransferID: transferID, Done: true}
 		if err != nil {
 			p.Err = err.Error()
@@ -5419,9 +5430,11 @@ func (a *App) SftpStartUploadDir(sessionID, localRoot, remoteRoot string) (strin
 				FilesTotal:  p.FilesTotal,
 				CurrentPath: p.CurrentPath,
 			})
+			a.transferProgress(transferID, p.BytesDone, p.BytesTotal)
 		}
 		err := sess.SftpUploadDir(localRoot, remoteRoot, onProgress, cancel)
 		a.releaseTransfer(transferID)
+		a.transferFinished(transferID, err != nil)
 		p := sshlayer.TransferProgress{TransferID: transferID, Done: true}
 		if err != nil {
 			p.Err = err.Error()

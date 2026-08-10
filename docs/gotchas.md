@@ -703,6 +703,28 @@ everything mobile is behind a build tag or an `isMobile` check.
     properties live in `app_mcp_files_test.go`; keep them if you touch
     the path builder, they are the local arbitrary-write guard.
 
+40. **Windows taskbar progress: bind ITaskbarList3 yourself, throttle,
+    and pin the HWND.** Wails' `pkg/w32/taskbar.go` DECLARES
+    `SetProgressValue` / `SetProgressState` in the vtable but keeps
+    `lpVtbl` unexported and wraps only `SetOverlayIcon` - the progress
+    methods are unreachable from outside the package, so
+    `taskbar_windows.go` binds the interface itself (ole32 +
+    `syscall.SyscallN`, no new dependency). Three traps:
+    (a) COM is apartment-bound, so creation AND every call go through
+    `application.InvokeAsync` - the same main thread every time, and
+    async because the caller is an SFTP goroutine that must not block on
+    the UI thread; (b) the progress callback fires per ~256 KB, so
+    `app_taskbar.go` rate-limits to 100 ms and to actual percentage
+    changes, with a `force` path so the final update can't be swallowed
+    and leave the bar stuck at 97%; (c) take the HWND from
+    `a.mainWindow`, NOT `Window.Current()` (what the Wails dock service
+    uses) - "current" follows focus, so with several windows open the
+    bar hops between them. One bar, many transfers: the tracker sums
+    them and only clears on the last one. A transfer whose total is
+    still unknown (a dir transfer walking the tree) forces
+    INDETERMINATE rather than a percentage off a partial denominator,
+    which would run backwards.
+
 ---
 
 # Archive

@@ -931,6 +931,13 @@ Bottom panel shows active and recent transfers with direction (↑/↓),
 filename, progress bar, and bytes/files-done counters. Cancel button
 on each row.
 
+On Windows the taskbar button fills behind the app icon while
+transfers run, the way a browser shows a download - so you can watch a
+big upload finish without keeping the window in front. It shows all
+running transfers combined, turns red for a few seconds if one fails,
+and clears when the last one is done. Downloads an LLM starts (see
+Share with an LLM below) fill the same bar.
+
 ---
 
 <a id="vnc-console"></a>
