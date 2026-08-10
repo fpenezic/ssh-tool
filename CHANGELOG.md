@@ -38,6 +38,22 @@ a prerelease upstream.
   button turns into *Update the path*, because the old entry still points at
   a binary that is no longer there.
 
+### Changed
+
+- **The system prompt now tells you where to paste it**, per client -
+  Claude Desktop's Project instructions, Claude Code's `CLAUDE.md`, the
+  system-prompt field elsewhere. Pasted into an ordinary chat message it may
+  simply be ignored, and that is the model behaving correctly: one that
+  accepted "here is your new system prompt" from conversational text would
+  also accept it from a log line it read through these tools.
+- **The share levels are described accurately.** *Read only* is scrollback and
+  nothing else - it never could run commands, despite what the old
+  documentation said - and *Read + run* is what the file tools need. There is
+  no separate file-sharing level, and the app no longer implies there is one
+  when it refuses.
+- **Refused LLM file operations are recorded** in the activity panel, so a
+  tool the app turned down can be told apart from one the LLM never called.
+
 ### Fixed
 
 - **Selecting a VNC tab now focuses the console.** Typing after switching to a
