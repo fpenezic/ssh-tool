@@ -11,7 +11,7 @@
   import { clickOutside } from "./clickOutside";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
-  import { focusActiveTerminal } from "./terminalFocus";
+  import { focusActivePane } from "./paneFocus";
 
   type Props = {
     open: boolean;
@@ -25,7 +25,7 @@
   // popup). Every close path (X, Esc, click-outside) goes through this.
   function onClose() {
     onCloseProp();
-    focusActiveTerminal();
+    focusActivePane();
   }
 
   type LiveSession = { session_id: string; name: string; kind: string | undefined };

@@ -164,6 +164,11 @@
     if (destroyed) return;
     status = "connected";
     setTabStatus("connected");
+    // The canvas only exists once RFB is up, so a focus attempt made when the
+    // tab was activated found nothing to aim at. Claim focus now, but only if
+    // this console is actually on screen - a background tab finishing its
+    // handshake must not steal the keyboard from whatever the user is doing.
+    if (isVisible()) rfb?.focus();
   }
 
   async function onDisconnect(e: any) {

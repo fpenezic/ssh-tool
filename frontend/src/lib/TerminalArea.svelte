@@ -19,7 +19,7 @@
   import { EventsOn } from "./wailsRuntime";
   import { appPrefs } from "./appPrefs.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
-  import { focusActiveTerminal } from "./terminalFocus";
+  import { focusActivePane } from "./paneFocus";
   let broadcastManagerOpen = $state(false);
   let shareDialogOpen = $state(false);
   // The ShareDialog defaults its tab selection to the ACTIVE tab, so switch to
@@ -249,7 +249,7 @@
     paneTabs.removeTab(tabId);
     if (paneTabs.tabs.length === 0) view.setTab("connections");
     // Focus follows the tab promoted to active (mirrors autoCloseSession).
-    else focusActiveTerminal();
+    else focusActivePane();
   }
 
   function tabTitle(tabId: string): string {
@@ -813,7 +813,7 @@
         {#if tabReorderIndicator?.tabId === t.tabId}
           <div class="tab-reorder-bar {tabReorderIndicator.side}"></div>
         {/if}
-        <button class="label" onclick={() => { paneTabs.activateTab(t.tabId); focusActiveTerminal(); }} title={st.hint}>
+        <button class="label" onclick={() => { paneTabs.activateTab(t.tabId); focusActivePane(); }} title={st.hint}>
           <span class="dot" style="background: {st.color}"></span>
           {#if t.groupName}
             <span

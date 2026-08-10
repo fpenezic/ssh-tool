@@ -18,7 +18,7 @@
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
   import { logtail } from "./logtailStore.svelte";
-  import { focusActiveTerminal } from "./terminalFocus";
+  import { focusActivePane } from "./paneFocus";
   import HttpModal from "./HttpModal.svelte";
   import TunnelPopover from "./TunnelPopover.svelte";
   import LlmSharePopover from "./LlmSharePopover.svelte";
@@ -44,7 +44,7 @@
   function popToOwnTab() {
     if (node.kind !== "pane") return;
     paneTabs.movePaneToOwnTab(tabId, node.id);
-    focusActiveTerminal();
+    focusActivePane();
   }
 
   // ----- Resize handle for split nodes -----
@@ -422,7 +422,7 @@
     // Whatever pane/tab got promoted to active should also get keyboard
     // focus - without this the focus dies with the unmounted xterm and
     // the user has to click before typing.
-    if (paneTabs.tabs.length > 0) focusActiveTerminal();
+    if (paneTabs.tabs.length > 0) focusActivePane();
     if (paneTabs.countLeavesForSession(sessionId) === 0) {
       // Session is going away entirely - tear down any background capture
       // for it too (the overlay lives up in TerminalArea now, keyed by

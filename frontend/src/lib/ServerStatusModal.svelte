@@ -13,7 +13,7 @@
   import { onMount } from "svelte";
   import { api, type ServerStats } from "./api";
   import { IconCpu, IconMemory, IconDisk, IconUsers, IconRefresh, IconHost } from "./iconMap";
-  import { focusActiveTerminal } from "./terminalFocus";
+  import { focusActivePane } from "./paneFocus";
 
   interface Props {
     initial: ServerStats;
@@ -28,7 +28,7 @@
   // (Esc, backdrop, the X button) routes through here.
   function onClose() {
     onCloseProp();
-    focusActiveTerminal();
+    focusActivePane();
   }
 
   // Seed from the last poll's snapshot so the modal paints instantly, then

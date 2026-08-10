@@ -4,7 +4,7 @@
   import { installMobileBackNav } from "./lib/mobileBackNav";
   import { api } from "./lib/api";
   import { EventsOn } from "./lib/wailsRuntime";
-  import { focusActiveTerminal } from "./lib/terminalFocus";
+  import { focusActivePane } from "./lib/paneFocus";
   import Sidebar from "./lib/Sidebar.svelte";
   import DetailPane from "./lib/DetailPane.svelte";
   import CredentialList from "./lib/CredentialList.svelte";
@@ -142,7 +142,7 @@
       if (view.tab !== "terminal") return;
       e.preventDefault();
       paneTabs.cycleActive(e.shiftKey ? -1 : 1);
-      focusActiveTerminal();
+      focusActivePane();
       return;
     }
 
@@ -156,7 +156,7 @@
         : paneTabs.activateIndex(n - 1);
       if (ok) {
         e.preventDefault();
-        focusActiveTerminal();
+        focusActivePane();
       }
       return;
     }
@@ -1022,14 +1022,14 @@
 {#if showSnippetPalette && vaultReady}
   <SnippetPalette onClose={() => {
     showSnippetPalette = false;
-    if (view.tab === "terminal") focusActiveTerminal();
+    if (view.tab === "terminal") focusActivePane();
   }} />
 {/if}
 
 {#if showPalette && vaultReady}
   <QuickPalette actions={paletteActions} onClose={() => {
     showPalette = false;
-    if (view.tab === "terminal") focusActiveTerminal();
+    if (view.tab === "terminal") focusActivePane();
   }} />
 {/if}
 

@@ -1039,13 +1039,26 @@ handler gets them.
 Activating a new tab via shortcut or click flips
 `.tab-content.active` in the DOM but doesn't move focus - the
 previous tab's `.xterm-helper-textarea` keeps it, so keystrokes
-go nowhere visible. Shared `focusActiveTerminal()` helper waits
-two `requestAnimationFrame` hops (display flip + xterm settle)
-then targets the textarea inside `.tab-content.active
-.term-wrap.active`. Selector must include the `.tab-content`
-gate - every Terminal component renders `.term-wrap.active`
-because pane focus is per-pane and unrelated to which tab is
-shown.
+go nowhere visible. Shared `focusActivePane()` helper
+(`paneFocus.ts`) waits two `requestAnimationFrame` hops (display
+flip + xterm settle) then targets the textarea inside
+`.tab-content.active .term-wrap.active`. Selector must include
+the `.tab-content` gate - every Terminal component renders
+`.term-wrap.active` because pane focus is per-pane and unrelated
+to which tab is shown.
+
+Not every tab is a terminal. A VNC tab's keyboard target is the
+noVNC canvas (`.vnc-screen canvas`, `tabIndex -1` so it is
+focusable only programmatically), and when the helper only knew
+about xterm the console was not merely left unfocused - focus
+STAYED on the previous tab's terminal, so typing at a console
+went into another host's shell. The helper now falls back to the
+canvas, and to blurring a stale xterm textarea when the active
+tab has neither (a console still connecting, or showing its
+password form). The canvas does not exist until RFB connects, so
+`VncPane.onConnect` also calls `rfb.focus()` - guarded by
+`isVisible()`, or a background tab completing its handshake
+would steal the keyboard.
 
 ### QuickPalette modal stopPropagation killed its own nav
 The palette stops keydown propagation on its modal so typed

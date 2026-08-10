@@ -14,7 +14,7 @@
   import { fuzzyMatch, highlightSegments, type FuzzyMatch } from "./fuzzy";
   import { clickOutside } from "./clickOutside";
   import { IconClipboardCopy } from "./iconMap";
-  import { focusActiveTerminal } from "./terminalFocus";
+  import { focusActivePane } from "./paneFocus";
 
   interface Props {
     onClose: () => void;
@@ -158,7 +158,7 @@
     // Restore focus to the active xterm so the user can keep typing
     // without an extra click. Shared helper handles the rAF timing
     // needed to wait out the modal teardown + view display flip.
-    focusActiveTerminal();
+    focusActivePane();
   }
 
   function submitVarForm() {

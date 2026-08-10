@@ -9,7 +9,7 @@
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte";
   import { errMsg } from "./connectErrors";
-  import { focusActiveTerminal } from "./terminalFocus";
+  import { focusActivePane } from "./paneFocus";
 
   let files = $state<RecordingFileInfo[]>([]);
   let listError = $state<string | null>(null);
@@ -88,7 +88,7 @@
     fullscreen = false;
     recordingsModal.close();
     // Hand focus back to the live terminal the user was in.
-    focusActiveTerminal();
+    focusActivePane();
   }
 </script>
 

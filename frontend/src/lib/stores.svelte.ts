@@ -3,7 +3,7 @@ import { expandedConnections, expandedCredentials } from "./treeState.svelte";
 import { tagFilter } from "./tagFilter.svelte.ts";
 import { resolveColorTag } from "./palette";
 import { terminalPrefs } from "./terminalPrefs.svelte.ts";
-import { focusActiveTerminal } from "./terminalFocus";
+import { focusActivePane } from "./paneFocus";
 import { takeNetworkVia } from "./networkVia";
 
 class TreeStore {
@@ -1896,7 +1896,7 @@ class SessionStore {
       // The close promoted another tab/pane to active, but keyboard
       // focus stayed on the now-unmounted xterm. Punt it into the
       // newly visible terminal so the user can type immediately.
-      focusActiveTerminal();
+      focusActivePane();
     }
   }
 }
