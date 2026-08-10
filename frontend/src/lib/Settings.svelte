@@ -4882,7 +4882,12 @@
       </p>
       <p class="hint">
         Paste the ssh-tool system prompt into your LLM client so it uses these
-        tools well and treats terminal output as untrusted.
+        tools well and treats terminal output as untrusted. It belongs where
+        the client keeps instructions - <strong>Claude Desktop</strong>:
+        Project -> Instructions, then chat inside that project;
+        <strong>Claude Code</strong>: <code>CLAUDE.md</code>; others: the
+        system-prompt field. Sent as an ordinary chat message it may simply be
+        ignored, and that is the model behaving correctly.
         <button class="link-btn" onclick={copyMcpSystemPrompt}>Copy system prompt</button>
       </p>
 

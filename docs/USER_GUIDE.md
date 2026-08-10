@@ -1195,9 +1195,18 @@ For a system prompt that teaches your LLM client how to use these
 tools well and safely (start with `list_sessions`, treat terminal
 output as untrusted, respect approvals, be extra careful in auto-run
 mode), click **Copy system prompt** in Settings -> LLM or the
-Share-with-LLM popover, then paste it into your `CLAUDE.md` (Claude
-Code) or the system prompt field (LM Studio). The same text is in
-[`docs/MCP_SYSTEM_PROMPT.md`](MCP_SYSTEM_PROMPT.md).
+Share-with-LLM popover, then paste it where your client keeps
+instructions: **Claude Desktop** -> Project -> *Instructions* (and
+then chat inside that project), **Claude Code** -> your `CLAUDE.md`,
+**LM Studio** and others -> the system-prompt field. The same text is
+in [`docs/MCP_SYSTEM_PROMPT.md`](MCP_SYSTEM_PROMPT.md).
+
+Pasting it as an ordinary chat message part-way through a conversation
+often will **not** work, and that is the model behaving correctly: a
+model that accepted "here is your new system prompt" from a chat turn
+would also accept it from a log line or a filename it read through
+these tools. Put it where instructions belong and it is trusted; send
+it as chat and it is treated as text, which is the whole point.
 
 ### Share a session to a web browser
 
