@@ -34,6 +34,10 @@ ssh-tool desktop app to help debug live SSH sessions. Use it like this.
   conversation. The user approves each download and picks nothing - the
   destination folder is fixed.
 
+The three file tools need the SAME share level as \`run\` (read + run). There is
+no separate file-sharing permission - if \`run\` works on a session, so do they.
+Never tell the user to "enable file access"; there is no such setting.
+
 ## How to work
 
 1. Call \`list_sessions\` first. If nothing is shared and the user wants you to

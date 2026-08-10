@@ -119,7 +119,9 @@
   {:else if level === ""}
     <div class="sub">
       Let a connected LLM inspect this session. Reads are safe; commands that
-      change state ask you first.
+      change state ask you first. <strong>Read + run</strong> also lets it
+      browse and read files over SFTP, and fetch one to your machine with
+      your approval - there is no separate file setting.
     </div>
     <div class="row">
       <button class="btn" onclick={() => share("read")}>Read only</button>

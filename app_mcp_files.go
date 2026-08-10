@@ -113,9 +113,17 @@ func mcpDownloadDest(sessionID, remotePath string) (string, error) {
 // mcpFileSession resolves a session for the file tools: it must be shared at
 // read-run (the same bar `run` sets, since these tools are the SFTP spelling of
 // ls/cat) and it must be live.
+//
+// The error text names the ACTUAL requirement on purpose. An earlier wording
+// ("session not shared for reading files") read as though a separate
+// file-sharing permission existed, and an LLM that hit it told the user to go
+// enable file access in the app - a setting that does not and will not exist.
+// There is one axis: read, read-run, read-run-yolo.
 func (a *App) mcpFileSession(sessionID string) (*sshlayer.Session, error) {
 	if !canRun(a.grantLevel(sessionID)) {
-		return nil, fmt.Errorf("session not shared for reading files")
+		return nil, fmt.Errorf("this session is shared read-only. The file tools need " +
+			"the same level as run: ask the user to share it as \"Read + run\" in the " +
+			"Share-with-LLM popover. There is no separate file-sharing setting")
 	}
 	sess, ok := a.pool.Get(sessionID)
 	if !ok {

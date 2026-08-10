@@ -7,6 +7,48 @@ a prerelease upstream.
 
 ---
 
+## [0.79.0] - File transfer for the LLM; taskbar progress; Claude Desktop
+
+### Added
+
+- **The LLM can finally move files.** Three new MCP tools: `list_files` and
+  `read_file` browse and read over SFTP instead of shelling out to `ls` and
+  `cat` (exact sizes, and binary files come back intact rather than mangled),
+  and `download_file` copies a remote file **to your machine** and hands the
+  LLM only the local path. Doing forensics through an LLM used to mean
+  `base64`-ing a file through the terminal and paying for every byte in the
+  conversation; a log or a core dump can now just be fetched. `list_files` and
+  `read_file` need the same "read + run" share level as the equivalent shell
+  commands and run without a prompt. `download_file` **always asks you** - it
+  is the only tool that writes to your local disk - and the prompt names the
+  file and its size, so a surprise 12 GB pull is yours to refuse. The
+  destination is fixed (`mcp-downloads/<session>/` in the app's data folder);
+  the LLM cannot choose where a file lands, and a second copy of the same
+  name is saved alongside the first rather than replacing it.
+- **The Windows taskbar button fills while files transfer**, the way a browser
+  shows a download - so a big upload can finish without keeping the window in
+  front. It shows all running transfers combined, turns red briefly if one
+  fails, and clears when the last one is done. Downloads the LLM starts fill
+  the same bar. macOS and Linux are unchanged for now.
+- **One-click registration with Claude Desktop.** Settings -> LLM has an *Add
+  to Claude Desktop* button that writes the MCP entry into Claude Desktop's
+  config for you. It merges - any other MCP servers you have there are left
+  alone - and keeps a `.bak` of the original. Claude Desktop only reads that
+  file when it starts, so restart it afterwards. If the app later moves, the
+  button turns into *Update the path*, because the old entry still points at
+  a binary that is no longer there.
+
+### Fixed
+
+- **Selecting a VNC tab now focuses the console.** Typing after switching to a
+  console did nothing - and not harmlessly: the keyboard stayed with the
+  terminal in the tab you came from, so keystrokes meant for the console went
+  into that shell. The console now takes focus when its tab is activated and
+  when it finishes connecting (a console connecting in a background tab still
+  will not steal your keyboard).
+
+---
+
 ## [0.78.0] - SOCKS browser launch fixes; Wails v3 beta
 
 ### Fixed

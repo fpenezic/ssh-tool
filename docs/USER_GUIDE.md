@@ -1112,10 +1112,14 @@ Then, per session:
 
 3. Connect the session and click the **Share with LLM** button in the
    pane toolbar (the robot-icon button next to tunnels). Three levels:
-   - *Read only* - the LLM can read scrollback and run allowlisted
-     read-only commands.
-   - *Read + run* - adds running other commands and typing into the
-     terminal, each **gated** by an approval prompt.
+   - *Read only* - the LLM can read the session's scrollback, nothing
+     else. No commands, no files.
+   - *Read + run* - adds running commands and typing into the terminal
+     (read-only commands go straight through, anything else is
+     **gated** by an approval prompt), plus the file tools: browsing
+     and reading files over SFTP, and fetching one to your machine
+     with your approval. There is no separate file-sharing level - if
+     the LLM can run `cat`, it can read the same file over SFTP.
    - *Auto-run (YOLO)* - runs the LLM's commands **without asking** each
      time, for hands-off work. Catastrophic commands (recursive delete of
      a system path, disk wipe, shutdown, ...) **still** raise a prompt -
