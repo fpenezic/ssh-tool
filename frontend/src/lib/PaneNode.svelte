@@ -24,6 +24,8 @@
   import LlmSharePopover from "./LlmSharePopover.svelte";
   import McpActivityPanel from "./McpActivityPanel.svelte";
   import { isMobile } from "./platform";
+  import { toast } from "./toast.svelte.ts";
+  import { unwrapRaw } from "./connectErrors";
 
   interface Props {
     tabId: string;
@@ -85,11 +87,13 @@
     if (node.kind !== "pane") return;
     const tab = paneTabs.tabs.find((t) => t.tabId === tabId);
     if (!tab) return;
-    // Reuse the same connection that the existing pane uses.
+    // Reuse the same connection that the existing pane uses. sshReopen, not
+    // sshConnect: a dynamic-inventory pane's connectionId is "dyn:<entryId>",
+    // which sshConnect cannot resolve, so splitting one failed silently.
     const existingSession = sessions.tabs.find((s) => s.sessionId === node.sessionId);
     if (!existingSession) return;
     try {
-      const r = await api.sshConnect(existingSession.connectionId);
+      const r = await api.sshReopen(existingSession.connectionId);
       sessions.add({
         sessionId: r.session_id,
         connectionId: existingSession.connectionId,
@@ -100,6 +104,7 @@
       paneTabs.splitPane(tabId, node.id, direction, r.session_id);
     } catch (e) {
       console.error("split failed", e);
+      toast.err(`Split failed: ${unwrapRaw(String((e as any)?.message ?? e))}`);
     }
   }
 
@@ -382,24 +387,28 @@
     const oldId = node.sessionId;
     const sess = sessions.tabs.find((s) => s.sessionId === oldId);
     if (!sess) return;
-    const conn = tree.connectionById(sess.connectionId);
-    if (!conn) return;
+    // Name/hostname come off the tab, NOT off tree.connectionById: a
+    // dynamic-inventory session's connectionId is the synthetic
+    // "dyn:<entryId>", which is not in the connections list, so the old
+    // lookup bailed here and the button did nothing on every dynamic host.
+    // sshReconnect resolves both id shapes backend-side.
     try {
       // Tear down first so the new session doesn't share quirks with
       // the dying one (forwards / SFTP cache live on Session).
       try { await api.sshDisconnect(oldId); } catch {}
       sessions.remove(oldId);
-      const r = await api.sshConnect(sess.connectionId);
+      const r = await api.sshReopen(sess.connectionId);
       sessions.add({
         sessionId: r.session_id,
         connectionId: sess.connectionId,
-        name: conn.name,
-        hostname: conn.hostname,
+        name: sess.name,
+        hostname: sess.hostname,
         status: "connected",
       });
       paneTabs.swapSessionId(oldId, r.session_id);
     } catch (e) {
       console.error("reconnect failed", e);
+      toast.err(`Reconnect failed: ${unwrapRaw(String((e as any)?.message ?? e))}`);
     }
   }
 

@@ -767,6 +767,26 @@ everything mobile is behind a build tag or an `isMobile` check.
     coalescing it does is valuable on its own, and it silently covers
     any hole left in upstream ordering.
 
+43. **A session's `connectionId` is not always a connection id - never
+    feed it back into `SshConnect`.** Dynamic-inventory sessions carry
+    the synthetic `dyn:<entryID>` (there is no `connections` row - see
+    the archive entry "Dynamic entries don't persist as connections"),
+    so `GetConnection` misses and the connect fails. Anything that
+    reopens a session from an existing one goes through `SshReopen` /
+    `api.sshReopen`, which splits on the `dyn:` prefix and routes to
+    `sshConnectDynamicInternal` with the folder read back off the entry
+    row. This bit twice with no error on screen: the pane Reconnect
+    button bailed even earlier, on a `tree.connectionById` lookup that
+    can never hit for a dynamic id, and pane splitting swallowed the
+    failure in a `console.error`. Two habits follow - take a pane's
+    name/hostname off the session tab rather than re-deriving it from
+    the tree, and surface connect failures in a toast, because a
+    silently dead button reads as "feature is broken", not "call
+    failed". Auto-reconnect had the same hole from the other side: the
+    dynamic connect path never wired `spawnReconnect` into its
+    `SetOnClose` at all, so `auto_reconnect` inherited from the folder
+    was ignored on dynamic hosts.
+
 ---
 
 # Archive

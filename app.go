@@ -1181,7 +1181,29 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 	}
 	a.metaMu.Unlock()
 	a.syncForegroundService()
+	// Same auto-reconnect wiring the saved-connection path gets. Dynamic
+	// entries inherit auto_reconnect down the folder chain like any other
+	// setting, so a dropped Proxmox/Hetzner/... host has to retry too; the
+	// synthetic "dyn:<entryID>" id is what reconnectConnect resolves back
+	// into a folder + entry.
+	dynAutoReconnect := settings.AutoReconnect
 	sess.SetOnClose(func(sessionID string) {
+		userInit := false
+		if s, ok := a.pool.Get(sessionID); ok {
+			userInit = s.WasUserInitiated()
+		}
+		if dynAutoReconnect && !userInit {
+			running := a.forwards.List(sessionID)
+			if len(running) > 0 {
+				ids := make([]string, 0, len(running))
+				for _, f := range running {
+					ids = append(ids, f.ID)
+				}
+				a.reconnectMu.Lock()
+				a.reconnectForwards[sessionID] = ids
+				a.reconnectMu.Unlock()
+			}
+		}
 		a.forwards.StopAllForSession(sessionID)
 		a.clearMcpGrant(sessionID)
 		a.sessionRecordingCleanup(sessionID)
@@ -1195,6 +1217,9 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 		a.metaMu.Unlock()
 		a.syncForegroundService()
 		EventsEmit("session_state:"+sessionID, sshlayer.SessionState{State: "disconnected"})
+		if dynAutoReconnect && !userInit {
+			a.spawnReconnect(sessionID, connectionID)
+		}
 	})
 	dynUser := ""
 	if settings.Username != nil {
@@ -5497,6 +5522,40 @@ func (a *App) spawnReconnect(oldSessionID, connectionID string) {
 	go a.runReconnect(oldSessionID, connectionID, cancel)
 }
 
+// reconnectConnect opens a fresh session for a connection id, transparently
+// handling dynamic-inventory ids.
+//
+// Dynamic entries have no `connections` row: their sessions carry the
+// synthetic id "dyn:<entryID>" that sshConnectDynamicInternal minted, and
+// SshConnect cannot resolve it (GetConnection returns nothing, so both the
+// manual Reconnect button and the auto-retry loop failed on every dynamic
+// host while pinned connections worked). The entry row still knows its
+// folder, which is the only other thing the dynamic connect path needs.
+func (a *App) reconnectConnect(connID string) (*SshConnectResult, error) {
+	entryID, isDyn := strings.CutPrefix(connID, "dyn:")
+	if !isDyn {
+		return a.SshConnect(connID)
+	}
+	entry, err := a.db.GetDynamicEntry(entryID)
+	if err != nil {
+		return nil, err
+	}
+	if entry == nil {
+		// An inventory refresh between the drop and the retry can drop the
+		// host (VM deleted, filtered out). Say so rather than "not found".
+		return nil, fmt.Errorf("dynamic entry is gone from the inventory - refresh the folder and connect again")
+	}
+	return a.sshConnectDynamicInternal(entry.FolderID, entryID, "", "", "", "", "")
+}
+
+// SshReopen opens another session against whatever an existing session is
+// connected to, given that session's connection id. Used by the Reconnect
+// button and by pane splitting, both of which used to call SshConnect
+// directly - so both silently did nothing on dynamic-inventory hosts.
+func (a *App) SshReopen(connectionID string) (*SshConnectResult, error) {
+	return a.reconnectConnect(connectionID)
+}
+
 func (a *App) runReconnect(oldID, connID string, cancel <-chan struct{}) {
 	const maxAttempts = 5
 	defer func() {
@@ -5523,9 +5582,9 @@ func (a *App) runReconnect(oldID, connID string, cancel <-chan struct{}) {
 		case <-time.After(time.Duration(delay) * time.Second):
 		}
 
-		// Try connecting. SshConnect will register a new session in the
+		// Try connecting. The connect registers a new session in the
 		// pool with a fresh id; the frontend swaps the id on success.
-		res, err := a.SshConnect(connID)
+		res, err := a.reconnectConnect(connID)
 		if err == nil {
 			a.restoreForwardsOnReconnect(oldID, connID, res.SessionID)
 			EventsEmit(successEvent, ReconnectSuccess{NewSessionID: res.SessionID, NetworkVia: res.NetworkVia})

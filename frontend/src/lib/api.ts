@@ -775,6 +775,11 @@ export const api = {
   autoBackupPrefsSet: (prefs: AutoBackupPrefs) => G.AutoBackupPrefsSet(prefs),
 
   sshConnect: (connectionId: string) => nn(G.SshConnect(connectionId)).then(recordVia),
+  // Open another session against what an existing session is connected to
+  // (Reconnect button, pane split). Accepts both a saved connection id and
+  // the synthetic "dyn:<entryId>" a dynamic-inventory session carries -
+  // sshConnect only understands the former.
+  sshReopen: (connectionId: string) => nn(G.SshReopen(connectionId)).then(recordVia),
   // overrideCredentialId: empty string falls through to SshConnect
   // behaviour (use the connection's persisted auth_ref). Non-empty
   // forces this credential for the target hop on this one attempt

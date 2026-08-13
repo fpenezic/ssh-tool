@@ -3226,6 +3226,20 @@ export function SshLaunchInSystemTerminal(connectionID) {
 }
 
 /**
+ * SshReopen opens another session against whatever an existing session is
+ * connected to, given that session's connection id. Used by the Reconnect
+ * button and by pane splitting, both of which used to call SshConnect
+ * directly - so both silently did nothing on dynamic-inventory hosts.
+ * @param {string} connectionID
+ * @returns {$CancellablePromise<$models.SshConnectResult | null>}
+ */
+export function SshReopen(connectionID) {
+    return $Call.ByID(3602849948, connectionID).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType147($result);
+    }));
+}
+
+/**
  * @param {string} sessionID
  * @param {number} cols
  * @param {number} rows
