@@ -7,6 +7,36 @@ a prerelease upstream.
 
 ---
 
+## [0.79.1] - Reconnect works on dynamic-inventory hosts
+
+### Fixed
+
+- **Reconnect now works on dynamic-inventory hosts.** On a server that came
+  from Proxmox, Hetzner, or any other inventory folder, the Reconnect button
+  in a dropped pane did nothing at all - no error, no attempt. Pinned
+  connections were fine, which is what made it look like a display quirk
+  rather than a dead button. Splitting a pane on such a host was broken the
+  same way and just as quietly.
+- **Auto-reconnect applies to dynamic-inventory hosts too.** If a folder had
+  auto-reconnect switched on, its dynamic hosts inherited the setting and
+  then ignored it - only saved connections ever retried. A dropped inventory
+  host now retries with the same backoff and restores the port forwards that
+  were running, exactly like a pinned one.
+- A failed reconnect or split now says so in a toast instead of failing
+  silently.
+
+### Changed
+
+- Moved to Wails v3.0.0-beta.8 (from beta.3). The desktop shell now delivers
+  events to the UI in the order they were sent and applies backpressure when
+  the UI falls behind, which is the class of problem that used to make a
+  large burst of terminal output render out of sequence. Terminal throughput
+  measured unchanged. Also brings upstream fixes for unreadable native menus
+  on Windows 10 1809 / Server 2019 and Dock bouncing on macOS when a window
+  asks for attention.
+
+---
+
 ## [0.79.0] - File transfer for the LLM; taskbar progress; Claude Desktop
 
 ### Added
