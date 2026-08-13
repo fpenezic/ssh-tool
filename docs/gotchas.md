@@ -787,6 +787,52 @@ everything mobile is behind a build tag or an `isMobile` check.
     `SetOnClose` at all, so `auto_reconnect` inherited from the folder
     was ignored on dynamic hosts.
 
+44. **A split-tunnel VPN that owns the default route makes the liveness
+    probe report false green - and that is NOT our bug.** Under UniFi
+    Identity "TUN Mode" the client gets `utun4` = `172.16.0.1` with a
+    `0.0.0.0/0` route at a lower metric than the physical NIC, and the
+    gateway `172.16.0.2` answers SYN-ACK for addresses it does not
+    actually route. Reproduce with the tunnel up, on an IP that hosts
+    nothing:
+
+        nc -vz -w4 10.0.0.99 22   # tunnel up   -> succeeded (!)
+        nc -vz -w4 10.0.0.99 22   # tunnel down -> timed out
+
+    `probeResolved` does a plain TCP connect and reports what it got, so
+    the green dot is truthful at the TCP layer; the tunnel is what lies.
+    Do not go hunting in `app_probe.go` for this. Same cause explains
+    `nslookup` against `172.16.0.2` timing out: connections are accepted,
+    nothing behind them resolves.
+
+    It hits ONLY connections with no network profile and no jump host,
+    because that is the one path that deliberately does not source-bind
+    (`app_probe.go`, the `else` branch of `probeResolved`): binding the
+    probe to the primary adapter would time out every host on a different
+    subnet than that adapter - a false RED on hosts you can plainly
+    reach, which is the worse failure. The other two call sites already
+    bind and are immune - the tunnel handshake itself
+    (`wg/manager.go`, `bindPhysical` -> `sourceBind`) and the auto-mode
+    direct probe (`app_network.go`, `physicalDialLocalAddr`). Both were
+    added for this same UniFi behaviour; see gotcha in `wg/bind.go`'s
+    header comment. WireGuard-profile connections are also immune from
+    the other direction: a sleeping tunnel yields `unknown`, not a false
+    red, and a live one dials through netstack where OS routing never
+    gets a say.
+
+    Deliberately NOT fixed. Binding the profile-less probe only when the
+    target shares the physical NIC's subnet does not help the real case
+    (the affected hosts sit on private subnets the physical NIC is not
+    on, so they stay green), and binding unconditionally when a
+    hijacking route is detected trades
+    false green for false red on hosts reachable ONLY through an external
+    corporate VPN - a legitimate setup. Detecting "is the default route
+    hijacked" is also a heuristic layered on the virtual-adapter name
+    list in `pickPhysicalSource`, which is already the fragile part.
+    Liveness is a convenience, not a security control, and a real connect
+    still fails loudly. Revisit only if this shows up on VPN clients
+    other than UniFi Identity - at that point it stops being an edge
+    case and the generalisation earns its keep.
+
 ---
 
 # Archive
