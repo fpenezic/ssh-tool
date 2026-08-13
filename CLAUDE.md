@@ -38,7 +38,7 @@ Author wants 300+ connections, daily-driver UX, full opkssh support
 ## Tech stack
 
 Backend (Go 1.26):
-- Wails v3 beta.3 (`github.com/wailsapp/wails/v3`) - desktop shell + IPC.
+- Wails v3 beta.8 (`github.com/wailsapp/wails/v3`) - desktop shell + IPC.
   When bumping this in go.mod, bump `WAILS3_VERSION` in
   `.github/workflows/release.yml` to match: the release build regenerates
   `frontend/bindings/` with the CLI that env pins (`build:frontend` ->

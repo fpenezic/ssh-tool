@@ -948,14 +948,16 @@
 
     // Live-output reassembly. Two problems to solve at once:
     //
-    // 1. ORDER. Wails v3's EventProcessor.Emit dispatches each event on its
-    //    OWN `go func()` (pkg/application/events.go), so pty_output events
-    //    do NOT necessarily reach the webview in the order the backend
-    //    emitted them - even though the backend now emits from a single
-    //    pump under a lock. Out-of-order delivery on a big `ll` burst landed
-    //    content on the wrong rows (prompt rendered mid-listing). We cannot
-    //    fix this on the Go side; the only total order we have is `cum`, the
-    //    backend's cumulative byte count through the end of each chunk.
+    // 1. ORDER. Historically Wails v3 could deliver pty_output events to the
+    //    webview out of the order the backend emitted them - even though the
+    //    backend emits from a single pump under a lock. On a big `ll` burst
+    //    that landed content on the wrong rows (prompt rendered mid-listing).
+    //    The only total order we have is `cum`, the backend's cumulative byte
+    //    count through the end of each chunk, so we reassemble on that.
+    //    Wails beta.8 added a per-window eval queue with a single drainer
+    //    (webview_window.go: enqueueEventJS), which should make delivery
+    //    ordered upstream. This stays anyway: coalescing below is worth it on
+    //    its own, and it covers any hole left in that guarantee. See gotcha 42.
     // 2. COALESCING. Writing each chunk with its own term.write raced
     //    xterm's async parser against resize/refresh; one contiguous write
     //    per frame keeps the screen consistent.

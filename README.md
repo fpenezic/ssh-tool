@@ -58,7 +58,7 @@ test status varies).
 
 - Go 1.26+
 - Node 20+
-- [`wails3` CLI](https://wails.io) (beta) - `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.3`
+- [`wails3` CLI](https://wails.io) (beta) - `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8`
 - [Task](https://taskfile.dev) - `go install github.com/go-task/task/v3/cmd/task@latest`
 
 ### Build for your platform

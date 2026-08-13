@@ -742,6 +742,31 @@ everything mobile is behind a build tag or an `isMobile` check.
     `ClaudeDesktopStatus` means the entry is there but its `command`
     is a different binary - the portable-build-moved case.
 
+42. **Wails beta.8 changed how events reach the WebView, in two ways
+    that both land on `pty_output`.** First, every window now has a
+    JS-eval queue with a single drainer, so delivery order finally
+    matches emit order - and an emitting goroutine BLOCKS once 64
+    events are queued (`eventQueueCapacity` in
+    `pkg/application/webview_window.go`). The blocked goroutine is our
+    PTY pump, so a slow WebView can now push back into SSH reads
+    instead of growing an unbounded queue. That is the correct
+    behaviour, but it is new: a hang under heavy output is a
+    backpressure symptom, not a deadlock.
+    Second, any event whose JSON exceeds `maxInlineEventPayload`
+    (8192 bytes) is no longer spliced into the eval - it is parked
+    host-side and the page fetches it from
+    `/wails/eventpayload/<id>`. `pumpOutput` reads 8 KiB
+    (`internal/ssh/session.go`), which base64-encodes to ~10.9 KB, so
+    EVERY full chunk of bulk output takes that HTTP round trip. It
+    stays ordered (the fetch is chained on `window._wails.__eq`), but
+    if terminal throughput ever regresses, shrinking the read buffer
+    to 4 KiB puts chunks back on the inline path - measure before
+    changing it.
+    Do NOT delete the `cum`/`pending` reorder buffer in
+    `Terminal.svelte` on the strength of the ordering fix: the frame
+    coalescing it does is valuable on its own, and it silently covers
+    any hole left in upstream ordering.
+
 ---
 
 # Archive

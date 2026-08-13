@@ -10,7 +10,7 @@
 
 | Module | Purpose |
 |---|---|
-| `github.com/wailsapp/wails/v3` | Desktop shell + IPC (beta.3) |
+| `github.com/wailsapp/wails/v3` | Desktop shell + IPC (beta.8) |
 | `modernc.org/sqlite` | SQLite, pure Go (no CGO) |
 | `golang.org/x/crypto/ssh` | SSH client |
 | `golang.org/x/crypto/ssh/agent` | Agent integration |
@@ -73,7 +73,7 @@ nothing is uploaded there.
 - Go: 1.26 (see `go.mod`)
 - Node: 20.x LTS
 - Wails CLI v3: matches the prerelease tag pinned in `go.mod` (currently
-  beta.3; the same tag is pinned as `WAILS3_VERSION` in
+  beta.8; the same tag is pinned as `WAILS3_VERSION` in
   `.github/workflows/release.yml`)
 
 ## What we don't use, and why
