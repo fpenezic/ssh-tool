@@ -7,6 +7,33 @@ a prerelease upstream.
 
 ---
 
+## [0.80.0] - The robot icon shows how much the LLM can do
+
+### Added
+
+- **The robot icon is now colour-coded by what the LLM is allowed to do.**
+  Sharing a session with an LLM has three levels, but the icon looked the
+  same for all of them - a read-only share and a full auto-run share were
+  indistinguishable at a glance. The colour now carries that: blue for read
+  only, yellow for read + run (where every command still waits for your
+  approval), and red for auto-run / YOLO, where commands execute without
+  asking and only catastrophic ones stop for confirmation. Hovering spells
+  the level out instead of just saying the session is shared.
+- A collapsed tab shows the riskiest level among its panes, so a YOLO
+  session cannot hide behind a read-only one.
+
+### Fixed
+
+- **Connecting to a dynamic-inventory host now shows up in the tree.** The
+  row kept displaying the hollow reachability circle after you connected, so
+  there was no way to tell a host you could reach from one you were actually
+  on. It now switches to the same filled green dot that saved connections
+  have always used.
+- Folder badges count live dynamic sessions too. A folder whose only open
+  session was a dynamic host showed no live count at all.
+
+---
+
 ## [0.79.1] - Reconnect works on dynamic-inventory hosts
 
 ### Fixed
