@@ -2039,17 +2039,23 @@ export const mcpApprovalStore = new McpApprovalStore();
 // the terminal tabs can show a "shared" marker. Kept live off the
 // mcp_grants_changed event; also seeded on demand.
 class McpSharedStore {
-  private ids = $state<Set<string>>(new Set());
+  // sessionId -> grant level. The level drives the robot icon's colour in the
+  // pane header, so we keep it rather than collapsing to a Set of ids.
+  private byId = $state<Map<string, string>>(new Map());
 
   has(sessionId: string): boolean {
-    return this.ids.has(sessionId);
+    return this.byId.has(sessionId);
   }
-  // Replace the whole set (from mcp_grants_changed payload or a fetch).
-  setFrom(grants: { session_id: string }[]) {
-    this.ids = new Set(grants.map((g) => g.session_id));
+  // "" when not shared - callers use it to pick the indicator colour.
+  levelOf(sessionId: string): string {
+    return this.byId.get(sessionId) ?? "";
+  }
+  // Replace the whole map (from mcp_grants_changed payload or a fetch).
+  setFrom(grants: { session_id: string; level?: string }[]) {
+    this.byId = new Map(grants.map((g) => [g.session_id, g.level ?? ""]));
   }
   get size(): number {
-    return this.ids.size;
+    return this.byId.size;
   }
 }
 export const mcpShared = new McpSharedStore();

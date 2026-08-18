@@ -12,6 +12,7 @@
   import { recording } from "./recording.svelte";
   import { connectionActions } from "./connectionActions.svelte";
   import { IconBroadcast, IconFolder, IconBot, IconHost } from "./iconMap";
+  import { mcpLevelTitle } from "./mcpLevel";
   import Icon from "./Icon.svelte";
   import BroadcastManager from "./BroadcastManager.svelte";
   import { setTabDetachDragImage } from "./dragImage";
@@ -161,6 +162,19 @@
   // Any pane in this tab shared with the LLM (MCP bridge)?
   function tabHasSharedSession(tabId: string): boolean {
     return tabSessionIdArr(tabId).some((sid) => mcpShared.has(sid));
+  }
+  // The RISKIEST grant level across this tab's panes, so a collapsed tab
+  // shows the same colour the pane header would. Ordered read < read-run <
+  // yolo; "" when nothing in the tab is shared.
+  function tabGrantLevel(tabId: string): string {
+    let best = "";
+    for (const sid of tabSessionIdArr(tabId)) {
+      const lvl = mcpShared.levelOf(sid);
+      if (lvl === "read-run-yolo") return lvl;
+      if (lvl === "read-run") best = lvl;
+      else if (lvl === "read" && best === "") best = lvl;
+    }
+    return best;
   }
   // Any pane in this tab has a browser guest attached?
   function tabHasGuest(tabId: string): boolean {
@@ -831,7 +845,13 @@
             ></span>
           {/if}
           {#if tabHasSharedSession(t.tabId)}
-            <span class="mcp-badge" title="Shared with LLM (MCP)">
+            {@const lvl = tabGrantLevel(t.tabId)}
+            <span
+              class="mcp-badge"
+              class:lvl-run={lvl === "read-run"}
+              class:lvl-yolo={lvl === "read-run-yolo"}
+              title={mcpLevelTitle(lvl)}
+            >
               <IconBot size={10} />
             </span>
           {/if}
@@ -1237,6 +1257,9 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.35; }
   }
+  /* Colour encodes the grant level (see PaneNode's .llm-share): blue =
+     read-only, yellow = read + run, red = auto-run/YOLO. A tab shows the
+     riskiest level among its panes. */
   .mcp-badge {
     display: inline-flex;
     align-items: center;
@@ -1244,6 +1267,8 @@
     margin-right: 0.15rem;
     flex-shrink: 0;
   }
+  .mcp-badge.lvl-run { color: var(--yellow); }
+  .mcp-badge.lvl-yolo { color: var(--red); }
   .share-badge {
     display: inline-flex;
     align-items: center;

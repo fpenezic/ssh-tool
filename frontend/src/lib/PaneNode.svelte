@@ -22,6 +22,7 @@
   import HttpModal from "./HttpModal.svelte";
   import TunnelPopover from "./TunnelPopover.svelte";
   import LlmSharePopover from "./LlmSharePopover.svelte";
+  import { mcpLevelTitle } from "./mcpLevel";
   import McpActivityPanel from "./McpActivityPanel.svelte";
   import { isMobile } from "./platform";
   import { toast } from "./toast.svelte.ts";
@@ -206,6 +207,12 @@
   // forward listing make no sense. Hide those toolbar groups when
   // this pane is a local shell.
   const isLocalPane = $derived(paneSession?.kind === "local");
+  // Grant level of this pane's session ("" when not shared). Drives the robot
+  // icon's colour + tooltip so the risk is legible without opening the popover.
+  const llmLevel = $derived(
+    paneSession?.status === "connected" ? mcpShared.levelOf(paneSession.sessionId) : ""
+  );
+  const llmTitle = $derived(mcpLevelTitle(llmLevel));
   // VNC consoles render noVNC full-bleed: no SSH channel, no PTY, and
   // the tab is locked to a single leaf. Hide SFTP / tcpdump / HTTP /
   // broadcast / split / forwards just like a local pane, plus the
@@ -591,8 +598,10 @@
               {#if mcpBridge.enabled}
               <button
                 class="llm-share"
-                class:has-active={paneSession?.status === "connected" && mcpShared.has(paneSession.sessionId)}
-                title="Share this session with an LLM (MCP)"
+                class:has-active={llmLevel !== ""}
+                class:lvl-run={llmLevel === "read-run"}
+                class:lvl-yolo={llmLevel === "read-run-yolo"}
+                title={llmTitle}
                 onclick={(e) => { e.stopPropagation(); showLlmShare = !showLlmShare; }}
               >
                 <IconBot size={13} />
@@ -982,7 +991,13 @@
   .pane-actions button.http      { color: var(--sapphire); }
   .pane-actions button.tunnels   { color: var(--lavender); }
   .pane-actions button.tunnels.has-active { color: var(--green); }
+  /* Robot colour encodes the grant level, so the risk is visible without
+     opening the popover: blue = read-only (the default share), yellow =
+     read + run (each command still gated), red = auto-run/YOLO (only
+     catastrophic commands prompt). Matches the popover's own accents. */
   .pane-actions button.llm-share.has-active { color: var(--blue); }
+  .pane-actions button.llm-share.lvl-run { color: var(--yellow); }
+  .pane-actions button.llm-share.lvl-yolo { color: var(--red); }
   .tunnel-anchor { position: relative; display: inline-flex; }
   .pane-actions button.close:hover {
     background: var(--red);
