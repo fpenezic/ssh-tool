@@ -780,6 +780,8 @@
             <div
               class="row dyn-entry"
               class:stopped={e.status === "stopped"}
+              class:live={dynLive}
+              class:active-session={appPrefs.activeRowEmphasis && "dyn:" + e.id === activeConnId}
               class:selected={selection.isDynamicEntrySelected(folder.id, e.id)}
               style="--depth: {depth + 2};"
               role="treeitem"
@@ -822,6 +824,8 @@
             <div
               class="row dyn-entry"
               class:stopped={e.status === "stopped"}
+              class:live={dynLive}
+              class:active-session={appPrefs.activeRowEmphasis && "dyn:" + e.id === activeConnId}
               class:selected={selection.isDynamicEntrySelected(folder.id, e.id)}
               style="--depth: {depth + 2};"
               role="treeitem"
@@ -1018,6 +1022,11 @@
   .row.conn.active-session {
     box-shadow: inset -3px 0 0 var(--teal);
   }
+  /* Same right-edge marker for the focused pane's dynamic entry. Dynamic
+     rows carry no colour tag, so they need only the plain variant. */
+  .row.dyn-entry.active-session {
+    box-shadow: inset -3px 0 0 var(--teal);
+  }
   .row.conn.tagged.active-session {
     box-shadow: inset 3px 0 0 var(--tag-color), inset -3px 0 0 var(--teal);
   }
@@ -1054,6 +1063,10 @@
   .row.connecting { opacity: 0.7; cursor: wait; }
   .row.conn.live .name { font-weight: 600; color: var(--green); }
   .row.conn.live .chev { color: var(--green); }
+  /* Dynamic entries get the same live emphasis as saved connections - the
+     row is the same kind of thing to the user, so it should not read
+     differently just because the host came from an inventory. */
+  .row.dyn-entry.live .dyn-name { font-weight: 600; color: var(--green); }
   .name.has-live { color: var(--green); font-weight: 600; }
   .live-badge {
     color: var(--green);

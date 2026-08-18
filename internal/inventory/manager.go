@@ -202,12 +202,31 @@ func (m *Manager) Refresh(ctx context.Context, folderID string, force bool) erro
 		entries = filtered
 	}
 
+	// Reuse the existing row id for an external_id we already have cached.
+	// The id is what a live session's synthetic "dyn:<entryID>" connection id
+	// points at (gotcha 43), so minting a fresh uuid every refresh silently
+	// detached connected sessions from their tree row: the live dot and the
+	// folder's live count vanished on the next refresh. external_id is the
+	// provider's stable identity, so it is the right thing to key on. Entries
+	// that are genuinely new still get a fresh uuid.
+	prevByExternal := map[string]string{}
+	if prev, err := m.db.ListDynamicEntries(folderID); err == nil {
+		for _, e := range prev {
+			if e.ExternalID != "" {
+				prevByExternal[e.ExternalID] = e.ID
+			}
+		}
+	}
 	rows := make([]store.DynamicEntry, 0, len(entries))
 	for _, e := range entries {
 		raw, _ := json.Marshal(json.RawMessage(e.Raw))
 		_ = raw // raw is already json; keep as-is
+		id := prevByExternal[e.ExternalID]
+		if id == "" {
+			id = uuid.NewString()
+		}
 		rows = append(rows, store.DynamicEntry{
-			ID:         uuid.NewString(),
+			ID:         id,
 			FolderID:   folderID,
 			ExternalID: e.ExternalID,
 			Name:       e.Name,
