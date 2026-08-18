@@ -7,6 +7,36 @@ a prerelease upstream.
 
 ---
 
+## [0.81.0] - Splitting panes takes one gesture and comes out even
+
+### Added
+
+- **Dragging a tab shows the split drop zones straight away.** Grabbing the
+  tab you were already on used to show nothing to drop onto - you had to
+  first hover another tab's label to bring it up, which was an invisible
+  extra step. The drop zones are now live from the moment the drag starts.
+  Hovering a specific tab still works and is still the way to aim at a
+  particular one. Abandoning a drag puts you back on the tab you started
+  from.
+- **New panes divide the row equally.** Adding a third pane used to halve
+  one of the existing two, leaving one wide pane and two narrow ones. Three
+  panes now come out as three equal columns, four as four, and so on. If you
+  have resized a row by hand, it is left exactly as you set it.
+- **Copy buttons on the MCP setup commands.** The Claude Code, WSL, and LM
+  Studio snippets in Settings each have a copy button now, instead of having
+  to select a long path or a multi-line config by hand.
+
+### Fixed
+
+- **Dynamic-inventory hosts show the same connected marker as saved ones.**
+  The bar on the right that marks the row behind the focused pane never
+  appeared on inventory hosts, so a connected dynamic host still looked
+  different from a connected pinned one.
+- Dynamic entries keep a stable identity across a folder refresh, so a
+  refresh cannot detach a connected session from its row.
+
+---
+
 ## [0.80.0] - The robot icon shows how much the LLM can do
 
 ### Added
