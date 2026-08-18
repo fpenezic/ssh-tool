@@ -156,7 +156,10 @@
     if (drag.tabId) {
       const sourceTabId = drag.tabId;
       const srcTab = paneTabs.tabs.find((t) => t.tabId === sourceTabId);
-      drag.end();
+      // Mark the drag consumed: the tab bar restores pre-drag focus only
+      // when a drag ends WITHOUT a drop, and the source tab is removed
+      // below anyway.
+      drag.end(true);
       if (!srcTab) return;
       const srcLeaf = paneTabs.activePane(sourceTabId);
       if (!srcLeaf) return;

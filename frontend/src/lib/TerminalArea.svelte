@@ -315,6 +315,11 @@
   const selfWindowName = isDetachedWindow ? `detached-${detachedTabKey}` : "main";
   let sendTargets = $state<{ name: string; label: string }[]>([]);
   let draggingTabId: string | null = null;
+  // Tab that was focused when a tab drag started, and whether we swapped
+  // focus away from it to expose a drop target. Restored on a cancelled
+  // drag so an aborted gesture doesn't silently change which tab you are
+  // looking at.
+  let dragFocusRestore: string | null = null;
   // Per-tab reorder hint shown while the user drags a tab over
   // another tab's label. side === "left" draws a thin bar on the
   // left edge of the hovered tab, "right" on its right edge.
@@ -769,8 +774,14 @@
             paneTabs.moveTabBefore(drag.tabId, after);
           }
           tabReorderIndicator = null;
-          drag.end();
+          drag.end(true);
           draggingTabId = null;
+          // A reorder keeps the dragged tab around, so hand focus back to it
+          // rather than leaving the user on the tab we borrowed for drop zones.
+          if (dragFocusRestore) {
+            paneTabs.activateTab(dragFocusRestore);
+            dragFocusRestore = null;
+          }
         }}
         onauxclick={(e) => {
           // Middle click anywhere on the tab closes it. button === 1
@@ -784,6 +795,20 @@
         ondragstart={(e) => {
           drag.startTab(t.tabId);
           draggingTabId = t.tabId;
+          // A tab's own pane refuses its own drop (PaneNode.onDragOver), so
+          // dragging the ACTIVE tab used to show no drop zones at all until
+          // the user hovered another tab to activate it. Switch focus to the
+          // tab that would take over if this one closed, so split zones are
+          // live from the first pixel of the drag. Hovering another tab still
+          // overrides this (ondragenter below).
+          dragFocusRestore = null;
+          if (!isDetachedWindow && paneTabs.activeTabId === t.tabId) {
+            const fallback = paneTabs.focusFallbackFor(t.tabId);
+            if (fallback) {
+              dragFocusRestore = t.tabId;
+              paneTabs.activateTab(fallback);
+            }
+          }
           // Replace the OS-default "document with no-drop slash"
           // ghost image with a pill that reads "Detach: <name>".
           // Pairs with effectAllowed='move' so the cursor reads as
@@ -806,8 +831,18 @@
         }}
         ondragend={(e) => {
           const tabId = draggingTabId;
+          const consumed = drag.consumed;
           drag.end();
           draggingTabId = null;
+          // Cancelled drag (dropped on nothing, or Esc): put focus back where
+          // it was. A consumed drop already handled focus - the pane split
+          // removes the source tab, the reorder re-activates it.
+          if (dragFocusRestore) {
+            if (!consumed && paneTabs.tabs.some((t) => t.tabId === dragFocusRestore)) {
+              paneTabs.activateTab(dragFocusRestore);
+            }
+            dragFocusRestore = null;
+          }
           if (isDetachedWindow) {
             // Cancel the pending drag - no-op if main window already accepted it.
             api.windowCancelTabDrag().catch(console.error);
