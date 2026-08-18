@@ -1,4 +1,5 @@
 import { api, type Folder, type Connection, type CredentialRef, type CredentialFolder, type InheritableSettings } from "./api";
+import { rebalanceEven } from "./paneSplit";
 import { expandedConnections, expandedCredentials } from "./treeState.svelte";
 import { tagFilter } from "./tagFilter.svelte.ts";
 import { resolveColorTag } from "./palette";
@@ -1106,6 +1107,17 @@ class PaneTreeStore {
     this.activeTabId = tabId;
   }
 
+  // The tab that would take focus if `tabId` went away - same rule
+  // removeTab() uses (last in the bar), just without actually removing
+  // anything. Dragging a tab uses this to reveal a drop target
+  // immediately: the dragged tab's own pane refuses its own drop, so
+  // with it in focus there is nowhere to drop until the user hovers
+  // another tab first. Returns null when `tabId` is the only tab.
+  focusFallbackFor(tabId: string): string | null {
+    const others = this.tabs.filter((t) => t.tabId !== tabId);
+    return others[others.length - 1]?.tabId ?? null;
+  }
+
   // cycleActive moves the active tab pointer forward (delta=+1) or
   // backward (delta=-1) with wrap-around. No-op when zero or one tab.
   // Used by Ctrl+Tab / Ctrl+Shift+Tab.
@@ -1203,7 +1215,7 @@ class PaneTreeStore {
           b: side === "b" ? newLeaf : leaf,
         };
       });
-      return { ...t, root: newRoot, activePaneId: newLeafId };
+      return { ...t, root: rebalanceEven(newRoot), activePaneId: newLeafId };
     });
     this.bumpLayout();
   }
@@ -1230,7 +1242,10 @@ class PaneTreeStore {
         a: side === "a" ? newLeaf : leaf,
         b: side === "b" ? newLeaf : leaf,
       }));
-      return { ...t, root: newRoot, activePaneId: newLeafId };
+      // Re-divide evenly-sized rows so N panes end up 1/N each instead of
+      // halving whichever pane was dropped on. Hand-resized rows are left
+      // exactly as the user set them - see rebalanceEven.
+      return { ...t, root: rebalanceEven(newRoot), activePaneId: newLeafId };
     });
     this.bumpLayout();
   }
@@ -1659,6 +1674,10 @@ class DragStore {
   }
   startTab(tabId: string) {
     this.clearSources();
+    // Fresh gesture - drop the previous drag's outcome so a stale `true`
+    // can't suppress this drag's focus restore. Not cleared in end(),
+    // which is what sets it.
+    this.consumed = false;
     this.tabId = tabId;
   }
   startCredential(id: string, alsoMoving: string[] = []) {
@@ -1692,7 +1711,14 @@ class DragStore {
     this.overTreeId = id;
     this.overTreeIntent = intent;
   }
-  end() {
+  // Set by a drop target that actually consumed the drag. ondragend fires
+  // for BOTH a successful drop and a cancelled one, and end() has already
+  // run by then either way, so this is the only way the tab bar can tell
+  // them apart (it restores pre-drag focus only on a cancel).
+  consumed = $state(false);
+
+  end(consumed = false) {
+    this.consumed = consumed;
     this.clearSources();
     this.overTreeKind = null; this.overTreeId = null; this.overTreeIntent = null;
     this.overCredFolderId = null;
