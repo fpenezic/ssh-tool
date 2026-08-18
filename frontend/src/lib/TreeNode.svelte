@@ -352,6 +352,13 @@
     for (const c of tree.connectionsIn(id)) {
       if (liveConnIds.has(c.id)) n++;
     }
+    // Dynamic-inventory entries are not `connections` rows, so connectionsIn()
+    // never sees them; their live sessions key on "dyn:<entryID>" (gotcha 43).
+    // Only counts entries already fetched for this folder - an unexpanded
+    // dynamic folder has none loaded, same as its row count.
+    for (const e of tree.dynamicEntries[id] ?? []) {
+      if (liveConnIds.has("dyn:" + e.id)) n++;
+    }
     for (const sub of tree.childrenOf(id)) {
       n += countLiveInSubtree(sub.id);
     }
@@ -768,7 +775,8 @@
           </div>
           {#each dynamicBuckets.hosts as e (e.id)}
             {@const HIc = dynamicEntryIcon(e.kind)}
-            {@const dprobe = probeState.stateOf("dyn:" + e.id)}
+            {@const dynLive = liveConnIds.has("dyn:" + e.id)}
+            {@const dprobe = dynLive ? null : probeState.stateOf("dyn:" + e.id)}
             <div
               class="row dyn-entry"
               class:stopped={e.status === "stopped"}
@@ -793,9 +801,9 @@
               }}
               title="Click to inspect, double-click to connect ({e.hostname})"
             >
-              <span class="dyn-probe" class:probe-up={dprobe === "up"} class:probe-down={dprobe === "down"}
-                title={dprobe === "up" ? "Reachable" : dprobe === "down" ? "Unreachable" : ""}
-              >{dprobe === "up" || dprobe === "down" ? "○" : ""}</span>
+              <span class="dyn-probe" class:live={dynLive} class:probe-up={dprobe === "up"} class:probe-down={dprobe === "down"}
+                title={dynLive ? "Connected" : dprobe === "up" ? "Reachable" : dprobe === "down" ? "Unreachable" : ""}
+              >{dynLive ? "●" : (dprobe === "up" || dprobe === "down") ? "○" : ""}</span>
               <span class="dyn-icon"><HIc size={13} /></span>
               <span class="dyn-name">{e.name}</span>
               <span class="dyn-host mono">{e.hostname}</span>
@@ -809,7 +817,8 @@
           </div>
           {#each dynamicBuckets.guests as e (e.id)}
             {@const GIc = dynamicEntryIcon(e.kind)}
-            {@const dprobe = probeState.stateOf("dyn:" + e.id)}
+            {@const dynLive = liveConnIds.has("dyn:" + e.id)}
+            {@const dprobe = dynLive ? null : probeState.stateOf("dyn:" + e.id)}
             <div
               class="row dyn-entry"
               class:stopped={e.status === "stopped"}
@@ -834,9 +843,9 @@
               }}
               title="Click to inspect, double-click to connect ({e.hostname})"
             >
-              <span class="dyn-probe" class:probe-up={dprobe === "up"} class:probe-down={dprobe === "down"}
-                title={dprobe === "up" ? "Reachable" : dprobe === "down" ? "Unreachable" : ""}
-              >{dprobe === "up" || dprobe === "down" ? "○" : ""}</span>
+              <span class="dyn-probe" class:live={dynLive} class:probe-up={dprobe === "up"} class:probe-down={dprobe === "down"}
+                title={dynLive ? "Connected" : dprobe === "up" ? "Reachable" : dprobe === "down" ? "Unreachable" : ""}
+              >{dynLive ? "●" : (dprobe === "up" || dprobe === "down") ? "○" : ""}</span>
               <span class="dyn-icon"><GIc size={13} /></span>
               <span class="dyn-kind mono">{e.kind === "guest_vm" ? "VM" : "LXC"}</span>
               <span class="dyn-name">{e.name}</span>
@@ -1025,6 +1034,10 @@
   .chev.dot.probe-down { color: var(--red); }
   /* Dynamic-entry probe dot (same ○ semantics, sized to the dyn row). */
   .dyn-probe { width: 0.8rem; text-align: center; font-size: 0.7rem; flex: none; }
+  /* Filled dot = a live session on this dynamic entry, mirroring the static
+     connection row. Dynamic sessions key on the synthetic "dyn:<entryID>"
+     connection id (see gotcha 43), which is what liveConnIds holds. */
+  .dyn-probe.live { color: var(--green); }
   .dyn-probe.probe-up { color: var(--green); }
   .dyn-probe.probe-down { color: var(--red); }
   /* Touch: bigger rows + a wider chevron hit area so folders are easy to
