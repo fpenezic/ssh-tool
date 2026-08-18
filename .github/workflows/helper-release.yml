@@ -88,10 +88,10 @@ jobs:
             out: ssh-tool-tailscale-windows-amd64.exe
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: ${{ matrix.dir }}/go.mod
       - name: Install Zig (for Windows cross CGO)
@@ -132,7 +132,7 @@ jobs:
           fi
           go build -trimpath -ldflags="-w -s -X main.version=${ver} ${nbflag}" \
             -o "../bin/${{ matrix.out }}" .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.out }}
           path: bin/${{ matrix.out }}
@@ -143,8 +143,8 @@ jobs:
     needs: [build-helpers]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: bin
           merge-multiple: true
