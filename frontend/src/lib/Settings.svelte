@@ -26,6 +26,7 @@
   import { probeState } from "./probeState.svelte";
   import { MCP_SYSTEM_PROMPT, MCP_SYSTEM_PROMPT_HINT } from "./mcpSystemPrompt";
   import { copyText, writeClipboard } from "./clipboard";
+  import { IconCopy } from "./iconMap";
   import { localShellPrefs } from "./localShellPrefs.svelte.ts";
   import { recordingsModal } from "./recording.svelte";
   import { syncState } from "./syncState.svelte";
@@ -490,6 +491,18 @@
   async function saveMcpReadonlyExtra() {
     try { await api.settingsSet("mcp_readonly_extra", mcpReadonlyExtra.trim()); }
     catch (e) { console.warn("mcp allowlist:", e); }
+  }
+
+  // Copy the exact registration command shown in a cmd-block. Each block is
+  // something the user has to paste into another program, so every one of them
+  // gets a copy button rather than making them select multi-line text by hand.
+  async function copyCmd(text: string, what: string) {
+    try {
+      await writeClipboard(text);
+      toast.ok(what + " copied");
+    } catch {
+      toast.err("Copy failed - clipboard unavailable");
+    }
   }
 
   async function copyMcpSystemPrompt() {
@@ -4818,7 +4831,13 @@
       </p>
 
       <p class="hint"><strong>Claude Code:</strong></p>
-      <pre class="cmd-block">claude mcp add ssh-tool -- {mcpExePath || "ssh-tool"} --mcp-bridge</pre>
+      {@const claudeCmd = `claude mcp add ssh-tool -- ${mcpExePath || "ssh-tool"} --mcp-bridge`}
+      <div class="cmd-wrap">
+        <pre class="cmd-block">{claudeCmd}</pre>
+        <button class="cmd-copy" title="Copy command" onclick={() => copyCmd(claudeCmd, "Command")}>
+          <IconCopy size={13} />
+        </button>
+      </div>
 
       {#if claudeDesktop?.supported}
         <p class="hint"><strong>Claude Desktop:</strong></p>
@@ -4859,14 +4878,20 @@
       {/if}
 
       <p class="hint"><strong>LM Studio</strong> (Program -> Edit mcp.json):</p>
-      <pre class="cmd-block">{`{
+      {@const lmJson = `{
   "mcpServers": {
     "ssh-tool": {
       "command": ${mcpExeJson},
       "args": ["--mcp-bridge"]
     }
   }
-}`}</pre>
+}`}
+      <div class="cmd-wrap">
+        <pre class="cmd-block">{lmJson}</pre>
+        <button class="cmd-copy" title="Copy config" onclick={() => copyCmd(lmJson, "Config")}>
+          <IconCopy size={13} />
+        </button>
+      </div>
       <p class="hint">
         Any MCP client works the same way - point its "command" at the path
         above with the <code>--mcp-bridge</code> argument.
@@ -4934,7 +4959,13 @@
           <strong>WSL client:</strong> turn on the toggle above, then run this
           inside your WSL Claude Code (it points at the Windows binary):
         </p>
-        <pre class="cmd-block">claude mcp add ssh-tool -- {mcpWslExePath} --mcp-bridge</pre>
+        {@const wslCmd = `claude mcp add ssh-tool -- ${mcpWslExePath} --mcp-bridge`}
+        <div class="cmd-wrap">
+          <pre class="cmd-block">{wslCmd}</pre>
+          <button class="cmd-copy" title="Copy command" onclick={() => copyCmd(wslCmd, "Command")}>
+            <IconCopy size={13} />
+          </button>
+        </div>
       {/if}
 
       <h3 style="margin-top:1.2rem">Auto-run allowlist</h3>
@@ -5795,6 +5826,26 @@
     color: var(--blue);
     margin: 0.3rem 0;
   }
+  /* The copy button floats over the block's top-right corner. The block keeps
+     user-select:all so selecting by hand still works for anyone who prefers it. */
+  .cmd-wrap { position: relative; }
+  .cmd-wrap .cmd-block { padding-right: 2rem; }
+  .cmd-copy {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.45rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.15rem;
+    background: var(--surface0);
+    border: 1px solid var(--surface1);
+    border-radius: 3px;
+    color: var(--subtext0);
+    cursor: pointer;
+    line-height: 0;
+  }
+  .cmd-copy:hover { color: var(--text); background: var(--surface1); }
   .cmd-block {
     background: var(--crust);
     border: 1px solid var(--surface1);
