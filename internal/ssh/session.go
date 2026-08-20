@@ -759,7 +759,17 @@ func Connect(
 	// newline so it executes; it lands in the user's own scrollback like anything
 	// they'd type. Empty = nothing sent.
 	if cmd := strings.TrimSpace(settings.InitialCommand); cmd != "" {
-		_, _ = stdin.Write([]byte(cmd + "\n"))
+		// One line at a time: the field is a textarea, so a multi-line snippet
+		// arrives with newlines in it and each line has to be submitted
+		// separately. Blank lines are skipped so an extra newline in the box
+		// does not send a stray Enter. LF is kept here (a remote Unix PTY maps
+		// CR to NL anyway, and this path has always used it).
+		for _, line := range strings.Split(strings.ReplaceAll(cmd, "\r\n", "\n"), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			_, _ = stdin.Write([]byte(line + "\n"))
+		}
 	}
 
 	// Output pump. We ALWAYS allocate a PTY (RequestPty above), and a PTY

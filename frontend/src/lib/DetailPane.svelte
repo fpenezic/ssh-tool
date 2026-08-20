@@ -1281,11 +1281,13 @@
 
       <label class="span-2" title="A command run in the shell right after connect - e.g. cd /var/www, tmux new -A -s main, source venv/bin/activate. Inherited by connections; blank inherits the parent folder.">
         Initial command
-        <input
+        <textarea
+          class="cmd-input"
+          rows="2"
           bind:value={editingFolder.initialCommand}
           placeholder="(inherit) e.g. cd /var/www"
-        />
-        <span class="field-note">Run in the shell on connect. Inherited by connections. Blank = inherit.</span>
+        ></textarea>
+        <span class="field-note">Run in the shell on connect. Inherited by connections. Blank = inherit. One command per line.</span>
       </label>
 
       {#if savedHint}
@@ -1585,15 +1587,17 @@
 
       <label class="span-2" title="A command run in the shell right after connect - e.g. cd /var/www, tmux new -A -s main, source venv/bin/activate. Blank inherits the folder's value.">
         {isLocal ? "Command" : "Initial command"}
-        <input
+        <textarea
+          class="cmd-input"
+          rows="2"
           bind:value={editing.initialCommand}
           placeholder={isLocal ? "e.g. telnet 10.0.0.5   ·   claude   ·   screen /dev/ttyUSB0" : "(inherit) e.g. cd /var/www"}
-        />
+        ></textarea>
         <span class="field-note">
           {#if isLocal}
-            The command this connection runs in the shell (the point of a local connection). Blank = just an interactive shell.
+            The command this connection runs in the shell (the point of a local connection). Blank = just an interactive shell. One command per line.
           {:else}
-            Run in the shell on connect. Blank = inherit folder.
+            Run in the shell on connect. Blank = inherit folder. One command per line.
           {/if}
         </span>
       </label>
@@ -1876,6 +1880,16 @@
     color: var(--blue);
     cursor: pointer;
     text-decoration: underline;
+  }
+  /* The initial command is a textarea so a multi-line snippet (a loop, a
+     couple of setup lines) can be pasted as-is. Monospace because the
+     content is shell, and vertically resizable only - horizontal growth
+     would break the two-column grid. */
+  .cmd-input {
+    font-family: ui-monospace, monospace;
+    font-size: 0.8rem;
+    resize: vertical;
+    min-height: 2.2rem;
   }
   .field-note {
     display: block;

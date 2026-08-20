@@ -157,8 +157,24 @@ func (s *Session) Start() {
 	// after Start is safe even before the first prompt renders; the newline
 	// runs it once the shell is ready. Fire-and-forget via Write so the
 	// writeMu serialisation with keystrokes is respected.
+	//
+	// Terminate with CR, not LF: that is what a real Enter keypress sends,
+	// and ConPTY's line reader (PowerShell, cmd) acts on CR only - an LF
+	// rendered the command and left the cursor sitting above it, waiting for
+	// the user to press Enter themselves. Unix PTYs accept CR as Enter too
+	// (ICRNL maps it to NL), so this is correct on every platform.
 	if s.initialCommand != "" {
-		_ = s.Write([]byte(s.initialCommand + "\n"))
+		// Multi-line commands are sent a line at a time. The field is a
+		// textarea, so a pasted snippet arrives with \n (or \r\n from a
+		// Windows clipboard) between lines; each line needs its own CR to be
+		// submitted, and blank lines are skipped so a trailing newline does
+		// not fire an extra empty Enter.
+		for _, line := range strings.Split(strings.ReplaceAll(s.initialCommand, "\r\n", "\n"), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			_ = s.Write([]byte(line + "\r"))
+		}
 	}
 }
 
