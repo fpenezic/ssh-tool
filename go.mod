@@ -1,6 +1,6 @@
 module ssh-tool
 
-go 1.25.5
+go 1.25.10
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
