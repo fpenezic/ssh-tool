@@ -7,6 +7,59 @@ a prerelease upstream.
 
 ---
 
+## [0.82.0] - A third of the memory, and tabs you can act on in bulk
+
+### Fixed
+
+- **Large sessions use far less memory.** With around 27 tabs open the app
+  was holding roughly 1.8 GB; the same session now sits near 0.6 GB, and the
+  GPU share of that drops from 1.3 GB to 0.44 GB. Every tab stays open and
+  keeps its scrollback exactly as before - what changed is that a terminal
+  you are not looking at no longer keeps a GPU renderer alive just to draw
+  nothing. Switching back is unchanged.
+- **Reopening a large session no longer loses dynamic hosts.** Restoring
+  ~25 inventory hosts would quietly drop a few, or claim a host was "not in
+  the inventory anymore" when it plainly was. Those hosts now get the same
+  automatic retry saved connections have always had, and the inventory is
+  fetched once per folder instead of once per host, which is what made a
+  busy provider look like a missing host.
+- **Local PowerShell connections run their command again.** The command was
+  printed and then left sitting there until you pressed Enter yourself.
+  WSL and the Unix shells were never affected.
+- **A long command no longer hides the connection name.** Local rows show
+  their command as a subtitle, and a long one pushed the name out of the
+  row. It is now shortened, with the full text on hover.
+- **LLM-opened inventory hosts show as connected.** A session the LLM
+  opened on a dynamic host left its tree row looking idle - no green dot,
+  no live count on the folder - no matter how many were up.
+- **Clearing a tab's group name works.** Submitting an empty name did
+  nothing; type "-" to clear, as the prompt now says.
+
+### Added
+
+- **Select several tabs and act on them at once.** Ctrl/Cmd-click or
+  Shift-click to select, then right-click for the bulk actions: add or
+  remove from broadcast, share with an LLM at any grant level, merge, or
+  close. A plain click clears the selection, and the menu says whether an
+  action applies to the whole selection or just the tab you clicked.
+- **Merge selected tabs into a grid.** Pick a layout from a preview that
+  shows the real proportions - including which columns end up taller when
+  the count does not divide evenly.
+- **MCP setup is one block with a shell and scope picker.** Windows and WSL
+  were two separate commands split across the page. The scope picker is the
+  important part: the default `claude mcp add` registers the server for one
+  directory only, which is why the connector goes missing in other
+  projects. Paths with spaces are now quoted correctly, and every snippet
+  has a copy button.
+
+### Changed
+
+- Tab context menu grouped, with icons and destructive actions in red.
+  "Ungroup tabs" is now "Split panes into separate tabs" - it never had
+  anything to do with group names.
+
+---
+
 ## [0.81.0] - Splitting panes takes one gesture and comes out even
 
 ### Added
