@@ -1315,6 +1315,95 @@ class PaneTreeStore {
   }
 
   // Split a multi-pane tab into one tab per leaf pane.
+  // Merge several tabs into one, arranging their panes as a grid.
+  //
+  // The pane tree is binary, so a grid is built by splitting into columns and
+  // then splitting each column into rows: 4 leaves become 2x2, 6 become 3x2.
+  // Column-major keeps tab-bar order readable left to right. Ratios are the
+  // even 1/n chain (see paneSplit.ts), so every cell is the same size.
+  //
+  // Only single-pane tabs are folded in - a tab that is already split keeps
+  // its own tree and is placed in one cell whole, which preserves layouts the
+  // user built deliberately.
+  mergeTabsIntoGrid(tabIds: string[], colsWanted?: number, rowsWanted?: number) {
+    const tabs = tabIds
+      .map((id) => this.tabs.find((t) => t.tabId === id))
+      .filter((t): t is PaneTab => !!t && !t.locked);
+    if (tabs.length < 2) return;
+
+    const roots = tabs.map((t) => t.root);
+    // Caller-chosen shape (the grid picker) wins; fall back to the squarest
+    // arrangement. Clamped so a shape too small to hold every pane can't drop
+    // one on the floor.
+    let cols = colsWanted && colsWanted > 0 ? colsWanted : Math.ceil(Math.sqrt(roots.length));
+    let rows = rowsWanted && rowsWanted > 0 ? rowsWanted : Math.ceil(roots.length / cols);
+    if (cols * rows < roots.length) {
+      cols = Math.ceil(Math.sqrt(roots.length));
+      rows = Math.ceil(roots.length / cols);
+    }
+
+    // Distribute leaves column-major, then build each column as a vertical
+    // chain and join the columns horizontally.
+    //
+    // The remainder is spread across the LEADING columns rather than dumped in
+    // the last one. Filling greedily (rows per column, last column takes what
+    // is left) gives 5 panes as 2+2+1, where the lone pane is a full-height
+    // column twice the height of its neighbours. Spreading gives the same
+    // 2+2+1 counts for 5, but for 7-in-3 it is 3+2+2 instead of 3+3+1, and for
+    // 10-in-4 it is 3+3+2+2 instead of 3+3+3+1 - no column is left holding a
+    // single stretched pane.
+    //
+    // A short column still stretches its panes to full height: the tree is
+    // binary with no empty cells, so a count that does not divide evenly
+    // cannot produce a perfect rectangle. The picker shows which slots fill,
+    // so the shape is visible before committing.
+    const perColumn: number[] = [];
+    const base = Math.floor(roots.length / cols);
+    const extra = roots.length % cols;
+    for (let c = 0; c < cols; c++) perColumn.push(base + (c < extra ? 1 : 0));
+
+    const columns: PaneNode[][] = [];
+    let taken = 0;
+    for (const size of perColumn) {
+      if (size <= 0) continue;
+      columns.push(roots.slice(taken, taken + size));
+      taken += size;
+    }
+
+    // Chain nodes into an even split tree of one orientation.
+    const chain = (nodes: PaneNode[], direction: "horizontal" | "vertical"): PaneNode => {
+      if (nodes.length === 1) return nodes[0];
+      const [head, ...tail] = nodes;
+      return {
+        kind: "split",
+        id: genId("split"),
+        direction,
+        ratio: 1 / nodes.length,
+        a: head,
+        b: chain(tail, direction),
+      };
+    };
+
+    const root = chain(columns.map((col) => chain(col, "vertical")), "horizontal");
+
+    // First tab in bar order survives and takes the merged tree; the rest are
+    // dropped WITHOUT touching their sessions - every session is still
+    // referenced by a leaf in the new tree.
+    const keep = tabs[0];
+    const dropped = new Set(tabs.slice(1).map((t) => t.tabId));
+    const firstLeaf = (n: PaneNode): PaneLeaf => (n.kind === "pane" ? n : firstLeaf(n.a));
+
+    this.tabs = this.tabs
+      .filter((t) => !dropped.has(t.tabId))
+      .map((t) =>
+        t.tabId === keep.tabId
+          ? { ...t, root, rootPaneId: firstLeaf(root).id, activePaneId: firstLeaf(root).id }
+          : t
+      );
+    this.activeTabId = keep.tabId;
+    this.bumpLayout();
+  }
+
   ungroupTab(tabId: string) {
     const tab = this.tabs.find((t) => t.tabId === tabId);
     if (!tab || tab.root.kind !== "split") return;
@@ -1431,6 +1520,83 @@ class PaneTreeStore {
     return true;
   }
 }
+// Multi-selection over the tab bar, so a bulk action (broadcast, close, LLM
+// share) can hit several tabs at once. Deliberately separate from
+// SelectionStore: that one is typed over tree nodes (connection / folder /
+// dynamic entry) and its anchor doubles as "what the detail pane shows",
+// neither of which fits a tab.
+//
+// The active tab is NOT implicitly selected. Selection is an explicit
+// ctrl/shift gesture and a plain click clears it, so a bulk action can never
+// quietly include a tab the user only happened to be looking at.
+class TabSelectionStore {
+  private ids = $state<Set<string>>(new Set());
+  // Last tab touched by a ctrl/shift click - the fixed end of a shift range.
+  private anchor = $state<string | null>(null);
+
+  has(tabId: string): boolean {
+    return this.ids.has(tabId);
+  }
+  get size(): number {
+    return this.ids.size;
+  }
+  // Selected tabs in bar order; callers iterate this for bulk actions.
+  ordered(orderedTabIds: string[]): string[] {
+    return orderedTabIds.filter((id) => this.ids.has(id));
+  }
+  clear() {
+    if (this.ids.size === 0 && this.anchor === null) return;
+    this.ids = new Set();
+    this.anchor = null;
+  }
+  // Ctrl/Cmd+click: add or remove one tab.
+  toggle(tabId: string) {
+    const next = new Set(this.ids);
+    if (next.has(tabId)) next.delete(tabId);
+    else next.add(tabId);
+    this.ids = next;
+    this.anchor = next.has(tabId) ? tabId : null;
+  }
+  // Shift+click: select the span between the anchor and this tab.
+  //
+  // With no anchor yet, the ACTIVE tab is used as one - shift-clicking left or
+  // right of where you already are selects everything in between, which is
+  // what every tab bar and file manager does. Requiring a shift-click to set
+  // the anchor first made the common "these five" gesture take two clicks and
+  // silently selected one tab on the first.
+  range(tabId: string, orderedTabIds: string[], activeTabId?: string | null) {
+    if (this.anchor === null && activeTabId && orderedTabIds.includes(activeTabId)) {
+      this.anchor = activeTabId;
+    }
+    if (this.anchor === null) {
+      this.ids = new Set([tabId]);
+      this.anchor = tabId;
+      return;
+    }
+    const i = orderedTabIds.indexOf(this.anchor);
+    const j = orderedTabIds.indexOf(tabId);
+    if (i < 0 || j < 0) {
+      this.toggle(tabId);
+      return;
+    }
+    const [lo, hi] = i < j ? [i, j] : [j, i];
+    this.ids = new Set(orderedTabIds.slice(lo, hi + 1));
+  }
+  // Drop ids that no longer exist (tabs closed, moved to another window).
+  prune(existingTabIds: string[]) {
+    const live = new Set(existingTabIds);
+    let changed = false;
+    const next = new Set<string>();
+    for (const id of this.ids) {
+      if (live.has(id)) next.add(id);
+      else changed = true;
+    }
+    if (changed) this.ids = next;
+    if (this.anchor !== null && !live.has(this.anchor)) this.anchor = null;
+  }
+}
+export const tabSelection = new TabSelectionStore();
+
 export const paneTabs = new PaneTreeStore();
 
 // ClosedTabEntry remembers just enough about a closed tab to let

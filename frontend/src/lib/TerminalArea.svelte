@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { sessions, paneTabs, view, drag, tree, closedTabs, mcpShared, shareBridge, shareShared, type PaneNode as PaneNodeType, encodePaneLayout, decodePaneLayout } from "./stores.svelte";
-  import { api } from "./api";
+  import { sessions, paneTabs, view, drag, tree, closedTabs, mcpShared, mcpBridge, shareBridge, shareShared, tabSelection, type PaneNode as PaneNodeType, encodePaneLayout, decodePaneLayout } from "./stores.svelte";
+  import { api, type McpGrantLevel } from "./api";
+  import { toast } from "./toast.svelte";
+  import GridPicker from "./GridPicker.svelte";
   import PaneNode from "./PaneNode.svelte";
   import ShareDialog from "./ShareDialog.svelte";
   import { projectTabs, realSessionIds } from "./shareProject";
@@ -11,7 +13,7 @@
   import { broadcast } from "./broadcast.svelte";
   import { recording } from "./recording.svelte";
   import { connectionActions } from "./connectionActions.svelte";
-  import { IconBroadcast, IconFolder, IconBot, IconHost } from "./iconMap";
+  import { IconBroadcast, IconFolder, IconBot, IconHost, IconCopy, IconWorkspace, IconPopOut, IconSplitH, IconSplitV, IconX, IconGlobe, IconPlay, IconStop, IconExternalLink } from "./iconMap";
   import { mcpLevelTitle } from "./mcpLevel";
   import Icon from "./Icon.svelte";
   import BroadcastManager from "./BroadcastManager.svelte";
@@ -330,8 +332,97 @@
   function openCtxMenu(e: MouseEvent, tabId: string) {
     refreshSendTargets();
     e.preventDefault();
+    // Right-clicking a tab OUTSIDE the current selection acts on that tab
+    // alone - the selection is dropped rather than silently retargeting the
+    // menu at tabs the user is no longer pointing at.
+    if (!tabSelection.has(tabId)) tabSelection.clear();
     ctxMenu = { tabId, x: e.clientX, y: e.clientY };
   }
+
+  // Tabs a context-menu action applies to: the whole selection when the
+  // right-clicked tab is part of it, otherwise just that tab.
+  // Short display name for a tab, for the context-menu heading.
+  function tabLabel(tabId: string): string {
+    const t = paneTabs.tabs.find((x) => x.tabId === tabId);
+    const title = t?.title ?? "tab";
+    return title.length > 24 ? title.slice(0, 23) + "…" : title;
+  }
+
+  function ctxTargets(tabId: string): string[] {
+    if (tabSelection.size > 1 && tabSelection.has(tabId)) {
+      return tabSelection.ordered(paneTabs.tabs.map((t) => t.tabId));
+    }
+    return [tabId];
+  }
+
+  // Every session id across the targeted tabs, de-duplicated.
+  function ctxTargetSessions(tabId: string): string[] {
+    const out = new Set<string>();
+    for (const id of ctxTargets(tabId)) {
+      for (const sid of tabSessionIdArr(id)) out.add(sid);
+    }
+    return [...out];
+  }
+
+  // Fold the selected tabs into one tab laid out as a grid. Destructive in the
+  // sense that N tabs become 1 (no sessions are closed - each keeps its own
+  // pane), and there is no undo, so it confirms first.
+  // Tabs waiting to be merged, while the grid picker is open.
+  let gridPickerIds = $state<string[] | null>(null);
+
+  function bulkMergeIntoGrid(tabId: string) {
+    const ids = ctxTargets(tabId);
+    if (ids.length < 2) return;
+    gridPickerIds = ids;
+  }
+
+  function applyGridMerge(cols: number, rows: number) {
+    const ids = gridPickerIds;
+    gridPickerIds = null;
+    if (!ids) return;
+    tabSelection.clear();
+    paneTabs.mergeTabsIntoGrid(ids, cols, rows);
+  }
+
+  function bulkAddToBroadcast(tabId: string) {
+    for (const sid of ctxTargetSessions(tabId)) broadcast.add(sid);
+    tabSelection.clear();
+  }
+
+  function bulkRemoveFromBroadcast(tabId: string) {
+    for (const sid of ctxTargetSessions(tabId)) broadcast.remove(sid);
+    tabSelection.clear();
+  }
+
+  async function bulkCloseTabs(tabId: string) {
+    // Snapshot first: closeTab mutates paneTabs.tabs, so iterating the live
+    // selection while closing would skip tabs.
+    const ids = ctxTargets(tabId);
+    tabSelection.clear();
+    for (const id of ids) await closeTab(id);
+  }
+
+  async function bulkShareLlm(tabId: string, level: McpGrantLevel) {
+    const sids = ctxTargetSessions(tabId);
+    tabSelection.clear();
+    let ok = 0;
+    for (const sid of sids) {
+      const sess = sessions.tabs.find((x) => x.sessionId === sid);
+      // Only connected SSH sessions can be shared; skip the rest quietly
+      // rather than failing the whole batch on one local shell.
+      if (!sess || sess.status !== "connected" || sess.kind === "local") continue;
+      try { await api.mcpShareSession(sid, level); ok++; } catch { /* keep going */ }
+    }
+    if (ok > 0) toast.ok(`Shared ${ok} session${ok === 1 ? "" : "s"} with the LLM`);
+    else toast.err("No connected SSH session to share");
+  }
+
+  // Drop selected ids for tabs that no longer exist (closed here, detached to
+  // another window, or moved). Without this a stale id would silently shrink
+  // every later bulk action's target count.
+  $effect(() => {
+    tabSelection.prune(paneTabs.tabs.map((t) => t.tabId));
+  });
 
   function closeCtxMenu() { ctxMenu = null; }
 
@@ -611,10 +702,18 @@
 
   async function setTabGroupName(tabId: string) {
     const cur = currentGroup(tabId);
-    const name = await showPrompt("Group name? (empty to clear)", cur ?? "");
+    // showPrompt collapses an empty submit to null, the same value it returns
+    // for cancel (fine for its other 27 callers, where blank means "never
+    // mind"). Here blank is a real instruction - clear the group - so it can't
+    // be told apart, and "empty to clear" silently did nothing. Ask for the
+    // explicit word instead of changing the shared helper's contract.
+    const name = await showPrompt(
+      cur ? `Group name? (type "-" to remove this tab from "${cur}")` : "Group name?",
+      cur ?? "",
+    );
     if (name === null) return;
     const trimmed = name.trim();
-    if (!trimmed) {
+    if (!trimmed || trimmed === "-") {
       paneTabs.setGroup(tabId, undefined, undefined);
       return;
     }
@@ -723,6 +822,7 @@
       <div
         class="tab"
         class:active
+        class:multi-selected={tabSelection.has(t.tabId)}
         class:closed={st.isClosed}
         class:tagged={!!tagCol}
         style:--tag-color={tagCol || "transparent"}
@@ -862,7 +962,30 @@
         {#if tabReorderIndicator?.tabId === t.tabId}
           <div class="tab-reorder-bar {tabReorderIndicator.side}"></div>
         {/if}
-        <button class="label" onclick={() => { paneTabs.activateTab(t.tabId); focusActivePane(); }} title={st.hint}>
+        <button
+          class="label"
+          onclick={(e) => {
+            // Ctrl/Cmd or Shift build a selection for bulk actions and must NOT
+            // switch tabs - switching would tear down and rebuild panes under a
+            // gesture whose whole point is to stay put. A plain click clears the
+            // selection so a later bulk action can't hit tabs the user forgot
+            // were selected.
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              tabSelection.toggle(t.tabId);
+              return;
+            }
+            if (e.shiftKey) {
+              e.preventDefault();
+              tabSelection.range(t.tabId, paneTabs.tabs.map((x) => x.tabId), paneTabs.activeTabId);
+              return;
+            }
+            tabSelection.clear();
+            paneTabs.activateTab(t.tabId);
+            focusActivePane();
+          }}
+          title={st.hint}
+        >
           <span class="dot" style="background: {st.color}"></span>
           {#if t.groupName}
             <span
@@ -965,8 +1088,42 @@
   {#if ctxMenu}
     <div class="ctx-backdrop" role="presentation" onclick={closeCtxMenu} oncontextmenu={(e) => { e.preventDefault(); closeCtxMenu(); }}></div>
     <div class="ctx-menu" style="left: {ctxMenu.x}px; top: {ctxMenu.y}px;">
+      {#if ctxTargets(ctxMenu.tabId).length > 1}
+        {@const bulkN = ctxTargets(ctxMenu.tabId).length}
+        <div class="ctx-heading">All {bulkN} selected tabs</div>
+        <button onclick={() => { bulkAddToBroadcast(ctxMenu!.tabId); closeCtxMenu(); }}>
+          <IconBroadcast size={13} /> Add {bulkN} tabs to broadcast
+        </button>
+        <button onclick={() => { bulkRemoveFromBroadcast(ctxMenu!.tabId); closeCtxMenu(); }}>
+          <IconBroadcast size={13} /> Remove {bulkN} tabs from broadcast
+        </button>
+        {#if mcpBridge.enabled}
+          <button onclick={() => { bulkShareLlm(ctxMenu!.tabId, "read"); closeCtxMenu(); }}>
+            <IconBot size={13} /> Share {bulkN} with LLM - read only
+          </button>
+          <button onclick={() => { bulkShareLlm(ctxMenu!.tabId, "read-run"); closeCtxMenu(); }}>
+            <IconBot size={13} /> Share {bulkN} with LLM - read + run
+          </button>
+          <button class="yolo" onclick={() => { bulkShareLlm(ctxMenu!.tabId, "read-run-yolo"); closeCtxMenu(); }}>
+            <IconBot size={13} /> Share {bulkN} with LLM - auto-run (YOLO)
+          </button>
+        {/if}
+        <button onclick={() => { bulkMergeIntoGrid(ctxMenu!.tabId); closeCtxMenu(); }}>
+          <IconSplitV size={13} /> Merge {bulkN} tabs into a grid
+        </button>
+        <button class="danger" onclick={() => { bulkCloseTabs(ctxMenu!.tabId); closeCtxMenu(); }}>
+          <IconX size={13} /> Close {bulkN} tabs
+        </button>
+        <div class="ctx-sep"></div>
+      {/if}
+      {#if ctxTargets(ctxMenu.tabId).length > 1}
+        <!-- Everything below acts on the right-clicked tab ALONE, not the
+             selection. Without a heading the menu shows "Close 7 tabs" and
+             "Close tab" with nothing saying which is which. -->
+        <div class="ctx-heading">Just "{tabLabel(ctxMenu.tabId)}"</div>
+      {/if}
       <button onclick={() => { duplicateTab(ctxMenu!.tabId); closeCtxMenu(); }}>
-        Duplicate tab
+        <IconCopy size={13} /> Duplicate tab
       </button>
       {#if tabVncConnId(ctxMenu.tabId)}
         <button onclick={() => { connectionActions.openVncConnection(tabVncConnId(ctxMenu!.tabId)!); closeCtxMenu(); }}>
@@ -979,18 +1136,20 @@
         </button>
       {/if}
       <button onclick={() => { setTabGroupName(ctxMenu!.tabId); closeCtxMenu(); }}>
-        Set group name…
+        <IconWorkspace size={13} /> Set group name…
       </button>
       {#if currentGroup(ctxMenu.tabId)}
         <button onclick={() => { paneTabs.setGroup(ctxMenu!.tabId, undefined, undefined); closeCtxMenu(); }}>
           Clear group
         </button>
       {/if}
+      <div class="ctx-sep"></div>
       <button onclick={() => { detachTab(ctxMenu!.tabId); closeCtxMenu(); }}>
-        ↗ Detach to new window
+        <IconPopOut size={13} /> Detach to new window
       </button>
       {#if shareBridge.enabled}
         <button onclick={() => { openShareDialog(ctxMenu!.tabId); closeCtxMenu(); }}>
+          <IconGlobe size={13} />
           Share to browser…
         </button>
         {#each sharesWithoutTab(ctxMenu.tabId) as sh (sh.shareId)}
@@ -1001,41 +1160,44 @@
       {/if}
       {#each sendTargets as w (w.name)}
         <button onclick={() => { sendTabToWindow(ctxMenu!.tabId, w.name); closeCtxMenu(); }}>
-          → Send to {w.label}
+          <IconExternalLink size={13} /> Send to {w.label}
         </button>
       {/each}
       {#if tabActiveSessionId(ctxMenu.tabId)}
         {@const recSid = tabActiveSessionId(ctxMenu.tabId)!}
         {#if recording.isRecording(recSid)}
           <button onclick={() => { recording.stop(recSid); closeCtxMenu(); }}>
+            <IconStop size={13} />
             Stop recording
           </button>
         {:else}
           <button onclick={() => { recording.start(recSid); closeCtxMenu(); }}>
+            <IconPlay size={13} />
             Record session
           </button>
         {/if}
       {/if}
       {#if tabBroadcastState(ctxMenu.tabId) === "all"}
         <button onclick={() => { tabRemoveAllFromBroadcast(ctxMenu!.tabId); closeCtxMenu(); }}>
-          Remove from broadcast
+          <IconBroadcast size={13} /> Remove from broadcast
         </button>
       {:else if tabBroadcastState(ctxMenu.tabId) === "partial"}
         <button onclick={() => { tabAddAllToBroadcast(ctxMenu!.tabId); closeCtxMenu(); }}>
-          Add remaining panes to broadcast
+          <IconBroadcast size={13} /> Add remaining panes to broadcast
         </button>
       {:else}
         <button onclick={() => { tabAddAllToBroadcast(ctxMenu!.tabId); closeCtxMenu(); }}>
-          Add to broadcast
+          <IconBroadcast size={13} /> Add to broadcast
         </button>
       {/if}
       {#if tabIsGrouped(ctxMenu.tabId)}
         <button onclick={() => { paneTabs.ungroupTab(ctxMenu!.tabId); closeCtxMenu(); }}>
-          Ungroup tabs
+          <IconSplitH size={13} /> Split panes into separate tabs
         </button>
       {/if}
-      <button onclick={() => { closeTab(ctxMenu!.tabId); closeCtxMenu(); }}>
-        Close tab
+      <div class="ctx-sep"></div>
+      <button class="danger" onclick={() => { closeTab(ctxMenu!.tabId); closeCtxMenu(); }}>
+        <IconX size={13} /> Close tab
       </button>
     </div>
   {/if}
@@ -1054,6 +1216,14 @@
     {/each}
   </div>
 </div>
+
+{#if gridPickerIds}
+  <GridPicker
+    count={gridPickerIds.length}
+    onPick={(c, r) => applyGridMerge(c, r)}
+    onCancel={() => (gridPickerIds = null)}
+  />
+{/if}
 
 <!-- tcpdump capture overlays live HERE, above the pane tree, mounted once
      per session and keyed by sessionId. This is what makes a capture
@@ -1141,7 +1311,20 @@
     min-width: 140px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.5);
   }
+  /* Icons sit in a fixed-width slot so labels line up whether or not an entry
+     has one, and are muted so they read as a hint rather than competing with
+     the text. */
+  .ctx-menu button :global(svg) {
+    width: 13px;
+    flex: none;
+    color: var(--subtext0);
+  }
+  .ctx-menu button.danger { color: var(--red); }
+  .ctx-menu button.danger :global(svg) { color: var(--red); }
   .ctx-menu button {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
     display: block;
     width: 100%;
     background: transparent;
@@ -1295,6 +1478,28 @@
   /* Colour encodes the grant level (see PaneNode's .llm-share): blue =
      read-only, yellow = read + run, red = auto-run/YOLO. A tab shows the
      riskiest level among its panes. */
+  /* The bulk YOLO entry grants auto-run across several sessions at once, so
+     it must not look like the two share entries above it. Same red accent the
+     share popover uses for the same grant. */
+  .ctx-menu button.yolo { color: var(--red); }
+  .ctx-heading {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.7rem;
+    color: var(--subtext0);
+  }
+  .ctx-sep {
+    height: 1px;
+    background: var(--surface1);
+    margin: 0.25rem 0;
+  }
+  /* Multi-selection marker. Must read differently from .active - the active
+     tab is the one on screen, a selected tab is one a bulk action will hit,
+     and a tab can be both at once. */
+  .tab.multi-selected {
+    outline: 1px solid var(--blue);
+    outline-offset: -1px;
+    background: color-mix(in srgb, var(--blue) 14%, transparent);
+  }
   .mcp-badge {
     display: inline-flex;
     align-items: center;
