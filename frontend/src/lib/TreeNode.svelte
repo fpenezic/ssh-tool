@@ -954,7 +954,10 @@
           {:else if connectErrId === conn.id}
             <span class="conn-err" title={connectErr ?? ""}><IconX size={12} /></span>
           {:else if conn.protocol === "local"}
-            <span class="host mono">{conn.overrides?.initial_command || "local shell"}</span>
+            <!-- The command may be multi-line now; collapse it to one line for
+                 the row and keep the full text in the tooltip. -->
+            <span class="host mono" title={conn.overrides?.initial_command || "local shell"}
+              >{(conn.overrides?.initial_command || "local shell").replace(/\s*\n\s*/g, " ; ")}</span>
           {:else if conn.hostname}
             <span class="host">{conn.hostname}</span>
           {/if}
@@ -1057,9 +1060,24 @@
     .chev { width: 1.8rem; font-size: 1.05rem; }
   }
   .icon { width: 1.2rem; text-align: center; font-size: 0.85rem; }
-  .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* The name must survive a long subtitle: without a min-width a flex item
+     refuses to shrink below its content, so a local connection whose Command
+     is a whole script pushed the name out of the row entirely. */
+  .name { flex: 1; min-width: 4rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .count { color: var(--overlay1); font-size: 0.75rem; }
-  .host { color: var(--overlay1); font-size: 0.75rem; margin-left: 0.4rem; }
+  /* .host doubles as the local-shell Command, which can be arbitrarily long -
+     cap it and ellipsise, and let it give up space before the name does. */
+  .host {
+    color: var(--overlay1);
+    font-size: 0.75rem;
+    margin-left: 0.4rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 2;
+    min-width: 0;
+    max-width: 60%;
+  }
   .row.connecting { opacity: 0.7; cursor: wait; }
   .row.conn.live .name { font-weight: 600; color: var(--green); }
   .row.conn.live .chev { color: var(--green); }
