@@ -255,8 +255,8 @@ type McpGrantInfo struct {
 }
 
 // McpShareSession grants the LLM access to a live session at the given level
-// ("read" or "read-run"). Sharing a session that isn't in the pool is
-// rejected so a grant can't dangle without a session.
+// ("read", "read-run" or "read-run-yolo"). Sharing a session that isn't in the
+// pool is rejected so a grant can't dangle without a session.
 func (a *App) McpShareSession(sessionID, level string) error {
 	if _, ok := a.pool.Get(sessionID); !ok {
 		return fmt.Errorf("session not connected")
@@ -760,6 +760,9 @@ func (a *App) mcpConnect(connectionID, level string) (string, error) {
 	var (
 		name, hostname, folder string
 		connect                func() (*SshConnectResult, error)
+		// The id the FRONTEND should store for this session. Same as
+		// connectionID for saved connections; narrowed for dynamic ones.
+		uiConnectionID = connectionID
 	)
 
 	if strings.HasPrefix(connectionID, "dyn:") {
@@ -775,6 +778,12 @@ func (a *App) mcpConnect(connectionID, level string) (string, error) {
 			return "", fmt.Errorf("dynamic host not found")
 		}
 		name, hostname, folder = entry.Name, entry.Hostname, a.folderPathIndex()[folderID]
+		// The rest of the app keys a dynamic session on "dyn:<entryID>" (the id
+		// sshConnectDynamicInternal puts on the synthetic connection, see gotcha
+		// 43). The MCP id carries the folder too, so it must be narrowed here -
+		// emitting the three-part form left the tree unable to match the session
+		// and no connected marker ever appeared for an LLM-opened dynamic host.
+		uiConnectionID = "dyn:" + entryID
 		connect = func() (*SshConnectResult, error) { return a.SshConnectDynamic(folderID, entryID) }
 	} else {
 		conn, err := a.db.GetConnection(connectionID)
@@ -824,7 +833,7 @@ func (a *App) mcpConnect(connectionID, level string) (string, error) {
 	// Emit an event the frontend listens for to add the tab + switch to it.
 	EventsEmit("mcp_session_opened", map[string]string{
 		"session_id":    res.SessionID,
-		"connection_id": connectionID,
+		"connection_id": uiConnectionID,
 		"name":          name,
 		"hostname":      hostname,
 	})

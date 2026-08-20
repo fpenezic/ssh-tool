@@ -1865,8 +1865,8 @@ export function McpSetManageStore(on) {
 
 /**
  * McpShareSession grants the LLM access to a live session at the given level
- * ("read" or "read-run"). Sharing a session that isn't in the pool is
- * rejected so a grant can't dangle without a session.
+ * ("read", "read-run" or "read-run-yolo"). Sharing a session that isn't in the
+ * pool is rejected so a grant can't dangle without a session.
  * @param {string} sessionID
  * @param {string} level
  * @returns {$CancellablePromise<void>}
