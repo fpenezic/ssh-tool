@@ -63,7 +63,7 @@ async function runPooled<T>(
 // Excludes anything credential / cryptographic so a wrong password
 // doesn't burn the saved value twice or spam the audit log. Matches
 // the same lower-cased substring style as connectErrors.ts.
-function isTransientConnectError(e: unknown): boolean {
+export function isTransientConnectError(e: unknown): boolean {
   const raw =
     typeof e === "object" && e && "message" in (e as any)
       ? String((e as any).message)

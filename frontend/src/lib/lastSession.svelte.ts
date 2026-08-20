@@ -16,7 +16,7 @@
 
 import { api } from "./api";
 import { paneTabs, sessions, tree, view } from "./stores.svelte";
-import { connectionActions } from "./connectionActions.svelte";
+import { connectionActions, isTransientConnectError } from "./connectionActions.svelte";
 import { showConfirm } from "./confirmModal.svelte.ts";
 import { toast } from "./toast.svelte.ts";
 
@@ -45,6 +45,9 @@ class LastSessionStore {
 
   private loaded = false;
   private restoreDone = false;
+  // Dynamic folders whose entries were already pulled during THIS restore, so
+  // a 25-host restore hits each provider once instead of once per host.
+  private inventoryPulled = new Set<string>();
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   async load() {
@@ -245,7 +248,18 @@ class LastSessionStore {
         ? [spec.folderId, ...Object.keys(tree.dynamicFolders).filter((f) => f !== spec.folderId)]
         : Object.keys(tree.dynamicFolders);
       for (const fid of candidates) {
-        await tree.loadDynamicEntries(fid);
+        // Only pull a folder's entries once per restore. Restoring 25 dynamic
+        // hosts used to re-fetch the inventory 25 times; a provider that rate
+        // limits (or just answers slowly) then returns an empty list, and the
+        // host is reported as "not in the inventory anymore" even though it is
+        // there. The tree is loaded before restore runs, so a folder already
+        // populated needs no round trip at all.
+        if (!this.inventoryPulled.has(fid)) {
+          this.inventoryPulled.add(fid);
+          if ((tree.dynamicEntries[fid] ?? []).length === 0) {
+            await tree.loadDynamicEntries(fid);
+          }
+        }
         const hit = (tree.dynamicEntries[fid] ?? []).find(matches);
         if (hit) {
           folderId = fid;
@@ -256,7 +270,18 @@ class LastSessionStore {
       if (!entry || !folderId) {
         throw new Error(`${spec.entryName || "dynamic host"}: not in the inventory anymore`);
       }
-      const res = await api.sshConnectDynamic(folderId, entry.id);
+      // Same single retry the saved-connection path gets: restoring 25 hosts
+      // back to back reliably turns up one transient DNS/refused/timeout, and
+      // without a retry that host is simply missing after a restart. Auth and
+      // host-key failures are NOT retried - see isTransientConnectError.
+      let res;
+      try {
+        res = await api.sshConnectDynamic(folderId, entry.id);
+      } catch (e) {
+        if (!isTransientConnectError(e)) throw e;
+        await new Promise((r) => setTimeout(r, 800));
+        res = await api.sshConnectDynamic(folderId, entry.id);
+      }
       sessions.add({
         sessionId: res.session_id,
         connectionId: "dyn:" + entry.id,
