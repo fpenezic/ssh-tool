@@ -652,6 +652,82 @@
   // the next paint re-rasterises every cell. No-op when WebGL is off
   // or the addon lacks the method (older xterm). Also exposed via the
   // Ctrl+L redraw shortcut for the rare in-place corruption case.
+  // Drop the GPU renderer while this pane's tab is in the background, and put
+  // it back when the tab comes forward.
+  //
+  // Every tab stays mounted (TerminalArea hides inactive ones with
+  // visibility:hidden so output keeps flowing and no state is lost), which
+  // meant every session also kept a live WebGL context and its own font
+  // texture atlas. Those live in the browser's GPU process, and at ~27 open
+  // sessions it was the single largest consumer in the whole app - far more
+  // than the terminal buffers themselves. A backgrounded terminal renders
+  // nothing, so the context is pure cost.
+  //
+  // The xterm buffer is untouched by this: disposing a renderer addon only
+  // drops the drawing layer, and xterm falls back to its DOM renderer, which
+  // repaints correctly for a pane nobody is looking at. Scrollback, cursor
+  // position and incoming writes all continue as normal, so switching back is
+  // seamless apart from reloading the atlas.
+  let rendererSuspended = false;
+
+  // Attach the renderer addon. Extracted so resumeRenderer() reuses exactly
+  // the mount-time selection logic instead of duplicating it.
+  function loadRenderer() {
+    if (!term) return;
+    // Never stack two renderer addons: mount loads one, and a resume must not
+    // add a second if one is somehow still attached.
+    if (webgl || canvas) return;
+    if (!terminalPrefs.disableWebgl && !isMobile) {
+      try {
+        webgl = new WebglAddon();
+        webgl.onContextLoss(() => {
+          // On context loss, drop WebGL and fall back to Canvas (not DOM).
+          webgl?.dispose(); webgl = null;
+          try { canvas = new CanvasAddon(); term?.loadAddon(canvas); } catch { /* ignore */ }
+        });
+        term.loadAddon(webgl);
+      } catch (e) {
+        console.warn("WebGL renderer unavailable, falling back to canvas", e);
+        try { canvas = new CanvasAddon(); term.loadAddon(canvas); } catch { /* ignore */ }
+      }
+    } else {
+      // WebGL off (disabled, or mobile): use Canvas rather than letting xterm
+      // fall back to its DOM renderer.
+      try {
+        canvas = new CanvasAddon();
+        term.loadAddon(canvas);
+      } catch (e) {
+        console.warn("Canvas renderer unavailable, using DOM", e);
+      }
+    }
+  }
+
+  function suspendRenderer() {
+    if (rendererSuspended || !term) return;
+    rendererSuspended = true;
+    try { webgl?.dispose(); } catch { /* best effort */ }
+    webgl = null;
+    try { canvas?.dispose(); } catch { /* best effort */ }
+    canvas = null;
+  }
+
+  function resumeRenderer() {
+    if (!rendererSuspended || !term) return;
+    rendererSuspended = false;
+    loadRenderer();
+    // The atlas is rebuilt from scratch; force a repaint so the first frame
+    // after switching back isn't the stale DOM-rendered one.
+    try { term.refresh(0, term.rows - 1); } catch { /* best effort */ }
+  }
+
+  $effect(() => {
+    // Reads `active` so the effect re-runs on tab switches.
+    const isActive = active;
+    if (!term) return;
+    if (isActive) resumeRenderer();
+    else suspendRenderer();
+  });
+
   function clearWebglAtlas() {
     try {
       (webgl as any)?.clearTextureAtlas?.();
@@ -730,29 +806,12 @@
     // WebGL by default; the Canvas addon when WebGL is disabled (the Android
     // WebView's WebGL atlas is flaky, and a user who hit that turns it off).
     // Canvas avoids both the DOM repaint bug and the WebGL atlas bug.
-    if (!terminalPrefs.disableWebgl && !isMobile) {
-      try {
-        webgl = new WebglAddon();
-        webgl.onContextLoss(() => {
-          // On context loss, drop WebGL and fall back to Canvas (not DOM).
-          webgl?.dispose(); webgl = null;
-          try { canvas = new CanvasAddon(); term?.loadAddon(canvas); } catch { /* ignore */ }
-        });
-        term.loadAddon(webgl);
-      } catch (e) {
-        console.warn("WebGL renderer unavailable, falling back to canvas", e);
-        try { canvas = new CanvasAddon(); term.loadAddon(canvas); } catch { /* ignore */ }
-      }
-    } else {
-      // WebGL off (disabled, or mobile): use Canvas rather than letting xterm
-      // fall back to its DOM renderer.
-      try {
-        canvas = new CanvasAddon();
-        term.loadAddon(canvas);
-      } catch (e) {
-        console.warn("Canvas renderer unavailable, using DOM", e);
-      }
-    }
+    // A pane can mount while its tab is in the background (restoring a saved
+    // layout, or a session opened by the MCP bridge into a non-active tab).
+    // Skip the renderer entirely in that case - the $effect attaches one when
+    // the tab is first brought forward.
+    if (active) loadRenderer();
+    else rendererSuspended = true;
 
     fit.fit();
 

@@ -761,7 +761,7 @@
           onControls={(c) => (vncCtl = c)}
         />
       {:else}
-        <Terminal sessionId={node.sessionId} active={true} />
+        <Terminal sessionId={node.sessionId} active={paneTabs.activeTabId === tabId} />
       {/if}
     </div>
     {#if dropZone}
