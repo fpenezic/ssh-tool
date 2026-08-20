@@ -496,6 +496,27 @@
   // Copy the exact registration command shown in a cmd-block. Each block is
   // something the user has to paste into another program, so every one of them
   // gets a copy button rather than making them select multi-line text by hand.
+  // Scope for the generated `claude mcp add` line. Local (the CLI default)
+  // registers the server for the current working directory only, which is a
+  // common surprise - the connector is missing in every other project. User
+  // scope registers it once for all of them.
+  let mcpScope = $state<"user" | "local">("user");
+  // Which shell the `claude mcp add` line will be pasted into. Same client and
+  // same server - only the path to the binary and its quoting differ, so this
+  // is one command with a shell picker rather than the separate blocks further
+  // down the page it used to be (they read as unrelated registrations).
+  let mcpWhere = $state<"pwsh" | "cmd" | "wsl">("pwsh");
+
+  // Quote a path for the chosen shell. Windows paths routinely contain a space
+  // ("C:\\Users\\First Last\\..."), which silently splits the command into the
+  // wrong argv without this. The quoted path is an argument to `claude`, not
+  // the command being invoked, so no PowerShell call operator is involved.
+  function mcpQuote(path: string, shell: "pwsh" | "cmd" | "wsl"): string {
+    if (!path.includes(" ")) return path;
+    if (shell === "wsl") return `'${path}'`;
+    return `"${path}"`;
+  }
+
   async function copyCmd(text: string, what: string) {
     try {
       await writeClipboard(text);
@@ -4831,13 +4852,56 @@
       </p>
 
       <p class="hint"><strong>Claude Code:</strong></p>
-      {@const claudeCmd = `claude mcp add ssh-tool -- ${mcpExePath || "ssh-tool"} --mcp-bridge`}
+      <div class="scope-row">
+        {#if mcpWslExePath}
+          <div class="scope-seg" role="group" aria-label="Shell you paste into">
+            <button
+              class="scope-btn" class:active={mcpWhere === "pwsh"}
+              onclick={() => (mcpWhere = "pwsh")}
+              title="Claude Code in PowerShell"
+            >PowerShell</button>
+            <button
+              class="scope-btn" class:active={mcpWhere === "cmd"}
+              onclick={() => (mcpWhere = "cmd")}
+              title="Claude Code in Command Prompt"
+            >CMD</button>
+            <button
+              class="scope-btn" class:active={mcpWhere === "wsl"}
+              onclick={() => (mcpWhere = "wsl")}
+              title="Claude Code inside WSL - points at the Windows binary"
+            >WSL</button>
+          </div>
+        {/if}
+        <div class="scope-seg" role="group" aria-label="Registration scope">
+          <button
+            class="scope-btn" class:active={mcpScope === "user"}
+            onclick={() => (mcpScope = "user")}
+            title="Register for every project on this machine"
+          >All projects</button>
+          <button
+            class="scope-btn" class:active={mcpScope === "local"}
+            onclick={() => (mcpScope = "local")}
+            title="Register only for the directory you run this in"
+          >This folder only</button>
+        </div>
+      </div>
+      {@const mcpBin = mcpQuote(
+        mcpWhere === "wsl" && mcpWslExePath ? mcpWslExePath : (mcpExePath || "ssh-tool"),
+        mcpWhere,
+      )}
+      {@const claudeCmd = `claude mcp add ${mcpScope === "user" ? "--scope user " : ""}ssh-tool -- ${mcpBin} --mcp-bridge`}
       <div class="cmd-wrap">
         <pre class="cmd-block">{claudeCmd}</pre>
         <button class="cmd-copy" title="Copy command" onclick={() => copyCmd(claudeCmd, "Command")}>
           <IconCopy size={13} />
         </button>
       </div>
+      <p class="hint">
+        {#if mcpScope === "user"}Registers once for every project on this machine.
+        {:else}Registers only for the directory you run it in - Claude Code's default;
+          other projects will not see ssh-tool.{/if}
+        {#if mcpWhere === "wsl"} Run it inside WSL; it points at the Windows binary.{/if}
+      </p>
 
       {#if claudeDesktop?.supported}
         <p class="hint"><strong>Claude Desktop:</strong></p>
@@ -4953,20 +5017,6 @@
           </div>
         </label>
       </fieldset>
-
-      {#if mcpWslExePath}
-        <p class="hint" style="margin-top:0.8rem">
-          <strong>WSL client:</strong> turn on the toggle above, then run this
-          inside your WSL Claude Code (it points at the Windows binary):
-        </p>
-        {@const wslCmd = `claude mcp add ssh-tool -- ${mcpWslExePath} --mcp-bridge`}
-        <div class="cmd-wrap">
-          <pre class="cmd-block">{wslCmd}</pre>
-          <button class="cmd-copy" title="Copy command" onclick={() => copyCmd(wslCmd, "Command")}>
-            <IconCopy size={13} />
-          </button>
-        </div>
-      {/if}
 
       <h3 style="margin-top:1.2rem">Auto-run allowlist</h3>
       <p class="hint">
@@ -5828,11 +5878,39 @@
   }
   /* The copy button floats over the block's top-right corner. The block keeps
      user-select:all so selecting by hand still works for anyone who prefers it. */
+  .scope-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin: 0.6rem 0 0.1rem;
+  }
+  .scope-seg {
+    display: inline-flex;
+    border: 1px solid var(--surface1);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .scope-btn {
+    background: var(--surface0);
+    border: none;
+    color: var(--subtext0);
+    font-size: 0.72rem;
+    padding: 0.2rem 0.5rem;
+    cursor: pointer;
+  }
+  .scope-btn + .scope-btn { border-left: 1px solid var(--surface1); }
+  .scope-btn:hover { color: var(--text); }
+  .scope-btn.active { background: var(--blue); color: var(--on-accent); }
+
   .cmd-wrap { position: relative; }
   .cmd-wrap .cmd-block { padding-right: 2rem; }
   .cmd-copy {
     position: absolute;
-    top: 0.55rem;
+    /* Top-aligned, sharing the block's own top padding, so it sits centred on
+       a one-line command and tucks into the corner of the multi-line JSON
+       instead of floating in the middle of it. */
+    top: 0.5rem;
     right: 0.45rem;
     display: inline-flex;
     align-items: center;
