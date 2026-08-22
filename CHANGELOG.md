@@ -7,6 +7,39 @@ a prerelease upstream.
 
 ---
 
+## [0.83.0] - Background connections, and finding the tab you already have
+
+### Added
+
+- **Connections can open straight into the background.** Tick "Open in the
+  background" on a connection and it connects as usual, but its tab stays
+  out of the tab bar - for the sessions that exist to run rather than to be
+  watched: a keepalive loop, a tail, a watcher. Works for SSH and local
+  shells alike. Nothing is lost: the session is live, output keeps
+  arriving, and the bar shows a count of hidden tabs that brings them back
+  in one click.
+- **Hide a tab on demand.** Right-click a tab for "Hide tab (keeps
+  running)", or hide a whole selection at once. Same deal - the session
+  carries on, only the bar entry goes away.
+- **The quick palette finds open tabs.** Searching a host you are already
+  on used to match its connection and open a second session; now the tab
+  you already have comes first, and Enter jumps to it. Hidden tabs are
+  found too, and jumping to one brings it back. Matches on the tab title,
+  its group, and the hosts inside it.
+
+### Fixed
+
+- **The vault prompt remembers when you decline auto-unlock.** "Remember on
+  this machine" came back ticked at every prompt, which is the wrong
+  default on a shared or jump box. Your last choice now sticks, per
+  machine.
+- **The tab context menu stays inside the window.** With several tabs
+  selected the menu is long enough to run off the bottom and right edges;
+  it now flips, clamps, and scrolls when it has to. The grid picker got the
+  same treatment for short windows.
+
+---
+
 ## [0.82.0] - A third of the memory, and tabs you can act on in bulk
 
 ### Fixed
