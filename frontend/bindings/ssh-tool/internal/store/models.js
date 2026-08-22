@@ -270,6 +270,16 @@ export class Connection {
              */
             this["favorite"] = false;
         }
+        if (!("open_hidden" in $$source)) {
+            /**
+             * OpenHidden starts this connection's tab hidden - the session runs
+             * normally, it just stays out of the tab bar. For background helpers
+             * whose output nobody watches.
+             * @member
+             * @type {boolean}
+             */
+            this["open_hidden"] = false;
+        }
         if (!("sensitive" in $$source)) {
             /**
              * @member

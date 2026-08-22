@@ -434,6 +434,7 @@
     networkProfile: string;
     initialCommand: string;
     localShellKind: string;
+    openHidden: boolean;
     tags: string[];
   } | null>(null);
   let newTagInput = $state("");
@@ -536,6 +537,7 @@
         vncDefault: encodeBool(conn.overrides?.vnc_default),
         networkProfile: encodeNetProfile(conn.overrides?.network_profile_id),
         initialCommand: conn.overrides?.initial_command ?? "",
+        openHidden: !!conn.open_hidden,
         localShellKind: conn.local_shell_kind ?? "",
         tags: [...(conn.tags ?? [])],
       };
@@ -572,6 +574,7 @@
       editing.vncDefault !== encodeBool(o.vnc_default) ||
       editing.networkProfile !== encodeNetProfile(o.network_profile_id) ||
       editing.initialCommand !== (o.initial_command ?? "") ||
+      editing.openHidden !== !!conn.open_hidden ||
       editing.localShellKind !== (conn.local_shell_kind ?? "") ||
       JSON.stringify(editing.jumpHost ?? null) !== JSON.stringify(o.jump_host ?? null) ||
       !tagsEq
@@ -641,6 +644,7 @@
       // read it), but only send it when local to avoid touching the column.
       localShellKind: isLocal ? (localKind || null) : undefined,
       clearLocalShellKind: isLocal && localKind === "",
+      openHidden: editing.openHidden,
     }).then(async () => {
       await tree.load();
       if (conn) {
@@ -1602,6 +1606,17 @@
         </span>
       </label>
 
+      <label class="span-2 inline-check" title="Connect as usual, but leave the tab out of the tab bar. For background helpers - a keepalive loop, a tail, a watcher - where the point is that it runs, not that you watch it.">
+        <input type="checkbox" bind:checked={editing.openHidden} />
+        <span class="inline-check-text">
+          Open in the background
+          <span class="field-note">
+            The session connects and keeps running; its tab is hidden. The tab
+            bar shows a count of hidden tabs, and Ctrl+K finds them.
+          </span>
+        </span>
+      </label>
+
       {#if !isMobile && !isLocal}
       <div class="span-2 vnc-section" class:on={editing.vncEnabled === "on"}>
         <div class="vnc-head">
@@ -2411,6 +2426,34 @@
   }
   .vnc-head .vnc-spacer { flex: 1 1 auto; }
   .vnc-title { font-weight: 600; }
+  /* Checkbox row inside the two-column grid. `.form label` sets column flex
+     (label above field) and outranks a single class, which left the box
+     stranded above its own text - so this needs the same two-class weight to
+     win. Matches the VNC checkbox row: box left, label beside it. */
+  .form label.inline-check {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.45rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  .form label.inline-check input[type="checkbox"] {
+    width: auto;
+    flex: none;
+    margin-top: 0.1rem;
+  }
+  .inline-check-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    /* Same size as the VNC checkbox row rather than the smaller field labels -
+       this is a statement to read, not a field caption. */
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+  .inline-check-text .field-note { font-size: 0.78rem; }
+
   .vnc-section .vnc-default-check {
     display: flex;
     flex-direction: row;

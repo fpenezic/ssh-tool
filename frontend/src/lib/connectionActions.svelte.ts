@@ -4,7 +4,7 @@
 // modal to render; the modals close themselves through these same flags.
 
 import { api, type Connection } from "./api";
-import { tree, sessions, paneTabs, view, selection, credentials } from "./stores.svelte";
+import { tree, sessions, paneTabs, view, selection, credentials, type PaneNode } from "./stores.svelte";
 import { vncSessions } from "./vncState.svelte.ts";
 import { showPrompt } from "./promptModal.svelte.ts";
 import { showConfirm } from "./confirmModal.svelte.ts";
@@ -259,6 +259,18 @@ class ConnectionActionsStore {
     return this.connectOne(id);
   }
 
+  // Connections flagged "open in the background" get their tab hidden as soon
+  // as it exists: the session is live and keeps running, it just stays out of
+  // the tab bar. Applied here rather than inside addTab so an explicitly
+  // opened tab (duplicate, split, restore) is never hidden by surprise.
+  private applyOpenHidden(c: { open_hidden?: boolean }, sessionId: string) {
+    if (!c.open_hidden) return;
+    const holds = (n: PaneNode): boolean =>
+      n.kind === "pane" ? n.sessionId === sessionId : holds(n.a) || holds(n.b);
+    const tab = paneTabs.tabs.find((t) => holds(t.root));
+    if (tab) paneTabs.setHidden(tab.tabId, true);
+  }
+
   async connectOne(id: string, opts?: { overrideCredentialId?: string }): Promise<boolean> {
     const c = tree.connectionById(id);
     if (!c) return false;
@@ -296,7 +308,8 @@ class ConnectionActionsStore {
         status: "connected",
       });
       paneTabs.addTab(r.session_id, c.name);
-      view.setTab("terminal");
+      this.applyOpenHidden(c, r.session_id);
+      if (!c.open_hidden) view.setTab("terminal");
       this.clearConnectError(c.id);
       return true;
     } catch (e) {
@@ -320,7 +333,8 @@ class ConnectionActionsStore {
         kind: "local",
       });
       paneTabs.addTab(r.session_id, c.name);
-      view.setTab("terminal");
+      this.applyOpenHidden(c, r.session_id);
+      if (!c.open_hidden) view.setTab("terminal");
       this.clearConnectError(c.id);
       return true;
     } catch (e) {

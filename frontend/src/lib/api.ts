@@ -94,6 +94,7 @@ export interface Connection {
   overrides: InheritableSettings;
   tags: string[];
   notes: string;
+  open_hidden?: boolean;
   favorite: boolean;
   sensitive: boolean;
   icon_image_id: string | null;
@@ -635,6 +636,7 @@ export const api = {
     protocol?: string;
     localShellKind?: string | null;
     clearLocalShellKind?: boolean;
+    openHidden?: boolean;
   }) =>
     G.ConnectionsUpdate({
       id: input.id,
@@ -651,6 +653,7 @@ export const api = {
       protocol: input.protocol,
       local_shell_kind: input.localShellKind,
       clear_local_shell_kind: input.clearLocalShellKind ?? false,
+      open_hidden: input.openHidden,
     } as any),
   connectionsDelete: (id: string) => G.ConnectionsDelete(id),
   connectionsClone: (id: string) => G.ConnectionsClone(id) as Promise<Connection | null>,

@@ -489,6 +489,16 @@ var migrations = []struct {
 		`ALTER TABLE connections ADD COLUMN protocol TEXT NOT NULL DEFAULT 'ssh';
 		 ALTER TABLE connections ADD COLUMN local_shell_kind TEXT;`,
 	},
+	{
+		25,
+		// Connections that should open straight into the background: the
+		// session connects and runs as normal, but its tab is left out of
+		// the tab bar. For long-lived helpers (a keepalive loop, a tail, a
+		// watcher) the tab is pure clutter - the point is that it runs, not
+		// that it is looked at. The bar shows a count of hidden tabs, so a
+		// backgrounded session is never invisible.
+		`ALTER TABLE connections ADD COLUMN open_hidden INTEGER NOT NULL DEFAULT 0;`,
+	},
 }
 
 // LatestSchemaVersion is the version a freshly-migrated DB lands on.

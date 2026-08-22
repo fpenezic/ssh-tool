@@ -968,6 +968,13 @@ export class ConnectionsUpdateInput {
              */
             this["sensitive"] = null;
         }
+        if (!("open_hidden" in $$source)) {
+            /**
+             * @member
+             * @type {boolean | null}
+             */
+            this["open_hidden"] = null;
+        }
         if (!("protocol" in $$source)) {
             /**
              * @member

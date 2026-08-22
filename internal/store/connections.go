@@ -45,8 +45,8 @@ func (d *DB) CreateConnection(in NewConnection) (*Connection, error) {
 	}
 	_, err = d.conn.Exec(
 		`INSERT INTO connections
-		 (id, folder_id, name, hostname, sort_order, overrides_json, tags_json, notes, favorite, sensitive, protocol, local_shell_kind, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`,
+		 (id, folder_id, name, hostname, sort_order, overrides_json, tags_json, notes, favorite, sensitive, open_hidden, protocol, local_shell_kind, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
 		id, in.FolderID, in.Name, in.Hostname, in.SortOrder,
 		string(overrides), string(tagsJSON), in.Notes, protocol, in.LocalShellKind, ts, ts,
 	)
@@ -59,7 +59,7 @@ func (d *DB) CreateConnection(in NewConnection) (*Connection, error) {
 func (d *DB) GetConnection(id string) (*Connection, error) {
 	row := d.conn.QueryRow(
 		`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
-		        notes, favorite, sensitive, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
+		        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
 		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind
 		 FROM connections WHERE id = ?`, id,
 	)
@@ -74,7 +74,7 @@ func (d *DB) ListConnections(folderID *string) ([]Connection, error) {
 	if folderID != nil {
 		rows, err = d.conn.Query(
 			`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
-			        notes, favorite, sensitive, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
+			        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
 			        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind
 			 FROM connections WHERE folder_id = ? ORDER BY sort_order, name`,
 			*folderID,
@@ -82,7 +82,7 @@ func (d *DB) ListConnections(folderID *string) ([]Connection, error) {
 	} else {
 		rows, err = d.conn.Query(
 			`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
-			        notes, favorite, sensitive, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
+			        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
 			        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind
 			 FROM connections ORDER BY sort_order, name`,
 		)
@@ -114,6 +114,7 @@ type UpdateConnection struct {
 	Notes       *string
 	Favorite    *bool
 	Sensitive   *bool
+	OpenHidden  *bool
 	// Protocol: nil = leave as-is; else "ssh"/"local". LocalShellKind
 	// pointer-to-pointer semantics kept simple: nil = leave as-is, a
 	// non-nil value (incl. pointer to "") replaces. ClearLocalShellKind
@@ -169,6 +170,10 @@ func (d *DB) UpdateConnection(in UpdateConnection) (*Connection, error) {
 	if in.Sensitive != nil {
 		newSens = *in.Sensitive
 	}
+	newHidden := existing.OpenHidden
+	if in.OpenHidden != nil {
+		newHidden = *in.OpenHidden
+	}
 	newProto := existing.Protocol
 	if in.Protocol != nil && *in.Protocol != "" {
 		newProto = *in.Protocol
@@ -197,10 +202,10 @@ func (d *DB) UpdateConnection(in UpdateConnection) (*Connection, error) {
 	_, err = d.conn.Exec(
 		`UPDATE connections SET
 		   folder_id=?, name=?, hostname=?, sort_order=?, overrides_json=?, tags_json=?,
-		   notes=?, favorite=?, sensitive=?, protocol=?, local_shell_kind=?, updated_at=?
+		   notes=?, favorite=?, sensitive=?, open_hidden=?, protocol=?, local_shell_kind=?, updated_at=?
 		 WHERE id=?`,
 		newFolder, newName, newHost, newSort, string(overridesJSON), string(tagsJSON),
-		newNotes, boolToInt(newFav), boolToInt(newSens), newProto, newLocalKind, now(), in.ID,
+		newNotes, boolToInt(newFav), boolToInt(newSens), boolToInt(newHidden), newProto, newLocalKind, now(), in.ID,
 	)
 	if err != nil {
 		return nil, err
@@ -415,7 +420,7 @@ func (d *DB) RecentConnections(limit int) ([]Connection, error) {
 	}
 	rows, err := d.conn.Query(
 		`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
-		        notes, favorite, sensitive, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
+		        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
 		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind
 		 FROM connections
 		 WHERE last_used_at IS NOT NULL
@@ -442,7 +447,7 @@ func (d *DB) RecentConnections(limit int) ([]Connection, error) {
 func (d *DB) FavoriteConnections() ([]Connection, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
-		        notes, favorite, sensitive, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
+		        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
 		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind
 		 FROM connections
 		 WHERE favorite = 1
@@ -473,6 +478,7 @@ func scanConnection(s scanner) (*Connection, error) {
 		tagsRaw      string
 		notes        string
 		fav, sens    int64
+		openHidden   int64
 		iconID       sql.NullString
 		iconName     sql.NullString
 		iconColor    sql.NullString
@@ -484,7 +490,7 @@ func scanConnection(s scanner) (*Connection, error) {
 	)
 	err := s.Scan(
 		&c.ID, &folderID, &c.Name, &c.Hostname, &c.SortOrder,
-		&overridesRaw, &tagsRaw, &notes, &fav, &sens, &iconID, &iconName, &iconColor, &lastUsed,
+		&overridesRaw, &tagsRaw, &notes, &fav, &sens, &openHidden, &iconID, &iconName, &iconColor, &lastUsed,
 		&c.CreatedAt, &c.UpdatedAt, &passVaultKey, &vncVaultKey, &protocol, &localKind,
 	)
 	if err != nil {
@@ -528,6 +534,7 @@ func scanConnection(s scanner) (*Connection, error) {
 	c.Notes = notes
 	c.Favorite = fav != 0
 	c.Sensitive = sens != 0
+	c.OpenHidden = openHidden != 0
 	if lastUsed.Valid {
 		v := lastUsed.Int64
 		c.LastUsedAt = &v

@@ -45,6 +45,10 @@ type Connection struct {
 	Tags           []string            `json:"tags"`
 	Notes          string              `json:"notes"`
 	Favorite       bool                `json:"favorite"`
+	// OpenHidden starts this connection's tab hidden - the session runs
+	// normally, it just stays out of the tab bar. For background helpers
+	// whose output nobody watches.
+	OpenHidden     bool                `json:"open_hidden"`
 	Sensitive      bool                `json:"sensitive"`
 	IconImageID    *string             `json:"icon_image_id"`
 	// IconName / IconColor: built-in lucide icon + palette colour, same

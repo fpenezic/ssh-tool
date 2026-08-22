@@ -2,7 +2,7 @@
 
 The DB lives at `DataDir/ssh-tool.db` (SQLite via `modernc.org/sqlite`,
 WAL mode, foreign keys on). Schema is versioned in `schema_meta.value`
-and migrated in order on every startup. Current head: **v24**. The audit log lives in a separate audit.db (machine-local, not in this schema).
+and migrated in order on every startup. Current head: **v25**. The audit log lives in a separate audit.db (machine-local, not in this schema).
 
 The canonical migration source is `internal/store/migrations.go`. This
 doc summarises the current shape and lists each migration's purpose.
@@ -42,6 +42,7 @@ CREATE TABLE connections (
     notes               TEXT NOT NULL DEFAULT '',
     favorite            INTEGER NOT NULL DEFAULT 0,
     sensitive           INTEGER NOT NULL DEFAULT 0,
+    open_hidden         INTEGER NOT NULL DEFAULT 0,
     last_used_at        INTEGER,
     created_at          INTEGER NOT NULL,
     updated_at          INTEGER NOT NULL,
@@ -221,6 +222,7 @@ Vault keys for various features:
 | 22 | icon_name + icon_color on connections + folders (built-in lucide icon + palette colour; mutually exclusive with icon_image_id) |
 | 23 | repair + extend: icon_name/icon_color also on credential_refs + credential_folders (v22 was amended in place to add these after shipping a 2-table form; runner now applies ALTERs per-statement and tolerates duplicate-column) |
 | 24 | protocol + local_shell_kind on connections (local-shell connections: "ssh" default vs "local" - a saved local PTY running the connection's initial_command; telnet/serial/"claude"/REPL) |
+| 25 | open_hidden on connections (connect normally but leave the tab out of the tab bar - background helpers like a keepalive loop or a tail; the bar shows a hidden-tab count and Ctrl+K still finds them) |
 
 Migration runner: `runMigrations` in `internal/store/migrations.go`.
 Each migration applies inside a transaction; failure rolls back and
