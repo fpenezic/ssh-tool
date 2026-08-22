@@ -19,7 +19,7 @@
   import { fuzzyMatch, highlightSegments, type FuzzyMatch } from "./fuzzy";
   import { clickOutside } from "./clickOutside";
   import type { Folder, Connection, PortForward, ForwardStatus, ProxyBookmark } from "./api";
-  import { IconFolder, IconHost, IconTunnel, IconExternalLink, IconAction, IconWorkspace, dynamicEntryIcon } from "./iconMap";
+  import { IconFolder, IconHost, IconTunnel, IconExternalLink, IconAction, IconWorkspace, dynamicEntryIcon, IconTerminal } from "./iconMap";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
   import { workspaces } from "./workspaces.svelte";
@@ -79,6 +79,12 @@
   // human-readable label that includes its folder path. Recompute when the
   // tree changes (rarely during the modal's lifetime, but cheap regardless).
   type Entry =
+    | {
+        kind: "open_tab";
+        tabId: string;
+        label: string;
+        haystacks: string[];
+      }
     | { kind: "folder"; folder: Folder; label: string; haystacks: string[] }
     | { kind: "connection"; conn: Connection; label: string; haystacks: string[] }
     | {
@@ -133,6 +139,27 @@
 
   function buildIndex(): Entry[] {
     const out: Entry[] = [];
+    // Open tabs go in first: with a lot of sessions up, searching for a host
+    // name usually means "switch to the tab I already have", not "open a
+    // second one". Matching on the session's host as well as the tab title
+    // keeps a renamed or grouped tab findable.
+    for (const t of paneTabs.tabs) {
+      const sids = tabSessionIds(t.tabId);
+      const hosts = sids
+        .map((sid) => sessions.tabs.find((x) => x.sessionId === sid))
+        .filter((x): x is NonNullable<typeof x> => !!x);
+      out.push({
+        kind: "open_tab",
+        tabId: t.tabId,
+        label: t.title,
+        haystacks: [
+          t.title,
+          t.groupName ?? "",
+          ...hosts.map((h) => h.name),
+          ...hosts.map((h) => h.hostname),
+        ].filter(Boolean),
+      });
+    }
     for (const f of tree.folders) {
       const path = folderPath(f.id);
       out.push({
@@ -241,6 +268,19 @@
     return `${dir} ${f.local_port ?? "?"} → ${f.remote_host ?? "?"}:${f.remote_port ?? "?"}`;
   }
 
+  // Session ids in a tab's pane tree.
+  function tabSessionIds(tabId: string): string[] {
+    const tab = paneTabs.tabs.find((t) => t.tabId === tabId);
+    if (!tab) return [];
+    const ids: string[] = [];
+    const walk = (n: typeof tab.root) => {
+      if (n.kind === "pane") ids.push(n.sessionId);
+      else { walk(n.a); walk(n.b); }
+    };
+    walk(tab.root);
+    return ids;
+  }
+
   function folderPath(folderId: string | null): string {
     if (!folderId) return "";
     const segs: string[] = [];
@@ -282,6 +322,9 @@
       const list: Entry[] = actionsOnly
         ? pool.slice(0, 50)
         : [
+            // Open tabs lead the empty view: with many sessions up, the
+            // palette is most often used to get back to one.
+            ...pool.filter((e) => e.kind === "open_tab"),
             ...pool.filter((e) => e.kind === "connection"),
             ...pool.filter((e) => e.kind === "dynamic_entry"),
             ...pool.filter((e) => e.kind === "folder"),
@@ -314,7 +357,10 @@
         // both a host and a tunnel description doesn't surface the
         // tunnel first.
         let bonus = 0;
-        if (e.kind === "connection" || e.kind === "dynamic_entry") bonus = -0.5;
+        // An already-open tab outranks connecting to the same host again -
+        // the usual intent when a name matches both.
+        if (e.kind === "open_tab") bonus = -1;
+        else if (e.kind === "connection" || e.kind === "dynamic_entry") bonus = -0.5;
         else if (e.kind === "forward" || e.kind === "bookmark" || e.kind === "action") bonus = 0.5;
         out.push({
           entry: e,
@@ -335,6 +381,15 @@
   });
 
   function chooseResult(r: Result) {
+    if (r.entry.kind === "open_tab") {
+      // Jumping to a hidden tab has to unhide it first - activating a tab the
+      // bar does not show would leave the user on a terminal with no way back.
+      paneTabs.setHidden(r.entry.tabId, false);
+      paneTabs.activateTab(r.entry.tabId);
+      view.setTab("terminal");
+      onClose();
+      return;
+    }
     if (r.entry.kind === "action") {
       const a = r.entry.action;
       onClose();
@@ -507,6 +562,7 @@
   });
 
   function iconFor(e: Entry): Component {
+    if (e.kind === "open_tab") return IconTerminal;
     if (e.kind === "folder") return IconFolder;
     if (e.kind === "forward") return IconTunnel;
     if (e.kind === "bookmark") return IconExternalLink;
@@ -517,6 +573,7 @@
 
   function rowKey(e: Entry): string {
     switch (e.kind) {
+      case "open_tab": return "tab:" + e.tabId;
       case "folder": return "folder:" + e.folder.id;
       case "connection": return "conn:" + e.conn.id;
       case "dynamic_entry": return "dyn:" + e.entryId;
@@ -631,6 +688,11 @@
               {/each}
               {#if r.entry.kind === "forward" && r.entry.running}
                 <span class="pill pill-on">running</span>
+              {:else if r.entry.kind === "open_tab"}
+                {@const tabHidden = paneTabs.tabs.find((t) => t.tabId === (r.entry as { tabId: string }).tabId)?.hidden}
+                <span class="pill pill-tab">
+                  {tabHidden ? "hidden tab - show it" : "open tab - jump to it"}
+                </span>
               {:else if connected}
                 <span class="pill pill-on">connected{sessCount > 1 ? ` (${sessCount})` : ""}</span>
               {/if}
@@ -808,6 +870,12 @@
     vertical-align: middle;
     position: relative;
     top: -1px;
+  }
+  /* Distinct from .pill-on: that one means "this host has a session up", this
+     one means "Enter switches to it instead of connecting again". */
+  .pill-tab {
+    background: color-mix(in srgb, var(--blue) 20%, transparent);
+    color: var(--blue);
   }
   .pill-on { color: var(--on-accent); background: var(--green); }
   .hint {
