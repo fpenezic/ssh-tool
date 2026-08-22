@@ -13,7 +13,7 @@
   import { broadcast } from "./broadcast.svelte";
   import { recording } from "./recording.svelte";
   import { connectionActions } from "./connectionActions.svelte";
-  import { IconBroadcast, IconFolder, IconBot, IconHost, IconCopy, IconWorkspace, IconPopOut, IconSplitH, IconSplitV, IconX, IconGlobe, IconPlay, IconStop, IconExternalLink } from "./iconMap";
+  import { IconBroadcast, IconFolder, IconBot, IconHost, IconCopy, IconWorkspace, IconPopOut, IconSplitH, IconSplitV, IconX, IconGlobe, IconPlay, IconStop, IconExternalLink, IconEyeOff } from "./iconMap";
   import { mcpLevelTitle } from "./mcpLevel";
   import Icon from "./Icon.svelte";
   import BroadcastManager from "./BroadcastManager.svelte";
@@ -328,6 +328,7 @@
   let tabReorderIndicator = $state<{ tabId: string; side: "left" | "right" } | null>(null);
 
   let ctxMenu = $state<{ tabId: string; x: number; y: number } | null>(null);
+  let ctxMenuEl = $state<HTMLDivElement | null>(null);
 
   function openCtxMenu(e: MouseEvent, tabId: string) {
     refreshSendTargets();
@@ -337,6 +338,24 @@
     // menu at tabs the user is no longer pointing at.
     if (!tabSelection.has(tabId)) tabSelection.clear();
     ctxMenu = { tabId, x: e.clientX, y: e.clientY };
+    // Position is corrected after the menu renders and its real size is
+    // known - the entry count varies (bulk section, share targets, window
+    // list), so there is no fixed height to subtract up front.
+    queueMicrotask(clampCtxMenu);
+  }
+
+  // Keep the menu inside the window: flip it left/up when it would overflow,
+  // and clamp so it can never start off-screen. Pairs with a max-height in
+  // CSS, which makes an over-tall menu scroll instead of running off the
+  // bottom edge.
+  function clampCtxMenu() {
+    if (!ctxMenuEl || !ctxMenu) return;
+    const pad = 8;
+    const r = ctxMenuEl.getBoundingClientRect();
+    let { x, y } = ctxMenu;
+    if (x + r.width + pad > window.innerWidth) x = Math.max(pad, x - r.width);
+    if (y + r.height + pad > window.innerHeight) y = Math.max(pad, window.innerHeight - r.height - pad);
+    if (x !== ctxMenu.x || y !== ctxMenu.y) ctxMenu = { ...ctxMenu, x, y };
   }
 
   // Tabs a context-menu action applies to: the whole selection when the
@@ -382,6 +401,12 @@
     if (!ids) return;
     tabSelection.clear();
     paneTabs.mergeTabsIntoGrid(ids, cols, rows);
+  }
+
+  function bulkHideTabs(tabId: string) {
+    const ids = ctxTargets(tabId);
+    tabSelection.clear();
+    for (const id of ids) paneTabs.setHidden(id, true);
   }
 
   function bulkAddToBroadcast(tabId: string) {
@@ -814,7 +839,19 @@
     ondragover={(e) => { if (!isDetachedWindow) e.preventDefault(); }}
     ondrop={(e: DragEvent) => onTabBarDrop(e)}
   >
-    {#each paneTabs.tabs as t (t.tabId)}
+    {#if paneTabs.hiddenCount > 0}
+      <!-- Always visible while anything is hidden: a running session that has
+           vanished from the UI with no trace is worse than a crowded bar. -->
+      <button
+        class="hidden-chip"
+        title="{paneTabs.hiddenCount} hidden tab{paneTabs.hiddenCount === 1 ? '' : 's'} still running - click to show them"
+        onclick={() => paneTabs.unhideAll()}
+      >
+        <IconEyeOff size={12} />
+        <span>{paneTabs.hiddenCount}</span>
+      </button>
+    {/if}
+    {#each paneTabs.tabs.filter((t) => !t.hidden) as t (t.tabId)}
       {@const active = paneTabs.activeTabId === t.tabId}
       {@const st = tabStatus(t.tabId)}
       {@const tagCol = tabColor(t.tabId)}
@@ -1087,7 +1124,7 @@
   </div>
   {#if ctxMenu}
     <div class="ctx-backdrop" role="presentation" onclick={closeCtxMenu} oncontextmenu={(e) => { e.preventDefault(); closeCtxMenu(); }}></div>
-    <div class="ctx-menu" style="left: {ctxMenu.x}px; top: {ctxMenu.y}px;">
+    <div class="ctx-menu" bind:this={ctxMenuEl} style="left: {ctxMenu.x}px; top: {ctxMenu.y}px;">
       {#if ctxTargets(ctxMenu.tabId).length > 1}
         {@const bulkN = ctxTargets(ctxMenu.tabId).length}
         <div class="ctx-heading">All {bulkN} selected tabs</div>
@@ -1108,6 +1145,9 @@
             <IconBot size={13} /> Share {bulkN} with LLM - auto-run (YOLO)
           </button>
         {/if}
+        <button onclick={() => { bulkHideTabs(ctxMenu!.tabId); closeCtxMenu(); }}>
+          <IconEyeOff size={13} /> Hide {bulkN} tabs (keep running)
+        </button>
         <button onclick={() => { bulkMergeIntoGrid(ctxMenu!.tabId); closeCtxMenu(); }}>
           <IconSplitV size={13} /> Merge {bulkN} tabs into a grid
         </button>
@@ -1137,6 +1177,9 @@
       {/if}
       <button onclick={() => { setTabGroupName(ctxMenu!.tabId); closeCtxMenu(); }}>
         <IconWorkspace size={13} /> Set group name…
+      </button>
+      <button onclick={() => { paneTabs.setHidden(ctxMenu!.tabId, true); closeCtxMenu(); }}>
+        <IconEyeOff size={13} /> Hide tab (keeps running)
       </button>
       {#if currentGroup(ctxMenu.tabId)}
         <button onclick={() => { paneTabs.setGroup(ctxMenu!.tabId, undefined, undefined); closeCtxMenu(); }}>
@@ -1310,6 +1353,10 @@
     padding: 0.25rem;
     min-width: 140px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    /* With a selection the menu carries two full sections and can outgrow a
+       short window, so it scrolls rather than spilling past the edge. */
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
   }
   /* Icons sit in a fixed-width slot so labels line up whether or not an entry
      has one, and are muted so they read as a hint rather than competing with
@@ -1500,6 +1547,21 @@
     outline-offset: -1px;
     background: color-mix(in srgb, var(--blue) 14%, transparent);
   }
+  .hidden-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    flex: none;
+    margin-right: 0.2rem;
+    padding: 0.1rem 0.35rem;
+    background: var(--surface0);
+    border: 1px solid var(--surface1);
+    border-radius: 3px;
+    color: var(--subtext0);
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
+  .hidden-chip:hover { color: var(--text); border-color: var(--overlay0); }
   .mcp-badge {
     display: inline-flex;
     align-items: center;

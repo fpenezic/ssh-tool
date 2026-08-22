@@ -999,6 +999,11 @@ export interface PaneTab {
   // locked tabs refuse splits and view toggles. Set for VNC consoles:
   // a remote desktop wants the whole tab, never an SFTP-style side pane.
   locked?: boolean;
+  // hidden tabs keep running - sessions stay connected, output keeps
+  // arriving - but are left out of the tab bar to keep it readable. The
+  // count is surfaced in the bar so a hidden session can never be silently
+  // forgotten, and Ctrl+K still finds them.
+  hidden?: boolean;
 }
 
 import { EventsOn } from "./wailsRuntime";
@@ -1163,6 +1168,26 @@ class PaneTreeStore {
   activeTitle(): string | null {
     const t = this.tabs.find((t) => t.tabId === this.activeTabId);
     return t?.title ?? null;
+  }
+
+  setHidden(tabId: string, hidden: boolean) {
+    this.tabs = this.tabs.map((t) => (t.tabId === tabId ? { ...t, hidden } : t));
+    // Hiding the tab you are on would leave the terminal area showing a tab
+    // that is no longer in the bar, so move to the first visible one.
+    if (hidden && this.activeTabId === tabId) {
+      this.activeTabId = this.tabs.find((t) => !t.hidden)?.tabId ?? null;
+    }
+    this.bumpLayout();
+  }
+
+  unhideAll() {
+    if (!this.tabs.some((t) => t.hidden)) return;
+    this.tabs = this.tabs.map((t) => (t.hidden ? { ...t, hidden: false } : t));
+    this.bumpLayout();
+  }
+
+  get hiddenCount(): number {
+    return this.tabs.filter((t) => t.hidden).length;
   }
 
   setGroup(tabId: string, name: string | undefined, color: string | undefined) {
