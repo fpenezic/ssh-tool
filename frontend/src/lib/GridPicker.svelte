@@ -125,6 +125,11 @@
     /* Sized for the widest grid it can show (MAX columns), so switching
        between layouts never resizes or recentres the dialog. */
     box-sizing: border-box;
+    /* Centred, so it only overflows on a very short window - but a detached
+       terminal window can be exactly that. */
+    max-height: calc(100vh - 16px);
+    max-width: calc(100vw - 16px);
+    overflow: auto;
     background: var(--base);
     border: 1px solid var(--surface1);
     border-radius: 6px;
