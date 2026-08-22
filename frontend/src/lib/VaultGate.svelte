@@ -27,7 +27,27 @@
   let autoUnlockAvailable = $state(false);
   let passphrase = $state("");
   let confirm = $state("");
-  let remember = $state(true);
+  // "Remember on this machine" defaults to ON, but a user who unticks it is
+  // usually on a machine where they never want it (a shared or jump box) -
+  // re-ticking it at every prompt is exactly the wrong default there. The
+  // last choice is remembered per machine.
+  //
+  // localStorage rather than the settings table: this prompt runs while the
+  // vault is LOCKED, so the DB-backed prefs may not be readable yet, and the
+  // preference is inherently per-machine anyway.
+  const REMEMBER_KEY = "vault.remember";
+  function loadRemember(): boolean {
+    try {
+      const v = localStorage.getItem(REMEMBER_KEY);
+      return v === null ? true : v === "1";
+    } catch {
+      return true;
+    }
+  }
+  let remember = $state(loadRemember());
+  $effect(() => {
+    try { localStorage.setItem(REMEMBER_KEY, remember ? "1" : "0"); } catch { /* ignore */ }
+  });
   let busy = $state(false);
   let err = $state<string | null>(null);
   // Mobile-only: a stored passphrase exists, so offer biometric unlock.
