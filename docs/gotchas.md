@@ -994,6 +994,44 @@ EventsOn is wired), a 50ms `setTimeout(() => notifyResize(), 50)`
 fires SIGWINCH, which causes bash/zsh to redraw the prompt line.
 Do NOT remove this timeout.
 
+### An applied migration is frozen - amend it and the edit vanishes
+The runner skips everything at or below the recorded version:
+
+```go
+if m.version <= current { continue }
+```
+
+So editing the SQL of a migration that has already run is a no-op on
+every database that has seen it, including your own local dirty
+build. The edit reviews fine, passes on a fresh DB, and silently
+never reaches an existing one. You end up with two populations of
+databases carrying different schemas under the same version number.
+
+This is not hypothetical here. Migration 22 added icon columns to
+connections + folders, then had the credential_refs +
+credential_folders statements appended afterwards. Databases already
+recorded at version 22 never got them and failed reads with "no such
+column: icon_name". Migration 23 exists purely to re-add all four -
+which is why 22 and 23 hold byte-identical SQL.
+
+`internal/store/migrations_frozen_test.go` now pins every migration
+up to `frozenThrough` by SHA-256, read out of migrations.go with
+go/ast. Change applied SQL and the test names the version and tells
+you to add a new migration instead. Adding one: raise
+`frozenThrough`, then `go test ./internal/store/ -run
+TestPrintMigrationHashes -v` prints the pin table to paste.
+
+Two companions: every migration at or below `frozenThrough` must be
+pinned (so the guard cannot silently stop covering the newest ones),
+and versions must be 1..N with no gaps or repeats (the runner
+compares against one integer watermark, so a gap changes which
+migrations run where).
+
+The escape hatch stays what it always was: a repair migration that
+re-adds the columns. The runner executes statement-by-statement and
+tolerates duplicate-column per statement, so re-adding what already
+exists is a no-op.
+
 ### Per-connection password (migration 7)
 `connections.password_vault_key` stores a vault reference (key
 `conn_pass:{connectionID}`) for direct password override.
