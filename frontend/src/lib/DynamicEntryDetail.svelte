@@ -302,6 +302,10 @@
   // We do not clear `connecting` here: the awaited connect() rejects and its
   // own finally does it, and flipping it from two places races.
   async function cancelConnect() {
+    // A host still queued behind the bulk-connect throttle has not called the
+    // backend yet, so SshCancelConnect would find nothing to abort. Drop it
+    // from the queue instead - the pool skips it when its turn comes.
+    if (connectionActions.cancelQueued(synthConnId)) return;
     if (!entry) return;
     try {
       await api.sshCancelConnect(synthConnId);

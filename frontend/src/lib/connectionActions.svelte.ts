@@ -270,6 +270,36 @@ class ConnectionActionsStore {
     this.connectStage = { ...this.connectStage, [connectionID]: stage };
   }
 
+  // Connects the user cancelled while they were still queued behind the
+  // bulk-connect throttle. They have not called the backend yet, so
+  // SshCancelConnect has nothing to abort - there is no in-flight attempt.
+  // The pool checks this set before starting each host instead.
+  private cancelledQueued = new Set<string>();
+
+  // Cancel a connect that is still queued, and with it every other host
+  // still waiting in the same batch. Returns true if this was a queued one
+  // (handled entirely frontend-side, no backend call).
+  //
+  // Cancelling the whole queue rather than one host: a bulk connect is one
+  // action, so cancelling it should be one action too - 16 clicks to undo
+  // one click is not a cancel. Hosts already in flight keep going; they have
+  // reached the backend and have their own Cancel.
+  cancelQueued(connectionID: string): boolean {
+    if (this.connectStage[connectionID] !== "Queued") return false;
+    const next = { ...this.connectStage };
+    for (const [id, stage] of Object.entries(this.connectStage)) {
+      if (stage !== "Queued") continue;
+      this.cancelledQueued.add(id);
+      delete next[id];
+    }
+    this.connectStage = next;
+    return true;
+  }
+
+  private takeQueuedCancel(connectionID: string): boolean {
+    return this.cancelledQueued.delete(connectionID);
+  }
+
   clearConnectError(connectionID: string) {
     if (!(connectionID in this.lastConnectError)) return;
     const next = { ...this.lastConnectError };
@@ -466,6 +496,9 @@ class ConnectionActionsStore {
     // "the click did nothing", and with no Cancel to press either, since
     // they had not reached the backend yet.
     const untrackers = new Map<string, () => void>();
+    // A cancel from an earlier batch must not silently skip a host the user
+    // has just asked for again.
+    for (const t of targets) this.cancelledQueued.delete("dyn:" + t.entryId);
     for (const t of targets) {
       untrackers.set(t.entryId, this.trackConnect("dyn:" + t.entryId, "Queued"));
     }
@@ -489,9 +522,15 @@ class ConnectionActionsStore {
         // network profile too, so offer the same take-over. The dialog
         // is a singleton: if several targets share a busy profile the
         // first prompts and the rest await that one decision.
-        const untrack = untrackers.get(t.entryId) ?? this.trackConnect("dyn:" + t.entryId);
+        const key = "dyn:" + t.entryId;
+        const untrack = untrackers.get(t.entryId) ?? this.trackConnect(key);
         untrackers.delete(t.entryId);
-        this.setConnectStage("dyn:" + t.entryId, "Connecting...");
+        // Cancelled while it sat in the queue: never call the backend at all.
+        if (this.takeQueuedCancel(key)) {
+          untrack();
+          return;
+        }
+        this.setConnectStage(key, "Connecting...");
         try {
           const res = await withTakeover(() => api.sshConnectDynamic(t.folderId, t.entryId));
           if (!res.ok && res.cancelled) return; // user declined - quiet skip
