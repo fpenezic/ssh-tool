@@ -16,17 +16,29 @@
 | `golang.org/x/crypto/ssh/agent` | Agent integration |
 | `golang.org/x/crypto/argon2` | Vault KDF (Argon2id, interactive params) |
 | `golang.org/x/crypto/chacha20poly1305` | Vault AEAD (XChaCha20-Poly1305) |
-| `github.com/zalando/go-keyring` | OS keychain fallback for machine-bound auto-unlock |
+| `github.com/zalando/go-keyring` | Purges legacy OS-keychain entries only - never a secret store (see `keyring_purge.go`) |
 | `github.com/openpubkey/openpubkey` | OpenPubkey OIDC client |
 | `github.com/openpubkey/opkssh` | opkssh cert issuance + verification (as a Go library, no external binary) |
 | `github.com/aymanbagabas/go-pty` | Cross-platform PTY (creak/pty on Unix, ConPTY on Windows) |
 | `github.com/google/uuid` | Stable ids for tree rows, sessions, dynamic entries |
 | `golang.org/x/net/proxy` | SOCKS5 dialer for the HTTP probe |
 | `gopkg.in/yaml.v3` | opkssh provider config + Ansible YAML inventory parser |
+| `golang.zx2c4.com/wireguard` | Userspace WireGuard (wireguard-go + netstack, no TUN adapter) |
+| `github.com/pkg/sftp` | SFTP client (file browser, remote sync transport) |
+| `github.com/coder/websocket` | VNC bridge + session sharing transport |
+| `github.com/modelcontextprotocol/go-sdk` | MCP bridge server (tools + instructions) |
+| `github.com/tobischo/gokeepasslib/v3` | KeePass `.kdbx` reader (live credential backend) |
+| `github.com/pelletier/go-toml/v2` | TOML export / import round-trip |
+| `github.com/kayrus/putty` | PuTTY / KiTTY private-key parsing |
 
 The dynamic inventory providers (`internal/inventory/{proxmox,
 hetzner,digitalocean,linode,vultr,scaleway,aws_ec2}.go`) hit
 provider HTTP APIs directly with `net/http` - no SDK dependencies.
+The same holds for the external credential backends: Bitwarden /
+Vaultwarden (`internal/bitwarden`) implements the EncString crypto
+natively, and Infisical (`internal/infisical`) talks to its REST API,
+both without vendor SDKs. Only KeePass needs a library, because the
+`.kdbx` container format is not something to reimplement.
 The Ansible provider (`internal/inventory/ansible.go`) parses a
 local `.ini` or `.yml` inventory file in-process; no Python
 runtime / `ansible-inventory` shell-out.
@@ -38,9 +50,10 @@ runtime / `ansible-inventory` shell-out.
 | `svelte` 5 | UI framework (runes API: $state, $derived, $effect, $props) |
 | `vite` 5 | Build tool, dev server |
 | `@wailsio/runtime` | v3 frontend runtime (Events, dialogs, file drop) |
-| `@xterm/xterm` 5 | Terminal emulator |
+| `@xterm/xterm` 6 | Terminal emulator |
 | `@xterm/addon-fit` | Auto-resize |
-| `@xterm/addon-webgl` | WebGL renderer |
+| `@xterm/addon-webgl` | WebGL renderer (off by default - see gotchas) |
+| `@xterm/addon-canvas` | Canvas 2D fallback renderer |
 | `@xterm/addon-web-links` | Clickable URLs |
 | `@xterm/addon-search` | Scrollback search |
 | `lucide` | Icon set (replaced emoji placeholders) |

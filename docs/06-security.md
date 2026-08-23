@@ -33,22 +33,40 @@ the encrypted file vault keyed by `vault_key`.
 
 ### Machine-bound auto-unlock (optional)
 
-The master key can be wrapped with a machine-derived secret stored
-in the OS keychain so the app unlocks without a passphrase prompt:
+The master key can be wrapped with a machine-derived secret so the app
+unlocks without a passphrase prompt. The wrapped key lives in a sidecar
+file next to `vault.enc` - **not** in the OS keychain:
 
-- Windows: Credential Manager (`go-keyring` → `wincred`).
-- macOS: Keychain (`security` framework).
-- Linux: Secret Service (gnome-keyring / KWallet via D-Bus).
+- Windows: DPAPI (`CryptProtectData`, user scope) over the sidecar.
+- macOS / Linux: key derived from the machine id + `USER` + an app
+  salt, sealed with XChaCha20-Poly1305 (`machine.go`,
+  `machine_strong_other.go`).
+
+Threat model: this protects a stolen disk or a sidecar copied to
+another machine. It does not protect against an attacker already
+running as the same user on the same machine - `TODO.md` carries the
+open item to strengthen the non-Windows binding.
+
+Earlier versions did mirror secrets into the OS keychain (Windows
+Credential Manager, macOS Keychain, Linux Secret Service). That was
+removed in v0.12.8: the OS keeps the keychain unlocked for the whole
+login session, so a *locked* vault still handed out secrets through
+the keyring path. `go-keyring` remains a dependency for exactly one
+job - purging those legacy entries (`internal/creds/keyring_purge.go`).
+Never reintroduce a keyring read path.
 
 Auto-unlock is opt-in; disabling it requires the passphrase on
 every launch. Idle auto-lock is also configurable
 (`vault_autolock_minutes` setting) - vault re-locks after timeout
 while SSH sessions and forwards stay alive.
 
-### Linux headless / no Secret Service
+### Headless / no desktop session
 
-Disable auto-unlock. The vault still works with a passphrase prompt
-at launch.
+Nothing special is needed since the keychain dependency is gone: the
+sidecar is a plain file, so auto-unlock works over SSH or on a headless
+box the same as on a desktop. Turn it off if the machine is shared or
+its disk is not trusted, and the vault falls back to a passphrase
+prompt at launch.
 
 ## Vault key namespace
 
