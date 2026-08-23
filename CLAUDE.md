@@ -245,6 +245,6 @@ Notes:
 - **How to use the app** → `docs/USER_GUIDE.md`
 - **Backlog + future work** → `docs/TODO.md`
 - **Implementation traps (live + archived)** → `docs/gotchas.md`
-- **Architecture, data model, roadmap** → `docs/02-architecture.md`,
-  `docs/03-data-model.md`, `docs/07-roadmap.md`
+- **Architecture + data model** → `docs/02-architecture.md`,
+  `docs/03-data-model.md`
 - **Security model + crypto choices** → `docs/06-security.md`

@@ -428,3 +428,30 @@ don't.
   path is an Apache Guacamole-style server-side proxy, which is
   infrastructure rather than a client feature. Revisit only if there
   is clear demand.
+
+---
+
+## Out of scope
+
+Decisions, not backlog. Recorded so the same proposals do not come
+back around; each was considered and declined on purpose.
+
+- **Team sync server / multi-user RBAC** - not planned in the core
+  app. Sync is file-based and user-owned; a server turns this into a
+  product with accounts, and the vault model assumes one owner.
+- **Integrated web browser** - the SOCKS endpoint is the product; the
+  isolated-browser launcher hands off to the system Chrome / Firefox.
+  Embedding a browser means owning its security surface.
+- **RDP / Telnet / Serial** - SSH (with SFTP as a subprotocol) and VNC
+  only. RDP has no viable pure-JS client; see the Remote GUI section
+  for the full reasoning.
+- **Kubernetes / kubectl integration** - discussed and declined. A
+  different auth and context model that does not fit the connection
+  tree.
+- **iOS** - build tags already cover it (`android || ios`), but no iOS
+  build is produced or tested, and it needs a Mac toolchain plus an
+  Apple Developer account. Android is the only mobile target shipping.
+- **Proprietary cloud sync service** - sync ships against transports
+  the user already owns (WebDAV, SFTP, Dropbox, OneDrive, Google
+  Drive). Running a sync service is out of scope even though the
+  transports are in.

@@ -1,184 +1,62 @@
 # Export / Import format
 
-## Ciljevi
+Sharing a folder subtree between machines or people. The canonical
+definition is `internal/exporter/exporter.go` (`Archive` and `Options`);
+this file explains the shape and the decisions behind it. When the two
+disagree, the code wins - it is what actually reads and writes archives.
 
-- Sharing folder subtree-a bez credentialsa
-- Human-readable (TOML), git-diff friendly
-- Deterministic ordering za stable diffs
-- Forward-compat via `schema_version`
+## Goals
 
-## Filename convention
+- Share a folder subtree, with or without credentials.
+- Human-readable and git-diff friendly.
+- Deterministic ordering, so re-exporting unchanged data produces an
+  identical file.
+- Forward-compatible through `schema_version`.
 
-`<root_folder_name>.ssh-tool.toml` (npr. `production.ssh-tool.toml`)
+## Encodings
 
-## Struktura
+TOML and JSON carry the *same* structure - only the encoding differs, so
+an archive can be converted between them without loss. TOML is the
+default for sharing (readable, diffable); JSON is there for tooling.
 
-```toml
-schema_version = "1"
-exported_at = "2026-05-18T10:00:00Z"
-generator = "ssh-tool 0.1.0"
+Filename convention: `<root_folder_name>.ssh-tool.toml`.
 
-# Optional: tko/odakle. Može se izostaviti za anon share.
-[meta]
-exported_by = "anonymous"
-description = "Production fleet connections"
+## Structure
 
-# Folders - ravna lista. Hijerarhija kroz parent reference (folder id).
-# IDs u exportu ne moraju match-at lokalne UUIDs; pri importu se mapira.
+Top-level fields: `schema_version` (an integer, bumped on any breaking
+change), `generated_at`, `generated_by`, then the sections:
 
-[[folder]]
-id = "f-prod"
-parent = null
-name = "Production"
-sort_order = 0
+| Section | Holds |
+|---|---|
+| `folders` | connection-tree folders, flat, hierarchy via a parent id |
+| `connections` | connections, each referencing its folder |
+| `credentials` | optional; present only with `IncludeCredentials` |
+| `credential_folders` | the credential tree's own hierarchy - separate from connection folders |
+| `images` | custom icon blobs, base64, content-addressed by md5 on import |
+| `forwards` | port forwards per connection; SOCKS bookmarks travel inline |
+| `encrypted_secrets` | credential secrets, `credentialID -> base64(nonce \|\| ciphertext)` |
 
-  [folder.settings]
-  username = "ops"
-  port = 22
-  auth_ref = "cr-opkssh-google"
-  keepalive_interval = 30
+Ids inside an archive are self-consistent but need not match anything
+locally; import maps them onto fresh local ids.
 
-    [folder.settings.jump_host]
-    hostname = "bastion.prod.example.com"
-    port = 22
-    username = "ops"
-    auth_ref = "cr-opkssh-google"
+Every optional section is genuinely optional: an archive written before
+a section existed still imports, just without that data. `images` is the
+clearest case - an older archive simply lands on default Lucide icons.
 
-    [folder.settings.ssh_options]
-    StrictHostKeyChecking = "ask"
-    ServerAliveInterval = "60"
+## Secrets
 
-[[folder]]
-id = "f-prod-web"
-parent = "f-prod"
-name = "Web tier"
-sort_order = 0
-# settings prazan -> sve naslijedeno
+Credentials are excluded by default. `IncludeCredentials` requires a
+passphrase and writes the secrets into `encrypted_secrets`, sealed
+separately from the readable structure - so the archive stays diffable
+while the secret material does not travel in the clear.
 
-# Connections
-[[connection]]
-id = "c-web-01"
-folder = "f-prod-web"
-name = "web-01"
-hostname = "10.0.1.10"
-sort_order = 0
-tags = ["nginx", "frontend"]
-notes = "Primary web node"
-# Nema overrides => sve od foldera
+## Sanitising a share
 
-[[connection]]
-id = "c-web-02"
-folder = "f-prod-web"
-name = "web-02"
-hostname = "10.0.1.11"
-sort_order = 1
-tags = ["nginx", "frontend"]
-
-  [connection.overrides]
-  port = 2222  # ovaj host na ne-default portu
-
-[[connection.port_forward]]
-connection_id = "c-web-01"
-kind = "local"
-local_addr = "127.0.0.1"
-local_port = 5432
-remote_host = "db.prod.internal"
-remote_port = 5432
-auto_start = false
-description = "Postgres tunnel"
-
-# Credential references - refs only, no secrets.
-[[credential_ref]]
-id = "cr-opkssh-google"
-name = "Ops Google OIDC"
-kind = "opkssh"
-hint = "Google OIDC via opkssh, prod cluster"
-
-  [credential_ref.config]
-  provider = "google"
-  # cert_path, audience itd. - non-secret config
-
-[[credential_ref]]
-id = "cr-key-deploy"
-name = "Deploy SSH key"
-kind = "key"
-hint = "Ed25519 key for deploy automation. Lokalno: ~/.ssh/id_ed25519_deploy"
-
-  [credential_ref.config]
-  # key_path se NE exportira (osobni filesystem)
-  # Pri importu, user mora mappirat na svoj lokalni key
-  needs_mapping = true
-```
-
-## Što NIKAD ne ide u export
-
-- `vault_key` vrijednosti
-- Stvarni passwordi, key file contenti, OIDC tokeni
-- `key_path` ako sadrži home directory (npr. `/home/john/.ssh/...`) - replace s placeholderom ili izostavi
-- `last_used_at` (privacy, otkriva kad je netko zadnji put konektao)
-
-## Sensitive flags
-
-Korisnik može markirati folder ili konekciju kao `sensitive = true` u UI-ju → preskoči se pri exportu. Default `false`.
-
-## Import flow
-
-1. User bira TOML file ili paste-a sadržaj
-2. Parser validira schema_version (može triggerirat migration ako stara verzija)
-3. **Dry-run preview**: prikaži UI tabelu
-   - Folders to create
-   - Connections to create
-   - Credential refs needing mapping (i njihovi hintovi)
-   - Conflicts (postojeća folder/connection s istim path)
-4. User za svaki credential_ref bira:
-   - Map na postojeći lokalni credential_ref
-   - Create new (otvara credential UI)
-   - Skip (konekcije koje ga koriste import-ane su ali bez auth-a - user mora kasnije popraviti)
-5. Conflict strategy:
-   - **Skip**: ne import-aj duplicate
-   - **Replace**: prepiši lokalno
-   - **Merge**: za foldere - spoji settings (import override-a lokalno za polja koja import ima)
-   - **Rename**: import dobije suffix " (imported)"
-6. Commit transakcijski (sve ili ništa)
-
-## ID remapping
-
-Export IDs su scoped na taj file. Pri importu generiraju se novi UUIDs lokalno, ali se zadrže reference (npr. `parent`) konzistentne - uses lookup tablicu old_id → new_id tijekom importa.
-
-## ssh_config import
-
-Standardni OpenSSH config:
-```
-Host bastion
-    HostName bastion.example.com
-    User ops
-
-Host prod-*
-    ProxyJump bastion
-    User deploy
-
-Host prod-web-01
-    HostName 10.0.1.10
-```
-
-Mapiranje:
-- `Host pattern` s wildcardom → folder (`prod-*` postaje folder `prod`, podelementi ulaze pod njega)
-- Specific `Host name` → connection
-- `ProxyJump` → `jump_host`
-- `User`/`Port`/`IdentityFile` → settings ili overrides
-- `IdentityFile` postaje `credential_ref` kind=`key` s `key_path` (lokalno only, ne export)
-
-## RDM import (post-MVP, S)
-
-Devolutions exporta XML. Pisat će se parser koji čita njegovu strukturu, mapira na folders/connections. Plan kad dođe vrijeme:
-1. Eksportaj RDM data
-2. Pošalji uzorak (anonimiziran) za parser dev
-3. Napisati XML→internal model converter
-
-## Encrypted bundle (post-MVP, N)
-
-Ako tim ipak želi share s credentialsa:
-- Format: `*.ssh-tool.age` (binary, age-encrypted)
-- Sadrži TOML kao gore + dodatni `[[secret]]` blokovi (password values, key file bytes, ...)
-- Enkripcija: age symmetric (passphrase) ili age recipients (public keys recipienata)
-- UI flow: import age file → prompt za passphrase ili identity key → dekriptira → standardni dry-run preview
+`Options` carries strip flags for exports leaving your control, each
+answering a real leak: `StripNotes` (notes hold ticket numbers, owner
+contacts, internal docs), `StripTags` (your taxonomy), `StripColor` and
+`StripIcon` (your visual conventions), `StripLocal` (local-shell entries
+are machine-specific and rarely portable), and
+`ConvertAuthRefToInherit`, which drops per-connection credential
+references so the recipient supplies their own through folder
+inheritance.

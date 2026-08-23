@@ -37,7 +37,7 @@ Native-ish desktop SSH connection manager s:
 - iOS - Android port (v0.36.0+) dijeli build tagove s iOS-om ali iOS build se ne radi; Android je jedini mobilni target
 - Cloud sync vlastiti - koristi git ili user-managed file sync (Syncthing, Dropbox folder)
 
-Napomena: "Mobile - desktop only" je bio non-goal do v0.36.0. Android sada radi nativno (isti Go core). Vidi docs/07-roadmap.md (Mobile sekcija).
+Napomena: "Mobile - desktop only" je bio non-goal do v0.36.0. Android sada radi nativno (isti Go core). Vidi docs/TODO.md (Android / mobile).
 
 ## Success criteria
 
