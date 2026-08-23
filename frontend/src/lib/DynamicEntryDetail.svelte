@@ -288,6 +288,22 @@
     }
   }
 
+  // Abort a connect stuck on opkssh OIDC login (closed browser tab, wrong
+  // config) without restarting the app. The backend registers the cancel
+  // handle under the same synthetic "dyn:<entryID>" key this view derives,
+  // so it reaches the right in-flight attempt.
+  //
+  // We do not clear `connecting` here: the awaited connect() rejects and its
+  // own finally does it, and flipping it from two places races.
+  async function cancelConnect() {
+    if (!entry) return;
+    try {
+      await api.sshCancelConnect(synthConnId);
+    } catch (e) {
+      console.warn(e);
+    }
+  }
+
   async function copyHost() {
     if (!entry) return;
     try { await copyText(entry.hostname, { label: "Hostname" }); } catch {}
@@ -356,6 +372,14 @@
       <button class="primary" onclick={connect} disabled={connecting}>
         {connecting ? "Connecting…" : overrideCredId ? "Connect (override)" : "Connect"}
       </button>
+      {#if connecting}
+        <!-- Abort a connect stuck on opkssh OIDC login (closed browser /
+             wrong config). Without this the button sits on "Connecting..."
+             until the login's own timeout expires, with no way out. -->
+        <button class="ghost" title="Cancel the connection attempt" onclick={cancelConnect}>
+          Cancel
+        </button>
+      {/if}
       {#if provider === "proxmox" && (entry.kind === "guest_vm" || entry.kind === "guest_lxc" || entry.kind === "host")}
         <button
           title={entry.kind === "host"

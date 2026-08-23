@@ -159,18 +159,50 @@ func GetCertStatus(cfg *OpksshConfig, vault *creds.Vault) *CertStatus {
 // practical gain.
 var (
 	certLoginMuMapMu sync.Mutex
-	certLoginMuMap   = map[string]*sync.Mutex{}
+	certLoginMuMap   = map[string]*lockChan{}
 )
 
-func certLoginLock(credentialID string) *sync.Mutex {
+func certLoginLock(credentialID string) *lockChan {
 	certLoginMuMapMu.Lock()
 	defer certLoginMuMapMu.Unlock()
 	mu, ok := certLoginMuMap[credentialID]
 	if !ok {
-		mu = &sync.Mutex{}
+		mu = newLockChan()
 		certLoginMuMap[credentialID] = mu
 	}
 	return mu
+}
+
+// lockChan is a mutex you can wait on with a context. sync.Mutex cannot do
+// this: once blocked in Lock() a goroutine is stuck until the holder
+// releases, no matter what happens to its context. That is unacceptable
+// here, where the holder may be waiting out a five-minute OIDC timeout for
+// a browser tab the user already closed.
+type lockChan struct {
+	ch chan struct{}
+}
+
+func newLockChan() *lockChan {
+	return &lockChan{ch: make(chan struct{}, 1)}
+}
+
+func (l *lockChan) Lock()   { l.ch <- struct{}{} }
+func (l *lockChan) Unlock() { <-l.ch }
+
+// lockCtx acquires l, or gives up if ctx is done first. The error names the
+// wait explicitly so a cancelled connect reports what it was waiting for
+// rather than a bare "context canceled".
+func lockCtx(ctx context.Context, l *lockChan) error {
+	// Check first so an already-cancelled connect never jumps an empty lock.
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("opkssh: connect cancelled: %w", err)
+	}
+	select {
+	case l.ch <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("opkssh: cancelled while waiting for another login on this credential: %w", ctx.Err())
+	}
 }
 
 // EnsureFreshCert reads (and refreshes if needed) the opkssh cert + key pair.
@@ -183,15 +215,17 @@ func certLoginLock(credentialID string) *sync.Mutex {
 // waiting for another connect's browser login to finish, which is exactly
 // the cert it would otherwise have re-fetched for itself.
 func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault) (*OpksshAuth, error) {
-	mu := certLoginLock(cfg.CredentialID)
-	mu.Lock()
-	defer mu.Unlock()
-
-	// A queued connect whose user hit Cancel (or whose app is quitting)
-	// should not go on to open a browser tab of its own.
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("opkssh: cancelled while waiting for another login: %w", err)
+	// Wait for any in-flight login on this credential, but stay cancellable
+	// while waiting. A plain mu.Lock() here is not enough: the winner's OIDC
+	// flow can sit for its full timeout when the user closes the browser tab,
+	// and every queued connect would block on an uninterruptible Lock -
+	// showing "Connecting..." with a Cancel button that cannot do anything,
+	// because cancelling a context does not release a sync.Mutex.
+	lock := certLoginLock(cfg.CredentialID)
+	if err := lockCtx(ctx, lock); err != nil {
+		return nil, err
 	}
+	defer lock.Unlock()
 
 	needsRefresh := false
 

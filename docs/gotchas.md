@@ -1239,9 +1239,23 @@ login was always enough.
   concurrently. A slow browser login for one must not stall connects
   using another.
 
-Waiters check `ctx.Err()` after acquiring: a queued connect the user
-cancelled (or a quitting app) must not go on to open a browser tab of
-its own.
+The lock is a channel, not a `sync.Mutex`, because it must be
+waitable with a context. A goroutine blocked in `Mutex.Lock()` cannot
+be released by cancelling its context - and the holder here may be
+sitting out a five-minute OIDC timeout for a browser tab the user
+already closed. With a plain mutex every queued connect showed
+"Connecting..." behind a Cancel button that could not do anything.
+`lockCtx` selects on the lock and `ctx.Done()`, so Cancel works while
+waiting. It also checks `ctx.Err()` first, so an already-cancelled
+connect never jumps a free lock and opens a browser tab of its own.
+
+Related: the dynamic-entry view had no Cancel button at all, so a
+dynamic host stuck on login could not be aborted from the UI even
+though the backend had registered a cancel handle for it. The key it
+registers under is the synthetic `dyn:<entryID>`, which is what
+`DynamicEntryDetail` derives - matching by construction, but worth
+knowing if either side changes (MCP uses a different, longer form;
+see `uiConnectionID`).
 
 ### xterm swallows Ctrl+Tab / Ctrl+1..9
 xterm.js' `attachCustomKeyEventHandler` defaults to returning
