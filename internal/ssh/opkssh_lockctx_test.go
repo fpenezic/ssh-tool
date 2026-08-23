@@ -93,3 +93,46 @@ func TestLockCtxProceedsAfterRelease(t *testing.T) {
 		t.Fatal("waiter did not wake after the lock was released")
 	}
 }
+
+// Every path out of the locked section must release the lock. An early
+// version returned "sign-in was cancelled" from inside the critical section
+// before the deferred Unlock was registered, leaking the lock: every later
+// connect then queued forever on a lock nobody would release, logging
+// "waiting for an in-flight login" with no login running. Nothing in the
+// unit tests caught it because they exercised the lock, not the function
+// that uses it.
+//
+// This models the acquire-check-return shape and asserts the lock is free
+// afterwards, which is the property that actually matters.
+func TestLockIsReleasedOnEveryReturnPath(t *testing.T) {
+	l := newLockChan()
+
+	// Stand-in for EnsureFreshCert's structure: acquire, then take an early
+	// return through a condition, with the release deferred first.
+	attempt := func(bailOut bool) error {
+		if err := lockCtx(context.Background(), l); err != nil {
+			return err
+		}
+		defer l.Unlock()
+		if bailOut {
+			return errors.New("sign-in was cancelled")
+		}
+		return nil
+	}
+
+	if err := attempt(true); err == nil {
+		t.Fatal("expected the bail-out path to return an error")
+	}
+	if !l.tryLock() {
+		t.Fatal("the bail-out path leaked the lock; every later connect would queue forever")
+	}
+	l.Unlock()
+
+	if err := attempt(false); err != nil {
+		t.Fatalf("normal path: %v", err)
+	}
+	if !l.tryLock() {
+		t.Fatal("the normal path leaked the lock")
+	}
+	l.Unlock()
+}

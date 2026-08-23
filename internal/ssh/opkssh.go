@@ -392,14 +392,20 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault,
 		if err := lockCtx(ctx, lock); err != nil {
 			return nil, err
 		}
-		// The login we queued behind may have been cancelled outright rather
-		// than having finished. Inheriting it - opening a fresh browser tab -
-		// is the opposite of what the user asked for when they cancelled it.
-		if partyAbandoned(party) {
-			return nil, fmt.Errorf("opkssh: sign-in was cancelled")
-		}
 	}
+	// Register the release BEFORE any early return below. An earlier version
+	// checked partyAbandoned above this line and returned while holding the
+	// lock, which leaked it: every later connect then queued on a lock nobody
+	// would ever release, logging "waiting for an in-flight login" with no
+	// login actually running.
 	defer lock.Unlock()
+
+	// The login we queued behind may have been cancelled outright rather than
+	// having finished. Inheriting it - opening a fresh browser tab - is the
+	// opposite of what the user asked for when they cancelled it.
+	if partyAbandoned(party) {
+		return nil, fmt.Errorf("opkssh: sign-in was cancelled")
+	}
 
 	// Acquired the lock, but this connect may have been cancelled while it
 	// waited - do not start a browser flow nobody is waiting for.
