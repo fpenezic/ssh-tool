@@ -161,6 +161,13 @@ export class CreateInput {
              */
             this["max_cert_age_hours"] = null;
         }
+        if (!("max_cert_age_seconds" in $$source)) {
+            /**
+             * @member
+             * @type {number | null}
+             */
+            this["max_cert_age_seconds"] = null;
+        }
         if (!("min_remaining_before_refresh_minutes" in $$source)) {
             /**
              * @member

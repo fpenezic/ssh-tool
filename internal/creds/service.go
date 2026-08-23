@@ -68,6 +68,7 @@ type CreateInput struct {
 	OpksshConfigYAML                 string  `json:"opkssh_config_yaml"`
 	ProviderHint                     *string `json:"provider_hint"`
 	MaxCertAgeHours                  *uint32 `json:"max_cert_age_hours"`
+	MaxCertAgeSeconds                *uint32 `json:"max_cert_age_seconds"`
 	MinRemainingBeforeRefreshMinutes *uint32 `json:"min_remaining_before_refresh_minutes"`
 
 	// api_token
@@ -574,11 +575,17 @@ func (s *Service) createOpkssh(in CreateInput) (*CreateResult, error) {
 	if in.ProviderHint != nil {
 		cfg["provider_hint"] = *in.ProviderHint
 	}
-	maxAge := uint32(168)
-	if in.MaxCertAgeHours != nil {
-		maxAge = *in.MaxCertAgeHours
+	// Stored in seconds so a short age is expressible; the hours key is kept
+	// in sync for anything still reading the old shape.
+	maxAgeSecs := uint32(168 * 3600)
+	switch {
+	case in.MaxCertAgeSeconds != nil && *in.MaxCertAgeSeconds > 0:
+		maxAgeSecs = *in.MaxCertAgeSeconds
+	case in.MaxCertAgeHours != nil && *in.MaxCertAgeHours > 0:
+		maxAgeSecs = *in.MaxCertAgeHours * 3600
 	}
-	cfg["max_cert_age_hours"] = maxAge
+	cfg["max_cert_age_seconds"] = maxAgeSecs
+	cfg["max_cert_age_hours"] = max(uint32(1), maxAgeSecs/3600)
 	refresh := uint32(60)
 	if in.MinRemainingBeforeRefreshMinutes != nil {
 		refresh = *in.MinRemainingBeforeRefreshMinutes

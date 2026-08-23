@@ -55,8 +55,28 @@ type OpksshConfig struct {
 	KeyBasename                      string
 	ConfigYAML                       string
 	ProviderHint                     string
-	MaxCertAgeHours                  uint32
+	// MaxCertAgeSeconds is the resolved age limit for a forever cert. It is
+	// stored as max_cert_age_seconds; max_cert_age_hours is the older key and
+	// is still read for credentials written before sub-hour ages existed.
+	MaxCertAgeSeconds uint32
+
+	// MinRemainingBeforeRefreshMinutes only applies to a cert that carries an
+	// explicit valid_before. Upstream opkssh has never issued one: sshcert.go
+	// hardcodes ValidBefore: ssh.CertTimeInfinity with no config path around
+	// it, and the "24h" in /etc/opk/providers is a server-side verification
+	// rule (it rejects a stale PKT), not a lifetime stamped into the cert.
+	// The field is therefore not editable in the UI any more - it was pure
+	// confusion, and setting it at or above the lifetime forced a browser
+	// login on every connect. The branch below stays as cheap insurance in
+	// case a fork or a future upstream does stamp an expiry.
 	MinRemainingBeforeRefreshMinutes uint32
+}
+
+// isPositiveNumber reports whether a config value survived the JSON round-trip
+// as a number greater than zero. Zero means "unset" for both age keys.
+func isPositiveNumber(v any) bool {
+	f, ok := v.(float64)
+	return ok && f > 0
 }
 
 // ParseOpksshConfig reads the credential's config map into typed fields.
@@ -75,10 +95,13 @@ func ParseOpksshConfig(cred *store.CredentialRef) (*OpksshConfig, error) {
 	if v, ok := cred.Config["provider_hint"].(string); ok {
 		cfg.ProviderHint = v
 	}
-	if v, ok := cred.Config["max_cert_age_hours"].(float64); ok {
-		cfg.MaxCertAgeHours = uint32(v)
-	} else {
-		cfg.MaxCertAgeHours = 168
+	switch {
+	case isPositiveNumber(cred.Config["max_cert_age_seconds"]):
+		cfg.MaxCertAgeSeconds = uint32(cred.Config["max_cert_age_seconds"].(float64))
+	case isPositiveNumber(cred.Config["max_cert_age_hours"]):
+		cfg.MaxCertAgeSeconds = uint32(cred.Config["max_cert_age_hours"].(float64)) * 3600
+	default:
+		cfg.MaxCertAgeSeconds = 168 * 3600
 	}
 	if v, ok := cred.Config["min_remaining_before_refresh_minutes"].(float64); ok {
 		cfg.MinRemainingBeforeRefreshMinutes = uint32(v)
@@ -132,7 +155,7 @@ func GetCertStatus(cfg *OpksshConfig, vault *creds.Vault) *CertStatus {
 		st.RenewAt = st.ValidBefore - int64(cfg.MinRemainingBeforeRefreshMinutes)*60
 	} else if st.IssuedAt > 0 {
 		// Forever cert: age-based forced re-login.
-		st.RenewAt = st.IssuedAt + int64(cfg.MaxCertAgeHours)*3600
+		st.RenewAt = st.IssuedAt + int64(cfg.MaxCertAgeSeconds)
 	}
 	return st
 }
@@ -489,7 +512,7 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault,
 		}
 	} else {
 		// "forever" cert - use stored issued_at for age check.
-		maxAge := time.Duration(cfg.MaxCertAgeHours) * time.Hour
+		maxAge := time.Duration(cfg.MaxCertAgeSeconds) * time.Second
 		var issuedAt time.Time
 		if tsOK {
 			if sec, err := strconv.ParseInt(issuedAtStr, 10, 64); err == nil {
