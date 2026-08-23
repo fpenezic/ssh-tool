@@ -82,7 +82,6 @@ For what's already shipped, see `CHANGELOG.md`.
   remote opkssh-verifier is rotated, current cached cert becomes
   invalid until next interactive login. A "regenerate now" button
   in the credential editor would let the user pre-empt.
-- **Connection retry / reconnect button on disconnect.**
 
 ---
 
@@ -283,8 +282,11 @@ update params + download progress shipped right after; what remains):
   a stale-on-offline fallback. Master + key file sealed in the vault,
   decrypted db wiped on Lock. Follow-ups not done: TOTP fields;
   write-back to the .kdbx; per-entry auto-type / URL matching.
-- **History retention** - opt-in keep last N old password values for
-  rollback. Backed by the existing vault, key `conn_pass_history:{id}`.
+- **Configurable password-history retention** - sealed history already
+  keeps the last 5 rotations (`secretHistoryRetention` in
+  `internal/creds/service.go`, key `conn_pass_history:{id}`); the count
+  is hard-coded. Wants a slider in Settings -> Vault, and a decision on
+  what happens to entries beyond the new limit when it is lowered.
 
 ---
 
@@ -302,9 +304,10 @@ update params + download progress shipped right after; what remains):
   refresh) + HTTP URL (single file).
 - **Ansible `group_vars/` / `host_vars/` directories** - parse
   side-by-side files alongside the inventory main file. Skipped
-  for the MVP "single file" constraint.
-- **Configurable retention slider for password history** -
-  hard-coded keep-last-5 today. Slider in Settings → Vault.
+  for the MVP "single file" constraint; `internal/inventory/ansible.go`
+  says so in its header. Note the parser already cascades group vars
+  *within* the inventory file (root-first walk), so this is about the
+  external directories only.
 
 ---
 
@@ -315,18 +318,19 @@ update params + download progress shipped right after; what remains):
   commit on change. Encrypted credential payload would need to be
   scrubbed before commit - possibly an `export-without-secrets`
   mode.
-- **Cloud-folder sync between machines** - Drive/OneDrive/Dropbox
-  folder as the transport. MVP would reuse the existing encrypted
-  backup format: a "sync folder" path in Settings, manual Push /
-  Pull buttons, optional auto-pull on launch + auto-push on quit
-  gated on ModTime. Last-write-wins; pre-restore snapshot is the
-  undo path. Concurrent edits on two machines will lose one side
-  of the diff - explicitly out of MVP scope. Per-entity diff sync
-  (real conflict resolution, tombstones, updated_at, 3-way merge)
-  is a much larger v2 if the simple flow proves insufficient.
-  Alternative path: a central service for connection metadata
-  sync with the vault kept strictly per-machine - that doubles as
-  a security feature (one vault key per host).
+- **Per-entity diff sync (cloud sync v2)** - the Dropbox / OneDrive
+  / Google Drive transports shipped in v0.75.0 with last-write-wins
+  and a pre-restore snapshot as the undo path, which means concurrent
+  edits on two machines still lose one side of the diff. Real conflict
+  resolution (tombstones, updated_at, 3-way merge) is a much larger
+  piece of work; only worth starting if the simple flow proves
+  insufficient in practice. Alternative path never explored: a central
+  service for connection metadata with the vault kept strictly
+  per-machine, which doubles as a security property (one vault key
+  per host).
+- **Proton Drive as a sync transport** - the remaining provider from
+  the original cloud-sync list. No official API; would need the
+  community rclone backend or equivalent.
 
 ---
 
@@ -454,15 +458,12 @@ update params + download progress shipped right after; what remains):
 Android shipped in v0.36.0 (boot, vault unlock + biometric, connections,
 live SSH, sync, broadcast, foreground-service background survival, opkssh
 browser login). v0.37.x added live-test UX fixes; v0.38.x renamed the app
-id off the scaffold default and stamped the build version. Built locally
-(`task android:package`), out of CI. Remaining for a real distributable:
+id off the scaffold default and stamped the build version. Since v0.45.2
+the signed release APK is built and signed in CI (`build-android`, keystore
+in the ANDROID_DEBUG_KEYSTORE secret with the cert digest pinned in a verify
+step) and published with every tag; `task android:package` still builds
+locally. Remaining for a real distributable:
 
-- **Release keystore + signed release build.** Builds are debug-signed
-  (`assembleDebug`) - fine for sideload from one machine, but a stable
-  release keystore (generated once, stored OUTSIDE the repo, never lost -
-  losing it means no existing install can ever update) is the prerequisite
-  for: a real update flow, Play, and F-Droid. Switch the android Taskfile
-  to `assembleRelease` + a gradle signing config once the keystore exists.
 - **In-app auto-update (deferred - decided to skip for now).** Desktop's
   binary-swap updater can't work on android (sandboxed APK, PackageManager
   owns the install). The only no-Play path is: download the APK + fire an
@@ -471,17 +472,15 @@ id off the scaffold default and stamped the build version. Built locally
   already works on android (it matches the `android-arm64` asset key);
   only the apply step is missing. Cheapest interim step if revisited: an
   "update available -> open the sshtool.app download link" prompt on
-  mobile (no install Intent, manual install). Blocked on the release
-  keystore above for the real auto-install.
+  mobile (no install Intent, manual install). The signing prerequisite is
+  no longer a blocker - CI signs every release APK with a stable key - so
+  what is left is purely the install-Intent plumbing.
 - **Distribution: Play vs F-Droid.** F-Droid fits an OSS app with no
   account fee and no Play dependency (reproducible build + open source,
   both planned anyway). Play needs a (new) Developer account + the $25 fee;
   the previous Play Console account was dormant-closed (not policy-banned),
   so a fresh account is the path if ever needed. Sideload via sshtool.app
   works today with zero store dependency.
-- **Android in CI.** CI builds desktop only; android stays a local NDK
-  build. Add an android job once the project goes open-source. There was
-  never an android CI step, so nothing to disable now.
 - **iOS build.** Build tags already cover it (`android || ios`) but no iOS
   build is produced or tested. Needs a Mac toolchain + Apple Developer.
 - **VNC / SFTP on mobile.** `app_vnc.go` is `!android`; VNC tabs untested
