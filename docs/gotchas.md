@@ -1285,8 +1285,17 @@ its ctx is not the party ctx, so cancelling the very host that opened
 the browser did nothing - the most natural thing for a user to try,
 since that is the host they were looking at when the tab appeared.
 `bridgeCancel` joins the two: the login ends if EITHER the party is
-cancelled or this connect is, and a cancelled performer leaves the
-party first so the refcount stays right.
+cancelled or this connect is.
+
+Cancelling the performer ABANDONS the whole party rather than just
+dropping that member. Merely dropping out frees the lock, and the next
+waiter starts a fresh login - so cancelling four queued hosts took four
+cancels and opened four browser tabs, each one handing the sign-in to
+the next host in line. Cancel means the user does not want to sign in,
+not that they want a different host to ask them. Waiters therefore
+re-check `partyAbandoned` after acquiring the lock and report
+"sign-in was cancelled" instead of inheriting the flow. The abandoned
+party is removed from the map, so a later Connect builds a clean one.
 
 The wait itself is also reported now: `tryLock` distinguishes an
 uncontended acquire from one about to block, and a blocking one logs

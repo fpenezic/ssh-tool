@@ -219,6 +219,12 @@ type loginParty struct {
 	n      int
 	ctx    context.Context
 	cancel context.CancelFunc
+	// abandoned is set when someone cancels the login outright rather than
+	// merely dropping out. Waiters check it after acquiring the lock so the
+	// next one in line reports the cancellation instead of starting a fresh
+	// browser flow - "cancel" means "I do not want to sign in", not "let the
+	// next host ask me instead".
+	abandoned bool
 }
 
 var (
@@ -230,7 +236,7 @@ var (
 // context the login should run under, plus a leave func the caller must
 // always invoke. The context outlives any single caller and is cancelled
 // only when everyone has left.
-func joinLoginParty(credentialID string) (context.Context, func()) {
+func joinLoginParty(credentialID string) (context.Context, *loginParty, func()) {
 	loginPartiesMu.Lock()
 	p, ok := loginParties[credentialID]
 	if !ok {
@@ -246,7 +252,7 @@ func joinLoginParty(credentialID string) (context.Context, func()) {
 	p.mu.Unlock()
 
 	var once sync.Once
-	return ctx, func() {
+	return ctx, p, func() {
 		once.Do(func() {
 			p.mu.Lock()
 			p.n--
@@ -270,11 +276,49 @@ func joinLoginParty(credentialID string) (context.Context, func()) {
 	}
 }
 
+// abandonLoginParty marks a credential's login as cancelled outright and
+// tears it down, so waiters wake up cancelled rather than one of them
+// inheriting the browser flow.
+//
+// This is what "Cancel" on the host holding the browser tab means. Simply
+// letting that connect drop out would free the lock, and the next waiter
+// would open a NEW tab - so cancelling four queued hosts took four cancels
+// and produced four browser tabs. The user cancelling the sign-in wants the
+// sign-in gone, not passed along.
+func abandonLoginParty(credentialID string) {
+	loginPartiesMu.Lock()
+	p := loginParties[credentialID]
+	if p != nil {
+		delete(loginParties, credentialID)
+	}
+	loginPartiesMu.Unlock()
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.abandoned = true
+	p.mu.Unlock()
+	p.cancel()
+}
+
+// partyAbandoned reports whether the login for this credential was cancelled
+// by someone while this connect sat on the lock.
+func partyAbandoned(p *loginParty) bool {
+	if p == nil {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.abandoned
+}
+
 // bridgeCancel returns a context that is done when either the party context
-// or this connect's own context is - so cancelling the host that opened the
-// browser ends the login, without that host being able to cancel a login the
-// rest of the party still wants (leaving the party is what handles that, and
-// only cancels once the last member is gone).
+// or this connect's own context is, so cancelling the host that opened the
+// browser ends the login.
+//
+// onOwnCancel abandons the whole party rather than just dropping this member
+// (see abandonLoginParty) - the queued hosts are waiting for the outcome of
+// the sign-in the user just dismissed, so they have nothing left to wait for.
 //
 // The returned stop func must be called to release the watcher goroutine.
 func bridgeCancel(partyCtx, ownCtx context.Context, onOwnCancel func()) (context.Context, func()) {
@@ -283,9 +327,6 @@ func bridgeCancel(partyCtx, ownCtx context.Context, onOwnCancel func()) (context
 	go func() {
 		select {
 		case <-ownCtx.Done():
-			// This connect gave up. Drop its membership first so the party
-			// refcount is right, then cancel our view of the login. If it was
-			// the only member, leave() has already cancelled the party ctx.
 			onOwnCancel()
 			cancel()
 		case <-ctx.Done():
@@ -337,7 +378,7 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault,
 	// interested while it waits. That is what lets the holder's browser flow
 	// be abandoned the moment the last waiter cancels, instead of running out
 	// its full timeout with the lock held.
-	loginCtx, leave := joinLoginParty(cfg.CredentialID)
+	loginCtx, party, leave := joinLoginParty(cfg.CredentialID)
 	defer leave()
 
 	lock := certLoginLock(cfg.CredentialID)
@@ -350,6 +391,12 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault,
 		progress("Waiting for browser sign-in")
 		if err := lockCtx(ctx, lock); err != nil {
 			return nil, err
+		}
+		// The login we queued behind may have been cancelled outright rather
+		// than having finished. Inheriting it - opening a fresh browser tab -
+		// is the opposite of what the user asked for when they cancelled it.
+		if partyAbandoned(party) {
+			return nil, fmt.Errorf("opkssh: sign-in was cancelled")
 		}
 	}
 	defer lock.Unlock()
@@ -420,7 +467,9 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault,
 		// for a user to try, since that is the host they were looking at when
 		// the tab appeared. leave() covers the case where the others give up;
 		// this covers the performer giving up first.
-		loginCtx, stopBridge := bridgeCancel(loginCtx, ctx, leave)
+		loginCtx, stopBridge := bridgeCancel(loginCtx, ctx, func() {
+			abandonLoginParty(cfg.CredentialID)
+		})
 		newKey, newCert, err := runOpksshLoginNative(loginCtx, cfg)
 		stopBridge()
 		if err != nil {

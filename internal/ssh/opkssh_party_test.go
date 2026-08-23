@@ -16,8 +16,8 @@ import (
 func TestLoginPartySurvivesOneMemberLeaving(t *testing.T) {
 	const cred = "party-survives"
 
-	ctxA, leaveA := joinLoginParty(cred)
-	_, leaveB := joinLoginParty(cred)
+	ctxA, _, leaveA := joinLoginParty(cred)
+	_, _, leaveB := joinLoginParty(cred)
 	defer leaveB()
 
 	leaveA()
@@ -36,8 +36,8 @@ func TestLoginPartySurvivesOneMemberLeaving(t *testing.T) {
 func TestLoginPartyCancelsWhenLastMemberLeaves(t *testing.T) {
 	const cred = "party-cancels"
 
-	ctx, leaveA := joinLoginParty(cred)
-	_, leaveB := joinLoginParty(cred)
+	ctx, _, leaveA := joinLoginParty(cred)
+	_, _, leaveB := joinLoginParty(cred)
 
 	leaveA()
 	leaveB()
@@ -55,11 +55,11 @@ func TestLoginPartyCancelsWhenLastMemberLeaves(t *testing.T) {
 func TestLoginPartyIsFreshAfterEveryoneLeft(t *testing.T) {
 	const cred = "party-fresh"
 
-	ctx1, leave1 := joinLoginParty(cred)
+	ctx1, _, leave1 := joinLoginParty(cred)
 	leave1()
 	<-ctx1.Done() // previous attempt abandoned
 
-	ctx2, leave2 := joinLoginParty(cred)
+	ctx2, _, leave2 := joinLoginParty(cred)
 	defer leave2()
 
 	if ctx2.Err() != nil {
@@ -72,8 +72,8 @@ func TestLoginPartyIsFreshAfterEveryoneLeft(t *testing.T) {
 func TestLoginPartyLeaveIsIdempotent(t *testing.T) {
 	const cred = "party-idempotent"
 
-	_, leaveA := joinLoginParty(cred)
-	ctxB, leaveB := joinLoginParty(cred)
+	_, _, leaveA := joinLoginParty(cred)
+	ctxB, _, leaveB := joinLoginParty(cred)
 	defer leaveB()
 
 	leaveA()
@@ -89,10 +89,10 @@ func TestLoginPartyLeaveIsIdempotent(t *testing.T) {
 // Different credentials must not share a party: abandoning one credential's
 // login cannot abort an unrelated one.
 func TestLoginPartyIsPerCredential(t *testing.T) {
-	ctxA, leaveA := joinLoginParty("cred-one")
+	ctxA, _, leaveA := joinLoginParty("cred-one")
 	defer leaveA()
 
-	_, leaveB := joinLoginParty("cred-two")
+	_, _, leaveB := joinLoginParty("cred-two")
 	leaveB()
 
 	if ctxA.Err() != nil {
@@ -106,7 +106,7 @@ func TestLoginPartyConcurrentJoinLeave(t *testing.T) {
 
 	// One member held for the duration, so the party should still be alive
 	// at the end no matter how the others interleave.
-	ctx, leaveHeld := joinLoginParty(cred)
+	ctx, _, leaveHeld := joinLoginParty(cred)
 	defer leaveHeld()
 
 	var wg sync.WaitGroup
@@ -114,7 +114,7 @@ func TestLoginPartyConcurrentJoinLeave(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, leave := joinLoginParty(cred)
+			_, _, leave := joinLoginParty(cred)
 			leave()
 		}()
 	}
@@ -152,7 +152,7 @@ func TestLoginPartyIgnoresMemberContexts(t *testing.T) {
 	cancel()
 	_ = cancelledCtx
 
-	ctx, leave := joinLoginParty("party-independent")
+	ctx, _, leave := joinLoginParty("party-independent")
 	defer leave()
 
 	if ctx.Err() != nil {
@@ -239,5 +239,87 @@ func TestBridgeCancelStopIsClean(t *testing.T) {
 	defer mu.Unlock()
 	if leaveCalls != 0 {
 		t.Fatalf("a cleanly finished login called leave() %d times via the bridge", leaveCalls)
+	}
+}
+
+// Cancelling the host that holds the browser tab must cancel the queued
+// hosts too, not hand the sign-in to the next one in line. Before this,
+// cancelling four queued hosts took four cancels and opened four browser
+// tabs, because each cancel freed the lock for the next waiter to start a
+// fresh login. "Cancel" means the user does not want to sign in, not that
+// they want to be asked again by a different host.
+func TestAbandonLoginPartyCancelsWaiters(t *testing.T) {
+	const cred = "party-abandon"
+
+	ctxPerformer, party, leavePerformer := joinLoginParty(cred)
+	defer leavePerformer()
+	ctxWaiter, _, leaveWaiter := joinLoginParty(cred)
+	defer leaveWaiter()
+
+	abandonLoginParty(cred)
+
+	for name, ctx := range map[string]context.Context{
+		"performer": ctxPerformer,
+		"waiter":    ctxWaiter,
+	} {
+		select {
+		case <-ctx.Done():
+		case <-time.After(2 * time.Second):
+			t.Fatalf("%s was not cancelled when the login was abandoned", name)
+		}
+	}
+
+	if !partyAbandoned(party) {
+		t.Fatal("party not flagged abandoned; a waiter would start a fresh browser login")
+	}
+}
+
+// A retry after an abandoned sign-in must get a clean party - the user
+// pressing Connect again is asking for a new login, not inheriting the
+// cancelled one.
+func TestAbandonedPartyDoesNotPoisonTheNextAttempt(t *testing.T) {
+	const cred = "party-abandon-retry"
+
+	_, _, leave1 := joinLoginParty(cred)
+	abandonLoginParty(cred)
+	leave1()
+
+	ctx2, party2, leave2 := joinLoginParty(cred)
+	defer leave2()
+
+	if ctx2.Err() != nil {
+		t.Fatal("a retry inherited the abandoned party's cancelled context")
+	}
+	if partyAbandoned(party2) {
+		t.Fatal("a retry inherited the abandoned flag and would refuse to sign in")
+	}
+}
+
+// Abandoning one credential must not touch another.
+func TestAbandonLoginPartyIsPerCredential(t *testing.T) {
+	ctxOther, partyOther, leaveOther := joinLoginParty("abandon-other")
+	defer leaveOther()
+
+	_, _, leaveTarget := joinLoginParty("abandon-target")
+	defer leaveTarget()
+	abandonLoginParty("abandon-target")
+
+	if ctxOther.Err() != nil {
+		t.Fatal("abandoning one credential cancelled another's login")
+	}
+	if partyAbandoned(partyOther) {
+		t.Fatal("abandoning one credential flagged another as abandoned")
+	}
+}
+
+// Abandoning a credential with no login in flight must be a no-op, since
+// SshCancelConnect can land at any time.
+func TestAbandonLoginPartyWithNoPartyIsSafe(t *testing.T) {
+	abandonLoginParty("abandon-nonexistent")
+
+	ctx, party, leave := joinLoginParty("abandon-nonexistent")
+	defer leave()
+	if ctx.Err() != nil || partyAbandoned(party) {
+		t.Fatal("abandoning a nonexistent party poisoned the next one")
 	}
 }
