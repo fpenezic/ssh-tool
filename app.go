@@ -7019,6 +7019,9 @@ type TcpdumpProbeResult struct {
 	RootUser             bool `json:"root_user"`
 	SudoNoPwd            bool `json:"sudo_no_pwd"`
 	HasCandidatePassword bool `json:"has_candidate_password"`
+	// TsharkAvailable reports whether `tshark` is on the remote's PATH, so
+	// the modal offers the engine toggle only where it would actually run.
+	TsharkAvailable bool `json:"tshark_available"`
 }
 
 // resolveSudoCandidate looks up a plausible sudo password for the
@@ -7056,10 +7059,14 @@ func (a *App) TcpdumpProbe(sessionID string) (*TcpdumpProbeResult, error) {
 		return nil, err
 	}
 	hasCand := !r && !sn && a.resolveSudoCandidate(sessionID) != ""
+	// A missing tshark is the common case, not an error - fold the probe
+	// failure into "unavailable" so a host without it still gets a capture.
+	hasTshark, _ := sshlayer.DetectTshark(target)
 	return &TcpdumpProbeResult{
 		RootUser:             r,
 		SudoNoPwd:            sn,
 		HasCandidatePassword: hasCand,
+		TsharkAvailable:      hasTshark,
 	}, nil
 }
 
@@ -7096,6 +7103,9 @@ type TcpdumpStartInput struct {
 	// strings (JSON object keys); values are lowercase proto names
 	// recognised by the decoder.
 	PortOverrides map[string]string `json:"port_overrides,omitempty"`
+	// Engine picks the capture backend: "" / "tcpdump" (default) or
+	// "tshark" where TcpdumpProbe reported it available.
+	Engine string `json:"engine,omitempty"`
 }
 
 // TcpdumpStart launches a capture and returns its dumpID. Live lines
@@ -7121,6 +7131,7 @@ func (a *App) TcpdumpStart(in TcpdumpStartInput) (string, error) {
 		// over the same session is a feedback loop (see TcpdumpOptions).
 		// The user can opt back in (e.g. to debug SSH itself).
 		ExcludeSSH: !in.IncludeSSH,
+		Engine:     in.Engine,
 	}
 	// For the ARP off-subnet check the analyzer needs the host's own
 	// interface subnets. Cheap one-shot probe; failure just disables

@@ -70,6 +70,13 @@
   // Cheap perf-wise; default off because most users want the brief
   // header-only stream.
   let verbose = $state(false);
+  // Capture engine. tshark is offered only when the probe found it on the
+  // remote; it names application protocols (TLSv1.3, DNS, HTTP) that tcpdump
+  // cannot. Verbose decode stays a tcpdump feature - our decoders read
+  // tcpdump's hex payload dump, which tshark does not emit in field mode,
+  // and tshark dissects those protocols itself.
+  let engine = $state<"tcpdump" | "tshark">("tcpdump");
+  const usingTshark = $derived(engine === "tshark");
   // Insights toggle = live network-health analyzer. Flags routing /
   // wrong-interface anomalies (UDP reply from wrong source IP, half-open
   // TCP, ICMP unreachable/redirect/TTL-exceeded, ARP off-subnet, RST
@@ -349,7 +356,8 @@
         root_user: probe.root_user,
         sudo_no_pwd: probe.sudo_no_pwd,
         use_saved_password: useSavedPassword && probe.has_candidate_password,
-        verbose,
+        engine,
+        verbose: verbose && !usingTshark,
         insights,
         port_overrides: portOverridesAsMap(),
       });
@@ -930,8 +938,22 @@
           <span>Use saved password</span>
         </label>
       {/if}
-      <label class="chk" title="Capture full payload - gives the Decode tab DHCP / DNS / ARP field-level dissection.">
-        <input type="checkbox" bind:checked={verbose} disabled={running} />
+      {#if probe?.tshark_available}
+        <label class="sel" title="tcpdump is universal. tshark (Wireshark's CLI) uses the full dissector set, so the protocol column names the application protocol - TLSv1.3, DNS, HTTP - instead of just tcp/udp.">
+          <span>Engine</span>
+          <select bind:value={engine} disabled={running}>
+            <option value="tcpdump">tcpdump</option>
+            <option value="tshark">tshark</option>
+          </select>
+        </label>
+      {/if}
+      <label
+        class="chk"
+        title={usingTshark
+          ? "Verbose decode is a tcpdump mode - it parses tcpdump's hex payload dump. tshark dissects these protocols itself, so the Info column already carries the detail."
+          : "Capture full payload - gives the Decode tab DHCP / DNS / ARP field-level dissection."}
+      >
+        <input type="checkbox" bind:checked={verbose} disabled={running || usingTshark} />
         <span>Verbose (decode)</span>
       </label>
       <label class="chk" title="Flag routing / wrong-interface anomalies live: UDP replies from the wrong source IP (0.0.0.0-bound services), SYNs with no reply, ICMP unreachable/redirect/TTL-exceeded, ARP for off-subnet hosts, RST storms. TCP flag checks need Verbose; UDP/ICMP/ARP work either way.">
@@ -1347,6 +1369,7 @@
   }
   .controls label.grow { flex: 1; min-width: 200px; }
   .controls label.num input { width: 5rem; }
+  .controls label.sel select { width: 7rem; }
   .controls label.chk {
     flex-direction: row;
     align-items: center;

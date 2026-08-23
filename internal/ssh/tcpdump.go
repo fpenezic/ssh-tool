@@ -47,6 +47,17 @@ type TcpdumpOptions struct {
 	// server_ip server_port), so it works regardless of the SSH port.
 	// Default-on from the app.
 	ExcludeSSH bool
+	// Engine selects the capture backend: "" / "tcpdump" (default) or
+	// "tshark". tshark is offered only where DetectTshark found the binary;
+	// it dissects application protocols tcpdump cannot name, and streams
+	// tab-separated fields instead of tcpdump's text grammar, so the stdout
+	// path parses it with parseTsharkLine rather than ParseTcpdumpLine.
+	Engine string
+}
+
+// useTshark reports whether this capture runs under tshark.
+func (o TcpdumpOptions) useTshark() bool {
+	return strings.TrimSpace(o.Engine) == "tshark"
 }
 
 // TcpdumpLineHandler is invoked for each parsed line from the capture.
@@ -189,7 +200,7 @@ func CheckRootOrSudo(client *ssh.Client) (bool, bool, error) {
 //
 // Auth model:
 //   - if rootUser is true, runs tcpdump directly.
-//   - else uses `sudo -S -p ''` reading from stdin. needsPassword=true
+//   - else uses `sudo -S -p ”` reading from stdin. needsPassword=true
 //     means a prompt is required; otherwise sudo -n is used.
 func StartTcpdump(
 	client *ssh.Client,
@@ -220,55 +231,13 @@ func StartTcpdump(
 		return nil, err
 	}
 
-	// -l line-buffered, -nn no DNS / no port name resolution,
-	// -tttt human timestamps. Verbose mode swaps -q for -v -X so
-	// tcpdump emits the per-protocol payload decode (BOOTP/DHCP
-	// options, DNS answer records, ARP who-has/is-at) AND hex+ASCII
-	// dumps that let us pull TLS SNI out of ClientHello packets.
-	verboseFlags := "-q"
-	if opts.Verbose {
-		verboseFlags = "-v -X"
-	}
-	// Snaplen (-s): cap bytes captured per packet. tcpdump's default is
-	// 262144, so on a busy link it ships the FULL payload of every packet
-	// over the SSH channel - tens of Mbit/s of stdout that we then throw
-	// away (the UI shows headers + a short decode). 160 bytes covers
-	// Ethernet+IP+TCP/UDP headers for the brief view; verbose/decode mode
-	// needs payload (DHCP options, DNS records, TLS SNI in ClientHello),
-	// but those live near the start, so 1024 keeps them while still
-	// cutting the wire volume ~256x versus the default.
-	snaplen := 160
-	if opts.Verbose {
-		snaplen = 1024
-	}
-	cmd := fmt.Sprintf("tcpdump -l -nn -tttt -s %d %s -i %s", snaplen, verboseFlags, shellQuote(opts.Iface))
-	if !continuous {
-		cmd += fmt.Sprintf(" -c %d", maxCount)
-	}
-	// Build the BPF: the user filter AND-ed with the SSH-exclusion clause.
-	//
-	// Capturing tcpdump output over the same SSH session is a feedback loop -
-	// every captured packet is streamed back over SSH, generating more SSH
-	// packets to capture. We must drop the control connection.
-	//
-	// We used to assemble this in-shell from $SSH_CONNECTION, but that is
-	// unreliable: under sudo (env_reset) or a non-standard login shell it can
-	// be empty, and the filter silently degrades to `not ( host and port )`,
-	// which lets the SSH traffic flood through (thousands of port-22 packets).
-	// Instead we derive the exclusion in Go from the live SSH connection and
-	// bake it in as a literal, with the $SSH_CONNECTION form kept only as a
-	// runtime fallback when the Go-side addresses aren't available.
-	userBPF := opts.BPFFilter
-	if opts.ExcludeSSH {
-		sshExcl := sshExclusionBPF(client)
-		if userBPF != "" {
-			// Wrap the user filter so precedence is unambiguous.
-			cmd += " " + shellQuote(userBPF) + " and " + sshExcl
-		} else {
-			cmd += " " + sshExcl
-		}
-	} else if userBPF != "" {
-		cmd += " " + shellQuote(userBPF)
+	// Compose the capture command for the selected engine. Both branches
+	// take the same SSH-exclusion clause and apply the same sudo prefix
+	// below, so switching engines changes only the command text.
+	cmd, err := buildCaptureCommand(opts, sshExclusionBPF(client), maxCount, continuous)
+	if err != nil {
+		sess.Close()
+		return nil, err
 	}
 	switch {
 	case rootUser:
@@ -356,6 +325,33 @@ func StartTcpdump(
 	go func() {
 		sc := bufio.NewScanner(stdout)
 		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+		// tshark's -T fields output is strictly one record per line - there
+		// are no continuation lines to reassemble, so it takes a much simpler
+		// loop than tcpdump's multi-line verbose format below.
+		if opts.useTshark() {
+			for sc.Scan() {
+				line := sc.Text()
+				pkt, ok := parseTsharkLine(line)
+				if !ok {
+					// Banner / status noise. Surface it unparsed rather than
+					// dropping it, same as the tcpdump path does.
+					if strings.TrimSpace(line) == "" {
+						continue
+					}
+					pkt = ParsedPacket{Raw: line}
+					pkt.Seq = h.appendRing(pkt)
+					onLine(pkt)
+					continue
+				}
+				if analyzer != nil {
+					analyzer.Observe(pkt)
+				}
+				pkt.Seq = h.appendRing(pkt)
+				onLine(pkt)
+			}
+			return
+		}
 
 		var header string
 		var payload []string
@@ -445,6 +441,14 @@ func StartTcpdump(
 	// "ended" message (exit 127) and not double-report.
 	notFoundCh := make(chan bool, 1)
 
+	// The engine name for user-facing errors - "tshark not installed" must
+	// not say tcpdump, or the user installs the wrong package.
+	engineName := "tcpdump"
+	if opts.useTshark() {
+		engineName = "tshark"
+	}
+	notInstalledMsg := engineName + " not installed on the remote host (or not on PATH)"
+
 	// stderr → lifecycle / error surface. Distinguish a wrong-password
 	// from a missing-tcpdump from a generic failure by sniffing common
 	// substrings.
@@ -456,7 +460,11 @@ func StartTcpdump(
 			line := sc.Text()
 			// Suppress tcpdump's startup banner - it goes to stderr.
 			low := strings.ToLower(line)
-			if strings.Contains(low, "listening on") || strings.Contains(low, "verbose output") {
+			// Startup banners go to stderr on both engines: tcpdump's
+			// "listening on eth0..." and tshark's "Capturing on 'eth0'".
+			if strings.Contains(low, "listening on") ||
+				strings.Contains(low, "verbose output") ||
+				strings.HasPrefix(low, "capturing on") {
 				continue
 			}
 			if firstErr == "" {
@@ -470,7 +478,7 @@ func StartTcpdump(
 				// not found" (dash/Debian), "tcpdump: No such file or
 				// directory", etc. All mean the binary isn't on PATH.
 				notFound = true
-				onLifecycle("error", "tcpdump not installed on the remote host (or not on PATH)")
+				onLifecycle("error", notInstalledMsg)
 			}
 		}
 		notFoundCh <- notFound
@@ -491,7 +499,7 @@ func StartTcpdump(
 		notFound := <-notFoundCh
 		if notFound || isExit127(err) {
 			if !notFound {
-				onLifecycle("error", "tcpdump not installed on the remote host (or not on PATH)")
+				onLifecycle("error", notInstalledMsg)
 			}
 			onLifecycle("ended", "")
 			return
@@ -626,4 +634,77 @@ func shellQuote(s string) string {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// buildCaptureCommand composes the capture command line for the configured
+// engine. Split out of StartTcpdump so both engines are covered by table tests
+// without opening an SSH session.
+func buildCaptureCommand(opts TcpdumpOptions, sshExcl string, maxCount int, continuous bool) (string, error) {
+	if opts.useTshark() {
+		o := opts
+		o.MaxCount = maxCount
+		if continuous {
+			o.MaxCount = -1
+		}
+		return buildTsharkCommand(o, sshExcl)
+	}
+	return buildTcpdumpCommand(opts, sshExcl, maxCount, continuous)
+}
+
+// buildTcpdumpCommand composes the tcpdump invocation. This is the original
+// in-line command construction from StartTcpdump, extracted verbatim.
+func buildTcpdumpCommand(opts TcpdumpOptions, sshExcl string, maxCount int, continuous bool) (string, error) {
+	if strings.TrimSpace(opts.Iface) == "" {
+		return "", fmt.Errorf("interface required")
+	}
+	// -l line-buffered, -nn no DNS / no port name resolution,
+	// -tttt human timestamps. Verbose mode swaps -q for -v -X so
+	// tcpdump emits the per-protocol payload decode (BOOTP/DHCP
+	// options, DNS answer records, ARP who-has/is-at) AND hex+ASCII
+	// dumps that let us pull TLS SNI out of ClientHello packets.
+	verboseFlags := "-q"
+	if opts.Verbose {
+		verboseFlags = "-v -X"
+	}
+	// Snaplen (-s): cap bytes captured per packet. tcpdump's default is
+	// 262144, so on a busy link it ships the FULL payload of every packet
+	// over the SSH channel - tens of Mbit/s of stdout that we then throw
+	// away (the UI shows headers + a short decode). 160 bytes covers
+	// Ethernet+IP+TCP/UDP headers for the brief view; verbose/decode mode
+	// needs payload (DHCP options, DNS records, TLS SNI in ClientHello),
+	// but those live near the start, so 1024 keeps them while still
+	// cutting the wire volume ~256x versus the default.
+	snaplen := 160
+	if opts.Verbose {
+		snaplen = 1024
+	}
+	cmd := fmt.Sprintf("tcpdump -l -nn -tttt -s %d %s -i %s", snaplen, verboseFlags, shellQuote(opts.Iface))
+	if !continuous {
+		cmd += fmt.Sprintf(" -c %d", maxCount)
+	}
+	// Build the BPF: the user filter AND-ed with the SSH-exclusion clause.
+	//
+	// Capturing tcpdump output over the same SSH session is a feedback loop -
+	// every captured packet is streamed back over SSH, generating more SSH
+	// packets to capture. We must drop the control connection.
+	//
+	// We used to assemble this in-shell from $SSH_CONNECTION, but that is
+	// unreliable: under sudo (env_reset) or a non-standard login shell it can
+	// be empty, and the filter silently degrades to `not ( host and port )`,
+	// which lets the SSH traffic flood through (thousands of port-22 packets).
+	// Instead we derive the exclusion in Go from the live SSH connection and
+	// bake it in as a literal, with the $SSH_CONNECTION form kept only as a
+	// runtime fallback when the Go-side addresses aren't available.
+	userBPF := opts.BPFFilter
+	if opts.ExcludeSSH {
+		if userBPF != "" {
+			// Wrap the user filter so precedence is unambiguous.
+			cmd += " " + shellQuote(userBPF) + " and " + sshExcl
+		} else {
+			cmd += " " + sshExcl
+		}
+	} else if userBPF != "" {
+		cmd += " " + shellQuote(userBPF)
+	}
+	return cmd, nil
 }

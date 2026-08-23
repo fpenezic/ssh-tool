@@ -4703,6 +4703,15 @@ export class TcpdumpProbeResult {
              */
             this["has_candidate_password"] = false;
         }
+        if (!("tshark_available" in $$source)) {
+            /**
+             * TsharkAvailable reports whether `tshark` is on the remote's PATH, so
+             * the modal offers the engine toggle only where it would actually run.
+             * @member
+             * @type {boolean}
+             */
+            this["tshark_available"] = false;
+        }
 
         Object.assign(this, $$source);
     }
@@ -4896,6 +4905,15 @@ export class TcpdumpStartInput {
              * @type {{ [_ in string]?: string } | undefined}
              */
             this["port_overrides"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Engine picks the capture backend: "" / "tcpdump" (default) or
+             * "tshark" where TcpdumpProbe reported it available.
+             * @member
+             * @type {string | undefined}
+             */
+            this["engine"] = undefined;
         }
 
         Object.assign(this, $$source);
