@@ -347,7 +347,7 @@ func dialChainFrom(
 			// dialChain backs batch exec, jump chains and VNC - non-
 			// interactive paths where an opkssh login isn't user-cancelable.
 			// Background ctx: the opkssh 5-min timeout still bounds it.
-			auth, err := ResolveAuth(context.Background(), cred, vault)
+			auth, err := ResolveAuth(context.Background(), cred, vault, nil)
 			if err != nil {
 				isLastHop := i == len(chain)-1
 				if !(isLastHop && settings.PasswordOverride != nil) {

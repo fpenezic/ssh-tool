@@ -211,7 +211,7 @@ var InfisicalResolveHook func(cred *store.CredentialRef) (secret string, handled
 // ResolveAuth turns a credential reference into AuthMaterial. Side-effecting
 // for `opkssh` (may run the OIDC login) and `agent` (opens UDS connection).
 // ctx cancels an in-flight opkssh OIDC login; the other kinds ignore it.
-func ResolveAuth(ctx context.Context, cred *store.CredentialRef, vault *creds.Vault) (*AuthMaterial, error) {
+func ResolveAuth(ctx context.Context, cred *store.CredentialRef, vault *creds.Vault, progress func(string)) (*AuthMaterial, error) {
 	// A credential carrying a KeePass reference resolves through the hook
 	// regardless of its kind: a "password" cred yields a password auth method,
 	// a "key" cred yields a signer. The secret is pulled from the .kdbx in
@@ -255,7 +255,7 @@ func ResolveAuth(ctx context.Context, cred *store.CredentialRef, vault *creds.Va
 	case store.CredAgent:
 		return resolveAgent(cred)
 	case store.CredOpkssh:
-		return resolveOpkssh(ctx, cred, vault)
+		return resolveOpkssh(ctx, cred, vault, progress)
 	case store.CredVault:
 		return nil, fmt.Errorf("vault credential type not yet supported")
 	default:
@@ -392,12 +392,12 @@ func resolveAgent(cred *store.CredentialRef) (*AuthMaterial, error) {
 	return &AuthMaterial{Agent: agent.NewClient(conn)}, nil
 }
 
-func resolveOpkssh(ctx context.Context, cred *store.CredentialRef, vault *creds.Vault) (*AuthMaterial, error) {
+func resolveOpkssh(ctx context.Context, cred *store.CredentialRef, vault *creds.Vault, progress func(string)) (*AuthMaterial, error) {
 	cfg, err := ParseOpksshConfig(cred)
 	if err != nil {
 		return nil, err
 	}
-	auth, err := EnsureFreshCert(ctx, cfg, vault)
+	auth, err := EnsureFreshCert(ctx, cfg, vault, progress)
 	if err != nil {
 		return nil, err
 	}

@@ -516,7 +516,7 @@ func Connect(
 			if h.Username == "" && cred.DefaultUsername != nil {
 				h.Username = *cred.DefaultUsername
 			}
-			auth, err := ResolveAuth(ctx, cred, vault)
+			auth, err := ResolveAuth(ctx, cred, vault, progress)
 			if err != nil {
 				// If we're on the last hop and a per-connection password override
 				// is set, that override will cover auth. Don't hard-fail here -

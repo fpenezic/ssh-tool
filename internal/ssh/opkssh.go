@@ -189,6 +189,87 @@ func newLockChan() *lockChan {
 func (l *lockChan) Lock()   { l.ch <- struct{}{} }
 func (l *lockChan) Unlock() { <-l.ch }
 
+// tryLock acquires without blocking, so the caller can tell an uncontended
+// acquire apart from one that is about to wait and report the wait.
+func (l *lockChan) tryLock() bool {
+	select {
+	case l.ch <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+// loginParty tracks everyone currently interested in one credential's login:
+// the connect performing it plus every connect queued behind it.
+//
+// It exists because cancelling the login is otherwise impossible from the
+// UI. The connect that wins the race owns the browser flow, but the user
+// does not know which host that is - they see a row of hosts on
+// "Connecting..." and press Cancel on whichever they are looking at. That
+// only ever cancelled a WAITER, leaving the login running and the lock held
+// for the rest of its five-minute ceiling.
+//
+// So the login runs on a context that is cancelled when the LAST interested
+// party goes away: cancel one host and the others still get their cert;
+// cancel all of them and the browser flow is abandoned immediately, freeing
+// the lock and the callback port.
+type loginParty struct {
+	mu     sync.Mutex
+	n      int
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+var (
+	loginPartiesMu sync.Mutex
+	loginParties   = map[string]*loginParty{}
+)
+
+// joinLoginParty registers interest in credentialID's login and returns the
+// context the login should run under, plus a leave func the caller must
+// always invoke. The context outlives any single caller and is cancelled
+// only when everyone has left.
+func joinLoginParty(credentialID string) (context.Context, func()) {
+	loginPartiesMu.Lock()
+	p, ok := loginParties[credentialID]
+	if !ok {
+		ctx, cancel := context.WithCancel(context.Background())
+		p = &loginParty{ctx: ctx, cancel: cancel}
+		loginParties[credentialID] = p
+	}
+	loginPartiesMu.Unlock()
+
+	p.mu.Lock()
+	p.n++
+	ctx := p.ctx
+	p.mu.Unlock()
+
+	var once sync.Once
+	return ctx, func() {
+		once.Do(func() {
+			p.mu.Lock()
+			p.n--
+			last := p.n == 0
+			p.mu.Unlock()
+			if !last {
+				return
+			}
+			// Everyone gave up: abandon the browser flow now rather than
+			// letting it hold the lock and the OIDC callback port until it
+			// times out.
+			p.cancel()
+			loginPartiesMu.Lock()
+			// Only drop it if it is still the party we joined - a new one
+			// may have been created after the last leave.
+			if loginParties[credentialID] == p {
+				delete(loginParties, credentialID)
+			}
+			loginPartiesMu.Unlock()
+		})
+	}
+}
+
 // lockCtx acquires l, or gives up if ctx is done first. The error names the
 // wait explicitly so a cancelled connect reports what it was waiting for
 // rather than a bare "context canceled".
@@ -214,18 +295,42 @@ func lockCtx(ctx context.Context, l *lockChan) error {
 // Serialised per credential; see certLoginMu. A connect that waits here is
 // waiting for another connect's browser login to finish, which is exactly
 // the cert it would otherwise have re-fetched for itself.
-func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault) (*OpksshAuth, error) {
+func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault, progress func(string)) (*OpksshAuth, error) {
+	if progress == nil {
+		progress = func(string) {}
+	}
 	// Wait for any in-flight login on this credential, but stay cancellable
 	// while waiting. A plain mu.Lock() here is not enough: the winner's OIDC
 	// flow can sit for its full timeout when the user closes the browser tab,
 	// and every queued connect would block on an uninterruptible Lock -
 	// showing "Connecting..." with a Cancel button that cannot do anything,
 	// because cancelling a context does not release a sync.Mutex.
+	// Join the login party BEFORE queuing on the lock, so a waiter counts as
+	// interested while it waits. That is what lets the holder's browser flow
+	// be abandoned the moment the last waiter cancels, instead of running out
+	// its full timeout with the lock held.
+	loginCtx, leave := joinLoginParty(cfg.CredentialID)
+	defer leave()
+
 	lock := certLoginLock(cfg.CredentialID)
-	if err := lockCtx(ctx, lock); err != nil {
-		return nil, err
+	if !lock.tryLock() {
+		// Someone else is mid-login for this credential. Say so - both in the
+		// log and (via the hook) in the UI, which otherwise sits on a bare
+		// "Connecting..." with no indication that it is queued behind a
+		// browser sign-in the user may have already dismissed.
+		log.Printf("opkssh: waiting for an in-flight login on cred %s", cfg.CredentialID)
+		progress("Waiting for browser sign-in")
+		if err := lockCtx(ctx, lock); err != nil {
+			return nil, err
+		}
 	}
 	defer lock.Unlock()
+
+	// Acquired the lock, but this connect may have been cancelled while it
+	// waited - do not start a browser flow nobody is waiting for.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("opkssh: connect cancelled: %w", err)
+	}
 
 	needsRefresh := false
 
@@ -275,7 +380,12 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault)
 	}
 
 	if needsRefresh {
-		newKey, newCert, err := runOpksshLoginNative(ctx, cfg)
+		// The login runs on the party's context, not this connect's. The user
+		// cannot tell which host owns the browser tab, so Cancel on any host
+		// sharing the credential must be able to end it; conversely one host
+		// cancelling must not abort a login the others still want. The party
+		// context is cancelled exactly when the last of them leaves.
+		newKey, newCert, err := runOpksshLoginNative(loginCtx, cfg)
 		if err != nil {
 			return nil, err
 		}

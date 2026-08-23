@@ -1249,6 +1249,27 @@ already closed. With a plain mutex every queued connect showed
 waiting. It also checks `ctx.Err()` first, so an already-cancelled
 connect never jumps a free lock and opens a browser tab of its own.
 
+Cancelling has a second problem the lock alone does not solve: the user
+cannot tell WHICH host owns the browser tab. They see a row of hosts on
+"Connecting..." and press Cancel on whichever one they are looking at,
+which is almost never the one performing the login. Cancelling a waiter
+frees that waiter and leaves the login running - holding the lock and
+the callback port for the rest of its five-minute ceiling.
+
+So the login does not run on the winning connect's context. It runs on
+a per-credential `loginParty` context, refcounted over everyone
+interested (the performer plus every queued waiter) and cancelled when
+the LAST one leaves. Cancel one host and the others still get their
+cert; cancel all of them and the browser flow is abandoned at once.
+Join the party BEFORE queuing on the lock, or a waiter would not count
+as interested while it waits.
+
+The wait itself is also reported now: `tryLock` distinguishes an
+uncontended acquire from one about to block, and a blocking one logs
+and pushes a "Waiting for browser sign-in" progress stage. Without it
+a queued connect is completely silent - which read as "nothing
+happened, the button does nothing".
+
 Related: the dynamic-entry view had no Cancel button at all, so a
 dynamic host stuck on login could not be aborted from the UI even
 though the backend had registered a cancel handle for it. The key it

@@ -154,7 +154,7 @@ func TestResolveAuthHookRouting(t *testing.T) {
 		Kind:   store.CredPassword,
 		Config: map[string]any{"keepass_ref": map[string]any{"db_id": "d", "entry_uuid": "e"}},
 	}
-	m, err := ResolveAuth(nil, kpCred, nil)
+	m, err := ResolveAuth(nil, kpCred, nil, nil)
 	if err != nil {
 		t.Fatalf("resolve keepass: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestResolveAuthHookRouting(t *testing.T) {
 		Kind:   store.CredPassword,
 		Config: map[string]any{"bitwarden_ref": map[string]any{"server_id": "s", "cipher_id": "c"}},
 	}
-	m, err = ResolveAuth(nil, bwCred, nil)
+	m, err = ResolveAuth(nil, bwCred, nil, nil)
 	if err != nil {
 		t.Fatalf("resolve bitwarden: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestResolveAuthHookRouting(t *testing.T) {
 		Kind:   store.CredPassword,
 		Config: map[string]any{"infisical_ref": map[string]any{"server_id": "s", "project_id": "p", "environment": "prod", "key": "k"}},
 	}
-	m, err = ResolveAuth(nil, infCred, nil)
+	m, err = ResolveAuth(nil, infCred, nil, nil)
 	if err != nil {
 		t.Fatalf("resolve infisical: %v", err)
 	}

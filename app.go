@@ -2380,7 +2380,7 @@ func (a *App) sftpSyncTransport(cfg SyncConfig) (*syncer.SFTP, error) {
 		if err != nil {
 			return nil, fmt.Errorf("SFTP credential: %w", err)
 		}
-		auth, err := sshlayer.ResolveAuth(context.Background(), cred, a.vault)
+		auth, err := sshlayer.ResolveAuth(context.Background(), cred, a.vault, nil)
 		if err != nil {
 			return nil, fmt.Errorf("SFTP credential: %w", err)
 		}
