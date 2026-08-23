@@ -67,6 +67,22 @@ func startPprof() {
 				"goroutines     " + strconv.Itoa(runtime.NumGoroutine()) + "\n"))
 	})
 
+	// The app's own process tree with each process's working set. Go's heap
+	// numbers above describe only the Go side, which is the small half: on
+	// Windows the WebView2 host processes hold most of the memory and pprof
+	// cannot see them at all. This answers "how much RAM with N tabs open"
+	// without anyone having to work out which msedgewebview2.exe rows in Task
+	// Manager belong to this app.
+	mux.HandleFunc("/debug/procmem", func(w http.ResponseWriter, _ *http.Request) {
+		procs, err := procTree()
+		if err != nil {
+			http.Error(w, "procmem: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte(formatProcTree(procs)))
+	})
+
 	// Force a GC + return free pages to the OS. Distinguishes "we are
 	// holding this memory" from "the runtime has not handed it back yet",
 	// which is most of the gap between Go's heap numbers and what the OS
