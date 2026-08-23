@@ -467,6 +467,9 @@ func (a *App) initialise() {
 		a.recordSyncPushedFingerprint()
 	}
 	a.credSvc = &creds.Service{DB: db, Vault: vault}
+	// Re-create the user's broadcast groups (names only, empty) now that the
+	// store is open, so the picker is populated before the frontend asks.
+	a.restoreBroadcastGroups()
 	a.initKeepass()
 	a.initBitwarden()
 	a.initInfisical()
@@ -3571,6 +3574,10 @@ func (a *App) emitBroadcastChanged() {
 	a.broadcastMu.Unlock()
 	EventsEmit("broadcast_changed", legacy)
 	EventsEmit("broadcast_groups_changed", groups)
+	// Every group mutation funnels through here, so this is the one place
+	// persistence has to hook. Names only, and restored empty - see
+	// app_broadcast_persist.go for why membership must not survive.
+	a.persistBroadcastGroups()
 }
 
 // ScrollbackSnapshot pairs a base64 chunk with the cumulative-byte watermark
