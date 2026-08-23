@@ -18,6 +18,7 @@
   import { tcpdump } from "./tcpdumpStore.svelte";
   import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot } from "./iconMap";
   import McpActivityPanel from "./McpActivityPanel.svelte";
+  import { mcpCounterTitle } from "./mcpLevel";
   import { networkProfiles } from "./networkProfiles.svelte";
   import { terminalPrefs } from "./terminalPrefs.svelte";
   import type { ServerStats } from "./api";
@@ -415,7 +416,9 @@
     <div class="mcp-anchor">
       <button
         class="seg mcp"
-        title="{mcpShared.size} session{mcpShared.size === 1 ? '' : 's'} shared with an LLM - click for activity"
+        class:lvl-run={mcpShared.highestLevel === "read-run"}
+        class:lvl-yolo={mcpShared.highestLevel === "read-run-yolo"}
+        title={mcpCounterTitle(mcpShared.size, mcpShared.highestLevel)}
         onclick={() => (showMcpActivity = !showMcpActivity)}
       >
         <IconBot size={11} />
@@ -431,7 +434,8 @@
     <div class="mcp-anchor">
       <button
         class="seg share"
-        title="{shareShared.guestCount} session{shareShared.guestCount === 1 ? '' : 's'} shared to a browser guest - click to manage"
+        class:controlled={shareShared.anyControlled}
+        title="{shareShared.guestCount} session{shareShared.guestCount === 1 ? '' : 's'} shared to a browser guest{shareShared.anyControlled ? ' - a guest can type' : ' (view only)'} - click to manage"
         onclick={() => (showSharePanel = !showSharePanel)}
       >
         <span class="dot">●</span>
@@ -629,7 +633,14 @@
   }
   .seg.tunnels { color: var(--green); }
   .seg.mcp { color: var(--blue); }
+  /* The counter stands for every shared session at once, so it takes the
+     loudest grant among them - same colours as the pane header and tab
+     badge, which report a single session each. */
+  .seg.mcp.lvl-run { color: var(--yellow); }
+  .seg.mcp.lvl-yolo { color: var(--red); }
   .seg.share { color: var(--green); }
+  /* A guest who can type is the loud case, same as read-run for MCP. */
+  .seg.share.controlled { color: var(--yellow); }
   .seg.share .dot { font-size: 0.7rem; }
   .mcp-anchor { position: relative; display: inline-flex; }
   /* The share segment sits on the LEFT of the status bar (before the spacer),

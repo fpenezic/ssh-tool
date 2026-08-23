@@ -1145,6 +1145,23 @@ tab can't collide with ids already in the destination window.
 
 ## Misc
 
+### A counter that stands for many sessions shows the loudest one
+The status-bar MCP and share counters each collapse several sessions into
+one number. Both were fixed colours (blue / green) regardless of what the
+sessions behind them allowed, so "3" looked identical whether all three
+were read-only or one was auto-running commands - the calmest possible
+reading of the riskiest possible state. They now take the loudest grant
+among their members: `mcpShared.highestLevel` folds the map with
+`loudestMcpLevel` (mcpLevel.ts, which owns the severity order and ranks
+an unrecognised level at the BOTTOM so a string from a newer build can
+never mask one this build understands), and `shareShared.anyControlled`
+reports whether any guest can type.
+
+Keep the two title helpers apart: `mcpLevelTitle` describes exactly one
+session's own grant (pane header, tab badge), `mcpCounterTitle` describes
+n sessions summarised by their loudest. Swapping them silently produces a
+tooltip that under-reports.
+
 ### Windows auto-update: CREATE_NO_WINDOW, not DETACHED_PROCESS
 The helper `.cmd` that swaps the running .exe used to be spawned
 with `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`. After every

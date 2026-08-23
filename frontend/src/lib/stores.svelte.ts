@@ -6,6 +6,7 @@ import { resolveColorTag } from "./palette";
 import { terminalPrefs } from "./terminalPrefs.svelte.ts";
 import { focusActivePane } from "./paneFocus";
 import { takeNetworkVia } from "./networkVia";
+import { loudestMcpLevel } from "./mcpLevel";
 
 class TreeStore {
   folders = $state<Folder[]>([]);
@@ -2274,6 +2275,14 @@ class McpSharedStore {
   get size(): number {
     return this.byId.size;
   }
+  // The loudest grant currently held by any shared session, "" when none are
+  // shared. Drives the status-bar counter, which stands for all of them at
+  // once and would otherwise report the calmest reading by default.
+  get highestLevel(): string {
+    let out = "";
+    for (const level of this.byId.values()) out = loudestMcpLevel(out, level);
+    return out;
+  }
 }
 export const mcpShared = new McpSharedStore();
 
@@ -2339,6 +2348,13 @@ class ShareSharedStore {
   }
   get guestCount(): number {
     return this.sessionsWithGuest.size;
+  }
+  // True when any guest anywhere can type. The status-bar counter stands for
+  // every shared session at once, so it has to report the loudest of them:
+  // a calm green "2" while one of those guests holds the keyboard is the
+  // wrong summary.
+  get anyControlled(): boolean {
+    return this.sessionsControlled.size > 0;
   }
   // The share_changed payload is the full active-share list. Since the payload
   // doesn't carry which real session each share covers, the caller supplies a
