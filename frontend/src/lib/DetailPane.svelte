@@ -819,6 +819,25 @@
   // ----- Per-connection password -----
 
   let passwordHasValue = $state(false);
+  // A saved password alongside key-based auth is offered to the server as a
+  // FALLBACK: x/crypto/ssh tries the key first, and if the server rejects it,
+  // sends the password. A malicious or impersonated host can therefore fail
+  // the pubkey step on purpose and harvest the password. This cannot be gated
+  // when the config is built (the fallback is what makes the password useful
+  // on hosts where the key is not installed), so the user is warned instead.
+  const keyAuthCredKind = $derived.by(() => {
+    // Fall back to the folder-inherited credential when the connection does
+    // not set one - the effective auth is what decides the risk, not whether
+    // the reference was typed here.
+    let ref = editing?.authRef ?? null;
+    if (!ref && conn) {
+      const inherited = tree.inheritedFieldForConnection(conn.id, "auth_ref");
+      if (inherited.from) ref = String(inherited.value);
+    }
+    if (!ref) return null;
+    const kind = credentials.byId(ref)?.kind;
+    return kind === "key" || kind === "agent" || kind === "opkssh" ? kind : null;
+  });
   let passwordInput = $state("");
   let passwordSaving = $state(false);
 
@@ -1552,7 +1571,15 @@
         {#if passwordInput}
           <PasswordStrengthMeter password={passwordInput} showFeedback={false} />
         {/if}
-        {#if passwordHasValue}
+        {#if passwordHasValue && keyAuthCredKind}
+          <span class="pass-hint warn">
+            This connection also authenticates with a {keyAuthCredKind === "opkssh" ? "certificate" : keyAuthCredKind}.
+            The key is tried first; if the server rejects it, this password is sent as a
+            fallback - so a host impersonating this one can make the key fail on purpose
+            and collect the password. Keep it only if you need it on hosts where the key
+            is not installed.
+          </span>
+        {:else if passwordHasValue}
           <span class="pass-hint">Password saved - will be used for auth</span>
         {/if}
       </label>
@@ -2466,6 +2493,9 @@
   .pass-row > :global(.pw-wrap) { flex: 1; min-width: 0; }
   .pass-row button { flex-shrink: 0; }
   .pass-hint { font-size: 0.74rem; color: var(--green); margin-top: 0.15rem; }
+  /* The password is a credential-disclosure risk here, not a completed
+     setting, so it must not read as the green confirmation above. */
+  .pass-hint.warn { color: var(--warn); line-height: 1.45; }
 
   .vnc-section {
     border: 1px solid var(--border);
