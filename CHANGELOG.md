@@ -9,6 +9,17 @@ a prerelease upstream.
 
 ## [0.85.1] - Ghost broadcast members
 
+### Added
+
+- The MCP bridge now sends usage instructions to the client when it connects,
+  so Claude Code (or any MCP client) learns how the bridge works without you
+  pasting anything into the session. It covers the grant levels and that only
+  you can hand them out, the live-session tools, and the fact that
+  provisioning is staged into a plan and written only after you approve
+  commit_plan. This is about discoverability, not security: the approval
+  modal, the grant split and the dangerous-command check remain the actual
+  boundaries, and none of them trust this text.
+
 ### Fixed
 
 - Ending sessions that came from a dynamic inventory (Proxmox, Hetzner,
