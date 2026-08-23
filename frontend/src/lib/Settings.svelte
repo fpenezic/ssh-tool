@@ -2206,12 +2206,13 @@
 
     <h3 style="margin-top:0.8rem">UI theme</h3>
     <p class="hint">
-      Default is Catppuccin Mocha with slightly lifted muted text
-      for outdoor / bright-room readability. Pick High contrast if
-      you still can't read subtle labels in direct sunlight.
+      Applies to the app itself. Terminal colours are set separately
+      under <strong>Terminal</strong> and don't follow this. Pick
+      High contrast if you can't read subtle labels in direct sunlight.
     </p>
     <fieldset class="modes">
       {#each [
+        { id: "system", name: "Follow system",        desc: "Match the OS dark / light setting, switching as it changes." },
         { id: "mocha", name: "Mocha (default dark)", desc: "Catppuccin Mocha - soft dark, easy on the eyes." },
         { id: "latte", name: "Latte (light)",        desc: "Catppuccin Latte - light background, dark text. For bright rooms / projectors." },
         { id: "hc",    name: "High contrast (dark)", desc: "Mocha with text + borders pushed up for direct-sun visibility." },

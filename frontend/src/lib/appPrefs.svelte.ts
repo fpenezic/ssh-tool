@@ -5,6 +5,10 @@
 // in via `var(--…)` without prop-drilling.
 
 import { api } from "./api";
+import { DARK_QUERY, isUITheme, osPrefersDark, resolveTheme } from "./uiTheme";
+import type { ResolvedTheme, UITheme } from "./uiTheme";
+
+export type { UITheme } from "./uiTheme";
 
 const DENSITY_KEY = "ui_density";
 const FONT_SIZE_KEY = "ui_font_size";
@@ -21,12 +25,11 @@ const THEME_KEY = "ui_theme";
 const THEME_CACHE_KEY = "ui_theme_cache";
 
 export type Density = "compact" | "comfortable" | "cozy";
-export type UITheme = "mocha" | "latte" | "hc";
 
 // Toggle the theme classes on <html>. Shared by the early boot path and
 // the reactive apply() so both stay in sync. "mocha" = no class (the
 // default :root values apply).
-function applyThemeClasses(theme: UITheme) {
+function applyThemeClasses(theme: ResolvedTheme) {
   const root = document.documentElement;
   root.classList.toggle("theme-light", theme === "latte");
   root.classList.toggle("theme-hc", theme === "hc");
@@ -36,10 +39,14 @@ function applyThemeClasses(theme: UITheme) {
 // last-known theme from localStorage and applies the class so the first
 // paint already matches, killing the dark->latte flash. The async load()
 // later reconciles against the settings DB (normally a no-op).
+//
+// "system" resolves here too: matchMedia is synchronous, so following the
+// OS costs nothing at boot and a light-desktop user gets a light first
+// frame instead of a dark flash.
 export function applyCachedThemeEarly() {
   try {
     const v = localStorage.getItem(THEME_CACHE_KEY);
-    if (v === "mocha" || v === "latte" || v === "hc") applyThemeClasses(v);
+    if (isUITheme(v)) applyThemeClasses(resolveTheme(v, osPrefersDark()));
   } catch { /* localStorage unavailable (rare) - fall through to async load */ }
 }
 
@@ -62,10 +69,19 @@ class AppPrefs {
   tabTimer = $state<boolean>(false);
   // UI theme variant. "mocha" = default Catppuccin Mocha with a
   // slightly lifted muted-text floor. "hc" = high contrast,
-  // applied via the `theme-hc` class on <html>.
+  // applied via the `theme-hc` class on <html>. "system" follows the
+  // OS dark/light setting, resolving to mocha or latte.
+  //
+  // This is the app chrome only. Terminal colours are a separate
+  // preference (terminalPrefs) and deliberately do not follow it - a
+  // terminal scheme is picked for contrast against shell output, not to
+  // match window decorations.
   uiTheme = $state<UITheme>("mocha");
 
   private loaded = false;
+  // Live handle on the OS preference so a desktop that flips dark/light
+  // while the app runs updates immediately, without a restart.
+  private darkQuery: MediaQueryList | null = null;
 
   async load() {
     if (this.loaded) return;
@@ -96,8 +112,9 @@ class AppPrefs {
     } catch { /* missing key fine */ }
     try {
       const v = await api.settingsGet(THEME_KEY);
-      if (v === "mocha" || v === "latte" || v === "hc") this.uiTheme = v;
+      if (isUITheme(v)) this.uiTheme = v;
     } catch { /* missing key fine */ }
+    this.watchOSTheme();
     // Refresh the synchronous boot cache so the next launch paints this
     // theme from the first frame (no dark->latte flash).
     try { localStorage.setItem(THEME_CACHE_KEY, this.uiTheme); } catch { /* ignore */ }
@@ -111,6 +128,20 @@ class AppPrefs {
     api.settingsSet(THEME_KEY, t).catch(console.warn);
     try { localStorage.setItem(THEME_CACHE_KEY, t); } catch { /* ignore */ }
     this.apply();
+  }
+
+  // Subscribe once to the OS dark/light preference. The listener stays
+  // attached for every theme choice and apply() decides whether it
+  // matters - re-subscribing on each change would be more moving parts
+  // for no gain, and apply() is idempotent.
+  private watchOSTheme() {
+    if (this.darkQuery) return;
+    try {
+      this.darkQuery = window.matchMedia(DARK_QUERY);
+      this.darkQuery.addEventListener("change", () => {
+        if (this.uiTheme === "system") this.apply();
+      });
+    } catch { /* matchMedia unsupported - "system" falls back to dark */ }
   }
 
   setDensity(d: Density) {
@@ -171,7 +202,9 @@ class AppPrefs {
     root.style.setProperty("--row-sub-gap", subGap);
     root.style.setProperty("--ui-font-size", `${this.baseFontSize}px`);
     // Theme is selected by class on <html>; CSS in style.css reads it.
-    applyThemeClasses(this.uiTheme);
+    // Resolve first so "system" never reaches the class toggles.
+    const resolved = resolveTheme(this.uiTheme, osPrefersDark());
+    applyThemeClasses(resolved);
   }
 }
 

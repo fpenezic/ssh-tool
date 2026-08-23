@@ -1179,6 +1179,42 @@ Linux. `relaunchApp` returns nil without quitting when `a.app` is
 unset, so a delayed hard exit backs it up - otherwise that path
 leaves two instances running.
 
+### "Follow system" theme resolves in JS, not CSS
+The UI theme is a class on `<html>` (`theme-light` / `theme-hc`), not
+a `prefers-color-scheme` media query, so "follow system" cannot be a
+CSS rule - it has to resolve to a palette before any class is
+toggled. `uiTheme.ts` keeps the two ideas apart: `UITheme` is what
+the user picked (including `"system"`), `ResolvedTheme` is what gets
+painted. `resolveTheme()` maps one to the other. Nothing downstream
+knows `"system"` exists, and there is deliberately no
+`theme-system` class to accidentally match.
+
+Resolution reads `matchMedia("(prefers-color-scheme: dark)")`, which
+every desktop webview forwards from the OS - with caveats:
+
+- **Windows**: WebView2 follows the *app* mode setting, which is a
+  separate toggle from *Windows* mode in Personalization > Colors.
+  App light + system dark gives a light app, correctly.
+- **Linux**: WebKitGTK reads the GTK / GNOME color-scheme. GNOME 42+
+  is fine; an older desktop (or `color-scheme: default`, which is
+  what a bare WSL session reports) may resolve light.
+- **macOS**: WKWebView follows Appearance including Auto.
+
+An unsupported or failed query resolves to **dark**, not light: dark
+is the app's own default, so a failure keeps the user where they
+were instead of flipping them.
+
+If a platform turns out to report wrongly, Wails has native
+detection to fall back on - `application.Env.IsDarkMode()` plus the
+`events.Common.SystemThemeChanged` application event (D-Bus on
+Linux, registry on Windows). That is a Go IPC hop plus a bindings
+regen, so it is not worth reaching for unless matchMedia is actually
+observed to be wrong.
+
+Terminal colours are a separate preference and deliberately do NOT
+follow the app theme: a terminal scheme is picked for contrast
+against shell output, not to match window chrome.
+
 ### xterm swallows Ctrl+Tab / Ctrl+1..9
 xterm.js' `attachCustomKeyEventHandler` defaults to returning
 true (let xterm handle the key) for combos without a named
