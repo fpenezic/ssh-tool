@@ -1,6 +1,10 @@
 # Shared bastion (jump) connection multiplexing - design
 
-Status: PROPOSED (awaiting review before implementation).
+Status: **implemented.** Shipped as the jump pool - `app_jumppool.go`
+(pool + linger), `internal/ssh/batch.go` (dial the prefix once, reuse
+it), `Session.releaseSharedPrefix` (per-session claim release). Tests
+in `app_jumppool_test.go`. What follows is the design reasoning; read
+the code for current behaviour.
 
 ## Problem
 

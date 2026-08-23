@@ -10,6 +10,14 @@ system prompt.
 The canonical copy lives in `frontend/src/lib/mcpSystemPrompt.ts` (what the
 Copy button uses); this file is the human-readable mirror - keep them in sync.
 
+Since v0.86.0 the bridge also sends its own usage instructions when a client
+connects (the `instructions` field of the MCP initialize response, defined as
+`mcpInstructions` in `app_mcp_desktop.go`). Those cover the grant model and
+the two workflows, so a client arrives already knowing how the bridge works.
+This system prompt is the stronger, user-controlled layer on top - useful
+because a model may ignore server-sent instructions, and because a
+`CLAUDE.md` applies across sessions whether or not the bridge is connected.
+
 It is deliberately short. The tools are self-describing; this mainly sets the
 right posture (how to search, what's untrusted, when the user is asked to
 approve).

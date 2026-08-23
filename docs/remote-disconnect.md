@@ -1,8 +1,11 @@
 # Presence + remote disconnect for network profiles (design)
 
-Status: **design only, not implemented.** Ships after the cheap
-"single identity" warning. Written before any code because it touches
-the sync layer, which is delicate.
+Status: **implemented.** Presence is published through the sync
+channel as a small plaintext file (no secrets); a machine is identified
+by a stable hardware/OS id so two machines sharing a profile cannot
+read each other's record as their own (`internal/creds/machine.go`).
+What follows is the design reasoning; read the code and CHANGELOG for
+current behaviour.
 
 ## Problem
 
