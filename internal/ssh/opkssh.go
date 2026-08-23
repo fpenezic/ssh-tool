@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"sync"
 	"time"
 
 	opkclient "github.com/openpubkey/openpubkey/client"
@@ -136,12 +137,62 @@ func GetCertStatus(cfg *OpksshConfig, vault *creds.Vault) *CertStatus {
 	return st
 }
 
+// certLoginMu serialises EnsureFreshCert per credential.
+//
+// Without it, connecting N hosts that share one opkssh credential starts N
+// logins at once: every connect reads the vault before any of them has
+// written a cert back, so all N decide a refresh is needed. Only the first
+// can bind the OIDC callback port - the rest die with "address already in
+// use", after each has opened its own browser tab. Connecting 25 dynamic
+// hosts meant 25 tabs and 24 failures.
+//
+// The lock has to cover the vault READ as well as the login, not just the
+// login: releasing it after the browser flow but before the vault write
+// would let the next waiter re-read a still-empty vault and log in again.
+// Under the lock, waiters find the cert the winner just stored and take the
+// "no refresh needed" path, which is what the logs show a successful login
+// already does for every subsequent host.
+//
+// Keyed by credential ID so unrelated credentials still authenticate
+// concurrently. Entries are never deleted: one mutex per opkssh credential
+// is a handful of them, and reclaiming them would need refcounting for no
+// practical gain.
+var (
+	certLoginMuMapMu sync.Mutex
+	certLoginMuMap   = map[string]*sync.Mutex{}
+)
+
+func certLoginLock(credentialID string) *sync.Mutex {
+	certLoginMuMapMu.Lock()
+	defer certLoginMuMapMu.Unlock()
+	mu, ok := certLoginMuMap[credentialID]
+	if !ok {
+		mu = &sync.Mutex{}
+		certLoginMuMap[credentialID] = mu
+	}
+	return mu
+}
+
 // EnsureFreshCert reads (and refreshes if needed) the opkssh cert + key pair.
 // Key and cert material live entirely in the vault - no filesystem access.
 // ctx cancels an in-flight OIDC login (the browser flow) so a connect that
 // hangs on auth - wrong config, closed browser - can be aborted from the UI
 // instead of waiting out the full timeout.
+//
+// Serialised per credential; see certLoginMu. A connect that waits here is
+// waiting for another connect's browser login to finish, which is exactly
+// the cert it would otherwise have re-fetched for itself.
 func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault) (*OpksshAuth, error) {
+	mu := certLoginLock(cfg.CredentialID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	// A queued connect whose user hit Cancel (or whose app is quitting)
+	// should not go on to open a browser tab of its own.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("opkssh: cancelled while waiting for another login: %w", err)
+	}
+
 	needsRefresh := false
 
 	keyPEM, keyOK, _ := vault.Get(opksshKeyAccount(cfg.CredentialID))

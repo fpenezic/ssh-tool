@@ -1215,6 +1215,34 @@ Terminal colours are a separate preference and deliberately do NOT
 follow the app theme: a terminal scheme is picked for contrast
 against shell output, not to match window chrome.
 
+### Concurrent connects on one opkssh credential each start a login
+`EnsureFreshCert` read the vault, decided a refresh was needed, and ran
+the browser OIDC flow with nothing serialising it. Connecting N hosts
+that inherit one opkssh credential therefore started N logins: every
+connect read the vault before any of them had written a cert back, so
+all N decided to refresh. Only the first could bind the OIDC callback
+port; the rest died with `bind: address already in use` - each having
+opened its own browser tab first. 25 dynamic hosts meant 25 tabs and
+24 failed connects.
+
+The logs make the fix obvious: once one login lands, every later host
+logs `cert age 10s, no refresh needed` and authenticates fine. One
+login was always enough.
+
+`certLoginLock(credentialID)` serialises it. Two things about it:
+
+- The lock must cover the vault READ, not just the login. Releasing
+  it after the browser flow but before `vault.Put` lets the next
+  waiter re-read a still-empty vault and log in again - the original
+  bug with extra steps.
+- Keyed per credential, so unrelated credentials still authenticate
+  concurrently. A slow browser login for one must not stall connects
+  using another.
+
+Waiters check `ctx.Err()` after acquiring: a queued connect the user
+cancelled (or a quitting app) must not go on to open a browser tab of
+its own.
+
 ### xterm swallows Ctrl+Tab / Ctrl+1..9
 xterm.js' `attachCustomKeyEventHandler` defaults to returning
 true (let xterm handle the key) for combos without a named
