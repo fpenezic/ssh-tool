@@ -47,6 +47,7 @@
       });
       if (!ok) return;
     }
+    const untrack = connectionActions.trackConnect("dyn:" + entry.id);
     try {
       const res = await api.sshConnectDynamic(folderId, entry.id);
       sessions.add({
@@ -66,6 +67,8 @@
       // synthetic dyn:<id>.
       connectionActions.recordConnectError("dyn:" + entry.id, e);
       selection.selectDynamicEntry(folderId, entry.id);
+    } finally {
+      untrack();
     }
   }
 
@@ -777,6 +780,7 @@
             {@const HIc = dynamicEntryIcon(e.kind)}
             {@const dynLive = liveConnIds.has("dyn:" + e.id)}
             {@const dprobe = dynLive ? null : probeState.stateOf("dyn:" + e.id)}
+            {@const dynStage = connectionActions.connectStage["dyn:" + e.id]}
             <div
               class="row dyn-entry"
               class:stopped={e.status === "stopped"}
@@ -803,9 +807,10 @@
               }}
               title="Click to inspect, double-click to connect ({e.hostname})"
             >
-              <span class="dyn-probe" class:live={dynLive} class:probe-up={dprobe === "up"} class:probe-down={dprobe === "down"}
-                title={dynLive ? "Connected" : dprobe === "up" ? "Reachable" : dprobe === "down" ? "Unreachable" : ""}
-              >{dynLive ? "●" : (dprobe === "up" || dprobe === "down") ? "○" : ""}</span>
+              <span class="dyn-probe" class:live={dynLive} class:connecting={dynStage !== undefined}
+                class:probe-up={dprobe === "up"} class:probe-down={dprobe === "down"}
+                title={dynStage !== undefined ? (dynStage || "Connecting...") : dynLive ? "Connected" : dprobe === "up" ? "Reachable" : dprobe === "down" ? "Unreachable" : ""}
+              >{dynStage !== undefined ? "◌" : dynLive ? "●" : (dprobe === "up" || dprobe === "down") ? "○" : ""}</span>
               <span class="dyn-icon"><HIc size={13} /></span>
               <span class="dyn-name">{e.name}</span>
               <span class="dyn-host mono">{e.hostname}</span>
@@ -821,6 +826,7 @@
             {@const GIc = dynamicEntryIcon(e.kind)}
             {@const dynLive = liveConnIds.has("dyn:" + e.id)}
             {@const dprobe = dynLive ? null : probeState.stateOf("dyn:" + e.id)}
+            {@const dynStage = connectionActions.connectStage["dyn:" + e.id]}
             <div
               class="row dyn-entry"
               class:stopped={e.status === "stopped"}
@@ -847,9 +853,10 @@
               }}
               title="Click to inspect, double-click to connect ({e.hostname})"
             >
-              <span class="dyn-probe" class:live={dynLive} class:probe-up={dprobe === "up"} class:probe-down={dprobe === "down"}
-                title={dynLive ? "Connected" : dprobe === "up" ? "Reachable" : dprobe === "down" ? "Unreachable" : ""}
-              >{dynLive ? "●" : (dprobe === "up" || dprobe === "down") ? "○" : ""}</span>
+              <span class="dyn-probe" class:live={dynLive} class:connecting={dynStage !== undefined}
+                class:probe-up={dprobe === "up"} class:probe-down={dprobe === "down"}
+                title={dynStage !== undefined ? (dynStage || "Connecting...") : dynLive ? "Connected" : dprobe === "up" ? "Reachable" : dprobe === "down" ? "Unreachable" : ""}
+              >{dynStage !== undefined ? "◌" : dynLive ? "●" : (dprobe === "up" || dprobe === "down") ? "○" : ""}</span>
               <span class="dyn-icon"><GIc size={13} /></span>
               <span class="dyn-kind mono">{e.kind === "guest_vm" ? "VM" : "LXC"}</span>
               <span class="dyn-name">{e.name}</span>
@@ -1050,6 +1057,11 @@
      connection row. Dynamic sessions key on the synthetic "dyn:<entryID>"
      connection id (see gotcha 43), which is what liveConnIds holds. */
   .dyn-probe.live { color: var(--green); }
+  /* A connect in flight, including one queued behind another host's opkssh
+     browser sign-in. Pulsing so it reads as "working" rather than a third
+     steady probe state. */
+  .dyn-probe.connecting { color: var(--yellow); animation: dyn-pulse 1s ease-in-out infinite; }
+  @keyframes dyn-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
   .dyn-probe.probe-up { color: var(--green); }
   .dyn-probe.probe-down { color: var(--red); }
   /* Touch: bigger rows + a wider chevron hit area so folders are easy to

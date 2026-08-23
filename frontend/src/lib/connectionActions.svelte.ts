@@ -11,6 +11,7 @@ import { showConfirm } from "./confirmModal.svelte.ts";
 import { toast } from "./toast.svelte.ts";
 import { unwrapRaw } from "./connectErrors";
 import { presenceTakeover, isBusyElsewhere } from "./presenceTakeover.svelte.ts";
+import { EventsOn } from "./wailsRuntime";
 
 // Above this many hosts in one Connect-all, ask for confirmation first -
 // a whole-folder Enter shouldn't silently open dozens of sessions.
@@ -227,6 +228,41 @@ class ConnectionActionsStore {
     );
   }
 
+  // In-flight connects, keyed by connectionID, with the latest progress
+  // stage the backend reported ("TCP dial ...", "Waiting for browser
+  // sign-in", ...). Empty string = in flight but no stage yet.
+  //
+  // This lives in the store rather than in a component because connects are
+  // started from several places (tree double-click, multi-select connect,
+  // the detail pane) while at most ONE detail pane is mounted. A component-
+  // local flag can only describe the host that pane happens to be showing,
+  // so connecting a folder of hosts from the tree left every other host with
+  // no visible state at all - the case that made a queued opkssh sign-in
+  // look like nothing was happening.
+  connectStage = $state<Record<string, string>>({});
+
+  // Mark a connect as in flight and subscribe to its progress events. The
+  // returned function must be called when the attempt settles; it
+  // unsubscribes and clears the entry.
+  trackConnect(connectionID: string): () => void {
+    this.connectStage = { ...this.connectStage, [connectionID]: "" };
+    const un = EventsOn(`connect_progress:${connectionID}`, (stage: string) => {
+      // Ignore a late event that arrives after the attempt settled, which
+      // would otherwise resurrect a finished connect as in-flight.
+      if (!(connectionID in this.connectStage)) return;
+      this.connectStage = { ...this.connectStage, [connectionID]: stage };
+    });
+    let done = false;
+    return () => {
+      if (done) return;
+      done = true;
+      un();
+      const next = { ...this.connectStage };
+      delete next[connectionID];
+      this.connectStage = next;
+    };
+  }
+
   clearConnectError(connectionID: string) {
     if (!(connectionID in this.lastConnectError)) return;
     const next = { ...this.lastConnectError };
@@ -430,21 +466,26 @@ class ConnectionActionsStore {
         // network profile too, so offer the same take-over. The dialog
         // is a singleton: if several targets share a busy profile the
         // first prompts and the rest await that one decision.
-        const res = await withTakeover(() => api.sshConnectDynamic(t.folderId, t.entryId));
-        if (!res.ok && res.cancelled) return; // user declined - quiet skip
-        if (!res.ok) {
-          this.recordConnectError("dyn:" + t.entryId, res.error);
-          throw res.error;
+        const untrack = this.trackConnect("dyn:" + t.entryId);
+        try {
+          const res = await withTakeover(() => api.sshConnectDynamic(t.folderId, t.entryId));
+          if (!res.ok && res.cancelled) return; // user declined - quiet skip
+          if (!res.ok) {
+            this.recordConnectError("dyn:" + t.entryId, res.error);
+            throw res.error;
+          }
+          const r = res.value;
+          sessions.add({
+            sessionId: r.session_id,
+            connectionId: "dyn:" + t.entryId,
+            name: meta?.name ?? t.entryId,
+            hostname: meta?.hostname ?? "",
+            status: "connected",
+          });
+          paneTabs.addTab(r.session_id, meta?.name ?? t.entryId);
+        } finally {
+          untrack();
         }
-        const r = res.value;
-        sessions.add({
-          sessionId: r.session_id,
-          connectionId: "dyn:" + t.entryId,
-          name: meta?.name ?? t.entryId,
-          hostname: meta?.hostname ?? "",
-          status: "connected",
-        });
-        paneTabs.addTab(r.session_id, meta?.name ?? t.entryId);
       },
     );
     if (results.some((r) => r.status === "fulfilled")) view.setTab("terminal");

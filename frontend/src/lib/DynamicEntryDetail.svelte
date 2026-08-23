@@ -8,7 +8,6 @@
   import { copyText } from "./clipboard";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
-  import { EventsOn } from "./wailsRuntime";
   import PasswordInput from "./PasswordInput.svelte";
 
   interface Props {
@@ -39,11 +38,12 @@
   // and the user taps again - especially easy to do on mobile where there's
   // no other feedback. Disable + relabel while a connect is in flight.
   let connecting = $state(false);
-  // Live connect stage ("TCP dial …", "Waiting for browser sign-in", …).
-  // Without this the button showed a bare "Connecting…" for every phase,
-  // including the one where this connect is queued behind another host's
-  // opkssh browser sign-in - which reads as nothing happening at all.
-  let connectStage = $state<string | null>(null);
+  // In-flight state comes from the store, not a local flag, so this pane
+  // reflects a connect started anywhere - tree double-click, multi-select,
+  // or this pane's own button. A local flag only ever knew about the last.
+  const storeStage = $derived(connectionActions.connectStage[synthConnId]);
+  const inFlight = $derived(connecting || storeStage !== undefined);
+
 
   // SSH-capable credentials only (password/key/agent/opkssh) for
   // the jump host picker.
@@ -239,17 +239,6 @@
     return "low";
   }
 
-  // Subscribe to connect-progress while an attempt is in flight. The backend
-  // emits `connect_progress:<connectionID>`, and for dynamic hosts that ID is
-  // the synthetic "dyn:<entryID>" this view already derives.
-  $effect(() => {
-    if (!connecting) { connectStage = null; return; }
-    const un = EventsOn(`connect_progress:${synthConnId}`, (stage: string) => {
-      connectStage = stage;
-    });
-    return () => { un(); connectStage = null; };
-  });
-
   async function connect() {
     if (!entry || connecting) return;
     if (entry.status === "stopped") {
@@ -386,10 +375,12 @@
       {/if}
     </h1>
     <div class="head-actions">
-      <button class="primary" onclick={connect} disabled={connecting}>
-        {connecting ? (connectStage ?? "Connecting…") : overrideCredId ? "Connect (override)" : "Connect"}
+      <button class="primary" onclick={connect} disabled={inFlight}>
+        {inFlight
+          ? (storeStage ? storeStage : "Connecting…")
+          : overrideCredId ? "Connect (override)" : "Connect"}
       </button>
-      {#if connecting}
+      {#if inFlight}
         <!-- Abort a connect stuck on opkssh OIDC login (closed browser /
              wrong config). Without this the button sits on "Connecting..."
              until the login's own timeout expires, with no way out. -->
