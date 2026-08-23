@@ -105,8 +105,10 @@ opkssh u našem store-u = **profile**. Ima:
 - `config_path` - null (system) ili path do custom config.yml
 - `provider_hint` - UI badge text
 - `default_username` - predlaže se pri uparivanju
-- `max_cert_age_hours` - gornja granica iznad server lifetimea
-- `min_remaining_before_refresh_minutes` - kad počet refresh
+- `max_cert_age_seconds` - gornja granica iznad server lifetimea, mjereno
+  od `issued_at` (stariji `max_cert_age_hours` se i dalje čita)
+- `min_remaining_before_refresh_minutes` - mrtvo za upstream opkssh (certovi
+  nemaju expiry), nije u UI-u; ostaje pročitano zbog forkova
 
 ### Multi-profile primjer
 
@@ -160,13 +162,15 @@ On connect:
    `valid_before = u64::MAX` ("forever") - server-side enforces
    lifetime separately, so we additionally track an `issued_at`
    timestamp in the credential and refresh based on
-   `max_cert_age_hours` + `min_remaining_before_refresh_minutes`.
+   `max_cert_age_seconds`. (`min_remaining_before_refresh_minutes`
+   only applies to a cert with a real `valid_before`, which upstream
+   opkssh never issues - see the gotcha.)
 3. If refresh is needed, `opkclient.Auth(ctx)` opens the default
    browser, waits for the localhost callback, and returns the
    fresh key+cert as byte slices.
 4. New key+cert are written back into the vault.
 5. `credential_refs.last_rotated_at` is updated; `expires_at`
-   stays as the `issued_at + max_cert_age_hours` upper bound.
+   stays as the `issued_at + max_cert_age_seconds` upper bound.
 6. The SSH layer hands the key+cert as `ssh.AuthMethod` to the
    standard `golang.org/x/crypto/ssh` client.
 

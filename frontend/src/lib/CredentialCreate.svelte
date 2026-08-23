@@ -47,7 +47,6 @@
   let opksshBasename = $state("id_ecdsa");
   let opksshConfigYaml = $state("");
   let opksshMaxAge = $state<number | undefined>(168);
-  let opksshRefresh = $state<number | undefined>(60);
 
   let apiTokenID = $state("");
   let apiTokenSecret = $state("");
@@ -361,7 +360,6 @@
             key_basename: opksshBasename,
             opkssh_config_yaml: opksshConfigYaml,
             max_cert_age_hours: opksshMaxAge ?? undefined,
-            min_remaining_before_refresh_minutes: opksshRefresh ?? undefined,
           } as CredentialCreateInput;
           break;
         case "api_token":
@@ -585,9 +583,6 @@
           </label>
           <label>Max cert age (hours)
             <input type="number" bind:value={opksshMaxAge} />
-          </label>
-          <label>Refresh window (minutes before expiry)
-            <input type="number" bind:value={opksshRefresh} />
           </label>
         {:else if kind === "api_token"}
           <label>Token id

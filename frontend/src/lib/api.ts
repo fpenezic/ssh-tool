@@ -504,7 +504,7 @@ export type CredentialCreateInput =
       config_path?: string;
       provider_hint?: string;
       max_cert_age_hours?: number;
-      min_remaining_before_refresh_minutes?: number;
+      max_cert_age_seconds?: number;
       hint?: string;
       tags?: string[];
       default_username?: string;

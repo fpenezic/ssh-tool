@@ -85,9 +85,7 @@
   // = hours/minutes respectively); parsed back to the numeric config
   // keys on save.
   let opksshMaxAgeText = $state("7d");
-  let opksshMinRemainingText = $state("1h");
   const opksshMaxAgeSecs = $derived(parseDur(opksshMaxAgeText, "h"));
-  const opksshMinRemainingSecs = $derived(parseDur(opksshMinRemainingText, "m"));
 
   // Provider aliases parsed from the YAML so the hint can be a dropdown
   // instead of a free-text field the user has to spell exactly. Matches
@@ -123,10 +121,13 @@
       opksshYaml = (cred.config?.opkssh_config_yaml as string) ?? "";
       opksshBasename = (cred.config?.key_basename as string) ?? "id_ecdsa";
       opksshProviderHint = (cred.config?.provider_hint as string) ?? "";
-      const ma = cred.config?.max_cert_age_hours;
-      opksshMaxAgeText = fmtDur((typeof ma === "number" && ma > 0 ? ma : 168) * 3600);
-      const mr = cred.config?.min_remaining_before_refresh_minutes;
-      opksshMinRemainingText = fmtDur((typeof mr === "number" && mr > 0 ? mr : 60) * 60);
+      const maSecs = cred.config?.max_cert_age_seconds;
+      const maHours = cred.config?.max_cert_age_hours;
+      opksshMaxAgeText = fmtDur(
+        typeof maSecs === "number" && maSecs > 0
+          ? maSecs
+          : (typeof maHours === "number" && maHours > 0 ? maHours : 168) * 3600,
+      );
       opksshCertStatus = null;
       api.opksshCertStatus(cred.id)
         .then((st) => (opksshCertStatus = st))
@@ -220,10 +221,6 @@
       opksshSaveErr = `Max cert age: can't parse "${opksshMaxAgeText}" - use e.g. 7d, 6d23h, 48h or a number of hours.`;
       return;
     }
-    if (opksshMinRemainingSecs == null) {
-      opksshSaveErr = `Refresh threshold: can't parse "${opksshMinRemainingText}" - use e.g. 1h, 90m or a number of minutes.`;
-      return;
-    }
     opksshSaving = true; opksshSaveErr = null; opksshSaveOk = false;
     try {
       const cfg = {
@@ -231,11 +228,9 @@
         key_basename: opksshBasename,
         opkssh_config_yaml: opksshYaml,
         provider_hint: opksshProviderHint,
+        max_cert_age_seconds: Math.max(60, Math.round(opksshMaxAgeSecs)),
+        // Kept in sync for anything still reading the pre-seconds shape.
         max_cert_age_hours: Math.max(1, Math.round(opksshMaxAgeSecs / 3600)),
-        min_remaining_before_refresh_minutes: Math.max(
-          1,
-          Math.round(opksshMinRemainingSecs / 60),
-        ),
       };
       await api.credentialsUpdate({ id: cred.id, config: cfg });
       await credentials.load();
@@ -964,29 +959,16 @@
           <input bind:value={opksshMaxAgeText} placeholder="7d" spellcheck="false" />
           <span class="field-hint" class:invalid={opksshMaxAgeSecs == null}>
             Force re-login after the cert has been in the vault this
-            long, even if it nominally has time left. Accepts 7d,
-            6d23h, 48h or a bare number of hours. Default 7d.
+            long. This is the only refresh control that applies -
+            opkssh certs carry no expiry, so the server decides when a
+            sign-in is too old and this decides when we pre-empt it.
+            Accepts 7d, 6d23h, 48h, 90m or a bare number of hours.
+            Minimum 1m. Default 7d.
             {#if opksshMaxAgeSecs == null}
               - <strong>can't parse "{opksshMaxAgeText}"</strong>
             {:else}
-              <!-- Stored as whole hours - show what actually saves. -->
-              = <strong>{fmtDur(Math.max(1, Math.round(opksshMaxAgeSecs / 3600)) * 3600)}</strong>
-            {/if}
-          </span>
-        </label>
-        <label>Refresh threshold
-          <input bind:value={opksshMinRemainingText} placeholder="1h" spellcheck="false" />
-          <span class="field-hint" class:invalid={opksshMinRemainingSecs == null}>
-            Refresh proactively when the cert has less than this much
-            time remaining (only applies when the cert has an explicit
-            <code>valid_before</code>; the "forever-cert" path uses
-            Max cert age instead). Accepts 1h, 90m or a bare number
-            of minutes. Default 1h.
-            {#if opksshMinRemainingSecs == null}
-              - <strong>can't parse "{opksshMinRemainingText}"</strong>
-            {:else}
-              <!-- Stored as whole minutes - show what actually saves. -->
-              = <strong>{fmtDur(Math.max(1, Math.round(opksshMinRemainingSecs / 60)) * 60)}</strong>
+              <!-- Stored as whole seconds, floor 1m - show what saves. -->
+              = <strong>{fmtDur(Math.max(60, Math.round(opksshMaxAgeSecs)))}</strong>
             {/if}
           </span>
         </label>

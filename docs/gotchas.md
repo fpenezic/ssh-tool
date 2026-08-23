@@ -49,9 +49,22 @@ novel.
    `forwards.StopAllForSession + pool.Remove + sessionMeta delete`.
 
 6. **opkssh certs have `valid_before = u64::MAX` ("forever").**
-   Server-side enforces lifetime separately. Surfaced as "no expiry"
-   in the UI; fall back to vault-stored `issued_at` for age-based
-   refresh. `ssh.CertTimeInfinity` is the sentinel.
+   Not a default we could configure away: upstream
+   `opkssh/sshcert/sshcert.go` hardcodes
+   `ValidBefore: ssh.CertTimeInfinity` in its only cert constructor.
+   The `24h` in a server's `/etc/opk/providers` is a *verification*
+   rule (the server rejects a stale PKT), never a lifetime stamped
+   into the cert - do not read it as an expiry. Surfaced as "no
+   expiry" in the UI; fall back to vault-stored `issued_at` for
+   age-based refresh. `ssh.CertTimeInfinity` is the sentinel.
+   Consequence: `min_remaining_before_refresh_minutes` can never fire
+   and is no longer editable (it survives in `OpksshConfig` only as
+   insurance against a fork that does stamp an expiry). The single
+   live control is `max_cert_age_seconds` - seconds since v0.85.0,
+   because the old whole-hours key made a refresh untestable without
+   waiting an hour. `max_cert_age_hours` is still read for
+   credentials written before the switch, and both keys are written
+   on save; a zero in either means "unset", not "expire now".
 
 7. **opkssh is implemented natively - no binary dependency.**
    `internal/ssh/opkssh.go` uses `openpubkey/opkssh` as a Go lib.
