@@ -7,6 +7,57 @@ a prerelease upstream.
 
 ---
 
+## [0.84.0] - One sign-in for the whole folder
+
+### Added
+
+- **The app theme can follow your desktop.** "Follow system" joins Mocha,
+  Latte and High contrast under Appearance, switching with the OS light /
+  dark setting as it changes. App chrome only: terminal colours stay on
+  their own preference, since a terminal scheme is chosen for contrast
+  against shell output rather than to match window decorations.
+- **Hosts waiting their turn now say so.** A bulk connect runs four at a
+  time; the rest used to sit there showing nothing at all, which was
+  indistinguishable from the click not having worked. They are marked as
+  queued from the moment you press Connect, and can be cancelled from the
+  queue - one cancel drops every host still waiting in that batch.
+
+### Fixed
+
+- **Connecting a folder of opkssh hosts opens one browser sign-in, not
+  one per host.** Every connect used to check the certificate store,
+  find it empty, and start its own OIDC login. Only the first could bind
+  the callback port, so connecting 25 hosts meant 25 browser tabs and 24
+  failures - and the one sign-in that did succeed had always been enough
+  for all of them. Connects on the same credential now queue behind a
+  single sign-in and share its certificate.
+- **A certificate is no longer thrown away when the vault is locked.**
+  The store refuses to write while locked, and that error was being
+  discarded, so the next connect found nothing and opened the browser
+  again. The certificate is now kept in memory for the session, which
+  means one sign-in per app run rather than one per host. Unlock the
+  vault and it persists for its full validity, as before.
+- **Cancel works during a sign-in, from any host.** You cannot tell which
+  host owns the browser tab, so Cancel now ends the sign-in whichever one
+  you press it on - including a host still queued - and cancels the hosts
+  waiting behind it rather than handing the sign-in to the next in line.
+  Dynamic hosts had no Cancel button at all; they do now.
+- **Dynamic hosts show what a connect is doing.** Stages the app already
+  reported - dialling, handshaking, opening the shell, and now waiting for
+  a browser sign-in - never reached anything opened from a dynamic folder.
+  They appear in the tree and in the host pane, wherever the connect was
+  started from.
+- **A downloaded update installs itself.** Downloading an update and
+  closing the app instead of restarting used to strand it: Windows cannot
+  overwrite its own running binary, so the swap was left to a helper that
+  never ran, and the next launch offered - and re-downloaded - the same
+  version. The pending update is now applied at the next launch, and a
+  download interrupted the same way is resumed rather than re-fetched.
+- **"Restart and install" restarts on Linux and macOS.** It closed the app
+  and left the user to find the icon again.
+
+---
+
 ## [0.83.0] - Background connections, and finding the tab you already have
 
 ### Added
