@@ -46,25 +46,18 @@ For what's already shipped, see `CHANGELOG.md`.
   stream pcap bytes into a local temp file, offer "Open in
   Wireshark". Defer until we decide it's worth the surface area.
 
-
 - **Connect retry on transient failures** - DNS, ECONNREFUSED with
   back-off, single auto-retry, surface as a inline pill not as a
   fresh error toast.
-
 
 - **Persist broadcast groups across restarts.** Today groups live
   only in backend RAM - relaunch wipes them. Settings KV is the
   obvious place to stash `broadcast_groups_v1` as a JSON snapshot;
   hydrate at startup, save after every mutation.
 
-
 - **Native drag-OUT (download)** *(deferred)* - WebView2 / WebKitGTK
   can't advertise drop-as-download cleanly. In-app "save as" works,
   but native DnD into Explorer / Finder is the user-facing gap.
-
-
-
-
 
 ---
 
@@ -79,8 +72,6 @@ For what's already shipped, see `CHANGELOG.md`.
   remote opkssh-verifier is rotated, current cached cert becomes
   invalid until next interactive login. A "regenerate now" button
   in the credential editor would let the user pre-empt.
-
-
 
 ---
 
@@ -119,7 +110,6 @@ Mediums + selected Lows tracked here.
   in the publish pipeline; standalone project, realistic priority
   once the app goes open-source / distribution widens.
 
-
 ---
 
 ## Sync
@@ -155,9 +145,6 @@ Mediums + selected Lows tracked here.
 - **Proton Drive as a sync transport** - the remaining provider from
   the original cloud-sync list. No official API; would need the
   community rclone backend or equivalent.
-
-
-
 
 ## Vault / credentials
 
@@ -198,40 +185,26 @@ Mediums + selected Lows tracked here.
   phone. RFC 6238 over the sealed secret is a few lines; the work is the
   prompt plumbing, and never logging or caching the generated code.
 
-
 ---
 
-## Dynamic inventory providers
+## Dynamic inventory
 
-- **Ansible `group_vars/` / `host_vars/` directories** - parse
-  side-by-side files alongside the inventory main file. Skipped
-  for the MVP "single file" constraint; `internal/inventory/ansible.go`
-  says so in its header. Note the parser already cascades group vars
-  *within* the inventory file (root-first walk), so this is about the
-  external directories only.
-
-
-
-- **Dynamic inventory: Proxmox notes / description** - would need a
+- **Proxmox notes / description** - would need a
   per-VM `/nodes/{node}/{type}/{vmid}/config` call (cached) since
   `/cluster/resources` doesn't carry it. Single extra HTTP per
   detail-pane open, low priority.
 
-
-- **Dynamic inventory: more providers** - still open: **Hetzner Robot**
+- **More providers** - still open: **Hetzner Robot**
   (dedicated servers - a different API from the shipped Hetzner Cloud in
   `hetzner.go`) and **libvirt**. Already shipped: Proxmox, Hetzner Cloud,
   DigitalOcean, Linode, Vultr, Scaleway, AWS EC2, Ansible
   (`internal/inventory/`). Pattern is established (`proxmox.go` /
   `hetzner.go`); each new one is ~150 lines.
 
-
-- **Dynamic inventory: filter persistence per folder** - currently
+- **Filter persistence per folder** - currently
   the visibility settings (hide-stopped, tag whitelist/blacklist)
   are in the folder config. UI exposes them but no "save as
   default" or sharable preset.
-
-
 
 ---
 
@@ -247,7 +220,6 @@ Mediums + selected Lows tracked here.
   shape exists.
 - **Remember detached-window positions** by tab id (per-monitor).
 
-
 ---
 
 ## Terminal
@@ -262,7 +234,6 @@ Mediums + selected Lows tracked here.
   compositing is flaky in the alpha (resize flicker), and themes
   assume a solid background across the whole shell. If ever: opt-in
   setting, macOS only, default off.
-
 
 ---
 
