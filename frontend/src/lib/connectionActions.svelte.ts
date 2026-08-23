@@ -244,8 +244,8 @@ class ConnectionActionsStore {
   // Mark a connect as in flight and subscribe to its progress events. The
   // returned function must be called when the attempt settles; it
   // unsubscribes and clears the entry.
-  trackConnect(connectionID: string): () => void {
-    this.connectStage = { ...this.connectStage, [connectionID]: "" };
+  trackConnect(connectionID: string, initialStage = ""): () => void {
+    this.connectStage = { ...this.connectStage, [connectionID]: initialStage };
     const un = EventsOn(`connect_progress:${connectionID}`, (stage: string) => {
       // Ignore a late event that arrives after the attempt settled, which
       // would otherwise resurrect a finished connect as in-flight.
@@ -261,6 +261,13 @@ class ConnectionActionsStore {
       delete next[connectionID];
       this.connectStage = next;
     };
+  }
+
+  // Update the stage of an attempt already being tracked. Used when a queued
+  // connect leaves the pool's waiting room and actually starts.
+  setConnectStage(connectionID: string, stage: string) {
+    if (!(connectionID in this.connectStage)) return;
+    this.connectStage = { ...this.connectStage, [connectionID]: stage };
   }
 
   clearConnectError(connectionID: string) {
@@ -453,7 +460,23 @@ class ConnectionActionsStore {
     if (targets.length > 1) {
       toast.info(`Connecting to ${targets.length} connections in the background...`);
     }
-    const results = await runPooled(
+    // Mark every target as pending BEFORE the pool gates them. Only
+    // BULK_CONNECT_MAX_CONCURRENT run at a time, so without this the hosts
+    // waiting their turn showed no state at all - indistinguishable from
+    // "the click did nothing", and with no Cancel to press either, since
+    // they had not reached the backend yet.
+    const untrackers = new Map<string, () => void>();
+    for (const t of targets) {
+      untrackers.set(t.entryId, this.trackConnect("dyn:" + t.entryId, "Queued"));
+    }
+    const releaseAll = () => {
+      for (const un of untrackers.values()) un();
+      untrackers.clear();
+    };
+
+    let results: PromiseSettledResult<void>[];
+    try {
+      results = await runPooled(
       targets,
       BULK_CONNECT_MAX_CONCURRENT,
       BULK_CONNECT_STAGGER_MS,
@@ -466,7 +489,9 @@ class ConnectionActionsStore {
         // network profile too, so offer the same take-over. The dialog
         // is a singleton: if several targets share a busy profile the
         // first prompts and the rest await that one decision.
-        const untrack = this.trackConnect("dyn:" + t.entryId);
+        const untrack = untrackers.get(t.entryId) ?? this.trackConnect("dyn:" + t.entryId);
+        untrackers.delete(t.entryId);
+        this.setConnectStage("dyn:" + t.entryId, "Connecting...");
         try {
           const res = await withTakeover(() => api.sshConnectDynamic(t.folderId, t.entryId));
           if (!res.ok && res.cancelled) return; // user declined - quiet skip
@@ -487,7 +512,12 @@ class ConnectionActionsStore {
           untrack();
         }
       },
-    );
+      );
+    } finally {
+      // Anything still queued when the pool unwinds (an early failure, or the
+      // user cancelling the batch) must not be left marked in flight.
+      releaseAll();
+    }
     if (results.some((r) => r.status === "fulfilled")) view.setTab("terminal");
   }
 

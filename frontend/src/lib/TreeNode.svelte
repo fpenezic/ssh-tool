@@ -807,7 +807,9 @@
               }}
               title="Click to inspect, double-click to connect ({e.hostname})"
             >
-              <span class="dyn-probe" class:live={dynLive} class:connecting={dynStage !== undefined}
+              <span class="dyn-probe" class:live={dynLive}
+                class:connecting={dynStage !== undefined && dynStage !== "Queued"}
+                class:queued={dynStage === "Queued"}
                 class:probe-up={dprobe === "up"} class:probe-down={dprobe === "down"}
                 title={dynStage !== undefined ? (dynStage || "Connecting...") : dynLive ? "Connected" : dprobe === "up" ? "Reachable" : dprobe === "down" ? "Unreachable" : ""}
               >{dynStage !== undefined ? "◌" : dynLive ? "●" : (dprobe === "up" || dprobe === "down") ? "○" : ""}</span>
@@ -853,7 +855,9 @@
               }}
               title="Click to inspect, double-click to connect ({e.hostname})"
             >
-              <span class="dyn-probe" class:live={dynLive} class:connecting={dynStage !== undefined}
+              <span class="dyn-probe" class:live={dynLive}
+                class:connecting={dynStage !== undefined && dynStage !== "Queued"}
+                class:queued={dynStage === "Queued"}
                 class:probe-up={dprobe === "up"} class:probe-down={dprobe === "down"}
                 title={dynStage !== undefined ? (dynStage || "Connecting...") : dynLive ? "Connected" : dprobe === "up" ? "Reachable" : dprobe === "down" ? "Unreachable" : ""}
               >{dynStage !== undefined ? "◌" : dynLive ? "●" : (dprobe === "up" || dprobe === "down") ? "○" : ""}</span>
@@ -1061,6 +1065,9 @@
      browser sign-in. Pulsing so it reads as "working" rather than a third
      steady probe state. */
   .dyn-probe.connecting { color: var(--yellow); animation: dyn-pulse 1s ease-in-out infinite; }
+  /* Waiting its turn behind the bulk-connect throttle - shown, but calmer
+     than an attempt that is actually running, so the two read differently. */
+  .dyn-probe.queued { color: var(--overlay1); }
   @keyframes dyn-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
   .dyn-probe.probe-up { color: var(--green); }
   .dyn-probe.probe-down { color: var(--red); }
