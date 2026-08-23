@@ -87,6 +87,23 @@ func main() {
 		appName, appVersion, appCommit,
 		time.Now().Format(time.RFC3339))
 
+	// A staged-but-not-applied update from an earlier run: the user hit
+	// Download and then closed the app instead of "Restart and install".
+	// Windows cannot overwrite its own running .exe, so the swap was left
+	// to a helper script that never ran - and before this, the next launch
+	// knew nothing about it, started the OLD binary and offered the same
+	// update again (a re-download of the whole thing, every time).
+	//
+	// Apply it here: after the relaunch handshake (so an update child does
+	// not re-apply what it just installed) but before the store or the
+	// window exist, so there is nothing to tear down and the swap sees a
+	// binary held only by this process. applyPendingUpdate exits on
+	// success; a false return means nothing was staged, or what was staged
+	// did not verify and has been discarded.
+	if applyPendingUpdate() {
+		os.Exit(0)
+	}
+
 	appInst := NewApp()
 	appInst.logBuf = logBuf
 

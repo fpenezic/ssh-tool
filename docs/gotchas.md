@@ -1117,6 +1117,44 @@ own console because none was inheritable. Swapped to
 `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP` so the window-less
 behaviour is the actual flag, not a side effect.
 
+### A downloaded update the user never restarted into was lost
+Windows cannot overwrite its own running .exe, so `Download`
+stages `ssh-tool.exe.new` and writes an apply `.cmd` that swaps
+it in after the process exits. The path to that script lived only
+in `App.updateApplyScript` - in memory. Download, then close the
+app instead of clicking "Restart and install", and the next
+launch started the OLD binary knowing nothing about the staged
+one: the update check offered the same version again and the user
+re-downloaded the whole binary, forever.
+
+`internal/updater/staged.go` writes a sidecar
+(`ssh-tool-update.json`, next to the exe) recording the staged
+path, script and digest. `applyPendingUpdate()` in
+`main_desktop.go` consumes it at launch - after the relaunch
+handshake, so an update child does not re-apply what it just
+installed, and before the store or window exist, so the swap sees
+a binary held only by this process. `PendingStaged()` re-hashes
+the staged file rather than trusting the manifest: a truncated
+download swapped over a working exe leaves the user with nothing
+that runs, which is the one failure this pipeline must not have.
+
+`DownloadUpdate` also checks for a valid staged copy of the same
+version first and returns it instead of re-fetching ~40 MB.
+
+### "Restart and install" did not restart on Linux/macOS
+`updater.Apply` is a no-op off Windows (the rename already
+happened during `Download`, since Unix allows renaming a running
+binary), and `ApplyUpdate` then just called `os.Exit(0)`. The
+button labelled "The app will close and relaunch" closed the app
+and never came back - the user had to find the icon again.
+`ApplyUpdate` now calls `relaunchApp()` on non-Windows, which
+already handles the pieces this needs: `SSH_TOOL_WAIT_PID` so the
+child waits for store.db to be released, and `setsid` so it
+survives the systemd scope teardown that `Quit()` triggers on
+Linux. `relaunchApp` returns nil without quitting when `a.app` is
+unset, so a delayed hard exit backs it up - otherwise that path
+leaves two instances running.
+
 ### xterm swallows Ctrl+Tab / Ctrl+1..9
 xterm.js' `attachCustomKeyEventHandler` defaults to returning
 true (let xterm handle the key) for combos without a named

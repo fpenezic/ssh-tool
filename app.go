@@ -6202,6 +6202,29 @@ func (a *App) DownloadUpdate() (*updater.DownloadResult, error) {
 	if !semverGreater(rel.Version, appVersion) {
 		return nil, fmt.Errorf("already on the latest version (%s)", appVersion)
 	}
+	// A download from an earlier run that is still staged and still the
+	// right version: hand it straight back instead of pulling ~40 MB again.
+	// PendingStaged has already re-verified its digest, so this is the same
+	// file the user paid for the first time. Windows only - Unix has no
+	// staged state to resume.
+	if staged, ok := updater.PendingStaged(); ok && staged.Version == rel.Version {
+		a.updateMu.Lock()
+		a.updateApplyScript = staged.ApplyScript
+		a.updateAssetURL = rel.AssetURL
+		a.updateAssetSHA256 = rel.AssetSHA256
+		a.updateMu.Unlock()
+		return &updater.DownloadResult{
+			StagedPath:   staged.StagedPath,
+			Size:         staged.Size,
+			SHA256:       staged.SHA256,
+			Verified:     true,
+			ApplyScript:  staged.ApplyScript,
+			NeedsRestart: true,
+		}, nil
+	}
+	// Any other staged copy is for a version we are no longer offering.
+	updater.ClearStaged()
+
 	url, wantSHA := rel.AssetURL, rel.AssetSHA256
 	// Keep the stash in step with what we are about to download so ApplyUpdate
 	// and any UI reading it stay consistent.
@@ -6222,7 +6245,7 @@ func (a *App) DownloadUpdate() (*updater.DownloadResult, error) {
 		EventsEmit("update_download_progress", UpdateDownloadProgress{Read: read, Total: total})
 	}
 
-	res, err := updater.Download(url, wantSHA, onProgress)
+	res, err := updater.Download(url, wantSHA, rel.Version, onProgress)
 	if err != nil {
 		a.recordAudit("update.download.failed", "", map[string]string{"error": err.Error(), "url": url})
 		return nil, err
@@ -6261,6 +6284,33 @@ func (a *App) ApplyUpdate() error {
 		}
 	}
 	a.recordAudit("update.apply", "", nil)
+	if runtime.GOOS != "windows" {
+		// Unix already has the new binary in place (Download renamed it
+		// over the running one). Re-exec it rather than just exiting:
+		// "Restart and install" that leaves the user staring at an empty
+		// desktop, having to find the icon again, is not a restart.
+		// relaunchApp spawns the child with SSH_TOOL_WAIT_PID, detaches it
+		// from our systemd scope and then quits us.
+		if err := a.relaunchApp(); err != nil {
+			// Nothing left to relaunch with - fall back to the plain exit
+			// so the update is at least applied on the next manual start.
+			log.Printf("update: relaunch after apply failed: %v", err)
+			go func() {
+				time.Sleep(250 * time.Millisecond)
+				os.Exit(0)
+			}()
+			return nil
+		}
+		// relaunchApp asks the Wails app to Quit, but only when it has an
+		// app handle; without one it returns nil having done nothing but
+		// spawn the child, which would leave two instances running. Back it
+		// with a hard exit that the Quit path beats under normal conditions.
+		go func() {
+			time.Sleep(2 * time.Second)
+			os.Exit(0)
+		}()
+		return nil
+	}
 	go func() {
 		time.Sleep(250 * time.Millisecond)
 		os.Exit(0)

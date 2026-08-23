@@ -27,6 +27,10 @@ func init() {
 // deep-link argv, no GTK. Never asks the process to exit early.
 func platformPreflight() bool { return false }
 
+// applyPendingUpdate is desktop-only. Mobile updates go through the store /
+// APK installer, and the app cannot swap its own binary anyway.
+func applyPendingUpdate() bool { return false }
+
 // buildApp constructs a minimal application for mobile. No quit gate, no
 // key bindings, no tray - those are desktop concepts. The Wails mobile
 // runtime drives the lifecycle from the native side.

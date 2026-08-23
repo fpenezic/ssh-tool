@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"ssh-tool/internal/updater"
+
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
@@ -436,4 +438,45 @@ func configurePlatform(app *application.App, appInst *App) func() {
 		return nil
 	}
 	return stopInstance
+}
+
+// applyPendingUpdate installs an update that a previous run downloaded but
+// never restarted into, and reports whether the caller should exit.
+//
+// This closes the Windows half of the "download without restart" hole. The
+// staged binary and its apply script are written next to the exe by
+// updater.Download; the sidecar manifest recorded there tells this launch
+// what is waiting. updater.PendingStaged re-hashes the staged file before
+// handing it back, so a truncated or tampered download is discarded here
+// rather than swapped over a working binary.
+//
+// Two guards keep this from firing when it should not:
+//   - Windows only. On Unix Download already renamed the new binary into
+//     place, so by the time we run here we ARE the new version.
+//   - The staged version must still be newer than what is running. If the
+//     user updated by some other route in the meantime (reinstall, package
+//     manager), the stale staged copy is dropped instead of downgrading them.
+//
+// Returns true only after Apply has successfully spawned the helper - the
+// caller must exit immediately so the script can take the file lock.
+func applyPendingUpdate() bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	staged, ok := updater.PendingStaged()
+	if !ok {
+		return false
+	}
+	if !semverGreater(staged.Version, appVersion) {
+		// Already on this version or newer - the staged copy is dead weight.
+		updater.ClearStaged()
+		return false
+	}
+	log.Printf("update: applying staged %s over %s", staged.Version, appVersion)
+	if err := updater.Apply(staged.ApplyScript); err != nil {
+		log.Printf("update: applying staged %s failed: %v", staged.Version, err)
+		updater.ClearStaged()
+		return false
+	}
+	return true
 }

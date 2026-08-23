@@ -86,7 +86,12 @@ func (w *progressWriter) Write(p []byte) (int, error) {
 // download and aborts. Empty wantSHA256 skips verification (manifest
 // from an older / third-party release server); the result carries
 // Verified=false so callers can surface that. onProgress may be nil.
-func Download(url, wantSHA256 string, onProgress ProgressFunc) (*DownloadResult, error) {
+//
+// version is the release version being staged. On Windows it is
+// recorded in the staged-update sidecar so a download the user never
+// restarted into is picked up by the next launch instead of being
+// silently forgotten and re-downloaded.
+func Download(url, wantSHA256, version string, onProgress ProgressFunc) (*DownloadResult, error) {
 	if url == "" {
 		return nil, errors.New("updater: empty url")
 	}
@@ -171,6 +176,16 @@ func Download(url, wantSHA256 string, onProgress ProgressFunc) (*DownloadResult,
 		}
 		out.ApplyScript = scriptPath
 		out.NeedsRestart = true
+		// Record the pending swap so closing the app without hitting
+		// "Restart and install" does not throw the download away.
+		// Best-effort: losing the sidecar costs a re-download, nothing more.
+		_ = writeStagedManifest(StagedUpdate{
+			Version:     version,
+			StagedPath:  stagedPath,
+			ApplyScript: scriptPath,
+			SHA256:      gotSHA,
+			Size:        n,
+		})
 	} else {
 		// On Unix the rename is safe even while the binary runs.
 		// We do it here so a subsequent restart picks up the new
@@ -214,7 +229,17 @@ func Apply(scriptPath string) error {
 	cmd := exec.Command("cmd.exe", "/c", abs)
 	cmd.Dir = filepath.Dir(abs) // anchor cwd so any relative ops in the .cmd resolve.
 	cmd.SysProcAttr = detachedAttr()
-	return cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	// The script owns the staged file from here; drop the sidecar so a
+	// relaunch does not try to apply the same update a second time. The
+	// script deletes itself and the staged copy as part of the swap, so
+	// only the manifest is ours to remove.
+	if path, err := stagedManifestPath(); err == nil {
+		_ = os.Remove(path)
+	}
+	return nil
 }
 
 // buildWindowsApplyScript composes the .cmd that survives parent exit.
