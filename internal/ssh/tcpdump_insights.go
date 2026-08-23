@@ -15,7 +15,10 @@ import (
 // Title is a short label; Detail is the human explanation; FlowKey ties
 // it back to a conversation so the UI can offer a route-check button.
 type Insight struct {
-	Kind     string `json:"kind"`     // "udp_src_mismatch" | "half_open" | "icmp_unreachable" | "icmp_redirect" | "ttl_exceeded" | "arp_off_subnet" | "rst_storm"
+	// Kind: "udp_src_mismatch" | "half_open" | "icmp_unreachable" |
+	// "icmp_redirect" | "ttl_exceeded" | "arp_off_subnet" | "rst_storm" |
+	// "mtu_black_hole" | "arp_conflict" | "dns_no_response".
+	Kind     string `json:"kind"`
 	Severity string `json:"severity"` // "error" | "warn" | "info"
 	Title    string `json:"title"`    // short label for the row
 	Detail   string `json:"detail"`   // full explanation
@@ -45,11 +48,11 @@ type flowState struct {
 	// For UDP src-IP mismatch: the destination IP a client first sent
 	// to (the address it *thinks* it's talking to). A later reply whose
 	// SOURCE IP differs is the wrong-interface / 0.0.0.0-bind smell.
-	udpReqDst   string // server IP the client addressed
-	udpReqSrc   string // client IP
-	udpFlared   bool
+	udpReqDst string // server IP the client addressed
+	udpReqSrc string // client IP
+	udpFlared bool
 
-	rstCount int
+	rstCount  int
 	rstFlared bool
 
 	// Wall-clock of the last packet on this flow. Drives eviction so a
@@ -79,14 +82,21 @@ const (
 // goroutine; a mutex guards the sweep timer that fires from another
 // goroutine.
 type InsightAnalyzer struct {
-	mu     sync.Mutex
-	flows  map[string]*flowState
-	seen   map[string]bool // de-dupe key = kind|flowkey
-	emit   func(Insight)
+	mu    sync.Mutex
+	flows map[string]*flowState
+	seen  map[string]bool // de-dupe key = kind|flowkey
+	emit  func(Insight)
 	// localNets are the host's own subnets, used to judge whether an ARP
 	// "who-has" is for an off-subnet target (no route). Populated lazily
 	// from observed traffic when not provided.
 	localNets []*net.IPNet
+
+	// dnsPending holds DNS queries still waiting for an answer, keyed by
+	// conversation. sweepDNS fires for the ones that time out.
+	dnsPending map[string]*dnsQuery
+	// arpOwners records the MAC that last claimed each IP, so a second
+	// claimant is a duplicate-address conflict. See checkARPConflict.
+	arpOwners map[string]arpOwner
 }
 
 // NewInsightAnalyzer builds an analyzer. emit is called once per new
@@ -95,9 +105,11 @@ type InsightAnalyzer struct {
 // check stays disabled (no false positives from an unknown topology).
 func NewInsightAnalyzer(emit func(Insight), localCIDRs []string) *InsightAnalyzer {
 	ia := &InsightAnalyzer{
-		flows: map[string]*flowState{},
-		seen:  map[string]bool{},
-		emit:  emit,
+		flows:      map[string]*flowState{},
+		seen:       map[string]bool{},
+		emit:       emit,
+		dnsPending: map[string]*dnsQuery{},
+		arpOwners:  map[string]arpOwner{},
 	}
 	for _, c := range localCIDRs {
 		if _, n, err := net.ParseCIDR(c); err == nil {
@@ -116,12 +128,19 @@ func (ia *InsightAnalyzer) Observe(p ParsedPacket) {
 
 	// ICMP control messages are an immediate, per-packet signal - no
 	// flow state needed.
-	if p.Proto == "icmp" || p.Proto == "icmpv6" {
+	if p.Proto == "icmp" || p.Proto == "icmpv6" || p.Proto == "icmp6" {
+		// MTU first: "fragmentation needed" IS an ICMP unreachable subtype,
+		// so the generic unreachable branch below would otherwise swallow it
+		// and report a routing problem for what is an MTU fault.
+		if ia.checkMTU(p) {
+			return
+		}
 		ia.checkICMP(p)
 		return
 	}
 	if p.Proto == "arp" {
 		ia.checkARP(p)
+		ia.checkARPConflict(p)
 		return
 	}
 
@@ -146,6 +165,7 @@ func (ia *InsightAnalyzer) Observe(p ParsedPacket) {
 		ia.checkTCP(p, fs)
 	case "udp":
 		ia.checkUDP(p, fs)
+		ia.checkDNS(p)
 	}
 }
 
@@ -358,6 +378,7 @@ func (ia *InsightAnalyzer) Sweep() {
 	defer ia.mu.Unlock()
 	const grace = 3 * time.Second
 	now := time.Now()
+	ia.sweepDNS(now)
 	for key, fs := range ia.flows {
 		// Evict idle conversations first - a finished flow can't trip a
 		// new insight, so keeping it only wastes memory. This is the

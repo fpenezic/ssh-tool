@@ -956,7 +956,7 @@
         <input type="checkbox" bind:checked={verbose} disabled={running || usingTshark} />
         <span>Verbose (decode)</span>
       </label>
-      <label class="chk" title="Flag routing / wrong-interface anomalies live: UDP replies from the wrong source IP (0.0.0.0-bound services), SYNs with no reply, ICMP unreachable/redirect/TTL-exceeded, ARP for off-subnet hosts, RST storms. TCP flag checks need Verbose; UDP/ICMP/ARP work either way.">
+      <label class="chk" title="Flag network anomalies live: UDP replies from the wrong source IP (0.0.0.0-bound services), SYNs with no reply, ICMP unreachable/redirect/TTL-exceeded, path MTU too small (fragmentation needed), duplicate IP addresses (two MACs claiming one IP), DNS queries with no answer, ARP for off-subnet hosts, RST storms. TCP flag checks need Verbose; UDP/ICMP/ARP work either way.">
         <input type="checkbox" bind:checked={insights} disabled={running} />
         <span>Insights</span>
       </label>
@@ -1198,9 +1198,10 @@
           </div>
         {:else if insightList.length === 0}
           <div class="empty">
-            No anomalies so far. Routing / wrong-interface problems (UDP replies
-            from the wrong source IP, SYNs with no reply, ICMP unreachable, ARP
-            for off-subnet hosts) will appear here as they happen.
+            No anomalies so far. Routing, MTU and address problems (UDP replies
+            from the wrong source IP, SYNs with no reply, ICMP unreachable,
+            path MTU too small, duplicate IP addresses, DNS queries with no
+            answer, ARP for off-subnet hosts) will appear here as they happen.
           </div>
         {/if}
 
