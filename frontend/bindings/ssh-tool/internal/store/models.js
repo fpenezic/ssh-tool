@@ -1299,6 +1299,20 @@ export class InheritableSettings {
         }
         if (/** @type {any} */(false)) {
             /**
+             * InitialCommandLineDelayMs pauses between the lines of a multi-line
+             * InitialCommand. 0 (the default) sends them back to back, which is
+             * what every connection did before this existed. A pause is needed
+             * when a line replaces the shell that reads the next one - "sudo su -
+             * user" is the case that motivated it: without a wait, line 2 is
+             * swallowed by the outgoing shell instead of the new one. nil means
+             * inherit from folder ancestry.
+             * @member
+             * @type {number | null | undefined}
+             */
+            this["initial_command_line_delay_ms"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * AutoReconnect: when true, sessions that drop without a user
              * Disconnect trigger an exponential-backoff reconnect loop (capped).
              * nil means "inherit from folder ancestry"; false means "explicitly
@@ -1847,6 +1861,15 @@ export class ResolvedSettings {
              * @type {string}
              */
             this["initial_command"] = "";
+        }
+        if (!("initial_command_line_delay_ms" in $$source)) {
+            /**
+             * InitialCommandLineDelayMs is the pause between lines of a multi-line
+             * InitialCommand; 0 sends them back to back.
+             * @member
+             * @type {number}
+             */
+            this["initial_command_line_delay_ms"] = 0;
         }
         if (!("auto_reconnect" in $$source)) {
             /**

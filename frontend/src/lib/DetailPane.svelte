@@ -42,6 +42,18 @@
     return String(v).trim();
   }
 
+  // Blank means "inherit"; anything else is a whole number of milliseconds,
+  // clamped so a typo cannot stall a connect for minutes. 0 is a real value
+  // (send the lines back to back), not the same as blank.
+  const MAX_INITIAL_COMMAND_DELAY_MS = 60000;
+  function parseDelayMs(v: string): number | undefined {
+    const t = numText(v);
+    if (t === "") return undefined;
+    const n = parseInt(t, 10);
+    if (isNaN(n) || n < 0) return undefined;
+    return Math.min(n, MAX_INITIAL_COMMAND_DELAY_MS);
+  }
+
   // Stable option list for the credential dropdown - same shape both
   // editor instances need. flatGrouped() returns { cred, label } items
   // where `label` includes the folder path so duplicates by name are
@@ -283,6 +295,7 @@
     keepalive: string;
     networkProfile: string;
     initialCommand: string;
+    initialCommandDelay: string;
   } | null>(null);
 
   function encodeBool(v: boolean | undefined): string {
@@ -326,6 +339,10 @@
           : "",
         networkProfile: encodeNetProfile(folder.settings.network_profile_id),
         initialCommand: folder.settings.initial_command ?? "",
+        initialCommandDelay:
+          folder.settings.initial_command_line_delay_ms !== undefined
+            ? String(folder.settings.initial_command_line_delay_ms)
+            : "",
       };
     } else {
       editingFolder = null;
@@ -349,6 +366,10 @@
       numText(editingFolder.keepalive) !== (s.keepalive_interval !== undefined ? String(s.keepalive_interval) : "") ||
       editingFolder.networkProfile !== encodeNetProfile(s.network_profile_id) ||
       editingFolder.initialCommand !== (s.initial_command ?? "") ||
+      numText(editingFolder.initialCommandDelay) !==
+        (s.initial_command_line_delay_ms !== undefined
+          ? String(s.initial_command_line_delay_ms)
+          : "") ||
       JSON.stringify(editingFolder.jumpHost ?? null) !== JSON.stringify(s.jump_host ?? null)
     );
   });
@@ -381,6 +402,7 @@
     }
     settings.network_profile_id = decodeNetProfile(editingFolder.networkProfile);
     settings.initial_command = editingFolder.initialCommand.trim() || undefined;
+    settings.initial_command_line_delay_ms = parseDelayMs(editingFolder.initialCommandDelay);
     try {
       await api.foldersUpdate({ id: folder.id, name: editingFolder.name, settings });
       await tree.load();
@@ -433,6 +455,7 @@
     vncDefault: string;
     networkProfile: string;
     initialCommand: string;
+    initialCommandDelay: string;
     localShellKind: string;
     openHidden: boolean;
     tags: string[];
@@ -537,6 +560,10 @@
         vncDefault: encodeBool(conn.overrides?.vnc_default),
         networkProfile: encodeNetProfile(conn.overrides?.network_profile_id),
         initialCommand: conn.overrides?.initial_command ?? "",
+        initialCommandDelay:
+          conn.overrides?.initial_command_line_delay_ms !== undefined
+            ? String(conn.overrides.initial_command_line_delay_ms)
+            : "",
         openHidden: !!conn.open_hidden,
         localShellKind: conn.local_shell_kind ?? "",
         tags: [...(conn.tags ?? [])],
@@ -574,6 +601,10 @@
       editing.vncDefault !== encodeBool(o.vnc_default) ||
       editing.networkProfile !== encodeNetProfile(o.network_profile_id) ||
       editing.initialCommand !== (o.initial_command ?? "") ||
+      numText(editing.initialCommandDelay) !==
+        (o.initial_command_line_delay_ms !== undefined
+          ? String(o.initial_command_line_delay_ms)
+          : "") ||
       editing.openHidden !== !!conn.open_hidden ||
       editing.localShellKind !== (conn.local_shell_kind ?? "") ||
       JSON.stringify(editing.jumpHost ?? null) !== JSON.stringify(o.jump_host ?? null) ||
@@ -631,6 +662,7 @@
     overrides.vnc_default = decodeBool(editing.vncDefault);
     overrides.network_profile_id = decodeNetProfile(editing.networkProfile);
     overrides.initial_command = editing.initialCommand.trim() || undefined;
+    overrides.initial_command_line_delay_ms = parseDelayMs(editing.initialCommandDelay);
     const localKind = editing.localShellKind.trim();
     await api.connectionsUpdate({
       id: conn.id,
@@ -1294,6 +1326,18 @@
         <span class="field-note">Run in the shell on connect. Inherited by connections. Blank = inherit. One command per line.</span>
       </label>
 
+      <label title="Wait this long between the lines of a multi-line command. Needed when a line replaces the shell that reads the next one.">
+        Delay between lines (ms)
+        <input
+          type="number"
+          min="0"
+          max="60000"
+          bind:value={editingFolder.initialCommandDelay}
+          placeholder="(inherit)"
+        />
+        <span class="field-note">Blank = inherit, 0 = no pause. Raise it when a line starts a new shell (<code>sudo su - user</code>) and the lines after it get swallowed.</span>
+      </label>
+
       {#if savedHint}
         <div class="span-2 save-row"><span class="saved-pill">✓ {savedHint}</span></div>
       {/if}
@@ -1604,6 +1648,18 @@
             Run in the shell on connect. Blank = inherit folder. One command per line.
           {/if}
         </span>
+      </label>
+
+      <label title="Wait this long between the lines of a multi-line command. Needed when a line replaces the shell that reads the next one.">
+        Delay between lines (ms)
+        <input
+          type="number"
+          min="0"
+          max="60000"
+          bind:value={editing.initialCommandDelay}
+          placeholder={isLocal ? "0" : "(inherit)"}
+        />
+        <span class="field-note">{isLocal ? "0 = no pause." : "Blank = inherit folder, 0 = no pause."} Raise it when a line starts a new shell (<code>sudo su - user</code>) and the lines after it get swallowed.</span>
       </label>
 
       <label class="span-2 inline-check" title="Connect as usual, but leave the tab out of the tab bar. For background helpers - a keepalive loop, a tail, a watcher - where the point is that it runs, not that you watch it.">

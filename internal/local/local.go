@@ -7,6 +7,7 @@
 package local
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log"
@@ -16,6 +17,9 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
+
+	"ssh-tool/internal/initcmd"
 
 	pty "github.com/aymanbagabas/go-pty"
 )
@@ -40,6 +44,9 @@ type Session struct {
 	// initialCommand is written to the PTY once, right after Start, when
 	// non-empty. See SpawnRequest.InitialCommand.
 	initialCommand string
+	// initialCommandDelay pauses between the lines of a multi-line
+	// initialCommand. See SpawnRequest.InitialCommandLineDelayMs.
+	initialCommandDelay time.Duration
 
 	mu         sync.Mutex
 	writeMu    sync.Mutex // serialises Write; see Write
@@ -80,6 +87,13 @@ type SpawnRequest struct {
 	// "local" connection into a telnet client / serial console / REPL /
 	// "claude" launcher: the command IS the connection.
 	InitialCommand string
+
+	// InitialCommandLineDelayMs pauses between the lines of a multi-line
+	// InitialCommand. 0 sends them back to back, which is what this did
+	// before the setting existed. A pause is what makes a line that
+	// replaces the shell work: "sudo su - user" hands the terminal to a new
+	// shell, and the follow-up lines have to wait for it.
+	InitialCommandLineDelayMs uint32
 }
 
 // Spawn creates a new Session and starts the child. The caller is
@@ -137,12 +151,13 @@ func Spawn(req SpawnRequest) (*Session, error) {
 	}
 
 	sess := &Session{
-		Kind:           kind,
-		Display:        display,
-		pty:            p,
-		cmd:            cmd,
-		done:           make(chan struct{}),
-		initialCommand: strings.TrimSpace(req.InitialCommand),
+		Kind:                kind,
+		Display:             display,
+		pty:                 p,
+		cmd:                 cmd,
+		done:                make(chan struct{}),
+		initialCommand:      strings.TrimSpace(req.InitialCommand),
+		initialCommandDelay: time.Duration(req.InitialCommandLineDelayMs) * time.Millisecond,
 	}
 	return sess, nil
 }
@@ -164,17 +179,30 @@ func (s *Session) Start() {
 	// the user to press Enter themselves. Unix PTYs accept CR as Enter too
 	// (ICRNL maps it to NL), so this is correct on every platform.
 	if s.initialCommand != "" {
-		// Multi-line commands are sent a line at a time. The field is a
-		// textarea, so a pasted snippet arrives with \n (or \r\n from a
-		// Windows clipboard) between lines; each line needs its own CR to be
-		// submitted, and blank lines are skipped so a trailing newline does
-		// not fire an extra empty Enter.
-		for _, line := range strings.Split(strings.ReplaceAll(s.initialCommand, "\r\n", "\n"), "\n") {
-			if strings.TrimSpace(line) == "" {
-				continue
-			}
-			_ = s.Write([]byte(line + "\r"))
+		// Multi-line commands are sent a line at a time; initcmd.Send owns the
+		// splitting, the blank-line skipping and the optional pause, shared
+		// with the SSH path. The CR terminator is this path's own, per the
+		// note above.
+		write := func(b []byte) error { return s.Write(b) }
+		if s.initialCommandDelay <= 0 {
+			initcmd.Send(context.Background(), s.initialCommand, 0, "\r", write)
+			return
 		}
+		// With a pause, Start must not block: it is called on the spawn path
+		// and the tab would not render until the last line went out. s.done
+		// ends the sequence if the shell exits mid-way.
+		go func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			go func() {
+				select {
+				case <-s.done:
+					cancel()
+				case <-ctx.Done():
+				}
+			}()
+			initcmd.Send(ctx, s.initialCommand, s.initialCommandDelay, "\r", write)
+		}()
 	}
 }
 

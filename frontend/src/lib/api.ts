@@ -54,6 +54,7 @@ export interface InheritableSettings {
   keepalive_interval?: number;
   terminal_type?: string;
   initial_command?: string;
+  initial_command_line_delay_ms?: number;
   auto_reconnect?: boolean;
   verbose?: boolean;
   probe_liveness?: boolean;
@@ -119,6 +120,7 @@ export interface ResolvedSettings {
   keepalive_interval: number;
   terminal_type: string;
   initial_command: string;
+  initial_command_line_delay_ms: number;
   auto_reconnect: boolean;
   verbose: boolean;
   vnc_enabled: boolean;

@@ -70,16 +70,18 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		KeepaliveInterval: firstNonNilU32(over.KeepaliveInterval, base.KeepaliveInterval),
 		TerminalType:      firstNonNil(over.TerminalType, base.TerminalType),
 		InitialCommand:    firstNonNil(over.InitialCommand, base.InitialCommand),
-		AutoReconnect:     firstNonNilBool(over.AutoReconnect, base.AutoReconnect),
-		Verbose:           firstNonNilBool(over.Verbose, base.Verbose),
-		ProbeLiveness:     firstNonNilBool(over.ProbeLiveness, base.ProbeLiveness),
-		VncEnabled:        firstNonNilBool(over.VncEnabled, base.VncEnabled),
-		VncPort:           firstNonNilU16(over.VncPort, base.VncPort),
-		VncUseTunnel:      firstNonNilBool(over.VncUseTunnel, base.VncUseTunnel),
-		VncDefault:        firstNonNilBool(over.VncDefault, base.VncDefault),
-		NetworkProfileID:  firstNonNil(over.NetworkProfileID, base.NetworkProfileID),
-		SSHOptions:        mergeMap(base.SSHOptions, over.SSHOptions),
-		EnvVars:           mergeMap(base.EnvVars, over.EnvVars),
+		InitialCommandLineDelayMs: firstNonNilU32(
+			over.InitialCommandLineDelayMs, base.InitialCommandLineDelayMs),
+		AutoReconnect:    firstNonNilBool(over.AutoReconnect, base.AutoReconnect),
+		Verbose:          firstNonNilBool(over.Verbose, base.Verbose),
+		ProbeLiveness:    firstNonNilBool(over.ProbeLiveness, base.ProbeLiveness),
+		VncEnabled:       firstNonNilBool(over.VncEnabled, base.VncEnabled),
+		VncPort:          firstNonNilU16(over.VncPort, base.VncPort),
+		VncUseTunnel:     firstNonNilBool(over.VncUseTunnel, base.VncUseTunnel),
+		VncDefault:       firstNonNilBool(over.VncDefault, base.VncDefault),
+		NetworkProfileID: firstNonNil(over.NetworkProfileID, base.NetworkProfileID),
+		SSHOptions:       mergeMap(base.SSHOptions, over.SSHOptions),
+		EnvVars:          mergeMap(base.EnvVars, over.EnvVars),
 	}
 	return out
 }
@@ -124,6 +126,12 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 	if s.InitialCommand != nil {
 		initialCmd = *s.InitialCommand
 	}
+	// 0 is a meaningful value here (send the lines back to back), so unlike
+	// port or keepalive there is no non-zero default to fall back to.
+	var initialCmdDelay uint32
+	if s.InitialCommandLineDelayMs != nil {
+		initialCmdDelay = *s.InitialCommandLineDelayMs
+	}
 	vncPort := uint16(5900)
 	if s.VncPort != nil && *s.VncPort != 0 {
 		vncPort = *s.VncPort
@@ -143,29 +151,30 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 		netProfile = nil
 	}
 	return store.ResolvedSettings{
-		Hostname:          hostname,
-		Username:          s.Username,
-		Port:              port,
-		AuthRef:           s.AuthRef,
-		JumpHost:          jh,
-		SSHOptions:        ssh,
-		EnvVars:           env,
-		ColorTag:          s.ColorTag,
-		BroadcastGroupID:  s.BroadcastGroupID,
-		KeepaliveInterval: keepalive,
-		TerminalType:      term,
-		InitialCommand:    initialCmd,
-		AutoReconnect:     s.AutoReconnect != nil && *s.AutoReconnect,
-		Verbose:           s.Verbose != nil && *s.Verbose,
+		Hostname:                  hostname,
+		Username:                  s.Username,
+		Port:                      port,
+		AuthRef:                   s.AuthRef,
+		JumpHost:                  jh,
+		SSHOptions:                ssh,
+		EnvVars:                   env,
+		ColorTag:                  s.ColorTag,
+		BroadcastGroupID:          s.BroadcastGroupID,
+		KeepaliveInterval:         keepalive,
+		TerminalType:              term,
+		InitialCommand:            initialCmd,
+		InitialCommandLineDelayMs: initialCmdDelay,
+		AutoReconnect:             s.AutoReconnect != nil && *s.AutoReconnect,
+		Verbose:                   s.Verbose != nil && *s.Verbose,
 		// Default true: probe unless a folder explicitly opted out. The global
 		// switch gates whether probing runs at all; this only lets a folder
 		// exclude itself.
-		ProbeLiveness: s.ProbeLiveness == nil || *s.ProbeLiveness,
-		VncEnabled:    s.VncEnabled != nil && *s.VncEnabled,
-		VncPort:           vncPort,
-		VncUseTunnel:      s.VncUseTunnel != nil && *s.VncUseTunnel,
-		VncDefault:        s.VncDefault != nil && *s.VncDefault,
-		NetworkProfileID:  netProfile,
+		ProbeLiveness:    s.ProbeLiveness == nil || *s.ProbeLiveness,
+		VncEnabled:       s.VncEnabled != nil && *s.VncEnabled,
+		VncPort:          vncPort,
+		VncUseTunnel:     s.VncUseTunnel != nil && *s.VncUseTunnel,
+		VncDefault:       s.VncDefault != nil && *s.VncDefault,
+		NetworkProfileID: netProfile,
 	}
 }
 

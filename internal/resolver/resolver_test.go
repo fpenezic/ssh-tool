@@ -260,3 +260,44 @@ func TestNetworkProfileInheritedAndBroken(t *testing.T) {
 		t.Fatalf("expected wg-lab, got %v", r3.NetworkProfileID)
 	}
 }
+
+// The per-line delay follows the same inheritance rules as the command it
+// paces, with one wrinkle the other numeric settings do not have: 0 is a
+// meaningful value (send the lines back to back) rather than "unset", so an
+// override of 0 has to survive a non-zero folder value.
+func TestInitialCommandLineDelayInheritedAndOverridden(t *testing.T) {
+	f := folder("root", nil, store.InheritableSettings{
+		InitialCommand:            ptr("sudo su - deploy\nwhoami"),
+		InitialCommandLineDelayMs: ptr(uint32(500)),
+	})
+
+	// No override: inherit the folder's pause.
+	r := ResolveWith(conn("c1", ptr("root"), "h", store.InheritableSettings{}), []store.Folder{f})
+	if r.InitialCommandLineDelayMs != 500 {
+		t.Fatalf("inherited delay: got %d, want 500", r.InitialCommandLineDelayMs)
+	}
+
+	// A connection override wins.
+	c2 := conn("c2", ptr("root"), "h", store.InheritableSettings{
+		InitialCommandLineDelayMs: ptr(uint32(1200)),
+	})
+	if got := ResolveWith(c2, []store.Folder{f}).InitialCommandLineDelayMs; got != 1200 {
+		t.Fatalf("override delay: got %d, want 1200", got)
+	}
+
+	// An explicit 0 means "no pause here", not "fall back to the folder".
+	c3 := conn("c3", ptr("root"), "h", store.InheritableSettings{
+		InitialCommandLineDelayMs: ptr(uint32(0)),
+	})
+	if got := ResolveWith(c3, []store.Folder{f}).InitialCommandLineDelayMs; got != 0 {
+		t.Fatalf("explicit zero should override the folder's 500, got %d", got)
+	}
+
+	// Nothing set anywhere: no pause, which is what every connection did
+	// before this setting existed.
+	bare := folder("bare", nil, store.InheritableSettings{})
+	r4 := ResolveWith(conn("c4", ptr("bare"), "h", store.InheritableSettings{}), []store.Folder{bare})
+	if r4.InitialCommandLineDelayMs != 0 {
+		t.Fatalf("unset delay should be 0, got %d", r4.InitialCommandLineDelayMs)
+	}
+}

@@ -48,9 +48,9 @@ type Connection struct {
 	// OpenHidden starts this connection's tab hidden - the session runs
 	// normally, it just stays out of the tab bar. For background helpers
 	// whose output nobody watches.
-	OpenHidden     bool                `json:"open_hidden"`
-	Sensitive      bool                `json:"sensitive"`
-	IconImageID    *string             `json:"icon_image_id"`
+	OpenHidden  bool    `json:"open_hidden"`
+	Sensitive   bool    `json:"sensitive"`
+	IconImageID *string `json:"icon_image_id"`
 	// IconName / IconColor: built-in lucide icon + palette colour, same
 	// semantics as on Folder. Mutually exclusive with IconImageID.
 	IconName         *string `json:"icon_name"`
@@ -91,6 +91,14 @@ type InheritableSettings struct {
 	// command). Sent to the TARGET hop's PTY only, with a trailing
 	// newline, so it runs and lands in the user's own scrollback.
 	InitialCommand *string `json:"initial_command,omitempty"`
+	// InitialCommandLineDelayMs pauses between the lines of a multi-line
+	// InitialCommand. 0 (the default) sends them back to back, which is
+	// what every connection did before this existed. A pause is needed
+	// when a line replaces the shell that reads the next one - "sudo su -
+	// user" is the case that motivated it: without a wait, line 2 is
+	// swallowed by the outgoing shell instead of the new one. nil means
+	// inherit from folder ancestry.
+	InitialCommandLineDelayMs *uint32 `json:"initial_command_line_delay_ms,omitempty"`
 	// AutoReconnect: when true, sessions that drop without a user
 	// Disconnect trigger an exponential-backoff reconnect loop (capped).
 	// nil means "inherit from folder ancestry"; false means "explicitly
@@ -215,9 +223,12 @@ type ResolvedSettings struct {
 	TerminalType      string            `json:"terminal_type"`
 	// InitialCommand is run in the shell right after connect ("" = none).
 	InitialCommand string `json:"initial_command"`
-	AutoReconnect  bool   `json:"auto_reconnect"`
-	Verbose        bool   `json:"verbose"`
-	ProbeLiveness  bool   `json:"probe_liveness"`
+	// InitialCommandLineDelayMs is the pause between lines of a multi-line
+	// InitialCommand; 0 sends them back to back.
+	InitialCommandLineDelayMs uint32 `json:"initial_command_line_delay_ms"`
+	AutoReconnect             bool   `json:"auto_reconnect"`
+	Verbose                   bool   `json:"verbose"`
+	ProbeLiveness             bool   `json:"probe_liveness"`
 	// VncPort is the resolved RFB port for the VNC console action,
 	// defaulting to 5900 when unset anywhere in the chain. VncUseTunnel
 	// says whether to reach it through the connection's SSH session.

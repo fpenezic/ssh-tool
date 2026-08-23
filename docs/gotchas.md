@@ -954,6 +954,31 @@ the Terminal component).
 
 ## Connect flow
 
+### Initial command: CR on the local PTY, LF over SSH
+The two transports terminate a line differently and the terminators are
+NOT interchangeable. The local PTY path (`internal/local/local.go`) must
+send `\r`: ConPTY's line reader (PowerShell, cmd) acts on CR only, and an
+LF renders the command but leaves the cursor above it waiting for a real
+Enter. The SSH path (`internal/ssh/session.go`) sends `\n` and always has;
+a remote Unix PTY maps CR to NL anyway. `initcmd.Send` takes the
+terminator as an argument for exactly this reason - do not "unify" it.
+
+### Initial command with a delay must not run on the connect goroutine
+A multi-line initial command can carry a per-line pause
+(`InitialCommandLineDelayMs`, added v0.85.0) because a line like
+`sudo su - deploy` replaces the shell that would read the next line.
+The pause runs on its own goroutine: sending inline would leave the
+terminal unusable for `delay * (lines-1)` before the user saw anything,
+and on the local path `Start()` would not return so the tab would not
+render. A zero delay deliberately keeps the OLD synchronous path -
+no timer, no goroutine - so the default behaviour is byte-identical to
+before the setting existed. The sequence is bound to the session's
+lifetime (`s.closed` for SSH, `s.done` for local); without that, a
+session that dies mid-sequence keeps typing into a dead PTY.
+Note 0 is a real value here, not "unset": `firstNonNilU32` is correct in
+the resolver only because the field is a `*uint32`, so an explicit 0
+override still beats a non-zero folder value.
+
 ### Jump host JSON shape
 `{kind:"none"}` or `{kind:"chain", chain:{...JumpHostSpec...}}`.
 `UnmarshalJSON` also accepts the legacy Rust-era flat shape

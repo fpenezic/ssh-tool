@@ -15,6 +15,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"ssh-tool/internal/creds"
+	"ssh-tool/internal/initcmd"
 	"ssh-tool/internal/store"
 )
 
@@ -196,10 +197,10 @@ type Session struct {
 	// device) or "direct" (profile present but auto/paused policy
 	// dialed outside the tunnel).
 	NetworkVia string
-	conn     ssh.Conn      // top-of-chain client connection
-	stack    []*ssh.Client // chain of clients (last one is the target)
-	channel  ssh.Channel
-	requests <-chan *ssh.Request
+	conn       ssh.Conn      // top-of-chain client connection
+	stack      []*ssh.Client // chain of clients (last one is the target)
+	channel    ssh.Channel
+	requests   <-chan *ssh.Request
 
 	stdin  io.WriteCloser
 	closed chan struct{}
@@ -233,7 +234,7 @@ type Session struct {
 	// chain. Called exactly once from whichever teardown path fires first;
 	// the pool refcounts and only the pool closes the shared clients, so
 	// this session's `stack` holds ONLY the clients it owns (the target).
-	releasePrefix    func()
+	releasePrefix     func()
 	releasePrefixOnce sync.Once
 
 	// scrollback accumulates raw PTY bytes so newly mounted terminals
@@ -761,14 +762,35 @@ func Connect(
 	if cmd := strings.TrimSpace(settings.InitialCommand); cmd != "" {
 		// One line at a time: the field is a textarea, so a multi-line snippet
 		// arrives with newlines in it and each line has to be submitted
-		// separately. Blank lines are skipped so an extra newline in the box
-		// does not send a stray Enter. LF is kept here (a remote Unix PTY maps
-		// CR to NL anyway, and this path has always used it).
-		for _, line := range strings.Split(strings.ReplaceAll(cmd, "\r\n", "\n"), "\n") {
-			if strings.TrimSpace(line) == "" {
-				continue
-			}
-			_, _ = stdin.Write([]byte(line + "\n"))
+		// separately. LF is kept here (a remote Unix PTY maps CR to NL anyway,
+		// and this path has always used it). initcmd.Send owns the splitting
+		// and the optional pause; the local PTY path uses the same helper.
+		write := func(b []byte) error {
+			_, err := stdin.Write(b)
+			return err
+		}
+		delay := time.Duration(settings.InitialCommandLineDelayMs) * time.Millisecond
+		if delay <= 0 {
+			// No pause: stay on the connect goroutine exactly as before, so
+			// the lines are already in the shell's stdin buffer by the time
+			// this function returns.
+			initcmd.Send(context.Background(), cmd, 0, "\n", write)
+		} else {
+			// With a pause we must not block the connect: the terminal would
+			// sit unusable for delay*(lines-1) before the user sees anything.
+			// s.closed ends the sequence if the session dies mid-way.
+			go func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				go func() {
+					select {
+					case <-s.closed:
+						cancel()
+					case <-ctx.Done():
+					}
+				}()
+				initcmd.Send(ctx, cmd, delay, "\n", write)
+			}()
 		}
 	}
 

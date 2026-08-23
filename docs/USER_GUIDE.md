@@ -306,6 +306,15 @@ Two-column grid (auto-fit on narrow widths). Fields:
   connection under it the same landing spot; a connection can override
   or (with an empty value) opt out. It runs on the target host only (not
   jump hosts) and shows in your scrollback like anything you'd type.
+  Multi-line values are sent one line at a time.
+- **Delay between lines (ms)** - a pause between the lines of a
+  multi-line initial command. Empty = inherit, 0 = no pause (what
+  every connection did before this existed). Raise it when a line
+  hands the terminal to a different shell - `sudo su - deploy` is the
+  usual case: without a wait, the lines after it are read by the shell
+  on its way out instead of the one that just started. A few hundred
+  milliseconds is normally enough. With a delay set, the terminal is
+  usable immediately and the remaining lines land as they are sent.
 - **Tags** - chip editor with type-and-enter.
 - **Notes** - markdown textarea with an **Edit / Preview** toggle.
   Supports headings (`#` through `######`), `**bold**`, `*italic*`,

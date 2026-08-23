@@ -3637,8 +3637,9 @@ func (a *App) LocalConnect(connectionID string) (*LocalShellOpenResult, error) {
 		kind = *conn.LocalShellKind
 	}
 	return a.openLocalShell(local.SpawnRequest{
-		Kind:           kind,
-		InitialCommand: settings.InitialCommand,
+		Kind:                      kind,
+		InitialCommand:            settings.InitialCommand,
+		InitialCommandLineDelayMs: settings.InitialCommandLineDelayMs,
 	})
 }
 
