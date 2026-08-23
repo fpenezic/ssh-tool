@@ -1155,6 +1155,34 @@ memory from the cached entry + the dynamic folder's inherit
 cascade, then runs through the standard resolver. No persistent
 connection row is created. Tab connection_id is `dyn:<entryID>`.
 
+### The dynamic connect path has its own close hook - keep it in sync
+`sshConnectDynamicInternal` registers a `SetOnClose` of its own
+(app.go, near the `dyn:<entryID>` wiring) rather than sharing one
+with `SshConnect`. It is a near-copy: forwards teardown, MCP grant,
+recording cleanup, pool remove, share end, wg release, meta delete,
+foreground-service sync, auto-reconnect. "Near" is the trap - it was
+missing the broadcast-group eviction that the other two close paths
+(saved connection, local shell) both had.
+
+The symptom was a badge that never went down. Broadcast 24 dynamic
+sessions, send Ctrl-D to end them all, and every id stayed a group
+member: the status bar kept showing `24`, and the Broadcast Manager
+read `24 of 1 selected` - 24 ghosts against one live session. Nothing
+crashed, because fan-out to a missing session id is a no-op; the state
+was simply wrong forever.
+
+The eviction now lives in one place, `evictFromBroadcastGroups`, and
+all three hooks call it. Two tests in `app_broadcast_evict_test.go`
+hold that line by parsing app.go: one asserts every `SetOnClose`
+literal calls the helper, the other rejects a new inline
+`delete(g, id)` over `a.broadcastGroups` outside the helper and the
+`Broadcast*` IPC. A fourth close path that forgets fails the build,
+not the user's status bar.
+
+Rule for anything session-scoped: if you add cleanup to one close
+hook, grep for `SetOnClose` and check you did not just create a
+third copy that will drift.
+
 ### Ansible inventory: `-J` is the shorthand for ProxyJump
 The ProxyJump regex only knew the long `-o ProxyJump=` form
 originally, so inventories using the short `-J root@bastion`

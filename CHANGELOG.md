@@ -7,6 +7,23 @@ a prerelease upstream.
 
 ---
 
+## [0.85.1] - Ghost broadcast members
+
+### Fixed
+
+- Ending sessions that came from a dynamic inventory (Proxmox, Hetzner,
+  DigitalOcean, Linode, Vultr, Scaleway, AWS EC2, Ansible) left them in
+  their broadcast groups. Broadcast a batch of dynamic hosts, end them
+  with Ctrl-D, and the status-bar badge kept counting every one of them:
+  24 members against a single live session, with the Broadcast Manager
+  reading "24 of 1 selected". The dynamic connect path has its own
+  session-close hook, a near-copy of the saved-connection one, and it was
+  the only one of the three that never dropped the session from the
+  broadcast groups. Fan-out to a dead id was harmless, so nothing broke -
+  the counters were just permanently wrong. The eviction now lives in one
+  helper that all three close paths call, and a test parses the source to
+  reject any close hook that skips it.
+
 ## [0.85.0] - Half a gigabyte back
 
 ### Changed

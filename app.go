@@ -1216,6 +1216,13 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 		delete(a.sessionMeta, sessionID)
 		a.metaMu.Unlock()
 		a.syncForegroundService()
+		// Evict from every broadcast group, exactly like the saved-
+		// connection and local-shell close paths do. Without this a
+		// dynamic-inventory session that ended (Ctrl-D, remote kill,
+		// network drop) stayed a member forever: the status-bar badge
+		// kept counting it and the manager showed "N of 1 selected"
+		// with N ghost ids that fan-out could never reach.
+		a.evictFromBroadcastGroups(sessionID)
 		EventsEmit("session_state:"+sessionID, sshlayer.SessionState{State: "disconnected"})
 		if dynAutoReconnect && !userInit {
 			a.spawnReconnect(sessionID, connectionID)
@@ -3135,18 +3142,7 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 		// Evict from every broadcast group - a dead session can't
 		// accept fan-out and we don't want the manager to show
 		// ghost members in any group.
-		a.broadcastMu.Lock()
-		evicted := false
-		for _, g := range a.broadcastGroups {
-			if g[id] {
-				delete(g, id)
-				evicted = true
-			}
-		}
-		a.broadcastMu.Unlock()
-		if evicted {
-			a.emitBroadcastChanged()
-		}
+		a.evictFromBroadcastGroups(id)
 		log.Printf("session %s cleaned up (user_initiated=%v)", id, userInit)
 
 		if autoReconnect && !userInit {
@@ -3527,6 +3523,29 @@ func (a *App) BroadcastFanOut(originID, dataB64 string) string {
 	return sb.String()
 }
 
+// evictFromBroadcastGroups drops a dead session from every broadcast
+// group and, if it was a member of any, pushes the new membership to
+// all windows. Every session-close path must call this: a session that
+// is gone can never accept fan-out again, and a stale id keeps the
+// status-bar badge and the Broadcast Manager counting members that do
+// not exist ("24 of 1 selected"). It used to be an inline block copied
+// into each close hook, which is exactly how the dynamic-inventory path
+// ended up without one.
+func (a *App) evictFromBroadcastGroups(sessionID string) {
+	a.broadcastMu.Lock()
+	evicted := false
+	for _, g := range a.broadcastGroups {
+		if g[sessionID] {
+			delete(g, sessionID)
+			evicted = true
+		}
+	}
+	a.broadcastMu.Unlock()
+	if evicted {
+		a.emitBroadcastChanged()
+	}
+}
+
 func (a *App) emitBroadcastChanged() {
 	a.broadcastMu.Lock()
 	// Legacy payload: just the default group as a flat list, so
@@ -3674,18 +3693,7 @@ func (a *App) openLocalShell(req local.SpawnRequest) (*LocalShellOpenResult, err
 		a.localPool.Remove(id)
 		// After localPool.Remove, so a share whose last session just closed ends.
 		a.shareSessionClosed(id) // local shells are shareable; end their shares
-		a.broadcastMu.Lock()
-		evicted := false
-		for _, g := range a.broadcastGroups {
-			if g[id] {
-				delete(g, id)
-				evicted = true
-			}
-		}
-		a.broadcastMu.Unlock()
-		if evicted {
-			a.emitBroadcastChanged()
-		}
+		a.evictFromBroadcastGroups(id)
 		EventsEmit("session_exit:"+id, 0)
 		EventsEmit("local_session_closed:"+id, true)
 		// Mirror the SSH close path: the frontend's SessionStore listens on
