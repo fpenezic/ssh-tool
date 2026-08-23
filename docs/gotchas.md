@@ -1141,6 +1141,30 @@ that runs, which is the one failure this pipeline must not have.
 `DownloadUpdate` also checks for a valid staged copy of the same
 version first and returns it instead of re-fetching ~40 MB.
 
+### Testing the updater without publishing a release
+The update path is the one feature you cannot test the normal way:
+exercising it needs a published newer release AND an older build to
+run it from, so every fix to it was untestable until after it
+shipped - which is how the two bugs above survived.
+
+`scripts/update-test-server.sh <windows|linux>` closes that. It
+builds the same code twice with different stamped versions, and
+serves a fake `/api/latest` matching the release server's JSON
+shape. `resolveLatestRelease` skips GitHub entirely when the
+`update_check_base_url` setting is set, so pointing the old build
+at the script's URL runs the real check -> download -> stage ->
+apply -> relaunch path against unreleased code.
+
+Two traps the script already handles: the asset key must be exactly
+`GOOS-GOARCH` (`platformAssetKey()`), or the client unmarshals a
+release with no downloadable asset and reports "no downloadable
+asset for this platform"; and Linux builds need `CGO_ENABLED=1`
+for GTK/WebKit while the Windows build is pure Go and
+cross-compiles from Linux.
+
+Remember to delete the `update_check_base_url` row afterwards, or
+the app keeps checking a server that is no longer running.
+
 ### "Restart and install" did not restart on Linux/macOS
 `updater.Apply` is a no-op off Windows (the rename already
 happened during `Download`, since Unix allows renaming a running
