@@ -323,3 +323,71 @@ func TestAbandonLoginPartyWithNoPartyIsSafe(t *testing.T) {
 		t.Fatal("abandoning a nonexistent party poisoned the next one")
 	}
 }
+
+// The UI runs at most 4 bulk connects at a time, so with 20 hosts the tail
+// calls into EnsureFreshCert AFTER the user has cancelled - each forming a
+// brand new party and opening its own browser tab. A short cooldown after a
+// cancel turns those late arrivals away.
+func TestSignInCooldownTurnsAwayLateArrivals(t *testing.T) {
+	const cred = "cooldown-late"
+	defer clearSignInCancelled(cred)
+
+	_, _, leave := joinLoginParty(cred)
+	abandonLoginParty(cred)
+	leave()
+
+	if !signInRecentlyCancelled(cred) {
+		t.Fatal("a cancelled sign-in left no cooldown; queued hosts would each open a browser")
+	}
+}
+
+// The cooldown must not be a permanent block: pressing Connect again has to
+// be able to open a browser.
+func TestSignInCooldownExpires(t *testing.T) {
+	const cred = "cooldown-expiry"
+
+	loginPartiesMu.Lock()
+	abandonedUntil[cred] = time.Now().Add(-time.Second) // already elapsed
+	loginPartiesMu.Unlock()
+
+	if signInRecentlyCancelled(cred) {
+		t.Fatal("an elapsed cooldown still blocks sign-in")
+	}
+
+	// ...and the elapsed entry is cleaned up rather than accumulating.
+	loginPartiesMu.Lock()
+	_, still := abandonedUntil[cred]
+	loginPartiesMu.Unlock()
+	if still {
+		t.Error("an elapsed cooldown entry was left in the map")
+	}
+}
+
+// A successful sign-in clears the cooldown, so hosts queued behind it are not
+// turned away by a flag from an earlier cancelled attempt.
+func TestClearSignInCancelledEndsCooldown(t *testing.T) {
+	const cred = "cooldown-clear"
+
+	_, _, leave := joinLoginParty(cred)
+	abandonLoginParty(cred)
+	leave()
+
+	clearSignInCancelled(cred)
+
+	if signInRecentlyCancelled(cred) {
+		t.Fatal("cooldown survived a completed sign-in")
+	}
+}
+
+// Cooldowns are per credential.
+func TestSignInCooldownIsPerCredential(t *testing.T) {
+	defer clearSignInCancelled("cooldown-a")
+
+	_, _, leave := joinLoginParty("cooldown-a")
+	abandonLoginParty("cooldown-a")
+	leave()
+
+	if signInRecentlyCancelled("cooldown-b") {
+		t.Fatal("cancelling one credential's sign-in blocked another's")
+	}
+}

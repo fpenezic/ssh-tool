@@ -230,7 +230,42 @@ type loginParty struct {
 var (
 	loginPartiesMu sync.Mutex
 	loginParties   = map[string]*loginParty{}
+	// When a sign-in was cancelled, remember it briefly so connects that are
+	// still queued behind the UI's bulk-connect throttle do not restart it.
+	// Only 4 connects run at a time, so with 20 hosts the rest call in AFTER
+	// the cancel, and each would otherwise open a new browser tab.
+	//
+	// A short window, not a permanent flag: pressing Connect again a moment
+	// later must open a browser. It only has to outlive the tail of one bulk
+	// connect, which is bounded by the stagger between the UI's batches.
+	abandonedUntil = map[string]time.Time{}
 )
+
+const abandonCooldown = 3 * time.Second
+
+// signInRecentlyCancelled reports whether a sign-in for this credential was
+// cancelled inside the cooldown window.
+func signInRecentlyCancelled(credentialID string) bool {
+	loginPartiesMu.Lock()
+	defer loginPartiesMu.Unlock()
+	until, ok := abandonedUntil[credentialID]
+	if !ok {
+		return false
+	}
+	if time.Now().After(until) {
+		delete(abandonedUntil, credentialID)
+		return false
+	}
+	return true
+}
+
+// clearSignInCancelled ends the cooldown early - used when the user
+// deliberately starts a fresh attempt.
+func clearSignInCancelled(credentialID string) {
+	loginPartiesMu.Lock()
+	delete(abandonedUntil, credentialID)
+	loginPartiesMu.Unlock()
+}
 
 // joinLoginParty registers interest in credentialID's login and returns the
 // context the login should run under, plus a leave func the caller must
@@ -291,6 +326,7 @@ func abandonLoginParty(credentialID string) {
 	if p != nil {
 		delete(loginParties, credentialID)
 	}
+	abandonedUntil[credentialID] = time.Now().Add(abandonCooldown)
 	loginPartiesMu.Unlock()
 	if p == nil {
 		return
@@ -381,6 +417,14 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault,
 	loginCtx, party, leave := joinLoginParty(cfg.CredentialID)
 	defer leave()
 
+	// A sign-in cancelled moments ago must not be restarted by a connect that
+	// was still queued behind the UI's bulk-connect throttle. Only 4 connects
+	// run at a time, so with 20 hosts the rest reach this point AFTER the
+	// user cancelled - and each would otherwise open a new browser tab.
+	if partyAbandoned(party) || signInRecentlyCancelled(cfg.CredentialID) {
+		return nil, fmt.Errorf("opkssh: sign-in was cancelled")
+	}
+
 	lock := certLoginLock(cfg.CredentialID)
 	if !lock.tryLock() {
 		// Someone else is mid-login for this credential. Say so - both in the
@@ -390,6 +434,14 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault,
 		log.Printf("opkssh: waiting for an in-flight login on cred %s", cfg.CredentialID)
 		progress("Waiting for browser sign-in")
 		if err := lockCtx(ctx, lock); err != nil {
+			// Cancelling a QUEUED host abandons the sign-in too, not just this
+			// one connect. The user does not know (or care) which host owns the
+			// browser tab - they cancel the one they are looking at, and mean
+			// "stop asking me to sign in". Cancelling only this waiter left the
+			// browser flow running and the other hosts still queued, so it took
+			// one cancel per host and looked like Cancel did nothing.
+			log.Printf("opkssh: connect cancelled while queued; abandoning the sign-in for cred %s", cfg.CredentialID)
+			abandonLoginParty(cfg.CredentialID)
 			return nil, err
 		}
 	}
@@ -478,6 +530,11 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault,
 		})
 		newKey, newCert, err := runOpksshLoginNative(loginCtx, cfg)
 		stopBridge()
+		if err == nil {
+			// A completed sign-in ends any cooldown from an earlier cancel, so
+			// the hosts behind this one are not turned away by a stale flag.
+			clearSignInCancelled(cfg.CredentialID)
+		}
 		if err != nil {
 			return nil, err
 		}
