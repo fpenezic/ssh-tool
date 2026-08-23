@@ -104,6 +104,9 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Opt-in profiler (SSH_TOOL_PPROF=6060). Off unless asked for.
+	startPprof()
+
 	appInst := NewApp()
 	appInst.logBuf = logBuf
 
