@@ -356,7 +356,7 @@
       if (liveConnIds.has(c.id)) n++;
     }
     // Dynamic-inventory entries are not `connections` rows, so connectionsIn()
-    // never sees them; their live sessions key on "dyn:<entryID>" (gotcha 43).
+    // never sees them; their live sessions key on "dyn:<entryID>" (gotcha 50).
     // Only counts entries already fetched for this folder - an unexpanded
     // dynamic folder has none loaded, same as its row count.
     for (const e of tree.dynamicEntries[id] ?? []) {
@@ -1059,7 +1059,7 @@
   .dyn-probe { width: 0.8rem; text-align: center; font-size: 0.7rem; flex: none; }
   /* Filled dot = a live session on this dynamic entry, mirroring the static
      connection row. Dynamic sessions key on the synthetic "dyn:<entryID>"
-     connection id (see gotcha 43), which is what liveConnIds holds. */
+     connection id (see gotcha 50), which is what liveConnIds holds. */
   .dyn-probe.live { color: var(--green); }
   /* A connect in flight, including one queued behind another host's opkssh
      browser sign-in. Pulsing so it reads as "working" rather than a third

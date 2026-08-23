@@ -164,7 +164,17 @@ novel.
     re-evaluate on Set-replace inside a single key (Svelte
     deep tracking misses that).
 
-30. **"Give internet" is a reverse-proxy forward, DNS resolved
+    Membership is in-memory only - the `broadcast_groups` table
+    holds group metadata, not members - so nothing stale survives
+    a restart. Within one run it very much can: every session
+    close path MUST call `evictFromBroadcastGroups`, or a dead
+    session stays a member forever and the badge counts ghosts.
+    The dynamic-inventory close hook was missing that call and
+    produced "24 of 1 selected"; see the Dynamic inventory
+    archive entry. Tests in `app_broadcast_evict_test.go` parse
+    app.go and fail any `SetOnClose` that skips the helper.
+
+19. **"Give internet" is a reverse-proxy forward, DNS resolved
     app-side.** `SshGiveInternet` (app.go) starts a
     `ForwardReverseProxy` forward (`internal/ssh/forward.go`): a
     remote listener on the server (`client.Listen`, loopback
@@ -182,7 +192,7 @@ novel.
     client side has a `bufio.Reader` that may already hold bytes read
     past the header block (request body / TLS ClientHello).
 
-31. **MCP bridge = separate stdio subprocess proxying to the live app
+20. **MCP bridge = separate stdio subprocess proxying to the live app
     over a local socket.** The desktop app runs the MCP server itself
     (`app_mcp_desktop.go`): per accepted socket connection it builds an
     `mcp.Server` (go-sdk) and runs it over an `mcp.IOTransport` on that
@@ -220,7 +230,7 @@ novel.
     Settings->LLM + the share popover; `docs/MCP_SYSTEM_PROMPT.md` is the
     hand-synced human-readable mirror.
     Tools: list_sessions, read_terminal, run, type_into_terminal,
-    list_files / read_file / download_file (gotcha 39), plus
+    list_files / read_file / download_file (gotcha 46), plus
     list_connections (name + folder path only, Sensitive connections
     omitted) and connect (approval-gated `SshConnect` then auto-share).
     WSL->Windows: an optional token-guarded loopback-TCP leg
@@ -259,7 +269,7 @@ novel.
     references an EXISTING vault credential by id (`auth_ref`), validated at
     commit; `list_credentials` returns id/name/kind only.
 
-32. **Cross-window tab moves go through a backend pending-drag slot, not
+21. **Cross-window tab moves go through a backend pending-drag slot, not
     native drag.** A WebView drag can't cross OS window boundaries (the
     drag ends when the pointer leaves the source window), so moving a tab
     to another window is a menu action ("Send to <window>"), not a drop.
@@ -277,7 +287,7 @@ novel.
     replay, non-user xterm `onData` is suppressed while `replaying` so query
     responses in the scrollback don't land in the remote shell as garbage.
 
-33. **KeePass is a read-only live secret backend, routed via a package-var
+22. **KeePass is a read-only live secret backend, routed via a package-var
     hook - not a new credential kind.** `internal/keepass` parses `.kdbx`
     with `gokeepasslib/v3` (pure Go, CGO-free, android-safe; `tobischo/argon2`
     is a pure-Go x/crypto fork). A credential does NOT get a new `Kind`: it
@@ -286,7 +296,7 @@ novel.
     `keepass_databases` holds the file + vault-account pointers, never
     secrets). `sshlayer.ResolveAuth` calls the package var
     `sshlayer.KeepassResolveHook` (wired in `app_keepass.go`, exactly like
-    `BrowserOpenHook` gotcha 28) BEFORE the kind switch; `handled=false` means
+    `BrowserOpenHook` gotcha 35) BEFORE the kind switch; `handled=false` means
     "not a KeePass cred, fall through". Field routing: `password` ->
     `ssh.Password`; an attachment or non-standard String field -> parsed as a
     signer. The decrypted DB lives ONLY in `keepass.Manager` memory and is
@@ -314,7 +324,7 @@ novel.
     appears live without an app restart. Local paths get a native Browse dialog
     (`KeepassPickFile` -> `OpenFileDialog`, desktop-only).
 
-34. **Vaultwarden / Bitwarden is the HTTP sibling of KeePass (gotcha 33) -
+23. **Vaultwarden / Bitwarden is the HTTP sibling of KeePass (gotcha 22) -
     same read-only live-backend shape, different source + real crypto.**
     `internal/bitwarden` (no app imports, unit-testable) implements the
     Bitwarden EncString scheme natively: AES-256-CBC + HMAC-SHA256, PKCS7,
@@ -327,7 +337,7 @@ novel.
     with its org key, else userKey - `Vault.keyFor` is the router. A credential
     does NOT get a new `Kind`: it stays `password`/`key` with
     `StorageMode=external` and `config_json.bitwarden_ref {server_id, cipher_id,
-    field}`; `sshlayer.BitwardenResolveHook` (package var, gotcha 28 pattern) is
+    field}`; `sshlayer.BitwardenResolveHook` (package var, gotcha 22 pattern) is
     called right after the KeePass hook, before the kind switch. Two auth secrets
     per server, DELIBERATELY split: the **master password** is written through
     the Settings form and sealed to a hidden vault account
@@ -359,10 +369,10 @@ novel.
     (email+password/2FA), self-signed certs (needs a cert the OS trust store
     accepts).
 
-35. **Interactive auth prompts (username + keyboard-interactive/password)
+24. **Interactive auth prompts (username + keyboard-interactive/password)
     reuse the host-key TOFU plumbing and are wired via package-var hooks.**
     `internal/ssh` exposes `UsernamePromptHook` and `InteractiveAuthHook`
-    (package vars, gotcha 28 pattern); `app_auth_prompt.go` `initAuthPrompts`
+    (package vars, gotcha 22 pattern); `app_auth_prompt.go` `initAuthPrompts`
     points them at IPC-backed impls that register a channel, emit an event
     (`username_prompt` / `auth_prompt`), and block on it with a 2-min
     cancel-default timeout - a direct clone of the host-key challenge
@@ -386,8 +396,8 @@ novel.
     now offers the interactive method regardless and still errors cleanly if the
     server has no method the prompt can satisfy.
 
-36. **Infisical is the THIRD external secret backend - the per-request,
-    zero-crypto sibling of Bitwarden (gotcha 34).** `internal/infisical` (no app
+25. **Infisical is the THIRD external secret backend - the per-request,
+    zero-crypto sibling of Bitwarden (gotcha 23).** `internal/infisical` (no app
     imports, unit-testable) reads SSH secrets straight out of an Infisical server
     at connect time. Unlike KeePass/Bitwarden there is NO client-side crypto and
     NO master password: Infisical decrypts server-side and returns plaintext over
@@ -405,7 +415,7 @@ novel.
     three) because a secret is addressed by project + environment + folder path +
     key, not one cipher UUID. A ref like `cloudflare/password` is folder path
     `/cloudflare` + key `password` (`splitSecretRef`). `sshlayer.
-    InfisicalResolveHook` (package var, gotcha 28) is called right after the
+    InfisicalResolveHook` (package var, gotcha 22) is called right after the
     Bitwarden hook, before the kind switch; handled=false = "not an Infisical
     cred, fall through". Store v20 table `infisical_servers` holds only pointers
     (no master_ref, no last_hash - per-request, not synced). Freshness is NOT the
@@ -434,7 +444,7 @@ The app runs on Android (v0.36.0+). Built locally via the NDK
 (`task android:package`), not in CI. Desktop stays byte-equivalent -
 everything mobile is behind a build tag or an `isMobile` check.
 
-19. **Build tags: `!android && !ios` is desktop; `android || ios` is
+26. **Build tags: `!android && !ios` is desktop; `android || ios` is
     mobile.** Negative desktop tag chosen so the plain dev loop (`go
     run .`, no `-tags`) still builds the desktop path. Desktop stays
     `CGO_ENABLED=0`; android needs `CGO_ENABLED=1` + NDK
@@ -446,14 +456,14 @@ everything mobile is behind a build tag or an `isMobile` check.
     `runtime.GOOS` / mobile stubs in `app_mobile_stubs.go`); they were
     not relocated into a desktop-tagged file.
 
-20. **Android has no Go WebviewWindow.** The native Activity IS the
+27. **Android has no Go WebviewWindow.** The native Activity IS the
     window. `configurePlatform` (`main_android.go`) creates NO window -
     `app.Window.NewWithOptions` broke asset serving ("wails.localhost
     connection refused"; the Go window hijacks the Activity's asset
     path). Consequence: the default event transport, which dispatches by
     iterating `app.windows`, reaches nobody.
 
-21. **Android Go->JS events go through a frontend long-poll.** Because of
+28. **Android Go->JS events go through a frontend long-poll.** Because of
     #20, `EventsEmit` (`wails3_runtime.go`) also enqueues on a poll queue
     (`mobile_events_android.go`); the frontend pump
     (`src/lib/mobileEvents.ts`) calls `App.MobilePollEvents` (25s long-
@@ -462,7 +472,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     `native:biometric`) are bridged by a Go listener
     (`registerMobileBiometricBridge`) re-enqueuing onto the same queue.
 
-22. **Android IPC transport is hand-rolled.** npm `@wailsio/runtime` is
+29. **Android IPC transport is hand-rolled.** npm `@wailsio/runtime` is
     alpha.79 with no android transport (it does a `fetch` POST the
     WebView can't service). `src/lib/androidTransport.ts` registers a
     custom transport via `setTransport`, routing through
@@ -471,7 +481,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     Android-only methods absent from the committed (desktop) bindings are
     called with `Call.ByName("main.App.MethodName")`.
 
-23. **Java env does not reach Go on android.** Go snapshots `environ` at
+30. **Java env does not reach Go on android.** Go snapshots `environ` at
     `.so` load (a static initializer, before `onCreate`), so
     `Os.setenv("HOME", ...)` in the Activity is invisible to Go.
     `ensureMobileTempDir()` (`mobile_env_android.go`) sets HOME + TMPDIR
@@ -479,7 +489,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     (`androidAppFilesDir`). Without TMPDIR, `os.TempDir` falls back to
     `/data/local/tmp` (not writable) and sync/backup fail.
 
-24. **xterm WebGL atlas corruption ("hijeroglifi").** WebGL is off by
+31. **xterm WebGL atlas corruption ("hijeroglifi").** WebGL is off by
     default EVERYWHERE since v0.47.0 (`terminalPrefs.disableWebgl`
     defaults true; opt back in via Settings). The glyph atlas corrupts
     into garbled glyphs on some GPUs - on font-size, broadcast and
@@ -488,7 +498,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     atlas (`clearWebglAtlas()`) for opted-in users, but the
     spontaneous case is why canvas is the default.
 
-25. **JNI export names pin the Java package - rename the app id, NOT the
+32. **JNI export names pin the Java package - rename the app id, NOT the
     namespace.** The Wails runtime (`.so`) hardcodes 18 JNI exports as
     `Java_com_wails_app_WailsBridge_*` (`GetMethodID` by mangled name).
     JNI mangling uses the fully-qualified Java class name = the gradle
@@ -501,7 +511,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     in-place upgrade, empty profile) - migrate via sync pull. DataDir +
     `androidAppFilesDir` follow the applicationId.
 
-26. **`task android:package` regenerates bindings under the android tag -
+33. **`task android:package` regenerates bindings under the android tag -
     never commit them.** The build runs `wails3 generate bindings`, which
     under `-tags android` DROPS every desktop-only IPC method (VNC,
     clipboard, local shell, ...) from `frontend/bindings/`. Those
@@ -522,7 +532,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     usually already clean (it's relinked before the regen); the gradle
     versionName is the one that needs the clean-tree re-assemble.
 
-27. **Android sync pull, sidecar, and relaunch.** There is no machine-
+34. **Android sync pull, sidecar, and relaunch.** There is no machine-
     bound sidecar on android (`machine_android.go` stubs it). `SyncPullLive`
     therefore reads the vault passphrase from the Keystore secure store
     via `App.localAutoUnlockPass()` (split per platform: desktop reads the
@@ -533,7 +543,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     app" message (the pending-restore swap only runs in `initialise()` on
     a cold start; we don't tear down the live store).
 
-28. **opkssh browser on android needs an Intent.** openpubkey's
+35. **opkssh browser on android needs an Intent.** openpubkey's
     `util.OpenUrl` shells out to `xdg-open`/`open`/`start`, none of which
     exist on android, so the OIDC login silently never opened a browser.
     `internal/ssh.BrowserOpenHook` (a package var the host wires) is set
@@ -545,14 +555,14 @@ everything mobile is behind a build tag or an `isMobile` check.
     -> `WailsBridge.openURL` -> `Intent.ACTION_VIEW`. The loopback
     callback server still runs in-process so the redirect lands back in Go.
 
-29. **Per-platform Taskfiles must keep ldflags parity.** The android
+36. **Per-platform Taskfiles must keep ldflags parity.** The android
     Taskfile originally omitted the `-X main.appVersion` / `-X
     main.appCommit` ldflags the desktop Taskfiles inject from `git
     describe`, so Settings -> About showed "dev". When touching version /
     build-stamp logic, update ALL of `build/{linux,windows,darwin,android,
     ios}/Taskfile.yml`, not just the desktop ones.
 
-30. **NetBird lives in a SEPARATE module (`netbird-helper/`), built as a
+37. **NetBird lives in a SEPARATE module (`netbird-helper/`), built as a
     sidecar plugin - never import it into the main module.** netbirdio/
     netbird needs 8 go.mod `replace` directives (its own wireguard-go fork
     among them), which would silently swap the upstream `wireguard-go`
@@ -561,7 +571,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     netbird imports. Pinned to netbird v0.73.2 with the exact replace set
     from that version - do not bump one without the other.
 
-31. **NetBird helper: `WireguardPort=0` (random) is mandatory; Windows
+38. **NetBird helper: `WireguardPort=0` (random) is mandatory; Windows
     needs a CGO build.** Two traps cost a full debugging session:
     - The embedded netstack peer still binds a real UDP socket for the WG
       transport; the default is 51820. On a machine also running the real
@@ -576,14 +586,14 @@ everything mobile is behind a build tag or an `isMobile` check.
       A plain `CGO_ENABLED=0` cross-compile misbehaves. Linux/macOS build
       native. (Same toolchain remote-tool uses for its in-process embed.)
 
-32. **NetBird is desktop-only; WireGuard is everywhere.** `internal/wg`
+39. **NetBird is desktop-only; WireGuard is everywhere.** `internal/wg`
     is pure-Go netstack and compiles for android, so WG profiles work on
     mobile. NetBird needs the sidecar helper PROCESS, which android can't
     spawn - `PluginsStatus` reports `supported=false` off desktop and the
-    UI hides / disables the NetBird path there. Tailscale (gotcha 33) is
+    UI hides / disables the NetBird path there. Tailscale (gotcha 40) is
     the same: desktop-only sidecar.
 
-33. **Helpers ship on their OWN `helper-vN` release, decoupled from the
+40. **Helpers ship on their OWN `helper-vN` release, decoupled from the
     app version - and speak a versioned protocol.** Two sidecar kinds now:
     `netbird-helper/` (CGO, wireguard-go fork, needs Zig for the Windows
     cross-build) and `tailscale-helper/` (tsnet, pure Go, CGO-free).
@@ -607,7 +617,7 @@ everything mobile is behind a build tag or an `isMobile` check.
       `resolveHelperSecret` is the shared vault/credential lookup.
     - Design + migration notes: `docs/helper-release-plan.md`.
 
-34. **Shared bastion pool: a pooled session must NOT close its jump
+41. **Shared bastion pool: a pooled session must NOT close its jump
     prefix.** `Connect` normally puts every hop's client in
     `Session.stack`, and both teardown paths (`Disconnect` + the Wait
     goroutine) call `cleanup(stack)`, closing all of them. When the
@@ -636,7 +646,7 @@ everything mobile is behind a build tag or an `isMobile` check.
       hop, and its cleanup never closes `initialPrev`. VNC-through-jump
       (`BuildJumpChain`) is still deliberately NOT pooled - single console.
 
-35. **Userspace WireGuard leaks its UDP handshake into another VPN's TUN
+42. **Userspace WireGuard leaks its UDP handshake into another VPN's TUN
     unless source-bound.** `conn.NewDefaultBind()` listens on `0.0.0.0`, so
     the OS routes the outbound handshake by the default route. A second VPN
     that installs `0.0.0.0/0` with a lower metric (e.g. UniFi Identity "TUN
@@ -660,7 +670,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     NOT affected - they run their own kernel TUN via the sidecar helper and
     dial through a loopback SOCKS5, not our UDP bind.
 
-36. **Chromium keeps a singleton per `--user-data-dir`, so a shared
+43. **Chromium keeps a singleton per `--user-data-dir`, so a shared
     persistent profile silently eats `--proxy-server`.** Launch it a second
     time with a dir that is already in use and it just hands the URL to the
     running instance and exits - every other switch is DROPPED. With one
@@ -677,7 +687,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     singleton lock) alive, so the *next* launch is never "the first" one.
     Firefox is immune - we pass `-no-remote` (`browser.go`).
 
-37. **A macOS `.app` is a directory - `exec` on it fails.** Every file
+44. **A macOS `.app` is a directory - `exec` on it fails.** Every file
     picker hands out `/Applications/Brave Browser.app`, so a pinned browser
     fell through to auto-detect with only a log line to show for it.
     `resolveAppBundle` (`browser.go`) walks to `Contents/MacOS/`: bundle name,
@@ -686,7 +696,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     than guess when several are present. Note `preferred_browser_path` is ONE
     global setting, so a mac path also shows up on the Windows build.
 
-38. **SOCKS5: never reply "granted" before the dial succeeds.**
+45. **SOCKS5: never reply "granted" before the dial succeeds.**
     `handleSocks5` returns the destination and leaves the reply to the caller
     (`acceptDynamic`), which dials over SSH first and then answers with the
     real code (`socks5ReplyForDialErr`: refused / host-unreach / net-unreach).
@@ -695,7 +705,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     `ERR_EMPTY_RESPONSE` - which reads like "the proxy is broken" when the
     truth is "nothing listens on that port over there".
 
-39. **MCP file tools: the gate has to match the shell gate, and the LLM
+46. **MCP file tools: the gate has to match the shell gate, and the LLM
     never picks the local path.** `list_files` / `read_file` /
     `download_file` (`app_mcp_files.go`) all require read-run, the same
     bar `run` sets. Do NOT "harden" the first two with an approval
@@ -716,7 +726,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     properties live in `app_mcp_files_test.go`; keep them if you touch
     the path builder, they are the local arbitrary-write guard.
 
-40. **Windows taskbar progress: bind ITaskbarList3 yourself, throttle,
+47. **Windows taskbar progress: bind ITaskbarList3 yourself, throttle,
     and pin the HWND.** Wails' `pkg/w32/taskbar.go` DECLARES
     `SetProgressValue` / `SetProgressState` in the vtable but keeps
     `lpVtbl` unexported and wraps only `SetOverlayIcon` - the progress
@@ -738,7 +748,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     INDETERMINATE rather than a percentage off a partial denominator,
     which would run backwards.
 
-41. **Writing Claude Desktop's config: merge, back up, refuse on
+48. **Writing Claude Desktop's config: merge, back up, refuse on
     garbage.** `ClaudeDesktopRegister` (`app_claude_desktop.go`) edits
     ANOTHER application's file, so it unmarshals into
     `map[string]json.RawMessage`, sets only the `ssh-tool` key inside
@@ -755,7 +765,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     `ClaudeDesktopStatus` means the entry is there but its `command`
     is a different binary - the portable-build-moved case.
 
-42. **Wails beta.8 changed how events reach the WebView, in two ways
+49. **Wails beta.8 changed how events reach the WebView, in two ways
     that both land on `pty_output`.** First, every window now has a
     JS-eval queue with a single drainer, so delivery order finally
     matches emit order - and an emitting goroutine BLOCKS once 64
@@ -780,7 +790,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     coalescing it does is valuable on its own, and it silently covers
     any hole left in upstream ordering.
 
-43. **A session's `connectionId` is not always a connection id - never
+50. **A session's `connectionId` is not always a connection id - never
     feed it back into `SshConnect`.** Dynamic-inventory sessions carry
     the synthetic `dyn:<entryID>` (there is no `connections` row - see
     the archive entry "Dynamic entries don't persist as connections"),
@@ -800,7 +810,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     `SetOnClose` at all, so `auto_reconnect` inherited from the folder
     was ignored on dynamic hosts.
 
-44. **A split-tunnel VPN that owns the default route makes the liveness
+51. **A split-tunnel VPN that owns the default route makes the liveness
     probe report false green - and that is NOT our bug.** Under UniFi
     Identity "TUN Mode" the client gets `utun4` = `172.16.0.1` with a
     `0.0.0.0/0` route at a lower metric than the physical NIC, and the
@@ -845,6 +855,114 @@ everything mobile is behind a build tag or an `isMobile` check.
     still fails loudly. Revisit only if this shows up on VPN clients
     other than UniFi Identity - at that point it stops being an edge
     case and the generalisation earns its keep.
+
+52. **An applied migration is frozen - amend it and the edit vanishes.**
+
+    The runner skips everything at or below the recorded version:
+
+    ```go
+    if m.version <= current { continue }
+    ```
+
+    So editing the SQL of a migration that has already run is a no-op on
+    every database that has seen it, including your own local dirty
+    build. The edit reviews fine, passes on a fresh DB, and silently
+    never reaches an existing one. You end up with two populations of
+    databases carrying different schemas under the same version number.
+
+    This is not hypothetical here. Migration 22 added icon columns to
+    connections + folders, then had the credential_refs +
+    credential_folders statements appended afterwards. Databases already
+    recorded at version 22 never got them and failed reads with "no such
+    column: icon_name". Migration 23 exists purely to re-add all four -
+    which is why 22 and 23 hold byte-identical SQL.
+
+    `internal/store/migrations_frozen_test.go` now pins every migration
+    up to `frozenThrough` by SHA-256, read out of migrations.go with
+    go/ast. Change applied SQL and the test names the version and tells
+    you to add a new migration instead. Adding one: raise
+    `frozenThrough`, then `go test ./internal/store/ -run
+    TestPrintMigrationHashes -v` prints the pin table to paste.
+
+    Two companions: every migration at or below `frozenThrough` must be
+    pinned (so the guard cannot silently stop covering the newest ones),
+    and versions must be 1..N with no gaps or repeats (the runner
+    compares against one integer watermark, so a gap changes which
+    migrations run where).
+
+    The escape hatch stays what it always was: a repair migration that
+    re-adds the columns. The runner executes statement-by-statement and
+    tolerates duplicate-column per statement, so re-adding what already
+    exists is a no-op.
+
+
+53. **Releasing a background tab's scrollback: five ways to get it wrong.**
+
+    Hidden tabs holding their xterm buffer was the app's single biggest memory
+    cost: 20 SSH sessions with a filled 5000-line buffer measured 1105 MB, of
+    which ~480 MB was JS heap and 19 of the 20 terminals were not even visible.
+    Dropping the buffer when a tab goes to the background (and replaying from
+    the backend ring on return) took it to 596 MB. Every one of these bit
+    during implementation:
+
+    1. **`active` is not visibility.** It means "belongs to the active tab".
+       Hiding an entire split leaves `paneTabs.activeTabId` pointing at it, so
+       every pane inside still reports `active=true` - a hidden 4x5 grid
+       released nothing at all. Use an IntersectionObserver on the host element.
+    2. **The renderer must NOT follow that observer.** The observer is async, so
+       one tab switch fires two callbacks a frame apart; driving
+       suspend/resumeRenderer off it tears the addon down and rebuilds it twice
+       per click, which is a visible double blink. Renderer follows `active`,
+       scrollback follows visibility.
+    3. **Unwire before rewiring.** Setting `wiredSid = null` alone leaves the
+       old `pty_output` listeners live while the effect adds new ones: every
+       chunk written twice, and a pane that later swaps session keeps the stale
+       subscription writing ANOTHER HOST'S output into it.
+    4. **`term.clear()` does not clear the screen** - it only drops the
+       scrollback above the viewport, so a replayed snapshot lands on top of
+       what is already there. Use `term.reset()`.
+    5. **Start "is it visible" as null, not false.** At mount the effect runs
+       before the observer reports; with `false` it dropped the buffer while the
+       mount was still fetching its snapshot, and the observer's first callback
+       restored - rewiring a second fetch on top of the one in flight. Every
+       newly opened tab printed everything twice.
+
+    The grace period (`terminal_bg_scrollback_delay`, default 15s) exists so
+    flipping between two tabs does not pay a drop + replay each way. Its three
+    ranges are distinct and all meaningful: -1 disables the release entirely
+    (pre-v0.85 behaviour), 0 releases the moment a tab is hidden, N waits N
+    seconds. Do not collapse -1 and 0 into "falsy".
+
+    Deliberately not a disk cache: scrollback holds typed passwords, sudo
+    prompts and tokens echoed by env. Writing it out in the clear would undo
+    the encrypted vault, and encrypting it means a cache that dies whenever the
+    vault is locked, plus wiping on exit and handling crash leftovers. The
+    backend ring is already in RAM and already trusted.
+
+    **Measure with the buffers FULL.** An idle measurement said scrollback was
+    not the cost. It is, by a wide margin.
+
+
+54. **The backend ring trims in batches, on a line boundary.**
+
+    Two things about `scrollbackBuf` (internal/ssh/session.go, mirrored in
+    internal/local/scrollback.go) that look like details and are not:
+
+    - **Trim on a newline, not an exact byte.** Cutting at
+      `len-scrollbackCap` left the first replayed line chopped mid-word, which
+      reads as corruption. `trimToLineStart` drops the leading fragment, but
+      gives up after scanning 4 KB: a full-screen TUI can fill the ring with no
+      newline at all, and a chopped first line beats an empty scrollback.
+    - **Trim in batches (`scrollbackSlack`), and COPY with headroom.** Cutting
+      back to exactly the cap means the next write is over it again, so every
+      chunk pays a full 1 MB copy - measured 14000 writes at 2.15s versus 8ms,
+      a 250x regression that would stall a busy session. Let the buffer run to
+      cap+slack, then cut, and give the new slice room to grow (a right-sized
+      `make` leaves cap == len and reallocates on every append).
+
+    The ring is 1 MB (~8000 lines) because it is what a tab replays from after
+    the background release; at 256 KB the returning tab visibly lost history.
+    `TestAppendStaysFastPastTheCap` guards the performance side.
 
 ---
 
@@ -994,44 +1112,6 @@ EventsOn is wired), a 50ms `setTimeout(() => notifyResize(), 50)`
 fires SIGWINCH, which causes bash/zsh to redraw the prompt line.
 Do NOT remove this timeout.
 
-### An applied migration is frozen - amend it and the edit vanishes
-The runner skips everything at or below the recorded version:
-
-```go
-if m.version <= current { continue }
-```
-
-So editing the SQL of a migration that has already run is a no-op on
-every database that has seen it, including your own local dirty
-build. The edit reviews fine, passes on a fresh DB, and silently
-never reaches an existing one. You end up with two populations of
-databases carrying different schemas under the same version number.
-
-This is not hypothetical here. Migration 22 added icon columns to
-connections + folders, then had the credential_refs +
-credential_folders statements appended afterwards. Databases already
-recorded at version 22 never got them and failed reads with "no such
-column: icon_name". Migration 23 exists purely to re-add all four -
-which is why 22 and 23 hold byte-identical SQL.
-
-`internal/store/migrations_frozen_test.go` now pins every migration
-up to `frozenThrough` by SHA-256, read out of migrations.go with
-go/ast. Change applied SQL and the test names the version and tells
-you to add a new migration instead. Adding one: raise
-`frozenThrough`, then `go test ./internal/store/ -run
-TestPrintMigrationHashes -v` prints the pin table to paste.
-
-Two companions: every migration at or below `frozenThrough` must be
-pinned (so the guard cannot silently stop covering the newest ones),
-and versions must be 1..N with no gaps or repeats (the runner
-compares against one integer watermark, so a gap changes which
-migrations run where).
-
-The escape hatch stays what it always was: a repair migration that
-re-adds the columns. The runner executes statement-by-statement and
-tolerates duplicate-column per statement, so re-adding what already
-exists is a no-op.
-
 ### Per-connection password (migration 7)
 `connections.password_vault_key` stores a vault reference (key
 `conn_pass:{connectionID}`) for direct password override.
@@ -1052,71 +1132,6 @@ username in `default_username`, not in the connection overrides.
 ---
 
 ## Terminal
-
-### Releasing a background tab's scrollback: five ways to get it wrong
-Hidden tabs holding their xterm buffer was the app's single biggest memory
-cost: 20 SSH sessions with a filled 5000-line buffer measured 1105 MB, of
-which ~480 MB was JS heap and 19 of the 20 terminals were not even visible.
-Dropping the buffer when a tab goes to the background (and replaying from
-the backend ring on return) took it to 596 MB. Every one of these bit
-during implementation:
-
-1. **`active` is not visibility.** It means "belongs to the active tab".
-   Hiding an entire split leaves `paneTabs.activeTabId` pointing at it, so
-   every pane inside still reports `active=true` - a hidden 4x5 grid
-   released nothing at all. Use an IntersectionObserver on the host element.
-2. **The renderer must NOT follow that observer.** The observer is async, so
-   one tab switch fires two callbacks a frame apart; driving
-   suspend/resumeRenderer off it tears the addon down and rebuilds it twice
-   per click, which is a visible double blink. Renderer follows `active`,
-   scrollback follows visibility.
-3. **Unwire before rewiring.** Setting `wiredSid = null` alone leaves the
-   old `pty_output` listeners live while the effect adds new ones: every
-   chunk written twice, and a pane that later swaps session keeps the stale
-   subscription writing ANOTHER HOST'S output into it.
-4. **`term.clear()` does not clear the screen** - it only drops the
-   scrollback above the viewport, so a replayed snapshot lands on top of
-   what is already there. Use `term.reset()`.
-5. **Start "is it visible" as null, not false.** At mount the effect runs
-   before the observer reports; with `false` it dropped the buffer while the
-   mount was still fetching its snapshot, and the observer's first callback
-   restored - rewiring a second fetch on top of the one in flight. Every
-   newly opened tab printed everything twice.
-
-The grace period (`terminal_bg_scrollback_delay`, default 15s) exists so
-flipping between two tabs does not pay a drop + replay each way. Its three
-ranges are distinct and all meaningful: -1 disables the release entirely
-(pre-v0.85 behaviour), 0 releases the moment a tab is hidden, N waits N
-seconds. Do not collapse -1 and 0 into "falsy".
-
-Deliberately not a disk cache: scrollback holds typed passwords, sudo
-prompts and tokens echoed by env. Writing it out in the clear would undo
-the encrypted vault, and encrypting it means a cache that dies whenever the
-vault is locked, plus wiping on exit and handling crash leftovers. The
-backend ring is already in RAM and already trusted.
-
-**Measure with the buffers FULL.** An idle measurement said scrollback was
-not the cost. It is, by a wide margin.
-
-### The backend ring trims in batches, on a line boundary
-Two things about `scrollbackBuf` (internal/ssh/session.go, mirrored in
-internal/local/scrollback.go) that look like details and are not:
-
-- **Trim on a newline, not an exact byte.** Cutting at
-  `len-scrollbackCap` left the first replayed line chopped mid-word, which
-  reads as corruption. `trimToLineStart` drops the leading fragment, but
-  gives up after scanning 4 KB: a full-screen TUI can fill the ring with no
-  newline at all, and a chopped first line beats an empty scrollback.
-- **Trim in batches (`scrollbackSlack`), and COPY with headroom.** Cutting
-  back to exactly the cap means the next write is over it again, so every
-  chunk pays a full 1 MB copy - measured 14000 writes at 2.15s versus 8ms,
-  a 250x regression that would stall a busy session. Let the buffer run to
-  cap+slack, then cut, and give the new slice room to grow (a right-sized
-  `make` leaves cap == len and reallocates on every append).
-
-The ring is 1 MB (~8000 lines) because it is what a tab replays from after
-the background release; at 256 KB the returning tab visibly lost history.
-`TestAppendStaysFastPastTheCap` guards the performance side.
 
 ### Pane tree is a binary tree
 `PaneNode = PaneLeaf | PaneSplit`. When you split a leaf, the OLD

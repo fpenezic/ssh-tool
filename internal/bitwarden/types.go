@@ -1,6 +1,6 @@
 // Package bitwarden reads secrets live out of a Vaultwarden / Bitwarden server.
 //
-// It is the HTTP-backed sibling of internal/keepass (gotcha 33): a credential
+// It is the HTTP-backed sibling of internal/keepass (gotcha 22): a credential
 // stays password/key with StorageMode=external and a config_json.bitwarden_ref,
 // and the secret is decrypted from the server's vault at connect time, never
 // copied into the local vault. Login uses an API key (client_credentials); the

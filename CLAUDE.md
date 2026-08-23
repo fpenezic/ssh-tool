@@ -59,10 +59,10 @@ Mobile (Android, v0.36.0+):
   `-buildmode=c-shared` -> libwails.so / JNI). Built locally
   (`task android:package`), not in CI. Desktop unaffected.
 - Installed app id `app.sshtool`; gradle namespace stays
-  `com.wails.app` for the JNI bridge (gotcha #25).
+  `com.wails.app` for the JNI bridge (gotcha #32).
 - Biometric vault unlock via EncryptedSharedPreferences (Keystore) +
   BiometricPrompt; foreground service keeps backgrounded SSH alive.
-- See gotchas 19-29 for the android-specific traps.
+- See gotchas 26-36 for the android-specific traps.
 
 Frontend (Node 20):
 - Svelte 5 (runes: $state, $derived, $effect, $props).

@@ -190,7 +190,7 @@ func InlineAuthMethods(password, keyPEM, keyPassphrase string) ([]ssh.AuthMethod
 
 // KeepassResolveHook, when set by the host (app.go), resolves a credential's
 // KeePass reference to its secret. Wired as a package var - like BrowserOpenHook
-// (gotcha 28) - so the ssh layer routes through the KeePass manager without
+// (gotcha 22) - so the ssh layer routes through the KeePass manager without
 // importing it or the manager reaching into every ResolveAuth call site.
 // Returns the secret and whether the credential actually carried a keepass_ref
 // (handled=false => not a KeePass credential, fall through to the normal path).

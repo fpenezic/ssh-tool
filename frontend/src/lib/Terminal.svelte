@@ -1149,7 +1149,7 @@
     //    Wails beta.8 added a per-window eval queue with a single drainer
     //    (webview_window.go: enqueueEventJS), which should make delivery
     //    ordered upstream. This stays anyway: coalescing below is worth it on
-    //    its own, and it covers any hole left in that guarantee. See gotcha 42.
+    //    its own, and it covers any hole left in that guarantee. See gotcha 49.
     // 2. COALESCING. Writing each chunk with its own term.write raced
     //    xterm's async parser against resize/refresh; one contiguous write
     //    per frame keeps the screen consistent.

@@ -7,7 +7,7 @@
 // wiped when the vault locks - same lifecycle and threat model as the vault.
 //
 // The parser is pure Go (github.com/tobischo/gokeepasslib/v3), so this builds
-// on the CGO_ENABLED=0 desktop stack and on android (gotcha 19) with no binary
+// on the CGO_ENABLED=0 desktop stack and on android (gotcha 26) with no binary
 // dependency and no platform branch.
 package keepass
 

@@ -204,7 +204,7 @@ func (m *Manager) Refresh(ctx context.Context, folderID string, force bool) erro
 
 	// Reuse the existing row id for an external_id we already have cached.
 	// The id is what a live session's synthetic "dyn:<entryID>" connection id
-	// points at (gotcha 43), so minting a fresh uuid every refresh silently
+	// points at (gotcha 50), so minting a fresh uuid every refresh silently
 	// detached connected sessions from their tree row: the live dot and the
 	// folder's live count vanished on the next refresh. external_id is the
 	// provider's stable identity, so it is the right thing to key on. Entries
