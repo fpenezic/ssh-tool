@@ -28,23 +28,6 @@ For what's already shipped, see `CHANGELOG.md`.
   a mode field on `JumpHostSpec` + UI. Revisit if the direct-when-on-
   VPN scenario actually comes up.
 
-- **Dynamic inventory: Proxmox notes / description** - would need a
-  per-VM `/nodes/{node}/{type}/{vmid}/config` call (cached) since
-  `/cluster/resources` doesn't carry it. Single extra HTTP per
-  detail-pane open, low priority.
-
-- **Dynamic inventory: more providers** - still open: **Hetzner Robot**
-  (dedicated servers - a different API from the shipped Hetzner Cloud in
-  `hetzner.go`) and **libvirt**. Already shipped: Proxmox, Hetzner Cloud,
-  DigitalOcean, Linode, Vultr, Scaleway, AWS EC2, Ansible
-  (`internal/inventory/`). Pattern is established (`proxmox.go` /
-  `hetzner.go`); each new one is ~150 lines.
-
-- **Dynamic inventory: filter persistence per folder** - currently
-  the visibility settings (hide-stopped, tag whitelist/blacklist)
-  are in the folder config. UI exposes them but no "save as
-  default" or sharable preset.
-
 - **tcpdump tshark fallback** - if `tshark` is available on the
   remote, prefer it for protocol decoding instead of raw tcpdump
   with `-v`. Toggle in tcpdump modal.
@@ -64,6 +47,25 @@ For what's already shipped, see `CHANGELOG.md`.
   Wireshark". Defer until we decide it's worth the surface area.
 
 
+- **Connect retry on transient failures** - DNS, ECONNREFUSED with
+  back-off, single auto-retry, surface as a inline pill not as a
+  fresh error toast.
+
+
+- **Persist broadcast groups across restarts.** Today groups live
+  only in backend RAM - relaunch wipes them. Settings KV is the
+  obvious place to stash `broadcast_groups_v1` as a JSON snapshot;
+  hydrate at startup, save after every mutation.
+
+
+- **Native drag-OUT (download)** *(deferred)* - WebView2 / WebKitGTK
+  can't advertise drop-as-download cleanly. In-app "save as" works,
+  but native DnD into Explorer / Finder is the user-facing gap.
+
+
+
+
+
 ---
 
 ## SSH layer
@@ -79,86 +81,6 @@ For what's already shipped, see `CHANGELOG.md`.
   in the credential editor would let the user pre-empt.
 
 
-
----
-
-## SFTP
-
-- **Native drag-OUT (download)** *(deferred)* - WebView2 / WebKitGTK
-  can't advertise drop-as-download cleanly. In-app "save as" works,
-  but native DnD into Explorer / Finder is the user-facing gap.
-
----
-
-## Remote GUI / consoles
-
-Field ask: "MobaXterm has X11, can we?" Analysis below picks the
-targets that fit a webview app and pay off, and parks the ones that
-don't.
-
-- **kubectl / OpenShift integration - WON'T DO (discussed, declined).**
-  Two shapes were considered. A local in-app "kubectl terminal" (like
-  the VNC tab) would mean either bundling a kubectl binary (~50MB per
-  platform, and its version must track the cluster - a maintenance
-  sink) or shelling out to the user's local kubectl (then ssh-tool is
-  just a thin wrapper around something they already have), plus an SSH
-  tunnel to the API server. A full pod/logs/exec UI is a separate
-  product that k9s / Lens already do well. And kubectl already works
-  fine in a normal ssh-tool terminal on a host that has it - there's
-  nothing to "integrate". The only piece that WOULD fit naturally, if
-  ever wanted: a `kubeconfig` credential type + auto-exporting
-  `KUBECONFIG` into a remote shell on connect (vault-based, no
-  bundling) - but that wasn't asked for. Revisit only if that narrow
-  vault-export need comes up.
-
-- **noVNC console tab - SHIPPED in v0.35.0.** Both targets landed:
-  Proxmox VM/LXC console ("Open console" on a dynamic entry, reusing
-  the inventory API token via vncproxy + vncwebsocket) and generic VNC
-  (per-connection vnc_port + optional SSH tunnel, vault VNC password).
-  noVNC bundles as a lazy chunk; a loopback Go websocket bridge
-  (`internal/ssh/vnc.go`) relays RFB so the webview needs no custom
-  headers / TLS-skip. VNC tabs are locked single-leaf (no split/SFTP).
-  Confirmed working against a live PVE cluster (LDAP realm, API token).
-  Key fix: pin the Proxmox API client to HTTP/1.1 - the vncproxy task
-  starts but returns 500 on an HTTP/2 stream. Node (host) consoles are
-  NOT offered: PVE's /nodes/<n>/vncshell rejects API tokens ("value
-  'user@realm!token' does not look like a valid user name") - it needs
-  a real user login, unlike guest vncproxy which accepts tokens. Guest
-  VM/LXC consoles work.
-
-  Open VNC follow-ups:
-  - **Two-way clipboard - DONE (v0.35.1).** Ctrl+V / Cmd+V pastes the
-    local clipboard into the remote (read via the native Wails clipboard
-    IPC, since the webview blocks clipboard reads over the canvas), and
-    the remote's RFB cut-text is mirrored back to the local clipboard on
-    copy. See ClipboardGetText / ClipboardSetText in app_vnc.go and the
-    keydown + "clipboard" event handlers in VncPane.svelte.
-  - **Proxmox node (host) shell - IMPLEMENTED (v0.35.0).** PVE's
-    vncshell rejects API tokens at a username-format check (a token must
-    not get a root host shell), so node consoles use a real realm login
-    instead: set a "VNC console login" (a password-kind credential whose
-    name is the PVE username, e.g. user@ldap) on the Proxmox dynamic
-    folder. The backend calls POST /access/ticket, then uses the
-    PVEAuthCookie + CSRFPreventionToken for vncshell + vncwebsocket.
-    Guest consoles still use the API token (no login needed). Without a
-    login set, the node "Open console" returns a clear error.
-  - A standalone "VNC host" tree node (vs the current per-connection
-    toggle); clipboard copy *from* the remote (RFB cut-text).
-
-- **X11 forwarding (parked)** - `ssh -X`: run a remote GUI app, its
-  window appears on the local desktop. We can add a ForwardX11 /
-  ForwardX11Trusted toggle + an X11 channel in the SSH layer, BUT it
-  is useless without a local X server (VcXsrv / X410 on Windows,
-  XQuartz on macOS) - which we cannot embed (MobaXterm bundles a full
-  Cygwin X.Org; that's out of scope for a Go/webview app). Low value
-  for the cost: the user reports using it rarely and doesn't want to
-  install an X server. VNC covers the "see a remote GUI" need without
-  any external install.
-
-- **RDP (parked, hardest)** - no good pure-JS RDP client; the real
-  path is an Apache Guacamole-style server-side proxy, which is
-  infrastructure rather than a client feature. Revisit only if there
-  is clear demand.
 
 ---
 
@@ -281,16 +203,6 @@ Mediums + selected Lows tracked here.
 
 ## Dynamic inventory providers
 
-- **Terraform state file provider** - local `terraform.tfstate`
-  first, remote S3 / GCS later. `aws_instance.*` →
-  `KindGuestVM`, tags from `tags.Name`, hostname from
-  `public_ip` / `public_dns` / `private_ip` (configurable).
-  Skipping Terraform Cloud API for now.
-- **Ansible dynamic scripts** - `./inventory.py --list`
-  (`Provider.ConfigSchema { source_type: "dynamic_script" }`),
-  with the script's exit code surfaced as a refresh error.
-- **Remote Ansible sources** - git repo (clone shallow on
-  refresh) + HTTP URL (single file).
 - **Ansible `group_vars/` / `host_vars/` directories** - parse
   side-by-side files alongside the inventory main file. Skipped
   for the MVP "single file" constraint; `internal/inventory/ansible.go`
@@ -300,20 +212,28 @@ Mediums + selected Lows tracked here.
 
 
 
+- **Dynamic inventory: Proxmox notes / description** - would need a
+  per-VM `/nodes/{node}/{type}/{vmid}/config` call (cached) since
+  `/cluster/resources` doesn't carry it. Single extra HTTP per
+  detail-pane open, low priority.
+
+
+- **Dynamic inventory: more providers** - still open: **Hetzner Robot**
+  (dedicated servers - a different API from the shipped Hetzner Cloud in
+  `hetzner.go`) and **libvirt**. Already shipped: Proxmox, Hetzner Cloud,
+  DigitalOcean, Linode, Vultr, Scaleway, AWS EC2, Ansible
+  (`internal/inventory/`). Pattern is established (`proxmox.go` /
+  `hetzner.go`); each new one is ~150 lines.
+
+
+- **Dynamic inventory: filter persistence per folder** - currently
+  the visibility settings (hide-stopped, tag whitelist/blacklist)
+  are in the folder config. UI exposes them but no "save as
+  default" or sharable preset.
+
+
+
 ---
-
-## OS integration
-
-- **Windows 11 top-level context menu** - the classic registry verb
-  lands under "Show more options" on Win11 by design. Appearing in
-  the default right-click menu needs an IExplorerCommand COM DLL +
-  sparse MSIX package with identity, which in turn needs a trusted
-  code signature - revisit together with the code-signing story
-  (docs/why-not-signed). msix scaffolding exists in build/windows.
-- **macOS "Open in ssh-tool" Finder action** - Windows Explorer and
-  Linux (Dolphin/Nautilus) shipped; Finder needs a Quick Action
-  (Automator workflow) or Finder Sync extension bundled into the
-  .app - packaging work, revisit with the macOS build.
 
 ## Window management
 
@@ -330,25 +250,8 @@ Mediums + selected Lows tracked here.
 
 ---
 
-## Broadcast
-
-- **Persist broadcast groups across restarts.** Today groups live
-  only in backend RAM - relaunch wipes them. Settings KV is the
-  obvious place to stash `broadcast_groups_v1` as a JSON snapshot;
-  hydrate at startup, save after every mutation.
-
----
-
 ## Terminal
 
-- **Sixel / image rendering** - niche but nice for users who pipe
-  graphs through SSH (matplotlib, btop, etc). xterm.js has a sixel
-  addon.
-- **Scrollback search beyond visible** - Ctrl+F currently searches
-  what's rendered + recent scrollback; large historical buffers
-  may need an indexed approach.
-- **Font ligatures toggle** - JetBrains Mono ligatures look nice in
-  some prompts and ugly in others.
 - **Session recording follow-ups** - "include scrollback at start"
   option and plain-text export (ANSI stripped). Recording + in-app
   playback (browser, scrubber, speed, idle-skip) shipped; these are
@@ -360,22 +263,6 @@ Mediums + selected Lows tracked here.
   assume a solid background across the whole shell. If ever: opt-in
   setting, macOS only, default off.
 
----
-
-## UI / UX polish
-
-- **Connect retry on transient failures** - DNS, ECONNREFUSED with
-  back-off, single auto-retry, surface as a inline pill not as a
-  fresh error toast.
-- **Hover preview for jump chain** - tooltip on the conn row
-  showing the resolved chain (bastion → target).
-- **Conditional formatting on tag colours** - high-contrast
-  override for the colorblind palette.
-- **Command palette: more commands.** Ctrl+K now carries app
-  commands (">" prefix: settings, lock vault, local shell, update
-  check, open workspace). Candidates for the next pass: new
-  connection / folder, start backup now, toggle theme, open
-  specific Settings sections.
 
 ---
 
@@ -384,8 +271,11 @@ Mediums + selected Lows tracked here.
 - **Remaining hardcoded knobs** - paste-guard threshold (multi-
   line cutoff). Density, font size, font family, scrollback limit,
   connect timeout, vault auto-lock all wired.
-- **Auto-update channel** - currently update *check* exists; auto-
-  download + relaunch flow not built. Opt-in.
+- **Auto-update channel** - check, download and staged-apply-on-next-launch
+  all ship; what is missing is a choice of channel. Today the updater
+  follows stable releases only. A "receive prereleases" toggle would let
+  testers pick up -rcN builds without hand-downloading them
+  (`internal/updater/github.go` already parses the prerelease flag).
 
 ---
 
@@ -419,6 +309,13 @@ Mediums + selected Lows tracked here.
   already reports `supported=true` on darwin, so until then a mac user
   sees the plugin as available but the download 404s. Consider gating
   the darwin download until the asset ships.
+
+- **Windows 11 top-level context menu** - the classic registry verb
+  lands under "Show more options" on Win11 by design. Appearing in
+  the default right-click menu needs an IExplorerCommand COM DLL +
+  sparse MSIX package with identity, which in turn needs a trusted
+  code signature - revisit together with the code-signing story
+  (docs/why-not-signed). msix scaffolding exists in build/windows.
 
 ---
 
@@ -464,17 +361,6 @@ locally. Remaining for a real distributable:
 
 ---
 
-## Misc
-
-- **Crash / panic reporting** - opt-in (off by default), sanitised.
-- **Onboarding tour** - first-launch walkthrough.
-- **Internationalisation** - Croatian + English at least; structure
-  UI strings via a small i18n shim.
-- **Accessibility audit** - tab order, ARIA labels, keyboard nav
-  across modals.
-
----
-
 ## Tech debt
 
 - **api.ts cleanup** - decide if the plain-interface facade stays,
@@ -498,3 +384,76 @@ locally. Remaining for a real distributable:
   exists; structure is the missing piece.
 - **`as any` cast cleanup** in `api.ts` - once the autogen post-
   processor lands.
+- **Crash / panic reporting** - opt-in (off by default), sanitised.
+
+---
+
+## Remote GUI / consoles
+
+Field ask: "MobaXterm has X11, can we?" Analysis below picks the
+targets that fit a webview app and pay off, and parks the ones that
+don't.
+
+- **kubectl / OpenShift integration - WON'T DO (discussed, declined).**
+  Two shapes were considered. A local in-app "kubectl terminal" (like
+  the VNC tab) would mean either bundling a kubectl binary (~50MB per
+  platform, and its version must track the cluster - a maintenance
+  sink) or shelling out to the user's local kubectl (then ssh-tool is
+  just a thin wrapper around something they already have), plus an SSH
+  tunnel to the API server. A full pod/logs/exec UI is a separate
+  product that k9s / Lens already do well. And kubectl already works
+  fine in a normal ssh-tool terminal on a host that has it - there's
+  nothing to "integrate". The only piece that WOULD fit naturally, if
+  ever wanted: a `kubeconfig` credential type + auto-exporting
+  `KUBECONFIG` into a remote shell on connect (vault-based, no
+  bundling) - but that wasn't asked for. Revisit only if that narrow
+  vault-export need comes up.
+
+- **noVNC console tab - SHIPPED in v0.35.0.** Both targets landed:
+  Proxmox VM/LXC console ("Open console" on a dynamic entry, reusing
+  the inventory API token via vncproxy + vncwebsocket) and generic VNC
+  (per-connection vnc_port + optional SSH tunnel, vault VNC password).
+  noVNC bundles as a lazy chunk; a loopback Go websocket bridge
+  (`internal/ssh/vnc.go`) relays RFB so the webview needs no custom
+  headers / TLS-skip. VNC tabs are locked single-leaf (no split/SFTP).
+  Confirmed working against a live PVE cluster (LDAP realm, API token).
+  Key fix: pin the Proxmox API client to HTTP/1.1 - the vncproxy task
+  starts but returns 500 on an HTTP/2 stream. Node (host) consoles are
+  NOT offered: PVE's /nodes/<n>/vncshell rejects API tokens ("value
+  'user@realm!token' does not look like a valid user name") - it needs
+  a real user login, unlike guest vncproxy which accepts tokens. Guest
+  VM/LXC consoles work.
+
+  Open VNC follow-ups:
+  - **Two-way clipboard - DONE (v0.35.1).** Ctrl+V / Cmd+V pastes the
+    local clipboard into the remote (read via the native Wails clipboard
+    IPC, since the webview blocks clipboard reads over the canvas), and
+    the remote's RFB cut-text is mirrored back to the local clipboard on
+    copy. See ClipboardGetText / ClipboardSetText in app_vnc.go and the
+    keydown + "clipboard" event handlers in VncPane.svelte.
+  - **Proxmox node (host) shell - IMPLEMENTED (v0.35.0).** PVE's
+    vncshell rejects API tokens at a username-format check (a token must
+    not get a root host shell), so node consoles use a real realm login
+    instead: set a "VNC console login" (a password-kind credential whose
+    name is the PVE username, e.g. user@ldap) on the Proxmox dynamic
+    folder. The backend calls POST /access/ticket, then uses the
+    PVEAuthCookie + CSRFPreventionToken for vncshell + vncwebsocket.
+    Guest consoles still use the API token (no login needed). Without a
+    login set, the node "Open console" returns a clear error.
+  - A standalone "VNC host" tree node (vs the current per-connection
+    toggle); clipboard copy *from* the remote (RFB cut-text).
+
+- **X11 forwarding (parked)** - `ssh -X`: run a remote GUI app, its
+  window appears on the local desktop. We can add a ForwardX11 /
+  ForwardX11Trusted toggle + an X11 channel in the SSH layer, BUT it
+  is useless without a local X server (VcXsrv / X410 on Windows,
+  XQuartz on macOS) - which we cannot embed (MobaXterm bundles a full
+  Cygwin X.Org; that's out of scope for a Go/webview app). Low value
+  for the cost: the user reports using it rarely and doesn't want to
+  install an X server. VNC covers the "see a remote GUI" need without
+  any external install.
+
+- **RDP (parked, hardest)** - no good pure-JS RDP client; the real
+  path is an Apache Guacamole-style server-side proxy, which is
+  infrastructure rather than a client feature. Revisit only if there
+  is clear demand.
