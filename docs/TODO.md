@@ -15,11 +15,6 @@ For what's already shipped, see `CHANGELOG.md`.
   cached command list, or local LLM. No clear winner; all add
   surface area for marginal gain.
 
-- **Health probe** *(deferred)* - scale concern for 300+ connections
-  behind VPN. Even a 5s timeout × 300 = 25min worst case if
-  unreachable; needs careful concurrency + back-off. Design captured
-  in earlier discussion.
-
 - **Jump host auto/always mode** *(deferred)* - today a configured jump
   host is unconditional ("always"). A network profile has auto (probe
   direct first, tunnel on failure) / always / paused; the same could
@@ -68,12 +63,12 @@ For what's already shipped, see `CHANGELOG.md`.
   stream pcap bytes into a local temp file, offer "Open in
   Wireshark". Defer until we decide it's worth the surface area.
 
+
 ---
 
 ## SSH layer
 
 - **Agent forwarding** - opt-in per connection.
-- **X11 forwarding** - opt-in per connection (low priority).
 - **Per-hop opkssh cert refresh trigger** - currently we resolve
   auth once and reuse the cert through every hop. A stale cert on
   hop N+1 fails the chain. Pre-flight refresh per hop, or surface
@@ -82,6 +77,8 @@ For what's already shipped, see `CHANGELOG.md`.
   remote opkssh-verifier is rotated, current cached cert becomes
   invalid until next interactive login. A "regenerate now" button
   in the credential editor would let the user pre-empt.
+
+
 
 ---
 
@@ -184,40 +181,14 @@ Mediums + selected Lows tracked here.
   platforms with per-OS FFI / CGO surface and needs its own test
   matrix (rotation across user accounts, machine-id absence,
   fallback chain). Treat as a standalone v0.x project.
-- ~~**Pending-restore staging is plaintext until next start.**~~
-  *(done)* Restore now seals `store.db.enc` / `vault.enc.enc` with the
-  just-typed passphrase (`sealStaged`), and ApplyPending unseals via a
-  machine-sealed READY passphrase before the swap. Covered by
-  `apply_prune_test.go`.
-- ~~**Heap zeroing on Lock.**~~ *(done)* The cache is
-  `memory map[string][]byte` and `Lock()` `wipeBytes()`-scrubs each
-  entry in place before dropping it (vault.go). Covered by
-  `vault_test.go`.
 - **Password override sent to server even after key auth succeeds.**
   A honeypot SSH server failing pubkey then accepting password can
   harvest the override. Mitigation: UI warning when both are set on
   the same connection; can't gate at config-build time.
-- ~~**Pre-auth banner painted to terminal.**~~ *(done)* `session.go`
-  buffers the banner in `bannerBuf` and emits it only after the SSH
-  handshake (incl. the host-key callback) completes, with cum=0 so it
-  doesn't touch the scrollback watermark.
-- ~~**Vault on-disk size leaks entry count + secret-length class.**~~
-  *(done)* `padPlaintext` prefixes the length and pads each entry's
-  plaintext to a size bucket (`padSizeFor`) before sealing;
-  `unpadPlaintext` reverses it and tolerates legacy unpadded entries.
 - **Inventory: Proxmox `base_url` accepts arbitrary hostnames.**
   Token sent in Authorization header against whatever URL the user
   pastes. Surface the resolved host before first refresh; consider
   reusing the SSRF guard from `FetchArchiveURL` here.
-- ~~**Backup-layer tests + vault-layer tests.**~~ *(done)* Both crypto
-  layers now have unit coverage incl. tamper rejection: `backup_test.go`
-  + `apply_prune_test.go`, `vault_test.go`. See the Tech-debt section.
-- ~~**Stray DEBUG log in app.go around `ConnectionsCreate`.**~~ *(done)*
-  Removed; none remain (verified 2026-07-16).
-
-From the 2026-06-09 review (sha256 verification + backend-derived
-update params + download progress shipped right after; what remains):
-
 - **Signed update manifest.** sha256 verification against
   `/api/latest` is in, which covers MITM / CDN tampering - but a
   compromised release server can still rewrite hash and binary
@@ -225,6 +196,7 @@ update params + download progress shipped right after; what remains):
   public key baked into the binary. Needs key management + signing
   in the publish pipeline; standalone project, realistic priority
   once the app goes open-source / distribution widens.
+
 
 ---
 
@@ -239,54 +211,71 @@ update params + download progress shipped right after; what remains):
   quiet period), flush-on-quit, periodic remote check with
   notification. Possible follow-up: one-click "pull and relaunch"
   instead of pull + manual reopen.
-- **S3 / additional transports** - the sync engine is
-  transport-agnostic; WebDAV is just the first backend.
+- **S3 as a sync transport** - the engine is transport-agnostic and now
+  carries WebDAV, SFTP, Dropbox, OneDrive and Google Drive
+  (`internal/syncer/`). S3 / S3-compatible (MinIO, R2, B2) is the
+  obvious remaining one: no OAuth dance, just key + secret + endpoint,
+  so it is mostly a request-signing implementation.
+- **Git-as-sync** - point ssh-tool at a git repo; pull on launch,
+  commit on change. Encrypted credential payload would need to be
+  scrubbed before commit - possibly an `export-without-secrets`
+  mode.
+- **Per-entity diff sync (cloud sync v2)** - the Dropbox / OneDrive
+  / Google Drive transports shipped in v0.75.0 with last-write-wins
+  and a pre-restore snapshot as the undo path, which means concurrent
+  edits on two machines still lose one side of the diff. Real conflict
+  resolution (tombstones, updated_at, 3-way merge) is a much larger
+  piece of work; only worth starting if the simple flow proves
+  insufficient in practice. Alternative path never explored: a central
+  service for connection metadata with the vault kept strictly
+  per-machine, which doubles as a security property (one vault key
+  per host).
+- **Proton Drive as a sync transport** - the remaining provider from
+  the original cloud-sync list. No official API; would need the
+  community rclone backend or equivalent.
+
+
+
 
 ## Vault / credentials
 
-- ~~**Manual "Lock vault now" from status bar.**~~ *(done)* The status
-  bar has a "Lock vault" segment (`lockVaultNow` in `StatusBar.svelte`),
-  and Settings has an equivalent (`onLockNow`).
-- **Bulk credential rotation** - select N password creds, walk
-  through them with a "Set new password" prompt, push to each
-  remote via the ssh-copy-id helper (next item).
 - **SSH key deployment helper (ssh-copy-id-style)** - given a
   credential's public key, push it to a target's `authorized_keys`
-  after authenticating with another method. Useful for first-time
-  setup on a new host.
+  after authenticating with another method. Useful for first-time setup
+  on a new host. The interactive-auth prompt a password-first connect
+  needs is already in place, so what is left is the append step (over
+  SFTP, idempotent - do not duplicate a key already present) plus a
+  target picker.
 - **Hardware key (FIDO2 / YubiKey) support** - `x/crypto/ssh` has
   limited support; `ssh-agent` forwarding to the platform agent
   may be the realistic path.
-- **Biometric vault unlock** *(investigated, parked)* - Windows
-  Hello / Touch ID / Linux Polkit. WebAuthn API would need to be
-  bridged from Wails since the webview's WebAuthn calls don't see
-  platform authenticators by default. Deferred.
+- **Biometric vault unlock on desktop** *(parked)* - Windows Hello /
+  Touch ID / Linux Polkit. Android shipped biometric unlock in v0.36.0
+  (BiometricPrompt + EncryptedSharedPreferences), but that is a platform
+  API with no desktop equivalent here: the webview's WebAuthn calls do
+  not see platform authenticators, so it would need bridging from Wails.
+  Desktop has the machine-bound auto-unlock sidecar instead, which
+  covers most of the same convenience.
 - **HashiCorp Vault** - `kind=external` credential that fetches the
   secret at use-time from a remote secret store. (Bitwarden /
   Vaultwarden shipped separately, see below.)
-- ~~**Vaultwarden / Bitwarden as a live credential backend**~~
-  *(shipped v0.60.0)*. `internal/bitwarden` (native EncString crypto,
-  no new deps), bitwarden_servers table (v19), credential
-  `config_json.bitwarden_ref {server_id, cipher_id, field}`, resolver
-  via `sshlayer.BitwardenResolveHook`. API-key login + /api/sync,
-  organizations/collections, native SSH-key items. Master sealed in the
-  vault (write-only), API key a normal api_token credential. Sealed sync
-  cache with stale-on-offline; WireGuard-profile routing. Wiped on Lock.
-  Follow-ups not done: TOTP auto-fill; write-back; email+password / 2FA
-  login; sidecar-SOCKS (Netbird/Tailscale) routing; self-signed certs.
-- ~~**KeePass as a live credential backend**~~ *(shipped v0.59.0)*.
-  `internal/keepass` (read-only `gokeepasslib/v3`), keepass_databases
-  table (v18), credential `config_json.keepass_ref {db_id, entry_uuid,
-  field}`, resolver routed via the `sshlayer.KeepassResolveHook` package
-  var. Local + remote (WebDAV/SFTP) with conditional-GET freshness and
-  a stale-on-offline fallback. Master + key file sealed in the vault,
-  decrypted db wiped on Lock. Follow-ups not done: TOTP fields;
-  write-back to the .kdbx; per-entry auto-type / URL matching.
-- **Configurable password-history retention** - sealed history already
-  keeps the last 5 rotations (`secretHistoryRetention` in
-  `internal/creds/service.go`, key `conn_pass_history:{id}`); the count
-  is hard-coded. Wants a slider in Settings -> Vault, and a decision on
-  what happens to entries beyond the new limit when it is lowered.
+- **External credential backend follow-ups** - KeePass (v0.59.0),
+  Bitwarden / Vaultwarden (v0.60.0) and Infisical all resolve secrets
+  live; these gaps are common to them. Write-back (rotate a password in
+  ssh-tool, push it to the backend) is the big one and needs a conflict
+  story. Bitwarden additionally lacks email+password / 2FA login (API
+  key only) and sidecar-SOCKS routing for Netbird / Tailscale; neither
+  accepts a self-signed server certificate; KeePass lacks per-entry
+  auto-type / URL matching.
+- **TOTP auto-fill from a credential backend** - both backends already
+  read the TOTP field (`internal/bitwarden` exposes `FieldTotp` /
+  `HasTotp`, KeePass entries carry one) but nothing generates a code.
+  Pairs with the interactive MFA prompt that already exists: when a host
+  asks for a verification code and the credential holds a TOTP secret,
+  offer the current code instead of making the user reach for their
+  phone. RFC 6238 over the sealed secret is a few lines; the work is the
+  prompt plumbing, and never logging or caching the generated code.
+
 
 ---
 
@@ -309,28 +298,7 @@ update params + download progress shipped right after; what remains):
   *within* the inventory file (root-first walk), so this is about the
   external directories only.
 
----
 
-## Import / Export / Sync
-
-- **RDM XML import** - only if anyone still has an XML-only export.
-- **Git-as-sync** - point ssh-tool at a git repo; pull on launch,
-  commit on change. Encrypted credential payload would need to be
-  scrubbed before commit - possibly an `export-without-secrets`
-  mode.
-- **Per-entity diff sync (cloud sync v2)** - the Dropbox / OneDrive
-  / Google Drive transports shipped in v0.75.0 with last-write-wins
-  and a pre-restore snapshot as the undo path, which means concurrent
-  edits on two machines still lose one side of the diff. Real conflict
-  resolution (tombstones, updated_at, 3-way merge) is a much larger
-  piece of work; only worth starting if the simple flow proves
-  insufficient in practice. Alternative path never explored: a central
-  service for connection metadata with the vault kept strictly
-  per-machine, which doubles as a security property (one vault key
-  per host).
-- **Proton Drive as a sync transport** - the remaining provider from
-  the original cloud-sync list. No official API; would need the
-  community rclone backend or equivalent.
 
 ---
 
@@ -349,15 +317,16 @@ update params + download progress shipped right after; what remains):
 
 ## Window management
 
-- **Save/restore window layout** between launches. Currently
-  workspaces snapshot tab grouping; pane splits inside a tab are
-  rebuilt by sshing fresh, not from a saved layout.
-- **Reopen last session: multi-pane splits.** Reopen restores SSH,
-  dynamic-inventory and local-shell tabs (title + group), but pane
-  splits inside a tab collapse to the active leaf. Same restore gap
-  as workspaces - fix both together.
-- **Multi-pane split restore** inside a workspace.
+- **Pane splits are not restored anywhere.** One gap with three faces:
+  reopen-last-session, workspaces and saved window layout all restore
+  tabs (title, group, SSH / dynamic / local kind) but collapse a split
+  tab to its active leaf, because the pane tree is never persisted - the
+  tabs are rebuilt by connecting fresh. Serialising the pane tree per tab
+  and replaying it on restore fixes all three at once. The detach /
+  redock path already ships a full pane tree between windows, so the
+  shape exists.
 - **Remember detached-window positions** by tab id (per-monitor).
+
 
 ---
 
@@ -520,27 +489,12 @@ locally. Remaining for a real distributable:
   cross-vault isolation + tamper detection), Delete. Still uncovered: the
   machine sidecar (WriteSidecar/ReadSidecar, v1-vs-v2 format, machine-id
   binding) - needs platform-specific fixtures.
-- ~~**Tests for backup layer**~~ *(done)* - `backup_test.go`
-  (pre-existing) covers Create/Restore round-trip, encrypted staging,
-  the pre-restore safety snapshot, wrong-passphrase, and tamper
-  rejection; `apply_prune_test.go` adds the ApplyPending deferred swap
-  (stage -> swap -> verify the backup's data survived + cleanup), the
-  no-op-when-nothing-staged path, prune-N retention (newest kept, manual
-  backups untouched, keep=0 no-op), and the scheduler's lastAutoBackupAt
-  interval gate.
-- ~~**Tests for SSH auth resolution**~~ *(done)* - `internal/ssh/
-  auth_test.go` covers externalAuthMaterial (KeePass/Bitwarden output),
-  the ResolveAuth hook routing (KeePass then Bitwarden, before the kind
-  switch), interactiveAuthMethods gating, and ToAuthMethods shape.
-  Still uncovered: the vault-backed resolvePassword/resolveKey/resolveAgent
-  paths (need a vault fixture - folds into the vault-layer test item).
+- **Vault-backed auth resolution is untested** - `internal/ssh/auth_test.go`
+  covers the external backends and the hook routing, but the vault-backed
+  resolvePassword / resolveKey / resolveAgent paths need a vault fixture.
+  Folds into the vault-layer test item above.
 - **slog migration** - verbose lines (opkssh, ssh hops, vault)
   would benefit from field-based filtering. Rolling log file
   exists; structure is the missing piece.
 - **`as any` cast cleanup** in `api.ts` - once the autogen post-
   processor lands.
-- ~~**Dynamic inventory: error visibility**~~ *(already done)* -
-  `TreeNode.svelte` shows a red `!` dot on a broken dynamic folder
-  (click-to-retry via `retryDynamicRefresh` -> `dynamicFolderRefreshNow`)
-  and fires a toast the first time the user expands it, so the failure
-  isn't missed. The tooltip carries the last error.
