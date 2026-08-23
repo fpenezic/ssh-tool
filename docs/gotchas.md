@@ -1060,6 +1060,26 @@ backend ring is already in RAM and already trusted.
 **Measure with the buffers FULL.** An idle measurement said scrollback was
 not the cost. It is, by a wide margin.
 
+### The backend ring trims in batches, on a line boundary
+Two things about `scrollbackBuf` (internal/ssh/session.go, mirrored in
+internal/local/scrollback.go) that look like details and are not:
+
+- **Trim on a newline, not an exact byte.** Cutting at
+  `len-scrollbackCap` left the first replayed line chopped mid-word, which
+  reads as corruption. `trimToLineStart` drops the leading fragment, but
+  gives up after scanning 4 KB: a full-screen TUI can fill the ring with no
+  newline at all, and a chopped first line beats an empty scrollback.
+- **Trim in batches (`scrollbackSlack`), and COPY with headroom.** Cutting
+  back to exactly the cap means the next write is over it again, so every
+  chunk pays a full 1 MB copy - measured 14000 writes at 2.15s versus 8ms,
+  a 250x regression that would stall a busy session. Let the buffer run to
+  cap+slack, then cut, and give the new slice room to grow (a right-sized
+  `make` leaves cap == len and reallocates on every append).
+
+The ring is 1 MB (~8000 lines) because it is what a tab replays from after
+the background release; at 256 KB the returning tab visibly lost history.
+`TestAppendStaysFastPastTheCap` guards the performance side.
+
 ### Pane tree is a binary tree
 `PaneNode = PaneLeaf | PaneSplit`. When you split a leaf, the OLD
 leaf becomes one child of the new split; we never mutate the old

@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -139,7 +140,17 @@ type EventSink interface {
 	EmitDebug(sessionID string, line string)
 }
 
-const scrollbackCap = 256 * 1024 // 256 KB - enough for ~2000 lines
+// 1 MB, roughly 8000 lines. This is what a tab replays from after its xterm
+// buffer is released in the background (v0.85), so it sets how much history
+// survives that round trip - at 256 KB the returning tab visibly lost
+// scrollback it had before. 20 sessions cost ~20 MB here against the ~500 MB
+// the release saves, and the snapshot crosses IPC base64-encoded, so this is
+// also ~1.4 MB per restore.
+const scrollbackCap = 1024 * 1024
+
+// How far past the cap the buffer may run before it is trimmed. See
+// appendAndEmit: this is what keeps the trim off the per-write hot path.
+const scrollbackSlack = 128 * 1024
 
 // clientVersionString is the SSH identification string we present. Must start
 // with "SSH-2.0-". We mimic a current OpenSSH so servers / middleboxes that
@@ -171,11 +182,48 @@ func (b *scrollbackBuf) appendAndEmit(data []byte, sink EventSink, sessionID str
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.buf = append(b.buf, data...)
-	if len(b.buf) > scrollbackCap {
-		b.buf = b.buf[len(b.buf)-scrollbackCap:]
+	// Trim in batches, not on every write. Cutting back to exactly the cap
+	// means the very next append is over it again, so a busy session pays a
+	// full 1 MB copy per chunk (measured ~1ms each, versus ~0.5us below the
+	// cap). Letting the buffer run to cap+slack and then cutting back to the
+	// cap amortises that copy over the whole slack.
+	if len(b.buf) > scrollbackCap+scrollbackSlack {
+		b.buf = trimToLineStart(b.buf[len(b.buf)-scrollbackCap:])
 	}
 	b.totalEmitted += uint64(len(data))
 	sink.EmitOutput(sessionID, data, b.totalEmitted)
+}
+
+// trimToLineStart drops a leading partial line so a replayed snapshot starts
+// at a line boundary. Cutting the ring at an exact byte offset left the first
+// visible line chopped mid-word ("om systemd[1114806]: Stopped ..."), which
+// looks like corruption rather than like history scrolling off the top.
+//
+// Bounded on purpose: a full-screen TUI (vim, htop) can fill the whole buffer
+// without a single newline, and searching the entire ring for one would throw
+// away everything we have. If no newline turns up in the first 4 KB the data
+// is left alone - a chopped first line beats an empty scrollback.
+// The result is COPIED into a right-sized slice rather than resliced. A
+// reslice keeps the original array alive, so the backing store only ever
+// grows: each append then reallocates a slightly larger buffer and copies a
+// megabyte, which turns a hot path quadratic (the first version of this
+// hung the test suite).
+func trimToLineStart(buf []byte) []byte {
+	const maxScan = 4 * 1024
+	limit := min(len(buf), maxScan)
+	start := 0
+	if i := bytes.IndexByte(buf[:limit], '\n'); i >= 0 {
+		start = i + 1
+	}
+	trimmed := len(buf) - start
+	// Headroom matters as much as the copy does. A right-sized slice leaves
+	// cap == len, so EVERY subsequent append reallocates and copies the whole
+	// megabyte: measured at ~1ms per write against ~0.5us before the cap was
+	// reached, which is enough to stall a busy session. Give the new buffer
+	// room to grow back to the cap.
+	out := make([]byte, trimmed, scrollbackCap+scrollbackCap/8)
+	copy(out, buf[start:])
+	return out
 }
 
 // snapshot returns the current buffer plus the cumulative-bytes counter at

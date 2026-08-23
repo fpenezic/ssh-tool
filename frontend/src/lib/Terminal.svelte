@@ -12,6 +12,7 @@
   import { api } from "./api";
   import { sessions } from "./stores.svelte";
   import { terminalPrefs } from "./terminalPrefs.svelte";
+  import { DropScheduler } from "./bgScrollback";
   import { copyPastePrefs } from "./copyPastePrefs.svelte";
   import { toast } from "./toast.svelte";
   import { broadcast } from "./broadcast.svelte";
@@ -753,7 +754,9 @@
   }
   onDestroy(unwire);
 
-  let scrollbackDropped = false;
+  // Whether the buffer is currently released. Owned by dropScheduler so
+  // there is exactly one source of truth; a second flag here could drift.
+  let scrollbackDropped = $state(false);
   // Bumped by restoreScrollback so the wiring $effect re-runs. It is read
   // purely as a dependency; the value itself is never used.
   let rewireTick = $state(0);
@@ -761,6 +764,7 @@
   function dropScrollback() {
     if (scrollbackDropped || !term) return;
     scrollbackDropped = true;
+
     try {
       term.options.scrollback = 0;
     } catch { /* best effort - worst case we keep the memory */ }
@@ -786,6 +790,7 @@
   function restoreScrollback() {
     if (!scrollbackDropped || !term) return;
     scrollbackDropped = false;
+
     unwire();
     try {
       term.options.scrollback = terminalPrefs.scrollback;
@@ -821,33 +826,17 @@
   // between two tabs pay a drop + full replay on every switch: wasted work,
   // and the replay blinks. The grace period (Settings, default 15s) means a
   // quick look at another tab costs nothing, while a tab genuinely left in
-  // the background still gives its memory back. 0 releases immediately.
-  let dropTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function cancelDropTimer() {
-    if (dropTimer !== null) {
-      clearTimeout(dropTimer);
-      dropTimer = null;
-    }
-  }
-  onDestroy(cancelDropTimer);
-
-  function scheduleDrop() {
-    if (scrollbackDropped || dropTimer !== null) return;
-    const secs = terminalPrefs.bgScrollbackDelay;
-    // Negative disables the feature outright - every tab keeps its buffer,
-    // as it did before v0.85. Zero still means "release immediately", which
-    // is a different thing and has to stay distinguishable from it.
-    if (secs < 0) return;
-    if (secs === 0) {
-      dropScrollback();
-      return;
-    }
-    dropTimer = setTimeout(() => {
-      dropTimer = null;
-      dropScrollback();
-    }, secs * 1000);
-  }
+  // the background still gives its memory back.
+  //
+  // The timing lives in DropScheduler (bgScrollback.ts) rather than inline
+  // here so it can be tested with fake timers - "must not release before the
+  // delay elapses" is the guarantee users would feel if it broke, and it is
+  // untestable against a live xterm.
+  const dropScheduler = new DropScheduler(
+    () => dropScrollback(),
+    () => terminalPrefs.bgScrollbackDelay,
+  );
+  onDestroy(() => dropScheduler.cancel());
 
   // The renderer follows `active` ONLY, exactly as it did before the
   // scrollback work. Tying it to IntersectionObserver visibility made every
@@ -870,13 +859,11 @@
     const isActive = active;
     if (!term || seen === null) return;
     if (isActive && seen) {
-      // Back within the grace period: cancel the pending drop. Nothing was
-      // released, so restoreScrollback() returns immediately and the switch
-      // costs nothing.
-      cancelDropTimer();
-      restoreScrollback();
+      // Within the grace period this cancels the pending drop and returns
+      // false: nothing was released, so the switch costs nothing.
+      if (dropScheduler.restore()) restoreScrollback();
     } else {
-      scheduleDrop();
+      dropScheduler.schedule();
     }
   });
 

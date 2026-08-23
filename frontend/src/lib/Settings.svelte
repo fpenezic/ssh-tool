@@ -2724,7 +2724,7 @@
       Clear to reset.
     </p>
 
-    <label class="num">
+    <label class="num scrollback-row">
       <span>Scrollback (lines)</span>
       <input
         type="number"
@@ -2748,8 +2748,8 @@
       across those events.
     </p>
 
-    <label class="num">
-      <span>Release background scrollback after (s)</span>
+    <label class="num scrollback-row">
+      <span>Release background scrollback (s)</span>
       <input
         type="number"
         min="-1"
@@ -5476,6 +5476,15 @@
     align-items: center;
     gap: 0.6rem;
     margin-top: 0.4rem;
+  }
+  /* The two scrollback rows sit directly above one another, so their inputs
+     have to line up; without a fixed label column each starts wherever its
+     own label happens to end. Scoped to these two rather than applied to
+     .num generally - elsewhere (the audit filter/limit row) short labels in
+     a wrapping flex row would be stretched by a min-width. */
+  .num.scrollback-row > span:first-child {
+    flex: 0 0 auto;
+    min-width: 15rem;
   }
   .num input[type="number"] {
     background: var(--mantle);
