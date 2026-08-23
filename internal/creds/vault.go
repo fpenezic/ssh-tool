@@ -245,6 +245,28 @@ func (v *Vault) Put(account, secret string) error {
 	return nil
 }
 
+// PutEphemeral stores a secret in the in-memory mirror only, never on disk.
+//
+// For material the app can always regenerate but should not have to: an
+// opkssh certificate is the case this exists for. Put refuses while the
+// vault is locked (correctly - a secret the user typed must not silently
+// live only in RAM), but a cert obtained from an interactive browser login
+// is different. Dropping it means the NEXT connect sharing that credential
+// opens the browser again, so connecting a folder of hosts with a locked
+// vault asked the user to sign in once per host.
+//
+// Ephemeral entries are indistinguishable from cached ones to Get, and are
+// lost on restart - which is the correct lifetime for something the vault
+// was not able to persist.
+func (v *Vault) PutEphemeral(account, secret string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if prev, ok := v.memory[account]; ok {
+		wipeBytes(prev)
+	}
+	v.memory[account] = []byte(secret)
+}
+
 // Get consults memory then the file vault. Returns ("", false, nil) when
 // the secret isn't stored or when the vault is locked and the value isn't
 // in the memory mirror.

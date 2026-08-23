@@ -159,3 +159,85 @@ func TestLoginPartyIgnoresMemberContexts(t *testing.T) {
 		t.Fatal("party context was born cancelled")
 	}
 }
+
+// The connect performing the login must be able to cancel it. Its own
+// context is not the party context, so without a bridge, cancelling the very
+// host that opened the browser did nothing - the most natural thing for a
+// user to try, since that is the host they were looking at when the tab
+// appeared.
+func TestBridgeCancelEndsLoginWhenPerformerCancels(t *testing.T) {
+	partyCtx, partyCancel := context.WithCancel(context.Background())
+	defer partyCancel()
+	ownCtx, ownCancel := context.WithCancel(context.Background())
+
+	var left bool
+	var leftMu sync.Mutex
+	loginCtx, stop := bridgeCancel(partyCtx, ownCtx, func() {
+		leftMu.Lock()
+		left = true
+		leftMu.Unlock()
+	})
+	defer stop()
+
+	ownCancel()
+
+	select {
+	case <-loginCtx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelling the performer did not end the login")
+	}
+
+	leftMu.Lock()
+	defer leftMu.Unlock()
+	if !left {
+		t.Fatal("the performer cancelled without leaving the party; the refcount would never reach zero")
+	}
+}
+
+// Cancelling the party (everyone gave up) must also end the login.
+func TestBridgeCancelEndsLoginWhenPartyCancels(t *testing.T) {
+	partyCtx, partyCancel := context.WithCancel(context.Background())
+	ownCtx, ownCancel := context.WithCancel(context.Background())
+	defer ownCancel()
+
+	loginCtx, stop := bridgeCancel(partyCtx, ownCtx, func() {})
+	defer stop()
+
+	partyCancel()
+
+	select {
+	case <-loginCtx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelling the party did not end the login")
+	}
+}
+
+// A login that completes normally must not be reported as cancelled, and the
+// watcher goroutine must not outlive it.
+func TestBridgeCancelStopIsClean(t *testing.T) {
+	partyCtx, partyCancel := context.WithCancel(context.Background())
+	defer partyCancel()
+	ownCtx, ownCancel := context.WithCancel(context.Background())
+	defer ownCancel()
+
+	var leaveCalls int
+	var mu sync.Mutex
+	loginCtx, stop := bridgeCancel(partyCtx, ownCtx, func() {
+		mu.Lock()
+		leaveCalls++
+		mu.Unlock()
+	})
+
+	if loginCtx.Err() != nil {
+		t.Fatal("login context was born cancelled")
+	}
+	stop()
+
+	// Give the watcher a moment to exit down the done branch.
+	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	if leaveCalls != 0 {
+		t.Fatalf("a cleanly finished login called leave() %d times via the bridge", leaveCalls)
+	}
+}

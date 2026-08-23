@@ -270,6 +270,34 @@ func joinLoginParty(credentialID string) (context.Context, func()) {
 	}
 }
 
+// bridgeCancel returns a context that is done when either the party context
+// or this connect's own context is - so cancelling the host that opened the
+// browser ends the login, without that host being able to cancel a login the
+// rest of the party still wants (leaving the party is what handles that, and
+// only cancels once the last member is gone).
+//
+// The returned stop func must be called to release the watcher goroutine.
+func bridgeCancel(partyCtx, ownCtx context.Context, onOwnCancel func()) (context.Context, func()) {
+	ctx, cancel := context.WithCancel(partyCtx)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ownCtx.Done():
+			// This connect gave up. Drop its membership first so the party
+			// refcount is right, then cancel our view of the login. If it was
+			// the only member, leave() has already cancelled the party ctx.
+			onOwnCancel()
+			cancel()
+		case <-ctx.Done():
+		case <-done:
+		}
+	}()
+	return ctx, func() {
+		close(done)
+		cancel()
+	}
+}
+
 // lockCtx acquires l, or gives up if ctx is done first. The error names the
 // wait explicitly so a cancelled connect reports what it was waiting for
 // rather than a bare "context canceled".
@@ -385,14 +413,45 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault,
 		// sharing the credential must be able to end it; conversely one host
 		// cancelling must not abort a login the others still want. The party
 		// context is cancelled exactly when the last of them leaves.
+		//
+		// This connect's OWN cancellation has to reach the login too. Its ctx
+		// is not the party ctx, so without this bridge cancelling the very
+		// host that opened the browser did nothing - the most natural thing
+		// for a user to try, since that is the host they were looking at when
+		// the tab appeared. leave() covers the case where the others give up;
+		// this covers the performer giving up first.
+		loginCtx, stopBridge := bridgeCancel(loginCtx, ctx, leave)
 		newKey, newCert, err := runOpksshLoginNative(loginCtx, cfg)
+		stopBridge()
 		if err != nil {
 			return nil, err
 		}
 		now := strconv.FormatInt(time.Now().Unix(), 10)
-		_ = vault.Put(opksshKeyAccount(cfg.CredentialID), string(newKey))
-		_ = vault.Put(opksshCertAccount(cfg.CredentialID), string(newCert))
-		_ = vault.Put(opksshIssuedAtAccount(cfg.CredentialID), now)
+		// Persist the freshly issued cert. If the vault is locked, Put fails -
+		// and dropping the error here meant the cert was never stored at all,
+		// so the NEXT connect on this credential found an empty vault and
+		// opened the browser again. Connecting a folder of hosts with a locked
+		// vault asked for a sign-in per host, which is exactly what the
+		// single-flight lock was supposed to prevent.
+		//
+		// Fall back to the in-memory mirror so the cert at least survives for
+		// this run. It is regenerable material, not something the user typed,
+		// so keeping it only in RAM is an acceptable degradation - unlike
+		// silently keeping a typed password there, which is why Put refuses.
+		if err := vault.Put(opksshKeyAccount(cfg.CredentialID), string(newKey)); err != nil {
+			log.Printf("opkssh: cannot persist cert for cred %s (%v); keeping it in memory for this session only",
+				cfg.CredentialID, err)
+			vault.PutEphemeral(opksshKeyAccount(cfg.CredentialID), string(newKey))
+			vault.PutEphemeral(opksshCertAccount(cfg.CredentialID), string(newCert))
+			vault.PutEphemeral(opksshIssuedAtAccount(cfg.CredentialID), now)
+		} else {
+			if err := vault.Put(opksshCertAccount(cfg.CredentialID), string(newCert)); err != nil {
+				log.Printf("opkssh: cert store failed for cred %s: %v", cfg.CredentialID, err)
+			}
+			if err := vault.Put(opksshIssuedAtAccount(cfg.CredentialID), now); err != nil {
+				log.Printf("opkssh: cert timestamp store failed for cred %s: %v", cfg.CredentialID, err)
+			}
+		}
 		keyPEM = string(newKey)
 		certPEM = string(newCert)
 	}

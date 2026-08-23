@@ -1249,6 +1249,22 @@ already closed. With a plain mutex every queued connect showed
 waiting. It also checks `ctx.Err()` first, so an already-cancelled
 connect never jumps a free lock and opens a browser tab of its own.
 
+A locked vault silently threw the cert away. `vault.Put` refuses while
+the vault is locked - correctly, since a secret the user typed must not
+end up living only in RAM - but `EnsureFreshCert` discarded the error
+with `_ =`. So the freshly issued cert was never stored, the next
+connect on that credential found an empty vault, and opened the browser
+again. With a locked vault, connecting a folder of hosts asked for one
+sign-in per host, defeating the single-flight lock entirely (the log
+gives it away: a different cert fingerprint per host). It also broke
+cancellation, because each host then formed its own one-member login
+party.
+
+`vault.PutEphemeral` is the fallback: memory-mirror only, invisible as
+such to `Get`, gone on restart. That lifetime is right for an opkssh
+cert - regenerable material from an interactive login, not something
+the user typed. The errors are logged now instead of dropped.
+
 Cancelling has a second problem the lock alone does not solve: the user
 cannot tell WHICH host owns the browser tab. They see a row of hosts on
 "Connecting..." and press Cancel on whichever one they are looking at,
@@ -1263,6 +1279,14 @@ the LAST one leaves. Cancel one host and the others still get their
 cert; cancel all of them and the browser flow is abandoned at once.
 Join the party BEFORE queuing on the lock, or a waiter would not count
 as interested while it waits.
+
+The performer's own cancellation still has to reach the login, though:
+its ctx is not the party ctx, so cancelling the very host that opened
+the browser did nothing - the most natural thing for a user to try,
+since that is the host they were looking at when the tab appeared.
+`bridgeCancel` joins the two: the login ends if EITHER the party is
+cancelled or this connect is, and a cancelled performer leaves the
+party first so the refcount stays right.
 
 The wait itself is also reported now: `tryLock` distinguishes an
 uncontended acquire from one about to block, and a blocking one logs
