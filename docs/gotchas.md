@@ -1015,6 +1015,51 @@ username in `default_username`, not in the connection overrides.
 
 ## Terminal
 
+### Releasing a background tab's scrollback: five ways to get it wrong
+Hidden tabs holding their xterm buffer was the app's single biggest memory
+cost: 20 SSH sessions with a filled 5000-line buffer measured 1105 MB, of
+which ~480 MB was JS heap and 19 of the 20 terminals were not even visible.
+Dropping the buffer when a tab goes to the background (and replaying from
+the backend ring on return) took it to 596 MB. Every one of these bit
+during implementation:
+
+1. **`active` is not visibility.** It means "belongs to the active tab".
+   Hiding an entire split leaves `paneTabs.activeTabId` pointing at it, so
+   every pane inside still reports `active=true` - a hidden 4x5 grid
+   released nothing at all. Use an IntersectionObserver on the host element.
+2. **The renderer must NOT follow that observer.** The observer is async, so
+   one tab switch fires two callbacks a frame apart; driving
+   suspend/resumeRenderer off it tears the addon down and rebuilds it twice
+   per click, which is a visible double blink. Renderer follows `active`,
+   scrollback follows visibility.
+3. **Unwire before rewiring.** Setting `wiredSid = null` alone leaves the
+   old `pty_output` listeners live while the effect adds new ones: every
+   chunk written twice, and a pane that later swaps session keeps the stale
+   subscription writing ANOTHER HOST'S output into it.
+4. **`term.clear()` does not clear the screen** - it only drops the
+   scrollback above the viewport, so a replayed snapshot lands on top of
+   what is already there. Use `term.reset()`.
+5. **Start "is it visible" as null, not false.** At mount the effect runs
+   before the observer reports; with `false` it dropped the buffer while the
+   mount was still fetching its snapshot, and the observer's first callback
+   restored - rewiring a second fetch on top of the one in flight. Every
+   newly opened tab printed everything twice.
+
+The grace period (`terminal_bg_scrollback_delay`, default 15s) exists so
+flipping between two tabs does not pay a drop + replay each way. Its three
+ranges are distinct and all meaningful: -1 disables the release entirely
+(pre-v0.85 behaviour), 0 releases the moment a tab is hidden, N waits N
+seconds. Do not collapse -1 and 0 into "falsy".
+
+Deliberately not a disk cache: scrollback holds typed passwords, sudo
+prompts and tokens echoed by env. Writing it out in the clear would undo
+the encrypted vault, and encrypting it means a cache that dies whenever the
+vault is locked, plus wiping on exit and handling crash leftovers. The
+backend ring is already in RAM and already trusted.
+
+**Measure with the buffers FULL.** An idle measurement said scrollback was
+not the cost. It is, by a wide margin.
+
 ### Pane tree is a binary tree
 `PaneNode = PaneLeaf | PaneSplit`. When you split a leaf, the OLD
 leaf becomes one child of the new split; we never mutate the old

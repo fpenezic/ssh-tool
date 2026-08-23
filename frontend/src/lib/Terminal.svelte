@@ -720,12 +720,164 @@
     try { term.refresh(0, term.rows - 1); } catch { /* best effort */ }
   }
 
+  // Dropping a hidden tab's scrollback is where the memory actually is.
+  // Measured on Windows with 20 SSH tabs holding a filled 5000-line buffer
+  // each: 530 MB idle -> 1280 MB, with the JS heap going 32 -> 480 MB and
+  // the WebView2 renderer 195 -> 868 MB. Nineteen of those twenty terminals
+  // were hidden, so ~700 MB was history nobody was looking at. A forced GC
+  // does not touch it - it is live data, not garbage.
+  //
+  // We can afford to throw it away because the backend already keeps its own
+  // ring per session (scrollbackCap in internal/ssh/session.go) and a tab
+  // restores from it on mount. Setting scrollback to 0 makes xterm discard
+  // the buffer through its own documented option rather than by poking at
+  // internals; restoring the option re-arms it for the replay.
+  //
+  // Deliberately NOT a disk cache. Terminal scrollback is the most sensitive
+  // content in the app - typed passwords, sudo prompts, tokens echoed by env,
+  // config file contents. Writing it to disk in the clear would undo the
+  // point of an encrypted vault, and encrypting it would mean a cache that
+  // stops working whenever the vault is locked, plus wiping on exit and
+  // handling a crash that leaves files behind. The backend ring is already
+  // in RAM and already trusted; use it.
+  // Declared here rather than next to the wiring $effect below because
+  // restoreScrollback() calls unwire(): a `let` read before its declaration
+  // is a TDZ error, and relying on the effect always running late enough to
+  // hide that would be fragile.
+  let wiredSid: string | null = null;
+  let wiredUnsubs: (() => void)[] = [];
+  function unwire() {
+    for (const fn of wiredUnsubs) fn();
+    wiredUnsubs = [];
+    wiredSid = null;
+  }
+  onDestroy(unwire);
+
+  let scrollbackDropped = false;
+  // Bumped by restoreScrollback so the wiring $effect re-runs. It is read
+  // purely as a dependency; the value itself is never used.
+  let rewireTick = $state(0);
+
+  function dropScrollback() {
+    if (scrollbackDropped || !term) return;
+    scrollbackDropped = true;
+    try {
+      term.options.scrollback = 0;
+    } catch { /* best effort - worst case we keep the memory */ }
+  }
+
+  // Re-arm the buffer and replay from the backend ring by re-running the
+  // mount path: subscribe, fetch the snapshot, dedupe against its cum
+  // watermark. Reimplementing the replay here would mean duplicating the
+  // watermark logic that the buffer-doubling-on-click bug came out of.
+  //
+  // Two things here are load-bearing, both learned the hard way when this
+  // shipped a build that printed every line twice and leaked one session's
+  // output into another pane:
+  //
+  //  - unwire() FIRST. Setting wiredSid = null on its own makes the effect
+  //    wire a second set of listeners while the old ones are still live, so
+  //    every pty_output chunk gets written twice - and a pane that later
+  //    swapped session kept the stale subscription writing another host's
+  //    output into it.
+  //  - reset(), not clear(). xterm's clear() keeps the current viewport and
+  //    only drops the scrollback above it, so the replayed snapshot lands
+  //    on top of what is already on screen.
+  function restoreScrollback() {
+    if (!scrollbackDropped || !term) return;
+    scrollbackDropped = false;
+    unwire();
+    try {
+      term.options.scrollback = terminalPrefs.scrollback;
+      term.reset();
+    } catch { /* best effort */ }
+    rewireTick++;
+  }
+
+  // `active` means "this pane belongs to the active tab", which is NOT the
+  // same as "the user can see this terminal". Hiding a split leaves
+  // paneTabs.activeTabId pointing at it, so every pane in that split still
+  // reports active=true and would keep its scrollback - measured: hiding a
+  // 4x5 grid of filled terminals freed nothing at all. Observe real
+  // visibility instead, which also covers a pane scrolled out of view.
+  // null = the observer has not reported yet. Starting at false instead made
+  // a freshly opened tab print everything twice: the first effect pass ran
+  // before the observer had a chance to speak, dropped the scrollback while
+  // the mount was still fetching its snapshot, and the observer's first
+  // callback then restored - rewiring a second snapshot fetch on top of the
+  // one already in flight. Until visibility is actually known, do nothing.
+  let onScreen = $state<boolean | null>(null);
   $effect(() => {
-    // Reads `active` so the effect re-runs on tab switches.
+    if (!host) return;
+    const io = new IntersectionObserver(
+      (entries) => { onScreen = entries.some((e) => e.isIntersecting); },
+      { threshold: 0 },
+    );
+    io.observe(host);
+    return () => io.disconnect();
+  });
+
+  // Releasing the scrollback the instant a tab loses focus makes flipping
+  // between two tabs pay a drop + full replay on every switch: wasted work,
+  // and the replay blinks. The grace period (Settings, default 15s) means a
+  // quick look at another tab costs nothing, while a tab genuinely left in
+  // the background still gives its memory back. 0 releases immediately.
+  let dropTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function cancelDropTimer() {
+    if (dropTimer !== null) {
+      clearTimeout(dropTimer);
+      dropTimer = null;
+    }
+  }
+  onDestroy(cancelDropTimer);
+
+  function scheduleDrop() {
+    if (scrollbackDropped || dropTimer !== null) return;
+    const secs = terminalPrefs.bgScrollbackDelay;
+    // Negative disables the feature outright - every tab keeps its buffer,
+    // as it did before v0.85. Zero still means "release immediately", which
+    // is a different thing and has to stay distinguishable from it.
+    if (secs < 0) return;
+    if (secs === 0) {
+      dropScrollback();
+      return;
+    }
+    dropTimer = setTimeout(() => {
+      dropTimer = null;
+      dropScrollback();
+    }, secs * 1000);
+  }
+
+  // The renderer follows `active` ONLY, exactly as it did before the
+  // scrollback work. Tying it to IntersectionObserver visibility made every
+  // tab switch blink: the observer is asynchronous, so hiding and re-showing
+  // a pane fires two callbacks a frame apart, and the effect tore the
+  // renderer addon down and built it back up - including a full
+  // term.refresh() - on each click. Cheap to get wrong, very visible.
+  $effect(() => {
     const isActive = active;
     if (!term) return;
     if (isActive) resumeRenderer();
     else suspendRenderer();
+  });
+
+  // Scrollback, by contrast, DOES need real visibility: a hidden split keeps
+  // active=true for every pane in it, so `active` alone would never release
+  // anything there.
+  $effect(() => {
+    const seen = onScreen;
+    const isActive = active;
+    if (!term || seen === null) return;
+    if (isActive && seen) {
+      // Back within the grace period: cancel the pending drop. Nothing was
+      // released, so restoreScrollback() returns immediately and the switch
+      // costs nothing.
+      cancelDropTimer();
+      restoreScrollback();
+    } else {
+      scheduleDrop();
+    }
   });
 
   function clearWebglAtlas() {
@@ -943,17 +1095,11 @@
   // runs before the next pass. If we held the unsubs inside the
   // effect body, an idle rerun would tear down the listeners. Keep
   // them in module-scope vars, only swap on a real sessionId change.
-  let wiredSid: string | null = null;
-  let wiredUnsubs: (() => void)[] = [];
-  function unwire() {
-    for (const fn of wiredUnsubs) fn();
-    wiredUnsubs = [];
-    wiredSid = null;
-  }
-  onDestroy(unwire);
-
   $effect(() => {
     const sid = sessionId;
+    // Read so restoreScrollback() can force this effect to run its mount
+    // path again after a hidden tab dropped its buffer.
+    rewireTick;
     if (!term) return;
     if (sid === wiredSid) {
       // Idle rerun - listeners are already wired. Skip without

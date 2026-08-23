@@ -13,6 +13,7 @@ const FONT_FAMILY_KEY = "terminal_font_family";
 const SCROLLBACK_KEY = "terminal_scrollback";
 const DISABLE_WEBGL_KEY = "terminal_disable_webgl";
 const SERVER_STATS_KEY = "server_stats_enabled";
+const BG_SCROLLBACK_DELAY_KEY = "terminal_bg_scrollback_delay";
 const MIN_FONT = 6;
 const MAX_FONT = 40;
 const DEFAULT_FONT = 13;
@@ -21,6 +22,14 @@ export const DEFAULT_FONT_FAMILY =
 const MIN_SCROLLBACK = 500;
 const MAX_SCROLLBACK = 100000;
 export const DEFAULT_SCROLLBACK = 5000;
+// Seconds a tab may sit in the background before its scrollback is released.
+// 0 releases immediately; -1 disables the release entirely (every tab keeps
+// its full buffer, the pre-v0.85 behaviour). The upper cap is minutes rather
+// than hours because a very long delay is barely different from never.
+const MIN_BG_DELAY = -1;
+const MAX_BG_DELAY = 600;
+export const BG_SCROLLBACK_OFF = -1;
+export const DEFAULT_BG_SCROLLBACK_DELAY = 15;
 
 class TerminalPrefs {
   fontSize = $state(DEFAULT_FONT);
@@ -44,6 +53,12 @@ class TerminalPrefs {
   // command on the remote host, which not every box (network gear) should
   // get, and it's only worth the round-trip if the user wants it.
   serverStatsEnabled = $state(false);
+  // Grace period before a backgrounded tab drops its xterm scrollback (it is
+  // replayed from the backend ring when the tab comes back). Flipping between
+  // two tabs otherwise pays a drop+replay on every switch, which is wasted
+  // work and a visible blink; 15s means a quick look elsewhere costs nothing.
+  // 0 disables the grace period, releasing as soon as the tab is hidden.
+  bgScrollbackDelay = $state(DEFAULT_BG_SCROLLBACK_DELAY);
   private loaded = false;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private saveThemeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -51,6 +66,7 @@ class TerminalPrefs {
   private saveFontFamilyTimer: ReturnType<typeof setTimeout> | null = null;
   private saveScrollbackTimer: ReturnType<typeof setTimeout> | null = null;
   private saveDisableWebglTimer: ReturnType<typeof setTimeout> | null = null;
+  private saveBgDelayTimer: ReturnType<typeof setTimeout> | null = null;
 
   async load() {
     if (this.loaded) return;
@@ -105,6 +121,17 @@ class TerminalPrefs {
     } catch {
       // missing key is fine
     }
+    try {
+      const raw = await api.settingsGet(BG_SCROLLBACK_DELAY_KEY);
+      const n = parseInt(raw, 10);
+      // 0 is a real choice here (release immediately), so test the parse
+      // rather than truthiness.
+      if (!isNaN(n) && n >= MIN_BG_DELAY && n <= MAX_BG_DELAY) {
+        this.bgScrollbackDelay = n;
+      }
+    } catch {
+      // missing key is fine
+    }
     this.loaded = true;
   }
 
@@ -143,6 +170,17 @@ class TerminalPrefs {
     this.saveScrollbackTimer = setTimeout(() => {
       api.settingsSet(SCROLLBACK_KEY, String(clamped)).catch(console.warn);
       this.saveScrollbackTimer = null;
+    }, 300);
+  }
+
+  setBgScrollbackDelay(n: number) {
+    const clamped = Math.max(MIN_BG_DELAY, Math.min(MAX_BG_DELAY, n));
+    if (clamped === this.bgScrollbackDelay) return;
+    this.bgScrollbackDelay = clamped;
+    if (this.saveBgDelayTimer) clearTimeout(this.saveBgDelayTimer);
+    this.saveBgDelayTimer = setTimeout(() => {
+      api.settingsSet(BG_SCROLLBACK_DELAY_KEY, String(clamped)).catch(console.warn);
+      this.saveBgDelayTimer = null;
     }, 300);
   }
 

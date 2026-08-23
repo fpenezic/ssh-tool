@@ -14,7 +14,7 @@
   import type { Folder, ClaudeDesktopInfo } from "./api";
   import { copyPastePrefs, type CopyPasteMode } from "./copyPastePrefs.svelte";
   import { SETTINGS_SECTIONS, EXTERNAL_TABS, isExternalTab, type SectionId, type SectionDef, type ExternalTabId } from "./settingsSections";
-  import { terminalPrefs, DEFAULT_FONT_FAMILY, DEFAULT_SCROLLBACK } from "./terminalPrefs.svelte";
+  import { terminalPrefs, DEFAULT_FONT_FAMILY, DEFAULT_SCROLLBACK, DEFAULT_BG_SCROLLBACK_DELAY } from "./terminalPrefs.svelte";
   import { appPrefs } from "./appPrefs.svelte";
   import { vaultPrefs } from "./vaultPrefs.svelte";
   import { lastSession } from "./lastSession.svelte";
@@ -2746,6 +2746,32 @@
       re-docked, or the UI reloads, only roughly the last ~2000 lines
       replay from the backend - the full scrollback above isn't preserved
       across those events.
+    </p>
+
+    <label class="num">
+      <span>Release background scrollback after (s)</span>
+      <input
+        type="number"
+        min="-1"
+        max="600"
+        step="5"
+        value={terminalPrefs.bgScrollbackDelay}
+        onblur={(e) => terminalPrefs.setBgScrollbackDelay(parseInt((e.target as HTMLInputElement).value, 10))}
+        onkeydown={(e) => {
+          if (e.key === "Enter") terminalPrefs.setBgScrollbackDelay(parseInt((e.currentTarget as HTMLInputElement).value, 10));
+        }}
+      />
+    </label>
+    <p class="hint inline">
+      A tab you are not looking at gives its scrollback back after this long,
+      and replays from the backend when you return. Default
+      {DEFAULT_BG_SCROLLBACK_DELAY}s. This is where the memory goes with many
+      tabs open: twenty sessions with a full buffer measured 1105 MB before
+      this existed and 592 MB after. Raise it if you flip between tabs
+      constantly and notice the replay; 0 releases the moment a tab is
+      hidden; -1 turns the whole thing off and every tab keeps its full
+      buffer. The tab keeps running either way - only the on-screen history
+      is dropped, and it replays when you come back.
     </p>
 
     <fieldset class="check-cards">
