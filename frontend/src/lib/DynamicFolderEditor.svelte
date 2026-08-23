@@ -90,6 +90,39 @@
 
   // proxmox-specific
   let baseURL = $state("");
+  // The Proxmox API token is sent to whatever host base_url names, on every
+  // refresh. Show the resolved destination (and warn on plain http, which puts
+  // the token on the wire in clear text) BEFORE the first refresh rather than
+  // after. Private and localhost addresses are fine - a Proxmox cluster
+  // normally lives on a LAN - so this describes, it does not block.
+  const proxmoxURL = $derived.by(() => {
+    const raw = baseURL.trim();
+    if (!raw) return null;
+    if (!raw.includes("://")) {
+      return { error: `Needs a scheme - write https://${raw}` };
+    }
+    let u: URL;
+    try {
+      u = new URL(raw);
+    } catch {
+      return { error: "Not a valid URL" };
+    }
+    if (u.protocol !== "https:" && u.protocol !== "http:") {
+      return { error: `Scheme must be https (or http), got ${u.protocol.replace(":", "")}` };
+    }
+    if (!u.hostname) return { error: "No host in the URL" };
+    if (u.username || u.password) {
+      return { error: "Do not put a username or password in the URL" };
+    }
+    if (u.search || u.hash) {
+      return { error: "Do not put a query string or fragment in the URL" };
+    }
+    return {
+      host: u.hostname,
+      port: u.port || "8006",
+      insecure: u.protocol === "http:",
+    };
+  });
   // Token now lives in the credentials vault as kind=api_token.
   // The folder config just stores a reference to it.
   let tokenCredentialId = $state<string>("");
@@ -275,6 +308,7 @@
     err = null;
     if (!name.trim()) { err = "Name is required"; return; }
     if (provider === "proxmox" && !baseURL.trim()) { err = "Base URL is required"; return; }
+    if (provider === "proxmox" && proxmoxURL?.error) { err = `Base URL: ${proxmoxURL.error}`; return; }
     if (provider === "aws_ec2" && !regionOrZone.trim()) { err = "Region is required (e.g. eu-central-1)"; return; }
     if (provider === "scaleway" && !regionOrZone.trim()) { err = "Zone is required (e.g. fr-par-1)"; return; }
     if (provider === "ansible" && !ansiblePath.trim()) { err = "Inventory file path is required"; return; }
@@ -452,6 +486,18 @@
           <label>
             <span class="lbl">Base URL</span>
             <input bind:value={baseURL} placeholder="https://pve.example.com:8006" />
+            {#if proxmoxURL?.error}
+              <span class="hint bad">{proxmoxURL.error}</span>
+            {:else if proxmoxURL?.host}
+              <span class="hint">
+                The API token will be sent to <strong>{proxmoxURL.host}</strong> on port {proxmoxURL.port}.
+              </span>
+              {#if proxmoxURL.insecure}
+                <span class="hint bad">
+                  Plain http - the API token crosses the network in clear text. Use https unless this is an isolated lab network.
+                </span>
+              {/if}
+            {/if}
             <span class="hint">If your cluster sits behind a load balancer, use the LB URL - `/cluster/resources` returns the whole cluster regardless of which node answers.</span>
           </label>
           <label>
@@ -825,6 +871,8 @@
   }
   .form label.check { flex-direction: row; align-items: center; gap: 0.45rem; }
   .form .hint { color: var(--overlay0); font-size: 0.72rem; line-height: 1.4; }
+  /* A hint that reports a problem with what the user typed, not just guidance. */
+  .form .hint.bad { color: var(--warn); }
   fieldset {
     border: 1px solid var(--surface0);
     border-radius: 4px;

@@ -44,8 +44,16 @@ func (Proxmox) Fetch(ctx context.Context, cfg map[string]any) ([]Entry, error) {
 	if baseURL == "" || tokenID == "" || tokenSecret == "" {
 		return nil, fmt.Errorf("proxmox: base_url + api_token_id + api_token_secret required")
 	}
+	// Check the URL before the token is put on the wire: every request to
+	// this host carries the API token in an Authorization header, so a
+	// malformed or surprising base_url is a credential-disclosure question,
+	// not just a connection error. See proxmox_url.go.
+	info, err := ValidateProxmoxBaseURL(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("proxmox: %w", err)
+	}
 
-	url := strings.TrimRight(baseURL, "/") + "/api2/json/cluster/resources"
+	url := info.Normalized + "/api2/json/cluster/resources"
 
 	client, err := httpClient(cfg, 15*time.Second, insecure)
 	if err != nil {
