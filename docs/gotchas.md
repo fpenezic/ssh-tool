@@ -1265,6 +1265,14 @@ such to `Get`, gone on restart. That lifetime is right for an opkssh
 cert - regenerable material from an interactive login, not something
 the user typed. The errors are logged now instead of dropped.
 
+So with a locked vault the working state is one sign-in per app RUN
+(not per host, which was the bug), and it does not survive a restart.
+Unlocking the vault is what makes a cert persist for its full validity.
+Worth knowing because a cert sitting in ~/.ssh is NOT a workaround for
+a locked vault: nothing reads certs from disk. `KeyBasename` survives
+in OpksshConfig from the old shell-out implementation and is unused -
+key and cert live only in the vault.
+
 Cancelling has a second problem the lock alone does not solve: the user
 cannot tell WHICH host owns the browser tab. They see a row of hosts on
 "Connecting..." and press Cancel on whichever one they are looking at,
