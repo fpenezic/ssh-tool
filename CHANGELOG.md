@@ -7,7 +7,7 @@ a prerelease upstream.
 
 ---
 
-## [0.85.1] - Ghost broadcast members
+## [0.86.0] - Ghost broadcast members
 
 ### Added
 
