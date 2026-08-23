@@ -7,6 +7,62 @@ a prerelease upstream.
 
 ---
 
+## [0.85.0] - Half a gigabyte back
+
+### Changed
+
+- **A tab you are not looking at gives its scrollback back.** With many
+  sessions open this was where the memory went: twenty SSH tabs, each with
+  a full 5000-line buffer, measured 1105 MB - and nineteen of those
+  terminals were not even on screen. A backgrounded tab now releases its
+  xterm buffer and replays from the backend when you return, which takes
+  the same twenty tabs to 596 MB. The session keeps running throughout;
+  only the on-screen history is dropped, and it comes back when you do.
+  New setting under Settings -> Terminal, "Release background scrollback
+  (s)": 15s by default, 0 to release the moment a tab is hidden, -1 to
+  turn the whole thing off and keep every buffer as before.
+- **More history survives a detach, reload or background release.** The
+  backend keeps 1 MB per session now instead of 256 KB - roughly 8000
+  lines rather than 2000 - so a returning tab no longer comes back visibly
+  shorter than it was.
+- **Replayed history starts at a whole line.** The buffer used to be cut at
+  an exact byte, leaving the first line chopped mid-word, which looked like
+  corrupted output rather than history scrolling off the top.
+- **The status bar's shared-session counters carry their grant level.** The
+  MCP counter was always blue and the browser-share counter always green,
+  whatever the sessions behind them allowed - so "3" looked identical
+  whether all three were read-only or one was auto-running commands. Both
+  now take the loudest of the sessions they stand for: yellow when a
+  command needs approval, red when one is auto-running, and yellow when a
+  browser guest can type. The tooltips say which.
+- **opkssh "Max cert age" is stored in seconds.** It was whole hours with a
+  1h floor, which made the one refresh control that actually applies
+  impossible to test without waiting an hour. Values like `90m` or `5m` now
+  survive being saved. Existing credentials keep working.
+
+### Added
+
+- **Per-line delay for a multi-line initial command.** A pause, in
+  milliseconds, between the lines of a connection's initial command -
+  inheritable from a folder like the command itself. Needed when a line
+  hands the terminal to a different shell: after `sudo su - deploy`, the
+  lines that follow were being read by the shell on its way out instead of
+  the one that just started. Defaults to 0, so nothing changes until you
+  set it.
+
+### Removed
+
+- **The opkssh "Refresh threshold" field.** It could never fire. It
+  measures the time left before a certificate's expiry, and upstream opkssh
+  does not issue certificates with one - it hardcodes "no expiry", and the
+  lifetime in a server's provider config is a rule the server applies when
+  checking a sign-in, never a date stamped into the cert. Worse than
+  useless: setting it at or above the assumed lifetime forced a browser
+  login on every connect. "Max cert age" is now the only refresh control,
+  which is what was doing the work all along.
+
+---
+
 ## [0.84.0] - One sign-in for the whole folder
 
 ### Added
