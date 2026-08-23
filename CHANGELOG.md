@@ -7,6 +7,54 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+Not tagged yet - awaiting verification against a live Docker / Proxmox /
+tshark host before release.
+
+### Added
+
+- **tshark as an alternate capture engine.** Where the remote has
+  `tshark` on PATH, the capture modal offers it next to tcpdump.
+  Wireshark's dissectors name the application protocol - TLSv1.3, DNS,
+  HTTP, QUIC - where tcpdump's brief output can only say tcp/udp, and
+  the Info column carries a real per-packet summary. The engine picker
+  appears only on hosts that have it. Verbose decode stays tcpdump-only
+  (its decoders read tcpdump's hex payload dump, which tshark does not
+  emit in field mode, and tshark dissects those protocols itself).
+- **Three more capture insights.** The live analyzer now also flags a
+  **path MTU too small** (ICMP fragmentation-needed, with the advertised
+  next-hop MTU where the router includes it - the fault where ping works
+  and every large transfer hangs), a **duplicate IP address** (two MAC
+  addresses claiming one IP, which presents as random connection drops
+  rather than a config error), and a **DNS query with no answer** (every
+  lookup stalls to the client's own timeout, so it reads as general
+  slowness). A SERVFAIL counts as an answer; only silence is reported.
+- **Broadcast groups survive a restart.** Group names now persist and
+  are re-created at launch, so the picker is still populated after a
+  relaunch. They come back EMPTY on purpose: members are session IDs,
+  and a restored group holding dead ones would show a member count for
+  sessions that do not exist.
+
+### Changed
+
+- **Proxmox base URL is checked before the token is sent.** The field
+  decides which host receives your API token, so it now rejects URLs
+  that cannot be what you meant (no scheme, a non-http(s) scheme,
+  embedded credentials, a query string) and shows where the token will
+  actually go as you type. Plain http is allowed but warns that the
+  token crosses the network in clear text. Private and localhost
+  addresses stay fully supported - a Proxmox cluster normally lives on
+  a LAN.
+- **A saved password alongside key auth now warns.** SSH tries the key
+  first and falls back to the password if the server rejects it, so a
+  host impersonating yours can fail the key on purpose and collect the
+  password. The connection detail explains this in place of the plain
+  "password saved" note, including when the key is inherited from a
+  folder.
+
+---
+
 ## [0.86.0] - Ghost broadcast members
 
 ### Added

@@ -28,16 +28,11 @@ For what's already shipped, see `CHANGELOG.md`.
   a mode field on `JumpHostSpec` + UI. Revisit if the direct-when-on-
   VPN scenario actually comes up.
 
-- **tcpdump tshark fallback** - if `tshark` is available on the
-  remote, prefer it for protocol decoding instead of raw tcpdump
-  with `-v`. Toggle in tcpdump modal.
-
-- **tcpdump insights, more detectors** - v0.26.0 shipped the live
-  network-health analyzer (UDP wrong-source-IP, half-open TCP,
-  ICMP unreachable/redirect/TTL, ARP off-subnet, RST storm) with a
-  per-flow `ip route get` check. Possible follow-ups: MTU/fragment
-  black-hole detection, duplicate-IP/ARP-conflict, asymmetric
-  routing across captured flows, DNS no-response. Detach re-attach
+- **tcpdump insights, more detectors** - the analyzer now covers
+  UDP wrong-source-IP, half-open TCP, ICMP unreachable/redirect/TTL,
+  ARP off-subnet, RST storm (v0.26.0) plus MTU black-hole,
+  duplicate-IP/ARP-conflict and DNS no-response. Still open:
+  asymmetric routing across captured flows. Detach re-attach
   recovers history from a 2000-packet backend ring - bumping that
   or persisting to disk is a separate call.
 
@@ -49,11 +44,6 @@ For what's already shipped, see `CHANGELOG.md`.
 - **Connect retry on transient failures** - DNS, ECONNREFUSED with
   back-off, single auto-retry, surface as a inline pill not as a
   fresh error toast.
-
-- **Persist broadcast groups across restarts.** Today groups live
-  only in backend RAM - relaunch wipes them. Settings KV is the
-  obvious place to stash `broadcast_groups_v1` as a JSON snapshot;
-  hydrate at startup, save after every mutation.
 
 - **Native drag-OUT (download)** *(deferred)* - WebView2 / WebKitGTK
   can't advertise drop-as-download cleanly. In-app "save as" works,
@@ -94,14 +84,6 @@ Mediums + selected Lows tracked here.
   platforms with per-OS FFI / CGO surface and needs its own test
   matrix (rotation across user accounts, machine-id absence,
   fallback chain). Treat as a standalone v0.x project.
-- **Password override sent to server even after key auth succeeds.**
-  A honeypot SSH server failing pubkey then accepting password can
-  harvest the override. Mitigation: UI warning when both are set on
-  the same connection; can't gate at config-build time.
-- **Inventory: Proxmox `base_url` accepts arbitrary hostnames.**
-  Token sent in Authorization header against whatever URL the user
-  pastes. Surface the resolved host before first refresh; consider
-  reusing the SSRF guard from `FetchArchiveURL` here.
 - **Signed update manifest.** sha256 verification against
   `/api/latest` is in, which covers MITM / CDN tampering - but a
   compromised release server can still rewrite hash and binary
