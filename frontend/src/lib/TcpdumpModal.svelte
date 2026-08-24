@@ -928,6 +928,18 @@
         <span>Max packets</span>
         <input type="number" min="10" max="5000" step="50" bind:value={maxCount} disabled={running || continuous} />
       </label>
+      {#if probe?.tshark_available}
+        <!-- Sits with the other labelled inputs, not among the checkboxes:
+             .controls is align-items:end, and a label+control is taller than
+             a checkbox, so putting it mid-run pushed the row out of line. -->
+        <label class="sel" title="tcpdump is universal. tshark (Wireshark's CLI) runs the full Wireshark dissector set, so the Proto column names the application protocol - TLSv1.3, DNS, HTTP - instead of just tcp/udp, and each row carries a readable summary.">
+          <span>Engine</span>
+          <select bind:value={engine} disabled={running}>
+            <option value="tcpdump">tcpdump</option>
+            <option value="tshark">tshark</option>
+          </select>
+        </label>
+      {/if}
       <label class="chk" title="Run until you stop it - no packet cap. Needed for a long-lived capture that should keep running while you switch tabs or detach the window.">
         <input type="checkbox" bind:checked={continuous} disabled={running} />
         <span>Continuous</span>
@@ -938,19 +950,10 @@
           <span>Use saved password</span>
         </label>
       {/if}
-      {#if probe?.tshark_available}
-        <label class="sel" title="tcpdump is universal. tshark (Wireshark's CLI) uses the full dissector set, so the protocol column names the application protocol - TLSv1.3, DNS, HTTP - instead of just tcp/udp.">
-          <span>Engine</span>
-          <select bind:value={engine} disabled={running}>
-            <option value="tcpdump">tcpdump</option>
-            <option value="tshark">tshark</option>
-          </select>
-        </label>
-      {/if}
       <label
         class="chk"
         title={usingTshark
-          ? "Verbose decode is a tcpdump mode - it parses tcpdump's hex payload dump. tshark dissects these protocols itself, so the Info column already carries the detail."
+          ? "Not used with tshark. This mode parses tcpdump's hex payload dump; tshark dissects DHCP / DNS / TLS itself and puts the result straight on each packet row."
           : "Capture full payload - gives the Decode tab DHCP / DNS / ARP field-level dissection."}
       >
         <input type="checkbox" bind:checked={verbose} disabled={running || usingTshark} />
@@ -1082,7 +1085,14 @@
           <div class="row flat">
             <span class="ts">{p.timestamp}</span>
             {#if p.proto}<span class="proto" style:color={protoColor(p.proto)}>{p.proto}</span>{/if}
-            <span class="raw">{p.raw}</span>
+            <!-- tshark's raw line is the tab-separated -T fields record,
+                 which is unreadable; its info column holds the dissector's
+                 summary, which is the whole reason to pick that engine.
+                 tcpdump's raw line IS the readable form, and its info holds
+                 only a TAIL for ICMP / ARP ("host X unreachable") without
+                 the addresses - so preferring info there would LOSE
+                 information. Hence per-engine, not a blanket swap. -->
+            <span class="raw">{usingTshark ? (p.info || p.raw) : p.raw}</span>
           </div>
         {/each}
       {:else if viewMode === "flows"}
@@ -1115,9 +1125,20 @@
         <!-- Decode tab: DHCP transactions (xid-grouped) + flat DNS/ARP -->
         {#if decodedPackets.length === 0}
           <div class="empty">
-            {verbose
-              ? "No decoded packets yet - DHCP / DNS / ARP traffic will land here."
-              : "Verbose mode is off. Stop, tick \"Verbose (decode)\", and Start again to see protocol decode."}
+            {#if usingTshark}
+              <!-- Verbose is force-disabled under tshark, so the "tick the
+                   box" message would point at a control the user cannot
+                   use. tshark's own dissection lands on the packet rows. -->
+              This tab shows tcpdump's payload decode, which tshark does not
+              produce - it dissects DHCP / DNS / TLS itself and puts the result
+              on each row in the Flat and Flows views. Switch the engine to
+              tcpdump if you want the field-level decode here.
+            {:else if verbose}
+              No decoded packets yet - DHCP / DNS / ARP traffic will land here.
+            {:else}
+              Verbose mode is off. Stop, tick "Verbose (decode)", and Start
+              again to see protocol decode.
+            {/if}
           </div>
         {/if}
 
