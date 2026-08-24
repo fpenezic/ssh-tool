@@ -669,11 +669,6 @@ export const api = {
   broadcastSetAll: (ids: string[]) => G.BroadcastSetAll(ids),
   broadcastFanOut: (originId: string, b64: string) =>
     G.BroadcastFanOut(originId, b64) as unknown as Promise<string>,
-  broadcastSavedGroups: () =>
-    (G.BroadcastSavedGroups() ?? []) as unknown as Promise<string[]>,
-  broadcastRestoreSaved: () =>
-    G.BroadcastRestoreSaved() as unknown as Promise<number>,
-  broadcastForgetSaved: () => G.BroadcastForgetSaved(),
   broadcastListGroups: () =>
     G.BroadcastListGroups() as unknown as Promise<Record<string, string[]>>,
   broadcastAddTo: (groupId: string, sessionId: string) =>

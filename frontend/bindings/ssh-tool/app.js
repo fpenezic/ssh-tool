@@ -384,15 +384,6 @@ export function BroadcastFanOut(originID, dataB64) {
 }
 
 /**
- * BroadcastForgetSaved drops the persisted group list. Used when the user
- * declines a restore permanently.
- * @returns {$CancellablePromise<void>}
- */
-export function BroadcastForgetSaved() {
-    return $Call.ByID(3338320236);
-}
-
-/**
  * BroadcastGroupDelete removes the named group entirely. No-op for
  * the default group ("") - clear it instead.
  * @param {string} groupID
@@ -456,32 +447,6 @@ export function BroadcastRemove(sessionID) {
  */
 export function BroadcastRemoveFrom(groupID, sessionID) {
     return $Call.ByID(1878133364, groupID, sessionID);
-}
-
-/**
- * BroadcastRestoreSaved re-creates the persisted groups, EMPTY, and pushes the
- * new list to every window. Returns how many were added.
- * 
- * Restoring them empty is the deliberate part: a persisted member list would
- * hold session IDs from the previous run, and every one of them is dead. A
- * group pre-populated with dead IDs would show a non-zero member badge for
- * sessions that do not exist - exactly the ghost-membership bug fixed in
- * v0.86.0, reintroduced through the back door.
- * @returns {$CancellablePromise<number>}
- */
-export function BroadcastRestoreSaved() {
-    return $Call.ByID(454055973);
-}
-
-/**
- * BroadcastSavedGroups reports the groups the previous run left behind, so the
- * UI can ask before re-creating them. Empty when there is nothing to restore.
- * @returns {$CancellablePromise<string[]>}
- */
-export function BroadcastSavedGroups() {
-    return $Call.ByID(1468648647).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType0($result);
-    }));
 }
 
 /**

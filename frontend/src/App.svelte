@@ -52,7 +52,6 @@
   import DynamicFolderEditor from "./lib/DynamicFolderEditor.svelte";
   import { vaultPrefs } from "./lib/vaultPrefs.svelte";
   import { lastSession } from "./lib/lastSession.svelte";
-  import { broadcastRestore } from "./lib/broadcastRestore.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
 
   // Load UI preferences early so density / base font size apply
@@ -62,7 +61,6 @@
   vaultPrefs.load();
   localShellPrefs.load();
   lastSession.load();
-  broadcastRestore.load();
 
   let showCreate = $state(false);
   // Folder context for the upcoming credential create - set when the
@@ -1004,11 +1002,6 @@
     // if recovery brought anything back this was a UI reload and the
     // backend sessions are already live).
     lastSession.restoreOnStartup(recovered).catch(console.warn);
-    // Same cold-start rule: a UI reload (Ctrl+R, HMR) leaves the backend
-    // groups intact, so re-asking there would prompt on every refresh.
-    if (recovered === 0) {
-      broadcastRestore.maybeRestore().catch(console.warn);
-    }
   }
 
   // Continuous last-session snapshot: any tab/session mutation

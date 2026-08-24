@@ -112,9 +112,6 @@ var machineLocalSettings = []string{
 	"recent_connections_count",
 	"keyring_legacy_purged_v1",
 	"app_log_tail_enabled",
-	// Broadcast groups describe how this machine's windows are arranged for
-	// a working session, not shared profile data.
-	"broadcast_groups_v1",
 }
 
 func machineLocalSettingsPlaceholders() string {

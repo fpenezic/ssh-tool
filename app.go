@@ -210,10 +210,6 @@ type App struct {
 	// walks every group the origin belongs to.
 	broadcastMu     sync.Mutex
 	broadcastGroups map[string]map[string]bool
-	// testEmitHook, when set, is called instead of the Wails event emit in
-	// emitBroadcastChanged. Tests run without a Wails runtime, so this is the
-	// only way to assert that a mutation actually notifies the windows.
-	testEmitHook func()
 
 	// detachedSessions maps a detached window's Name -> sessionIDs
 	// that landed in it. WindowClosing fires SshDisconnect for the
@@ -3573,15 +3569,8 @@ func (a *App) emitBroadcastChanged() {
 		groups[gid] = ids
 	}
 	a.broadcastMu.Unlock()
-	if a.testEmitHook != nil {
-		a.testEmitHook()
-	}
 	EventsEmit("broadcast_changed", legacy)
 	EventsEmit("broadcast_groups_changed", groups)
-	// Every group mutation funnels through here, so this is the one place
-	// persistence has to hook. Names only, and restored empty - see
-	// app_broadcast_persist.go for why membership must not survive.
-	a.persistBroadcastGroups()
 }
 
 // ScrollbackSnapshot pairs a base64 chunk with the cumulative-byte watermark

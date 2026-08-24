@@ -9,7 +9,6 @@
   import InfisicalSettings from "./InfisicalSettings.svelte";
   import { api, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type SuperPuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo } from "./api";
   import { vaultState } from "./vaultState.svelte";
-  import { broadcastRestore } from "./broadcastRestore.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
   import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
   import FolderPicker from "./FolderPicker.svelte";
@@ -316,9 +315,6 @@
   }
 
   onMount(async () => {
-    // The radio group reads this store; without the load it renders the
-    // default rather than the user's saved choice.
-    broadcastRestore.load().catch(() => {});
     try {
       const v = await api.settingsGet("preferred_browser_path");
       browserPath = v ?? "";
@@ -1813,15 +1809,6 @@
 
   // Unlocking is the same flow everywhere: re-show VaultGate, which owns the
   // passphrase entry, the auto-unlock probe and the mobile biometric path.
-  // "Never" also forgets what is stored - leaving the names behind would mean
-  // switching back to "ask" later resurrects groups from a long-dead session.
-  async function onBroadcastModeChange(m: "ask" | "always" | "never") {
-    await broadcastRestore.setMode(m);
-    if (m === "never") {
-      try { await api.broadcastForgetSaved(); } catch { /* best effort */ }
-    }
-  }
-
   function onUnlockNow() {
     window.dispatchEvent(new CustomEvent("vault-unlock-now"));
   }
@@ -2608,32 +2595,6 @@
       {/each}
     </fieldset>
 
-    <h3 style="margin-top:1.2rem">Broadcast groups</h3>
-    <p class="hint">
-      Broadcast groups are remembered by name and come back EMPTY - their
-      members were sessions from the last run, and those are gone. You pick
-      the sessions again; this only saves re-typing the group names.
-    </p>
-    <fieldset class="modes">
-      {#each [
-        { id: "ask",    name: "Ask on startup (default)", desc: "If the last session had groups, offer to re-create them." },
-        { id: "always", name: "Always restore",           desc: "Re-create the saved groups silently, no prompt." },
-        { id: "never",  name: "Never",                    desc: "Start with no groups. Saved names are cleared." },
-      ] as m (m.id)}
-        <label class:active={broadcastRestore.mode === m.id}>
-          <input
-            type="radio"
-            name="restoreBroadcastGroups"
-            checked={broadcastRestore.mode === m.id}
-            onchange={() => onBroadcastModeChange(m.id as any)}
-          />
-          <div>
-            <div class="mode-name">{m.name}</div>
-            <div class="mode-desc">{m.desc}</div>
-          </div>
-        </label>
-      {/each}
-    </fieldset>
   </div>
   {/if}
 
