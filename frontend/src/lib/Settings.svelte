@@ -8,6 +8,7 @@
   import BitwardenSettings from "./BitwardenSettings.svelte";
   import InfisicalSettings from "./InfisicalSettings.svelte";
   import { api, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type SuperPuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo } from "./api";
+  import { vaultState } from "./vaultState.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
   import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
   import FolderPicker from "./FolderPicker.svelte";
@@ -1806,6 +1807,12 @@
   let lockBusy = $state(false);
   let lockNotice = $state<string | null>(null);
 
+  // Unlocking is the same flow everywhere: re-show VaultGate, which owns the
+  // passphrase entry, the auto-unlock probe and the mobile biometric path.
+  function onUnlockNow() {
+    window.dispatchEvent(new CustomEvent("vault-unlock-now"));
+  }
+
   async function onLockNow() {
     const ok = await showConfirm({
       title: "Lock vault",
@@ -1818,6 +1825,7 @@
     try {
       await api.vaultLock(true);
       lockNotice = "Vault locked.";
+      vaultState.markLocked();
       // Tell the rest of the app so VaultGate re-prompts.
       window.dispatchEvent(new CustomEvent("vault-lock-now"));
       setTimeout(() => { lockNotice = null; }, 2500);
@@ -3541,19 +3549,31 @@
       running across a lock; only the credential tree gets re-protected.
     </p>
 
-    <h3 style="margin-top:1.2rem">Lock now</h3>
-    <p class="hint">
-      Forget the in-memory vault key immediately. The next
-      vault-backed action (new SSH connection, credential edit,
-      passphrase rotation) will re-prompt. Also forgets the
-      auto-unlock sidecar so the next app launch prompts too.
-    </p>
-    <div class="row">
-      <button disabled={lockBusy} onclick={onLockNow}>
-        {lockBusy ? "Locking…" : "Lock vault now"}
-      </button>
-      {#if lockNotice}<span class="ok inline">{lockNotice}</span>{/if}
-    </div>
+    {#if vaultState.locked}
+      <h3 style="margin-top:1.2rem">Unlock</h3>
+      <p class="hint">
+        The vault is locked, so stored passwords, keys and API tokens
+        cannot be read. Unlocking re-prompts for the master passphrase
+        (or uses the auto-unlock sidecar where one is set up).
+      </p>
+      <div class="row">
+        <button class="primary" onclick={onUnlockNow}>Unlock vault</button>
+      </div>
+    {:else}
+      <h3 style="margin-top:1.2rem">Lock now</h3>
+      <p class="hint">
+        Forget the in-memory vault key immediately. The next
+        vault-backed action (new SSH connection, credential edit,
+        passphrase rotation) will re-prompt. Also forgets the
+        auto-unlock sidecar so the next app launch prompts too.
+      </p>
+      <div class="row">
+        <button disabled={lockBusy} onclick={onLockNow}>
+          {lockBusy ? "Locking…" : "Lock vault now"}
+        </button>
+        {#if lockNotice}<span class="ok inline">{lockNotice}</span>{/if}
+      </div>
+    {/if}
 
     <h3 style="margin-top:1.2rem">Change master passphrase</h3>
     <p class="hint">

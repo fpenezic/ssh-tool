@@ -12,6 +12,7 @@
   import CredentialCreate from "./lib/CredentialCreate.svelte";
   import TerminalArea from "./lib/TerminalArea.svelte";
   import VaultGate from "./lib/VaultGate.svelte";
+  import { vaultState } from "./lib/vaultState.svelte";
   import { broadcast } from "./lib/broadcast.svelte";
   import { recording, recordingsModal } from "./lib/recording.svelte";
   import { syncState } from "./lib/syncState.svelte";
@@ -862,6 +863,7 @@
         api.vaultLock(false).catch(console.warn);
         suppressAutoUnlock = true;
         vaultReady = false;
+        vaultState.markLocked();
       }, idleMs);
     };
     const opts = { capture: true, passive: true } as AddEventListenerOptions;
@@ -889,10 +891,27 @@
       if (vaultReady) {
         suppressAutoUnlock = true;
         vaultReady = false;
+        vaultState.markLocked();
       }
     }
     window.addEventListener("vault-lock-now", onLock);
     return () => window.removeEventListener("vault-lock-now", onLock);
+  });
+
+  // Unlock request from the status-bar pill (or the credentials banner).
+  // Re-showing VaultGate IS the unlock flow - it owns passphrase entry, the
+  // auto-unlock probe and the mobile biometric path.
+  //
+  // suppressAutoUnlock is deliberately left as it stands. If the vault was
+  // locked manually or by the idle timer, that flag is set and the gate must
+  // demand the passphrase; clearing it here would let the sidecar silently
+  // re-open the vault the user just chose to close.
+  $effect(() => {
+    function onUnlock() {
+      vaultReady = false;
+    }
+    window.addEventListener("vault-unlock-now", onUnlock);
+    return () => window.removeEventListener("vault-unlock-now", onUnlock);
   });
 
   // Reflect the active connection in the OS window / taskbar title.
@@ -924,6 +943,7 @@
     const unsub = EventsOn("vault_locked_during_connect", (p: { hostname?: string; message?: string }) => {
       suppressAutoUnlock = true;
       vaultReady = false;
+      vaultState.markLocked();
       toast.err(`Vault locked while connecting to ${p?.hostname ?? "host"}. Unlock and retry.`);
     });
     return () => unsub?.();
@@ -932,6 +952,10 @@
   async function onVaultReady() {
     suppressAutoUnlock = false;
     vaultReady = true;
+    // The gate also returns here via "Skip (memory only)", which leaves the
+    // vault LOCKED. Read the backend rather than assuming success, so the
+    // status-bar pill reflects a skip instead of claiming unlocked.
+    void vaultState.refresh();
     await Promise.all([tree.load(), credentials.load()]);
     // Recover any SSH sessions / forwards that the Go backend kept alive
     // across a UI reload (Ctrl+R, Vite HMR, etc.). The backend goroutines

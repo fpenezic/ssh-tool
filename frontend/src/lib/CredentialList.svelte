@@ -11,6 +11,14 @@
   import { toast } from "./toast.svelte.ts";
   import { credentialIconFor, IconFolderPlus, IconPlus, IconRotateCw, IconKey, IconExpandAll, IconCollapseAll } from "./iconMap";
   import { connectionActions } from "./connectionActions.svelte";
+  import { IconLock } from "./iconMap";
+  import { vaultState } from "./vaultState.svelte";
+
+  // Re-show VaultGate, which owns the whole unlock flow. Same event the
+  // status-bar pill fires.
+  function unlockVault() {
+    window.dispatchEvent(new CustomEvent("vault-unlock-now"));
+  }
 
   interface Props {
     onCreate: () => void;
@@ -134,6 +142,21 @@
     </div>
   </header>
 
+  <!-- The credential list renders fine with the vault locked: names, kinds
+       and folders are plain store rows. Only the SECRETS are unreadable, and
+       nothing said so until a reveal or a connect failed. This is the one
+       screen where that gap is most confusing, so it gets a banner rather
+       than relying on the status-bar pill alone. -->
+  {#if vaultState.locked}
+    <button class="vault-banner" onclick={unlockVault}>
+      <IconLock size={13} />
+      <span class="vb-text">
+        <strong>Vault locked</strong>
+        Passwords, keys and tokens can't be read. Click to unlock.
+      </span>
+    </button>
+  {/if}
+
   {#if credentials.loading}
     <div class="skeleton">
       {#each Array(6) as _, i (i)}
@@ -254,6 +277,33 @@
     color: var(--subtext0);
   }
   .actions { display: flex; gap: 0.25rem; }
+
+  /* Locked-vault banner. Deliberately a button, not a passive notice: the
+     state it reports has exactly one fix, so the message and the action are
+     the same target. --warn (not an error red) - a locked vault is working
+     as designed, it just blocks what this screen is for. */
+  .vault-banner {
+    display: flex; align-items: flex-start; gap: 0.5rem;
+    width: 100%;
+    padding: 0.55rem 0.8rem;
+    border: 0;
+    border-bottom: 1px solid var(--surface0);
+    background: color-mix(in srgb, var(--warn) 12%, transparent);
+    color: var(--warn);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .vault-banner:hover {
+    background: color-mix(in srgb, var(--warn) 20%, transparent);
+  }
+  .vault-banner > :global(svg) { flex: none; margin-top: 0.1rem; }
+  .vb-text {
+    display: flex; flex-direction: column; gap: 0.1rem;
+    font-size: 0.72rem; line-height: 1.35;
+    color: var(--subtext0);
+  }
+  .vb-text strong { color: var(--warn); font-size: 0.76rem; }
   .actions button {
     background: transparent; border: 0; color: var(--subtext0);
     cursor: pointer; padding: 0.15rem 0.35rem;

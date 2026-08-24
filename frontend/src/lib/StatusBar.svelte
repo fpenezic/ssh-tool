@@ -26,10 +26,10 @@
   import { workspaces } from "./workspaces.svelte";
   import { updateCheck } from "./updateCheck.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
-  import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
   import { onMount, onDestroy } from "svelte";
   import { api } from "./api";
+  import { vaultState } from "./vaultState.svelte";
   import { EventsOn } from "./wailsRuntime";
   import UpdateModal from "./UpdateModal.svelte";
   import ServerStatusModal from "./ServerStatusModal.svelte";
@@ -47,38 +47,14 @@
   let showSharePanel = $state(false);
   let tunnelTimer: ReturnType<typeof setInterval> | null = null;
 
-  // Vault state tracked here so the pill below can show locked /
-  // unlocked + offer a manual Lock now. Synced via VaultStatus on
-  // mount and the `vault_locked` event App.svelte already emits.
-  let vaultLocked = $state(true);
-  let unsubVault: null | (() => void) = null;
   let unsubOpenUpdate: null | (() => void) = null;
-  async function refreshVault() {
-    try {
-      const st = await api.vaultStatus();
-      vaultLocked = st?.state !== "unlocked";
-    } catch {
-      vaultLocked = true;
-    }
-  }
-  async function lockVaultNow() {
-    const ok = await showConfirm({
-      title: "Lock vault",
-      message: "Lock the vault now? You'll be prompted to unlock on the next vault-backed action (new SSH connection, credential edit, …).",
-      okLabel: "Lock",
-    });
-    if (!ok) return;
-    try {
-      // Forget the sidecar so the next launch also prompts.
-      // Without this the auto-unlock kicks back in immediately
-      // on the next app start - defeats the point of a manual
-      // lock.
-      await api.vaultLock(true);
-      vaultLocked = true;
-      toast.ok("Vault locked");
-    } catch (e: any) {
-      toast.err(`Lock failed: ${errMsg(e)}`);
-    }
+
+  // Ask App.svelte to re-show VaultGate. The gate owns the passphrase entry,
+  // the auto-unlock probe and the mobile biometric path, so re-showing it is
+  // the whole unlock flow - duplicating any of it here would be a second
+  // place to keep correct.
+  function unlockVaultNow() {
+    window.dispatchEvent(new CustomEvent("vault-unlock-now"));
   }
   async function refreshTunnels() {
     try {
@@ -97,8 +73,9 @@
     api.appVersion().then((v) => { version = v.version; }).catch(() => {});
     refreshTunnels();
     tunnelTimer = setInterval(refreshTunnels, 3000);
-    refreshVault();
-    unsubVault = EventsOn("vault_locked", () => { vaultLocked = true; });
+    // Slow background poll: the backend emits no vault-lock event, so the
+    // store is the single place that reconciles the real state.
+    vaultState.start();
     // Clicking the OS update toast raises the window (backend) and emits
     // this so the update dialog opens straight away - the whole point of
     // the notification is to land the user on the update, not just surface
@@ -107,8 +84,10 @@
   });
   onDestroy(() => {
     if (tunnelTimer) clearInterval(tunnelTimer);
-    unsubVault?.();
     unsubOpenUpdate?.();
+    // vaultState is a shared singleton and is deliberately NOT stopped here:
+    // a detached window mounts its own StatusBar, and tearing the poll down
+    // with one of them would leave the others blind to a later lock.
   });
 
   let version = $state<string>("");
@@ -507,14 +486,21 @@
     </div>
   {/if}
 
-  <!-- Vault lock pill withdrawn - user feedback: rare action,
-       doesn't justify status-bar real estate. Manual lock is still
-       available via the existing auto-lock idle timer + the
-       Settings → Vault panel. -->
-  {#if false && !vaultLocked}
-    <button class="seg vault" onclick={lockVaultNow}>
+  <!-- Locked-vault pill. The earlier "Lock vault" pill was withdrawn as a
+       rare action not worth the space, and that still holds - this is the
+       opposite case. The vault can be locked while the app is fully usable
+       (VaultGate's "Skip (memory only)", or the idle auto-lock after a skip),
+       and until now nothing on screen said so: the user found out when a
+       credential reveal or an SSH connect failed. A locked vault is a state
+       worth a permanent indicator, and the click is the fix for it. -->
+  {#if vaultState.locked}
+    <button
+      class="seg vault locked"
+      onclick={unlockVaultNow}
+      title="The vault is locked - stored passwords, keys and API tokens cannot be read. Click to unlock."
+    >
       <IconLock size={11} />
-      <span>Lock vault</span>
+      <span>Vault locked</span>
     </button>
   {/if}
 
