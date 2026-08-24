@@ -210,6 +210,10 @@ type App struct {
 	// walks every group the origin belongs to.
 	broadcastMu     sync.Mutex
 	broadcastGroups map[string]map[string]bool
+	// testEmitHook, when set, is called instead of the Wails event emit in
+	// emitBroadcastChanged. Tests run without a Wails runtime, so this is the
+	// only way to assert that a mutation actually notifies the windows.
+	testEmitHook func()
 
 	// detachedSessions maps a detached window's Name -> sessionIDs
 	// that landed in it. WindowClosing fires SshDisconnect for the
@@ -467,9 +471,6 @@ func (a *App) initialise() {
 		a.recordSyncPushedFingerprint()
 	}
 	a.credSvc = &creds.Service{DB: db, Vault: vault}
-	// Re-create the user's broadcast groups (names only, empty) now that the
-	// store is open, so the picker is populated before the frontend asks.
-	a.restoreBroadcastGroups()
 	a.initKeepass()
 	a.initBitwarden()
 	a.initInfisical()
@@ -3572,6 +3573,9 @@ func (a *App) emitBroadcastChanged() {
 		groups[gid] = ids
 	}
 	a.broadcastMu.Unlock()
+	if a.testEmitHook != nil {
+		a.testEmitHook()
+	}
 	EventsEmit("broadcast_changed", legacy)
 	EventsEmit("broadcast_groups_changed", groups)
 	// Every group mutation funnels through here, so this is the one place

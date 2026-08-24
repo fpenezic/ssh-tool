@@ -45,7 +45,7 @@ func TestBroadcastGroupsSurviveRestart(t *testing.T) {
 
 	// Relaunch: a fresh App over the same store.
 	b := newPersistTestApp(t, dbPath)
-	b.restoreBroadcastGroups()
+	b.BroadcastRestoreSaved()
 
 	got := groupNames(b)
 	if len(got) != 2 || got[0] != "db-tier" || got[1] != "web-tier" {
@@ -64,7 +64,7 @@ func TestRestoredGroupsAreEmpty(t *testing.T) {
 	a.BroadcastAddTo("web-tier", "session-2")
 
 	b := newPersistTestApp(t, dbPath)
-	b.restoreBroadcastGroups()
+	b.BroadcastRestoreSaved()
 
 	b.broadcastMu.Lock()
 	n := len(b.broadcastGroups["web-tier"])
@@ -122,7 +122,7 @@ func TestDeletedGroupDoesNotComeBack(t *testing.T) {
 	a.BroadcastGroupDelete("web-tier")
 
 	b := newPersistTestApp(t, dbPath)
-	b.restoreBroadcastGroups()
+	b.BroadcastRestoreSaved()
 
 	for _, g := range groupNames(b) {
 		if g == "web-tier" {
@@ -141,7 +141,7 @@ func TestClearedGroupStillPersists(t *testing.T) {
 	a.BroadcastClearGroup("web-tier")
 
 	b := newPersistTestApp(t, dbPath)
-	b.restoreBroadcastGroups()
+	b.BroadcastRestoreSaved()
 
 	b.broadcastMu.Lock()
 	_, ok := b.broadcastGroups["web-tier"]
@@ -157,7 +157,7 @@ func TestRestoreKeepsTheDefaultGroup(t *testing.T) {
 	a.BroadcastAddTo("web-tier", "session-1")
 
 	b := newPersistTestApp(t, dbPath)
-	b.restoreBroadcastGroups()
+	b.BroadcastRestoreSaved()
 
 	b.broadcastMu.Lock()
 	_, ok := b.broadcastGroups[""]
@@ -175,9 +175,9 @@ func TestRestoreIsIdempotentAndNonDestructive(t *testing.T) {
 	a.BroadcastAddTo("web-tier", "session-1")
 
 	b := newPersistTestApp(t, dbPath)
-	b.restoreBroadcastGroups()
+	b.BroadcastRestoreSaved()
 	b.BroadcastAddTo("web-tier", "live-session")
-	b.restoreBroadcastGroups() // second call
+	b.BroadcastRestoreSaved() // second call
 
 	b.broadcastMu.Lock()
 	members := len(b.broadcastGroups["web-tier"])
@@ -194,7 +194,7 @@ func TestRestoreToleratesGarbage(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Must not panic, and must leave the default group intact.
-	a.restoreBroadcastGroups()
+	a.BroadcastRestoreSaved()
 	a.broadcastMu.Lock()
 	_, ok := a.broadcastGroups[""]
 	a.broadcastMu.Unlock()
@@ -236,5 +236,72 @@ func TestEveryGroupMutationPersists(t *testing.T) {
 				t.Errorf("%s: group %q missing from %v", c.name, c.want, names)
 			}
 		})
+	}
+}
+
+// BroadcastSavedGroups must report what is on disk WITHOUT creating anything,
+// so the UI can ask first. If it had a side effect, declining the prompt
+// would still leave the groups behind.
+func TestSavedGroupsIsReadOnly(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "store.db")
+	a := newPersistTestApp(t, dbPath)
+	a.BroadcastAddTo("prod", "s1")
+
+	b := newPersistTestApp(t, dbPath)
+	saved := b.BroadcastSavedGroups()
+	if len(saved) != 1 || saved[0] != "prod" {
+		t.Fatalf("saved = %v, want [prod]", saved)
+	}
+	// Reading must not have re-created it.
+	if got := groupNames(b); len(got) != 0 {
+		t.Errorf("reading the saved list created groups: %v", got)
+	}
+}
+
+func TestRestoreSavedReportsHowManyItAdded(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "store.db")
+	a := newPersistTestApp(t, dbPath)
+	a.BroadcastAddTo("prod", "s1")
+	a.BroadcastAddTo("staging", "s2")
+
+	b := newPersistTestApp(t, dbPath)
+	if n := b.BroadcastRestoreSaved(); n != 2 {
+		t.Errorf("restored %d groups, want 2", n)
+	}
+	// A second restore adds nothing - the groups already exist.
+	if n := b.BroadcastRestoreSaved(); n != 0 {
+		t.Errorf("second restore added %d, want 0", n)
+	}
+}
+
+// A restore that happens AFTER the frontend has read the group list is
+// invisible unless the backend pushes the change. This was the bug: the
+// groups sat in backend memory that no window ever asked about again.
+func TestRestorePushesTheNewListToWindows(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "store.db")
+	a := newPersistTestApp(t, dbPath)
+	a.BroadcastAddTo("prod", "s1")
+
+	b := newPersistTestApp(t, dbPath)
+	emitted := 0
+	b.testEmitHook = func() { emitted++ }
+	b.BroadcastRestoreSaved()
+	if emitted == 0 {
+		t.Error("a restore must notify the windows, or the groups stay invisible")
+	}
+}
+
+func TestForgetSavedClearsThePersistedList(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "store.db")
+	a := newPersistTestApp(t, dbPath)
+	a.BroadcastAddTo("prod", "s1")
+	a.BroadcastForgetSaved()
+
+	b := newPersistTestApp(t, dbPath)
+	if saved := b.BroadcastSavedGroups(); len(saved) != 0 {
+		t.Errorf("forget left %v behind", saved)
+	}
+	if n := b.BroadcastRestoreSaved(); n != 0 {
+		t.Errorf("restore after forget created %d groups", n)
 	}
 }

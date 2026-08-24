@@ -51,35 +51,72 @@ func (a *App) persistBroadcastGroups() {
 	_ = a.db.SetSetting(broadcastGroupsKey, string(blob))
 }
 
-// restoreBroadcastGroups re-creates the persisted groups, empty. Call once at
-// startup, after the store is open and before the frontend asks for the group
-// list.
+// savedBroadcastGroupNames returns the group names persisted by the previous
+// run, without touching live state. The frontend calls this at startup to
+// decide whether to offer a restore.
+func (a *App) savedBroadcastGroupNames() []string {
+	if a.db == nil {
+		return nil
+	}
+	raw, ok, err := a.db.GetSetting(broadcastGroupsKey)
+	if err != nil || !ok || raw == "" {
+		return nil
+	}
+	var names []string
+	if err := json.Unmarshal([]byte(raw), &names); err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// BroadcastSavedGroups reports the groups the previous run left behind, so the
+// UI can ask before re-creating them. Empty when there is nothing to restore.
+func (a *App) BroadcastSavedGroups() []string {
+	return a.savedBroadcastGroupNames()
+}
+
+// BroadcastRestoreSaved re-creates the persisted groups, EMPTY, and pushes the
+// new list to every window. Returns how many were added.
 //
-// Restoring them EMPTY is the deliberate part: a persisted member list would
+// Restoring them empty is the deliberate part: a persisted member list would
 // hold session IDs from the previous run, and every one of them is dead. A
 // group pre-populated with dead IDs would show a non-zero member badge for
 // sessions that do not exist - exactly the ghost-membership bug fixed in
 // v0.86.0, reintroduced through the back door.
-func (a *App) restoreBroadcastGroups() {
-	if a.db == nil {
-		return
+func (a *App) BroadcastRestoreSaved() int {
+	names := a.savedBroadcastGroupNames()
+	if len(names) == 0 {
+		return 0
 	}
-	raw, ok, err := a.db.GetSetting(broadcastGroupsKey)
-	if err != nil || !ok || raw == "" {
-		return
-	}
-	var names []string
-	if err := json.Unmarshal([]byte(raw), &names); err != nil {
-		return
-	}
+	added := 0
 	a.broadcastMu.Lock()
 	for _, n := range names {
-		if n == "" {
-			continue
-		}
 		if _, exists := a.broadcastGroups[n]; !exists {
 			a.broadcastGroups[n] = make(map[string]bool)
+			added++
 		}
 	}
 	a.broadcastMu.Unlock()
+	if added > 0 {
+		// Without this the restored groups sit in backend memory that no
+		// window ever asked about again - the frontend reads the list once at
+		// init, and a restore that happens after that is invisible.
+		a.emitBroadcastChanged()
+	}
+	return added
+}
+
+// BroadcastForgetSaved drops the persisted group list. Used when the user
+// declines a restore permanently.
+func (a *App) BroadcastForgetSaved() {
+	if a.db == nil {
+		return
+	}
+	_ = a.db.SetSetting(broadcastGroupsKey, "[]")
 }
