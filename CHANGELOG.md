@@ -30,6 +30,13 @@ tshark host before release.
   rather than a config error), and a **DNS query with no answer** (every
   lookup stalls to the client's own timeout, so it reads as general
   slowness). A SERVFAIL counts as an answer; only silence is reported.
+- **A locked vault is now visible.** VaultGate's "Skip (memory only)"
+  lets you into the app with the vault still locked, and nothing said so
+  until a credential reveal or an SSH connect failed. A "Vault locked"
+  pill now sits in the status bar, the credentials list carries a banner
+  above the tree, and the Settings vault section offers Unlock when
+  locked instead of only ever offering Lock. All three re-open the
+  unlock prompt; the view you were on stays where it was.
 - **Broadcast groups survive a restart.** Group names now persist and
   are re-created at launch, so the picker is still populated after a
   relaunch. They come back EMPTY on purpose: members are session IDs,
