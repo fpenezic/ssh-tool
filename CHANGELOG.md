@@ -9,19 +9,24 @@ a prerelease upstream.
 
 ## [Unreleased]
 
-Not tagged yet - awaiting verification against a live Docker / Proxmox /
-tshark host before release.
+Not tagged yet. The container-permission and Proxmox changes still want a
+check against a live host.
 
 ### Added
 
 - **tshark as an alternate capture engine.** Where the remote has
-  `tshark` on PATH, the capture modal offers it next to tcpdump.
-  Wireshark's dissectors name the application protocol - TLSv1.3, DNS,
-  HTTP, QUIC - where tcpdump's brief output can only say tcp/udp, and
-  the Info column carries a real per-packet summary. The engine picker
-  appears only on hosts that have it. Verbose decode stays tcpdump-only
-  (its decoders read tcpdump's hex payload dump, which tshark does not
-  emit in field mode, and tshark dissects those protocols itself).
+  `tshark`, the capture can run it instead of tcpdump: Wireshark's
+  dissectors name the application protocol - TLSv1.3, DNS, HTTP, QUIC -
+  where tcpdump's brief output can only say tcp/udp, and every row
+  carries a readable per-packet summary. The engine picker appears only
+  when BOTH tools are installed; with one, it is simply used. The title
+  bar names whichever is running.
+- **The Decode tab works under tshark too.** All twelve protocols the
+  tcpdump path decodes - DHCP, DNS, ARP, ICMP, TLS SNI, HTTP, NTP, SNMP,
+  SSH, LDAP, SMB, MQTT - are now read from named dissector fields, so a
+  DHCP DORA exchange still groups by transaction id at a glance. This is
+  more accurate than the tcpdump path, which regexes a payload dump.
+  "Verbose (decode)" is not needed under tshark, and says so.
 - **Three more capture insights.** The live analyzer now also flags a
   **path MTU too small** (ICMP fragmentation-needed, with the advertised
   next-hop MTU where the router includes it - the fault where ping works
@@ -37,14 +42,23 @@ tshark host before release.
   above the tree, and the Settings vault section offers Unlock when
   locked instead of only ever offering Lock. All three re-open the
   unlock prompt; the view you were on stays where it was.
+- **Container logs work without docker-group membership.** A user who
+  cannot reach the daemon directly used to get an empty container picker
+  with no explanation - indistinguishable from "nothing running", even
+  though the log stream itself would have worked. The probe now reports
+  whether the engine needs sudo, or is unreachable entirely, and says
+  which, quoting the daemon's own message.
 
 ### Fixed
 
-- **tshark captures did not exclude their own SSH traffic.** The
-  SSH-exclusion clause was escaped for tcpdump's unquoted command line
-  and reached tshark with literal backslashes, which rejected the filter
-  - and a rejected capture filter means no filter at all, so the capture
-  fed on its own output. tcpdump was unaffected.
+- **Captures did not exclude their own SSH traffic behind NAT.** The
+  exclusion filter was built from the client socket's address, which
+  behind NAT is a private one the server never sees - so it matched
+  nothing and the capture fed on its own output, which is what drove
+  the "high packet rate" warning. The address is now taken from the
+  server, which is the side that has to match it. Only the control
+  connection is dropped: other SSH sessions, including ones sharing your
+  public address, stay visible.
 
 ### Changed
 
@@ -62,6 +76,9 @@ tshark host before release.
   password. The connection detail explains this in place of the plain
   "password saved" note, including when the key is inherited from a
   folder.
+- **A failed capture now says why.** "Process exited with status 1" is
+  replaced by the tool's own first error line - a rejected filter, an
+  unusable interface - instead of a bare exit code.
 
 ---
 
