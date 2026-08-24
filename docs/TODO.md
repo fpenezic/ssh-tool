@@ -29,11 +29,15 @@ For what's already shipped, see `CHANGELOG.md`.
   is down", so it would warn on things that are fine), a
   "switch to tunnel" conversion button, `{{host}}` templating, and
   folder-inherited bookmarks.
-  Two constraints settled with the author: a jump host is never
-  "direct", and neither are the built-in VPN profiles - they are
-  userspace and raise no OS-level route, so the browser cannot use them.
-  Full plan: `~/.claude/plans/direct-bookmarks.md` (written 2026-08-24,
-  wider than this entry - trim it to the scope above).
+  Two constraints, settled and not worth re-litigating: a jump host is
+  never "direct" (that URL needs SOCKS), and neither are the built-in
+  VPN profiles - they are userspace and raise no OS-level route, so a
+  browser cannot reach anything through them.
+  A data-model note for whoever picks this up: hang the list off the
+  CONNECTION, not off a forward, and leave `ProxyBookmark` alone. One
+  shared list with a `mode: direct|socks` field reads tidier but forces
+  a migration of every existing SOCKS bookmark and couples two things
+  with different lifecycles.
 
 - **Smart command autocomplete** *(deferred)* - three approaches
   captured in earlier discussions: shell history scrape, per-host
