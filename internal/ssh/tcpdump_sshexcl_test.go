@@ -174,10 +174,11 @@ func TestExclusionAcceptsBracketedIPv6FromTheProbe(t *testing.T) {
 	}
 }
 
-// A capture host can carry several SSH sessions at once (the reported case
-// showed two, on different interfaces). The filter keys on host AND port, so
-// it drops only THIS control connection and leaves other SSH traffic - which
-// the user may well be trying to debug - visible.
+// A capture host can carry several SSH sessions at once. The filter keys on
+// host AND port, so it drops only THIS control connection and leaves other SSH
+// traffic - which the user may well be trying to debug - visible. Host alone
+// would be especially wrong behind NAT, where every session from the same
+// office shares one public address.
 func TestExclusionDropsOnlyOurOwnConnection(t *testing.T) {
 	ours, ok := sshExclusionFromAddr("141.136.189.34:45414")
 	if !ok {

@@ -624,9 +624,15 @@ func remoteSSHPeer(client *ssh.Client) (string, bool) {
 	//    the direct answer when the variable survives.
 	// 2. Failing that, walk up from this shell to its sshd parent and read
 	//    that process's peer from the socket table. Keyed on OUR process,
-	//    not on port 22, so a server listening on a non-standard port still
-	//    resolves - and so a host with many SSH sessions gives back THIS
-	//    one rather than whichever matched first.
+	//    not on a port number, so a server on a non-standard SSH port still
+	//    resolves and a host with many sessions gives back THIS one.
+	//
+	// The socket lookup needs `sudo -n ss`: the sshd process belongs to root,
+	// so an unprivileged `ss -tnp` shows the connection with no owning pid and
+	// the pid match finds nothing. Verified on a live host - without sudo the
+	// walk silently returned empty. `sudo -n` never prompts, so this stays a
+	// best-effort step that costs nothing when sudo is unavailable.
+	//
 	// Output is one line: "IP PORT".
 	const probe = `
 if [ -n "$SSH_CONNECTION" ]; then
@@ -634,8 +640,8 @@ if [ -n "$SSH_CONNECTION" ]; then
 else
   p=$$
   while [ "$p" != "1" ] && [ -n "$p" ]; do
-    if ss -tnp 2>/dev/null | grep -q "pid=$p,"; then
-      ss -tnp 2>/dev/null | awk -v pid="pid=$p," '$0 ~ pid && $1=="ESTAB" {
+    if sudo -n ss -tnp 2>/dev/null | grep -q "pid=$p,"; then
+      sudo -n ss -tnp 2>/dev/null | awk -v pid="pid=$p," '$0 ~ pid && $1=="ESTAB" {
         n=split($5,a,":"); port=a[n];
         host=substr($5, 1, length($5)-length(port)-1);
         print host, port; exit
