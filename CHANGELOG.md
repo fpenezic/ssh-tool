@@ -37,11 +37,21 @@ tshark host before release.
   above the tree, and the Settings vault section offers Unlock when
   locked instead of only ever offering Lock. All three re-open the
   unlock prompt; the view you were on stays where it was.
-- **Broadcast groups survive a restart.** Group names now persist and
-  are re-created at launch, so the picker is still populated after a
-  relaunch. They come back EMPTY on purpose: members are session IDs,
-  and a restored group holding dead ones would show a member count for
-  sessions that do not exist.
+- **Broadcast groups survive a restart, if you want them to.** Group
+  names are remembered and offered back at startup - the same
+  ask / always / never choice as reopen-last-session, in Settings -
+  Window - Startup. They come back EMPTY on purpose: members are session
+  IDs, and a restored group holding dead ones would show a member count
+  for sessions that do not exist. Declining the prompt keeps the names
+  for next time; choosing "Never" clears them.
+
+### Fixed
+
+- **tshark captures did not exclude their own SSH traffic.** The
+  SSH-exclusion clause was escaped for tcpdump's unquoted command line
+  and reached tshark with literal backslashes, which rejected the filter
+  - and a rejected capture filter means no filter at all, so the capture
+  fed on its own output. tcpdump was unaffected.
 
 ### Changed
 
