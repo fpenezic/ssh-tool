@@ -36,6 +36,38 @@ var tsharkFields = []string{
 	"udp.dstport",
 	"frame.len",
 	"_ws.col.Info", // dissector one-line summary
+	// DHCP fields, so the Decode tab's DORA view works under tshark too.
+	// Grouping a Discover/Offer/Request/Ack exchange by transaction id is the
+	// decoder's most useful trick, and it must not be a tcpdump-only feature.
+	// These come from named dissector fields rather than regexes over a hex
+	// dump, so they are exact where the tcpdump path is best-effort.
+	// Empty on every non-DHCP packet, which costs one tab each.
+	"dhcp.id",          // transaction id (xid) - the DORA grouping key
+	"dhcp.option.dhcp", // message type: 1=Discover 2=Offer 3=Request 5=ACK
+	"dhcp.ip.your",     // address the server assigns
+	"dhcp.hw.mac_addr", // client MAC
+	"dhcp.option.requested_ip_address",
+	"dhcp.option.dhcp_server_id",
+	"dhcp.option.ip_address_lease_time",
+	"dhcp.option.subnet_mask",
+	"dhcp.option.router",
+	"dhcp.option.domain_name",
+
+	// The remaining decoders, so the Decode tab is not poorer under tshark
+	// than under tcpdump. Every one of these is a named dissector field, so
+	// where the tcpdump path regexes a hex dump this reads the parsed value.
+	"dns.id", "dns.qry.name", "dns.qry.type", "dns.flags.response", "dns.a", "dns.cname",
+	"arp.opcode", "arp.src.proto_ipv4", "arp.dst.proto_ipv4", "arp.src.hw_mac",
+	"icmp.type", "icmp.code", "icmp.ident", "icmp.seq",
+	"tls.handshake.extensions_server_name", "tls.handshake.type",
+	"http.request.method", "http.request.uri", "http.host",
+	"http.response.code", "http.user_agent", "http.content_type",
+	"ntp.flags.mode", "ntp.flags.vn", "ntp.stratum",
+	"snmp.version", "snmp.community",
+	"ssh.protocol",
+	"ldap.messageID", "ldap.protocolOp",
+	"smb2.cmd", "smb.cmd",
+	"mqtt.msgtype", "mqtt.topic", "mqtt.ver",
 }
 
 const (
@@ -51,6 +83,63 @@ const (
 	tsFieldUDPDstPort
 	tsFieldLen
 	tsFieldInfo
+	tsFieldDHCPXid
+	tsFieldDHCPType
+	tsFieldDHCPYourIP
+	tsFieldDHCPClientMAC
+	tsFieldDHCPRequestedIP
+	tsFieldDHCPServerID
+	tsFieldDHCPLease
+	tsFieldDHCPMask
+	tsFieldDHCPRouter
+	tsFieldDHCPDomain
+
+	tsFieldDNSID
+	tsFieldDNSQName
+	tsFieldDNSQType
+	tsFieldDNSIsResponse
+	tsFieldDNSA
+	tsFieldDNSCName
+
+	tsFieldARPOpcode
+	tsFieldARPSrcIP
+	tsFieldARPDstIP
+	tsFieldARPSrcMAC
+
+	tsFieldICMPType
+	tsFieldICMPCode
+	tsFieldICMPID
+	tsFieldICMPSeq
+
+	tsFieldTLSSNI
+	tsFieldTLSHandshakeType
+
+	tsFieldHTTPMethod
+	tsFieldHTTPURI
+	tsFieldHTTPHost
+	tsFieldHTTPStatus
+	tsFieldHTTPUserAgent
+	tsFieldHTTPContentType
+
+	tsFieldNTPMode
+	tsFieldNTPVersion
+	tsFieldNTPStratum
+
+	tsFieldSNMPVersion
+	tsFieldSNMPCommunity
+
+	tsFieldSSHProtocol
+
+	tsFieldLDAPMsgID
+	tsFieldLDAPOp
+
+	tsFieldSMB2Cmd
+	tsFieldSMBCmd
+
+	tsFieldMQTTType
+	tsFieldMQTTTopic
+	tsFieldMQTTVersion
+
 	tsFieldCount
 )
 
@@ -62,14 +151,30 @@ const tsharkSep = "\t"
 // capture modal calls it once so it can offer the engine toggle only where it
 // would work; a missing binary is not an error, it just means tcpdump.
 func DetectTshark(client *ssh.Client) (bool, error) {
+	return detectBinary(client, "tshark")
+}
+
+// DetectTcpdump reports whether `tcpdump` is on the remote host's PATH.
+//
+// This is not a formality: a host can perfectly well have tshark and not
+// tcpdump (Wireshark's CLI package does not depend on it). Without this check
+// the modal offered a two-engine picker defaulting to the one that is not
+// installed, and the capture failed with "not installed" until the user
+// happened to switch.
+func DetectTcpdump(client *ssh.Client) (bool, error) {
+	return detectBinary(client, "tcpdump")
+}
+
+// detectBinary reports whether a command is on the remote PATH. A missing
+// binary is an answer, not an error - only a broken session is an error.
+func detectBinary(client *ssh.Client, name string) (bool, error) {
 	sess, err := client.NewSession()
 	if err != nil {
 		return false, err
 	}
 	defer sess.Close()
-	out, runErr := sess.Output("command -v tshark 2>/dev/null")
+	out, runErr := sess.Output("command -v " + name + " 2>/dev/null")
 	if runErr != nil {
-		// Non-zero exit means "not found", which is an answer, not a failure.
 		return false, nil
 	}
 	return strings.TrimSpace(string(out)) != "", nil
@@ -188,6 +293,12 @@ func parseTsharkLine(line string) (ParsedPacket, bool) {
 	p.Info = strings.TrimSpace(cols[tsFieldInfo])
 	p.Proto = tsharkProto(cols[tsFieldProto], tcpSrc, udpSrc)
 	p.FlowKey = flowKey(p.Proto, p.SrcIP, p.SrcPort, p.DstIP, p.DstPort)
+	// Feed the Decode tab. Unlike the tcpdump path this needs no verbose mode:
+	// the fields are requested on every capture and are simply empty for
+	// non-DHCP packets.
+	if d := decodeTshark(cols); d != nil {
+		p.Decoded = d
+	}
 	return p, true
 }
 
@@ -244,4 +355,487 @@ func tsharkTime(v string) string {
 		return m[1]
 	}
 	return strings.TrimSpace(v)
+}
+
+// dhcpMessageTypes maps the numeric DHCP message type (option 53) to the name
+// the Decode tab shows as a DORA stage.
+var dhcpMessageTypes = map[string]string{
+	"1": "Discover",
+	"2": "Offer",
+	"3": "Request",
+	"4": "Decline",
+	"5": "ACK",
+	"6": "NAK",
+	"7": "Release",
+	"8": "Inform",
+}
+
+// decodeTsharkDHCP builds a PacketDecode from tshark's named DHCP fields.
+//
+// The Decode tab's DORA view - grouping a Discover / Offer / Request / ACK
+// exchange by transaction id - is the decoder's most useful trick, and it was
+// tcpdump-only because our decoders parse tcpdump's hex payload dump, which
+// tshark does not emit in -T fields mode. Rather than tell the user to switch
+// engines, we read the same information from the dissector, which names these
+// fields exactly instead of matching regexes over a hex dump.
+//
+// Returns nil for a packet with no DHCP transaction id, i.e. everything that
+// is not DHCP.
+func decodeTsharkDHCP(cols []string) *PacketDecode {
+	xid := strings.TrimSpace(cols[tsFieldDHCPXid])
+	if xid == "" {
+		return nil
+	}
+	d := &PacketDecode{Type: "dhcp", Fields: map[string]string{}}
+	// The grouping key. tshark prints it as 0x-prefixed already; normalise so
+	// two spellings of one exchange cannot split into two transactions.
+	if !strings.HasPrefix(xid, "0x") {
+		xid = "0x" + xid
+	}
+	d.Fields["xid"] = xid
+
+	put := func(key string, idx int) string {
+		v := strings.TrimSpace(cols[idx])
+		if v != "" {
+			d.Fields[key] = v
+		}
+		return v
+	}
+
+	msgType := strings.TrimSpace(cols[tsFieldDHCPType])
+	stage := dhcpMessageTypes[msgType]
+	if stage == "" && msgType != "" {
+		// An unknown type is still worth showing rather than dropping the
+		// packet out of the transaction.
+		stage = "type " + msgType
+	}
+	if stage != "" {
+		d.Fields["msg_type"] = stage
+	}
+
+	put("client_mac", tsFieldDHCPClientMAC)
+	assigned := put("assigned_ip", tsFieldDHCPYourIP)
+	put("requested_ip", tsFieldDHCPRequestedIP)
+	put("server_id", tsFieldDHCPServerID)
+	put("subnet_mask", tsFieldDHCPMask)
+	put("gateway", tsFieldDHCPRouter)
+	put("domain", tsFieldDHCPDomain)
+	if lease := strings.TrimSpace(cols[tsFieldDHCPLease]); lease != "" {
+		d.Fields["lease_time"] = lease + "s"
+	}
+
+	// 0.0.0.0 in yiaddr means "no address in this message" (Discover and
+	// Request carry it); showing it as an assigned address is misleading.
+	if assigned == "0.0.0.0" {
+		delete(d.Fields, "assigned_ip")
+		assigned = ""
+	}
+
+	switch {
+	case stage != "" && assigned != "":
+		d.Summary = "DHCP " + stage + " - " + assigned
+	case stage != "":
+		d.Summary = "DHCP " + stage
+	default:
+		d.Summary = "DHCP " + xid
+	}
+	return d
+}
+
+// decodeTshark builds the Decode tab's PacketDecode from tshark's named
+// dissector fields, covering the same protocols the tcpdump path decodes.
+//
+// The tcpdump decoders work by regexing tcpdump's hex/ASCII payload dump,
+// which -T fields does not emit - so without this the Decode tab was empty
+// under tshark. Reading the dissector's own fields is both simpler and more
+// accurate: no payload truncation, no regex guesswork.
+//
+// Order matters only in that the first match wins; the protocols are mutually
+// exclusive in practice because each one's key field is empty otherwise.
+func decodeTshark(cols []string) *PacketDecode {
+	if d := decodeTsharkDHCP(cols); d != nil {
+		return d
+	}
+	if d := decodeTsharkDNS(cols); d != nil {
+		return d
+	}
+	if d := decodeTsharkARP(cols); d != nil {
+		return d
+	}
+	if d := decodeTsharkICMP(cols); d != nil {
+		return d
+	}
+	if d := decodeTsharkTLS(cols); d != nil {
+		return d
+	}
+	if d := decodeTsharkHTTP(cols); d != nil {
+		return d
+	}
+	if d := decodeTsharkNTP(cols); d != nil {
+		return d
+	}
+	if d := decodeTsharkSNMP(cols); d != nil {
+		return d
+	}
+	if d := decodeTsharkSSH(cols); d != nil {
+		return d
+	}
+	if d := decodeTsharkLDAP(cols); d != nil {
+		return d
+	}
+	if d := decodeTsharkSMB(cols); d != nil {
+		return d
+	}
+	if d := decodeTsharkMQTT(cols); d != nil {
+		return d
+	}
+	return nil
+}
+
+// col trims one column; the empty string means "the dissector did not set it".
+func col(cols []string, idx int) string {
+	if idx >= len(cols) {
+		return ""
+	}
+	return strings.TrimSpace(cols[idx])
+}
+
+// newDecode starts a decode of the given type with a fields map ready.
+func newDecode(kind string) *PacketDecode {
+	return &PacketDecode{Type: kind, Fields: map[string]string{}}
+}
+
+// setIf copies a column into a field when the dissector set it.
+func setIf(d *PacketDecode, cols []string, key string, idx int) string {
+	v := col(cols, idx)
+	if v != "" {
+		d.Fields[key] = v
+	}
+	return v
+}
+
+func decodeTsharkDNS(cols []string) *PacketDecode {
+	qname := col(cols, tsFieldDNSQName)
+	txid := col(cols, tsFieldDNSID)
+	if qname == "" && txid == "" {
+		return nil
+	}
+	d := newDecode("dns")
+	if txid != "" {
+		d.Fields["txid"] = txid
+	}
+	if qname != "" {
+		d.Fields["qname"] = qname
+	}
+	if qt := col(cols, tsFieldDNSQType); qt != "" {
+		d.Fields["qtype"] = dnsQTypeName(qt)
+	}
+	// dns.flags.response is "1" on an answer. The tcpdump decoder splits
+	// query and response by wording; here it is a flag.
+	isResponse := col(cols, tsFieldDNSIsResponse) == "1"
+	d.Fields["op"] = "query"
+	if isResponse {
+		d.Fields["op"] = "response"
+	}
+	// A multi-answer response comes back comma-joined by tshark.
+	answers := col(cols, tsFieldDNSA)
+	if answers == "" {
+		answers = col(cols, tsFieldDNSCName)
+	}
+	if answers != "" {
+		d.Fields["rdata"] = answers
+	}
+
+	switch {
+	case isResponse && answers != "" && qname != "":
+		d.Summary = "DNS response " + qname + " -> " + answers
+	case isResponse && qname != "":
+		d.Summary = "DNS response " + qname
+	case qname != "":
+		d.Summary = "DNS query " + qname
+	default:
+		d.Summary = "DNS " + txid
+	}
+	return d
+}
+
+// dnsQTypeName turns tshark's numeric qry.type into the familiar mnemonic,
+// matching what the tcpdump decoder shows.
+func dnsQTypeName(v string) string {
+	switch v {
+	case "1":
+		return "A"
+	case "2":
+		return "NS"
+	case "5":
+		return "CNAME"
+	case "6":
+		return "SOA"
+	case "12":
+		return "PTR"
+	case "15":
+		return "MX"
+	case "16":
+		return "TXT"
+	case "28":
+		return "AAAA"
+	case "33":
+		return "SRV"
+	case "65":
+		return "HTTPS"
+	default:
+		return v
+	}
+}
+
+func decodeTsharkARP(cols []string) *PacketDecode {
+	opcode := col(cols, tsFieldARPOpcode)
+	if opcode == "" {
+		return nil
+	}
+	d := newDecode("arp")
+	target := setIf(d, cols, "target", tsFieldARPDstIP)
+	sender := setIf(d, cols, "sender", tsFieldARPSrcIP)
+	mac := setIf(d, cols, "target_mac", tsFieldARPSrcMAC)
+
+	switch opcode {
+	case "1":
+		d.Fields["op"] = "request"
+		d.Summary = "Who has " + target + "? Tell " + sender
+	case "2":
+		d.Fields["op"] = "reply"
+		d.Summary = sender + " is at " + mac
+	default:
+		d.Fields["op"] = "opcode " + opcode
+		d.Summary = "ARP opcode " + opcode
+	}
+	return d
+}
+
+func decodeTsharkICMP(cols []string) *PacketDecode {
+	icmpType := col(cols, tsFieldICMPType)
+	if icmpType == "" {
+		return nil
+	}
+	d := newDecode("icmp")
+	setIf(d, cols, "id", tsFieldICMPID)
+	setIf(d, cols, "seq", tsFieldICMPSeq)
+
+	code := col(cols, tsFieldICMPCode)
+	op := icmpTypeName(icmpType, code)
+	d.Fields["op"] = op
+	d.Summary = "ICMP " + op
+	return d
+}
+
+// icmpTypeName names the common ICMP types. Anything else keeps its numbers,
+// which is still more use than dropping the packet from the Decode tab.
+func icmpTypeName(t, code string) string {
+	switch t {
+	case "0":
+		return "echo reply"
+	case "3":
+		switch code {
+		case "0":
+			return "network unreachable"
+		case "1":
+			return "host unreachable"
+		case "3":
+			return "port unreachable"
+		case "4":
+			return "fragmentation needed"
+		default:
+			return "destination unreachable"
+		}
+	case "5":
+		return "redirect"
+	case "8":
+		return "echo request"
+	case "11":
+		return "time exceeded"
+	default:
+		return "type " + t + " code " + code
+	}
+}
+
+func decodeTsharkTLS(cols []string) *PacketDecode {
+	sni := col(cols, tsFieldTLSSNI)
+	if sni == "" {
+		// Only a ClientHello carries SNI, and SNI is the whole reason this
+		// decode exists - matching the tcpdump path, which also returns
+		// nothing without it.
+		return nil
+	}
+	d := newDecode("tls")
+	d.Fields["sni"] = sni
+	d.Summary = "TLS ClientHello SNI: " + sni
+	return d
+}
+
+func decodeTsharkHTTP(cols []string) *PacketDecode {
+	method := col(cols, tsFieldHTTPMethod)
+	status := col(cols, tsFieldHTTPStatus)
+	if method == "" && status == "" {
+		return nil
+	}
+	d := newDecode("http")
+	setIf(d, cols, "host", tsFieldHTTPHost)
+	setIf(d, cols, "user_agent", tsFieldHTTPUserAgent)
+	setIf(d, cols, "content_type", tsFieldHTTPContentType)
+	uri := setIf(d, cols, "path", tsFieldHTTPURI)
+
+	if method != "" {
+		d.Fields["op"] = "request"
+		d.Fields["method"] = method
+		d.Summary = method + " " + uri
+		if host := d.Fields["host"]; host != "" {
+			d.Summary = method + " " + host + uri
+		}
+		return d
+	}
+	d.Fields["op"] = "response"
+	d.Fields["status"] = status
+	d.Summary = "HTTP " + status
+	return d
+}
+
+func decodeTsharkNTP(cols []string) *PacketDecode {
+	mode := col(cols, tsFieldNTPMode)
+	if mode == "" {
+		return nil
+	}
+	d := newDecode("ntp")
+	setIf(d, cols, "version", tsFieldNTPVersion)
+	setIf(d, cols, "stratum", tsFieldNTPStratum)
+	name := ntpModeName(byte(atoiSafe(mode)))
+	d.Fields["mode"] = name
+	d.Summary = "NTP " + name
+	if st := d.Fields["stratum"]; st != "" {
+		d.Summary += " stratum " + st
+	}
+	return d
+}
+
+func decodeTsharkSNMP(cols []string) *PacketDecode {
+	version := col(cols, tsFieldSNMPVersion)
+	community := col(cols, tsFieldSNMPCommunity)
+	if version == "" && community == "" {
+		return nil
+	}
+	d := newDecode("snmp")
+	if version != "" {
+		// tshark reports 0/1/3 for v1/v2c/v3.
+		switch version {
+		case "0":
+			d.Fields["version"] = "v1"
+		case "1":
+			d.Fields["version"] = "v2c"
+		case "3":
+			d.Fields["version"] = "v3"
+		default:
+			d.Fields["version"] = version
+		}
+	}
+	if community != "" {
+		d.Fields["community"] = community
+	}
+	d.Summary = "SNMP " + d.Fields["version"]
+	if community != "" {
+		d.Summary += " community " + community
+	}
+	return d
+}
+
+func decodeTsharkSSH(cols []string) *PacketDecode {
+	proto := col(cols, tsFieldSSHProtocol)
+	if proto == "" {
+		return nil
+	}
+	d := newDecode("ssh")
+	d.Fields["op"] = "banner"
+	d.Fields["software"] = proto
+	// "SSH-2.0-OpenSSH_9.6" - the version sits between the first two dashes.
+	if parts := strings.SplitN(proto, "-", 3); len(parts) >= 2 {
+		d.Fields["version"] = parts[1]
+	}
+	d.Summary = "SSH " + proto
+	return d
+}
+
+func decodeTsharkLDAP(cols []string) *PacketDecode {
+	msgID := col(cols, tsFieldLDAPMsgID)
+	op := col(cols, tsFieldLDAPOp)
+	if msgID == "" && op == "" {
+		return nil
+	}
+	d := newDecode("ldap")
+	if msgID != "" {
+		d.Fields["message_id"] = msgID
+	}
+	if op != "" {
+		d.Fields["op"] = op
+	}
+	d.Summary = "LDAP " + op
+	if msgID != "" {
+		d.Summary += " (msg " + msgID + ")"
+	}
+	return d
+}
+
+func decodeTsharkSMB(cols []string) *PacketDecode {
+	cmd := col(cols, tsFieldSMB2Cmd)
+	dialect := "SMB2"
+	if cmd == "" {
+		cmd = col(cols, tsFieldSMBCmd)
+		dialect = "SMB"
+	}
+	if cmd == "" {
+		return nil
+	}
+	d := newDecode("smb")
+	d.Fields["command"] = cmd
+	d.Fields["dialect"] = dialect
+	d.Summary = dialect + " " + cmd
+	return d
+}
+
+func decodeTsharkMQTT(cols []string) *PacketDecode {
+	msgType := col(cols, tsFieldMQTTType)
+	if msgType == "" {
+		return nil
+	}
+	d := newDecode("mqtt")
+	setIf(d, cols, "topic", tsFieldMQTTTopic)
+	setIf(d, cols, "mqtt_version", tsFieldMQTTVersion)
+	name := mqttPacketTypeName(msgType)
+	d.Fields["packet_type"] = name
+	d.Fields["protocol"] = "MQTT"
+	d.Summary = "MQTT " + name
+	if topic := d.Fields["topic"]; topic != "" {
+		d.Summary += " " + topic
+	}
+	return d
+}
+
+// mqttPacketTypeName maps the MQTT control packet type to its name.
+func mqttPacketTypeName(v string) string {
+	names := map[string]string{
+		"1": "CONNECT", "2": "CONNACK", "3": "PUBLISH", "4": "PUBACK",
+		"5": "PUBREC", "6": "PUBREL", "7": "PUBCOMP", "8": "SUBSCRIBE",
+		"9": "SUBACK", "10": "UNSUBSCRIBE", "11": "UNSUBACK",
+		"12": "PINGREQ", "13": "PINGRESP", "14": "DISCONNECT",
+	}
+	if n, ok := names[v]; ok {
+		return n
+	}
+	return "type " + v
+}
+
+// atoiSafe parses a small integer, returning 0 on anything unparseable.
+func atoiSafe(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
 }

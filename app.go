@@ -7019,9 +7019,12 @@ type TcpdumpProbeResult struct {
 	RootUser             bool `json:"root_user"`
 	SudoNoPwd            bool `json:"sudo_no_pwd"`
 	HasCandidatePassword bool `json:"has_candidate_password"`
-	// TsharkAvailable reports whether `tshark` is on the remote's PATH, so
-	// the modal offers the engine toggle only where it would actually run.
-	TsharkAvailable bool `json:"tshark_available"`
+	// TsharkAvailable / TcpdumpAvailable report which capture binaries are on
+	// the remote's PATH. Both are probed: a host can have tshark without
+	// tcpdump (Wireshark's CLI package does not depend on it), and offering a
+	// picker that defaults to the missing one just fails the capture.
+	TsharkAvailable  bool `json:"tshark_available"`
+	TcpdumpAvailable bool `json:"tcpdump_available"`
 }
 
 // resolveSudoCandidate looks up a plausible sudo password for the
@@ -7059,14 +7062,16 @@ func (a *App) TcpdumpProbe(sessionID string) (*TcpdumpProbeResult, error) {
 		return nil, err
 	}
 	hasCand := !r && !sn && a.resolveSudoCandidate(sessionID) != ""
-	// A missing tshark is the common case, not an error - fold the probe
-	// failure into "unavailable" so a host without it still gets a capture.
+	// A missing binary is the common case, not an error - fold a probe
+	// failure into "unavailable" rather than failing the whole probe.
 	hasTshark, _ := sshlayer.DetectTshark(target)
+	hasTcpdump, _ := sshlayer.DetectTcpdump(target)
 	return &TcpdumpProbeResult{
 		RootUser:             r,
 		SudoNoPwd:            sn,
 		HasCandidatePassword: hasCand,
 		TsharkAvailable:      hasTshark,
+		TcpdumpAvailable:     hasTcpdump,
 	}, nil
 }
 

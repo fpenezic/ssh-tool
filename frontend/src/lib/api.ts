@@ -1528,9 +1528,11 @@ export interface TcpdumpProbeResult {
   root_user: boolean;
   sudo_no_pwd: boolean;
   has_candidate_password: boolean;
-  // tshark_available reports whether the remote has tshark on PATH; the
-  // engine toggle is only offered when it does.
+  // Which capture binaries the remote has. The engine picker is only shown
+  // when BOTH exist - with one engine there is nothing to pick, and a picker
+  // defaulting to the missing one just fails the capture.
   tshark_available?: boolean;
+  tcpdump_available?: boolean;
 }
 
 export interface TcpdumpStartInput {

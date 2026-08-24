@@ -4735,12 +4735,21 @@ export class TcpdumpProbeResult {
         }
         if (!("tshark_available" in $$source)) {
             /**
-             * TsharkAvailable reports whether `tshark` is on the remote's PATH, so
-             * the modal offers the engine toggle only where it would actually run.
+             * TsharkAvailable / TcpdumpAvailable report which capture binaries are on
+             * the remote's PATH. Both are probed: a host can have tshark without
+             * tcpdump (Wireshark's CLI package does not depend on it), and offering a
+             * picker that defaults to the missing one just fails the capture.
              * @member
              * @type {boolean}
              */
             this["tshark_available"] = false;
+        }
+        if (!("tcpdump_available" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["tcpdump_available"] = false;
         }
 
         Object.assign(this, $$source);

@@ -321,3 +321,352 @@ func TestUseTsharkPredicate(t *testing.T) {
 		}
 	}
 }
+
+// dhcpRecord builds a tshark -T fields line for one DHCP packet.
+func dhcpRecord(xid, msgType string, extra map[int]string) string {
+	f := map[int]string{
+		tsFieldProto:         "DHCP",
+		tsFieldIP4Src:        "0.0.0.0",
+		tsFieldIP4Dst:        "255.255.255.255",
+		tsFieldUDPSrcPort:    "68",
+		tsFieldUDPDstPort:    "67",
+		tsFieldLen:           "342",
+		tsFieldDHCPXid:       xid,
+		tsFieldDHCPType:      msgType,
+		tsFieldDHCPClientMAC: "aa:bb:cc:dd:ee:ff",
+	}
+	for k, v := range extra {
+		f[k] = v
+	}
+	return tsharkRecord(f)
+}
+
+// The DORA view groups by transaction id, so every packet of one exchange
+// must come back with the same xid and a named stage. This is the decoder's
+// most useful trick and it must not be tcpdump-only.
+func TestTsharkDecodesFullDORAExchange(t *testing.T) {
+	stages := []struct{ code, want string }{
+		{"1", "Discover"},
+		{"2", "Offer"},
+		{"3", "Request"},
+		{"5", "ACK"},
+	}
+	for _, st := range stages {
+		p, ok := parseTsharkLine(dhcpRecord("0x3f2a1b0c", st.code, nil))
+		if !ok {
+			t.Fatalf("%s: record did not parse", st.want)
+		}
+		if p.Decoded == nil {
+			t.Fatalf("%s: no decode attached - the Decode tab would be empty", st.want)
+		}
+		if p.Decoded.Type != "dhcp" {
+			t.Errorf("%s: decode type = %q, want dhcp", st.want, p.Decoded.Type)
+		}
+		if got := p.Decoded.Fields["xid"]; got != "0x3f2a1b0c" {
+			t.Errorf("%s: xid = %q - a wrong key splits the transaction", st.want, got)
+		}
+		if got := p.Decoded.Fields["msg_type"]; got != st.want {
+			t.Errorf("message type %s = %q, want %q", st.code, got, st.want)
+		}
+	}
+}
+
+// tshark may print the id with or without the 0x prefix; both spellings must
+// land on ONE transaction or the DORA view shows the exchange twice.
+func TestTsharkDHCPXidIsNormalised(t *testing.T) {
+	with, _ := parseTsharkLine(dhcpRecord("0xabcd1234", "1", nil))
+	without, _ := parseTsharkLine(dhcpRecord("abcd1234", "1", nil))
+	if with.Decoded == nil || without.Decoded == nil {
+		t.Fatal("both spellings must decode")
+	}
+	if with.Decoded.Fields["xid"] != without.Decoded.Fields["xid"] {
+		t.Errorf("xid spellings diverge: %q vs %q",
+			with.Decoded.Fields["xid"], without.Decoded.Fields["xid"])
+	}
+}
+
+// yiaddr is 0.0.0.0 on Discover and Request. Showing that as the assigned
+// address would put a bogus "assigned 0.0.0.0" on the transaction.
+func TestTsharkDHCPIgnoresEmptyAssignedAddress(t *testing.T) {
+	p, _ := parseTsharkLine(dhcpRecord("0x1", "1", map[int]string{
+		tsFieldDHCPYourIP: "0.0.0.0",
+	}))
+	if _, present := p.Decoded.Fields["assigned_ip"]; present {
+		t.Error("0.0.0.0 is 'no address in this message', not an assignment")
+	}
+
+	ack, _ := parseTsharkLine(dhcpRecord("0x1", "5", map[int]string{
+		tsFieldDHCPYourIP: "10.0.0.55",
+	}))
+	if got := ack.Decoded.Fields["assigned_ip"]; got != "10.0.0.55" {
+		t.Errorf("a real assignment must survive, got %q", got)
+	}
+	if !strings.Contains(ack.Decoded.Summary, "10.0.0.55") {
+		t.Errorf("summary should name the assigned address: %q", ack.Decoded.Summary)
+	}
+}
+
+func TestTsharkDHCPCarriesTheLeaseDetails(t *testing.T) {
+	p, _ := parseTsharkLine(dhcpRecord("0x1", "5", map[int]string{
+		tsFieldDHCPYourIP:   "10.0.0.55",
+		tsFieldDHCPServerID: "10.0.0.1",
+		tsFieldDHCPLease:    "86400",
+		tsFieldDHCPMask:     "255.255.255.0",
+		tsFieldDHCPRouter:   "10.0.0.1",
+		tsFieldDHCPDomain:   "example.com",
+	}))
+	want := map[string]string{
+		"client_mac":  "aa:bb:cc:dd:ee:ff",
+		"server_id":   "10.0.0.1",
+		"lease_time":  "86400s",
+		"subnet_mask": "255.255.255.0",
+		"gateway":     "10.0.0.1",
+		"domain":      "example.com",
+	}
+	for k, v := range want {
+		if got := p.Decoded.Fields[k]; got != v {
+			t.Errorf("field %s = %q, want %q", k, got, v)
+		}
+	}
+}
+
+// Every non-DHCP packet carries empty DHCP columns; attaching a decode there
+// would put junk rows in the Decode tab.
+func TestTsharkNonDHCPGetsNoDecode(t *testing.T) {
+	p, ok := parseTsharkLine(tsharkRecord(map[int]string{
+		tsFieldProto: "TLSv1.3", tsFieldIP4Src: "10.0.0.1", tsFieldIP4Dst: "10.0.0.2",
+		tsFieldTCPSrcPort: "443", tsFieldTCPDstPort: "51234", tsFieldLen: "1420",
+	}))
+	if !ok {
+		t.Fatal("record did not parse")
+	}
+	if p.Decoded != nil {
+		t.Errorf("non-DHCP packet got a decode: %+v", p.Decoded)
+	}
+}
+
+// The DHCP columns are appended after the original ones; if the command and
+// the parser ever disagree on the order, every field reads the wrong column.
+func TestTsharkCommandRequestsTheDHCPFields(t *testing.T) {
+	cmd, _ := buildTsharkCommand(TcpdumpOptions{Iface: "eth0"}, "")
+	for _, f := range []string{
+		"dhcp.id", "dhcp.option.dhcp", "dhcp.ip.your", "dhcp.hw.mac_addr",
+	} {
+		if !strings.Contains(cmd, " -e "+f) {
+			t.Errorf("command does not request %q, so the Decode tab stays empty", f)
+		}
+	}
+}
+
+// tsharkFields and the tsField* index constants are two hand-maintained lists
+// that must stay the same length and in the same order. If they drift, every
+// field after the divergence reads a NEIGHBOURING column - a silent corruption
+// that shows up as nonsense values rather than an error. This is the one check
+// that cannot be skipped when adding a field.
+func TestTsharkFieldListMatchesIndexConstants(t *testing.T) {
+	if len(tsharkFields) != tsFieldCount {
+		t.Fatalf("tsharkFields has %d entries but tsFieldCount is %d - "+
+			"every column after the mismatch is read from the wrong index",
+			len(tsharkFields), tsFieldCount)
+	}
+}
+
+// Spot-check that a few named constants point at the field they claim to, so
+// a reordering inside the list is caught as well as a length change.
+func TestTsharkIndexConstantsPointAtTheRightFields(t *testing.T) {
+	want := map[int]string{
+		tsFieldTime:          "frame.time",
+		tsFieldProto:         "_ws.col.Protocol",
+		tsFieldInfo:          "_ws.col.Info",
+		tsFieldDHCPXid:       "dhcp.id",
+		tsFieldDHCPType:      "dhcp.option.dhcp",
+		tsFieldDNSQName:      "dns.qry.name",
+		tsFieldARPOpcode:     "arp.opcode",
+		tsFieldICMPType:      "icmp.type",
+		tsFieldTLSSNI:        "tls.handshake.extensions_server_name",
+		tsFieldHTTPMethod:    "http.request.method",
+		tsFieldNTPMode:       "ntp.flags.mode",
+		tsFieldSNMPCommunity: "snmp.community",
+		tsFieldSSHProtocol:   "ssh.protocol",
+		tsFieldLDAPMsgID:     "ldap.messageID",
+		tsFieldSMB2Cmd:       "smb2.cmd",
+		tsFieldMQTTTopic:     "mqtt.topic",
+	}
+	for idx, name := range want {
+		if idx >= len(tsharkFields) {
+			t.Errorf("index %d is past the end of tsharkFields (%d)", idx, len(tsharkFields))
+			continue
+		}
+		if tsharkFields[idx] != name {
+			t.Errorf("index %d = %q, want %q", idx, tsharkFields[idx], name)
+		}
+	}
+}
+
+// Every decoder the tcpdump path has must also fire under tshark, or the
+// Decode tab is quietly poorer on the engine that has better data.
+func TestTsharkDecodesEveryProtocol(t *testing.T) {
+	cases := []struct {
+		name     string
+		cols     map[int]string
+		wantType string
+		wantIn   string // substring the summary must carry
+	}{
+		{
+			name:     "dns query",
+			cols:     map[int]string{tsFieldDNSID: "0x1234", tsFieldDNSQName: "example.com", tsFieldDNSQType: "1"},
+			wantType: "dns",
+			wantIn:   "example.com",
+		},
+		{
+			name: "dns response with answer",
+			cols: map[int]string{
+				tsFieldDNSID: "0x1234", tsFieldDNSQName: "example.com",
+				tsFieldDNSIsResponse: "1", tsFieldDNSA: "93.184.216.34",
+			},
+			wantType: "dns",
+			wantIn:   "93.184.216.34",
+		},
+		{
+			name: "arp request",
+			cols: map[int]string{
+				tsFieldARPOpcode: "1", tsFieldARPDstIP: "10.0.0.5", tsFieldARPSrcIP: "10.0.0.1",
+			},
+			wantType: "arp",
+			wantIn:   "Who has 10.0.0.5",
+		},
+		{
+			name: "icmp echo request",
+			cols: map[int]string{
+				tsFieldICMPType: "8", tsFieldICMPID: "0x0003", tsFieldICMPSeq: "1",
+			},
+			wantType: "icmp",
+			wantIn:   "echo request",
+		},
+		{
+			name:     "icmp fragmentation needed",
+			cols:     map[int]string{tsFieldICMPType: "3", tsFieldICMPCode: "4"},
+			wantType: "icmp",
+			wantIn:   "fragmentation needed",
+		},
+		{
+			name:     "tls client hello",
+			cols:     map[int]string{tsFieldTLSSNI: "api.example.com"},
+			wantType: "tls",
+			wantIn:   "api.example.com",
+		},
+		{
+			name: "http request",
+			cols: map[int]string{
+				tsFieldHTTPMethod: "GET", tsFieldHTTPURI: "/index.html",
+				tsFieldHTTPHost: "example.com",
+			},
+			wantType: "http",
+			wantIn:   "example.com/index.html",
+		},
+		{
+			name:     "http response",
+			cols:     map[int]string{tsFieldHTTPStatus: "404"},
+			wantType: "http",
+			wantIn:   "404",
+		},
+		{
+			name:     "ntp",
+			cols:     map[int]string{tsFieldNTPMode: "3", tsFieldNTPStratum: "2"},
+			wantType: "ntp",
+			wantIn:   "stratum 2",
+		},
+		{
+			name:     "snmp v2c",
+			cols:     map[int]string{tsFieldSNMPVersion: "1", tsFieldSNMPCommunity: "public"},
+			wantType: "snmp",
+			wantIn:   "v2c",
+		},
+		{
+			name:     "ssh banner",
+			cols:     map[int]string{tsFieldSSHProtocol: "SSH-2.0-OpenSSH_9.6"},
+			wantType: "ssh",
+			wantIn:   "OpenSSH_9.6",
+		},
+		{
+			name:     "ldap",
+			cols:     map[int]string{tsFieldLDAPMsgID: "7", tsFieldLDAPOp: "searchRequest"},
+			wantType: "ldap",
+			wantIn:   "searchRequest",
+		},
+		{
+			name:     "smb2",
+			cols:     map[int]string{tsFieldSMB2Cmd: "Negotiate"},
+			wantType: "smb",
+			wantIn:   "Negotiate",
+		},
+		{
+			name:     "mqtt publish",
+			cols:     map[int]string{tsFieldMQTTType: "3", tsFieldMQTTTopic: "sensors/temp"},
+			wantType: "mqtt",
+			wantIn:   "sensors/temp",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cols := make([]string, tsFieldCount)
+			for i, v := range c.cols {
+				cols[i] = v
+			}
+			d := decodeTshark(cols)
+			if d == nil {
+				t.Fatalf("no decode produced - this protocol is missing from the Decode tab")
+			}
+			if d.Type != c.wantType {
+				t.Errorf("type = %q, want %q", d.Type, c.wantType)
+			}
+			if !strings.Contains(d.Summary, c.wantIn) {
+				t.Errorf("summary %q does not carry %q", d.Summary, c.wantIn)
+			}
+		})
+	}
+}
+
+// Coverage guard: the tcpdump path decodes these types, so tshark must too.
+// A new decoder added on one side and not the other is the failure this
+// catches.
+func TestTsharkCoversTheSameProtocolsAsTcpdump(t *testing.T) {
+	// cwmp is deliberately absent: it is decoded out of an HTTP body, which
+	// -T fields does not carry. Everything else has a dissector field.
+	want := []string{"dhcp", "dns", "arp", "icmp", "tls", "http", "ntp", "snmp", "ssh", "ldap", "smb", "mqtt"}
+	probes := map[string]map[int]string{
+		"dhcp": {tsFieldDHCPXid: "0x1", tsFieldDHCPType: "1"},
+		"dns":  {tsFieldDNSQName: "example.com"},
+		"arp":  {tsFieldARPOpcode: "1"},
+		"icmp": {tsFieldICMPType: "8"},
+		"tls":  {tsFieldTLSSNI: "example.com"},
+		"http": {tsFieldHTTPMethod: "GET"},
+		"ntp":  {tsFieldNTPMode: "3"},
+		"snmp": {tsFieldSNMPVersion: "1"},
+		"ssh":  {tsFieldSSHProtocol: "SSH-2.0-x"},
+		"ldap": {tsFieldLDAPOp: "bindRequest"},
+		"smb":  {tsFieldSMB2Cmd: "Negotiate"},
+		"mqtt": {tsFieldMQTTType: "1"},
+	}
+	for _, kind := range want {
+		cols := make([]string, tsFieldCount)
+		for i, v := range probes[kind] {
+			cols[i] = v
+		}
+		d := decodeTshark(cols)
+		if d == nil || d.Type != kind {
+			t.Errorf("protocol %q does not decode under tshark (got %v)", kind, d)
+		}
+	}
+}
+
+// A packet that matches nothing must not produce an empty decode row.
+func TestTsharkPlainPacketProducesNoDecode(t *testing.T) {
+	cols := make([]string, tsFieldCount)
+	cols[tsFieldProto] = "TCP"
+	cols[tsFieldIP4Src] = "10.0.0.1"
+	if d := decodeTshark(cols); d != nil {
+		t.Errorf("plain TCP produced a decode: %+v", d)
+	}
+}
