@@ -595,7 +595,25 @@ func sshExclusionBPF(client *ssh.Client) string {
 // sshExclusionFallback is the runtime shell form used when we can't derive the
 // peer address in Go. Unreliable over WireGuard / under sudo (see caller), but
 // better than no exclusion.
-const sshExclusionFallback = `not \( host $(echo $SSH_CONNECTION | awk '{print $1}') and port $(echo $SSH_CONNECTION | awk '{print $2}') \)`
+// Unescaped, like sshExclusionFromAddr - shellEscapeBPF adds what the
+// unquoted tcpdump context needs. This form still has to run through a shell
+// (the $(...) substitutions are the point), so it is only usable where the
+// clause is NOT quoted.
+const sshExclusionFallback = `not ( host $(echo $SSH_CONNECTION | awk '{print $1}') and port $(echo $SSH_CONNECTION | awk '{print $2}') )`
+
+// shellEscapeBPF escapes the shell-significant characters in a BPF clause that
+// is passed as BARE (unquoted) words - which is how the tcpdump command line
+// is assembled. Only the grouping parens matter: everything else in a BPF
+// expression we generate is alphanumeric, dots and spaces.
+//
+// The tshark path must NOT use this: it puts the clause inside a quoted -f
+// argument, where a backslash is a literal character and would corrupt the
+// filter. A rejected capture filter means no filter at all, which is how the
+// SSH control connection got back into the capture.
+func shellEscapeBPF(bpf string) string {
+	bpf = strings.ReplaceAll(bpf, "(", `\(`)
+	return strings.ReplaceAll(bpf, ")", `\)`)
+}
 
 // sshExclusionFromAddr builds the literal `not ( host H and port P )` clause
 // from a "host:port" address string, returning ok=false when the address is
@@ -608,7 +626,13 @@ func sshExclusionFromAddr(addr string) (string, bool) {
 	if strings.ContainsAny(host, " ()\\'\"`$") || !isNumericPort(port) {
 		return "", false
 	}
-	return fmt.Sprintf(`not \( host %s and port %s \)`, host, port), true
+	// Plain BPF, NOT shell-escaped. Callers decide the escaping, because the
+	// two engines put this clause in different places: tcpdump takes it as
+	// bare (unquoted) shell words, tshark takes it inside a quoted -f
+	// argument. Baking `\(` in here produced a filter that reached tshark
+	// with literal backslashes, which it rejects - and a rejected capture
+	// filter means NO filter, so the SSH control connection flooded back in.
+	return fmt.Sprintf("not ( host %s and port %s )", host, port), true
 }
 
 func isNumericPort(s string) bool {
@@ -697,11 +721,14 @@ func buildTcpdumpCommand(opts TcpdumpOptions, sshExcl string, maxCount int, cont
 	// runtime fallback when the Go-side addresses aren't available.
 	userBPF := opts.BPFFilter
 	if opts.ExcludeSSH {
+		// The clause arrives as plain BPF; tcpdump takes it as bare shell
+		// words, so the parens need escaping here (and only here).
+		escaped := shellEscapeBPF(sshExcl)
 		if userBPF != "" {
 			// Wrap the user filter so precedence is unambiguous.
-			cmd += " " + shellQuote(userBPF) + " and " + sshExcl
+			cmd += " " + shellQuote(userBPF) + " and " + escaped
 		} else {
-			cmd += " " + sshExcl
+			cmd += " " + escaped
 		}
 	} else if userBPF != "" {
 		cmd += " " + shellQuote(userBPF)

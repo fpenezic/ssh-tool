@@ -300,7 +300,7 @@ func TestBuildCaptureCommandTcpdumpUnchangedByRefactor(t *testing.T) {
 	}
 	for _, want := range []string{
 		"tcpdump -l -nn -tttt", "-s 1024", "-v -X", "-i eth0", "-c 500",
-		"'port 443' and not (host 10.0.0.9 and port 22)",
+		`'port 443' and not \(host 10.0.0.9 and port 22\)`,
 	} {
 		if !strings.Contains(cmd, want) {
 			t.Errorf("tcpdump command lost %q after the refactor:\n%s", want, cmd)
