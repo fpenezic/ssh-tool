@@ -560,8 +560,8 @@
               class:running={tcpdumpMode === "open"}
               class:bg={tcpdumpMode === "minimized"}
               title={tcpdumpMode === "minimized" && tcpdumpStats
-                ? `tcpdump on ${tcpdumpStats.iface} running in background - ${tcpdumpStats.packets} packets${tcpdumpStats.insights > 0 ? `, ${tcpdumpStats.insights} insights` : ""} (counts in status bar; click to restore)`
-                : "Live tcpdump on this host"}
+                ? `Packet capture on ${tcpdumpStats.iface} running in background - ${tcpdumpStats.packets} packets${tcpdumpStats.insights > 0 ? `, ${tcpdumpStats.insights} insights` : ""} (counts in status bar; click to restore)`
+                : "Live packet capture on this host (tcpdump, or tshark where available)"}
               onclick={(e) => { e.stopPropagation(); tcpdump.open(node.sessionId); }}
             ><IconActivity size={13} /></button>
             <button

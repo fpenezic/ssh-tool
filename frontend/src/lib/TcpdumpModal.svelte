@@ -864,7 +864,16 @@
        use:clickOutside={{ onOutside: dismiss, enabled: !embedded }}
        onkeydown={(e) => e.stopPropagation()}>
     <header>
-      <strong>tcpdump</strong>
+      <!-- The title names the binary actually running. The modal is
+           "tcpdump" by history, but on a tshark host nothing on screen said
+           which tool produced the rows - and the two format their output
+           differently enough that it matters when reading them. -->
+      <strong>{engine === "tshark" ? "tshark" : "tcpdump"}</strong>
+      {#if engine === "tshark"}
+        <span class="engine-note" title="Wireshark's CLI. Rows carry the dissector's protocol name and summary, and the Decode tab is filled from named dissector fields rather than a payload dump.">
+          Wireshark dissectors
+        </span>
+      {/if}
       <span class="auth-state">
         {#if probe?.root_user}
           <span class="ok">running as root</span>
@@ -1336,6 +1345,16 @@
     background: var(--mantle);
     border-bottom: 1px solid var(--surface0);
     font-size: 0.9rem;
+  }
+  /* Sits next to the title, before the auth state, so the engine is
+     identifiable at a glance without competing with it. */
+  .engine-note {
+    font-size: 0.68rem;
+    color: var(--subtext0);
+    background: var(--surface0);
+    border-radius: 3px;
+    padding: 0.05rem 0.3rem;
+    white-space: nowrap;
   }
   .auth-state { flex: 1; font-size: 0.78rem; }
   .auth-state .ok { color: var(--green); }

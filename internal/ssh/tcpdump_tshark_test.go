@@ -670,3 +670,78 @@ func TestTsharkPlainPacketProducesNoDecode(t *testing.T) {
 		t.Errorf("plain TCP produced a decode: %+v", d)
 	}
 }
+
+// An ICMP error row is only useful if it names WHICH destination failed. The
+// address lives in the packet the error quotes, not in the outer header - a
+// row reading just "destination unreachable" is what the author reported.
+func TestTsharkICMPErrorNamesTheFailedDestination(t *testing.T) {
+	cols := make([]string, tsFieldCount)
+	cols[tsFieldICMPType] = "3"
+	cols[tsFieldICMPCode] = "1"
+	cols[tsFieldICMPOrigDst] = "10.0.27.99"
+	cols[tsFieldICMPOrigTCPPort] = "443"
+
+	d := decodeTshark(cols)
+	if d == nil {
+		t.Fatal("no decode")
+	}
+	if got := d.Fields["target"]; got != "10.0.27.99" {
+		t.Errorf("target = %q - without it the row cannot be acted on", got)
+	}
+	if !strings.Contains(d.Summary, "10.0.27.99") {
+		t.Errorf("summary must name the destination, got %q", d.Summary)
+	}
+	// id/seq belong to echo packets; on an error they would be noise.
+	for _, k := range []string{"id", "seq"} {
+		if _, present := d.Fields[k]; present {
+			t.Errorf("%q has no meaning on an ICMP error", k)
+		}
+	}
+}
+
+// The Decode tab renders every field as its own row, so a field that merely
+// restates the summary shows up as a duplicate line under each entry - which
+// is exactly what the reported screenshot showed.
+func TestTsharkDecodeFieldsDoNotRestateTheSummary(t *testing.T) {
+	cases := []struct {
+		name string
+		cols map[int]string
+	}{
+		{"icmp unreachable", map[int]string{tsFieldICMPType: "3", tsFieldICMPCode: "1"}},
+		{"icmp echo", map[int]string{tsFieldICMPType: "8", tsFieldICMPSeq: "5"}},
+		{"ssh banner", map[int]string{tsFieldSSHProtocol: "SSH-2.0-OpenSSH_9.6"}},
+		{"ldap", map[int]string{tsFieldLDAPOp: "bindRequest", tsFieldLDAPMsgID: "3"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cols := make([]string, tsFieldCount)
+			for i, v := range c.cols {
+				cols[i] = v
+			}
+			d := decodeTshark(cols)
+			if d == nil {
+				t.Fatal("no decode")
+			}
+			if _, present := d.Fields["op"]; present {
+				t.Errorf("field \"op\" duplicates the summary %q as its own row", d.Summary)
+			}
+		})
+	}
+}
+
+// Echo packets are the case where id/seq DO belong - they are how a request
+// is paired with its reply.
+func TestTsharkICMPEchoKeepsIdAndSeq(t *testing.T) {
+	cols := make([]string, tsFieldCount)
+	cols[tsFieldICMPType] = "8"
+	cols[tsFieldICMPID] = "9"
+	cols[tsFieldICMPSeq] = "5531"
+
+	d := decodeTshark(cols)
+	if d.Fields["id"] != "9" || d.Fields["seq"] != "5531" {
+		t.Errorf("echo must keep id/seq, got %+v", d.Fields)
+	}
+	if !strings.Contains(d.Summary, "5531") {
+		t.Errorf("summary should carry the sequence: %q", d.Summary)
+	}
+}

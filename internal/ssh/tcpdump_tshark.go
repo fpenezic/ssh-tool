@@ -59,6 +59,12 @@ var tsharkFields = []string{
 	"dns.id", "dns.qry.name", "dns.qry.type", "dns.flags.response", "dns.a", "dns.cname",
 	"arp.opcode", "arp.src.proto_ipv4", "arp.dst.proto_ipv4", "arp.src.hw_mac",
 	"icmp.type", "icmp.code", "icmp.ident", "icmp.seq",
+	// The embedded original packet inside an ICMP error. Without this an
+	// "unreachable" row says only that something was unreachable, never
+	// WHICH address - which is the one thing you need from it. occurrence=f
+	// gives the first ip.dst, i.e. the outer one, so the quoted header needs
+	// its own field name.
+	"icmp.ip.dst", "icmp.udp.dstport", "icmp.tcp.dstport",
 	"tls.handshake.extensions_server_name", "tls.handshake.type",
 	"http.request.method", "http.request.uri", "http.host",
 	"http.response.code", "http.user_agent", "http.content_type",
@@ -110,6 +116,9 @@ const (
 	tsFieldICMPCode
 	tsFieldICMPID
 	tsFieldICMPSeq
+	tsFieldICMPOrigDst
+	tsFieldICMPOrigUDPPort
+	tsFieldICMPOrigTCPPort
 
 	tsFieldTLSSNI
 	tsFieldTLSHandshakeType
@@ -618,13 +627,47 @@ func decodeTsharkICMP(cols []string) *PacketDecode {
 		return nil
 	}
 	d := newDecode("icmp")
-	setIf(d, cols, "id", tsFieldICMPID)
-	setIf(d, cols, "seq", tsFieldICMPSeq)
-
 	code := col(cols, tsFieldICMPCode)
 	op := icmpTypeName(icmpType, code)
-	d.Fields["op"] = op
-	d.Summary = "ICMP " + op
+
+	switch icmpType {
+	case "0", "8":
+		// Echo: id and seq are the whole content, and pairing a request with
+		// its reply is what the fields are for.
+		setIf(d, cols, "id", tsFieldICMPID)
+		seq := setIf(d, cols, "seq", tsFieldICMPSeq)
+		d.Summary = "ICMP " + op
+		if seq != "" {
+			d.Summary += " seq=" + seq
+		}
+	case "3", "11", "5":
+		// An error quotes the packet that caused it. WHICH destination failed
+		// is the only thing worth reading off one of these rows, so pull it
+		// out of the embedded header - id/seq are meaningless here and are
+		// deliberately not set.
+		target := setIf(d, cols, "target", tsFieldICMPOrigDst)
+		port := col(cols, tsFieldICMPOrigTCPPort)
+		if port == "" {
+			port = col(cols, tsFieldICMPOrigUDPPort)
+		}
+		if port != "" {
+			d.Fields["target_port"] = port
+		}
+		switch {
+		case target != "" && port != "":
+			d.Summary = "ICMP " + op + ": " + target + ":" + port
+		case target != "":
+			d.Summary = "ICMP " + op + ": " + target
+		default:
+			d.Summary = "ICMP " + op
+		}
+	default:
+		d.Summary = "ICMP " + op
+	}
+
+	// `op` is deliberately NOT stored as a field: the summary above already
+	// says it, and the Decode tab renders every field as its own row, so
+	// storing it produced a duplicate line under each entry.
 	return d
 }
 
@@ -752,7 +795,8 @@ func decodeTsharkSSH(cols []string) *PacketDecode {
 		return nil
 	}
 	d := newDecode("ssh")
-	d.Fields["op"] = "banner"
+	// No "op" field: the summary is the banner itself, so a row saying
+	// op=banner is pure duplication in a tab that renders every field.
 	d.Fields["software"] = proto
 	// "SSH-2.0-OpenSSH_9.6" - the version sits between the first two dashes.
 	if parts := strings.SplitN(proto, "-", 3); len(parts) >= 2 {
@@ -772,9 +816,7 @@ func decodeTsharkLDAP(cols []string) *PacketDecode {
 	if msgID != "" {
 		d.Fields["message_id"] = msgID
 	}
-	if op != "" {
-		d.Fields["op"] = op
-	}
+	// op is in the summary; storing it too would repeat the line.
 	d.Summary = "LDAP " + op
 	if msgID != "" {
 		d.Summary += " (msg " + msgID + ")"
