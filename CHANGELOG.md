@@ -7,10 +7,7 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
-
-Not tagged yet. The container-permission and Proxmox changes still want a
-check against a live host.
+## [0.87.0] - Wireshark's dissectors, and a vault that says it is locked
 
 ### Added
 
@@ -76,6 +73,11 @@ check against a live host.
   password. The connection detail explains this in place of the plain
   "password saved" note, including when the key is inherited from a
   folder.
+- **API tokens are no longer offered as SSH credentials.** They exist
+  for the dynamic-inventory providers (Proxmox, Hetzner, ...) and cannot
+  authenticate an SSH session, so picking one only produced a connection
+  that failed at connect time. One already saved on a connection stays
+  listed, so an existing config does not lose its reference.
 - **A failed capture now says why.** "Process exited with status 1" is
   replaced by the tool's own first error line - a rejected filter, an
   unusable interface - instead of a bare exit code.
