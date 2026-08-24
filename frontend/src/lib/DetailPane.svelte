@@ -4,6 +4,7 @@
   import { toast } from "./toast.svelte";
   import { writeClipboard } from "./clipboard";
   import PasswordInput from "./PasswordInput.svelte";
+  import { effectiveAuthRef, isKeyAuthKind, isSelectableSSHCred } from "./authWarning";
   import { api, type ResolvedSettings, type JumpHostOverride } from "./api";
   import { showPrompt } from "./promptModal.svelte.ts";
   import JumpChainEditor from "./JumpChainEditor.svelte";
@@ -58,12 +59,19 @@
   // editor instances need. flatGrouped() returns { cred, label } items
   // where `label` includes the folder path so duplicates by name are
   // disambiguated.
-  const credOptions = $derived(
-    credentials.flatGrouped().map((g) => ({
-      value: g.cred.id,
-      label: g.label,
-    })),
-  );
+  // Credentials offerable as SSH auth. api_token is deliberately excluded:
+  // those exist for the dynamic-inventory providers (Proxmox, Hetzner, ...)
+  // and cannot authenticate an SSH session, so listing them here only invites
+  // a connection that fails at connect time.
+  //
+  // An api_token already set on a connection stays selectable, so an existing
+  // (if broken) config does not silently lose its reference when opened.
+  function sshCredOptions(keepId: string | undefined) {
+    return credentials
+      .flatGrouped()
+      .filter((g) => isSelectableSSHCred(g.cred.kind, g.cred.id, keepId))
+      .map((g) => ({ value: g.cred.id, label: g.label }));
+  }
 
   const multiCount = $derived(selection.multiCount());
   const folderMultiCount = $derived(selection.folderMultiCount());
@@ -298,6 +306,10 @@
     initialCommandDelay: string;
   } | null>(null);
 
+  // Same api_token exclusion as the connection picker, keyed on the folder's
+  // own current value so an existing reference is not dropped on open.
+  const folderCredOptions = $derived(sshCredOptions(editingFolder?.authRef));
+
   function encodeBool(v: boolean | undefined): string {
     if (v === true) return "on";
     if (v === false) return "off";
@@ -460,6 +472,11 @@
     openHidden: boolean;
     tags: string[];
   } | null>(null);
+
+  // SSH auth credentials for the connection picker. api_token is filtered out
+  // (see sshCredOptions) but a value already stored on this connection is
+  // kept, so opening an existing config cannot silently drop its reference.
+  const credOptions = $derived(sshCredOptions(editing?.authRef));
   let newTagInput = $state("");
 
   // A local-shell connection ("telnet", serial console, "claude", ...):
@@ -825,19 +842,25 @@
   // the pubkey step on purpose and harvest the password. This cannot be gated
   // when the config is built (the fallback is what makes the password useful
   // on hosts where the key is not installed), so the user is warned instead.
-  const keyAuthCredKind = $derived.by(() => {
-    // Fall back to the folder-inherited credential when the connection does
-    // not set one - the effective auth is what decides the risk, not whether
-    // the reference was typed here.
-    let ref = editing?.authRef ?? null;
-    if (!ref && conn) {
-      const inherited = tree.inheritedFieldForConnection(conn.id, "auth_ref");
-      if (inherited.from) ref = String(inherited.value);
-    }
-    if (!ref) return null;
-    const kind = credentials.byId(ref)?.kind;
-    return kind === "key" || kind === "agent" || kind === "opkssh" ? kind : null;
+  // The credential that will actually authenticate this connection, whether
+  // set here or inherited from a folder. Inheritance matters: a connection
+  // with no auth_ref of its own still authenticates with the folder's key,
+  // and carries exactly the same risk.
+  const effectiveAuthCred = $derived.by(() => {
+    const inherited = conn
+      ? tree.inheritedFieldForConnection(conn.id, "auth_ref")
+      : { value: undefined, from: null };
+    const ref = effectiveAuthRef(
+      editing?.authRef,
+      inherited.from ? (inherited.value as string | undefined) : null,
+    );
+    return ref ? credentials.byId(ref) : null;
   });
+
+  const keyAuthCredKind = $derived(
+    isKeyAuthKind(effectiveAuthCred?.kind) ? effectiveAuthCred!.kind : null,
+  );
+
   let passwordInput = $state("");
   let passwordSaving = $state(false);
 
@@ -1223,7 +1246,7 @@
         <div class="cred-picker-row">
           <SearchableSelect
             bind:value={editingFolder.authRef}
-            options={credOptions}
+            options={folderCredOptions}
             placeholder="Search credentials…"
           />
           {#if hasKeepass}
