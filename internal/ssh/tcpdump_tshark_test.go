@@ -677,9 +677,8 @@ func TestTsharkPlainPacketProducesNoDecode(t *testing.T) {
 func TestTsharkICMPErrorNamesTheFailedDestination(t *testing.T) {
 	cols := make([]string, tsFieldCount)
 	cols[tsFieldICMPType] = "3"
-	cols[tsFieldICMPCode] = "1"
-	cols[tsFieldICMPOrigDst] = "10.0.27.99"
-	cols[tsFieldICMPOrigTCPPort] = "443"
+	cols[tsFieldICMPCode] = "3"
+	cols[tsFieldInfo] = "Destination unreachable (Port unreachable) 10.0.27.99"
 
 	d := decodeTshark(cols)
 	if d == nil {
@@ -695,6 +694,43 @@ func TestTsharkICMPErrorNamesTheFailedDestination(t *testing.T) {
 	for _, k := range []string{"id", "seq"} {
 		if _, present := d.Fields[k]; present {
 			t.Errorf("%q has no meaning on an ICMP error", k)
+		}
+	}
+}
+
+// The dissector often does NOT name an address ("Host administratively
+// prohibited"). The row must still render, just without a target - it must
+// not invent one out of something address-shaped in the text.
+func TestTsharkICMPErrorWithoutANamedAddress(t *testing.T) {
+	cols := make([]string, tsFieldCount)
+	cols[tsFieldICMPType] = "3"
+	cols[tsFieldICMPCode] = "10"
+	cols[tsFieldInfo] = "Destination unreachable (Host administratively prohibited)"
+
+	d := decodeTshark(cols)
+	if d == nil {
+		t.Fatal("the row must still decode without an address")
+	}
+	if got, present := d.Fields["target"]; present {
+		t.Errorf("invented a target %q from text with no address", got)
+	}
+	if !strings.Contains(d.Summary, "unreachable") {
+		t.Errorf("summary lost the error kind: %q", d.Summary)
+	}
+}
+
+func TestICMPErrorTargetExtraction(t *testing.T) {
+	cases := []struct{ info, want string }{
+		{"Destination unreachable (Port unreachable) 10.0.27.99", "10.0.27.99"},
+		{"Time-to-live exceeded (Time to live exceeded in transit) 192.168.4.1", "192.168.4.1"},
+		{"Destination unreachable (Host administratively prohibited)", ""},
+		{"", ""},
+		// A bare number sequence is not an address.
+		{"Destination unreachable (code 13)", ""},
+	}
+	for _, c := range cases {
+		if got := icmpErrorTarget(c.info); got != c.want {
+			t.Errorf("icmpErrorTarget(%q) = %q, want %q", c.info, got, c.want)
 		}
 	}
 }
@@ -743,5 +779,138 @@ func TestTsharkICMPEchoKeepsIdAndSeq(t *testing.T) {
 	}
 	if !strings.Contains(d.Summary, "5531") {
 		t.Errorf("summary should carry the sequence: %q", d.Summary)
+	}
+}
+
+// tshark REJECTS the whole capture (exit 1) on a single unknown -e field, so
+// one invented field name breaks the engine entirely. That is exactly what
+// happened: "icmp.ip.dst" looked reasonable - it is how the protocol TREE
+// nests - but Wireshark has no such field, and tshark exited with status 1.
+//
+// A unit test cannot validate names against Wireshark's dictionary. What it
+// can do is pin the list, so that adding a field is a deliberate act that
+// updates this test, and whoever does it has to confirm the name exists
+// (tshark -G fields | grep, or the display-filter reference) rather than
+// inferring it from the tree layout.
+func TestTsharkFieldListIsPinned(t *testing.T) {
+	// Every name here has to exist in Wireshark's dictionary. Verify a new
+	// one with:  tshark -G fields | awk -F"\t" '$3=="<name>"'
+	want := []string{
+		"frame.time", "_ws.col.Protocol",
+		"ip.src", "ipv6.src", "ip.dst", "ipv6.dst",
+		"tcp.srcport", "udp.srcport", "tcp.dstport", "udp.dstport",
+		"frame.len", "_ws.col.Info",
+
+		"dhcp.id", "dhcp.option.dhcp", "dhcp.ip.your", "dhcp.hw.mac_addr",
+		"dhcp.option.requested_ip_address", "dhcp.option.dhcp_server_id",
+		"dhcp.option.ip_address_lease_time", "dhcp.option.subnet_mask",
+		"dhcp.option.router", "dhcp.option.domain_name",
+
+		"dns.id", "dns.qry.name", "dns.qry.type", "dns.flags.response",
+		"dns.a", "dns.cname",
+		"arp.opcode", "arp.src.proto_ipv4", "arp.dst.proto_ipv4", "arp.src.hw_mac",
+		"icmp.type", "icmp.code", "icmp.ident", "icmp.seq",
+		"tls.handshake.extensions_server_name", "tls.handshake.type",
+		"http.request.method", "http.request.uri", "http.host",
+		"http.response.code", "http.user_agent", "http.content_type",
+		"ntp.flags.mode", "ntp.flags.vn", "ntp.stratum",
+		"snmp.version", "snmp.community",
+		"ssh.protocol",
+		"ldap.messageID", "ldap.protocolOp",
+		"smb2.cmd", "smb.cmd",
+		"mqtt.msgtype", "mqtt.topic", "mqtt.ver",
+	}
+	if len(tsharkFields) != len(want) {
+		t.Fatalf("tsharkFields has %d entries, the pinned list has %d - "+
+			"adding a field means confirming it exists in Wireshark and "+
+			"updating this list", len(tsharkFields), len(want))
+	}
+	for i, f := range tsharkFields {
+		if f != want[i] {
+			t.Errorf("field %d = %q, pinned as %q", i, f, want[i])
+		}
+	}
+}
+
+// A capture retried with only the core fields (after the host's Wireshark
+// rejected a decode field) emits SHORT rows. Parsing must handle them without
+// panicking and still produce usable packets - a reduced capture is the
+// fallback that keeps the engine working at all.
+func TestTsharkParsesReducedCoreOnlyRows(t *testing.T) {
+	core := make([]string, tsharkCoreFieldCount)
+	core[tsFieldTime] = "Aug 24, 2026 01:15:42.123456789 CEST"
+	core[tsFieldProto] = "TLSv1.3"
+	core[tsFieldIP4Src] = "10.0.0.1"
+	core[tsFieldIP4Dst] = "10.0.0.2"
+	core[tsFieldTCPSrcPort] = "443"
+	core[tsFieldTCPDstPort] = "51234"
+	core[tsFieldLen] = "1420"
+	core[tsFieldInfo] = "Application Data"
+
+	p, ok := parseTsharkLine(strings.Join(core, tsharkSep))
+	if !ok {
+		t.Fatal("a core-only row must still parse")
+	}
+	if p.SrcIP != "10.0.0.1" || p.DstPort != 51234 {
+		t.Errorf("core columns lost: %s -> %s:%d", p.SrcIP, p.DstIP, p.DstPort)
+	}
+	if p.Info != "Application Data" {
+		t.Errorf("info = %q", p.Info)
+	}
+	// No decode fields were requested, so there must be no decode - and
+	// crucially, no out-of-range read while looking for one.
+	if p.Decoded != nil {
+		t.Errorf("core-only capture produced a decode: %+v", p.Decoded)
+	}
+}
+
+// Every decoder must tolerate a short row, since decodeTshark runs on all of
+// them. An out-of-range index here would panic the capture goroutine.
+func TestTsharkDecodersToleratesShortRows(t *testing.T) {
+	for n := 0; n <= tsFieldCount; n++ {
+		cols := make([]string, n)
+		for i := range cols {
+			cols[i] = "x"
+		}
+		// Must not panic at any length.
+		_ = decodeTshark(cols)
+	}
+}
+
+func TestTsharkCoreOnlyCommandDropsDecodeFields(t *testing.T) {
+	full, _ := buildTsharkCommand(TcpdumpOptions{Iface: "eth0"}, "")
+	if !strings.Contains(full, " -e dhcp.id") {
+		t.Fatal("the normal command should request the decode fields")
+	}
+	reduced, _ := buildTsharkCommand(TcpdumpOptions{Iface: "eth0", tsharkCoreOnly: true}, "")
+	if strings.Contains(reduced, " -e dhcp.id") {
+		t.Error("the reduced command must drop the decode fields")
+	}
+	// The packet-shape columns are what keeps Flat / Flows / insights working.
+	for _, f := range []string{"frame.time", "ip.src", "tcp.srcport", "_ws.col.Info"} {
+		if !strings.Contains(reduced, " -e "+f) {
+			t.Errorf("reduced command lost core field %q", f)
+		}
+	}
+}
+
+func TestUnknownFieldErrorDetection(t *testing.T) {
+	for _, s := range []string{
+		"tshark: Some fields aren't valid: icmp.ip.dst",
+		"tshark: The field \"foo.bar\" is not valid",
+		"tshark: unknown field foo.bar",
+	} {
+		if !isTsharkUnknownFieldError(s) {
+			t.Errorf("should be recognised as an unknown-field error: %q", s)
+		}
+	}
+	for _, s := range []string{
+		"tshark: The capture filter \"port abc\" is invalid",
+		"tshark: You don't have permission to capture on that device",
+		"",
+	} {
+		if isTsharkUnknownFieldError(s) {
+			t.Errorf("must not be treated as an unknown-field error: %q", s)
+		}
 	}
 }

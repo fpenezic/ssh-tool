@@ -20,9 +20,20 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// tsharkCoreFieldCount is how many of tsharkFields are the packet-shape
+// columns every row needs (through _ws.col.Info). The rest feed the Decode
+// tab and are optional: see tsharkFallbackCommand.
+const tsharkCoreFieldCount = tsFieldInfo + 1
+
 // tsharkFields are the -e columns, in the order buildTsharkCommand requests
 // them and parseTsharkLine reads them back. The two MUST stay in sync; the
 // index constants below are the single source of truth for that ordering.
+//
+// Every name must exist in Wireshark's field dictionary: tshark rejects the
+// WHOLE capture with exit 1 on one unknown -e, so a typo or an invented name
+// takes the engine down completely. Confirm a new one with
+// `tshark -G fields` before adding it. TestTsharkFieldListIsPinned makes
+// adding a field a deliberate act rather than a guess.
 var tsharkFields = []string{
 	"frame.time",       // absolute timestamp
 	"_ws.col.Protocol", // dissector-chosen protocol name ("TLSv1.3", "DNS")
@@ -59,12 +70,6 @@ var tsharkFields = []string{
 	"dns.id", "dns.qry.name", "dns.qry.type", "dns.flags.response", "dns.a", "dns.cname",
 	"arp.opcode", "arp.src.proto_ipv4", "arp.dst.proto_ipv4", "arp.src.hw_mac",
 	"icmp.type", "icmp.code", "icmp.ident", "icmp.seq",
-	// The embedded original packet inside an ICMP error. Without this an
-	// "unreachable" row says only that something was unreachable, never
-	// WHICH address - which is the one thing you need from it. occurrence=f
-	// gives the first ip.dst, i.e. the outer one, so the quoted header needs
-	// its own field name.
-	"icmp.ip.dst", "icmp.udp.dstport", "icmp.tcp.dstport",
 	"tls.handshake.extensions_server_name", "tls.handshake.type",
 	"http.request.method", "http.request.uri", "http.host",
 	"http.response.code", "http.user_agent", "http.content_type",
@@ -116,9 +121,6 @@ const (
 	tsFieldICMPCode
 	tsFieldICMPID
 	tsFieldICMPSeq
-	tsFieldICMPOrigDst
-	tsFieldICMPOrigUDPPort
-	tsFieldICMPOrigTCPPort
 
 	tsFieldTLSSNI
 	tsFieldTLSHandshakeType
@@ -248,7 +250,11 @@ func buildTsharkCommand(opts TcpdumpOptions, sshExcl string) (string, error) {
 	// fragmented packet can carry several ip.src values, and without this they
 	// arrive comma-joined and break the column count.
 	b.WriteString(" -T fields -E separator=/t -E occurrence=f")
-	for _, f := range tsharkFields {
+	fields := tsharkFields
+	if opts.tsharkCoreOnly {
+		fields = tsharkCoreFields()
+	}
+	for _, f := range fields {
 		b.WriteString(" -e ")
 		b.WriteString(f)
 	}
@@ -263,8 +269,11 @@ func parseTsharkLine(line string) (ParsedPacket, bool) {
 		return ParsedPacket{}, false
 	}
 	cols := strings.Split(line, tsharkSep)
-	if len(cols) < tsFieldCount {
-		// Banner and status lines carry no tabs at all.
+	// A reduced capture (tsharkCoreOnly, after a rejected decode field) emits
+	// only the packet-shape columns, so require those and treat the decode
+	// columns as optional - col() returns "" past the end. Banner and status
+	// lines carry no tabs at all and are rejected here.
+	if len(cols) < tsharkCoreFieldCount {
 		return ParsedPacket{}, false
 	}
 
@@ -391,7 +400,7 @@ var dhcpMessageTypes = map[string]string{
 // Returns nil for a packet with no DHCP transaction id, i.e. everything that
 // is not DHCP.
 func decodeTsharkDHCP(cols []string) *PacketDecode {
-	xid := strings.TrimSpace(cols[tsFieldDHCPXid])
+	xid := col(cols, tsFieldDHCPXid)
 	if xid == "" {
 		return nil
 	}
@@ -404,14 +413,14 @@ func decodeTsharkDHCP(cols []string) *PacketDecode {
 	d.Fields["xid"] = xid
 
 	put := func(key string, idx int) string {
-		v := strings.TrimSpace(cols[idx])
+		v := col(cols, idx)
 		if v != "" {
 			d.Fields[key] = v
 		}
 		return v
 	}
 
-	msgType := strings.TrimSpace(cols[tsFieldDHCPType])
+	msgType := col(cols, tsFieldDHCPType)
 	stage := dhcpMessageTypes[msgType]
 	if stage == "" && msgType != "" {
 		// An unknown type is still worth showing rather than dropping the
@@ -429,7 +438,7 @@ func decodeTsharkDHCP(cols []string) *PacketDecode {
 	put("subnet_mask", tsFieldDHCPMask)
 	put("gateway", tsFieldDHCPRouter)
 	put("domain", tsFieldDHCPDomain)
-	if lease := strings.TrimSpace(cols[tsFieldDHCPLease]); lease != "" {
+	if lease := col(cols, tsFieldDHCPLease); lease != "" {
 		d.Fields["lease_time"] = lease + "s"
 	}
 
@@ -641,24 +650,18 @@ func decodeTsharkICMP(cols []string) *PacketDecode {
 			d.Summary += " seq=" + seq
 		}
 	case "3", "11", "5":
-		// An error quotes the packet that caused it. WHICH destination failed
-		// is the only thing worth reading off one of these rows, so pull it
-		// out of the embedded header - id/seq are meaningless here and are
-		// deliberately not set.
-		target := setIf(d, cols, "target", tsFieldICMPOrigDst)
-		port := col(cols, tsFieldICMPOrigTCPPort)
-		if port == "" {
-			port = col(cols, tsFieldICMPOrigUDPPort)
-		}
-		if port != "" {
-			d.Fields["target_port"] = port
-		}
-		switch {
-		case target != "" && port != "":
-			d.Summary = "ICMP " + op + ": " + target + ":" + port
-		case target != "":
+		// An error quotes the packet that caused it, and WHICH destination
+		// failed is the only thing worth reading off such a row. The embedded
+		// header is dissected under the SAME field names as the outer one
+		// (ip.dst etc.), and -E occurrence=f keeps only the first - so there
+		// is no separate field to request for it. The dissector does name it
+		// in the Info column, so take it from there.
+		//
+		// id/seq are meaningless on an error and are deliberately not set.
+		if target := icmpErrorTarget(col(cols, tsFieldInfo)); target != "" {
+			d.Fields["target"] = target
 			d.Summary = "ICMP " + op + ": " + target
-		default:
+		} else {
 			d.Summary = "ICMP " + op
 		}
 	default:
@@ -880,4 +883,53 @@ func atoiSafe(s string) int {
 		return 0
 	}
 	return n
+}
+
+// reICMPInfoTarget pulls the failed destination out of the dissector's Info
+// column for an ICMP error. tshark writes e.g.
+//
+//	"Destination unreachable (Host administratively prohibited)"
+//
+// on its own, but when it can name the inner packet it writes the address:
+//
+//	"Destination unreachable (Port unreachable) 10.0.27.99"
+//
+// and for a time-exceeded, the address of the hop that gave up.
+var reICMPInfoTarget = regexp.MustCompile(`\b(\d{1,3}(?:\.\d{1,3}){3}|[0-9a-fA-F:]{2,}:[0-9a-fA-F:]*)\b`)
+
+// icmpErrorTarget returns the first address named in an ICMP error's Info
+// column, or "" when the dissector did not name one. Best-effort by design:
+// the row is still shown without it, just less specific.
+func icmpErrorTarget(info string) string {
+	if info == "" {
+		return ""
+	}
+	m := reICMPInfoTarget.FindString(info)
+	// Guard against matching something that merely looks address-shaped.
+	if strings.Count(m, ".") == 3 || strings.Contains(m, ":") {
+		return m
+	}
+	return ""
+}
+
+// tsharkFieldsUnknownRe matches tshark's complaint about an -e it does not
+// recognise, e.g. `tshark: Some fields aren't valid: icmp.ip.dst`.
+var tsharkFieldsUnknownRe = regexp.MustCompile(`(?i)field.{0,20}(aren't|is not|isn't|not) valid|unknown field`)
+
+// isTsharkUnknownFieldError reports whether a failed tshark run died because
+// one of the -e fields does not exist in this Wireshark's dictionary.
+//
+// This matters because the failure is total: tshark rejects the entire
+// capture rather than skipping the field, so a field that exists in the
+// version we developed against but not in the one on the user's host takes
+// packet capture away completely on that host.
+func isTsharkUnknownFieldError(stderr string) bool {
+	return tsharkFieldsUnknownRe.MatchString(stderr)
+}
+
+// tsharkCoreFields returns just the packet-shape columns - enough for the
+// Flat and Flows views and the insight analyzer, without the per-protocol
+// decode fields. Used to retry a capture that a newer field name killed.
+func tsharkCoreFields() []string {
+	return tsharkFields[:tsharkCoreFieldCount]
 }

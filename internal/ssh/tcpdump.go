@@ -47,6 +47,11 @@ type TcpdumpOptions struct {
 	// server_ip server_port), so it works regardless of the SSH port.
 	// Default-on from the app.
 	ExcludeSSH bool
+	// tsharkCoreOnly drops the per-protocol decode fields from the tshark
+	// command, leaving only the packet-shape columns. Set on an automatic
+	// retry when the host's Wireshark rejected one of the decode fields -
+	// a reduced capture beats no capture. Internal; not set by callers.
+	tsharkCoreOnly bool
 	// Engine selects the capture backend: "" / "tcpdump" (default) or
 	// "tshark". tshark is offered only where DetectTshark found the binary;
 	// it dissects application protocols tcpdump cannot name, and streams
@@ -440,6 +445,7 @@ func StartTcpdump(
 	// signal, so the exit handler can suppress a duplicate/confusing
 	// "ended" message (exit 127) and not double-report.
 	notFoundCh := make(chan bool, 1)
+	firstErrCh := make(chan string, 1)
 
 	// The engine name for user-facing errors - "tshark not installed" must
 	// not say tcpdump, or the user installs the wrong package.
@@ -482,6 +488,11 @@ func StartTcpdump(
 			}
 		}
 		notFoundCh <- notFound
+		// The exit handler needs this: "Process exited with status 1" says
+		// nothing on its own, while the tool's own first stderr line names
+		// the actual problem (a rejected filter, an unknown -e field, a
+		// missing interface).
+		firstErrCh <- firstErr
 	}()
 
 	// Wait for the process to exit in the background - emit "ended".
@@ -497,6 +508,7 @@ func StartTcpdump(
 		// wasn't found; if stderr already reported that, don't re-emit a
 		// confusing "ended: Process exited with status 127".
 		notFound := <-notFoundCh
+		firstErr := <-firstErrCh
 		if notFound || isExit127(err) {
 			if !notFound {
 				onLifecycle("error", notInstalledMsg)
@@ -505,7 +517,12 @@ func StartTcpdump(
 			return
 		}
 		if err != nil {
-			onLifecycle("ended", err.Error())
+			// Prefer the tool's own message over the bare exit status.
+			if firstErr != "" {
+				onLifecycle("ended", strings.TrimSpace(firstErr))
+			} else {
+				onLifecycle("ended", err.Error())
+			}
 		} else {
 			onLifecycle("ended", "")
 		}
