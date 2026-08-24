@@ -43,6 +43,13 @@
   // Container sources (docker / podman). engine is auto-detected on mount; the
   // container/compose radios only appear when an engine is present.
   let engine = $state("");
+  // How the host's container engine has to be reached. A user who is not in
+  // the `docker` group is a common setup, and it used to look identical to
+  // "no containers running": the listing swallowed the permission error and
+  // the picker just came back empty.
+  let containerNeedsSudo = $state(false);
+  let containerDenied = $state(false);
+  let containerDenyReason = $state("");
   let containers = $state<ContainerInfo[]>([]);
   let projects = $state<string[]>([]);
   let container = $state("");
@@ -158,7 +165,12 @@
     // Detect a container engine so the container/compose sources can be offered.
     try {
       const cp = await api.containerEngineProbe(sessionId);
-      if (cp.available) engine = cp.engine;
+      if (cp.available) {
+        engine = cp.engine;
+        containerNeedsSudo = !!cp.needs_sudo;
+        containerDenied = !!cp.denied;
+        containerDenyReason = cp.reason ?? "";
+      }
     } catch { /* no engine - container sources stay hidden */ }
     // Re-attach to a tail already running for this session (this window just
     // received it via a detach/open).
@@ -230,7 +242,7 @@
     listErr = null;
     loadingList = true;
     try {
-      containers = await api.containerList(sessionId, engine);
+      containers = await api.containerList(sessionId, engine, containerNeedsSudo);
       if (!container && containers.length > 0) container = containers[0].name;
     } catch (e: any) {
       listErr = errMsg(e);
@@ -243,7 +255,7 @@
     listErr = null;
     loadingList = true;
     try {
-      projects = await api.composeProjectList(sessionId, engine);
+      projects = await api.composeProjectList(sessionId, engine, containerNeedsSudo);
       if (!project && projects.length > 0) project = projects[0];
     } catch (e: any) {
       listErr = errMsg(e);
@@ -443,6 +455,19 @@
               <button type="button" class="refresh" onclick={loadProjects} title="Refresh list" disabled={loadingList}>↻</button>
             </div>
           </label>
+        {/if}
+        {#if (kind === "container" || kind === "compose") && containerDenied}
+          <div class="err">
+            {engine} is installed but this user cannot reach the daemon, and
+            sudo did not help.
+            {#if containerDenyReason}<br /><span class="reason">{containerDenyReason}</span>{/if}
+            <br />Add the user to the <code>{engine}</code> group, or use a login that can.
+          </div>
+        {:else if (kind === "container" || kind === "compose") && containerNeedsSudo}
+          <div class="note">
+            This user is not in the <code>{engine}</code> group, so the listing
+            and the log stream run under sudo.
+          </div>
         {/if}
         {#if listErr}<div class="err">{listErr}</div>{/if}
         <label class="fld">
@@ -694,4 +719,12 @@
   }
   .empty { color: var(--overlay0); padding: 1rem 0; text-align: center; }
   .err { color: var(--red); padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+  /* The daemon's own refusal text, quoted verbatim under our explanation. */
+  .reason { color: var(--subtext0); font-family: var(--font-mono, monospace); font-size: 0.74rem; }
+  /* Not a failure - the tail will work, it just needs elevation. */
+  .note { color: var(--warn); padding: 0.3rem 0.7rem; font-size: 0.78rem; line-height: 1.4; }
+  .note code, .err code {
+    background: var(--surface0); border-radius: 3px;
+    padding: 0 0.2rem; font-size: 0.95em;
+  }
 </style>

@@ -962,10 +962,10 @@ export const api = {
     G.LogTailStart(input as any) as unknown as Promise<string>,
   containerEngineProbe: (sessionId: string) =>
     nn(G.ContainerEngineProbe(sessionId)) as Promise<ContainerProbeResult>,
-  containerList: (sessionId: string, engine: string) =>
-    (G.ContainerList(sessionId, engine) ?? []) as unknown as Promise<ContainerInfo[]>,
-  composeProjectList: (sessionId: string, engine: string) =>
-    (G.ComposeProjectList(sessionId, engine) ?? []) as unknown as Promise<string[]>,
+  containerList: (sessionId: string, engine: string, elevate = false) =>
+    (G.ContainerList(sessionId, engine, elevate) ?? []) as unknown as Promise<ContainerInfo[]>,
+  composeProjectList: (sessionId: string, engine: string, elevate = false) =>
+    (G.ComposeProjectList(sessionId, engine, elevate) ?? []) as unknown as Promise<string[]>,
   logtailStop: (tailId: string) => G.LogTailStop(tailId),
   logtailProvidePassword: (tailId: string, password: string) =>
     G.LogTailProvidePassword(tailId, password),
@@ -1650,6 +1650,16 @@ export interface ContainerInfo {
 export interface ContainerProbeResult {
   engine: string;
   available: boolean;
+  // needs_sudo: the engine is installed but the login user cannot reach the
+  // daemon directly (the usual "not in the docker group" host), so the
+  // listing and the tail both run elevated.
+  needs_sudo?: boolean;
+  // denied: installed, but reachable neither directly nor via sudo. The UI
+  // must say so rather than show an empty picker.
+  denied?: boolean;
+  // reason: the daemon's own refusal text - it names the fix better than we
+  // could.
+  reason?: string;
 }
 
 export interface LogTailLine {

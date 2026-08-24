@@ -7632,37 +7632,62 @@ func (a *App) LogTailActiveForSession(sessionID string) *LogTailActiveInfo {
 type ContainerProbeResult struct {
 	Engine    string `json:"engine"`    // "docker" | "podman" | ""
 	Available bool   `json:"available"` // engine != ""
+	// NeedsSudo is true when the engine is installed but the login user
+	// cannot reach the daemon directly - the usual "not in the docker
+	// group" host. Listing and the tail then both run under sudo.
+	NeedsSudo bool `json:"needs_sudo"`
+	// Denied is true when the engine is installed but reachable neither
+	// directly nor via sudo. The UI must say so instead of showing an
+	// empty picker that looks like "no containers running".
+	Denied bool `json:"denied"`
+	// Reason is the daemon's own refusal text, shown to the user because
+	// it names the fix (add the user to the docker group, start the
+	// daemon, ...) better than we could.
+	Reason string `json:"reason,omitempty"`
 }
 
-// ContainerEngineProbe detects docker/podman on the session's target host.
+// ContainerEngineProbe detects docker/podman on the session's target host and
+// works out whether the user can actually drive it.
 func (a *App) ContainerEngineProbe(sessionID string) (*ContainerProbeResult, error) {
 	target, err := a.logtailTarget(sessionID)
 	if err != nil {
 		return nil, err
 	}
-	engine, err := sshlayer.DetectContainerEngine(target)
+	// The same root/sudo probe the log tail uses, so both agree on how the
+	// host is reached. A probe failure is not fatal: fall back to "no
+	// elevation available" and let the direct attempt speak for itself.
+	rootUser, sudoNoPwd, _ := sshlayer.CheckRootOrSudo(target)
+	acc, err := sshlayer.ProbeContainerAccess(target, rootUser, sudoNoPwd)
 	if err != nil {
 		return nil, err
 	}
-	return &ContainerProbeResult{Engine: engine, Available: engine != ""}, nil
+	return &ContainerProbeResult{
+		Engine:    acc.Engine,
+		Available: acc.Engine != "",
+		NeedsSudo: acc.NeedsSudo,
+		Denied:    acc.Denied,
+		Reason:    acc.Reason,
+	}, nil
 }
 
 // ContainerList returns the running containers for the engine on the host.
-func (a *App) ContainerList(sessionID, engine string) ([]sshlayer.ContainerInfo, error) {
+// elevate mirrors the probe's NeedsSudo so the listing reaches the daemon the
+// same way the tail will.
+func (a *App) ContainerList(sessionID, engine string, elevate bool) ([]sshlayer.ContainerInfo, error) {
 	target, err := a.logtailTarget(sessionID)
 	if err != nil {
 		return nil, err
 	}
-	return sshlayer.ListContainers(target, engine)
+	return sshlayer.ListContainers(target, engine, elevate)
 }
 
 // ComposeProjectList returns the distinct compose project names on the host.
-func (a *App) ComposeProjectList(sessionID, engine string) ([]string, error) {
+func (a *App) ComposeProjectList(sessionID, engine string, elevate bool) ([]string, error) {
 	target, err := a.logtailTarget(sessionID)
 	if err != nil {
 		return nil, err
 	}
-	return sshlayer.ListComposeProjects(target, engine)
+	return sshlayer.ListComposeProjects(target, engine, elevate)
 }
 
 // logtailTarget resolves a session's target SSH client for the container

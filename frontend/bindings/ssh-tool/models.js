@@ -1047,6 +1047,36 @@ export class ContainerProbeResult {
              */
             this["available"] = false;
         }
+        if (!("needs_sudo" in $$source)) {
+            /**
+             * NeedsSudo is true when the engine is installed but the login user
+             * cannot reach the daemon directly - the usual "not in the docker
+             * group" host. Listing and the tail then both run under sudo.
+             * @member
+             * @type {boolean}
+             */
+            this["needs_sudo"] = false;
+        }
+        if (!("denied" in $$source)) {
+            /**
+             * Denied is true when the engine is installed but reachable neither
+             * directly nor via sudo. The UI must say so instead of showing an
+             * empty picker that looks like "no containers running".
+             * @member
+             * @type {boolean}
+             */
+            this["denied"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Reason is the daemon's own refusal text, shown to the user because
+             * it names the fix (add the user to the docker group, start the
+             * daemon, ...) better than we could.
+             * @member
+             * @type {string | undefined}
+             */
+            this["reason"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

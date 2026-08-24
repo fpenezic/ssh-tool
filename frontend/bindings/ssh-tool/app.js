@@ -565,10 +565,11 @@ export function ClipboardSetText(text) {
  * ComposeProjectList returns the distinct compose project names on the host.
  * @param {string} sessionID
  * @param {string} engine
+ * @param {boolean} elevate
  * @returns {$CancellablePromise<string[]>}
  */
-export function ComposeProjectList(sessionID, engine) {
-    return $Call.ByID(3694162288, sessionID, engine).then(/** @type {($result: any) => any} */(($result) => {
+export function ComposeProjectList(sessionID, engine, elevate) {
+    return $Call.ByID(3694162288, sessionID, engine, elevate).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType0($result);
     }));
 }
@@ -728,7 +729,8 @@ export function ConnectionsUpdate($in) {
 }
 
 /**
- * ContainerEngineProbe detects docker/podman on the session's target host.
+ * ContainerEngineProbe detects docker/podman on the session's target host and
+ * works out whether the user can actually drive it.
  * @param {string} sessionID
  * @returns {$CancellablePromise<$models.ContainerProbeResult | null>}
  */
@@ -740,12 +742,15 @@ export function ContainerEngineProbe(sessionID) {
 
 /**
  * ContainerList returns the running containers for the engine on the host.
+ * elevate mirrors the probe's NeedsSudo so the listing reaches the daemon the
+ * same way the tail will.
  * @param {string} sessionID
  * @param {string} engine
+ * @param {boolean} elevate
  * @returns {$CancellablePromise<ssh$0.ContainerInfo[]>}
  */
-export function ContainerList(sessionID, engine) {
-    return $Call.ByID(1783859960, sessionID, engine).then(/** @type {($result: any) => any} */(($result) => {
+export function ContainerList(sessionID, engine, elevate) {
+    return $Call.ByID(1783859960, sessionID, engine, elevate).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType33($result);
     }));
 }
