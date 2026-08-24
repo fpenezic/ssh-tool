@@ -582,7 +582,20 @@ func (h *TcpdumpHandle) Stop() {
 // SSH listen port alone - that would also hide any other SSH traffic the user
 // wants to see. Only this exact control connection is dropped.
 func sshExclusionBPF(client *ssh.Client) string {
+	// Ask the SERVER what it sees first. LocalAddr() is our socket's address,
+	// which is only the same thing when nothing rewrites it in between - and
+	// behind NAT it is not: the client holds a private address (192.168.x.x)
+	// while the server sees the public one. The filter then names a host that
+	// never appears on the wire there, so it excludes nothing and the capture
+	// feeds on its own SSH traffic.
 	if client != nil {
+		if peer, ok := remoteSSHPeer(client); ok {
+			if bpf, ok := sshExclusionFromAddr(peer); ok {
+				return bpf
+			}
+		}
+		// No answer from the server (unusual shell, no ss/who): the local
+		// address is still right for a direct or WireGuard hop.
 		if la := client.LocalAddr(); la != nil {
 			if bpf, ok := sshExclusionFromAddr(la.String()); ok {
 				return bpf
@@ -590,6 +603,66 @@ func sshExclusionBPF(client *ssh.Client) string {
 		}
 	}
 	return sshExclusionFallback
+}
+
+// remoteSSHPeer asks the server which address:port this SSH connection comes
+// from - the authoritative answer, since that is what its own tcpdump will
+// see on the wire.
+//
+// $SSH_CONNECTION alone is not enough (it is empty under sudo's env_reset and
+// over a userspace WireGuard hop - see e9dd3b8), so this tries it first and
+// falls back to reading the socket table for our own sshd process. Both run in
+// one command so this costs a single round trip.
+func remoteSSHPeer(client *ssh.Client) (string, bool) {
+	sess, err := client.NewSession()
+	if err != nil {
+		return "", false
+	}
+	defer sess.Close()
+
+	// 1. $SSH_CONNECTION is "client_ip client_port server_ip server_port" -
+	//    the direct answer when the variable survives.
+	// 2. Failing that, walk up from this shell to its sshd parent and read
+	//    that process's peer from the socket table. Keyed on OUR process,
+	//    not on port 22, so a server listening on a non-standard port still
+	//    resolves - and so a host with many SSH sessions gives back THIS
+	//    one rather than whichever matched first.
+	// Output is one line: "IP PORT".
+	const probe = `
+if [ -n "$SSH_CONNECTION" ]; then
+  echo "$SSH_CONNECTION" | awk '{print $1, $2}'
+else
+  p=$$
+  while [ "$p" != "1" ] && [ -n "$p" ]; do
+    if ss -tnp 2>/dev/null | grep -q "pid=$p,"; then
+      ss -tnp 2>/dev/null | awk -v pid="pid=$p," '$0 ~ pid && $1=="ESTAB" {
+        n=split($5,a,":"); port=a[n];
+        host=substr($5, 1, length($5)-length(port)-1);
+        print host, port; exit
+      }'
+      break
+    fi
+    p=$(awk '{print $4}' /proc/$p/stat 2>/dev/null)
+  done
+fi
+`
+	out, err := sess.Output(probe)
+	if err != nil {
+		return "", false
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) < 2 {
+		return "", false
+	}
+	host, port := fields[0], fields[1]
+	if host == "" || port == "" || !isNumericPort(port) {
+		return "", false
+	}
+	// An IPv6 address has to be bracketed for SplitHostPort in the caller.
+	if strings.Contains(host, ":") {
+		return "[" + host + "]:" + port, true
+	}
+	return host + ":" + port, true
 }
 
 // sshExclusionFallback is the runtime shell form used when we can't derive the

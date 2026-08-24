@@ -133,3 +133,62 @@ func TestExclusionIsPresentForBothEngines(t *testing.T) {
 		}
 	}
 }
+
+// The exclusion must name the address the SERVER sees, not the one the client
+// holds. Behind NAT those differ: the client has a private address while the
+// server sees the public one, so a filter built from the local socket names a
+// host that never appears on the wire there - and excludes nothing, letting
+// the capture feed on its own SSH traffic.
+func TestExclusionUsesTheAddressTheServerSees(t *testing.T) {
+	// What the server reported (public, post-NAT).
+	serverSees := "141.136.189.34:9905"
+	bpf, ok := sshExclusionFromAddr(serverSees)
+	if !ok {
+		t.Fatal("expected the clause to build")
+	}
+	if !strings.Contains(bpf, "141.136.189.34") {
+		t.Errorf("the filter must name the public address, got %q", bpf)
+	}
+
+	// The client's own view of the same connection. Building the filter from
+	// this is the bug - keep a test that spells out why they differ.
+	clientHolds := "192.168.1.20:9905"
+	localBPF, _ := sshExclusionFromAddr(clientHolds)
+	if localBPF == bpf {
+		t.Fatal("test is meaningless if both addresses are the same")
+	}
+	if strings.Contains(localBPF, "141.136.189.34") {
+		t.Error("the local address cannot know the public one - that is the point")
+	}
+}
+
+// The probe returns "IP PORT"; an IPv6 address has to come back bracketed or
+// SplitHostPort in sshExclusionFromAddr rejects it.
+func TestExclusionAcceptsBracketedIPv6FromTheProbe(t *testing.T) {
+	bpf, ok := sshExclusionFromAddr("[2001:db8::5]:9905")
+	if !ok {
+		t.Fatal("a bracketed IPv6 peer must parse")
+	}
+	if !strings.Contains(bpf, "2001:db8::5") {
+		t.Errorf("IPv6 host lost: %q", bpf)
+	}
+}
+
+// A capture host can carry several SSH sessions at once (the reported case
+// showed two, on different interfaces). The filter keys on host AND port, so
+// it drops only THIS control connection and leaves other SSH traffic - which
+// the user may well be trying to debug - visible.
+func TestExclusionDropsOnlyOurOwnConnection(t *testing.T) {
+	ours, ok := sshExclusionFromAddr("141.136.189.34:45414")
+	if !ok {
+		t.Fatal("expected the clause to build")
+	}
+	// Same host, different port = a second session from the same NAT gateway.
+	if !strings.Contains(ours, "45414") {
+		t.Error("the port is what separates our session from another one")
+	}
+	// A host-only filter would hide every session behind that gateway.
+	if strings.Contains(ours, "host 141.136.189.34 )") {
+		t.Error("filtering by host alone would hide unrelated SSH sessions")
+	}
+}
