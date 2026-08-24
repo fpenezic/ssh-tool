@@ -10,6 +10,31 @@ For what's already shipped, see `CHANGELOG.md`.
 
 ## Connection ergonomics
 
+- **Direct bookmarks (no SOCKS)** - bookmarks today are a field on a
+  dynamic forward, so a host's web UI that this machine can already
+  reach (Proxmox, iDRAC, Grafana on the LAN) either needs a tunnel it
+  does not need, or lives outside the app. Add a bookmark list on the
+  CONNECTION that opens in the default browser with the user's own
+  logins. Keep the SOCKS bookmarks exactly as they are - a tunnel
+  bookmark is meaningless without its forward, a direct one is
+  meaningless with it, so one shared list with a mode flag was
+  considered and rejected.
+  Scope, deliberately small: `connection_bookmarks` table, two IPC
+  methods, a section in the connection detail, and one badge in the
+  tunnel popover - `direct` vs `via tunnel`, saying what HAPPENS rather
+  than how it is configured. The add dialog asks "how is this reached?"
+  in those terms rather than offering a type.
+  Explicitly NOT in v1, each an answer to a problem nobody has yet: a
+  reachability probe on save (it cannot tell "unreachable" from "service
+  is down", so it would warn on things that are fine), a
+  "switch to tunnel" conversion button, `{{host}}` templating, and
+  folder-inherited bookmarks.
+  Two constraints settled with the author: a jump host is never
+  "direct", and neither are the built-in VPN profiles - they are
+  userspace and raise no OS-level route, so the browser cannot use them.
+  Full plan: `~/.claude/plans/direct-bookmarks.md` (written 2026-08-24,
+  wider than this entry - trim it to the scope above).
+
 - **Smart command autocomplete** *(deferred)* - three approaches
   captured in earlier discussions: shell history scrape, per-host
   cached command list, or local LLM. No clear winner; all add
