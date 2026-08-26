@@ -819,17 +819,7 @@
     // lines) while the terminal stays flat at 69. The two numbers are not
     // the same unit, so no margin makes the comparison sound.
     const used = term.buffer?.active?.length ?? 0;
-    if (terminalHasScrollback(used, term.rows)) {
-      api.frontendLog(
-        `scrollback KEEP session=${sessionId} terminal=${used} lines, ` +
-        `viewport=${term.rows} rows - has history above the fold`,
-      ).catch(() => {});
-      return;
-    }
-    api.frontendLog(
-      `scrollback drop session=${sessionId} terminal=${used} lines, ` +
-      `viewport=${term.rows} rows - nothing above the fold`,
-    ).catch(() => {});
+    if (terminalHasScrollback(used, term.rows)) return;
 
     scrollbackDropped = true;
     try {
