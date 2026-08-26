@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -3579,6 +3580,14 @@ func (a *App) emitBroadcastChanged() {
 type ScrollbackSnapshot struct {
 	B64 string `json:"b64"`
 	Cum uint64 `json:"cum"`
+	// Lines is how many newlines the retained buffer holds.
+	//
+	// NOT a proxy for how many terminal rows a replay reproduces - that was
+	// tried and is wrong: a TUI redrawing in place emits newlines constantly
+	// while the terminal's own line count stays flat (measured: the ring grew
+	// 303 -> 711 lines against a terminal steady at 69). Kept because it is
+	// one cheap pass and it makes the ring's growth visible in diagnostics.
+	Lines int `json:"lines"`
 }
 
 // SshGetScrollback returns the buffered PTY output for a session plus the
@@ -3594,7 +3603,11 @@ func (a *App) SshGetScrollback(sessionID string) (ScrollbackSnapshot, error) {
 	if len(data) == 0 {
 		return ScrollbackSnapshot{Cum: cum}, nil
 	}
-	return ScrollbackSnapshot{B64: sshlayer.EncodeBase64(data), Cum: cum}, nil
+	return ScrollbackSnapshot{
+		B64:   sshlayer.EncodeBase64(data),
+		Cum:   cum,
+		Lines: bytes.Count(data, []byte{'\n'}),
+	}, nil
 }
 
 func (a *App) SshResize(sessionID string, cols, rows uint16) error {
@@ -3981,7 +3994,11 @@ func (a *App) LocalShellGetScrollback(sessionID string) (ScrollbackSnapshot, err
 	if len(data) == 0 {
 		return ScrollbackSnapshot{Cum: cum}, nil
 	}
-	return ScrollbackSnapshot{B64: sshlayer.EncodeBase64(data), Cum: cum}, nil
+	return ScrollbackSnapshot{
+		B64:   sshlayer.EncodeBase64(data),
+		Cum:   cum,
+		Lines: bytes.Count(data, []byte{'\n'}),
+	}, nil
 }
 
 // LocalShellList returns metadata for every live local session so the

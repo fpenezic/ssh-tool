@@ -817,7 +817,7 @@ export const api = {
     G.GetConnectionHasPassword(connectionId) as unknown as Promise<boolean>,
   sshWrite: (sessionId: string, dataB64: string) => G.SshWrite(sessionId, dataB64),
   sshGetScrollback: (sessionId: string) =>
-    G.SshGetScrollback(sessionId) as unknown as Promise<{ b64: string; cum: number }>,
+    G.SshGetScrollback(sessionId) as unknown as Promise<{ b64: string; cum: number; lines?: number }>,
   sshResize: (sessionId: string, cols: number, rows: number) =>
     G.SshResize(sessionId, cols, rows),
   sshDisconnect: (sessionId: string) => G.SshDisconnect(sessionId),
@@ -1096,7 +1096,7 @@ export const api = {
     G.LocalShellResize(sessionId, cols, rows),
   localShellDisconnect: (sessionId: string) => G.LocalShellDisconnect(sessionId),
   localShellGetScrollback: (sessionId: string) =>
-    G.LocalShellGetScrollback(sessionId) as unknown as Promise<{ b64?: string; cum: number }>,
+    G.LocalShellGetScrollback(sessionId) as unknown as Promise<{ b64?: string; cum: number; lines?: number }>,
   localShellList: () =>
     G.LocalShellList() as unknown as Promise<
       { session_id: string; kind: string; display: string }[]

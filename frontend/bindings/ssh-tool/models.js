@@ -3735,6 +3735,20 @@ export class ScrollbackSnapshot {
              */
             this["cum"] = 0;
         }
+        if (!("lines" in $$source)) {
+            /**
+             * Lines is how many newlines the retained buffer holds.
+             * 
+             * NOT a proxy for how many terminal rows a replay reproduces - that was
+             * tried and is wrong: a TUI redrawing in place emits newlines constantly
+             * while the terminal's own line count stays flat (measured: the ring grew
+             * 303 -> 711 lines against a terminal steady at 69). Kept because it is
+             * one cheap pass and it makes the ring's growth visible in diagnostics.
+             * @member
+             * @type {number}
+             */
+            this["lines"] = 0;
+        }
 
         Object.assign(this, $$source);
     }

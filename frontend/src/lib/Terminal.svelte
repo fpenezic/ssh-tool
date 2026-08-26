@@ -13,6 +13,8 @@
   import { sessions } from "./stores.svelte";
   import { terminalPrefs } from "./terminalPrefs.svelte";
   import { DropScheduler } from "./bgScrollback";
+  import { resyncAnsi } from "./ansiResync";
+  import { mayDropScrollback, mayReplayOnRestore, terminalHasScrollback } from "./bgScrollbackPolicy";
   import { copyPastePrefs } from "./copyPastePrefs.svelte";
   import { toast } from "./toast.svelte";
   import { broadcast } from "./broadcast.svelte";
@@ -716,9 +718,29 @@
     if (!rendererSuspended || !term) return;
     rendererSuspended = false;
     loadRenderer();
-    // The atlas is rebuilt from scratch; force a repaint so the first frame
-    // after switching back isn't the stale DOM-rendered one.
-    try { term.refresh(0, term.rows - 1); } catch { /* best effort */ }
+    // Repaint AFTER the new renderer has had a frame to initialise.
+    //
+    // Calling refresh() synchronously here raced the addon's own setup: the
+    // WebGL addon builds its glyph atlas and canvas asynchronously, so a
+    // refresh issued in the same tick was serviced by a renderer that was not
+    // ready, and the rows written while the tab was backgrounded never made
+    // it into the new atlas. The screen then showed a mix of freshly painted
+    // and never-painted cells - text landing mid-row, box-drawing broken -
+    // even though the terminal BUFFER was perfectly correct. That is the
+    // reported corruption: the same content re-rendered later came out
+    // whole.
+    //
+    // Two frames, not one: the first lets the addon attach and size itself,
+    // the second is when a repaint can actually reach it.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!term || rendererSuspended) return;
+        try {
+          clearWebglAtlas();
+          term.refresh(0, term.rows - 1);
+        } catch { /* best effort */ }
+      });
+    });
   }
 
   // Dropping a hidden tab's scrollback is where the memory actually is.
@@ -763,8 +785,53 @@
 
   function dropScrollback() {
     if (scrollbackDropped || !term) return;
-    scrollbackDropped = true;
 
+    // Never drop while a full-screen TUI owns the terminal.
+    //
+    // Restoring works by resetting xterm and replaying the backend ring, and
+    // that ring is a byte HISTORY, not a screen state. For line-based output
+    // replaying the history reproduces the screen; for a TUI it does not.
+    // The ring is capped and trims from the front, so the ?1049h that put the
+    // terminal into the alternate screen scrolls out of it - the replay then
+    // runs the TUI's cursor positioning against the NORMAL buffer and the
+    // screen comes apart. That is the reported corruption, and no amount of
+    // sequence-level repair fixes it: the state the replay needs is simply
+    // not in the buffer any more.
+    //
+    // Skipping the drop costs nothing here: a TUI in the alternate screen has
+    // no scrollback worth reclaiming (that is what the alternate screen IS),
+    // so the memory saving this feature exists for is zero in exactly the
+    // case that breaks. Once the TUI exits, the next schedule() drops as
+    // usual.
+    if (!mayDropScrollback(term.buffer?.active?.type)) return;
+
+    // Don't trade the user's history for memory.
+    //
+    // The decision is whether this terminal holds anything ABOVE its
+    // viewport. If it does, dropping risks losing scrollback a replay cannot
+    // faithfully rebuild; if it does not - a TUI redrawing in place, which is
+    // what the memory feature was measured against - there is nothing to
+    // lose and the drop is free.
+    //
+    // An earlier version compared the terminal's line count against the
+    // backend ring's. The app's own logging killed that: the ring counts
+    // newlines in the byte stream, and a redrawing TUI grows it (303 -> 711
+    // lines) while the terminal stays flat at 69. The two numbers are not
+    // the same unit, so no margin makes the comparison sound.
+    const used = term.buffer?.active?.length ?? 0;
+    if (terminalHasScrollback(used, term.rows)) {
+      api.frontendLog(
+        `scrollback KEEP session=${sessionId} terminal=${used} lines, ` +
+        `viewport=${term.rows} rows - has history above the fold`,
+      ).catch(() => {});
+      return;
+    }
+    api.frontendLog(
+      `scrollback drop session=${sessionId} terminal=${used} lines, ` +
+      `viewport=${term.rows} rows - nothing above the fold`,
+    ).catch(() => {});
+
+    scrollbackDropped = true;
     try {
       term.options.scrollback = 0;
     } catch { /* best effort - worst case we keep the memory */ }
@@ -790,6 +857,31 @@
   function restoreScrollback() {
     if (!scrollbackDropped || !term) return;
     scrollbackDropped = false;
+
+    // A TUI may have started while the tab was in the background - the drop
+    // happened against a plain shell, so it was allowed, but by now the
+    // terminal is in the alternate screen. Resetting and replaying here would
+    // corrupt it for the same reason dropScrollback refuses to act in that
+    // state, so re-arm the buffer WITHOUT the reset+replay. The scrollback
+    // that scrolled past while backgrounded is lost, which for a full-screen
+    // TUI means nothing: it keeps no scrollback of its own.
+    if (!mayReplayOnRestore(term.buffer?.active?.type)) {
+      try {
+        term.options.scrollback = terminalPrefs.scrollback;
+      } catch { /* best effort */ }
+      return;
+    }
+
+    // The drop decision was made when the tab went away; by now the terminal
+    // may hold much more. A busy TUI can add thousands of lines while
+    // backgrounded, and reset+replay would hand back only what fits in the
+    // ring - silently shortening the history. Re-check against what is
+    // actually here now, and skip the replay if it would lose lines.
+    // No line-count check here. Setting scrollback = 0 makes xterm evict
+    // immediately, so by the time this runs the buffer is back to the
+    // viewport height and any measurement is taken AFTER the loss - the
+    // app's own logging showed every restore reporting exactly 70 lines.
+    // The decision that matters is the one at drop time.
 
     unwire();
     try {
@@ -1196,6 +1288,20 @@
       // Force-flush mode: we've waited long enough for a missing chunk that
       // we now write the held run in order regardless of gaps.
       const force = gapFrames >= GAP_FRAME_BUDGET;
+      if (force) {
+        // Writing past a gap means a partial ANSI sequence reaches xterm:
+        // a half-written escape corrupts the screen (text landing mid-row,
+        // box-drawing breaking up) rather than merely losing a character.
+        // It is supposed to be unreachable with Wails delivery, so say so
+        // loudly instead of degrading in silence - a corrupted TUI with no
+        // trace is very hard to diagnose from a screenshot.
+        const missing = pending.length > 0 ? pending[0].start - writeCum : 0;
+        console.warn(
+          `[terminal] force-flushing past a ${missing}-byte gap after ` +
+          `${gapFrames} frames (session ${sessionId}). Screen corruption ` +
+          `in a full-screen TUI is expected after this.`,
+        );
+      }
 
       const ready: Uint8Array[] = [];
       const leftover: Pending[] = [];
@@ -1278,7 +1384,14 @@
           replaying = true;
           const clearReplay = () => { replaying = false; };
           setTimeout(clearReplay, 250);
-          try { t.write(stripDECRQM(fromB64(snap.b64)), clearReplay); }
+          // resyncAnsi first: the backend ring is capped and trims from the
+          // front on a LINE boundary, which is right for shell output but
+          // arbitrary inside a full-screen TUI's escape stream. Replaying a
+          // snapshot that begins mid-sequence feeds xterm half an escape and
+          // corrupts the screen - text landing mid-row, box-drawing coming
+          // apart. Reported on a tab left in the background long enough for
+          // its scrollback to be dropped and then replayed on return.
+          try { t.write(stripDECRQM(resyncAnsi(fromB64(snap.b64))), clearReplay); }
           catch (err) { console.warn("[term] snapshot write threw", err); replaying = false; }
         }
         watermark = snap.cum ?? 0;
