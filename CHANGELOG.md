@@ -7,6 +7,17 @@ a prerelease upstream.
 
 ---
 
+## [0.87.2] - Quieter log
+
+### Fixed
+
+- **The app log no longer fills with scrollback diagnostics.** Debug
+  output left over from tracking down the v0.87.1 fix was writing a line
+  every time a tab went to the background. Removed; the fix itself is
+  unchanged.
+
+---
+
 ## [0.87.1] - Scrollback that stays where you left it
 
 ### Fixed
