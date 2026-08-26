@@ -7,7 +7,7 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.87.1] - Scrollback that stays where you left it
 
 ### Fixed
 
