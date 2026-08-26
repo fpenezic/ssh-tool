@@ -896,7 +896,7 @@ everything mobile is behind a build tag or an `isMobile` check.
     exists is a no-op.
 
 
-53. **Releasing a background tab's scrollback: five ways to get it wrong.**
+53. **Releasing a background tab's scrollback: six ways to get it wrong.**
 
     Hidden tabs holding their xterm buffer was the app's single biggest memory
     cost: 20 SSH sessions with a filled 5000-line buffer measured 1105 MB, of
@@ -939,8 +939,38 @@ everything mobile is behind a build tag or an `isMobile` check.
     vault is locked, plus wiping on exit and handling crash leftovers. The
     backend ring is already in RAM and already trusted.
 
+    6. **The replay cannot rebuild a full-screen program's history, and you
+       cannot measure that from the ring.** Replaying byte history reproduces
+       the screen for line-based output. For a TUI it does not, and lines
+       vanish from the scrollback (2026-08-26 report: a Claude Code tab left
+       in the background, screen always correct, history above it short).
+       Two comparisons were tried and both are wrong:
+       - **Ring lines vs terminal lines.** Not the same unit. The ring counts
+         newlines in the byte stream, and a TUI redrawing in place emits them
+         constantly while adding nothing to the scrollback - measured, the
+         ring grew 303 -> 711 while the terminal sat flat at 69. No margin
+         rescues that comparison.
+       - **Re-checking at restore time.** Setting `scrollback = 0` makes xterm
+         evict immediately, so by then the buffer is back to the viewport
+         height (every restore logged exactly 70 lines) and the measurement
+         happens after the loss.
+
+       Decide at DROP time on the one thing that is knowable: does the
+       terminal hold anything above its viewport? If yes, keep it. Also never
+       drop while in the alternate screen - the ring trims from the front, so
+       the `?1049h` scrolls out and the replay runs cursor positioning against
+       the normal buffer.
+
     **Measure with the buffers FULL.** An idle measurement said scrollback was
     not the cost. It is, by a wide margin.
+
+    **And instrument before theorising.** Four builds went out on four
+    different diagnoses (reorder buffer, ANSI resync, alternate screen,
+    renderer race) before logging the two numbers that decide the drop. The
+    log disproved two of those fixes in one reading. Log to the in-app viewer
+    via `FrontendLog`, not `console` - DevTools are compiled out of production
+    builds (`production && !devtools`), so a console warning never reaches the
+    person reporting the bug.
 
 
 54. **The backend ring trims in batches, on a line boundary.**
