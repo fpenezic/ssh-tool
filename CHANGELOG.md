@@ -7,6 +7,29 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **A backgrounded tab no longer loses scrollback.** Leaving a terminal
+  in the background long enough - a Claude Code session, say - and then
+  scrolling up could show earlier output missing. The visible screen was
+  always correct; only the history above it lost lines. Releasing a
+  hidden tab's scrollback to save memory is undone by replaying the
+  backend buffer, and for a full-screen program that replay could not
+  rebuild what was dropped. A tab that holds history above its viewport
+  now keeps it; one that does not - which is what the memory saving was
+  measured against - still gives it back.
+- **Local shells now use the same output delivery path as SSH.** The
+  local terminal read output in smaller chunks than the SSH path, which
+  put it on a different (and less strictly ordered) event route inside
+  the webview. This is why the scrollback loss reproduced in a local tab
+  but not over SSH to the same machine.
+- **Replayed history resyncs to a sequence boundary,** so a buffer that
+  was trimmed mid-escape no longer feeds the terminal a partial one.
+
+---
+
 ## [0.87.0] - Wireshark's dissectors, and a vault that says it is locked
 
 ### Added
