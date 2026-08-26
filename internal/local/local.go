@@ -207,7 +207,20 @@ func (s *Session) Start() {
 }
 
 func (s *Session) pumpOutput() {
-	buf := make([]byte, 4096)
+	// 8 KiB, matching the SSH pump - and deliberately, not incidentally.
+	//
+	// Wails beta.8 splits event delivery at maxInlineEventPayload (8192
+	// bytes of JSON): anything larger is parked host-side and fetched over
+	// HTTP, chained on window._wails.__eq so it stays ordered; anything
+	// smaller is spliced into the JS-eval queue. A 4 KiB read base64-encodes
+	// to ~5.5 KB and therefore took the INLINE path, while the SSH pump's
+	// 8 KiB read (~10.9 KB encoded) took the fetch path.
+	//
+	// That was the only structural difference between the two, and it lines
+	// up with the report: a Claude Code session in a LOCAL tab lost
+	// scrollback lines after being backgrounded, while the same thing over
+	// SSH to the same WSL box did not reproduce. See gotcha 49.
+	buf := make([]byte, 8192)
 	for {
 		n, err := s.pty.Read(buf)
 		if n > 0 {
