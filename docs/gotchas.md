@@ -994,6 +994,36 @@ everything mobile is behind a build tag or an `isMobile` check.
     the background release; at 256 KB the returning tab visibly lost history.
     `TestAppendStaysFastPastTheCap` guards the performance side.
 
+55. **A dynamic-inventory session's connection id is synthetic - resolve it
+    with `resolveAnyConnection`, never `resolver.ResolveConnection`.**
+
+    Dynamic entries have no `connections` row. Their sessions carry
+    `"dyn:<entryID>"` (minted by `sshConnectDynamicInternal`), so anything
+    calling `resolver.ResolveConnection` directly gets "not found" on every
+    Proxmox / Hetzner / AWS / Ansible host while saved connections work fine.
+
+    The failure is silent in the UI: the button is rendered, it is clickable,
+    the rejected promise lands in a `catch` that shows a hint nobody reads.
+    This bit three separate times before it was generalised - pane splitting,
+    Reconnect, then the whole copy group (host / user / password / ssh command)
+    plus "open in system terminal" - each fixed in place when reported, while
+    `sshConnectDynamicInternal` and the batch-exec loop had each grown their
+    own private copy of the same resolve. That is why connect and batch worked
+    and nothing else did.
+
+    `resolveAnyConnection` (app.go) takes either id shape. It rebuilds the
+    synthetic `store.Connection` and resolves it against the folder chain,
+    including `applyAnsibleVarsToConnection` - skip that and a copied ssh
+    command silently disagrees with what Connect actually does.
+
+    Deliberately NOT routed through it: `sshConnectInternal` and `LocalConnect`
+    (dynamic connects have their own path; local is gated on a real row), and
+    the probe / VNC resolvers, which already carry dedicated dynamic handling.
+
+    When adding any feature that resolves a connection id, ask first whether a
+    dynamic host reaches it. If the id can come off a live session, it can be
+    `dyn:`.
+
 ---
 
 # Archive
