@@ -632,8 +632,27 @@
 {/if}
 
 <style>
-  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 0.25rem; }
-  .head h1 { margin: 0; font-size: 1.35rem; display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+  /* This pane renders inside DetailPane's <section class="detail">, which
+     pads the sides but NOT the top - the saved-connection header supplies
+     its own top padding, so it looks right and this one used to sit flush
+     against the tab bar. Mirror that header exactly (sticky, centered,
+     underlined, same 1.1rem title) so switching between a pinned host and
+     an inventory host doesn't visibly shift the layout. */
+  .head {
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--surface0);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--base);
+    /* Pull out to the container's side padding and re-pad, so the sticky
+       background covers the full width and sits flush at top:0. */
+    margin: 0 -1.25rem 1rem;
+    padding: 1rem 1.25rem 0.5rem;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.5rem;
+  }
+  .head h1 { margin: 0; font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
   .head .ico { color: var(--teal); display: inline-flex; }
   .head-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
   .head-actions button { background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 3px; padding: 0.35rem 0.8rem; cursor: pointer; }
@@ -641,7 +660,10 @@
   .head-actions button.primary { background: var(--blue); color: var(--on-accent); border-color: var(--blue); font-weight: 600; }
   .head-actions button.primary:hover { filter: brightness(1.08); }
 
-  .sub { color: var(--subtext0); font-size: 0.85rem; margin: 0 0 1.25rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  /* The header now carries its own 1rem bottom margin and an underline, so
+     the old 1.25rem gap below this row left the provider line stranded
+     between two separators. Pull it up against the header. */
+  .sub { color: var(--subtext0); font-size: 0.85rem; margin: -0.35rem 0 1rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .sub .muted { color: var(--overlay0); }
   .sub .small { font-size: 0.75rem; }
   .sub code { background: var(--surface0); padding: 0.05rem 0.4rem; border-radius: 2px; color: var(--text); }
