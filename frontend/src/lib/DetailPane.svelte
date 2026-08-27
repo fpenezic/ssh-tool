@@ -998,7 +998,7 @@
       copiedHint = "Copied: " + cmd;
       setTimeout(() => { copiedHint = null; }, 3500);
     } catch (e: any) {
-      copiedHint = "Error: " + (e?.message ?? e);
+      copiedHint = "Error: " + errMsg(e);
       setTimeout(() => { copiedHint = null; }, 4000);
     }
   }
@@ -1010,7 +1010,7 @@
       copiedHint = "Launched system terminal";
       setTimeout(() => { copiedHint = null; }, 3000);
     } catch (e: any) {
-      copiedHint = "Launch failed: " + (e?.message ?? e);
+      copiedHint = "Launch failed: " + errMsg(e);
       setTimeout(() => { copiedHint = null; }, 5000);
     }
   }
@@ -1048,7 +1048,9 @@
       // Reveal explains a missing password in a full sentence (key auth,
       // agent, opkssh); prefixing "Error:" both stutters and overstates it -
       // a key-auth host having no password is normal, not a failure.
-      copiedHint = String(e?.message ?? e);
+      // errMsg, not e.message: Wails wraps the Go error in a JSON envelope
+      // and e.message IS that envelope, so the raw JSON reached the hint.
+      copiedHint = errMsg(e);
       setTimeout(() => { copiedHint = null; }, 5000);
     }
   }
@@ -2512,7 +2514,11 @@
     font-family: ui-monospace, monospace;
     font-size: 0.82rem;
     margin-top: 0.4rem;
-    word-break: break-all;
+    /* break-all suits a copied value (a long ssh command, a host); it
+       mangles a sentence by snapping words mid-character, and the
+       no-password explanation is prose. break-word wraps both sanely. */
+    overflow-wrap: break-word;
+    word-break: normal;
   }
   .pass-row { align-items: center; }
   /* The password field is now a PasswordInput wrapper, not a bare input. */

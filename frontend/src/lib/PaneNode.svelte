@@ -26,7 +26,7 @@
   import McpActivityPanel from "./McpActivityPanel.svelte";
   import { isMobile } from "./platform";
   import { toast } from "./toast.svelte.ts";
-  import { unwrapRaw } from "./connectErrors";
+  import { unwrapRaw, errMsg } from "./connectErrors";
 
   interface Props {
     tabId: string;
@@ -367,7 +367,7 @@
       await copyText(val, { toast: false });
       flashCopyHint(`${label} copied`);
     } catch (e: any) {
-      flashCopyHint("Copy failed: " + (e?.message ?? e));
+      flashCopyHint("Copy failed: " + errMsg(e));
     }
   }
 
@@ -381,7 +381,9 @@
       // The backend explains why in a full sentence (key auth, agent,
       // opkssh, no credential at all), so don't prefix it - "No password:
       // "foo" authenticates with an SSH key..." read like a stutter.
-      flashCopyHint(String(e?.message ?? e));
+      // errMsg, not e.message: Wails wraps the Go error in a JSON envelope
+      // and e.message IS that envelope, so the raw JSON reached the hint.
+      flashCopyHint(errMsg(e));
     }
   }
 
@@ -1028,16 +1030,18 @@
     background: var(--mantle);
     border: 1px solid var(--surface0);
     border-radius: 3px;
-    padding: 0.2rem 0.5rem;
-    font-size: 0.72rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.82rem;
     color: var(--green);
     z-index: 10;
     box-shadow: 0 2px 6px rgba(0,0,0,0.4);
     /* "copied" is two words, but the no-password explanation is a
-       sentence - cap it and wrap rather than running off the pane. */
-    max-width: min(320px, calc(100% - 12px));
+       sentence - cap it and wrap rather than running off the pane.
+       0.72rem was sized for the two-word case and left a sentence
+       genuinely hard to read against the toolbar. */
+    max-width: min(380px, calc(100% - 12px));
     white-space: normal;
-    line-height: 1.35;
+    line-height: 1.4;
   }
 
   .term-wrap {
