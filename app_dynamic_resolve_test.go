@@ -162,3 +162,56 @@ func TestNoPasswordReasonLeaksNoInternals(t *testing.T) {
 		}
 	}
 }
+
+// The dynamic detail pane only ever offered "Copy host", reading
+// entry.hostname straight off the row. Everything the saved-connection pane
+// offers (user, password, ssh command, launch) goes through these IPCs, so
+// pin that they now work on a "dyn:" id - that is what lets the dynamic pane
+// carry the same Quick actions row.
+func TestCopyInfoAndSshCommandOnDynamicEntry(t *testing.T) {
+	a := newResolveTestApp(t)
+
+	user := "ops"
+	port := uint16(2022)
+	folder, err := a.db.CreateFolder(store.NewFolder{
+		Name:     "hetzner",
+		Settings: store.InheritableSettings{Username: &user, Port: &port},
+	})
+	if err != nil {
+		t.Fatalf("create folder: %v", err)
+	}
+	if err := a.db.CreateDynamicFolder(store.DynamicFolder{
+		FolderID: folder.ID, Provider: "hetzner", Config: map[string]any{},
+	}); err != nil {
+		t.Fatalf("create dynamic folder: %v", err)
+	}
+	if err := a.db.ReplaceDynamicEntries(folder.ID, []store.DynamicEntry{{
+		ID: "e-1", FolderID: folder.ID, ExternalID: "srv/1",
+		Name: "auth-01", Hostname: "10.239.248.62", Kind: "server",
+		Raw: json.RawMessage(`{}`),
+	}}); err != nil {
+		t.Fatalf("replace entries: %v", err)
+	}
+
+	info, err := a.ConnectionCopyInfo("dyn:e-1")
+	if err != nil {
+		t.Fatalf("ConnectionCopyInfo: %v", err)
+	}
+	if info.Hostname != "10.239.248.62" {
+		t.Errorf("hostname = %q", info.Hostname)
+	}
+	if info.Username != "ops" {
+		t.Errorf("username = %q, want ops (inherited)", info.Username)
+	}
+	if info.Port != 2022 {
+		t.Errorf("port = %d, want 2022 (inherited)", info.Port)
+	}
+	// The ssh command has to carry the inherited user and port, or the
+	// copied line would not reproduce what Connect actually does.
+	if !strings.Contains(info.SSHCommand, "ops@10.239.248.62") {
+		t.Errorf("ssh command missing user@host: %q", info.SSHCommand)
+	}
+	if !strings.Contains(info.SSHCommand, "-p 2022") {
+		t.Errorf("ssh command missing inherited port: %q", info.SSHCommand)
+	}
+}

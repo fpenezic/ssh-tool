@@ -2,10 +2,13 @@
   import { tree, credentials, selection, sessions, paneTabs, view } from "./stores.svelte";
   import { connectionActions, withTakeover } from "./connectionActions.svelte";
   import { api } from "./api";
-  import { IconGlobe, dynamicEntryIcon } from "./iconMap";
-  import { explain as explainConnectError, unwrapRaw as unwrapConnectErr } from "./connectErrors";
+  import {
+    IconGlobe, dynamicEntryIcon,
+    IconHost, IconUser, IconLock, IconClipboardCopy, IconTerminal,
+  } from "./iconMap";
+  import { explain as explainConnectError, unwrapRaw as unwrapConnectErr, errMsg } from "./connectErrors";
   import { toast } from "./toast.svelte";
-  import { copyText } from "./clipboard";
+  import { copyText, copySensitive, writeClipboard } from "./clipboard";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import PasswordInput from "./PasswordInput.svelte";
@@ -319,6 +322,56 @@
     try { await copyText(entry.hostname, { label: "Hostname" }); } catch {}
   }
 
+  // Quick actions, mirroring the saved-connection pane. These resolve the
+  // synthetic "dyn:<entryID>" backend-side (resolveAnyConnection), so the
+  // username, password and ssh command come off the same folder cascade an
+  // actual Connect uses - not off the raw inventory row, which only knows a
+  // hostname. Before this the pane offered "Copy host" alone.
+  let actionHint = $state<string | null>(null);
+  let actionHintTimer: ReturnType<typeof setTimeout> | null = null;
+  function flashAction(msg: string, ms = 3500) {
+    actionHint = msg;
+    if (actionHintTimer) clearTimeout(actionHintTimer);
+    actionHintTimer = setTimeout(() => { actionHint = null; }, ms);
+  }
+
+  async function copyResolvedField(field: "username" | "password" | "ssh") {
+    if (!entry) return;
+    try {
+      if (field === "password") {
+        const pw = await api.connectionRevealPassword(synthConnId);
+        await copySensitive(pw, { toast: false });
+        flashAction("Password copied (clears in 30s)");
+        return;
+      }
+      if (field === "ssh") {
+        const cmd = await api.sshSystemCommand(synthConnId);
+        await writeClipboard(cmd);
+        flashAction("Copied: " + cmd);
+        return;
+      }
+      const info = await api.connectionCopyInfo(synthConnId);
+      if (!info.username) { flashAction("No username resolved - it inherits from the folder"); return; }
+      await writeClipboard(info.username);
+      flashAction("Username copied");
+    } catch (e: any) {
+      // errMsg, not e.message: Wails wraps the Go error in a JSON envelope.
+      // The backend explains a missing password in a full sentence, so this
+      // is shown unprefixed.
+      flashAction(errMsg(e), 5000);
+    }
+  }
+
+  async function launchInSystemTerminal() {
+    if (!entry) return;
+    try {
+      await api.sshLaunchInSystemTerminal(synthConnId);
+      flashAction("Launched system terminal", 3000);
+    } catch (e: any) {
+      flashAction("Launch failed: " + errMsg(e), 5000);
+    }
+  }
+
   async function refreshFolder() {
     try {
       await api.dynamicFolderRefreshNow(folderId);
@@ -409,7 +462,6 @@
       >
         {showOverride ? "✕" : "Use different credential…"}
       </button>
-      <button onclick={copyHost} title="Copy hostname">Copy host</button>
       <button onclick={refreshFolder} title="Refresh inventory">Refresh</button>
       <button
         onclick={pinAsConnection}
@@ -510,6 +562,29 @@
     {/each}
   </section>
 
+  <section class="quick-actions">
+    <h3>Quick actions</h3>
+    <div class="actions-row">
+      <button onclick={copyHost} title="Copy host to clipboard">
+        <IconHost size={13} /> Host
+      </button>
+      <button onclick={() => copyResolvedField("username")} title="Copy the username this entry inherits">
+        <IconUser size={13} /> User
+      </button>
+      <button onclick={() => copyResolvedField("password")} title="Copy password (clears clipboard after 30s)">
+        <IconLock size={13} /> Password
+      </button>
+      <span class="actions-sep" aria-hidden="true"></span>
+      <button onclick={() => copyResolvedField("ssh")} title="Copy `ssh …` invocation to clipboard">
+        <IconClipboardCopy size={13} /> ssh command
+      </button>
+      <button onclick={launchInSystemTerminal} title="Open this host in your OS terminal (Windows Terminal / Terminal.app / gnome-terminal / …)">
+        <IconTerminal size={13} /> Launch in system terminal
+      </button>
+    </div>
+    {#if actionHint}<div class="ok-hint">{actionHint}</div>{/if}
+  </section>
+
   {#if entry.tags.length > 0}
     <section class="tags">
       <h3>{provider === "hetzner" ? "Labels" : "Tags"}</h3>
@@ -606,6 +681,40 @@
   .fact-value { color: var(--text); font-size: 0.9rem; word-break: break-all; }
   .fact-value.mono { font-family: ui-monospace, monospace; font-size: 0.85rem; }
 
+  /* Quick actions mirror the saved-connection pane, down to the icon
+     tinting, so the two panes read as the same app rather than two
+     different ones. Heading matches the .tags/.usage h3 style here
+     (DetailPane uses h2 for its sections). */
+  .quick-actions { margin-bottom: 1.5rem; }
+  .quick-actions h3 { margin: 0 0 0.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--subtext0); letter-spacing: 0.05em; }
+  .actions-row { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+  .actions-row > button {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    background: var(--surface0); color: var(--text);
+    border: 1px solid var(--surface1); border-radius: 3px;
+    padding: 0.35rem 0.7rem; cursor: pointer;
+  }
+  .actions-row > button:hover { background: var(--surface1); }
+  .actions-row > button:nth-child(1) :global(svg) { color: var(--blue); }
+  .actions-row > button:nth-child(2) :global(svg) { color: var(--mauve); }
+  .actions-row > button:nth-child(3) :global(svg) { color: var(--peach); }
+  .actions-row > button:nth-child(5) :global(svg) { color: var(--green); }
+  .actions-sep {
+    display: inline-block; width: 1px; height: 1.4em;
+    background: var(--surface0); margin: 0 0.3rem;
+  }
+  .ok-hint {
+    color: var(--green); background: var(--crust);
+    padding: 0.45rem 0.75rem; border-radius: 4px;
+    border-left: 3px solid var(--green);
+    font-family: ui-monospace, monospace;
+    font-size: 0.82rem;
+    margin-top: 0.5rem;
+    /* The no-password explanation is a sentence; break-all would snap
+       words mid-character (see DetailPane's .ok-hint). */
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
   .tags { margin-bottom: 1.5rem; }
   .tags h3 { margin: 0 0 0.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--subtext0); letter-spacing: 0.05em; }
   .tag-row { display: flex; flex-wrap: wrap; gap: 0.35rem; }
