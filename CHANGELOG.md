@@ -7,6 +7,46 @@ a prerelease upstream.
 
 ---
 
+## [0.88.0] - Dynamic hosts, fully wired
+
+### Added
+
+- **The dynamic host pane now has the same Quick actions as a saved
+  connection.** Host, user, password, ssh command and Launch in system
+  terminal, instead of the lone Copy host button it had before. The
+  username, password and ssh command resolve through the folder cascade,
+  so a copied ssh line reproduces what Connect actually does rather than
+  guessing from the inventory row.
+
+### Fixed
+
+- **The copy buttons work on dynamic inventory hosts.** Copy host, user,
+  password and ssh command, plus Launch in system terminal, silently did
+  nothing on any host that came from Proxmox, Hetzner, AWS or any other
+  inventory provider - the buttons were visible and clickable and simply
+  had no effect. They resolve the pane's connection, and a dynamic host
+  has no saved connection row to resolve. Splitting and reconnecting a
+  dynamic pane had been fixed the same way before; this covers the rest.
+
+- **"No password" now explains itself.** Copying a password from a
+  key-authenticated host answered `credential is not a password
+  (kind=key)`. It now names the auth method - SSH key, agent, opkssh
+  certificate, API token - so the message reads as information rather
+  than a malfunction, which is what it always was: pressing the button on
+  a key-auth host is a reasonable thing to do.
+
+- **Error hints no longer show raw JSON.** Some copy hints displayed the
+  internal `{"message":...,"kind":"RuntimeError"}` envelope instead of
+  the message inside it. The hints are also larger and wrap properly now
+  that they carry a sentence rather than the word "copied".
+
+- **The dynamic host header lines up with the connection header.** It sat
+  flush against the tab bar with its buttons riding the top of the row,
+  while the saved-connection pane had proper spacing and a sticky,
+  underlined header. Both now look the same.
+
+---
+
 ## [0.87.2] - Quieter log
 
 ### Fixed
