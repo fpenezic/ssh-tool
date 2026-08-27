@@ -1430,7 +1430,7 @@ func (a *App) ConnectionsTouch(id string) error {
 }
 
 func (a *App) ConnectionsResolve(id string) (*store.ResolvedSettings, error) {
-	return resolver.ResolveConnection(a.db, id)
+	return a.resolveAnyConnection(id)
 }
 
 // ----- Credentials -----
@@ -4277,7 +4277,7 @@ func (a *App) LaunchExternalTerminal(connectionID, kind string) error {
 	if runtime.GOOS != "windows" {
 		return fmt.Errorf("external terminal launch is only implemented on Windows for now")
 	}
-	settings, err := resolver.ResolveConnection(a.db, connectionID)
+	settings, err := a.resolveAnyConnection(connectionID)
 	if err != nil {
 		return fmt.Errorf("resolve: %w", err)
 	}
@@ -5550,6 +5550,69 @@ func (a *App) spawnReconnect(oldSessionID, connectionID string) {
 	go a.runReconnect(oldSessionID, connectionID, cancel)
 }
 
+// resolveAnyConnection resolves either a saved-connection id or the synthetic
+// "dyn:<entryID>" a dynamic-inventory session carries, into the same
+// ResolvedSettings the connect path uses.
+//
+// Dynamic entries have no `connections` row, so resolver.ResolveConnection
+// returns "not found" for them. Every caller that reached for it directly
+// therefore failed on dynamic hosts while saved connections worked: the pane
+// toolbar's copy host / username / password / ssh-command buttons and "open in
+// system terminal" all silently did nothing. sshConnectDynamicInternal and the
+// batch-exec loop had each grown their own private copy of this resolve, which
+// is why connect and batch worked and nothing else did.
+//
+// The entry row knows its folder, which is all the inherit cascade needs: build
+// the same synthetic connection those two paths build, resolve it against the
+// folder chain, and fall back to the credential's default_username exactly like
+// the connect path does.
+func (a *App) resolveAnyConnection(connectionID string) (*store.ResolvedSettings, error) {
+	entryID, isDyn := strings.CutPrefix(connectionID, "dyn:")
+	if !isDyn {
+		return resolver.ResolveConnection(a.db, connectionID)
+	}
+	entry, err := a.db.GetDynamicEntry(entryID)
+	if err != nil {
+		return nil, err
+	}
+	if entry == nil {
+		// An inventory refresh can drop the host (VM deleted, filtered out)
+		// while its session is still open. Say so rather than "not found".
+		return nil, fmt.Errorf("dynamic entry is gone from the inventory - refresh the folder")
+	}
+	folders, err := a.db.ListFolders()
+	if err != nil {
+		return nil, err
+	}
+	folderRef := entry.FolderID
+	synthetic := store.Connection{
+		ID:        connectionID,
+		FolderID:  &folderRef,
+		Name:      entry.Name,
+		Hostname:  entry.Hostname,
+		Overrides: store.InheritableSettings{},
+	}
+	// Ansible-provider entries keep ansible_user / ansible_port / jump hops in
+	// Raw; the connect path lifts them into the synthetic overrides before
+	// resolving, so the copied host/user/ssh command has to do the same or it
+	// would disagree with what an actual connect uses.
+	jumpCred := ""
+	if df, err := a.db.GetDynamicFolder(entry.FolderID); err == nil && df != nil {
+		if s, ok := df.Config["jump_credential_id"].(string); ok {
+			jumpCred = s
+		}
+	}
+	applyAnsibleVarsToConnection(&synthetic, entry.Raw, jumpCred)
+
+	s := resolver.ResolveWith(synthetic, folders)
+	if s.Username == nil && s.AuthRef != nil {
+		if cred, err2 := a.db.GetCredential(*s.AuthRef); err2 == nil && cred.DefaultUsername != nil {
+			s.Username = cred.DefaultUsername
+		}
+	}
+	return &s, nil
+}
+
 // reconnectConnect opens a fresh session for a connection id, transparently
 // handling dynamic-inventory ids.
 //
@@ -5696,7 +5759,7 @@ func (a *App) SshCancelReconnect(oldSessionID string) {
 // We don't include -i KEYFILE because credentials live in our vault,
 // not as filesystem keys; opkssh certs likewise.
 func (a *App) sshSystemArgv(connectionID string) ([]string, error) {
-	s, err := resolver.ResolveConnection(a.db, connectionID)
+	s, err := a.resolveAnyConnection(connectionID)
 	if err != nil {
 		return nil, err
 	}
@@ -6416,7 +6479,7 @@ func parseSemver(s string) ([3]int, bool) {
 // Use cases: pasting a sudo password into an open terminal without
 // flipping to the credentials tab.
 func (a *App) ConnectionRevealPassword(connectionID string) (string, error) {
-	s, err := resolver.ResolveConnection(a.db, connectionID)
+	s, err := a.resolveAnyConnection(connectionID)
 	if err != nil {
 		return "", err
 	}
@@ -6470,7 +6533,7 @@ type ConnectionCopyInfo struct {
 }
 
 func (a *App) ConnectionCopyInfo(connectionID string) (*ConnectionCopyInfo, error) {
-	s, err := resolver.ResolveConnection(a.db, connectionID)
+	s, err := a.resolveAnyConnection(connectionID)
 	if err != nil {
 		return nil, err
 	}
