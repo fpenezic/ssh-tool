@@ -1045,8 +1045,11 @@
       }
       setTimeout(() => { copiedHint = null; }, 3000);
     } catch (e: any) {
-      copiedHint = "Error: " + (e?.message ?? e);
-      setTimeout(() => { copiedHint = null; }, 4000);
+      // Reveal explains a missing password in a full sentence (key auth,
+      // agent, opkssh); prefixing "Error:" both stutters and overstates it -
+      // a key-auth host having no password is normal, not a failure.
+      copiedHint = String(e?.message ?? e);
+      setTimeout(() => { copiedHint = null; }, 5000);
     }
   }
 

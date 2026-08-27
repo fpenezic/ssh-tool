@@ -6471,6 +6471,32 @@ func parseSemver(s string) ([3]int, bool) {
 	return out, true
 }
 
+// noPasswordReason explains, in the user's terms, why a credential has no
+// password to copy. The copy-password button is shown on every SSH pane
+// (we can't know the auth kind without resolving), so hitting it on a
+// key-auth host is a normal thing to do, not a mistake - it used to answer
+// "credential is not a password (kind=key)", which leaks an internal enum
+// and doesn't say what the connection actually uses.
+func noPasswordReason(kind store.CredentialKind, name string) string {
+	cred := "this connection"
+	if name != "" {
+		cred = strconv.Quote(name)
+	}
+	switch kind {
+	case store.CredKey:
+		return cred + " authenticates with an SSH key, so there is no password to copy"
+	case store.CredAgent:
+		return cred + " authenticates through your SSH agent, so there is no password to copy"
+	case store.CredOpkssh:
+		return cred + " authenticates with an opkssh certificate, so there is no password to copy"
+	case store.CredAPIToken:
+		return cred + " is an API token (used by inventory providers, not for SSH login), so there is no password to copy"
+	case store.CredVault:
+		return cred + " resolves its secret at connect time, so there is no password to copy"
+	}
+	return cred + " has no password to copy"
+}
+
 // ConnectionRevealPassword resolves a connection -> credential -> vault
 // and returns the plaintext password for the resolved credential. Only
 // works on kind=password creds; other kinds return an error so the UI
@@ -6484,14 +6510,14 @@ func (a *App) ConnectionRevealPassword(connectionID string) (string, error) {
 		return "", err
 	}
 	if s.AuthRef == nil || *s.AuthRef == "" {
-		return "", fmt.Errorf("connection has no credential")
+		return "", fmt.Errorf("this connection has no credential set - nothing to copy")
 	}
 	c, err := a.db.GetCredential(*s.AuthRef)
 	if err != nil {
 		return "", err
 	}
 	if c.Kind != store.CredPassword {
-		return "", fmt.Errorf("credential is not a password (kind=%s)", c.Kind)
+		return "", fmt.Errorf("%s", noPasswordReason(c.Kind, c.Name))
 	}
 	// External-backed password credentials (KeePass / Bitwarden / Infisical) hold
 	// no vault secret - the value lives in the .kdbx or on the server and is

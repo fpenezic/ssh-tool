@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ssh-tool/internal/store"
@@ -112,5 +113,52 @@ func TestResolveAnyConnectionSavedConnection(t *testing.T) {
 	}
 	if got.Username == nil || *got.Username != "root" {
 		t.Errorf("username = %v, want root", got.Username)
+	}
+}
+
+// The copy-password button sits on every SSH pane - we can't know the auth
+// kind without resolving - so pressing it on a key-auth host is a normal
+// thing to do. It used to answer "credential is not a password (kind=key)",
+// which leaks an internal enum and never says what the host actually uses.
+func TestNoPasswordReasonIsHumanReadable(t *testing.T) {
+	cases := []struct {
+		kind store.CredentialKind
+		name string
+		want string
+	}{
+		{store.CredKey, "prod key", `"prod key" authenticates with an SSH key, so there is no password to copy`},
+		{store.CredAgent, "agent", `"agent" authenticates through your SSH agent, so there is no password to copy`},
+		{store.CredOpkssh, "sso", `"sso" authenticates with an opkssh certificate, so there is no password to copy`},
+		{store.CredAPIToken, "pve", `"pve" is an API token (used by inventory providers, not for SSH login), so there is no password to copy`},
+		// An unnamed credential must still read as a sentence.
+		{store.CredKey, "", "this connection authenticates with an SSH key, so there is no password to copy"},
+	}
+	for _, tc := range cases {
+		got := noPasswordReason(tc.kind, tc.name)
+		if got != tc.want {
+			t.Errorf("noPasswordReason(%s, %q):\n got  %q\n want %q", tc.kind, tc.name, got, tc.want)
+		}
+	}
+}
+
+// Whatever we add later, the message must never expose the internal enum
+// the way the old "credential is not a password (kind=key)" did. Matching
+// on the kind string itself would be wrong - "key" and "agent" are ordinary
+// English words the prose is entitled to use - so this pins the leak shape.
+func TestNoPasswordReasonLeaksNoInternals(t *testing.T) {
+	kinds := []store.CredentialKind{
+		store.CredKey, store.CredAgent, store.CredOpkssh,
+		store.CredVault, store.CredAPIToken, store.CredentialKind("something-new"),
+	}
+	for _, k := range kinds {
+		msg := noPasswordReason(k, "cred")
+		if strings.Contains(msg, "kind=") {
+			t.Errorf("noPasswordReason(%s) leaks the internal kind: %q", k, msg)
+		}
+		// Every kind, including one added after this test was written,
+		// has to produce a sentence rather than an empty hint.
+		if !strings.HasSuffix(msg, "no password to copy") {
+			t.Errorf("noPasswordReason(%s) is not a readable sentence: %q", k, msg)
+		}
 	}
 }

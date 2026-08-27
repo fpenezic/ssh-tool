@@ -378,7 +378,10 @@
       await copySensitive(pw, { toast: false });
       flashCopyHint("Password copied (clears in 30s)");
     } catch (e: any) {
-      flashCopyHint("No password: " + (e?.message ?? e));
+      // The backend explains why in a full sentence (key auth, agent,
+      // opkssh, no credential at all), so don't prefix it - "No password:
+      // "foo" authenticates with an SSH key..." read like a stutter.
+      flashCopyHint(String(e?.message ?? e));
     }
   }
 
@@ -1030,6 +1033,11 @@
     color: var(--green);
     z-index: 10;
     box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    /* "copied" is two words, but the no-password explanation is a
+       sentence - cap it and wrap rather than running off the pane. */
+    max-width: min(320px, calc(100% - 12px));
+    white-space: normal;
+    line-height: 1.35;
   }
 
   .term-wrap {
