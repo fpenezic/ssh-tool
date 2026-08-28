@@ -1669,6 +1669,19 @@ func (a *App) AuditList(in AuditListInput) ([]store.AuditEvent, error) {
 	})
 }
 
+// AuditStats aggregates the audit log for the Insights panel.
+// windowDays <= 0 means all time. Aggregation happens in the store
+// over every row in the window - deliberately not over an AuditList
+// page, which is capped and would silently report on the last N
+// events while the UI labels it a date range.
+func (a *App) AuditStats(windowDays int) (*store.AuditStats, error) {
+	var since int64
+	if windowDays > 0 {
+		since = time.Now().AddDate(0, 0, -windowDays).Unix()
+	}
+	return a.db.AuditStats(since)
+}
+
 // AuditPurge drops all rows older than `olderThanDays`. Returns the
 // number of rows removed.
 func (a *App) AuditPurge(olderThanDays int) (int64, error) {

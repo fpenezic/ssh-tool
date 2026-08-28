@@ -428,6 +428,39 @@ export interface AuditEvent {
   metadata: Record<string, string>;
 }
 
+export interface AuditCount {
+  key: string;
+  count: number;
+}
+
+export interface AuditHostStat {
+  host: string;
+  name: string;
+  connects: number;
+  seconds: number;
+  /** Connects with no matching disconnect: still open, or the app died. */
+  unpaired: number;
+  lastTs: number;
+}
+
+export interface AuditStats {
+  since: number;
+  until: number;
+  total: number;
+  firstTs: number;
+  actions: AuditCount[];
+  hosts: AuditHostStat[];
+  /** key = YYYY-MM-DD in local time. */
+  daily: AuditCount[];
+  /** 24 buckets, local time. */
+  hourly: number[];
+  failures: AuditCount[];
+  connects: number;
+  sessionSecs: number;
+  unpaired: number;
+  longestSecs: number;
+}
+
 export interface VaultStatus {
   state: "not_initialized" | "locked" | "unlocked";
   auto_unlock_available?: boolean;
@@ -769,6 +802,7 @@ export const api = {
   auditList: (action: string, limit: number, before: number) =>
     G.AuditList({ action, limit, before }) as unknown as Promise<AuditEvent[]>,
   auditPurge: (olderThanDays: number) => G.AuditPurge(olderThanDays) as unknown as Promise<number>,
+  auditStats: (windowDays: number) => nn(G.AuditStats(windowDays)) as Promise<AuditStats>,
 
   backupsCreate: (passphrase: string, destPath?: string) =>
     nn(G.BackupsCreate({ passphrase, dest_path: destPath ?? "" })) as Promise<BackupCreateResult>,

@@ -2010,8 +2010,121 @@
     URL.revokeObjectURL(url);
   }
 
+  // ----- Audit insights -----
+  //
+  // Aggregates come from the backend over the whole audit.db for the
+  // chosen window. They are deliberately NOT derived from
+  // auditEvents: that array is one capped page (auditLimit), so
+  // summing it would report "the last 200 events" under a "last 30
+  // days" heading.
+  let statsWindow = $state(30); // days; 0 = all time
+  let stats = $state<import("./api").AuditStats | null>(null);
+  let statsBusy = $state(false);
+  let statsError = $state<string | null>(null);
+  let statsOpen = $state(true);
+
+  const STAT_WINDOWS: { label: string; days: number }[] = [
+    { label: "7d", days: 7 },
+    { label: "30d", days: 30 },
+    { label: "90d", days: 90 },
+    { label: "All", days: 0 },
+  ];
+
+  async function loadStats() {
+    statsBusy = true;
+    statsError = null;
+    try {
+      stats = await api.auditStats(statsWindow);
+    } catch (e: any) {
+      statsError = errMsg(e);
+    } finally {
+      statsBusy = false;
+    }
+  }
+
+  function setStatsWindow(days: number) {
+    if (statsWindow === days) return;
+    statsWindow = days;
+    loadStats();
+  }
+
+  // Compact duration: the panel shows totals that range from seconds
+  // to hundreds of hours, so a fixed unit would be unreadable at one
+  // end or the other.
+  function fmtDur(secs: number): string {
+    if (!secs || secs < 0) return "0m";
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    if (h >= 24) {
+      const d = Math.floor(h / 24);
+      return `${d}d ${h % 24}h`;
+    }
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m`;
+    return `${secs}s`;
+  }
+
+  function fmtDay(key: string): string {
+    const [, mo, da] = key.split("-");
+    return `${da}.${mo}.`;
+  }
+
+  // Average is over PAIRED sessions only. Dividing the total by every
+  // connect would count a session that is still open (no disconnect
+  // yet, so no duration) as zero minutes and drag the mean down.
+  const avgSessionSecs = $derived.by(() => {
+    if (!stats) return 0;
+    const paired = stats.connects - stats.unpaired;
+    if (paired <= 0) return 0;
+    return Math.round(stats.sessionSecs / paired);
+  });
+
+  const topHosts = $derived(stats ? stats.hosts.slice(0, 8) : []);
+  const topActions = $derived(stats ? stats.actions.slice(0, 10) : []);
+  const maxHostSecs = $derived(
+    topHosts.reduce((m, h) => Math.max(m, h.seconds), 0) || 1,
+  );
+  const maxActionCount = $derived(
+    topActions.reduce((m, a) => Math.max(m, a.count), 0) || 1,
+  );
+  const failureTotal = $derived(
+    stats ? stats.failures.reduce((n, f) => n + f.count, 0) : 0,
+  );
+
+  // Trailing slice of the daily series, zero-filled so gaps read as
+  // quiet days rather than being collapsed out of the chart.
+  const dailySeries = $derived.by(() => {
+    if (!stats) return [] as { key: string; count: number }[];
+    const span = statsWindow > 0 ? Math.min(statsWindow, 90) : 30;
+    const have = new Map(stats.daily.map((d) => [d.key, d.count]));
+    const out: { key: string; count: number }[] = [];
+    const today = new Date();
+    for (let i = span - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      out.push({ key, count: have.get(key) ?? 0 });
+    }
+    return out;
+  });
+  const maxDaily = $derived(
+    dailySeries.reduce((m, d) => Math.max(m, d.count), 0) || 1,
+  );
+  const maxHourly = $derived(
+    stats ? stats.hourly.reduce((m, h) => Math.max(m, h), 0) || 1 : 1,
+  );
+
+  // "No events in this window, but the log is not empty" is a
+  // different message from "nothing has ever happened", and only the
+  // first has an obvious fix (widen the window).
+  const emptyWindow = $derived(!!stats && stats.total === 0);
+
   $effect(() => {
     if (activeSection === "audit") loadAudit();
+  });
+
+  $effect(() => {
+    if (activeSection === "audit" && stats === null && !statsBusy) loadStats();
   });
 
   // ----- Backup & restore -----
@@ -3652,6 +3765,179 @@
       connect to that host yesterday" and for shipping evidence to
       a compliance review.
     </p>
+    <section class="insights">
+      <header class="ins-head">
+        <button
+          class="ins-toggle"
+          onclick={() => (statsOpen = !statsOpen)}
+          aria-expanded={statsOpen}
+        >
+          <span class="chev" class:open={statsOpen}>&#9656;</span>
+          Insights
+        </button>
+        <div class="ins-windows">
+          {#each STAT_WINDOWS as w (w.days)}
+            <button
+              class="win"
+              class:active={statsWindow === w.days}
+              onclick={() => setStatsWindow(w.days)}
+              disabled={statsBusy}
+            >{w.label}</button>
+          {/each}
+          <button class="win" onclick={loadStats} disabled={statsBusy} title="Recompute">
+            {statsBusy ? "…" : "\u21bb"}
+          </button>
+        </div>
+      </header>
+
+      {#if statsOpen}
+        {#if statsError}
+          <div class="err">{statsError}</div>
+        {:else if !stats}
+          <p class="hint">Computing…</p>
+        {:else if emptyWindow}
+          <p class="hint">
+            No events in this window.
+            {#if statsWindow > 0}Try a wider range.{/if}
+          </p>
+        {:else}
+          <div class="tiles">
+            <div class="tile">
+              <span class="tv">{stats.total.toLocaleString()}</span>
+              <span class="tl">events</span>
+            </div>
+            <div class="tile">
+              <span class="tv">{stats.connects.toLocaleString()}</span>
+              <span class="tl">SSH connects</span>
+            </div>
+            <div class="tile">
+              <span class="tv">{fmtDur(stats.sessionSecs)}</span>
+              <span class="tl">time connected</span>
+            </div>
+            <div class="tile">
+              <span class="tv">{fmtDur(avgSessionSecs)}</span>
+              <span class="tl">avg session</span>
+            </div>
+            <div class="tile">
+              <span class="tv">{fmtDur(stats.longestSecs)}</span>
+              <span class="tl">longest</span>
+            </div>
+            <div class="tile" class:warn={failureTotal > 0}>
+              <span class="tv">{failureTotal.toLocaleString()}</span>
+              <span class="tl">failures</span>
+            </div>
+          </div>
+
+          {#if stats.unpaired > 0}
+            <p class="hint sub-note">
+              {stats.unpaired}
+              {stats.unpaired === 1 ? "connect has" : "connects have"}
+              no matching disconnect - still open, or the app closed
+              before it was recorded. They count as connects but add
+              no time, so the totals above are a lower bound.
+            </p>
+          {/if}
+
+          <div class="charts">
+            <div class="chart">
+              <h4>Activity</h4>
+              <div class="spark" role="img" aria-label="Events per day">
+                {#each dailySeries as d (d.key)}
+                  <div
+                    class="bar"
+                    class:zero={d.count === 0}
+                    style="height:{Math.max(2, (d.count / maxDaily) * 100)}%"
+                    title="{d.key}: {d.count} event{d.count === 1 ? '' : 's'}"
+                  ></div>
+                {/each}
+              </div>
+              <div class="axis">
+                <span>{dailySeries.length ? fmtDay(dailySeries[0].key) : ""}</span>
+                <span>{dailySeries.length ? fmtDay(dailySeries[dailySeries.length - 1].key) : ""}</span>
+              </div>
+            </div>
+
+            <div class="chart">
+              <h4>By hour</h4>
+              <div class="spark hours" role="img" aria-label="Events by hour of day">
+                {#each stats.hourly as h, i (i)}
+                  <div
+                    class="bar hour"
+                    class:zero={h === 0}
+                    style="height:{Math.max(2, (h / maxHourly) * 100)}%"
+                    title="{String(i).padStart(2, '0')}:00 - {h} event{h === 1 ? '' : 's'}"
+                  ></div>
+                {/each}
+              </div>
+              <div class="axis">
+                <span>00</span><span>12</span><span>23</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="lists">
+            <div class="lst">
+              <h4>Top hosts</h4>
+              {#if topHosts.length === 0}
+                <p class="hint">No SSH connects in this window.</p>
+              {:else}
+                {#each topHosts as h (h.host)}
+                  <div class="lrow">
+                    <span class="lname" title={h.name ? `${h.name} (${h.host})` : h.host}>
+                      {h.name || h.host}
+                    </span>
+                    <span class="ltrack">
+                      <span class="lfill" style="width:{(h.seconds / maxHostSecs) * 100}%"></span>
+                    </span>
+                    <span class="lval">
+                      {fmtDur(h.seconds)}
+                      <span class="lsub">{h.connects}x</span>
+                    </span>
+                  </div>
+                {/each}
+              {/if}
+            </div>
+
+            <div class="lst">
+              <h4>Top actions</h4>
+              {#each topActions as a (a.key)}
+                <div class="lrow">
+                  <button
+                    class="lname link"
+                    title="Filter the table by {a.key}"
+                    onclick={() => (auditFilter = a.key)}
+                  >{a.key}</button>
+                  <span class="ltrack">
+                    <span
+                      class="lfill"
+                      class:bad={a.key.endsWith(".failed") || a.key === "share.violation" || a.key === "share.deny"}
+                      style="width:{(a.count / maxActionCount) * 100}%"
+                    ></span>
+                  </span>
+                  <span class="lval">{a.count}</span>
+                </div>
+              {/each}
+            </div>
+          </div>
+
+          {#if stats.failures.length > 0}
+            <div class="fails">
+              <h4>Failures and denials</h4>
+              <div class="chips">
+                {#each stats.failures as f (f.key)}
+                  <button
+                    class="chip bad"
+                    title="Filter the table by {f.key}"
+                    onclick={() => (auditFilter = f.key)}
+                  >{f.key} <b>{f.count}</b></button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+        {/if}
+      {/if}
+    </section>
+
     <div class="row" style="gap:0.5rem; flex-wrap:wrap">
       <label class="num" style="flex:1; min-width:14rem">
         <span>Filter</span>
@@ -5742,6 +6028,203 @@
     border-radius: 3px;
     font-size: 0.78rem;
   }
+  /* ----- Audit insights ----- */
+  .insights {
+    margin: 0.9rem 0 1.1rem;
+    padding: 0.8rem 0.9rem;
+    background: var(--mantle);
+    border: 1px solid var(--surface0);
+    border-radius: 6px;
+  }
+  .ins-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .ins-toggle {
+    background: transparent;
+    padding: 0;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .ins-toggle:hover { background: transparent; color: var(--blue); }
+  .chev {
+    display: inline-block;
+    transition: transform 0.12s ease;
+    color: var(--overlay1);
+    font-size: 0.8rem;
+  }
+  .chev.open { transform: rotate(90deg); }
+  .ins-windows { display: flex; gap: 0.25rem; }
+  .win {
+    padding: 0.2rem 0.55rem;
+    font-size: 0.78rem;
+    background: var(--surface0);
+    color: var(--subtext1);
+    border-radius: 3px;
+  }
+  .win:hover { background: var(--surface1); color: var(--text); }
+  .win.active {
+    background: var(--blue);
+    color: var(--on-accent);
+    font-weight: 600;
+  }
+
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+    gap: 0.5rem;
+    margin-top: 0.8rem;
+  }
+  .tile {
+    background: var(--crust);
+    border: 1px solid var(--surface0);
+    border-radius: 5px;
+    padding: 0.55rem 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .tile.warn { border-color: var(--red); }
+  .tile.warn .tv { color: var(--red); }
+  .tv {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .tl {
+    font-size: 0.74rem;
+    color: var(--subtext0);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .sub-note { margin-top: 0.6rem; font-size: 0.82rem; }
+
+  .charts {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 0.9rem;
+    margin-top: 0.9rem;
+  }
+  @media (max-width: 720px) {
+    .charts { grid-template-columns: 1fr; }
+  }
+  .chart h4,
+  .lst h4,
+  .fails h4 {
+    margin: 0 0 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--subtext1);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .spark {
+    display: flex;
+    align-items: flex-end;
+    gap: 1px;
+    height: 62px;
+    padding: 0.3rem 0.4rem;
+    background: var(--crust);
+    border: 1px solid var(--surface0);
+    border-radius: 5px;
+  }
+  .spark.hours { gap: 2px; }
+  .bar {
+    flex: 1;
+    min-width: 2px;
+    background: var(--blue);
+    border-radius: 1px 1px 0 0;
+  }
+  /* A quiet day is a real data point, so it keeps a visible stub
+     rather than vanishing and shifting the dates either side. */
+  .bar.zero { background: var(--surface1); }
+  .bar.hour { background: var(--mauve); }
+  .bar.hour.zero { background: var(--surface1); }
+  .axis {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: var(--subtext0);
+    margin-top: 0.2rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .lists {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.9rem;
+    margin-top: 0.9rem;
+  }
+  @media (max-width: 720px) {
+    .lists { grid-template-columns: 1fr; }
+  }
+  .lrow {
+    display: grid;
+    grid-template-columns: minmax(4rem, 9rem) 1fr auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.15rem 0;
+    font-size: 0.82rem;
+  }
+  .lname {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+  }
+  .lname.link {
+    background: transparent;
+    padding: 0;
+    text-align: left;
+    font-size: inherit;
+    font-family: var(--font-mono, monospace);
+    color: var(--subtext1);
+    cursor: pointer;
+  }
+  .lname.link:hover { background: transparent; color: var(--blue); }
+  .ltrack {
+    height: 7px;
+    background: var(--surface0);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .lfill {
+    display: block;
+    height: 100%;
+    background: var(--green);
+    border-radius: 4px;
+  }
+  .lfill.bad { background: var(--red); }
+  .lval {
+    font-variant-numeric: tabular-nums;
+    color: var(--subtext1);
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+  .lsub { color: var(--overlay1); margin-left: 0.3rem; }
+
+  .fails { margin-top: 0.9rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .chip {
+    font-size: 0.76rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 10px;
+    background: var(--surface0);
+    color: var(--subtext1);
+    font-family: var(--font-mono, monospace);
+  }
+  .chip.bad { color: var(--red); }
+  .chip.bad:hover { background: var(--surface1); }
+  .chip b { color: var(--text); margin-left: 0.15rem; }
+
   .err {
     color: var(--red);
     background: var(--mantle);

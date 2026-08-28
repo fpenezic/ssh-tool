@@ -11,6 +11,44 @@ import { Create as $Create } from "@wailsio/runtime";
 import * as json$0 from "../../../encoding/json/models.js";
 
 /**
+ * AuditCount is one action (or host, or day) with its tally.
+ */
+export class AuditCount {
+    /**
+     * Creates a new AuditCount instance.
+     * @param {Partial<AuditCount>} [$$source = {}] - The source object to create the AuditCount.
+     */
+    constructor($$source = {}) {
+        if (!("key" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["key"] = "";
+        }
+        if (!("count" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["count"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new AuditCount instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {AuditCount}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new AuditCount(/** @type {Partial<AuditCount>} */($$parsedSource));
+    }
+}
+
+/**
  * AuditEvent is one row of the local audit log.
  */
 export class AuditEvent {
@@ -71,6 +109,212 @@ export class AuditEvent {
             $$parsedSource["metadata"] = $$createField4_0($$parsedSource["metadata"]);
         }
         return new AuditEvent(/** @type {Partial<AuditEvent>} */($$parsedSource));
+    }
+}
+
+/**
+ * AuditHostStat is one SSH target with its connect tally and total
+ * time connected. Seconds only covers sessions we could pair; see
+ * Unpaired.
+ */
+export class AuditHostStat {
+    /**
+     * Creates a new AuditHostStat instance.
+     * @param {Partial<AuditHostStat>} [$$source = {}] - The source object to create the AuditHostStat.
+     */
+    constructor($$source = {}) {
+        if (!("host" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["host"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("connects" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["connects"] = 0;
+        }
+        if (!("seconds" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["seconds"] = 0;
+        }
+        if (!("unpaired" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["unpaired"] = 0;
+        }
+        if (!("lastTs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["lastTs"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new AuditHostStat instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {AuditHostStat}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new AuditHostStat(/** @type {Partial<AuditHostStat>} */($$parsedSource));
+    }
+}
+
+/**
+ * AuditStats is the whole Insights payload for one time window.
+ */
+export class AuditStats {
+    /**
+     * Creates a new AuditStats instance.
+     * @param {Partial<AuditStats>} [$$source = {}] - The source object to create the AuditStats.
+     */
+    constructor($$source = {}) {
+        if (!("since" in $$source)) {
+            /**
+             * 0 = all time
+             * @member
+             * @type {number}
+             */
+            this["since"] = 0;
+        }
+        if (!("until" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["until"] = 0;
+        }
+        if (!("total" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["total"] = 0;
+        }
+        if (!("firstTs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["firstTs"] = 0;
+        }
+        if (!("actions" in $$source)) {
+            /**
+             * @member
+             * @type {AuditCount[]}
+             */
+            this["actions"] = [];
+        }
+        if (!("hosts" in $$source)) {
+            /**
+             * @member
+             * @type {AuditHostStat[]}
+             */
+            this["hosts"] = [];
+        }
+        if (!("daily" in $$source)) {
+            /**
+             * key = YYYY-MM-DD, local time
+             * @member
+             * @type {AuditCount[]}
+             */
+            this["daily"] = [];
+        }
+        if (!("hourly" in $$source)) {
+            /**
+             * 24 buckets, local time
+             * @member
+             * @type {number[]}
+             */
+            this["hourly"] = [];
+        }
+        if (!("failures" in $$source)) {
+            /**
+             * @member
+             * @type {AuditCount[]}
+             */
+            this["failures"] = [];
+        }
+        if (!("connects" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["connects"] = 0;
+        }
+        if (!("sessionSecs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["sessionSecs"] = 0;
+        }
+        if (!("unpaired" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["unpaired"] = 0;
+        }
+        if (!("longestSecs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["longestSecs"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new AuditStats instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {AuditStats}
+     */
+    static createFrom($$source = {}) {
+        const $$createField4_0 = $$createType2;
+        const $$createField5_0 = $$createType4;
+        const $$createField6_0 = $$createType2;
+        const $$createField7_0 = $$createType5;
+        const $$createField8_0 = $$createType2;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("actions" in $$parsedSource) {
+            $$parsedSource["actions"] = $$createField4_0($$parsedSource["actions"]);
+        }
+        if ("hosts" in $$parsedSource) {
+            $$parsedSource["hosts"] = $$createField5_0($$parsedSource["hosts"]);
+        }
+        if ("daily" in $$parsedSource) {
+            $$parsedSource["daily"] = $$createField6_0($$parsedSource["daily"]);
+        }
+        if ("hourly" in $$parsedSource) {
+            $$parsedSource["hourly"] = $$createField7_0($$parsedSource["hourly"]);
+        }
+        if ("failures" in $$parsedSource) {
+            $$parsedSource["failures"] = $$createField8_0($$parsedSource["failures"]);
+        }
+        return new AuditStats(/** @type {Partial<AuditStats>} */($$parsedSource));
     }
 }
 
@@ -361,8 +605,8 @@ export class Connection {
      * @returns {Connection}
      */
     static createFrom($$source = {}) {
-        const $$createField7_0 = $$createType1;
-        const $$createField8_0 = $$createType2;
+        const $$createField7_0 = $$createType6;
+        const $$createField8_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("overrides" in $$parsedSource) {
             $$parsedSource["overrides"] = $$createField7_0($$parsedSource["overrides"]);
@@ -710,8 +954,8 @@ export class CredentialRef {
      * @returns {CredentialRef}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType2;
-        const $$createField7_0 = $$createType3;
+        const $$createField6_0 = $$createType7;
+        const $$createField7_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField6_0($$parsedSource["tags"]);
@@ -883,7 +1127,7 @@ export class DynamicEntry {
      * @returns {DynamicEntry}
      */
     static createFrom($$source = {}) {
-        const $$createField7_0 = $$createType2;
+        const $$createField7_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField7_0($$parsedSource["tags"]);
@@ -956,7 +1200,7 @@ export class DynamicFolder {
      * @returns {DynamicFolder}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType3;
+        const $$createField2_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("config" in $$parsedSource) {
             $$parsedSource["config"] = $$createField2_0($$parsedSource["config"]);
@@ -1057,7 +1301,7 @@ export class Folder {
      * @returns {Folder}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType1;
+        const $$createField4_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("settings" in $$parsedSource) {
             $$parsedSource["settings"] = $$createField4_0($$parsedSource["settings"]);
@@ -1490,7 +1734,7 @@ export class JumpHostSpec {
      * @returns {JumpHostSpec}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType5;
+        const $$createField4_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("via" in $$parsedSource) {
             $$parsedSource["via"] = $$createField4_0($$parsedSource["via"]);
@@ -1721,7 +1965,7 @@ export class PortForward {
      * @returns {PortForward}
      */
     static createFrom($$source = {}) {
-        const $$createField9_0 = $$createType7;
+        const $$createField9_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("bookmarks" in $$parsedSource) {
             $$parsedSource["bookmarks"] = $$createField9_0($$parsedSource["bookmarks"]);
@@ -1946,7 +2190,7 @@ export class ResolvedSettings {
      * @returns {ResolvedSettings}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType5;
+        const $$createField4_0 = $$createType10;
         const $$createField5_0 = $$createType0;
         const $$createField6_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
@@ -2047,7 +2291,7 @@ export class Snippet {
      * @returns {Snippet}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType2;
+        const $$createField4_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField4_0($$parsedSource["tags"]);
@@ -2103,7 +2347,7 @@ export class SnippetInput {
      * @returns {SnippetInput}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType2;
+        const $$createField3_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField3_0($$parsedSource["tags"]);
@@ -2251,10 +2495,15 @@ export class Workspace {
 
 // Private type creation functions
 const $$createType0 = $Create.Map($Create.Any, $Create.Any);
-const $$createType1 = InheritableSettings.createFrom;
-const $$createType2 = $Create.Array($Create.Any);
-const $$createType3 = $Create.Map($Create.Any, $Create.Any);
-const $$createType4 = JumpHostSpec.createFrom;
-const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = ProxyBookmark.createFrom;
-const $$createType7 = $Create.Array($$createType6);
+const $$createType1 = AuditCount.createFrom;
+const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = AuditHostStat.createFrom;
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = $Create.Array($Create.Any);
+const $$createType6 = InheritableSettings.createFrom;
+const $$createType7 = $Create.Array($Create.Any);
+const $$createType8 = $Create.Map($Create.Any, $Create.Any);
+const $$createType9 = JumpHostSpec.createFrom;
+const $$createType10 = $Create.Nullable($$createType9);
+const $$createType11 = ProxyBookmark.createFrom;
+const $$createType12 = $Create.Array($$createType11);
