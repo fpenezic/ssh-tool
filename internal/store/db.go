@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -24,6 +25,9 @@ type DB struct {
 	// signal permanently hot. Falls back to conn if the side file
 	// can't open.
 	audit *sql.DB
+
+	// stopWAL shuts down the background WAL trimmer started by Open.
+	stopWAL chan struct{}
 }
 
 // Open opens (and migrates) the SQLite database at the given path. The
@@ -62,7 +66,9 @@ func Open(path string) (*DB, error) {
 	} else {
 		migrateAuditRows(db, audit)
 	}
-	return &DB{conn: db, audit: audit}, nil
+	d := &DB{conn: db, audit: audit, stopWAL: make(chan struct{})}
+	d.startWALTrimmer()
+	return d, nil
 }
 
 // openAuditDB opens/creates the side audit database with the same
@@ -127,12 +133,72 @@ func migrateAuditRows(main, audit *sql.DB) {
 	}
 }
 
-// Close releases the underlying connections.
+// Close releases the underlying connections, truncating each WAL on
+// the way out.
 func (d *DB) Close() error {
+	if d.stopWAL != nil {
+		close(d.stopWAL)
+		d.stopWAL = nil
+	}
 	if d.audit != nil && d.audit != d.conn {
+		checkpointTruncate(d.audit)
 		_ = d.audit.Close()
 	}
+	checkpointTruncate(d.conn)
 	return d.conn.Close()
+}
+
+// checkpointTruncate drains the WAL into the database file and resets
+// the file to zero length.
+//
+// A passive checkpoint - which is all the automatic one ever does -
+// copies pages back into the db but then RECYCLES the WAL, writing
+// over it from the start rather than shrinking it. The file therefore
+// sticks at its high-water mark forever: a single busy session that
+// pushes it to a few thousand frames leaves multi-MB -wal files next
+// to a much smaller database, and plain Close() never reclaims them.
+// TRUNCATE is the mode that actually shortens the file.
+//
+// Errors are ignored on purpose. This runs on the shutdown path, the
+// data is already durable in the WAL either way, and a checkpoint can
+// legitimately fail (BUSY) if another connection still holds a read
+// snapshot - in which case the next clean Close reclaims the space.
+func checkpointTruncate(db *sql.DB) {
+	if db == nil {
+		return
+	}
+	_, _ = db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
+}
+
+// walTrimInterval is how often the background trimmer runs. The app is
+// a long-lived desktop process - sessions of several days are normal -
+// so waiting for Close() to reclaim WAL space is not enough on its own.
+const walTrimInterval = 30 * time.Minute
+
+// startWALTrimmer periodically truncates both WALs while the app runs.
+//
+// TRUNCATE blocks new writers for the duration of the checkpoint, but
+// these databases are small and the work is proportional to the WAL,
+// which is exactly what we are keeping short. A half-hour cadence
+// keeps the files near zero without the checkpoint ever having much
+// to do.
+func (d *DB) startWALTrimmer() {
+	stop := d.stopWAL
+	go func() {
+		t := time.NewTicker(walTrimInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-t.C:
+				checkpointTruncate(d.conn)
+				if d.audit != nil && d.audit != d.conn {
+					checkpointTruncate(d.audit)
+				}
+			}
+		}
+	}()
 }
 
 // Conn returns the raw *sql.DB; callers in the same package use it directly.
