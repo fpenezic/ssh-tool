@@ -129,21 +129,26 @@ type AuditHostStat struct {
 
 // AuditStats is the whole Insights payload for one time window.
 type AuditStats struct {
-	Since       int64           `json:"since"` // 0 = all time
-	Until       int64           `json:"until"`
-	Total       int64           `json:"total"`
-	FirstTS     int64           `json:"firstTs"`
-	Actions     []AuditCount    `json:"actions"`
-	Hosts       []AuditHostStat `json:"hosts"`
-	Daily       []AuditCount    `json:"daily"`  // key = YYYY-MM-DD, local time
-	Hourly      []int64         `json:"hourly"` // 24 buckets, local time
-	Failures    []AuditCount    `json:"failures"`
-	Gates       []AuditCount    `json:"gates"` // LLM approval gate tallies
-	LLMActions  int64           `json:"llmActions"`
-	Connects    int64           `json:"connects"`
-	SessionSecs int64           `json:"sessionSecs"`
-	Unpaired    int64           `json:"unpaired"`
-	LongestSecs int64           `json:"longestSecs"`
+	Since      int64           `json:"since"` // 0 = all time
+	Until      int64           `json:"until"`
+	Total      int64           `json:"total"`
+	FirstTS    int64           `json:"firstTs"`
+	Actions    []AuditCount    `json:"actions"`
+	Hosts      []AuditHostStat `json:"hosts"`
+	Daily      []AuditCount    `json:"daily"`  // key = YYYY-MM-DD, local time
+	Hourly     []int64         `json:"hourly"` // 24 buckets, local time
+	Failures   []AuditCount    `json:"failures"`
+	Gates      []AuditCount    `json:"gates"` // LLM approval gate tallies
+	LLMActions int64           `json:"llmActions"`
+	// LLMLoggingOff is set when LLM activity logging was switched off
+	// at some point inside the window, which makes Gates/LLMActions a
+	// floor rather than a full count.
+	LLMLoggingOff   bool  `json:"llmLoggingOff"`
+	LLMLoggingOffTS int64 `json:"llmLoggingOffTs"`
+	Connects        int64 `json:"connects"`
+	SessionSecs     int64 `json:"sessionSecs"`
+	Unpaired        int64 `json:"unpaired"`
+	LongestSecs     int64 `json:"longestSecs"`
 }
 
 // auditStatsRows is the raw window we walk more than once.
@@ -250,6 +255,17 @@ func (d *DB) AuditStats(since int64) (*AuditStats, error) {
 				g = "unknown"
 			}
 			gates[g]++
+		}
+		// A window that contains an "LLM logging -> off" flip cannot
+		// report a complete count of what the LLM did, and saying so
+		// matters more than the number: an unmarked gap reads as a
+		// quiet period rather than as missing evidence.
+		if r.action == "settings.toggle" && r.target == "mcp_audit_enabled" &&
+			strings.HasPrefix(r.meta["to"], "off") {
+			out.LLMLoggingOff = true
+			if r.ts > out.LLMLoggingOffTS {
+				out.LLMLoggingOffTS = r.ts
+			}
 		}
 	}
 	for k, v := range gates {

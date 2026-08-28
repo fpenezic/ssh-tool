@@ -270,6 +270,23 @@ export class AuditStats {
              */
             this["llmActions"] = 0;
         }
+        if (!("llmLoggingOff" in $$source)) {
+            /**
+             * LLMLoggingOff is set when LLM activity logging was switched off
+             * at some point inside the window, which makes Gates/LLMActions a
+             * floor rather than a full count.
+             * @member
+             * @type {boolean}
+             */
+            this["llmLoggingOff"] = false;
+        }
+        if (!("llmLoggingOffTs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["llmLoggingOffTs"] = 0;
+        }
         if (!("connects" in $$source)) {
             /**
              * @member

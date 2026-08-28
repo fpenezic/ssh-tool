@@ -458,6 +458,9 @@ export interface AuditStats {
   /** LLM approval gates: denied / yolo / auto / approved, in risk order. */
   gates: AuditCount[];
   llmActions: number;
+  /** True when LLM logging was switched off inside the window, making the gate counts a floor. */
+  llmLoggingOff: boolean;
+  llmLoggingOffTs: number;
   connects: number;
   sessionSecs: number;
   unpaired: number;

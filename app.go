@@ -4758,12 +4758,45 @@ func (a *App) SettingsGet(key string) string {
 	return v
 }
 
+// auditedSettings are the toggles whose flips belong in the audit log:
+// each one turns a security control - or a record of one - on or off.
+//
+// mcp_audit_enabled matters most. Switching it off stops LLM activity
+// being recorded at all, and without a marker the resulting gap in the
+// log is indistinguishable from a quiet period. That makes the gap the
+// one thing an audit trail must never have: missing evidence that
+// looks like absent activity. The flip itself is the evidence.
+var auditedSettings = map[string]string{
+	"mcp_audit_enabled":  "LLM activity logging",
+	"mcp_audit_output":   "LLM command output logging",
+	"mcp_bridge_enabled": "MCP bridge",
+	"mcp_bridge_tcp":     "MCP bridge TCP listener",
+	"share_enabled":      "session sharing",
+	"share_audit_output": "shared-session input logging",
+}
+
 func (a *App) SettingsSet(key, value string) error {
 	if localStateKeys[key] {
 		return a.localSettingSet(key, value)
 	}
+	// Read the old value BEFORE the write: a toggle's audit row is
+	// only useful if it says what changed, not just what it is now.
+	label, audited := auditedSettings[key]
+	prev := ""
+	if audited {
+		if v, ok, err := a.db.GetSetting(key); err == nil && ok {
+			prev = v
+		}
+	}
 	if err := a.db.SetSetting(key, value); err != nil {
 		return err
+	}
+	if audited && prev != value {
+		a.recordAudit("settings.toggle", key, map[string]string{
+			"setting": label,
+			"from":    settingStateLabel(key, prev),
+			"to":      settingStateLabel(key, value),
+		})
 	}
 	// Toggling the MCP bridge takes effect immediately: start the local
 	// listener when enabled, tear it down when disabled.
@@ -4792,6 +4825,23 @@ func (a *App) SettingsSet(key, value string) error {
 		EventsEmit("share_toggled", on)
 	}
 	return nil
+}
+
+// settingStateLabel renders a toggle value as on/off. An unset key is
+// reported as its default rather than as an empty string, so a log
+// reader does not have to know which toggles default on.
+func settingStateLabel(key, value string) string {
+	if value == "" {
+		// mcp_audit_enabled is the only one of these that defaults on.
+		if key == "mcp_audit_enabled" {
+			return "on (default)"
+		}
+		return "off (default)"
+	}
+	if value == "1" || value == "true" {
+		return "on"
+	}
+	return "off"
 }
 
 func (a *App) SettingsDelete(key string) error {

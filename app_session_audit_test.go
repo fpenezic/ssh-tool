@@ -109,3 +109,73 @@ func TestDroppedSessionBecomesMeasurable(t *testing.T) {
 		t.Fatalf("hosts = %+v, want one named lab-vm", st.Hosts)
 	}
 }
+
+// A toggle that turns audit logging off is itself an audit event.
+// Without the row, the gap it creates is indistinguishable from a
+// period where nothing happened.
+func TestSettingsToggleIsAudited(t *testing.T) {
+	a := newAuditTestApp(t)
+
+	if err := a.SettingsSet("mcp_audit_enabled", "0"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+
+	ev := lastAudit(t, a)
+	if ev.Action != "settings.toggle" {
+		t.Fatalf("action = %q, want settings.toggle", ev.Action)
+	}
+	if ev.Target != "mcp_audit_enabled" {
+		t.Errorf("target = %q, want mcp_audit_enabled", ev.Target)
+	}
+	// The previous value is the point: "it is off now" says less than
+	// "it was on and someone turned it off".
+	if ev.Metadata["from"] != "on (default)" {
+		t.Errorf("from = %q, want %q", ev.Metadata["from"], "on (default)")
+	}
+	if ev.Metadata["to"] != "off" {
+		t.Errorf("to = %q, want off", ev.Metadata["to"])
+	}
+	if ev.Metadata["setting"] == "" {
+		t.Error("setting label is empty; the row should be readable without knowing the key")
+	}
+}
+
+// Writing the same value again is not a change and must not pad the
+// log - a toggle row should mean something actually flipped.
+func TestSettingsToggleNoRowWhenUnchanged(t *testing.T) {
+	a := newAuditTestApp(t)
+	if err := a.SettingsSet("share_enabled", "1"); err != nil {
+		t.Fatalf("first set: %v", err)
+	}
+	before, err := a.db.ListAudit(store.AuditFilter{Limit: 100})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if err := a.SettingsSet("share_enabled", "1"); err != nil {
+		t.Fatalf("second set: %v", err)
+	}
+	after, err := a.db.ListAudit(store.AuditFilter{Limit: 100})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(after) != len(before) {
+		t.Errorf("re-writing the same value added %d row(s); want none", len(after)-len(before))
+	}
+}
+
+// Ordinary preferences must not end up in the audit log.
+func TestSettingsToggleIgnoresUnrelatedKeys(t *testing.T) {
+	a := newAuditTestApp(t)
+	if err := a.SettingsSet("terminal_font_size", "14"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	evs, err := a.db.ListAudit(store.AuditFilter{Limit: 10})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, ev := range evs {
+		if ev.Action == "settings.toggle" {
+			t.Errorf("unrelated setting %q produced an audit row", ev.Target)
+		}
+	}
+}

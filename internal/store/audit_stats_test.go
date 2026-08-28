@@ -425,3 +425,77 @@ func TestAuditStatsNoLLMActivityYieldsNoGates(t *testing.T) {
 		t.Errorf("llmActions=%d gates=%+v, want 0 / empty", st.LLMActions, st.Gates)
 	}
 }
+
+// Switching LLM logging off leaves a gap that looks exactly like a
+// quiet period. The toggle row is what tells them apart, so the stats
+// have to surface it - a gate breakdown over a window with logging
+// disabled is a floor, not a count.
+func TestAuditStatsFlagsLLMLoggingGap(t *testing.T) {
+	d := statsDB(t)
+	base := time.Now().Add(-10 * 24 * time.Hour).Unix()
+	appendAt(t, d, base, "mcp_run", "t", map[string]string{"gate": "approved"})
+	appendAt(t, d, base+100, "settings.toggle", "mcp_audit_enabled", map[string]string{
+		"setting": "LLM activity logging", "from": "on (default)", "to": "off",
+	})
+	// The gap: whatever happened here was never written.
+	appendAt(t, d, base+9000, "settings.toggle", "mcp_audit_enabled", map[string]string{
+		"setting": "LLM activity logging", "from": "off", "to": "on",
+	})
+	appendAt(t, d, base+9100, "mcp_run", "t", map[string]string{"gate": "yolo"})
+
+	st, err := d.AuditStats(0)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if !st.LLMLoggingOff {
+		t.Error("llmLoggingOff = false; the window contains an off flip")
+	}
+	if st.LLMLoggingOffTS != base+100 {
+		t.Errorf("llmLoggingOffTs = %d, want %d", st.LLMLoggingOffTS, base+100)
+	}
+	// The rows that DID get written still count normally.
+	if st.LLMActions != 2 {
+		t.Errorf("llmActions = %d, want 2", st.LLMActions)
+	}
+}
+
+// Turning logging back ON must not raise the flag on its own - only an
+// off flip means evidence is missing.
+func TestAuditStatsNoGapFlagWhenOnlyEnabled(t *testing.T) {
+	d := statsDB(t)
+	base := time.Now().Add(-time.Hour).Unix()
+	appendAt(t, d, base, "settings.toggle", "mcp_audit_enabled", map[string]string{
+		"setting": "LLM activity logging", "from": "off", "to": "on",
+	})
+	// A different toggle going off must not be mistaken for this one.
+	appendAt(t, d, base+10, "settings.toggle", "mcp_audit_output", map[string]string{
+		"setting": "LLM command output logging", "from": "on", "to": "off",
+	})
+
+	st, err := d.AuditStats(0)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if st.LLMLoggingOff {
+		t.Error("llmLoggingOff = true, but logging was only ever turned on")
+	}
+}
+
+// An off flip outside the window must not taint it: the flag describes
+// this window, and the window's own rows are what it reports on.
+func TestAuditStatsGapFlagRespectsWindow(t *testing.T) {
+	d := statsDB(t)
+	now := time.Now()
+	appendAt(t, d, now.Add(-60*24*time.Hour).Unix(), "settings.toggle", "mcp_audit_enabled",
+		map[string]string{"to": "off"})
+	appendAt(t, d, now.Add(-1*time.Hour).Unix(), "mcp_run", "t",
+		map[string]string{"gate": "approved"})
+
+	st, err := d.AuditStats(now.Add(-7 * 24 * time.Hour).Unix())
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if st.LLMLoggingOff {
+		t.Error("llmLoggingOff = true, but the off flip predates the window")
+	}
+}

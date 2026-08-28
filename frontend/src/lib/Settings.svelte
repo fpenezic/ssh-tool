@@ -3938,7 +3938,7 @@
             </div>
           </div>
 
-          {#if stats.gates.length > 0}
+          {#if stats.gates.length > 0 || stats.llmLoggingOff}
             <div class="fails">
               <h4>LLM access ({stats.llmActions.toLocaleString()} actions)</h4>
               <div class="gate-bar" role="img" aria-label="LLM actions by approval gate">
@@ -3950,6 +3950,15 @@
                   ></span>
                 {/each}
               </div>
+              {#if stats.llmLoggingOff}
+                <p class="hint gap-note">
+                  LLM activity logging was switched off during this
+                  period{stats.llmLoggingOffTs
+                    ? " (last on " + new Date(stats.llmLoggingOffTs * 1000).toLocaleString() + ")"
+                    : ""}, so anything the LLM did while it was off is
+                  not in the log. These counts are a floor, not a total.
+                </p>
+              {/if}
               <div class="chips gate-chips">
                 {#each stats.gates as g (g.key)}
                   <button
@@ -6279,6 +6288,14 @@
   .gseg.g-unknown,
   .dot.g-unknown { background: var(--overlay1); }
   .gate-chips { margin-top: 0.1rem; }
+  /* The gap warning sits between the bar and the chips, where it is
+     read before the numbers it qualifies. */
+  .gap-note {
+    margin: 0.45rem 0 0.5rem;
+    padding-left: 0.6rem;
+    border-left: 2px solid var(--peach);
+    font-size: 0.82rem;
+  }
   .chip.gate {
     display: inline-flex;
     align-items: center;
