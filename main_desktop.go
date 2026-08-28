@@ -173,6 +173,7 @@ func buildApp(appInst *App) *application.App {
 			if appInst.quitConfirmed.Load() {
 				appInst.syncFlushOnQuit()
 				appInst.stopTunnelsOnQuit()
+				appInst.closeSessionsOnQuit()
 				return true
 			}
 			if appInst.SshActiveSessionCount() == 0 {
@@ -180,6 +181,7 @@ func buildApp(appInst *App) *application.App {
 				// capped at 10s so a dead network can't block quit.
 				appInst.syncFlushOnQuit()
 				appInst.stopTunnelsOnQuit()
+				appInst.closeSessionsOnQuit()
 				return true
 			}
 			// The confirm modal is useless behind a hidden window

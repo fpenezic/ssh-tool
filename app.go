@@ -1208,6 +1208,12 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 		a.forwards.StopAllForSession(sessionID)
 		a.clearMcpGrant(sessionID)
 		a.sessionRecordingCleanup(sessionID)
+		// Before pool.Remove and the sessionMeta delete below, both of
+		// which the audit row reads from. A user-initiated close is
+		// already logged by SshDisconnect, so only log the rest here.
+		if !userInit {
+			a.recordSessionClosed(sessionID, "closed")
+		}
 		a.pool.Remove(sessionID)
 		// After pool.Remove, so the share server sees this session as gone and
 		// can end a share whose last session just closed.
@@ -3145,6 +3151,11 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 		a.forwards.StopAllForSession(id)
 		a.clearMcpGrant(id)
 		a.sessionRecordingCleanup(id)
+		// See the dynamic path: SshDisconnect covers the user-initiated
+		// case, everything else would otherwise never be logged.
+		if !userInit {
+			a.recordSessionClosed(id, "closed")
+		}
 		a.pool.Remove(id)
 		// After pool.Remove, so a share whose last session just closed ends.
 		a.shareSessionClosed(id)
@@ -4070,25 +4081,63 @@ func (a *App) GetConnectionHasPassword(connectionID string) bool {
 	return conn.PasswordVaultKey != nil
 }
 
+// closeSessionsOnQuit records an ssh.disconnect for every session still
+// open at shutdown, then closes the store.
+//
+// The per-session SetOnClose handlers do not fire on the way out - the
+// process just exits - so without this every session live at quit stays
+// unpaired in the log forever, and long-running ones (exactly the
+// sessions worth measuring) are the most likely to be in that state.
+//
+// Closing the store here also gives the WAL its truncating checkpoint;
+// nothing else on the desktop path ever called store.DB.Close.
+func (a *App) closeSessionsOnQuit() {
+	for _, id := range a.pool.IDs() {
+		a.recordSessionClosed(id, "app_quit")
+	}
+	if a.db != nil {
+		if err := a.db.Close(); err != nil {
+			log.Printf("store close on quit: %v", err)
+		}
+	}
+}
+
+// recordSessionClosed writes the ssh.disconnect audit row for a session
+// that ended on its own - server hung up, network dropped, app quit -
+// rather than through SshDisconnect.
+//
+// Without this only an explicit Disconnect click was ever logged, so
+// connects vastly outnumbered disconnects (350 vs 35 on the author's
+// install) and anything pairing the two to measure session length was
+// working from a handful of sessions. Dynamic-inventory hosts were the
+// worst case: they are rarely closed by clicking Disconnect.
+//
+// `reason` separates the causes so the log distinguishes a clean
+// teardown from a drop. Must be called BEFORE sessionMeta is deleted -
+// that map is where the host and name come from.
+func (a *App) recordSessionClosed(sessionID, reason string) {
+	a.metaMu.Lock()
+	meta, ok := a.sessionMeta[sessionID]
+	a.metaMu.Unlock()
+	m := map[string]string{"session_id": sessionID, "reason": reason}
+	target := ""
+	if ok {
+		target = meta.connectionID
+		m["host"] = meta.hostname
+		m["name"] = meta.name
+	}
+	a.recordAudit("ssh.disconnect", target, m)
+}
+
 func (a *App) SshDisconnect(sessionID string) error {
 	sess, ok := a.pool.Get(sessionID)
 	if !ok {
 		return nil
 	}
-	a.metaMu.Lock()
-	meta, hasMeta := a.sessionMeta[sessionID]
-	a.metaMu.Unlock()
 	a.forwards.StopAllForSession(sessionID)
 	sess.Disconnect()
 	a.pool.Remove(sessionID)
-	auditMeta := map[string]string{"session_id": sessionID}
-	target := ""
-	if hasMeta {
-		target = meta.connectionID
-		auditMeta["host"] = meta.hostname
-		auditMeta["name"] = meta.name
-	}
-	a.recordAudit("ssh.disconnect", target, auditMeta)
+	a.recordSessionClosed(sessionID, "user")
 	return nil
 }
 

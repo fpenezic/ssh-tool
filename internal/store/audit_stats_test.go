@@ -271,3 +271,73 @@ func TestAuditStatsIncludesDynamicConnects(t *testing.T) {
 		t.Errorf("hosts = %+v, want prox-vm", st.Hosts)
 	}
 }
+
+// Disconnects are now recorded on every teardown path, each carrying a
+// reason. Pairing keys on session_id alone, so the reason must not
+// affect it - a dropped session is as measurable as a clicked one.
+func TestAuditStatsPairsRegardlessOfDisconnectReason(t *testing.T) {
+	d := statsDB(t)
+	base := time.Now().Add(-4 * time.Hour).Unix()
+	for i, reason := range []string{"user", "closed", "app_quit"} {
+		sid := string(rune('a' + i))
+		off := int64(i) * 1000
+		appendAt(t, d, base+off, "ssh.connect", "c", map[string]string{
+			"session_id": sid, "host": "h1",
+		})
+		appendAt(t, d, base+off+60, "ssh.disconnect", "c", map[string]string{
+			"session_id": sid, "host": "h1", "reason": reason,
+		})
+	}
+
+	st, err := d.AuditStats(0)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if st.Connects != 3 {
+		t.Errorf("connects = %d, want 3", st.Connects)
+	}
+	if st.SessionSecs != 180 {
+		t.Errorf("sessionSecs = %d, want 180 (3 x 60s regardless of reason)", st.SessionSecs)
+	}
+	if st.Unpaired != 0 {
+		t.Errorf("unpaired = %d, want 0 - every reason should pair", st.Unpaired)
+	}
+}
+
+// History written before disconnects were logged everywhere still has
+// bare connects in it. Those must keep counting as unpaired rather
+// than breaking the newer rows around them.
+func TestAuditStatsMixesLegacyAndNewRows(t *testing.T) {
+	d := statsDB(t)
+	base := time.Now().Add(-6 * time.Hour).Unix()
+	// Legacy: connect with no disconnect ever written.
+	appendAt(t, d, base, "ssh.connect.dynamic", "dyn:old", map[string]string{
+		"session_id": "legacy", "host": "h-old",
+	})
+	// New: full pair.
+	appendAt(t, d, base+100, "ssh.connect", "c", map[string]string{
+		"session_id": "new", "host": "h-new",
+	})
+	appendAt(t, d, base+400, "ssh.disconnect", "c", map[string]string{
+		"session_id": "new", "host": "h-new", "reason": "closed",
+	})
+
+	st, err := d.AuditStats(0)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if st.Connects != 2 {
+		t.Errorf("connects = %d, want 2", st.Connects)
+	}
+	if st.Unpaired != 1 {
+		t.Errorf("unpaired = %d, want 1 (the legacy row)", st.Unpaired)
+	}
+	if st.SessionSecs != 300 {
+		t.Errorf("sessionSecs = %d, want 300 - the legacy row must not add time", st.SessionSecs)
+	}
+	// The measurable half must still be measurable: average is over
+	// paired sessions, so one legacy row must not halve it.
+	if paired := st.Connects - st.Unpaired; paired != 1 {
+		t.Fatalf("paired = %d, want 1", paired)
+	}
+}
