@@ -455,6 +455,9 @@ export interface AuditStats {
   /** 24 buckets, local time. */
   hourly: number[];
   failures: AuditCount[];
+  /** LLM approval gates: denied / yolo / auto / approved, in risk order. */
+  gates: AuditCount[];
+  llmActions: number;
   connects: number;
   sessionSecs: number;
   unpaired: number;

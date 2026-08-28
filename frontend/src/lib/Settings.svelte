@@ -2091,6 +2091,24 @@
     stats ? stats.failures.reduce((n, f) => n + f.count, 0) : 0,
   );
 
+  // How much of what the LLM did ran without a human in the loop.
+  // "yolo" is the session opted out of per-command prompts; "auto" is
+  // an allowlisted read-only tool. Both are unattended, but only yolo
+  // is a choice the user made, so they stay separate.
+  const GATE_LABEL: Record<string, string> = {
+    denied: "denied",
+    yolo: "unattended (yolo)",
+    auto: "auto (read-only)",
+    approved: "approved by you",
+    unknown: "unrecorded",
+  };
+  const gateTotal = $derived(
+    stats ? stats.gates.reduce((n, g) => n + g.count, 0) : 0,
+  );
+  function gatePct(n: number): number {
+    return gateTotal > 0 ? (n / gateTotal) * 100 : 0;
+  }
+
   // Trailing slice of the daily series, zero-filled so gaps read as
   // quiet days rather than being collapsed out of the chart.
   const dailySeries = $derived.by(() => {
@@ -3919,6 +3937,33 @@
               {/each}
             </div>
           </div>
+
+          {#if stats.gates.length > 0}
+            <div class="fails">
+              <h4>LLM access ({stats.llmActions.toLocaleString()} actions)</h4>
+              <div class="gate-bar" role="img" aria-label="LLM actions by approval gate">
+                {#each stats.gates as g (g.key)}
+                  <span
+                    class="gseg g-{g.key}"
+                    style="width:{gatePct(g.count)}%"
+                    title="{GATE_LABEL[g.key] ?? g.key}: {g.count}"
+                  ></span>
+                {/each}
+              </div>
+              <div class="chips gate-chips">
+                {#each stats.gates as g (g.key)}
+                  <button
+                    class="chip gate g-{g.key}"
+                    title="Filter the table by gate={g.key}"
+                    onclick={() => (auditFilter = g.key)}
+                  >
+                    <span class="dot g-{g.key}"></span>
+                    {GATE_LABEL[g.key] ?? g.key} <b>{g.count}</b>
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
 
           {#if stats.failures.length > 0}
             <div class="fails">
@@ -6212,6 +6257,40 @@
   .lsub { color: var(--overlay1); margin-left: 0.3rem; }
 
   .fails { margin-top: 0.9rem; }
+  /* Gate mix: one stacked bar, so "how much ran unattended" reads as
+     a proportion at a glance rather than four numbers to compare. */
+  .gate-bar {
+    display: flex;
+    height: 10px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: var(--surface0);
+    margin-bottom: 0.45rem;
+  }
+  .gseg { display: block; height: 100%; }
+  .gseg.g-denied,
+  .dot.g-denied { background: var(--red); }
+  .gseg.g-yolo,
+  .dot.g-yolo { background: var(--peach); }
+  .gseg.g-auto,
+  .dot.g-auto { background: var(--blue); }
+  .gseg.g-approved,
+  .dot.g-approved { background: var(--green); }
+  .gseg.g-unknown,
+  .dot.g-unknown { background: var(--overlay1); }
+  .gate-chips { margin-top: 0.1rem; }
+  .chip.gate {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-family: inherit;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
   .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   .chip {
     font-size: 0.76rem;

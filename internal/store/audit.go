@@ -138,6 +138,8 @@ type AuditStats struct {
 	Daily       []AuditCount    `json:"daily"`  // key = YYYY-MM-DD, local time
 	Hourly      []int64         `json:"hourly"` // 24 buckets, local time
 	Failures    []AuditCount    `json:"failures"`
+	Gates       []AuditCount    `json:"gates"` // LLM approval gate tallies
+	LLMActions  int64           `json:"llmActions"`
 	Connects    int64           `json:"connects"`
 	SessionSecs int64           `json:"sessionSecs"`
 	Unpaired    int64           `json:"unpaired"`
@@ -233,11 +235,43 @@ func (d *DB) AuditStats(since int64) (*AuditStats, error) {
 
 	out.Hourly = make([]int64, 24)
 	daily := map[string]int64{}
+	gates := map[string]int64{}
 	for _, r := range all {
 		t := time.Unix(r.ts, 0)
 		out.Hourly[t.Hour()]++
 		daily[t.Format("2006-01-02")]++
+		// Every mcp_* row carries the gate that let it through, which
+		// is the only place the audit log says whether a human
+		// approved what the LLM did or it ran unattended.
+		if strings.HasPrefix(r.action, "mcp_") {
+			out.LLMActions++
+			g := r.meta["gate"]
+			if g == "" {
+				g = "unknown"
+			}
+			gates[g]++
+		}
 	}
+	for k, v := range gates {
+		out.Gates = append(out.Gates, AuditCount{Key: k, Count: v})
+	}
+	// Fixed risk order, not by count: the panel reads as a risk
+	// ranking, so denied/yolo must not move around as tallies shift.
+	gateRank := map[string]int{"denied": 0, "yolo": 1, "auto": 2, "approved": 3}
+	sort.Slice(out.Gates, func(i, j int) bool {
+		ri, oki := gateRank[out.Gates[i].Key]
+		rj, okj := gateRank[out.Gates[j].Key]
+		if !oki {
+			ri = 99
+		}
+		if !okj {
+			rj = 99
+		}
+		if ri != rj {
+			return ri < rj
+		}
+		return out.Gates[i].Key < out.Gates[j].Key
+	})
 	for k, v := range daily {
 		out.Daily = append(out.Daily, AuditCount{Key: k, Count: v})
 	}

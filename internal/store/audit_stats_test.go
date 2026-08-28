@@ -341,3 +341,87 @@ func TestAuditStatsMixesLegacyAndNewRows(t *testing.T) {
 		t.Fatalf("paired = %d, want 1", paired)
 	}
 }
+
+// The gate is the only field in the log that says whether a human
+// approved what the LLM did. It is tallied across every mcp_* action,
+// not per action kind - "how much ran unattended" is the question.
+func TestAuditStatsTalliesLLMGates(t *testing.T) {
+	d := statsDB(t)
+	base := time.Now().Add(-2 * time.Hour).Unix()
+	rows := []struct {
+		action, gate string
+	}{
+		{"mcp_run", "yolo"},
+		{"mcp_run", "yolo"},
+		{"mcp_run", "approved"},
+		{"mcp_connect", "approved"},
+		{"mcp_run", "denied"},
+		{"mcp_read", "auto"},
+	}
+	for i, r := range rows {
+		appendAt(t, d, base+int64(i), r.action, "t", map[string]string{"gate": r.gate})
+	}
+	// A non-LLM row must not land in the gate tally.
+	appendAt(t, d, base+50, "ssh.connect", "c", map[string]string{"session_id": "s", "host": "h"})
+
+	st, err := d.AuditStats(0)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if st.LLMActions != 6 {
+		t.Errorf("llmActions = %d, want 6 (the ssh.connect must not count)", st.LLMActions)
+	}
+	got := map[string]int64{}
+	for _, g := range st.Gates {
+		got[g.Key] = g.Count
+	}
+	for k, want := range map[string]int64{"yolo": 2, "approved": 2, "denied": 1, "auto": 1} {
+		if got[k] != want {
+			t.Errorf("gate %s = %d, want %d", k, got[k], want)
+		}
+	}
+	// Risk order is fixed so the panel does not reshuffle as counts
+	// change: denied, yolo, auto, approved.
+	var order []string
+	for _, g := range st.Gates {
+		order = append(order, g.Key)
+	}
+	want := []string{"denied", "yolo", "auto", "approved"}
+	for i := range want {
+		if i >= len(order) || order[i] != want[i] {
+			t.Fatalf("gate order = %v, want %v", order, want)
+		}
+	}
+}
+
+// An mcp_ row written before the gate field existed must still be
+// counted as an LLM action rather than dropped or crashing the tally.
+func TestAuditStatsGatelessLLMRowCountsAsUnknown(t *testing.T) {
+	d := statsDB(t)
+	base := time.Now().Add(-1 * time.Hour).Unix()
+	appendAt(t, d, base, "mcp_run", "t", map[string]string{"command": "ls"})
+
+	st, err := d.AuditStats(0)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if st.LLMActions != 1 {
+		t.Errorf("llmActions = %d, want 1", st.LLMActions)
+	}
+	if len(st.Gates) != 1 || st.Gates[0].Key != "unknown" || st.Gates[0].Count != 1 {
+		t.Errorf("gates = %+v, want one unknown=1", st.Gates)
+	}
+}
+
+func TestAuditStatsNoLLMActivityYieldsNoGates(t *testing.T) {
+	d := statsDB(t)
+	appendAt(t, d, time.Now().Add(-time.Hour).Unix(), "vault.unlock", "", nil)
+
+	st, err := d.AuditStats(0)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if st.LLMActions != 0 || len(st.Gates) != 0 {
+		t.Errorf("llmActions=%d gates=%+v, want 0 / empty", st.LLMActions, st.Gates)
+	}
+}

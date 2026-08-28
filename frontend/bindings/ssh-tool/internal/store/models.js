@@ -255,6 +255,21 @@ export class AuditStats {
              */
             this["failures"] = [];
         }
+        if (!("gates" in $$source)) {
+            /**
+             * LLM approval gate tallies
+             * @member
+             * @type {AuditCount[]}
+             */
+            this["gates"] = [];
+        }
+        if (!("llmActions" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["llmActions"] = 0;
+        }
         if (!("connects" in $$source)) {
             /**
              * @member
@@ -298,6 +313,7 @@ export class AuditStats {
         const $$createField6_0 = $$createType2;
         const $$createField7_0 = $$createType5;
         const $$createField8_0 = $$createType2;
+        const $$createField9_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("actions" in $$parsedSource) {
             $$parsedSource["actions"] = $$createField4_0($$parsedSource["actions"]);
@@ -313,6 +329,9 @@ export class AuditStats {
         }
         if ("failures" in $$parsedSource) {
             $$parsedSource["failures"] = $$createField8_0($$parsedSource["failures"]);
+        }
+        if ("gates" in $$parsedSource) {
+            $$parsedSource["gates"] = $$createField9_0($$parsedSource["gates"]);
         }
         return new AuditStats(/** @type {Partial<AuditStats>} */($$parsedSource));
     }
