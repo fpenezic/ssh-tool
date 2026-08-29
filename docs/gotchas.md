@@ -1024,6 +1024,37 @@ everything mobile is behind a build tag or an `isMobile` check.
     dynamic host reaches it. If the id can come off a live session, it can be
     `dyn:`.
 
+56. **A process-scoped singleton must not swallow the Activity.**
+    `WailsBridge` is a process singleton because the Go runtime it fronts
+    has one `main()` that cannot run twice, so it holds
+    `getApplicationContext()` rather than leaking a destroyed activity.
+    That is correct for the runtime and wrong for anything needing a UI
+    host: `BiometricPrompt` requires a live `FragmentActivity`, and
+    `authenticate()` gated on `context instanceof FragmentActivity`, which
+    an application context never satisfies. Biometric unlock failed with
+    "no activity" and never drew a prompt (shipped in v0.89.0, fixed in
+    v0.89.1). The bridge now carries a separate `volatile activity` field:
+    `MainActivity.onCreate` calls `attachActivity(this)`,
+    `onDestroy` calls `detachActivity(this)`.
+
+    Two rules when adding any bridge method that touches UI:
+
+    - Take the activity from that field, never from `context`. Anything
+      that shows a dialog, a prompt, a permission request, or starts an
+      activity for a result belongs here. A plain `startActivity` can use
+      the app context but needs `FLAG_ACTIVITY_NEW_TASK` (see `openURL`).
+    - Detach must be identity-guarded (`if (this.activity == dead)`). On a
+      configuration change Android runs the new activity's `onCreate`
+      before the old one's `onDestroy`, so an unconditional `null` lets
+      the outgoing instance clear the incoming one's registration - back
+      to "no activity", but only after a rotation, which is exactly the
+      case manual testing misses.
+
+    Same shape as the `detachWebView` pair added alongside the singleton:
+    the bridge outlives every activity, so every per-activity reference it
+    holds needs an explicit attach/detach, guarded by identity.
+
+
 ---
 
 # Archive
