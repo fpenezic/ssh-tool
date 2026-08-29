@@ -7,6 +7,21 @@ a prerelease upstream.
 
 ---
 
+## [0.89.1] - Biometric unlock fix (Android)
+
+### Fixed
+
+- **Biometric vault unlock on Android works again.** The v0.89.0 fix for
+  the app hanging in the background reused a single bridge for the whole
+  process, which meant it no longer held a reference to the on-screen
+  activity - and the system biometric prompt needs one. Every unlock
+  attempt failed with an activity error before the fingerprint prompt
+  could appear. The bridge now tracks the current activity separately,
+  including across a rotation, so the prompt shows and the stored
+  passphrase unlocks the vault as before. Desktop was never affected.
+
+---
+
 ## [0.89.0] - Audit insights, and text selection on mobile
 
 ### Added
