@@ -61,6 +61,10 @@ public class MainActivity extends AppCompatActivity {
         // initialize() is a no-op, because the Go runtime behind it is
         // still up and cannot be started again.
         bridge = WailsBridge.get(this);
+        // The bridge holds the application context, so it cannot host a
+        // BiometricPrompt on its own; hand it this activity for as long
+        // as we are alive (see attachActivity).
+        bridge.attachActivity(this);
         bridge.initialize();
 
         // Capture a ssh-tool:// deep link from the launch Intent (cold start
@@ -263,6 +267,9 @@ public class MainActivity extends AppCompatActivity {
             }
             webView.destroy();
             webView = null;
+        }
+        if (bridge != null) {
+            bridge.detachActivity(this);
         }
     }
 

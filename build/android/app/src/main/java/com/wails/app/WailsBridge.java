@@ -40,6 +40,13 @@ public class WailsBridge {
     private WebView webView;
     private volatile boolean initialized = false;
 
+    // The bridge itself holds the application context (it outlives any
+    // activity - see the singleton note below), but BiometricPrompt needs
+    // a live FragmentActivity to host its fragment. MainActivity attaches
+    // itself here in onCreate and detaches in onDestroy, so this is null
+    // exactly while no activity is on screen.
+    private volatile androidx.fragment.app.FragmentActivity activity;
+
     // Native methods - implemented in Go
     private static native void nativeInit(WailsBridge bridge);
     private static native void nativeShutdown();
@@ -74,6 +81,23 @@ public class WailsBridge {
 
     private WailsBridge(Context context) {
         this.context = context;
+    }
+
+    /** attachActivity records the activity currently hosting the WebView.
+     *  Required by authenticate(): the bridge's own context is the
+     *  application context, which is never a FragmentActivity. */
+    public void attachActivity(androidx.fragment.app.FragmentActivity a) {
+        this.activity = a;
+    }
+
+    /** detachActivity clears the reference when that activity goes away,
+     *  so the singleton bridge never leaks a destroyed activity. Guarded
+     *  by identity: a recreated activity attaches before the old one is
+     *  destroyed, and must not be cleared by the outgoing instance. */
+    public void detachActivity(androidx.fragment.app.FragmentActivity dead) {
+        if (this.activity == dead) {
+            this.activity = null;
+        }
     }
 
     /**
@@ -352,12 +376,11 @@ public class WailsBridge {
      *  delivered asynchronously to JS as the "common:biometric" event
      *  {ok:bool, error?:string}. */
     public void authenticate(String reason) {
-        if (!(context instanceof androidx.fragment.app.FragmentActivity)) {
+        androidx.fragment.app.FragmentActivity activity = this.activity;
+        if (activity == null) {
             emitBiometric(false, "no activity");
             return;
         }
-        androidx.fragment.app.FragmentActivity activity =
-                (androidx.fragment.app.FragmentActivity) context;
         activity.runOnUiThread(() -> {
             try {
                 java.util.concurrent.Executor exec =
