@@ -56,8 +56,11 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Initialize the native Go library
-        bridge = new WailsBridge(this);
+        // Initialize the native Go library. Process-scoped: on a
+        // recreated activity this returns the existing bridge and
+        // initialize() is a no-op, because the Go runtime behind it is
+        // still up and cannot be started again.
+        bridge = WailsBridge.get(this);
         bridge.initialize();
 
         // Capture a ssh-tool:// deep link from the launch Intent (cold start
@@ -231,11 +234,35 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (bridge != null) {
-            bridge.shutdown();
+        // Do NOT shut the Go runtime down here.
+        //
+        // The activity is destroyed routinely - rotation, the system
+        // reclaiming it while backgrounded - while the process lives
+        // on, kept alive by the foreground service holding the SSH
+        // sessions open. The Go side is per-process and its main()
+        // cannot be started a second time, so tearing it down on an
+        // activity teardown leaves a process that is alive but has no
+        // working runtime: the UI never comes back and only a force
+        // stop clears it.
+        //
+        // Shutdown belongs to the process ending, which Android does
+        // by killing us; there is nothing to do here.
+        if (isFinishing() && bridge != null) {
+            // A real finish (back out of the app, or finish() called)
+            // is the one case where the user has genuinely dismissed
+            // the app rather than the system reclaiming the activity.
+            // Even then the service may still hold sessions, so only
+            // let go of the WebView.
+            Log.i(TAG, "activity finishing; leaving the Go runtime alone");
         }
         if (webView != null) {
+            // Unregister before destroying: the bridge outlives this
+            // activity and must not keep posting into a dead WebView.
+            if (bridge != null) {
+                bridge.detachWebView(webView);
+            }
             webView.destroy();
+            webView = null;
         }
     }
 
