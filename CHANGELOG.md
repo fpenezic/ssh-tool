@@ -7,6 +7,66 @@ a prerelease upstream.
 
 ---
 
+## [0.89.0] - Audit insights, and text selection on mobile
+
+### Added
+
+- **Insights, a summary above the audit log.** Tiles for events, SSH
+  connects, time connected, average and longest session, and failures;
+  an activity sparkline and an hour-of-day histogram; top hosts by time
+  spent and top actions by count. Pick a window of 7, 30 or 90 days, or
+  all time. Clicking an action or a failure fills the Filter box, so the
+  summary leads into the table instead of being a dead end. Everything
+  is computed over the whole log for the chosen window - not over the
+  page the table happens to have loaded, which would have reported "the
+  last 200 events" under a "last 30 days" heading.
+
+- **A breakdown of what the LLM did, by approval gate.** Every MCP
+  action already recorded whether it ran with your approval, ran
+  unattended because you opted out of prompts, was an allowlisted
+  read-only tool, or was denied - but nothing added it up, so the one
+  question worth asking ("how much of this ran without me") meant
+  reading the table row by row. Now it is a bar and a chip per gate.
+
+- **Selecting terminal text with a finger.** Long-press enters selection
+  mode: the keyboard drops out of the way, dragging moves the end of the
+  selection, and a toolbar offers Copy, Select all and Cancel. There was
+  previously no way to do this at all - a touch focused the terminal and
+  a drag scrolled.
+
+- **Security toggles are recorded when they change.** Turning LLM
+  activity logging, command-output logging, the MCP bridge or session
+  sharing on or off now writes an audit row with the previous value as
+  well as the new one.
+
+### Fixed
+
+- **Disconnects are recorded however a session ends.** Only clicking
+  Disconnect used to write one. A session that ended because the server
+  hung up, the network dropped, a tab closed, or the app quit left a
+  connect with nothing to pair it against - so "time connected" was
+  measured from a small fraction of real usage, and dynamic-inventory
+  hosts, which are almost never closed by clicking Disconnect, were
+  missing almost entirely. Sessions still open at quit are recorded too.
+  Rows already in the log cannot be repaired, so the panel says outright
+  when its totals are a lower bound.
+
+- **A window where LLM logging was switched off says so.** An unmarked
+  gap in the log is indistinguishable from a stretch where nothing
+  happened, which is the one thing an audit trail must not be. When the
+  toggle was flipped off inside the window you are looking at, the panel
+  now says the counts are a floor rather than a total.
+
+- **The write-ahead log no longer grows without bound.** A 480 KB
+  audit.db could sit next to a 4 MB audit.db-wal, and a clean shutdown
+  did not reclaim it: SQLite's automatic checkpoint copies data back
+  into the database but then reuses the log file rather than shortening
+  it, so it stays at its high-water mark. Both databases are now
+  truncated on close and every half hour. No data was ever at risk -
+  this is disk space and startup time.
+
+---
+
 ## [0.88.0] - Dynamic hosts, fully wired
 
 ### Added
