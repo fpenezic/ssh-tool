@@ -57,6 +57,21 @@ a prerelease upstream.
   toggle was flipped off inside the window you are looking at, the panel
   now says the counts are a floor rather than a total.
 
+- **Android: the app no longer becomes unrecoverable after being
+  backgrounded.** Coming back to it could leave the launcher icon doing
+  nothing, recents unable to restore it, and swiping the task away no
+  help - only a force stop cleared it. Three methods the Wails runtime
+  calls on our Android bridge were missing, including the two that let
+  the Go side run work on the main thread; without them a main-thread
+  request never completed and blocked everything behind it, while the
+  foreground service kept the process alive. Our own teardown made it
+  worse by shutting the Go runtime down whenever the activity was
+  destroyed, even though the process lives on.
+
+- **Android: the text selection toolbar is usable in portrait.** Its
+  buttons wrapped onto a row that fell off the bottom of the screen, so
+  Copy was only reachable in landscape.
+
 - **The write-ahead log no longer grows without bound.** A 480 KB
   audit.db could sit next to a 4 MB audit.db-wal, and a clean shutdown
   did not reclaim it: SQLite's automatic checkpoint copies data back

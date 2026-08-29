@@ -1858,12 +1858,29 @@
     padding: 0.4rem 0.5rem;
     background: var(--mantle);
     border-top: 1px solid var(--surface0);
-    flex-wrap: wrap;
+    /* Never wrap. Wrapping pushed the buttons onto a second row that
+       fell below the visible area in portrait - the bar looked empty
+       on exactly the orientation people hold a phone in. The bar
+       keeps its height and the row scrolls instead, same as the key
+       bar above it. */
+    flex: 0 0 auto;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
+  .sel-bar::-webkit-scrollbar { display: none; }
   .sel-hint {
     color: var(--subtext0);
     font-size: 0.75rem;
     margin-right: auto;
+    white-space: nowrap;
+    /* First thing to go when width is tight: the buttons are the
+       point of the bar, the hint is a nicety. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  @media (max-width: 30rem) {
+    .sel-hint { display: none; }
   }
   .sel-bar button {
     background: var(--surface0);
@@ -1877,6 +1894,8 @@
     font: inherit;
     font-size: 0.85rem;
     cursor: pointer;
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
   .sel-bar button.primary {
     background: var(--blue);
