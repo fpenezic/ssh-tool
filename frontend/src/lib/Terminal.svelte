@@ -35,6 +35,12 @@
   import PasteGuard from "./PasteGuard.svelte";
   import TermKeyBar from "./TermKeyBar.svelte";
   import { isMobile } from "./platform";
+  import {
+    cellFromPoint as cellFromPointAt,
+    orderCells,
+    selectionLength,
+    exceedsSlop,
+  } from "./touchSelect";
 
   interface Props {
     sessionId: string;
@@ -1531,27 +1537,164 @@
     return Math.hypot(dx, dy);
   }
 
+  // ---------- touch text selection ----------
+  //
+  // There is no way to drag out a selection with a finger: a single
+  // touch focuses the terminal and raises the keyboard, and a drag
+  // scrolls. Both are the right default, so selection needs an
+  // explicit mode rather than a gesture that competes with them.
+  //
+  // Long-press enters it. While active, a drag moves the selection
+  // anchor instead of scrolling, and a small toolbar offers Copy /
+  // Select all / Cancel. Any of those, or a tap outside, leaves.
+  let selecting = $state(false);
+  let selAnchor: { col: number; row: number } | null = null;
+  let longPressTimer: ReturnType<typeof setTimeout> | undefined;
+  let longPressOrigin: { x: number; y: number } | null = null;
+
+  // Movement beyond this cancels the pending long-press: the user is
+  // scrolling, not holding still.
+  const LONG_PRESS_SLOP_PX = 12;
+  const LONG_PRESS_MS = 450;
+
+  // Pixel -> cell. Uses the renderer's real cell box, the same private
+  // path fit() already depends on, falling back to the font estimate
+  // if an xterm upgrade changes the shape.
+  function cellFromPoint(clientX: number, clientY: number): { col: number; row: number } | null {
+    if (!term || !host) return null;
+    const screen = host.querySelector<HTMLElement>(".xterm-screen") ?? host;
+    const r = screen.getBoundingClientRect();
+    const css = (term as any)._core?._renderService?.dimensions?.css?.cell;
+    return cellFromPointAt(
+      clientX,
+      clientY,
+      r,
+      { width: css?.width ?? 0, height: css?.height ?? 0 },
+      term.cols,
+      term.rows,
+    );
+  }
+
+  // xterm's select() takes a length along one row, so a multi-row
+  // range is built by selecting from the anchor to the end of its row,
+  // every whole row between, and the head's row up to the head. Rows
+  // are viewport-relative here, which is what select() expects.
+  function selectRange(a: { col: number; row: number }, b: { col: number; row: number }) {
+    if (!term) return;
+    // Normalise so the anchor is always the earlier point; dragging
+    // backwards is as natural as forwards on a touch screen.
+    const [start, end] = orderCells(a, b);
+    const len = selectionLength(start, end, term.cols);
+    if (start.row === end.row) {
+      term.select(start.col, start.row, len);
+      return;
+    }
+    // Multi-row: xterm has no direct API, so drive it through the
+    // core's selection service, which is what the mouse path uses.
+    const sm = (term as any)._core?._selectionService;
+    if (sm?.setSelection) {
+      sm.setSelection(start.col, start.row, len);
+      term.refresh(start.row, end.row);
+      return;
+    }
+    // Fallback if that private shape ever changes: whole lines. Less
+    // precise, but still gives the user the text.
+    term.selectLines(start.row, end.row);
+  }
+
+  function enterSelectMode(x: number, y: number) {
+    if (!term) return;
+    selecting = true;
+    // Drop the keyboard: it covers half the screen and nothing is
+    // being typed while selecting.
+    const ta = host?.querySelector<HTMLTextAreaElement>("textarea.xterm-helper-textarea");
+    ta?.blur();
+    const cell = cellFromPoint(x, y);
+    if (cell) {
+      selAnchor = cell;
+      // Select the word under the finger as a starting point - a
+      // zero-width selection would look like nothing happened.
+      term.select(cell.col, cell.row, 1);
+    }
+    if (navigator.vibrate) {
+      try { navigator.vibrate(15); } catch { /* not fatal */ }
+    }
+  }
+
+  function exitSelectMode(clear = true) {
+    selecting = false;
+    selAnchor = null;
+    if (clear) term?.clearSelection();
+  }
+
+  async function copyTouchSelection() {
+    const ok = await copySelection(true);
+    if (!ok) toast.err("Nothing selected");
+    exitSelectMode();
+  }
+
+  function selectAllTouch() {
+    term?.selectAll();
+  }
+
   function onPointerDown(e: PointerEvent) {
     if (e.pointerType !== "touch") return;
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (activePointers.size === 2) {
       pinchBaseDist = pinchDistance();
-    } else if (activePointers.size === 1) {
-      // Single-finger tap: focus the terminal so the soft keyboard opens.
-      // xterm's own touch focus is unreliable inside the Android WebView;
-      // focus its hidden textarea directly within this user gesture so the
-      // IME is raised. Falling back to term.focus() if the textarea isn't
-      // found.
-      const ta = host?.querySelector<HTMLTextAreaElement>("textarea.xterm-helper-textarea");
-      if (ta) ta.focus();
-      else term?.focus();
+      // A second finger means pinch, not long-press.
+      clearTimeout(longPressTimer);
+      longPressOrigin = null;
+      return;
     }
+    if (activePointers.size !== 1) return;
+
+    if (selecting) {
+      // Already selecting: this touch re-anchors the range rather
+      // than focusing the terminal.
+      const cell = cellFromPoint(e.clientX, e.clientY);
+      if (cell) {
+        selAnchor = cell;
+        term?.select(cell.col, cell.row, 1);
+      }
+      e.preventDefault();
+      return;
+    }
+
+    // Arm the long-press that enters selection mode. Focus still
+    // happens on release (see onPointerUp) so a plain tap behaves
+    // exactly as before.
+    longPressOrigin = { x: e.clientX, y: e.clientY };
+    clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      if (longPressOrigin) enterSelectMode(longPressOrigin.x, longPressOrigin.y);
+      longPressOrigin = null;
+    }, LONG_PRESS_MS);
   }
 
   function onPointerMove(e: PointerEvent) {
     if (e.pointerType !== "touch") return;
     if (!activePointers.has(e.pointerId)) return;
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    // Dragging in selection mode moves the head of the range. Must
+    // preventDefault or the WebView scrolls the viewport out from
+    // under the selection.
+    if (selecting && activePointers.size === 1 && selAnchor) {
+      const cell = cellFromPoint(e.clientX, e.clientY);
+      if (cell) selectRange(selAnchor, cell);
+      e.preventDefault();
+      return;
+    }
+
+    // Moving before the long-press fires means this is a scroll.
+    if (longPressOrigin) {
+      if (exceedsSlop(longPressOrigin, { x: e.clientX, y: e.clientY }, LONG_PRESS_SLOP_PX)) {
+        clearTimeout(longPressTimer);
+        longPressOrigin = null;
+      }
+    }
+
     if (activePointers.size !== 2 || pinchBaseDist === 0) return;
     e.preventDefault();
     const dist = pinchDistance();
@@ -1567,10 +1710,25 @@
     if (e.pointerType !== "touch") return;
     activePointers.delete(e.pointerId);
     if (activePointers.size < 2) pinchBaseDist = 0;
+
+    const wasPendingPress = longPressOrigin !== null;
+    clearTimeout(longPressTimer);
+    longPressOrigin = null;
+
+    // A tap that never became a long-press: focus the terminal and
+    // raise the IME. Deferred to release (it used to run on press) so
+    // holding still does not pop the keyboard up just before the
+    // selection toolbar replaces it.
+    if (wasPendingPress && !selecting) {
+      const ta = host?.querySelector<HTMLTextAreaElement>("textarea.xterm-helper-textarea");
+      if (ta) ta.focus();
+      else term?.focus();
+    }
   }
 
   onDestroy(() => {
     clearTimeout(selectToastTimer);
+    clearTimeout(longPressTimer);
     resizeObs?.disconnect();
     host?.removeEventListener("paste", onHostPaste, { capture: true } as any);
     host?.removeEventListener("copy", onNativeCopy);
@@ -1623,7 +1781,15 @@
        the sub-row remainder under the last line render as terminal
        colour instead of the app theme's grey strip (obvious on the
        light UI theme above the status bar). -->
-  <div class="term-host" bind:this={host} style:background={terminalPrefs.theme.background ?? "transparent"}></div>
+  <div class="term-host" class:selecting bind:this={host} style:background={terminalPrefs.theme.background ?? "transparent"}></div>
+  {#if isMobile && selecting}
+    <div class="sel-bar" role="toolbar" aria-label="Text selection">
+      <span class="sel-hint">Drag to select</span>
+      <button onclick={selectAllTouch}>Select all</button>
+      <button onclick={() => exitSelectMode()}>Cancel</button>
+      <button class="primary" onclick={copyTouchSelection}>Copy</button>
+    </div>
+  {/if}
   {#if isMobile}
     <TermKeyBar send={sendKeys} />
   {/if}
@@ -1680,6 +1846,49 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* Selection toolbar: sits above the key bar while a touch
+     selection is active, and is the only way out of the mode - a
+     stray tap must not silently drop a selection the user is still
+     building. */
+  .sel-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.5rem;
+    background: var(--mantle);
+    border-top: 1px solid var(--surface0);
+    flex-wrap: wrap;
+  }
+  .sel-hint {
+    color: var(--subtext0);
+    font-size: 0.75rem;
+    margin-right: auto;
+  }
+  .sel-bar button {
+    background: var(--surface0);
+    color: var(--text);
+    border: 0;
+    border-radius: 4px;
+    /* Comfortably past the 44px touch-target floor: this bar sits
+       right above the key bar, and a mis-tap here loses the
+       selection. */
+    padding: 0.55rem 0.9rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .sel-bar button.primary {
+    background: var(--blue);
+    color: var(--on-accent);
+    font-weight: 600;
+  }
+  /* While a touch selection is being dragged the WebView must not
+     also pan the viewport. preventDefault() alone is not enough on
+     Android - the compositor can start scrolling before the handler
+     runs - so the gesture is disabled in CSS for the duration. */
+  .term-host.selecting {
+    touch-action: none;
   }
   .term-host {
     flex: 1;
