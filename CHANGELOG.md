@@ -68,6 +68,12 @@ a prerelease upstream.
   worse by shutting the Go runtime down whenever the activity was
   destroyed, even though the process lives on.
 
+- **Android: the app is 16 KB page compatible.** Recent devices warned
+  at install that it was not. Android 15+ ships hardware with 16 KB
+  memory pages, and the native library was still aligned to the old
+  4 KB - a warning today, but a device with those pages could not have
+  loaded it at all.
+
 - **Android: the text selection toolbar is usable in portrait.** Its
   buttons wrapped onto a row that fell off the bottom of the screen, so
   Copy was only reachable in landscape.
