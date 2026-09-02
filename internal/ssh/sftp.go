@@ -35,6 +35,16 @@ type SftpEntry struct {
 	ModeStr string `json:"mode_str"`     // e.g. "-rw-r--r--"
 	ModTime int64  `json:"mod_time"`     // unix seconds
 	Target  string `json:"target,omitempty"` // symlink target if IsLink
+	// UID/GID come from the raw SFTP attrs. Protocol v3 carries numbers
+	// only - there is no name lookup over SFTP - so the UI shows the ids.
+	// -1 means the server did not report them (some non-POSIX servers).
+	UID int64 `json:"uid"`
+	GID int64 `json:"gid"`
+	// Owner/Group are resolved from the host's /etc/passwd and /etc/group
+	// (see idnames.go) and are empty when the id is not in those files -
+	// LDAP/SSSD accounts, or a server that refuses to serve them.
+	Owner string `json:"owner,omitempty"`
+	Group string `json:"group,omitempty"`
 }
 
 // sftpClient lazily creates and caches the *sftp.Client. Held as a value
@@ -93,12 +103,18 @@ func (s *Session) SftpList(remotePath string) (string, []SftpEntry, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	if remotePath == "" || remotePath == "~" {
-		// pkg/sftp doesn't expand ~; Getwd returns the CWD which is the
-		// user's home after a default OpenSSH login.
-		remotePath, err = cli.Getwd()
+	// pkg/sftp doesn't expand ~; Getwd returns the CWD which is the user's
+	// home after a default OpenSSH login. "~/sub" has to be rewritten too,
+	// not just a bare "~" - the path bar lets one be pasted straight in.
+	if remotePath == "" || remotePath == "~" || strings.HasPrefix(remotePath, "~/") {
+		home, err := cli.Getwd()
 		if err != nil {
 			return "", nil, fmt.Errorf("getwd: %w", err)
+		}
+		if strings.HasPrefix(remotePath, "~/") {
+			remotePath = path.Join(home, remotePath[2:])
+		} else {
+			remotePath = home
 		}
 	}
 	infos, err := cli.ReadDir(remotePath)
@@ -115,11 +131,18 @@ func (s *Session) SftpList(remotePath string) (string, []SftpEntry, error) {
 		}
 		out = append(out, entry)
 	}
+	s.ResolveIDNames(out)
 	return remotePath, out, nil
 }
 
 func fileInfoToEntry(fi os.FileInfo, fullPath string) SftpEntry {
 	mode := fi.Mode()
+	// Sys() is *sftp.FileStat for entries that came off the wire; anything
+	// else (or a server that omitted the attrs) leaves the ids unknown.
+	uid, gid := int64(-1), int64(-1)
+	if st, ok := fi.Sys().(*sftp.FileStat); ok && st != nil {
+		uid, gid = int64(st.UID), int64(st.GID)
+	}
 	return SftpEntry{
 		Name:    fi.Name(),
 		Path:    fullPath,
@@ -129,6 +152,8 @@ func fileInfoToEntry(fi os.FileInfo, fullPath string) SftpEntry {
 		Mode:    uint32(mode.Perm()),
 		ModeStr: mode.String(),
 		ModTime: fi.ModTime().Unix(),
+		UID:     uid,
+		GID:     gid,
 	}
 }
 
@@ -199,6 +224,64 @@ func (s *Session) SftpReadAll(remotePath string, maxBytes int64) ([]byte, error)
 		return io.ReadAll(f)
 	}
 	return io.ReadAll(io.LimitReader(f, maxBytes))
+}
+
+// SftpWriteFile replaces a remote file's contents in place, preserving its
+// permission bits. Used by the quick-view editor, which only ever saves a
+// file the user already opened.
+//
+// Why not reuse SftpUpload: it calls Create(), which truncates and applies
+// the server's default mode. Saving /etc/nginx/nginx.conf that way would
+// silently relax it to 0644. Here we stat first, write, then restore the
+// mode we saw.
+//
+// expectedModTime guards against a lost update: the caller passes the
+// mod-time it read the file at, and a mismatch aborts rather than
+// overwriting whatever changed underneath. Pass 0 to skip the check.
+//
+// The write is not atomic - there is no rename dance, because a temp file
+// next to the target would need the same ownership to be safe, and SFTP
+// gives us no way to set that as a non-root user. A failed write mid-way
+// therefore leaves a truncated file, same as any editor writing in place
+// over SFTP.
+func (s *Session) SftpWriteFile(remotePath string, data []byte, expectedModTime int64) error {
+	cli, err := s.SFTPClient()
+	if err != nil {
+		return err
+	}
+	fi, statErr := cli.Stat(remotePath)
+	if statErr != nil {
+		return fmt.Errorf("stat %s: %w", remotePath, statErr)
+	}
+	if fi.IsDir() {
+		return fmt.Errorf("%s is a directory", remotePath)
+	}
+	if expectedModTime != 0 && fi.ModTime().Unix() != expectedModTime {
+		return fmt.Errorf(
+			"file changed on the server since it was opened (modified %s) - reopen it before saving",
+			fi.ModTime().Format(time.RFC3339),
+		)
+	}
+	mode := fi.Mode().Perm()
+
+	f, err := cli.OpenFile(remotePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
+	if err != nil {
+		return fmt.Errorf("open %s for writing: %w", remotePath, err)
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return fmt.Errorf("write %s: %w", remotePath, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", remotePath, err)
+	}
+	// Restore the mode we found. OpenFile above does not change it on an
+	// existing file, but a server that created it fresh would apply its own
+	// default, so set it back explicitly.
+	if err := cli.Chmod(remotePath, mode); err != nil {
+		return fmt.Errorf("restore mode on %s: %w", remotePath, err)
+	}
+	return nil
 }
 
 // TransferProgress is a chunk of progress info emitted during up/down.

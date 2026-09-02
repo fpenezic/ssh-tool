@@ -272,6 +272,10 @@ type Session struct {
 	// Closed by CloseSFTP from the session-close path.
 	sftp *sftpHolder
 
+	// idNames caches this host's uid/gid -> name maps for the SFTP browser.
+	// Read once per session over SFTP; see idnames.go.
+	idNames *idNames
+
 	// userInitiatedClose is set true by Disconnect so the wait-goroutine
 	// can mark the disconnect as expected. Auto-reconnect logic in the
 	// app layer uses this to decide whether to retry.

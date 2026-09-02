@@ -3841,6 +3841,15 @@ export class SftpPreview {
              */
             this["size"] = 0;
         }
+        if (!("mod_time" in $$source)) {
+            /**
+             * ModTime is the file's mod-time at read. The editor passes it back to
+             * SftpWriteFile so a save aborts if the file changed meanwhile.
+             * @member
+             * @type {number}
+             */
+            this["mod_time"] = 0;
+        }
 
         Object.assign(this, $$source);
     }

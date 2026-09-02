@@ -915,6 +915,40 @@ export class SftpEntry {
              */
             this["target"] = undefined;
         }
+        if (!("uid" in $$source)) {
+            /**
+             * UID/GID come from the raw SFTP attrs. Protocol v3 carries numbers
+             * only - there is no name lookup over SFTP - so the UI shows the ids.
+             * -1 means the server did not report them (some non-POSIX servers).
+             * @member
+             * @type {number}
+             */
+            this["uid"] = 0;
+        }
+        if (!("gid" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["gid"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Owner/Group are resolved from the host's /etc/passwd and /etc/group
+             * (see idnames.go) and are empty when the id is not in those files -
+             * LDAP/SSSD accounts, or a server that refuses to serve them.
+             * @member
+             * @type {string | undefined}
+             */
+            this["owner"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["group"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

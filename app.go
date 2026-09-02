@@ -5308,6 +5308,9 @@ type SftpPreview struct {
 	B64       string `json:"b64"`
 	Truncated bool   `json:"truncated"`
 	Size      int64  `json:"size"`
+	// ModTime is the file's mod-time at read. The editor passes it back to
+	// SftpWriteFile so a save aborts if the file changed meanwhile.
+	ModTime int64 `json:"mod_time"`
 }
 
 func (a *App) SftpReadPreview(sessionID, remotePath string, maxBytes int64) (*SftpPreview, error) {
@@ -5334,7 +5337,29 @@ func (a *App) SftpReadPreview(sessionID, remotePath string, maxBytes int64) (*Sf
 		B64:       base64.StdEncoding.EncodeToString(data),
 		Truncated: truncated,
 		Size:      stat.Size,
+		ModTime:   stat.ModTime,
 	}, nil
+}
+
+// SftpWriteFile saves edited text back to a remote file, keeping its
+// permission bits. b64 is the new contents; expectedModTime is what the
+// editor read the file at, so a concurrent change aborts the save instead
+// of silently winning. Refuses anything over maxWriteBytes - the editor is
+// for configs, not for pushing large files (that is what upload is for).
+func (a *App) SftpWriteFile(sessionID, remotePath, b64 string, expectedModTime int64) error {
+	sess, ok := a.pool.Get(sessionID)
+	if !ok {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+	data, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return fmt.Errorf("decode contents: %w", err)
+	}
+	const maxWriteBytes = 4 << 20
+	if len(data) > maxWriteBytes {
+		return fmt.Errorf("file too large to save from the editor (%d bytes; limit %d)", len(data), maxWriteBytes)
+	}
+	return sess.SftpWriteFile(remotePath, data, expectedModTime)
 }
 
 // LoadTextFileResult carries the picked archive path + its UTF-8

@@ -2773,6 +2773,22 @@ export function SftpStat(sessionID, remotePath) {
 }
 
 /**
+ * SftpWriteFile saves edited text back to a remote file, keeping its
+ * permission bits. b64 is the new contents; expectedModTime is what the
+ * editor read the file at, so a concurrent change aborts the save instead
+ * of silently winning. Refuses anything over maxWriteBytes - the editor is
+ * for configs, not for pushing large files (that is what upload is for).
+ * @param {string} sessionID
+ * @param {string} remotePath
+ * @param {string} b64
+ * @param {number} expectedModTime
+ * @returns {$CancellablePromise<void>}
+ */
+export function SftpWriteFile(sessionID, remotePath, b64, expectedModTime) {
+    return $Call.ByID(2401472593, sessionID, remotePath, b64, expectedModTime);
+}
+
+/**
  * ShareActive returns the UI snapshot of active shares + attached guests.
  * @returns {$CancellablePromise<share$0.ShareStatus[]>}
  */
