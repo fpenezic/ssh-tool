@@ -1418,7 +1418,16 @@ export const api = {
       b64: string;
       truncated: boolean;
       size: number;
+      mod_time: number;
     }>,
+  /** Saves edited contents back. expectedModTime is the mod_time the file
+   *  was read at; the backend refuses the write if it no longer matches. */
+  sftpWriteFile: (
+    sessionId: string,
+    remotePath: string,
+    b64: string,
+    expectedModTime: number,
+  ) => G.SftpWriteFile(sessionId, remotePath, b64, expectedModTime),
   sftpPickDownloadDest: (suggestedName: string) =>
     G.SftpPickDownloadDest(suggestedName) as unknown as Promise<string>,
   sftpPickUploadSource: () =>
@@ -1448,6 +1457,14 @@ export interface SftpEntry {
   mode_str: string;
   mod_time: number;
   target?: string;
+  /** Numeric owner / group from the SFTP attrs; -1 when the server did
+   *  not report them. SFTP has no name lookup, so ids are all we get. */
+  uid: number;
+  gid: number;
+  /** Resolved from the host's /etc/passwd and /etc/group. Absent when the
+   *  id is not in those files (LDAP/SSSD accounts) - fall back to the id. */
+  owner?: string;
+  group?: string;
 }
 
 export interface SftpTransferProgress {

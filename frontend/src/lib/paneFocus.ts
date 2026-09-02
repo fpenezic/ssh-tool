@@ -50,3 +50,30 @@ export function focusActivePane(): void {
     });
   });
 }
+
+/** focusSessionTerminal moves keyboard focus to the terminal showing the
+ *  given session, wherever that pane sits in the layout. Used by the SFTP
+ *  browser's "cd here": the command is typed into the shell, so the user
+ *  has to be able to press Enter without clicking the terminal first.
+ *
+ *  Panes are matched by session AND view - an SFTP or VNC pane can share a
+ *  session with a terminal, and only the terminal has an xterm textarea.
+ *  Returns whether focus was actually moved.
+ */
+export function focusSessionTerminal(sessionId: string): boolean {
+  const wraps = document.querySelectorAll<HTMLElement>(
+    `.term-wrap[data-session="${CSS.escape(sessionId)}"]`,
+  );
+  for (const w of wraps) {
+    const view = w.dataset.view ?? "term";
+    if (view === "sftp" || view === "vnc") continue;
+    const ta = w.querySelector(
+      ".xterm-helper-textarea",
+    ) as HTMLTextAreaElement | null;
+    if (ta) {
+      ta.focus();
+      return true;
+    }
+  }
+  return false;
+}

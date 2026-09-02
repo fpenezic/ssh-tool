@@ -754,7 +754,10 @@
     {#if copyHint}
       <div class="copy-hint">{copyHint}</div>
     {/if}
-    <div class="term-wrap">
+    <!-- data-session lets a sibling pane (the SFTP browser's "cd here")
+         find this session's terminal to focus it; the view attribute keeps
+         it from targeting an SFTP or VNC pane sharing the same session. -->
+    <div class="term-wrap" data-session={node.sessionId} data-view={node.view ?? "term"}>
       {#if node.view === "sftp"}
         <SftpPane sessionId={node.sessionId} />
       {:else if node.view === "vnc"}

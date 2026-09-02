@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { EventsOn } from "./wailsRuntime";
+  import { sessionCwd, parseOsc7 } from "./sessionCwd.svelte";
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
   import { WebglAddon } from "@xterm/addon-webgl";
@@ -1019,6 +1020,18 @@
 
     term.attachCustomKeyEventHandler(customKeyHandler);
     term.onSelectionChange(onSelectionChange);
+
+    // OSC 7 is how a shell announces its working directory (the same
+    // sequence terminal emulators use to open a new tab in the same place).
+    // Bash/zsh emit it when PROMPT_COMMAND or precmd is configured to; if
+    // the shell never sends it, nothing here fires and the SFTP pane's
+    // follow toggle simply has nothing to follow. Returning true marks the
+    // sequence handled so it is not echoed.
+    term.parser.registerOscHandler(7, (payload) => {
+      const dir = parseOsc7(payload);
+      if (dir) sessionCwd.report(sessionId, dir);
+      return true;
+    });
 
     // WebGL is off by default on mobile: the Android WebView's WebGL glyph
     // atlas is flaky (garbled / overlapping text - "hieroglyphs" - after

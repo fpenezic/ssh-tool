@@ -1,11 +1,15 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, untrack } from "svelte";
   import { errMsg } from "./connectErrors";
   import { api, type SftpEntry, type SftpTransferProgress } from "./api";
   import { EventsOn } from "./wailsRuntime";
   import { IconFolder, IconFile, IconLink } from "./iconMap";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
+  import SftpViewModal from "./SftpViewModal.svelte";
+  import { sessionCwd } from "./sessionCwd.svelte";
+  import { toast } from "./toast.svelte";
+  import { focusSessionTerminal } from "./paneFocus";
 
   interface Props {
     sessionId: string;
@@ -103,9 +107,36 @@
     selected = next;
   }
 
+  // SFTP v3 carries numeric ids only; the backend resolves them against the
+  // host's /etc/passwd and /etc/group. Names are used when available and the
+  // id is the fallback, so an LDAP account still renders as a number rather
+  // than as blank. Servers that omit the attrs send -1, shown as a dash.
+  function fmtOwner(e: SftpEntry): string {
+    if (e.uid < 0 && e.gid < 0) return "-";
+    const u = e.owner || (e.uid < 0 ? "?" : String(e.uid));
+    const g = e.group || (e.gid < 0 ? "?" : String(e.gid));
+    return `${u}:${g}`;
+  }
+
+  // The tooltip always shows the raw ids - the name can be ambiguous across
+  // hosts, the number is what the filesystem actually stores.
+  function ownerTitle(e: SftpEntry): string {
+    if (e.uid < 0 && e.gid < 0) return "Owner not reported by the server";
+    const u = e.uid < 0 ? "unknown" : String(e.uid);
+    const g = e.gid < 0 ? "unknown" : String(e.gid);
+    return `uid ${u}, gid ${g}`;
+  }
+
   function openEntry(entry: SftpEntry) {
-    if (entry.is_dir) load(entry.path);
-    // file open: future - for now nothing (download via button)
+    if (entry.is_dir) {
+      load(entry.path);
+      return;
+    }
+    // Files open in the read-only quick view. A symlink to a directory
+    // still lands here (we only know the target string, not its type),
+    // in which case the preview reports the read error - acceptable, and
+    // cheaper than a stat round-trip on every double click.
+    openView(entry);
   }
 
   // Breadcrumbs from absolute cwd; click on a segment navigates there.
@@ -131,6 +162,116 @@
   // ---------- file ops ----------
 
   async function refresh() { load(cwd); }
+
+  // Follow the shell's directory. Opt-in per pane: a listing that jumps
+  // around while you are working in it is worse than one that stays put.
+  // The shell reports its directory via OSC 7 (see sessionCwd); shells that
+  // do not emit it leave shellCwd empty and the toggle disabled.
+  const shellCwd = $derived(sessionCwd.get(sessionId));
+  const following = $derived(sessionCwd.isFollowing(sessionId));
+
+  $effect(() => {
+    if (!following) return;
+    const target = shellCwd;
+    // untrack the comparison: this effect must re-run when the shell moves,
+    // not when our own load() writes cwd back.
+    if (target && target !== untrack(() => cwd)) load(target);
+  });
+
+  // Send the shell to the directory being browsed.
+  //
+  // Ctrl+U first: without it a second click appends to whatever the first
+  // one typed, giving `cd '/x'cd '/x'`. Ctrl+U is the readline "kill line"
+  // binding, so it clears the input the shell is holding - including a
+  // half-typed command of the user's, which is the intended trade: the line
+  // is visibly replaced rather than silently concatenated.
+  //
+  // No trailing newline on purpose: pressing Enter for the user could run
+  // something they did not intend. They see `cd '...'` and confirm it.
+  // Focus moves to the terminal so that Enter actually reaches the shell -
+  // otherwise it lands in this pane and nothing happens.
+  async function cdHere() {
+    if (!cwd) return;
+    // Single-quote the path and escape any embedded quote the POSIX way -
+    // a directory name can legally contain almost anything.
+    const quoted = `\u0015cd '${cwd.replace(/'/g, `'\\''`)}'`;
+    try {
+      const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(quoted)));
+      await api.sshWrite(sessionId, b64);
+      if (!focusSessionTerminal(sessionId)) {
+        toast.push("ok", "Typed into the terminal - press Enter to run it");
+      }
+    } catch (e) {
+      toast.push("err", errMsg(e));
+    }
+  }
+
+  function toggleFollow() {
+    const next = !following;
+    sessionCwd.setFollowing(sessionId, next);
+    // Turning it on should act immediately rather than waiting for the next
+    // prompt - the user just asked to be where the shell is.
+    if (next && shellCwd && shellCwd !== cwd) load(shellCwd);
+  }
+
+  // Quick view: read-only preview of a remote text file. Directories and
+  // symlinks are skipped (a link's target may well be a directory), so
+  // only regular files open.
+  let viewing = $state<{ path: string; name: string } | null>(null);
+
+  function openView(entry: SftpEntry) {
+    if (entry.is_dir) return;
+    viewing = { path: entry.path, name: entry.name };
+  }
+
+  function viewSelected() {
+    if (selected.size !== 1) return;
+    const e = entries.find((x) => x.path === [...selected][0]);
+    if (e) openView(e);
+  }
+
+  // Path bar: the crumbs double as an editable field so a path can be
+  // pasted instead of clicked through. Clicking the empty strip (or the
+  // pencil) swaps in an input seeded with cwd; Enter navigates, Escape
+  // restores the crumbs. Kept as one control rather than a permanent
+  // second row so the toolbar height doesn't change.
+  let editingPath = $state(false);
+  let pathDraft = $state("");
+  let pathInput = $state<HTMLInputElement | null>(null);
+
+  function startEditPath() {
+    pathDraft = cwd || "/";
+    editingPath = true;
+  }
+
+  // Bind:this lands before the element is in the DOM on the same tick,
+  // so focus/select waits for the effect that runs after it is attached.
+  $effect(() => {
+    if (editingPath && pathInput) {
+      pathInput.focus();
+      pathInput.select();
+    }
+  });
+
+  function commitPath() {
+    const next = pathDraft.trim();
+    editingPath = false;
+    if (!next || next === cwd) return;
+    // The backend expands ~ / ~/sub and the SFTP server resolves relative
+    // paths against the login CWD; load() reports back whatever it landed
+    // on, so cwd and the crumbs stay canonical.
+    load(next);
+  }
+
+  function onPathKey(ev: KeyboardEvent) {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      commitPath();
+    } else if (ev.key === "Escape") {
+      ev.preventDefault();
+      editingPath = false;
+    }
+  }
 
   async function mkdir() {
     const name = await showPrompt("New folder name?");
@@ -326,15 +467,55 @@
   <div class="toolbar">
     <button onclick={() => load(parentDir())} disabled={!cwd || cwd === "/"} title="Parent directory">↑</button>
     <button onclick={refresh} title="Refresh">↻</button>
-    <div class="crumbs">
-      {#each crumbs as c, i (c.path)}
-        {#if i > 0}<span class="sep">/</span>{/if}
-        <button class="crumb" onclick={() => load(c.path)}>{c.name}</button>
-      {/each}
-    </div>
+    <button
+      class:active={following}
+      onclick={toggleFollow}
+      disabled={!shellCwd && !following}
+      title={shellCwd
+        ? (following ? `Following the shell (${shellCwd}) - click to stop` : `Follow the shell's directory (${shellCwd})`)
+        : "The shell hasn't reported its directory - its prompt has to emit OSC 7. See the user guide (Follow the shell) for the one-liner."}
+      aria-pressed={following}
+    >⇄</button>
+    <button
+      onclick={cdHere}
+      disabled={!cwd}
+      title="Type 'cd <this directory>' into the terminal (you press Enter)"
+    >cd here</button>
+    {#if editingPath}
+      <input
+        class="path-input"
+        bind:this={pathInput}
+        bind:value={pathDraft}
+        onkeydown={onPathKey}
+        onblur={() => (editingPath = false)}
+        spellcheck="false"
+        autocomplete="off"
+        placeholder="/path/to/dir"
+      />
+    {:else}
+      <div class="crumbs">
+        {#each crumbs as c, i (c.path)}
+          {#if i > 0}<span class="sep">/</span>{/if}
+          <button class="crumb" onclick={() => load(c.path)}>{c.name}</button>
+        {/each}
+        <button
+          class="path-edit"
+          onclick={startEditPath}
+          title="Edit path (paste a path and press Enter)"
+          aria-label="Edit path"
+        >✎</button>
+        <button
+          class="path-gap"
+          onclick={startEditPath}
+          tabindex="-1"
+          aria-hidden="true"
+        ></button>
+      </div>
+    {/if}
     <div class="actions">
       <button onclick={uploadFile} title="Upload file">⬆ Upload</button>
       <button onclick={uploadFolder} title="Upload folder (recursive)">⬆ Folder</button>
+      <button onclick={viewSelected} disabled={selected.size !== 1} title="Quick view (Enter / double click)">View</button>
       <button onclick={downloadSelected} disabled={selected.size !== 1} title="Download selected (folder = recursive)">⬇ Download</button>
       <button onclick={mkdir} title="New folder">＋ Folder</button>
       <button onclick={renameSelected} disabled={selected.size !== 1}>Rename</button>
@@ -351,6 +532,7 @@
       <button class="col name" onclick={() => setSort("name")}>Name {sortKey === "name" ? (sortDir === "asc" ? "▲" : "▼") : ""}</button>
       <button class="col size" onclick={() => setSort("size")}>Size {sortKey === "size" ? (sortDir === "asc" ? "▲" : "▼") : ""}</button>
       <button class="col date" onclick={() => setSort("mod_time")}>Modified {sortKey === "mod_time" ? (sortDir === "asc" ? "▲" : "▼") : ""}</button>
+      <span class="col owner">Owner</span>
       <span class="col mode">Mode</span>
     </div>
     {#if loading && entries.length === 0}
@@ -379,6 +561,7 @@
           </span>
           <span class="col size">{e.is_dir ? "" : fmtSize(e.size)}</span>
           <span class="col date">{fmtDate(e.mod_time)}</span>
+          <span class="col owner" title={ownerTitle(e)}>{fmtOwner(e)}</span>
           <span class="col mode">{e.mode_str}</span>
         </div>
       {/each}
@@ -417,6 +600,19 @@
     </div>
   {/if}
 </div>
+
+{#if viewing}
+  <!-- Keyed on the path: the viewer loads its file on mount, so swapping to
+       another file has to build a new instance rather than reuse this one. -->
+  {#key viewing.path}
+    <SftpViewModal
+      {sessionId}
+      path={viewing.path}
+      name={viewing.name}
+      onClose={() => (viewing = null)}
+    />
+  {/key}
+{/if}
 
 <style>
   .sftp {
@@ -477,6 +673,44 @@
     padding: 0.1rem 0.25rem !important;
   }
   .crumb:hover { background: var(--surface0) !important; }
+  /* Pencil sits right after the last crumb; the gap button is the rest of
+     the strip, so clicking the empty space also opens the path editor. */
+  .path-edit {
+    background: transparent !important;
+    color: var(--overlay1) !important;
+    padding: 0.1rem 0.25rem !important;
+    margin-left: 0.15rem;
+    flex: 0 0 auto;
+  }
+  .toolbar button.active {
+    background: var(--surface1) !important;
+    color: var(--blue) !important;
+  }
+  .path-edit:hover {
+    background: var(--surface0) !important;
+    color: var(--text) !important;
+  }
+  .path-gap {
+    flex: 1 1 auto;
+    min-width: 1rem;
+    align-self: stretch;
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    cursor: text;
+  }
+  .path-input {
+    flex: 1; min-width: 0;
+    margin: 0 0.4rem;
+    padding: 0.15rem 0.4rem;
+    background: var(--base);
+    color: var(--text);
+    border: 1px solid var(--blue);
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: inherit;
+  }
+  .path-input:focus { outline: none; }
   .sep { color: var(--overlay0); }
   .actions { display: flex; gap: 0.25rem; }
   .err {
@@ -491,7 +725,7 @@
   }
   .row {
     display: grid;
-    grid-template-columns: 1fr 80px 140px 110px;
+    grid-template-columns: 1fr 80px 140px 90px 110px;
     align-items: center;
     padding: 0.15rem 0.5rem;
     border-bottom: 1px solid var(--crust);
@@ -513,7 +747,8 @@
     cursor: pointer;
     font: inherit;
   }
-  .col.size, .col.date, .col.mode { color: var(--subtext0); }
+  .col.size, .col.date, .col.owner, .col.mode { color: var(--subtext0); }
+  .col.owner { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .name { display: flex; align-items: center; gap: 0.3rem; min-width: 0; overflow: hidden; }
   .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .link-tgt { color: var(--overlay0); font-size: 0.72rem; }
