@@ -903,13 +903,80 @@ auth).
 
 ### Listing
 
-- Sortable columns: Name, Size, Modified time.
+- Sortable columns: Name, Size, Modified time. Owner and Mode are
+  shown too.
+- Owner reads as `user:group`. SFTP itself only carries numeric ids,
+  so the names are resolved from the host's `/etc/passwd` and
+  `/etc/group` (read once per session). Accounts that live only in
+  LDAP/SSSD are not in those files and stay numeric.
 - Click a file / folder to select it; Ctrl/Cmd-click toggles into a
   multi-selection.
 - Double-click a directory enters it.
 - Breadcrumbs at the top - click any segment to jump.
 - ↑ button = go to parent directory.
 - Refresh button (↻) re-lists the current directory.
+
+### Path bar
+
+The breadcrumbs double as an editable field. Click the pencil (or the
+empty strip beside the crumbs), paste a path, press Enter. Escape puts
+the breadcrumbs back.
+
+Absolute paths, paths relative to your login directory, `~` and `~/sub`
+all work.
+
+### Quick view and editing
+
+Press Enter, double-click a file, or use the **View** button to open a
+read-only preview with syntax highlighting (YAML, INI/conf, JSON,
+shell, Python, Dockerfile, and log output). Binary files are detected
+and refused rather than rendered as garbage; files over 256 KB open
+truncated, with a banner saying so.
+
+- **{ } Format** appears for a JSON document and pretty-prints it. It
+  is a view toggle - it never rewrites the file.
+- **Wrap** toggles line wrapping, **Copy** copies what is on screen.
+- A **CRLF** badge marks a file with Windows line endings. **MIXED**
+  (yellow) means the file has both, and the offending lines are marked
+  in the gutter - that is usually a defect worth fixing.
+- **Edit** switches to an editable buffer. Ctrl+S saves, Escape leaves
+  edit mode, and closing with unsaved changes asks first.
+
+Saving preserves the file's permission bits and its original line
+endings. If the file changed on the server since you opened it, the
+save is refused rather than overwriting someone else's work - reopen
+it and redo the change. Truncated files cannot be edited at all, since
+saving would drop everything past the first 256 KB.
+
+The write is not atomic: an interrupted save leaves a truncated file,
+the same as any editor writing in place over SFTP. For anything
+critical, keep a copy.
+
+### Follow the shell
+
+The **⇄** button makes the browser follow the directory your shell is
+in. It is off by default and set per pane.
+
+This relies on the shell announcing its directory with OSC 7. Many
+distributions ship it only for their own terminal, so it usually needs
+enabling. Add to `~/.bashrc` on the server:
+
+```bash
+PROMPT_COMMAND='printf "\033]7;file://%s%s\033\\" "$HOSTNAME" "$PWD"'
+```
+
+zsh:
+
+```zsh
+precmd() { printf "\033]7;file://%s%s\033\\" "$HOST" "$PWD"; }
+```
+
+Until the shell reports something, the button stays disabled.
+
+The other direction is deliberately manual: **cd here** types
+`cd '<current directory>'` into the terminal and moves focus there,
+but does not press Enter - you confirm it. It clears the input line
+first, so clicking it twice does not concatenate two commands.
 
 ### Toolbar actions
 
@@ -1035,6 +1102,33 @@ stays separate from your everyday browser, so the proxy applies reliably
 and normal browsing isn't routed through the tunnel. Works with both
 Chromium- and Firefox-family browsers (on WSL a persistent Firefox
 profile falls back to isolated).
+
+### Grouping bookmarks: one forward per customer
+
+Each launched browser process gets exactly one proxy - that is a
+browser limitation, not an ssh-tool one. `--proxy-server` is a
+process-wide switch, and a second launch against the same profile
+directory is handed to the already-running process, which keeps the
+proxy it started with. So a profile shared across two SOCKS forwards
+would send everything through whichever one came up first.
+
+That is why every forward gets its own isolated profile, and why two
+forwards mean two browser windows rather than two tabs.
+
+The practical way to get tabs back: **define one SOCKS forward per
+customer (or per environment), on a jump host that can reach all of
+that customer's services, and hang every bookmark for that customer
+off it.** One forward means one browser window, so those bookmarks
+open as tabs and share a session. Isolation stays where it matters -
+between customers, not between services belonging to the same one.
+
+This also avoids address collisions. Two customers both using
+`10.0.0.0/8` internally are only unambiguous if each is reached
+through its own forward.
+
+If a jump host genuinely cannot see part of a customer's estate, give
+that segment its own forward. The extra window is correct there, not
+a workaround.
 
 ### Tunnels from the terminal view
 
