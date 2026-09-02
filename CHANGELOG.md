@@ -7,6 +7,62 @@ a prerelease upstream.
 
 ---
 
+## [0.90.0] - SFTP browser: quick view, editing, path bar
+
+### Added
+
+- **Quick view for remote files.** Press Enter, double-click, or use the
+  new View button to read a file without downloading it. Syntax
+  highlighting covers what you actually open over SFTP: YAML, INI and
+  conf files, JSON, shell, Python and Dockerfiles, plus log output with
+  levels and timestamps coloured. Binary files are detected and refused
+  rather than rendered as noise, and anything over 256 KB opens
+  truncated with a banner saying so.
+- **Editing.** The same view switches to an editable buffer with the
+  highlighting still applied. Ctrl+S saves, Escape leaves edit mode, and
+  closing with unsaved changes asks first. Saving keeps the file's
+  permission bits and its original line endings, and is refused outright
+  if the file changed on the server since you opened it - no silent
+  overwrite of someone else's work. The write is not atomic, so an
+  interrupted save leaves a truncated file, same as any editor working
+  in place over SFTP.
+- **JSON formatting.** A Format button pretty-prints a JSON document in
+  the viewer. It is a view toggle only - editing always works on the raw
+  file, so looking at a file can never rewrite it.
+- **Editable path bar.** The breadcrumbs now double as a field: click
+  the pencil, paste a path, press Enter. Absolute paths, relative ones,
+  `~` and `~/sub` all work.
+- **Owner column.** The listing shows `user:group` alongside Mode. SFTP
+  itself only carries numeric ids, so names are resolved from the host's
+  `/etc/passwd` and `/etc/group`, read once per session over the SFTP
+  channel (so it works on hosts that refuse an exec channel). Accounts
+  that live only in LDAP or SSSD stay numeric, which is the honest
+  answer rather than a guess.
+- **Line-ending awareness.** A CRLF badge marks a file with Windows line
+  endings. MIXED means the file has both, and the offending lines are
+  flagged in the gutter - usually a defect worth fixing rather than a
+  convention.
+- **Follow the shell.** The browser can track the directory your shell
+  is in, off by default and set per pane. It needs the prompt to emit
+  OSC 7; the user guide has the one-liner for bash and zsh. The reverse,
+  cd here, types the directory into the terminal and moves focus there
+  but does not press Enter - you confirm the command yourself.
+
+### Fixed
+
+- **A CRLF file could hang the preview on "Loading".** A YAML list item
+  ending in CR made one of the highlighters throw, which took the whole
+  render down while leaving the loading state on screen. Line splitting
+  now handles all three terminators, and a failure in any highlighter
+  degrades that single line to plain text instead of losing the file.
+- **`~/sub` paths failed to open.** Only a bare `~` was expanded; a
+  tilde with a subdirectory was passed through literally and the listing
+  failed.
+- **A plain `Dockerfile` was highlighted as a shell script.** It now has
+  its own lexer, and `*.Dockerfile` names are recognised too.
+
+---
+
 ## [0.89.1] - Biometric unlock fix (Android)
 
 ### Fixed
