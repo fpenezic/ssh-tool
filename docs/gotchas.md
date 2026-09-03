@@ -1054,6 +1054,68 @@ everything mobile is behind a build tag or an `isMobile` check.
     the bridge outlives every activity, so every per-activity reference it
     holds needs an explicit attach/detach, guarded by identity.
 
+57. **A hand-written lexer must escape its own output, and a decorating
+    pass runs over markup it already emitted.** `miniHighlight.ts` colours
+    a line in several passes: strings first, then keywords, then comments.
+    Each later pass sees the earlier pass's `<span class="tok-str">`, and
+    `class` is a Python keyword - so the keyword pass rewrote the word
+    `class` *inside the attribute it had just produced*, yielding
+    `<span [kw:class]="tok-str">` and visibly broken output. The fix is
+    `outsideTags(html, fn)`, which applies a pass only to the chunks that
+    sit between tags; shell and log passes go through it too.
+
+    Two rules for any new lexer:
+
+    - Escape at the point of emission (`esc()`), never at the end. A
+      later pass cannot tell an escaped `<` from one it must escape.
+    - Never run a bare `String.replace` over a partially-marked line.
+      Route it through `outsideTags`. The failure is invisible until a
+      keyword happens to collide with a class name, which is exactly
+      what test fixtures don't contain - the tests now assert balanced
+      spans and no nested attributes instead.
+
+58. **A file's line terminator is part of every line-anchored regex.**
+    `/opt/pvpgn/docker-compose.yml` hung the quick view on "Loading"
+    forever while an identical-looking file rendered fine. The difference
+    was CRLF: splitting on `\n` alone leaves a trailing `\r` on every
+    line, which sits between the text and the `$` anchor, so
+    `/^(\s*-\s)(.*)$/.exec(line)!` returned null on a list item, the
+    non-null assertion threw, and the TypeError escaped out of
+    `$derived.by` - killing the render with no console the user could
+    see. Three separate fixes, all of which are load-bearing:
+
+    - Split on `/\r\n|\n|\r/`, so no lexer ever sees a stray `\r`.
+    - Per-line `try { fn(line) } catch { esc(line) }` in `highlight()`.
+      This is the one that matters: any future lexer bug now costs one
+      line of colour instead of the whole view.
+    - Never a non-null assertion on a regex result in a lexer.
+
+    Saving keeps the file's own terminator (`detectEol`): a CRLF file
+    stays CRLF, and a mixed file is normalised to CRLF rather than left
+    half-and-half. The editor marks CRLF/MIXED so the user knows which.
+
+59. **`$effect` tracks the state it writes, not just the state it
+    reads.** `SftpViewModal` loaded its file in an `$effect`, and `load()`
+    assigns `formatted = false`. That write made `formatted` a dependency,
+    so toggling Format re-ran the effect, which reset it - the button
+    looked dead. Load-on-open is not reactive work: it runs `onMount`, and
+    a `{#key viewing.path}` around the modal re-mounts it for a different
+    file. Reach for `{#key}` + `onMount` whenever "run once per X" is the
+    actual requirement; an `$effect` that writes its own trigger is a
+    loop that Svelte 5 merely hides.
+
+    Two neighbours in the same modal, same root cause of "the DOM is not
+    yours to reassign":
+
+    - A textarea bound with `bind:value` moves the caret to the end when
+      the bound value is reassigned. The post-save re-read therefore uses
+      `sftpStat` for the mod-time baseline only, and never touches
+      `content`.
+    - `#app { user-select: none }` (`style.css`) is deliberate app-chrome
+      policy; content opts back in with `.selectable` or `<pre>`. And
+      when text is painted under a transparent textarea, an opaque
+      `::selection` background hides the paint - the selection has to be
+      a translucent `color-mix`, with `color: transparent`.
 
 ---
 
