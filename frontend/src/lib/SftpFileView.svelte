@@ -413,16 +413,14 @@
     {#if !isModal && onExpand}
       <button
         onclick={() => requestSwitch(onExpand)}
-        title="Open in a full-size window"
-        aria-label="Open in a full-size window"
-      >⤢</button>
+        title="Open this file in a full-size window"
+      >Expand</button>
     {/if}
     {#if isModal && onDock}
       <button
         onclick={() => requestSwitch(onDock)}
-        title="Dock back into the SFTP pane"
-        aria-label="Dock back into the SFTP pane"
-      >⤡</button>
+        title="Dock this file back into the SFTP pane"
+      >Dock</button>
     {/if}
     <button
       class="close"
