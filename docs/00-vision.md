@@ -17,7 +17,7 @@ Native-ish desktop SSH connection manager s:
 - Hijerarhijskim tree-om konekcija (folderi → subfolderi → konekcije)
 - Inheritance settings-a (jump host, credentials, opcije naslijeđuju se niz tree)
 - File-based encrypted vault (Argon2id + XChaCha20-Poly1305), s
-  opcionalnim machine-bound auto-unlockom kroz OS keychain
+  opcionalnim machine-bound auto-unlockom (file-only, bez OS keychaina)
 - Integriranim terminalom (tabs, splits, undock na drugi monitor, broadcast)
 - opkssh OIDC integracijom (native - bez vanjskog binary-a)
 - SFTP browserom

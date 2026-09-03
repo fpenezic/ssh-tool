@@ -159,6 +159,100 @@ inherited folder settings and feeds it into the standard SSH layer.
 Defined but no longer load-bearing. Broadcast state lives in-memory
 in `BroadcastManager`. The table sticks around for migration safety.
 
+### `credential_secret_history` (v14)
+Sealed history of the last rotations of a credential's secret, so a
+rotated password or API token can still be read back.
+
+```sql
+CREATE TABLE credential_secret_history (
+    id            TEXT PRIMARY KEY,
+    credential_id TEXT NOT NULL REFERENCES credential_refs(id) ON DELETE CASCADE,
+    rotated_at    INTEGER NOT NULL,
+    vault_account TEXT NOT NULL,   -- vault account holding the old secret
+    note          TEXT NOT NULL DEFAULT '',
+    rotated_by    TEXT NOT NULL DEFAULT 'user'
+);
+```
+
+The row holds only a vault account name; the secret itself never
+leaves the vault. Trimmed to the last 5 rotations per credential.
+
+### `pinned_dynamic_entries` (v15)
+Promotes one dynamic-inventory entry to a real `connections` row, so
+per-host overrides survive a refresh that would otherwise rebuild the
+entry from the provider payload.
+
+```sql
+CREATE TABLE pinned_dynamic_entries (
+    folder_id     TEXT NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
+    external_id   TEXT NOT NULL,
+    connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+    pinned_at     INTEGER NOT NULL,
+    PRIMARY KEY (folder_id, external_id)
+);
+```
+
+### `network_profiles` (v17)
+Userspace VPN profiles. `config_json` is polymorphic and carries a
+`kind` field (`wireguard` | `netbird` | `tailscale`) plus the fields
+that kind needs.
+
+```sql
+CREATE TABLE network_profiles (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    config_json TEXT NOT NULL DEFAULT '{}',
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+);
+```
+
+Never round-trip `config_json` through a typed `wg.Profile` - that
+drops the `kind` and provider-specific fields for the two sidecar
+kinds. See `docs/gotchas.md`.
+
+### External credential backends (v18 - v20)
+One table per backend, all with the same shape: an id + unique name,
+where to reach it, vault account references for its own secrets, and
+sync bookkeeping. None of them stores a secret in SQLite.
+
+- **`keepass_databases` (v18)** - `source` is `local` | `webdav` |
+  `sftp`; `master_ref` / `keyfile_ref` name vault accounts;
+  `remote_cfg_json` holds source-specific fetch config, with
+  `last_fetched_at` + `last_etag` for conditional GETs.
+- **`bitwarden_servers` (v19)** - Bitwarden / Vaultwarden.
+  `api_key_ref` + `master_ref`, with `last_synced_at` / `last_hash`.
+- **`infisical_servers` (v20)** - `api_key_ref` points at an
+  `api_token` credential holding client id + secret.
+
+Bitwarden and Infisical also carry `network_profile_id` (v19 / v21):
+the network profile to dial the server through, empty meaning direct.
+
+### Columns added later
+- v16: `connections.vnc_password_vault_key` - VNC console password.
+- v22 / v23: `icon_name` + `icon_color` on `folders`, `connections`,
+  `credential_refs`, `credential_folders` (built-in lucide icons
+  alongside the uploaded `images` ones). v23 repeats v22 because the
+  original was amended after shipping - see the frozen-migration
+  gotcha; the runner tolerates a duplicate-column error per statement.
+- v24: `connections.protocol` (`ssh` default) + `local_shell_kind`,
+  which is what makes a local-shell tab a connection row.
+- v25: `connections.open_hidden` - open the tab without focusing it.
+
+### `audit_events` (v13, separate DB)
+Lives in `audit.db`, not `store.db` - it is machine-local and
+deliberately excluded from sync, export and backup.
+
+```sql
+CREATE TABLE audit_events (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts            INTEGER NOT NULL,
+    action        TEXT NOT NULL,
+    target        TEXT NOT NULL DEFAULT '',
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+```
+
 ## Inheritance
 
 `resolver.Resolve(connectionID)` walks the folder cascade from root

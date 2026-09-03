@@ -37,7 +37,7 @@ Author wants 300+ connections, daily-driver UX, full opkssh support
 
 ## Tech stack
 
-Backend (Go 1.26):
+Backend (Go 1.25):
 - Wails v3 beta.8 (`github.com/wailsapp/wails/v3`) - desktop shell + IPC.
   When bumping this in go.mod, bump `WAILS3_VERSION` in
   `.github/workflows/release.yml` to match: the release build regenerates
@@ -93,7 +93,8 @@ ssh-tool/
 │  │   ├─ rdm/             Devolutions RDM JSON importer (3-pass)
 │  │   ├─ sshconfig/       ~/.ssh/config importer
 │  │   ├─ mobaxterm/       MobaXterm .mxtsessions importer
-│  │   └─ puttyreg/        PuTTY / KiTTY .reg importer
+│  │   ├─ puttyreg/        PuTTY / KiTTY .reg importer
+│  │   └─ superputty/      SuperPuTTY Sessions.xml importer
 │  ├─ syncer/              encrypted WebDAV profile sync (push/pull/live)
 │  ├─ recorder/            asciicast v2 session recording
 │  ├─ resolver/            inheritance: folder tree → ResolvedSettings
@@ -101,10 +102,20 @@ ssh-tool/
 │  ├─ backup/              encrypted store+vault snapshots, scheduler
 │  ├─ ssh/                 SSH client, opkssh, forwards, browser, tcpdump, VNC bridge
 │  ├─ wg/                  userspace WireGuard (wireguard-go + netstack) network profiles
-│  ├─ tunnelhelper/        sidecar (plugin) process manager: spawn + SOCKS5 dialer (NetBird)
+│  ├─ tunnelhelper/        sidecar (plugin) process manager: spawn + SOCKS5 dialer (NetBird, Tailscale)
 │  ├─ inventory/           dynamic providers: Proxmox, Hetzner, DO, Linode, Vultr, Scaleway, AWS EC2, Ansible
 │  ├─ httpc/               HTTP/SOAP probe (used by HttpModal)
 │  ├─ local/               in-app local PTY (Win/Mac/Linux shells)
+│  ├─ keepass/             .kdbx credential backend
+│  ├─ bitwarden/           Bitwarden / Vaultwarden credential backend
+│  ├─ infisical/           Infisical credential backend
+│  ├─ share/               session sharing: browser guest + MCP
+│  ├─ presence/            LAN presence for shared sessions
+│  ├─ updater/             in-app update check + staged install
+│  ├─ exporter/            encrypted archive export / import
+│  └─ initcmd/             initial-command sequencing
+├─ netbird-helper/         optional sidecar plugin (separate Go module)
+├─ tailscale-helper/       optional sidecar plugin (separate Go module)
 ├─ frontend/
 │  ├─ src/                 App.svelte + lib/* (~80 components/stores)
 │  ├─ bindings/            wails-generated, committed (regenerated on build)
@@ -140,10 +151,15 @@ task linux:build                   # bin/ssh-tool
 Tests + checks:
 ```bash
 go build ./...
-go test ./internal/resolver/       # 9 cases
-go test ./internal/creds/          # vault + machine sidecar
+go test ./...                      # 24 packages carry tests
 cd frontend && npm run check       # svelte-check, 0 errors expected
+cd frontend && npm run test        # vitest, 12 files / 141 cases
 ```
+
+Narrower runs while iterating: `go test ./internal/resolver/`
+(inheritance), `./internal/creds/` (vault + machine sidecar),
+`./internal/ssh/` (the largest suite). Android still has to compile:
+`GOOS=android GOARCH=arm64 go build -tags android ./internal/ssh/`.
 
 Regenerate bindings after IPC changes:
 ```bash

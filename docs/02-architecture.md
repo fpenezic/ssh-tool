@@ -14,7 +14,7 @@
 │  │  Main window (Svelte 5)    │  │  Go backend            │    │
 │  │  ┌──────────────────────┐  │  │  ┌──────────────────┐  │    │
 │  │  │  Sidebar (conn/cred) │  │  │  │  store           │  │    │
-│  │  │  Tab bar             │  │  │  │  (SQLite, v11)   │  │    │
+│  │  │  Tab bar             │  │  │  │  (SQLite, v25)   │  │    │
 │  │  │  Split panes         │◄─┼──┼──┤                  │  │    │
 │  │  │   ↳ xterm.js × N     │  │  │  ├──────────────────┤  │    │
 │  │  │  Detail panes        │  │  │  │  creds (vault)   │  │    │
@@ -76,13 +76,21 @@ Representative commands (front → back, request/response):
   `ImportArchive(path, options)`
 
 Events (back → front, push):
-- `pty_output:{sessionID}` → bytes
-- `session_state:{sessionID}` → connected | disconnected | error
-- `forward_state:{forwardID}` → listening | error | closed
+- `pty_output:{sessionID}` -> bytes
+- `session_state:{sessionID}` -> connected | disconnected | error
+- `session_exit:{sessionID}`, `session_debug:{sessionID}`
 - `host_key_challenge` / response via `SshRespondHostKey(...)`
-- `connect_progress:{connectionID}` → "TCP dial", "Handshake", …
+- `auth_prompt`, `username_prompt`, `vault_locked_during_connect`
+- `connect_progress:{connectionID}` -> "TCP dial", "Handshake", ...
 - `dynamic_folder_refreshed:{folderID}`
+- `tcpdump_line_batch` / `tcpdump_event` / `tcpdump_insight`
+- `logtail_line_batch` / `logtail_event` / `logtail_closed`
+- `share_*`, `mcp_*`, `sync_*`, `network_tunnel_changed`
 - `broadcast_changed`, `quit_request`, `window_redock`, `app_log`
+
+That list is representative, not exhaustive - grep `EventsEmit(` for
+the full set (~46 names). Port forwards report through the
+`ForwardsList()` poll plus session state, not a dedicated event.
 
 ## State management
 

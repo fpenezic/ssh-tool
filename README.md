@@ -17,8 +17,9 @@ test status varies).
 - **Connection tree** with folder-level inherited settings, tags,
   multi-select batch editor.
 - **Encrypted credential vault** - Argon2id + XChaCha20-Poly1305,
-  optional OS keychain auto-unlock, idle auto-lock, password
-  strength meter.
+  file-only persistence with an optional machine-bound auto-unlock
+  sidecar (no OS keychain - removed in v0.12.8), idle auto-lock,
+  password strength meter.
 - **Multi-window, multi-tab, multi-pane** terminal with native
   detach / redock and broadcast input across windows.
 - **Workspaces** - named tab bundles you switch between with one
@@ -34,11 +35,14 @@ test status varies).
   or types in with your approval; encrypted, per-guest word-code
   confirmation, no cloud relay) or to an external LLM over MCP.
 - **opkssh** native (no external binary) certificate flow.
-- **SFTP** browser with native OS drag-and-drop upload.
+- **SFTP** browser with native OS drag-and-drop upload, a paste-able
+  path bar, owner/group names, and quick view + in-place editing with
+  syntax highlighting (mode and CRLF/LF endings preserved on save).
 - **Port forwards** - local / remote / SOCKS5 dynamic with
   isolated-browser launcher.
-- **Imports** from Devolutions RDM JSON and ssh_config; encrypted
-  archive export.
+- **Imports** from Devolutions RDM JSON, ssh_config, MobaXterm
+  `.mxtsessions`, PuTTY / KiTTY `.reg` and SuperPuTTY `Sessions.xml`;
+  encrypted archive export.
 
 ## Documentation
 
@@ -56,7 +60,7 @@ test status varies).
 
 ### Requirements
 
-- Go 1.26+
+- Go 1.25+ (`go.mod` is the source of truth)
 - Node 20+
 - [`wails3` CLI](https://wails.io) (beta) - `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8`
 - [Task](https://taskfile.dev) - `go install github.com/go-task/task/v3/cmd/task@latest`
@@ -97,18 +101,32 @@ GDK_BACKEND=x11 WEBKIT_DISABLE_DMABUF_RENDERER=1 \
 
 ```
 ssh-tool/
-├─ main.go            entrypoint (Wails v3 application.New)
-├─ app.go             IPC service exposed to the frontend
+├─ main.go            shared entrypoint (desktop + android split by build tag)
+├─ app.go             IPC service exposed to the frontend (+ app_*.go)
 ├─ internal/
 │  ├─ store/          SQLite + migrations + CRUD (+ audit.db)
 │  ├─ creds/          vault crypto + lifecycle
-│  ├─ ssh/            session, jump chain, forwards, tcpdump, batch
+│  ├─ ssh/            session, jump chain, forwards, sftp, tcpdump, batch
 │  ├─ inventory/      dynamic providers (Proxmox, Hetzner, DO, AWS, ...)
 │  ├─ httpc/          HTTP / SOAP request runner with SOCKS5 dialer
-│  ├─ resolver/       inheritable-settings resolver (folder → conn)
+│  ├─ resolver/       inheritable-settings resolver (folder -> conn)
 │  ├─ local/          in-app local PTY (Win/Mac/Linux shells)
 │  ├─ exporter/       encrypted archive export / import
-│  └─ importer/       RDM JSON + ssh_config parsers
+│  ├─ importer/       RDM, ssh_config, MobaXterm, PuTTY, SuperPuTTY
+│  ├─ wg/             userspace WireGuard network profiles
+│  ├─ tunnelhelper/   sidecar plugin manager (NetBird, Tailscale)
+│  ├─ keepass/        .kdbx credential backend
+│  ├─ bitwarden/      Bitwarden / Vaultwarden credential backend
+│  ├─ infisical/      Infisical credential backend
+│  ├─ syncer/         encrypted WebDAV + cloud profile sync
+│  ├─ backup/         encrypted store+vault snapshots, scheduler
+│  ├─ recorder/       asciicast v2 session recording
+│  ├─ share/          session sharing (browser guest, MCP)
+│  ├─ presence/       LAN presence for shared sessions
+│  ├─ updater/        in-app update check + staged install
+│  └─ initcmd/        initial-command sequencing
+├─ netbird-helper/    optional sidecar plugin (separate module)
+├─ tailscale-helper/  optional sidecar plugin (separate module)
 ├─ frontend/          Svelte 5 + xterm.js
 └─ docs/              user guide, app description, TODO, etc.
 ```

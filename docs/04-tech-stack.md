@@ -6,7 +6,7 @@
 > (the russh fork rejects opkssh's `valid_before=u64::MAX` certs).
 > What follows describes the current stack.
 
-## Backend (Go 1.26)
+## Backend (Go 1.25)
 
 | Module | Purpose |
 |---|---|
@@ -56,8 +56,11 @@ runtime / `ansible-inventory` shell-out.
 | `@xterm/addon-canvas` | Canvas 2D fallback renderer |
 | `@xterm/addon-web-links` | Clickable URLs |
 | `@xterm/addon-search` | Scrollback search |
-| `lucide` | Icon set (replaced emoji placeholders) |
+| `@lucide/svelte` | Icon set (replaced emoji placeholders) |
+| `@novnc/novnc` | VNC console client |
 | `typescript` 5 | Static types |
+| `vitest` 2 | Frontend unit tests (`npm run test`) |
+| `svelte-check` 4 | Type/template checking (`npm run check`) |
 
 Wails autogenerates TS bindings into `frontend/bindings/`. The
 `frontend/src/lib/api.ts` facade wraps those with plain-object
@@ -83,7 +86,7 @@ nothing is uploaded there.
 
 ## Version pinning
 
-- Go: 1.26 (see `go.mod`)
+- Go: 1.25 (see `go.mod` - that file is the only source of truth; CI uses `go-version-file: go.mod`)
 - Node: 20.x LTS
 - Wails CLI v3: matches the prerelease tag pinned in `go.mod` (currently
   beta.8; the same tag is pinned as `WAILS3_VERSION` in

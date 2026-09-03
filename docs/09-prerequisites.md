@@ -5,10 +5,10 @@ What to install for hacking on ssh-tool.
 ## Toolchain
 
 ```bash
-# Go 1.26
+# Go 1.25 (go.mod pins the exact toolchain)
 # https://go.dev/dl - use the official installer or rely on
-# your distro's package manager if it ships 1.26+
-go version    # → go1.26.x
+# your distro's package manager if it ships 1.25+
+go version    # -> go1.25.x or newer
 
 # Node 20 LTS
 # https://nodejs.org or use fnm/nvm

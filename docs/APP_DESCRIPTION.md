@@ -44,7 +44,7 @@ reconnect, keepalive). Tags + auto-facets for filtering. Multi-select
 with tri-state batch editor.
 
 **Credential vault** - Argon2id-derived key + XChaCha20-Poly1305
-authenticated encryption, optional OS-keychain auto-unlock sidecar,
+authenticated encryption, optional machine-bound auto-unlock sidecar,
 idle auto-lock. Password / private key / agent / opkssh kinds, with
 custom icons and folder grouping.
 
@@ -95,7 +95,7 @@ archive bundle. Exports never include credential secrets by default.
 ### Secure credential vault
 
 - **Argon2id + XChaCha20-Poly1305** at rest.
-- **Optional OS keychain auto-unlock**, **idle auto-lock**,
+- **Optional machine-bound auto-unlock**, **idle auto-lock**,
   **password strength meter** on create / rotate.
 - **Per-connection password override** stored separately for
   one-off cases where the credential doesn't apply.
