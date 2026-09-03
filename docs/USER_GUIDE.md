@@ -928,10 +928,21 @@ all work.
 ### Quick view and editing
 
 Press Enter, double-click a file, or use the **View** button to open a
-read-only preview with syntax highlighting (YAML, INI/conf, JSON,
-shell, Python, Dockerfile, and log output). Binary files are detected
-and refused rather than rendered as garbage; files over 256 KB open
-truncated, with a banner saying so.
+preview with syntax highlighting (YAML, INI/conf, JSON, shell, Python,
+Dockerfile, and log output). Binary files are detected and refused
+rather than rendered as garbage; files over 256 KB open truncated,
+with a banner saying so.
+
+The preview **docks inside the SFTP pane**, under the listing, rather
+than covering the window. Since the browser opens as a split beside
+the terminal, this is what lets you read a README or a config while
+you type in the shell next to it. Drag the divider between the listing
+and the preview to resize; double-click it to reset to half. Escape
+does not close a docked preview - it only leaves edit mode - so the
+file stays put while you work beside it.
+
+- **Expand** moves the file to a full-window view for when the split
+  is too short. **Dock** in that window puts it back.
 
 - **{ } Format** appears for a JSON document and pretty-prints it. It
   is a view toggle - it never rewrites the file.

@@ -7,6 +7,64 @@ a prerelease upstream.
 
 ---
 
+## [0.91.0] - SFTP file view docks in the pane
+
+### Changed
+
+- **The SFTP file view no longer covers your session.** It docks inside
+  the SFTP pane, under the listing, instead of opening as a modal over
+  the whole window. The browser opens as a split beside the terminal,
+  so the modal was covering the very shell you opened the file for -
+  reading a README or a config while typing next door was impossible
+  without closing it first. Drag the divider between the listing and
+  the preview to resize it, or double-click the divider to reset to
+  half; the height is remembered as a share of the pane, so it survives
+  a resize.
+- The full-window view is still there for a long config in a short
+  split: **Expand** sends the file to it, **Dock** brings it back.
+  Switching either way asks first if you have unsaved changes.
+- Escape no longer closes the file view when it is docked - it only
+  leaves edit mode. The key reaches the view whenever focus happens to
+  sit in it, and closing a file you are reading beside your shell would
+  be a trap. The full-window view still closes on Escape.
+- Keyboard focus stays in the terminal when a docked file opens. The
+  docked view takes focus only when you click into it, which is what
+  makes typing in the shell while reading a file work at all.
+
+### Fixed
+
+- The divider between the listing and the file view no longer sticks to
+  the cursor after you release the mouse.
+- The two buttons that move a file between the docked and full-window
+  views are now labelled Expand and Dock. They were a pair of diagonal
+  arrows that are not actually opposites - both are bidirectional - so
+  the control that undid the expand looked identical to the one that
+  performed it.
+- **No more emoji in the interface.** Eight were left, in the HTTP
+  modal, port forwards, the folder picker, the host-key warning, the
+  import banner and the icon picker. Emoji render from the system font,
+  so the same button looked different on Windows, Linux, macOS and
+  Android - and the project's own rules had banned them everywhere else
+  already.
+
+### Documentation
+
+- Audited every doc against the source. The Go version was wrong in
+  four places, three documents still advertised the OS-keychain vault
+  unlock that was removed in v0.12.8, the architecture diagram showed a
+  schema 14 versions stale, and it listed an event that has never
+  existed. The data model stopped at schema v11 while its own header
+  said v25 - the eight tables and six columns added since are now
+  documented. The internal package layout was missing twelve packages
+  and a fifth importer.
+- Recorded the three traps the v0.90.0 file viewer walked into, in
+  `docs/gotchas.md`: a lexer whose decorating pass rewrites markup an
+  earlier pass emitted, a file's line terminator breaking every
+  line-anchored regex, and a Svelte `$effect` tracking the state it
+  writes rather than only what it reads.
+
+---
+
 ## [0.90.0] - SFTP browser: quick view, editing, path bar
 
 ### Added
