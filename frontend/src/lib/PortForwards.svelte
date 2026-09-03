@@ -474,7 +474,7 @@
                 class="copy-port"
                 title="Copy {status.local_port} to clipboard"
                 onclick={() => copyAssignedPort(status.local_port)}
-              >📋 :{status.local_port}</button>
+              >:{status.local_port}</button>
             {/if}
             {#if running && status}
               <span class="bytes">↓ {fmtBytes(status.bytes_in)} · ↑ {fmtBytes(status.bytes_out)}</span>

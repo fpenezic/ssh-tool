@@ -1302,7 +1302,7 @@
           currentIconId={folder.icon_image_id}
           currentIconName={folder.icon_name}
           currentIconColor={folder.icon_color}
-          fallbackEmoji="📁"
+          fallbackEmoji=""
           onChange={() => tree.load()}
           onNamedChange={() => tree.load()}
         /></div>
@@ -1639,7 +1639,7 @@
         currentIconId={conn.icon_image_id}
         currentIconName={conn.icon_name}
         currentIconColor={conn.icon_color}
-        fallbackEmoji="🖥"
+        fallbackEmoji=""
         onChange={() => tree.load()}
         onNamedChange={() => tree.load()}
       /></div>

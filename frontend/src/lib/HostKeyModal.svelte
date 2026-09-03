@@ -31,7 +31,6 @@
   <div class="modal">
     {#if status === "changed"}
       <header class="warn">
-        <span class="icon">⚠️</span>
         <h1>Host key changed - possible attack!</h1>
       </header>
       <p class="warn-text">

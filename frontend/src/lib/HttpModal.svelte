@@ -273,7 +273,7 @@
           <div class="body-toggle">
             <button class:active={bodyView === "pretty"} onclick={() => (bodyView = "pretty")}>Pretty</button>
             <button class:active={bodyView === "raw"} onclick={() => (bodyView = "raw")}>Raw</button>
-            <button onclick={copyBody} title="Copy body">📋</button>
+            <button onclick={copyBody} title="Copy body">Copy</button>
           </div>
         </div>
         <details class="resp-headers" open={false}>

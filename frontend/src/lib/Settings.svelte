@@ -4665,7 +4665,7 @@
     {#if rdmSummary}
       <div class="summary" bind:this={rdmSummaryEl}>
         <div class="banner ok-banner">
-          ✅ Import done -
+          Import done -
           <strong>{rdmSummary.connections_created}</strong> connections,
           <strong>{rdmSummary.folders_created}</strong> folders,
           <strong>{rdmSummary.images_stored}</strong> icons.

@@ -703,7 +703,7 @@
           currentIconId={cred.icon_image_id ?? null}
           currentIconName={cred.icon_name}
           currentIconColor={cred.icon_color}
-          fallbackEmoji="🔑"
+          fallbackEmoji=""
           onChange={() => credentials.load()}
           onNamedChange={() => credentials.load()}
         />

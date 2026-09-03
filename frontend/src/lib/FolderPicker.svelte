@@ -88,7 +88,6 @@
         class="row root"
         onclick={() => onPick(null)}
       >
-        <span class="ico">📂</span>
         <span class="nm">(root - top level)</span>
       </button>
       {#each tree.childrenOf(null) as f (f.id)}
