@@ -7,6 +7,7 @@
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import SftpViewModal from "./SftpViewModal.svelte";
+  import SftpFileView from "./SftpFileView.svelte";
   import { sessionCwd } from "./sessionCwd.svelte";
   import { toast } from "./toast.svelte";
   import { focusSessionTerminal } from "./paneFocus";
@@ -214,14 +215,50 @@
     if (next && shellCwd && shellCwd !== cwd) load(shellCwd);
   }
 
-  // Quick view: read-only preview of a remote text file. Directories and
-  // symlinks are skipped (a link's target may well be a directory), so
-  // only regular files open.
+  // Quick view of a remote text file. Directories and symlinks are skipped
+  // (a link's target may well be a directory), so only regular files open.
+  //
+  // The view docks inside this pane by default rather than opening a modal.
+  // SFTP opens as a split beside the terminal, so a modal covered the very
+  // shell the user was reading the file for; docked, a README or a config
+  // stays on screen while they type next door. `expanded` sends the same
+  // file to the modal for the cases where the split is simply too short.
   let viewing = $state<{ path: string; name: string } | null>(null);
+  let expanded = $state(false);
+
+  // Height of the docked view, as a share of the pane. Kept in a ratio
+  // rather than pixels so it survives a pane resize.
+  const VIEW_MIN = 0.15;
+  const VIEW_MAX = 0.85;
+  let viewFrac = $state(0.5);
+  let paneEl = $state<HTMLDivElement | null>(null);
 
   function openView(entry: SftpEntry) {
     if (entry.is_dir) return;
     viewing = { path: entry.path, name: entry.name };
+    expanded = false;
+  }
+
+  // Drag the splitter between the listing and the docked view. Pointer
+  // capture keeps the drag alive over the iframe-less webview even when the
+  // cursor leaves the splitter, and avoids the mouseup-outside case that
+  // would otherwise strand us mid-drag.
+  function startResize(e: PointerEvent) {
+    if (!paneEl) return;
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const rect = paneEl.getBoundingClientRect();
+    const onMove = (ev: PointerEvent) => {
+      const frac = (rect.bottom - ev.clientY) / rect.height;
+      viewFrac = Math.min(VIEW_MAX, Math.max(VIEW_MIN, frac));
+    };
+    const onUp = (ev: PointerEvent) => {
+      (e.currentTarget as HTMLElement).releasePointerCapture(ev.pointerId);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   }
 
   function viewSelected() {
@@ -463,7 +500,13 @@
   }
 </script>
 
-<div class="sftp" data-file-drop-target="sftp-{sessionId}" data-sftp-session={sessionId} data-cwd={cwd || "/"}>
+<div
+  class="sftp"
+  bind:this={paneEl}
+  data-file-drop-target="sftp-{sessionId}"
+  data-sftp-session={sessionId}
+  data-cwd={cwd || "/"}
+>
   <div class="toolbar">
     <button onclick={() => load(parentDir())} disabled={!cwd || cwd === "/"} title="Parent directory">↑</button>
     <button onclick={refresh} title="Refresh">↻</button>
@@ -599,17 +642,42 @@
       {/each}
     </div>
   {/if}
+
+  {#if viewing && !expanded}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="vsplit"
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="Resize file preview"
+      onpointerdown={startResize}
+      ondblclick={() => (viewFrac = 0.5)}
+      title="Drag to resize, double-click to reset"
+    ></div>
+    <div class="viewdock" style="height: {(viewFrac * 100).toFixed(1)}%">
+      <!-- Keyed on the path: the view loads its file on mount, so swapping
+           to another file has to build a new instance, not reuse this one. -->
+      {#key viewing.path}
+        <SftpFileView
+          {sessionId}
+          path={viewing.path}
+          name={viewing.name}
+          chrome="inline"
+          onClose={() => (viewing = null)}
+          onExpand={() => (expanded = true)}
+        />
+      {/key}
+    </div>
+  {/if}
 </div>
 
-{#if viewing}
-  <!-- Keyed on the path: the viewer loads its file on mount, so swapping to
-       another file has to build a new instance rather than reuse this one. -->
+{#if viewing && expanded}
   {#key viewing.path}
     <SftpViewModal
       {sessionId}
       path={viewing.path}
       name={viewing.name}
-      onClose={() => (viewing = null)}
+      onClose={() => { viewing = null; expanded = false; }}
     />
   {/key}
 {/if}
@@ -722,7 +790,27 @@
   .listing {
     overflow: auto;
     background: var(--base);
+    /* flex:1 with min-height:0 so the docked preview below can claim its
+       share instead of pushing the listing past the pane. */
+    flex: 1;
+    min-height: 0;
   }
+  /* Docked file preview. Height is driven by the splitter; flex-shrink:0
+     keeps it from collapsing when the listing is long. */
+  .viewdock {
+    flex: 0 0 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .vsplit {
+    flex: 0 0 auto;
+    height: 5px;
+    cursor: row-resize;
+    background: var(--surface0);
+  }
+  .vsplit:hover { background: var(--blue); }
   .row {
     display: grid;
     grid-template-columns: 1fr 80px 140px 90px 110px;
