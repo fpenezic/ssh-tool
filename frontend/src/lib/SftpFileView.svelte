@@ -43,6 +43,10 @@
     /** Inline only: swap this file out for the modal, which has room for
      *  a long config. Omitted (and the button hidden) in the modal itself. */
     onExpand?: () => void;
+    /** Modal only: send this file back to the pane's docked view. The
+     *  inverse of onExpand, so the two chromes are reachable from each
+     *  other rather than expand being a one-way trip. */
+    onDock?: () => void;
   }
   let {
     sessionId,
@@ -51,6 +55,7 @@
     onClose,
     chrome = "modal",
     onExpand,
+    onDock,
   }: Props = $props();
   const isModal = $derived(chrome === "modal");
 
@@ -235,6 +240,22 @@
 
   let hlEl = $state<HTMLDivElement | null>(null);
 
+  /** Switching chrome remounts this component (both mount sites key on the
+   *  path), so an unsaved draft would vanish without a word. Same confirm
+   *  as closing, for the same reason. */
+  async function requestSwitch(go: () => void) {
+    if (dirty) {
+      const ok = await showConfirm({
+        title: "Discard changes",
+        message: `Discard your unsaved changes to ${name}?`,
+        okLabel: "Discard",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    go();
+  }
+
   // The highlight layer scrolls with the textarea. Driven from the
   // textarea's scroll event rather than CSS because the two elements are
   // independently scrollable and only the textarea receives wheel/caret
@@ -390,7 +411,18 @@
         {/if}
       {/if}
     {#if !isModal && onExpand}
-      <button onclick={onExpand} title="Open in a full-size window">⤢</button>
+      <button
+        onclick={() => requestSwitch(onExpand)}
+        title="Open in a full-size window"
+        aria-label="Open in a full-size window"
+      >⤢</button>
+    {/if}
+    {#if isModal && onDock}
+      <button
+        onclick={() => requestSwitch(onDock)}
+        title="Dock back into the SFTP pane"
+        aria-label="Dock back into the SFTP pane"
+      >⤡</button>
     {/if}
     <button
       class="close"

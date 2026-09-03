@@ -15,8 +15,11 @@
     path: string;
     name: string;
     onClose: () => void;
+    /** Restore this file to SftpPane's docked view. Passed straight to the
+     *  shared view, which guards it with the unsaved-changes confirm. */
+    onDock?: () => void;
   }
-  let { sessionId, path, name, onClose }: Props = $props();
+  let { sessionId, path, name, onClose, onDock }: Props = $props();
 
   // The view owns the unsaved-changes confirm, so the backdrop routes
   // through it rather than calling onClose directly.
@@ -52,6 +55,7 @@
       {path}
       {name}
       {onClose}
+      {onDock}
       chrome="modal"
     />
   </div>

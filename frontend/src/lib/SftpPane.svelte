@@ -239,26 +239,38 @@
     expanded = false;
   }
 
-  // Drag the splitter between the listing and the docked view. Pointer
-  // capture keeps the drag alive over the iframe-less webview even when the
-  // cursor leaves the splitter, and avoids the mouseup-outside case that
-  // would otherwise strand us mid-drag.
+  // Drag the splitter between the listing and the docked view.
+  //
+  // Deliberately NOT setPointerCapture: capture retargets every subsequent
+  // pointer event to the splitter itself, so a pointerup listener bound to
+  // window never fires, the listeners are never removed, and the divider
+  // follows the mouse for ever. Capture and window-level listeners are two
+  // ways of doing the same job and must not be combined - window listeners
+  // already survive the cursor leaving the splitter, which is the only
+  // thing capture would have bought us.
+  let resizing = $state(false);
+
   function startResize(e: PointerEvent) {
     if (!paneEl) return;
     e.preventDefault();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     const rect = paneEl.getBoundingClientRect();
+    resizing = true;
     const onMove = (ev: PointerEvent) => {
       const frac = (rect.bottom - ev.clientY) / rect.height;
       viewFrac = Math.min(VIEW_MAX, Math.max(VIEW_MIN, frac));
     };
-    const onUp = (ev: PointerEvent) => {
-      (e.currentTarget as HTMLElement).releasePointerCapture(ev.pointerId);
+    const stop = () => {
+      resizing = false;
       window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
     };
     window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    // pointercancel too: the webview cancels the stream when the drag turns
+    // into a browser gesture or the window loses the pointer, and without it
+    // that path leaks the same stuck-divider bug pointerup used to.
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
   }
 
   function viewSelected() {
@@ -647,6 +659,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="vsplit"
+      class:dragging={resizing}
       role="separator"
       aria-orientation="horizontal"
       aria-label="Resize file preview"
@@ -678,6 +691,7 @@
       path={viewing.path}
       name={viewing.name}
       onClose={() => { viewing = null; expanded = false; }}
+      onDock={() => (expanded = false)}
     />
   {/key}
 {/if}
@@ -810,7 +824,10 @@
     cursor: row-resize;
     background: var(--surface0);
   }
-  .vsplit:hover { background: var(--blue); }
+  .vsplit:hover, .vsplit.dragging { background: var(--blue); }
+  /* While dragging, the cursor must not flicker as it crosses the listing
+     or the view, and neither may start a text selection. */
+  :global(body:has(.vsplit.dragging)) { cursor: row-resize; user-select: none; }
   .row {
     display: grid;
     grid-template-columns: 1fr 80px 140px 90px 110px;
