@@ -20,6 +20,7 @@
   import { clickOutside } from "./clickOutside";
   import type { Folder, Connection, PortForward, ForwardStatus, ProxyBookmark } from "./api";
   import { IconFolder, IconHost, IconTunnel, IconExternalLink, IconAction, IconWorkspace, dynamicEntryIcon, IconTerminal } from "./iconMap";
+  import Icon from "./Icon.svelte";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
   import { workspaces } from "./workspaces.svelte";
@@ -561,6 +562,19 @@
     }
   });
 
+  /** customIcon returns the per-row icon a connection or folder was given in
+   *  the tree (an uploaded image, or a built-in lucide name + colour), or
+   *  null for every other row kind. The palette used to draw only the
+   *  generic type icon, so a host the user had deliberately marked with a
+   *  colour or a picture looked like every other host here. The entries
+   *  already carry the whole row, so nothing extra is fetched. */
+  function customIcon(e: Entry): { imageId?: string | null; name?: string | null; color?: string | null } | null {
+    const row = e.kind === "connection" ? e.conn : e.kind === "folder" ? e.folder : null;
+    if (!row) return null;
+    if (!row.icon_image_id && !row.icon_name) return null;
+    return { imageId: row.icon_image_id, name: row.icon_name, color: row.icon_color };
+  }
+
   function iconFor(e: Entry): Component {
     if (e.kind === "open_tab") return IconTerminal;
     if (e.kind === "folder") return IconFolder;
@@ -663,6 +677,7 @@
         {@const isConn = r.entry.kind === "connection"}
         {@const Ic = iconFor(r.entry)}
         {@const sessCount = entrySessionCount(r.entry)}
+        {@const custom = customIcon(r.entry)}
         {@const connected = sessCount > 0}
         <div
           class="row"
@@ -680,7 +695,14 @@
             class="icon"
             class:tunnel-on={r.entry.kind === "forward" && r.entry.running}
             class:connected
-          ><Ic size={14} /></span>
+            class:custom
+          >{#if custom}
+              <Icon imageId={custom.imageId} iconName={custom.name} iconColor={custom.color} size={14}>
+                <Ic size={14} />
+              </Icon>
+            {:else}
+              <Ic size={14} />
+            {/if}</span>
           <div class="meta">
             <div class="label" class:connected>
               {#each segs as s}
@@ -855,6 +877,10 @@
   }
   .icon.tunnel-on { color: var(--green); }
   .icon.connected { color: var(--green); }
+  /* A row with its own icon keeps the colour the user picked; the green
+     "connected" tint would otherwise silently override it. The label is
+     still tinted, so the connected state stays visible. */
+  .icon.custom { color: inherit; }
   .label.connected { color: var(--green); }
   .bm-conn { color: var(--blue); }
   .bm-conn.on { color: var(--green); }
