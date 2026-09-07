@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tree, selection, drag, sessions, paneTabs, view } from "./stores.svelte";
   import TreeNode from "./TreeNode.svelte";
+  import { renameState } from "./renameState.svelte";
   import { api } from "./api";
   import { computeIntent, isInvalidDrop, applyDrop, applyDropToRoot, applyMultiDrop, applyMultiDropToRoot, type DragKind } from "./treeDnd";
   import { setMultiDragImage } from "./dragImage";
@@ -364,6 +365,22 @@
     // Connections take precedence when both are selected (typical
     // path); folder-only selection routes through the folder-delete
     // flow which cascades.
+    // F2 renames the focused row in place, the way a file manager does.
+    // Only for a single selection: a rename is one name, and silently
+    // picking one row out of several would be worse than doing nothing.
+    if (e.key === "F2") {
+      const conns = selection.selectedConnectionIds();
+      const folders = selection.selectedFolderIds();
+      if (conns.length === 1) {
+        e.preventDefault();
+        renameState.begin("connection", conns[0]);
+      } else if (folders.length === 1) {
+        e.preventDefault();
+        renameState.begin("folder", folders[0]);
+      }
+      return;
+    }
+
     if (e.key === "Delete" || (e.key === "Backspace" && e.metaKey)) {
       const conns = selection.selectedConnectionIds();
       const folders = selection.selectedFolderIds();

@@ -6,6 +6,7 @@
   import { tagFilter } from "./tagFilter.svelte.ts";
   import { nameFilter } from "./nameFilter.svelte.ts";
   import { appPrefs } from "./appPrefs.svelte";
+  import { renameState } from "./renameState.svelte";
   import { api, type Folder } from "./api";
   import TreeNodeSelf from "./TreeNode.svelte";
   import Icon from "./Icon.svelte";
@@ -528,6 +529,46 @@
     e.stopPropagation();
     expandedConnections.toggle(folder.id);
   }
+  // ----- Inline rename (F2 from the sidebar puts a row into this mode) -----
+
+  // Guards the commit so blur-after-Enter and blur-after-Escape cannot fire a
+  // second save. The input is removed from the DOM by the rename ending,
+  // which itself triggers blur.
+  let renameDone = false;
+
+  async function commitRename(kind: "connection" | "folder", id: string, was: string, next: string) {
+    if (renameDone) return;
+    renameDone = true;
+    const name = next.trim();
+    // An unchanged or emptied name is a cancel, not an error: the user
+    // pressed Enter on a field they did not mean to change.
+    if (!name || name === was) {
+      renameState.end();
+      return;
+    }
+    try {
+      if (kind === "connection") {
+        await api.connectionsUpdate({ id, name });
+      } else {
+        await api.foldersUpdate({ id, name });
+      }
+      await tree.load();
+    } catch (e) {
+      toast.push("err", errMsg(e));
+    } finally {
+      renameState.end();
+    }
+  }
+
+  // Focus and pre-select the name so typing replaces it, which is what F2
+  // does everywhere else. Runs on mount of the input via {@attach}-style
+  // action rather than an effect, so it fires exactly once per rename.
+  function renameInput(node: HTMLInputElement) {
+    renameDone = false;
+    node.focus();
+    node.select();
+  }
+
   function onRowKey(e: KeyboardEvent) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -738,12 +779,34 @@
         <IconFolder size={14} />
       {/if}
     </Icon></span>
-    <span
-      class="name"
-      class:has-live={liveInSubtree > 0}
-      class:dyn-name={isDynamicFolder}
-      title={isDynamicFolder ? dynamicTooltip : ""}
-    >{folder.name}</span>
+    {#if renameState.editing("folder", folder.id)}
+      <!-- svelte-ignore a11y_autofocus -->
+      <input
+        class="rename"
+        value={folder.name}
+        use:renameInput
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commitRename("folder", folder.id, folder.name, e.currentTarget.value);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            renameDone = true;
+            renameState.end();
+          }
+        }}
+        onblur={(e) => commitRename("folder", folder.id, folder.name, e.currentTarget.value)}
+      />
+    {:else}
+      <span
+        class="name"
+        class:has-live={liveInSubtree > 0}
+        class:dyn-name={isDynamicFolder}
+        title={isDynamicFolder ? dynamicTooltip : ""}
+      >{folder.name}</span>
+    {/if}
     {#if isDynamicFolder && dynamicMeta?.last_error}
       <button
         class="dyn-err-dot"
@@ -958,7 +1021,29 @@
               </Icon>
             {/if}
           </span>
-          <span class="name">{conn.name}</span>
+          {#if renameState.editing("connection", conn.id)}
+            <input
+              class="rename"
+              value={conn.name}
+              use:renameInput
+              onclick={(e) => e.stopPropagation()}
+              ondblclick={(e) => e.stopPropagation()}
+              onkeydown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitRename("connection", conn.id, conn.name, e.currentTarget.value);
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  renameDone = true;
+                  renameState.end();
+                }
+              }}
+              onblur={(e) => commitRename("connection", conn.id, conn.name, e.currentTarget.value)}
+            />
+          {:else}
+            <span class="name">{conn.name}</span>
+          {/if}
           {#if conn.favorite}<span class="fav" title="Favourite"><IconStar size={11} fill="var(--yellow)" /></span>{/if}
           {#if isConn}
             <span class="conn-hint">connecting…</span>
@@ -1082,6 +1167,20 @@
   /* The name must survive a long subtitle: without a min-width a flex item
      refuses to shrink below its content, so a local connection whose Command
      is a whole script pushed the name out of the row entirely. */
+  /* Inline rename field. Sized and styled to sit in the row without
+     changing its height, so the tree does not jump when F2 is pressed. */
+  .rename {
+    flex: 1 1 auto;
+    min-width: 0;
+    font: inherit;
+    color: var(--text);
+    background: var(--base);
+    border: 1px solid var(--blue);
+    border-radius: 2px;
+    padding: 0 0.2rem;
+    margin: 0;
+    outline: none;
+  }
   .name { flex: 1; min-width: 4rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .count { color: var(--overlay1); font-size: 0.75rem; }
   /* .host doubles as the local-shell Command, which can be arbitrarily long -
