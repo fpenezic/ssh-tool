@@ -473,6 +473,12 @@ Each credential has a **kind** that determines auth behaviour:
   that (credentials go through the full vault-cleanup path, they no
   longer drop flat to the root). The Delete key works on the
   current selection, multi-selections included.
+- **F2 renames in place.** The name turns into a field in the row
+  itself: Enter saves, Escape abandons, and the text starts selected so
+  typing replaces it. Press F2 on the next row to keep going. It acts on
+  a single selection only - a rename is one name, so with several rows
+  selected the key does nothing rather than guessing which one you
+  meant.
 
 ### Credential detail panel
 
@@ -1292,6 +1298,24 @@ Approve and it is all written at once (all-or-nothing); reject and
 nothing changes. The LLM **never sets or sees a password** - a
 connection or its bastion can only reference a credential that already
 exists in your vault, by name.
+
+The same grant also lets the LLM **change things that already exist**:
+rename a connection or folder, correct a hostname, user or port, swap a
+credential or network profile, or move a connection into another
+folder. Only the fields it names are touched. It can also take a
+setting *off* a connection so the connection inherits the folder's
+instead - that is how you say "these two should just use the folder's
+credential". Edits stage into the same plan and are shown separately in
+the approval modal, as `field: old -> new` above the list of new items,
+so you can see what is being overwritten before you approve. There is
+deliberately **no delete tool**: removing things stays yours to do in
+the app.
+
+If every connection the LLM is about to create in a folder carries the
+same credential or network profile, the approval modal says so and
+suggests putting it on the folder instead. It only points this out - it
+never rewrites the plan behind you - but taking the hint means a later
+credential rotation is one edit instead of one per host.
 
 A session shared with the LLM shows a small robot-icon badge on
 its tab, so you can always see at a glance which sessions the LLM can
@@ -2854,6 +2878,7 @@ opkssh OIDC flow problems.
 | **Ctrl/Cmd+K** | Open Quick palette |
 | **Ctrl/Cmd+Shift+P** | Open Snippet palette (fires into active terminal) |
 | **Ctrl/Cmd+S** | Save the open editor (connection / folder / credential) |
+| **F2** | Rename the selected connection or folder in the tree, in place |
 | **Esc** | Close Quick palette / modal / context menu |
 | **F12** | Open DevTools (development aid) |
 

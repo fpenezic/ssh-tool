@@ -7,6 +7,50 @@ a prerelease upstream.
 
 ---
 
+## [0.92.0] - Rename with F2, and the LLM bridge can edit
+
+### Added
+
+- **F2 renames a connection or folder in place.** The name becomes a
+  field in the tree row itself: Enter saves, Escape abandons, and the
+  text starts selected so typing replaces it. F2 on the next row carries
+  straight on, which is the point when renaming several things in a row.
+  Works on a single selection only - a rename is one name.
+- **The LLM bridge can change existing connections, not only create
+  them.** `edit_connection` renames a connection, changes its host, user
+  or port, swaps its credential or network profile, or moves it to
+  another folder. Only the fields it passes change. `rename_folder` does
+  the same for a folder name. Both stage into the same plan as the
+  create tools and are written by the same all-or-nothing commit.
+- **Making a connection inherit from its folder is now expressible.**
+  An edit can REMOVE a per-connection setting so it falls back to the
+  folder's - previously the only way to set a credential was to create
+  the connection with it, and there was no way to take one off.
+- **The approval modal shows changes to existing items** as
+  `field: old -> new`, above the list of things being created. An edit
+  overwrites a row you already depend on, so it should not sit below a
+  long list of additions where it can be scrolled past.
+- **The plan warns when every connection in a folder repeats the same
+  credential or network profile**, suggesting it belongs on the folder
+  instead. Inheritance is the reason the folder tree exists, but nothing
+  pointed it out, and repeating a credential on each connection turns a
+  later rotation into N edits instead of one. Only unanimous folders are
+  flagged: where some connections differ, those differences are the
+  point.
+
+### Fixed
+
+- **Cloning a connection now copies its icon.** The icon lives in its
+  own columns rather than in the struct the clone copied, so a cloned
+  connection silently came out with the default one.
+- **The Ctrl+K palette shows custom icons.** It drew only the generic
+  type icon, so a host deliberately marked with a colour or an uploaded
+  picture looked like every other host - in the one view where scanning
+  the list is the whole interaction. A row with its own icon keeps the
+  colour you chose; the label still turns green when a session is live.
+
+---
+
 ## [0.91.0] - SFTP file view docks in the pane
 
 ### Changed

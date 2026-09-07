@@ -1085,6 +1085,10 @@
       <dd>Reorder. Drop onto a pane edge to split. Hover over a non-source tab during a drag to activate it.</dd>
       <dt>Ctrl-click / Shift-click in tree</dt>
       <dd>Multi-select connections or dynamic-inventory entries (Shift = range)</dd>
+      <dt><kbd>F2</kbd> in tree</dt>
+      <dd>Rename the selected connection or folder in place (Enter saves, Esc cancels)</dd>
+      <dt><kbd>Delete</kbd> in tree</dt>
+      <dd>Delete the selection (confirm dialog lists everything affected)</dd>
     </dl>
   </div>
 {/if}
