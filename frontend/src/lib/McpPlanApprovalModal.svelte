@@ -33,11 +33,21 @@
     connections: number;
     forwards: number;
     bookmarks: number;
+    edits: number;
+  }
+  /** A change to something that ALREADY exists, as "field: old -> new".
+   *  Kept separate from the creations because an edit overwrites a row the
+   *  user already relies on. */
+  export interface PlanEditPreview {
+    kind: string;
+    target: string;
+    changes: string[];
   }
   export interface PlanPreview {
     approval_id: string;
     folders: PlanFolderPreview[];
     connections: PlanConnPreview[];
+    edits: PlanEditPreview[];
     warnings: string[];
     counts: PlanCounts;
   }
@@ -55,9 +65,20 @@
       c.connections ? `${c.connections} connection${c.connections === 1 ? "" : "s"}` : "",
       c.forwards ? `${c.forwards} forward${c.forwards === 1 ? "" : "s"}` : "",
       c.bookmarks ? `${c.bookmarks} bookmark${c.bookmarks === 1 ? "" : "s"}` : "",
+      c.edits ? `${c.edits} change${c.edits === 1 ? "" : "s"} to existing items` : "",
     ]
       .filter(Boolean)
       .join(", "),
+  );
+
+  // A plan that only edits must not announce itself as creating things.
+  const creates = $derived(c.folders + c.connections + c.forwards + c.bookmarks);
+  const title = $derived(
+    creates === 0 && c.edits > 0
+      ? "LLM wants to change existing connections"
+      : c.edits > 0
+        ? "LLM wants to create and change connections"
+        : "LLM wants to create connections",
   );
 </script>
 
@@ -65,11 +86,11 @@
   <div class="modal">
     <header>
       <span class="icon"><IconBot size={18} /></span>
-      <h1>LLM wants to create connections</h1>
+      <h1>{title}</h1>
     </header>
     <p>
-      An external LLM has prepared the following to add to your connection tree.
-      Nothing is written until you approve. It references existing vault
+      An external LLM has prepared the following changes to your connection
+      tree. Nothing is written until you approve. It references existing vault
       credentials by name and never sets passwords.
     </p>
     <p class="summary">{summary || "empty plan"}</p>
@@ -83,6 +104,21 @@
     {/if}
 
     <div class="tree">
+      {#if preview.edits?.length}
+        <div class="section-label">Changes to existing items</div>
+        {#each preview.edits as ed}
+          <div class="edit">
+            <div class="edit-head">
+              <span class="kind">{ed.kind}</span>
+              <span class="target">{ed.target}</span>
+            </div>
+            {#each ed.changes as ch}
+              <div class="change">{ch}</div>
+            {/each}
+          </div>
+        {/each}
+      {/if}
+
       {#if preview.folders?.length}
         <div class="section-label">Folders</div>
         {#each preview.folders as f}
@@ -168,6 +204,26 @@
     overflow-y: auto; margin: 0.5rem 0; padding-right: 0.25rem;
     border: 1px solid var(--surface0); border-radius: 4px;
     background: var(--mantle); padding: 0.6rem 0.7rem;
+  }
+  .edit {
+    border: 1px solid var(--surface1);
+    border-left: 3px solid var(--yellow);
+    border-radius: 3px;
+    padding: 0.4rem 0.6rem;
+    margin-bottom: 0.4rem;
+  }
+  .edit-head { display: flex; align-items: baseline; gap: 0.5rem; }
+  .edit-head .kind {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--overlay1);
+  }
+  .edit-head .target { font-weight: 600; }
+  .change {
+    font-family: ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--subtext1);
+    margin-top: 0.2rem;
   }
   .section-label {
     font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;

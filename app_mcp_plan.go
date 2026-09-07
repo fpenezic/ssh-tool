@@ -110,6 +110,29 @@ type planForward struct {
 	Desc       string
 }
 
+// planEditConn is an edit to an EXISTING connection. Every field is
+// optional: nil means "leave this alone", which is what lets an LLM rename a
+// connection without disturbing the credential or jump host beside it.
+//
+// ClearSettings names inheritable fields to remove so they fall back to
+// folder inheritance - the "make this inherit the folder's credential"
+// operation, which is not expressible as a value.
+type planEditConn struct {
+	ConnID        string
+	Name          *string
+	Host          *string
+	Folder        *planRef // move; a set-but-empty ref means root
+	SetSettings   store.InheritableSettings
+	ClearSettings []string
+}
+
+// planEditFolder renames an existing folder. Folder settings already have
+// their own plan entry (planFolderSettings), so this is name-only.
+type planEditFolder struct {
+	FolderID string
+	Name     string
+}
+
 type planBookmarks struct {
 	Forward   planRef // temp id or existing forward id (dynamic only)
 	Bookmarks []store.ProxyBookmark
@@ -122,6 +145,8 @@ type mcpPlan struct {
 	conns          []planConn
 	forwards       []planForward
 	bookmarks      []planBookmarks
+	editConns      []planEditConn   // edits to EXISTING connections
+	editFolders    []planEditFolder // renames of EXISTING folders
 }
 
 // getOrInitPlan returns the current plan, creating an empty one if none is in
@@ -345,6 +370,160 @@ func (a *App) planSetBookmarks(forward string, bookmarks []store.ProxyBookmark) 
 	return nil
 }
 
+// editConnInput is what the edit_connection tool passes down. Strings use a
+// pointer so "not mentioned" is distinguishable from "set to empty".
+type editConnInput struct {
+	ConnID           string
+	Name             *string
+	Host             *string
+	User             *string
+	Port             *uint16
+	AuthRef          *string
+	NetworkProfileID *string
+	InitialCommand   *string
+	Folder           *string
+	Clear            []string
+}
+
+// planEditConnection stages an edit to an existing connection.
+func (a *App) planEditConnection(in editConnInput) error {
+	if !a.mcpManageAllowed() {
+		return errManageOff
+	}
+	if strings.TrimSpace(in.ConnID) == "" {
+		return fmt.Errorf("connection id required")
+	}
+	// Fail fast on a bad id: the LLM is likely working from a stale listing,
+	// and reporting that now beats a confusing failure at commit time.
+	if _, err := a.db.GetConnection(in.ConnID); err != nil {
+		return fmt.Errorf("no connection with id %q", in.ConnID)
+	}
+
+	e := planEditConn{ConnID: in.ConnID}
+	if in.Name != nil {
+		n := strings.TrimSpace(*in.Name)
+		if n == "" {
+			return fmt.Errorf("name cannot be empty")
+		}
+		e.Name = &n
+	}
+	if in.Host != nil {
+		h := strings.TrimSpace(*in.Host)
+		if h == "" {
+			return fmt.Errorf("host cannot be empty")
+		}
+		e.Host = &h
+	}
+	if in.Folder != nil {
+		ref := parsePlanRef(*in.Folder)
+		e.Folder = &ref
+	}
+	if in.User != nil {
+		e.SetSettings.Username = in.User
+	}
+	if in.Port != nil {
+		e.SetSettings.Port = in.Port
+	}
+	if in.AuthRef != nil {
+		e.SetSettings.AuthRef = in.AuthRef
+	}
+	if in.NetworkProfileID != nil {
+		e.SetSettings.NetworkProfileID = in.NetworkProfileID
+	}
+	if in.InitialCommand != nil {
+		e.SetSettings.InitialCommand = in.InitialCommand
+	}
+	for _, c := range in.Clear {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		e.ClearSettings = append(e.ClearSettings, c)
+	}
+	if e.Name == nil && e.Host == nil && e.Folder == nil &&
+		len(e.ClearSettings) == 0 && settingsEmpty(e.SetSettings) {
+		return fmt.Errorf("nothing to change")
+	}
+
+	a.mcp.planMu.Lock()
+	defer a.mcp.planMu.Unlock()
+	p := a.getOrInitPlan()
+	// Merge into an existing staged edit for the same connection so two calls
+	// (rename, then clear the credential) do not fight each other.
+	for i := range p.editConns {
+		if p.editConns[i].ConnID == e.ConnID {
+			mergeConnEdit(&p.editConns[i], e)
+			return nil
+		}
+	}
+	p.editConns = append(p.editConns, e)
+	return nil
+}
+
+// mergeConnEdit folds b into a, with b winning on any field it sets.
+func mergeConnEdit(a *planEditConn, b planEditConn) {
+	if b.Name != nil {
+		a.Name = b.Name
+	}
+	if b.Host != nil {
+		a.Host = b.Host
+	}
+	if b.Folder != nil {
+		a.Folder = b.Folder
+	}
+	if b.SetSettings.Username != nil {
+		a.SetSettings.Username = b.SetSettings.Username
+	}
+	if b.SetSettings.Port != nil {
+		a.SetSettings.Port = b.SetSettings.Port
+	}
+	if b.SetSettings.AuthRef != nil {
+		a.SetSettings.AuthRef = b.SetSettings.AuthRef
+	}
+	if b.SetSettings.NetworkProfileID != nil {
+		a.SetSettings.NetworkProfileID = b.SetSettings.NetworkProfileID
+	}
+	if b.SetSettings.InitialCommand != nil {
+		a.SetSettings.InitialCommand = b.SetSettings.InitialCommand
+	}
+	a.ClearSettings = append(a.ClearSettings, b.ClearSettings...)
+}
+
+// settingsEmpty reports whether an edit set no inheritable value at all.
+func settingsEmpty(s store.InheritableSettings) bool {
+	return s.Username == nil && s.Port == nil && s.AuthRef == nil &&
+		s.NetworkProfileID == nil && s.InitialCommand == nil
+}
+
+// planRenameFolder stages a rename of an existing folder.
+func (a *App) planRenameFolder(folderID, name string) error {
+	if !a.mcpManageAllowed() {
+		return errManageOff
+	}
+	folderID = strings.TrimSpace(folderID)
+	name = strings.TrimSpace(name)
+	if folderID == "" {
+		return fmt.Errorf("folder id required")
+	}
+	if name == "" {
+		return fmt.Errorf("name cannot be empty")
+	}
+	if _, err := a.db.GetFolder(folderID); err != nil {
+		return fmt.Errorf("no folder with id %q", folderID)
+	}
+	a.mcp.planMu.Lock()
+	defer a.mcp.planMu.Unlock()
+	p := a.getOrInitPlan()
+	for i := range p.editFolders {
+		if p.editFolders[i].FolderID == folderID {
+			p.editFolders[i].Name = name
+			return nil
+		}
+	}
+	p.editFolders = append(p.editFolders, planEditFolder{FolderID: folderID, Name: name})
+	return nil
+}
+
 // planDiscard drops the pending plan without writing.
 func (a *App) planDiscard() {
 	a.mcp.planMu.Lock()
@@ -363,8 +542,19 @@ type McpPlanPreview struct {
 	ApprovalID  string                 `json:"approval_id"`
 	Folders     []McpPlanFolderPreview `json:"folders"`
 	Connections []McpPlanConnPreview   `json:"connections"`
+	Edits       []McpPlanEditPreview   `json:"edits"`
 	Warnings    []string               `json:"warnings"`
 	Counts      McpPlanCounts          `json:"counts"`
+}
+
+// McpPlanEditPreview describes one change to something that ALREADY exists.
+// Shown apart from the creations in the approval modal: creating a connection
+// is additive and easy to undo by deleting it, whereas an edit overwrites a
+// row the user already relies on, so it deserves the more careful look.
+type McpPlanEditPreview struct {
+	Kind    string   `json:"kind"`    // "connection" | "folder"
+	Target  string   `json:"target"`  // current name + path, for recognition
+	Changes []string `json:"changes"` // human-readable "field: old -> new"
 }
 
 type McpPlanCounts struct {
@@ -372,6 +562,7 @@ type McpPlanCounts struct {
 	Connections int `json:"connections"`
 	Forwards    int `json:"forwards"`
 	Bookmarks   int `json:"bookmarks"`
+	Edits       int `json:"edits"`
 }
 
 type McpPlanFolderPreview struct {
@@ -625,7 +816,115 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 			Name: label, Forwards: renderForwards(list),
 		})
 	}
+
+	// Edits to existing rows. Rendered as "field: old -> new" so the approval
+	// modal shows what is being overwritten, not just what it will become -
+	// the old value is the part the user needs to weigh.
+	for _, ef := range p.editFolders {
+		cur, err := a.db.GetFolder(ef.FolderID)
+		if err != nil {
+			warn("rename targets a folder that no longer exists (" + ef.FolderID + ")")
+			continue
+		}
+		if cur.Name == ef.Name {
+			continue // no-op, nothing to show
+		}
+		pv.Edits = append(pv.Edits, McpPlanEditPreview{
+			Kind:    "folder",
+			Target:  folderPaths[ef.FolderID],
+			Changes: []string{fmt.Sprintf("name: %s -> %s", cur.Name, ef.Name)},
+		})
+	}
+	for _, e := range p.editConns {
+		cur, err := a.db.GetConnection(e.ConnID)
+		if err != nil {
+			warn("edit targets a connection that no longer exists (" + e.ConnID + ")")
+			continue
+		}
+		var ch []string
+		if e.Name != nil && *e.Name != cur.Name {
+			ch = append(ch, fmt.Sprintf("name: %s -> %s", cur.Name, *e.Name))
+		}
+		if e.Host != nil && *e.Host != cur.Hostname {
+			ch = append(ch, fmt.Sprintf("host: %s -> %s", cur.Hostname, *e.Host))
+		}
+		if e.Folder != nil {
+			from := "(root)"
+			if cur.FolderID != nil {
+				from = folderPaths[*cur.FolderID]
+			}
+			ch = append(ch, fmt.Sprintf("folder: %s -> %s", from, folderLabel(*e.Folder)))
+		}
+		if e.SetSettings.Username != nil {
+			ch = append(ch, fmt.Sprintf("user: %s -> %s", strDeref(cur.Overrides.Username, "(inherited)"), *e.SetSettings.Username))
+		}
+		if e.SetSettings.Port != nil {
+			ch = append(ch, fmt.Sprintf("port: %s -> %d", portLabel(cur.Overrides.Port), *e.SetSettings.Port))
+		}
+		if e.SetSettings.AuthRef != nil {
+			ch = append(ch, fmt.Sprintf("credential: %s -> %s",
+				credOrInherited(credNames, cur.Overrides.AuthRef),
+				credLabel(*e.SetSettings.AuthRef, "edit of "+cur.Name)))
+		}
+		if e.SetSettings.NetworkProfileID != nil {
+			ch = append(ch, fmt.Sprintf("network profile: %s -> %s",
+				nameOrInherited(profNames, cur.Overrides.NetworkProfileID), *e.SetSettings.NetworkProfileID))
+		}
+		if e.SetSettings.InitialCommand != nil {
+			ch = append(ch, fmt.Sprintf("initial command: %q -> %q",
+				strDeref(cur.Overrides.InitialCommand, ""), *e.SetSettings.InitialCommand))
+		}
+		// Clearing is the "inherit from the folder again" operation, so say
+		// that rather than showing an empty new value.
+		for _, f := range e.ClearSettings {
+			ch = append(ch, fmt.Sprintf("%s: now inherited from folder", f))
+		}
+		if len(ch) == 0 {
+			continue
+		}
+		pv.Edits = append(pv.Edits, McpPlanEditPreview{
+			Kind: "connection", Target: a.connectionLabel(e.ConnID), Changes: ch,
+		})
+	}
+	pv.Counts.Edits = len(pv.Edits)
 	return pv
+}
+
+// strDeref renders an optional string, falling back to a placeholder.
+func strDeref(p *string, dflt string) string {
+	if p == nil || *p == "" {
+		return dflt
+	}
+	return *p
+}
+
+func portLabel(p *uint16) string {
+	if p == nil || *p == 0 {
+		return "(inherited)"
+	}
+	return fmt.Sprintf("%d", *p)
+}
+
+// credOrInherited names the credential currently on a row, or says the row
+// inherits one, so an edit that swaps a credential shows what it replaces.
+func credOrInherited(names map[string]string, id *string) string {
+	if id == nil || *id == "" {
+		return "(inherited)"
+	}
+	if n, ok := names[*id]; ok {
+		return n
+	}
+	return "UNKNOWN (" + *id + ")"
+}
+
+func nameOrInherited(names map[string]string, id *string) string {
+	if id == nil || *id == "" {
+		return "(inherited)"
+	}
+	if n, ok := names[*id]; ok {
+		return n
+	}
+	return *id
 }
 
 // connectionLabel returns "folder/name" for an existing connection id, or ""
@@ -655,7 +954,8 @@ func (a *App) planCommit() (string, error) {
 	a.mcp.planMu.Lock()
 	p := a.mcp.plan
 	a.mcp.planMu.Unlock()
-	if p == nil || (len(p.folders) == 0 && len(p.folderSettings) == 0 && len(p.conns) == 0 && len(p.forwards) == 0 && len(p.bookmarks) == 0) {
+	if p == nil || (len(p.folders) == 0 && len(p.folderSettings) == 0 && len(p.conns) == 0 &&
+		len(p.forwards) == 0 && len(p.bookmarks) == 0 && len(p.editConns) == 0 && len(p.editFolders) == 0) {
 		return "", fmt.Errorf("no plan to commit; stage folders/connections/forwards first")
 	}
 
@@ -782,6 +1082,37 @@ func (a *App) validatePlanRefs(p *mcpPlan) error {
 			if _, err := a.db.GetFolder(c.Folder.Existing); err != nil {
 				return fmt.Errorf("connection %q references unknown folder id %q", c.Name, c.Folder.Existing)
 			}
+		}
+	}
+	for _, e := range p.editConns {
+		if _, err := a.db.GetConnection(e.ConnID); err != nil {
+			return fmt.Errorf("edit targets unknown connection id %q", e.ConnID)
+		}
+		if e.SetSettings.AuthRef != nil && *e.SetSettings.AuthRef != "" && !credOK[*e.SetSettings.AuthRef] {
+			return fmt.Errorf("edit of %q references unknown credential id %q", e.ConnID, *e.SetSettings.AuthRef)
+		}
+		if e.SetSettings.NetworkProfileID != nil && *e.SetSettings.NetworkProfileID != "" && !profOK[*e.SetSettings.NetworkProfileID] {
+			return fmt.Errorf("edit of %q references unknown network profile id %q", e.ConnID, *e.SetSettings.NetworkProfileID)
+		}
+		if e.Folder != nil {
+			if e.Folder.Temp != "" && !tempFolders[e.Folder.Temp] {
+				return fmt.Errorf("edit of %q moves into unknown plan folder %q", e.ConnID, e.Folder.Temp)
+			}
+			if e.Folder.Existing != "" {
+				if _, err := a.db.GetFolder(e.Folder.Existing); err != nil {
+					return fmt.Errorf("edit of %q moves into unknown folder id %q", e.ConnID, e.Folder.Existing)
+				}
+			}
+		}
+		for _, f := range e.ClearSettings {
+			if !store.ValidOverrideField(f) {
+				return fmt.Errorf("edit of %q clears unknown settings field %q", e.ConnID, f)
+			}
+		}
+	}
+	for _, ef := range p.editFolders {
+		if _, err := a.db.GetFolder(ef.FolderID); err != nil {
+			return fmt.Errorf("rename targets unknown folder id %q", ef.FolderID)
 		}
 	}
 	for _, fw := range p.forwards {
@@ -960,17 +1291,69 @@ func (a *App) writePlan(p *mcpPlan) (string, error) {
 				return err
 			}
 		}
+
+		// Edits run last: a move can target a folder created earlier in this
+		// same plan, so folderIDs has to be populated first.
+		for _, ef := range p.editFolders {
+			if err := a.db.RenameFolderTx(tx, ef.FolderID, ef.Name); err != nil {
+				return fmt.Errorf("rename folder %q: %w", ef.FolderID, err)
+			}
+		}
+		for _, e := range p.editConns {
+			if e.Name != nil {
+				if err := a.db.RenameConnectionTx(tx, e.ConnID, *e.Name); err != nil {
+					return fmt.Errorf("rename connection %q: %w", e.ConnID, err)
+				}
+			}
+			if e.Host != nil {
+				if err := a.db.SetConnectionHostnameTx(tx, e.ConnID, *e.Host); err != nil {
+					return fmt.Errorf("set hostname on %q: %w", e.ConnID, err)
+				}
+			}
+			if e.Folder != nil {
+				var fid *string
+				switch {
+				case e.Folder.Temp != "":
+					rid, ok := folderIDs[e.Folder.Temp]
+					if !ok {
+						return fmt.Errorf("edit of %q: folder ref %q not created", e.ConnID, e.Folder.Temp)
+					}
+					fid = &rid
+				case e.Folder.Existing != "":
+					x := e.Folder.Existing
+					fid = &x
+				}
+				// fid stays nil for an empty ref, which moves to the root.
+				if err := a.db.MoveConnectionTx(tx, e.ConnID, fid); err != nil {
+					return fmt.Errorf("move connection %q: %w", e.ConnID, err)
+				}
+			}
+			if !settingsEmpty(e.SetSettings) || len(e.ClearSettings) > 0 {
+				if err := a.db.PatchConnectionOverridesTx(tx, e.ConnID, e.SetSettings, e.ClearSettings); err != nil {
+					return fmt.Errorf("update settings on %q: %w", e.ConnID, err)
+				}
+			}
+		}
 		return nil
 	})
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("created %d folder(s), %d connection(s), %d forward(s)",
-		len(folderIDs), len(connIDs), len(forwardIDs)), nil
+	parts := []string{}
+	if len(folderIDs) > 0 || len(connIDs) > 0 || len(forwardIDs) > 0 {
+		parts = append(parts, fmt.Sprintf("created %d folder(s), %d connection(s), %d forward(s)",
+			len(folderIDs), len(connIDs), len(forwardIDs)))
+	}
+	if len(p.editConns) > 0 || len(p.editFolders) > 0 {
+		parts = append(parts, fmt.Sprintf("edited %d connection(s), %d folder(s)",
+			len(p.editConns), len(p.editFolders)))
+	}
+	return strings.Join(parts, "; "), nil
 }
 
 // planSummary is a one-line description for the activity log.
 func (a *App) planSummary(p *mcpPlan) string {
-	return fmt.Sprintf("provision plan: %d folders, %d connections, %d forwards, %d bookmark sets",
-		len(p.folders), len(p.conns), len(p.forwards), len(p.bookmarks))
+	return fmt.Sprintf("provision plan: %d folders, %d connections, %d forwards, %d bookmark sets, %d edits",
+		len(p.folders), len(p.conns), len(p.forwards), len(p.bookmarks),
+		len(p.editConns)+len(p.editFolders))
 }

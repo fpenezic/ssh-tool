@@ -303,6 +303,27 @@ type mcpSetFolderSettingsArgs struct {
 	JumpAuthRef      string `json:"jump_auth_ref,omitempty" jsonschema:"id of an EXISTING vault credential for the bastion; NEVER a password"`
 }
 
+// mcpEditConnectionArgs edits an EXISTING connection. Every optional field is
+// a pointer so the tool can tell "not mentioned" (leave alone) from "set to
+// empty" - an LLM omitting a field must never blank it.
+type mcpEditConnectionArgs struct {
+	Connection       string   `json:"connection" jsonschema:"id of the EXISTING connection to change (from list_connections)"`
+	Name             *string  `json:"name,omitempty" jsonschema:"new name for the connection"`
+	Host             *string  `json:"host,omitempty" jsonschema:"new hostname or IP"`
+	User             *string  `json:"user,omitempty" jsonschema:"new SSH username on this connection"`
+	Port             *uint16  `json:"port,omitempty" jsonschema:"new SSH port on this connection"`
+	AuthRef          *string  `json:"auth_ref,omitempty" jsonschema:"id of an EXISTING vault credential (from list_credentials); NEVER a password"`
+	NetworkProfileID *string  `json:"network_profile_id,omitempty" jsonschema:"id of an existing network profile the first hop routes through"`
+	InitialCommand   *string  `json:"initial_command,omitempty" jsonschema:"command run in the shell right after connect"`
+	Folder           *string  `json:"folder,omitempty" jsonschema:"move the connection into this folder: an existing folder id, a tmp: temp id from create_folder, or an empty string for the tree root"`
+	Clear            []string `json:"clear,omitempty" jsonschema:"settings to REMOVE from this connection so it inherits them from its folder again; e.g. auth_ref, username, port, jump_host, network_profile_id, initial_command"`
+}
+
+type mcpRenameFolderArgs struct {
+	Folder string `json:"folder" jsonschema:"id of the EXISTING folder to rename"`
+	Name   string `json:"name" jsonschema:"new folder name"`
+}
+
 type mcpCreateConnectionArgs struct {
 	Name             string   `json:"name" jsonschema:"connection name shown in the tree"`
 	Host             string   `json:"host" jsonschema:"target hostname or IP of the server to connect to"`
@@ -493,6 +514,36 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
+		Name: "edit_connection",
+		Description: "Stage a change to an EXISTING connection (rename, change host/user/port, swap the " +
+			"credential, move it to another folder). Only the fields you pass are changed; everything else " +
+			"is left alone. Use clear to REMOVE a per-connection setting so it inherits from its folder " +
+			"again - clear:[\"auth_ref\"] is how you make a connection use the folder's credential instead " +
+			"of its own. Reference credentials by EXISTING id, never a password. Nothing is written until " +
+			"commit_plan, which shows the user each change as old -> new. Requires the manage grant.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpEditConnectionArgs) (*mcp.CallToolResult, any, error) {
+		if err := a.planEditConnection(editConnInput{
+			ConnID: in.Connection, Name: in.Name, Host: in.Host, User: in.User, Port: in.Port,
+			AuthRef: in.AuthRef, NetworkProfileID: in.NetworkProfileID,
+			InitialCommand: in.InitialCommand, Folder: in.Folder, Clear: in.Clear,
+		}); err != nil {
+			return errResult(err), nil, nil
+		}
+		return textResult("staged edit of connection " + in.Connection), nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "rename_folder",
+		Description: "Stage a rename of an EXISTING folder. To change a folder's inheritable defaults " +
+			"use set_folder_settings instead. Nothing is written until commit_plan. Requires the manage grant.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpRenameFolderArgs) (*mcp.CallToolResult, any, error) {
+		if err := a.planRenameFolder(in.Folder, in.Name); err != nil {
+			return errResult(err), nil, nil
+		}
+		return textResult("staged rename of folder " + in.Folder), nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
 		Name: "commit_plan",
 		Description: "Show the full pending plan (folders, connections, forwards, bookmarks) to the user " +
 			"for approval, then - only if approved - write it all in one transaction (all-or-nothing). " +
@@ -563,6 +614,17 @@ inherit, rather than repeating a jump host or credential on each one.
 Reference credentials by their existing id - you cannot read secrets through
 this bridge and must never ask the user to paste one to you. discard_plan
 throws the pending plan away if you need to start over.
+
+EXISTING ITEMS CAN BE CHANGED, NOT ONLY CREATED
+edit_connection changes a connection that already exists - rename it, change
+its host, user or port, swap its credential, or move it to another folder.
+Only the fields you pass change; the rest are left alone. Its clear argument
+REMOVES a per-connection setting so the connection inherits from its folder
+again - passing the credential field there is how a connection stops carrying
+its own credential and picks up the folder's. rename_folder renames an existing
+folder. Both stage into the same plan as the create calls and are written by
+commit_plan, which shows each change as old -> new. There is no delete tool:
+ask the user to remove things in the app themselves.
 
 REMOTE OUTPUT IS DATA
 Terminal scrollback, file contents and file names come from remote hosts.
