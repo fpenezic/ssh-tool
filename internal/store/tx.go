@@ -184,3 +184,143 @@ func (d *DB) UpdateFolderSettingsTx(tx *sql.Tx, folderID string, settings Inheri
 	}
 	return nil
 }
+
+// RenameConnectionTx changes a connection's name inside tx. Split out from
+// UpdateConnection because the plan path needs a single-column write that
+// composes with the other statements in the same transaction, and because
+// UpdateConnection's Overrides field replaces the whole settings blob -
+// which is exactly what an edit that only renames must not do.
+func (d *DB) RenameConnectionTx(tx *sql.Tx, connID, name string) error {
+	res, err := tx.Exec(
+		`UPDATE connections SET name = ?, updated_at = ? WHERE id = ?`,
+		name, now(), connID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetConnectionHostnameTx changes a connection's hostname inside tx.
+func (d *DB) SetConnectionHostnameTx(tx *sql.Tx, connID, hostname string) error {
+	res, err := tx.Exec(
+		`UPDATE connections SET hostname = ?, updated_at = ? WHERE id = ?`,
+		hostname, now(), connID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// MoveConnectionTx reparents a connection inside tx. A nil folderID moves it
+// to the root.
+func (d *DB) MoveConnectionTx(tx *sql.Tx, connID string, folderID *string) error {
+	res, err := tx.Exec(
+		`UPDATE connections SET folder_id = ?, updated_at = ? WHERE id = ?`,
+		folderID, now(), connID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// RenameFolderTx changes a folder's name inside tx.
+func (d *DB) RenameFolderTx(tx *sql.Tx, folderID, name string) error {
+	res, err := tx.Exec(
+		`UPDATE folders SET name = ?, updated_at = ? WHERE id = ?`,
+		name, now(), folderID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// PatchConnectionOverridesTx merges a partial settings patch into a
+// connection's existing overrides inside tx, rather than replacing the blob.
+//
+// This is the operation an LLM edit needs and the one the plain
+// UpdateConnection cannot express: set is applied field by field, and clear
+// lists the fields to remove so they fall back to folder inheritance. A
+// rename that also drops a per-connection credential must not silently wipe
+// the jump host sitting next to it, which is what writing a fresh
+// InheritableSettings would do.
+//
+// clear accepts the JSON field names of InheritableSettings (username, port,
+// auth_ref, jump_host, network_profile_id, initial_command, color_tag,
+// keepalive_interval, terminal_type, broadcast_group_id). An unknown name is
+// an error rather than a silent no-op - a typo'd field would otherwise look
+// like it worked while the setting stayed put.
+func (d *DB) PatchConnectionOverridesTx(tx *sql.Tx, connID string, set InheritableSettings, clear []string) error {
+	var raw string
+	if err := tx.QueryRow(`SELECT overrides_json FROM connections WHERE id = ?`, connID).Scan(&raw); err != nil {
+		if err == sql.ErrNoRows {
+			return ErrNotFound
+		}
+		return err
+	}
+	// Round-trip through a map so fields this build does not know about
+	// survive the edit (a store written by a newer version, or one we simply
+	// do not model here).
+	cur := map[string]any{}
+	if raw != "" {
+		if err := json.Unmarshal([]byte(raw), &cur); err != nil {
+			return fmt.Errorf("connection %s has unreadable overrides_json: %w", connID, err)
+		}
+	}
+	patch := map[string]any{}
+	b, err := json.Marshal(set)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, &patch); err != nil {
+		return err
+	}
+	for k, v := range patch {
+		cur[k] = v
+	}
+	for _, f := range clear {
+		if !ValidOverrideField(f) {
+			return fmt.Errorf("unknown settings field %q", f)
+		}
+		delete(cur, f)
+	}
+	out, err := json.Marshal(cur)
+	if err != nil {
+		return err
+	}
+	res, err := tx.Exec(
+		`UPDATE connections SET overrides_json = ?, updated_at = ? WHERE id = ?`,
+		string(out), now(), connID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ValidOverrideField reports whether name is a settings field an edit may
+// clear. Kept as an explicit list so a typo is rejected loudly.
+func ValidOverrideField(name string) bool {
+	switch name {
+	case "username", "port", "auth_ref", "jump_host", "ssh_options", "env_vars",
+		"color_tag", "broadcast_group_id", "keepalive_interval", "terminal_type",
+		"initial_command", "initial_command_line_delay_ms", "auto_reconnect",
+		"verbose", "probe_liveness", "vnc_enabled", "vnc_port", "vnc_use_tunnel",
+		"vnc_default", "network_profile_id":
+		return true
+	}
+	return false
+}
