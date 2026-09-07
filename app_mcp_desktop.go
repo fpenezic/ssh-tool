@@ -609,8 +609,15 @@ set_socks_bookmarks only stage into a pending plan; nothing is written until
 commit_plan, which shows the whole plan for approval and then writes it in one
 transaction. Stage the complete change, then commit once. Temp ids come back
 from the create calls and are referenced as tmp:<id> in later calls.
-Put shared settings on a folder with set_folder_settings and let connections
-inherit, rather than repeating a jump host or credential on each one.
+INHERIT BY DEFAULT. When two or more connections you are staging into the same
+folder would carry the same credential, network profile, jump host or user, put
+it on the FOLDER with set_folder_settings and leave it off the connections
+entirely. Do not pass the credential argument to each create_connection when
+they all share one - that is the same tree today and N edits to change later,
+instead of one.
+Set a value directly on a connection only when it genuinely differs from its
+siblings. The approval modal points out folders where every connection repeats
+the same setting.
 Reference credentials by their existing id - you cannot read secrets through
 this bridge and must never ask the user to paste one to you. discard_plan
 throws the pending plan away if you need to start over.

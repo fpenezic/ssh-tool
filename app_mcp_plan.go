@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -887,7 +888,129 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 		})
 	}
 	pv.Counts.Edits = len(pv.Edits)
+	a.warnRepeatedSettings(p, &pv, credNames, profNames, tempFolderName)
 	return pv
+}
+
+// warnRepeatedSettings flags the case where several connections landing in the
+// same folder each carry the same credential or network profile.
+//
+// Inheritance is the whole point of the folder tree: put the credential on the
+// folder once and the connections pick it up, so a rotation or a swap is one
+// edit instead of N. An LLM reaches for the shortest path instead - passing
+// auth_ref to each create_connection - and the result looks identical in the
+// tree while being materially worse to live with.
+//
+// This does not rewrite the plan. Hoisting the setting automatically would
+// change what the user approved after they read it, and the folder may
+// legitimately hold connections that must NOT share the credential. Saying so
+// in the approval modal leaves the decision where it belongs.
+func (a *App) warnRepeatedSettings(p *mcpPlan, pv *McpPlanPreview,
+	credNames, profNames, tempFolderName map[string]string) {
+
+	// Group the staged connections by the folder they land in. Only new
+	// connections are considered: an edit that sets a credential is usually a
+	// deliberate per-connection override.
+	folderName := func(ref planRef) string {
+		switch {
+		case ref.Temp != "":
+			if n, ok := tempFolderName[ref.Temp]; ok {
+				return n
+			}
+			return "the new folder"
+		case ref.Existing != "":
+			if paths := a.folderPathIndex(); paths[ref.Existing] != "" {
+				return paths[ref.Existing]
+			}
+			return "that folder"
+		}
+		return "the tree root"
+	}
+
+	for _, r := range repeatedSettings(p.conns) {
+		names, kind := credNames, "credential"
+		if r.Kind == "profile" {
+			names, kind = profNames, "network profile"
+		}
+		name := names[r.ID]
+		if name == "" {
+			name = r.ID
+		}
+		pv.Warnings = append(pv.Warnings, fmt.Sprintf(
+			"all %d connections in %s use %s %q. Consider putting it on the folder with "+
+				"set_folder_settings and letting them inherit it, so changing it later is one edit.",
+			r.Count, folderName(r.Folder), kind, name))
+	}
+}
+
+// repeatedSetting is one "every connection here carries the same value" find.
+type repeatedSetting struct {
+	Folder planRef
+	Kind   string // "credential" | "profile"
+	ID     string
+	Count  int
+}
+
+// repeatedSettings reports settings that every staged connection in a folder
+// carries identically, and so belong on the folder instead.
+//
+// Only a unanimous folder is reported. Where three of five connections share a
+// credential the odd ones out are the point, and a warning there would be
+// noise the user learns to skip past - which costs the warnings that matter.
+func repeatedSettings(conns []planConn) []repeatedSetting {
+	type bucket struct {
+		creds map[string]int
+		profs map[string]int
+		total int
+		ref   planRef
+	}
+	byFolder := map[string]*bucket{}
+	for _, c := range conns {
+		key := c.Folder.Temp + "\x00" + c.Folder.Existing
+		b := byFolder[key]
+		if b == nil {
+			b = &bucket{creds: map[string]int{}, profs: map[string]int{}, ref: c.Folder}
+			byFolder[key] = b
+		}
+		b.total++
+		if c.AuthRef != "" {
+			b.creds[c.AuthRef]++
+		}
+		if c.NetworkProfileID != "" {
+			b.profs[c.NetworkProfileID]++
+		}
+	}
+
+	// Sort every level: warnings are user-facing text, and map iteration would
+	// reorder them between two identical plans.
+	keys := make([]string, 0, len(byFolder))
+	for k := range byFolder {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var out []repeatedSetting
+	for _, k := range keys {
+		b := byFolder[k]
+		if b.total < 2 {
+			continue
+		}
+		add := func(kind string, m map[string]int) {
+			ids := make([]string, 0, len(m))
+			for id, n := range m {
+				if n == b.total {
+					ids = append(ids, id)
+				}
+			}
+			sort.Strings(ids)
+			for _, id := range ids {
+				out = append(out, repeatedSetting{Folder: b.ref, Kind: kind, ID: id, Count: b.total})
+			}
+		}
+		add("credential", b.creds)
+		add("profile", b.profs)
+	}
+	return out
 }
 
 // strDeref renders an optional string, falling back to a placeholder.
