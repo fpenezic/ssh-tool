@@ -1387,7 +1387,7 @@ func (a *App) ConnectionsClone(id string) (*store.Connection, error) {
 	if err != nil {
 		return nil, err
 	}
-	return a.db.CreateConnection(store.NewConnection{
+	c, err := a.db.CreateConnection(store.NewConnection{
 		FolderID:       src.FolderID,
 		Name:           "Copy of " + src.Name,
 		Hostname:       src.Hostname,
@@ -1398,6 +1398,42 @@ func (a *App) ConnectionsClone(id string) (*store.Connection, error) {
 		Protocol:       src.Protocol,
 		LocalShellKind: src.LocalShellKind,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	// The icon is not part of NewConnection - it lives in its own columns
+	// with their own setters, so a clone has to copy it in a second step or
+	// the copy silently comes out with the default icon. The two kinds are
+	// mutually exclusive (each setter clears the other), so copy whichever
+	// the source actually has.
+	//
+	// A failure here is not worth discarding the clone over: the connection
+	// exists and works, it just looks wrong. Log and carry on, returning the
+	// row we created.
+	switch {
+	case src.IconImageID != nil && *src.IconImageID != "":
+		if err := a.db.SetConnectionIcon(c.ID, *src.IconImageID); err != nil {
+			log.Printf("clone %s: copy icon image: %v", c.ID, err)
+		}
+	case src.IconName != nil && *src.IconName != "":
+		color := ""
+		if src.IconColor != nil {
+			color = *src.IconColor
+		}
+		if err := a.db.SetConnectionNamedIcon(c.ID, *src.IconName, color); err != nil {
+			log.Printf("clone %s: copy named icon: %v", c.ID, err)
+		}
+	default:
+		return c, nil
+	}
+
+	// Re-read so the caller gets the icon fields it just set; the frontend
+	// renders straight from this return value.
+	if fresh, err := a.db.GetConnection(c.ID); err == nil {
+		return fresh, nil
+	}
+	return c, nil
 }
 
 // ConnectionsBatchUpdate applies the same overrides patch to many
