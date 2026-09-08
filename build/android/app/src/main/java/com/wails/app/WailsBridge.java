@@ -342,33 +342,68 @@ public class WailsBridge {
     }
 
     /** secureSet stores a value in Keystore-backed encrypted prefs.
-     *  Payload: {"key":...,"value":...} (JSON). */
-    public void secureSet(String jsonPayload) {
+     *  Payload: {"key":...,"value":...} (JSON). Returns a {"ok":bool,
+     *  "error":string} envelope - Wails treats a failure as fatal rather
+     *  than silently storing nothing, so the error text has to survive the
+     *  JNI hop instead of going only to logcat. */
+    public String secureSet(String jsonPayload) {
         try {
             org.json.JSONObject o = new org.json.JSONObject(jsonPayload);
             store().set(o.getString("key"), o.getString("value"));
+            return "{\"ok\":true}";
         } catch (Exception e) {
             Log.e(TAG, "secureSet failed", e);
+            return errorEnvelope(e);
         }
     }
 
-    /** secureGet returns the stored value for key, or "" if absent. */
+    /** secureGet returns a {"ok","found","value","error"} envelope. The
+     *  found flag is what separates "no passphrase stored" from "the
+     *  Keystore threw" - both used to come back as an empty string, so a
+     *  broken keystore looked exactly like auto-unlock never being set up. */
     public String secureGet(String key) {
         try {
             String v = store().get(key);
-            return v != null ? v : "";
+            if (v == null) {
+                return "{\"ok\":true,\"found\":false}";
+            }
+            org.json.JSONObject env = new org.json.JSONObject();
+            env.put("ok", true);
+            env.put("found", true);
+            env.put("value", v);
+            return env.toString();
         } catch (Exception e) {
             Log.e(TAG, "secureGet failed", e);
-            return "";
+            return errorEnvelope(e);
         }
     }
 
     /** secureDelete removes a stored value. */
-    public void secureDelete(String key) {
+    public String secureDelete(String key) {
         try {
             store().delete(key);
+            return "{\"ok\":true}";
         } catch (Exception e) {
             Log.e(TAG, "secureDelete failed", e);
+            return errorEnvelope(e);
+        }
+    }
+
+    /** errorEnvelope builds {"ok":false,"error":...} with JSON-safe text.
+     *  Exception messages can carry quotes or newlines, so they go through
+     *  JSONObject rather than string concatenation. */
+    private static String errorEnvelope(Exception e) {
+        String msg = e.getMessage();
+        if (msg == null || msg.isEmpty()) {
+            msg = e.getClass().getSimpleName();
+        }
+        try {
+            org.json.JSONObject env = new org.json.JSONObject();
+            env.put("ok", false);
+            env.put("error", msg);
+            return env.toString();
+        } catch (org.json.JSONException je) {
+            return "{\"ok\":false,\"error\":\"secure store failure\"}";
         }
     }
 

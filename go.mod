@@ -13,7 +13,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.3.1
 	github.com/pkg/sftp v1.13.10
 	github.com/tobischo/gokeepasslib/v3 v3.6.2
-	github.com/wailsapp/wails/v3 v3.0.0-beta.8
+	github.com/wailsapp/wails/v3 v3.0.0-beta.18
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.53.0
 	golang.org/x/net v0.56.0

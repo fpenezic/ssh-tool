@@ -7,6 +7,33 @@ a prerelease upstream.
 
 ---
 
+## [0.93.0] - Wails beta.18, and a secure store that admits failure
+
+### Changed
+
+- **Wails v3 moves from beta.8 to beta.18.** Ten nightly releases of
+  upstream fixes, of which four reach this app: GTK4 Linux no longer
+  drops custom-protocol and file-association launch arguments (the
+  deep-link path), Windows ICO tray icons render correctly and follow
+  the taskbar theme, macOS names Control-letter key presses properly,
+  and a Calloc leak on Linux and macOS is gone.
+
+### Fixed
+
+- **Android biometric unlock now tells you when the Keystore fails,
+  instead of looking like it was never set up.** The secure store used
+  to swallow every error: a passphrase that failed to save reported
+  success, and a keystore that could not be read was indistinguishable
+  from having no stored passphrase at all. Either way the app quietly
+  offered the passphrase field with no hint that anything had gone
+  wrong. Failures now carry a reason across the native bridge, and
+  "nothing stored" is a separate answer from "the read failed".
+
+  Verified on device: cold start, fingerprint unlock, and passphrase
+  unlock all confirmed against the new bridge.
+
+---
+
 ## [0.92.0] - Rename with F2, and the LLM bridge can edit
 
 ### Added

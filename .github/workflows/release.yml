@@ -28,7 +28,7 @@ permissions:
   contents: write # gh release create
 
 env:
-  WAILS3_VERSION: v3.0.0-beta.8
+  WAILS3_VERSION: v3.0.0-beta.18
   # Pinned, not @latest: task 3.53.1 raised its own Go requirement to 1.25.10
   # overnight and broke every build job on a green tag. A pin means our builds
   # only change when we change them.
