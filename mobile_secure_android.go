@@ -17,11 +17,7 @@
 
 package main
 
-import (
-	"encoding/json"
-
-	"github.com/wailsapp/wails/v3/pkg/application"
-)
+import "github.com/wailsapp/wails/v3/pkg/application"
 
 // vaultSecureKey is the EncryptedSharedPreferences key under which the vault
 // passphrase is stored.
@@ -30,26 +26,33 @@ const vaultSecureKey = "vault_passphrase"
 // MobileSecureSetVaultPass stores the vault passphrase in the platform secure
 // store (Keystore-backed). Called by the frontend after a successful unlock
 // when the user opts into auto-unlock.
+//
+// The store is fail-closed: a write that did not land has to surface, or the
+// user is told auto-unlock is on and then finds it silently absent at the
+// next launch.
 func (a *App) MobileSecureSetVaultPass(passphrase string) error {
-	payload, err := json.Marshal(map[string]string{"key": vaultSecureKey, "value": passphrase})
-	if err != nil {
-		return err
-	}
-	application.Android.SecureSet(string(payload))
-	return nil
+	return application.Android.SecureSet(vaultSecureKey, passphrase)
 }
 
 // MobileSecureHasVaultPass reports whether a passphrase is stored (so the
 // frontend can offer biometric auto-unlock on launch).
-func (a *App) MobileSecureHasVaultPass() bool {
-	return application.Android.SecureGet(vaultSecureKey) != ""
+//
+// The error is deliberately not folded into the bool. "Nothing stored" and
+// "the Keystore threw" both mean no biometric unlock right now, but only the
+// second is worth telling the user about - otherwise a broken keystore looks
+// exactly like never having enabled auto-unlock.
+func (a *App) MobileSecureHasVaultPass() (bool, error) {
+	_, found, err := application.Android.SecureGet(vaultSecureKey)
+	if err != nil {
+		return false, err
+	}
+	return found, nil
 }
 
 // MobileSecureClearVaultPass removes the stored passphrase (used when the
 // user turns auto-unlock off or locks-and-forgets).
 func (a *App) MobileSecureClearVaultPass() error {
-	application.Android.SecureDelete(vaultSecureKey)
-	return nil
+	return application.Android.SecureDelete(vaultSecureKey)
 }
 
 // MobileBiometricUnlock fires the system biometric prompt. On the
@@ -64,8 +67,11 @@ func (a *App) MobileBiometricUnlock() error {
 // vault. Called by the frontend only after a successful biometric result, so
 // the secret never crosses into JS. Returns true on success.
 func (a *App) MobileUnlockWithStoredPass() (bool, error) {
-	pass := application.Android.SecureGet(vaultSecureKey)
-	if pass == "" {
+	pass, found, err := application.Android.SecureGet(vaultSecureKey)
+	if err != nil {
+		return false, err
+	}
+	if !found || pass == "" {
 		return false, nil
 	}
 	if err := a.vault.Unlock(pass, false); err != nil {
@@ -82,7 +88,14 @@ func (a *App) MobileUnlockWithStoredPass() (bool, error) {
 // which matters doubly on android, where AppRelaunch (process re-exec) is a
 // no-op. Empty when auto-unlock was never enabled.
 func (a *App) localAutoUnlockPass() string {
-	return application.Android.SecureGet(vaultSecureKey)
+	// Errors collapse to "" on purpose: the caller (SyncPullLive) treats an
+	// empty passphrase as "cannot merge in place", which is the right
+	// outcome whether the secret is absent or the Keystore is unreachable.
+	pass, found, err := application.Android.SecureGet(vaultSecureKey)
+	if err != nil || !found {
+		return ""
+	}
+	return pass
 }
 
 // registerMobileBiometricBridge forwards the native biometric result event
