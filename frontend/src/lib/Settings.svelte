@@ -5399,8 +5399,11 @@
               for example from a pasted server list - which you approve in one
               modal before anything is written. No session needs to be open. It
               never sets passwords; connections can only reference credentials
-              already in your vault. Off by default and not remembered between
-              runs.
+              already in your vault.
+            </div>
+            <div class="mode-desc warn">
+              Off by default, and ends when you quit ssh-tool. A grant that
+              writes to your whole tree should never come back on its own.
             </div>
           </div>
         </label>
@@ -6488,6 +6491,15 @@
   }
   .mode-name { font-weight: 600; font-size: 0.85rem; color: var(--text); }
   .mode-desc { font-size: 0.78rem; color: var(--subtext0); line-height: 1.5; margin-top: 0.15rem; }
+  /* The manage grant is deliberately not persisted; that is a safety property
+     worth reading, not a footnote at the end of a paragraph. */
+  .mode-desc.warn {
+    color: var(--yellow);
+    margin-top: 0.4rem; padding: 0.3rem 0.45rem;
+    background: color-mix(in srgb, var(--yellow) 12%, transparent);
+    border-left: 2px solid var(--yellow);
+    border-radius: 2px;
+  }
   kbd {
     background: var(--mantle);
     border: 1px solid var(--surface0);

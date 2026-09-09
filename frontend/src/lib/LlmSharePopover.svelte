@@ -167,6 +167,11 @@
         approval. It never sets passwords - only references existing vault
         credentials.
       </div>
+      {#if manageOn}
+        <div class="manage-note">
+          Ends when you quit ssh-tool - turn it on again next launch.
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -247,5 +252,16 @@
   .manage-sub {
     margin-top: 0.3rem; font-size: 0.7rem; line-height: 1.35;
     color: var(--overlay0);
+  }
+  /* Shown only while the grant is on: a write grant that quietly came back
+     after a restart would be worse than one the user has to re-enable, so
+     say plainly that it does not. */
+  .manage-note {
+    margin-top: 0.35rem; padding: 0.3rem 0.4rem;
+    font-size: 0.7rem; line-height: 1.35;
+    color: var(--yellow);
+    background: color-mix(in srgb, var(--yellow) 12%, transparent);
+    border-left: 2px solid var(--yellow);
+    border-radius: 2px;
   }
 </style>

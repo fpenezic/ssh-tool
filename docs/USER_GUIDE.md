@@ -1285,8 +1285,10 @@ What the LLM can do:
   automatically so it can start working.
 
 **Create connections in bulk (Allow manage).** The Share-with-LLM
-popover has an *Allow manage (create connections)* toggle (off by
-default, never persisted). With it on, you can paste a list of servers
+popover has an *Allow manage (create connections)* toggle. It is off by
+default and **ends when you quit ssh-tool** - a grant that can write to
+your whole connection tree never comes back on its own, so turn it on
+again on the next launch. With it on, you can paste a list of servers
 into your LLM with instructions - "these go through bastion 1.2.3.4 as
 admin, on credential 'prod-key', each with a SOCKS proxy and a bookmark
 to the internal wiki" - and it will build the whole tree of folders,
