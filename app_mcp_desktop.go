@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -316,6 +317,9 @@ type mcpEditConnectionArgs struct {
 	NetworkProfileID *string  `json:"network_profile_id,omitempty" jsonschema:"id of an existing network profile the first hop routes through"`
 	InitialCommand   *string  `json:"initial_command,omitempty" jsonschema:"command run in the shell right after connect"`
 	Folder           *string  `json:"folder,omitempty" jsonschema:"move the connection into this folder: an existing folder id, a tmp: temp id from create_folder, or an empty string for the tree root"`
+	Icon             *string  `json:"icon,omitempty" jsonschema:"built-in icon name (see list_icons), or an empty string to remove the icon. Replaces a custom uploaded image if the connection had one"`
+	IconColor        *string  `json:"icon_color,omitempty" jsonschema:"colour for a built-in icon: red, orange, yellow, green, teal, blue, mauve or pink. Ignored on connections carrying an uploaded image"`
+	IconImage        *string  `json:"icon_image,omitempty" jsonschema:"id of an already-uploaded icon (from list_icons), or an empty string to remove it. Mutually exclusive with icon"`
 	Clear            []string `json:"clear,omitempty" jsonschema:"settings to REMOVE from this connection so it inherits them from its folder again; e.g. auth_ref, username, port, jump_host, network_profile_id, initial_command"`
 }
 
@@ -338,6 +342,9 @@ type mcpCreateConnectionArgs struct {
 	JumpAuthRef      string   `json:"jump_auth_ref,omitempty" jsonschema:"id of an EXISTING vault credential for the bastion; NEVER a password"`
 	InitialCommand   string   `json:"initial_command,omitempty" jsonschema:"command run in the shell right after connect (e.g. tmux attach)"`
 	Tags             []string `json:"tags,omitempty" jsonschema:"optional tags"`
+	Icon             string   `json:"icon,omitempty" jsonschema:"built-in icon name shown in the tree; call list_icons for the choices. Only set one the user asked for - do not guess from the hostname"`
+	IconColor        string   `json:"icon_color,omitempty" jsonschema:"colour for the icon: red, orange, yellow, green, teal, blue, mauve or pink. Needs icon to be set"`
+	IconImage        string   `json:"icon_image,omitempty" jsonschema:"id of an icon the user already uploaded (from list_icons, which shows what each one is used by). Use it to match an existing connection's icon. Mutually exclusive with icon"`
 }
 
 type mcpCreateForwardArgs struct {
@@ -377,11 +384,51 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 		if len(paths) == 0 {
 			b.WriteString("No folders yet.")
 		}
-		for id, p := range paths {
+		// An icon here is usually a customer's logo, set on the customer
+		// folder rather than on each connection. Report the nearest one up
+		// the tree so a model staging into a subsystem folder can see it.
+		hints, _ := a.db.FolderIconHints()
+		connIcons, _ := a.db.FolderConnIcons(6)
+		ids := make([]string, 0, len(paths))
+		for id := range paths {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		for _, id := range ids {
+			p := paths[id]
 			if p == "" {
 				p = "(root-level)"
 			}
-			fmt.Fprintf(&b, "- %s  id=%s\n", p, id)
+			fmt.Fprintf(&b, "- %s  id=%s", p, id)
+			if h, ok := hints[id]; ok {
+				icon := h.IconName
+				if h.IconColor != "" {
+					icon += "/" + h.IconColor
+				}
+				if h.IconImageID != "" {
+					icon = "uploaded icon " + h.IconImageID
+				}
+				switch h.Depth {
+				case 0:
+					fmt.Fprintf(&b, "  [icon: %s]", icon)
+				default:
+					fmt.Fprintf(&b, "  [icon from %s: %s]", h.FolderPath, icon)
+				}
+			}
+			// What the connections inside already do is the convention to
+			// follow when adding more of them.
+			if u, ok := connIcons[id]; ok {
+				switch {
+				case u.Unanimous != "" && u.IsImage:
+					fmt.Fprintf(&b, "  [all %d connections: uploaded icon %s]", u.Total, u.Unanimous)
+				case u.Unanimous != "":
+					fmt.Fprintf(&b, "  [all %d connections: icon %s]", u.Total, u.Unanimous)
+				default:
+					fmt.Fprintf(&b, "  [icons vary (%d/%d set): %s]",
+						u.WithIcon, u.Total, strings.Join(u.Examples, ", "))
+				}
+			}
+			b.WriteString("\n")
 		}
 		return textResult(b.String()), nil, nil
 	})
@@ -405,6 +452,49 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 		}
 		for _, c := range creds {
 			fmt.Fprintf(&b, "- %s  (%s)  id=%s\n", c.Name, c.Kind, c.ID)
+		}
+		return textResult(b.String()), nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "list_icons",
+		Description: "List the built-in icon names a connection or folder can carry, with the label " +
+			"each one shows in the app's icon picker. Use it to translate what the user asked for " +
+			"(\"give the database servers a database icon\") into a valid icon name. " +
+			"Requires the manage grant.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ mcpEmptyArgs) (*mcp.CallToolResult, any, error) {
+		if !a.mcpManageAllowed() {
+			return errResult(errManageOff), nil, nil
+		}
+		names := make([]string, 0, len(builtinIconLabels))
+		for n := range builtinIconLabels {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		var b strings.Builder
+		for _, n := range names {
+			fmt.Fprintf(&b, "- %s  (%s)\n", n, builtinIconLabels[n])
+		}
+		fmt.Fprintf(&b, "\nColours: %s\n", strings.Join(iconPaletteColors, ", "))
+
+		// Uploaded icons have no name of their own, so list them by what
+		// already wears them - that is how the user refers to them too
+		// ("the icon the web servers have").
+		imgs, err := a.db.ListImageUsage(3)
+		if err == nil && len(imgs) > 0 {
+			b.WriteString("\nUploaded icons (pass as icon_image):\n")
+			for _, im := range imgs {
+				switch {
+				case len(im.Examples) > 0:
+					fmt.Fprintf(&b, "- %s  used by: %s", im.ID, strings.Join(im.Examples, ", "))
+					if im.UseCount > len(im.Examples) {
+						fmt.Fprintf(&b, " (+%d more)", im.UseCount-len(im.Examples))
+					}
+					b.WriteString("\n")
+				default:
+					fmt.Fprintf(&b, "- %s  (unused)\n", im.ID)
+				}
+			}
 		}
 		return textResult(b.String()), nil, nil
 	})
@@ -474,6 +564,7 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 			Folder: in.Folder, AuthRef: in.AuthRef, NetworkProfileID: in.NetworkProfileID,
 			JumpHost: in.JumpHost, JumpUser: in.JumpUser, JumpPort: in.JumpPort, JumpAuthRef: in.JumpAuthRef,
 			InitialCommand: in.InitialCommand, Tags: in.Tags,
+			Icon: in.Icon, IconColor: in.IconColor, IconImage: in.IconImage,
 		})
 		if err != nil {
 			return errResult(err), nil, nil
@@ -526,6 +617,7 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 			ConnID: in.Connection, Name: in.Name, Host: in.Host, User: in.User, Port: in.Port,
 			AuthRef: in.AuthRef, NetworkProfileID: in.NetworkProfileID,
 			InitialCommand: in.InitialCommand, Folder: in.Folder, Clear: in.Clear,
+			Icon: in.Icon, IconColor: in.IconColor, IconImage: in.IconImage,
 		}); err != nil {
 			return errResult(err), nil, nil
 		}
@@ -618,6 +710,26 @@ instead of one.
 Set a value directly on a connection only when it genuinely differs from its
 siblings. The approval modal points out folders where every connection repeats
 the same setting.
+ICONS ARE OPTIONAL AND NEVER GUESSED. list_icons gives the built-in names, plus
+any icons the user uploaded (listed by what already wears them, since an
+uploaded icon has no name). Pass the icon argument (with an optional colour) or
+the uploaded-icon argument on create_connection and edit_connection ONLY when
+the user asked for one, or asked you to match an existing connection. Do not
+infer an icon
+from a hostname: a wrong icon is worse than none, because nobody goes back to
+fix it.
+FOLLOW THE FOLDER'S EXISTING CONVENTION. Before creating connections, read
+what list_folders reports for the target folder and match it:
+- "all N connections: <icon>" - they already agree, usually an uploaded
+  customer logo. Give the new connections that same icon.
+- "icons vary" with samples like "db-01 -> database, nfs-01 -> hard-drive" -
+  the convention is per role, not one shared icon. Read the role out of each
+  new server's own name and pick the matching icon the same way. Where a name
+  says nothing about its role, leave that one unset rather than guessing.
+- nothing reported - the folder has no convention, so set no icons.
+A folder's own icon (or the one it inherits from the customer folder above it)
+is shown separately. That is what the user sees on the folder row itself; do
+not copy it onto connections.
 Reference credentials by their existing id - you cannot read secrets through
 this bridge and must never ask the user to paste one to you. discard_plan
 throws the pending plan away if you need to start over.

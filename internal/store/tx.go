@@ -324,3 +324,63 @@ func ValidOverrideField(name string) bool {
 	}
 	return false
 }
+
+// SetConnectionNamedIconTx sets a built-in icon + palette colour inside an
+// existing transaction. Same shape as SetConnectionNamedIcon, but the MCP plan
+// commit writes every row under one transaction: an icon applied outside it
+// could survive a rolled-back connection, or vanish while the connection it
+// belonged to was kept.
+//
+// An empty name clears the icon (and the colour with it, since a colour with
+// no icon has nothing to paint).
+func (d *DB) SetConnectionNamedIconTx(tx *sql.Tx, connID, name, color string) error {
+	var n, c interface{}
+	if name != "" {
+		n = name
+		if color != "" {
+			c = color
+		}
+	}
+	res, err := tx.Exec(
+		`UPDATE connections SET icon_name = ?, icon_color = ?, icon_image_id = NULL, updated_at = ? WHERE id = ?`,
+		n, c, now(), connID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetConnectionIconTx sets an uploaded image as a connection's icon inside an
+// existing transaction, clearing any built-in icon (the two kinds are mutually
+// exclusive). Transactional for the same reason as the named variant: the MCP
+// plan commit is all-or-nothing.
+func (d *DB) SetConnectionIconTx(tx *sql.Tx, connID, imageID string) error {
+	var v interface{}
+	if imageID != "" {
+		v = imageID
+	}
+	res, err := tx.Exec(
+		`UPDATE connections SET icon_image_id = ?, icon_name = NULL, icon_color = NULL, updated_at = ? WHERE id = ?`,
+		v, now(), connID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ImageExists reports whether an uploaded image with this id is present.
+// Used to reject a stale or invented image id before it reaches a write.
+func (d *DB) ImageExists(imageID string) bool {
+	if imageID == "" {
+		return false
+	}
+	var one int
+	err := d.conn.QueryRow(`SELECT 1 FROM images WHERE id = ?`, imageID).Scan(&one)
+	return err == nil
+}

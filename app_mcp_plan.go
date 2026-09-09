@@ -97,6 +97,9 @@ type planConn struct {
 	Jump             *planJump
 	InitialCommand   string
 	Tags             []string
+	Icon             string // built-in icon name, or ""
+	IconColor        string // palette colour name, or ""
+	IconImage        string // uploaded image id, or ""
 }
 
 type planForward struct {
@@ -125,6 +128,11 @@ type planEditConn struct {
 	Folder        *planRef // move; a set-but-empty ref means root
 	SetSettings   store.InheritableSettings
 	ClearSettings []string
+	// Icon is separate from SetSettings because icons are their own columns,
+	// outside the inheritable-settings blob. A set-but-empty value clears it.
+	Icon      *string
+	IconColor *string
+	IconImage *string
 }
 
 // planEditFolder renames an existing folder. Folder settings already have
@@ -277,6 +285,9 @@ type planConnInput struct {
 	JumpAuthRef      string
 	InitialCommand   string
 	Tags             []string
+	Icon             string
+	IconColor        string
+	IconImage        string
 }
 
 func (a *App) planAddConnection(in planConnInput) (string, error) {
@@ -291,6 +302,29 @@ func (a *App) planAddConnection(in planConnInput) (string, error) {
 	if host == "" {
 		return "", fmt.Errorf("connection host required")
 	}
+	icon := strings.TrimSpace(in.Icon)
+	iconColor := strings.TrimSpace(in.IconColor)
+	// Reject an unknown icon rather than storing it: nothing downstream
+	// validates, so a bad name would be written and then render as the
+	// generic fallback glyph, looking like the icon was simply ignored.
+	if icon != "" && !validIconName(icon) {
+		return "", fmt.Errorf("unknown icon %q", icon)
+	}
+	if !validIconColor(iconColor) {
+		return "", fmt.Errorf("unknown icon colour %q", iconColor)
+	}
+	if icon == "" && iconColor != "" {
+		return "", fmt.Errorf("icon_color needs an icon")
+	}
+	iconImage := strings.TrimSpace(in.IconImage)
+	if iconImage != "" {
+		if icon != "" {
+			return "", fmt.Errorf("set icon or icon_image, not both")
+		}
+		if !a.db.ImageExists(iconImage) {
+			return "", fmt.Errorf("no uploaded icon with id %q", iconImage)
+		}
+	}
 	c := planConn{
 		TempID:           newTempID(),
 		Name:             name,
@@ -302,6 +336,9 @@ func (a *App) planAddConnection(in planConnInput) (string, error) {
 		NetworkProfileID: strings.TrimSpace(in.NetworkProfileID),
 		InitialCommand:   in.InitialCommand,
 		Tags:             in.Tags,
+		Icon:             icon,
+		IconColor:        iconColor,
+		IconImage:        iconImage,
 	}
 	if jh := strings.TrimSpace(in.JumpHost); jh != "" {
 		c.Jump = &planJump{
@@ -383,6 +420,9 @@ type editConnInput struct {
 	NetworkProfileID *string
 	InitialCommand   *string
 	Folder           *string
+	Icon             *string
+	IconColor        *string
+	IconImage        *string
 	Clear            []string
 }
 
@@ -434,6 +474,34 @@ func (a *App) planEditConnection(in editConnInput) error {
 	if in.InitialCommand != nil {
 		e.SetSettings.InitialCommand = in.InitialCommand
 	}
+	if in.Icon != nil {
+		icon := strings.TrimSpace(*in.Icon)
+		// Empty is allowed here (unlike create): it is how an edit takes an
+		// icon back off a connection.
+		if icon != "" && !validIconName(icon) {
+			return fmt.Errorf("unknown icon %q", icon)
+		}
+		e.Icon = &icon
+	}
+	if in.IconColor != nil {
+		col := strings.TrimSpace(*in.IconColor)
+		if !validIconColor(col) {
+			return fmt.Errorf("unknown icon colour %q", col)
+		}
+		e.IconColor = &col
+	}
+	if in.IconImage != nil {
+		img := strings.TrimSpace(*in.IconImage)
+		if img != "" {
+			if in.Icon != nil && strings.TrimSpace(*in.Icon) != "" {
+				return fmt.Errorf("set icon or icon_image, not both")
+			}
+			if !a.db.ImageExists(img) {
+				return fmt.Errorf("no uploaded icon with id %q", img)
+			}
+		}
+		e.IconImage = &img
+	}
 	for _, c := range in.Clear {
 		c = strings.TrimSpace(c)
 		if c == "" {
@@ -441,7 +509,7 @@ func (a *App) planEditConnection(in editConnInput) error {
 		}
 		e.ClearSettings = append(e.ClearSettings, c)
 	}
-	if e.Name == nil && e.Host == nil && e.Folder == nil &&
+	if e.Name == nil && e.Host == nil && e.Folder == nil && e.Icon == nil && e.IconColor == nil && e.IconImage == nil &&
 		len(e.ClearSettings) == 0 && settingsEmpty(e.SetSettings) {
 		return fmt.Errorf("nothing to change")
 	}
@@ -471,6 +539,15 @@ func mergeConnEdit(a *planEditConn, b planEditConn) {
 	}
 	if b.Folder != nil {
 		a.Folder = b.Folder
+	}
+	if b.Icon != nil {
+		a.Icon = b.Icon
+	}
+	if b.IconColor != nil {
+		a.IconColor = b.IconColor
+	}
+	if b.IconImage != nil {
+		a.IconImage = b.IconImage
 	}
 	if b.SetSettings.Username != nil {
 		a.SetSettings.Username = b.SetSettings.Username
@@ -875,6 +952,28 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 			ch = append(ch, fmt.Sprintf("initial command: %q -> %q",
 				strDeref(cur.Overrides.InitialCommand, ""), *e.SetSettings.InitialCommand))
 		}
+		// Icons read as a change of appearance, so describe them the way the
+		// user would see them rather than by id.
+		if e.Icon != nil {
+			from := iconLabel(cur.IconName, cur.IconImageID)
+			to := "(none)"
+			if *e.Icon != "" {
+				to = *e.Icon
+			}
+			ch = append(ch, fmt.Sprintf("icon: %s -> %s", from, to))
+		}
+		if e.IconImage != nil {
+			from := iconLabel(cur.IconName, cur.IconImageID)
+			to := "(none)"
+			if *e.IconImage != "" {
+				to = "uploaded icon"
+			}
+			ch = append(ch, fmt.Sprintf("icon: %s -> %s", from, to))
+		}
+		if e.IconColor != nil && e.Icon == nil && e.IconImage == nil {
+			ch = append(ch, fmt.Sprintf("icon colour: %s -> %s",
+				strDeref(cur.IconColor, "(default)"), orNone(*e.IconColor)))
+		}
 		// Clearing is the "inherit from the folder again" operation, so say
 		// that rather than showing an empty new value.
 		for _, f := range e.ClearSettings {
@@ -890,6 +989,25 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 	pv.Counts.Edits = len(pv.Edits)
 	a.warnRepeatedSettings(p, &pv, credNames, profNames, tempFolderName)
 	return pv
+}
+
+// iconLabel describes the icon a row currently carries, for the approval
+// modal. Uploaded images have no name, so they are described by kind.
+func iconLabel(name, imageID *string) string {
+	if imageID != nil && *imageID != "" {
+		return "uploaded icon"
+	}
+	if name != nil && *name != "" {
+		return *name
+	}
+	return "(none)"
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return "(default)"
+	}
+	return s
 }
 
 // warnRepeatedSettings flags the case where several connections landing in the
@@ -1362,6 +1480,16 @@ func (a *App) writePlan(p *mcpPlan) (string, error) {
 			if err != nil {
 				return err
 			}
+			switch {
+			case c.IconImage != "":
+				if err := a.db.SetConnectionIconTx(tx, id, c.IconImage); err != nil {
+					return err
+				}
+			case c.Icon != "":
+				if err := a.db.SetConnectionNamedIconTx(tx, id, c.Icon, c.IconColor); err != nil {
+					return err
+				}
+			}
 			connIDs[c.TempID] = id
 		}
 
@@ -1454,6 +1582,44 @@ func (a *App) writePlan(p *mcpPlan) (string, error) {
 			if !settingsEmpty(e.SetSettings) || len(e.ClearSettings) > 0 {
 				if err := a.db.PatchConnectionOverridesTx(tx, e.ConnID, e.SetSettings, e.ClearSettings); err != nil {
 					return fmt.Errorf("update settings on %q: %w", e.ConnID, err)
+				}
+			}
+			if e.IconImage != nil {
+				if err := a.db.SetConnectionIconTx(tx, e.ConnID, *e.IconImage); err != nil {
+					return fmt.Errorf("set icon image on %q: %w", e.ConnID, err)
+				}
+			} else if e.Icon != nil || e.IconColor != nil {
+				// The setter writes both columns at once, so an edit touching
+				// only one of them has to carry the other's current value
+				// through - otherwise changing just the colour would silently
+				// drop the icon it was meant to colour.
+				name, color, hasImage := "", "", false
+				if cur, err := a.db.GetConnection(e.ConnID); err == nil {
+					name = strDeref(cur.IconName, "")
+					color = strDeref(cur.IconColor, "")
+					hasImage = cur.IconImageID != nil && *cur.IconImageID != ""
+				}
+				if e.Icon != nil {
+					name = *e.Icon
+				}
+				if e.IconColor != nil {
+					color = *e.IconColor
+				}
+				// A colour-only edit against a connection carrying an uploaded
+				// image would resolve to an empty name here, and writing that
+				// clears the image (the two icon kinds are mutually exclusive).
+				// Recolouring an image is not a thing, so skip instead.
+				switch {
+				case e.Icon != nil:
+					if err := a.db.SetConnectionNamedIconTx(tx, e.ConnID, name, color); err != nil {
+						return fmt.Errorf("set icon on %q: %w", e.ConnID, err)
+					}
+				case hasImage:
+					// colour-only edit, custom image: nothing to recolour.
+				case name != "":
+					if err := a.db.SetConnectionNamedIconTx(tx, e.ConnID, name, color); err != nil {
+						return fmt.Errorf("set icon colour on %q: %w", e.ConnID, err)
+					}
 				}
 			}
 		}
