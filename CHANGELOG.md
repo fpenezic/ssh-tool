@@ -7,6 +7,38 @@ a prerelease upstream.
 
 ---
 
+## [0.94.0] - The LLM bridge gives connections the right icon
+
+### Added
+
+- **The LLM can set icons on the connections it creates**, instead of
+  leaving a batch of twenty generic rows to be walked by hand afterwards.
+  Both kinds work: the built-in icons (with a palette colour) and the
+  images you uploaded yourself.
+- **It follows what the target folder already does.** If every connection
+  in a folder wears the same icon - typically a customer logo - new ones
+  get that icon too. If the folder instead uses different icons per role
+  (db-01 with a database, nfs-01 with a disk), it reads the role out of
+  each new server's own name and picks the same way. A folder with no
+  settled convention gets no icons at all, and an icon is never guessed
+  from a hostname when you did not ask for one.
+- **Uploaded icons are offered by what already wears them** ("used by:
+  web-01, web-02"), because an uploaded icon has no name of its own -
+  only an id. So "give these the same icon as the web servers" works.
+- **Cloning a folder icon down onto connections is deliberately not a
+  thing.** An icon tells connections in a folder apart, and forty
+  identical rows would defeat the point.
+
+### Changed
+
+- **The manage grant now says it ends when you quit.** It never survived
+  a restart - that is the design, since a grant that writes to your whole
+  connection tree should not come back on its own - but the only mention
+  was a parenthetical, so finding it off after a restart looked like a
+  fault. The popover, Settings and the user guide now state it plainly.
+
+---
+
 ## [0.93.0] - Wails beta.18, and a secure store that admits failure
 
 ### Changed
