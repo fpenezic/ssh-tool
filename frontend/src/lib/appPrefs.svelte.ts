@@ -5,7 +5,8 @@
 // in via `var(--…)` without prop-drilling.
 
 import { api } from "./api";
-import { DARK_QUERY, isUITheme, osPrefersDark, resolveTheme } from "./uiTheme";
+import { EventsOn } from "./wailsRuntime";
+import { DARK_QUERY, isUITheme, osPrefersDark, resolveTheme, setPlatformPrefersDark } from "./uiTheme";
 import type { ResolvedTheme, UITheme } from "./uiTheme";
 
 export type { UITheme } from "./uiTheme";
@@ -142,6 +143,23 @@ class AppPrefs {
         if (this.uiTheme === "system") this.apply();
       });
     } catch { /* matchMedia unsupported - "system" falls back to dark */ }
+
+    // Ask the platform what the desktop actually prefers. On KDE the
+    // webview's own answer is wrong (WebKitGTK reads the GTK theme, not
+    // the desktop setting), and the Go side reads the portal instead.
+    api
+      .osPrefersDark()
+      .then(([dark, known]) => {
+        if (!known) return;
+        setPlatformPrefersDark(dark);
+        if (this.uiTheme === "system") this.apply();
+      })
+      .catch(() => { /* no platform answer: matchMedia stays in charge */ });
+
+    EventsOn("os_theme_changed", (dark: boolean) => {
+      setPlatformPrefersDark(dark);
+      if (this.uiTheme === "system") this.apply();
+    });
   }
 
   setDensity(d: Density) {

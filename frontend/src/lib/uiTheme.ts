@@ -42,9 +42,27 @@ export function resolveTheme(theme: UITheme, prefersDark: boolean): ResolvedThem
 // is dark, so a failed query keeps users where they were rather than
 // flipping them to light.
 export function osPrefersDark(): boolean {
+  // The platform's own answer wins when we have one. WebKitGTK derives
+  // prefers-color-scheme from the GTK theme, which on KDE does not track
+  // the desktop's colour-scheme setting - so matchMedia there reports
+  // the app's starting palette rather than what the user chose. The Go
+  // side reads the xdg-desktop-portal, which every desktop implements.
+  //
+  // Windows and GNOME were never wrong, so this changes nothing there:
+  // the reported value and matchMedia agree.
+  if (platformPrefersDark !== null) return platformPrefersDark;
   try {
     return window.matchMedia(DARK_QUERY).matches;
   } catch {
     return true;
   }
+}
+
+// null means the platform has not told us anything, so matchMedia stays
+// in charge. Set once at startup and updated by the os_theme_changed
+// event; never written from the frontend's own guesses.
+let platformPrefersDark: boolean | null = null;
+
+export function setPlatformPrefersDark(dark: boolean | null) {
+  platformPrefersDark = dark;
 }

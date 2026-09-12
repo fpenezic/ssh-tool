@@ -419,6 +419,30 @@ func configurePlatform(app *application.App, appInst *App) func() {
 		}
 	})
 
+	// System theme. On KDE (and any desktop whose GTK bridge does not
+	// feed WebKitGTK what it reads), prefers-color-scheme in the webview
+	// does not track the desktop setting, so an app on "system" stays on
+	// whichever palette it started with. Wails resolves the real value
+	// through the xdg-desktop-portal (org.freedesktop.appearance), which
+	// KDE, GNOME and everything else implement, so forward that to the
+	// frontend and let it override matchMedia.
+	//
+	// GNOME and Windows were never broken - WebKitGTK/WebView2 follow the
+	// desktop there - so this is additive: the frontend prefers whatever
+	// arrives here and falls back to matchMedia when nothing does.
+	// Seed the cache: ThemeChanged only fires on a change, so a cold
+	// start would otherwise have nothing to answer OsPrefersDark with.
+	// Env.IsDarkMode reads the same portal the event does.
+	appInst.osDarkMode.Store(app.Env.IsDarkMode())
+	appInst.osDarkModeKnown.Store(true)
+
+	app.Event.OnApplicationEvent(events.Common.ThemeChanged, func(ev *application.ApplicationEvent) {
+		dark := ev.Context().IsDarkMode()
+		appInst.osDarkMode.Store(dark)
+		appInst.osDarkModeKnown.Store(true)
+		EventsEmit("os_theme_changed", dark)
+	})
+
 	// Single-instance listener: subsequent launches (e.g. browser
 	// clicks "Open in ssh-tool" while this instance is already
 	// running) connect here, hand us their argv, and exit. We

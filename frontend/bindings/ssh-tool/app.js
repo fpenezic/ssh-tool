@@ -116,12 +116,6 @@ export function AppGetLogs() {
 }
 
 /**
- * AppRelaunch spawns a fresh instance of this binary and quits the
- * current one - the "restart to apply" step after a sync pull or
- * backup restore, without making the user find the icon again. The
- * child gets SSH_TOOL_WAIT_PID so its startup waits for this process
- * to release store.db (and so it doesn't hand itself off to us via
- * the single-instance socket and exit).
  * @returns {$CancellablePromise<void>}
  */
 export function AppRelaunch() {
@@ -2247,6 +2241,26 @@ export function OpksshCertStatus(credentialID) {
     return $Call.ByID(2850976259, credentialID).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType111($result);
     }));
+}
+
+/**
+ * AppRelaunch spawns a fresh instance of this binary and quits the
+ * current one - the "restart to apply" step after a sync pull or
+ * backup restore, without making the user find the icon again. The
+ * child gets SSH_TOOL_WAIT_PID so its startup waits for this process
+ * to release store.db (and so it doesn't hand itself off to us via
+ * the single-instance socket and exit).
+ * OsPrefersDark reports the desktop's colour-scheme preference as the
+ * platform sees it, for the initial paint - the ThemeChanged event only
+ * fires on a change, so a cold start has nothing to listen for.
+ * 
+ * Returns (dark, known). known is false when the platform never told us
+ * anything, which is the signal for the frontend to keep trusting
+ * prefers-color-scheme instead of a value we made up.
+ * @returns {$CancellablePromise<[boolean, boolean]>}
+ */
+export function OsPrefersDark() {
+    return $Call.ByID(3309931334);
 }
 
 /**

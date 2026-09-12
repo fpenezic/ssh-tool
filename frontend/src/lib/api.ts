@@ -1267,6 +1267,9 @@ export const api = {
   // Restarts from the freshly installed copy rather than the running
   // one, which is still the binary the user downloaded.
   relaunchFromInstall: (path: string) => G.RelaunchFromInstall(path),
+  // [dark, known] - known is false when the platform never reported,
+  // in which case prefers-color-scheme stays authoritative.
+  osPrefersDark: () => G.OsPrefersDark() as unknown as Promise<[boolean, boolean]>,
   fetchReleaseNotes: (version: string) =>
     G.FetchReleaseNotes(version) as unknown as Promise<{
       version: string;
