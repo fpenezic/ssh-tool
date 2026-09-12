@@ -1264,6 +1264,9 @@ export const api = {
       desktop_entry: boolean;
     }>,
   installToUserPrefix: () => G.InstallToUserPrefix() as unknown as Promise<string>,
+  // Restarts from the freshly installed copy rather than the running
+  // one, which is still the binary the user downloaded.
+  relaunchFromInstall: (path: string) => G.RelaunchFromInstall(path),
   fetchReleaseNotes: (version: string) =>
     G.FetchReleaseNotes(version) as unknown as Promise<{
       version: string;

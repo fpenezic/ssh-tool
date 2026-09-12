@@ -20,11 +20,11 @@ contents:
   - src: "./bin/ssh-tool"
     dst: "/usr/bin/ssh-tool"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/ssh-tool.png"
+    dst: "/usr/share/icons/hicolor/128x128/apps/org.wails.ssh-tool.png"
   - src: "./build/appicon.svg"
-    dst: "/usr/share/icons/hicolor/scalable/apps/ssh-tool.svg"
+    dst: "/usr/share/icons/hicolor/scalable/apps/org.wails.ssh-tool.svg"
   - src: "./build/linux/ssh-tool.desktop"
-    dst: "/usr/share/applications/ssh-tool.desktop"
+    dst: "/usr/share/applications/org.wails.ssh-tool.desktop"
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:

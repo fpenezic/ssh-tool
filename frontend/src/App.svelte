@@ -827,7 +827,19 @@
         async () => {
           try {
             const path = await api.installToUserPrefix();
-            toast.ok(`Installed to ${path}`, 5000);
+            // The running process is still the downloaded binary, so
+            // the window stays bound to a path with no desktop entry
+            // until it restarts - the icon would still look wrong.
+            // Offer the restart rather than leaving it half-applied.
+            toast.info(
+              `Installed to ${path}. Click to restart from there.`,
+              0,
+              () => {
+                api.relaunchFromInstall(path).catch((e: any) =>
+                  toast.err(humanError(e), 6000),
+                );
+              },
+            );
           } catch (e: any) {
             toast.err(humanError(e), 6000);
           }

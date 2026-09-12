@@ -48,7 +48,7 @@ func TestInstallToUserPrefixFromLoose(t *testing.T) {
 		t.Errorf("installed binary is not executable: %v", fi.Mode())
 	}
 
-	entry := filepath.Join(home, ".local", "share", "applications", "ssh-tool.desktop")
+	entry := filepath.Join(home, ".local", "share", "applications", desktopFileName)
 	body, err := os.ReadFile(entry)
 	if err != nil {
 		t.Fatalf("desktop entry missing: %v", err)
@@ -66,8 +66,8 @@ func TestInstallToUserPrefixFromLoose(t *testing.T) {
 	}
 
 	for _, icon := range []string{
-		filepath.Join(home, ".local", "share", "icons", "hicolor", "128x128", "apps", "ssh-tool.png"),
-		filepath.Join(home, ".local", "share", "icons", "hicolor", "scalable", "apps", "ssh-tool.svg"),
+		filepath.Join(home, ".local", "share", "icons", "hicolor", "128x128", "apps", "org.wails.ssh-tool.png"),
+		filepath.Join(home, ".local", "share", "icons", "hicolor", "scalable", "apps", "org.wails.ssh-tool.svg"),
 	} {
 		fi, err := os.Stat(icon)
 		if err != nil {

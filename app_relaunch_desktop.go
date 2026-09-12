@@ -21,6 +21,15 @@ func (a *App) relaunchApp() error {
 	if err != nil {
 		return err
 	}
+	return a.relaunchAs(exe)
+}
+
+// relaunchAs is relaunchApp with the target binary named explicitly.
+// After a user-prefix install the copy in ~/.local/bin is the one that
+// should come back: restarting os.Executable() would bring up the
+// downloaded binary again, leaving the window bound to a path that has
+// no desktop entry - the icon the install was meant to fix.
+func (a *App) relaunchAs(exe string) error {
 	cmd := exec.Command(exe)
 	cmd.Env = append(os.Environ(), "SSH_TOOL_WAIT_PID="+strconv.Itoa(os.Getpid()))
 	// Detach the child so it outlives this process. On Linux the app

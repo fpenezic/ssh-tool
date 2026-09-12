@@ -91,7 +91,7 @@ func TestGetInstallStateUserComplete(t *testing.T) {
 	if err := os.WriteFile(exe, []byte("x"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(appDir, "ssh-tool.desktop"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(appDir, desktopFileName), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -134,13 +134,59 @@ func TestGetInstallStateUserMissingEntry(t *testing.T) {
 
 // XDG_DATA_HOME has to be honoured, or the entry is written where the
 // session is not looking.
+// The desktop entry has to be named after the Wayland app-id, which
+// Wails derives from the application Name as "org.wails.<Name>". Get
+// this wrong and the launcher still shows the icon (it matches on Exec
+// and Name) while the window and tray fall back to the generic Wails
+// one - which is exactly the bug this guards against, and it is
+// invisible on X11.
+func TestDesktopFileNameMatchesWailsAppID(t *testing.T) {
+	const wailsAppID = "org.wails." + "ssh-tool" // appName, as passed to application.New
+	if want := wailsAppID + ".desktop"; desktopFileName != want {
+		t.Errorf("desktopFileName = %q, want %q - the compositor looks up "+
+			"<app-id>.desktop and finds nothing otherwise", desktopFileName, want)
+	}
+}
+
+// Icon= must resolve in the icon theme under the same app-id name: the
+// compositor falls back to looking the app-id up directly.
+func TestInstalledEntryUsesAppIDIcon(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", "")
+
+	exe := filepath.Join(home, "dl-ssh-tool")
+	if err := os.WriteFile(exe, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := installFrom(exe); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := os.ReadFile(desktopEntryPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(string(body), "Icon=org.wails.ssh-tool\n") {
+		t.Errorf("Icon= should name the app-id:\n%s", body)
+	}
+	for _, p := range []string{
+		filepath.Join(home, ".local/share/icons/hicolor/128x128/apps/org.wails.ssh-tool.png"),
+		filepath.Join(home, ".local/share/icons/hicolor/scalable/apps/org.wails.ssh-tool.svg"),
+	} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("icon not installed under the app-id name: %s", p)
+		}
+	}
+}
+
 func TestDesktopEntryPathHonoursXDG(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "custom"))
 
 	got := desktopEntryPath()
-	want := filepath.Join(home, "custom", "applications", "ssh-tool.desktop")
+	want := filepath.Join(home, "custom", "applications", desktopFileName)
 	if got != want {
 		t.Errorf("desktopEntryPath = %q, want %q", got, want)
 	}

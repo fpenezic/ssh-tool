@@ -64,12 +64,21 @@ func userDataDir() string {
 	return filepath.Join(home, ".local", "share")
 }
 
+// desktopFileName must match the Wayland app-id, not our binary name.
+// Wails builds its GtkApplication id as "org.wails.<Name>" (hardcoded
+// in linux_cgo.go), GTK4 hands that to the compositor as the window
+// app-id, and KWin/GNOME then look for "<app-id>.desktop". A file named
+// ssh-tool.desktop is found by the launcher (which matches on Exec and
+// Name) but never by the window, which is why the menu entry showed our
+// icon while the window and tray kept the generic Wails one.
+const desktopFileName = "org.wails.ssh-tool.desktop"
+
 func desktopEntryPath() string {
 	d := userDataDir()
 	if d == "" {
 		return ""
 	}
-	return filepath.Join(d, "applications", "ssh-tool.desktop")
+	return filepath.Join(d, "applications", desktopFileName)
 }
 
 // GetInstallState reports where the binary lives. Called once by the
@@ -140,6 +149,22 @@ func isPackagePath(dir string) bool {
 	return false
 }
 
+// RelaunchFromInstall restarts the app from the freshly installed copy.
+//
+// Separate from AppRelaunch because the path differs: the running
+// process came from ~/Downloads, and restarting that would leave the
+// window bound to a binary with no desktop entry, which is the problem
+// the install just solved. Called after the user accepts the restart.
+func (a *App) RelaunchFromInstall(path string) error {
+	if path == "" {
+		return fmt.Errorf("no installed path to restart from")
+	}
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("installed binary is missing: %w", err)
+	}
+	return a.relaunchAs(path)
+}
+
 // InstallToUserPrefix copies the running binary into ~/.local/bin and
 // writes the desktop entry and icons, the same layout
 // build/linux/install-user.sh produces.
@@ -205,7 +230,7 @@ Name=ssh-tool
 GenericName=SSH connection manager
 Comment=Cross-platform SSH connection manager
 Exec=%s %%U
-Icon=ssh-tool
+Icon=org.wails.ssh-tool
 Categories=Network;Development;RemoteAccess;
 Terminal=false
 Keywords=ssh;terminal;sftp;tunnel;wireguard;
@@ -224,10 +249,21 @@ MimeType=x-scheme-handler/ssh-tool;
 	// appIcon is the same embedded PNG the window uses, so the launcher
 	// icon cannot drift from the one in the title bar.
 	if len(appIcon) > 0 {
-		_ = os.WriteFile(filepath.Join(iconDir, "128x128", "apps", "ssh-tool.png"), appIcon, 0o644)
+		_ = os.WriteFile(filepath.Join(iconDir, "128x128", "apps", "org.wails.ssh-tool.png"), appIcon, 0o644)
 	}
 	if len(appIconSVG) > 0 {
-		_ = os.WriteFile(filepath.Join(iconDir, "scalable", "apps", "ssh-tool.svg"), appIconSVG, 0o644)
+		_ = os.WriteFile(filepath.Join(iconDir, "scalable", "apps", "org.wails.ssh-tool.svg"), appIconSVG, 0o644)
+	}
+
+	// Earlier builds wrote ssh-tool.desktop (and ssh-tool.png/svg), which
+	// the compositor never matched to a window. Left behind they show up
+	// as a second, identical entry in the launcher, so clear them out.
+	for _, stale := range []string{
+		filepath.Join(appDir, "ssh-tool.desktop"),
+		filepath.Join(iconDir, "128x128", "apps", "ssh-tool.png"),
+		filepath.Join(iconDir, "scalable", "apps", "ssh-tool.svg"),
+	} {
+		_ = os.Remove(stale)
 	}
 
 	refreshDesktopCaches(appDir, iconDir)

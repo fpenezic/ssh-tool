@@ -26,8 +26,14 @@ APP_DIR="$DATA_DIR/applications"
 ICON_DIR="$DATA_DIR/icons/hicolor"
 
 if [ "${1:-}" = "--uninstall" ]; then
+    # The ssh-tool.* names are from builds before the desktop entry was
+    # renamed to match the Wayland app-id; remove both so an uninstall
+    # after an upgrade leaves nothing behind.
     rm -f "$BIN_DIR/ssh-tool" \
+          "$APP_DIR/org.wails.ssh-tool.desktop" \
           "$APP_DIR/ssh-tool.desktop" \
+          "$ICON_DIR/128x128/apps/org.wails.ssh-tool.png" \
+          "$ICON_DIR/scalable/apps/org.wails.ssh-tool.svg" \
           "$ICON_DIR/128x128/apps/ssh-tool.png" \
           "$ICON_DIR/scalable/apps/ssh-tool.svg"
     command -v update-desktop-database >/dev/null 2>&1 &&
@@ -55,14 +61,14 @@ install -m 0755 "$SRC" "$BIN_DIR/ssh-tool"
 
 # Exec must be absolute: a .desktop launched by the session does not
 # necessarily inherit a PATH containing ~/.local/bin.
-cat > "$APP_DIR/ssh-tool.desktop" <<EOF
+cat > "$APP_DIR/org.wails.ssh-tool.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=ssh-tool
 GenericName=SSH connection manager
 Comment=Cross-platform SSH connection manager
 Exec=$BIN_DIR/ssh-tool %U
-Icon=ssh-tool
+Icon=org.wails.ssh-tool
 Categories=Network;Development;RemoteAccess;
 Terminal=false
 Keywords=ssh;terminal;sftp;tunnel;wireguard;
@@ -75,11 +81,15 @@ EOF
 # Icons ship next to this script in the source tree; when it is run from
 # an extracted release tarball they sit beside the binary instead.
 for cand in "$here/../appicon.png" "$here/appicon.png" "$(dirname "$SRC")/appicon.png"; do
-    [ -f "$cand" ] && cp "$cand" "$ICON_DIR/128x128/apps/ssh-tool.png" && break
+    [ -f "$cand" ] && cp "$cand" "$ICON_DIR/128x128/apps/org.wails.ssh-tool.png" && break
 done
 for cand in "$here/../appicon.svg" "$here/appicon.svg" "$(dirname "$SRC")/appicon.svg"; do
-    [ -f "$cand" ] && cp "$cand" "$ICON_DIR/scalable/apps/ssh-tool.svg" && break
+    [ -f "$cand" ] && cp "$cand" "$ICON_DIR/scalable/apps/org.wails.ssh-tool.svg" && break
 done
+
+rm -f "$APP_DIR/ssh-tool.desktop" \
+      "$ICON_DIR/128x128/apps/ssh-tool.png" \
+      "$ICON_DIR/scalable/apps/ssh-tool.svg"
 
 command -v update-desktop-database >/dev/null 2>&1 &&
     update-desktop-database -q "$APP_DIR" || true

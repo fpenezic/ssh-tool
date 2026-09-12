@@ -21,6 +21,10 @@ func (a *App) GetInstallState() InstallState {
 	return InstallState{Kind: "native"}
 }
 
+// RelaunchFromInstall is a no-op off Linux; nothing offers an install
+// there, so nothing ever asks for this restart.
+func (a *App) RelaunchFromInstall(path string) error { return nil }
+
 // InstallToUserPrefix is a no-op off Linux.
 func (a *App) InstallToUserPrefix() (string, error) {
 	return "", nil

@@ -2521,6 +2521,20 @@ export function RegisterURLScheme() {
 }
 
 /**
+ * RelaunchFromInstall restarts the app from the freshly installed copy.
+ * 
+ * Separate from AppRelaunch because the path differs: the running
+ * process came from ~/Downloads, and restarting that would leave the
+ * window bound to a binary with no desktop entry, which is the problem
+ * the install just solved. Called after the user accepts the restart.
+ * @param {string} path
+ * @returns {$CancellablePromise<void>}
+ */
+export function RelaunchFromInstall(path) {
+    return $Call.ByID(3746194030, path);
+}
+
+/**
  * RequestAttention flashes the taskbar button to pull the user's eye to a
  * blocking prompt (MCP approval, host-key TOFU, warn-before-quit) they might
  * miss while the window is in the background. No-op when the window already has
