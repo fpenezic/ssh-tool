@@ -144,11 +144,38 @@ jobs:
           SSHTOOL_VERSION: ${{ github.ref_name }}
         run: |
           ${{ matrix.build }}
-          mv ${{ matrix.bin }} bin/${{ matrix.out }}
+      # Distro packages, Linux only. They declare the GTK4 + WebKitGTK 6.0
+      # runtime deps, so the package manager pulls them in instead of the
+      # user meeting a loader error on first launch. This runs BEFORE the
+      # rename below: nfpm.yaml reads the binary from ./bin/ssh-tool.
+      - name: Package (deb/rpm/pacman)
+        if: startsWith(matrix.platform, 'linux-')
+        env:
+          SSHTOOL_VERSION: ${{ github.ref_name }}
+        run: |
+          task linux:generate:deb
+          task linux:generate:rpm
+          task linux:generate:aur
+          arch="${{ matrix.platform }}"; arch="${arch#linux-}"
+          mv bin/ssh-tool.deb "bin/ssh-tool-linux-${arch}.deb"
+          mv bin/ssh-tool.rpm "bin/ssh-tool-linux-${arch}.rpm"
+          mv bin/ssh-tool.pkg.tar.zst "bin/ssh-tool-linux-${arch}.pkg.tar.zst"
+      - name: Rename binary
+        run: mv ${{ matrix.bin }} bin/${{ matrix.out }}
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.out }}
           path: bin/${{ matrix.out }}
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        if: startsWith(matrix.platform, 'linux-')
+        with:
+          name: ${{ matrix.out }}-packages
+          path: |
+            bin/*.deb
+            bin/*.rpm
+            bin/*.pkg.tar.zst
           if-no-files-found: error
           retention-days: 7
 

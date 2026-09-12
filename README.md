@@ -44,6 +44,49 @@ test status varies).
   `.mxtsessions`, PuTTY / KiTTY `.reg` and SuperPuTTY `Sessions.xml`;
   encrypted archive export.
 
+## Install
+
+Every release ships a single binary per platform, plus distro packages
+for Linux. Grab them from
+[Releases](https://github.com/fpenezic/ssh-tool/releases) or
+[sshtool.app](https://sshtool.app).
+
+### Linux
+
+The app draws its window with GTK 4 and WebKitGTK 6.0, which are not
+bundled - bundling a browser engine would mean shipping (and patching)
+several hundred MB of GTK, mesa and WebKit, and you would stop getting
+security updates through your package manager.
+
+The distro packages declare those dependencies, so this is handled for
+you:
+
+```bash
+sudo pacman -U ssh-tool-linux-amd64.pkg.tar.zst   # Arch / CachyOS / Manjaro
+sudo apt install ./ssh-tool-linux-amd64.deb       # Debian / Ubuntu
+sudo dnf install ./ssh-tool-linux-amd64.rpm       # Fedora / RHEL
+```
+
+They also register the desktop entry and icon, so the app shows up in
+your launcher.
+
+If you prefer the bare binary, install the runtime first:
+
+```bash
+sudo pacman -S webkitgtk-6.0 gtk4                 # Arch
+sudo apt install libwebkitgtk-6.0-4 libgtk-4-1    # Debian / Ubuntu
+sudo dnf install webkitgtk6.0 gtk4                # Fedora
+```
+
+Without them the binary fails in the dynamic loader with
+`libwebkitgtk-6.0.so.4: cannot open shared object file`, before any of
+our code runs.
+
+### Windows
+
+One `.exe`, no runtime and no installer. WebView2 ships with Windows 10
+and 11.
+
 ## Documentation
 
 - [User guide](docs/USER_GUIDE.md) - every shipped feature, indexed.
