@@ -6482,6 +6482,15 @@ func (a *App) DownloadUpdate() (*updater.DownloadResult, error) {
 	if rel.AssetURL == "" {
 		return nil, fmt.Errorf("no downloadable asset for this platform in release %s", rel.Version)
 	}
+	// A development build has no comparable version, so semverGreater
+	// says false and the check below would report "already on the latest
+	// version (dev)" - technically a refusal, but it reads as a bug.
+	// Say what is actually going on, and refuse for the real reason:
+	// replacing a build from the user's own tree with a release is not
+	// an update, it is losing their build.
+	if isDevBuild() {
+		return nil, fmt.Errorf("this is a development build (%s), not a release - build it again or run a release binary to use in-app updates", appVersion)
+	}
 	// Only download when the resolved release is actually newer than what is
 	// running - guards against a download click racing a just-applied update.
 	if !semverGreater(rel.Version, appVersion) {

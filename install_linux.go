@@ -107,6 +107,19 @@ func (a *App) GetInstallState() InstallState {
 func installStateFor(exePath string) InstallState {
 	st := InstallState{Kind: "loose"}
 
+	// A development build never offers to install itself. It would
+	// otherwise offer to replace the user's working copy with a build
+	// from their own tree, which is one mis-click away from losing the
+	// version they actually use.
+	if isDevBuild() {
+		st.Kind = "dev"
+		if resolved, err := filepath.EvalSymlinks(exePath); err == nil {
+			exePath = resolved
+		}
+		st.ExePath = exePath
+		return st
+	}
+
 	if resolved, err := filepath.EvalSymlinks(exePath); err == nil {
 		exePath = resolved
 	}
@@ -211,6 +224,12 @@ func (a *App) InstallToUserPrefix() (string, error) {
 // tests can drive a real install against a throwaway HOME.
 func installFrom(exePath string) (string, error) {
 	st := installStateFor(exePath)
+	// Defence in depth: the offer is hidden for a dev build, but a stale
+	// frontend could still call this, and installing a half-finished
+	// build over the user's working copy is not recoverable from the UI.
+	if st.Kind == "dev" {
+		return "", fmt.Errorf("this is a development build (%s); install a release instead", appVersion)
+	}
 	if st.Kind == "package" {
 		return "", fmt.Errorf("this build was installed by your package manager; nothing to do")
 	}

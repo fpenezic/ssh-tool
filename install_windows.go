@@ -68,6 +68,19 @@ func (a *App) GetInstallState() InstallState {
 // so tests can describe a layout instead of being run from one.
 func installStateFor(exePath string) InstallState {
 	st := InstallState{Kind: "loose"}
+
+	// A development build never offers to install itself. It would
+	// otherwise offer to replace the user's working copy with a build
+	// from their own tree, which is one mis-click away from losing the
+	// version they actually use.
+	if isDevBuild() {
+		st.Kind = "dev"
+		if resolved, err := filepath.EvalSymlinks(exePath); err == nil {
+			exePath = resolved
+		}
+		st.ExePath = exePath
+		return st
+	}
 	if resolved, err := filepath.EvalSymlinks(exePath); err == nil {
 		exePath = resolved
 	}
@@ -121,6 +134,11 @@ func (a *App) InstallToUserPrefix() (string, error) {
 }
 
 func installFrom(exePath string) (string, error) {
+	// See the Linux twin: a development build must not replace the
+	// user's working copy, and the UI check alone is not enough.
+	if isDevBuild() {
+		return "", fmt.Errorf("this is a development build (%s); install a release instead", appVersion)
+	}
 	progDir := userProgramDir()
 	if progDir == "" {
 		return "", fmt.Errorf("cannot locate %%LOCALAPPDATA%%")
