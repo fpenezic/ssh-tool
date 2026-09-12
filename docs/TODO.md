@@ -268,7 +268,10 @@ Mediums + selected Lows tracked here.
   numeric x.y.z.w), so file-version detection works. Order of work:
   (1) NSIS per-user installer into `%LOCALAPPDATA%\Programs\ssh-tool`
   so the self-updater keeps working without admin (Program Files
-  would break the apply script); (2) code signing - Azure Trusted
+  would break the apply script) - note the in-app install offer
+  already puts the exe exactly there and creates the Start Menu
+  shortcut, so an installer mostly needs to wrap what
+  `install_windows.go` does; (2) code signing - Azure Trusted
   Signing is the cheap route, unsigned exe trips SmartScreen on a
   fleet; (3) wrap as Win32 .intunewin, detection rule "version >="
   (not "==" - self-updated clients drift ahead of the Intune catalog
@@ -278,7 +281,39 @@ Mediums + selected Lows tracked here.
   `update_check_disabled` is a per-user DB setting.
 - **Linux .AppImage** - Taskfile + AppImage config exist; needs
   smoke testing.
-- **Linux .deb / .rpm** - `nfpm` config exists; needs sign + publish.
+- **apt / dnf repositories (target: v0.100.0).** The .deb and .rpm are
+  built and attached to every release now, but they are one-off
+  installs: a new version means downloading another package by hand,
+  and the in-app updater correctly refuses to touch a package-managed
+  binary. A repository fixes that the way the AUR already does for
+  Arch.
+
+  What it needs, roughly in order:
+
+  1. **A signing key.** A dedicated GPG key (not the author's personal
+     one), private half in GitHub Actions secrets, public half served
+     next to the repo and fingerprint published in the README. Losing
+     it means every user re-adds the key by hand, so it wants a backup
+     kept outside CI.
+  2. **Repository metadata.** apt wants `dists/stable/` with a signed
+     `InRelease`; dnf wants `repodata/` from `createrepo_c` plus a
+     detached signature. Both are generated per release, from the
+     packages CI already builds - `aptly` or plain `apt-ftparchive` for
+     the former, `createrepo_c` for the latter.
+  3. **Somewhere to host it.** Undecided, and it is the decision that
+     shapes the rest. sshtool.app currently only redirects to GitHub
+     Releases and holds no files, so serving a repo there means giving
+     the web app storage and static serving it does not have today.
+     GitHub Pages needs none of that (a gh-pages branch, pushed by the
+     same workflow that publishes the release) at the cost of the URL.
+  4. **Retention.** A repo accumulates: decide up front how many old
+     versions stay resolvable, or `apt install ssh-tool=0.94.0` breaks
+     silently when it is cleaned up.
+
+  Worth doing when there is an apt or dnf user asking, or at v0.100.0
+  as planned, whichever comes first. The AUR recipe in `build/aur/` is
+  the reference for how little per-release work this should end up
+  being: one script, run after the release exists.
 - **Windows .msi / NSIS** - installer config exists; code-signing
   cert acquisition + EV process is the open question.
 - **macOS universal** - Taskfile + Info.plist exist; needs Apple
