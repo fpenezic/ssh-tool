@@ -179,6 +179,11 @@
   // simply never renders there.
   let installState = $state<Awaited<ReturnType<typeof api.getInstallState>> | null>(null);
   let installing = $state(false);
+  // "the Start Menu" on Windows, "your applications menu" elsewhere -
+  // the mechanism differs but the user-facing idea is the same.
+  const menuName = $derived(
+    navigator.userAgent.includes("Windows") ? "the Start Menu" : "your applications menu",
+  );
   let installMsg = $state("");
 
   async function installToUserPrefix() {
@@ -2408,18 +2413,18 @@
       {#if installState.replaces}
         <p class="hint">
           This copy is running from <code>{installState.exe_path}</code>,
-          but your applications menu opens
+          but {menuName} opens
           <code>{installState.target_path}</code>{installState.installed_version
             ? ` (${installState.installed_version})`
-            : ""}. Until you replace it, launching ssh-tool from the menu
-          keeps starting the other one.
+            : ""}. Until you replace it, launching ssh-tool from
+          {menuName} keeps starting the other one.
         </p>
       {:else}
         <p class="hint">
           ssh-tool is running from <code>{installState.exe_path}</code>, so
-          it has no entry in your applications menu. Installing copies it to
-          <code>{installState.target_path}</code> and registers the launcher
-          entry and icon. No root, and it stays updatable from inside the
+          it has no entry in {menuName}. Installing copies it to
+          <code>{installState.target_path}</code> and creates the shortcut.
+          No administrator rights, and it stays updatable from inside the
           app.
         </p>
       {/if}
@@ -2428,7 +2433,7 @@
           ? "Installing..."
           : installState.replaces
             ? "Replace the installed copy"
-            : "Add to applications menu"}
+            : `Add to ${menuName}`}
       </button>
       {#if installMsg}
         <p class="hint" style="margin-top:0.4rem">{installMsg}</p>

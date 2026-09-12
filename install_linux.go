@@ -3,14 +3,12 @@
 package main
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // InstallState describes how the running binary is installed, so the UI
@@ -154,31 +152,9 @@ func installStateFor(exePath string) InstallState {
 	return st
 }
 
-// binaryVersion reads the version stamped into another ssh-tool binary.
-//
-// The version is injected with -ldflags -X main.appVersion, so it sits
-// in the binary as a plain string with no marker around it. Rather than
-// scan for it, ask the binary itself: --print-version prints one line
-// and exits, handled early in main() before anything is initialised.
-//
-// Returns "" when the binary cannot be run or does not answer - an old
-// build predating the flag, a different architecture, a corrupt
-// download. The caller treats that as "something is installed, version
-// unknown", which is still worth telling the user.
+// binaryVersion asks another ssh-tool binary what version it is.
 func binaryVersion(path string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, path, "--print-version").Output()
-	if err != nil {
-		return ""
-	}
-	v := strings.TrimSpace(string(out))
-	// Guard against a binary that ignores the flag and prints something
-	// else entirely (or opens a window and returns nothing).
-	if len(v) > 64 || strings.ContainsAny(v, "\n\r") {
-		return ""
-	}
-	return v
+	return runPrintVersion(path)
 }
 
 // isPackagePath mirrors the updater's list. Kept separate rather than

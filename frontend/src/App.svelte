@@ -841,9 +841,12 @@
       // adding a menu entry, and the upgrade case is the one where
       // saying nothing hurts most: the launcher still points at the old
       // binary, so clicking the icon tomorrow quietly goes back to it.
+      const menu = navigator.userAgent.includes("Windows")
+        ? "the Start Menu"
+        : "your applications menu";
       const msg = st.replaces
         ? `Replace the installed copy${st.installed_version ? ` (${st.installed_version})` : ""} with this one? Click to install.`
-        : "Add ssh-tool to your applications menu? Click to install.";
+        : `Add ssh-tool to ${menu}? Click to install.`;
       toast.info(
         msg,
         0,
