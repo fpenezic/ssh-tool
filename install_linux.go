@@ -3,12 +3,14 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // InstallState describes how the running binary is installed, so the UI
@@ -35,6 +37,17 @@ type InstallState struct {
 	CanOffer bool `json:"can_offer"`
 	// DesktopEntry is true when a launcher entry already exists.
 	DesktopEntry bool `json:"desktop_entry"`
+	// InstalledVersion is the version of the copy already in the user
+	// prefix, when there is one and it is not us. This is the upgrade
+	// case: a newer build run from ~/Downloads while the launcher entry
+	// still points at the older installed copy. Empty when nothing is
+	// installed, or when we are the installed copy.
+	InstalledVersion string `json:"installed_version"`
+	// Replaces is true when installing would overwrite an existing
+	// install rather than create one. Changes the wording from "add to
+	// your applications menu" to "replace the installed copy", which
+	// are different enough that one message cannot serve both.
+	Replaces bool `json:"replaces"`
 }
 
 // appIconSVG is installed alongside the PNG. Icon themes prefer the
@@ -129,7 +142,43 @@ func installStateFor(exePath string) InstallState {
 	}
 	st.TargetPath = filepath.Join(binDir, "ssh-tool")
 	st.CanOffer = true
+
+	// Is something already installed there? If so this is an upgrade,
+	// not a first install - the launcher entry exists and points at the
+	// older copy, so clicking the icon tomorrow would silently go back
+	// to it.
+	if fi, err := os.Stat(st.TargetPath); err == nil && !fi.IsDir() {
+		st.Replaces = true
+		st.InstalledVersion = binaryVersion(st.TargetPath)
+	}
 	return st
+}
+
+// binaryVersion reads the version stamped into another ssh-tool binary.
+//
+// The version is injected with -ldflags -X main.appVersion, so it sits
+// in the binary as a plain string with no marker around it. Rather than
+// scan for it, ask the binary itself: --print-version prints one line
+// and exits, handled early in main() before anything is initialised.
+//
+// Returns "" when the binary cannot be run or does not answer - an old
+// build predating the flag, a different architecture, a corrupt
+// download. The caller treats that as "something is installed, version
+// unknown", which is still worth telling the user.
+func binaryVersion(path string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, path, "--print-version").Output()
+	if err != nil {
+		return ""
+	}
+	v := strings.TrimSpace(string(out))
+	// Guard against a binary that ignores the flag and prints something
+	// else entirely (or opens a window and returns nothing).
+	if len(v) > 64 || strings.ContainsAny(v, "\n\r") {
+		return ""
+	}
+	return v
 }
 
 // isPackagePath mirrors the updater's list. Kept separate rather than

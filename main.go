@@ -15,6 +15,7 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -51,6 +52,25 @@ func main() {
 	// has no use for the relaunch handshake or the GTK env fixups.
 	if len(os.Args) > 1 && os.Args[1] == "--mcp-bridge" {
 		os.Exit(runMcpBridge())
+	}
+
+	// `ssh-tool --print-version` prints the build version and exits.
+	//
+	// This is how a running instance reads the version of ANOTHER copy
+	// on disk - the one already installed in ~/.local/bin, say, when
+	// deciding whether an install would be an upgrade or a first
+	// install. The version is injected via -ldflags, so there is nothing
+	// to parse out of the file; asking the binary is both simpler and
+	// correct across builds.
+	//
+	// Checked before the pre-flight below for the same reason the bridge
+	// is: this is not an app launch, and the single-instance guard would
+	// hand its argv to the running instance and exit before anything
+	// was printed - so the caller would read an empty string and every
+	// upgrade would look like a first install.
+	if len(os.Args) > 1 && os.Args[1] == "--print-version" {
+		fmt.Println(appVersion)
+		os.Exit(0)
 	}
 
 	// Desktop pre-flight: relaunch handshake (wait for the old instance

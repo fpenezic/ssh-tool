@@ -830,12 +830,22 @@
   });
 
   setTimeout(async () => {
-    if (localStorage.getItem("install-offer-shown") === "1") return;
     try {
       const st = await api.getInstallState();
       if (!st.can_offer) return;
+      // The once-only flag covers the "add me to your menu" nudge. An
+      // upgrade is a different question and gets asked again: the user
+      // just launched a build that will not be what the launcher opens.
+      if (!st.replaces && localStorage.getItem("install-offer-shown") === "1") return;
+      // Replacing an existing install is a different question from
+      // adding a menu entry, and the upgrade case is the one where
+      // saying nothing hurts most: the launcher still points at the old
+      // binary, so clicking the icon tomorrow quietly goes back to it.
+      const msg = st.replaces
+        ? `Replace the installed copy${st.installed_version ? ` (${st.installed_version})` : ""} with this one? Click to install.`
+        : "Add ssh-tool to your applications menu? Click to install.";
       toast.info(
-        "Add ssh-tool to your applications menu? Click to install.",
+        msg,
         0,
         async () => {
           try {

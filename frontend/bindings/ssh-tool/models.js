@@ -2357,6 +2357,29 @@ export class InstallState {
              */
             this["desktop_entry"] = false;
         }
+        if (!("installed_version" in $$source)) {
+            /**
+             * InstalledVersion is the version of the copy already in the user
+             * prefix, when there is one and it is not us. This is the upgrade
+             * case: a newer build run from ~/Downloads while the launcher entry
+             * still points at the older installed copy. Empty when nothing is
+             * installed, or when we are the installed copy.
+             * @member
+             * @type {string}
+             */
+            this["installed_version"] = "";
+        }
+        if (!("replaces" in $$source)) {
+            /**
+             * Replaces is true when installing would overwrite an existing
+             * install rather than create one. Changes the wording from "add to
+             * your applications menu" to "replace the installed copy", which
+             * are different enough that one message cannot serve both.
+             * @member
+             * @type {boolean}
+             */
+            this["replaces"] = false;
+        }
 
         Object.assign(this, $$source);
     }

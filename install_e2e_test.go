@@ -121,3 +121,58 @@ func contains(hay, needle string) bool {
 		return false
 	})()
 }
+
+// Replacing an older install must overwrite the binary and leave the
+// desktop entry pointing at the same path - the entry is what the
+// launcher opens, so a stale one would send the user back to whatever
+// used to be there.
+func TestInstallReplacesOlderCopy(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", "")
+
+	binDir := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	installed := filepath.Join(binDir, "ssh-tool")
+	if err := os.WriteFile(installed, []byte("OLD BUILD"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	dl := filepath.Join(home, "Downloads")
+	if err := os.MkdirAll(dl, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	newer := filepath.Join(dl, "ssh-tool-linux-amd64")
+	if err := os.WriteFile(newer, []byte("NEW BUILD"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	target, err := installFrom(newer)
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if target != installed {
+		t.Errorf("target = %q, want %q", target, installed)
+	}
+	got, err := os.ReadFile(installed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "NEW BUILD" {
+		t.Errorf("installed binary = %q, the old one survived", got)
+	}
+	// No .new left behind from the atomic swap.
+	if _, err := os.Stat(installed + ".new"); err == nil {
+		t.Error("temp file left behind after replace")
+	}
+
+	body, err := os.ReadFile(desktopEntryPath())
+	if err != nil {
+		t.Fatalf("desktop entry missing after replace: %v", err)
+	}
+	if !contains(string(body), "Exec="+installed) {
+		t.Errorf("desktop entry should point at the installed path:\n%s", body)
+	}
+}

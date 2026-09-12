@@ -1262,6 +1262,8 @@ export const api = {
       target_path: string;
       can_offer: boolean;
       desktop_entry: boolean;
+      installed_version: string;
+      replaces: boolean;
     }>,
   installToUserPrefix: () => G.InstallToUserPrefix() as unknown as Promise<string>,
   // Restarts from the freshly installed copy rather than the running

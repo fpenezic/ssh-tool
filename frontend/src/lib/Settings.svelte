@@ -2405,15 +2405,30 @@
          it lives permanently, for anyone who dismissed it. -->
     {#if installState?.can_offer}
       <h3 style="margin-top:0.8rem">Desktop integration</h3>
-      <p class="hint">
-        ssh-tool is running from <code>{installState.exe_path}</code>, so
-        it has no entry in your applications menu. Installing copies it to
-        <code>{installState.target_path}</code> and registers the launcher
-        entry and icon. No root, and it stays updatable from inside the
-        app.
-      </p>
+      {#if installState.replaces}
+        <p class="hint">
+          This copy is running from <code>{installState.exe_path}</code>,
+          but your applications menu opens
+          <code>{installState.target_path}</code>{installState.installed_version
+            ? ` (${installState.installed_version})`
+            : ""}. Until you replace it, launching ssh-tool from the menu
+          keeps starting the other one.
+        </p>
+      {:else}
+        <p class="hint">
+          ssh-tool is running from <code>{installState.exe_path}</code>, so
+          it has no entry in your applications menu. Installing copies it to
+          <code>{installState.target_path}</code> and registers the launcher
+          entry and icon. No root, and it stays updatable from inside the
+          app.
+        </p>
+      {/if}
       <button class="btn" onclick={installToUserPrefix} disabled={installing}>
-        {installing ? "Installing..." : "Add to applications menu"}
+        {installing
+          ? "Installing..."
+          : installState.replaces
+            ? "Replace the installed copy"
+            : "Add to applications menu"}
       </button>
       {#if installMsg}
         <p class="hint" style="margin-top:0.4rem">{installMsg}</p>

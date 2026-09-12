@@ -191,3 +191,108 @@ func TestDesktopEntryPathHonoursXDG(t *testing.T) {
 		t.Errorf("desktopEntryPath = %q, want %q", got, want)
 	}
 }
+
+// The upgrade case: a newer build run from ~/Downloads while an older
+// copy is already installed. Reporting this as a plain first install
+// would be wrong - the launcher entry exists and points at the old
+// binary, so clicking the icon tomorrow goes back to it.
+func TestGetInstallStateDetectsExistingInstall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", "")
+
+	binDir := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A stand-in for the installed copy. It answers --print-version the
+	// way a real build does.
+	installed := filepath.Join(binDir, "ssh-tool")
+	script := "#!/bin/sh\n[ \"$1\" = \"--print-version\" ] && echo v0.94.0\n"
+	if err := os.WriteFile(installed, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	dl := filepath.Join(home, "Downloads")
+	if err := os.MkdirAll(dl, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	newer := filepath.Join(dl, "ssh-tool-linux-amd64")
+	if err := os.WriteFile(newer, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	st := installStateFor(newer)
+	if st.Kind != "loose" {
+		t.Errorf("Kind = %q, want loose", st.Kind)
+	}
+	if !st.CanOffer {
+		t.Error("an upgrade should still be offered")
+	}
+	if !st.Replaces {
+		t.Error("Replaces should be true when something is already installed")
+	}
+	if st.InstalledVersion != "v0.94.0" {
+		t.Errorf("InstalledVersion = %q, want v0.94.0", st.InstalledVersion)
+	}
+}
+
+// A first install has nothing to replace, and must not claim otherwise.
+func TestGetInstallStateFirstInstallDoesNotReplace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", "")
+
+	dl := filepath.Join(home, "Downloads")
+	if err := os.MkdirAll(dl, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(dl, "ssh-tool-linux-amd64")
+	if err := os.WriteFile(exe, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	st := installStateFor(exe)
+	if st.Replaces {
+		t.Error("nothing is installed, so nothing is being replaced")
+	}
+	if st.InstalledVersion != "" {
+		t.Errorf("InstalledVersion = %q, want empty", st.InstalledVersion)
+	}
+}
+
+// An installed binary that does not answer --print-version (an older
+// build, a different architecture, a truncated download) still counts
+// as installed. "Something is there, version unknown" is worth saying;
+// silently calling it a first install is not.
+func TestGetInstallStateUnreadableInstalledVersion(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", "")
+
+	binDir := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Not executable: running it fails, which is the point.
+	if err := os.WriteFile(filepath.Join(binDir, "ssh-tool"), []byte("not a binary"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dl := filepath.Join(home, "Downloads")
+	if err := os.MkdirAll(dl, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(dl, "ssh-tool-linux-amd64")
+	if err := os.WriteFile(exe, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	st := installStateFor(exe)
+	if !st.Replaces {
+		t.Error("a file is there, so installing would replace it")
+	}
+	if st.InstalledVersion != "" {
+		t.Errorf("InstalledVersion = %q, want empty when it cannot be read", st.InstalledVersion)
+	}
+}
