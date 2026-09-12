@@ -44,6 +44,7 @@ export {
     ImportArchiveRequest,
     InfisicalEnsureCredentialInput,
     InfisicalSaveInput,
+    InstallState,
     KeepassEnsureCredentialInput,
     KeepassSaveInput,
     LoadTextFileResult,

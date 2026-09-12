@@ -3,6 +3,7 @@
   import { isMobile } from "./lib/platform";
   import { installMobileBackNav } from "./lib/mobileBackNav";
   import { api } from "./lib/api";
+  import { errMsg as humanError } from "./lib/connectErrors";
   import { EventsOn } from "./lib/wailsRuntime";
   import { focusActivePane } from "./lib/paneFocus";
   import Sidebar from "./lib/Sidebar.svelte";
@@ -805,6 +806,40 @@
   // the status bar stays quiet.
   setTimeout(() => { updateCheck.run(); }, 5000);
   setInterval(() => { updateCheck.run(); }, 6 * 60 * 60 * 1000);
+
+  // Offer to finish the install when the binary was just downloaded and
+  // run in place (Linux). That works, but there is no menu entry and no
+  // icon, which is what makes the app look half-installed. Installing
+  // copies it to ~/.local/bin and writes the desktop entry - no root,
+  // and the binary stays user-owned so the in-app updater keeps working.
+  //
+  // Asked at most once: a packaged install reports can_offer false, and
+  // a decline is remembered so this never becomes nagging. 8 s so it
+  // lands after the update toast rather than competing with it.
+  setTimeout(async () => {
+    if (localStorage.getItem("install-offer-declined") === "1") return;
+    try {
+      const st = await api.getInstallState();
+      if (!st.can_offer) return;
+      toast.info(
+        "Add ssh-tool to your applications menu? Click to install.",
+        0,
+        async () => {
+          try {
+            const path = await api.installToUserPrefix();
+            toast.ok(`Installed to ${path}`, 5000);
+          } catch (e: any) {
+            toast.err(humanError(e), 6000);
+          }
+        },
+      );
+      // The toast is sticky, so dismissing it IS the decline. There is
+      // no separate "no" button to hang this on.
+      localStorage.setItem("install-offer-declined", "1");
+    } catch {
+      // Never block startup on this.
+    }
+  }, 8000);
   // Subscribe to the backend-owned broadcast set so every window's
   // local mirror stays in sync. Idempotent - safe to call from
   // both the main App and DetachedWindow.

@@ -1253,6 +1253,17 @@ export const api = {
       needs_restart: boolean;
     }>,
   applyUpdate: () => G.ApplyUpdate(),
+  // Linux only in practice; every other platform reports kind "native"
+  // and can_offer false, so callers need no platform check.
+  getInstallState: () =>
+    G.GetInstallState() as unknown as Promise<{
+      kind: "package" | "user" | "loose" | "native";
+      exe_path: string;
+      target_path: string;
+      can_offer: boolean;
+      desktop_entry: boolean;
+    }>,
+  installToUserPrefix: () => G.InstallToUserPrefix() as unknown as Promise<string>,
   fetchReleaseNotes: (version: string) =>
     G.FetchReleaseNotes(version) as unknown as Promise<{
       version: string;

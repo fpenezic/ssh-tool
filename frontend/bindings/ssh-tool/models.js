@@ -2297,6 +2297,82 @@ export class InfisicalSaveInput {
 }
 
 /**
+ * InstallState describes how the running binary is installed, so the UI
+ * can offer to finish the job.
+ * 
+ * The three states a Linux user can be in:
+ * 
+ *   - a distro package: /usr/bin, owned by pacman/apt/dnf. Nothing to
+ *     offer; updates come from the package manager.
+ *   - installed in the user's own prefix (~/.local/bin) with a desktop
+ *     entry: the good state for the standalone binary.
+ *   - run from wherever it was downloaded: works, but there is no menu
+ *     entry and no icon, which is what makes it look unfinished.
+ * 
+ * Only the third state produces an offer.
+ */
+export class InstallState {
+    /**
+     * Creates a new InstallState instance.
+     * @param {Partial<InstallState>} [$$source = {}] - The source object to create the InstallState.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * Kind is "package", "user", or "loose".
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("exe_path" in $$source)) {
+            /**
+             * ExePath is where the running binary actually lives.
+             * @member
+             * @type {string}
+             */
+            this["exe_path"] = "";
+        }
+        if (!("target_path" in $$source)) {
+            /**
+             * TargetPath is where an install would put it (empty unless loose).
+             * @member
+             * @type {string}
+             */
+            this["target_path"] = "";
+        }
+        if (!("can_offer" in $$source)) {
+            /**
+             * CanOffer is true when installing is possible and worth suggesting.
+             * @member
+             * @type {boolean}
+             */
+            this["can_offer"] = false;
+        }
+        if (!("desktop_entry" in $$source)) {
+            /**
+             * DesktopEntry is true when a launcher entry already exists.
+             * @member
+             * @type {boolean}
+             */
+            this["desktop_entry"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new InstallState instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {InstallState}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new InstallState(/** @type {Partial<InstallState>} */($$parsedSource));
+    }
+}
+
+/**
  * KeepassEnsureCredentialInput picks a KeePass entry+field straight from the
  * connection auth picker. The app finds an existing credential that already
  * references the exact same entry+field (so choosing it twice reuses one) or
