@@ -265,6 +265,12 @@ func configurePlatform(app *application.App, appInst *App) func() {
 	// without losing background sessions. Icon click toggles the
 	// main window; the right-click menu has Show / Quit.
 	tray := app.SystemTray.New()
+	// Label and tooltip are different properties on Linux: the label
+	// feeds the StatusNotifierItem's Title and Id, which is what KDE
+	// shows on hover. Wails defaults both to "", and KDE then falls back
+	// to the D-Bus service name - which is why the tray tooltip read
+	// "wails" while the taskbar entry was correct.
+	tray.SetLabel(appName)
 	tray.SetTooltip(appName)
 	if len(trayIcon) > 0 {
 		tray.SetIcon(trayIcon)
