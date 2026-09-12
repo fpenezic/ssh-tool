@@ -58,14 +58,24 @@ bundled - bundling a browser engine would mean shipping (and patching)
 several hundred MB of GTK, mesa and WebKit, and you would stop getting
 security updates through your package manager.
 
-The distro packages declare those dependencies, so this is handled for
-you:
+On Arch (and CachyOS, Manjaro, EndeavourOS) install from the AUR, which
+keeps ssh-tool updating with the rest of the system:
 
 ```bash
-sudo pacman -U ssh-tool-linux-amd64.pkg.tar.zst   # Arch / CachyOS / Manjaro
+yay -S ssh-tool-bin        # or paru -S ssh-tool-bin
+```
+
+Elsewhere, download the package for your distro from the release page:
+
+```bash
 sudo apt install ./ssh-tool-linux-amd64.deb       # Debian / Ubuntu
 sudo dnf install ./ssh-tool-linux-amd64.rpm       # Fedora / RHEL
+sudo pacman -U ssh-tool-linux-amd64.pkg.tar.zst   # Arch, without the AUR
 ```
+
+These are one-off installs: there is no apt or dnf repository yet, so a
+new version means downloading the new package. The AUR route updates
+itself.
 
 They also register the desktop entry and icon, so the app shows up in
 your launcher.

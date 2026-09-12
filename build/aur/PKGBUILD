@@ -1,0 +1,62 @@
+# Maintainer: Filip Penezic <108677346+fpenezic@users.noreply.github.com>
+#
+# This is the AUR recipe for the ssh-tool-bin package: it installs the
+# release binary rather than building from source. A from-source PKGBUILD
+# would need Go, Node and the Wails CLI on the user's machine, and would
+# produce the same artefact CI already signs and publishes.
+#
+# To publish a new version: bump pkgver, refresh the checksums with
+# `updpkgsums`, and push to the AUR remote. scripts/aur-release.sh does
+# both from a release tag.
+pkgname=ssh-tool-bin
+pkgver=0.94.0
+pkgrel=1
+pkgdesc="Cross-platform SSH connection manager with folder inheritance, encrypted vault and multi-pane terminal"
+arch=('x86_64' 'aarch64')
+url="https://sshtool.app"
+license=('Apache-2.0')
+# The GTK4 + WebKitGTK 6.0 stack is linked dynamically and deliberately
+# not bundled - see the project README for why.
+depends=('gtk4' 'webkitgtk-6.0')
+provides=('ssh-tool')
+conflicts=('ssh-tool')
+options=('!strip' '!debug')
+
+source_x86_64=("ssh-tool-$pkgver-x86_64::https://github.com/fpenezic/ssh-tool/releases/download/v$pkgver/ssh-tool-linux-amd64"
+               "org.wails.ssh-tool.desktop::https://raw.githubusercontent.com/fpenezic/ssh-tool/v$pkgver/build/linux/ssh-tool.desktop.in"
+               "ssh-tool.png::https://raw.githubusercontent.com/fpenezic/ssh-tool/v$pkgver/build/appicon.png"
+               "ssh-tool.svg::https://raw.githubusercontent.com/fpenezic/ssh-tool/v$pkgver/build/appicon.svg")
+source_aarch64=("ssh-tool-$pkgver-aarch64::https://github.com/fpenezic/ssh-tool/releases/download/v$pkgver/ssh-tool-linux-arm64"
+                "org.wails.ssh-tool.desktop::https://raw.githubusercontent.com/fpenezic/ssh-tool/v$pkgver/build/linux/ssh-tool.desktop.in"
+                "ssh-tool.png::https://raw.githubusercontent.com/fpenezic/ssh-tool/v$pkgver/build/appicon.png"
+                "ssh-tool.svg::https://raw.githubusercontent.com/fpenezic/ssh-tool/v$pkgver/build/appicon.svg")
+
+sha256sums_x86_64=('3f751f93d0a3ad1b54ecdd067a3c56784f94ad38cff5d42a2b6e456b4f5ad846'
+                   '3888be0acca45c34cb81fcfe1aa808408f47a57af479cb441ee38074d02e4df1'
+                   '50dfa61e4cf0bb920e46334d661f249440978f6a548eb026cb1b33e4e20f5e60'
+                   'ac1b9bcde49c905eb1102ecc7f2f31e8e079b97e53614d27515c7a815b0f380d')
+sha256sums_aarch64=('fce27b68d95dc87660a8175f8d03bcbe787395e70c7fe9285aaababaf12b0b53'
+                    '3888be0acca45c34cb81fcfe1aa808408f47a57af479cb441ee38074d02e4df1'
+                    '50dfa61e4cf0bb920e46334d661f249440978f6a548eb026cb1b33e4e20f5e60'
+                    'ac1b9bcde49c905eb1102ecc7f2f31e8e079b97e53614d27515c7a815b0f380d')
+
+package() {
+    local _bin="ssh-tool-$pkgver-$CARCH"
+
+    install -Dm755 "$srcdir/$_bin" "$pkgdir/usr/bin/ssh-tool"
+
+    # The desktop entry must be named after the Wayland app-id, which
+    # Wails derives as org.wails.<Name>. A file named ssh-tool.desktop is
+    # found by the launcher but never matched to the window, so the
+    # window and tray fall back to the generic Wails icon.
+    install -Dm644 "$srcdir/org.wails.ssh-tool.desktop" \
+        "$pkgdir/usr/share/applications/org.wails.ssh-tool.desktop"
+
+    # Icons carry the app-id name for the same reason: the compositor
+    # resolves the window icon through the entry, and falls back to
+    # looking the app-id up in the theme.
+    install -Dm644 "$srcdir/ssh-tool.png" \
+        "$pkgdir/usr/share/icons/hicolor/128x128/apps/org.wails.ssh-tool.png"
+    install -Dm644 "$srcdir/ssh-tool.svg" \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/org.wails.ssh-tool.svg"
+}
