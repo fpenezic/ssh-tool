@@ -817,7 +817,7 @@
   // a decline is remembered so this never becomes nagging. 8 s so it
   // lands after the update toast rather than competing with it.
   setTimeout(async () => {
-    if (localStorage.getItem("install-offer-declined") === "1") return;
+    if (localStorage.getItem("install-offer-shown") === "1") return;
     try {
       const st = await api.getInstallState();
       if (!st.can_offer) return;
@@ -845,9 +845,12 @@
           }
         },
       );
-      // The toast is sticky, so dismissing it IS the decline. There is
-      // no separate "no" button to hang this on.
-      localStorage.setItem("install-offer-declined", "1");
+      // Remember that the offer was made, not that it was refused: the
+      // toast is sticky and has no "no" button, so there is no moment
+      // that means "declined". Recording it here keeps the offer to one
+      // appearance either way, and an install makes the question moot
+      // anyway (the state becomes "user", which never offers).
+      localStorage.setItem("install-offer-shown", "1");
     } catch {
       // Never block startup on this.
     }

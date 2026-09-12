@@ -173,6 +173,29 @@
   // bookmarks, cached dynamic entries by kind); active tunnels and
   // session counts are runtime values on top of that.
   let profileStats = $state<import("./api").ProfileStats | null>(null);
+
+  // Desktop integration (Linux). null until queried; can_offer is false
+  // on a packaged install and on every other platform, so the block
+  // simply never renders there.
+  let installState = $state<Awaited<ReturnType<typeof api.getInstallState>> | null>(null);
+  let installing = $state(false);
+  let installMsg = $state("");
+
+  async function installToUserPrefix() {
+    installing = true;
+    installMsg = "";
+    try {
+      const path = await api.installToUserPrefix();
+      installMsg = `Installed to ${path}. Restart to run the installed copy.`;
+      // Re-read: after a successful install there is nothing left to
+      // offer, and the block should disappear on its own.
+      installState = await api.getInstallState();
+    } catch (e: any) {
+      installMsg = errMsg(e);
+    } finally {
+      installing = false;
+    }
+  }
   let activeForwards = $state<number | null>(null);
   const connectedSessions = $derived(
     sessions.tabs.filter((s) => s.status === "connected").length
@@ -1291,6 +1314,11 @@
   }
 
   onMount(() => { refreshURLSchemeStatus(); refreshExplorerMenuStatus(); });
+  onMount(async () => {
+    try {
+      installState = await api.getInstallState();
+    } catch { /* non-fatal: the block stays hidden */ }
+  });
 
   // Watch the deep-link store: when App.svelte gets
   // `deep_link_import` it sets pendingImportURL here, we navigate
@@ -2370,6 +2398,27 @@
         </label>
       {/each}
     </fieldset>
+
+    <!-- Linux only, and only while there is something to do: a binary
+         run from wherever it was downloaded works, but has no menu entry
+         and no icon. The startup toast offers this once; this is where
+         it lives permanently, for anyone who dismissed it. -->
+    {#if installState?.can_offer}
+      <h3 style="margin-top:0.8rem">Desktop integration</h3>
+      <p class="hint">
+        ssh-tool is running from <code>{installState.exe_path}</code>, so
+        it has no entry in your applications menu. Installing copies it to
+        <code>{installState.target_path}</code> and registers the launcher
+        entry and icon. No root, and it stays updatable from inside the
+        app.
+      </p>
+      <button class="btn" onclick={installToUserPrefix} disabled={installing}>
+        {installing ? "Installing..." : "Add to applications menu"}
+      </button>
+      {#if installMsg}
+        <p class="hint" style="margin-top:0.4rem">{installMsg}</p>
+      {/if}
+    {/if}
 
     {#if !isMobile}
     <h3 style="margin-top:0.8rem">Density</h3>
