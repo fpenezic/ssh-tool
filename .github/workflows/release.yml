@@ -160,6 +160,12 @@ jobs:
           mv bin/ssh-tool.deb "bin/ssh-tool-linux-${arch}.deb"
           mv bin/ssh-tool.rpm "bin/ssh-tool-linux-${arch}.rpm"
           mv bin/ssh-tool.pkg.tar.zst "bin/ssh-tool-linux-${arch}.pkg.tar.zst"
+          # The user-prefix installer is arch-independent, but the
+          # release page is flat, so amd64 is the one that carries it.
+          if [ "$arch" = "amd64" ]; then
+            cp build/linux/install-user.sh build/linux/check-deps.sh bin/
+            cp build/appicon.png build/appicon.svg bin/
+          fi
       - name: Rename binary
         run: mv ${{ matrix.bin }} bin/${{ matrix.out }}
       - uses: actions/upload-artifact@v7
@@ -176,6 +182,8 @@ jobs:
             bin/*.deb
             bin/*.rpm
             bin/*.pkg.tar.zst
+            bin/*.sh
+            bin/appicon.*
           if-no-files-found: error
           retention-days: 7
 

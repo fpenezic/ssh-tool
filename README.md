@@ -70,7 +70,18 @@ sudo dnf install ./ssh-tool-linux-amd64.rpm       # Fedora / RHEL
 They also register the desktop entry and icon, so the app shows up in
 your launcher.
 
-If you prefer the bare binary, install the runtime first:
+If you would rather keep in-app updates, install into your own prefix
+instead. `build/linux/install-user.sh` puts the binary in
+`~/.local/bin` and registers the launcher entry and icon under
+`~/.local/share`, with no root and no package manager:
+
+```bash
+./install-user.sh ./ssh-tool-linux-amd64   # --uninstall to reverse it
+```
+
+Going that route (or running the bare binary straight from your
+downloads folder) means installing the runtime yourself, which the
+packages would have done for you:
 
 ```bash
 sudo pacman -S webkitgtk-6.0 gtk4                 # Arch
@@ -91,8 +102,8 @@ and 11.
 
 The standalone binary updates itself: Help > Check for updates
 downloads the new build and swaps it in place, on Windows and Linux
-alike. Keep it somewhere your user owns (`~/.local/bin`, the desktop,
-anywhere in `$HOME`).
+alike. It works from anywhere your user owns - `~/.local/bin` (what
+`install-user.sh` uses), the desktop, anywhere in `$HOME`.
 
 A distro package is owned by the package manager instead, so ssh-tool
 declines to overwrite itself and says so - update it with
