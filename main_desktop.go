@@ -479,8 +479,8 @@ func configurePlatform(app *application.App, appInst *App) func() {
 	// clicks "Open in ssh-tool" while this instance is already
 	// running) connect here, hand us their argv, and exit. We
 	// re-emit the deep link event and refocus the window.
-	stopInstance, err := startInstanceServer(func(argv []string) {
-		log.Printf("instance handoff: argv = %v", argv)
+	stopInstance, err := startInstanceServer(func(msg instanceMsg) {
+		log.Printf("instance handoff: argv = %v (from %s %s)", msg.Argv, msg.Version, msg.ExePath)
 		// Bring the main window forward before the import flow
 		// kicks in, otherwise the user wouldn't notice the action.
 		if mainWindow != nil {
@@ -488,8 +488,15 @@ func configurePlatform(app *application.App, appInst *App) func() {
 			mainWindow.Focus()
 			appInst.windowHidden.Store(false)
 		}
-		dispatchDeepLink(argv, 200*time.Millisecond)
-		dispatchOpenDir(argv, 200*time.Millisecond)
+		// A launch of a DIFFERENT build is almost always someone running
+		// a download to upgrade. Handing off silently means they watch
+		// the old version come to the front and conclude the update did
+		// nothing. Tell the frontend so it can offer to switch.
+		if other := describeOtherBuild(msg); other != nil {
+			EventsEmit("other_build_launched", other)
+		}
+		dispatchDeepLink(msg.Argv, 200*time.Millisecond)
+		dispatchOpenDir(msg.Argv, 200*time.Millisecond)
 	})
 	if err != nil {
 		log.Printf("single-instance: %v (continuing without)", err)

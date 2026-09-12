@@ -816,6 +816,19 @@
   // Asked at most once: a packaged install reports can_offer false, and
   // a decline is remembered so this never becomes nagging. 8 s so it
   // lands after the update toast rather than competing with it.
+  // Someone launched a different copy of ssh-tool while this one is
+  // running. The single-instance guard handed us its argv and exited it,
+  // which is right for a deep link and wrong for an upgrade: without
+  // this the user double-clicks the build they just downloaded, watches
+  // the old window come forward, and concludes the download is broken.
+  EventsOn("other_build_launched", (b: { version: string; exe_path: string; newer: boolean }) => {
+    const what = b.newer ? `A newer build (${b.version})` : `A different build (${b.version})`;
+    toast.info(
+      `${what} was launched from ${b.exe_path}, but this copy is already running. Quit ssh-tool first, then start the new one.`,
+      0,
+    );
+  });
+
   setTimeout(async () => {
     if (localStorage.getItem("install-offer-shown") === "1") return;
     try {
