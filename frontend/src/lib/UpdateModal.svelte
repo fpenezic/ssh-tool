@@ -34,6 +34,9 @@
   // spawns the helper that swaps it in.
   let downloadBusy = $state(false);
   let downloadErr = $state<string>("");
+  // True when the refusal came from a distro-package install rather than
+  // a real download failure; changes the wording only.
+  let pkgManaged = $state(false);
   let staged = $state<{ staged_path: string; size: number; sha256: string; verified: boolean; apply_script?: string; needs_restart: boolean } | null>(null);
 
   // Download progress (bytes). total <= 0 = no Content-Length from
@@ -73,6 +76,7 @@
     if (!updateCheck.downloadURL || downloadBusy) return;
     downloadBusy = true;
     downloadErr = "";
+    pkgManaged = false;
     progRead = 0;
     progTotal = 0;
     const unProg = EventsOn("update_download_progress", (p: { read: number; total: number }) => {
@@ -83,6 +87,10 @@
       staged = await api.downloadUpdate();
     } catch (e: any) {
       downloadErr = humanError(e);
+      // Matches ErrPackageManaged from internal/updater. Checking the
+      // text is crude, but the IPC layer flattens errors to strings and
+      // this only changes how the message is framed.
+      pkgManaged = /installed from a system package/i.test(downloadErr);
     } finally {
       unProg();
       downloadBusy = false;
@@ -172,7 +180,16 @@
   </div>
 
   {#if downloadErr}
-    <div class="staged err">Update failed: {downloadErr}</div>
+    <!-- A package-managed install is not a failure, it is the wrong
+         update route: the package manager owns the binary. Saying
+         "Update failed" there sends people hunting for a bug. -->
+    <div class="staged err">
+      {#if pkgManaged}
+        {downloadErr}
+      {:else}
+        Update failed: {downloadErr}
+      {/if}
+    </div>
   {/if}
   {#if downloadBusy}
     <div class="staged progress-row">

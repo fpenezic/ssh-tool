@@ -87,6 +87,19 @@ our code runs.
 One `.exe`, no runtime and no installer. WebView2 ships with Windows 10
 and 11.
 
+### Updates
+
+The standalone binary updates itself: Help > Check for updates
+downloads the new build and swaps it in place, on Windows and Linux
+alike. Keep it somewhere your user owns (`~/.local/bin`, the desktop,
+anywhere in `$HOME`).
+
+A distro package is owned by the package manager instead, so ssh-tool
+declines to overwrite itself and says so - update it with
+`pacman -Syu`, `apt upgrade` or `dnf upgrade` like anything else on the
+system. That is the trade: the packages fix the dependency and the
+launcher entry, the standalone binary keeps in-app updates.
+
 ## Documentation
 
 - [User guide](docs/USER_GUIDE.md) - every shipped feature, indexed.

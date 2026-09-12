@@ -100,6 +100,20 @@ func Download(url, wantSHA256, version string, onProgress ProgressFunc) (*Downlo
 		return nil, fmt.Errorf("updater: locate exe: %w", err)
 	}
 	dir := filepath.Dir(exePath)
+
+	// A distro package owns its files: the binary is root-owned under
+	// /usr/bin, and both the staged write and the swap would fail with
+	// EACCES. Downloading several tens of MB first and failing on the
+	// rename afterwards wastes the user's bandwidth to tell them
+	// something we already knew, so check before the request goes out.
+	//
+	// Updating in place would be wrong even with the permissions: the
+	// package manager would not know about the swap, and the next
+	// system upgrade would silently revert it.
+	if err := checkInstallWritable(dir); err != nil {
+		return nil, err
+	}
+
 	stagedName := "ssh-tool.new"
 	if runtime.GOOS == "windows" {
 		stagedName = "ssh-tool.exe.new"
