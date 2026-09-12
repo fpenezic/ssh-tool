@@ -438,20 +438,35 @@ func configurePlatform(app *application.App, appInst *App) func() {
 	// at this point it always answered "light", which is precisely the
 	// bug this code was added to fix - the app opened light on a dark
 	// desktop and only corrected itself if the user toggled the setting.
-	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
-		seedDark := app.Env.IsDarkMode()
-		appInst.osDarkMode.Store(seedDark)
-		appInst.osDarkModeKnown.Store(true)
-		log.Printf("theme: desktop reports dark=%v at startup", seedDark)
-		EventsEmit("os_theme_changed", seedDark)
-	})
-
-	app.Event.OnApplicationEvent(events.Common.ThemeChanged, func(ev *application.ApplicationEvent) {
-		dark := ev.Context().IsDarkMode()
+	publishTheme := func(dark bool, why string) {
+		if appInst.osDarkModeKnown.Load() && appInst.osDarkMode.Load() == dark {
+			return
+		}
 		appInst.osDarkMode.Store(dark)
 		appInst.osDarkModeKnown.Store(true)
-		log.Printf("theme: desktop changed to dark=%v", dark)
+		log.Printf("theme: desktop is dark=%v (%s)", dark, why)
 		EventsEmit("os_theme_changed", dark)
+	}
+
+	// Read the portal directly rather than through Env.IsDarkMode, which
+	// answers false until app.impl exists (assigned inside Run()).
+	if dark, known := currentDesktopDarkMode(); known {
+		publishTheme(dark, "startup")
+	}
+
+	// Our own portal watcher. Wails has one, but it filters
+	// SettingChanged on the "org.gnome.desktop.interface" namespace,
+	// while KDE announces under "org.freedesktop.appearance" - so on KDE
+	// its signal is discarded and the app never notices a theme change
+	// after startup. See theme_portal_linux.go.
+	stopTheme := watchDesktopTheme(func(dark bool) {
+		publishTheme(dark, "portal signal")
+	})
+
+	// Wails' own event, for whatever desktops its filter does match.
+	// publishTheme de-duplicates, so both firing costs nothing.
+	app.Event.OnApplicationEvent(events.Common.ThemeChanged, func(ev *application.ApplicationEvent) {
+		publishTheme(ev.Context().IsDarkMode(), "wails event")
 	})
 
 	// Single-instance listener: subsequent launches (e.g. browser
@@ -472,9 +487,12 @@ func configurePlatform(app *application.App, appInst *App) func() {
 	})
 	if err != nil {
 		log.Printf("single-instance: %v (continuing without)", err)
-		return nil
+		return stopTheme
 	}
-	return stopInstance
+	return func() {
+		stopTheme()
+		stopInstance()
+	}
 }
 
 // applyPendingUpdate installs an update that a previous run downloaded but
