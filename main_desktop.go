@@ -433,13 +433,24 @@ func configurePlatform(app *application.App, appInst *App) func() {
 	// Seed the cache: ThemeChanged only fires on a change, so a cold
 	// start would otherwise have nothing to answer OsPrefersDark with.
 	// Env.IsDarkMode reads the same portal the event does.
-	appInst.osDarkMode.Store(app.Env.IsDarkMode())
-	appInst.osDarkModeKnown.Store(true)
+	// Seed after the app starts, not here: Env.IsDarkMode returns false
+	// when app.impl is still nil, and impl is only set inside Run(). Read
+	// at this point it always answered "light", which is precisely the
+	// bug this code was added to fix - the app opened light on a dark
+	// desktop and only corrected itself if the user toggled the setting.
+	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		seedDark := app.Env.IsDarkMode()
+		appInst.osDarkMode.Store(seedDark)
+		appInst.osDarkModeKnown.Store(true)
+		log.Printf("theme: desktop reports dark=%v at startup", seedDark)
+		EventsEmit("os_theme_changed", seedDark)
+	})
 
 	app.Event.OnApplicationEvent(events.Common.ThemeChanged, func(ev *application.ApplicationEvent) {
 		dark := ev.Context().IsDarkMode()
 		appInst.osDarkMode.Store(dark)
 		appInst.osDarkModeKnown.Store(true)
+		log.Printf("theme: desktop changed to dark=%v", dark)
 		EventsEmit("os_theme_changed", dark)
 	})
 
