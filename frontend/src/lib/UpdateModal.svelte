@@ -72,6 +72,17 @@
     }
   });
 
+  // True when this build came from a distro package, where the in-app
+  // updater cannot (and must not) replace the binary. Queried once so
+  // the modal can say it up front rather than after a failed click.
+  let packaged = $state(false);
+  $effect(() => {
+    api
+      .getInstallState()
+      .then((st) => { packaged = st.kind === "package"; })
+      .catch(() => { /* assume not packaged; the download path still guards */ });
+  });
+
   async function startDownload() {
     if (!updateCheck.downloadURL || downloadBusy) return;
     downloadBusy = true;
@@ -156,6 +167,14 @@
   </header>
 
   <div class="body">
+    {#if packaged}
+      <p class="hint" style="margin-bottom:0.6rem">
+        This copy was installed by your package manager, which owns the
+        binary - update it with <code>pacman -Syu</code>,
+        <code>apt upgrade</code> or <code>dnf upgrade</code>. The release
+        notes below are still current.
+      </p>
+    {/if}
     {#if loading}
       <p class="hint">Loading release notes…</p>
     {:else if errMsg}
@@ -222,7 +241,12 @@
     <button class="secondary" onclick={openReleasesPage}>View all releases</button>
     <div class="spacer"></div>
     <button class="secondary" onclick={onClose}>Later</button>
-    {#if !staged}
+    {#if packaged}
+      <!-- A distro package is updated by the package manager. Offering
+           a Download button that can only fail is worse than saying so
+           before it is clicked. -->
+      <button class="secondary" onclick={openReleasesPage}>Release notes</button>
+    {:else if !staged}
       <button
         class="primary"
         onclick={startDownload}
