@@ -44,6 +44,64 @@ test status varies).
   `.mxtsessions`, PuTTY / KiTTY `.reg` and SuperPuTTY `Sessions.xml`;
   encrypted archive export.
 
+## Install
+
+Every release ships a single binary per platform. Grab it from
+[Releases](https://github.com/fpenezic/ssh-tool/releases) or
+[sshtool.app](https://sshtool.app).
+
+### Linux
+
+The app draws its window with GTK 4 and WebKitGTK 6.0, which are not
+bundled - bundling a browser engine would mean shipping (and patching)
+several hundred MB of GTK, mesa and WebKit, and you would stop getting
+security updates through your package manager. Install them first:
+
+```bash
+sudo pacman -S webkitgtk-6.0 gtk4                 # Arch / CachyOS
+sudo apt install libwebkitgtk-6.0-4 libgtk-4-1    # Debian / Ubuntu
+sudo dnf install webkitgtk6.0 gtk4                # Fedora / RHEL
+```
+
+Without them the binary fails in the dynamic loader with
+`libwebkitgtk-6.0.so.4: cannot open shared object file`, before any of
+our code runs.
+
+Then make it executable and run it:
+
+```bash
+chmod +x ssh-tool-linux-amd64
+./ssh-tool-linux-amd64
+```
+
+It will offer to add itself to your applications menu - that copies the
+binary to `~/.local/bin` and registers the launcher entry and icon, with
+no root. You can do the same later from
+**Settings > Desktop integration**, and undo it there too.
+`build/linux/install-user.sh` does the same from a shell if you prefer.
+
+Distro packages (.deb / .rpm / pacman) build from this repo with
+`task linux:create:deb` and friends, but are not attached to releases
+yet - see [`docs/TODO.md`](docs/TODO.md).
+
+### Windows
+
+One `.exe`, no runtime and no installer. WebView2 ships with Windows 10
+and 11. It offers the same thing on first run: a copy into
+`%LOCALAPPDATA%\Programs\ssh-tool` and a Start Menu shortcut, no
+administrator rights.
+
+### Updates
+
+ssh-tool updates itself: Help > Check for updates downloads the new
+build and swaps it in place, on Windows and Linux alike. It works from
+anywhere your user owns - `~/.local/bin`, `%LOCALAPPDATA%`, the desktop,
+anywhere in `$HOME`.
+
+It will not overwrite a binary owned by a package manager (`/usr/bin`
+and friends), and says so rather than failing: that install updates
+through the package manager instead.
+
 ## Documentation
 
 - [User guide](docs/USER_GUIDE.md) - every shipped feature, indexed.

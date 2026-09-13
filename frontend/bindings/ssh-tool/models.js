@@ -2297,6 +2297,172 @@ export class InfisicalSaveInput {
 }
 
 /**
+ * InstallState describes how the running binary is installed, so the UI
+ * can offer to finish the job.
+ * 
+ * The three states a Linux user can be in:
+ * 
+ *   - a distro package: /usr/bin, owned by pacman/apt/dnf. Nothing to
+ *     offer; updates come from the package manager.
+ *   - installed in the user's own prefix (~/.local/bin) with a desktop
+ *     entry: the good state for the standalone binary.
+ *   - run from wherever it was downloaded: works, but there is no menu
+ *     entry and no icon, which is what makes it look unfinished.
+ * 
+ * Only the third state produces an offer.
+ */
+export class InstallState {
+    /**
+     * Creates a new InstallState instance.
+     * @param {Partial<InstallState>} [$$source = {}] - The source object to create the InstallState.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * Kind is "package", "user", or "loose".
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("exe_path" in $$source)) {
+            /**
+             * ExePath is where the running binary actually lives.
+             * @member
+             * @type {string}
+             */
+            this["exe_path"] = "";
+        }
+        if (!("target_path" in $$source)) {
+            /**
+             * TargetPath is where an install would put it (empty unless loose).
+             * @member
+             * @type {string}
+             */
+            this["target_path"] = "";
+        }
+        if (!("can_offer" in $$source)) {
+            /**
+             * CanOffer is true when installing is possible and worth suggesting.
+             * @member
+             * @type {boolean}
+             */
+            this["can_offer"] = false;
+        }
+        if (!("desktop_entry" in $$source)) {
+            /**
+             * DesktopEntry is true when a launcher entry already exists.
+             * @member
+             * @type {boolean}
+             */
+            this["desktop_entry"] = false;
+        }
+        if (!("installed_version" in $$source)) {
+            /**
+             * InstalledVersion is the version of the copy already in the user
+             * prefix, when there is one and it is not us. This is the upgrade
+             * case: a newer build run from ~/Downloads while the launcher entry
+             * still points at the older installed copy. Empty when nothing is
+             * installed, or when we are the installed copy.
+             * @member
+             * @type {string}
+             */
+            this["installed_version"] = "";
+        }
+        if (!("replaces" in $$source)) {
+            /**
+             * Replaces is true when installing would overwrite an existing
+             * install rather than create one. Changes the wording from "add to
+             * your applications menu" to "replace the installed copy", which
+             * are different enough that one message cannot serve both.
+             * @member
+             * @type {boolean}
+             */
+            this["replaces"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new InstallState instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {InstallState}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new InstallState(/** @type {Partial<InstallState>} */($$parsedSource));
+    }
+}
+
+/**
+ * IntegrationStatus describes one desktop registration - the
+ * ssh-tool:// handler, the file-manager context menu - and whether it
+ * still points at this binary.
+ * 
+ * Stale is the part that matters. Every registration stores an absolute
+ * path to the executable, and installing to ~/.local/bin (or
+ * %LOCALAPPDATA%\Programs) moves it. The registration keeps working
+ * against the OLD path, so clicking an ssh-tool:// link launches
+ * whatever is still sitting in ~/Downloads - or nothing at all, once
+ * that is deleted. Neither failure says anything about why.
+ */
+export class IntegrationStatus {
+    /**
+     * Creates a new IntegrationStatus instance.
+     * @param {Partial<IntegrationStatus>} [$$source = {}] - The source object to create the IntegrationStatus.
+     */
+    constructor($$source = {}) {
+        if (!("registered" in $$source)) {
+            /**
+             * Registered is true when a registration exists at all.
+             * @member
+             * @type {boolean}
+             */
+            this["registered"] = false;
+        }
+        if (!("detail" in $$source)) {
+            /**
+             * Detail is the short OS-specific identifier shown to the user
+             * (a .desktop name, a registry command).
+             * @member
+             * @type {string}
+             */
+            this["detail"] = "";
+        }
+        if (!("target" in $$source)) {
+            /**
+             * Target is the executable path the registration points at, when
+             * it can be read back. Empty when the OS does not expose it.
+             * @member
+             * @type {string}
+             */
+            this["target"] = "";
+        }
+        if (!("stale" in $$source)) {
+            /**
+             * Stale is true when Target is readable and is not this binary.
+             * @member
+             * @type {boolean}
+             */
+            this["stale"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new IntegrationStatus instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {IntegrationStatus}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new IntegrationStatus(/** @type {Partial<IntegrationStatus>} */($$parsedSource));
+    }
+}
+
+/**
  * KeepassEnsureCredentialInput picks a KeePass entry+field straight from the
  * connection auth picker. The app finds an existing credential that already
  * references the exact same entry+field (so choosing it twice reuses one) or

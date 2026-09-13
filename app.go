@@ -55,6 +55,18 @@ import (
 
 // App is the root service exposed to the frontend.
 type App struct {
+	// osDarkMode caches the desktop's colour-scheme preference as
+	// reported by the platform (the xdg-desktop-portal on Linux), which
+	// is more reliable than prefers-color-scheme in the webview: on KDE
+	// the GTK bridge does not feed WebKitGTK the value, so matchMedia
+	// answers from the GTK theme rather than the desktop setting.
+	osDarkMode atomic.Bool
+	// osDarkModeKnown distinguishes "the desktop says light" from "we
+	// never heard anything", so the frontend can fall back to
+	// prefers-color-scheme rather than forcing light on a platform that
+	// simply does not report.
+	osDarkModeKnown atomic.Bool
+
 	// ctx is preserved for code that still expects a context (e.g.
 	// graceful background goroutine shutdown). v3 hands us one in
 	// ServiceStartup.
@@ -2928,6 +2940,17 @@ func (a *App) SyncPullLive() (*SyncPullLiveResult, error) {
 // child gets SSH_TOOL_WAIT_PID so its startup waits for this process
 // to release store.db (and so it doesn't hand itself off to us via
 // the single-instance socket and exit).
+// OsPrefersDark reports the desktop's colour-scheme preference as the
+// platform sees it, for the initial paint - the ThemeChanged event only
+// fires on a change, so a cold start has nothing to listen for.
+//
+// Returns (dark, known). known is false when the platform never told us
+// anything, which is the signal for the frontend to keep trusting
+// prefers-color-scheme instead of a value we made up.
+func (a *App) OsPrefersDark() (bool, bool) {
+	return a.osDarkMode.Load(), a.osDarkModeKnown.Load()
+}
+
 func (a *App) AppRelaunch() error {
 	return a.relaunchApp()
 }
@@ -5151,6 +5174,22 @@ func (a *App) URLSchemeStatus() string {
 	return urlSchemeStatus()
 }
 
+// URLSchemeIntegration reports the handler registration AND whether it
+// still points at this binary. Installing to a per-user location moves
+// the executable, and the registration keeps pointing at wherever it
+// was registered from - so an ssh-tool:// link would launch the copy in
+// ~/Downloads, or nothing once that is deleted.
+func (a *App) URLSchemeIntegration() IntegrationStatus {
+	self, _ := os.Executable()
+	return integrationStatusFor(urlSchemeStatus(), urlSchemeTarget(), self)
+}
+
+// ExplorerMenuIntegration is the same for the file-manager context menu.
+func (a *App) ExplorerMenuIntegration() IntegrationStatus {
+	self, _ := os.Executable()
+	return integrationStatusFor(explorerMenuStatus(), explorerMenuTarget(), self)
+}
+
 // ExplorerMenuRegister adds "Open in ssh-tool" to the OS file
 // manager's right-click menu for directories (Explorer on Windows,
 // Dolphin/Nautilus on Linux). Per-user / no admin. Idempotent.
@@ -6458,6 +6497,15 @@ func (a *App) DownloadUpdate() (*updater.DownloadResult, error) {
 	}
 	if rel.AssetURL == "" {
 		return nil, fmt.Errorf("no downloadable asset for this platform in release %s", rel.Version)
+	}
+	// A development build has no comparable version, so semverGreater
+	// says false and the check below would report "already on the latest
+	// version (dev)" - technically a refusal, but it reads as a bug.
+	// Say what is actually going on, and refuse for the real reason:
+	// replacing a build from the user's own tree with a release is not
+	// an update, it is losing their build.
+	if isDevBuild() {
+		return nil, fmt.Errorf("this is a development build (%s), not a release - build it again or run a release binary to use in-app updates", appVersion)
 	}
 	// Only download when the resolved release is actually newer than what is
 	// running - guards against a download click racing a just-applied update.

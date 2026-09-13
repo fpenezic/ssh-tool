@@ -18,4 +18,12 @@ else
   echo "Warning: update-mime-database command not found. Custom URL schemes may not be immediately recognized." >&2
 fi
 
+# Refresh the icon cache. Without this the .desktop entry resolves Icon=ssh-tool
+# to nothing on a running session and the launcher falls back to a generic
+# placeholder - the icon file is on disk, but hicolor's index does not know it.
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  echo "Updating icon cache..."
+  gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
+fi
+
 exit 0

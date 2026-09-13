@@ -34,6 +34,13 @@ import (
 
 type instanceMsg struct {
 	Argv []string `json:"argv"`
+	// Version and ExePath describe the process that is handing off.
+	// Without them a newer build launched while an older one is running
+	// hands over its argv and exits silently, so the user double-clicks
+	// the update and keeps looking at the old version with nothing to
+	// suggest otherwise. Empty when the sender predates this field.
+	Version string `json:"version,omitempty"`
+	ExePath string `json:"exe_path,omitempty"`
 }
 
 // trySendToRunning is called BEFORE we initialise the application
@@ -52,8 +59,13 @@ func trySendToRunning(argv []string) bool {
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
+	exePath, _ := os.Executable()
 	enc := json.NewEncoder(conn)
-	if err := enc.Encode(instanceMsg{Argv: argv}); err != nil {
+	if err := enc.Encode(instanceMsg{
+		Argv:    argv,
+		Version: appVersion,
+		ExePath: exePath,
+	}); err != nil {
 		return false
 	}
 	// Read a single byte ack so we know the primary actually saw it
@@ -67,7 +79,7 @@ func trySendToRunning(argv []string) bool {
 // startInstanceServer brings up the loopback listener and writes
 // its port into the lock file. handler runs in a goroutine per
 // connection. Returned cancel func tears it down on shutdown.
-func startInstanceServer(handler func(argv []string)) (cancel func(), err error) {
+func startInstanceServer(handler func(msg instanceMsg)) (cancel func(), err error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("listen: %w", err)
@@ -92,7 +104,7 @@ func startInstanceServer(handler func(argv []string)) (cancel func(), err error)
 	}, nil
 }
 
-func serveInstance(conn net.Conn, handler func(argv []string)) {
+func serveInstance(conn net.Conn, handler func(msg instanceMsg)) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
 	var msg instanceMsg
@@ -101,7 +113,7 @@ func serveInstance(conn net.Conn, handler func(argv []string)) {
 	}
 	// Ack first so the secondary can exit fast; then dispatch.
 	_, _ = conn.Write([]byte{1})
-	handler(msg.Argv)
+	handler(msg)
 }
 
 func instanceLockPath() string {

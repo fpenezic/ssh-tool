@@ -15,14 +15,14 @@ import (
 //
 // Layout (HKCU = HKEY_CURRENT_USER):
 //
-//   HKCU\Software\Classes\ssh-tool
-//     (Default)         = "URL:SSH-Tool Catalog Import"
-//     "URL Protocol"    = ""    (sentinel - its presence flags this
-//                                key as a URL-handler root)
-//     \DefaultIcon
-//       (Default)       = "<exe path>,1"
-//     \shell\open\command
-//       (Default)       = "\"<exe path>\" \"%1\""
+//	HKCU\Software\Classes\ssh-tool
+//	  (Default)         = "URL:SSH-Tool Catalog Import"
+//	  "URL Protocol"    = ""    (sentinel - its presence flags this
+//	                             key as a URL-handler root)
+//	  \DefaultIcon
+//	    (Default)       = "<exe path>,1"
+//	  \shell\open\command
+//	    (Default)       = "\"<exe path>\" \"%1\""
 //
 // Idempotent: overwrites existing values.
 func registerURLScheme() error {
@@ -30,6 +30,12 @@ func registerURLScheme() error {
 	if err != nil {
 		return fmt.Errorf("locate exe: %w", err)
 	}
+	return registerURLSchemeAt(exe)
+}
+
+// registerURLSchemeAt registers a specific binary, for use after an
+// install moves the executable.
+func registerURLSchemeAt(exe string) error {
 
 	// Root key.
 	root, _, err := registry.CreateKey(
@@ -84,4 +90,10 @@ func urlSchemeStatus() string {
 		return ""
 	}
 	return v
+}
+
+// urlSchemeTarget pulls the executable out of the registered command
+// line (`"<exe>" "%1"`). Empty when it cannot be parsed.
+func urlSchemeTarget() string {
+	return commandLineProgram(urlSchemeStatus())
 }

@@ -265,6 +265,12 @@ func configurePlatform(app *application.App, appInst *App) func() {
 	// without losing background sessions. Icon click toggles the
 	// main window; the right-click menu has Show / Quit.
 	tray := app.SystemTray.New()
+	// Label and tooltip are different properties on Linux: the label
+	// feeds the StatusNotifierItem's Title and Id, which is what KDE
+	// shows on hover. Wails defaults both to "", and KDE then falls back
+	// to the D-Bus service name - which is why the tray tooltip read
+	// "wails" while the taskbar entry was correct.
+	tray.SetLabel(appName)
 	tray.SetTooltip(appName)
 	if len(trayIcon) > 0 {
 		tray.SetIcon(trayIcon)
@@ -419,12 +425,62 @@ func configurePlatform(app *application.App, appInst *App) func() {
 		}
 	})
 
+	// System theme. On KDE (and any desktop whose GTK bridge does not
+	// feed WebKitGTK what it reads), prefers-color-scheme in the webview
+	// does not track the desktop setting, so an app on "system" stays on
+	// whichever palette it started with. Wails resolves the real value
+	// through the xdg-desktop-portal (org.freedesktop.appearance), which
+	// KDE, GNOME and everything else implement, so forward that to the
+	// frontend and let it override matchMedia.
+	//
+	// GNOME and Windows were never broken - WebKitGTK/WebView2 follow the
+	// desktop there - so this is additive: the frontend prefers whatever
+	// arrives here and falls back to matchMedia when nothing does.
+	// Seed the cache: ThemeChanged only fires on a change, so a cold
+	// start would otherwise have nothing to answer OsPrefersDark with.
+	// Env.IsDarkMode reads the same portal the event does.
+	// Seed after the app starts, not here: Env.IsDarkMode returns false
+	// when app.impl is still nil, and impl is only set inside Run(). Read
+	// at this point it always answered "light", which is precisely the
+	// bug this code was added to fix - the app opened light on a dark
+	// desktop and only corrected itself if the user toggled the setting.
+	publishTheme := func(dark bool, why string) {
+		if appInst.osDarkModeKnown.Load() && appInst.osDarkMode.Load() == dark {
+			return
+		}
+		appInst.osDarkMode.Store(dark)
+		appInst.osDarkModeKnown.Store(true)
+		log.Printf("theme: desktop is dark=%v (%s)", dark, why)
+		EventsEmit("os_theme_changed", dark)
+	}
+
+	// Read the portal directly rather than through Env.IsDarkMode, which
+	// answers false until app.impl exists (assigned inside Run()).
+	if dark, known := currentDesktopDarkMode(); known {
+		publishTheme(dark, "startup")
+	}
+
+	// Our own portal watcher. Wails has one, but it filters
+	// SettingChanged on the "org.gnome.desktop.interface" namespace,
+	// while KDE announces under "org.freedesktop.appearance" - so on KDE
+	// its signal is discarded and the app never notices a theme change
+	// after startup. See theme_portal_linux.go.
+	stopTheme := watchDesktopTheme(func(dark bool) {
+		publishTheme(dark, "portal signal")
+	})
+
+	// Wails' own event, for whatever desktops its filter does match.
+	// publishTheme de-duplicates, so both firing costs nothing.
+	app.Event.OnApplicationEvent(events.Common.ThemeChanged, func(ev *application.ApplicationEvent) {
+		publishTheme(ev.Context().IsDarkMode(), "wails event")
+	})
+
 	// Single-instance listener: subsequent launches (e.g. browser
 	// clicks "Open in ssh-tool" while this instance is already
 	// running) connect here, hand us their argv, and exit. We
 	// re-emit the deep link event and refocus the window.
-	stopInstance, err := startInstanceServer(func(argv []string) {
-		log.Printf("instance handoff: argv = %v", argv)
+	stopInstance, err := startInstanceServer(func(msg instanceMsg) {
+		log.Printf("instance handoff: argv = %v (from %s %s)", msg.Argv, msg.Version, msg.ExePath)
 		// Bring the main window forward before the import flow
 		// kicks in, otherwise the user wouldn't notice the action.
 		if mainWindow != nil {
@@ -432,14 +488,24 @@ func configurePlatform(app *application.App, appInst *App) func() {
 			mainWindow.Focus()
 			appInst.windowHidden.Store(false)
 		}
-		dispatchDeepLink(argv, 200*time.Millisecond)
-		dispatchOpenDir(argv, 200*time.Millisecond)
+		// A launch of a DIFFERENT build is almost always someone running
+		// a download to upgrade. Handing off silently means they watch
+		// the old version come to the front and conclude the update did
+		// nothing. Tell the frontend so it can offer to switch.
+		if other := describeOtherBuild(msg); other != nil {
+			EventsEmit("other_build_launched", other)
+		}
+		dispatchDeepLink(msg.Argv, 200*time.Millisecond)
+		dispatchOpenDir(msg.Argv, 200*time.Millisecond)
 	})
 	if err != nil {
 		log.Printf("single-instance: %v (continuing without)", err)
-		return nil
+		return stopTheme
 	}
-	return stopInstance
+	return func() {
+		stopTheme()
+		stopInstance()
+	}
 }
 
 // applyPendingUpdate installs an update that a previous run downloaded but

@@ -26,6 +26,16 @@
   <div class="modal" role="document" use:clickOutside={{ onOutside: onCancel }} onkeydown={(e) => e.stopPropagation()}>
     <h2>{confirmModal.pending.title}</h2>
     <p class="msg">{confirmModal.pending.message}</p>
+    {#if confirmModal.pending.checkboxLabel}
+      <label class="optout">
+        <input
+          type="checkbox"
+          checked={confirmModal.pending.checked}
+          onchange={(e) => confirmModal.toggleChecked((e.target as HTMLInputElement).checked)}
+        />
+        <span>{confirmModal.pending.checkboxLabel}</span>
+      </label>
+    {/if}
     <div class="row">
       <button onclick={onCancel}>{confirmModal.pending.cancelLabel}</button>
       <button
@@ -68,6 +78,16 @@
   button:hover { background: var(--surface1); }
   button.primary { background: var(--blue); color: var(--on-accent); font-weight: 600; }
   button.primary:hover { background: var(--sapphire); }
+  .optout {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0.1rem 0 0.9rem;
+    font-size: 0.85rem;
+    color: var(--subtext0);
+    cursor: pointer;
+  }
+  .optout input { cursor: pointer; }
   button.danger { background: var(--red); color: var(--on-accent); font-weight: 600; }
   button.danger:hover { background: var(--maroon); }
 </style>

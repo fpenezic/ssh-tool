@@ -155,16 +155,25 @@ tasks:
 
   generate:deb:
     summary: Creates a deb package
+    env:
+      PRODUCTION_VERSION:
+        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --match 'v[0-9]*' --always 2>/dev/null || echo 0.0.0)}" | sed 's/^v//'
     cmds:
       - wails3 tool package -name "{{.APP_NAME}}" -format deb -config ./build/linux/nfpm/nfpm.yaml -out {{.ROOT_DIR}}/bin
 
   generate:rpm:
     summary: Creates a rpm package
+    env:
+      PRODUCTION_VERSION:
+        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --match 'v[0-9]*' --always 2>/dev/null || echo 0.0.0)}" | sed 's/^v//'
     cmds:
       - wails3 tool package -name "{{.APP_NAME}}" -format rpm -config ./build/linux/nfpm/nfpm.yaml -out {{.ROOT_DIR}}/bin
 
   generate:aur:
     summary: Creates a arch linux packager package
+    env:
+      PRODUCTION_VERSION:
+        sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --match 'v[0-9]*' --always 2>/dev/null || echo 0.0.0)}" | sed 's/^v//'
     cmds:
       - wails3 tool package -name "{{.APP_NAME}}" -format archlinux -config ./build/linux/nfpm/nfpm.yaml -out {{.ROOT_DIR}}/bin
 

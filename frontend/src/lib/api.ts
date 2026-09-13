@@ -1253,6 +1253,28 @@ export const api = {
       needs_restart: boolean;
     }>,
   applyUpdate: () => G.ApplyUpdate(),
+  // Linux only in practice; every other platform reports kind "native"
+  // and can_offer false, so callers need no platform check.
+  getInstallState: () =>
+    G.GetInstallState() as unknown as Promise<{
+      kind: "package" | "user" | "loose" | "native";
+      exe_path: string;
+      target_path: string;
+      can_offer: boolean;
+      desktop_entry: boolean;
+      installed_version: string;
+      replaces: boolean;
+    }>,
+  installToUserPrefix: () => G.InstallToUserPrefix() as unknown as Promise<string>,
+  // Restarts from the freshly installed copy rather than the running
+  // one, which is still the binary the user downloaded.
+  relaunchFromInstall: (path: string) => G.RelaunchFromInstall(path),
+  // Removes the launcher entry, icons and the installed copy. Returns
+  // false when there was nothing to remove. User data is untouched.
+  uninstallUserPrefix: () => G.UninstallUserPrefix() as unknown as Promise<boolean>,
+  // [dark, known] - known is false when the platform never reported,
+  // in which case prefers-color-scheme stays authoritative.
+  osPrefersDark: () => G.OsPrefersDark() as unknown as Promise<[boolean, boolean]>,
   fetchReleaseNotes: (version: string) =>
     G.FetchReleaseNotes(version) as unknown as Promise<{
       version: string;
@@ -1313,6 +1335,13 @@ export const api = {
   // inspect and merge into it (never replace - the user has other servers).
   claudeDesktopStatus: () =>
     G.ClaudeDesktopStatus() as unknown as Promise<ClaudeDesktopInfo>,
+  // Registration status plus whether it still points at this binary.
+  // Installing moves the executable; the registration does not follow
+  // on its own (the installer re-points the ones it can).
+  urlSchemeIntegration: () =>
+    G.URLSchemeIntegration() as unknown as Promise<IntegrationStatus>,
+  explorerMenuIntegration: () =>
+    G.ExplorerMenuIntegration() as unknown as Promise<IntegrationStatus>,
   claudeDesktopRegister: () =>
     G.ClaudeDesktopRegister() as unknown as Promise<string>,
   requestAttention: () => G.RequestAttention(),
@@ -2038,6 +2067,16 @@ export interface McpActivity {
   exit?: "ok" | "error" | "";
   gate: "auto" | "approved" | "denied" | "n/a" | "";
 }
+
+// A desktop registration and whether it is still valid. stale means the
+// stored path is readable and is NOT this binary; a path that cannot be
+// read leaves it false, since "cannot tell" is not "wrong".
+export type IntegrationStatus = {
+  registered: boolean;
+  detail: string;
+  target: string;
+  stale: boolean;
+};
 
 // Claude Desktop MCP registration status (ClaudeDesktopStatus).
 export interface ClaudeDesktopInfo {

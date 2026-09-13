@@ -23,6 +23,7 @@ export type SectionId =
   | "export"
   | "llm"
   | "sharing"
+  | "desktop"
   | "logs"
   | "updates"
   | "about";
@@ -83,6 +84,7 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
   { id: "export",      title: "Export connections", group: "Import / Export", keywords: ["backup", "csv", "dump"] },
   { id: "llm",         title: "LLM (MCP) access",  group: "Integrations",   keywords: ["mcp", "claude", "ai", "bridge", "yolo", "agent"] },
   { id: "sharing",     title: "Sharing",           group: "Integrations",   keywords: ["broadcast", "share", "collaborate"] },
+  { id: "desktop",     title: "Desktop integration", group: "Integrations", keywords: ["install", "uninstall", "start menu", "applications menu", "launcher", "icon", "shortcut", "context menu", "explorer", "nautilus", "dolphin", "url scheme", "ssh-tool://", "protocol handler", "right-click"] },
   { id: "updates",     title: "Updates",           group: "Diagnostics",    keywords: ["version", "upgrade", "release", "changelog"] },
   { id: "logs",        title: "Logs",              group: "Diagnostics",    keywords: ["debug", "diagnostics", "troubleshoot"] },
   { id: "about",       title: "About",             group: "Diagnostics",    keywords: ["version", "credits", "license", "profile stats"] },

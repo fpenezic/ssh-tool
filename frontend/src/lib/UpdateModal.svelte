@@ -34,6 +34,9 @@
   // spawns the helper that swaps it in.
   let downloadBusy = $state(false);
   let downloadErr = $state<string>("");
+  // True when the refusal came from a distro-package install rather than
+  // a real download failure; changes the wording only.
+  let pkgManaged = $state(false);
   let staged = $state<{ staged_path: string; size: number; sha256: string; verified: boolean; apply_script?: string; needs_restart: boolean } | null>(null);
 
   // Download progress (bytes). total <= 0 = no Content-Length from
@@ -69,10 +72,22 @@
     }
   });
 
+  // True when this build came from a distro package, where the in-app
+  // updater cannot (and must not) replace the binary. Queried once so
+  // the modal can say it up front rather than after a failed click.
+  let packaged = $state(false);
+  $effect(() => {
+    api
+      .getInstallState()
+      .then((st) => { packaged = st.kind === "package"; })
+      .catch(() => { /* assume not packaged; the download path still guards */ });
+  });
+
   async function startDownload() {
     if (!updateCheck.downloadURL || downloadBusy) return;
     downloadBusy = true;
     downloadErr = "";
+    pkgManaged = false;
     progRead = 0;
     progTotal = 0;
     const unProg = EventsOn("update_download_progress", (p: { read: number; total: number }) => {
@@ -83,6 +98,10 @@
       staged = await api.downloadUpdate();
     } catch (e: any) {
       downloadErr = humanError(e);
+      // Matches ErrPackageManaged from internal/updater. Checking the
+      // text is crude, but the IPC layer flattens errors to strings and
+      // this only changes how the message is framed.
+      pkgManaged = /installed from a system package/i.test(downloadErr);
     } finally {
       unProg();
       downloadBusy = false;
@@ -148,6 +167,14 @@
   </header>
 
   <div class="body">
+    {#if packaged}
+      <p class="hint" style="margin-bottom:0.6rem">
+        This copy was installed by your package manager, which owns the
+        binary - update it with <code>pacman -Syu</code>,
+        <code>apt upgrade</code> or <code>dnf upgrade</code>. The release
+        notes below are still current.
+      </p>
+    {/if}
     {#if loading}
       <p class="hint">Loading release notes…</p>
     {:else if errMsg}
@@ -172,7 +199,16 @@
   </div>
 
   {#if downloadErr}
-    <div class="staged err">Update failed: {downloadErr}</div>
+    <!-- A package-managed install is not a failure, it is the wrong
+         update route: the package manager owns the binary. Saying
+         "Update failed" there sends people hunting for a bug. -->
+    <div class="staged err">
+      {#if pkgManaged}
+        {downloadErr}
+      {:else}
+        Update failed: {downloadErr}
+      {/if}
+    </div>
   {/if}
   {#if downloadBusy}
     <div class="staged progress-row">
@@ -205,7 +241,12 @@
     <button class="secondary" onclick={openReleasesPage}>View all releases</button>
     <div class="spacer"></div>
     <button class="secondary" onclick={onClose}>Later</button>
-    {#if !staged}
+    {#if packaged}
+      <!-- A distro package is updated by the package manager. Offering
+           a Download button that can only fail is worse than saying so
+           before it is clicked. -->
+      <button class="secondary" onclick={openReleasesPage}>Release notes</button>
+    {:else if !staged}
       <button
         class="primary"
         onclick={startDownload}

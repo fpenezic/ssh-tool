@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -33,6 +34,12 @@ func registerExplorerMenu() error {
 	if err != nil {
 		return fmt.Errorf("locate exe: %w", err)
 	}
+	return registerExplorerMenuAt(exe)
+}
+
+// registerExplorerMenuAt registers a specific binary, for use after an
+// install moves the executable.
+func registerExplorerMenuAt(exe string) error {
 	for _, e := range explorerMenuKeys() {
 		root, _, err := registry.CreateKey(registry.CURRENT_USER, e.base, registry.ALL_ACCESS)
 		if err != nil {
@@ -88,4 +95,33 @@ func explorerMenuStatus() string {
 		return ""
 	}
 	return v
+}
+
+// explorerMenuTarget pulls the executable out of the registered command
+// line, which is written as `"<exe>" --open-dir "%1"`.
+//
+// Returns "" when it cannot be parsed, which the caller reports as
+// "cannot tell" rather than as broken.
+func explorerMenuTarget() string {
+	return commandLineProgram(explorerMenuStatus())
+}
+
+// commandLineProgram takes the program out of a Windows command line.
+// The path is quoted (it routinely contains spaces - Program Files,
+// a username with a space), so this is not a split on whitespace.
+func commandLineProgram(cmd string) string {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return ""
+	}
+	if cmd[0] == '"' {
+		if i := strings.IndexByte(cmd[1:], '"'); i >= 0 {
+			return cmd[1 : 1+i]
+		}
+		return ""
+	}
+	if i := strings.IndexByte(cmd, ' '); i >= 0 {
+		return cmd[:i]
+	}
+	return cmd
 }

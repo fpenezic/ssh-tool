@@ -144,11 +144,35 @@ jobs:
           SSHTOOL_VERSION: ${{ github.ref_name }}
         run: |
           ${{ matrix.build }}
-          mv ${{ matrix.bin }} bin/${{ matrix.out }}
+      # Distro packages are built by `task linux:create:deb` (and rpm /
+      # aur) and are NOT attached to releases yet: the .deb and .rpm have
+      # never been installed on a Debian or Fedora machine, and shipping
+      # a package nobody has installed is worse than shipping none. The
+      # pacman one has been tested, but a release carrying packages for
+      # one distro and not the others needs more explaining than it is
+      # worth. Revisit when there is a machine to test on - see
+      # docs/TODO.md "apt / dnf repositories".
+      #
+      # The helper scripts do ship: they are what the release page points
+      # at for a manual install.
+      - name: Attach install helpers
+        if: matrix.platform == 'linux-amd64'
+        run: cp build/linux/install-user.sh build/linux/check-deps.sh build/appicon.png build/appicon.svg bin/
+      - name: Rename binary
+        run: mv ${{ matrix.bin }} bin/${{ matrix.out }}
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.out }}
           path: bin/${{ matrix.out }}
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        if: matrix.platform == 'linux-amd64'
+        with:
+          name: linux-install-helpers
+          path: |
+            bin/*.sh
+            bin/appicon.*
           if-no-files-found: error
           retention-days: 7
 

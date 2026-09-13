@@ -3,6 +3,7 @@
   import { isMobile } from "./lib/platform";
   import { installMobileBackNav } from "./lib/mobileBackNav";
   import { api } from "./lib/api";
+  import { errMsg as humanError } from "./lib/connectErrors";
   import { EventsOn } from "./lib/wailsRuntime";
   import { focusActivePane } from "./lib/paneFocus";
   import Sidebar from "./lib/Sidebar.svelte";
@@ -24,7 +25,7 @@
   import SnippetPalette from "./lib/SnippetPalette.svelte";
   import ToastHost from "./lib/ToastHost.svelte";
   import { toast } from "./lib/toast.svelte.ts";
-  import { showConfirm } from "./lib/confirmModal.svelte.ts";
+  import { showConfirm, showConfirmWithCheckbox } from "./lib/confirmModal.svelte.ts";
   import type { PaletteAction } from "./lib/QuickPalette.svelte";
   import { SETTINGS_SECTIONS, EXTERNAL_TABS } from "./lib/settingsSections";
   import { localShellPrefs, type LocalShellKind } from "./lib/localShellPrefs.svelte.ts";
@@ -48,6 +49,7 @@
   import { layoutPrefs } from "./lib/layoutPrefs.svelte";
   import { appPrefs } from "./lib/appPrefs.svelte";
   import { updateCheck } from "./lib/updateCheck.svelte";
+  import { desktopAlerts } from "./lib/desktopAlerts.svelte";
   import { dynEditor } from "./lib/dynEditor.svelte";
   import DynamicFolderEditor from "./lib/DynamicFolderEditor.svelte";
   import { vaultPrefs } from "./lib/vaultPrefs.svelte";
@@ -805,6 +807,121 @@
   // the status bar stays quiet.
   setTimeout(() => { updateCheck.run(); }, 5000);
   setInterval(() => { updateCheck.run(); }, 6 * 60 * 60 * 1000);
+
+  // Offer to finish the install when the binary was just downloaded and
+  // run in place (Linux). That works, but there is no menu entry and no
+  // icon, which is what makes the app look half-installed. Installing
+  // copies it to ~/.local/bin and writes the desktop entry - no root,
+  // and the binary stays user-owned so the in-app updater keeps working.
+  //
+  // Asked at most once: a packaged install reports can_offer false, and
+  // a decline is remembered so this never becomes nagging. 8 s so it
+  // lands after the update toast rather than competing with it.
+  // Someone launched a different copy of ssh-tool while this one is
+  // running. The single-instance guard handed us its argv and exited it,
+  // which is right for a deep link and wrong for an upgrade: without
+  // this the user double-clicks the build they just downloaded, watches
+  // the old window come forward, and concludes the download is broken.
+  EventsOn("other_build_launched", (b: { version: string; exe_path: string; newer: boolean }) => {
+    const what = b.newer ? `A newer build (${b.version})` : `A different build (${b.version})`;
+    toast.info(
+      `${what} was launched from ${b.exe_path}, but this copy is already running. Quit ssh-tool first, then start the new one.`,
+      0,
+    );
+  });
+
+  // Offer to finish the install when the binary was just downloaded and
+  // run in place. That works, but there is no menu entry and no icon,
+  // which is what makes the app look half-installed. Installing copies
+  // it to a per-user location and registers the launcher entry - no
+  // root or admin, and the binary stays user-owned so the in-app updater
+  // keeps working.
+  //
+  // A modal rather than a toast: this decides where the app lives from
+  // now on, and a toast in the corner is easy to miss and easy to
+  // dismiss by accident. The modal carries its own opt-out, so saying
+  // "not now, and stop asking" takes one click instead of a trip to
+  // Settings.
+  //
+  // Raised as soon as the app is usable rather than on a timer. A delay
+  // long enough to let the window settle is also long enough for the
+  // user to have opened a connection and started typing, and a modal
+  // landing mid-command is worse than one that is simply there when the
+  // window opens.
+  //
+  // Gated on vaultReady for the same reason: VaultGate owns the screen
+  // until the passphrase is in, and stacking a second dialog over it
+  // would be both confusing and easy to dismiss by accident.
+  let installOfferAsked = false;
+
+  async function askAboutInstall() {
+    try {
+      // Persisted opt-out, shared with the Settings toggle. In the
+      // database rather than localStorage: clearing the webview's data
+      // should not bring a dismissed prompt back.
+      if ((await api.settingsGet("install_offer_disabled")) === "1") return;
+      const st = await api.getInstallState();
+      if (!st.can_offer) return;
+
+      const menu = navigator.userAgent.includes("Windows")
+        ? "the Start Menu"
+        : "your applications menu";
+      // Replacing an existing install is a different question from
+      // adding an entry, and the upgrade case is where saying nothing
+      // costs most: the launcher still opens the old binary, so
+      // clicking the icon tomorrow quietly goes back to it.
+      const { ok, checked } = await showConfirmWithCheckbox(
+        st.replaces
+          ? {
+              title: "Replace the installed copy?",
+              message:
+                `${menu} opens ${st.target_path}` +
+                (st.installed_version ? ` (${st.installed_version})` : "") +
+                `, but you are running ${st.exe_path}. ` +
+                "Replacing it means the shortcut starts this version from now on.",
+              okLabel: "Replace",
+              checkboxLabel: "Don't ask again",
+            }
+          : {
+              title: `Add ssh-tool to ${menu}?`,
+              message:
+                `ssh-tool is running from ${st.exe_path}, so it has no entry in ${menu}. ` +
+                `Installing copies it to ${st.target_path} and creates the shortcut. ` +
+                "No administrator rights, and updates keep working from inside the app.",
+              okLabel: "Install",
+              checkboxLabel: "Don't ask again",
+            },
+      );
+
+      // The checkbox is honoured either way: ticking it on the way to
+      // "no" is the whole point, and ticking it while accepting means
+      // "do it, and do not raise this again".
+      if (checked) {
+        api.settingsSet("install_offer_disabled", "1").catch(console.warn);
+      }
+      if (!ok) return;
+
+      const path = await api.installToUserPrefix();
+      // The running process is still the binary that was launched, so
+      // the window stays bound to a path with no desktop entry until it
+      // restarts - the icon would still look wrong.
+      const restart = await showConfirm({
+        title: "Restart now?",
+        message:
+          `Installed to ${path}. ssh-tool is still running the copy you launched; ` +
+          "restarting switches to the installed one.",
+        okLabel: "Restart",
+        cancelLabel: "Later",
+      });
+      if (restart) {
+        api.relaunchFromInstall(path).catch((e: any) => toast.err(humanError(e), 6000));
+      }
+    } catch (e: any) {
+      // Never block startup on this, but do not swallow a failed
+      // install either - the user just asked for it.
+      if (e) toast.err(humanError(e), 6000);
+    }
+  }
   // Subscribe to the backend-owned broadcast set so every window's
   // local mirror stays in sync. Idempotent - safe to call from
   // both the main App and DetachedWindow.
@@ -1001,7 +1118,20 @@
     // Reopen the tabs from the last quit (opt-in, cold start only -
     // if recovery brought anything back this was a UI reload and the
     // backend sessions are already live).
-    lastSession.restoreOnStartup(recovered).catch(console.warn);
+    lastSession.restoreOnStartup(recovered).catch(console.warn).finally(() => {
+      // Ask about installing only once the startup flow is done: the
+      // vault is open, the tree is loaded and the session-restore
+      // prompt (which is also a dialog) has had its turn. Stacking two
+      // modals, or raising one over an empty window, is worse than
+      // either on its own.
+      if (installOfferAsked) return;
+      installOfferAsked = true;
+      void askAboutInstall();
+      // Standing integration problems (a handler left pointing at a
+      // binary that has since moved). Checked once at startup; the
+      // Settings section refreshes it whenever one is fixed.
+      void desktopAlerts.refresh();
+    });
   }
 
   // Continuous last-session snapshot: any tab/session mutation

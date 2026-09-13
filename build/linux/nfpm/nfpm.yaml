@@ -6,23 +6,25 @@
 name: "ssh-tool"
 arch: ${GOARCH}
 platform: "linux"
-version: "0.1.0"
+version: ${PRODUCTION_VERSION}
 section: "default"
 priority: "extra"
-maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
+maintainer: "Filip Penezic <108677346+fpenezic@users.noreply.github.com>"
 description: "Cross-platform SSH connection manager"
 vendor: "Filip Penezic"
-homepage: "https://gitlab.com/ludi-bipe/ssh-tool"
-license: "MIT"
+homepage: "https://sshtool.app"
+license: "Apache-2.0"
 release: "1"
 
 contents:
   - src: "./bin/ssh-tool"
-    dst: "/usr/local/bin/ssh-tool"
+    dst: "/usr/bin/ssh-tool"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/ssh-tool.png"
+    dst: "/usr/share/icons/hicolor/128x128/apps/org.wails.ssh-tool.png"
+  - src: "./build/appicon.svg"
+    dst: "/usr/share/icons/hicolor/scalable/apps/org.wails.ssh-tool.svg"
   - src: "./build/linux/ssh-tool.desktop"
-    dst: "/usr/share/applications/ssh-tool.desktop"
+    dst: "/usr/share/applications/org.wails.ssh-tool.desktop"
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:
@@ -42,6 +44,10 @@ overrides:
     depends:
       - gtk4
       - webkitgtk-6.0
+    # Arch reads the packager from its own field, not from `maintainer`;
+    # without it every package ships as "Unknown Packager".
+    archlinux:
+      packager: "Filip Penezic <108677346+fpenezic@users.noreply.github.com>"
 
 # scripts section to ensure desktop database is updated after install
 scripts:
