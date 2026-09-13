@@ -842,8 +842,18 @@
   // "not now, and stop asking" takes one click instead of a trip to
   // Settings.
   //
-  // 8 s so it lands after the update check rather than competing with it.
-  setTimeout(async () => {
+  // Raised as soon as the app is usable rather than on a timer. A delay
+  // long enough to let the window settle is also long enough for the
+  // user to have opened a connection and started typing, and a modal
+  // landing mid-command is worse than one that is simply there when the
+  // window opens.
+  //
+  // Gated on vaultReady for the same reason: VaultGate owns the screen
+  // until the passphrase is in, and stacking a second dialog over it
+  // would be both confusing and easy to dismiss by accident.
+  let installOfferAsked = false;
+
+  async function askAboutInstall() {
     try {
       // Persisted opt-out, shared with the Settings toggle. In the
       // database rather than localStorage: clearing the webview's data
@@ -910,7 +920,7 @@
       // install either - the user just asked for it.
       if (e) toast.err(humanError(e), 6000);
     }
-  }, 8000);
+  }
   // Subscribe to the backend-owned broadcast set so every window's
   // local mirror stays in sync. Idempotent - safe to call from
   // both the main App and DetachedWindow.
@@ -1107,7 +1117,16 @@
     // Reopen the tabs from the last quit (opt-in, cold start only -
     // if recovery brought anything back this was a UI reload and the
     // backend sessions are already live).
-    lastSession.restoreOnStartup(recovered).catch(console.warn);
+    lastSession.restoreOnStartup(recovered).catch(console.warn).finally(() => {
+      // Ask about installing only once the startup flow is done: the
+      // vault is open, the tree is loaded and the session-restore
+      // prompt (which is also a dialog) has had its turn. Stacking two
+      // modals, or raising one over an empty window, is worse than
+      // either on its own.
+      if (installOfferAsked) return;
+      installOfferAsked = true;
+      void askAboutInstall();
+    });
   }
 
   // Continuous last-session snapshot: any tab/session mutation
