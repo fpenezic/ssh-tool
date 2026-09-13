@@ -7,6 +7,81 @@ a prerelease upstream.
 
 ---
 
+## [0.95.0] - It installs itself now, and notices when it has moved
+
+### Added
+
+- **ssh-tool offers to install itself.** Run the downloaded binary and it
+  asks, once, whether to add itself to your applications menu (Start Menu
+  on Windows). Saying yes copies it to `~/.local/bin` or
+  `%LOCALAPPDATA%\Programs\ssh-tool`, writes the launcher entry and the
+  icon, and offers to restart from the installed copy. No root, no
+  administrator rights, and the binary stays yours - so the in-app
+  updater keeps working, which a system package would take away.
+- **Settings > Desktop integration** is the permanent home for all of
+  this: install, uninstall, the file manager's right-click menu, and the
+  `ssh-tool://` link handler. They used to be in three different places,
+  one of them filed under an import format.
+- **A prompt you can turn off.** The install question carries a "Don't ask
+  again" tickbox, and the same switch lives in Settings. It is asked after
+  the vault is open and the tree has loaded - never in the middle of
+  something you were typing.
+- **It notices when a registration is pointing at the wrong copy.** Every
+  desktop registration stores an absolute path, so moving the binary
+  leaves them launching whatever used to be there - working right up until
+  that file is deleted, then failing silently. ssh-tool now reads those
+  paths back, says which are stale, and offers to re-point them.
+  Installing re-points the ones that already exist automatically. The MCP
+  entry is only reported, never rewritten: it lives in Claude Desktop's
+  config, not ours.
+- **Upgrades are offered as upgrades.** Running a newer download while an
+  older copy is installed says so, naming the version it would replace -
+  rather than asking to "add" an entry that already exists. Without that,
+  a launcher still pointing at the old binary quietly undoes the upgrade
+  the next time you click the icon.
+- **A status-bar badge** for problems that persist until fixed, so a stale
+  handler is visible without opening Settings. Click it to land on the
+  setting that repairs it.
+- **Launching a second copy says so.** Double-clicking a freshly
+  downloaded build while one is already running used to hand over silently
+  and exit, which looks exactly like a broken download. It now names the
+  version and where it was launched from.
+
+### Fixed
+
+- **The window and tray icon on KDE.** The desktop entry has to be named
+  after the Wayland app-id, which Wails derives as `org.wails.ssh-tool` -
+  the launcher found our entry by other means and drew the icon, while the
+  window and tray fell back to a generic placeholder. Read straight off
+  the running window, not guessed.
+- **The tray tooltip said "wails".** The label and the tooltip are
+  different properties on Linux, and KDE reads the label.
+- **Light/dark now follows the KDE setting.** WebKitGTK derives
+  `prefers-color-scheme` from the GTK theme, which KDE does not feed it,
+  so the app kept whichever palette it started in. ssh-tool now reads the
+  desktop's colour scheme through the xdg portal, and watches for changes
+  itself - the upstream watcher listens on the GNOME namespace only, so on
+  KDE the signal arrived and was discarded.
+- **The updater refuses to overwrite a package-managed install** and says
+  why, rather than failing on permissions - or worse, succeeding as root
+  and having the next `pacman -Syu` silently undo the update.
+- **Development builds never replace your working copy.** A build from the
+  source tree will not install itself over the one you use, though it can
+  still create an entry where none exists.
+
+### Notes
+
+- Distro packages (.deb / .rpm / pacman) build from this repo but are not
+  attached to releases yet - the .deb and .rpm have not been installed on
+  a real Debian or Fedora machine, and an untested package is worse than
+  none. An AUR recipe is ready to publish. See `docs/TODO.md`.
+- Linux still needs GTK 4 and WebKitGTK 6.0 installed; they are
+  deliberately not bundled. The README says which package to install, and
+  a missing library now produces an explanation rather than a loader
+  error.
+
+---
+
 ## [0.94.0] - The LLM bridge gives connections the right icon
 
 ### Added
