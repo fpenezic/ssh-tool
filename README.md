@@ -46,8 +46,7 @@ test status varies).
 
 ## Install
 
-Every release ships a single binary per platform, plus distro packages
-for Linux. Grab them from
+Every release ships a single binary per platform. Grab it from
 [Releases](https://github.com/fpenezic/ssh-tool/releases) or
 [sshtool.app](https://sshtool.app).
 
@@ -56,70 +55,52 @@ for Linux. Grab them from
 The app draws its window with GTK 4 and WebKitGTK 6.0, which are not
 bundled - bundling a browser engine would mean shipping (and patching)
 several hundred MB of GTK, mesa and WebKit, and you would stop getting
-security updates through your package manager.
-
-On Arch (and CachyOS, Manjaro, EndeavourOS) install from the AUR, which
-keeps ssh-tool updating with the rest of the system:
+security updates through your package manager. Install them first:
 
 ```bash
-yay -S ssh-tool-bin        # or paru -S ssh-tool-bin
-```
-
-Elsewhere, download the package for your distro from the release page:
-
-```bash
-sudo apt install ./ssh-tool-linux-amd64.deb       # Debian / Ubuntu
-sudo dnf install ./ssh-tool-linux-amd64.rpm       # Fedora / RHEL
-sudo pacman -U ssh-tool-linux-amd64.pkg.tar.zst   # Arch, without the AUR
-```
-
-These are one-off installs: there is no apt or dnf repository yet, so a
-new version means downloading the new package. The AUR route updates
-itself.
-
-They also register the desktop entry and icon, so the app shows up in
-your launcher.
-
-If you would rather keep in-app updates, install into your own prefix
-instead. `build/linux/install-user.sh` puts the binary in
-`~/.local/bin` and registers the launcher entry and icon under
-`~/.local/share`, with no root and no package manager:
-
-```bash
-./install-user.sh ./ssh-tool-linux-amd64   # --uninstall to reverse it
-```
-
-Going that route (or running the bare binary straight from your
-downloads folder) means installing the runtime yourself, which the
-packages would have done for you:
-
-```bash
-sudo pacman -S webkitgtk-6.0 gtk4                 # Arch
+sudo pacman -S webkitgtk-6.0 gtk4                 # Arch / CachyOS
 sudo apt install libwebkitgtk-6.0-4 libgtk-4-1    # Debian / Ubuntu
-sudo dnf install webkitgtk6.0 gtk4                # Fedora
+sudo dnf install webkitgtk6.0 gtk4                # Fedora / RHEL
 ```
 
 Without them the binary fails in the dynamic loader with
 `libwebkitgtk-6.0.so.4: cannot open shared object file`, before any of
 our code runs.
 
+Then make it executable and run it:
+
+```bash
+chmod +x ssh-tool-linux-amd64
+./ssh-tool-linux-amd64
+```
+
+It will offer to add itself to your applications menu - that copies the
+binary to `~/.local/bin` and registers the launcher entry and icon, with
+no root. You can do the same later from
+**Settings > Desktop integration**, and undo it there too.
+`build/linux/install-user.sh` does the same from a shell if you prefer.
+
+Distro packages (.deb / .rpm / pacman) build from this repo with
+`task linux:create:deb` and friends, but are not attached to releases
+yet - see [`docs/TODO.md`](docs/TODO.md).
+
 ### Windows
 
 One `.exe`, no runtime and no installer. WebView2 ships with Windows 10
-and 11.
+and 11. It offers the same thing on first run: a copy into
+`%LOCALAPPDATA%\Programs\ssh-tool` and a Start Menu shortcut, no
+administrator rights.
 
 ### Updates
 
-The standalone binary updates itself: Help > Check for updates
-downloads the new build and swaps it in place, on Windows and Linux
-alike. It works from anywhere your user owns - `~/.local/bin` (what
-`install-user.sh` uses), the desktop, anywhere in `$HOME`.
+ssh-tool updates itself: Help > Check for updates downloads the new
+build and swaps it in place, on Windows and Linux alike. It works from
+anywhere your user owns - `~/.local/bin`, `%LOCALAPPDATA%`, the desktop,
+anywhere in `$HOME`.
 
-A distro package is owned by the package manager instead, so ssh-tool
-declines to overwrite itself and says so - update it with
-`pacman -Syu`, `apt upgrade` or `dnf upgrade` like anything else on the
-system. That is the trade: the packages fix the dependency and the
-launcher entry, the standalone binary keeps in-app updates.
+It will not overwrite a binary owned by a package manager (`/usr/bin`
+and friends), and says so rather than failing: that install updates
+through the package manager instead.
 
 ## Documentation
 

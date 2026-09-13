@@ -281,9 +281,28 @@ Mediums + selected Lows tracked here.
   `update_check_disabled` is a per-user DB setting.
 - **Linux .AppImage** - Taskfile + AppImage config exist; needs
   smoke testing.
-- **apt / dnf repositories (target: v0.100.0).** The .deb and .rpm are
-  built and attached to every release now, but they are one-off
-  installs: a new version means downloading another package by hand,
+- **Publish the distro packages.** They build (`task linux:create:deb`,
+  `:rpm`, `:aur`) and were verified by inspection - correct version,
+  dependencies, install paths, desktop entry and icons under the
+  org.wails.ssh-tool app-id name. The pacman one was also installed and
+  run on a CachyOS machine.
+
+  Not attached to releases, because the .deb and .rpm have never been
+  installed anywhere: a package nobody has installed is worse than no
+  package. Needs a Debian and a Fedora box (a container is enough for
+  the install itself; the launcher entry and icon want a session).
+  Shipping only the tested pacman one was considered and dropped - a
+  release carrying a package for one distro and not the others needs
+  more explaining than it saves.
+
+  The AUR recipe in `build/aur/` is ready and `makepkg` was verified to
+  build it from published v0.94.0 artefacts with matching checksums.
+  Publishing it needs an AUR account with an SSH key, which is a
+  maintainer action; `scripts/aur-release.sh <tag>` refreshes pkgver and
+  the checksums afterwards.
+
+- **apt / dnf repositories (target: v0.100.0).** Once the packages ship,
+  they are still one-off installs: a new version means downloading another package by hand,
   and the in-app updater correctly refuses to touch a package-managed
   binary. A repository fixes that the way the AUR already does for
   Arch.

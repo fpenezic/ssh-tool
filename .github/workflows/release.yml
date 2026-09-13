@@ -144,28 +144,20 @@ jobs:
           SSHTOOL_VERSION: ${{ github.ref_name }}
         run: |
           ${{ matrix.build }}
-      # Distro packages, Linux only. They declare the GTK4 + WebKitGTK 6.0
-      # runtime deps, so the package manager pulls them in instead of the
-      # user meeting a loader error on first launch. This runs BEFORE the
-      # rename below: nfpm.yaml reads the binary from ./bin/ssh-tool.
-      - name: Package (deb/rpm/pacman)
-        if: startsWith(matrix.platform, 'linux-')
-        env:
-          SSHTOOL_VERSION: ${{ github.ref_name }}
-        run: |
-          task linux:generate:deb
-          task linux:generate:rpm
-          task linux:generate:aur
-          arch="${{ matrix.platform }}"; arch="${arch#linux-}"
-          mv bin/ssh-tool.deb "bin/ssh-tool-linux-${arch}.deb"
-          mv bin/ssh-tool.rpm "bin/ssh-tool-linux-${arch}.rpm"
-          mv bin/ssh-tool.pkg.tar.zst "bin/ssh-tool-linux-${arch}.pkg.tar.zst"
-          # The user-prefix installer is arch-independent, but the
-          # release page is flat, so amd64 is the one that carries it.
-          if [ "$arch" = "amd64" ]; then
-            cp build/linux/install-user.sh build/linux/check-deps.sh bin/
-            cp build/appicon.png build/appicon.svg bin/
-          fi
+      # Distro packages are built by `task linux:create:deb` (and rpm /
+      # aur) and are NOT attached to releases yet: the .deb and .rpm have
+      # never been installed on a Debian or Fedora machine, and shipping
+      # a package nobody has installed is worse than shipping none. The
+      # pacman one has been tested, but a release carrying packages for
+      # one distro and not the others needs more explaining than it is
+      # worth. Revisit when there is a machine to test on - see
+      # docs/TODO.md "apt / dnf repositories".
+      #
+      # The helper scripts do ship: they are what the release page points
+      # at for a manual install.
+      - name: Attach install helpers
+        if: matrix.platform == 'linux-amd64'
+        run: cp build/linux/install-user.sh build/linux/check-deps.sh build/appicon.png build/appicon.svg bin/
       - name: Rename binary
         run: mv ${{ matrix.bin }} bin/${{ matrix.out }}
       - uses: actions/upload-artifact@v7
@@ -175,13 +167,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v7
-        if: startsWith(matrix.platform, 'linux-')
+        if: matrix.platform == 'linux-amd64'
         with:
-          name: ${{ matrix.out }}-packages
+          name: linux-install-helpers
           path: |
-            bin/*.deb
-            bin/*.rpm
-            bin/*.pkg.tar.zst
             bin/*.sh
             bin/appicon.*
           if-no-files-found: error
