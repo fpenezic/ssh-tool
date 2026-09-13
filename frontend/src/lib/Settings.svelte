@@ -1363,7 +1363,9 @@
     try {
       await api.registerURLScheme();
       urlSchemeMsg = "Registered. ssh-tool:// links now launch this app.";
-      await refreshURLSchemeStatus();
+      // Refresh the staleness check too, or the warning stays up after
+      // the thing it warns about has been fixed.
+      await Promise.all([refreshURLSchemeStatus(), refreshIntegrationInfo()]);
     } catch (e: any) {
       urlSchemeMsg = `Failed: ${errMsg(e)}`;
     } finally {
@@ -1380,6 +1382,22 @@
     try { explorerMenuStatus = await api.explorerMenuStatus(); } catch {}
   }
 
+  // Re-registering writes the current binary's path over the stored
+  // one. Same call as adding it; the separate button exists so the
+  // label says what the user actually wants here.
+  async function repointExplorerMenu() {
+    explorerMenuBusy = true; explorerMenuMsg = null;
+    try {
+      await api.explorerMenuRegister();
+      explorerMenuMsg = "Re-pointed at this copy of ssh-tool.";
+      await Promise.all([refreshExplorerMenuStatus(), refreshIntegrationInfo()]);
+    } catch (e: any) {
+      explorerMenuMsg = `Failed: ${errMsg(e)}`;
+    } finally {
+      explorerMenuBusy = false;
+    }
+  }
+
   async function toggleExplorerMenu() {
     explorerMenuBusy = true; explorerMenuMsg = null;
     try {
@@ -1390,7 +1408,7 @@
         await api.explorerMenuRegister();
         explorerMenuMsg = "Added. Right-click a folder (or inside one) to see \"Open in ssh-tool\".";
       }
-      await refreshExplorerMenuStatus();
+      await Promise.all([refreshExplorerMenuStatus(), refreshIntegrationInfo()]);
     } catch (e: any) {
       explorerMenuMsg = `Failed: ${errMsg(e)}`;
     } finally {
@@ -5703,6 +5721,15 @@
         {:else}
           <span class="status-warn">not installed</span>
         {/if}
+        <!-- Three states, not two: registered-and-current, registered-
+             but-pointing-elsewhere, and absent. A stale registration
+             needs re-pointing, and offering only "Remove" there sends
+             the user the wrong way. -->
+        {#if explorerMenuInfo?.stale}
+          <button class="picker-btn" disabled={explorerMenuBusy} onclick={repointExplorerMenu}>
+            {explorerMenuBusy ? "Working…" : "Re-point to this copy"}
+          </button>
+        {/if}
         <button class="picker-btn" disabled={explorerMenuBusy} onclick={toggleExplorerMenu}>
           {explorerMenuBusy ? "Working…" : explorerMenuStatus ? "Remove" : "Add to menu"}
         </button>
@@ -5710,7 +5737,7 @@
       {#if explorerMenuInfo?.stale}
         <p class="hint warn-note">
           Points at <code>{explorerMenuInfo.target}</code>, not this copy.
-          Use <strong>Add to menu</strong> to re-point it.
+          Right-clicking a folder will open that one instead.
         </p>
       {/if}
       {#if explorerMenuMsg}
@@ -5745,7 +5772,7 @@
       {#if urlSchemeInfo?.stale}
         <p class="hint warn-note">
           Points at <code>{urlSchemeInfo.target}</code>, not this copy.
-          Use <strong>Re-register</strong> to fix it.
+          ssh-tool:// links will open that one instead.
         </p>
       {/if}
       {#if urlSchemeMsg}
