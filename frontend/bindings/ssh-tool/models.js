@@ -2396,6 +2396,73 @@ export class InstallState {
 }
 
 /**
+ * IntegrationStatus describes one desktop registration - the
+ * ssh-tool:// handler, the file-manager context menu - and whether it
+ * still points at this binary.
+ * 
+ * Stale is the part that matters. Every registration stores an absolute
+ * path to the executable, and installing to ~/.local/bin (or
+ * %LOCALAPPDATA%\Programs) moves it. The registration keeps working
+ * against the OLD path, so clicking an ssh-tool:// link launches
+ * whatever is still sitting in ~/Downloads - or nothing at all, once
+ * that is deleted. Neither failure says anything about why.
+ */
+export class IntegrationStatus {
+    /**
+     * Creates a new IntegrationStatus instance.
+     * @param {Partial<IntegrationStatus>} [$$source = {}] - The source object to create the IntegrationStatus.
+     */
+    constructor($$source = {}) {
+        if (!("registered" in $$source)) {
+            /**
+             * Registered is true when a registration exists at all.
+             * @member
+             * @type {boolean}
+             */
+            this["registered"] = false;
+        }
+        if (!("detail" in $$source)) {
+            /**
+             * Detail is the short OS-specific identifier shown to the user
+             * (a .desktop name, a registry command).
+             * @member
+             * @type {string}
+             */
+            this["detail"] = "";
+        }
+        if (!("target" in $$source)) {
+            /**
+             * Target is the executable path the registration points at, when
+             * it can be read back. Empty when the OS does not expose it.
+             * @member
+             * @type {string}
+             */
+            this["target"] = "";
+        }
+        if (!("stale" in $$source)) {
+            /**
+             * Stale is true when Target is readable and is not this binary.
+             * @member
+             * @type {boolean}
+             */
+            this["stale"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new IntegrationStatus instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {IntegrationStatus}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new IntegrationStatus(/** @type {Partial<IntegrationStatus>} */($$parsedSource));
+    }
+}
+
+/**
  * KeepassEnsureCredentialInput picks a KeePass entry+field straight from the
  * connection auth picker. The app finds an existing credential that already
  * references the exact same entry+field (so choosing it twice reuses one) or

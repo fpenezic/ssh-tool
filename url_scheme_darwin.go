@@ -53,3 +53,13 @@ func urlSchemeStatus() string {
 	}
 	return ""
 }
+
+// urlSchemeTarget: Launch Services resolves the handler by bundle id
+// rather than by path, so there is no executable path to compare
+// against. Reported as "cannot tell", which is accurate - a moved
+// bundle is a different problem from a moved binary.
+func urlSchemeTarget() string { return "" }
+
+// registerURLSchemeAt: macOS resolves handlers by bundle id, so there is no
+// per-binary registration to re-point.
+func registerURLSchemeAt(string) error { return nil }

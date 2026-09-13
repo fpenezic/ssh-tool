@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // "Open in ssh-tool" for Linux file managers. Two per-user
@@ -35,6 +36,13 @@ func registerExplorerMenu() error {
 	if err != nil {
 		return fmt.Errorf("locate exe: %w", err)
 	}
+	return registerExplorerMenuAt(exe)
+}
+
+// registerExplorerMenuAt registers a specific binary. See the URL-scheme
+// twin: after an install the entries have to point at the installed
+// copy, not at the one running the install.
+func registerExplorerMenuAt(exe string) error {
 	dolphin, nautilus, err := explorerMenuPaths()
 	if err != nil {
 		return err
@@ -103,4 +111,56 @@ func explorerMenuStatus() string {
 		out += "Nautilus script"
 	}
 	return out
+}
+
+// explorerMenuTarget reads back the executable the context-menu entries
+// launch. Dolphin's servicemenu is a .desktop file with an Exec= line;
+// the Nautilus script is a shell script that execs the binary directly.
+//
+// Returns "" when nothing readable is installed, which the caller
+// reports as "cannot tell" rather than as broken.
+func explorerMenuTarget() string {
+	dolphin, nautilus, err := explorerMenuPaths()
+	if err != nil {
+		return ""
+	}
+	if body, err := os.ReadFile(dolphin); err == nil {
+		if t := execTargetFromDesktopEntry(string(body)); t != "" {
+			return t
+		}
+	}
+	if body, err := os.ReadFile(nautilus); err == nil {
+		if t := scriptTarget(string(body)); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
+// scriptTarget finds the quoted binary path in the generated Nautilus
+// script. The script is ours, so the shape is known: the path appears
+// in double quotes on the line that runs it.
+func scriptTarget(body string) string {
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		start := strings.IndexByte(line, '"')
+		if start < 0 {
+			continue
+		}
+		rest := line[start+1:]
+		end := strings.IndexByte(rest, '"')
+		if end <= 0 {
+			continue
+		}
+		// The "/" test is what skips the earlier quoted strings in the
+		// generated script (dir="$(printf ...)" and "$PWD"): none of
+		// them contain a slash, and the exec target always does.
+		if cand := rest[:end]; strings.Contains(cand, "/") {
+			return cand
+		}
+	}
+	return ""
 }

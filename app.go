@@ -5174,6 +5174,22 @@ func (a *App) URLSchemeStatus() string {
 	return urlSchemeStatus()
 }
 
+// URLSchemeIntegration reports the handler registration AND whether it
+// still points at this binary. Installing to a per-user location moves
+// the executable, and the registration keeps pointing at wherever it
+// was registered from - so an ssh-tool:// link would launch the copy in
+// ~/Downloads, or nothing once that is deleted.
+func (a *App) URLSchemeIntegration() IntegrationStatus {
+	self, _ := os.Executable()
+	return integrationStatusFor(urlSchemeStatus(), urlSchemeTarget(), self)
+}
+
+// ExplorerMenuIntegration is the same for the file-manager context menu.
+func (a *App) ExplorerMenuIntegration() IntegrationStatus {
+	self, _ := os.Executable()
+	return integrationStatusFor(explorerMenuStatus(), explorerMenuTarget(), self)
+}
+
 // ExplorerMenuRegister adds "Open in ssh-tool" to the OS file
 // manager's right-click menu for directories (Explorer on Windows,
 // Dolphin/Nautilus on Linux). Per-user / no admin. Idempotent.

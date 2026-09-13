@@ -236,8 +236,15 @@
       const path = await api.installToUserPrefix();
       installMsg = `Installed to ${path}.`;
       // Re-read: after a successful install there is nothing left to
-      // offer, and the block should disappear on its own.
+      // offer, and the block should disappear on its own. The install
+      // also re-points any existing registrations, so their staleness
+      // warnings need refreshing too.
       installState = await api.getInstallState();
+      await Promise.all([
+        refreshURLSchemeStatus(),
+        refreshExplorerMenuStatus(),
+        refreshIntegrationInfo(),
+      ]);
 
       // Same as the startup offer: the running process is still the
       // binary that was launched, so until it restarts the window is
@@ -1333,6 +1340,20 @@
   let urlSchemeBusy = $state(false);
   let urlSchemeMsg = $state<string | null>(null);
 
+  // Richer status for the Desktop integration section: registered, and
+  // whether the stored path still points at this binary.
+  let urlSchemeInfo = $state<import("./api").IntegrationStatus | null>(null);
+  let explorerMenuInfo = $state<import("./api").IntegrationStatus | null>(null);
+
+  async function refreshIntegrationInfo() {
+    try {
+      [urlSchemeInfo, explorerMenuInfo] = await Promise.all([
+        api.urlSchemeIntegration(),
+        api.explorerMenuIntegration(),
+      ]);
+    } catch { /* the plain status strings still render */ }
+  }
+
   async function refreshURLSchemeStatus() {
     try { urlSchemeStatus = await api.urlSchemeStatus(); } catch {}
   }
@@ -1383,6 +1404,7 @@
   onMount(async () => {
     refreshURLSchemeStatus();
     refreshExplorerMenuStatus();
+    refreshIntegrationInfo();
     try {
       installState = await api.getInstallState();
       installOfferDisabled = (await api.settingsGet("install_offer_disabled")) === "1";
@@ -5564,6 +5586,34 @@
       per-user - nothing here needs administrator rights.
     </p>
 
+    <!-- Every registration below stores an absolute path to the
+         executable. Moving the binary (installing it, or just dragging
+         the download somewhere else) leaves them pointing at the old
+         location: they keep working until that file is gone, then fail
+         with nothing to explain why. Saying so beats letting the user
+         discover it when a link stops opening. -->
+    {#if urlSchemeInfo?.stale || explorerMenuInfo?.stale}
+      <p class="hint warn-note">
+        Some registrations still point at a different copy of ssh-tool
+        than the one running ({installState?.exe_path}). They will keep
+        launching that copy until re-registered below.
+      </p>
+    {/if}
+
+    <!-- The MCP entry lives in Claude Desktop's config file, not in
+         ours. Rewriting another application's configuration without
+         being asked is a bigger liberty than re-pointing our own
+         registrations, so this warns and links rather than fixing it
+         silently. -->
+    {#if claudeDesktop?.stale}
+      <p class="hint warn-note">
+        Claude Desktop's MCP entry points at
+        <code>{claudeDesktop.path}</code>'s older command. Re-register it
+        under <strong>LLM (MCP) access</strong>, then restart Claude
+        Desktop.
+      </p>
+    {/if}
+
     <!-- Linux only, and only while there is something to do: a binary
          run from wherever it was downloaded works, but has no menu entry
          and no icon. The startup toast offers this once; this is where
@@ -5657,6 +5707,12 @@
           {explorerMenuBusy ? "Working…" : explorerMenuStatus ? "Remove" : "Add to menu"}
         </button>
       </div>
+      {#if explorerMenuInfo?.stale}
+        <p class="hint warn-note">
+          Points at <code>{explorerMenuInfo.target}</code>, not this copy.
+          Use <strong>Add to menu</strong> to re-point it.
+        </p>
+      {/if}
       {#if explorerMenuMsg}
         <p class="hint">{explorerMenuMsg}</p>
       {/if}
@@ -5686,6 +5742,12 @@
           {urlSchemeBusy ? "Working…" : urlSchemeStatus ? "Re-register" : "Register handler"}
         </button>
       </div>
+      {#if urlSchemeInfo?.stale}
+        <p class="hint warn-note">
+          Points at <code>{urlSchemeInfo.target}</code>, not this copy.
+          Use <strong>Re-register</strong> to fix it.
+        </p>
+      {/if}
       {#if urlSchemeMsg}
         <p class="hint">{urlSchemeMsg}</p>
       {/if}

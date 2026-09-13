@@ -150,6 +150,7 @@ func installFrom(exePath string) (string, error) {
 			return "", err
 		}
 	}
+	reRegisterMovedIntegrations(target)
 	if err := createStartMenuShortcut(target); err != nil {
 		// The copy succeeded; report the shortcut failure without
 		// pretending the whole thing failed.

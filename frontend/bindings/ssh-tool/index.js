@@ -45,6 +45,7 @@ export {
     InfisicalEnsureCredentialInput,
     InfisicalSaveInput,
     InstallState,
+    IntegrationStatus,
     KeepassEnsureCredentialInput,
     KeepassSaveInput,
     LoadTextFileResult,

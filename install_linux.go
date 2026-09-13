@@ -361,6 +361,7 @@ MimeType=x-scheme-handler/ssh-tool;
 	}
 
 	refreshDesktopCaches(appDir, iconDir)
+	reRegisterMovedIntegrations(target)
 	return target, nil
 }
 

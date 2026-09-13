@@ -1,0 +1,66 @@
+//go:build linux && !android
+
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// The point of the whole exercise: after an install, a handler that was
+// registered from ~/Downloads must point at the installed copy. Left
+// alone it keeps launching the download - which works until that file
+// is deleted, and then fails with nothing explaining why.
+func TestReRegisterMovedIntegrationsRepointsURLScheme(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	appDir := filepath.Join(home, ".local", "share", "applications")
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A handler registered from the downloads copy.
+	old := filepath.Join(home, "Downloads", "ssh-tool-linux-amd64")
+	entry := filepath.Join(appDir, "ssh-tool-url.desktop")
+	if err := os.WriteFile(entry, []byte(
+		"[Desktop Entry]\nType=Application\nExec=\""+old+"\" %u\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	newPath := filepath.Join(home, ".local", "bin", "ssh-tool")
+	// registerURLSchemeAt also shells out to xdg-mime, which may not be
+	// present; the file write is what matters and happens first.
+	_ = registerURLSchemeAt(newPath)
+
+	body, err := os.ReadFile(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := execTargetFromDesktopEntry(string(body)); got != newPath {
+		t.Errorf("Exec target = %q, want %q", got, newPath)
+	}
+	if strings.Contains(string(body), "Downloads") {
+		t.Error("the old path should be gone from the entry")
+	}
+}
+
+// Re-registering must not CREATE registrations the user never asked
+// for. Installing is not consent to add a context-menu entry.
+func TestReRegisterSkipsWhatWasNeverRegistered(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	reRegisterMovedIntegrations(filepath.Join(home, ".local", "bin", "ssh-tool"))
+
+	for _, p := range []string{
+		filepath.Join(home, ".local/share/applications/ssh-tool-url.desktop"),
+		filepath.Join(home, ".local/share/kio/servicemenus/ssh-tool-open-dir.desktop"),
+		filepath.Join(home, ".local/share/nautilus/scripts/Open in ssh-tool"),
+	} {
+		if _, err := os.Stat(p); err == nil {
+			t.Errorf("created a registration that did not exist: %s", p)
+		}
+	}
+}
