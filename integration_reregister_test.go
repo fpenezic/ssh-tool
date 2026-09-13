@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,5 +63,22 @@ func TestReRegisterSkipsWhatWasNeverRegistered(t *testing.T) {
 		if _, err := os.Stat(p); err == nil {
 			t.Errorf("created a registration that did not exist: %s", p)
 		}
+	}
+}
+
+// IntegrationStatus is declared twice - once here and once in
+// app_mobile_stubs.go - because app.go is shared and mobile has no
+// registrations to report. The JSON shape has to stay identical or the
+// frontend's type stops matching one of the two builds.
+func TestIntegrationStatusJSONShape(t *testing.T) {
+	b, err := json.Marshal(IntegrationStatus{
+		Registered: true, Detail: "d", Target: "t", Stale: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"registered":true,"detail":"d","target":"t","stale":true}`
+	if string(b) != want {
+		t.Errorf("JSON shape drifted:\n got %s\nwant %s", b, want)
 	}
 }

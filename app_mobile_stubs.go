@@ -32,6 +32,24 @@ func SaveFileDialog(SaveFileDialogOptions) (string, error)      { return "", nil
 func registerURLScheme() error { return ErrURLSchemeNotSupported }
 func urlSchemeStatus() string  { return "" }
 
+// IntegrationStatus and its helpers exist on mobile only because app.go
+// is shared. Nothing on Android registers a URL handler at runtime (the
+// scheme is declared in the manifest and bound at install time) and
+// there is no file manager to add a menu to.
+type IntegrationStatus struct {
+	Registered bool   `json:"registered"`
+	Detail     string `json:"detail"`
+	Target     string `json:"target"`
+	Stale      bool   `json:"stale"`
+}
+
+func integrationStatusFor(detail, target, self string) IntegrationStatus {
+	return IntegrationStatus{Registered: detail != "", Detail: detail}
+}
+
+func urlSchemeTarget() string    { return "" }
+func explorerMenuTarget() string { return "" }
+
 // File-manager context-menu integration is desktop-only for the same
 // reason.
 func registerExplorerMenu() error   { return ErrURLSchemeNotSupported }
