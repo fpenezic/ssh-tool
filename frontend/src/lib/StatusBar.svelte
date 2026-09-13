@@ -16,6 +16,7 @@
   import { errMsg } from "./connectErrors";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
+  import { desktopAlerts } from "./desktopAlerts.svelte";
   import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot } from "./iconMap";
   import McpActivityPanel from "./McpActivityPanel.svelte";
   import { mcpCounterTitle } from "./mcpLevel";
@@ -550,6 +551,20 @@
   {/if}
 
 
+  <!-- Standing problems with the desktop integrations (a handler
+       pointing at a binary that moved, say). They only showed inside
+       Settings, which is no help to someone who has not noticed
+       anything is wrong yet. -->
+  {#if desktopAlerts.count > 0}
+    <button
+      class="seg alerts"
+      onclick={() => view.setTabSettingsSection(desktopAlerts.primarySection)}
+      title={desktopAlerts.alerts.map((a) => a.message).join("\n")}
+    >
+      <span>! {desktopAlerts.count === 1 ? "1 issue" : `${desktopAlerts.count} issues`}</span>
+    </button>
+  {/if}
+
   {#if updateCheck.available}
     <button
       class="seg update"
@@ -745,6 +760,8 @@
     padding: 0 0.25rem;
     font-size: 0.6rem;
   }
+  .seg.alerts { color: var(--yellow); font-weight: 600; }
+  .seg.alerts:hover { background: var(--surface0); }
   .seg.update { color: var(--green); font-weight: 600; }
   .seg.update:hover { background: var(--surface0); }
   .seg.vault { color: var(--yellow); }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { errMsg } from "./connectErrors";
+  import { desktopAlerts } from "./desktopAlerts.svelte";
   import { isMobile } from "./platform";
   import PasswordInput from "./PasswordInput.svelte";
   import McpGrantsList from "./McpGrantsList.svelte";
@@ -648,6 +649,8 @@
     } finally {
       claudeDesktopBusy = false;
       try { claudeDesktop = await api.claudeDesktopStatus(); } catch { /* keep the old view */ }
+      // This one is reported by the status-bar badge too.
+      void desktopAlerts.refresh();
     }
   }
 
@@ -1352,6 +1355,9 @@
         api.explorerMenuIntegration(),
       ]);
     } catch { /* the plain status strings still render */ }
+    // Keep the status-bar badge in step: fixing something here should
+    // clear it without waiting for a restart.
+    void desktopAlerts.refresh();
   }
 
   async function refreshURLSchemeStatus() {

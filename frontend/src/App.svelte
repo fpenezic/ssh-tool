@@ -49,6 +49,7 @@
   import { layoutPrefs } from "./lib/layoutPrefs.svelte";
   import { appPrefs } from "./lib/appPrefs.svelte";
   import { updateCheck } from "./lib/updateCheck.svelte";
+  import { desktopAlerts } from "./lib/desktopAlerts.svelte";
   import { dynEditor } from "./lib/dynEditor.svelte";
   import DynamicFolderEditor from "./lib/DynamicFolderEditor.svelte";
   import { vaultPrefs } from "./lib/vaultPrefs.svelte";
@@ -1126,6 +1127,10 @@
       if (installOfferAsked) return;
       installOfferAsked = true;
       void askAboutInstall();
+      // Standing integration problems (a handler left pointing at a
+      // binary that has since moved). Checked once at startup; the
+      // Settings section refreshes it whenever one is fixed.
+      void desktopAlerts.refresh();
     });
   }
 
