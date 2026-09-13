@@ -36,6 +36,7 @@ func TestIsPackagePath(t *testing.T) {
 
 // A binary sitting in Downloads is the case the offer exists for.
 func TestGetInstallStateLoose(t *testing.T) {
+	asReleaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "")
@@ -63,6 +64,7 @@ func TestGetInstallStateLoose(t *testing.T) {
 
 // Installed by a distro package: never offer, the package manager owns it.
 func TestGetInstallStatePackage(t *testing.T) {
+	asReleaseBuild(t)
 	t.Setenv("HOME", t.TempDir())
 	st := installStateFor("/usr/bin/ssh-tool")
 	if st.Kind != "package" {
@@ -76,6 +78,7 @@ func TestGetInstallStatePackage(t *testing.T) {
 // Already in ~/.local/bin with a desktop entry: the finished state, so
 // there is nothing left to offer.
 func TestGetInstallStateUserComplete(t *testing.T) {
+	asReleaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "")
@@ -110,6 +113,7 @@ func TestGetInstallStateUserComplete(t *testing.T) {
 // In the right directory but with no launcher entry - offer to finish
 // the job rather than staying silent.
 func TestGetInstallStateUserMissingEntry(t *testing.T) {
+	asReleaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "")
@@ -151,6 +155,7 @@ func TestDesktopFileNameMatchesWailsAppID(t *testing.T) {
 // Icon= must resolve in the icon theme under the same app-id name: the
 // compositor falls back to looking the app-id up directly.
 func TestInstalledEntryUsesAppIDIcon(t *testing.T) {
+	asReleaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "")
@@ -197,6 +202,7 @@ func TestDesktopEntryPathHonoursXDG(t *testing.T) {
 // would be wrong - the launcher entry exists and points at the old
 // binary, so clicking the icon tomorrow goes back to it.
 func TestGetInstallStateDetectsExistingInstall(t *testing.T) {
+	asReleaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "")
@@ -239,6 +245,7 @@ func TestGetInstallStateDetectsExistingInstall(t *testing.T) {
 
 // A first install has nothing to replace, and must not claim otherwise.
 func TestGetInstallStateFirstInstallDoesNotReplace(t *testing.T) {
+	asReleaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "")
@@ -266,6 +273,7 @@ func TestGetInstallStateFirstInstallDoesNotReplace(t *testing.T) {
 // as installed. "Something is there, version unknown" is worth saying;
 // silently calling it a first install is not.
 func TestGetInstallStateUnreadableInstalledVersion(t *testing.T) {
+	asReleaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "")

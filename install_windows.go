@@ -196,6 +196,58 @@ func copyExecutable(src, dst string) error {
 	return nil
 }
 
+// UninstallUserPrefix removes the Start Menu shortcut and the copy in
+// %LOCALAPPDATA%\Programs\ssh-tool.
+//
+// It does NOT touch the database, the vault or any other user data.
+//
+// Unlike Unix, Windows refuses to delete a running exe. When that is the
+// file being removed, the shortcut still goes and the exe is renamed
+// aside as .old so the directory is not left looking installed - the
+// next install cleans it up, and a stale .old is harmless.
+//
+// Returns false when there was nothing to remove.
+func (a *App) UninstallUserPrefix() (bool, error) {
+	progDir := userProgramDir()
+	if progDir == "" {
+		return false, fmt.Errorf("cannot locate %%LOCALAPPDATA%%")
+	}
+	exe := filepath.Join(progDir, "ssh-tool.exe")
+
+	removed := false
+	var firstErr error
+
+	if lnk := startMenuShortcutPath(); lnk != "" {
+		err := os.Remove(lnk)
+		switch {
+		case err == nil:
+			removed = true
+		case os.IsNotExist(err):
+		default:
+			firstErr = fmt.Errorf("remove %s: %w", lnk, err)
+		}
+	}
+
+	if err := os.Remove(exe); err == nil {
+		removed = true
+		// Leave no empty directory behind; ignore failure, it only
+		// means something else is in there.
+		_ = os.Remove(progDir)
+	} else if !os.IsNotExist(err) {
+		// Almost certainly "in use": this is the running exe. Move it
+		// aside so the install no longer looks present.
+		old := exe + ".old"
+		_ = os.Remove(old)
+		if rErr := os.Rename(exe, old); rErr == nil {
+			removed = true
+		} else if firstErr == nil {
+			firstErr = fmt.Errorf("remove %s (is it running?): %w", exe, err)
+		}
+	}
+
+	return removed, firstErr
+}
+
 // RelaunchFromInstall restarts the app from the freshly installed copy.
 func (a *App) RelaunchFromInstall(path string) error {
 	if path == "" {

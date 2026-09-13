@@ -3674,6 +3674,26 @@ export function URLSchemeStatus() {
 }
 
 /**
+ * UninstallUserPrefix removes what InstallToUserPrefix put in place:
+ * the desktop entry, the icons, and the copy in ~/.local/bin.
+ * 
+ * It does NOT touch the database, the vault or any other user data -
+ * this removes the desktop integration, not the app's contents. The
+ * wording in Settings says so, because "uninstall" invites the other
+ * reading.
+ * 
+ * Deleting the binary while it is the one running is fine on Unix: the
+ * process holds its inode and keeps working until it exits. The user is
+ * told the app is still running from where it was.
+ * 
+ * Returns false when there was nothing to remove.
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function UninstallUserPrefix() {
+    return $Call.ByID(1823656610);
+}
+
+/**
  * UnpinConnection deletes the pin mapping AND the underlying
  * connection. The next inventory refresh re-includes the original
  * external_id as a dynamic ghost. Returns the dynamic folder id so the

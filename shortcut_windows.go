@@ -35,8 +35,15 @@ func createStartMenuShortcut(target string) error {
 	// Paths go through the argument list rather than into the script
 	// text: a directory name containing a quote or a backtick would
 	// otherwise break the script, and %LOCALAPPDATA% is user-controlled.
-	script := `
-param([string]$LnkPath, [string]$TargetPath, [string]$WorkDir)
+	//
+	// The script has to be a FILE, invoked with -File. A param() block
+	// is only honoured for a script; with -Command the named arguments
+	// are parsed as further commands, so -LnkPath became "the term
+	// '-LnkPath' is not recognized" and every $LnkPath below it was
+	// empty - CreateShortcut("") then failed with "the shortcut pathname
+	// must end with .lnk or .url".
+	script := `param([string]$LnkPath, [string]$TargetPath, [string]$WorkDir)
+$ErrorActionPreference = "Stop"
 $shell = New-Object -ComObject WScript.Shell
 $sc = $shell.CreateShortcut($LnkPath)
 $sc.TargetPath = $TargetPath
@@ -44,9 +51,23 @@ $sc.WorkingDirectory = $WorkDir
 $sc.Description = "SSH connection manager"
 $sc.Save()
 `
+	scriptFile, err := os.CreateTemp("", "ssh-tool-shortcut-*.ps1")
+	if err != nil {
+		return fmt.Errorf("write shortcut script: %w", err)
+	}
+	scriptPath := scriptFile.Name()
+	defer os.Remove(scriptPath)
+	if _, err := scriptFile.WriteString(script); err != nil {
+		scriptFile.Close()
+		return fmt.Errorf("write shortcut script: %w", err)
+	}
+	if err := scriptFile.Close(); err != nil {
+		return fmt.Errorf("write shortcut script: %w", err)
+	}
+
 	cmd := exec.Command("powershell.exe",
 		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-		"-Command", script,
+		"-File", scriptPath,
 		"-LnkPath", lnk,
 		"-TargetPath", target,
 		"-WorkDir", filepath.Dir(target),
@@ -62,8 +83,17 @@ $sc.Save()
 		}
 		return fmt.Errorf("create shortcut: %s", msg)
 	}
-	if _, err := os.Stat(lnk); err != nil {
+	// PowerShell exits 0 for a script that printed errors unless
+	// $ErrorActionPreference stops it, and an empty .lnk path used to
+	// fail this way - so confirm the file is actually there rather than
+	// trusting the exit status.
+	fi, err := os.Stat(lnk)
+	if err != nil {
 		return fmt.Errorf("shortcut was not created at %s", lnk)
+	}
+	if fi.Size() == 0 {
+		os.Remove(lnk)
+		return fmt.Errorf("shortcut at %s was created empty", lnk)
 	}
 	return nil
 }

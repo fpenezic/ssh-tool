@@ -186,6 +186,49 @@
   );
   let installMsg = $state("");
 
+  let installOfferDisabled = $state(false);
+
+  async function setInstallOfferDisabled(v: boolean) {
+    installOfferDisabled = v;
+    try {
+      await api.settingsSet("install_offer_disabled", v ? "1" : "0");
+    } catch (e: any) {
+      installMsg = errMsg(e);
+      installOfferDisabled = !v;
+    }
+  }
+
+  let uninstalling = $state(false);
+  let uninstallMsg = $state("");
+
+  async function uninstallUserPrefix() {
+    // Uses the app's own confirm dialog rather than an inline two-step:
+    // this deletes files, and the surrounding text is easy to skim past.
+    const ok = await showConfirm({
+      title: "Remove desktop integration",
+      message:
+        "Delete the launcher entry, icon and the installed copy? " +
+        "Your connections, credentials and settings are not affected.",
+      okLabel: "Remove",
+      danger: true,
+    });
+    if (!ok) return;
+
+    uninstalling = true;
+    uninstallMsg = "";
+    try {
+      const removed = await api.uninstallUserPrefix();
+      uninstallMsg = removed
+        ? `Removed. ssh-tool keeps running from ${installState?.exe_path ?? "its current location"} until you close it.`
+        : "Nothing to remove.";
+      installState = await api.getInstallState();
+    } catch (e: any) {
+      uninstallMsg = errMsg(e);
+    } finally {
+      uninstalling = false;
+    }
+  }
+
   async function installToUserPrefix() {
     installing = true;
     installMsg = "";
@@ -1322,6 +1365,7 @@
   onMount(async () => {
     try {
       installState = await api.getInstallState();
+      installOfferDisabled = (await api.settingsGet("install_offer_disabled")) === "1";
     } catch { /* non-fatal: the block stays hidden */ }
   });
 
@@ -2437,6 +2481,41 @@
       </button>
       {#if installMsg}
         <p class="hint" style="margin-top:0.4rem">{installMsg}</p>
+      {/if}
+      <fieldset class="check-cards" style="margin-top:0.6rem">
+        <label class:active={installOfferDisabled}>
+          <input
+            type="checkbox"
+            checked={installOfferDisabled}
+            onchange={(e) => setInstallOfferDisabled((e.target as HTMLInputElement).checked)}
+          />
+          <div>
+            <div class="mode-name">Don't offer this at startup</div>
+            <div class="mode-desc">
+              Stops the prompt appearing when ssh-tool is launched from
+              somewhere it is not installed. This section stays here
+              either way.
+            </div>
+          </div>
+        </label>
+      </fieldset>
+    {/if}
+
+    <!-- Removing what an install put in place. Only shown when there is
+         something to remove, so it cannot be confused with uninstalling
+         the app itself - the running binary and your data stay put. -->
+    {#if installState && (installState.kind === "user" || installState.desktop_entry)}
+      <h3 style="margin-top:0.8rem">Remove desktop integration</h3>
+      <p class="hint">
+        Deletes the {menuName} entry and icon, and the copy in
+        <code>{installState.kind === "user" ? installState.exe_path : installState.target_path}</code>.
+        Your connections, credentials and settings are not touched.
+      </p>
+      <button class="btn" onclick={uninstallUserPrefix} disabled={uninstalling}>
+        {uninstalling ? "Removing..." : "Remove"}
+      </button>
+      {#if uninstallMsg}
+        <p class="hint" style="margin-top:0.4rem">{uninstallMsg}</p>
       {/if}
     {/if}
 

@@ -1,5 +1,3 @@
-//go:build !android && !ios
-
 package main
 
 import "strings"

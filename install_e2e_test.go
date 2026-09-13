@@ -8,9 +8,21 @@ import (
 	"testing"
 )
 
+// asReleaseBuild stamps a release version for the duration of a test.
+// installFrom refuses a development build, and `go test` is one - these
+// tests are about the install mechanics, not that guard (which
+// TestInstallFromRefusesDevBuild covers).
+func asReleaseBuild(t *testing.T) {
+	t.Helper()
+	orig := appVersion
+	appVersion = "v0.94.0"
+	t.Cleanup(func() { appVersion = orig })
+}
+
 // The whole point of the offer: a binary in Downloads ends up in
 // ~/.local/bin with a launcher entry and icons, without root.
 func TestInstallToUserPrefixFromLoose(t *testing.T) {
+	asReleaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "")
@@ -89,6 +101,7 @@ func TestInstallToUserPrefixFromLoose(t *testing.T) {
 // A partially-written binary must never replace a working one, so the
 // copy goes through a temp file in the destination directory.
 func TestInstallLeavesNoTempOnSuccess(t *testing.T) {
+	asReleaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "")
@@ -127,6 +140,7 @@ func contains(hay, needle string) bool {
 // launcher opens, so a stale one would send the user back to whatever
 // used to be there.
 func TestInstallReplacesOlderCopy(t *testing.T) {
+	asReleaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "")
@@ -174,5 +188,75 @@ func TestInstallReplacesOlderCopy(t *testing.T) {
 	}
 	if !contains(string(body), "Exec="+installed) {
 		t.Errorf("desktop entry should point at the installed path:\n%s", body)
+	}
+}
+
+// Uninstalling removes what an install put in place and nothing else.
+// The wording in Settings promises user data is untouched, so the test
+// puts a file in the data directory and checks it survives.
+func TestUninstallRemovesOnlyIntegration(t *testing.T) {
+	asReleaseBuild(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", "")
+
+	exe := filepath.Join(home, "dl-ssh-tool")
+	if err := os.WriteFile(exe, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	installed, err := installFrom(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Stand-in for the user's real data.
+	dataDir := filepath.Join(home, ".local", "share", "ssh-tool")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	store := filepath.Join(dataDir, "store.db")
+	if err := os.WriteFile(store, []byte("connections"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	app := &App{}
+	removed, err := app.UninstallUserPrefix()
+	if err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	if !removed {
+		t.Error("something was installed, so something should have been removed")
+	}
+
+	for _, gone := range []string{
+		installed,
+		desktopEntryPath(),
+		filepath.Join(home, ".local/share/icons/hicolor/128x128/apps/org.wails.ssh-tool.png"),
+		filepath.Join(home, ".local/share/icons/hicolor/scalable/apps/org.wails.ssh-tool.svg"),
+	} {
+		if _, err := os.Stat(gone); err == nil {
+			t.Errorf("should have been removed: %s", gone)
+		}
+	}
+
+	if _, err := os.Stat(store); err != nil {
+		t.Error("user data must survive an uninstall")
+	}
+}
+
+// Uninstalling twice, or with nothing installed, is not an error - it
+// reports that there was nothing to do.
+func TestUninstallWithNothingInstalled(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", "")
+
+	app := &App{}
+	removed, err := app.UninstallUserPrefix()
+	if err != nil {
+		t.Fatalf("uninstall on a clean home should not error: %v", err)
+	}
+	if removed {
+		t.Error("nothing was installed, so nothing should be reported as removed")
 	}
 }

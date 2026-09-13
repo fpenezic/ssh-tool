@@ -8,9 +8,19 @@ import (
 	"testing"
 )
 
+// asReleaseBuild stamps a release version for the duration of a test:
+// the install paths refuse a development build, and `go test` is one.
+func asReleaseBuild(t *testing.T) {
+	t.Helper()
+	orig := appVersion
+	appVersion = "v0.94.0"
+	t.Cleanup(func() { appVersion = orig })
+}
+
 // An exe run from Downloads is the case the offer exists for: it works,
 // but there is nothing in the Start Menu to search for or pin.
 func TestGetInstallStateLooseWindows(t *testing.T) {
+	asReleaseBuild(t)
 	base := t.TempDir()
 	t.Setenv("LOCALAPPDATA", filepath.Join(base, "Local"))
 	t.Setenv("APPDATA", filepath.Join(base, "Roaming"))
@@ -44,6 +54,7 @@ func TestGetInstallStateLooseWindows(t *testing.T) {
 // is the same install - comparing them byte-wise would offer to install
 // the app over itself.
 func TestGetInstallStateWindowsIsCaseInsensitive(t *testing.T) {
+	asReleaseBuild(t)
 	base := t.TempDir()
 	t.Setenv("LOCALAPPDATA", filepath.Join(base, "Local"))
 	t.Setenv("APPDATA", filepath.Join(base, "Roaming"))
@@ -67,6 +78,7 @@ func TestGetInstallStateWindowsIsCaseInsensitive(t *testing.T) {
 // sits in the per-user program directory, which is what the Start Menu
 // shortcut points at.
 func TestGetInstallStateWindowsDetectsExistingInstall(t *testing.T) {
+	asReleaseBuild(t)
 	base := t.TempDir()
 	t.Setenv("LOCALAPPDATA", filepath.Join(base, "Local"))
 	t.Setenv("APPDATA", filepath.Join(base, "Roaming"))
@@ -100,6 +112,7 @@ func TestGetInstallStateWindowsDetectsExistingInstall(t *testing.T) {
 // Installing must overwrite the old exe rather than failing on the
 // rename, which is what a plain os.Rename does on Windows.
 func TestInstallFromReplacesOnWindows(t *testing.T) {
+	asReleaseBuild(t)
 	base := t.TempDir()
 	t.Setenv("LOCALAPPDATA", filepath.Join(base, "Local"))
 	t.Setenv("APPDATA", filepath.Join(base, "Roaming"))

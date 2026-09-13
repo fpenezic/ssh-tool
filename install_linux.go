@@ -187,6 +187,60 @@ func isPackagePath(dir string) bool {
 	return false
 }
 
+// UninstallUserPrefix removes what InstallToUserPrefix put in place:
+// the desktop entry, the icons, and the copy in ~/.local/bin.
+//
+// It does NOT touch the database, the vault or any other user data -
+// this removes the desktop integration, not the app's contents. The
+// wording in Settings says so, because "uninstall" invites the other
+// reading.
+//
+// Deleting the binary while it is the one running is fine on Unix: the
+// process holds its inode and keeps working until it exits. The user is
+// told the app is still running from where it was.
+//
+// Returns false when there was nothing to remove.
+func (a *App) UninstallUserPrefix() (bool, error) {
+	dataDir := userDataDir()
+	binDir := userBinDir()
+	if dataDir == "" || binDir == "" {
+		return false, fmt.Errorf("cannot locate your home directory")
+	}
+	iconDir := filepath.Join(dataDir, "icons", "hicolor")
+
+	targets := []string{
+		filepath.Join(binDir, "ssh-tool"),
+		desktopEntryPath(),
+		filepath.Join(iconDir, "128x128", "apps", "org.wails.ssh-tool.png"),
+		filepath.Join(iconDir, "scalable", "apps", "org.wails.ssh-tool.svg"),
+		// Names from before the entry was renamed to match the app-id.
+		filepath.Join(dataDir, "applications", "ssh-tool.desktop"),
+		filepath.Join(iconDir, "128x128", "apps", "ssh-tool.png"),
+		filepath.Join(iconDir, "scalable", "apps", "ssh-tool.svg"),
+	}
+
+	removed := false
+	var firstErr error
+	for _, t := range targets {
+		if t == "" {
+			continue
+		}
+		err := os.Remove(t)
+		switch {
+		case err == nil:
+			removed = true
+		case os.IsNotExist(err):
+			// Nothing there; not a failure.
+		case firstErr == nil:
+			firstErr = fmt.Errorf("remove %s: %w", t, err)
+		}
+	}
+	if removed {
+		refreshDesktopCaches(filepath.Join(dataDir, "applications"), iconDir)
+	}
+	return removed, firstErr
+}
+
 // RelaunchFromInstall restarts the app from the freshly installed copy.
 //
 // Separate from AppRelaunch because the path differs: the running

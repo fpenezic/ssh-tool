@@ -1271,6 +1271,9 @@ export const api = {
   // Restarts from the freshly installed copy rather than the running
   // one, which is still the binary the user downloaded.
   relaunchFromInstall: (path: string) => G.RelaunchFromInstall(path),
+  // Removes the launcher entry, icons and the installed copy. Returns
+  // false when there was nothing to remove. User data is untouched.
+  uninstallUserPrefix: () => G.UninstallUserPrefix() as unknown as Promise<boolean>,
   // [dark, known] - known is false when the platform never reported,
   // in which case prefers-color-scheme stays authoritative.
   osPrefersDark: () => G.OsPrefersDark() as unknown as Promise<[boolean, boolean]>,

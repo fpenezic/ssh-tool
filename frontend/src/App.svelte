@@ -831,6 +831,11 @@
 
   setTimeout(async () => {
     try {
+      // A persisted opt-out, set from Settings > Desktop integration.
+      // In the database rather than localStorage: clearing the webview's
+      // data should not bring a dismissed prompt back, and the setting
+      // belongs next to the other app preferences.
+      if ((await api.settingsGet("install_offer_disabled")) === "1") return;
       const st = await api.getInstallState();
       if (!st.can_offer) return;
       // The once-only flag covers the "add me to your menu" nudge. An
@@ -848,7 +853,7 @@
         ? `Replace the installed copy${st.installed_version ? ` (${st.installed_version})` : ""} with this one? Click to install.`
         : `Add ssh-tool to ${menu}? Click to install.`;
       toast.info(
-        msg,
+        `${msg} (Turn this off in Settings > Appearance.)`,
         0,
         async () => {
           try {

@@ -27,6 +27,10 @@ func (a *App) GetInstallState() InstallState {
 // there, so nothing ever asks for this restart.
 func (a *App) RelaunchFromInstall(path string) error { return nil }
 
+// UninstallUserPrefix is a no-op where there is no desktop integration
+// to remove.
+func (a *App) UninstallUserPrefix() (bool, error) { return false, nil }
+
 // InstallToUserPrefix is a no-op off Linux.
 func (a *App) InstallToUserPrefix() (string, error) {
 	return "", nil
