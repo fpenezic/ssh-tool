@@ -1243,8 +1243,11 @@ export const api = {
     }>,
   // No url / script-path params: the backend downloads and applies
   // only what it derived from its own update check.
-  downloadUpdate: () =>
-    G.DownloadUpdate() as unknown as Promise<{
+  // allowDevReplace: pass true only after the user confirmed that a
+  // development build may be overwritten by a release. The backend
+  // refuses the first call so the prompt cannot be skipped.
+  downloadUpdate: (allowDevReplace = false) =>
+    G.DownloadUpdate(allowDevReplace) as unknown as Promise<{
       staged_path: string;
       size: number;
       sha256: string;

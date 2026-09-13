@@ -6479,6 +6479,13 @@ type UpdateDownloadProgress struct {
 	Total int64 `json:"total"`
 }
 
+// devReplaceErrPrefix marks the one refusal the UI is allowed to turn into
+// a confirmation prompt. The IPC layer flattens errors to strings, so the
+// frontend matches on this prefix rather than on an error type; keeping it
+// as a named constant is what stops the wording and the match drifting
+// apart. Same crude-but-contained trick as ErrPackageManaged in UpdateModal.
+const devReplaceErrPrefix = "dev-build-confirm: "
+
 // DownloadUpdate re-resolves the newest release at download time and streams
 // its asset into a staging slot next to the running binary, verifying its
 // sha256 against the manifest value before any swap. It deliberately takes no
@@ -6490,7 +6497,14 @@ type UpdateDownloadProgress struct {
 // On Unix the swap happens during Download itself (renames are safe over a
 // running binary). On Windows the swap is deferred to an apply script that
 // ApplyUpdate spawns just before the app exits.
-func (a *App) DownloadUpdate() (*updater.DownloadResult, error) {
+//
+// allowDevReplace is the caller's confirmation that a development build may
+// be overwritten by a release. It is false on the first call: the backend
+// refuses with devReplaceErrPrefix, the UI asks, and only a real yes comes
+// back as true. Moving from a dev build onto a release is a legitimate thing
+// to want - it is how you stop testing and go back to a shipped version -
+// but it destroys an unreleased build, so it never happens on one click.
+func (a *App) DownloadUpdate(allowDevReplace bool) (*updater.DownloadResult, error) {
 	rel, err := a.resolveLatestRelease()
 	if err != nil {
 		return nil, fmt.Errorf("re-check for the latest release before downloading: %w", err)
@@ -6498,18 +6512,27 @@ func (a *App) DownloadUpdate() (*updater.DownloadResult, error) {
 	if rel.AssetURL == "" {
 		return nil, fmt.Errorf("no downloadable asset for this platform in release %s", rel.Version)
 	}
-	// A development build has no comparable version, so semverGreater
-	// says false and the check below would report "already on the latest
-	// version (dev)" - technically a refusal, but it reads as a bug.
-	// Say what is actually going on, and refuse for the real reason:
-	// replacing a build from the user's own tree with a release is not
-	// an update, it is losing their build.
-	if isDevBuild() {
-		return nil, fmt.Errorf("this is a development build (%s), not a release - build it again or run a release binary to use in-app updates", appVersion)
+	// A development build CAN move to a release - that is how someone
+	// running their own build gets back onto a shipped version. What it
+	// must not do is happen by accident: replacing a build from the
+	// user's own tree is losing that build. So the refusal is not
+	// absolute, it is a confirmation: the UI asks, then re-calls with
+	// allowDevReplace. A plain "dev" / "unknown" version has no number
+	// to rank, so there is nothing to compare it against either way.
+	dev := isDevBuild()
+	if dev && !allowDevReplace {
+		return nil, fmt.Errorf("%sthis is a development build (%s); installing %s will replace it", devReplaceErrPrefix, appVersion, rel.Version)
 	}
 	// Only download when the resolved release is actually newer than what is
 	// running - guards against a download click racing a just-applied update.
+	// For a dev build the comparison is against the tag it was built from
+	// (parseSemver drops the describe suffix), so v0.94.0-27-g... does see
+	// v0.95.0 as newer while v0.95.0-3-g... does not - correct in both
+	// directions, since the second one is AHEAD of the release.
 	if !semverGreater(rel.Version, appVersion) {
+		if dev {
+			return nil, fmt.Errorf("this development build (%s) is not behind the latest release (%s)", appVersion, rel.Version)
+		}
 		return nil, fmt.Errorf("already on the latest version (%s)", appVersion)
 	}
 	// A download from an earlier run that is still staged and still the

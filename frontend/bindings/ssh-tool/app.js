@@ -978,10 +978,18 @@ export function CredentialsUsage(id) {
  * On Unix the swap happens during Download itself (renames are safe over a
  * running binary). On Windows the swap is deferred to an apply script that
  * ApplyUpdate spawns just before the app exits.
+ * 
+ * allowDevReplace is the caller's confirmation that a development build may
+ * be overwritten by a release. It is false on the first call: the backend
+ * refuses with devReplaceErrPrefix, the UI asks, and only a real yes comes
+ * back as true. Moving from a dev build onto a release is a legitimate thing
+ * to want - it is how you stop testing and go back to a shipped version -
+ * but it destroys an unreleased build, so it never happens on one click.
+ * @param {boolean} allowDevReplace
  * @returns {$CancellablePromise<updater$0.DownloadResult | null>}
  */
-export function DownloadUpdate() {
-    return $Call.ByID(115027584).then(/** @type {($result: any) => any} */(($result) => {
+export function DownloadUpdate(allowDevReplace) {
+    return $Call.ByID(115027584, allowDevReplace).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType49($result);
     }));
 }

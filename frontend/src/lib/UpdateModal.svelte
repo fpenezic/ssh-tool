@@ -83,7 +83,14 @@
       .catch(() => { /* assume not packaged; the download path still guards */ });
   });
 
-  async function startDownload() {
+  // The backend refuses the first download on a development build and
+  // tags the error with this prefix. It is not a failure: it is the
+  // backend asking, because installing a release over a build from the
+  // user's own tree destroys that build. Confirm, then re-call with the
+  // flag set. Kept in sync with devReplaceErrPrefix in app.go.
+  const DEV_CONFIRM_PREFIX = "dev-build-confirm: ";
+
+  async function startDownload(allowDevReplace = false) {
     if (!updateCheck.downloadURL || downloadBusy) return;
     downloadBusy = true;
     downloadErr = "";
@@ -94,17 +101,40 @@
       progRead = p.read;
       progTotal = p.total;
     });
+    // Set when this call hands the work to a confirmed retry: the retry
+    // owns the busy flag from then on, so our finally must not clear it
+    // out from under the download that is now running.
+    let handedOff = false;
     try {
-      staged = await api.downloadUpdate();
+      staged = await api.downloadUpdate(allowDevReplace);
     } catch (e: any) {
+      const raw = String(e?.message ?? e ?? "");
+      if (!allowDevReplace && raw.includes(DEV_CONFIRM_PREFIX)) {
+        // Ask before replacing the user's own build. Release the
+        // progress listener and the busy flag first: showConfirm awaits
+        // the user, and leaving the button spinning through that read as
+        // a hang.
+        handedOff = true;
+        unProg();
+        downloadBusy = false;
+        const ok = await showConfirm({
+          title: "Replace this development build?",
+          message: `You are running ${updateCheck.current}, a build from your own tree. Installing ${updateCheck.latest} will overwrite it, and it cannot be recovered from here - you would have to build it again. Continue?`,
+          okLabel: "Install release",
+        });
+        if (ok) await startDownload(true);
+        return;
+      }
       downloadErr = humanError(e);
       // Matches ErrPackageManaged from internal/updater. Checking the
       // text is crude, but the IPC layer flattens errors to strings and
       // this only changes how the message is framed.
       pkgManaged = /installed from a system package/i.test(downloadErr);
     } finally {
-      unProg();
-      downloadBusy = false;
+      if (!handedOff) {
+        unProg();
+        downloadBusy = false;
+      }
     }
   }
 
@@ -249,7 +279,7 @@
     {:else if !staged}
       <button
         class="primary"
-        onclick={startDownload}
+        onclick={() => startDownload()}
         disabled={!updateCheck.downloadURL || downloadBusy}
       >
         {downloadBusy
