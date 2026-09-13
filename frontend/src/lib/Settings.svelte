@@ -1377,8 +1377,12 @@
     }
   }
 
-  onMount(() => { refreshURLSchemeStatus(); refreshExplorerMenuStatus(); });
+  // Everything the Desktop integration section shows. Queried on mount
+  // rather than when the section opens: the calls are cheap, and the
+  // command palette can jump straight into the section.
   onMount(async () => {
+    refreshURLSchemeStatus();
+    refreshExplorerMenuStatus();
     try {
       installState = await api.getInstallState();
       installOfferDisabled = (await api.settingsGet("install_offer_disabled")) === "1";
@@ -2350,7 +2354,10 @@
 
   // Sections that are desktop-only and hidden on mobile (the backend
   // features they configure are excluded on android).
-  const MOBILE_HIDDEN_SECTIONS = new Set(["browser", "llm"]);
+  // "desktop" holds the install offer, the file-manager context menu and
+  // the URL-scheme handler - all desktop-only, so on Android the section
+  // would render a heading and nothing else.
+  const MOBILE_HIDDEN_SECTIONS = new Set(["browser", "llm", "desktop"]);
 
   // Group sections by their group label for the side nav.
   const sectionsByGroup = $derived.by(() => {
@@ -2463,77 +2470,6 @@
         </label>
       {/each}
     </fieldset>
-
-    <!-- Linux only, and only while there is something to do: a binary
-         run from wherever it was downloaded works, but has no menu entry
-         and no icon. The startup toast offers this once; this is where
-         it lives permanently, for anyone who dismissed it. -->
-    {#if installState?.can_offer}
-      <h3 style="margin-top:0.8rem">Desktop integration</h3>
-      {#if installState.replaces}
-        <p class="hint">
-          This copy is running from <code>{installState.exe_path}</code>,
-          but {menuName} opens
-          <code>{installState.target_path}</code>{installState.installed_version
-            ? ` (${installState.installed_version})`
-            : ""}. Until you replace it, launching ssh-tool from
-          {menuName} keeps starting the other one.
-        </p>
-      {:else}
-        <p class="hint">
-          ssh-tool is running from <code>{installState.exe_path}</code>, so
-          it has no entry in {menuName}. Installing copies it to
-          <code>{installState.target_path}</code> and creates the shortcut.
-          No administrator rights, and it stays updatable from inside the
-          app.
-        </p>
-      {/if}
-      <button class="btn" onclick={installToUserPrefix} disabled={installing}>
-        {installing
-          ? "Installing..."
-          : installState.replaces
-            ? "Replace the installed copy"
-            : `Add to ${menuName}`}
-      </button>
-      {#if installMsg}
-        <p class="hint" style="margin-top:0.4rem">{installMsg}</p>
-      {/if}
-      <fieldset class="check-cards" style="margin-top:0.6rem">
-        <label class:active={installOfferDisabled}>
-          <input
-            type="checkbox"
-            checked={installOfferDisabled}
-            onchange={(e) => setInstallOfferDisabled((e.target as HTMLInputElement).checked)}
-          />
-          <div>
-            <div class="mode-name">Don't offer this at startup</div>
-            <div class="mode-desc">
-              Stops the prompt appearing when ssh-tool is launched from
-              somewhere it is not installed. This section stays here
-              either way.
-            </div>
-          </div>
-        </label>
-      </fieldset>
-    {/if}
-
-    <!-- Removing what an install put in place. Only shown when there is
-         something to remove, so it cannot be confused with uninstalling
-         the app itself - the running binary and your data stay put. -->
-    {#if installState && (installState.kind === "user" || installState.replaces || installState.desktop_entry)}
-      <h3 style="margin-top:0.8rem">Remove desktop integration</h3>
-      <p class="hint">
-        Deletes the {menuName} entry and icon, and the copy in
-        <code>{installState.kind === "user" ? installState.exe_path : installState.target_path}</code>.
-        Your connections, credentials and settings are not touched.
-      </p>
-      <button class="btn" onclick={uninstallUserPrefix} disabled={uninstalling}>
-        {uninstalling ? "Removing..." : "Remove"}
-      </button>
-      {#if uninstallMsg}
-        <p class="hint" style="margin-top:0.4rem">{uninstallMsg}</p>
-      {/if}
-    {/if}
 
     {#if !isMobile}
     <h3 style="margin-top:0.8rem">Density</h3>
@@ -2694,31 +2630,11 @@
       {/each}
     </fieldset>
 
-    {#if !isMobile && !settingsIsMac}
-      <h2 style="margin-top: 1.5rem;">File manager integration</h2>
-      <p class="hint">
-        Adds <strong>Open in ssh-tool</strong> to the right-click menu
-        on directories (Windows Explorer; Dolphin and the Nautilus
-        Scripts menu on Linux). Picking it opens the default local
-        shell above as a tab, already in that directory. Per-user
-        registration, no admin rights.
-      </p>
-      <div class="scheme-row">
-        <span class="lbl">Context menu</span>
-        {#if explorerMenuStatus}
-          <span class="status-ok">installed</span>
-          <code class="status-detail mono">{explorerMenuStatus}</code>
-        {:else}
-          <span class="status-warn">not installed</span>
-        {/if}
-        <button class="picker-btn" disabled={explorerMenuBusy} onclick={toggleExplorerMenu}>
-          {explorerMenuBusy ? "Working…" : explorerMenuStatus ? "Remove" : "Add to menu"}
-        </button>
-      </div>
-      {#if explorerMenuMsg}
-        <p class="hint">{explorerMenuMsg}</p>
-      {/if}
-    {/if}
+    <p class="hint" style="margin-top: 1.5rem;">
+      The right-click <strong>Open in ssh-tool</strong> menu moved to
+      <strong>Desktop integration</strong>, with the rest of the
+      desktop hooks.
+    </p>
 
     <h2 style="margin-top: 1.5rem;">External terminal</h2>
     <p class="hint">
@@ -5120,29 +5036,6 @@
       dry-run first to see what will land.
     </p>
 
-    {#if !isMobile}
-      <!-- The ssh-tool:// handler binds "Open in ssh-tool" links to this app
-           (registry / .desktop / Launch Services). The control is desktop-only
-           because there's nothing to register at runtime on Android - the
-           scheme is declared in the manifest and bound at install time (the
-           handler IS wired there: MainActivity -> deep_link_import). Pulling an
-           archive from a URL below works regardless. -->
-      <div class="scheme-row">
-        <span class="lbl">ssh-tool:// handler</span>
-        {#if urlSchemeStatus}
-          <span class="status-ok">registered</span>
-          <code class="status-detail mono">{urlSchemeStatus}</code>
-        {:else}
-          <span class="status-warn">not registered - "Open in ssh-tool" buttons won't launch this app</span>
-        {/if}
-        <button class="picker-btn" disabled={urlSchemeBusy} onclick={registerURLScheme}>
-          {urlSchemeBusy ? "Working…" : urlSchemeStatus ? "Re-register" : "Register handler"}
-        </button>
-      </div>
-      {#if urlSchemeMsg}
-        <p class="hint">{urlSchemeMsg}</p>
-      {/if}
-    {/if}
 
     <div class="url-fetch">
       <input
@@ -5662,6 +5555,142 @@
         </label>
       </fieldset>
     {/if}
+
+  {:else if activeSection === "desktop"}
+    <h2>Desktop integration</h2>
+    <p class="hint">
+      How ssh-tool hooks into the rest of the desktop: where it lives,
+      what launches it, and which links and menus open it. All of it is
+      per-user - nothing here needs administrator rights.
+    </p>
+
+    <!-- Linux only, and only while there is something to do: a binary
+         run from wherever it was downloaded works, but has no menu entry
+         and no icon. The startup toast offers this once; this is where
+         it lives permanently, for anyone who dismissed it. -->
+    {#if installState?.can_offer}
+      <h3 style="margin-top:0.8rem">Desktop integration</h3>
+      {#if installState.replaces}
+        <p class="hint">
+          This copy is running from <code>{installState.exe_path}</code>,
+          but {menuName} opens
+          <code>{installState.target_path}</code>{installState.installed_version
+            ? ` (${installState.installed_version})`
+            : ""}. Until you replace it, launching ssh-tool from
+          {menuName} keeps starting the other one.
+        </p>
+      {:else}
+        <p class="hint">
+          ssh-tool is running from <code>{installState.exe_path}</code>, so
+          it has no entry in {menuName}. Installing copies it to
+          <code>{installState.target_path}</code> and creates the shortcut.
+          No administrator rights, and it stays updatable from inside the
+          app.
+        </p>
+      {/if}
+      <button class="btn" onclick={installToUserPrefix} disabled={installing}>
+        {installing
+          ? "Installing..."
+          : installState.replaces
+            ? "Replace the installed copy"
+            : `Add to ${menuName}`}
+      </button>
+      {#if installMsg}
+        <p class="hint" style="margin-top:0.4rem">{installMsg}</p>
+      {/if}
+      <fieldset class="check-cards" style="margin-top:0.6rem">
+        <label class:active={installOfferDisabled}>
+          <input
+            type="checkbox"
+            checked={installOfferDisabled}
+            onchange={(e) => setInstallOfferDisabled((e.target as HTMLInputElement).checked)}
+          />
+          <div>
+            <div class="mode-name">Don't offer this at startup</div>
+            <div class="mode-desc">
+              Stops the prompt appearing when ssh-tool is launched from
+              somewhere it is not installed. This section stays here
+              either way.
+            </div>
+          </div>
+        </label>
+      </fieldset>
+    {/if}
+
+    <!-- Removing what an install put in place. Only shown when there is
+         something to remove, so it cannot be confused with uninstalling
+         the app itself - the running binary and your data stay put. -->
+    {#if installState && (installState.kind === "user" || installState.replaces || installState.desktop_entry)}
+      <h3 style="margin-top:0.8rem">Remove desktop integration</h3>
+      <p class="hint">
+        Deletes the {menuName} entry and icon, and the copy in
+        <code>{installState.kind === "user" ? installState.exe_path : installState.target_path}</code>.
+        Your connections, credentials and settings are not touched.
+      </p>
+      <button class="btn" onclick={uninstallUserPrefix} disabled={uninstalling}>
+        {uninstalling ? "Removing..." : "Remove"}
+      </button>
+      {#if uninstallMsg}
+        <p class="hint" style="margin-top:0.4rem">{uninstallMsg}</p>
+      {/if}
+    {/if}
+
+    <h2 style="margin-top: 1.5rem;">File manager</h2>
+    {#if !isMobile && !settingsIsMac}
+      <h2 style="margin-top: 1.5rem;">File manager integration</h2>
+      <p class="hint">
+        Adds <strong>Open in ssh-tool</strong> to the right-click menu
+        on directories (Windows Explorer; Dolphin and the Nautilus
+        Scripts menu on Linux). Picking it opens the default local
+        shell above as a tab, already in that directory. Per-user
+        registration, no admin rights.
+      </p>
+      <div class="scheme-row">
+        <span class="lbl">Context menu</span>
+        {#if explorerMenuStatus}
+          <span class="status-ok">installed</span>
+          <code class="status-detail mono">{explorerMenuStatus}</code>
+        {:else}
+          <span class="status-warn">not installed</span>
+        {/if}
+        <button class="picker-btn" disabled={explorerMenuBusy} onclick={toggleExplorerMenu}>
+          {explorerMenuBusy ? "Working…" : explorerMenuStatus ? "Remove" : "Add to menu"}
+        </button>
+      </div>
+      {#if explorerMenuMsg}
+        <p class="hint">{explorerMenuMsg}</p>
+      {/if}
+    {/if}
+
+    <h2 style="margin-top: 1.5rem;">Links</h2>
+    <p class="hint">
+      Binds <code>ssh-tool://</code> links to this app, so "Open in
+      ssh-tool" buttons on a web page or in another tool launch it here.
+    </p>
+    {#if !isMobile}
+      <!-- The ssh-tool:// handler binds "Open in ssh-tool" links to this app
+           (registry / .desktop / Launch Services). The control is desktop-only
+           because there's nothing to register at runtime on Android - the
+           scheme is declared in the manifest and bound at install time (the
+           handler IS wired there: MainActivity -> deep_link_import). Pulling an
+           archive from a URL below works regardless. -->
+      <div class="scheme-row">
+        <span class="lbl">ssh-tool:// handler</span>
+        {#if urlSchemeStatus}
+          <span class="status-ok">registered</span>
+          <code class="status-detail mono">{urlSchemeStatus}</code>
+        {:else}
+          <span class="status-warn">not registered - "Open in ssh-tool" buttons won't launch this app</span>
+        {/if}
+        <button class="picker-btn" disabled={urlSchemeBusy} onclick={registerURLScheme}>
+          {urlSchemeBusy ? "Working…" : urlSchemeStatus ? "Re-register" : "Register handler"}
+        </button>
+      </div>
+      {#if urlSchemeMsg}
+        <p class="hint">{urlSchemeMsg}</p>
+      {/if}
+    {/if}
+
 
   {:else if activeSection === "logs"}
   <div class="group">
