@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestIsDevBuild(t *testing.T) {
 	orig := appVersion
@@ -46,11 +49,45 @@ func TestDevBuildIsNeverOffered(t *testing.T) {
 	t.Setenv("APPDATA", home+"/Roaming")
 
 	st := installStateFor(home + "/src/ssh-tool/bin/ssh-tool")
-	if st.Kind != "dev" {
-		t.Errorf("Kind = %q, want dev", st.Kind)
-	}
 	if st.CanOffer {
 		t.Error("a development build must never offer to install itself")
+	}
+	// The state itself stays truthful. Reporting a fake kind here hid
+	// the uninstall option in Settings whenever a dev build was running,
+	// even though there was a real install to remove.
+	if st.Kind != "loose" {
+		t.Errorf("Kind = %q, want the real location (loose)", st.Kind)
+	}
+	if st.ExePath == "" {
+		t.Error("ExePath should still be reported for a dev build")
+	}
+}
+
+// A dev build running while a real install exists must still see that
+// install - Settings needs it to offer the uninstall.
+func TestDevBuildStillSeesAnExistingInstall(t *testing.T) {
+	orig := appVersion
+	t.Cleanup(func() { appVersion = orig })
+	appVersion = "v0.94.0-14-g76da8ca-dirty"
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", "")
+
+	binDir := home + "/.local/bin"
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(binDir+"/ssh-tool", []byte("installed"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	st := installStateFor(home + "/src/bin/ssh-tool")
+	if !st.Replaces {
+		t.Error("the existing install should be reported even from a dev build")
+	}
+	if st.CanOffer {
+		t.Error("but installing it is still refused")
 	}
 }
 

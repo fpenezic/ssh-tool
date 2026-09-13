@@ -107,18 +107,11 @@ func (a *App) GetInstallState() InstallState {
 func installStateFor(exePath string) InstallState {
 	st := InstallState{Kind: "loose"}
 
-	// A development build never offers to install itself. It would
-	// otherwise offer to replace the user's working copy with a build
-	// from their own tree, which is one mis-click away from losing the
-	// version they actually use.
-	if isDevBuild() {
-		st.Kind = "dev"
-		if resolved, err := filepath.EvalSymlinks(exePath); err == nil {
-			exePath = resolved
-		}
-		st.ExePath = exePath
-		return st
-	}
+	// A development build reports where it is and what is installed, but
+	// never offers to install itself (CanOffer below) - that would offer
+	// to replace the user's working copy with a build from their own
+	// tree. It must still report an existing install, or running a dev
+	// build would hide the uninstall option for the copy they DO have.
 
 	if resolved, err := filepath.EvalSymlinks(exePath); err == nil {
 		exePath = resolved
@@ -142,7 +135,7 @@ func installStateFor(exePath string) InstallState {
 		st.Kind = "user"
 		// Already in the right place; the only thing that could still
 		// be missing is the desktop entry, which is worth offering.
-		st.CanOffer = !st.DesktopEntry
+		st.CanOffer = !st.DesktopEntry && !isDevBuild()
 		st.TargetPath = exePath
 		return st
 	}
@@ -152,7 +145,7 @@ func installStateFor(exePath string) InstallState {
 		return st
 	}
 	st.TargetPath = filepath.Join(binDir, "ssh-tool")
-	st.CanOffer = true
+	st.CanOffer = !isDevBuild()
 
 	// Is something already installed there? If so this is an upgrade,
 	// not a first install - the launcher entry exists and points at the

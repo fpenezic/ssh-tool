@@ -1257,9 +1257,7 @@ export const api = {
   // and can_offer false, so callers need no platform check.
   getInstallState: () =>
     G.GetInstallState() as unknown as Promise<{
-      // "dev" is a build from the source tree: never offered, and the
-      // in-app updater refuses it too.
-      kind: "package" | "user" | "loose" | "native" | "dev";
+      kind: "package" | "user" | "loose" | "native";
       exe_path: string;
       target_path: string;
       can_offer: boolean;

@@ -2504,7 +2504,7 @@
     <!-- Removing what an install put in place. Only shown when there is
          something to remove, so it cannot be confused with uninstalling
          the app itself - the running binary and your data stay put. -->
-    {#if installState && (installState.kind === "user" || installState.desktop_entry)}
+    {#if installState && (installState.kind === "user" || installState.replaces || installState.desktop_entry)}
       <h3 style="margin-top:0.8rem">Remove desktop integration</h3>
       <p class="hint">
         Deletes the {menuName} entry and icon, and the copy in
