@@ -7,6 +7,41 @@ a prerelease upstream.
 
 ---
 
+## [0.96.0] - Windows Defender, and a way back from a dev build
+
+### Fixed
+
+- **Windows Defender no longer removes the download.** Defender's cloud
+  model classified the v0.95.0 Windows binary as
+  `Trojan:Win32/Sabsik.FL.A!ml` and deleted it on arrival. Nothing in the
+  binary was ever malicious - that verdict comes from a machine-learning
+  classifier, and the pattern it matched was how v0.95.0 created its
+  Start Menu shortcut: it ran `powershell.exe` with
+  `-ExecutionPolicy Bypass` against a script dropped into `%TEMP%`, which
+  used `WScript.Shell` to write a `.lnk` into the Start Menu, with the
+  console window hidden. Each of those is ordinary installer behaviour,
+  but together, inside one unsigned executable, they are also the
+  textbook description of malware installing itself. The shortcut is now
+  created by calling the Windows shell directly (`IShellLink`), which is
+  what the PowerShell wrapper was doing underneath anyway - no script, no
+  temp file, no spawned process.
+
+  Worth knowing if you hit this on v0.95.0: the file only tripped the
+  check when it arrived from the internet, so a copy that was already on
+  disk kept working, which made it look intermittent. If Defender removed
+  yours, download again on this version.
+
+- **A development build can update to a release again.** Running a build
+  from the source tree, the update check would offer the new version and
+  then refuse the download outright: "this is a development build, not a
+  release". The refusal was protecting something real, since installing a
+  release over your own build destroys it, but it left no way forward
+  inside the app. It is now a confirmation rather than a wall - it says
+  what will be overwritten, and proceeds if you agree. Only relevant if
+  you build ssh-tool yourself.
+
+---
+
 ## [0.95.0] - It installs itself now, and notices when it has moved
 
 ### Added
