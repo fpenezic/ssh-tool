@@ -108,10 +108,11 @@ func installStateFor(exePath string) InstallState {
 	st := InstallState{Kind: "loose"}
 
 	// A development build reports where it is and what is installed, but
-	// never offers to install itself (CanOffer below) - that would offer
-	// to replace the user's working copy with a build from their own
-	// tree. It must still report an existing install, or running a dev
-	// build would hide the uninstall option for the copy they DO have.
+	// never offers to REPLACE an existing install: copying a build from
+	// the author's own tree over the copy they use daily is one mis-click
+	// from losing it. Installing when nothing is there is harmless and
+	// stays available - refusing it outright left a dev build with no way
+	// to re-create an entry it had just removed.
 
 	if resolved, err := filepath.EvalSymlinks(exePath); err == nil {
 		exePath = resolved
@@ -135,7 +136,7 @@ func installStateFor(exePath string) InstallState {
 		st.Kind = "user"
 		// Already in the right place; the only thing that could still
 		// be missing is the desktop entry, which is worth offering.
-		st.CanOffer = !st.DesktopEntry && !isDevBuild()
+		st.CanOffer = !st.DesktopEntry
 		st.TargetPath = exePath
 		return st
 	}
@@ -145,7 +146,7 @@ func installStateFor(exePath string) InstallState {
 		return st
 	}
 	st.TargetPath = filepath.Join(binDir, "ssh-tool")
-	st.CanOffer = !isDevBuild()
+	st.CanOffer = true
 
 	// Is something already installed there? If so this is an upgrade,
 	// not a first install - the launcher entry exists and points at the
@@ -154,6 +155,11 @@ func installStateFor(exePath string) InstallState {
 	if fi, err := os.Stat(st.TargetPath); err == nil && !fi.IsDir() {
 		st.Replaces = true
 		st.InstalledVersion = binaryVersion(st.TargetPath)
+		// Overwriting an install with a dev build is the case worth
+		// refusing; creating one that does not exist is not.
+		if isDevBuild() {
+			st.CanOffer = false
+		}
 	}
 	return st
 }
@@ -274,9 +280,6 @@ func installFrom(exePath string) (string, error) {
 	// Defence in depth: the offer is hidden for a dev build, but a stale
 	// frontend could still call this, and installing a half-finished
 	// build over the user's working copy is not recoverable from the UI.
-	if st.Kind == "dev" {
-		return "", fmt.Errorf("this is a development build (%s); install a release instead", appVersion)
-	}
 	if st.Kind == "package" {
 		return "", fmt.Errorf("this build was installed by your package manager; nothing to do")
 	}

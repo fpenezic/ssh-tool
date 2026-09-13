@@ -70,10 +70,11 @@ func installStateFor(exePath string) InstallState {
 	st := InstallState{Kind: "loose"}
 
 	// A development build reports where it is and what is installed, but
-	// never offers to install itself (CanOffer below) - that would offer
-	// to replace the user's working copy with a build from their own
-	// tree. It must still report an existing install, or running a dev
-	// build would hide the uninstall option for the copy they DO have.
+	// never offers to REPLACE an existing install: copying a build from
+	// the author's own tree over the copy they use daily is one mis-click
+	// from losing it. Installing when nothing is there is harmless and
+	// stays available - refusing it outright left a dev build with no way
+	// to re-create an entry it had just removed.
 	if resolved, err := filepath.EvalSymlinks(exePath); err == nil {
 		exePath = resolved
 	}
@@ -96,15 +97,19 @@ func installStateFor(exePath string) InstallState {
 	if strings.EqualFold(filepath.Clean(exePath), filepath.Clean(target)) {
 		st.Kind = "user"
 		st.TargetPath = exePath
-		st.CanOffer = !st.DesktopEntry && !isDevBuild()
+		st.CanOffer = !st.DesktopEntry
 		return st
 	}
 
 	st.TargetPath = target
-	st.CanOffer = !isDevBuild()
+	st.CanOffer = true
 	if fi, err := os.Stat(target); err == nil && !fi.IsDir() {
 		st.Replaces = true
 		st.InstalledVersion = binaryVersion(target)
+		// See the Linux twin: refuse to overwrite, not to create.
+		if isDevBuild() {
+			st.CanOffer = false
+		}
 	}
 	return st
 }
@@ -127,10 +132,9 @@ func (a *App) InstallToUserPrefix() (string, error) {
 }
 
 func installFrom(exePath string) (string, error) {
-	// See the Linux twin: a development build must not replace the
-	// user's working copy, and the UI check alone is not enough.
-	if isDevBuild() {
-		return "", fmt.Errorf("this is a development build (%s); install a release instead", appVersion)
+	// See the Linux twin: refuse only the replace, not a first install.
+	if st := installStateFor(exePath); st.Replaces && isDevBuild() {
+		return "", fmt.Errorf("this is a development build (%s); it will not replace the installed copy", appVersion)
 	}
 	progDir := userProgramDir()
 	if progDir == "" {

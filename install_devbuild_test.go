@@ -34,10 +34,11 @@ func TestIsDevBuild(t *testing.T) {
 	}
 }
 
-// Running ./bin/ssh-tool from the source tree is a daily habit, and the
-// install offer must stay out of the way: offering to copy a dev build
-// over the user's working install is one mis-click from losing it.
-func TestDevBuildIsNeverOffered(t *testing.T) {
+// Running ./bin/ssh-tool from the source tree is a daily habit. The
+// offer must not copy a dev build over the working install - but with
+// nothing installed there is nothing to lose, and refusing there left
+// the author unable to re-create an entry they had just removed.
+func TestDevBuildMayCreateButNotReplace(t *testing.T) {
 	orig := appVersion
 	t.Cleanup(func() { appVersion = orig })
 	appVersion = "v0.94.0-14-g76da8ca-dirty"
@@ -49,8 +50,11 @@ func TestDevBuildIsNeverOffered(t *testing.T) {
 	t.Setenv("APPDATA", home+"/Roaming")
 
 	st := installStateFor(home + "/src/ssh-tool/bin/ssh-tool")
-	if st.CanOffer {
-		t.Error("a development build must never offer to install itself")
+	// With nothing installed there is nothing to lose, so the offer
+	// stands: refusing it left a dev build unable to re-create an entry
+	// it had just removed.
+	if !st.CanOffer {
+		t.Error("with nothing installed, even a dev build may create the entry")
 	}
 	// The state itself stays truthful. Reporting a fake kind here hid
 	// the uninstall option in Settings whenever a dev build was running,
@@ -94,7 +98,9 @@ func TestDevBuildStillSeesAnExistingInstall(t *testing.T) {
 // The UI check is not the only guard: a stale frontend, or a call from
 // somewhere else, must not be able to overwrite a real install with a
 // build from the source tree.
-func TestInstallFromRefusesDevBuild(t *testing.T) {
+// A dev build must not overwrite a real install, even if the UI somehow
+// asks it to.
+func TestInstallFromRefusesDevBuildReplace(t *testing.T) {
 	orig := appVersion
 	t.Cleanup(func() { appVersion = orig })
 	appVersion = "dev"
@@ -105,7 +111,20 @@ func TestInstallFromRefusesDevBuild(t *testing.T) {
 	t.Setenv("LOCALAPPDATA", home+"/Local")
 	t.Setenv("APPDATA", home+"/Roaming")
 
-	if _, err := installFrom(home + "/bin/ssh-tool"); err == nil {
-		t.Fatal("installing a development build should be refused")
+	binDir := home + "/.local/bin"
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(binDir+"/ssh-tool", []byte("the copy in use"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := installFrom(home + "/src/bin/ssh-tool"); err == nil {
+		t.Fatal("a dev build must not replace an existing install")
+	}
+	// And the existing copy is untouched.
+	data, err := os.ReadFile(binDir + "/ssh-tool")
+	if err != nil || string(data) != "the copy in use" {
+		t.Error("the installed copy should be exactly as it was")
 	}
 }
