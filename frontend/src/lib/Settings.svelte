@@ -234,10 +234,26 @@
     installMsg = "";
     try {
       const path = await api.installToUserPrefix();
-      installMsg = `Installed to ${path}. Restart to run the installed copy.`;
+      installMsg = `Installed to ${path}.`;
       // Re-read: after a successful install there is nothing left to
       // offer, and the block should disappear on its own.
       installState = await api.getInstallState();
+
+      // Same as the startup offer: the running process is still the
+      // binary that was launched, so until it restarts the window is
+      // bound to a path with no desktop entry. Telling the user to
+      // restart and leaving them to do it is the worse half of the job.
+      const restart = await showConfirm({
+        title: "Restart now?",
+        message:
+          `Installed to ${path}. ssh-tool is still running the copy you launched; ` +
+          "restarting switches to the installed one.",
+        okLabel: "Restart",
+        cancelLabel: "Later",
+      });
+      if (restart) {
+        await api.relaunchFromInstall(path);
+      }
     } catch (e: any) {
       installMsg = errMsg(e);
     } finally {

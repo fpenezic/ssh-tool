@@ -25,7 +25,7 @@
   import SnippetPalette from "./lib/SnippetPalette.svelte";
   import ToastHost from "./lib/ToastHost.svelte";
   import { toast } from "./lib/toast.svelte.ts";
-  import { showConfirm } from "./lib/confirmModal.svelte.ts";
+  import { showConfirm, showConfirmWithCheckbox } from "./lib/confirmModal.svelte.ts";
   import type { PaletteAction } from "./lib/QuickPalette.svelte";
   import { SETTINGS_SECTIONS, EXTERNAL_TABS } from "./lib/settingsSections";
   import { localShellPrefs, type LocalShellKind } from "./lib/localShellPrefs.svelte.ts";
@@ -829,61 +829,86 @@
     );
   });
 
+  // Offer to finish the install when the binary was just downloaded and
+  // run in place. That works, but there is no menu entry and no icon,
+  // which is what makes the app look half-installed. Installing copies
+  // it to a per-user location and registers the launcher entry - no
+  // root or admin, and the binary stays user-owned so the in-app updater
+  // keeps working.
+  //
+  // A modal rather than a toast: this decides where the app lives from
+  // now on, and a toast in the corner is easy to miss and easy to
+  // dismiss by accident. The modal carries its own opt-out, so saying
+  // "not now, and stop asking" takes one click instead of a trip to
+  // Settings.
+  //
+  // 8 s so it lands after the update check rather than competing with it.
   setTimeout(async () => {
     try {
-      // A persisted opt-out, set from Settings > Desktop integration.
-      // In the database rather than localStorage: clearing the webview's
-      // data should not bring a dismissed prompt back, and the setting
-      // belongs next to the other app preferences.
+      // Persisted opt-out, shared with the Settings toggle. In the
+      // database rather than localStorage: clearing the webview's data
+      // should not bring a dismissed prompt back.
       if ((await api.settingsGet("install_offer_disabled")) === "1") return;
       const st = await api.getInstallState();
       if (!st.can_offer) return;
-      // The once-only flag covers the "add me to your menu" nudge. An
-      // upgrade is a different question and gets asked again: the user
-      // just launched a build that will not be what the launcher opens.
-      if (!st.replaces && localStorage.getItem("install-offer-shown") === "1") return;
-      // Replacing an existing install is a different question from
-      // adding a menu entry, and the upgrade case is the one where
-      // saying nothing hurts most: the launcher still points at the old
-      // binary, so clicking the icon tomorrow quietly goes back to it.
+
       const menu = navigator.userAgent.includes("Windows")
         ? "the Start Menu"
         : "your applications menu";
-      const msg = st.replaces
-        ? `Replace the installed copy${st.installed_version ? ` (${st.installed_version})` : ""} with this one? Click to install.`
-        : `Add ssh-tool to ${menu}? Click to install.`;
-      toast.info(
-        `${msg} (Turn this off in Settings > Appearance.)`,
-        0,
-        async () => {
-          try {
-            const path = await api.installToUserPrefix();
-            // The running process is still the downloaded binary, so
-            // the window stays bound to a path with no desktop entry
-            // until it restarts - the icon would still look wrong.
-            // Offer the restart rather than leaving it half-applied.
-            toast.info(
-              `Installed to ${path}. Click to restart from there.`,
-              0,
-              () => {
-                api.relaunchFromInstall(path).catch((e: any) =>
-                  toast.err(humanError(e), 6000),
-                );
-              },
-            );
-          } catch (e: any) {
-            toast.err(humanError(e), 6000);
-          }
-        },
+      // Replacing an existing install is a different question from
+      // adding an entry, and the upgrade case is where saying nothing
+      // costs most: the launcher still opens the old binary, so
+      // clicking the icon tomorrow quietly goes back to it.
+      const { ok, checked } = await showConfirmWithCheckbox(
+        st.replaces
+          ? {
+              title: "Replace the installed copy?",
+              message:
+                `${menu} opens ${st.target_path}` +
+                (st.installed_version ? ` (${st.installed_version})` : "") +
+                `, but you are running ${st.exe_path}. ` +
+                "Replacing it means the shortcut starts this version from now on.",
+              okLabel: "Replace",
+              checkboxLabel: "Don't ask again",
+            }
+          : {
+              title: `Add ssh-tool to ${menu}?`,
+              message:
+                `ssh-tool is running from ${st.exe_path}, so it has no entry in ${menu}. ` +
+                `Installing copies it to ${st.target_path} and creates the shortcut. ` +
+                "No administrator rights, and updates keep working from inside the app.",
+              okLabel: "Install",
+              checkboxLabel: "Don't ask again",
+            },
       );
-      // Remember that the offer was made, not that it was refused: the
-      // toast is sticky and has no "no" button, so there is no moment
-      // that means "declined". Recording it here keeps the offer to one
-      // appearance either way, and an install makes the question moot
-      // anyway (the state becomes "user", which never offers).
-      localStorage.setItem("install-offer-shown", "1");
-    } catch {
-      // Never block startup on this.
+
+      // The checkbox is honoured either way: ticking it on the way to
+      // "no" is the whole point, and ticking it while accepting means
+      // "do it, and do not raise this again".
+      if (checked) {
+        api.settingsSet("install_offer_disabled", "1").catch(console.warn);
+      }
+      if (!ok) return;
+
+      const path = await api.installToUserPrefix();
+      // The running process is still the binary that was launched, so
+      // the window stays bound to a path with no desktop entry until it
+      // restarts - the icon would still look wrong.
+      const restart = await showConfirm({
+        title: "Restart now?",
+        message:
+          `Installed to ${path}. ssh-tool is still running the copy you launched; ` +
+          "restarting switches to the installed one.",
+        okLabel: "Restart",
+        cancelLabel: "Later",
+      });
+      if (restart) {
+        api.relaunchFromInstall(path).catch((e: any) => toast.err(humanError(e), 6000));
+      }
+    } catch (e: any) {
+      // Never block startup on this, but do not swallow a failed
+      // install either - the user just asked for it.
+      if (e) toast.err(humanError(e), 6000);
     }
   }, 8000);
   // Subscribe to the backend-owned broadcast set so every window's
