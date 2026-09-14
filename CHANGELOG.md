@@ -24,7 +24,7 @@ a prerelease upstream.
 
 - **Emoji stop pushing everything one column to the right.** Table
   borders walked sideways and the character after an emoji was eaten
-  ("bug otvoren" arriving as "bug ot voren"). The terminal measured
+  ("bug open" arriving as "bug op en"). The terminal measured
   characters with Unicode 6 widths from 2010, while the programs drawing
   those tables measure them the modern way; each emoji cost a column.
   CJK and Cyrillic were never affected, which made the damage look
