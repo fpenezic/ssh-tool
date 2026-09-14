@@ -29,6 +29,7 @@
   import type { PaletteAction } from "./lib/QuickPalette.svelte";
   import { SETTINGS_SECTIONS, EXTERNAL_TABS } from "./lib/settingsSections";
   import { localShellPrefs, type LocalShellKind } from "./lib/localShellPrefs.svelte.ts";
+  import { newTabActions } from "./lib/newTabActions.svelte.ts";
   import HostKeyModal from "./lib/HostKeyModal.svelte";
   import AuthPromptModal from "./lib/AuthPromptModal.svelte";
   import McpApprovalModal from "./lib/McpApprovalModal.svelte";
@@ -469,6 +470,23 @@
       toast.err(`Failed to open local shell: ${e?.message ?? String(e)}`);
     }
   }
+
+  // Hand the tab strip's "+" the two things it offers. Both live here -
+  // the palette is local state, openLocalShell closes over prefs and the
+  // session store - while the button itself renders in TerminalArea,
+  // which takes no props.
+  $effect(() => {
+    // Name what will actually open ("PowerShell", "bash") rather than a
+    // generic word, so the menu entry matches the user's preference.
+    newTabActions.localShellLabel = localShellButtonLabel.replace(/^Local: /, "");
+  });
+  $effect(() => {
+    newTabActions.register({
+      openPalette: () => { showPalette = true; },
+      openLocalShell: (kind?: string) => { void openLocalShell(kind); },
+    });
+    return () => newTabActions.unregister();
+  });
 
   // App commands for the quick palette (">" prefix or fuzzy match).
   // Workspace-open rows are built inside the palette itself.

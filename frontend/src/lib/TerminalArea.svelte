@@ -23,6 +23,7 @@
   import { appPrefs } from "./appPrefs.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { focusActivePane } from "./paneFocus";
+  import { newTabActions } from "./newTabActions.svelte.ts";
   let broadcastManagerOpen = $state(false);
   let shareDialogOpen = $state(false);
   // The ShareDialog defaults its tab selection to the ACTIVE tab, so switch to
@@ -342,6 +343,45 @@
     // known - the entry count varies (bulk section, share targets, window
     // list), so there is no fixed height to subtract up front.
     queueMicrotask(clampCtxMenu);
+  }
+
+  // ---------- new-tab ("+") menu ----------
+
+  // The "+" offers the two ways to start a tab. Connect comes first: this
+  // is an SSH client, and a local shell is the secondary case - hence a
+  // menu rather than a button that spawns a shell on sight.
+  let newTabMenu = $state<{ x: number; y: number } | null>(null);
+  let newTabMenuEl = $state<HTMLDivElement | null>(null);
+
+  function openNewTabMenu(e: MouseEvent) {
+    // Ctrl/middle click skips the menu and goes straight to a local shell,
+    // the way a browser's "+" opens a tab without asking. Middle click is
+    // button 1; browsers fire auxclick for it, not click.
+    if (e.ctrlKey || e.metaKey || e.button === 1) {
+      e.preventDefault();
+      newTabActions.openLocalShell?.();
+      return;
+    }
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    // Anchored under the button rather than at the pointer: the button has
+    // a fixed place in the strip, so the menu should too.
+    newTabMenu = { x: r.left, y: r.bottom + 2 };
+    queueMicrotask(clampNewTabMenu);
+  }
+
+  function closeNewTabMenu() {
+    newTabMenu = null;
+  }
+
+  // Same treatment as the tab context menu - see clampCtxMenu.
+  function clampNewTabMenu() {
+    if (!newTabMenuEl || !newTabMenu) return;
+    const pad = 8;
+    const r = newTabMenuEl.getBoundingClientRect();
+    let { x, y } = newTabMenu;
+    if (x + r.width + pad > window.innerWidth) x = Math.max(pad, window.innerWidth - r.width - pad);
+    if (y + r.height + pad > window.innerHeight) y = Math.max(pad, window.innerHeight - r.height - pad);
+    if (x !== newTabMenu.x || y !== newTabMenu.y) newTabMenu = { x, y };
   }
 
   // Keep the menu inside the window: flip it left/up when it would overflow,
@@ -1108,6 +1148,15 @@
         <button class="close" onclick={() => closeTab(t.tabId)} title="Close tab">✕</button>
       </div>
     {/each}
+    {#if newTabActions.available}
+      <button
+        class="newtab"
+        title="New tab (Ctrl+click for {newTabActions.localShellLabel})"
+        aria-label="New tab"
+        onclick={openNewTabMenu}
+        onauxclick={(e) => { if (e.button === 1) openNewTabMenu(e); }}
+      >+</button>
+    {/if}
     <div class="tabbar-end">
       <button
         class="bcast-btn"
@@ -1122,6 +1171,31 @@
       </button>
     </div>
   </div>
+  {#if newTabMenu}
+    <div class="ctx-backdrop" role="presentation" onclick={closeNewTabMenu}
+         oncontextmenu={(e) => { e.preventDefault(); closeNewTabMenu(); }}></div>
+    <div
+      class="ctx-menu"
+      bind:this={newTabMenuEl}
+      style="left: {newTabMenu.x}px; top: {newTabMenu.y}px"
+      role="menu"
+      tabindex="-1"
+    >
+      <button
+        role="menuitem"
+        onclick={() => { closeNewTabMenu(); newTabActions.openPalette?.(); }}
+      >
+        Connect to...
+        <span class="ctx-key">Ctrl+K</span>
+      </button>
+      <button
+        role="menuitem"
+        onclick={() => { closeNewTabMenu(); newTabActions.openLocalShell?.(); }}
+      >
+        New {newTabActions.localShellLabel}
+      </button>
+    </div>
+  {/if}
   {#if ctxMenu}
     <div class="ctx-backdrop" role="presentation" onclick={closeCtxMenu} oncontextmenu={(e) => { e.preventDefault(); closeCtxMenu(); }}></div>
     <div class="ctx-menu" bind:this={ctxMenuEl} style="left: {ctxMenu.x}px; top: {ctxMenu.y}px;">
@@ -1646,6 +1720,40 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* Sits in the flex flow right after the last tab, so it travels with
+     them and wraps onto the next row with them - the strip wraps rather
+     than scrolling (see .tabbar), so there is no edge to pin it to and
+     pinning it right would read as a toolbar button instead of "new tab".
+     Deliberately narrower than a tab and without the tab's border-right,
+     so it reads as an affordance rather than an empty tab. */
+  .newtab {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--surface0);
+    color: var(--subtext0);
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0 0.6rem;
+    cursor: pointer;
+    align-self: stretch;
+  }
+  .newtab:hover {
+    background: var(--surface0);
+    color: var(--text);
+  }
+  /* Shortcut hint, right-aligned within the entry. The menu teaches the
+     keyboard route so the button becomes unnecessary over time.
+     .ctx-menu button resolves to display:block (it declares flex and then
+     block, and the later wins), so this floats rather than relying on
+     margin-left:auto, which would need a flex parent. Left alone
+     deliberately - changing that display would reflow every existing
+     entry in this menu. */
+  .ctx-key {
+    float: right;
+    padding-left: 1.5rem;
+    color: var(--overlay0);
+    font-size: 0.72rem;
   }
   .tabbar-end {
     margin-left: auto;
