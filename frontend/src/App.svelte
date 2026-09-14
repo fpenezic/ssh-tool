@@ -2,6 +2,7 @@
   import { tree, credentials, view, sessions, paneTabs, hostKeyStore, authPromptStore, mcpApprovalStore, mcpShared, mcpBridge, shareApprovalStore, shareShared, shareBridge, decodePaneLayoutsMulti, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
   import { isMobile } from "./lib/platform";
   import { installMobileBackNav } from "./lib/mobileBackNav";
+  import { installNavigationGuard } from "./lib/navigationGuard";
   import { api } from "./lib/api";
   import { errMsg as humanError } from "./lib/connectErrors";
   import { EventsOn } from "./lib/wailsRuntime";
@@ -390,6 +391,12 @@
       view.setTab("connections");
     }
   }
+  // Keep the app window on the app. A top-level navigation swaps the whole
+  // UI for a remote page with no way back - an OAuth login link that failed
+  // to reach the real browser did exactly that. External URLs go to the
+  // system browser instead. See navigationGuard.ts.
+  $effect(() => installNavigationGuard((url) => api.openURL(url)));
+
   let mobileBackTick: (() => void) | null = null;
   $effect(() => {
     if (!isMobile) return;
