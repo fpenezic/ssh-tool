@@ -9,7 +9,7 @@
 # `updpkgsums`, and push to the AUR remote. scripts/aur-release.sh does
 # both from a release tag.
 pkgname=ssh-tool-bin
-pkgver=0.94.0
+pkgver=0.96.0
 pkgrel=1
 pkgdesc="Cross-platform SSH connection manager with folder inheritance, encrypted vault and multi-pane terminal"
 arch=('x86_64' 'aarch64')
@@ -31,15 +31,14 @@ source_aarch64=("ssh-tool-$pkgver-aarch64::https://github.com/fpenezic/ssh-tool/
                 "ssh-tool.png::https://raw.githubusercontent.com/fpenezic/ssh-tool/v$pkgver/build/appicon.png"
                 "ssh-tool.svg::https://raw.githubusercontent.com/fpenezic/ssh-tool/v$pkgver/build/appicon.svg")
 
-sha256sums_x86_64=('3f751f93d0a3ad1b54ecdd067a3c56784f94ad38cff5d42a2b6e456b4f5ad846'
-                   '3888be0acca45c34cb81fcfe1aa808408f47a57af479cb441ee38074d02e4df1'
+sha256sums_x86_64=('9df07d28fa1f99e6189be75394ba2d6e3ad03d4a1999ec0508e4549be7548147'
+                   'aaa1d83a505d9287be442123a440abaf333144776e2c9ac61f0c39a44e1dd4b6'
                    '50dfa61e4cf0bb920e46334d661f249440978f6a548eb026cb1b33e4e20f5e60'
                    'ac1b9bcde49c905eb1102ecc7f2f31e8e079b97e53614d27515c7a815b0f380d')
-sha256sums_aarch64=('fce27b68d95dc87660a8175f8d03bcbe787395e70c7fe9285aaababaf12b0b53'
-                    '3888be0acca45c34cb81fcfe1aa808408f47a57af479cb441ee38074d02e4df1'
+sha256sums_aarch64=('69d0a1ee0d63b6056118edf0912bc0317fab26c40344d8ea25ed27cf84f1481b'
+                    'aaa1d83a505d9287be442123a440abaf333144776e2c9ac61f0c39a44e1dd4b6'
                     '50dfa61e4cf0bb920e46334d661f249440978f6a548eb026cb1b33e4e20f5e60'
                     'ac1b9bcde49c905eb1102ecc7f2f31e8e079b97e53614d27515c7a815b0f380d')
-
 package() {
     local _bin="ssh-tool-$pkgver-$CARCH"
 

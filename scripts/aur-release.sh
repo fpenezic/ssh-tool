@@ -47,8 +47,32 @@ pkgbuild="$(dirname "$0")/../build/aur/PKGBUILD"
 
 sed -i "s/^pkgver=.*/pkgver=$ver/" "$pkgbuild"
 sed -i "s/^pkgrel=.*/pkgrel=1/" "$pkgbuild"
-sed -i "s|^sha256sums_x86_64=.*|sha256sums_x86_64=('$sha_amd64'\n                   '$sha_desktop'\n                   '$sha_png'\n                   '$sha_svg')|" "$pkgbuild"
-sed -i "s|^sha256sums_aarch64=.*|sha256sums_aarch64=('$sha_arm64'\n                    '$sha_desktop'\n                    '$sha_png'\n                    '$sha_svg')|" "$pkgbuild"
+
+# Each sha256sums array spans four lines. Matching only the opening line
+# and substituting a multi-line replacement leaves the other three behind
+# as orphans, which makepkg then reads as a syntax error - so delete the
+# whole array (from its opening line through the line ending in "')")
+# before inserting the new one.
+replace_sums() {
+    local var="$1" indent="$2" a="$3" b="$4" c="$5" d="$6"
+    python3 - "$pkgbuild" "$var" "$indent" "$a" "$b" "$c" "$d" <<'PY'
+import re, sys
+path, var, indent, a, b, c, d = sys.argv[1:8]
+src = open(path).read()
+# From "<var>=(" up to and including the first ")" that closes it.
+pat = re.compile(r"^" + re.escape(var) + r"=\(.*?\)\s*$", re.S | re.M)
+block = "%s=('%s'\n%s'%s'\n%s'%s'\n%s'%s')" % (var, a, indent, b, indent, c, indent, d)
+out, n = pat.subn(lambda _: block, src, count=1)
+if n != 1:
+    sys.exit("could not locate %s in %s" % (var, path))
+open(path, "w").write(out)
+PY
+}
+
+replace_sums sha256sums_x86_64  "                   " \
+    "$sha_amd64" "$sha_desktop" "$sha_png" "$sha_svg"
+replace_sums sha256sums_aarch64 "                    " \
+    "$sha_arm64" "$sha_desktop" "$sha_png" "$sha_svg"
 
 echo
 echo "build/aur/PKGBUILD updated to $ver"
