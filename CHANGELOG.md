@@ -7,6 +7,76 @@ a prerelease upstream.
 
 ---
 
+## [0.98.0] - Terminal output that lines up, and links that open in your browser
+
+### Fixed
+
+- **Full-screen TUIs no longer tear themselves apart.** Long sessions in
+  a terminal tab drifted into overlapping rows, swallowed characters and
+  borders in the wrong column. The PTY is read in fixed blocks, and a
+  terminal query that happened to straddle one of those boundaries was
+  passed through to the renderer half-parsed instead of being filtered
+  out, which killed its parser mid-stream. The filter now carries state
+  across blocks, so where the read happens to land no longer matters.
+  Anything that redraws continuously - Claude Code, htop, a text editor -
+  hit this regularly; a plain shell almost never did, which is why it
+  looked random.
+
+- **Emoji stop pushing everything one column to the right.** Table
+  borders walked sideways and the character after an emoji was eaten
+  ("bug otvoren" arriving as "bug ot voren"). The terminal measured
+  characters with Unicode 6 widths from 2010, while the programs drawing
+  those tables measure them the modern way; each emoji cost a column.
+  CJK and Cyrillic were never affected, which made the damage look
+  arbitrary. Also fixed for the emoji that are only wide when a variation
+  selector follows - the warning sign, gear, heart and a dozen more -
+  which are narrow even under the newer table but drawn wide by every
+  current terminal.
+
+- **"Press c to copy" now actually copies.** A program running in the
+  terminal has exactly one way to reach your clipboard, and we were
+  discarding it. Tools reported success while nothing was copied and
+  there was nothing to paste. Clipboard READS stay refused: they would
+  let any command on any host you are connected to read whatever you
+  copied last, which is often a password.
+
+- **Clicking a link opens your browser instead of taking over the
+  window.** Some links prompted "Do you want to navigate to..." and, on
+  OK, replaced the whole app with a remote page - no back button, no way
+  out but a restart. Two separate holes: links a program marks up
+  explicitly were falling through to the terminal library's own
+  navigation prompt, and for the rest the WebView was racing us, which
+  short URLs survived and long ones did not. Both now go to the system
+  browser. If opening fails the URL is copied instead, with a notice, so
+  a click never does nothing.
+
+- **Ctrl+click no longer leaves text selected or overwrites your
+  clipboard.** Returning from the browser left a selection behind, and in
+  Linux copy mode - where selecting copies - opening a link replaced
+  whatever you had copied, including something a terminal program had
+  just put there.
+
+- **Long OAuth logins work on Windows.** URLs past a few hundred
+  characters never reached the browser at all: they were handed to a
+  legacy Windows helper that re-parsed them and gave up on the query
+  string. Short links always worked, so this only showed up on sign-in
+  pages.
+
+### Added
+
+- **The app window stays on the app.** If anything tries to navigate the
+  window somewhere else, it opens in your browser instead. The app is
+  drawn by a browser engine, so a stray navigation would otherwise
+  discard the running UI entirely.
+
+### Known issues
+
+- A URL that a program breaks across lines *itself* - printing a newline
+  and indenting the rest, rather than letting the terminal wrap it -
+  stays clickable only on its first line. Terminal-wrapped URLs are
+  unaffected, and links a program marks up explicitly carry the whole
+  address however they are displayed.
+
 ## [0.97.0] - A "+" on the tab strip, and the keyboard stays where you put it
 
 ### Added
