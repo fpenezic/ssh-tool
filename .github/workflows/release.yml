@@ -311,6 +311,116 @@ jobs:
             gh release create "$tag" bin/* --title "$tag" --generate-notes
           fi
 
+  # Push the refreshed recipe to the AUR, so `yay -S ssh-tool-bin` tracks
+  # releases without a manual step.
+  #
+  # Runs after publish on purpose: aur-release.sh hashes the PUBLISHED
+  # artefacts, so there is nothing to checksum until the release exists.
+  #
+  # Skipped silently when AUR_SSH_KEY is not configured. The initial
+  # import cannot happen here anyway - the AUR repo does not exist until
+  # a maintainer pushes it the first time, and that push needs their
+  # account. See docs/TODO.md for the one-time steps.
+  aur:
+    needs: publish
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check for the AUR key
+        id: gate
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          if [ -z "$AUR_SSH_KEY" ]; then
+            echo "AUR_SSH_KEY not set - skipping the AUR push." >&2
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Refresh the recipe for this tag
+        if: steps.gate.outputs.enabled == 'true'
+        run: ./scripts/aur-release.sh "${{ github.ref_name }}"
+
+      - name: Push to the AUR
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_SSH_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          # Pin the host key rather than disabling verification: this is
+          # a push with a write-capable key, so an unauthenticated host
+          # is not acceptable even in CI.
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+          cat >> ~/.ssh/config <<'SSHCFG'
+          Host aur.archlinux.org
+              User aur
+              IdentityFile ~/.ssh/aur
+              IdentitiesOnly yes
+          SSHCFG
+          chmod 600 ~/.ssh/config
+
+          git clone ssh://aur@aur.archlinux.org/ssh-tool-bin.git /tmp/aur
+          cp build/aur/PKGBUILD /tmp/aur/PKGBUILD
+          cd /tmp/aur
+
+          # .SRCINFO must agree with the PKGBUILD or the AUR rejects the
+          # push, and only makepkg can generate it. It is not packaged for
+          # Ubuntu, and pacman's repo ships scripts/makepkg.sh.IN - a
+          # meson template, not a runnable script - so building it from
+          # source is more work than borrowing an Arch image for the one
+          # command. makepkg refuses to run as root, and the image's
+          # `nobody` account is expired ("su: User account has expired"),
+          # so make a throwaway user. --printsrcinfo only parses the
+          # recipe - nothing is downloaded or compiled here.
+          docker run --rm -v /tmp/aur:/pkg -w /pkg archlinux:base-devel \
+            sh -c 'useradd -m builder && chown -R builder /pkg && su builder -c "makepkg --printsrcinfo"' \
+            > .SRCINFO
+          test -s .SRCINFO
+
+          git config user.name "Filip Penezic"
+          git config user.email "108677346+fpenezic@users.noreply.github.com"
+          git add PKGBUILD .SRCINFO
+          # A re-run of the same tag has nothing to commit; that is a
+          # success, not a failure.
+          if git diff --cached --quiet; then
+            echo "AUR already at ${TAG#v}; nothing to push."
+            exit 0
+          fi
+          git commit -m "${TAG#v}"
+          git push origin master
+
+      # The recipe in THIS repo is the source of truth for the next run,
+      # so commit the refreshed pkgver/checksums back to main. Without
+      # this the repo keeps showing the previous version while the AUR
+      # has moved on, and the next aur-release.sh starts from stale
+      # numbers.
+      - name: Commit the refreshed recipe back to main
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- build/aur/PKGBUILD; then
+            echo "recipe already current in the repo."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add build/aur/PKGBUILD
+          git commit -m "chore(aur): recipe for ${TAG}"
+          # The tag is not on a branch here (checkout is detached), so
+          # push explicitly to main. A release is always tagged from main.
+          git push origin HEAD:main
+
   # Pre-release tags (vX.Y.Z-suffix): artifacts land as a GitHub
   # prerelease for testers; sshtool.app is never touched.
   prerelease:
