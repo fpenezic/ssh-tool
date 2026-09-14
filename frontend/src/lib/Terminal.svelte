@@ -2,9 +2,12 @@
   import { onMount, onDestroy } from "svelte";
   import { EventsOn } from "./wailsRuntime";
   import { sessionCwd, parseOsc7 } from "./sessionCwd.svelte";
+  import { parseOsc52 } from "./osc52";
   import { userIsTypingElsewhere } from "./paneFocus";
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
+  import { VS16Addon } from "./unicodeVS16";
+  import { DecrqmStripper, stripSnapshot } from "./decrqm";
   import { WebglAddon } from "@xterm/addon-webgl";
   import { CanvasAddon } from "@xterm/addon-canvas";
   import { writeClipboard } from "./clipboard";
@@ -212,80 +215,6 @@
     term?.focus();
   }
 
-  // Strip DECRQM (Request Mode) and DECRPM (Report Mode) CSI
-  // sequences from a byte stream. Format:
-  //   ESC [ ? <params> $ p      (DECRQM, ESC=0x1b)
-  //   ESC [ ? <params> $ y      (DECRPM, less common but same shape)
-  // 8-bit CSI variant (0x9b) handled too.
-  //
-  // Reason for the strip: xterm 6.x has an open bug in its
-  // requestMode handler that throws when certain params land -
-  // the throw fires from inside an async parser callback so
-  // try/catch around term.write doesn't catch it. The sequence
-  // is a query the remote sends to detect terminal features;
-  // dropping it just means the remote falls back to safe defaults.
-  function stripDECRQM(data: Uint8Array): Uint8Array {
-    // Quick scan: nothing to strip if no ESC/0x9b present.
-    let found = false;
-    for (let i = 0; i < data.length; i++) {
-      const b = data[i];
-      if (b === 0x1b || b === 0x9b) { found = true; break; }
-    }
-    if (!found) return data;
-
-    const out = new Uint8Array(data.length);
-    let oi = 0;
-    let i = 0;
-    while (i < data.length) {
-      const b = data[i];
-      let csiStart = -1;
-      // 7-bit CSI: ESC [
-      if (b === 0x1b && i + 1 < data.length && data[i + 1] === 0x5b) {
-        csiStart = i + 2;
-      }
-      // 8-bit CSI: 0x9b
-      else if (b === 0x9b) {
-        csiStart = i + 1;
-      }
-      if (csiStart < 0) {
-        out[oi++] = b;
-        i++;
-        continue;
-      }
-      // Only intercept DECRQM/DECRPM: CSI ? <params> $ [py]
-      if (csiStart >= data.length || data[csiStart] !== 0x3f /* ? */) {
-        out[oi++] = b;
-        i++;
-        continue;
-      }
-      // Walk to terminator: $ followed by p or y. Stop after
-      // 64 bytes to avoid consuming the rest of the stream on
-      // malformed input.
-      let j = csiStart + 1;
-      const maxJ = Math.min(j + 64, data.length - 1);
-      let stripped = false;
-      while (j < maxJ) {
-        if (data[j] === 0x24 /* $ */ && (data[j + 1] === 0x70 /* p */ || data[j + 1] === 0x79 /* y */)) {
-          // Skip the whole sequence: from `b` (i) through j+1.
-          i = j + 2;
-          stripped = true;
-          break;
-        }
-        // Params are digits, semicolons, and the leading '?'. If
-        // we hit anything else this isn't DECRQM/DECRPM - bail.
-        const c = data[j];
-        if (!((c >= 0x30 && c <= 0x39) || c === 0x3b)) {
-          break;
-        }
-        j++;
-      }
-      if (!stripped) {
-        out[oi++] = b;
-        i++;
-      }
-    }
-    return out.subarray(0, oi);
-  }
 
   // ---------- copy / paste handlers ----------
 
@@ -1008,6 +937,33 @@
       scrollback: terminalPrefs.scrollback,
       allowProposedApi: true,
     });
+    // xterm ships ONLY a Unicode 6 width table (2010). Under it most
+    // emoji are width 1, while every modern producer - Claude Code, gh,
+    // btop, any Go or Rust TUI - measures them as width 2 and pads its
+    // table borders accordingly. The mismatch is one column per emoji:
+    // borders drift right and the next character gets overwritten.
+    //
+    // VS16Addon layers two fixes: the Unicode 11 table, and the emoji
+    // presentation rule for characters that are only wide when followed
+    // by U+FE0F (the warning sign, gear, heart and a dozen more are
+    // narrow in the tables but drawn wide everywhere). Windows Terminal
+    // renders the same output correctly with both applied; with only the
+    // v11 table, cells containing those characters were still a column
+    // short. See unicodeVS16.ts.
+    //
+    // Must be activated explicitly: loadAddon only registers the
+    // provider, it does not switch activeVersion. Needs
+    // allowProposedApi (set above) - unicode handling is proposed API in
+    // xterm 6.
+    term.loadAddon(new VS16Addon());
+    try {
+      term.unicode.activeVersion = VS16Addon.VERSION;
+    } catch (err) {
+      // Never let a width table cost us the terminal - v6 renders, just
+      // misaligned on emoji.
+      console.warn("[term] wide-emoji width table unavailable", err);
+    }
+
     fit = new FitAddon();
     term.loadAddon(fit);
     search = new SearchAddon();
@@ -1038,6 +994,29 @@
     term.parser.registerOscHandler(7, (payload) => {
       const dir = parseOsc7(payload);
       if (dir) sessionCwd.report(sessionId, dir);
+      return true;
+    });
+
+    // OSC 52 is the only channel a program inside the PTY has to the
+    // user's clipboard. TUIs use it for "press c to copy" - Claude Code's
+    // login prompt among them, which is what surfaced this: it reported
+    // "copied" (its send succeeded) while the sequence was dropped on the
+    // floor, so there was nothing to paste. xterm.js has no built-in
+    // handler, so without this it is silently discarded.
+    //
+    // Writes only. A "?" payload asks us to send the clipboard CONTENTS
+    // back to the process, which would let any command on any connected
+    // host read whatever the user copied last - often a password, given
+    // this app has a copy-password button. We refuse those, but still
+    // return true so the sequence is swallowed rather than echoed as
+    // garbage.
+    term.parser.registerOscHandler(52, (payload) => {
+      const res = parseOsc52(payload);
+      if (res?.kind === "write") {
+        writeClipboard(res.text).catch((err) => {
+          console.warn("[term] OSC 52 clipboard write failed", err);
+        });
+      }
       return true;
     });
 
@@ -1213,6 +1192,13 @@
     let watermark: number | null = null;
     let snapshotWritten = false;
     const buffered: Array<{ data: Uint8Array; cum: number }> = [];
+    // One stripper for the whole live stream: DECRQM queries straddle the
+    // pump's 8 KiB chunk boundaries, and a stateless strip leaks the
+    // sequence through whenever that happens (see decrqm.ts). writeChunk
+    // and queueLive are alternative branches of the SAME stream (pre- and
+    // post-watermark), so they must share one instance - two would each
+    // hold half of a split sequence.
+    const liveStripper = new DecrqmStripper();
 
     function writeChunk(data: Uint8Array, cum: number) {
       // Strip DECRQM (CSI ? ... $ p) before write. xterm 6.x has an
@@ -1224,7 +1210,7 @@
       // it just means the remote falls back to defaults. The PTY
       // response would normally be queued anyway, so dropping it
       // is safe.
-      const clean = stripDECRQM(data);
+      const clean = liveStripper.push(data);
       try {
         if (cum === 0 || watermark === null) {
           t.write(clean);
@@ -1283,14 +1269,20 @@
     let gapFrames = 0;
     const GAP_FRAME_BUDGET = 4;
     function queueLive(data: Uint8Array, cum: number) {
-      const clean = stripDECRQM(data);
+      const clean = liveStripper.push(data);
       if (cum === 0) {
         // Banner sentinel (pre-session) - no ordering info; write as-is at
         // the front of the stream.
         pending.push({ start: -1, end: -1, clean });
       } else {
-        // Offsets from the RAW decoded length (cum counts raw bytes); the
-        // DECRQM strip only changes content, not the stream position.
+        // Offsets are RAW stream positions - that is the only coordinate
+        // comparable between chunks, and ordering is what they are for.
+        //
+        // They are NOT byte counts of `clean`: the stripper holds a
+        // partial escape sequence back for the next chunk, so a chunk can
+        // emit fewer bytes than it spans (and the next one more). Only
+        // ordering may be derived from these; see flushLive, which counts
+        // written bytes separately.
         pending.push({ start: cum - data.length, end: cum, clean });
       }
       if (!rafPending) rafPending = requestAnimationFrame(flushLive);
@@ -1334,11 +1326,16 @@
           continue;
         }
         if (p.start <= writeCum || force) {
-          // Contiguous/overlapping (or forced past a stuck gap) - trim any
-          // overlapped prefix and write. Overlap is normally just the
-          // snapshot boundary, where the strip doesn't touch the overlapped
-          // bytes, so a byte-count trim on the cleaned buffer is correct.
-          const overlap = writeCum - p.start;
+          // Contiguous/overlapping (or forced past a stuck gap).
+          //
+          // The overlap trim is a RAW byte count applied to a CLEANED
+          // buffer, which is only valid when the two coincide. At the
+          // snapshot boundary they do: the strip does not touch the
+          // overlapped bytes. When the stripper has withheld part of a
+          // sequence, p.clean can be shorter than the span, and trimming
+          // by the raw count would eat real output - so clamp, and never
+          // trim more than the buffer holds.
+          const overlap = Math.min(Math.max(writeCum - p.start, 0), p.clean.length);
           ready.push(overlap > 0 ? p.clean.subarray(overlap) : p.clean);
           writeCum = Math.max(writeCum, p.end);
         } else {
@@ -1408,7 +1405,7 @@
           // corrupts the screen - text landing mid-row, box-drawing coming
           // apart. Reported on a tab left in the background long enough for
           // its scrollback to be dropped and then replayed on return.
-          try { t.write(stripDECRQM(resyncAnsi(fromB64(snap.b64))), clearReplay); }
+          try { t.write(stripSnapshot(resyncAnsi(fromB64(snap.b64))), clearReplay); }
           catch (err) { console.warn("[term] snapshot write threw", err); replaying = false; }
         }
         watermark = snap.cum ?? 0;
