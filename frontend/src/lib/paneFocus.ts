@@ -1,3 +1,28 @@
+/** userIsTypingElsewhere reports whether the keyboard currently belongs to
+ *  something that must keep it: an open palette or modal (they all render
+ *  inside .overlay, most with role=dialog), or any text field.
+ *
+ *  Focus moves here are deferred by two animation frames, and connecting is
+ *  asynchronous on top of that, so the world can change before they land -
+ *  typically the user hits Ctrl+K again while a session is still coming up.
+ *  Taking the keyboard then types into a terminal they are not looking at.
+ */
+export function userIsTypingElsewhere(
+  active: HTMLElement | null = typeof document === "undefined"
+    ? null
+    : (document.activeElement as HTMLElement | null),
+): boolean {
+  if (!active) return false;
+  // document is guarded so this stays callable without a DOM (unit tests,
+  // and any future non-browser consumer); body is only reachable when there
+  // is one.
+  if (typeof document !== "undefined" && active === document.body) return false;
+  if (active.closest?.('[role="dialog"], .overlay')) return true;
+  const tag = active.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return active.isContentEditable;
+}
+
 // Punts keyboard focus to the active tab's interactive surface after the next
 // two animation frames. Two hops are required because tab cycling and the
 // snippet palette both trigger a display: none -> flex flip on the tab-content
@@ -18,6 +43,9 @@
 export function focusActivePane(): void {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
+      // Re-checked inside the frames, not before them: the palette may have
+      // opened while we were waiting.
+      if (userIsTypingElsewhere()) return;
       const active = document.querySelector(".tab-content.active");
       if (!active) return;
 

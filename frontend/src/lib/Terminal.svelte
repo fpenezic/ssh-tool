@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { EventsOn } from "./wailsRuntime";
   import { sessionCwd, parseOsc7 } from "./sessionCwd.svelte";
+  import { userIsTypingElsewhere } from "./paneFocus";
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
   import { WebglAddon } from "@xterm/addon-webgl";
@@ -574,6 +575,9 @@
   // The currently-focused element (typically the Connect button in
   // DetailPane) is blurred first because some webviews refuse to move
   // focus across hidden→visible boundaries while another control owns it.
+  // That blur is why this has to check first whether the user is typing:
+  // it does not merely fail to take focus, it actively removes it from
+  // whatever had it.
   function focusWhenVisible() {
     let tries = 0;
     const tick = () => {
@@ -584,6 +588,10 @@
         && host.clientHeight > 0;
       if (ready) {
         const active = document.activeElement as HTMLElement | null;
+        // Checked at the moment focus would actually move, not when the
+        // poll started: the palette may well have been opened during
+        // those few hundred milliseconds.
+        if (userIsTypingElsewhere(active)) return;
         if (active && active !== document.body && !host.contains(active)) {
           active.blur();
         }
