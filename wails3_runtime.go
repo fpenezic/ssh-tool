@@ -36,7 +36,16 @@ func EventsEmit(name string, data any) {
 }
 
 // BrowserOpenURL routes a URL to the OS default browser.
+//
+// Windows goes through our own ShellExecuteW binding first: the Wails
+// runtime shells out to `rundll32 url.dll,FileProtocolHandler`, which
+// silently fails to open long OAuth-style URLs (see openurl_windows.go).
+// Every other platform - and Windows if that call fails - uses the
+// runtime's opener unchanged.
 func BrowserOpenURL(url string) {
+	if err := openURLPlatform(url); err == nil {
+		return
+	}
 	if rt == nil {
 		return
 	}
