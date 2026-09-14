@@ -42,14 +42,15 @@ func EventsEmit(name string, data any) {
 // silently fails to open long OAuth-style URLs (see openurl_windows.go).
 // Every other platform - and Windows if that call fails - uses the
 // runtime's opener unchanged.
-func BrowserOpenURL(url string) {
-	if err := openURLPlatform(url); err == nil {
-		return
+func BrowserOpenURL(url string) error {
+	err := openURLPlatform(url)
+	if err == nil {
+		return nil
 	}
 	if rt == nil {
-		return
+		return err
 	}
-	_ = rt.Browser.OpenURL(url)
+	return rt.Browser.OpenURL(url)
 }
 
 // OpenFileDialogOptions / SaveFileDialogOptions mirror the v2 shape but

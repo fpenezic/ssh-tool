@@ -460,10 +460,19 @@
   // than this, releasing the mouse produces none.
   let selectToastTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // Set between a Ctrl/Cmd mousedown and the link activation that follows,
+  // so the incidental selection xterm starts underneath a link click does
+  // not trip select-to-copy. Cleared on the next plain mousedown.
+  let modifierClickPending = false;
+
   function onSelectionChange() {
     // Linux convention: selecting text auto-copies. Closest we get to
     // the X primary selection without a real primary clipboard.
     if (copyPastePrefs.mode !== "linux") return;
+    // A Ctrl+click on a link drags a one-character selection into being
+    // before the link fires. Copying that would replace the clipboard the
+    // user is about to need - including one a TUI just wrote via OSC 52.
+    if (modifierClickPending) return;
     if (!term?.hasSelection()) return;
     copySelection();
     clearTimeout(selectToastTimer);
@@ -489,7 +498,24 @@
     await pasteFromClipboard();
   }
 
+  // Runs in the bubble phase, after xterm's Linkifier has activated any
+  // link under the cursor.
+  function onMouseUpReleaseModifier() {
+    if (!modifierClickPending) return;
+    // A modifier click that landed on a link clears its own selection; one
+    // that missed leaves whatever xterm selected, which the user did not
+    // ask for either.
+    term?.clearSelection();
+    modifierClickPending = false;
+  }
+
   function onMouseDown(e: MouseEvent) {
+    // Track Ctrl/Cmd + left so the selection it starts is not treated as a
+    // deliberate one. The event still has to reach xterm: its Linkifier
+    // records the link under the cursor on mousedown and will not activate
+    // on mouseup without that record.
+    modifierClickPending = e.button === 0 && (e.ctrlKey || e.metaKey);
+
     // Middle-click paste, Linux mode only.
     if (e.button !== 1) return;
     if (copyPastePrefs.mode !== "linux") return;
@@ -975,11 +1001,70 @@
     // on Mac). Plain click in the terminal is for selection /
     // shell - accidentally launching a browser when clicking near
     // a URL was annoying. Same convention as VS Code's terminal.
+    // Shared by both kinds of link: the URLs WebLinksAddon finds by
+    // scanning text, and OSC 8 hyperlinks, which the shell marks up
+    // explicitly.
+    function openLinkExternally(url: string): void {
+      term?.clearSelection();
+      modifierClickPending = false;
+      api.openURL(url).catch((err) => {
+        // Opening is the only route out: preventDefault and the link
+        // handler deliberately stop the WebView from acting on the click,
+        // so a failure here means nothing happened at all.
+        console.warn("[term] open link failed", err);
+        // Leave the user something to act on: the URL itself.
+        writeClipboard(url)
+          .then(() => toast.err("Could not open the link - copied it instead"))
+          .catch(() => toast.err("Could not open the link"));
+      });
+    }
+
     webLinks = new WebLinksAddon((e, url) => {
       if (!(e.ctrlKey || e.metaKey)) return;
-      api.openURL(url);
+      // Stop the WebView from acting on the click itself. Without this it
+      // races us: our openURL goes to Go over IPC while the embedder
+      // starts its own top-level navigation to the same URL, and for a
+      // long URL the navigation won round - the app window was offered to
+      // claude.com instead of the link opening in the browser.
+      e.preventDefault();
+      e.stopPropagation();
+      // xterm begins a selection on mousedown and only fires the link on
+      // mouseup, so by the time we get here a selection is already under
+      // way and survives the trip to the browser - on Linux, where
+      // select-to-copy is on, it also overwrites the clipboard we may have
+      // just written. Clearing on mousedown is not an option: the
+      // Linkifier records the link there and refuses to activate without
+      // that record, so the click has to reach it intact.
+      openLinkExternally(url);
     });
     term.loadAddon(webLinks);
+
+    // OSC 8 hyperlinks are links the program marks up explicitly, rather
+    // than URLs found by scanning text. Claude Code emits them for its
+    // login URL, and they are a SEPARATE path through xterm: the
+    // WebLinksAddon handler above never sees them.
+    //
+    // Without a linkHandler, xterm falls back to its own defaultActivate,
+    // which pops a browser confirm() - "Do you want to navigate to ...
+    // WARNING: This link could potentially be dangerous" - and on OK calls
+    // window.open, navigating the app window away from the app. That is
+    // the dialog users were seeing, and it has nothing to do with URL
+    // length or with how we open URLs; we simply never claimed the
+    // callback.
+    //
+    // Same modifier rule as the scanned links so the two behave alike.
+    term.options.linkHandler = {
+      activate: (e, url) => {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openLinkExternally(url);
+      },
+      // Left at the default (false): only http/https reach activate, so a
+      // file: or custom-scheme link from a remote host cannot be turned
+      // into a shell-level open by clicking it.
+      allowNonHttpProtocols: false,
+    };
     term.open(host);
 
     term.attachCustomKeyEventHandler(customKeyHandler);
@@ -1110,6 +1195,10 @@
     // contextmenu fires for right-click and we route by mode.
     host.addEventListener("contextmenu", onContextMenu, { capture: true });
     host.addEventListener("mousedown", onMouseDown, { capture: true });
+    // Releases modifierClickPending after the link handler (which runs on
+    // mouseup) has had its turn, so a Ctrl+click that hits no link does not
+    // leave select-to-copy switched off.
+    host.addEventListener("mouseup", onMouseUpReleaseModifier);
     // Pinch-to-zoom (touch). Capture + non-passive on move so we can
     // preventDefault the WebView's own pinch page-zoom.
     host.addEventListener("pointerdown", onPointerDown, { capture: true });
@@ -1753,6 +1842,7 @@
     host?.removeEventListener("wheel", onWheel, { capture: true } as any);
     host?.removeEventListener("contextmenu", onContextMenu, { capture: true } as any);
     host?.removeEventListener("mousedown", onMouseDown, { capture: true } as any);
+    host?.removeEventListener("mouseup", onMouseUpReleaseModifier);
     host?.removeEventListener("pointerdown", onPointerDown, { capture: true } as any);
     host?.removeEventListener("pointermove", onPointerMove, { capture: true } as any);
     host?.removeEventListener("pointerup", onPointerUp, { capture: true } as any);

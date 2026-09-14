@@ -2238,8 +2238,13 @@ export function OpenNativeTerminal(kind) {
 }
 
 /**
- * OpenURL routes a URL to the system browser via Wails runtime. Used by
- * the xterm web-links addon when the user clicks a URL in the terminal.
+ * OpenURL routes a URL to the system browser. Used by the xterm web-links
+ * addon when the user clicks a URL in the terminal, and by any UI element
+ * linking out.
+ * 
+ * Returns the error rather than swallowing it: when opening fails the
+ * WebView is left as the only thing that might act on the URL, and the
+ * caller needs to know that happened instead of showing nothing.
  * @param {string} url
  * @returns {$CancellablePromise<void>}
  */

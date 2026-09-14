@@ -2548,7 +2548,11 @@ func (a *App) oauthConnect(p oauthProvider, clientID string) error {
 		return fmt.Errorf("set the %s app key first", p.label)
 	}
 	tok, err := syncer.Authorize(context.Background(), p.endpoints, clientID, p.clientSecret, func(u string) {
-		BrowserOpenURL(u)
+		if err := BrowserOpenURL(u); err != nil {
+			// The consent URL is the whole flow; if it did not open the
+			// user is staring at a dialog that will never complete.
+			log.Printf("open consent url: %v", err)
+		}
 	})
 	if err != nil {
 		return err
@@ -6024,10 +6028,19 @@ func (a *App) SshSystemCommand(connectionID string) (string, error) {
 	return strings.Join(argv, " "), nil
 }
 
-// OpenURL routes a URL to the system browser via Wails runtime. Used by
-// the xterm web-links addon when the user clicks a URL in the terminal.
-func (a *App) OpenURL(url string) {
-	BrowserOpenURL(url)
+// OpenURL routes a URL to the system browser. Used by the xterm web-links
+// addon when the user clicks a URL in the terminal, and by any UI element
+// linking out.
+//
+// Returns the error rather than swallowing it: when opening fails the
+// WebView is left as the only thing that might act on the URL, and the
+// caller needs to know that happened instead of showing nothing.
+func (a *App) OpenURL(url string) error {
+	if err := BrowserOpenURL(url); err != nil {
+		log.Printf("open url (%d chars): %v", len(url), err)
+		return err
+	}
+	return nil
 }
 
 // SshLaunchInSystemTerminal opens the OS terminal with the equivalent
