@@ -7,6 +7,30 @@ a prerelease upstream.
 
 ---
 
+## [0.97.0] - A "+" on the tab strip, and the keyboard stays where you put it
+
+### Added
+
+- **A "+" at the end of the tab strip.** Starting a tab meant knowing
+  where else in the window to look. It opens a short menu rather than
+  spawning something on the spot: "Connect to..." first, which opens the
+  same quick palette as Ctrl+K, then a local shell named after whichever
+  one you actually use - "New PowerShell", "New bash". Ctrl+click or
+  middle click skips the menu and opens the shell straight away, the way
+  a browser's "+" does. The menu shows the shortcut beside each entry, so
+  it works its own way out of a job.
+
+### Fixed
+
+- **Typing no longer lands in a terminal you are not looking at.** Open a
+  connection from Ctrl+K, press Ctrl+K again while it is still
+  connecting, and start typing: the keystrokes went to the session that
+  had just come up in the background rather than to the palette in front
+  of you. Connecting is asynchronous and the terminal claimed the
+  keyboard whenever it finished, without checking whether you had moved
+  on in the meantime. It now leaves the keyboard alone whenever a palette,
+  a dialog or any text field has it.
+
 ## [0.96.0] - Windows Defender, and a way back from a dev build
 
 ### Fixed
