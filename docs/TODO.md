@@ -296,10 +296,18 @@ Mediums + selected Lows tracked here.
   more explaining than it saves.
 
   The AUR recipe in `build/aur/` is ready and `makepkg` was verified to
-  build it from published v0.94.0 artefacts with matching checksums.
-  Publishing it needs an AUR account with an SSH key, which is a
-  maintainer action; `scripts/aur-release.sh <tag>` refreshes pkgver and
-  the checksums afterwards.
+  parse and build it from published artefacts with matching checksums.
+  The release workflow has an `aur` job that refreshes the recipe,
+  regenerates `.SRCINFO` and pushes on every stable tag. It is gated on
+  an `AUR_SSH_KEY` secret and skips silently while that is unset, which
+  is the state today: the initial import cannot be automated, because an
+  AUR repository only comes into existence with its first push, and that
+  push needs a maintainer account.
+
+  If the package ships: it installs to `/usr/bin`, so the in-app updater
+  correctly refuses to replace it (`internal/updater/writable_unix.go`)
+  and updates arrive through `pacman -Syu` instead. Worth stating in the
+  package description so it does not read as a bug.
 
 - **apt / dnf repositories (target: v0.100.0).** Once the packages ship,
   they are still one-off installs: a new version means downloading another package by hand,
