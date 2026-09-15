@@ -391,6 +391,59 @@ class ConnectionActionsStore {
     }
   }
 
+  // connectSessionOnly dials a saved connection and registers the session,
+  // but opens NO tab. Restoring a split tab needs one session per pane and a
+  // single tab built from the tree afterwards (see paneSpec.ts); connectOne
+  // would give it one tab per pane instead.
+  //
+  // open_hidden is deliberately not applied: the pane layout being restored is
+  // the explicit instruction about where this session goes, and it outranks
+  // the connection's default placement.
+  async connectSessionOnly(id: string): Promise<string | null> {
+    const c = tree.connectionById(id);
+    if (!c) return null;
+    try {
+      if (c.protocol === "local") {
+        const r = await api.localConnect(c.id);
+        sessions.add({
+          sessionId: r.session_id,
+          connectionId: c.id,
+          name: c.name,
+          hostname: r.display || r.kind,
+          status: "connected",
+          kind: "local",
+        });
+        this.clearConnectError(c.id);
+        return r.session_id;
+      }
+      // Same take-over offer and single transient retry as connectOne.
+      const attempt = () => api.sshConnect(c.id);
+      const res = await withTakeover(attempt);
+      if (!res.ok && res.cancelled) return null;
+      let r;
+      if (res.ok) {
+        r = res.value;
+      } else if (isTransientConnectError(res.error)) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        r = await attempt();
+      } else {
+        throw res.error;
+      }
+      sessions.add({
+        sessionId: r.session_id,
+        connectionId: c.id,
+        name: c.name,
+        hostname: c.hostname,
+        status: "connected",
+      });
+      this.clearConnectError(c.id);
+      return r.session_id;
+    } catch (e) {
+      this.recordFailure(c.id, e);
+      return null;
+    }
+  }
+
   // connectLocal opens a saved local-shell connection. The session is
   // tagged kind:"local" so the pane correctly disables SFTP / VNC /
   // reconnect (they don't apply to a local PTY).

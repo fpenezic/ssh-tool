@@ -1,22 +1,39 @@
 // Workspaces - named bundles of "these tabs in this layout" the user
-// can switch between. MVP scope:
-//   - Serialise: snapshot of every open tab's connectionId + title +
-//     group metadata. Pane splits collapse to the active leaf for now;
-//     restoring multi-pane tabs is a follow-up.
-//   - Restore: disconnect everything open, fan out sshConnect to the
-//     workspace's connectionIds, rebuild tabs with their group label.
+// can switch between.
+//   - Serialise: every open tab's pane tree, one session spec per pane
+//     (split directions and ratios included), plus title + group metadata.
+//   - Restore: disconnect everything open, reconnect each pane, rebuild the
+//     tabs with their layout and group label.
 //   - Persist via backend store (workspaces table, migration 10).
 //
 // The serialiser writes a JSON shape the backend treats as opaque
 // (just a TEXT column). Versioned so we can evolve the schema later.
+//
+// Version 2 added the pane tree; version 1 stored one connectionId per tab
+// and collapsed splits to the active pane. Both are readable - a v1 workspace
+// keeps working and is upgraded in memory on open, and rewritten as v2 the
+// next time the user overwrites it.
+//
+// The pane tree lives in paneSpec.ts and the per-session translation in
+// sessionSpec.ts, both shared with reopen-last-session.
 
 import { api, type Workspace } from "./api";
-import { paneTabs, sessions } from "./stores.svelte";
-import { connectionActions } from "./connectionActions.svelte";
+import { paneTabs, sessions, view } from "./stores.svelte";
+import {
+  serializePaneSpec,
+  restorePaneSpec,
+  upgradeWorkspaceTabs,
+  PANE_SPEC_VERSION,
+  type TabSpec,
+  type SessionSpec,
+} from "./paneSpec";
+import { specForSession, connectSpec, beginRestore } from "./sessionSpec";
+import { toast } from "./toast.svelte.ts";
 
-export const WORKSPACE_VERSION = 1;
+export const WORKSPACE_VERSION = PANE_SPEC_VERSION;
 
-export interface WorkspaceTabSpec {
+/** Version 1 tab shape, still found in workspaces saved before pane trees. */
+export interface WorkspaceTabSpecV1 {
   connectionId: string;
   title?: string;
   groupName?: string;
@@ -25,7 +42,7 @@ export interface WorkspaceTabSpec {
 
 export interface WorkspaceLayout {
   version: number;
-  tabs: WorkspaceTabSpec[];
+  tabs: TabSpec[];
 }
 
 class WorkspaceStore {
@@ -46,20 +63,20 @@ class WorkspaceStore {
     }
   }
 
-  // Build a snapshot of the current tab set. Splits collapse to the
-  // tab's active leaf - multi-pane workspaces are a future iteration.
+  // Build a snapshot of the current tab set, pane trees and all. A tab whose
+  // every pane is unrestorable (a lone VNC console) is skipped rather than
+  // saved as an empty entry.
   serializeCurrent(): WorkspaceLayout {
-    const tabs: WorkspaceTabSpec[] = [];
+    const tabs: TabSpec[] = [];
     for (const t of paneTabs.tabs) {
-      const leaf = paneTabs.activePane(t.tabId);
-      if (!leaf) continue;
-      const sess = sessions.tabs.find((s) => s.sessionId === leaf.sessionId);
-      if (!sess) continue;
+      const spec = serializePaneSpec(t.root, (sid) => specForSession(sid));
+      if (!spec) continue;
       tabs.push({
-        connectionId: sess.connectionId,
         title: t.title,
         groupName: t.groupName,
         groupColor: t.groupColor,
+        sessions: spec.sessions,
+        root: spec.root,
       });
     }
     return { version: WORKSPACE_VERSION, tabs };
@@ -86,8 +103,7 @@ class WorkspaceStore {
 
   // Restore a workspace: disconnect every open session (sessions are
   // owned by the previous workspace - keeping them around would clutter
-  // the bar), then fan out connectOne to the workspace ids, attaching
-  // the group metadata to the newly-opened tabs.
+  // the bar), then rebuild each saved tab, pane tree included.
   async open(id: string) {
     const ws = this.list.find((w) => w.id === id);
     if (!ws) throw new Error("workspace not found");
@@ -97,7 +113,8 @@ class WorkspaceStore {
     } catch {
       throw new Error("workspace layout is corrupt");
     }
-    if (!layout?.tabs?.length) {
+    const tabs = upgradeWorkspaceTabs(layout);
+    if (!tabs.length) {
       // Empty workspace - just touch + return.
       await api.workspaceTouchLastOpened(id);
       await this.load();
@@ -121,22 +138,30 @@ class WorkspaceStore {
       paneTabs.removeTab(t.tabId);
     }
 
-    // Open each tab. connectionActions.connectOne handles the IPC,
-    // sessions.add, paneTabs.addTab, view switch. After it returns we
-    // attach the group metadata.
-    for (const spec of layout.tabs) {
-      const beforeIds = new Set(paneTabs.tabs.map((t) => t.tabId));
-      const ok = await connectionActions.connectOne(spec.connectionId);
-      if (!ok) continue;
-      // Find the newly-added tab (its tabId wasn't in the snapshot
-      // we took before the connect call).
-      const newTab = paneTabs.tabs.find((t) => !beforeIds.has(t.tabId));
-      if (!newTab) continue;
-      if (spec.title) paneTabs.setTitle(newTab.tabId, spec.title);
-      if (spec.groupName || spec.groupColor) {
-        paneTabs.setGroup(newTab.tabId, spec.groupName, spec.groupColor);
+    // Rebuild each tab: one connect per pane, then the tree around them.
+    // A pane that cannot be reconnected is dropped and its split collapsed,
+    // so one dead host costs a pane rather than the whole tab.
+    beginRestore();
+    let opened = 0;
+    for (const spec of tabs) {
+      const built = await restorePaneSpec(spec, (one) => connectSpec(one));
+      if (!built) {
+        toast.err(`${spec.title || "tab"}: nothing could be reconnected`);
+        continue;
       }
+      const tab = paneTabs.addTabFromLayout({
+        title: spec.title ?? "",
+        root: built.root,
+        groupName: spec.groupName,
+        groupColor: spec.groupColor,
+      });
+      if (!spec.title) {
+        const first = sessions.tabs.find((x) => x.sessionId === built.sessionIds[0]);
+        if (first) paneTabs.setTitle(tab.tabId, first.name);
+      }
+      opened++;
     }
+    if (opened > 0) view.setTab("terminal");
 
     try { await api.workspaceTouchLastOpened(id); } catch { /* ignore */ }
     await this.load();

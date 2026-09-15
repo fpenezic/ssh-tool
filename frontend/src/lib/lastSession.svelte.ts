@@ -5,8 +5,10 @@
 //
 // Snapshot scope: SSH tabs (connectionId), dynamic-inventory tabs
 // (folderId + entryId, captured from the tree cache while it's warm)
-// and local shells (shell kind). Pane splits collapse to the active
-// leaf, same as the workspaces serializer.
+// and local shells (shell kind). Split tabs are saved whole - the pane
+// tree, its split directions and ratios, and one entry per pane (see
+// paneSpec.ts, shared with the workspaces serializer). A pane whose
+// session cannot be restored is dropped and its split collapsed.
 //
 // Save discipline matches window_state.go: saving is gated until the
 // startup restore has run, otherwise the empty boot state would
@@ -18,10 +20,21 @@ import { api } from "./api";
 import { paneTabs, sessions, tree, view } from "./stores.svelte";
 import { connectionActions, isTransientConnectError } from "./connectionActions.svelte";
 import { showConfirm } from "./confirmModal.svelte.ts";
+import {
+  serializePaneSpec,
+  restorePaneSpec,
+  specFromFlat,
+  type SessionSpec,
+  type TabSpec,
+} from "./paneSpec";
+import { specForSession, connectSpec, beginRestore } from "./sessionSpec";
 import { toast } from "./toast.svelte.ts";
 
 const MODE_KEY = "reopen_last_session_mode";
-const TABS_KEY = "last_session_tabs_v1";
+const TABS_KEY = "last_session_tabs_v2";
+// Read-only fallback: a v1 blob (one session per tab, no pane tree) is still
+// restored on the first launch after the upgrade, then rewritten as v2.
+const LEGACY_TABS_KEY = "last_session_tabs_v1";
 
 export type ReopenMode = "ask" | "always" | "never";
 
@@ -65,74 +78,20 @@ class LastSessionStore {
     api.settingsSet(MODE_KEY, v).catch(console.warn);
   }
 
-  // Locate a dynamic entry across all cached folders. Entry row ids
-  // regenerate on every provider refresh (backend assigns a fresh
-  // uuid per fetch), so a session's id can be stale by snapshot time
-  // - fall back to matching the session's hostname + name.
-  private dynEntryFor(
-    entryId: string,
-    hostname: string,
-    name: string,
-  ): { folderId: string; entry: (typeof tree.dynamicEntries)[string][number] } | null {
-    for (const [fid, list] of Object.entries(tree.dynamicEntries)) {
-      const hit = list.find((e) => e.id === entryId);
-      if (hit) return { folderId: fid, entry: hit };
-    }
-    for (const [fid, list] of Object.entries(tree.dynamicEntries)) {
-      const hit = list.find(
-        (e) => (hostname && e.hostname === hostname) || (name && e.name === name),
-      );
-      if (hit) return { folderId: fid, entry: hit };
-    }
-    return null;
-  }
-
-  private serialize(): SavedTab[] {
-    const out: SavedTab[] = [];
+  private serialize(): TabSpec[] {
+    const out: TabSpec[] = [];
     for (const t of paneTabs.tabs) {
-      const leaf = paneTabs.activePane(t.tabId);
-      if (!leaf) continue;
-      const sess = sessions.tabs.find((s) => s.sessionId === leaf.sessionId);
-      if (!sess) continue;
-      // VNC consoles aren't restorable: the bridge token dies with the
-      // process and a console can't be silently re-established (Proxmox
-      // would re-mint a ticket, generic VNC would re-tunnel). Skip them
-      // so they don't get mis-saved as an ssh/dyn tab and reopened as a
-      // terminal on next launch.
-      if (sess.kind === "vnc") continue;
-      const meta = {
+      const spec = serializePaneSpec(t.root, (sid) => specForSession(sid));
+      // Every pane was unrestorable (a lone VNC console, say) - skip the tab
+      // rather than writing an empty one.
+      if (!spec) continue;
+      out.push({
         title: t.title,
         groupName: t.groupName,
         groupColor: t.groupColor,
-      };
-      if (sess.kind === "local") {
-        // A saved local-shell connection (connectionId set, non-dyn) must
-        // restore via LocalConnect so its InitialCommand re-runs (e.g. a
-        // "claude" launcher). An ad-hoc local shell has no connectionId;
-        // recovery and openLocalShell store its shell kind in `hostname`
-        // (cmd / powershell / wsl / bash ...). Distinguishing the two here
-        // is what stops a saved "claude on double-click" connection from
-        // reopening as a bare WSL prompt on restore.
-        if (sess.connectionId && !sess.connectionId.startsWith("dyn:")) {
-          out.push({ kind: "local", connectionId: sess.connectionId, ...meta });
-        } else {
-          out.push({ kind: "local", shellKind: sess.hostname, ...meta });
-        }
-      } else if (sess.connectionId.startsWith("dyn:")) {
-        const entryId = sess.connectionId.slice(4);
-        const dyn = this.dynEntryFor(entryId, sess.hostname, sess.name);
-        out.push({
-          kind: "dyn",
-          entryId,
-          externalId: dyn?.entry.external_id ?? "",
-          folderId: dyn?.folderId ?? "",
-          entryName: dyn?.entry.name ?? sess.name,
-          hostname: dyn?.entry.hostname ?? sess.hostname,
-          ...meta,
-        });
-      } else if (sess.connectionId) {
-        out.push({ kind: "ssh", connectionId: sess.connectionId, ...meta });
-      }
+        sessions: spec.sessions,
+        root: spec.root,
+      });
     }
     return out;
   }
@@ -174,10 +133,17 @@ class LastSessionStore {
     this.restoreDone = true;
     if (recovered > 0 || this.mode === "never") return;
 
-    let saved: SavedTab[] = [];
+    let saved: TabSpec[] = [];
     try {
       const raw = await api.settingsGet(TABS_KEY);
-      if (raw) saved = JSON.parse(raw);
+      if (raw) {
+        saved = JSON.parse(raw);
+      } else {
+        // First launch after the upgrade: read the flat v1 snapshot and lift
+        // each row to a one-pane spec. The next flush writes v2.
+        const legacy = await api.settingsGet(LEGACY_TABS_KEY);
+        if (legacy) saved = upgradeLegacyTabs(JSON.parse(legacy));
+      }
     } catch { /* missing or corrupt - nothing to restore */ }
     if (!Array.isArray(saved) || saved.length === 0) return;
 
@@ -195,6 +161,7 @@ class LastSessionStore {
     }
 
     this.restoring = true;
+    beginRestore();
     // Connects run sequentially (preserves tab order) and each one
     // blocks until auth+PTY, so a slow host opens its tab visibly
     // late. The toasts attribute those stragglers - without them a
@@ -221,129 +188,39 @@ class LastSessionStore {
     }
   }
 
-  private async restoreOne(spec: SavedTab) {
-    if (!spec) return;
-    const beforeIds = new Set(paneTabs.tabs.map((t) => t.tabId));
-
-    // Legacy snapshot rows (pre-kind) carry only connectionId.
-    const kind = spec.kind ?? (spec.connectionId ? "ssh" : undefined);
-
-    if (kind === "ssh" && spec.connectionId) {
-      const ok = await connectionActions.connectOne(spec.connectionId);
-      if (!ok) return;
-    } else if (kind === "dyn" && (spec.externalId || spec.entryId)) {
-      // Entry row ids regenerate on every provider refresh, so the
-      // saved id may be dead. Resolve through the provider-stable
-      // external_id (name/hostname as a last resort) against freshly
-      // loaded entries, then connect with the CURRENT row id.
-      const matches = (e: { id: string; external_id: string; name: string; hostname: string }) =>
-        (spec.externalId && e.external_id === spec.externalId) ||
-        (spec.entryId && e.id === spec.entryId) ||
-        (spec.hostname && e.hostname === spec.hostname) ||
-        (spec.entryName && e.name === spec.entryName);
-
-      let folderId = "";
-      let entry: { id: string; name: string; hostname: string } | null = null;
-      const candidates = spec.folderId
-        ? [spec.folderId, ...Object.keys(tree.dynamicFolders).filter((f) => f !== spec.folderId)]
-        : Object.keys(tree.dynamicFolders);
-      for (const fid of candidates) {
-        // Only pull a folder's entries once per restore. Restoring 25 dynamic
-        // hosts used to re-fetch the inventory 25 times; a provider that rate
-        // limits (or just answers slowly) then returns an empty list, and the
-        // host is reported as "not in the inventory anymore" even though it is
-        // there. The tree is loaded before restore runs, so a folder already
-        // populated needs no round trip at all.
-        if (!this.inventoryPulled.has(fid)) {
-          this.inventoryPulled.add(fid);
-          if ((tree.dynamicEntries[fid] ?? []).length === 0) {
-            await tree.loadDynamicEntries(fid);
-          }
-        }
-        const hit = (tree.dynamicEntries[fid] ?? []).find(matches);
-        if (hit) {
-          folderId = fid;
-          entry = hit;
-          break;
-        }
-      }
-      if (!entry || !folderId) {
-        throw new Error(`${spec.entryName || "dynamic host"}: not in the inventory anymore`);
-      }
-      // Same single retry the saved-connection path gets: restoring 25 hosts
-      // back to back reliably turns up one transient DNS/refused/timeout, and
-      // without a retry that host is simply missing after a restart. Auth and
-      // host-key failures are NOT retried - see isTransientConnectError.
-      let res;
-      try {
-        res = await api.sshConnectDynamic(folderId, entry.id);
-      } catch (e) {
-        if (!isTransientConnectError(e)) throw e;
-        await new Promise((r) => setTimeout(r, 800));
-        res = await api.sshConnectDynamic(folderId, entry.id);
-      }
-      sessions.add({
-        sessionId: res.session_id,
-        connectionId: "dyn:" + entry.id,
-        name: entry.name,
-        hostname: entry.hostname,
-        status: "connected",
-      });
-      paneTabs.addTab(res.session_id, entry.name);
-      view.setTab("terminal");
-    } else if (kind === "local" && spec.connectionId) {
-      // A saved local-shell connection: re-run it through LocalConnect so
-      // its InitialCommand fires (a "claude" launcher, a REPL, ...). If the
-      // connection was deleted since the snapshot, fall through to nothing
-      // rather than spawning a bare shell that isn't what the user saved.
-      const conn = tree.connectionById(spec.connectionId);
-      if (!conn || conn.protocol !== "local") {
-        throw new Error(`${spec.title || "local connection"}: no longer exists`);
-      }
-      const r = await api.localConnect(conn.id);
-      sessions.add({
-        sessionId: r.session_id,
-        connectionId: conn.id,
-        name: conn.name,
-        hostname: r.display || r.kind,
-        kind: "local",
-        status: "connected",
-      });
-      paneTabs.addTab(r.session_id, conn.name);
-      view.setTab("terminal");
-    } else if (kind === "local") {
-      // Ad-hoc local shell (no connectionId). hostname carries the resolved
-      // shell kind, but auto-resolve stores a canonical label the spawner
-      // won't accept back as input: on Linux/mac the auto shell is "shell"
-      // (from $SHELL), which is not a valid kind, so local.Spawn("shell")
-      // errors with "unsupported shell kind" and the restore toasts a
-      // failure. Only feed back kinds the spawner takes; anything else
-      // (incl. "shell") falls to "" = auto and gets the same default shell.
-      // Mirrors duplicateTab in TerminalArea.svelte.
-      const spawnKinds = ["wsl", "powershell", "cmd", "bash", "zsh", "sh", "fish"];
-      const shellKind = spawnKinds.includes(spec.shellKind ?? "") ? spec.shellKind! : "";
-      const res = await api.localShellOpen(shellKind, "", 120, 32);
-      sessions.add({
-        sessionId: res.session_id,
-        connectionId: "",
-        name: res.display,
-        hostname: res.kind,
-        kind: "local",
-        status: "connected",
-      });
-      paneTabs.addTab(res.session_id, res.display);
-      view.setTab("terminal");
-    } else {
-      return;
+  private async restoreOne(spec: TabSpec) {
+    if (!spec?.root) return;
+    const built = await restorePaneSpec(spec, (one) => connectSpec(one));
+    if (!built) throw new Error(`${spec.title || "tab"}: nothing could be reconnected`);
+    const tab = paneTabs.addTabFromLayout({
+      title: spec.title ?? "",
+      root: built.root,
+      groupName: spec.groupName,
+      groupColor: spec.groupColor,
+    });
+    // A tab title is normally derived from the connection; a saved one that
+    // is empty must not blank the restored tab.
+    if (!spec.title) {
+      const first = sessions.tabs.find((x) => x.sessionId === built.sessionIds[0]);
+      if (first) paneTabs.setTitle(tab.tabId, first.name);
     }
-
-    const newTab = paneTabs.tabs.find((t) => !beforeIds.has(t.tabId));
-    if (!newTab) return;
-    if (spec.title) paneTabs.setTitle(newTab.tabId, spec.title);
-    if (spec.groupName || spec.groupColor) {
-      paneTabs.setGroup(newTab.tabId, spec.groupName, spec.groupColor);
-    }
+    view.setTab("terminal");
   }
+
+}
+
+// Lift a v1 snapshot (flat, one session per tab) into v2 tab specs.
+function upgradeLegacyTabs(rows: unknown): TabSpec[] {
+  if (!Array.isArray(rows)) return [];
+  const out: TabSpec[] = [];
+  for (const r of rows as SavedTab[]) {
+    if (!r) continue;
+    const kind = r.kind ?? (r.connectionId ? "ssh" : undefined);
+    if (!kind) continue;
+    const { title, groupName, groupColor, ...session } = r;
+    out.push(specFromFlat({ ...session, kind } as SessionSpec, { title, groupName, groupColor }));
+  }
+  return out;
 }
 
 export const lastSession = new LastSessionStore();
