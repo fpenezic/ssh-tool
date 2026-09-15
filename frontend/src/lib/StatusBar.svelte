@@ -17,7 +17,7 @@
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
   import { desktopAlerts } from "./desktopAlerts.svelte";
-  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot } from "./iconMap";
+  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot, IconSave } from "./iconMap";
   import McpActivityPanel from "./McpActivityPanel.svelte";
   import { mcpCounterTitle } from "./mcpLevel";
   import { networkProfiles } from "./networkProfiles.svelte";
@@ -27,6 +27,7 @@
   import { workspaces } from "./workspaces.svelte";
   import { updateCheck } from "./updateCheck.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
+  import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
   import { onMount, onDestroy } from "svelte";
   import { api } from "./api";
@@ -111,13 +112,68 @@
   }
   async function saveCurrentAs() {
     const name = await showPrompt("Workspace name?");
-    if (!name?.trim()) return;
+    const trimmed = name?.trim();
+    if (!trimmed) return;
     wsErr = null;
+    // Reusing an existing name means "save into that one" - the backend's
+    // unique constraint would otherwise answer a plain rename attempt with a
+    // raw SQL error, which is how this used to dead-end.
+    const existing = workspaces.findByName(trimmed);
     try {
-      await workspaces.saveCurrentAs(name.trim());
+      if (existing) {
+        const ok = await showConfirm({
+          title: "Overwrite workspace",
+          message: `"${existing.name}" already exists. Replace it with the current tabs?`,
+          okLabel: "Overwrite",
+        });
+        if (!ok) return;
+        await workspaces.overwrite(existing.id, existing.name);
+      } else {
+        await workspaces.saveCurrentAs(trimmed);
+      }
       wsMenuOpen = false;
     } catch (e: any) {
       wsErr = errMsg(e);
+    }
+  }
+
+  // Save into the workspace that is already open: the everyday case, with no
+  // prompt and no confirm. Only offered when one IS open.
+  async function saveActive() {
+    wsErr = null;
+    wsBusy = true;
+    try {
+      const name = workspaces.active?.name ?? "";
+      if (await workspaces.saveActive()) {
+        toast.ok(`Workspace "${name}" saved`);
+        wsMenuOpen = false;
+      }
+    } catch (e: any) {
+      wsErr = errMsg(e);
+    } finally {
+      wsBusy = false;
+    }
+  }
+
+  // Save into a workspace from its row, without opening it first.
+  async function saveInto(id: string, name: string, e: MouseEvent) {
+    e.stopPropagation();
+    const ok = await showConfirm({
+      title: "Overwrite workspace",
+      message: `Replace "${name}" with the current tabs?`,
+      okLabel: "Overwrite",
+    });
+    if (!ok) return;
+    wsErr = null;
+    wsBusy = true;
+    try {
+      await workspaces.overwrite(id, name);
+      toast.ok(`Workspace "${name}" saved`);
+      wsMenuOpen = false;
+    } catch (err: any) {
+      wsErr = errMsg(err);
+    } finally {
+      wsBusy = false;
     }
   }
   function manage() {
@@ -340,20 +396,39 @@
           <div class="ws-empty">No workspaces yet.</div>
         {:else}
           {#each workspaces.list as w (w.id)}
-            <button
-              class="ws-row"
-              disabled={wsBusy}
-              onclick={() => openWorkspace(w.id)}
-              title={w.last_opened_at ? `Last opened ${new Date(w.last_opened_at * 1000).toLocaleString()}` : "Never opened"}
-            >
-              <span class="ws-name">{w.name}</span>
-              {#if w.last_opened_at}
-                <span class="ws-meta">{new Date(w.last_opened_at * 1000).toLocaleDateString()}</span>
-              {/if}
-            </button>
+            <div class="ws-row-wrap" class:active={w.id === workspaces.activeId}>
+              <button
+                class="ws-row"
+                disabled={wsBusy}
+                onclick={() => openWorkspace(w.id)}
+                title={w.last_opened_at ? `Last opened ${new Date(w.last_opened_at * 1000).toLocaleString()}` : "Never opened"}
+              >
+                <span class="ws-name">{w.name}</span>
+                {#if w.last_opened_at}
+                  <span class="ws-meta">{new Date(w.last_opened_at * 1000).toLocaleDateString()}</span>
+                {/if}
+              </button>
+              <button
+                class="ws-save"
+                disabled={wsBusy || paneTabs.tabs.length === 0}
+                onclick={(e) => saveInto(w.id, w.name, e)}
+                title="Overwrite this workspace with the current tabs"
+                aria-label="Overwrite {w.name}"
+              ><IconSave size={11} /></button>
+            </div>
           {/each}
         {/if}
         <div class="ws-sep"></div>
+        {#if workspaces.active}
+          <button
+            class="ws-action primary"
+            disabled={wsBusy || paneTabs.tabs.length === 0}
+            onclick={saveActive}
+            title="Write the current tabs into this workspace"
+          >
+            <IconSave size={11} /> Save changes to "{workspaces.active.name}"
+          </button>
+        {/if}
         <button class="ws-action" disabled={paneTabs.tabs.length === 0} onclick={saveCurrentAs}>
           + Save current as…
         </button>
@@ -837,4 +912,32 @@
   .ws-meta { color: var(--overlay0); font-size: 0.7rem; }
   .ws-sep { height: 1px; background: var(--surface0); margin: 0.2rem 0; }
   .ws-action { color: var(--blue); }
+  .ws-action.primary {
+    justify-content: flex-start;
+    gap: 0.4rem;
+    color: var(--green);
+    font-weight: 500;
+  }
+  /* A row is a flex pair: the name (which opens the workspace) and a save
+     button that writes the current tabs into it without opening it first. */
+  .ws-row-wrap {
+    display: flex;
+    align-items: stretch;
+  }
+  .ws-row-wrap .ws-row { flex: 1; min-width: 0; }
+  .ws-row-wrap.active .ws-name { color: var(--green); }
+  .ws-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ws-save {
+    display: flex;
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: var(--overlay0);
+    padding: 0 0.55rem;
+    cursor: pointer;
+  }
+  .ws-save:hover:not(:disabled) { background: var(--surface0); color: var(--green); }
+  .ws-save:disabled { opacity: 0.35; cursor: not-allowed; }
+  .ws-row-wrap:hover .ws-save { color: var(--subtext0); }
+  .ws-row-wrap:hover .ws-save:hover:not(:disabled) { color: var(--green); }
 </style>

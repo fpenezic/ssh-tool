@@ -49,6 +49,15 @@ class WorkspaceStore {
   list = $state<Workspace[]>([]);
   loading = $state(false);
   error = $state<string | null>(null);
+  // The workspace currently open, if any. Set by open() and by saving the
+  // current tabs under a new name; cleared when that workspace is deleted.
+  // Lets the UI offer "Save changes" against the right one instead of making
+  // the user find it in a list and confirm an overwrite.
+  activeId = $state<string | null>(null);
+
+  get active(): Workspace | null {
+    return this.list.find((w) => w.id === this.activeId) ?? null;
+  }
 
   async load() {
     this.loading = true;
@@ -86,18 +95,41 @@ class WorkspaceStore {
     const layout = this.serializeCurrent();
     const created = await api.workspaceCreate(name, JSON.stringify(layout));
     await this.load();
+    if (created) this.activeId = created.id;
     return created;
+  }
+
+  // Write the current tabs over the workspace that is already open. The
+  // everyday save: no name prompt, no overwrite confirm, no picking from a
+  // list. Returns false when nothing is open to save into.
+  async saveActive(): Promise<boolean> {
+    const w = this.active;
+    if (!w) return false;
+    await this.overwrite(w.id, w.name);
+    return true;
+  }
+
+  /** The existing workspace with this name, if any. Name matching is
+   *  case-insensitive: the table's UNIQUE constraint is what the user runs
+   *  into otherwise, as a raw SQL error with no way forward. */
+  findByName(name: string): Workspace | null {
+    const n = name.trim().toLowerCase();
+    return this.list.find((w) => w.name.toLowerCase() === n) ?? null;
   }
 
   async overwrite(id: string, name: string): Promise<Workspace | null> {
     const layout = this.serializeCurrent();
     const updated = await api.workspaceUpdate(id, name, JSON.stringify(layout));
     await this.load();
+    // Saving into a workspace makes it the one you are working in, whether or
+    // not it was open before.
+    this.activeId = id;
     return updated;
   }
 
   async delete(id: string) {
     await api.workspaceDelete(id);
+    if (this.activeId === id) this.activeId = null;
     await this.load();
   }
 
@@ -163,6 +195,7 @@ class WorkspaceStore {
     }
     if (opened > 0) view.setTab("terminal");
 
+    this.activeId = id;
     try { await api.workspaceTouchLastOpened(id); } catch { /* ignore */ }
     await this.load();
   }

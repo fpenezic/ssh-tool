@@ -9,6 +9,7 @@
 //   const C = credentialKindIcon(kind);  // returns the component
 
 import Folder from "@lucide/svelte/icons/folder";
+import Save from "@lucide/svelte/icons/save";
 import Zap from "@lucide/svelte/icons/zap";
 import Layers from "@lucide/svelte/icons/layers";
 import FolderPlus from "@lucide/svelte/icons/folder-plus";
@@ -63,6 +64,7 @@ export {
   RefreshCw as IconRefresh,
   Trash as IconTrash,
   Download as IconDownload,
+  Save as IconSave,
   Copy as IconCopy,
   Pencil as IconPencil,
   FolderInput as IconMoveToFolder,

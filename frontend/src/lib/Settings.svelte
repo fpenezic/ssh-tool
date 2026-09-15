@@ -314,10 +314,26 @@
   }
   async function wsSaveNew() {
     const name = await showPrompt("New workspace name?");
-    if (!name?.trim()) return;
+    const trimmed = name?.trim();
+    if (!trimmed) return;
     wsErr = null;
-    try { await workspaces.saveCurrentAs(name.trim()); }
-    catch (e: any) { wsErr = errMsg(e); }
+    // An existing name means "save into that one". Without this the UNIQUE
+    // constraint answers with a raw SQL error and the user has no way to
+    // save an edited workspace under the name it already has.
+    const existing = workspaces.findByName(trimmed);
+    try {
+      if (existing) {
+        const ok = await showConfirm({
+          title: "Overwrite workspace",
+          message: `"${existing.name}" already exists. Replace it with the current tabs?`,
+          okLabel: "Overwrite",
+        });
+        if (!ok) return;
+        await workspaces.overwrite(existing.id, existing.name);
+      } else {
+        await workspaces.saveCurrentAs(trimmed);
+      }
+    } catch (e: any) { wsErr = errMsg(e); }
   }
 
   // --- Snippets state ----------------------------------------------------

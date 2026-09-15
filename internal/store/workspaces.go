@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -71,9 +72,22 @@ func (d *DB) CreateWorkspace(name, layoutJSON string) (*Workspace, error) {
 		VALUES (?, ?, ?, ?, ?)
 	`, id, name, layoutJSON, now, now)
 	if err != nil {
+		// name is UNIQUE. The frontend offers to overwrite before it gets
+		// here, so this is the fallback for any other caller - a bare
+		// constraint violation is not something to show a user.
+		if isUniqueViolation(err) {
+			return nil, fmt.Errorf("a workspace named %q already exists", name)
+		}
 		return nil, err
 	}
 	return d.GetWorkspace(id)
+}
+
+// isUniqueViolation reports whether err is a UNIQUE constraint failure.
+// modernc.org/sqlite returns these as a plain error string rather than a
+// typed error, so matching on the message is the available option.
+func isUniqueViolation(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
 func (d *DB) UpdateWorkspace(id, name, layoutJSON string) (*Workspace, error) {
@@ -84,6 +98,9 @@ func (d *DB) UpdateWorkspace(id, name, layoutJSON string) (*Workspace, error) {
 		WHERE id = ?
 	`, name, layoutJSON, now, id)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, fmt.Errorf("a workspace named %q already exists", name)
+		}
 		return nil, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
