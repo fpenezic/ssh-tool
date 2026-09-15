@@ -7,6 +7,46 @@ a prerelease upstream.
 
 ---
 
+## [0.99.1] - Split tabs that come back, and workspaces you can actually save
+
+### Added
+
+- **Split tabs survive a restart.** Workspaces and reopen-last-session
+  both kept only the pane you happened to be looking at, so a tab split
+  four ways came back as one terminal and the arrangement was gone. Both
+  now save the whole tab: which panes, where each one sits, how wide it
+  is, and whether it was showing a terminal or the SFTP browser. A tab
+  split three ways reopens split three ways, at the sizes you left it.
+
+  Panes sharing one connection (a terminal with SFTP alongside it)
+  reconnect once, not twice, so restoring a workspace does not quietly
+  double the session count on your hosts. If a single host is down when
+  a workspace opens, that pane is dropped and the rest of the tab comes
+  back rather than the whole tab being lost.
+
+  Workspaces saved before this release still open, and are upgraded the
+  next time you save them.
+
+- **Tooltips on the session toolbar appear as you reach them.** The
+  toolbar is a row of unlabelled icons - copy host, copy password,
+  packet capture, log tail, port forwards - and the built-in tooltip
+  took about a second to show, which meant hovering and waiting to find
+  the button you wanted. They now appear almost immediately, and once
+  one is up, moving along the row shows the rest with no delay at all.
+
+### Fixed
+
+- **Saving an edited workspace was a dead end.** The only option was
+  "Save current as…", and typing the name the workspace already had
+  failed with a database error instead of saving. Reusing a name now
+  offers to replace that workspace, the menu leads with "Save changes"
+  for the one you have open, and every workspace in the list has a save
+  button that writes the current tabs into it. The overwrite action
+  existed all along, buried in Settings - Workspaces; it is now where
+  the work happens.
+
+---
+
 ## [0.98.0] - Terminal output that lines up, and links that open in your browser
 
 ### Fixed
