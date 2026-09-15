@@ -17,6 +17,7 @@
   } from "./iconMap";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
+  import { tooltipGroup } from "./tooltip.svelte";
   import { logtail } from "./logtailStore.svelte";
   import { focusActivePane } from "./paneFocus";
   import HttpModal from "./HttpModal.svelte";
@@ -510,7 +511,7 @@
           ><IconRotateCw size={12} /> Reconnect</button>
         {/if}
       {/if}
-      <div class="pane-actions">
+      <div class="pane-actions" use:tooltipGroup>
         <!-- Copy group: SSH only -->
         {#if !noSshPane}
           <div class="action-group">

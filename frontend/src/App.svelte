@@ -25,6 +25,7 @@
   import QuickPalette from "./lib/QuickPalette.svelte";
   import SnippetPalette from "./lib/SnippetPalette.svelte";
   import ToastHost from "./lib/ToastHost.svelte";
+  import TooltipHost from "./lib/TooltipHost.svelte";
   import { toast } from "./lib/toast.svelte.ts";
   import { showConfirm, showConfirmWithCheckbox } from "./lib/confirmModal.svelte.ts";
   import type { PaletteAction } from "./lib/QuickPalette.svelte";
@@ -1182,12 +1183,14 @@
        backend tail. -->
   <LogTailWindow sessionId={logtailSession!} />
   <ToastHost />
+  <TooltipHost />
 {:else if isDetached}
   <!-- Detached window: shared backend, slim UI. The vault is already
        unlocked in the main process (otherwise the user couldn't have
        opened a tab to detach), so we skip VaultGate entirely. -->
   <DetachedWindow detachedTabKey={detachedTab!} windowName={detachedWindowName} />
   <ToastHost />
+  <TooltipHost />
 {:else}
 
 {#if !vaultReady}
@@ -1406,6 +1409,7 @@
   {/if}
 
   <ToastHost />
+  <TooltipHost />
 
   {#if showCreate}
     <CredentialCreate
