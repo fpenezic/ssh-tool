@@ -126,3 +126,60 @@ func TestPersistentProfileDirIsPerKey(t *testing.T) {
 		t.Errorf("per-forward dir %q nested inside shared profile %q", a, shared)
 	}
 }
+
+// A local (-L) forward is reached directly on loopback, so port 0 must
+// produce a command line with no proxy switches at all. Leaving
+// --proxy-bypass-list behind would be the subtle failure: it is what
+// forces loopback traffic through the proxy, so on its own it would send
+// 127.0.0.1:<port> into a proxy that isn't there.
+func TestChromiumArgsNoProxyWhenPortZero(t *testing.T) {
+	args := chromiumArgs("/usr/bin/chromium", "/tmp/profile", "127.0.0.1", 0, "http://127.0.0.1:8080")
+	for _, a := range args {
+		if strings.Contains(a, "proxy") {
+			t.Fatalf("port 0 must add no proxy switches, got %q in %v", a, args)
+		}
+	}
+	if args[len(args)-1] != "http://127.0.0.1:8080" {
+		t.Fatalf("url must be last, got %v", args)
+	}
+	if !strings.HasPrefix(args[0], "--user-data-dir=") {
+		t.Fatalf("profile isolation must survive: %v", args)
+	}
+}
+
+func TestChromiumArgsProxyWhenPortSet(t *testing.T) {
+	args := chromiumArgs("/usr/bin/chromium", "/tmp/profile", "127.0.0.1", 1080, "https://example.com")
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--proxy-server=socks5://") {
+		t.Fatalf("missing proxy server: %v", args)
+	}
+	if !strings.Contains(joined, "--proxy-bypass-list=<-loopback>") {
+		t.Fatalf("missing loopback bypass: %v", args)
+	}
+}
+
+// proxy.type 0 has to be written, not merely omitted: a persistent
+// profile keeps prefs.js between launches, so an absent pref would leave
+// a previous SOCKS launch still proxying.
+func TestFirefoxPrefsDisableProxyWhenPortZero(t *testing.T) {
+	prefs := firefoxPrefs("127.0.0.1", 0)
+	if !strings.Contains(prefs, `user_pref("network.proxy.type", 0);`) {
+		t.Fatalf("expected explicit no-proxy pref, got:\n%s", prefs)
+	}
+	if strings.Contains(prefs, "network.proxy.socks") {
+		t.Fatalf("port 0 must not set a socks proxy, got:\n%s", prefs)
+	}
+}
+
+func TestFirefoxPrefsSetProxyWhenPortSet(t *testing.T) {
+	prefs := firefoxPrefs("127.0.0.1", 1080)
+	if !strings.Contains(prefs, `user_pref("network.proxy.type", 1);`) {
+		t.Fatalf("expected proxy type 1, got:\n%s", prefs)
+	}
+	if !strings.Contains(prefs, `user_pref("network.proxy.socks_port", 1080);`) {
+		t.Fatalf("expected socks port, got:\n%s", prefs)
+	}
+	if !strings.Contains(prefs, `user_pref("network.proxy.socks_remote_dns", true);`) {
+		t.Fatalf("remote DNS must stay on so hostnames resolve through the tunnel:\n%s", prefs)
+	}
+}

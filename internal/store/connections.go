@@ -19,6 +19,9 @@ type NewConnection struct {
 	// picks the shell for a local connection (nil = auto).
 	Protocol       string
 	LocalShellKind *string
+	// LocalShellDir is the shell's starting directory (nil = fall back
+	// to the app-wide setting, then to the user's home).
+	LocalShellDir *string
 }
 
 func (d *DB) CreateConnection(in NewConnection) (*Connection, error) {
@@ -45,10 +48,10 @@ func (d *DB) CreateConnection(in NewConnection) (*Connection, error) {
 	}
 	_, err = d.conn.Exec(
 		`INSERT INTO connections
-		 (id, folder_id, name, hostname, sort_order, overrides_json, tags_json, notes, favorite, sensitive, open_hidden, protocol, local_shell_kind, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
+		 (id, folder_id, name, hostname, sort_order, overrides_json, tags_json, notes, favorite, sensitive, open_hidden, protocol, local_shell_kind, local_shell_dir, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?)`,
 		id, in.FolderID, in.Name, in.Hostname, in.SortOrder,
-		string(overrides), string(tagsJSON), in.Notes, protocol, in.LocalShellKind, ts, ts,
+		string(overrides), string(tagsJSON), in.Notes, protocol, in.LocalShellKind, in.LocalShellDir, ts, ts,
 	)
 	if err != nil {
 		return nil, err
@@ -60,7 +63,7 @@ func (d *DB) GetConnection(id string) (*Connection, error) {
 	row := d.conn.QueryRow(
 		`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
 		        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
-		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind
+		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir
 		 FROM connections WHERE id = ?`, id,
 	)
 	return scanConnection(row)
@@ -75,7 +78,7 @@ func (d *DB) ListConnections(folderID *string) ([]Connection, error) {
 		rows, err = d.conn.Query(
 			`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
 			        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
-			        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind
+			        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir
 			 FROM connections WHERE folder_id = ? ORDER BY sort_order, name`,
 			*folderID,
 		)
@@ -83,7 +86,7 @@ func (d *DB) ListConnections(folderID *string) ([]Connection, error) {
 		rows, err = d.conn.Query(
 			`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
 			        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
-			        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind
+			        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir
 			 FROM connections ORDER BY sort_order, name`,
 		)
 	}
@@ -122,6 +125,8 @@ type UpdateConnection struct {
 	Protocol            *string
 	LocalShellKind      *string
 	ClearLocalShellKind bool
+	LocalShellDir       *string
+	ClearLocalShellDir  bool
 }
 
 func (d *DB) UpdateConnection(in UpdateConnection) (*Connection, error) {
@@ -181,6 +186,12 @@ func (d *DB) UpdateConnection(in UpdateConnection) (*Connection, error) {
 	if newProto == "" {
 		newProto = "ssh"
 	}
+	newLocalDir := existing.LocalShellDir
+	if in.ClearLocalShellDir {
+		newLocalDir = nil
+	} else if in.LocalShellDir != nil {
+		newLocalDir = in.LocalShellDir
+	}
 	newLocalKind := existing.LocalShellKind
 	if in.ClearLocalShellKind {
 		newLocalKind = nil
@@ -202,10 +213,10 @@ func (d *DB) UpdateConnection(in UpdateConnection) (*Connection, error) {
 	_, err = d.conn.Exec(
 		`UPDATE connections SET
 		   folder_id=?, name=?, hostname=?, sort_order=?, overrides_json=?, tags_json=?,
-		   notes=?, favorite=?, sensitive=?, open_hidden=?, protocol=?, local_shell_kind=?, updated_at=?
+		   notes=?, favorite=?, sensitive=?, open_hidden=?, protocol=?, local_shell_kind=?, local_shell_dir=?, updated_at=?
 		 WHERE id=?`,
 		newFolder, newName, newHost, newSort, string(overridesJSON), string(tagsJSON),
-		newNotes, boolToInt(newFav), boolToInt(newSens), boolToInt(newHidden), newProto, newLocalKind, now(), in.ID,
+		newNotes, boolToInt(newFav), boolToInt(newSens), boolToInt(newHidden), newProto, newLocalKind, newLocalDir, now(), in.ID,
 	)
 	if err != nil {
 		return nil, err
@@ -421,7 +432,7 @@ func (d *DB) RecentConnections(limit int) ([]Connection, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
 		        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
-		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind
+		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir
 		 FROM connections
 		 WHERE last_used_at IS NOT NULL
 		 ORDER BY last_used_at DESC
@@ -448,7 +459,7 @@ func (d *DB) FavoriteConnections() ([]Connection, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
 		        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
-		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind
+		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir
 		 FROM connections
 		 WHERE favorite = 1
 		 ORDER BY name`,
@@ -487,11 +498,12 @@ func scanConnection(s scanner) (*Connection, error) {
 		vncVaultKey  sql.NullString
 		protocol     sql.NullString
 		localKind    sql.NullString
+		localDir     sql.NullString
 	)
 	err := s.Scan(
 		&c.ID, &folderID, &c.Name, &c.Hostname, &c.SortOrder,
 		&overridesRaw, &tagsRaw, &notes, &fav, &sens, &openHidden, &iconID, &iconName, &iconColor, &lastUsed,
-		&c.CreatedAt, &c.UpdatedAt, &passVaultKey, &vncVaultKey, &protocol, &localKind,
+		&c.CreatedAt, &c.UpdatedAt, &passVaultKey, &vncVaultKey, &protocol, &localKind, &localDir,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -524,6 +536,9 @@ func scanConnection(s scanner) (*Connection, error) {
 	}
 	if localKind.Valid {
 		c.LocalShellKind = &localKind.String
+	}
+	if localDir.Valid {
+		c.LocalShellDir = &localDir.String
 	}
 	if err := json.Unmarshal([]byte(overridesRaw), &c.Overrides); err != nil {
 		return nil, fmt.Errorf("unmarshal overrides: %w", err)

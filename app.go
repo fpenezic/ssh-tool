@@ -1334,6 +1334,7 @@ type ConnectionsCreateInput struct {
 	Notes          string                    `json:"notes"`
 	Protocol       string                    `json:"protocol"`
 	LocalShellKind *string                   `json:"local_shell_kind"`
+	LocalShellDir  *string                   `json:"local_shell_dir"`
 }
 
 func (a *App) ConnectionsCreate(in ConnectionsCreateInput) (*store.Connection, error) {
@@ -1347,6 +1348,7 @@ func (a *App) ConnectionsCreate(in ConnectionsCreateInput) (*store.Connection, e
 		Notes:          in.Notes,
 		Protocol:       in.Protocol,
 		LocalShellKind: in.LocalShellKind,
+		LocalShellDir:  in.LocalShellDir,
 	})
 }
 
@@ -1368,6 +1370,8 @@ type ConnectionsUpdateInput struct {
 	// forces it back to auto (NULL).
 	LocalShellKind      *string `json:"local_shell_kind"`
 	ClearLocalShellKind bool    `json:"clear_local_shell_kind"`
+	LocalShellDir       *string `json:"local_shell_dir"`
+	ClearLocalShellDir  bool    `json:"clear_local_shell_dir"`
 }
 
 func (a *App) ConnectionsUpdate(in ConnectionsUpdateInput) (*store.Connection, error) {
@@ -1387,6 +1391,8 @@ func (a *App) ConnectionsUpdate(in ConnectionsUpdateInput) (*store.Connection, e
 		Protocol:            in.Protocol,
 		LocalShellKind:      in.LocalShellKind,
 		ClearLocalShellKind: in.ClearLocalShellKind,
+		LocalShellDir:       in.LocalShellDir,
+		ClearLocalShellDir:  in.ClearLocalShellDir,
 	})
 }
 
@@ -1409,6 +1415,7 @@ func (a *App) ConnectionsClone(id string) (*store.Connection, error) {
 		Notes:          src.Notes,
 		Protocol:       src.Protocol,
 		LocalShellKind: src.LocalShellKind,
+		LocalShellDir:  src.LocalShellDir,
 	})
 	if err != nil {
 		return nil, err
@@ -3723,12 +3730,31 @@ type LocalShellOpenResult struct {
 // pty_output:<sessionID> channel as SSH so the xterm component
 // doesn't need to know which kind it is.
 func (a *App) LocalShellOpen(kind, dir string, cols, rows uint16) (*LocalShellOpenResult, error) {
+	if dir == "" {
+		dir = a.localShellDirSetting()
+	}
 	return a.openLocalShell(local.SpawnRequest{
 		Kind: kind,
 		Cols: cols,
 		Rows: rows,
 		Dir:  dir,
 	})
+}
+
+// localShellDirSetting reads the app-wide starting directory for local
+// shells. Empty means "no preference", which local.Spawn turns into the
+// user's home - the directory every other terminal on the system opens
+// in. It is deliberately not resolved to an absolute path here: the WSL
+// shell takes Linux paths that mean nothing to the Windows side.
+func (a *App) localShellDirSetting() string {
+	if a.db == nil {
+		return ""
+	}
+	v, _, err := a.db.GetSetting("local_shell_dir")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(v)
 }
 
 // LocalConnect opens a saved "local" connection: a local PTY running the
@@ -3755,8 +3781,18 @@ func (a *App) LocalConnect(connectionID string) (*LocalShellOpenResult, error) {
 	if conn.LocalShellKind != nil {
 		kind = *conn.LocalShellKind
 	}
+	// The connection's own directory wins; an unset one falls back to the
+	// app-wide setting, and an unset setting to the user's home.
+	dir := ""
+	if conn.LocalShellDir != nil {
+		dir = strings.TrimSpace(*conn.LocalShellDir)
+	}
+	if dir == "" {
+		dir = a.localShellDirSetting()
+	}
 	return a.openLocalShell(local.SpawnRequest{
 		Kind:                      kind,
+		Dir:                       dir,
 		InitialCommand:            settings.InitialCommand,
 		InitialCommandLineDelayMs: settings.InitialCommandLineDelayMs,
 	})
@@ -4253,6 +4289,9 @@ type ForwardUpdateInput struct {
 	ClearRemotePort bool    `json:"clear_remote_port"`
 	AutoStart       *bool   `json:"auto_start"`
 	Description     *string `json:"description"`
+	// BrowserMode: "" / "system" / "isolated" / "persistent". nil leaves
+	// it alone; see SshLaunchBrowser for what each one means.
+	BrowserMode *string `json:"browser_mode"`
 }
 
 func (a *App) ForwardsUpdate(in ForwardUpdateInput) (*store.PortForward, error) {
@@ -4268,6 +4307,7 @@ func (a *App) ForwardsUpdate(in ForwardUpdateInput) (*store.PortForward, error) 
 		ClearRemotePort: in.ClearRemotePort,
 		AutoStart:       in.AutoStart,
 		Description:     in.Description,
+		BrowserMode:     in.BrowserMode,
 	})
 }
 
@@ -4777,24 +4817,65 @@ type BrowserLaunchResult struct {
 	PID int `json:"pid"`
 }
 
-// SshLaunchBrowser opens a browser pointed at the given SOCKS5 forward.
-// Respects the user's `preferred_browser_path` setting if present;
-// otherwise platform default detection (see internal/ssh/browser.go).
+// SshLaunchBrowser opens a browser on the given forward.
+//
+// A dynamic (SOCKS) forward is proxied through; a local (-L) forward is
+// dialled directly, because it already listens on loopback. Which
+// browser profile is used comes from the forward's own browser_mode:
+//
+//	""/"system"  - the user's normal browser, nothing isolated
+//	"isolated"   - a throwaway profile
+//	"persistent" - a profile kept per forward, so logins survive
+//
+// The empty default differs by kind on purpose. A local forward has
+// always been opened by hand as localhost:<port> in the user's own
+// browser, so forcing a blank profile on it would lose every login and
+// extension they have - that is a regression dressed as a feature. A
+// dynamic forward's isolation IS the point of the proxy, so it keeps
+// answering to the app-wide browser_persistent_profile setting.
+//
+// Respects `preferred_browser_path` if set; otherwise platform default
+// detection (see internal/ssh/browser.go).
 func (a *App) SshLaunchBrowser(forwardID, url string) (*BrowserLaunchResult, error) {
 	for _, s := range a.forwards.List("") {
 		if s.ID != forwardID {
 			continue
 		}
-		if s.Kind != sshlayer.ForwardDynamic {
-			return nil, fmt.Errorf("forward %s is not a dynamic (SOCKS) forward", forwardID)
+		if s.Kind != sshlayer.ForwardDynamic && s.Kind != sshlayer.ForwardLocal {
+			return nil, fmt.Errorf("forward %s is neither a dynamic (SOCKS) nor a local forward", forwardID)
+		}
+
+		mode := a.forwardBrowserMode(forwardID)
+		if mode == "" {
+			if s.Kind == sshlayer.ForwardDynamic {
+				// Historical behaviour for SOCKS forwards.
+				if a.boolSetting("browser_persistent_profile") {
+					mode = "persistent"
+				} else {
+					mode = "isolated"
+				}
+			} else {
+				mode = "system"
+			}
+		}
+
+		if mode == "system" {
+			// No profile juggling: hand it to whatever the OS opens URLs
+			// with, which is where the user's logins already live.
+			BrowserOpenURL(url)
+			return &BrowserLaunchResult{PID: 0}, nil
+		}
+
+		// Port 0 tells the browser layer to dial directly - see
+		// LaunchIsolatedBrowser. Only a SOCKS forward supplies one.
+		var proxyPort uint16
+		if s.Kind == sshlayer.ForwardDynamic {
+			proxyPort = s.LocalPort
 		}
 		preferred, _, _ := a.db.GetSetting("preferred_browser_path")
-		// When browser_persistent_profile is on, reuse a dedicated profile
-		// (keeps logins / saved creds) instead of a throwaway isolated one.
-		persistent := a.boolSetting("browser_persistent_profile")
-		pid, err := sshlayer.LaunchIsolatedBrowser(s.LocalAddr, s.LocalPort, url, sshlayer.LaunchOptions{
+		pid, err := sshlayer.LaunchIsolatedBrowser(s.LocalAddr, proxyPort, url, sshlayer.LaunchOptions{
 			PreferredPath:  preferred,
-			Persistent:     persistent,
+			Persistent:     mode == "persistent",
 			ProfileBaseDir: store.DataDir(),
 			// One persistent profile per forward: a shared one makes Chromium
 			// reuse the first launch's instance (and its now-stale SOCKS port)
@@ -4807,6 +4888,20 @@ func (a *App) SshLaunchBrowser(forwardID, url string) (*BrowserLaunchResult, err
 		return &BrowserLaunchResult{PID: pid}, nil
 	}
 	return nil, fmt.Errorf("forward %s is not active", forwardID)
+}
+
+// forwardBrowserMode reads the saved browser_mode for a forward. A
+// forward that is running but not saved (or a DB read that fails) yields
+// "", which the caller turns into the per-kind default.
+func (a *App) forwardBrowserMode(forwardID string) string {
+	if a.db == nil {
+		return ""
+	}
+	f, err := a.db.GetPortForward(forwardID)
+	if err != nil || f == nil {
+		return ""
+	}
+	return strings.TrimSpace(f.BrowserMode)
 }
 
 // ----- Settings -----

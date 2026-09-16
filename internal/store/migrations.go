@@ -499,6 +499,32 @@ var migrations = []struct {
 		// backgrounded session is never invisible.
 		`ALTER TABLE connections ADD COLUMN open_hidden INTEGER NOT NULL DEFAULT 0;`,
 	},
+	{
+		26,
+		// Two independent additions that would otherwise be one migration
+		// each in the same release.
+		//
+		// `local_shell_dir` is the working directory a local connection's
+		// shell starts in (NULL/empty = the app-wide `local_shell_dir`
+		// setting, which itself falls back to the user's home). Before
+		// this the shell inherited the app's own cwd, i.e. the directory
+		// the executable lives in.
+		//
+		// `browser_mode` is per-forward, and only consulted when a
+		// bookmark or the browser button opens a URL through it:
+		//   ""/"system"  - the user's normal browser, no isolation. The
+		//                  default for local forwards, because that is
+		//                  what opening localhost:<port> by hand has
+		//                  always done, and a fresh profile would lose
+		//                  every login and extension the user has.
+		//   "isolated"   - a throwaway profile, discarded on close.
+		//   "persistent" - a profile kept per forward, so logins survive.
+		// Dynamic (SOCKS) forwards keep answering to the app-wide
+		// `browser_persistent_profile` setting when this is unset: their
+		// isolation is the point of the proxy, not an opt-in.
+		`ALTER TABLE connections ADD COLUMN local_shell_dir TEXT;
+		 ALTER TABLE port_forwards ADD COLUMN browser_mode TEXT NOT NULL DEFAULT '';`,
+	},
 }
 
 // LatestSchemaVersion is the version a freshly-migrated DB lands on.

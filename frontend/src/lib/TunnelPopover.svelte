@@ -291,7 +291,7 @@
             {/if}
           </div>
         </li>
-        {#if spec.kind === "dynamic" && spec.bookmarks?.length > 0}
+        {#if (spec.kind === "dynamic" || spec.kind === "local") && spec.bookmarks?.length > 0}
           {#each spec.bookmarks as bm (bm.url)}
             <li class="bm">
               <button

@@ -522,6 +522,17 @@ export class Connection {
              */
             this["local_shell_kind"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * LocalShellDir is the working directory this connection's shell
+             * starts in. nil / "" defers to the app-wide `local_shell_dir`
+             * setting, which itself falls back to the user's home directory.
+             * Ignored for SSH connections.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["local_shell_dir"] = undefined;
+        }
         if (!("overrides" in $$source)) {
             /**
              * @member
@@ -641,14 +652,14 @@ export class Connection {
      * @returns {Connection}
      */
     static createFrom($$source = {}) {
-        const $$createField7_0 = $$createType6;
-        const $$createField8_0 = $$createType7;
+        const $$createField8_0 = $$createType6;
+        const $$createField9_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("overrides" in $$parsedSource) {
-            $$parsedSource["overrides"] = $$createField7_0($$parsedSource["overrides"]);
+            $$parsedSource["overrides"] = $$createField8_0($$parsedSource["overrides"]);
         }
         if ("tags" in $$parsedSource) {
-            $$parsedSource["tags"] = $$createField8_0($$parsedSource["tags"]);
+            $$parsedSource["tags"] = $$createField9_0($$parsedSource["tags"]);
         }
         return new Connection(/** @type {Partial<Connection>} */($$parsedSource));
     }
@@ -1990,6 +2001,22 @@ export class PortForward {
              * @type {ProxyBookmark[]}
              */
             this["bookmarks"] = [];
+        }
+        if (!("browser_mode" in $$source)) {
+            /**
+             * BrowserMode decides how a bookmark on this forward opens:
+             *   ""/"system"  - the user's normal browser, no isolation
+             *   "isolated"   - a throwaway profile, discarded on close
+             *   "persistent" - a profile kept per forward, so logins survive
+             * Empty is the default for local forwards, because opening
+             * localhost:<port> by hand has always used the normal browser and a
+             * fresh profile would lose every login and extension. Dynamic
+             * forwards read the app-wide browser_persistent_profile setting when
+             * this is empty - isolation is the point of a SOCKS proxy.
+             * @member
+             * @type {string}
+             */
+            this["browser_mode"] = "";
         }
 
         Object.assign(this, $$source);

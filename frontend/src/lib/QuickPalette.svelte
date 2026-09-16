@@ -114,11 +114,12 @@
         haystacks: string[];
       }
     | {
-        // Bookmark open. Belongs to a specific dynamic forward; we
-        // need the forward id so SshLaunchBrowser routes through the
-        // right SOCKS5 listener. `running` mirrors the parent
-        // forward's state - if false, the action will start it
-        // first (same UX as TunnelPopover).
+        // Bookmark open. Belongs to a specific forward; we need the
+        // forward id so SshLaunchBrowser routes through the right
+        // SOCKS5 listener (dynamic) or applies the right browser
+        // profile (local). `running` mirrors the parent forward's
+        // state - if false, the action will start it first (same UX as
+        // TunnelPopover).
         kind: "bookmark";
         spec: PortForward;
         bookmark: ProxyBookmark;
@@ -214,7 +215,7 @@
         label,
         haystacks,
       });
-      if (f.kind === "dynamic" && f.bookmarks?.length) {
+      if ((f.kind === "dynamic" || f.kind === "local") && f.bookmarks?.length) {
         for (const bm of f.bookmarks) {
           out.push({
             kind: "bookmark",

@@ -100,6 +100,9 @@
   let nRemotePort = $state<number | undefined>(undefined);
   let nAutoStart = $state(false);
   let nDesc = $state("");
+  // "" = the default for this kind (the user's own browser for a local
+  // forward, an isolated profile for SOCKS). See SshLaunchBrowser.
+  let nBrowserMode = $state("");
 
   // Reset the address defaults to loopback when the user switches kind,
   // unless they've typed their own value. Keeps both fields meaningful per
@@ -120,6 +123,7 @@
     nRemotePort = undefined;
     nAutoStart = false;
     nDesc = "";
+    nBrowserMode = "";
   }
 
   // Editing an existing forward reuses this same form. null = create mode.
@@ -139,6 +143,7 @@
     nRemotePort = spec.remote_port ?? undefined;
     nAutoStart = spec.auto_start;
     nDesc = spec.description ?? "";
+    nBrowserMode = spec.browser_mode ?? "";
     showAdd = true;
   }
 
@@ -194,6 +199,7 @@
         clear_remote_port: isDyn || nRemotePort === undefined,
         auto_start: nAutoStart,
         description: nDesc,
+        browser_mode: nBrowserMode,
       });
       cancelForm();
       await reload();
@@ -268,9 +274,22 @@
     }
   }
 
+  // A local forward already points at one place, so the prompt starts
+  // filled in with it rather than a bare "https://" the user has to
+  // retype every time. The live port matters: a forward configured with
+  // port 0 is assigned one by the OS at start, and the spec still says 0.
+  function defaultURL(spec: PortForward): string {
+    if (spec.kind !== "local") return "https://";
+    const st = statusOf(spec.id);
+    const port = st?.local_port || spec.local_port || 0;
+    if (!port) return "https://";
+    const host = spec.local_addr && spec.local_addr !== "0.0.0.0" ? spec.local_addr : "127.0.0.1";
+    return `http://${host}:${port}`;
+  }
+
   async function launchBrowser(spec: PortForward, url?: string) {
     err = null;
-    const target = url ?? await showPrompt("URL to open:", "https://") ?? "";
+    const target = url ?? await showPrompt("URL to open:", defaultURL(spec)) ?? "";
     if (!target) return;
     // Make sure the proxy is up: connect if needed, then start the
     // forward if it isn't already listening, then launch the browser.
@@ -421,6 +440,27 @@
         <input type="checkbox" bind:checked={nAutoStart} />
         <span>Auto-start when this connection connects</span>
       </label>
+      {#if editingForwardId !== null && (nKind === "local" || nKind === "dynamic")}
+        <label>Bookmarks open in
+          <select bind:value={nBrowserMode}>
+            <option value="">
+              {nKind === "local" ? "Your browser (default)" : "Isolated profile (default)"}
+            </option>
+            <option value="system">Your browser - keeps your logins and extensions</option>
+            <option value="isolated">Isolated profile - fresh every time</option>
+            <option value="persistent">Dedicated profile - separate, but remembers logins</option>
+          </select>
+        </label>
+        <p class="edit-note">
+          {#if nKind === "local"}
+            A dedicated profile keeps two tunnels to the same software from
+            logging each other out.
+          {:else}
+            Traffic goes through the proxy either way; this only picks whose
+            cookies and logins the browser uses.
+          {/if}
+        </p>
+      {/if}
       {#if editingForwardId !== null && statusOf(editingForwardId)?.state === "listening"}
         <p class="edit-note">This forward is running - stop and start it again to apply changes.</p>
       {/if}
@@ -483,8 +523,13 @@
           <div class="actions">
             {#if running}
               <button onclick={() => stopForward(spec)}>Stop</button>
-              {#if spec.kind === "dynamic"}
-                <button onclick={() => launchBrowser(spec)} title="Open a custom URL via this proxy" class="iconlbl"><IconGlobe size={12} /> Open URL…</button>
+              {#if spec.kind === "dynamic" || spec.kind === "local"}
+                <button
+                  onclick={() => launchBrowser(spec)}
+                  title={spec.kind === "dynamic"
+                    ? "Open a custom URL via this proxy"
+                    : "Open a URL on this tunnel"}
+                  class="iconlbl"><IconGlobe size={12} /> Open URL…</button>
               {/if}
             {:else}
               <button class="primary" onclick={() => startForward(spec)}
@@ -496,7 +541,7 @@
             <button onclick={() => openEditForward(spec)} title="Edit this forward">Edit</button>
             <button class="danger" onclick={() => removeForward(spec.id)}>Delete</button>
           </div>
-          {#if spec.kind === "dynamic"}
+          {#if spec.kind === "dynamic" || spec.kind === "local"}
             <div class="bookmarks">
               {#each spec.bookmarks ?? [] as bm, i}
                 <span class="bm-chip">

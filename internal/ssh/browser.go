@@ -42,9 +42,13 @@ type LaunchOptions struct {
 	ProfileKey string
 }
 
-// LaunchIsolatedBrowser opens a browser pointed at a SOCKS5 proxy, in an
-// isolated user-data-dir so cookies and sessions don't bleed into the
-// user's everyday browsing.
+// LaunchIsolatedBrowser opens a browser in a user-data-dir of its own so
+// cookies and sessions don't bleed into the user's everyday browsing.
+//
+// socksPort 0 means "no proxy": the browser is launched isolated but
+// dials directly, which is what a local (-L) forward needs - it already
+// listens on loopback. Any other port routes everything through that
+// SOCKS5 proxy.
 //
 // The dispatcher resolves a binary, sniffs the engine, and hands off to
 // chromium- or firefox-specific launch. Returns the PID of the spawned
@@ -137,22 +141,39 @@ func resolveBrowser(preferredPath string) (string, browserEngine, error) {
 
 // ----- chromium-family launch -----
 
+// chromiumArgs builds the command line. Split out from launchChromium so
+// the proxy/no-proxy decision can be tested without spawning a browser.
+func chromiumArgs(bin, profile, socksAddr string, socksPort uint16, url string) []string {
+	args := []string{
+		"--user-data-dir=" + profile,
+		"--no-default-browser-check",
+		"--no-first-run",
+		"--disable-features=ChromeWhatsNewUI",
+	}
+	// Port 0 means "no proxy": a local (-L) forward already listens on
+	// loopback, so the URL is reached directly. Both proxy switches have
+	// to stay out in that case - not just --proxy-server. The bypass
+	// list is what makes a SOCKS launch send loopback traffic through the
+	// proxy too, which for a local forward would route 127.0.0.1:<port>
+	// into a proxy that does not exist.
+	if socksPort != 0 {
+		args = append(args,
+			fmt.Sprintf("--proxy-server=socks5://%s:%d", proxyHostForBrowser(bin, socksAddr), socksPort),
+			"--proxy-bypass-list=<-loopback>",
+		)
+	}
+	if url != "" {
+		args = append(args, url)
+	}
+	return args
+}
+
 func launchChromium(bin, socksAddr string, socksPort uint16, url string, opts LaunchOptions) (int, error) {
 	profile, err := chromiumProfileDir(opts)
 	if err != nil {
 		return 0, err
 	}
-	args := []string{
-		"--user-data-dir=" + profile,
-		fmt.Sprintf("--proxy-server=socks5://%s:%d", proxyHostForBrowser(bin, socksAddr), socksPort),
-		"--proxy-bypass-list=<-loopback>",
-		"--no-default-browser-check",
-		"--no-first-run",
-		"--disable-features=ChromeWhatsNewUI",
-	}
-	if url != "" {
-		args = append(args, url)
-	}
+	args := chromiumArgs(bin, profile, socksAddr, socksPort, url)
 	log.Printf("browser: %s %s", bin, strings.Join(args, " "))
 	cmd := exec.Command(bin, args...)
 	cmd.Stdout = nil
@@ -252,6 +273,34 @@ func sanitizeProfileKey(key string) string {
 
 // ----- firefox launch -----
 
+// firefoxPrefs builds the user.js contents. Split out from launchFirefox
+// so the proxy/no-proxy decision can be tested without spawning a
+// browser.
+func firefoxPrefs(socksAddr string, socksPort uint16) string {
+	const common = `
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("startup.homepage_welcome_url", "");
+user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
+`
+	// Port 0 means "no proxy" - a local (-L) forward is reached directly
+	// on loopback. proxy.type 0 is Firefox's explicit "no proxy", and it
+	// is written rather than omitted: on a persistent profile, leaving
+	// the pref out would let a previous SOCKS launch's setting survive
+	// in prefs.js and silently keep proxying.
+	if socksPort == 0 {
+		return common + `user_pref("network.proxy.type", 0);` + "\n"
+	}
+	return common + fmt.Sprintf(`
+user_pref("network.proxy.type", 1);
+user_pref("network.proxy.socks", "%s");
+user_pref("network.proxy.socks_port", %d);
+user_pref("network.proxy.socks_version", 5);
+user_pref("network.proxy.socks_remote_dns", true);
+user_pref("network.proxy.no_proxies_on", "");
+`, socksAddr, socksPort)
+}
+
 func launchFirefox(bin, socksAddr string, socksPort uint16, url string, opts LaunchOptions) (int, error) {
 	var profile string
 	if opts.Persistent {
@@ -288,18 +337,7 @@ func launchFirefox(bin, socksAddr string, socksPort uint16, url string, opts Lau
 	// has no command-line flag for SOCKS. Rewriting user.js each launch is
 	// harmless - Firefox re-applies it and the proxy stays correct even for
 	// a persistent profile.
-	prefs := fmt.Sprintf(`
-user_pref("network.proxy.type", 1);
-user_pref("network.proxy.socks", "%s");
-user_pref("network.proxy.socks_port", %d);
-user_pref("network.proxy.socks_version", 5);
-user_pref("network.proxy.socks_remote_dns", true);
-user_pref("network.proxy.no_proxies_on", "");
-user_pref("browser.shell.checkDefaultBrowser", false);
-user_pref("startup.homepage_welcome_url", "");
-user_pref("browser.startup.homepage_override.mstone", "ignore");
-user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
-`, socksAddr, socksPort)
+	prefs := firefoxPrefs(socksAddr, socksPort)
 	if err := os.WriteFile(filepath.Join(profile, "user.js"), []byte(prefs), 0o600); err != nil {
 		return 0, fmt.Errorf("write firefox prefs: %w", err)
 	}

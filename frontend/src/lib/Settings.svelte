@@ -41,6 +41,24 @@
   let browserPath = $state("");
   let browserPersistent = $state(false);
 
+  // App-wide starting directory for local shells. Empty means "the
+  // user's home", which is what every other terminal does; before this
+  // setting existed the shell inherited the app's own cwd, i.e. the
+  // directory the executable lives in.
+  let localShellDir = $state("");
+  let localShellDirTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function saveLocalShellDir(v: string) {
+    localShellDir = v;
+    if (localShellDirTimer) clearTimeout(localShellDirTimer);
+    localShellDirTimer = setTimeout(() => {
+      api.settingsSet("local_shell_dir", v.trim()).catch((e) =>
+        console.warn("local_shell_dir set:", e),
+      );
+      localShellDirTimer = null;
+    }, 300);
+  }
+
   async function toggleBrowserPersistent(on: boolean) {
     browserPersistent = on;
     try {
@@ -431,6 +449,7 @@
       browserPath = v ?? "";
       savedPath = v ?? "";
       browserPersistent = (await api.settingsGet("browser_persistent_profile")) === "true";
+      localShellDir = (await api.settingsGet("local_shell_dir")) ?? "";
     } catch (e) {
       console.warn("settings load:", e);
     }
@@ -2691,6 +2710,22 @@
         </label>
       {/each}
     </fieldset>
+
+    <label style="margin-top: 1rem;">
+      Start in directory
+      <input
+        value={localShellDir}
+        oninput={(e) => saveLocalShellDir((e.target as HTMLInputElement).value)}
+        placeholder="Your home directory"
+      />
+    </label>
+    <p class="hint">
+      Where a local shell opens. Empty means your home directory. A
+      saved local connection can override this with its own.
+      <strong>WSL</strong> takes a Linux path
+      (<code>/srv/app</code>); a Windows path works too and is mapped to
+      <code>/mnt/...</code> the way WSL always does.
+    </p>
 
     <p class="hint" style="margin-top: 1.5rem;">
       The right-click <strong>Open in ssh-tool</strong> menu moved to

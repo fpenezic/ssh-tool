@@ -27,6 +27,16 @@ type PortForward struct {
 	AutoStart    bool            `json:"auto_start"`
 	Description  string          `json:"description"`
 	Bookmarks    []ProxyBookmark `json:"bookmarks"`
+	// BrowserMode decides how a bookmark on this forward opens:
+	//   ""/"system"  - the user's normal browser, no isolation
+	//   "isolated"   - a throwaway profile, discarded on close
+	//   "persistent" - a profile kept per forward, so logins survive
+	// Empty is the default for local forwards, because opening
+	// localhost:<port> by hand has always used the normal browser and a
+	// fresh profile would lose every login and extension. Dynamic
+	// forwards read the app-wide browser_persistent_profile setting when
+	// this is empty - isolation is the point of a SOCKS proxy.
+	BrowserMode string `json:"browser_mode"`
 }
 
 type NewPortForward struct {
@@ -69,7 +79,7 @@ func (d *DB) CreatePortForward(in NewPortForward) (*PortForward, error) {
 func (d *DB) GetPortForward(id string) (*PortForward, error) {
 	row := d.conn.QueryRow(
 		`SELECT id, connection_id, kind, local_addr, local_port,
-		        remote_host, remote_port, auto_start, description, bookmarks
+		        remote_host, remote_port, auto_start, description, bookmarks, browser_mode
 		 FROM port_forwards WHERE id = ?`, id,
 	)
 	return scanPortForward(row)
@@ -78,7 +88,7 @@ func (d *DB) GetPortForward(id string) (*PortForward, error) {
 func (d *DB) ListPortForwards(connectionID string) ([]PortForward, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, connection_id, kind, local_addr, local_port,
-		        remote_host, remote_port, auto_start, description, bookmarks
+		        remote_host, remote_port, auto_start, description, bookmarks, browser_mode
 		 FROM port_forwards WHERE connection_id = ? ORDER BY description`,
 		connectionID,
 	)
@@ -104,7 +114,7 @@ func (d *DB) ListPortForwards(connectionID string) ([]PortForward, error) {
 func (d *DB) ListAllPortForwards() ([]PortForward, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, connection_id, kind, local_addr, local_port,
-		        remote_host, remote_port, auto_start, description, bookmarks
+		        remote_host, remote_port, auto_start, description, bookmarks, browser_mode
 		 FROM port_forwards ORDER BY connection_id, description`,
 	)
 	if err != nil {
@@ -134,6 +144,9 @@ type UpdatePortForward struct {
 	ClearRemotePort bool
 	AutoStart       *bool
 	Description     *string
+	// BrowserMode: nil leaves it alone; a pointer (including to "")
+	// replaces it. "" means "the default for this kind".
+	BrowserMode *string
 }
 
 func (d *DB) UpdatePortForward(in UpdatePortForward) (*PortForward, error) {
@@ -169,6 +182,10 @@ func (d *DB) UpdatePortForward(in UpdatePortForward) (*PortForward, error) {
 	if in.AutoStart != nil {
 		auto = *in.AutoStart
 	}
+	browserMode := existing.BrowserMode
+	if in.BrowserMode != nil {
+		browserMode = *in.BrowserMode
+	}
 	desc := existing.Description
 	if in.Description != nil {
 		desc = *in.Description
@@ -177,11 +194,11 @@ func (d *DB) UpdatePortForward(in UpdatePortForward) (*PortForward, error) {
 	_, err = d.conn.Exec(
 		`UPDATE port_forwards SET
 		   local_addr=?, local_port=?, remote_host=?, remote_port=?,
-		   auto_start=?, description=?
+		   auto_start=?, description=?, browser_mode=?
 		 WHERE id=?`,
 		nullableStr(la), nullableU16(lp),
 		nullableStr(rh), nullableU16(rp),
-		boolToInt(auto), desc, in.ID,
+		boolToInt(auto), desc, browserMode, in.ID,
 	)
 	if err != nil {
 		return nil, err
@@ -229,9 +246,10 @@ func scanPortForward(s scanner) (*PortForward, error) {
 		auto          int64
 		descRaw       sql.NullString
 		bookmarksJSON sql.NullString
+		browserMode   sql.NullString
 	)
 	err := s.Scan(
-		&f.ID, &f.ConnectionID, &f.Kind, &la, &lp, &rh, &rp, &auto, &descRaw, &bookmarksJSON,
+		&f.ID, &f.ConnectionID, &f.Kind, &la, &lp, &rh, &rp, &auto, &descRaw, &bookmarksJSON, &browserMode,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -261,6 +279,9 @@ func scanPortForward(s scanner) (*PortForward, error) {
 	}
 	if bookmarksJSON.Valid && bookmarksJSON.String != "" {
 		_ = json.Unmarshal([]byte(bookmarksJSON.String), &f.Bookmarks)
+	}
+	if browserMode.Valid {
+		f.BrowserMode = browserMode.String
 	}
 	if f.Bookmarks == nil {
 		f.Bookmarks = []ProxyBookmark{}

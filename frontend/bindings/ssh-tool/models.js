@@ -862,6 +862,13 @@ export class ConnectionsCreateInput {
              */
             this["local_shell_kind"] = null;
         }
+        if (!("local_shell_dir" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["local_shell_dir"] = null;
+        }
 
         Object.assign(this, $$source);
     }
@@ -997,6 +1004,20 @@ export class ConnectionsUpdateInput {
              * @type {boolean}
              */
             this["clear_local_shell_kind"] = false;
+        }
+        if (!("local_shell_dir" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["local_shell_dir"] = null;
+        }
+        if (!("clear_local_shell_dir" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["clear_local_shell_dir"] = false;
         }
 
         Object.assign(this, $$source);
@@ -1978,6 +1999,15 @@ export class ForwardUpdateInput {
              * @type {string | null}
              */
             this["description"] = null;
+        }
+        if (!("browser_mode" in $$source)) {
+            /**
+             * BrowserMode: "" / "system" / "isolated" / "persistent". nil leaves
+             * it alone; see SshLaunchBrowser for what each one means.
+             * @member
+             * @type {string | null}
+             */
+            this["browser_mode"] = null;
         }
 
         Object.assign(this, $$source);

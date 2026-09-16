@@ -92,6 +92,7 @@ export interface Connection {
   // Shell for a local connection: null = auto, else bash/zsh/sh/
   // powershell/cmd/wsl. Ignored for SSH connections.
   local_shell_kind?: string | null;
+  local_shell_dir?: string | null;
   overrides: InheritableSettings;
   tags: string[];
   notes: string;
@@ -650,6 +651,7 @@ export const api = {
     notes?: string;
     protocol?: string;
     localShellKind?: string | null;
+    localShellDir?: string | null;
   }) =>
     nn(G.ConnectionsCreate({
       folder_id: input.folderId,
@@ -661,6 +663,7 @@ export const api = {
       notes: input.notes ?? "",
       protocol: input.protocol ?? "ssh",
       local_shell_kind: input.localShellKind ?? null,
+      local_shell_dir: input.localShellDir ?? null,
     } as any)),
   connectionsUpdate: (input: {
     id: string;
@@ -677,6 +680,8 @@ export const api = {
     protocol?: string;
     localShellKind?: string | null;
     clearLocalShellKind?: boolean;
+    localShellDir?: string | null;
+    clearLocalShellDir?: boolean;
     openHidden?: boolean;
   }) =>
     G.ConnectionsUpdate({
@@ -694,6 +699,8 @@ export const api = {
       protocol: input.protocol,
       local_shell_kind: input.localShellKind,
       clear_local_shell_kind: input.clearLocalShellKind ?? false,
+      local_shell_dir: input.localShellDir,
+      clear_local_shell_dir: input.clearLocalShellDir ?? false,
       open_hidden: input.openHidden,
     } as any),
   connectionsDelete: (id: string) => G.ConnectionsDelete(id),
@@ -1953,6 +1960,10 @@ export interface PortForward {
   auto_start: boolean;
   description: string;
   bookmarks: ProxyBookmark[];
+  /** "" | "system" | "isolated" | "persistent" - how a bookmark on this
+   *  forward opens a browser. "" takes the per-kind default: the user's
+   *  own browser for a local forward, an isolated profile for SOCKS. */
+  browser_mode: string;
 }
 
 export interface DiskPart {
@@ -2139,4 +2150,6 @@ export interface ForwardUpdateInput {
   clear_remote_port?: boolean;
   auto_start?: boolean;
   description?: string;
+  /** "" | "system" | "isolated" | "persistent"; omit to leave unchanged. */
+  browser_mode?: string;
 }

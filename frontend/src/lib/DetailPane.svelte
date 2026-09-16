@@ -469,6 +469,7 @@
     initialCommand: string;
     initialCommandDelay: string;
     localShellKind: string;
+    localShellDir: string;
     openHidden: boolean;
     tags: string[];
   } | null>(null);
@@ -583,6 +584,7 @@
             : "",
         openHidden: !!conn.open_hidden,
         localShellKind: conn.local_shell_kind ?? "",
+        localShellDir: conn.local_shell_dir ?? "",
         tags: [...(conn.tags ?? [])],
       };
       newTagInput = "";
@@ -624,6 +626,7 @@
           : "") ||
       editing.openHidden !== !!conn.open_hidden ||
       editing.localShellKind !== (conn.local_shell_kind ?? "") ||
+      editing.localShellDir !== (conn.local_shell_dir ?? "") ||
       JSON.stringify(editing.jumpHost ?? null) !== JSON.stringify(o.jump_host ?? null) ||
       !tagsEq
     );
@@ -681,6 +684,7 @@
     overrides.initial_command = editing.initialCommand.trim() || undefined;
     overrides.initial_command_line_delay_ms = parseDelayMs(editing.initialCommandDelay);
     const localKind = editing.localShellKind.trim();
+    const localDir = editing.localShellDir.trim();
     await api.connectionsUpdate({
       id: conn.id,
       name: editing.name,
@@ -693,6 +697,8 @@
       // read it), but only send it when local to avoid touching the column.
       localShellKind: isLocal ? (localKind || null) : undefined,
       clearLocalShellKind: isLocal && localKind === "",
+      localShellDir: isLocal ? (localDir || null) : undefined,
+      clearLocalShellDir: isLocal && localDir === "",
       openHidden: editing.openHidden,
     }).then(async () => {
       await tree.load();
@@ -1513,6 +1519,11 @@
             {/each}
           </select>
           <span class="field-note">A local-shell connection runs on this machine - no host, no SSH. The Initial command below is what it runs (e.g. <code>telnet 10.0.0.5</code>, <code>claude</code>).</span>
+        </label>
+        <label class="span-2" title="Where this shell starts. Empty uses the app-wide setting, then your home directory.">
+          Start in directory
+          <input bind:value={editing.localShellDir} placeholder="Leave empty for the app default" />
+          <span class="field-note">Empty falls back to the app-wide setting in Settings, and then to your home directory. <strong>WSL</strong> takes a Linux path (<code>/srv/app</code>).</span>
         </label>
       {:else}
         <label title="The address to connect to: a DNS hostname or an IP. This is what SSH dials, not the display name above.">Hostname / IP address<input bind:value={editing.hostname} placeholder="host.example.com or 10.0.0.5" /></label>

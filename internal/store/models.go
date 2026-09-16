@@ -40,8 +40,13 @@ type Connection struct {
 	// = auto (per-platform default), else one of the kinds resolveShell
 	// accepts ("bash"/"zsh"/"sh"/"powershell"/"cmd"/"wsl"). Ignored for
 	// SSH connections.
-	LocalShellKind *string             `json:"local_shell_kind,omitempty"`
-	Overrides      InheritableSettings `json:"overrides"`
+	LocalShellKind *string `json:"local_shell_kind,omitempty"`
+	// LocalShellDir is the working directory this connection's shell
+	// starts in. nil / "" defers to the app-wide `local_shell_dir`
+	// setting, which itself falls back to the user's home directory.
+	// Ignored for SSH connections.
+	LocalShellDir *string             `json:"local_shell_dir,omitempty"`
+	Overrides     InheritableSettings `json:"overrides"`
 	Tags           []string            `json:"tags"`
 	Notes          string              `json:"notes"`
 	Favorite       bool                `json:"favorite"`

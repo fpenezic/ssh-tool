@@ -43,7 +43,11 @@ func TestMigration21AddsBitwardenNetworkProfileID(t *testing.T) {
 		CREATE TABLE connections (id TEXT PRIMARY KEY);
 		CREATE TABLE folders (id TEXT PRIMARY KEY);
 		CREATE TABLE credential_refs (id TEXT PRIMARY KEY);
-		CREATE TABLE credential_folders (id TEXT PRIMARY KEY);`)
+		CREATE TABLE credential_folders (id TEXT PRIMARY KEY);
+		-- Not part of the icon repair under test, but a real v22 DB has
+		-- it and later migrations do touch it (v26 adds browser_mode).
+		-- Without it the run fails before reaching the assertions.
+		CREATE TABLE port_forwards (id TEXT PRIMARY KEY);`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +118,11 @@ func TestMigration23RepairsCredentialIconColumns(t *testing.T) {
 		CREATE TABLE connections (id TEXT PRIMARY KEY, icon_name TEXT, icon_color TEXT);
 		CREATE TABLE folders (id TEXT PRIMARY KEY, icon_name TEXT, icon_color TEXT);
 		CREATE TABLE credential_refs (id TEXT PRIMARY KEY);
-		CREATE TABLE credential_folders (id TEXT PRIMARY KEY);`)
+		CREATE TABLE credential_folders (id TEXT PRIMARY KEY);
+		-- Not part of the icon repair under test, but a real v22 DB has
+		-- it and later migrations do touch it (v26 adds browser_mode).
+		-- Without it the run fails before reaching the assertions.
+		CREATE TABLE port_forwards (id TEXT PRIMARY KEY);`)
 	if err != nil {
 		t.Fatal(err)
 	}

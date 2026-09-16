@@ -3305,9 +3305,25 @@ export function SshGiveInternet(sessionID, remotePort, allowInternal) {
 }
 
 /**
- * SshLaunchBrowser opens a browser pointed at the given SOCKS5 forward.
- * Respects the user's `preferred_browser_path` setting if present;
- * otherwise platform default detection (see internal/ssh/browser.go).
+ * SshLaunchBrowser opens a browser on the given forward.
+ * 
+ * A dynamic (SOCKS) forward is proxied through; a local (-L) forward is
+ * dialled directly, because it already listens on loopback. Which
+ * browser profile is used comes from the forward's own browser_mode:
+ * 
+ * 	""/"system"  - the user's normal browser, nothing isolated
+ * 	"isolated"   - a throwaway profile
+ * 	"persistent" - a profile kept per forward, so logins survive
+ * 
+ * The empty default differs by kind on purpose. A local forward has
+ * always been opened by hand as localhost:<port> in the user's own
+ * browser, so forcing a blank profile on it would lose every login and
+ * extension they have - that is a regression dressed as a feature. A
+ * dynamic forward's isolation IS the point of the proxy, so it keeps
+ * answering to the app-wide browser_persistent_profile setting.
+ * 
+ * Respects `preferred_browser_path` if set; otherwise platform default
+ * detection (see internal/ssh/browser.go).
  * @param {string} forwardID
  * @param {string} url
  * @returns {$CancellablePromise<$models.BrowserLaunchResult | null>}
