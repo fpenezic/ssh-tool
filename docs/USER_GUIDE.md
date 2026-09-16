@@ -1100,25 +1100,52 @@ Below the connection editor: **Port forwards** section. Three kinds:
 - The Forwards header shows running counts; rows show live byte
   counters (in / out).
 
-### SOCKS5 + isolated browser
+### Opening things in a browser
 
-Each dynamic forward has an **Open URL…** button that launches an
-isolated browser instance routed through the SOCKS5 port. Bookmarks
-are per-forward - common URLs you've launched via this forward
-appear as quick-launch buttons.
+Dynamic and local forwards both have an **Open URL…** button and
+per-forward **bookmarks** - the URLs you reach through that tunnel,
+as quick-launch buttons. They appear in the forwards list, in the
+tunnel popover on a pane header, and in the quick palette.
 
-By default the launched browser uses a temporary isolated profile so
-cookies and history don't pollute your normal browsing. Configure the
-browser binary in **Settings → Browser launcher** (Chrome, Chromium,
-Firefox, Edge are all supported - pick the binary path).
+For a local forward the prompt starts filled in with the forward's own
+address, so opening it is one click rather than retyping
+`http://127.0.0.1:8080` every time. If the forward is set to port 0 -
+let the OS choose - the prompt offers the port it was actually given.
 
-If a tunnelled site needs your saved logins, turn on **Use a persistent
-browser profile** in the same settings section: the launcher then reuses
-a dedicated profile so cookies and sign-ins survive between launches. It
-stays separate from your everyday browser, so the proxy applies reliably
-and normal browsing isn't routed through the tunnel. Works with both
-Chromium- and Firefox-family browsers (on WSL a persistent Firefox
-profile falls back to isolated).
+A dynamic forward routes the browser through its SOCKS5 port; a local
+forward is reached directly, because it already listens on your
+machine.
+
+**Prefer one SOCKS proxy over many local forwards.** A single dynamic
+forward reaches every host the server can reach, by its real name, with
+no port mapping to invent and no collisions to avoid when two services
+both want 8080. Local forwards are the better fit when something can
+only speak to a fixed local port, or when you want exactly one service
+exposed and nothing else.
+
+#### Which browser a bookmark opens in
+
+Each local and dynamic forward chooses this for itself, in the forward's
+edit form:
+
+- **Your browser** - the normal one, with your logins and extensions.
+  The default for local forwards, and the same thing that happens when
+  you paste `localhost:<port>` into a browser by hand.
+- **Isolated profile** - a fresh throwaway profile every time. The
+  default for SOCKS proxies, where separation is the point.
+- **Dedicated profile** - separate from your everyday browser, but it
+  remembers logins between launches.
+
+The dedicated profile is worth choosing when two tunnels reach the same
+software on different servers: a shared cookie jar means signing into
+one signs you out of the other.
+
+Configure which browser binary is launched in **Settings → Browser
+launcher** (Chrome, Chromium, Firefox and Edge are all supported - pick
+the binary path). **Use a persistent browser profile** in the same
+section sets the default for SOCKS forwards that have not chosen for
+themselves. Works with both Chromium- and Firefox-family browsers (on
+WSL a persistent Firefox profile falls back to isolated).
 
 ### Grouping bookmarks: one forward per customer
 
@@ -2607,6 +2634,12 @@ Side-nav with grouped panels (last-opened section persists as
   a "Default for plain click" selector that mirrors this
   setting. The button label updates to show the current default
   (e.g. `Local: WSL`). Saved as `local_shell_kind`.
+- **Start in directory** - where a local shell opens. Empty means your
+  home directory, which is what every other terminal on the system
+  does. A saved local-shell connection can override it with its own
+  directory, in the connection editor. For **WSL** this takes a Linux
+  path (`/srv/app`); a Windows path works too and is mapped to
+  `/mnt/...` the way WSL always does. Saved as `local_shell_dir`.
 - **File manager integration** - adds **Open in ssh-tool** to the
   right-click menu on directories: Windows Explorer (folder and
   folder background), KDE Dolphin, and the GNOME Nautilus Scripts

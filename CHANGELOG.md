@@ -7,6 +7,50 @@ a prerelease upstream.
 
 ---
 
+## [0.100.0] - Tunnels that open themselves, shells that start at home
+
+### Added
+
+- **Bookmarks on local port forwards.** A local (-L) forward could only
+  be used by copying `localhost:<port>` into a browser by hand;
+  bookmarks existed but were reserved for SOCKS proxies. Local forwards
+  now take them too, in the tunnel popover, the forwards list and the
+  quick palette. The "Open URL" prompt starts filled in with the
+  forward's own address rather than a bare `https://`, and it reads the
+  live port, so a forward set to port 0 offers the port it was actually
+  given.
+- **Per-forward browser choice.** Each local or dynamic forward picks
+  how its bookmarks open: your normal browser, a throwaway isolated
+  profile, or a dedicated profile that remembers logins. The default is
+  unchanged behaviour for both kinds - your own browser for a local
+  forward, an isolated one for a SOCKS proxy. The dedicated profile is
+  the one to choose when two tunnels reach the same software on
+  different servers and one keeps logging you out of the other.
+- **Local shells start in a sensible directory.** New `Start in
+  directory` setting, with a per-connection override on local-shell
+  connections. Empty means your home directory.
+
+### Fixed
+
+- **Renaming with F2 lets you select the text.** Dragging across the
+  rename field started dragging the row instead of selecting what you
+  were trying to overwrite - most annoying right after cloning a
+  connection, where selecting "Copy of ..." is the entire point.
+- **Local shells no longer open in the install directory.** They
+  inherited the app's working directory, so on Windows a WSL shell
+  started in `/mnt/c/Users/<you>/AppData/Local/Programs/ssh-tool`. WSL
+  needs its own `--cd` flag for this - a working directory alone cannot
+  reach the Linux home, since every Windows path maps to some `/mnt/...`
+  path.
+
+### Internal
+
+- apt and dnf repository publishing is wired into the release workflow
+  and gated on a signing-key secret, so it stays dormant until the
+  packages have been installed and tested somewhere. See `docs/TODO.md`.
+
+---
+
 ## [0.99.1] - Split tabs that come back, and workspaces you can actually save
 
 ### Added
