@@ -2013,6 +2013,8 @@ description, or bookmark URL.
 - ↑ / ↓ - navigate matches.
 - **Enter** - context-sensitive: connect to a connection, start /
   stop a tunnel, open a bookmark.
+- **Ctrl+Enter** or **Ctrl+click** - mark a connection without
+  connecting. See below.
 - **Esc** - close.
 
 Connections rank slightly above folders at similar scores; tunnels
@@ -2021,6 +2023,25 @@ host and a tunnel surfaces the host first. The empty query view
 shows connections / dynamic entries / folders only; tunnels and
 bookmarks appear once you start typing so they don't swamp the
 list.
+
+### Opening several hosts at once
+
+Mark connections with **Ctrl+Enter** (or Ctrl+click) and they get a
+coloured stripe; the footer counts them. **Enter** then connects
+every marked host instead of the highlighted row, and `clear` in the
+footer drops the set.
+
+Marks survive retyping the query, so hosts that no single search
+matches can still be collected: find the first, mark it, search
+again, mark the next. Only connections can be marked - tunnels,
+bookmarks and commands are not things you open five of at once.
+
+Hosts are dialled one after another rather than all at once, because
+a connection may need the vault unlocked, a host key accepted or a
+password typed, and those prompts are modal - firing them in
+parallel would stack prompts from different hosts with no way to
+tell them apart. If some hosts fail the rest still open, and the
+failures are reported together in one message.
 
 ### App commands
 

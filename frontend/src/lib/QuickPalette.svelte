@@ -74,6 +74,26 @@
 
   let query = $state("");
   let activeIdx = $state(0);
+
+  // Multi-select. Connections only: opening five hosts at once is a real
+  // workflow, whereas "run five actions" or "jump to five tabs" is not.
+  // Held as connection ids rather than row indices, which shift as the
+  // query is retyped - marking a host, refining the search and marking
+  // another has to keep both.
+  let markedIds = $state<string[]>([]);
+  const markedSet = $derived(new Set(markedIds));
+
+  function markableId(r: Result): string | null {
+    return r.entry.kind === "connection" ? r.entry.conn.id : null;
+  }
+
+  function toggleMark(r: Result) {
+    const id = markableId(r);
+    if (!id) return;
+    markedIds = markedIds.includes(id)
+      ? markedIds.filter((x) => x !== id)
+      : [...markedIds, id];
+  }
   let inputEl: HTMLInputElement | undefined = $state();
   let listEl: HTMLDivElement | undefined = $state();
 
@@ -377,7 +397,9 @@
     return out.slice(0, 50);
   }
 
-  // Reset active index whenever results change.
+  // Reset active index whenever results change. Marks deliberately
+  // survive: the point of marking is to collect hosts across several
+  // different searches.
   $effect(() => {
     void results.length;
     activeIdx = 0;
@@ -479,15 +501,40 @@
     // Connection: connect immediately (the whole point of the palette).
     // Route through connectDefault so local-shell and VNC-default
     // connections do the right thing (not a blind SSH dial).
-    const c = r.entry.conn;
+    //
+    // Marked rows win over the highlighted one: having marked four hosts,
+    // pressing Enter is plainly meant to open those four, not whichever
+    // row the cursor happens to sit on.
+    const ids = markedIds.length > 0 ? [...markedIds] : [r.entry.conn.id];
     onClose();
-    queueMicrotask(async () => {
-      const ok = await connectionActions.connectDefault(c.id);
+    queueMicrotask(() => void connectMany(ids));
+  }
+
+  // Connect a set of connections one after another.
+  //
+  // Sequential, not parallel: each dial may need the vault unlocking, a
+  // host-key decision or a password, and those are modal. Firing them at
+  // once would stack prompts from different hosts on top of each other
+  // with no way to tell which belongs to which.
+  //
+  // One failure does not stop the rest - the point of opening five hosts
+  // is the four that are up. Failures are collected into a single toast
+  // rather than one per host, which on a bad subnet would bury the screen.
+  async function connectMany(ids: string[]) {
+    const failed: string[] = [];
+    for (const id of ids) {
+      const ok = await connectionActions.connectDefault(id);
       if (!ok) {
-        const last = connectionActions.lastConnectError[c.id];
-        toast.err(`Connect failed: ${last?.message ?? "connect failed"}`);
+        const name = tree.connections.find((c) => c.id === id)?.name ?? id;
+        const last = connectionActions.lastConnectError[id];
+        failed.push(`${name}: ${last?.message ?? "connect failed"}`);
       }
-    });
+    }
+    if (failed.length === 1) {
+      toast.err(`Connect failed: ${failed[0]}`);
+    } else if (failed.length > 1) {
+      toast.err(`${failed.length} of ${ids.length} failed to connect:\n${failed.join("\n")}`);
+    }
   }
 
   // Pick the most recently opened connected session matching the given
@@ -545,7 +592,19 @@
     } else if (e.key === "Enter") {
       e.preventDefault();
       const r = results[activeIdx];
-      if (r) chooseResult(r);
+      if (!r) return;
+      // Ctrl/Cmd+Enter marks without connecting, so a set can be built
+      // from the keyboard alone. Space is not usable for this - the
+      // query field owns it.
+      if (e.ctrlKey || e.metaKey) {
+        if (markableId(r)) {
+          toggleMark(r);
+          activeIdx = Math.min(results.length - 1, activeIdx + 1);
+          scrollActiveIntoView();
+        }
+        return;
+      }
+      chooseResult(r);
     }
   }
 
@@ -687,16 +746,29 @@
         {@const sessCount = entrySessionCount(r.entry)}
         {@const custom = customIcon(r.entry)}
         {@const connected = sessCount > 0}
+        {@const markId = markableId(r)}
+        {@const marked = markId !== null && markedSet.has(markId)}
         <div
           class="row"
           class:active={i === activeIdx}
+          class:marked
           data-idx={i}
           role="button"
           tabindex="0"
-          onclick={() => chooseResult(r)}
+          onclick={(e) => {
+            if ((e.ctrlKey || e.metaKey) && markableId(r)) {
+              e.preventDefault();
+              toggleMark(r);
+              return;
+            }
+            chooseResult(r);
+          }}
           onmousemove={() => (activeIdx = i)}
           onkeydown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); chooseResult(r); }
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            if ((e.ctrlKey || e.metaKey) && markableId(r)) { toggleMark(r); return; }
+            chooseResult(r);
           }}
         >
           <span
@@ -766,7 +838,11 @@
               {/if}
             {/if}
           </div>
-          {#if isConn || r.entry.kind === "dynamic_entry"}
+          {#if marked}
+            <span class="hint marked-hint">marked</span>
+          {:else if isConn && markedIds.length > 0}
+            <span class="hint">^↵ mark</span>
+          {:else if isConn || r.entry.kind === "dynamic_entry"}
             <span class="hint">↵ connect</span>
           {:else if r.entry.kind === "forward"}
             <span class="hint">↵ {r.entry.running ? "stop" : "start"}</span>
@@ -782,7 +858,15 @@
     </div>
     <footer>
       <span><kbd>↑↓</kbd> navigate</span>
-      <span><kbd>↵</kbd> select</span>
+      {#if markedIds.length > 0}
+        <span class="marked-count">
+          <kbd>↵</kbd> connect {markedIds.length} marked
+        </span>
+        <button class="clear-marks" onclick={() => (markedIds = [])}>clear</button>
+      {:else}
+        <span><kbd>↵</kbd> select</span>
+        <span><kbd>Ctrl</kbd>+<kbd>↵</kbd> mark</span>
+      {/if}
       <span><kbd>&gt;</kbd> commands</span>
       <span><kbd>Esc</kbd> close</span>
     </footer>
@@ -835,7 +919,13 @@
   .row.active {
     background: var(--surface0);
   }
-
+  /* A marked row stays legible when it is also the active one, so the
+     stripe is a border rather than a background it would fight with. */
+  .row.marked {
+    box-shadow: inset 2px 0 0 var(--mauve);
+  }
+  .row.marked .label { color: var(--mauve); }
+  .marked-hint { color: var(--mauve); }
   .icon {
     width: 1.4rem;
     text-align: center;
@@ -917,6 +1007,13 @@
     color: var(--overlay0);
     font-size: 0.7rem;
   }
+  .marked-count { color: var(--mauve); }
+  .clear-marks {
+    background: transparent; border: 0; padding: 0;
+    color: var(--overlay1); font: inherit; font-size: inherit;
+    text-decoration: underline; cursor: pointer;
+  }
+  .clear-marks:hover { color: var(--text); }
   footer {
     display: flex;
     gap: 1rem;

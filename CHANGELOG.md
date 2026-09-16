@@ -35,6 +35,13 @@ a prerelease upstream.
   directory` setting, with a per-connection override on local-shell
   connections. Empty means your home directory.
 
+- **Open several hosts at once from the palette.** Ctrl+Enter or
+  Ctrl+click marks connections in the Ctrl+K palette; Enter then
+  connects all of them. Marks survive retyping the query, so a set can
+  be collected across several searches. Hosts are dialled one after
+  another, because vault, host-key and password prompts are modal and
+  would otherwise stack up from different hosts at once.
+
 ### Fixed
 
 - **Typing in the palette no longer lands in a terminal.** Opening a
