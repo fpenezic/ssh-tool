@@ -444,3 +444,175 @@ jobs:
             gh release create "$tag" bin/* --title "$tag" --prerelease \
               --notes "Pre-release build for testing. Not published to sshtool.app."
           fi
+
+  # Build the apt + dnf repository and publish it to GitHub Pages, so
+  # `apt upgrade` / `dnf upgrade` carry new versions the way the AUR
+  # already does for Arch.
+  #
+  # Gated on REPO_GPG_KEY, and silently does nothing until it is set.
+  # That gate is not only about the key: the .deb and .rpm have never
+  # been installed on a Debian or Fedora machine (see docs/TODO.md), and
+  # a repository that serves an untested package is worse than no
+  # repository - it installs that package on every user automatically,
+  # rather than one person trying it by hand. Set the secret once the
+  # packages have actually been installed somewhere.
+  #
+  # Runs after publish because it reuses the published artefacts: the
+  # binaries in the packages should be the exact bytes users download,
+  # not a second build of the same tag.
+  repo:
+    needs: publish
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check for the signing key
+        id: gate
+        env:
+          REPO_GPG_KEY: ${{ secrets.REPO_GPG_KEY }}
+        run: |
+          if [ -z "$REPO_GPG_KEY" ]; then
+            echo "REPO_GPG_KEY not set - skipping the apt/dnf repository." >&2
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-go@v7
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install packaging tools
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          sudo apt-get update
+          # The same GTK/WebKit deps the linux build job installs: the
+          # package tasks depend on the build task, so this compiles.
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config \
+            libgtk-4-dev libwebkitgtk-6.0-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y apt-utils createrepo-c gnupg
+          go install github.com/go-task/task/v3/cmd/task@${TASK_VERSION}
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}
+
+      - name: Frontend deps
+        if: steps.gate.outputs.enabled == 'true'
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build the packages for this tag
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          SSHTOOL_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # CGO off keeps this identical to the release build; the deb
+          # and rpm wrap the same binary users download.
+          CGO_ENABLED=0 task linux:create:deb
+          CGO_ENABLED=0 task linux:create:rpm
+
+      - name: Collect the previous versions
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pkgs
+          cp bin/*.deb bin/*.rpm /tmp/pkgs/ 2>/dev/null || true
+
+          # Retention: this tag plus the four before it stay resolvable,
+          # so `apt install ssh-tool=<older>` keeps working for a while
+          # without the repo growing without bound. Older packages simply
+          # stop being listed; the GitHub Release still has them.
+          gh release list --limit 40 --exclude-drafts --exclude-pre-releases \
+            --json tagName --jq '.[].tagName' \
+            | grep -v "^${TAG}$" | head -n 4 > /tmp/keep.txt || true
+
+          while read -r old; do
+            [ -n "$old" ] || continue
+            # A tag from before the packages shipped has none to download;
+            # that is expected, not an error.
+            gh release download "$old" --dir /tmp/pkgs \
+              --pattern '*.deb' --pattern '*.rpm' 2>/dev/null \
+              || echo "no packages on $old - skipping" >&2
+          done < /tmp/keep.txt
+
+          ls -la /tmp/pkgs
+
+      - name: Import the signing key
+        if: steps.gate.outputs.enabled == 'true'
+        id: gpg
+        env:
+          REPO_GPG_KEY: ${{ secrets.REPO_GPG_KEY }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$REPO_GPG_KEY" | gpg --batch --import
+          keyid=$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ {print $5; exit}')
+          if [ -z "$keyid" ]; then
+            echo "no secret key found after import" >&2
+            exit 1
+          fi
+          echo "keyid=$keyid" >> "$GITHUB_OUTPUT"
+
+      - name: Build the repository
+        if: steps.gate.outputs.enabled == 'true'
+        run: ./scripts/build-repo.sh /tmp/pkgs /tmp/repo "${{ steps.gpg.outputs.keyid }}"
+
+      - name: Publish to GitHub Pages
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # The repo tree replaces the branch wholesale rather than being
+          # merged into it: apt and dnf metadata describe exactly the set
+          # of files present, so a leftover package from a previous run
+          # would be listed by nothing and served forever.
+          rm -rf /tmp/pages
+          git clone --depth 1 --branch gh-pages \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            /tmp/pages 2>/dev/null || {
+              git init /tmp/pages
+              git -C /tmp/pages checkout -b gh-pages
+              git -C /tmp/pages remote add origin \
+                "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            }
+
+          find /tmp/pages -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
+          cp -r /tmp/repo/. /tmp/pages/
+          # Jekyll would eat the dists/ directory's underscore-free but
+          # metadata-only files; .nojekyll turns that processing off.
+          touch /tmp/pages/.nojekyll
+          # REPO_URL is a placeholder in the checked-in page: the real
+          # host is only known here, and hard-coding it in docs/ would
+          # rot the moment the repo moves or gains a CNAME.
+          owner="${GITHUB_REPOSITORY%%/*}"
+          name="${GITHUB_REPOSITORY##*/}"
+          url="${owner}.github.io/${name}"
+          sed "s|REPO_URL|${url}|g" "${GITHUB_WORKSPACE}/docs/repo-index.html" \
+            > /tmp/pages/index.html
+
+          cd /tmp/pages
+          git add -A
+          if git diff --cached --quiet; then
+            echo "repository unchanged - nothing to publish"
+            exit 0
+          fi
+          git commit -m "repo: ${TAG}"
+          git push origin gh-pages

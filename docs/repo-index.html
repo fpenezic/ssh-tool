@@ -1,0 +1,68 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ssh-tool package repository</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0 auto; padding: 2rem 1rem; max-width: 46rem;
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 0.2rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; }
+  .lede { color: #666; margin-top: 0; }
+  pre {
+    background: #f4f4f4; padding: 0.8rem; border-radius: 6px;
+    overflow-x: auto; font-size: 13px;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .note { border-left: 3px solid #999; padding-left: 0.8rem; color: #666; }
+  a { color: #0366d6; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1c1c1c; color: #ddd; }
+    pre { background: #262626; }
+    .lede, .note { color: #999; }
+    a { color: #6cb6ff; }
+  }
+</style>
+
+<h1>ssh-tool package repository</h1>
+<p class="lede">apt and dnf repositories for ssh-tool. Once added,
+new versions arrive through your normal system upgrade.</p>
+
+<h2>Debian / Ubuntu</h2>
+<pre><code>curl -fsSL https://REPO_URL/ssh-tool.asc \
+  | sudo gpg --dearmor -o /usr/share/keyrings/ssh-tool.gpg
+
+echo 'deb [signed-by=/usr/share/keyrings/ssh-tool.gpg] https://REPO_URL/deb stable main' \
+  | sudo tee /etc/apt/sources.list.d/ssh-tool.list
+
+sudo apt update
+sudo apt install ssh-tool</code></pre>
+
+<h2>Fedora / RHEL</h2>
+<pre><code>sudo tee /etc/yum.repos.d/ssh-tool.repo &lt;&lt;'EOF'
+[ssh-tool]
+name=ssh-tool
+baseurl=https://REPO_URL/rpm
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://REPO_URL/ssh-tool.asc
+EOF
+
+sudo dnf install ssh-tool</code></pre>
+
+<h2>Arch</h2>
+<p>Arch users install from the AUR instead:
+<code>yay -S ssh-tool-bin</code>.</p>
+
+<h2>Notes</h2>
+<p class="note">A packaged install lives in <code>/usr/bin</code>, so
+the in-app updater deliberately refuses to replace it - updates come
+from <code>apt upgrade</code> / <code>dnf upgrade</code> instead. If you
+would rather have the self-updating build, download it from the
+<a href="https://github.com/fpenezic/ssh-tool/releases">releases
+page</a> and it installs to your home directory.</p>
+<p class="note">The five most recent versions stay installable here.
+Older ones remain on the releases page.</p>

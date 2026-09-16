@@ -309,38 +309,45 @@ Mediums + selected Lows tracked here.
   and updates arrive through `pacman -Syu` instead. Worth stating in the
   package description so it does not read as a bug.
 
-- **apt / dnf repositories (target: v0.100.0).** Once the packages ship,
-  they are still one-off installs: a new version means downloading another package by hand,
-  and the in-app updater correctly refuses to touch a package-managed
-  binary. A repository fixes that the way the AUR already does for
-  Arch.
+- **apt / dnf repositories.** The machinery is in place and gated off.
+  `scripts/build-repo.sh` writes the tree, and the release workflow's
+  `repo` job builds the packages for the tag, pulls the four previous
+  releases' packages for retention, signs everything and publishes the
+  result to GitHub Pages. It is gated on a `REPO_GPG_KEY` secret and does
+  nothing at all while that is unset.
 
-  What it needs, roughly in order:
+  What was verified locally, not just read: the apt half of the script
+  against a real .deb, both signatures (`InRelease` and `Release.gpg`
+  verify as good signatures), the exported public key, and the awk the
+  workflow uses to pull the key id out of `gpg --list-secret-keys`. The
+  stanza-splitting still matters - `apt-ftparchive --arch` does NOT
+  filter on the package's Architecture field and produced an empty
+  Packages file for a plainly-amd64 .deb, which is a working repository
+  containing nothing. The script splits stanzas itself and the amd64
+  Packages file now carries the stanza while arm64 is correctly empty.
+  `createrepo_c` was not available locally, so the dnf half has been
+  read but not run.
 
-  1. **A signing key.** A dedicated GPG key (not the author's personal
-     one), private half in GitHub Actions secrets, public half served
-     next to the repo and fingerprint published in the README. Losing
-     it means every user re-adds the key by hand, so it wants a backup
-     kept outside CI.
-  2. **Repository metadata.** apt wants `dists/stable/` with a signed
-     `InRelease`; dnf wants `repodata/` from `createrepo_c` plus a
-     detached signature. Both are generated per release, from the
-     packages CI already builds - `aptly` or plain `apt-ftparchive` for
-     the former, `createrepo_c` for the latter.
-  3. **Somewhere to host it.** Undecided, and it is the decision that
-     shapes the rest. sshtool.app currently only redirects to GitHub
-     Releases and holds no files, so serving a repo there means giving
-     the web app storage and static serving it does not have today.
-     GitHub Pages needs none of that (a gh-pages branch, pushed by the
-     same workflow that publishes the release) at the cost of the URL.
-  4. **Retention.** A repo accumulates: decide up front how many old
-     versions stay resolvable, or `apt install ssh-tool=0.94.0` breaks
-     silently when it is cleaned up.
+  Remaining, in order:
 
-  Worth doing when there is an apt or dnf user asking, or at v0.100.0
-  as planned, whichever comes first. The AUR recipe in `build/aur/` is
-  the reference for how little per-release work this should end up
-  being: one script, run after the release exists.
+  1. **Install the .deb and .rpm somewhere.** This is the real gate, not
+     the key. A repository that serves an untested package is worse than
+     no repository: it installs that package on every user
+     automatically, rather than one person trying it by hand.
+  2. **Generate the signing key.** A dedicated GPG key, not a personal
+     one. Private half into the `REPO_GPG_KEY` secret (the full
+     armoured secret key; the job imports it and reads the id itself),
+     public half is published by the job as `ssh-tool.asc`. Losing it
+     means every user re-adds the key by hand, so keep a backup outside
+     CI.
+  3. **Enable Pages** for the repo, serving the `gh-pages` branch, which
+     the job creates on its first run.
+
+  Retention is the five most recent stable tags: the tag being released
+  plus the four before it. Older versions stop being listed but stay on
+  their GitHub Release. `docs/repo-index.html` is the landing page, with
+  `REPO_URL` substituted at publish time.
+
 - **Windows .msi / NSIS** - installer config exists; code-signing
   cert acquisition + EV process is the open question.
 - **macOS universal** - Taskfile + Info.plist exist; needs Apple
