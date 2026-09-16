@@ -7,7 +7,26 @@ a prerelease upstream.
 
 ---
 
-## [0.100.0] - Tunnels that open themselves, shells that start at home
+## [0.100.0] - Linux packages, tunnels that open themselves, focus that lands
+
+Version one hundred, and still 0.x - `v1.0.0` waits for Wails v3 to
+leave prerelease, not for the app to feel finished. Between 0.1.0 and
+here: opkssh certificate auth, eight dynamic-inventory providers,
+userspace WireGuard, five importers, an Android build, and a rather
+large number of bugs that only showed up on someone else's machine.
+
+This release is a good example of the last part. Three of its fixes came
+from ordinary use rather than from a test: a rename field that would not
+let the mouse select text, a second session that opened without a
+cursor, and a bookmark that could not be written down because its tunnel
+picks a new port on every run.
+
+It also brings proper Linux packages. `.deb`, `.rpm` and `.pkg.tar.zst`
+are attached to the release, so installing is one command instead of
+downloading a binary and placing it yourself - each one installed,
+verified and removed on a real system before it shipped. apt and dnf
+repositories are next, which will make upgrades arrive the way every
+other package on the machine does.
 
 ### Added
 
@@ -34,7 +53,6 @@ a prerelease upstream.
 - **Local shells start in a sensible directory.** New `Start in
   directory` setting, with a per-connection override on local-shell
   connections. Empty means your home directory.
-
 - **Open several hosts at once from the palette.** Ctrl+Enter or
   Ctrl+click marks connections in the Ctrl+K palette; Enter then
   connects all of them. Marks survive retyping the query, so a set can
@@ -44,13 +62,22 @@ a prerelease upstream.
 
 ### Fixed
 
+- **The second session you open gets the cursor.** Since v0.97, opening
+  a connection while another was already up left the new terminal
+  unfocused - you had to click it before typing. The guard that stops a
+  background session stealing the keyboard was matching any focused text
+  field, and xterm's own focus target is a textarea, so every terminal
+  looked to every other terminal like a field in use.
+- **Switching to the terminal view focuses it.** Arriving from Settings
+  or the toolbar button left the keyboard nowhere. This one was never
+  wired up rather than broken recently.
 - **Typing in the palette no longer lands in a terminal.** Opening a
   connection, pressing Ctrl+K again and typing the next host could send
   those keystrokes into the session that had just come up. v0.97 fixed
-  the case where the palette was open the whole time; this fixes the
+  the case where the palette stayed open throughout; this fixes the
   rest. A connecting terminal polls for up to 600ms to take the
   keyboard, and the palette closes before the connection it started is
-  dialled, so checking the document for evidence of typing was never
+  dialled, so looking at the document for evidence of typing was never
   going to be reliable - with several sessions opening, whichever poll
   finished last simply won. Palettes and dialogs now hold the keyboard
   explicitly for as long as they are open.
