@@ -304,9 +304,17 @@ Mediums + selected Lows tracked here.
   for RHEL (the commented-out block in nfpm.yaml) is a separate
   decision.
 
-  Still missing: a .deb install on a Debian or Ubuntu box, and a look at
-  the launcher entry and icon in a real desktop session - the Fedora box
-  was headless, and desktop-file-validate only checks the file.
+  **The .deb has been installed and removed on Ubuntu 24.04** the same
+  day: postinst and the desktop-file-utils / hicolor triggers all run,
+  `md5sum -c` against the package's own md5sums passes on all four
+  files, `dpkg -C` reports nothing broken, `ldd` is clean, and removal
+  leaves nothing behind. The deb format has no build-host field, so that
+  leak was RPM-only.
+
+  Still missing: the launcher entry and icon in a REAL desktop session.
+  Neither test box could show it - the Fedora VM was headless and the
+  Ubuntu one is WSL - and desktop-file-validate only checks the file, not
+  how a menu renders it.
 
   The AUR recipe in `build/aur/` is ready and `makepkg` was verified to
   parse and build it from published artefacts with matching checksums.
