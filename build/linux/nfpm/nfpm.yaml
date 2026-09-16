@@ -38,6 +38,12 @@ overrides:
     depends:
       - gtk4
       - webkitgtk6.0
+    rpm:
+      # Without this nfpm stamps os.Hostname() into the RPM header, so
+      # every package shipped the maintainer's machine name - visible to
+      # anyone running `rpm -qi ssh-tool`. Fixed after a real install on
+      # Fedora 44 showed "Build Host: Cygnus".
+      buildhost: "sshtool.app"
 
   # Arch Linux packages
   archlinux:
