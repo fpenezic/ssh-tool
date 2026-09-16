@@ -276,23 +276,29 @@
 
   // A local forward already points at one place, so the prompt starts
   // filled in with it rather than a bare "https://" the user has to
-  // retype every time. The live port matters: a forward configured with
-  // port 0 is assigned one by the OS at start, and the spec still says 0.
+  // retype every time.
+  //
+  // A forward on port 0 has no port to write down: the OS assigns one
+  // at start, and a different one on the next run. Those get the
+  // {port} placeholder, which the backend resolves against the live
+  // listener when the URL is opened (see expandForwardURL) - so a
+  // bookmark saved from this prompt keeps working across restarts.
   function defaultURL(spec: PortForward): string {
     if (spec.kind !== "local") return "https://";
-    const st = statusOf(spec.id);
-    const port = st?.local_port || spec.local_port || 0;
-    if (!port) return "https://";
     const host = spec.local_addr && spec.local_addr !== "0.0.0.0" ? spec.local_addr : "127.0.0.1";
-    return `http://${host}:${port}`;
+    if (spec.local_port) return `http://${host}:${spec.local_port}`;
+    // Auto port. The live one is the more useful thing to open right
+    // now, but {port} is the more useful thing to SAVE, so offer the
+    // placeholder and let the hint below the field explain it. The
+    // backend resolves either form.
+    return `http://${host}:{port}`;
   }
 
   async function launchBrowser(spec: PortForward, url?: string) {
     err = null;
-    const target = url ?? await showPrompt("URL to open:", defaultURL(spec)) ?? "";
-    if (!target) return;
-    // Make sure the proxy is up: connect if needed, then start the
-    // forward if it isn't already listening, then launch the browser.
+    // Start the tunnel BEFORE prompting. On an auto-port forward the
+    // port does not exist until the listener is up, so prompting first
+    // would offer a URL nobody could have filled in correctly.
     const sid = await ensureSession();
     if (!sid) return;
     try {
@@ -300,6 +306,13 @@
         await api.forwardsStart(spec.id, sid);
         await reload();
       }
+    } catch (e: any) {
+      err = errMsg(e);
+      return;
+    }
+    const target = url ?? await showPrompt("URL to open:", defaultURL(spec)) ?? "";
+    if (!target) return;
+    try {
       await api.sshLaunchBrowser(spec.id, target);
     } catch (e: any) {
       err = errMsg(e);
@@ -314,11 +327,14 @@
   let newBmName = $state("");
   let newBmUrl = $state("");
 
-  function openAddBookmark(specId: string) {
-    addBookmarkFor = specId;
+  function openAddBookmark(spec: PortForward) {
+    addBookmarkFor = spec.id;
     editBmIndex = null;
     newBmName = "";
-    newBmUrl = "";
+    // Local forwards start from their own address, so the common case
+    // is typing a path onto the end rather than the whole URL. A SOCKS
+    // proxy has no single address to suggest.
+    newBmUrl = spec.kind === "local" ? defaultURL(spec) : "";
   }
 
   function openEditBookmark(spec: PortForward, index: number) {
@@ -558,12 +574,23 @@
               {#if addBookmarkFor === spec.id}
                 <span class="bm-add-form">
                   <input bind:value={newBmName} placeholder="Label" class="bm-input" />
-                  <input bind:value={newBmUrl} placeholder="https://…" class="bm-input bm-url" />
+                  <input
+                    bind:value={newBmUrl}
+                    placeholder={spec.kind === "local" && !spec.local_port ? "http://127.0.0.1:{port}/path" : "https://…"}
+                    class="bm-input bm-url"
+                  />
                   <button class="bm-save" onclick={() => saveBookmark(spec)}>{editBmIndex !== null ? "Save" : "Add"}</button>
                   <button onclick={() => { addBookmarkFor = null; editBmIndex = null; }}>✕</button>
                 </span>
+                {#if spec.kind === "local" && !spec.local_port}
+                  <span class="bm-hint">
+                    This tunnel picks its port at start, so keep
+                    <code>{"{port}"}</code> in the URL - it is filled in with the
+                    real port each time you open the bookmark.
+                  </span>
+                {/if}
               {:else}
-                <button class="bm-new" onclick={() => openAddBookmark(spec.id)}>+ Bookmark</button>
+                <button class="bm-new" onclick={() => openAddBookmark(spec)}>+ Bookmark</button>
               {/if}
             </div>
           {/if}
@@ -746,7 +773,9 @@
     color: var(--text); font: inherit; font-size: 0.78rem;
     padding: 0.1rem 0.2rem; width: 6rem; outline: none;
   }
-  .bm-url { width: 12rem; }
+  /* Wide enough for a prefilled http://127.0.0.1:{port}/path without
+     the user having to scroll inside the field to see what they typed. */
+  .bm-url { width: 16rem; }
   .bm-save {
     background: var(--surface0); color: var(--green); border: 0;
     padding: 0.15rem 0.45rem; border-radius: 2px;
@@ -759,5 +788,14 @@
     font: inherit; font-size: 0.78rem; cursor: pointer;
   }
   .bm-new:hover { border-color: var(--mauve); color: var(--mauve); }
+  .bm-hint {
+    display: block; width: 100%;
+    color: var(--overlay0); font-size: 0.72rem;
+    margin-top: 0.25rem;
+  }
+  .bm-hint code {
+    background: var(--surface0); color: var(--text);
+    padding: 0 0.2rem; border-radius: 2px;
+  }
   .iconlbl { display: inline-flex; align-items: center; gap: 0.25rem; }
 </style>

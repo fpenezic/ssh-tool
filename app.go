@@ -4845,6 +4845,13 @@ func (a *App) SshLaunchBrowser(forwardID, url string) (*BrowserLaunchResult, err
 			return nil, fmt.Errorf("forward %s is neither a dynamic (SOCKS) nor a local forward", forwardID)
 		}
 
+		// {port} is resolved here, against the LIVE listener, because
+		// that is the only place the real number is known: a forward
+		// configured with port 0 is assigned one by the OS at start, and
+		// a bookmark saved with a literal port would point at a stale
+		// one on the next run.
+		url = expandForwardURL(url, s.LocalAddr, s.LocalPort)
+
 		mode := a.forwardBrowserMode(forwardID)
 		if mode == "" {
 			if s.Kind == sshlayer.ForwardDynamic {
@@ -4888,6 +4895,31 @@ func (a *App) SshLaunchBrowser(forwardID, url string) (*BrowserLaunchResult, err
 		return &BrowserLaunchResult{PID: pid}, nil
 	}
 	return nil, fmt.Errorf("forward %s is not active", forwardID)
+}
+
+// expandForwardURL substitutes the placeholders a saved bookmark may
+// carry with the forward's live listen address.
+//
+//	{port} -> the port the listener actually got
+//	{host} -> the listen address (0.0.0.0 reads back as 127.0.0.1,
+//	          since that is what a browser on this machine can dial)
+//
+// The placeholders exist because a forward on port 0 has no stable port
+// to write down, and because a fixed port can be changed later without
+// having to rewrite every bookmark that referred to it. A URL with no
+// placeholder is returned untouched, so bookmarks saved before this
+// existed keep working exactly as they did.
+func expandForwardURL(url, addr string, port uint16) string {
+	if !strings.Contains(url, "{") {
+		return url
+	}
+	host := addr
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	url = strings.ReplaceAll(url, "{port}", strconv.Itoa(int(port)))
+	url = strings.ReplaceAll(url, "{host}", host)
+	return url
 }
 
 // forwardBrowserMode reads the saved browser_mode for a forward. A

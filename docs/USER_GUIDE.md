@@ -1109,8 +1109,24 @@ tunnel popover on a pane header, and in the quick palette.
 
 For a local forward the prompt starts filled in with the forward's own
 address, so opening it is one click rather than retyping
-`http://127.0.0.1:8080` every time. If the forward is set to port 0 -
-let the OS choose - the prompt offers the port it was actually given.
+`http://127.0.0.1:8080` every time.
+
+**Tunnels that choose their own port.** A forward set to port 0 gets its
+port from the OS at start, and a different one on the next run - there
+is no number to write down. Bookmarks on such a forward use a
+placeholder instead:
+
+    http://127.0.0.1:{port}/grafana
+
+`{port}` is replaced with the real port each time the bookmark is
+opened, so it keeps working across restarts. `{host}` works the same way
+for the listen address. Both are filled in for you when you add a
+bookmark on an auto-port forward, and both are optional: a URL with a
+literal port is left exactly as you typed it.
+
+The placeholder is worth using on a fixed-port forward too - it means
+changing the port later does not silently break every bookmark that
+referred to it.
 
 A dynamic forward routes the browser through its SOCKS5 port; a local
 forward is reached directly, because it already listens on your

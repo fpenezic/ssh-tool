@@ -16,9 +16,14 @@ a prerelease upstream.
   bookmarks existed but were reserved for SOCKS proxies. Local forwards
   now take them too, in the tunnel popover, the forwards list and the
   quick palette. The "Open URL" prompt starts filled in with the
-  forward's own address rather than a bare `https://`, and it reads the
-  live port, so a forward set to port 0 offers the port it was actually
-  given.
+  forward's own address rather than a bare `https://`.
+- **Bookmarks work on tunnels that pick their own port.** A forward set
+  to port 0 gets a different port on every run, so a saved bookmark
+  cannot contain the number. Bookmarks now take a `{port}` placeholder
+  (and `{host}`), filled in with the real value each time one is opened;
+  it is prefilled for you on auto-port forwards. Useful on fixed-port
+  forwards too, where it means changing the port later does not break
+  every bookmark that referred to it.
 - **Per-forward browser choice.** Each local or dynamic forward picks
   how its bookmarks open: your normal browser, a throwaway isolated
   profile, or a dedicated profile that remembers logins. The default is
