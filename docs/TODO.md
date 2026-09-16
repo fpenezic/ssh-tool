@@ -287,13 +287,26 @@ Mediums + selected Lows tracked here.
   org.wails.ssh-tool app-id name. The pacman one was also installed and
   run on a CachyOS machine.
 
-  Not attached to releases, because the .deb and .rpm have never been
-  installed anywhere: a package nobody has installed is worse than no
-  package. Needs a Debian and a Fedora box (a container is enough for
-  the install itself; the launcher entry and icon want a session).
-  Shipping only the tested pacman one was considered and dropped - a
-  release carrying a package for one distro and not the others needs
-  more explaining than it saves.
+  **The .rpm has now been installed and removed on a real Fedora 44 box**
+  (2026-09-16): dependencies resolve cleanly (270 of them), `rpm -V` is
+  silent, all four files land where they should, `--print-version` is
+  right, `ldd` reports no unresolved libraries, and `dnf remove` leaves
+  nothing behind. Two defects came out of it and are fixed: nfpm was
+  stamping the maintainer's hostname into the RPM header, and the
+  desktop entry carried two main categories.
+
+  **RHEL 10 cannot install this RPM.** Rocky Linux 10.2 has `gtk4` but
+  no `webkitgtk6.0` at all - not in baseos, appstream or extras, and
+  nothing provides `libwebkitgtk-6.0.so.4`. The dependency name in
+  nfpm.yaml is right; the package does not exist in that family. So the
+  RPM is a Fedora package today, and saying so at the point of download
+  is part of publishing it. Whether to also ship a GTK3/WebKit2 build
+  for RHEL (the commented-out block in nfpm.yaml) is a separate
+  decision.
+
+  Still missing: a .deb install on a Debian or Ubuntu box, and a look at
+  the launcher entry and icon in a real desktop session - the Fedora box
+  was headless, and desktop-file-validate only checks the file.
 
   The AUR recipe in `build/aur/` is ready and `makepkg` was verified to
   parse and build it from published artefacts with matching checksums.
