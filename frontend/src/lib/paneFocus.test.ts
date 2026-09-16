@@ -1,5 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { userIsTypingElsewhere } from "./paneFocus";
+import { describe, it, expect, afterEach } from "vitest";
+import {
+  userIsTypingElsewhere,
+  claimKeyboard,
+  keyboardIsClaimed,
+  __resetKeyboardClaims,
+} from "./paneFocus";
+
+afterEach(() => __resetKeyboardClaims());
 
 // Connecting is asynchronous, and focus moves are deferred on top of that,
 // so by the time a terminal is ready to take the keyboard the user may have
@@ -63,5 +70,64 @@ describe("userIsTypingElsewhere", () => {
   // which goes through focusActivePane's own path rather than this guard.
   it("treats another terminal's xterm textarea as typing", () => {
     expect(userIsTypingElsewhere(el({ tagName: "TEXTAREA" }))).toBe(true);
+  });
+});
+
+// The DOM check answers "who holds the keyboard right now", which is not
+// the same as "is the user busy with a palette". A palette focuses its
+// input in an effect, and closes before the connection it started is
+// dialled, so a terminal finishing later saw a clean document and took
+// the keyboard - correct in isolation, wrong when the user had already
+// pressed Ctrl+K for the next host. Ownership is therefore declared.
+describe("keyboard ownership", () => {
+  it("starts unclaimed", () => {
+    expect(keyboardIsClaimed()).toBe(false);
+  });
+
+  it("blocks a focus steal while a palette is open, whatever the DOM says", () => {
+    const release = claimKeyboard();
+    // Focus sitting on an ordinary button would normally allow the steal.
+    expect(userIsTypingElsewhere(el({ tagName: "BUTTON" }))).toBe(true);
+    // Even with nothing focused at all - the gap between a palette
+    // mounting and focusing its input.
+    expect(userIsTypingElsewhere(null)).toBe(true);
+    release();
+    expect(userIsTypingElsewhere(el({ tagName: "BUTTON" }))).toBe(false);
+  });
+
+  // A modal opened from a palette: the inner one closing must not hand
+  // the keyboard to a terminal while the outer one is still up.
+  it("counts nested owners", () => {
+    const outer = claimKeyboard();
+    const inner = claimKeyboard();
+    inner();
+    expect(keyboardIsClaimed()).toBe(true);
+    outer();
+    expect(keyboardIsClaimed()).toBe(false);
+  });
+
+  // Svelte can run an effect's cleanup more than once; a second release
+  // must not decrement another component's claim.
+  it("ignores a repeated release", () => {
+    const a = claimKeyboard();
+    const b = claimKeyboard();
+    a();
+    a();
+    a();
+    expect(keyboardIsClaimed()).toBe(true);
+    b();
+    expect(keyboardIsClaimed()).toBe(false);
+  });
+
+  it("never drops below zero", () => {
+    const release = claimKeyboard();
+    release();
+    release();
+    expect(keyboardIsClaimed()).toBe(false);
+    // A later claim still works rather than starting from a negative count.
+    const again = claimKeyboard();
+    expect(keyboardIsClaimed()).toBe(true);
+    again();
+    expect(keyboardIsClaimed()).toBe(false);
   });
 });

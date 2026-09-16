@@ -1,3 +1,55 @@
+// ---------------------------------------------------------------------
+// Keyboard ownership
+//
+// The DOM check below answers "is something holding the keyboard RIGHT
+// NOW", which is not the same question as "is the user busy with a
+// palette". Three things make the difference matter:
+//
+//   - A palette focuses its input in an effect, so between mounting and
+//     that effect running it owns the keyboard without any DOM evidence.
+//   - It closes BEFORE the connection it started is dialled, so a
+//     terminal finishing 300ms later sees a clean document and takes the
+//     keyboard - correct on its own, wrong when the user has already
+//     pressed Ctrl+K for the next host.
+//   - Every terminal polls for up to 600ms to grab focus. Open several
+//     sessions and those pollers overlap, so the last one to finish wins
+//     regardless of what the user is doing.
+//
+// So palettes and modals declare ownership explicitly, for as long as
+// they are open, and focus moves defer to that declaration without
+// having to find evidence in the DOM.
+let keyboardOwners = 0;
+
+/** claimKeyboard marks the keyboard as owned by a palette or modal until
+ *  the returned function is called. Call it when the component mounts,
+ *  and the result from its cleanup - a $effect return, or onDestroy.
+ *
+ *  Nested owners (a modal opened from a palette) are counted rather than
+ *  flagged, so the inner one closing does not hand the keyboard to a
+ *  terminal while the outer one is still up.
+ */
+export function claimKeyboard(): () => void {
+  keyboardOwners++;
+  let released = false;
+  return () => {
+    if (released) return;   // idempotent: cleanup can run more than once
+    released = true;
+    keyboardOwners--;
+    if (keyboardOwners < 0) keyboardOwners = 0;
+  };
+}
+
+/** keyboardIsClaimed reports whether any palette or modal currently holds
+ *  the keyboard. */
+export function keyboardIsClaimed(): boolean {
+  return keyboardOwners > 0;
+}
+
+/** __resetKeyboardClaims is for tests only. */
+export function __resetKeyboardClaims(): void {
+  keyboardOwners = 0;
+}
+
 /** userIsTypingElsewhere reports whether the keyboard currently belongs to
  *  something that must keep it: an open palette or modal (they all render
  *  inside .overlay, most with role=dialog), or any text field.
@@ -12,6 +64,10 @@ export function userIsTypingElsewhere(
     ? null
     : (document.activeElement as HTMLElement | null),
 ): boolean {
+  // An open palette outranks whatever the DOM says: it may not have
+  // focused its input yet, and a terminal must not race it to the
+  // keyboard.
+  if (keyboardIsClaimed()) return true;
   if (!active) return false;
   // document is guarded so this stays callable without a DOM (unit tests,
   // and any future non-browser consumer); body is only reachable when there

@@ -1,8 +1,17 @@
 <script lang="ts">
   import { confirmModal } from "./confirmModal.svelte.ts";
   import { clickOutside } from "./clickOutside";
+  import { claimKeyboard } from "./paneFocus";
 
   let okBtn = $state<HTMLButtonElement | null>(null);
+
+  // This component stays mounted and renders nothing until asked, so the
+  // claim is tied to `pending` rather than to mounting. Returning the
+  // release from the effect means it runs whenever pending flips back.
+  $effect(() => {
+    if (!confirmModal.pending) return;
+    return claimKeyboard();
+  });
 
   $effect(() => {
     if (confirmModal.pending) {

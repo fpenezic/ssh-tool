@@ -14,7 +14,7 @@
   import { fuzzyMatch, highlightSegments, type FuzzyMatch } from "./fuzzy";
   import { clickOutside } from "./clickOutside";
   import { IconClipboardCopy } from "./iconMap";
-  import { focusActivePane } from "./paneFocus";
+  import { focusActivePane, claimKeyboard } from "./paneFocus";
 
   interface Props {
     onClose: () => void;
@@ -44,6 +44,11 @@
       (e) => { loadErr = String(e?.message ?? e); },
     );
   });
+
+  // Held for the palette's whole lifetime, not just once the input is
+  // focused: the setTimeout below leaves a gap a connecting terminal
+  // could win. See claimKeyboard.
+  $effect(() => claimKeyboard());
 
   $effect(() => { setTimeout(() => inputEl?.focus(), 0); });
 

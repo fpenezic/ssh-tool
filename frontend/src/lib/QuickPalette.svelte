@@ -23,6 +23,7 @@
   import Icon from "./Icon.svelte";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
+  import { claimKeyboard } from "./paneFocus";
   import { workspaces } from "./workspaces.svelte";
   import type { Component } from "svelte";
 
@@ -556,6 +557,12 @@
     });
   }
 
+  // Hold the keyboard for as long as the palette is open. Claimed on
+  // mount rather than when the input is focused, because the gap between
+  // the two is exactly where a terminal finishing its connect used to
+  // win the race. Released when the palette unmounts.
+  $effect(() => claimKeyboard());
+
   $effect(() => {
     // Focus the input on mount.
     if (inputEl) {
@@ -828,6 +835,7 @@
   .row.active {
     background: var(--surface0);
   }
+
   .icon {
     width: 1.4rem;
     text-align: center;

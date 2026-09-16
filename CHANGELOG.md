@@ -37,6 +37,16 @@ a prerelease upstream.
 
 ### Fixed
 
+- **Typing in the palette no longer lands in a terminal.** Opening a
+  connection, pressing Ctrl+K again and typing the next host could send
+  those keystrokes into the session that had just come up. v0.97 fixed
+  the case where the palette was open the whole time; this fixes the
+  rest. A connecting terminal polls for up to 600ms to take the
+  keyboard, and the palette closes before the connection it started is
+  dialled, so checking the document for evidence of typing was never
+  going to be reliable - with several sessions opening, whichever poll
+  finished last simply won. Palettes and dialogs now hold the keyboard
+  explicitly for as long as they are open.
 - **Renaming with F2 lets you select the text.** Dragging across the
   rename field started dragging the row instead of selecting what you
   were trying to overwrite - most annoying right after cloning a

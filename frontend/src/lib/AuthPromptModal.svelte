@@ -1,6 +1,7 @@
 <script lang="ts">
   import { IconKeyRound } from "./iconMap";
   import type { AuthPromptQuestion } from "./stores.svelte";
+  import { claimKeyboard } from "./paneFocus";
 
   interface Props {
     promptId: string;
@@ -24,6 +25,12 @@
   let answers = $state<string[]>(new Array(questions.length).fill(""));
 
   const title = $derived(kind === "username" ? "Username required" : "Authentication required");
+
+  // A fresh component is mounted per prompt, so mounting is exactly the
+  // window this modal owns the keyboard for. Matters more here than
+  // elsewhere: this modal appears DURING a connect, which is precisely
+  // when a terminal is polling to take focus.
+  $effect(() => claimKeyboard());
 
   // Focus the first field on mount. HTML autofocus is unreliable for a
   // dynamically mounted modal (and doesn't re-fire), so grab the first input
