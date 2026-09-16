@@ -144,15 +144,37 @@ jobs:
           SSHTOOL_VERSION: ${{ github.ref_name }}
         run: |
           ${{ matrix.build }}
-      # Distro packages are built by `task linux:create:deb` (and rpm /
-      # aur) and are NOT attached to releases yet: the .deb and .rpm have
-      # never been installed on a Debian or Fedora machine, and shipping
-      # a package nobody has installed is worse than shipping none. The
-      # pacman one has been tested, but a release carrying packages for
-      # one distro and not the others needs more explaining than it is
-      # worth. Revisit when there is a machine to test on - see
-      # docs/TODO.md "apt / dnf repositories".
+      # Distro packages. All three were installed, verified and removed on
+      # real systems before this step was added (Fedora 44 for the rpm,
+      # Ubuntu 24.04 for the deb, CachyOS for the pacman one) - see
+      # docs/TODO.md. That install is what found the two defects the
+      # config alone did not show: nfpm stamping the build machine's
+      # hostname into the RPM header, and a desktop entry with two main
+      # categories.
       #
+      # nfpm names its output ssh-tool.<ext> with no version or
+      # architecture, which is fine in bin/ and wrong on a release page
+      # where someone downloads the file on its own. Renamed here rather
+      # than in the Taskfile so local builds keep the short names.
+      #
+      # amd64 only: the packages hard-code an amd64 binary path, and
+      # cross-building them would need the arm64 binary staged into the
+      # same tree. Worth doing when an arm64 Linux user asks.
+      - name: Build distro packages
+        if: matrix.platform == 'linux-amd64'
+        env:
+          SSHTOOL_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          task linux:create:deb
+          task linux:create:rpm
+          task linux:create:aur
+          ver="${GITHUB_REF_NAME#v}"
+          mv bin/ssh-tool.deb          "bin/ssh-tool_${ver}_amd64.deb"
+          mv bin/ssh-tool.rpm          "bin/ssh-tool-${ver}.x86_64.rpm"
+          mv bin/ssh-tool.pkg.tar.zst  "bin/ssh-tool-${ver}-x86_64.pkg.tar.zst"
+          ls -la bin/
+
       # The helper scripts do ship: they are what the release page points
       # at for a manual install.
       - name: Attach install helpers
@@ -173,6 +195,16 @@ jobs:
           path: |
             bin/*.sh
             bin/appicon.*
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        if: matrix.platform == 'linux-amd64'
+        with:
+          name: linux-distro-packages
+          path: |
+            bin/*.deb
+            bin/*.rpm
+            bin/*.pkg.tar.zst
           if-no-files-found: error
           retention-days: 7
 
@@ -481,46 +513,22 @@ jobs:
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-go@v7
-        if: steps.gate.outputs.enabled == 'true'
-        with:
-          go-version-file: go.mod
-      - uses: actions/setup-node@v7
-        if: steps.gate.outputs.enabled == 'true'
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
       - name: Install packaging tools
         if: steps.gate.outputs.enabled == 'true'
         run: |
           sudo apt-get update
-          # The same GTK/WebKit deps the linux build job installs: the
-          # package tasks depend on the build task, so this compiles.
-          sudo apt-get install -y --no-install-recommends \
-            build-essential pkg-config \
-            libgtk-4-dev libwebkitgtk-6.0-dev \
-            libgtk-3-dev libwebkit2gtk-4.1-dev
           sudo apt-get install -y apt-utils createrepo-c gnupg
-          go install github.com/go-task/task/v3/cmd/task@${TASK_VERSION}
-          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}
 
-      - name: Frontend deps
+      # The packages come from the build job rather than being rebuilt
+      # here, so the repository serves the EXACT bytes attached to the
+      # release. Rebuilding would also need the whole Go/Node/GTK
+      # toolchain for a second time, and a Linux build needs CGO for the
+      # GTK bindings - a CGO_ENABLED=0 rebuild does not even compile.
+      - uses: actions/download-artifact@v8
         if: steps.gate.outputs.enabled == 'true'
-        working-directory: frontend
-        run: npm ci
-
-      - name: Build the packages for this tag
-        if: steps.gate.outputs.enabled == 'true'
-        env:
-          SSHTOOL_VERSION: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          # CGO off keeps this identical to the release build; the deb
-          # and rpm wrap the same binary users download.
-          CGO_ENABLED=0 task linux:create:deb
-          CGO_ENABLED=0 task linux:create:rpm
+        with:
+          name: linux-distro-packages
+          path: bin
 
       - name: Collect the previous versions
         if: steps.gate.outputs.enabled == 'true'

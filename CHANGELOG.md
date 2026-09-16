@@ -65,11 +65,27 @@ a prerelease upstream.
   reach the Linux home, since every Windows path maps to some `/mnt/...`
   path.
 
+### Packaging
+
+- **Linux packages ship with releases.** `.deb`, `.rpm` and
+  `.pkg.tar.zst` are now built in CI and attached to every release,
+  named with their version and architecture. Each was installed,
+  verified and removed on a real system first - Fedora 44, Ubuntu 24.04
+  and CachyOS. Note the `.rpm` targets Fedora: RHEL 10 and its rebuilds
+  have no `webkitgtk6.0` package at all, so it will not install there.
+- **The RPM no longer carries the build machine's hostname.** nfpm
+  stamps `os.Hostname()` into the header unless told otherwise, so
+  `rpm -qi` showed the maintainer's machine name.
+- **One category in the launcher entry.** The desktop file listed both
+  Network and Development as main categories, which can list the app
+  twice in a menu.
+
 ### Internal
 
 - apt and dnf repository publishing is wired into the release workflow
-  and gated on a signing-key secret, so it stays dormant until the
-  packages have been installed and tested somewhere. See `docs/TODO.md`.
+  and gated on a signing-key secret, so it stays dormant until the key
+  exists. It serves the same package files the release carries rather
+  than rebuilding them. See `docs/TODO.md`.
 
 ---
 
