@@ -24,15 +24,21 @@ type Stub = {
   isContentEditable?: boolean;
   /** selectors this element or an ancestor matches */
   matches?: string[];
+  /** class names on the element itself */
+  classes?: string[];
 };
 
 function el(s: Stub): HTMLElement {
+  const classes = s.classes ?? [];
   return {
     tagName: s.tagName,
     isContentEditable: s.isContentEditable ?? false,
+    classList: { contains: (c: string) => classes.includes(c) },
     closest: (sel: string) => ((s.matches ?? []).includes(sel) ? ({} as Element) : null),
   } as unknown as HTMLElement;
 }
+
+const XTERM = "xterm-helper-textarea";
 
 const DIALOG_SEL = '[role="dialog"], .overlay';
 
@@ -65,12 +71,28 @@ describe("userIsTypingElsewhere", () => {
     expect(userIsTypingElsewhere(el({ tagName: "BUTTON" }))).toBe(false);
   });
 
-  // xterm's focus target is a TEXTAREA, so it trips the text-field branch.
-  // That is correct for the reported bug (do not yank focus out of a shell
-  // someone is typing in) and does not break switching between terminals,
-  // which goes through focusActivePane's own path rather than this guard.
-  it("treats another terminal's xterm textarea as typing", () => {
+  // This used to assert the opposite, on the theory that terminal-to-
+  // terminal focus went through focusActivePane rather than this guard.
+  // A log from the field showed otherwise: a newly connected session runs
+  // focusWhenVisible, finds the PREVIOUS session's textarea focused, and
+  // stands down - so the second and every later session opened without a
+  // cursor. Terminals must be able to take focus from each other.
+  it("lets one terminal take focus from another", () => {
+    expect(userIsTypingElsewhere(el({ tagName: "TEXTAREA", classes: [XTERM] }))).toBe(false);
+  });
+
+  // A plain textarea is still protected: that is a note field or an
+  // editor, not a pane handing over to the next pane.
+  it("still protects an ordinary textarea", () => {
     expect(userIsTypingElsewhere(el({ tagName: "TEXTAREA" }))).toBe(true);
+  });
+
+  // An xterm textarea inside an open dialog stays protected - the dialog
+  // branch runs first.
+  it("protects an xterm textarea inside a dialog", () => {
+    expect(
+      userIsTypingElsewhere(el({ tagName: "TEXTAREA", classes: [XTERM], matches: [DIALOG_SEL] })),
+    ).toBe(true);
   });
 });
 

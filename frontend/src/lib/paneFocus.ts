@@ -21,6 +21,7 @@
 let keyboardOwners = 0;
 const releaseWaiters = new Set<() => void>();
 
+
 /** claimKeyboard marks the keyboard as owned by a palette or modal until
  *  the returned function is called. Call it when the component mounts,
  *  and the result from its cleanup - a $effect return, or onDestroy.
@@ -97,6 +98,14 @@ export function userIsTypingElsewhere(
   // is one.
   if (typeof document !== "undefined" && active === document.body) return false;
   if (active.closest?.('[role="dialog"], .overlay')) return true;
+  // A terminal's own textarea is NOT "somewhere the user is typing" as far
+  // as another terminal is concerned. xterm's focus target is a TEXTAREA,
+  // so treating it like an ordinary text field meant the second session a
+  // user opened could never take the keyboard from the first: it saw a
+  // focused TEXTAREA and stood down. Terminals hand focus to each other as
+  // ordinary business - opening a session, switching tab, closing a pane -
+  // and the caller has already decided this pane should have it.
+  if (active.classList?.contains("xterm-helper-textarea")) return false;
   const tag = active.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
   return active.isContentEditable;

@@ -59,6 +59,21 @@
   import { lastSession } from "./lib/lastSession.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
 
+  // Arriving at the terminal view puts the cursor in it, whichever route
+  // got here: the toolbar button, a keyboard shortcut, closing Settings,
+  // or a connection that switched the view itself. Doing it here rather
+  // than at each caller means a new route cannot forget to.
+  //
+  // Reads view.tab and nothing else, so it runs on entering the view, not
+  // on every change within it. focusActivePane is a no-op when a dialog
+  // holds the keyboard, so this cannot steal from a modal.
+  let wasTerminal = false;
+  $effect(() => {
+    const isTerminal = view.tab === "terminal";
+    if (isTerminal && !wasTerminal) focusActivePane();
+    wasTerminal = isTerminal;
+  });
+
   // Load UI preferences early so density / base font size apply
   // before any tree row renders - avoids the brief "compact then
   // jump to cozy" reflow on app start.
