@@ -19,6 +19,7 @@
 // they are open, and focus moves defer to that declaration without
 // having to find evidence in the DOM.
 let keyboardOwners = 0;
+const releaseWaiters = new Set<() => void>();
 
 /** claimKeyboard marks the keyboard as owned by a palette or modal until
  *  the returned function is called. Call it when the component mounts,
@@ -36,7 +37,28 @@ export function claimKeyboard(): () => void {
     released = true;
     keyboardOwners--;
     if (keyboardOwners < 0) keyboardOwners = 0;
+    if (keyboardOwners === 0) {
+      // Whoever deferred to the claim gets a chance to try again. Without
+      // this a terminal that found the keyboard claimed would simply give
+      // up: the palette closes a moment later and nothing asks for focus
+      // again, leaving the session the user just opened unfocused.
+      const waiting = [...releaseWaiters];
+      releaseWaiters.clear();
+      for (const w of waiting) w();
+    }
   };
+}
+
+/** onKeyboardReleased registers fn to run when the last claim is dropped.
+ *  Fires at most once; returns a function that cancels the registration.
+ *
+ *  Callers use this instead of simply abandoning a focus move: "someone
+ *  else holds the keyboard" is a reason to wait, not a reason to stop.
+ */
+export function onKeyboardReleased(fn: () => void): () => void {
+  if (keyboardOwners === 0) return () => {};
+  releaseWaiters.add(fn);
+  return () => releaseWaiters.delete(fn);
 }
 
 /** keyboardIsClaimed reports whether any palette or modal currently holds
@@ -48,6 +70,7 @@ export function keyboardIsClaimed(): boolean {
 /** __resetKeyboardClaims is for tests only. */
 export function __resetKeyboardClaims(): void {
   keyboardOwners = 0;
+  releaseWaiters.clear();
 }
 
 /** userIsTypingElsewhere reports whether the keyboard currently belongs to
@@ -99,8 +122,15 @@ export function userIsTypingElsewhere(
 export function focusActivePane(): void {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      // Re-checked inside the frames, not before them: the palette may have
-      // opened while we were waiting.
+      // A dialog holding the keyboard means wait, not stop - the palette
+      // that triggered this closes a moment later, and nothing else would
+      // ask again. Same reasoning as Terminal.focusWhenVisible.
+      if (keyboardIsClaimed()) {
+        onKeyboardReleased(() => focusActivePane());
+        return;
+      }
+      // Re-checked inside the frames, not before them: the user may have
+      // clicked into a text field while we were waiting.
       if (userIsTypingElsewhere()) return;
       const active = document.querySelector(".tab-content.active");
       if (!active) return;

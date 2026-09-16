@@ -3,6 +3,7 @@ import {
   userIsTypingElsewhere,
   claimKeyboard,
   keyboardIsClaimed,
+  onKeyboardReleased,
   __resetKeyboardClaims,
 } from "./paneFocus";
 
@@ -129,5 +130,63 @@ describe("keyboard ownership", () => {
     expect(keyboardIsClaimed()).toBe(true);
     again();
     expect(keyboardIsClaimed()).toBe(false);
+  });
+});
+
+// Deferring to a claim must be temporary. The palette that starts a
+// connection closes just before the terminal mounts, so a focus attempt
+// landing in that window found the keyboard claimed - and, in the first
+// version of this, simply gave up. The session opened without a cursor:
+// reported for both Enter and a plain click, since neither involves the
+// keyboard at all.
+describe("waiting for the keyboard", () => {
+  it("notifies a waiter when the last claim drops", () => {
+    const release = claimKeyboard();
+    let woke = 0;
+    onKeyboardReleased(() => woke++);
+    expect(woke).toBe(0);
+    release();
+    expect(woke).toBe(1);
+  });
+
+  it("waits for the OUTERMOST claim, not the first to close", () => {
+    const outer = claimKeyboard();
+    const inner = claimKeyboard();
+    let woke = 0;
+    onKeyboardReleased(() => woke++);
+    inner();
+    expect(woke).toBe(0);   // outer still holds it
+    outer();
+    expect(woke).toBe(1);
+  });
+
+  it("does not register when nothing holds the keyboard", () => {
+    let woke = 0;
+    onKeyboardReleased(() => woke++);
+    // Nothing to wait for, so the caller proceeds on its own; a later
+    // unrelated claim must not fire this.
+    const release = claimKeyboard();
+    release();
+    expect(woke).toBe(0);
+  });
+
+  it("can be cancelled, so a closed pane does not steal focus later", () => {
+    const release = claimKeyboard();
+    let woke = 0;
+    const cancel = onKeyboardReleased(() => woke++);
+    cancel();
+    release();
+    expect(woke).toBe(0);
+  });
+
+  it("fires each waiter once, not on every later release", () => {
+    const r1 = claimKeyboard();
+    let woke = 0;
+    onKeyboardReleased(() => woke++);
+    r1();
+    expect(woke).toBe(1);
+    const r2 = claimKeyboard();
+    r2();
+    expect(woke).toBe(1);
   });
 });

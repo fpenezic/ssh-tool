@@ -3,7 +3,7 @@
   import { EventsOn } from "./wailsRuntime";
   import { sessionCwd, parseOsc7 } from "./sessionCwd.svelte";
   import { parseOsc52 } from "./osc52";
-  import { userIsTypingElsewhere } from "./paneFocus";
+  import { userIsTypingElsewhere, keyboardIsClaimed, onKeyboardReleased } from "./paneFocus";
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
   import { VS16Addon } from "./unicodeVS16";
@@ -542,13 +542,29 @@
         && host.clientWidth > 0
         && host.clientHeight > 0;
       if (ready) {
-        const active = document.activeElement as HTMLElement | null;
+        // A palette or dialog holding the keyboard is a reason to WAIT,
+        // not to stop. The palette that started this connection closes
+        // just before the terminal mounts, so a poll landing in that
+        // window would otherwise abandon the focus move and nothing
+        // would ask again - leaving the session the user just opened
+        // without a cursor.
+        if (keyboardIsClaimed()) {
+          cancelWait?.();
+          cancelWait = onKeyboardReleased(() => {
+            cancelWait = null;
+            // Back through the whole check: the pane may have been
+            // closed or hidden while the dialog was up.
+            if (active) focusWhenVisible();
+          });
+          return;
+        }
+        const activeEl = document.activeElement as HTMLElement | null;
         // Checked at the moment focus would actually move, not when the
-        // poll started: the palette may well have been opened during
-        // those few hundred milliseconds.
-        if (userIsTypingElsewhere(active)) return;
-        if (active && active !== document.body && !host.contains(active)) {
-          active.blur();
+        // poll started: the user may have clicked into a text field
+        // during those few hundred milliseconds.
+        if (userIsTypingElsewhere(activeEl)) return;
+        if (activeEl && activeEl !== document.body && !host.contains(activeEl)) {
+          activeEl.blur();
         }
         term.focus();
         return;
@@ -557,6 +573,13 @@
     };
     tick();
   }
+
+  // Pending "focus once the keyboard is free" registration, so a second
+  // attempt replaces the first rather than stacking. Dropped on destroy:
+  // a pane closed while a dialog was up must not come back and claim the
+  // keyboard once that dialog closes.
+  let cancelWait: (() => void) | null = null;
+  onDestroy(() => { cancelWait?.(); cancelWait = null; });
 
   async function notifyResize() {
     if (!term || !fit) return;
