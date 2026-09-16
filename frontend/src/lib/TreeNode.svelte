@@ -530,6 +530,14 @@
     expandedConnections.toggle(folder.id);
   }
   // ----- Inline rename (F2 from the sidebar puts a row into this mode) -----
+  //
+  // Both row templates turn `draggable` OFF while their rename input is
+  // open. A draggable ancestor wins over text selection inside it, so
+  // pressing and dragging across the field starts a row drag (and, on a
+  // cloned connection, offers to move "Copy of ..." somewhere) instead
+  // of selecting the text to overwrite. stopPropagation on mousedown
+  // does not fix it: the drag comes from the ancestor's own draggable
+  // attribute, not from an event bubbling up to it.
 
   // Guards the commit so blur-after-Enter and blur-after-Escape cannot fire a
   // second save. The input is removed from the DOM by the rename ending,
@@ -720,7 +728,7 @@
     aria-selected={isSelected}
     data-kind="folder"
     data-id={folder.id}
-    draggable="true"
+    draggable={!renameState.editing("folder", folder.id)}
     onmousedown={recordMods}
     onclick={(e) => onFolderRowClick(e)}
     ondblclick={toggle}
@@ -965,7 +973,7 @@
           aria-selected={selConn}
           data-kind="connection"
           data-id={conn.id}
-          draggable={!isConn}
+          draggable={!isConn && !renameState.editing("connection", conn.id)}
           title={rowTitle}
           onmousedown={recordMods}
           onclick={(e) => handleConnClick(e, conn.id, conn.name, conn.hostname)}
