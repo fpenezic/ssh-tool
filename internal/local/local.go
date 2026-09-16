@@ -121,24 +121,23 @@ func Spawn(req SpawnRequest) (*Session, error) {
 		return nil, err
 	}
 
+	dir, dirArgs := resolveStartDir(kind, req.Dir)
+	args = append(args, dirArgs...)
+
 	// With cmd.Dir set, a relative executable name is resolved against
 	// that directory instead of PATH (documented os/exec semantics that
 	// go-pty mirrors) - "wsl.exe" would be looked up as
 	// <dir>\wsl.exe and fail. Pin the shell to its absolute path
 	// before the Dir assignment below.
-	if req.Dir != "" && !filepath.IsAbs(name) {
+	if dir != "" && !filepath.IsAbs(name) {
 		if abs, err := exec.LookPath(name); err == nil {
 			name = abs
 		}
 	}
 
 	cmd := p.Command(name, args...)
-	if req.Dir != "" {
-		if st, err := os.Stat(req.Dir); err == nil && st.IsDir() {
-			cmd.Dir = req.Dir
-		}
-		// A vanished/invalid dir silently falls back to the default
-		// cwd - better a shell in the wrong place than no shell.
+	if dir != "" {
+		cmd.Dir = dir
 	}
 	cmd.Env = append(os.Environ(),
 		"TERM=xterm-256color",
@@ -370,6 +369,55 @@ func resolveShell(kind string) (string, string, []string, string, error) {
 		}
 	}
 	return "", "", nil, "", errors.New("unsupported shell kind for this platform")
+}
+
+// resolveStartDir decides where a shell begins, and by which of the two
+// available mechanisms it gets there.
+//
+// WSL does not respond to the obvious one. A plain `wsl.exe` INHERITS
+// the Windows working directory and maps it to the /mnt/... equivalent,
+// so launching from the app's own install directory drops the user in
+// /mnt/c/Users/<name>/AppData/Local/Programs/ssh-tool. Setting cmd.Dir
+// cannot fix that: every Windows path maps to some /mnt/... path, and
+// the Linux home is not reachable through that mapping at all. The fix
+// is wsl.exe's own flag - `--cd ~` starts in the distro's home, and
+// `--cd <abs>` takes either a Linux path or a Windows one (measured:
+// `--cd /tmp` -> /tmp, `--cd C:\Users` -> /mnt/c/Users, and an
+// unreadable path logs a chdir error and lands in / rather than
+// failing the spawn).
+//
+// Everything else takes cmd.Dir: PowerShell, cmd.exe and the Unix
+// shells all honour the working directory they are started with.
+//
+// Returns (dir, args): dir goes to cmd.Dir (may be empty), args are
+// appended to the shell's own argv (may be nil).
+func resolveStartDir(kind, requested string) (string, []string) {
+	if kind == "wsl" {
+		// An explicit request wins, and is passed through untouched:
+		// the user may legitimately mean a Linux path (/srv/app), which
+		// os.Stat on the Windows side could not verify anyway.
+		if requested != "" {
+			return "", []string{"--cd", requested}
+		}
+		return "", []string{"--cd", "~"}
+	}
+
+	if requested != "" {
+		if st, err := os.Stat(requested); err == nil && st.IsDir() {
+			return requested, nil
+		}
+		// A vanished or invalid directory falls through to the default
+		// rather than failing the spawn - better a shell in the wrong
+		// place than no shell.
+	}
+
+	// Default: the user's home, which is what every other terminal on
+	// the system does. Without this the shell inherits the app's own
+	// cwd, i.e. wherever the executable happens to live.
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return home, nil
+	}
+	return "", nil
 }
 
 func baseName(p string) string {
