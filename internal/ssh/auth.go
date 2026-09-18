@@ -88,7 +88,12 @@ type InteractiveAuthPrompt struct {
 // been offered, because it is appended last in the method list. name/instruction
 // are the server's, echos pair 1:1 with prompts; the returned answers must
 // pair 1:1 with prompts too. label identifies the hop for the UI.
-var InteractiveAuthHook func(label, host string, port int, name, instruction string, prompts []InteractiveAuthPrompt) (answers []string, err error)
+//
+// user is the account being authenticated, so the prompt can say whose
+// password it wants. It is read when the challenge arrives rather than
+// when the method is built, because a hop with no configured username
+// has one prompted for in between.
+var InteractiveAuthHook func(label, host string, port int, user, name, instruction string, prompts []InteractiveAuthPrompt) (answers []string, err error)
 
 // AuthMaterial is the resolved per-hop authentication state, ready to be
 // turned into ssh.AuthMethod values.
@@ -124,9 +129,15 @@ func (m *AuthMaterial) ToAuthMethods() []ssh.AuthMethod {
 // "publickey,password,keyboard-interactive" server drives the former (it can
 // carry a password prompt AND a 2FA code); a server offering only "password"
 // with no stored secret is covered by the latter.
-func interactiveAuthMethods(label, host string, port int) []ssh.AuthMethod {
+// userFn is called at challenge time rather than taking a username up
+// front: when a hop has no configured user, one is prompted for after
+// these methods are built but before the server ever challenges.
+func interactiveAuthMethods(label, host string, port int, userFn func() string) []ssh.AuthMethod {
 	if InteractiveAuthHook == nil {
 		return nil
+	}
+	if userFn == nil {
+		userFn = func() string { return "" }
 	}
 	ki := ssh.KeyboardInteractive(func(name, instruction string, questions []string, echos []bool) ([]string, error) {
 		if len(questions) == 0 {
@@ -142,10 +153,10 @@ func interactiveAuthMethods(label, host string, port int) []ssh.AuthMethod {
 			}
 			prompts[i] = InteractiveAuthPrompt{Echo: echo, Text: q}
 		}
-		return InteractiveAuthHook(label, host, port, name, instruction, prompts)
+		return InteractiveAuthHook(label, host, port, userFn(), name, instruction, prompts)
 	})
 	pw := ssh.PasswordCallback(func() (string, error) {
-		answers, err := InteractiveAuthHook(label, host, port, "", "",
+		answers, err := InteractiveAuthHook(label, host, port, userFn(), "", "",
 			[]InteractiveAuthPrompt{{Echo: false, Text: "Password:"}})
 		if err != nil {
 			return "", err

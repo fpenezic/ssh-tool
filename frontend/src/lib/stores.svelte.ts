@@ -2200,6 +2200,7 @@ export interface AuthPrompt {
   label: string;
   host: string;
   port: number;
+  user?: string; // the account being authenticated (auth kind)
   name?: string; // server-provided title (auth kind)
   instruction?: string; // server-provided instruction (auth kind)
   questions: AuthPromptQuestion[];

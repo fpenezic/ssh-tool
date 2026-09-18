@@ -9,6 +9,7 @@
     label: string;
     host: string;
     port: number;
+    user?: string;
     name?: string;
     instruction?: string;
     questions: AuthPromptQuestion[];
@@ -16,7 +17,12 @@
     onRespond: (answers: string[] | null) => void;
     queueLength?: number;
   }
-  let { kind, label, host, port, name, instruction, questions, onRespond, queueLength = 0 }: Props = $props();
+  let { kind, label, host, port, user, name, instruction, questions, onRespond, queueLength = 0 }: Props = $props();
+
+  // "user@host:port" when the account is known, so a prompt that arrives
+  // mid-connect says whose password it wants - several hosts can be
+  // dialled at once, and they do not all use the same account.
+  const target = $derived(user ? `${user}@${host}:${port}` : `${host}:${port}`);
 
   // One answer per question, initially blank. questions is fixed for the
   // lifetime of this modal instance (a new prompt mounts a fresh component),
@@ -73,7 +79,7 @@
       </p>
     {:else}
       <p>
-        <strong>{host}:{port}</strong> ({label}) is asking for authentication.
+        <strong>{target}</strong> ({label}) is asking for authentication.
         {#if name}<span class="srv">{name}</span>{/if}
       </p>
       {#if instruction}<p class="instr">{instruction}</p>{/if}

@@ -50,6 +50,7 @@ type AuthPromptEvent struct {
 	Label       string               `json:"label"`
 	Host        string               `json:"host"`
 	Port        int                  `json:"port"`
+	User        string               `json:"user"`        // account being authenticated
 	Name        string               `json:"name"`        // server-provided title
 	Instruction string               `json:"instruction"` // server-provided instruction
 	Questions   []AuthPromptQuestion `json:"questions"`
@@ -115,7 +116,7 @@ func (a *App) promptUsername(label, host string, port int) (string, error) {
 }
 
 // promptInteractiveAuth backs sshlayer.InteractiveAuthHook.
-func (a *App) promptInteractiveAuth(label, host string, port int, name, instruction string, prompts []sshlayer.InteractiveAuthPrompt) ([]string, error) {
+func (a *App) promptInteractiveAuth(label, host string, port int, user, name, instruction string, prompts []sshlayer.InteractiveAuthPrompt) ([]string, error) {
 	id, ch := a.registerPrompt()
 	defer a.unregisterPrompt(id)
 
@@ -124,7 +125,7 @@ func (a *App) promptInteractiveAuth(label, host string, port int, name, instruct
 		qs[i] = AuthPromptQuestion{Echo: p.Echo, Text: p.Text}
 	}
 	EventsEmit("auth_prompt", AuthPromptEvent{
-		PromptID: id, Label: label, Host: host, Port: port,
+		PromptID: id, Label: label, Host: host, Port: port, User: user,
 		Name: name, Instruction: instruction, Questions: qs,
 	})
 	a.RequestAttention()

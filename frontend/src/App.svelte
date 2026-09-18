@@ -729,7 +729,9 @@
     api.requestAttention().catch(() => {});
     api.sendPromptNotification(
       "Authentication required",
-      `${data.host ?? "The server"} is asking for a password or verification code.`,
+      data.user
+        ? `${data.user}@${data.host ?? "server"} is asking for a password or verification code.`
+        : `${data.host ?? "The server"} is asking for a password or verification code.`,
     ).catch(() => {});
     authPromptStore.enqueue({
       promptId: data.prompt_id,
@@ -737,6 +739,7 @@
       label: data.label ?? "",
       host: data.host ?? "",
       port: data.port ?? 22,
+      user: data.user ?? "",
       name: data.name ?? "",
       instruction: data.instruction ?? "",
       questions: (data.questions ?? []).map((q: any) => ({ echo: !!q.echo, text: q.text ?? "" })),
@@ -1476,6 +1479,7 @@
       label={authPromptStore.pending.label}
       host={authPromptStore.pending.host}
       port={authPromptStore.pending.port}
+      user={authPromptStore.pending.user}
       name={authPromptStore.pending.name}
       instruction={authPromptStore.pending.instruction}
       questions={authPromptStore.pending.questions}

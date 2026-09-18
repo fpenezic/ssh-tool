@@ -97,18 +97,64 @@ func TestToAuthMethodsOrderAndShape(t *testing.T) {
 func TestInteractiveAuthMethodsGating(t *testing.T) {
 	// No hook set -> no interactive methods.
 	InteractiveAuthHook = nil
-	if got := interactiveAuthMethods("t", "h", 22); got != nil {
+	if got := interactiveAuthMethods("t", "h", 22, nil); got != nil {
 		t.Fatalf("no hook: want nil, got %d methods", len(got))
 	}
 
 	// Hook set -> keyboard-interactive + password callback.
-	InteractiveAuthHook = func(label, host string, port int, name, instruction string, prompts []InteractiveAuthPrompt) ([]string, error) {
+	InteractiveAuthHook = func(label, host string, port int, user, name, instruction string, prompts []InteractiveAuthPrompt) ([]string, error) {
 		return []string{"answer"}, nil
 	}
 	defer func() { InteractiveAuthHook = nil }()
-	methods := interactiveAuthMethods("t", "h", 22)
+	methods := interactiveAuthMethods("t", "h", 22, nil)
 	if len(methods) != 2 {
 		t.Fatalf("with hook: want 2 methods, got %d", len(methods))
+	}
+}
+
+// The username reaches the prompt, and it is read when the server
+// challenges rather than when the method is built. That distinction is
+// the whole point of taking a closure: a hop with no configured user has
+// one prompted for in between, so reading it up front would name the
+// wrong account (or none at all).
+//
+// ssh.AuthMethod hides its callback behind an unexported interface, so
+// the closure is exercised directly - which is the part this package
+// owns. That it is invoked at challenge time is guaranteed by
+// KeyboardInteractive/PasswordCallback calling it, not by this test.
+func TestInteractiveAuthUserIsReadLate(t *testing.T) {
+	InteractiveAuthHook = func(label, host string, port int, user, name, instruction string, prompts []InteractiveAuthPrompt) ([]string, error) {
+		return []string{"pw"}, nil
+	}
+	defer func() { InteractiveAuthHook = nil }()
+
+	user := "" // not known yet, exactly as at the callsite
+	userFn := func() string { return user }
+
+	methods := interactiveAuthMethods("t", "h", 22, userFn)
+	if len(methods) != 2 {
+		t.Fatalf("want 2 methods, got %d", len(methods))
+	}
+	if got := userFn(); got != "" {
+		t.Fatalf("before resolution: want empty, got %q", got)
+	}
+
+	user = "bulbadmin" // resolved after the methods were built
+	if got := userFn(); got != "bulbadmin" {
+		t.Fatalf("after resolution: want %q, got %q", "bulbadmin", got)
+	}
+}
+
+// A nil userFn must not panic - it is the documented "no username known"
+// case, and a panic here would abort a connection rather than prompt.
+func TestInteractiveAuthNilUserFn(t *testing.T) {
+	InteractiveAuthHook = func(label, host string, port int, user, name, instruction string, prompts []InteractiveAuthPrompt) ([]string, error) {
+		return []string{"pw"}, nil
+	}
+	defer func() { InteractiveAuthHook = nil }()
+
+	if methods := interactiveAuthMethods("t", "h", 22, nil); len(methods) != 2 {
+		t.Fatalf("nil userFn: want 2 methods, got %d", len(methods))
 	}
 }
 

@@ -605,7 +605,11 @@ func Connect(
 		// 2FA). Only the target hop - a jump host asking interactively mid-chain
 		// would be surprising and is rare.
 		if i == len(chain)-1 {
-			methods = append(methods, interactiveAuthMethods(h.Label, h.Hostname, int(h.Port))...)
+			// The username closure, not h.Username: a hop with no configured
+			// user gets one prompted for below, after this line runs but
+			// before the server issues its first challenge.
+			methods = append(methods, interactiveAuthMethods(
+				h.Label, h.Hostname, int(h.Port), func() string { return h.Username })...)
 		}
 		if h.Username == "" {
 			// No configured username: prompt for one instead of failing, so a
