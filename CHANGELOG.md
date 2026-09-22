@@ -7,6 +7,34 @@ a prerelease upstream.
 
 ---
 
+## [0.100.2] - Turning the package repositories on
+
+No user-facing changes. v0.100.1 attached the apt and dnf repository
+build to the release for the first time, and it got as far as signing
+the finished trees before failing to publish them: the step set its git
+identity in the wrong repository, so the commit had no author. One line,
+fixed here.
+
+What that run did prove, since the failure came after all of it: the
+signing key imports from its secret and signs unattended, createrepo_c
+and the dnf half work (neither could be tested locally), and retention
+pulled the previous release's packages while correctly skipping older
+tags that carry none.
+
+If this release publishes the repositories, adding them looks like this:
+
+    # Debian / Ubuntu
+    curl -fsSL https://fpenezic.github.io/ssh-tool/ssh-tool.asc \
+      | sudo gpg --dearmor -o /usr/share/keyrings/ssh-tool.gpg
+    echo 'deb [signed-by=/usr/share/keyrings/ssh-tool.gpg] https://fpenezic.github.io/ssh-tool/deb stable main' \
+      | sudo tee /etc/apt/sources.list.d/ssh-tool.list
+
+The landing page at https://fpenezic.github.io/ssh-tool has the dnf
+instructions too. The .rpm targets Fedora - RHEL 10 and its rebuilds
+have no webkitgtk6.0 package, so it will not install there.
+
+---
+
 ## [0.100.1] - Things that were there but would not show themselves
 
 Small fixes, all from using the app rather than from a test suite, and
