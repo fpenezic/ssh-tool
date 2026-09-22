@@ -24,6 +24,19 @@
   // row): offer New connection / New folder shortcut at root level.
   // Row right-clicks have their own menus and stopPropagation, so
   // this fires only when the user actually missed every row.
+  // A click on the empty space below the rows clears the selection, the
+  // way a file manager does. Without it the last-clicked folder stayed
+  // selected while looking like nothing was, and "New folder" then
+  // created inside it - invisibly, when that folder was collapsed.
+  //
+  // Same target test as the context menu below: anything inside a row
+  // belongs to that row's own handler.
+  function onEmptyAreaClick(e: MouseEvent) {
+    const t = e.target as HTMLElement | null;
+    if (t?.closest('[role="treeitem"]')) return;
+    if (selection.current.kind !== "none") selection.select({ kind: "none" });
+  }
+
   function openEmptyAreaMenu(e: MouseEvent) {
     // Skip if the target is a row - row's own handler should win.
     const t = e.target as HTMLElement | null;
@@ -184,12 +197,27 @@
     return undefined;
   }
 
+  // "in Work / Telekom.SI" or "at the top level", for the create prompts.
+  // New items land in whatever folder is selected, which is right but not
+  // guessable - especially when that folder is collapsed and so shows
+  // nothing of itself. Saying it in the prompt beats a hidden rule.
+  function targetLabel(id: string | undefined): string {
+    if (!id) return "at the top level";
+    const parts: string[] = [];
+    let cur = tree.folderById(id);
+    for (let i = 0; i < 10000 && cur; i++) {
+      parts.push(cur.name);
+      cur = tree.folderById(cur.parent_id ?? null);
+    }
+    return `in ${parts.reverse().join(" / ")}`;
+  }
+
   async function addRootFolder() {
     // Read the target BEFORE the prompt, like addConnection does: the
     // selection is what decides where the folder lands, and leaving the
     // read until afterwards invites it to change underneath.
     const parentId = targetFolderId();
-    const name = await showPrompt("Folder name?");
+    const name = await showPrompt(`Folder name? (${targetLabel(parentId)})`);
     if (!name) return;
     const created = await api.foldersCreate({ name, parentId });
     await tree.load();
@@ -203,7 +231,7 @@
 
   async function addConnection() {
     const folderId = targetFolderId();
-    const name = await showPrompt("Connection name?");
+    const name = await showPrompt(`Connection name? (${targetLabel(folderId)})`);
     if (!name) return;
     const hostname = await showPrompt("Hostname?") ?? "";
     const conn = await api.connectionsCreate({
@@ -220,7 +248,7 @@
   // are set in the editor. Starts with shell = auto, no command.
   async function addLocalConnection() {
     const folderId = targetFolderId();
-    const name = await showPrompt("Local shell connection name?");
+    const name = await showPrompt(`Local shell connection name? (${targetLabel(folderId)})`);
     if (!name) return;
     const conn = await api.connectionsCreate({
       folderId,
@@ -559,6 +587,7 @@
       ondragleave={onTreeAreaDragLeave}
       ondrop={onTreeAreaDrop}
       onkeydown={onTreeKey}
+      onclick={onEmptyAreaClick}
       oncontextmenu={openEmptyAreaMenu}
       role="tree"
       tabindex="-1"
