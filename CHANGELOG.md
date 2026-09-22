@@ -7,6 +7,50 @@ a prerelease upstream.
 
 ---
 
+## [0.100.1] - Things that were there but would not show themselves
+
+Small fixes, all from using the app rather than from a test suite, and
+most of the same shape: the feature worked, but its result was invisible
+or its target was not what you expected.
+
+### Added
+
+- **Rename a tab** from its right-click menu. A tab is named after the
+  connection it opened, which is no help when half a dozen of them are
+  local shells with the same name. A renamed tab keeps its name across a
+  restart and inside a saved workspace.
+- **The password prompt names the account.** It said which host was
+  asking but not which user, so with several connections opening at once
+  there was nothing to say whose password it wanted. Now
+  "user@host:port". The tray notification says the same.
+
+### Fixed
+
+- **A new folder is shown, not just created.** Creating one looked like
+  it did nothing: the tree reloaded and no folder appeared. It had been
+  created, inside whichever folder was selected, and a collapsed parent
+  never rendered the new row. New connections always revealed
+  themselves; folders now do too.
+- **Clicking the empty space below the tree deselects.** Without it, a
+  folder selected earlier stayed selected while looking like nothing
+  was - so "New folder" put the next one inside it, invisibly.
+- **The create prompts say where the item will land**, e.g. "Folder
+  name? (in Work / Telekom.SI)" or "(at the top level)". Where things go
+  has not changed; it is just no longer a guess.
+- **Ctrl+click marks dynamic-inventory hosts too.** On a Hetzner,
+  Proxmox or AWS host from a dynamic folder it did nothing - worse, it
+  fell through to an ordinary click and connected. The two kinds look
+  identical in the list, so there was no way to tell why one row marked
+  and the next one opened.
+- **Escape clears the search before it closes the palette.** Marking
+  hosts is meant to work across several searches, but the obvious way to
+  start the next one threw the set away. A second Escape, on an empty
+  box, closes as before. Marked hosts now also show as chips above the
+  footer, each removable, so a set collected across searches stays
+  visible.
+
+---
+
 ## [0.100.0] - Linux packages, tunnels that open themselves, focus that lands
 
 Version one hundred, and still 0.x - `v1.0.0` waits for Wails v3 to
