@@ -583,6 +583,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          PAGES_DOMAIN: ${{ vars.PAGES_DOMAIN }}
         run: |
           set -euo pipefail
 
@@ -612,6 +613,17 @@ jobs:
           # Jekyll would eat the dists/ directory's underscore-free but
           # metadata-only files; .nojekyll turns that processing off.
           touch /tmp/pages/.nojekyll
+          # CNAME is what makes Pages answer on the custom domain, and
+          # GitHub keeps it as a file in the branch - which the wipe above
+          # would delete, taking the domain down on the next release. So
+          # it is written here rather than left to the settings UI.
+          # Configured through the PAGES_DOMAIN variable (not a secret -
+          # it is public the moment anyone visits): set it and the domain
+          # survives every publish; leave it unset and Pages serves the
+          # default github.io URL.
+          if [ -n "${PAGES_DOMAIN}" ]; then
+            printf '%s\n' "${PAGES_DOMAIN}" > /tmp/pages/CNAME
+          fi
           # REPO_URL is a placeholder in the checked-in page: the real
           # host is only known here, and hard-coding it in docs/ would
           # rot the moment the repo moves or gains a CNAME.
