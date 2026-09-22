@@ -250,7 +250,12 @@ Notes:
   keep all punctuation ASCII. (En-dashes too.)
 - Sensitive data NEVER in repo files. Real email addresses, internal
   hostnames, customer names - keep them out of CLAUDE.md, USER_GUIDE,
-  commit bodies, even examples. Use `example.com` placeholders.
+  commit bodies, even examples. Use `example.com` placeholders. This
+  covers test fixtures: a folder name in a table test is as public as
+  the README. `scripts/install-hooks.sh` installs a pre-commit check
+  that refuses staged lines matching a local pattern list; the list
+  lives in `.git/` and is never committed, so the hook does nothing
+  until you write one.
 - Maintainer-local preferences live in `CLAUDE.local.md` (gitignored);
   if you are the maintainer, keep personal workflow notes there, not
   here.
