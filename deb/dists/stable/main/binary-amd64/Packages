@@ -52,3 +52,21 @@ Homepage: https://sshtool.app
 Description: Cross-platform SSH connection manager
 License: Apache-2.0
 
+Package: ssh-tool
+Architecture: amd64
+Version: 0.100.3-1
+Priority: extra
+Section: default
+Maintainer: Filip Penezic <108677346+fpenezic@users.noreply.github.com>
+Installed-Size: 31900
+Depends: libgtk-4-1, libwebkitgtk-6.0-4
+Filename: pool/main/ssh-tool_0.100.3_amd64.deb
+Size: 12618022
+MD5sum: fe78714dd9bd5f66fc1ad95e84663e90
+SHA1: 71c1c5295f4c9b11985a1387c71ea6237b76cbeb
+SHA256: 75e7065fa1d651ab2a98ee75ead05e53d66eb1ed731055b6e832e2ea230965ba
+SHA512: 61489edd93209909e6c3c6cf3e2e15f6a68d468dc9f03c6c7ac70afb53cd12da88ad2255af8ce2e177558814763fbbea008f244298518a0d0caa2cb3e78f165d
+Homepage: https://sshtool.app
+Description: Cross-platform SSH connection manager
+License: Apache-2.0
+
