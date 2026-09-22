@@ -185,10 +185,20 @@
   }
 
   async function addRootFolder() {
+    // Read the target BEFORE the prompt, like addConnection does: the
+    // selection is what decides where the folder lands, and leaving the
+    // read until afterwards invites it to change underneath.
+    const parentId = targetFolderId();
     const name = await showPrompt("Folder name?");
     if (!name) return;
-    await api.foldersCreate({ name, parentId: targetFolderId() });
+    const created = await api.foldersCreate({ name, parentId });
     await tree.load();
+    // Reveal it. A new folder created inside a COLLAPSED parent was
+    // invisible - the tree just flickered as it reloaded and nothing
+    // appeared to happen, which reads as the button being broken. New
+    // connections never had this because they select-and-reveal on
+    // creation; folders did not.
+    if (created?.id) view.reveal("folder", created.id);
   }
 
   async function addConnection() {

@@ -432,7 +432,10 @@
     if (!name?.trim()) return;
     const created = await api.foldersCreate({ name: name.trim(), parentId: folder.id });
     await tree.load();
-    selection.select({ kind: "folder", id: (created as any).id ?? folder.id });
+    // reveal, not select: selecting alone leaves the row hidden when the
+    // parent folder is collapsed.
+    if (created?.id) view.reveal("folder", created.id);
+    else selection.select({ kind: "folder", id: folder.id });
   }
 
   async function addConnectionHere() {

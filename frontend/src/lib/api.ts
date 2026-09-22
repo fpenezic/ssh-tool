@@ -618,7 +618,7 @@ export const api = {
       name: input.name,
       sort_order: input.sortOrder ?? 0,
       settings: input.settings ?? ({} as InheritableSettings),
-    } as any),
+    } as any) as unknown as Promise<Folder>,
   foldersUpdate: (input: {
     id: string;
     parentId?: string;
