@@ -108,6 +108,7 @@ func (d *DB) MirrorFrom(srcPath string) error {
 var machineLocalSettings = []string{
 	"window_state_v1",
 	"last_session_tabs_v1",
+	"last_session_tabs_v2",
 	"settings_active_section",
 	"recent_connections_count",
 	"keyring_legacy_purged_v1",
@@ -199,6 +200,13 @@ func copyTable(tx *sql.Tx, src *sql.DB, table string) error {
 	}
 	return rows.Err()
 }
+
+// IsMachineLocalSetting reports whether a settings key describes THIS
+// machine and must never arrive from a pulled profile. Exported so the
+// app's own routing table can be tested against this list: the two have
+// to agree, and a versioned key that is in one but not the other syncs
+// something that should have stayed put.
+func IsMachineLocalSetting(key string) bool { return isMachineLocalSetting(key) }
 
 func isMachineLocalSetting(key string) bool {
 	if strings.HasPrefix(key, "sync_") {

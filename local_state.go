@@ -28,8 +28,12 @@ import (
 
 // localStateKeys is the routing table: settings keys that are
 // machine-local. Everything else stays in the store (and syncs).
+// A versioned key has to be listed for EVERY version still written: the
+// match is exact, so bumping v1 to v2 in the frontend silently moved the
+// open-tab snapshot back into the synced store until v2 was added here.
 var localStateKeys = map[string]bool{
-	"last_session_tabs_v1":    true, // open-tab snapshot, written on every tab change
+	"last_session_tabs_v1":    true, // open-tab snapshot (pre-splits format)
+	"last_session_tabs_v2":    true, // open-tab snapshot, written on every tab change
 	"window_state_v1":         true, // window geometry, written on move/resize
 	"settings_active_section": true, // last viewed Settings section
 }
