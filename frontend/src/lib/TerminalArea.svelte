@@ -13,7 +13,7 @@
   import { broadcast } from "./broadcast.svelte";
   import { recording } from "./recording.svelte";
   import { connectionActions } from "./connectionActions.svelte";
-  import { IconBroadcast, IconFolder, IconBot, IconHost, IconCopy, IconWorkspace, IconPopOut, IconSplitH, IconSplitV, IconX, IconGlobe, IconPlay, IconStop, IconExternalLink, IconEyeOff } from "./iconMap";
+  import { IconBroadcast, IconFolder, IconBot, IconHost, IconCopy, IconWorkspace, IconPopOut, IconSplitH, IconSplitV, IconX, IconGlobe, IconPlay, IconStop, IconExternalLink, IconEyeOff, IconPencil } from "./iconMap";
   import { mcpLevelTitle } from "./mcpLevel";
   import Icon from "./Icon.svelte";
   import BroadcastManager from "./BroadcastManager.svelte";
@@ -765,6 +765,28 @@
     return paneTabs.tabs.find((t) => t.tabId === tabId)?.groupName;
   }
 
+  // Rename a tab. The title is otherwise derived from the connection, which
+  // is no help when half a dozen tabs are all called "WSL" - the point of
+  // this is telling those apart.
+  //
+  // A renamed tab keeps its name across a restart and inside a saved
+  // workspace: TabSpec carries `title`, and the restore path only falls back
+  // to the session name when the saved title is empty.
+  //
+  // Blank is treated as cancel rather than "revert to the automatic name":
+  // showPrompt collapses an empty submit to null, the same value it returns
+  // for cancel, so the two cannot be told apart here (see the note in
+  // setTabGroupName).
+  async function renameTab(tabId: string) {
+    const t = paneTabs.tabs.find((x) => x.tabId === tabId);
+    if (!t) return;
+    const name = await showPrompt("Tab name?", t.title ?? "");
+    if (name === null) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    paneTabs.setTitle(tabId, trimmed);
+  }
+
   async function setTabGroupName(tabId: string) {
     const cur = currentGroup(tabId);
     // showPrompt collapses an empty submit to null, the same value it returns
@@ -1249,6 +1271,9 @@
           Open VNC console
         </button>
       {/if}
+      <button onclick={() => { renameTab(ctxMenu!.tabId); closeCtxMenu(); }}>
+        <IconPencil size={13} /> Rename tab…
+      </button>
       <button onclick={() => { setTabGroupName(ctxMenu!.tabId); closeCtxMenu(); }}>
         <IconWorkspace size={13} /> Set group name…
       </button>
