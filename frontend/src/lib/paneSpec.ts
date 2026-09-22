@@ -55,6 +55,11 @@ export interface SpecSplit {
 /** A tab as persisted: its sessions, and the tree that arranges them. */
 export interface TabSpec {
   title?: string;
+  // Whether `title` is a name the user typed rather than one generated
+  // from the tab's sessions. A generated title is rebuilt from the live
+  // panes on restore; a chosen one has to survive, and the tab bar shows
+  // it in place of the per-pane names.
+  titleCustom?: boolean;
   groupName?: string;
   groupColor?: string;
   sessions: SessionSpec[];

@@ -1005,6 +1005,12 @@ export interface PaneTab {
   // count is surfaced in the bar so a hidden session can never be silently
   // forgotten, and Ctrl+K still finds them.
   hidden?: boolean;
+  // Set when the user renamed the tab by hand. `title` alone cannot carry
+  // this: it is also filled automatically from the first session's name on
+  // restore, so without the flag the bar has no way to tell a chosen name
+  // from a generated one and would keep overwriting the chosen one with
+  // live pane names.
+  titleCustom?: boolean;
 }
 
 import { EventsOn } from "./wailsRuntime";
@@ -1148,9 +1154,12 @@ class PaneTreeStore {
     return true;
   }
 
-  setTitle(tabId: string, title: string) {
+  // `custom` marks a name the user typed, which the tab bar then shows
+  // instead of the live pane names. Restore paths leave it unset: they are
+  // reconstructing a generated title, not a chosen one.
+  setTitle(tabId: string, title: string, custom = false) {
     this.tabs = this.tabs.map((t) =>
-      t.tabId === tabId ? { ...t, title } : t
+      t.tabId === tabId ? { ...t, title, ...(custom ? { titleCustom: true } : {}) } : t
     );
   }
 

@@ -87,6 +87,7 @@ class LastSessionStore {
       if (!spec) continue;
       out.push({
         title: t.title,
+        titleCustom: t.titleCustom,
         groupName: t.groupName,
         groupColor: t.groupColor,
         sessions: spec.sessions,
@@ -198,6 +199,7 @@ class LastSessionStore {
       groupName: spec.groupName,
       groupColor: spec.groupColor,
     });
+    if (spec.titleCustom && spec.title) paneTabs.setTitle(tab.tabId, spec.title, true);
     // A tab title is normally derived from the connection; a saved one that
     // is empty must not blank the restored tab.
     if (!spec.title) {

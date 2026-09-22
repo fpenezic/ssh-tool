@@ -82,6 +82,7 @@ class WorkspaceStore {
       if (!spec) continue;
       tabs.push({
         title: t.title,
+        titleCustom: t.titleCustom,
         groupName: t.groupName,
         groupColor: t.groupColor,
         sessions: spec.sessions,
@@ -187,6 +188,7 @@ class WorkspaceStore {
         groupName: spec.groupName,
         groupColor: spec.groupColor,
       });
+      if (spec.titleCustom && spec.title) paneTabs.setTitle(tab.tabId, spec.title, true);
       if (!spec.title) {
         const first = sessions.tabs.find((x) => x.sessionId === built.sessionIds[0]);
         if (first) paneTabs.setTitle(tab.tabId, first.name);

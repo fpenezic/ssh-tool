@@ -272,6 +272,10 @@
   function tabTitle(tabId: string): string {
     const tab = paneTabs.tabs.find((t) => t.tabId === tabId);
     if (!tab) return "?";
+    // A name the user typed outranks the generated one. Without this the
+    // rename only reached the window title, which reads `title` directly,
+    // while the bar kept rebuilding the label from the live pane names.
+    if (tab.titleCustom && tab.title) return tab.title;
     const segs = tabSegments(tabId);
     if (segs.length === 0) return tab.title;
     const fmt = (s: TabSeg) => s.name + (s.kind === "sftp" ? " (sftp)" : "");
@@ -784,7 +788,7 @@
     if (name === null) return;
     const trimmed = name.trim();
     if (!trimmed) return;
-    paneTabs.setTitle(tabId, trimmed);
+    paneTabs.setTitle(tabId, trimmed, true);
   }
 
   async function setTabGroupName(tabId: string) {
@@ -1145,7 +1149,9 @@
             {/if}
           {/each}
           <span class="tab-label-segs">
-            {#if segs.length === 0}
+            {#if t.titleCustom && t.title}
+              {t.title}
+            {:else if segs.length === 0}
               {tabTitle(t.tabId)}
             {:else if segs.length <= 3}
               {#each segs as seg, i (i)}
