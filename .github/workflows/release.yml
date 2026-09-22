@@ -585,8 +585,6 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           # The repo tree replaces the branch wholesale rather than being
           # merged into it: apt and dnf metadata describe exactly the set
@@ -601,6 +599,13 @@ jobs:
               git -C /tmp/pages remote add origin \
                 "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
             }
+
+          # The identity has to be set on /tmp/pages, not on the checkout:
+          # `git config` without --global writes to the repository it is run
+          # in, and the commit below happens in the clone. Setting it on the
+          # checkout left the clone with no identity at all.
+          git -C /tmp/pages config user.name "github-actions[bot]"
+          git -C /tmp/pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           find /tmp/pages -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
           cp -r /tmp/repo/. /tmp/pages/
