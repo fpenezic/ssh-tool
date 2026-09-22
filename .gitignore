@@ -109,3 +109,28 @@ id_rsa
 id_ed25519
 *_rsa
 *_ed25519
+*.key
+*.crt
+*.cer
+*.jks
+*.keystore
+id_dsa
+id_dsa.pub
+*_dsa
+
+# App data and backups. The vault and the sealed snapshots hold every
+# credential the app manages, and none of them match the *.db rule
+# above: the backup format is .sshtool-backup, the vault is vault.enc,
+# and a staged restore writes store.db.enc / vault.enc.enc.
+*.enc
+*.sshtool-backup
+*.kdbx
+
+# Publish token for the web server's upload escape hatch. Named exactly,
+# because it has no extension to match on.
+release-token
+
+# .env.local and .env.<x>.local were covered; a plain .env.production
+# was not.
+.env.*
+!.env.example
