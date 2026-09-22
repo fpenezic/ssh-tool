@@ -1,0 +1,54 @@
+Package: ssh-tool
+Architecture: amd64
+Version: 0.100.0-1
+Priority: extra
+Section: default
+Maintainer: Filip Penezic <108677346+fpenezic@users.noreply.github.com>
+Installed-Size: 31896
+Depends: libgtk-4-1, libwebkitgtk-6.0-4
+Filename: pool/main/ssh-tool_0.100.0_amd64.deb
+Size: 12616690
+MD5sum: e840c50052424792f0af182dc982cd6b
+SHA1: 195d4ee84076aab8377328be3e27c95a5cac98dc
+SHA256: 641d47b769fc1026ec59729272f514ae7401ff0fcd3f45174b8ff0c0c9918551
+SHA512: 8f5c05b865807fce70b9617f476b0feee3ebea3197e969bc0bfed455f8c676f77c9bcaa6a90ed5c212dcb3f66e97278316866545c7c430edc9bceb37f77a2aba
+Homepage: https://sshtool.app
+Description: Cross-platform SSH connection manager
+License: Apache-2.0
+
+Package: ssh-tool
+Architecture: amd64
+Version: 0.100.1-1
+Priority: extra
+Section: default
+Maintainer: Filip Penezic <108677346+fpenezic@users.noreply.github.com>
+Installed-Size: 31900
+Depends: libgtk-4-1, libwebkitgtk-6.0-4
+Filename: pool/main/ssh-tool_0.100.1_amd64.deb
+Size: 12617062
+MD5sum: 69f3ac77f979ac1964df2968472eb1b7
+SHA1: 2f759fb68df0d943cb0443bb20e277f88670c23a
+SHA256: 5b3061e06652a9f07d140b868f2b5862065b3035d984ae162c6ac064f6fe699d
+SHA512: 00c13a09bc2350071654d6069cf3f578bed9ba6a45806521b605fc26a645becd618fe9574f6b1a0f58ac4b1609fac17bcf185b9190b6cc82d99bebe7ce24e8f1
+Homepage: https://sshtool.app
+Description: Cross-platform SSH connection manager
+License: Apache-2.0
+
+Package: ssh-tool
+Architecture: amd64
+Version: 0.100.2-1
+Priority: extra
+Section: default
+Maintainer: Filip Penezic <108677346+fpenezic@users.noreply.github.com>
+Installed-Size: 31900
+Depends: libgtk-4-1, libwebkitgtk-6.0-4
+Filename: pool/main/ssh-tool_0.100.2_amd64.deb
+Size: 12617060
+MD5sum: 557ace4a260b16eca21a2576db7b8b64
+SHA1: 3b0b8b022deb3812b0faafae6817d53e2f2aa54e
+SHA256: 3af7b49b5a913ef5570361140eb9352af545c48524fc95e92174777445aa7cc8
+SHA512: ac70820517ac0366657e2c132d036ad860c82dfcf03dc6fa23891bb802f3112a3572f380f37e232e0dec3285c7fd30c15b433ef9014f7094f07f31739d2e4f31
+Homepage: https://sshtool.app
+Description: Cross-platform SSH connection manager
+License: Apache-2.0
+

@@ -1,0 +1,5 @@
+Archive: stable
+Component: main
+Origin: ssh-tool
+Label: ssh-tool
+Architecture: arm64
