@@ -7,6 +7,37 @@ a prerelease upstream.
 
 ---
 
+## [0.100.3] - Three things that were not doing what they said
+
+All three were found by using the app, and all three had been quietly
+wrong for a while rather than newly broken.
+
+### Fixed
+
+- **Renaming a tab now changes the tab.** The new name was saved, but
+  the tab bar rebuilds its label from the connections inside the tab and
+  only fell back to the tab's own name when the tab had no panes at all
+  - which a connected tab never is. The window title does read the name
+  directly, so the rename showed up in the taskbar and nowhere else,
+  which made it look like it had renamed the application. A renamed tab
+  now keeps its name in the bar, across a restart, and inside a saved
+  workspace; tabs you have not renamed still follow their connections.
+- **The last open tabs no longer travel between machines.** Which tabs
+  you have open describes one machine and is meant to stay there, kept
+  out of the synced profile by name. When split-pane tabs arrived the
+  snapshot's format changed, and the list of things to keep local was
+  not updated with it, so since v0.99.0 the open-tab list has been
+  syncing: pull on another machine and it would arrive with the
+  first machine's tabs. Nothing failed, which is why it went unnoticed.
+  The stale copy clears itself the first time you change a tab - your
+  open tabs are not lost in the process.
+- **Marked hosts stay visible in Ctrl+K.** With a full result list, the
+  row of marked hosts was squeezed down to a couple of pixels while the
+  footer still offered to connect them, so the only evidence of what you
+  had marked was the count.
+
+---
+
 ## [0.100.2] - Turning the package repositories on
 
 No user-facing changes. v0.100.1 attached the apt and dnf repository
@@ -21,16 +52,17 @@ and the dnf half work (neither could be tested locally), and retention
 pulled the previous release's packages while correctly skipping older
 tags that carry none.
 
-If this release publishes the repositories, adding them looks like this:
+The repositories went live with this release. Adding them looks like
+this:
 
     # Debian / Ubuntu
-    curl -fsSL https://fpenezic.github.io/ssh-tool/ssh-tool.asc \
+    curl -fsSL https://repo.sshtool.app/ssh-tool.asc \
       | sudo gpg --dearmor -o /usr/share/keyrings/ssh-tool.gpg
-    echo 'deb [signed-by=/usr/share/keyrings/ssh-tool.gpg] https://fpenezic.github.io/ssh-tool/deb stable main' \
+    echo 'deb [signed-by=/usr/share/keyrings/ssh-tool.gpg] https://repo.sshtool.app/deb stable main' \
       | sudo tee /etc/apt/sources.list.d/ssh-tool.list
 
-The landing page at https://fpenezic.github.io/ssh-tool has the dnf
-instructions too. The .rpm targets Fedora - RHEL 10 and its rebuilds
+The landing page at https://repo.sshtool.app has the dnf instructions
+too. The .rpm targets Fedora - RHEL 10 and its rebuilds
 have no webkitgtk6.0 package, so it will not install there.
 
 ---
