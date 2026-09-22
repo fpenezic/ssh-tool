@@ -40,7 +40,7 @@ echo 'deb [signed-by=/usr/share/keyrings/ssh-tool.gpg] https://REPO_URL/deb stab
 sudo apt update
 sudo apt install ssh-tool</code></pre>
 
-<h2>Fedora / RHEL</h2>
+<h2>Fedora</h2>
 <pre><code>sudo tee /etc/yum.repos.d/ssh-tool.repo &lt;&lt;'EOF'
 [ssh-tool]
 name=ssh-tool
@@ -52,10 +52,21 @@ gpgkey=https://REPO_URL/ssh-tool.asc
 EOF
 
 sudo dnf install ssh-tool</code></pre>
+<p class="note">Fedora only. RHEL 10 and its rebuilds (Rocky, Alma) ship
+no <code>webkitgtk6.0</code> package at all, so this will not install
+there - the dependency is real and the package does not exist in that
+family.</p>
 
 <h2>Arch</h2>
-<p>Arch users install from the AUR instead:
-<code>yay -S ssh-tool-bin</code>.</p>
+<p>There is no apt/dnf-style repository for Arch, but each release
+carries a package. Download the <code>.pkg.tar.zst</code> from the
+<a href="https://github.com/fpenezic/ssh-tool/releases/latest">latest
+release</a> and install it:</p>
+<pre><code>sudo pacman -U ssh-tool-*-x86_64.pkg.tar.zst</code></pre>
+<p class="note">An AUR recipe is written and tested, but the AUR has been
+closed to new accounts and packages since a security incident upstream,
+so it cannot be published yet. Until then, upgrading means downloading
+the new package - <code>pacman -Syu</code> will not pick it up.</p>
 
 <h2>Notes</h2>
 <p class="note">A packaged install lives in <code>/usr/bin</code>, so
