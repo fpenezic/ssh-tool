@@ -195,9 +195,7 @@ Android/mobile build-tag + event-transport traps. The file is split into
 - Each phase commit has a long body explaining the why + gotchas -
   load-bearing context for the next handoff. Match the style.
 - Don't squash phase commits.
-- No `Co-Authored-By` footer (personal project). `scripts/install-hooks.sh`
-  installs a commit-msg hook that rejects the trailer and any em/en-dash
-  in the message, plus a warning when a shipped migration's SQL changes.
+- No `Co-Authored-By` footer (personal project).
 - Before committing, verify `git config user.email` matches what
   you expect. If unset/wrong, ask the author once and remember it
   for the session - never bake an email into a repo file.
@@ -254,9 +252,6 @@ Notes:
   hostnames, customer names - keep them out of CLAUDE.md, USER_GUIDE,
   commit bodies, even examples - test fixtures included. Use
   `example.com` and generic names throughout.
-  `scripts/install-hooks.sh` installs a pre-commit check that refuses
-  staged lines matching a local pattern list; the list lives in `.git/`
-  and is never committed, so the hook does nothing until you write one.
 - Maintainer-local preferences live in `CLAUDE.local.md` (gitignored);
   if you are the maintainer, keep personal workflow notes there, not
   here.
