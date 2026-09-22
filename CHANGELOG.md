@@ -63,7 +63,7 @@ or its target was not what you expected.
   folder selected earlier stayed selected while looking like nothing
   was - so "New folder" put the next one inside it, invisibly.
 - **The create prompts say where the item will land**, e.g. "Folder
-  name? (in Work / Telekom.SI)" or "(at the top level)". Where things go
+  name? (in Work / Acme)" or "(at the top level)". Where things go
   has not changed; it is just no longer a guess.
 - **Ctrl+click marks dynamic-inventory hosts too.** On a Hetzner,
   Proxmox or AWS host from a dynamic folder it did nothing - worse, it

@@ -22,15 +22,15 @@ func TestFolderIconHintsWalkUp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cust, err := db.CreateFolder(NewFolder{Name: "A1 - Bulgaria", ParentID: &work.ID})
+	cust, err := db.CreateFolder(NewFolder{Name: "Acme - Europe", ParentID: &work.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sub, err := db.CreateFolder(NewFolder{Name: "NMS - Clickhouse", ParentID: &cust.ID})
+	sub, err := db.CreateFolder(NewFolder{Name: "NMS - Database", ParentID: &cust.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := db.CreateFolder(NewFolder{Name: "Telekom", ParentID: &work.ID})
+	other, err := db.CreateFolder(NewFolder{Name: "Globex", ParentID: &work.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,8 +53,8 @@ func TestFolderIconHintsWalkUp(t *testing.T) {
 	if h.Depth != 1 {
 		t.Errorf("depth = %d, want 1", h.Depth)
 	}
-	if h.FolderPath != "Work/A1 - Bulgaria" {
-		t.Errorf("path = %q, want Work/A1 - Bulgaria", h.FolderPath)
+	if h.FolderPath != "Work/Acme - Europe" {
+		t.Errorf("path = %q, want Work/Acme - Europe", h.FolderPath)
 	}
 	if got := hints[cust.ID]; got.Depth != 0 {
 		t.Errorf("the iconed folder itself should be depth 0, got %d", got.Depth)

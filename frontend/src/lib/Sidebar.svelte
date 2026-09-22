@@ -197,7 +197,7 @@
     return undefined;
   }
 
-  // "in Work / Telekom.SI" or "at the top level", for the create prompts.
+  // "in Work / Acme" or "at the top level", for the create prompts.
   // New items land in whatever folder is selected, which is right but not
   // guessable - especially when that folder is collapsed and so shows
   // nothing of itself. Saying it in the prompt beats a hidden rule.
