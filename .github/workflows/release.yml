@@ -627,9 +627,19 @@ jobs:
           # REPO_URL is a placeholder in the checked-in page: the real
           # host is only known here, and hard-coding it in docs/ would
           # rot the moment the repo moves or gains a CNAME.
-          owner="${GITHUB_REPOSITORY%%/*}"
-          name="${GITHUB_REPOSITORY##*/}"
-          url="${owner}.github.io/${name}"
+          #
+          # The custom domain wins when one is configured. Otherwise the
+          # page would sit on repo.example.com telling people to add
+          # owner.github.io - which works, but defeats the point of
+          # having the domain and pins users to a URL that moves if the
+          # account is ever renamed.
+          if [ -n "${PAGES_DOMAIN}" ]; then
+            url="${PAGES_DOMAIN}"
+          else
+            owner="${GITHUB_REPOSITORY%%/*}"
+            name="${GITHUB_REPOSITORY##*/}"
+            url="${owner}.github.io/${name}"
+          fi
           sed "s|REPO_URL|${url}|g" "${GITHUB_WORKSPACE}/docs/repo-index.html" \
             > /tmp/pages/index.html
 
