@@ -50,6 +50,17 @@ func TestReRegisterMovedIntegrationsRepointsURLScheme(t *testing.T) {
 // Re-registering must not CREATE registrations the user never asked
 // for. Installing is not consent to add a context-menu entry.
 func TestReRegisterSkipsWhatWasNeverRegistered(t *testing.T) {
+	// HOME is redirected below, but the "is anything registered?" probes
+	// shell out to xdg-mime, which reads the real user's XDG state and
+	// ignores it. On a machine where the developer has actually
+	// registered the scheme, the probe says yes and the function then
+	// writes into the temp HOME - the test would report a bug that only
+	// exists because the host is registered. CI is clean, so it passes
+	// there and fails only locally.
+	if urlSchemeStatus() != "" || explorerMenuStatus() != "" {
+		t.Skip("host has ssh-tool integrations registered; the probes cannot be isolated")
+	}
+
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
