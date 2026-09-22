@@ -1105,6 +1105,12 @@
     padding: 0.4rem 0.8rem;
     border-top: 1px solid var(--surface0);
     max-height: 5.5rem; overflow-y: auto;
+    /* The modal is a fixed-height flex column, so every child defaults to
+       flex-shrink: 1. The result list can give up space (flex: 1), but this
+       bar cannot: squeezed, it collapsed to a few pixels and the chips were
+       sliced off at the top while the footer still said "connect 3 marked".
+       It sizes to its content, scrolling internally past max-height. */
+    flex: 0 0 auto;
   }
   .marked-chip {
     background: var(--surface0); border: 1px solid var(--mauve);
@@ -1128,6 +1134,9 @@
     border-top: 1px solid var(--surface0);
     color: var(--overlay0);
     font-size: 0.72rem;
+    /* Same reason as .marked-bar: the key hints are what tell you Enter
+       connects the marked set, so they must not be the thing that shrinks. */
+    flex: 0 0 auto;
   }
   kbd {
     background: var(--crust);
