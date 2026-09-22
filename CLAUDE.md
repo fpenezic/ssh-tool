@@ -195,7 +195,9 @@ Android/mobile build-tag + event-transport traps. The file is split into
 - Each phase commit has a long body explaining the why + gotchas -
   load-bearing context for the next handoff. Match the style.
 - Don't squash phase commits.
-- No `Co-Authored-By` footer (personal project).
+- No `Co-Authored-By` footer (personal project). `scripts/install-hooks.sh`
+  installs a commit-msg hook that rejects the trailer and any em/en-dash
+  in the message, plus a warning when a shipped migration's SQL changes.
 - Before committing, verify `git config user.email` matches what
   you expect. If unset/wrong, ask the author once and remember it
   for the session - never bake an email into a repo file.
