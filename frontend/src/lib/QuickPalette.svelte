@@ -75,24 +75,53 @@
   let query = $state("");
   let activeIdx = $state(0);
 
-  // Multi-select. Connections only: opening five hosts at once is a real
-  // workflow, whereas "run five actions" or "jump to five tabs" is not.
-  // Held as connection ids rather than row indices, which shift as the
-  // query is retyped - marking a host, refining the search and marking
-  // another has to keep both.
-  let markedIds = $state<string[]>([]);
-  const markedSet = $derived(new Set(markedIds));
+  // Multi-select. Hosts only: opening five at once is a real workflow,
+  // whereas "run five actions" or "jump to five tabs" is not.
+  //
+  // Both saved connections and dynamic-inventory entries qualify - they
+  // look identical in the list, so marking one and not the other would be
+  // an invisible distinction. They dial through completely different
+  // calls, though, so a mark records which it is rather than just an id.
+  //
+  // Keyed by id rather than row index: indices shift as the query is
+  // retyped, and the point of marking is collecting hosts across several
+  // different searches.
+  type Mark =
+    | { kind: "connection"; id: string; name: string }
+    | { kind: "dynamic"; id: string; name: string; folderId: string; entryId: string; hostname: string; status: string };
+
+  let marks = $state<Mark[]>([]);
+  const markedSet = $derived(new Set(marks.map((m) => m.id)));
+
+  function markFor(r: Result): Mark | null {
+    if (r.entry.kind === "connection") {
+      return { kind: "connection", id: r.entry.conn.id, name: r.entry.conn.name };
+    }
+    if (r.entry.kind === "dynamic_entry") {
+      const e = r.entry;
+      return {
+        kind: "dynamic",
+        id: `dyn:${e.folderId}:${e.entryId}`,
+        name: e.name,
+        folderId: e.folderId,
+        entryId: e.entryId,
+        hostname: e.hostname,
+        status: e.status,
+      };
+    }
+    return null;
+  }
 
   function markableId(r: Result): string | null {
-    return r.entry.kind === "connection" ? r.entry.conn.id : null;
+    return markFor(r)?.id ?? null;
   }
 
   function toggleMark(r: Result) {
-    const id = markableId(r);
-    if (!id) return;
-    markedIds = markedIds.includes(id)
-      ? markedIds.filter((x) => x !== id)
-      : [...markedIds, id];
+    const m = markFor(r);
+    if (!m) return;
+    marks = marks.some((x) => x.id === m.id)
+      ? marks.filter((x) => x.id !== m.id)
+      : [...marks, m];
   }
   let inputEl: HTMLInputElement | undefined = $state();
   let listEl: HTMLDivElement | undefined = $state();
@@ -406,6 +435,16 @@
   });
 
   function chooseResult(r: Result) {
+    // A marked set outranks the row that was clicked: having marked four
+    // hosts, Enter plainly means "open those four". Checked before the
+    // per-kind branches below, or a marked dynamic entry would dial
+    // itself alone through its own path.
+    if (marks.length > 0 && markFor(r) !== null) {
+      const set = [...marks];
+      onClose();
+      queueMicrotask(() => void connectMany(set));
+      return;
+    }
     if (r.entry.kind === "open_tab") {
       // Jumping to a hidden tab has to unhide it first - activating a tab the
       // bar does not show would leave the user on a terminal with no way back.
@@ -501,13 +540,9 @@
     // Connection: connect immediately (the whole point of the palette).
     // Route through connectDefault so local-shell and VNC-default
     // connections do the right thing (not a blind SSH dial).
-    //
-    // Marked rows win over the highlighted one: having marked four hosts,
-    // pressing Enter is plainly meant to open those four, not whichever
-    // row the cursor happens to sit on.
-    const ids = markedIds.length > 0 ? [...markedIds] : [r.entry.conn.id];
+    const c = r.entry.conn;
     onClose();
-    queueMicrotask(() => void connectMany(ids));
+    queueMicrotask(() => void connectMany([{ kind: "connection", id: c.id, name: c.name }]));
   }
 
   // Connect a set of connections one after another.
@@ -520,20 +555,53 @@
   // One failure does not stop the rest - the point of opening five hosts
   // is the four that are up. Failures are collected into a single toast
   // rather than one per host, which on a bad subnet would bury the screen.
-  async function connectMany(ids: string[]) {
+  async function connectMany(set: Mark[]) {
     const failed: string[] = [];
-    for (const id of ids) {
-      const ok = await connectionActions.connectDefault(id);
-      if (!ok) {
-        const name = tree.connections.find((c) => c.id === id)?.name ?? id;
-        const last = connectionActions.lastConnectError[id];
-        failed.push(`${name}: ${last?.message ?? "connect failed"}`);
+    let opened = false;
+    for (const m of set) {
+      if (m.kind === "connection") {
+        const ok = await connectionActions.connectDefault(m.id);
+        if (!ok) {
+          const last = connectionActions.lastConnectError[m.id];
+          failed.push(`${m.name}: ${last?.message ?? "connect failed"}`);
+        }
+        continue;
+      }
+      // A stopped host is confirmed once, per host: it is the provider
+      // saying the machine is off, and skipping that check because the
+      // user is opening several at once would dial a box that cannot
+      // answer. Declining skips just that one.
+      if (m.status === "stopped") {
+        const ok = await showConfirm({
+          title: "Host is stopped",
+          message: `${m.name} is stopped in the provider.\n\nConnect anyway?`,
+          okLabel: "Connect",
+        });
+        if (!ok) continue;
+      }
+      try {
+        const res = await api.sshConnectDynamic(m.folderId, m.entryId);
+        sessions.add({
+          sessionId: res.session_id,
+          connectionId: "dyn:" + m.entryId,
+          name: m.name,
+          hostname: m.hostname,
+          status: "connected",
+        });
+        paneTabs.addTab(res.session_id, m.name);
+        opened = true;
+      } catch (err: any) {
+        failed.push(`${m.name}: ${err?.message ?? String(err)}`);
       }
     }
+    // Switched once at the end rather than per host: the view flip also
+    // hands the keyboard to the active pane, and doing that on every
+    // iteration would move focus around while the rest are still dialling.
+    if (opened) view.setTab("terminal");
     if (failed.length === 1) {
       toast.err(`Connect failed: ${failed[0]}`);
     } else if (failed.length > 1) {
-      toast.err(`${failed.length} of ${ids.length} failed to connect:\n${failed.join("\n")}`);
+      toast.err(`${failed.length} of ${set.length} failed to connect:\n${failed.join("\n")}`);
     }
   }
 
@@ -840,7 +908,7 @@
           </div>
           {#if marked}
             <span class="hint marked-hint">marked</span>
-          {:else if isConn && markedIds.length > 0}
+          {:else if markId !== null && marks.length > 0}
             <span class="hint">^↵ mark</span>
           {:else if isConn || r.entry.kind === "dynamic_entry"}
             <span class="hint">↵ connect</span>
@@ -858,11 +926,11 @@
     </div>
     <footer>
       <span><kbd>↑↓</kbd> navigate</span>
-      {#if markedIds.length > 0}
+      {#if marks.length > 0}
         <span class="marked-count">
-          <kbd>↵</kbd> connect {markedIds.length} marked
+          <kbd>↵</kbd> connect {marks.length} marked
         </span>
-        <button class="clear-marks" onclick={() => (markedIds = [])}>clear</button>
+        <button class="clear-marks" onclick={() => (marks = [])}>clear</button>
       {:else}
         <span><kbd>↵</kbd> select</span>
         <span><kbd>Ctrl</kbd>+<kbd>↵</kbd> mark</span>
