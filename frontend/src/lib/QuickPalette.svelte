@@ -648,6 +648,16 @@
   function onKey(e: KeyboardEvent) {
     if (e.key === "Escape") {
       e.preventDefault();
+      // With a query typed, Escape clears it so the next search can be
+      // typed straight away - closing the palette there would throw away
+      // any marked hosts, which is the opposite of what someone
+      // collecting a set across several searches wants. A second Escape,
+      // on an empty box, closes as before.
+      if (query !== "") {
+        query = "";
+        activeIdx = 0;
+        return;
+      }
       onClose();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -924,6 +934,20 @@
         </div>
       {/each}
     </div>
+    {#if marks.length > 0}
+      <!-- The marked hosts are usually not in the current result list any
+           more - the point of marking is collecting them across several
+           searches - so they are listed here, each removable on its own. -->
+      <div class="marked-bar">
+        {#each marks as m (m.id)}
+          <button
+            class="marked-chip"
+            title="Remove {m.name} from the set"
+            onclick={() => (marks = marks.filter((x) => x.id !== m.id))}
+          >{m.name} <span class="chip-x">×</span></button>
+        {/each}
+      </div>
+    {/if}
     <footer>
       <span><kbd>↑↓</kbd> navigate</span>
       {#if marks.length > 0}
@@ -936,7 +960,7 @@
         <span><kbd>Ctrl</kbd>+<kbd>↵</kbd> mark</span>
       {/if}
       <span><kbd>&gt;</kbd> commands</span>
-      <span><kbd>Esc</kbd> close</span>
+      <span><kbd>Esc</kbd> {query ? "clear" : "close"}</span>
     </footer>
   </div>
 </div>
@@ -1076,6 +1100,21 @@
     font-size: 0.7rem;
   }
   .marked-count { color: var(--mauve); }
+  .marked-bar {
+    display: flex; flex-wrap: wrap; gap: 0.3rem;
+    padding: 0.4rem 0.8rem;
+    border-top: 1px solid var(--surface0);
+    max-height: 5.5rem; overflow-y: auto;
+  }
+  .marked-chip {
+    background: var(--surface0); border: 1px solid var(--mauve);
+    color: var(--text); border-radius: 3px;
+    padding: 0.1rem 0.4rem; font: inherit; font-size: 0.72rem;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 0.3rem;
+  }
+  .marked-chip:hover { border-color: var(--red); }
+  .chip-x { color: var(--overlay1); }
+  .marked-chip:hover .chip-x { color: var(--red); }
   .clear-marks {
     background: transparent; border: 0; padding: 0;
     color: var(--overlay1); font: inherit; font-size: inherit;
