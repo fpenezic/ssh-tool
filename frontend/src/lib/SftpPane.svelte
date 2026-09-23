@@ -2,6 +2,7 @@
   import { onMount, onDestroy, untrack } from "svelte";
   import { errMsg } from "./connectErrors";
   import { api, type SftpEntry, type SftpTransferProgress } from "./api";
+  import { etaSeconds, fmtEta, pushSample, rateBps, summarizeBatch, type RateSample } from "./transferRate";
   import { EventsOn } from "./wailsRuntime";
   import { IconFolder, IconFile, IconLink } from "./iconMap";
   import { showPrompt } from "./promptModal.svelte.ts";
@@ -36,8 +37,26 @@
     filesDone?: number;
     filesTotal?: number;
     currentPath?: string;
+    samples: RateSample[];
+    startedAt: number;
+    // Bytes already there when the first progress arrived: non-zero for a
+    // transfer resumed from a .part. Speed and the final average count
+    // from here, or the resumed bytes would read as an instant burst.
+    startBytes?: number;
+    finishedAt?: number;
   };
   let transfers = $state<ActiveTransfer[]>([]);
+
+  // Wall clock for the speed readout. Ticks only while a transfer is
+  // running, so a stalled one decays to 0 even though no progress event
+  // arrives to trigger a re-render.
+  let now = $state(Date.now());
+  const isRunning = (t: ActiveTransfer) => !t.finishedAt && !t.err && !t.cancelled;
+  $effect(() => {
+    if (!transfers.some(isRunning)) return;
+    const h = setInterval(() => { now = Date.now(); }, 500);
+    return () => clearInterval(h);
+  });
   const eventUnsubs: Array<() => void> = [];
 
   // Sort + show directories first within each direction.
@@ -368,13 +387,22 @@
   // ---------- transfers ----------
 
   function watchTransfer(transferId: string, direction: "up" | "down", name: string) {
-    const t: ActiveTransfer = { id: transferId, direction, name, bytes: 0, total: 0 };
+    const t: ActiveTransfer = {
+      id: transferId, direction, name, bytes: 0, total: 0,
+      samples: [], startedAt: Date.now(),
+    };
     transfers = [...transfers, t];
     const un = EventsOn(`sftp_progress:${transferId}`, (p: SftpTransferProgress) => {
+      const at = Date.now();
+      now = at;
       transfers = transfers.map((x) =>
         x.id === transferId
           ? {
               ...x,
+              ...(x.startBytes === undefined
+                ? { samples: [{ t: at, bytes: p.bytes }], startBytes: p.bytes, startedAt: at }
+                : { samples: pushSample(x.samples, { t: at, bytes: p.bytes }) }),
+              finishedAt: p.done ? at : x.finishedAt,
               bytes: p.bytes,
               total: p.total,
               err: p.err,
@@ -387,12 +415,7 @@
       if (p.done) {
         un();
         if (direction === "up") refresh();
-        // Auto-remove successful transfers after 4s.
-        if (!p.err) {
-          setTimeout(() => {
-            transfers = transfers.filter((x) => x.id !== transferId);
-          }, 4000);
-        }
+        scheduleSweep();
       }
     });
     eventUnsubs.push(un);
@@ -489,6 +512,36 @@
     } catch (e: any) { error = errMsg(e); }
   }
 
+  // Successful rows leave together, 4s after the LAST running transfer
+  // ends. Removing each one 4s after its own finish took its bytes out of
+  // the batch summary mid-batch and moved the percentage backwards.
+  // Failed rows stay until the pane closes so the error can be read;
+  // cancelled ones go with the rest (the user already knows why).
+  let sweepTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleSweep() {
+    if (sweepTimer) clearTimeout(sweepTimer);
+    sweepTimer = null;
+    if (transfers.some(isRunning)) return;
+    sweepTimer = setTimeout(() => {
+      sweepTimer = null;
+      if (transfers.some(isRunning)) return;
+      transfers = transfers.filter((x) => x.err && !x.cancelled);
+    }, 4000);
+  }
+  onDestroy(() => { if (sweepTimer) clearTimeout(sweepTimer); });
+
+  const batch = $derived(summarizeBatch(
+    transfers.map((t) => ({
+      bytes: t.bytes, total: t.total, samples: t.samples,
+      running: isRunning(t), failed: !!t.err || !!t.cancelled,
+    })),
+    now,
+  ));
+
+  function cancelAll() {
+    for (const t of transfers) if (isRunning(t)) cancelTransfer(t.id);
+  }
+
   function cancelTransfer(id: string) {
     api.sftpCancelTransfer(id);
     transfers = transfers.map((x) => x.id === id ? { ...x, cancelled: true } : x);
@@ -497,7 +550,7 @@
   // ---------- helpers ----------
 
   function fmtSize(n: number): string {
-    if (n < 1024) return `${n} B`;
+    if (n < 1024) return `${Math.round(n)} B`;
     if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} K`;
     if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} M`;
     return `${(n / 1024 / 1024 / 1024).toFixed(1)} G`;
@@ -505,6 +558,20 @@
   function fmtDate(unix: number): string {
     const d = new Date(unix * 1000);
     return d.toISOString().slice(0, 16).replace("T", " ");
+  }
+  // Live: rate over the last few seconds plus ETA. Finished: the average
+  // over the whole transfer, which is the number worth remembering.
+  function speedText(t: ActiveTransfer): string {
+    if (t.err || t.cancelled) return "";
+    if (t.finishedAt) {
+      const secs = (t.finishedAt - t.startedAt) / 1000;
+      const moved = t.bytes - (t.startBytes ?? 0);
+      return secs > 0 && moved > 0 ? ` · avg ${fmtSize(moved / secs)}/s` : "";
+    }
+    const bps = rateBps(t.samples, now);
+    if (bps === null) return "";
+    const eta = etaSeconds(t.bytes, t.total, bps);
+    return ` · ${fmtSize(bps)}/s` + (eta !== null ? ` · ${fmtEta(eta)} left` : "");
   }
   function pct(t: ActiveTransfer): number {
     if (!t.total) return 0;
@@ -625,6 +692,17 @@
 
   {#if transfers.length > 0}
     <div class="transfers">
+      {#if batch.running >= 2}
+        <div class="transfer summary">
+          <span class="dir">Σ</span>
+          <span class="tname">{batch.running} transfers running</span>
+          <div class="bar"><div class="fill" style="width: {batch.total ? Math.min(100, Math.floor((batch.bytes / batch.total) * 100)) : 0}%"></div></div>
+          <span class="pct">
+            {batch.total ? Math.min(100, Math.floor((batch.bytes / batch.total) * 100)) : 0}% ({fmtSize(batch.bytes)}/{fmtSize(batch.total)}){#if batch.bps !== null} · {fmtSize(batch.bps)}/s{/if}{#if batch.eta !== null} · {fmtEta(batch.eta)} left{/if}
+          </span>
+          <button class="x all" onclick={cancelAll} title="Cancel every running transfer">Cancel all</button>
+        </div>
+      {/if}
       {#each transfers as t (t.id)}
         {@const isDir = (t.filesTotal ?? 0) > 0}
         <div class="transfer" class:err={t.err}>
@@ -642,9 +720,9 @@
             {:else if t.cancelled}
               cancelled
             {:else if isDir}
-              {t.filesDone}/{t.filesTotal} files · {fmtSize(t.bytes)}/{fmtSize(t.total)}
+              {t.filesDone}/{t.filesTotal} files · {fmtSize(t.bytes)}/{fmtSize(t.total)}{speedText(t)}
             {:else}
-              {pct(t)}% ({fmtSize(t.bytes)}/{fmtSize(t.total)})
+              {pct(t)}% ({fmtSize(t.bytes)}/{fmtSize(t.total)}){speedText(t)}
             {/if}
           </span>
           {#if !t.err && !t.cancelled && t.bytes < t.total}
@@ -876,6 +954,18 @@
     font-size: 0.78rem;
   }
   .transfer.err { color: var(--red); }
+  /* Stays in view while the rows under it scroll. */
+  .summary {
+    position: sticky;
+    top: -0.3rem;
+    background: var(--crust);
+    border-bottom: 1px solid var(--surface0);
+    padding-bottom: 0.3rem;
+    margin-bottom: 0.2rem;
+    font-weight: 600;
+    z-index: 1;
+  }
+  .x.all { font-size: 0.72rem; white-space: nowrap; }
   .tname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cur { color: var(--overlay0); font-size: 0.7rem; margin-left: 0.3rem; }
   .bar {
@@ -890,7 +980,16 @@
     transition: width 0.15s linear;
   }
   .transfer.err .fill { background: var(--red); }
-  .pct { color: var(--subtext0); }
+  /* One line, fixed-width digits: the speed readout changes twice a
+     second and would otherwise wrap in a narrow pane and jitter. */
+  .pct {
+    color: var(--subtext0);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
   .bad { color: var(--red); }
   .x {
     background: transparent; border: 0; color: var(--red);
