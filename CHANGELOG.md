@@ -7,6 +7,21 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **A clear error when a server has no working SFTP.** On some NAS
+  firmware SSH works but SFTP does not (the server is set up to run an
+  SFTP program it does not have), and opening the file pane failed with
+  "error receiving version packet from server: server unexpectedly
+  closed connection: unexpected EOF" - which reads like a network
+  problem. It now says the server has no working SFTP subsystem, that
+  SSH itself is fine, and whether the server closed or refused the SFTP
+  channel. The original error is kept in brackets.
+
+---
+
 ## [0.101.0] - Faster file transfers you can resume, and warnings before things expire
 
 ### File transfers
