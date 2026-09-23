@@ -3403,6 +3403,62 @@ export class NetworkProfileInfo {
 }
 
 /**
+ * OpksshCertLifetime is one opkssh credential's current cert, reduced to
+ * the window the status bar measures against: when it started and when
+ * the user will next have to log in through the browser.
+ */
+export class OpksshCertLifetime {
+    /**
+     * Creates a new OpksshCertLifetime instance.
+     * @param {Partial<OpksshCertLifetime>} [$$source = {}] - The source object to create the OpksshCertLifetime.
+     */
+    constructor($$source = {}) {
+        if (!("credential_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["credential_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("start" in $$source)) {
+            /**
+             * unix seconds
+             * @member
+             * @type {number}
+             */
+            this["start"] = 0;
+        }
+        if (!("end" in $$source)) {
+            /**
+             * unix seconds
+             * @member
+             * @type {number}
+             */
+            this["end"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new OpksshCertLifetime instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {OpksshCertLifetime}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new OpksshCertLifetime(/** @type {Partial<OpksshCertLifetime>} */($$parsedSource));
+    }
+}
+
+/**
  * OpksshCertStatusResult wraps the vault cert state for the credential
  * editor. VaultLocked distinguishes "no cert" from "can't look" - a
  * locked vault returns ok=false on every Get and would otherwise

@@ -58,6 +58,7 @@ export {
     McpGrantInfo,
     NetbirdConfig,
     NetworkProfileInfo,
+    OpksshCertLifetime,
     OpksshCertStatusResult,
     PinDynamicEntryInput,
     PluginInfo,

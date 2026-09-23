@@ -14,8 +14,10 @@ import { api } from "./api";
 export type DesktopAlert = {
   // Stable id, so a resolved alert can be told apart from a new one.
   id: string;
-  // One line, written to be read in a tooltip.
+  // One line, the headline.
   message: string;
+  // What it means and what fixing it takes, for the issues panel.
+  detail: string;
   // Settings section to open when the badge is clicked.
   section: string;
 };
@@ -44,6 +46,7 @@ class DesktopAlertsStore {
         found.push({
           id: "url-scheme-stale",
           message: "ssh-tool:// links open a different copy of ssh-tool",
+          detail: "The link handler is registered to another install or an older path. Register it again from this copy.",
           section: "desktop",
         });
       }
@@ -51,6 +54,7 @@ class DesktopAlertsStore {
         found.push({
           id: "context-menu-stale",
           message: "The file manager's right-click menu opens a different copy",
+          detail: "The menu entry points at another install or an older path. Register it again from this copy.",
           section: "desktop",
         });
       }
@@ -65,6 +69,7 @@ class DesktopAlertsStore {
         found.push({
           id: "mcp-stale",
           message: "Claude Desktop's MCP entry points at an older ssh-tool",
+          detail: "Claude Desktop will start the old binary for MCP. Update the entry so it runs this one.",
           section: "llm",
         });
       }

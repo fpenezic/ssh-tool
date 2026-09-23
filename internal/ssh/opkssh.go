@@ -128,6 +128,7 @@ type OpksshAuth struct {
 type CertStatus struct {
 	HasCert     bool  `json:"has_cert"`
 	IssuedAt    int64 `json:"issued_at"`    // unix seconds; 0 = unknown
+	ValidAfter  int64 `json:"valid_after"`  // unix seconds from the cert itself; 0 = unset
 	ValidBefore int64 `json:"valid_before"` // unix seconds; 0 = forever cert
 	RenewAt     int64 `json:"renew_at"`     // unix seconds; 0 = on next connect
 }
@@ -144,6 +145,7 @@ func GetCertStatus(cfg *OpksshConfig, vault *creds.Vault) *CertStatus {
 		return st
 	}
 	st.HasCert = true
+	st.ValidAfter = int64(cert.ValidAfter)
 	if s, ok, _ := vault.Get(opksshIssuedAtAccount(cfg.CredentialID)); ok {
 		if sec, err := strconv.ParseInt(s, 10, 64); err == nil {
 			st.IssuedAt = sec

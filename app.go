@@ -1800,6 +1800,74 @@ func (a *App) OpksshCertStatus(credentialID string) (*OpksshCertStatusResult, er
 	}, nil
 }
 
+// OpksshCertLifetime is one opkssh credential's current cert, reduced to
+// the window the status bar measures against: when it started and when
+// the user will next have to log in through the browser.
+type OpksshCertLifetime struct {
+	CredentialID string `json:"credential_id"`
+	Name         string `json:"name"`
+	Start        int64  `json:"start"` // unix seconds
+	End          int64  `json:"end"`   // unix seconds
+}
+
+// OpksshCertLifetimes reports every opkssh credential holding a cert, for
+// the status bar's expiry warning. The editor's OpksshCertStatus answers
+// for one credential; asking it once per credential on a timer would be N
+// round trips for a badge.
+//
+// End is the cert's own ValidBefore when it has one, else the forced
+// re-login at issued_at + max age - the "forever" certs opkssh issues are
+// only as long-lived as that setting. Start is the recorded issue time,
+// falling back to the cert's ValidAfter. Credentials where either end is
+// unknown are left out: a warning needs a window to be a fraction of.
+// Empty while the vault is locked (nothing in it can be read).
+func (a *App) OpksshCertLifetimes() ([]OpksshCertLifetime, error) {
+	out := []OpksshCertLifetime{}
+	if a.db == nil || a.vault.Status().Kind != creds.StatusUnlocked {
+		return out, nil
+	}
+	list, err := a.db.ListCredentials()
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		c := &list[i]
+		if c.Kind != store.CredOpkssh {
+			continue
+		}
+		cfg, err := sshlayer.ParseOpksshConfig(c)
+		if err != nil {
+			continue
+		}
+		start, end, ok := certLifetimeWindow(sshlayer.GetCertStatus(cfg, a.vault))
+		if !ok {
+			continue
+		}
+		out = append(out, OpksshCertLifetime{CredentialID: c.ID, Name: c.Name, Start: start, End: end})
+	}
+	return out, nil
+}
+
+// certLifetimeWindow reduces a cert status to the start/end pair
+// OpksshCertLifetimes reports; see there for the fallback rules.
+func certLifetimeWindow(st *sshlayer.CertStatus) (start, end int64, ok bool) {
+	if !st.HasCert {
+		return 0, 0, false
+	}
+	start = st.IssuedAt
+	if start == 0 {
+		start = st.ValidAfter
+	}
+	end = st.ValidBefore
+	if end == 0 {
+		end = st.RenewAt
+	}
+	if start == 0 || end <= start {
+		return 0, 0, false
+	}
+	return start, end, true
+}
+
 // ----- Vault -----
 
 func (a *App) VaultStatus() creds.Status {

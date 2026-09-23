@@ -12,11 +12,12 @@
   // existing pane toolbars.
 
   import { sessions, paneTabs, view, tree, mcpShared, shareShared } from "./stores.svelte";
+  import { issues } from "./issues.svelte";
+  import IssuesPanel from "./IssuesPanel.svelte";
   import SharePanel from "./SharePanel.svelte";
   import { errMsg } from "./connectErrors";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
-  import { desktopAlerts } from "./desktopAlerts.svelte";
   import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot, IconSave } from "./iconMap";
   import McpActivityPanel from "./McpActivityPanel.svelte";
   import { mcpCounterTitle } from "./mcpLevel";
@@ -46,6 +47,16 @@
   // forward. 3s matches the per-pane PaneNode poll cadence.
   let tunnelCount = $state(0);
   let showMcpActivity = $state(false);
+  let showIssues = $state(false);
+  onMount(() => {
+    issues.start();
+    return () => issues.stop();
+  });
+  // Cert status reads the vault, so an unlock is the moment the opkssh
+  // side becomes knowable - not the next minute tick.
+  $effect(() => {
+    if (vaultState.status === "unlocked") void issues.refreshOpkssh();
+  });
   let showSharePanel = $state(false);
   let tunnelTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -630,14 +641,23 @@
        pointing at a binary that moved, say). They only showed inside
        Settings, which is no help to someone who has not noticed
        anything is wrong yet. -->
-  {#if desktopAlerts.count > 0}
-    <button
-      class="seg alerts"
-      onclick={() => view.setTabSettingsSection(desktopAlerts.primarySection)}
-      title={desktopAlerts.alerts.map((a) => a.message).join("\n")}
-    >
-      <span>! {desktopAlerts.count === 1 ? "1 issue" : `${desktopAlerts.count} issues`}</span>
-    </button>
+  <!-- Standing problems: desktop integrations, credentials about to
+       expire, opkssh certs running out. A click opens the list with a
+       description and a way to each fix; the count alone said nothing. -->
+  {#if issues.items.length > 0}
+    <div class="mcp-anchor">
+      <button
+        class="seg alerts"
+        class:error={issues.severity === "error"}
+        onclick={() => (showIssues = !showIssues)}
+        title="Click to see what needs attention"
+      >
+        <span>! {issues.items.length === 1 ? "1 issue" : `${issues.items.length} issues`}</span>
+      </button>
+      {#if showIssues}
+        <IssuesPanel onClose={() => (showIssues = false)} />
+      {/if}
+    </div>
   {/if}
 
   {#if updateCheck.available}
@@ -837,6 +857,7 @@
   }
   .seg.alerts { color: var(--yellow); font-weight: 600; }
   .seg.alerts:hover { background: var(--surface0); }
+  .seg.alerts.error { color: var(--red); }
   .seg.update { color: var(--green); font-weight: 600; }
   .seg.update:hover { background: var(--surface0); }
   .seg.vault { color: var(--yellow); }

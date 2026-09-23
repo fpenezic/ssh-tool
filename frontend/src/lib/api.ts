@@ -601,6 +601,13 @@ export interface CredentialCreateResult {
   fingerprint?: string;
 }
 
+export type OpksshCertLifetime = {
+  credential_id: string;
+  name: string;
+  start: number; // unix seconds
+  end: number;   // unix seconds: the next forced browser sign-in
+};
+
 export const api = {
   ping: (name: string) => G.Ping(name),
   setWindowTitle: (title: string) => G.SetWindowTitle(title),
@@ -1039,6 +1046,10 @@ export const api = {
   recordingRead: (path: string) =>
     G.RecordingRead(path) as unknown as Promise<string>,
   recordingDelete: (path: string) => G.RecordingDelete(path),
+  // Every opkssh credential's current cert as a start/end window, for the
+  // status bar's expiry warning. Empty while the vault is locked.
+  opksshCertLifetimes: () =>
+    G.OpksshCertLifetimes() as unknown as Promise<OpksshCertLifetime[] | null>,
   opksshCertStatus: (credentialId: string) =>
     nn(G.OpksshCertStatus(credentialId)) as Promise<OpksshCertStatus>,
   syncConfigGet: () => G.SyncConfigGet() as unknown as Promise<SyncConfig>,
