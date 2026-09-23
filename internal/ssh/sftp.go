@@ -297,11 +297,11 @@ type TransferProgress struct {
 	CurrentPath string `json:"current_path,omitempty"`
 }
 
-// progressWriter wraps an io.Writer and calls onChunk every flushInterval
-// or every chunkBytes, whichever comes first. Caller passes the running
-// total so we can include Total in the emit.
-type progressWriter struct {
-	w             io.Writer
+// progress throttles progress callbacks to every emitEvery or every
+// emitEveryByte, whichever comes first. Shared by the download side
+// (counts bytes written locally) and the upload side (counts bytes read
+// from the local file).
+type progress struct {
 	bytes         int64
 	total         int64
 	onChunk       func(written, total int64)
@@ -311,9 +311,8 @@ type progressWriter struct {
 	emittedAt     int64
 }
 
-func newProgressWriter(w io.Writer, total int64, onChunk func(written, total int64)) *progressWriter {
-	return &progressWriter{
-		w:             w,
+func newProgress(total int64, onChunk func(written, total int64)) *progress {
+	return &progress{
 		total:         total,
 		onChunk:       onChunk,
 		emitEvery:     100 * time.Millisecond,
@@ -322,8 +321,7 @@ func newProgressWriter(w io.Writer, total int64, onChunk func(written, total int
 	}
 }
 
-func (p *progressWriter) Write(b []byte) (int, error) {
-	n, err := p.w.Write(b)
+func (p *progress) add(n int) {
 	p.bytes += int64(n)
 	now := time.Now()
 	if now.Sub(p.lastEmit) >= p.emitEvery || p.bytes-p.emittedAt >= p.emitEveryByte {
@@ -331,12 +329,56 @@ func (p *progressWriter) Write(b []byte) (int, error) {
 		p.lastEmit = now
 		p.emittedAt = p.bytes
 	}
+}
+
+// progressWriter is the download-side sink: counts what lands locally
+// and aborts the transfer by failing the next write once cancel closes.
+type progressWriter struct {
+	w      io.Writer
+	p      *progress
+	cancel <-chan struct{}
+}
+
+func (w *progressWriter) Write(b []byte) (int, error) {
+	select {
+	case <-w.cancel:
+		return 0, ErrTransferCancelled
+	default:
+	}
+	n, err := w.w.Write(b)
+	w.p.add(n)
+	return n, err
+}
+
+// progressReader is the upload-side source, same contract as
+// progressWriter. It counts bytes handed to the SFTP client, which runs
+// up to maxConcurrentRequests packets ahead of the server's acks, so the
+// figure leads the wire by a couple of MB at most.
+type progressReader struct {
+	r      io.Reader
+	p      *progress
+	cancel <-chan struct{}
+}
+
+func (r *progressReader) Read(b []byte) (int, error) {
+	select {
+	case <-r.cancel:
+		return 0, ErrTransferCancelled
+	default:
+	}
+	n, err := r.r.Read(b)
+	r.p.add(n)
 	return n, err
 }
 
 // SftpDownload streams a remote file to a local path. Progress is
 // reported via onProgress; the caller is responsible for routing those
 // to the frontend. cancel may be closed to abort the transfer mid-way.
+//
+// File.WriteTo, not a Read loop: pkg/sftp's Read with a 64 KB buffer
+// keeps two 32 KB packets in flight, so throughput is bound by RTT, not
+// the link - measured at about half of OpenSSH scp on the same host.
+// WriteTo pipelines up to the client's 64 concurrent requests.
 func (s *Session) SftpDownload(remotePath, localPath string, onProgress func(written, total int64), cancel <-chan struct{}) (int64, error) {
 	cli, err := s.SFTPClient()
 	if err != nil {
@@ -359,12 +401,15 @@ func (s *Session) SftpDownload(remotePath, localPath string, onProgress func(wri
 		return 0, err
 	}
 	defer dst.Close()
-	pw := newProgressWriter(dst, fi.Size(), onProgress)
-	return copyWithCancel(pw, src, cancel)
+	return src.WriteTo(&progressWriter{w: dst, p: newProgress(fi.Size(), onProgress), cancel: cancel})
 }
 
 // SftpUpload streams a local file to the remote. Progress + cancel behave
-// the same as SftpDownload.
+// the same as SftpDownload, and for the same reason it goes through
+// ReadFromWithConcurrency rather than a Write loop. Plain ReadFrom would
+// not do: it only pipelines when the client was built with
+// UseConcurrentWrites, and it sizes the pipeline from the reader, which
+// the progress wrapper hides.
 func (s *Session) SftpUpload(localPath, remotePath string, onProgress func(written, total int64), cancel <-chan struct{}) (int64, error) {
 	cli, err := s.SFTPClient()
 	if err != nil {
@@ -384,37 +429,8 @@ func (s *Session) SftpUpload(localPath, remotePath string, onProgress func(writt
 		return 0, err
 	}
 	defer dst.Close()
-	pw := newProgressWriter(dst, fi.Size(), onProgress)
-	return copyWithCancel(pw, src, cancel)
-}
-
-// copyWithCancel is io.Copy with a cancel channel checked between chunks.
-// Cancelled transfers return ErrTransferCancelled and leave the partial
-// destination behind for the caller to clean up.
-func copyWithCancel(dst io.Writer, src io.Reader, cancel <-chan struct{}) (int64, error) {
-	buf := make([]byte, 64*1024)
-	var total int64
-	for {
-		select {
-		case <-cancel:
-			return total, ErrTransferCancelled
-		default:
-		}
-		n, err := src.Read(buf)
-		if n > 0 {
-			nw, werr := dst.Write(buf[:n])
-			total += int64(nw)
-			if werr != nil {
-				return total, werr
-			}
-		}
-		if err == io.EOF {
-			return total, nil
-		}
-		if err != nil {
-			return total, err
-		}
-	}
+	// 0 = the client's maximum (64 requests in flight).
+	return dst.ReadFromWithConcurrency(&progressReader{r: src, p: newProgress(fi.Size(), onProgress), cancel: cancel}, 0)
 }
 
 // ErrTransferCancelled is returned when the cancel channel fires mid-copy.
