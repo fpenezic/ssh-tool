@@ -2763,6 +2763,22 @@ export class LocalShellInfo {
              */
             this["display"] = "";
         }
+        if (!("connection_id" in $$source)) {
+            /**
+             * Set when a saved local connection opened the shell, empty for an
+             * ad-hoc one. See local.Session.ConnectionID.
+             * @member
+             * @type {string}
+             */
+            this["connection_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
 
         Object.assign(this, $$source);
     }

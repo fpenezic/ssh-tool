@@ -1146,7 +1146,9 @@ export const api = {
     G.LocalShellGetScrollback(sessionId) as unknown as Promise<{ b64?: string; cum: number; lines?: number }>,
   localShellList: () =>
     G.LocalShellList() as unknown as Promise<
-      { session_id: string; kind: string; display: string }[]
+      // connection_id / name: set when a saved local connection opened
+      // the shell, empty for an ad-hoc one.
+      { session_id: string; kind: string; display: string; connection_id: string; name: string }[]
     >,
 
   // VNC console. Each open returns a loopback ws URL (single-use token)

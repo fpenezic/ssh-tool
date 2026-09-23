@@ -3738,7 +3738,7 @@ func (a *App) LocalShellOpen(kind, dir string, cols, rows uint16) (*LocalShellOp
 		Cols: cols,
 		Rows: rows,
 		Dir:  dir,
-	})
+	}, "", "")
 }
 
 // localShellDirSetting reads the app-wide starting directory for local
@@ -3795,17 +3795,20 @@ func (a *App) LocalConnect(connectionID string) (*LocalShellOpenResult, error) {
 		Dir:                       dir,
 		InitialCommand:            settings.InitialCommand,
 		InitialCommandLineDelayMs: settings.InitialCommandLineDelayMs,
-	})
+	}, conn.ID, conn.Name)
 }
 
 // openLocalShell is the shared spawn + wiring path for both the ad-hoc
-// local-shell launcher and saved local connections.
-func (a *App) openLocalShell(req local.SpawnRequest) (*LocalShellOpenResult, error) {
+// local-shell launcher and saved local connections. connectionID and
+// name are empty for the ad-hoc launcher.
+func (a *App) openLocalShell(req local.SpawnRequest, connectionID, name string) (*LocalShellOpenResult, error) {
 	sess, err := local.Spawn(req)
 	if err != nil {
 		return nil, err
 	}
 	sess.ID = uuid.NewString()
+	sess.ConnectionID = connectionID
+	sess.Name = name
 
 	// Wire output sink before Start so the first chunk of shell
 	// banner / prompt isn't lost. Mirrors the SSH pumpOutput path.
@@ -4130,6 +4133,10 @@ type LocalShellInfo struct {
 	SessionID string `json:"session_id"`
 	Kind      string `json:"kind"`
 	Display   string `json:"display"`
+	// Set when a saved local connection opened the shell, empty for an
+	// ad-hoc one. See local.Session.ConnectionID.
+	ConnectionID string `json:"connection_id"`
+	Name         string `json:"name"`
 }
 
 func (a *App) LocalShellList() []LocalShellInfo {
@@ -4140,9 +4147,11 @@ func (a *App) LocalShellList() []LocalShellInfo {
 			continue
 		}
 		out = append(out, LocalShellInfo{
-			SessionID: s.ID,
-			Kind:      s.Kind,
-			Display:   s.Display,
+			SessionID:    s.ID,
+			Kind:         s.Kind,
+			Display:      s.Display,
+			ConnectionID: s.ConnectionID,
+			Name:         s.Name,
 		})
 	}
 	return out

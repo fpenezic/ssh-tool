@@ -37,6 +37,15 @@ type Session struct {
 	Kind    string // "bash" | "zsh" | "powershell" | "cmd" | "wsl" | "sh"
 	Display string // human-readable label for the tab (e.g. "bash", "Ubuntu (WSL)")
 
+	// ConnectionID and Name identify the saved connection that opened this
+	// shell; both empty for an ad-hoc shell. Set by the App after Spawn.
+	// Kept here because a window that did not open the tab (a detached
+	// one, or the main window after a reload) rebuilds it from the
+	// backend alone, and without them a saved connection came back as
+	// its bare shell kind with no icon.
+	ConnectionID string
+	Name         string
+
 	pty  pty.Pty
 	cmd  *pty.Cmd
 	done chan struct{}

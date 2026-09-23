@@ -13,7 +13,7 @@
   import { onMount } from "svelte";
   import { errMsg } from "./connectErrors";
   import { api } from "./api";
-  import { sessions, paneTabs, view, decodePaneLayout, encodePaneLayouts } from "./stores.svelte";
+  import { sessions, paneTabs, view, tree, decodePaneLayout, encodePaneLayouts } from "./stores.svelte";
   import { vncSessions } from "./vncState.svelte.ts";
   import TerminalArea from "./TerminalArea.svelte";
   import { broadcast } from "./broadcast.svelte";
@@ -43,6 +43,11 @@
     // Same deal for recording state - a session recorded in the main
     // window keeps its indicator after a detach.
     recording.init();
+    // The tab bar resolves a tab's icon through tree.connectionById, and
+    // only the main window loaded the tree, so every tab torn off into
+    // this window showed the default glyph. Not awaited: an icon arriving
+    // a moment late beats holding back the terminals.
+    void tree.load().catch(console.warn);
     try {
       // Parse the comma-separated session IDs passed by the main window.
       // Fall back to all active sessions if none were specified (legacy/manual open).
@@ -80,8 +85,8 @@
         if (sessions.tabs.find((t) => t.sessionId === l.session_id)) continue;
         sessions.add({
           sessionId: l.session_id,
-          connectionId: "local:" + l.session_id,
-          name: l.display || l.kind,
+          connectionId: l.connection_id || "local:" + l.session_id,
+          name: l.name || l.display || l.kind,
           hostname: l.kind,
           status: "connected",
           kind: "local",
@@ -118,7 +123,7 @@
         }
         for (const l of locals) {
           if (allowedIds && !allowedIds.has(l.session_id)) continue;
-          paneTabs.addTab(l.session_id, l.display || l.kind);
+          paneTabs.addTab(l.session_id, l.name || l.display || l.kind);
         }
         for (const v of vncs) {
           if (allowedIds && !allowedIds.has(v.session_id)) continue;

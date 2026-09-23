@@ -317,8 +317,8 @@
           if (!sessions.tabs.find((t) => t.sessionId === l.session_id)) {
             sessions.add({
               sessionId: l.session_id,
-              connectionId: "local:" + l.session_id,
-              name: l.display || l.kind,
+              connectionId: l.connection_id || "local:" + l.session_id,
+              name: l.name || l.display || l.kind,
               hostname: l.kind,
               status: "connected",
               kind: "local",
@@ -338,7 +338,7 @@
           }
           for (const l of locals) {
             if (!wanted.has(l.session_id)) continue;
-            paneTabs.addTab(l.session_id, l.display || l.kind);
+            paneTabs.addTab(l.session_id, l.name || l.display || l.kind);
           }
         }
         view.setTab("terminal");
@@ -1147,13 +1147,13 @@
         if (sessions.tabs.find((t) => t.sessionId === s.session_id)) continue;
         sessions.add({
           sessionId: s.session_id,
-          connectionId: "",
-          name: s.display,
+          connectionId: s.connection_id,
+          name: s.name || s.display,
           hostname: s.kind,
           kind: "local",
           status: "connected",
         });
-        paneTabs.addTab(s.session_id, s.display);
+        paneTabs.addTab(s.session_id, s.name || s.display);
         recovered++;
       }
     } catch (e) {
