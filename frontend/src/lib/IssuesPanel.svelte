@@ -28,7 +28,19 @@
             <div class="head">{it.title}</div>
             <div class="detail">{it.detail}</div>
           </div>
-          <button class="act" onclick={() => run(it.action)}>{it.actionLabel}</button>
+          <div class="acts">
+            {#if it.opkssh}
+              {@const cid = it.opkssh.credentialId}
+              {@const name = it.opkssh.name}
+              {#if issues.signingIn.has(cid)}
+                <span class="wait">Waiting for browser...</span>
+                <button class="act" onclick={() => issues.cancelSignIn(cid)}>Cancel</button>
+              {:else}
+                <button class="act primary" onclick={() => issues.signIn(cid, name)}>Sign in now</button>
+              {/if}
+            {/if}
+            <button class="act" onclick={() => run(it.action)}>{it.actionLabel}</button>
+          </div>
         </li>
       {/each}
     </ul>
@@ -82,4 +94,8 @@
     padding: 0.2rem 0.55rem; font-size: 0.76rem; cursor: pointer; white-space: nowrap;
   }
   .act:hover { background: var(--surface1); }
+  .acts { flex: 0 0 auto; display: flex; flex-direction: column; align-items: stretch; gap: 0.3rem; }
+  .act.primary { background: var(--blue); color: var(--on-accent); border-color: var(--blue); }
+  .act.primary:hover { filter: brightness(1.1); background: var(--blue); }
+  .wait { font-size: 0.72rem; color: var(--subtext0); white-space: nowrap; }
 </style>

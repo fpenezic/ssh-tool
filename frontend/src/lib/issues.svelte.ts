@@ -14,6 +14,8 @@ import { api, type OpksshCertLifetime } from "./api";
 import { credentials, view, selection } from "./stores.svelte";
 import { desktopAlerts } from "./desktopAlerts.svelte";
 import { expiringCredentials, opksshExpiry } from "./credExpiry";
+import { toast } from "./toast.svelte.ts";
+import { errMsg } from "./connectErrors";
 
 export type IssueSeverity = "warn" | "error";
 
@@ -24,6 +26,8 @@ export interface Issue {
   detail: string;
   actionLabel: string;
   action: () => void;
+  // Set on opkssh issues: the panel adds a Sign in now button for it.
+  opkssh?: { credentialId: string; name: string };
 }
 
 function openCredential(id: string) {
@@ -37,7 +41,33 @@ class IssuesStore {
   // beat - a connect that signed in again replaces the cert behind it.
   now = $state(Date.now());
   opkssh = $state<OpksshCertLifetime[]>([]);
+  // Credentials with a sign-in in flight, so the panel can turn the button
+  // into Cancel. Lives here, not in the panel: closing the panel must not
+  // lose track of a browser flow that is still running.
+  signingIn = $state<Set<string>>(new Set());
   private timer: ReturnType<typeof setInterval> | null = null;
+
+  async signIn(credentialId: string, name: string) {
+    if (this.signingIn.has(credentialId)) return;
+    this.signingIn = new Set([...this.signingIn, credentialId]);
+    try {
+      await api.opksshSignIn(credentialId);
+      toast.ok(`${name}: signed in`);
+      await this.refreshOpkssh();
+    } catch (e) {
+      const msg = errMsg(e);
+      // A cancel the user clicked is not news to them.
+      if (!/cancel/i.test(msg)) toast.err(`${name}: ${msg}`);
+    } finally {
+      const next = new Set(this.signingIn);
+      next.delete(credentialId);
+      this.signingIn = next;
+    }
+  }
+
+  cancelSignIn(credentialId: string) {
+    void api.opksshSignInCancel(credentialId);
+  }
 
   start() {
     if (this.timer) return;
@@ -94,6 +124,7 @@ class IssuesStore {
           ? "The opkssh certificate has run out. The next connect with it opens the browser to sign in."
           : `The opkssh certificate has ${left}% of its lifetime left. Once it runs out, the next connect opens the browser to sign in.`,
         actionLabel: "Open credential", action: () => openCredential(o.credential_id),
+        opkssh: { credentialId: o.credential_id, name: o.name },
       });
     }
     // Errors first; the order inside each group is the sources' own.

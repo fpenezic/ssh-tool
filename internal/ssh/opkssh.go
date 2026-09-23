@@ -426,6 +426,25 @@ func lockCtx(ctx context.Context, l *lockChan) error {
 // waiting for another connect's browser login to finish, which is exactly
 // the cert it would otherwise have re-fetched for itself.
 func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault, progress func(string)) (*OpksshAuth, error) {
+	return ensureCert(ctx, cfg, vault, progress, false)
+}
+
+// SignInNow runs the browser sign-in for an opkssh credential whatever
+// state its cert is in, so the user can renew ahead of expiry instead of
+// having it interrupt the next connect. Same path as a connect: same
+// per-credential lock, same login party, same vault writes.
+func SignInNow(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault) error {
+	_, err := ensureCert(ctx, cfg, vault, nil, true)
+	return err
+}
+
+// CancelSignIn abandons an in-flight sign-in for the credential - the
+// same thing Cancel on a connect waiting for it does.
+func CancelSignIn(credentialID string) { abandonLoginParty(credentialID) }
+
+// ensureCert is EnsureFreshCert with force: sign in even when the cert in
+// the vault is still good.
+func ensureCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault, progress func(string), force bool) (*OpksshAuth, error) {
 	if progress == nil {
 		progress = func(string) {}
 	}
@@ -446,12 +465,16 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault,
 	// was still queued behind the UI's bulk-connect throttle. Only 4 connects
 	// run at a time, so with 20 hosts the rest reach this point AFTER the
 	// user cancelled - and each would otherwise open a new browser tab.
-	if partyAbandoned(party) || signInRecentlyCancelled(cfg.CredentialID) {
+	// An explicit Sign in now is exempt from the cooldown: it is the user
+	// asking for the browser, not a queued connect nobody is watching.
+	if partyAbandoned(party) || (!force && signInRecentlyCancelled(cfg.CredentialID)) {
 		return nil, fmt.Errorf("opkssh: sign-in was cancelled")
 	}
 
 	lock := certLoginLock(cfg.CredentialID)
+	waited := false
 	if !lock.tryLock() {
+		waited = true
 		// Someone else is mid-login for this credential. Say so - both in the
 		// log and (via the hook) in the UI, which otherwise sits on a bare
 		// "Connecting..." with no indication that it is queued behind a
@@ -537,6 +560,12 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault,
 		}
 	}
 
+	// A forced sign-in that queued behind another one inherits its fresh
+	// cert instead of opening a second browser tab straight after.
+	if force && !waited {
+		needsRefresh = true
+	}
+
 	if needsRefresh {
 		// The login runs on the party's context, not this connect's. The user
 		// cannot tell which host owns the browser tab, so Cancel on any host
@@ -553,7 +582,7 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault,
 		loginCtx, stopBridge := bridgeCancel(loginCtx, ctx, func() {
 			abandonLoginParty(cfg.CredentialID)
 		})
-		newKey, newCert, err := runOpksshLoginNative(loginCtx, cfg)
+		newKey, newCert, err := opksshLogin(loginCtx, cfg)
 		stopBridge()
 		if err == nil {
 			// A completed sign-in ends any cooldown from an earlier cancel, so
@@ -613,6 +642,10 @@ func EnsureFreshCert(ctx context.Context, cfg *OpksshConfig, vault *creds.Vault,
 	}
 	return &OpksshAuth{Signer: certSigner}, nil
 }
+
+// opksshLogin is the browser sign-in ensureCert calls; a variable so the
+// refresh decisions can be tested without a real OIDC provider.
+var opksshLogin = runOpksshLoginNative
 
 // runOpksshLoginNative performs OIDC authentication and SSH cert generation
 // using the openpubkey library directly. No filesystem access - key and cert

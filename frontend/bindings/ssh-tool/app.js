@@ -2287,6 +2287,29 @@ export function OpksshCertStatus(credentialID) {
 }
 
 /**
+ * OpksshSignIn runs the browser sign-in for an opkssh credential now,
+ * whatever state its cert is in - the issues panel's "Sign in now", so a
+ * cert about to run out can be renewed before it interrupts a connect.
+ * Blocks until the sign-in finishes, fails, times out, or is cancelled
+ * with OpksshSignInCancel.
+ * @param {string} credentialID
+ * @returns {$CancellablePromise<void>}
+ */
+export function OpksshSignIn(credentialID) {
+    return $Call.ByID(4217184185, credentialID);
+}
+
+/**
+ * OpksshSignInCancel abandons a sign-in started by OpksshSignIn (or by a
+ * connect) for the credential.
+ * @param {string} credentialID
+ * @returns {$CancellablePromise<void>}
+ */
+export function OpksshSignInCancel(credentialID) {
+    return $Call.ByID(2338872471, credentialID);
+}
+
+/**
  * AppRelaunch spawns a fresh instance of this binary and quits the
  * current one - the "restart to apply" step after a sync pull or
  * backup restore, without making the user find the icon again. The

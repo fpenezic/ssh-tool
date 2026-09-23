@@ -1800,6 +1800,41 @@ func (a *App) OpksshCertStatus(credentialID string) (*OpksshCertStatusResult, er
 	}, nil
 }
 
+// OpksshSignIn runs the browser sign-in for an opkssh credential now,
+// whatever state its cert is in - the issues panel's "Sign in now", so a
+// cert about to run out can be renewed before it interrupts a connect.
+// Blocks until the sign-in finishes, fails, times out, or is cancelled
+// with OpksshSignInCancel.
+func (a *App) OpksshSignIn(credentialID string) error {
+	cred, err := a.db.GetCredential(credentialID)
+	if err != nil {
+		return err
+	}
+	if cred.Kind != store.CredOpkssh {
+		return fmt.Errorf("credential is not opkssh")
+	}
+	if a.vault.Status().Kind != creds.StatusUnlocked {
+		return fmt.Errorf("unlock the vault first: the new certificate is stored in it")
+	}
+	cfg, err := sshlayer.ParseOpksshConfig(cred)
+	if err != nil {
+		return err
+	}
+	err = sshlayer.SignInNow(a.ctx, cfg, a.vault)
+	if err != nil {
+		a.recordAudit("opkssh.signin.failed", credentialID, map[string]string{"error": err.Error()})
+		return err
+	}
+	a.recordAudit("opkssh.signin", credentialID, nil)
+	return nil
+}
+
+// OpksshSignInCancel abandons a sign-in started by OpksshSignIn (or by a
+// connect) for the credential.
+func (a *App) OpksshSignInCancel(credentialID string) {
+	sshlayer.CancelSignIn(credentialID)
+}
+
 // OpksshCertLifetime is one opkssh credential's current cert, reduced to
 // the window the status bar measures against: when it started and when
 // the user will next have to log in through the browser.

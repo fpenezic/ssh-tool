@@ -2,6 +2,7 @@
   import { credentials, selection, view } from "./stores.svelte";
   import { toast } from "./toast.svelte";
   import { expiryInfo } from "./credExpiry";
+  import { issues } from "./issues.svelte";
   import { expandedCredentials } from "./treeState.svelte";
   import { api, type UsageRef, type CredentialHistoryEntry, type OpksshCertStatus } from "./api";
   import { connectionActions } from "./connectionActions.svelte";
@@ -172,6 +173,16 @@
     if (h > 0) out += `${h}h`;
     if (m > 0) out += `${m}m`;
     return out;
+  }
+
+  // Same sign-in as the issues panel's button, and the same in-flight
+  // state, so starting it in one place shows Cancel in the other.
+  async function opksshSignIn() {
+    if (!cred) return;
+    const id = cred.id;
+    await issues.signIn(id, cred.name);
+    if (cred?.id !== id) return; // moved to another credential meanwhile
+    opksshCertStatus = await api.opksshCertStatus(id).catch(() => null);
   }
 
   const opksshCertLine = $derived.by(() => {
@@ -919,7 +930,17 @@
     {#if cred.kind === "opkssh"}
       <h2>opkssh config</h2>
       {#if opksshCertLine}
-        <p class="cert-status">{opksshCertLine}</p>
+        <div class="cert-status">
+          <span>{opksshCertLine}</span>
+          {#if opksshCertStatus && !opksshCertStatus.vault_locked}
+            {#if issues.signingIn.has(cred.id)}
+              <span class="cert-wait">Waiting for browser...</span>
+              <button onclick={() => issues.cancelSignIn(cred!.id)}>Cancel</button>
+            {:else}
+              <button class="primary" onclick={opksshSignIn}>Sign in now</button>
+            {/if}
+          {/if}
+        </div>
       {/if}
       <div class="form">
         <label>Key basename
@@ -1129,7 +1150,13 @@
   .form { display: flex; flex-direction: column; gap: 0.6rem; max-width: 560px; }
   .form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--subtext0); }
   .field-hint { color: var(--overlay0); font-size: 0.72rem; line-height: 1.45; }
+  .cert-status > span:first-child { flex: 1; min-width: 12rem; }
+  .cert-wait { font-size: 0.78rem; color: var(--subtext0); }
   .cert-status {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
     margin: 0 0 0.6rem;
     padding: 0.45rem 0.6rem;
     background: var(--mantle);

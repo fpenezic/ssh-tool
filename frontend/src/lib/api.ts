@@ -1048,6 +1048,10 @@ export const api = {
   recordingDelete: (path: string) => G.RecordingDelete(path),
   // Every opkssh credential's current cert as a start/end window, for the
   // status bar's expiry warning. Empty while the vault is locked.
+  // Browser sign-in now, ahead of expiry. Resolves when it finishes;
+  // rejects on failure, timeout, or opksshSignInCancel.
+  opksshSignIn: (credentialId: string) => G.OpksshSignIn(credentialId) as unknown as Promise<void>,
+  opksshSignInCancel: (credentialId: string) => G.OpksshSignInCancel(credentialId) as unknown as Promise<void>,
   opksshCertLifetimes: () =>
     G.OpksshCertLifetimes() as unknown as Promise<OpksshCertLifetime[] | null>,
   opksshCertStatus: (credentialId: string) =>
