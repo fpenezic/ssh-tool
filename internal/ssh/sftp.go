@@ -10,6 +10,7 @@
 package ssh
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -371,9 +372,53 @@ func (r *progressReader) Read(b []byte) (int, error) {
 	return n, err
 }
 
+// Transfers write to "<dest>.part" and rename onto the destination only
+// once every byte is there. A cancelled or dropped transfer used to leave
+// a truncated file under the real name, indistinguishable from a complete
+// one; now it leaves a .part, and the next transfer of the same file
+// picks up from it.
+const PartSuffix = ".part"
+
+// resumeCheckBytes is how much of a .part's tail is compared against the
+// source before resuming from it. A .part is only ever ours, but the
+// source can change between attempts (a log that rotated, a rebuilt
+// artifact under the same name); appending to a prefix of a different
+// file would produce a corrupt result that looks complete. Comparing the
+// tail catches that for the price of one small read on each side. It is
+// not a full hash - that needs sha256sum on the host, which SFTP-only
+// accounts do not have.
+const resumeCheckBytes = 64 * 1024
+
+// resumeOffset decides where a transfer into an existing .part starts:
+// its size when that is a proper prefix-or-whole of the source and the
+// tails match, otherwise 0 (start over, truncating the .part).
+func resumeOffset(partSize, srcSize int64, src, part io.ReaderAt) int64 {
+	if partSize <= 0 || partSize > srcSize {
+		return 0
+	}
+	n := int64(resumeCheckBytes)
+	if n > partSize {
+		n = partSize
+	}
+	a := make([]byte, n)
+	b := make([]byte, n)
+	if _, err := src.ReadAt(a, partSize-n); err != nil && err != io.EOF {
+		return 0
+	}
+	if _, err := part.ReadAt(b, partSize-n); err != nil && err != io.EOF {
+		return 0
+	}
+	if !bytes.Equal(a, b) {
+		return 0
+	}
+	return partSize
+}
+
 // SftpDownload streams a remote file to a local path. Progress is
 // reported via onProgress; the caller is responsible for routing those
 // to the frontend. cancel may be closed to abort the transfer mid-way.
+// The returned count is the file's bytes now on disk, resumed ones
+// included.
 //
 // File.WriteTo, not a Read loop: pkg/sftp's Read with a 64 KB buffer
 // keeps two 32 KB packets in flight, so throughput is bound by RTT, not
@@ -396,20 +441,51 @@ func (s *Session) SftpDownload(remotePath, localPath string, onProgress func(wri
 		return 0, err
 	}
 	defer src.Close()
-	dst, err := os.Create(localPath)
+
+	part := localPath + PartSuffix
+	dst, err := os.OpenFile(part, os.O_RDWR|os.O_CREATE, 0o644)
 	if err != nil {
 		return 0, err
 	}
-	defer dst.Close()
-	return src.WriteTo(&progressWriter{w: dst, p: newProgress(fi.Size(), onProgress), cancel: cancel})
+	var off int64
+	if pi, err := dst.Stat(); err == nil {
+		off = resumeOffset(pi.Size(), fi.Size(), src, dst)
+	}
+	if err := dst.Truncate(off); err != nil {
+		dst.Close()
+		return 0, err
+	}
+	if _, err := dst.Seek(off, io.SeekStart); err != nil {
+		dst.Close()
+		return 0, err
+	}
+	if _, err := src.Seek(off, io.SeekStart); err != nil {
+		dst.Close()
+		return 0, err
+	}
+	prog := newProgress(fi.Size(), onProgress)
+	prog.bytes = off
+	n, err := src.WriteTo(&progressWriter{w: dst, p: prog, cancel: cancel})
+	if cerr := dst.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return off + n, err
+	}
+	// os.Rename replaces an existing file on Windows too (MoveFileEx
+	// with REPLACE_EXISTING); the Save dialog already asked about it.
+	if err := os.Rename(part, localPath); err != nil {
+		return off + n, err
+	}
+	return off + n, nil
 }
 
-// SftpUpload streams a local file to the remote. Progress + cancel behave
-// the same as SftpDownload, and for the same reason it goes through
-// ReadFromWithConcurrency rather than a Write loop. Plain ReadFrom would
-// not do: it only pipelines when the client was built with
-// UseConcurrentWrites, and it sizes the pipeline from the reader, which
-// the progress wrapper hides.
+// SftpUpload streams a local file to the remote. Progress, cancel, the
+// .part and the resume rules match SftpDownload. It goes through
+// ReadFromWithConcurrency rather than a Write loop for the same reason;
+// plain ReadFrom would not do: it only pipelines when the client was
+// built with UseConcurrentWrites, and it sizes the pipeline from the
+// reader, which the progress wrapper hides.
 func (s *Session) SftpUpload(localPath, remotePath string, onProgress func(written, total int64), cancel <-chan struct{}) (int64, error) {
 	cli, err := s.SFTPClient()
 	if err != nil {
@@ -424,13 +500,57 @@ func (s *Session) SftpUpload(localPath, remotePath string, onProgress func(writt
 	if err != nil {
 		return 0, err
 	}
-	dst, err := cli.Create(remotePath)
+
+	part := remotePath + PartSuffix
+	dst, err := cli.OpenFile(part, os.O_RDWR|os.O_CREATE)
 	if err != nil {
 		return 0, err
 	}
-	defer dst.Close()
+	var off int64
+	if pi, err := dst.Stat(); err == nil {
+		off = resumeOffset(pi.Size(), fi.Size(), src, dst)
+	}
+	if err := dst.Truncate(off); err != nil {
+		dst.Close()
+		return 0, err
+	}
+	if _, err := dst.Seek(off, io.SeekStart); err != nil {
+		dst.Close()
+		return 0, err
+	}
+	if _, err := src.Seek(off, io.SeekStart); err != nil {
+		dst.Close()
+		return 0, err
+	}
+	prog := newProgress(fi.Size(), onProgress)
+	prog.bytes = off
 	// 0 = the client's maximum (64 requests in flight).
-	return dst.ReadFromWithConcurrency(&progressReader{r: src, p: newProgress(fi.Size(), onProgress), cancel: cancel}, 0)
+	n, err := dst.ReadFromWithConcurrency(&progressReader{r: src, p: prog, cancel: cancel}, 0)
+	if cerr := dst.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return off + n, err
+	}
+	return off + n, renameReplacing(cli, part, remotePath)
+}
+
+// renameReplacing moves a finished .part onto its destination. Plain
+// SFTP v3 RENAME fails when the target exists (OpenSSH follows the spec
+// there), so the posix-rename extension goes first: atomic, and it
+// replaces. Servers without it get remove-then-rename, which leaves a
+// short window with no file under the name - acceptable, since the only
+// alternative is failing a transfer that already completed.
+func renameReplacing(cli *sftp.Client, from, to string) error {
+	if err := cli.PosixRename(from, to); err == nil {
+		return nil
+	}
+	if _, err := cli.Lstat(to); err == nil {
+		if err := cli.Remove(to); err != nil {
+			return err
+		}
+	}
+	return cli.Rename(from, to)
 }
 
 // ErrTransferCancelled is returned when the cancel channel fires mid-copy.

@@ -335,9 +335,10 @@ func (a *App) mcpDownloadFile(sessionID, remotePath string, cancel <-chan struct
 	}, cancel)
 	a.transferFinished(transferID, err != nil)
 	if err != nil {
-		// A cancelled or failed transfer leaves a partial file behind; drop it
-		// so nothing downstream mistakes it for the real thing.
-		_ = os.Remove(dest)
+		// A cancelled or failed transfer leaves a partial .part behind. The UI
+		// keeps it to resume from; an MCP download has no next attempt to
+		// resume, so drop it.
+		_ = os.Remove(dest + sshlayer.PartSuffix)
 		a.recordActivity(McpActivity{
 			SessionID: sessionID, Session: name, Kind: "file",
 			Command: prompt, Exit: "error", Gate: gate,

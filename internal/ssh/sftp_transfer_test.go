@@ -204,3 +204,115 @@ func TestSftpTransfersPipelineOverLatency(t *testing.T) {
 	}
 }
 
+// firstProgress records the first figure a transfer reports: a resumed
+// transfer starts past the .part, a restarted one near zero.
+func firstProgress() (func(int64, int64), *int64) {
+	first := int64(-1)
+	return func(w, _ int64) {
+		if first < 0 {
+			first = w
+		}
+	}, &first
+}
+
+func TestSftpTransfersResumeFromPart(t *testing.T) {
+	s := sftpOverLatency(t, 0)
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	want := writeRandom(t, src, 3<<20)
+	half := int64(len(want) / 2)
+
+	for _, dirn := range []string{"download", "upload"} {
+		t.Run(dirn, func(t *testing.T) {
+			dest := filepath.Join(dir, dirn)
+			if err := os.WriteFile(dest+PartSuffix, want[:half], 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cb, first := firstProgress()
+			var n int64
+			var err error
+			if dirn == "download" {
+				n, err = s.SftpDownload(src, dest, cb, nil)
+			} else {
+				n, err = s.SftpUpload(src, dest, cb, nil)
+			}
+			if err != nil || n != int64(len(want)) {
+				t.Fatalf("n=%d err=%v", n, err)
+			}
+			if *first <= half {
+				t.Errorf("did not resume: first progress %d, .part held %d", *first, half)
+			}
+			got, _ := os.ReadFile(dest)
+			if !bytes.Equal(got, want) {
+				t.Fatal("resumed file differs from the source")
+			}
+			if _, err := os.Stat(dest + PartSuffix); !os.IsNotExist(err) {
+				t.Errorf(".part left behind after success: %v", err)
+			}
+		})
+	}
+}
+
+func TestSftpTransfersRestartOnForeignPart(t *testing.T) {
+	s := sftpOverLatency(t, 0)
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	want := writeRandom(t, src, 1<<20)
+
+	cases := map[string][]byte{
+		"different content": bytes.Repeat([]byte{0xAA}, len(want)/2),
+		"longer than source": append(append([]byte(nil), want...), 1, 2, 3),
+	}
+	for name, part := range cases {
+		t.Run(name, func(t *testing.T) {
+			dest := filepath.Join(dir, "d-"+name)
+			if err := os.WriteFile(dest+PartSuffix, part, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.SftpDownload(src, dest, func(_, _ int64) {}, nil); err != nil {
+				t.Fatal(err)
+			}
+			got, _ := os.ReadFile(dest)
+			if !bytes.Equal(got, want) {
+				t.Fatal("a foreign .part leaked into the result")
+			}
+		})
+	}
+}
+
+func TestSftpCancelLeavesOnlyPart(t *testing.T) {
+	s := sftpOverLatency(t, 0)
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeRandom(t, src, 1<<20)
+	dest := filepath.Join(dir, "dest")
+	cancel := make(chan struct{})
+	close(cancel)
+	if _, err := s.SftpDownload(src, dest, func(_, _ int64) {}, cancel); !errors.Is(err, ErrTransferCancelled) {
+		t.Fatalf("want ErrTransferCancelled, got %v", err)
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Error("a cancelled download left a file under the real name")
+	}
+	if _, err := os.Stat(dest + PartSuffix); err != nil {
+		t.Errorf("no .part to resume from: %v", err)
+	}
+}
+
+func TestSftpUploadReplacesExistingTarget(t *testing.T) {
+	s := sftpOverLatency(t, 0)
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	want := writeRandom(t, src, 200<<10)
+	dest := filepath.Join(dir, "dest")
+	if err := os.WriteFile(dest, []byte("old contents"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SftpUpload(src, dest, func(_, _ int64) {}, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(dest)
+	if !bytes.Equal(got, want) {
+		t.Fatal("existing target not replaced")
+	}
+}
