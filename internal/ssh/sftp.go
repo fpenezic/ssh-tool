@@ -75,10 +75,37 @@ func (s *Session) SFTPClient() (*sftp.Client, error) {
 	}
 	cli, err := sftp.NewClient(tgt)
 	if err != nil {
-		return nil, fmt.Errorf("open sftp: %w", err)
+		return nil, explainSFTPOpenError(err)
 	}
 	s.sftp.client = cli
 	return cli, nil
+}
+
+// ErrNoSFTPSubsystem marks an SFTP open that failed because the server has
+// no working sftp subsystem, as opposed to a network or auth problem.
+var ErrNoSFTPSubsystem = errors.New("the server has no working SFTP subsystem")
+
+// explainSFTPOpenError names the two shapes of "SSH works, SFTP does not"
+// for what they are. The raw errors - "subsystem request failed", or
+// "error receiving version packet from server: server unexpectedly closed
+// connection: unexpected EOF" - read like a network fault, and send people
+// debugging their connection when the cause is one line of server config.
+//
+// The second shape is the common one on NAS firmware: sshd_config names an
+// sftp-server binary the vendor did not ship, so sshd accepts the subsystem,
+// fails to exec it, and closes the channel before the version packet.
+func explainSFTPOpenError(err error) error {
+	rejected := strings.Contains(err.Error(), "subsystem request failed")
+	closed := errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF)
+	if !rejected && !closed {
+		return fmt.Errorf("open sftp: %w", err)
+	}
+	what := "closed"
+	if rejected {
+		what = "refused"
+	}
+	return fmt.Errorf("%w: SSH works, but the server %s the SFTP channel (open sftp: %v)",
+		ErrNoSFTPSubsystem, what, err)
 }
 
 // CloseSFTP releases the cached SFTP client if one exists. Safe to call

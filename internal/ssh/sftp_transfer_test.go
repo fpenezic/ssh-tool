@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -314,5 +316,28 @@ func TestSftpUploadReplacesExistingTarget(t *testing.T) {
 	got, _ := os.ReadFile(dest)
 	if !bytes.Equal(got, want) {
 		t.Fatal("existing target not replaced")
+	}
+}
+
+func TestExplainSFTPOpenError(t *testing.T) {
+	closed := fmt.Errorf("error receiving version packet from server: %w",
+		fmt.Errorf("server unexpectedly closed connection: %w", io.ErrUnexpectedEOF))
+	for name, in := range map[string]error{
+		"closed before version": closed,
+		"subsystem refused":     errors.New("ssh: subsystem request failed"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := explainSFTPOpenError(in)
+			if !errors.Is(got, ErrNoSFTPSubsystem) {
+				t.Fatalf("not recognised as a missing subsystem: %v", got)
+			}
+			if !strings.Contains(got.Error(), "SSH works") {
+				t.Errorf("message does not say SSH itself is fine: %v", got)
+			}
+		})
+	}
+	other := explainSFTPOpenError(errors.New("ssh: handshake failed"))
+	if errors.Is(other, ErrNoSFTPSubsystem) {
+		t.Errorf("an unrelated failure was blamed on the subsystem: %v", other)
 	}
 }
