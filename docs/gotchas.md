@@ -1117,6 +1117,51 @@ everything mobile is behind a build tag or an `isMobile` check.
       `::selection` background hides the paint - the selection has to be
       a translucent `color-mix`, with `color: transparent`.
 
+60. **pkg/sftp's `Read`/`Write` are latency-bound; whole-file copies go
+    through `WriteTo` / `ReadFromWithConcurrency`.** A copy loop with a
+    64 KB buffer keeps two 32 KB requests in flight, so throughput is
+    RTT-bound: it ran at under half of OpenSSH scp. `File.WriteTo`
+    (download) and `File.ReadFromWithConcurrency(r, 0)` (upload) keep up
+    to 64 in flight. Plain `ReadFrom` is NOT the same: it only pipelines
+    on a client built with `UseConcurrentWrites`, and it sizes the
+    pipeline from the reader's `Len`/`Size`/`Stat`, which any wrapper
+    hides. Cancel and progress therefore live in the wrappers
+    (`progressWriter` / `progressReader` in `internal/ssh/sftp.go`), not
+    in a loop. Both honour the file offset set with `Seek`, which is
+    what `.part` resume relies on. `sftp_transfer_test.go` has a
+    latency-pipe harness that measures this; its teardown must close the
+    pipes before the client/server, or each side's receive loop blocks
+    forever.
+
+61. **SFTP v3 RENAME refuses an existing target.** OpenSSH follows the
+    spec, so renaming a finished `.part` over an existing file fails.
+    `renameReplacing` tries `PosixRename` (the `posix-rename@openssh.com`
+    extension: atomic, replaces) and only then remove-then-rename.
+    Locally `os.Rename` replaces on Windows too (MoveFileEx with
+    REPLACE_EXISTING).
+
+62. **A window that did not open a tab rebuilds it from the backend
+    alone.** The detached window, re-dock and reload recovery all build
+    tabs from `SshActiveSessions` / `LocalShellList`, so anything the tab
+    bar shows (name, icon) must be carried by the backend session - a
+    local shell's `ConnectionID` / `Name` were missing and a saved WSL
+    connection came back as "wsl". The icon additionally resolves through
+    `tree.connectionById`, which is empty unless that window called
+    `tree.load()`; `DetachedWindow` does so on mount. The main window's
+    re-dock looked right only because it kept its original store entry -
+    do not test a tab-rebuild path through re-dock alone.
+
+63. **opkssh "Sign in now" is `ensureCert(force)`, not a second login
+    path.** It shares the per-credential lock and login party with
+    connects, so concurrency is settled by that machinery: a forced
+    sign-in that had to WAIT for the lock inherits the cert the holder
+    just fetched instead of opening a second browser tab (`force &&
+    !waited`), and an explicit click bypasses the post-cancel cooldown
+    that stops queued connects from reopening the browser. The browser
+    flow is reached through the `opksshLogin` package variable so tests
+    can substitute a fake that issues a real key + cert
+    (`opkssh_signin_test.go`).
+
 ---
 
 # Archive
