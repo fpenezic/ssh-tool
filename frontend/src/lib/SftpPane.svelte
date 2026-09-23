@@ -81,6 +81,7 @@
     loading = true;
     error = null;
     selected = new Set();
+    anchor = null;
     try {
       const r = await api.sftpList(sessionId, path);
       cwd = r.path;
@@ -116,15 +117,31 @@
     else { sortKey = k; sortDir = "asc"; }
   }
 
+  // Explorer rules: click selects one, Ctrl toggles, Shift selects the
+  // range from the anchor (the last plain or Ctrl click) in on-screen
+  // order, Ctrl+Shift adds that range to what is already selected. The
+  // anchor does not move on a Shift click, so repeated Shift clicks
+  // resize the range around the same starting row.
+  let anchor: string | null = null;
   function toggleSelect(p: string, e: MouseEvent) {
+    const ctrl = e.ctrlKey || e.metaKey;
+    const from = anchor ? sorted.findIndex((x) => x.path === anchor) : -1;
+    if (e.shiftKey && from >= 0) {
+      const to = sorted.findIndex((x) => x.path === p);
+      const next = ctrl ? new Set(selected) : new Set<string>();
+      for (const x of sorted.slice(Math.min(from, to), Math.max(from, to) + 1)) next.add(x.path);
+      selected = next;
+      return;
+    }
     const next = new Set(selected);
-    if (e.ctrlKey || e.metaKey) {
+    if (ctrl) {
       if (next.has(p)) next.delete(p); else next.add(p);
     } else {
       next.clear();
       next.add(p);
     }
     selected = next;
+    anchor = p;
   }
 
   // SFTP v3 carries numeric ids only; the backend resolves them against the
@@ -668,8 +685,16 @@
           class:selected={selected.has(e.path)}
           ondblclick={() => openEntry(e)}
           onclick={(ev) => toggleSelect(e.path, ev)}
+          onmousedown={(ev) => { if (ev.shiftKey) ev.preventDefault(); /* no text selection on Shift click */ }}
           onkeydown={(ev) => {
             if (ev.key === "Enter") { ev.preventDefault(); openEntry(e); }
+            if (ev.key === "Delete") {
+              ev.preventDefault();
+              // The focused row counts when nothing covers it, the way
+              // Delete on a file you just tabbed to works in Explorer.
+              if (!selected.has(e.path)) selected = new Set([e.path]);
+              void deleteSelected();
+            }
           }}
           role="button"
           tabindex="0"
