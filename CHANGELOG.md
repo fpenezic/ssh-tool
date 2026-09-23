@@ -7,6 +7,74 @@ a prerelease upstream.
 
 ---
 
+## [0.101.0] - Faster file transfers you can resume, and warnings before things expire
+
+### File transfers
+
+- **SFTP is as fast as scp.** Transfers used to keep only two small
+  requests in flight at a time, so the round trip to the server set the
+  speed, not your link: on a host where scp managed 5 MB/s, ssh-tool
+  stayed under half of that. Uploads and downloads now keep up to 64
+  requests in flight and match scp. Folder transfers get the same speed.
+- **An interrupted transfer picks up where it stopped.** A file now
+  arrives as `name.part` and only takes its real name once every byte
+  is there, so a cancelled or dropped transfer can no longer leave a
+  cut-off file that looks complete. Transfer the same file again and it
+  continues from the `.part`. Before continuing, the end of the `.part`
+  is compared with the source, and if the source has changed in the
+  meantime the transfer starts over instead of producing a mix of two
+  files. Uploading over an existing file on the server now replaces it
+  in one step.
+- **Speed and time left.** Each transfer shows its current speed
+  (averaged over the last few seconds, so it does not jump around) and
+  an estimate of the time left. When it finishes, it shows the average
+  speed. A transfer that stalls drops to 0 instead of showing its last
+  speed.
+- **Several transfers at once get a summary and Cancel all.** With two
+  or more running, a line at the top shows the overall progress, the
+  combined speed and the time left, plus a button to cancel them all.
+  Finished transfers stay listed until the last one is done and then go
+  together, so the overall percentage never goes backwards.
+- **Shift-click and Delete in the file pane.** Shift-click selects a
+  range the way it does in Explorer (Ctrl+Shift adds the range to what
+  is already selected), and the Delete key deletes the selection after
+  the usual confirmation.
+
+### Issues and expiry warnings
+
+- **The issues badge opens a list.** It used to show a count, with the
+  details only in a hover tooltip, and clicking it opened a Settings
+  page without saying which issue it was about. Now it opens a panel
+  where each issue has a short explanation and a button that takes you
+  to where it gets fixed.
+- **Credentials about to expire show up there.** Any credential with an
+  expiry date appears 14 days before it runs out, and in red once it
+  has. Until now the only warning was a small label in the Credentials
+  view.
+- **So do opkssh certificates, measured against their own lifetime.**
+  Some providers issue certificates for a few hours, others for a
+  week, so a fixed number of days would not fit both. A certificate is
+  flagged with a quarter of its lifetime left and marked urgent with a
+  tenth left. For certificates opkssh issues without an end date, the
+  end is the forced re-login set by "Max cert age".
+- **Sign in now.** An opkssh certificate can be renewed on the spot,
+  from the issues panel or from the credential itself, instead of
+  waiting for the next connect to open the browser. While the sign-in
+  is waiting for the browser the button turns into Cancel. If a connect
+  is already waiting for the same sign-in, the click reuses it rather
+  than opening a second browser tab.
+
+### Fixed
+
+- **A torn-off tab keeps its connection's name and icon.** A saved
+  local connection (a WSL shell, for example) moved into its own window
+  showed up as plain "wsl" with the default icon, and only looked right
+  again after docking it back. The same happened after reloading the
+  window. Every tab in a separate window, SSH ones included, was also
+  missing its connection icon. Both are fixed.
+
+---
+
 ## [0.100.3] - Three things that were not doing what they said
 
 All three were found by using the app, and all three had been quietly
