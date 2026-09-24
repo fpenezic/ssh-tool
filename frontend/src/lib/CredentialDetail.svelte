@@ -1157,6 +1157,10 @@
     align-items: center;
     gap: 0.6rem;
     flex-wrap: wrap;
+    /* Same column as the form below, so Sign in now sits at the fields'
+       right edge instead of the far side of a wide window. */
+    max-width: 560px;
+    box-sizing: border-box;
     margin: 0 0 0.6rem;
     padding: 0.45rem 0.6rem;
     background: var(--mantle);
