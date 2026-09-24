@@ -9,6 +9,17 @@ a prerelease upstream.
 
 ## [Unreleased]
 
+### Added
+
+- **Colours in the SFTP file list.** Folders are blue, hidden files are
+  dimmed, and interrupted transfers (`.part`) and editor or browser
+  leftovers (`.swp`, `.tmp`, `.crdownload`, `name~`) are marked with a
+  "partial" or "temp" label. Archives, scripts, packet captures, config
+  files and symlinks each get their own icon colour, and a file owned by
+  someone other than the user you are logged in as shows its owner in
+  orange. Each rule can be switched off from the new Colors menu at the
+  end of the file pane toolbar; the choice is remembered on this machine.
+
 ### Fixed
 
 - **A clear error when a server has no working SFTP.** On some NAS
