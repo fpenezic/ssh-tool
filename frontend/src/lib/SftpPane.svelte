@@ -12,6 +12,8 @@
   import { sessionCwd } from "./sessionCwd.svelte";
   import { toast } from "./toast.svelte";
   import { focusSessionTerminal } from "./paneFocus";
+  import { entryStyle } from "./sftpEntryStyle";
+  import { sftpView } from "./sftpView.svelte";
 
   interface Props {
     sessionId: string;
@@ -19,6 +21,9 @@
   let { sessionId }: Props = $props();
 
   let cwd = $state("");
+  // SSH login name on the target, for the "owned by someone else" mark.
+  let loginUser = $state("");
+  let viewMenuOpen = $state(false);
   let entries = $state<SftpEntry[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
@@ -85,6 +90,7 @@
     try {
       const r = await api.sftpList(sessionId, path);
       cwd = r.path;
+      loginUser = r.user ?? "";
       entries = r.entries ?? [];
     } catch (e: any) {
       error = errMsg(e);
@@ -94,6 +100,7 @@
   }
 
   onMount(() => {
+    void sftpView.load();
     load("");
     // Native OS file-drop listener. Wails forwards drops on any element
     // tagged data-file-drop-target back into Go where we re-emit a
@@ -659,6 +666,20 @@
       <button onclick={mkdir} title="New folder">＋ Folder</button>
       <button onclick={renameSelected} disabled={selected.size !== 1}>Rename</button>
       <button class="danger" onclick={deleteSelected} disabled={selected.size === 0}>Delete</button>
+      <div class="view-menu">
+        <button onclick={() => (viewMenuOpen = !viewMenuOpen)} aria-expanded={viewMenuOpen} title="Row colours">Colors ▾</button>
+        {#if viewMenuOpen}
+          <!-- Closes on any click outside; the backdrop is not a control. -->
+          <div class="view-backdrop" role="presentation" onclick={() => (viewMenuOpen = false)}></div>
+          <div class="view-pop">
+            <label><input type="checkbox" checked={sftpView.prefs.dirs} onchange={(ev) => sftpView.set("dirs", ev.currentTarget.checked)} /> Folders in colour</label>
+            <label><input type="checkbox" checked={sftpView.prefs.hidden} onchange={(ev) => sftpView.set("hidden", ev.currentTarget.checked)} /> Dim hidden files</label>
+            <label><input type="checkbox" checked={sftpView.prefs.temp} onchange={(ev) => sftpView.set("temp", ev.currentTarget.checked)} /> Mark .part and temp files</label>
+            <label><input type="checkbox" checked={sftpView.prefs.types} onchange={(ev) => sftpView.set("types", ev.currentTarget.checked)} /> Icon colour by file type</label>
+            <label><input type="checkbox" checked={sftpView.prefs.owner} onchange={(ev) => sftpView.set("owner", ev.currentTarget.checked)} /> Mark other owners</label>
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 
@@ -666,7 +687,14 @@
     <div class="err">{error}</div>
   {/if}
 
-  <div class="listing">
+  <div
+    class="listing"
+    class:v-dirs={sftpView.prefs.dirs}
+    class:v-hidden={sftpView.prefs.hidden}
+    class:v-temp={sftpView.prefs.temp}
+    class:v-types={sftpView.prefs.types}
+    class:v-owner={sftpView.prefs.owner}
+  >
     <div class="head row">
       <button class="col name" onclick={() => setSort("name")}>Name {sortKey === "name" ? (sortDir === "asc" ? "▲" : "▼") : ""}</button>
       <button class="col size" onclick={() => setSort("size")}>Size {sortKey === "size" ? (sortDir === "asc" ? "▲" : "▼") : ""}</button>
@@ -680,9 +708,15 @@
       <div class="hint">Empty directory</div>
     {:else}
       {#each sorted as e (e.path)}
+        {@const st = entryStyle(e, loginUser)}
         <div
-          class="row entry"
+          class="row entry {st.kind ? `k-${st.kind}` : ''}"
           class:selected={selected.has(e.path)}
+          class:dir={e.is_dir}
+          class:link={e.is_link}
+          class:hidden-f={st.hidden}
+          class:temp={st.temp}
+          class:foreign={st.foreign}
           ondblclick={() => openEntry(e)}
           onclick={(ev) => toggleSelect(e.path, ev)}
           onmousedown={(ev) => { if (ev.shiftKey) ev.preventDefault(); /* no text selection on Shift click */ }}
@@ -704,6 +738,7 @@
               {#if e.is_dir}<IconFolder size={13} />{:else if e.is_link}<IconLink size={13} />{:else}<IconFile size={13} />{/if}
             </span>
             <span class="nm">{e.name}</span>
+            {#if st.tempLabel}<span class="temp-badge">{st.tempLabel}</span>{/if}
             {#if e.is_link && e.target}<span class="link-tgt">→ {e.target}</span>{/if}
           </span>
           <span class="col size">{e.is_dir ? "" : fmtSize(e.size)}</span>
@@ -961,6 +996,36 @@
   .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .link-tgt { color: var(--overlay0); font-size: 0.72rem; }
   .ico { width: 1rem; text-align: center; }
+
+  /* Row colouring, each rule behind its own view toggle (Colors menu). */
+  .v-dirs .row.dir .ico, .v-dirs .row.dir .nm { color: var(--blue); }
+  .v-dirs .row.dir .nm { font-weight: 600; }
+  .v-hidden .row.hidden-f .col { color: var(--overlay1); }
+  .v-hidden .row.hidden-f .ico { opacity: 0.6; }
+  .v-hidden.v-dirs .row.hidden-f.dir .nm { color: color-mix(in srgb, var(--blue) 55%, var(--overlay1)); }
+  .v-temp .row.temp { background: color-mix(in srgb, var(--peach) 8%, transparent); }
+  .v-temp .row.temp .ico, .v-temp .row.temp .nm { color: var(--peach); }
+  .v-temp .row.temp .nm { font-style: italic; }
+  .temp-badge { display: none; flex: none; font-size: 0.65rem; line-height: 1.2; padding: 0 0.3rem; border: 1px solid var(--peach); border-radius: 3px; color: var(--peach); }
+  .v-temp .temp-badge { display: inline-block; }
+  .v-types .row.k-arch .ico { color: var(--mauve); }
+  .v-types .row.k-code .ico { color: var(--green); }
+  .v-types .row.k-cap .ico { color: var(--teal); }
+  .v-types .row.k-cfg .ico { color: var(--yellow); }
+  .v-types .row.link .ico, .v-types .row.link .nm { color: var(--sapphire); }
+  .v-owner .row.foreign .col.owner { color: var(--peach); }
+
+  .view-menu { position: relative; }
+  .view-backdrop { position: fixed; inset: 0; z-index: 20; }
+  .view-pop {
+    position: absolute; right: 0; top: calc(100% + 4px); z-index: 21;
+    display: flex; flex-direction: column; gap: 0.3rem;
+    padding: 0.5rem 0.7rem;
+    background: var(--mantle); border: 1px solid var(--surface1); border-radius: 4px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    white-space: nowrap;
+  }
+  .view-pop label { display: flex; align-items: center; gap: 0.4rem; cursor: pointer; }
   .hint { padding: 0.8rem; color: var(--overlay0); }
 
   .transfers {

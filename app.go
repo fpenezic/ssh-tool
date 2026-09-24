@@ -5569,9 +5569,12 @@ func (a *App) ImportArchive(req ImportArchiveRequest) (*exporter.ImportSummary, 
 // SftpListResult mirrors what we hand to the frontend on SftpList. The
 // resolved path is returned because the caller may pass "" to mean "home
 // directory" and the UI wants to render the actual path that was listed.
+// User is the SSH login name on the target, so the pane can mark entries
+// owned by someone else.
 type SftpListResult struct {
 	Path    string               `json:"path"`
 	Entries []sshlayer.SftpEntry `json:"entries"`
+	User    string               `json:"user"`
 }
 
 func (a *App) SftpList(sessionID, remotePath string) (*SftpListResult, error) {
@@ -5583,7 +5586,11 @@ func (a *App) SftpList(sessionID, remotePath string) (*SftpListResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &SftpListResult{Path: resolved, Entries: entries}, nil
+	res := &SftpListResult{Path: resolved, Entries: entries}
+	if tgt := sess.TargetClient(); tgt != nil {
+		res.User = tgt.User()
+	}
+	return res, nil
 }
 
 func (a *App) SftpStat(sessionID, remotePath string) (*sshlayer.SftpEntry, error) {

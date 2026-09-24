@@ -1460,6 +1460,8 @@ export const api = {
     G.SftpList(sessionId, remotePath) as unknown as Promise<{
       path: string;
       entries: SftpEntry[];
+      /** SSH login name on the target; "" when unknown. */
+      user: string;
     }>,
   sftpStat: (sessionId: string, remotePath: string) =>
     G.SftpStat(sessionId, remotePath) as unknown as Promise<SftpEntry>,

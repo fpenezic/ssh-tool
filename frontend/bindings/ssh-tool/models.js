@@ -4036,6 +4036,8 @@ export class ScrollbackSnapshot {
  * SftpListResult mirrors what we hand to the frontend on SftpList. The
  * resolved path is returned because the caller may pass "" to mean "home
  * directory" and the UI wants to render the actual path that was listed.
+ * User is the SSH login name on the target, so the pane can mark entries
+ * owned by someone else.
  */
 export class SftpListResult {
     /**
@@ -4056,6 +4058,13 @@ export class SftpListResult {
              * @type {ssh$0.SftpEntry[]}
              */
             this["entries"] = [];
+        }
+        if (!("user" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["user"] = "";
         }
 
         Object.assign(this, $$source);
