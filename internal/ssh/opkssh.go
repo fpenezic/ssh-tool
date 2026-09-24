@@ -9,6 +9,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -201,7 +202,7 @@ func certLoginLock(credentialID string) *lockChan {
 // lockChan is a mutex you can wait on with a context. sync.Mutex cannot do
 // this: once blocked in Lock() a goroutine is stuck until the holder
 // releases, no matter what happens to its context. That is unacceptable
-// here, where the holder may be waiting out a five-minute OIDC timeout for
+// here, where the holder may be waiting out the OIDC timeout (opksshLoginTimeout) for
 // a browser tab the user already closed.
 type lockChan struct {
 	ch chan struct{}
@@ -233,7 +234,7 @@ func (l *lockChan) tryLock() bool {
 // does not know which host that is - they see a row of hosts on
 // "Connecting..." and press Cancel on whichever they are looking at. That
 // only ever cancelled a WAITER, leaving the login running and the lock held
-// for the rest of its five-minute ceiling.
+// for the rest of its timeout.
 //
 // So the login runs on a context that is cancelled when the LAST interested
 // party goes away: cancel one host and the others still get their cert;
@@ -267,6 +268,12 @@ var (
 )
 
 const abandonCooldown = 3 * time.Second
+
+// opksshLoginTimeout bounds one browser sign-in. Long enough to type a
+// password and approve an MFA prompt; a sign-in that has to wait for a
+// phone fetched from another room is simply started again. It also bounds
+// how long a forgotten browser tab holds the credential's login lock.
+const opksshLoginTimeout = 90 * time.Second
 
 // signInRecentlyCancelled reports whether a sign-in for this credential was
 // cancelled inside the cooldown window.
@@ -709,10 +716,11 @@ func runOpksshLoginNative(ctx context.Context, cfg *OpksshConfig) (keyPEM, certB
 	}
 
 	// Auth opens the browser and blocks until the OIDC callback is received.
-	// The 5-minute ceiling is a child of the caller's ctx, so either the
-	// timeout OR an explicit cancel (user hit Cancel on the connect) aborts
-	// oc.Auth and frees this goroutine.
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	// The ceiling is a child of the caller's ctx, so either the timeout OR
+	// an explicit cancel (user hit Cancel on the connect) aborts oc.Auth and
+	// frees this goroutine.
+	parent := ctx
+	ctx, cancel := context.WithTimeout(ctx, opksshLoginTimeout)
 	defer cancel()
 
 	// Keep the process network-alive across the browser round-trip; the
@@ -722,9 +730,14 @@ func runOpksshLoginNative(ctx context.Context, cfg *OpksshConfig) (keyPEM, certB
 		defer LoginKeepAliveHook(false)
 	}
 
-	log.Printf("opkssh: opening browser for OIDC login (5-minute timeout)")
+	log.Printf("opkssh: opening browser for OIDC login (%s timeout)", opksshLoginTimeout)
 	pkt, err := oc.Auth(ctx)
 	if err != nil {
+		// Our own ceiling, not a cancel from the caller: say so instead of
+		// surfacing a bare "context deadline exceeded".
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) && parent.Err() == nil {
+			return nil, nil, fmt.Errorf("opkssh: sign-in timed out after %s without a response from the browser", opksshLoginTimeout)
+		}
 		return nil, nil, fmt.Errorf("opkssh: OIDC auth failed: %w", err)
 	}
 	log.Printf("opkssh: OIDC auth complete")

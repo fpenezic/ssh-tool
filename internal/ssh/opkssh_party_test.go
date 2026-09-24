@@ -31,7 +31,7 @@ func TestLoginPartySurvivesOneMemberLeaving(t *testing.T) {
 
 // ...and the other half: when everyone gives up, the browser flow must be
 // abandoned immediately. Before this, cancelling every host left the login
-// running to its five-minute ceiling, holding the lock and the OIDC callback
+// running to its login timeout, holding the lock and the OIDC callback
 // port, so retrying was silently queued behind a flow nobody wanted.
 func TestLoginPartyCancelsWhenLastMemberLeaves(t *testing.T) {
 	const cred = "party-cancels"

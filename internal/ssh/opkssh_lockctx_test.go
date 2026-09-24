@@ -11,7 +11,7 @@ import (
 // in Mutex.Lock() cannot be released by cancelling its context. With the
 // per-credential login lock that meant a user who closed the OIDC browser
 // tab left every queued connect stuck on "Connecting..." behind a Cancel
-// button that could not do anything, until the winner's five-minute timeout
+// button that could not do anything, until the winner's login timeout
 // expired.
 func TestLockCtxReleasesOnCancel(t *testing.T) {
 	l := newLockChan()

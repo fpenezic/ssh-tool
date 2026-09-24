@@ -1656,7 +1656,7 @@ login was always enough.
 The lock is a channel, not a `sync.Mutex`, because it must be
 waitable with a context. A goroutine blocked in `Mutex.Lock()` cannot
 be released by cancelling its context - and the holder here may be
-sitting out a five-minute OIDC timeout for a browser tab the user
+sitting out an OIDC login timeout for a browser tab the user
 already closed. With a plain mutex every queued connect showed
 "Connecting..." behind a Cancel button that could not do anything.
 `lockCtx` selects on the lock and `ctx.Done()`, so Cancel works while
@@ -1692,7 +1692,7 @@ cannot tell WHICH host owns the browser tab. They see a row of hosts on
 "Connecting..." and press Cancel on whichever one they are looking at,
 which is almost never the one performing the login. Cancelling a waiter
 frees that waiter and leaves the login running - holding the lock and
-the callback port for the rest of its five-minute ceiling.
+the callback port for the rest of its login timeout.
 
 So the login does not run on the winning connect's context. It runs on
 a per-credential `loginParty` context, refcounted over everyone
