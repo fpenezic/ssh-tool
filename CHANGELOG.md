@@ -7,7 +7,7 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.102.0] - A faster terminal and a colour-coded file list
 
 ### Added
 
@@ -39,6 +39,16 @@ a prerelease upstream.
   problem. It now says the server has no working SFTP subsystem, that
   SSH itself is fine, and whether the server closed or refused the SFTP
   channel. The original error is kept in brackets.
+
+### opkssh
+
+- **A browser sign-in gives up after 90 seconds instead of five
+  minutes.** If the sign-in page is left alone, the connect or Sign in
+  now fails after 90 s with "sign-in timed out" instead of waiting five
+  minutes and then reporting "context deadline exceeded". Start it again
+  if you needed longer. The Sign in now button on a credential also
+  lines up with the fields below it instead of sitting at the far edge
+  of the window.
 
 ---
 
