@@ -22,6 +22,15 @@ a prerelease upstream.
 
 ### Fixed
 
+- **Fast output no longer lags behind in the terminal.** A command that
+  prints a lot at once (`seq 1 10000000`, a big log, `cat` of a large
+  file) used to take about twice as long to appear on screen as it took
+  to run, because every small piece of output was sent to the window
+  separately. Output that arrives in a burst is now sent in larger
+  pieces, and the terminal keeps up with the server. Typing and
+  full-screen programs respond exactly as before. Applies to SSH and
+  local tabs.
+
 - **A clear error when a server has no working SFTP.** On some NAS
   firmware SSH works but SFTP does not (the server is set up to run an
   SFTP program it does not have), and opening the file pane failed with

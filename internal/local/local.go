@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"ssh-tool/internal/initcmd"
+	"ssh-tool/internal/outbatch"
 
 	pty "github.com/aymanbagabas/go-pty"
 )
@@ -229,27 +230,35 @@ func (s *Session) pumpOutput() {
 	// scrollback lines after being backgrounded, while the same thing over
 	// SSH to the same WSL box did not reproduce. See gotcha 49.
 	buf := make([]byte, 8192)
+	// Bursts go out as a few large events instead of one per read; see
+	// internal/outbatch.
+	out := outbatch.New(func(chunk []byte) {
+		cum := s.scrollback.append(chunk)
+		// Read the sink under the lock: SetOutputSink writes it under
+		// s.mu, and an unsynchronised read here is a data race (-race
+		// flags it). Benign in practice today - the sink is installed
+		// before the pump starts - but a correctness fix, and load-bearing
+		// once a second consumer (session sharing) is involved. The lock
+		// is dropped before calling the sink so a slow sink can't stall
+		// SetOutputSink.
+		s.mu.Lock()
+		sink := s.outputSink
+		s.mu.Unlock()
+		if sink != nil {
+			sink(chunk, cum)
+		}
+	})
 	for {
 		n, err := s.pty.Read(buf)
 		if n > 0 {
+			// Copied: an immediate emit hands this slice to the sink,
+			// which may keep it.
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
-			cum := s.scrollback.append(chunk)
-			// Read the sink under the lock: SetOutputSink writes it under
-			// s.mu, and an unsynchronised read here is a data race (-race
-			// flags it). Benign in practice today - the sink is installed
-			// before the pump starts - but a correctness fix, and load-bearing
-			// once a second consumer (session sharing) is involved. The lock
-			// is dropped before calling the sink so a slow sink can't stall
-			// SetOutputSink.
-			s.mu.Lock()
-			sink := s.outputSink
-			s.mu.Unlock()
-			if sink != nil {
-				sink(chunk, cum)
-			}
+			out.Push(chunk)
 		}
 		if err != nil {
+			out.Close()
 			if !errors.Is(err, io.EOF) {
 				log.Printf("local session %s: pty read: %v", s.ID, err)
 			}

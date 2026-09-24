@@ -17,6 +17,7 @@ import (
 
 	"ssh-tool/internal/creds"
 	"ssh-tool/internal/initcmd"
+	"ssh-tool/internal/outbatch"
 	"ssh-tool/internal/store"
 )
 
@@ -954,6 +955,12 @@ func pumpOutput(s *Session, r io.Reader, sink EventSink) {
 	// incomplete tail back and prepending it to the next read guarantees
 	// every emitted chunk is sequence-complete.
 	var carry []byte
+	// Bursts go out as a few large events instead of one per read; see
+	// internal/outbatch. Each pushed chunk is already sequence-complete, so
+	// their concatenation is too.
+	out := outbatch.New(func(b []byte) {
+		s.scrollback.appendAndEmit(b, sink, s.ID)
+	})
 	for {
 		n, err := r.Read(buf)
 		if n > 0 {
@@ -973,15 +980,14 @@ func pumpOutput(s *Session, r io.Reader, sink EventSink) {
 				carry = append(carry[:0:0], hold...)
 			}
 			if len(emit) > 0 {
-				s.scrollback.appendAndEmit(emit, sink, s.ID)
+				out.Push(emit)
 			}
 		}
 		if err != nil {
 			// Flush whatever incomplete tail remains so nothing is lost on
 			// close (e.g. a final prompt ending mid-sequence).
-			if len(carry) > 0 {
-				s.scrollback.appendAndEmit(carry, sink, s.ID)
-			}
+			out.Push(carry)
+			out.Close()
 			return
 		}
 	}

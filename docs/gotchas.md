@@ -782,9 +782,8 @@ everything mobile is behind a build tag or an `isMobile` check.
     (`internal/ssh/session.go`), which base64-encodes to ~10.9 KB, so
     EVERY full chunk of bulk output takes that HTTP round trip. It
     stays ordered (the fetch is chained on `window._wails.__eq`), but
-    if terminal throughput ever regresses, shrinking the read buffer
-    to 4 KiB puts chunks back on the inline path - measure before
-    changing it.
+    per-event cost, not size, is what limits throughput - see gotcha
+    64 before touching read or event sizes.
     Do NOT delete the `cum`/`pending` reorder buffer in
     `Terminal.svelte` on the strength of the ordering fix: the frame
     coalescing it does is valuable on its own, and it silently covers
@@ -1161,6 +1160,22 @@ everything mobile is behind a build tag or an `isMobile` check.
     flow is reached through the `opksshLogin` package variable so tests
     can substitute a fake that issues a real key + cert
     (`opkssh_signin_test.go`).
+
+64. **Terminal output speed is bounded by the NUMBER of events, not
+    their size.** Measured on Windows/WebView2 with `seq 1 1000000`
+    (7.9 MB): the pump read it in 366 ms as 1407 events of ~5.6 KB,
+    the JS handlers used 67 ms, xterm kept up - and the events still
+    took 1726 ms to arrive, about 1.2 ms of delivery each. Both pumps
+    (SSH and local PTY) therefore push through `internal/outbatch`:
+    the first chunk after 10 ms of quiet is emitted at once (echo
+    latency unchanged), the rest of a burst is held for up to 10 ms or
+    256 KB and emitted as one event. Same run: 46 events, 1057 ms.
+    Do not go back to one event per read, and do not "fix" throughput
+    by shrinking reads to stay under the 8 KB inline limit from
+    gotcha 49 - that multiplies the event count. The coalescer calls
+    emit under its own lock, so the flush timer and the pump never
+    reorder bytes; `cum` is still assigned in `appendAndEmit`, after
+    batching, so it stays a byte offset of what was emitted.
 
 ---
 
