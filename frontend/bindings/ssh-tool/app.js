@@ -1456,6 +1456,25 @@ export function IconSetFolderNamed(folderID, name, color) {
 }
 
 /**
+ * ImagesDelete removes an uploaded icon from the library. Rows still using
+ * it go back to their default icon; the count of those rows is returned.
+ * @param {string} id
+ * @returns {$CancellablePromise<number>}
+ */
+export function ImagesDelete(id) {
+    return $Call.ByID(2409131888, id);
+}
+
+/**
+ * ImagesDeleteUnused removes every uploaded icon nothing uses and returns
+ * how many were removed.
+ * @returns {$CancellablePromise<number>}
+ */
+export function ImagesDeleteUnused() {
+    return $Call.ByID(913455970);
+}
+
+/**
  * @param {string} id
  * @returns {$CancellablePromise<$models.ImagePayload | null>}
  */

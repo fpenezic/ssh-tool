@@ -397,3 +397,52 @@ func (d *DB) FolderIconHints() (map[string]FolderIconHint, error) {
 	}
 	return out, nil
 }
+
+// imageRefTables lists every column that can point at an uploaded image.
+// Deleting an image has to clear all of them first: foreign keys are on,
+// so a delete with a reference left fails outright.
+var imageRefTables = []string{"folders", "connections", "credential_refs"}
+
+// DeleteImage removes an uploaded icon. Rows still using it fall back to
+// their default icon (their icon_image_id is cleared and updated_at bumped,
+// so the change syncs like any other icon edit). Returns how many rows
+// lost the icon.
+func (d *DB) DeleteImage(id string) (int, error) {
+	tx, err := d.conn.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	now := time.Now().Unix()
+	cleared := 0
+	for _, t := range imageRefTables {
+		res, err := tx.Exec("UPDATE "+t+" SET icon_image_id = NULL, updated_at = ? WHERE icon_image_id = ?", now, id)
+		if err != nil {
+			return 0, err
+		}
+		n, _ := res.RowsAffected()
+		cleared += int(n)
+	}
+	res, err := tx.Exec("DELETE FROM images WHERE id = ?", id)
+	if err != nil {
+		return 0, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return 0, fmt.Errorf("image %s not found", id)
+	}
+	return cleared, tx.Commit()
+}
+
+// DeleteUnusedImages removes every uploaded icon that no folder,
+// connection or credential uses, and returns how many went.
+func (d *DB) DeleteUnusedImages() (int, error) {
+	q := "DELETE FROM images WHERE id NOT IN (SELECT icon_image_id FROM folders WHERE icon_image_id IS NOT NULL)" +
+		" AND id NOT IN (SELECT icon_image_id FROM connections WHERE icon_image_id IS NOT NULL)" +
+		" AND id NOT IN (SELECT icon_image_id FROM credential_refs WHERE icon_image_id IS NOT NULL)"
+	res, err := d.conn.Exec(q)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}

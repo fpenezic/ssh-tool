@@ -5195,6 +5195,18 @@ func (a *App) ImagesUpload(b64Data, mime string) (string, error) {
 	return a.db.PutImage(data, mime)
 }
 
+// ImagesDelete removes an uploaded icon from the library. Rows still using
+// it go back to their default icon; the count of those rows is returned.
+func (a *App) ImagesDelete(id string) (int, error) {
+	return a.db.DeleteImage(id)
+}
+
+// ImagesDeleteUnused removes every uploaded icon nothing uses and returns
+// how many were removed.
+func (a *App) ImagesDeleteUnused() (int, error) {
+	return a.db.DeleteUnusedImages()
+}
+
 // ImagesSetFolder assigns an image to a folder. Pass empty imageID to
 // clear the icon (folder reverts to the default emoji).
 func (a *App) ImagesSetFolder(folderID, imageID string) error {

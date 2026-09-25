@@ -13,6 +13,8 @@
   import { BUILTIN_ICONS } from "./builtinIcons";
   import { palette, resolveColorTag } from "./palette";
   import IconImage from "@lucide/svelte/icons/image";
+  import { showConfirm } from "./confirmModal.svelte.ts";
+  import { tree } from "./stores.svelte";
 
   type Props = {
     // "credentialFolder" is named-icon only (no uploaded-image column).
@@ -132,6 +134,52 @@
     // tree uses, so flipping back to the connection list shows
     // them instantly.
     for (const img of existing) imageCache.ensure(img.id);
+  }
+
+  // Delete mode turns a click on a library icon into "delete it" instead of
+  // "use it", so there is no small target to aim at inside each tile.
+  let deleteMode = $state(false);
+  const unusedCount = $derived(existing.filter((i) => i.use_count === 0).length);
+
+  async function deleteImage(img: { id: string; use_count: number }) {
+    err = null;
+    const users = img.use_count;
+    const ok = await showConfirm({
+      title: "Delete icon",
+      message: users > 0
+        ? `This icon is used by ${users} item${users === 1 ? "" : "s"}. They go back to the default icon.`
+        : "This icon is not used anywhere.",
+      okLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.imagesDelete(img.id);
+      existing = existing.filter((i) => i.id !== img.id);
+      if (img.id === currentIconId) onChange?.(null);
+      // Other rows wearing it still show the old icon until the tree is
+      // reloaded from the store.
+      if (users > 0) void tree.load();
+    } catch (e: any) {
+      err = errMsg(e);
+    }
+  }
+
+  async function deleteUnused() {
+    err = null;
+    const ok = await showConfirm({
+      title: "Remove unused icons",
+      message: `Remove ${unusedCount} uploaded icon${unusedCount === 1 ? "" : "s"} that nothing uses?`,
+      okLabel: "Remove",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.imagesDeleteUnused();
+      existing = existing.filter((i) => i.use_count > 0);
+    } catch (e: any) {
+      err = errMsg(e);
+    }
   }
 
   async function pickExisting(imageId: string) {
@@ -316,15 +364,29 @@
       {:else if existing.length === 0}
         <div class="empty">No icons in the library yet - upload one first.</div>
       {:else}
-        <div class="grid">
+        <div class="lib-tools">
+          <button
+            type="button"
+            class:danger-on={deleteMode}
+            onclick={() => (deleteMode = !deleteMode)}
+            title="Click an icon to delete it"
+          >{deleteMode ? "Done deleting" : "Delete icons…"}</button>
+          <button type="button" disabled={unusedCount === 0} onclick={deleteUnused}>
+            Remove unused ({unusedCount})
+          </button>
+        </div>
+        <div class="grid" class:deleting={deleteMode}>
           {#each existing as img (img.id)}
             {@const url = imageCache.peek(img.id)}
             <button
               type="button"
               class="cell"
               class:current={img.id === currentIconId}
-              title={`${img.use_count} use${img.use_count === 1 ? "" : "s"}`}
-              onclick={() => pickExisting(img.id)}
+              class:unused={img.use_count === 0}
+              title={deleteMode
+                ? `Delete (${img.use_count} use${img.use_count === 1 ? "" : "s"})`
+                : `${img.use_count} use${img.use_count === 1 ? "" : "s"}`}
+              onclick={() => (deleteMode ? deleteImage(img) : pickExisting(img.id))}
             >
               {#if url}
                 <img src={url} alt="" />
@@ -441,6 +503,11 @@
   }
   .cell img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .cell .ph { color: var(--overlay0); font-size: 0.75rem; }
+  .cell.unused img { opacity: 0.55; }
+  .grid.deleting .cell:hover { border-color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+  .lib-tools { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
+  .lib-tools button { font-size: 0.75rem; }
+  .lib-tools button.danger-on { color: var(--red); border-color: var(--red); }
   .cell .badge {
     position: absolute; bottom: 2px; right: 3px;
     background: var(--surface0); color: var(--subtext0);
