@@ -7,6 +7,40 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **When each command was run.** Settings -> Terminal -> "Show when each
+  command was run" puts the time at the right edge of every command
+  line, in SSH and local tabs. Times are recorded all the time, so
+  switching it on also shows commands you ran earlier, and they stay put
+  when a tab is detached, redocked, reloaded or left in the background.
+  Enter inside vim, htop, nmtui, Claude Code and similar programs is not
+  a command and gets no time.
+- **Copy a command together with its output.** Point at the right edge
+  of a command line and click "copy" to put the prompt, the command and
+  everything it printed on the clipboard, ready to paste into a message.
+  From the keyboard, Ctrl+Shift+Up/Down selects one command's block at a
+  time and your usual copy key copies it. The button can be turned off
+  in Settings -> Terminal.
+- **Delete uploaded icons.** The icon picker's uploaded library can now
+  remove every icon nothing uses in one go, or delete icons one by one
+  (items that used a deleted icon go back to the default one).
+
+### Fixed
+
+- **Ctrl+K no longer opens connections twice.** After Ctrl-clicking a
+  host, one Enter could open every marked host twice, or open a host the
+  mouse had only passed over. Marking a host now also puts you back in
+  the search box with the text selected, so the next name is typed
+  straight over it.
+- **Selected .part files are visible in the file pane.** The orange tint
+  on partial and temp files hid the selection and the hover highlight.
+- **Shorter descriptions in Settings -> Terminal.**
+
+---
+
 ## [0.102.0] - A faster terminal and a colour-coded file list
 
 ### Added
