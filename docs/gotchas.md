@@ -1208,6 +1208,18 @@ everything mobile is behind a build tag or an `isMobile` check.
     up (IconPicker's `confirming`). Re-enable it on the next tick: the
     click that closed the dialog is still being dispatched.
 
+68. **A preference syncs unless its key is listed as machine-local.**
+    Sync seals the whole store.db and a pull mirrors it back, so every
+    `SettingsSet` key travels to the user's other machines by default -
+    grepping the syncer for "settings" finds nothing, which makes it
+    look like settings are excluded. The exceptions are routed by key:
+    `localStateKeys` in `local_state.go` sends a key to
+    `<DataDir>/local-state.json` (outside the sync and backup envelope),
+    and `machineLocalSettings` in `internal/store/mirror.go` keeps a key
+    through a pull. A new per-machine preference needs its key in
+    `localStateKeys`; the match is exact, so a versioned key has to be
+    listed for every version still written.
+
 ---
 
 # Archive
