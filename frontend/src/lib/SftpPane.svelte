@@ -581,11 +581,13 @@
 
   // ---------- helpers ----------
 
+  // Bytes, 1024-based, always with the B: a bare "95 M/s" read as
+  // megabits as easily as megabytes.
   function fmtSize(n: number): string {
     if (n < 1024) return `${Math.round(n)} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} K`;
-    if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} M`;
-    return `${(n / 1024 / 1024 / 1024).toFixed(1)} G`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+    return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
   }
   function fmtDate(unix: number): string {
     const d = new Date(unix * 1000);
