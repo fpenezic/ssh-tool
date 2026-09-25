@@ -7,7 +7,7 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.103.0] - Command timestamps, copy a command with its output, and a tidier Settings
 
 ### Added
 
@@ -18,15 +18,37 @@ a prerelease upstream.
   when a tab is detached, redocked, reloaded or left in the background.
   Enter inside vim, htop, nmtui, Claude Code and similar programs is not
   a command and gets no time.
-- **Copy a command together with its output.** Point at the right edge
-  of a command line and click "copy" to put the prompt, the command and
-  everything it printed on the clipboard, ready to paste into a message.
-  From the keyboard, Ctrl+Shift+Up/Down selects one command's block at a
-  time and your usual copy key copies it. The button can be turned off
-  in Settings -> Terminal.
+- **Copy a command together with its output.** Rest the mouse at the
+  right side of a command's output and a Copy button appears; it puts
+  the prompt, the command and everything it printed on the clipboard,
+  ready to paste into a message. Hovering the button shades exactly what
+  will be copied. From the keyboard, Ctrl+Shift+Up/Down selects one
+  command's block at a time and your usual copy key copies it. The
+  button can be turned off in Settings -> Terminal.
 - **Delete uploaded icons.** The icon picker's uploaded library can now
   remove every icon nothing uses in one go, or delete icons one by one
-  (items that used a deleted icon go back to the default one).
+  or several at once with Ctrl-click. Items that used a deleted icon go
+  back to the default one.
+- **Import anything through an LLM.** Settings -> Import now points out
+  that any other format (a CSV, a spreadsheet, an inventory file,
+  another tool's export) can be handed to an LLM client with manage
+  access, which stages the folders and connections for you to approve.
+
+### Settings
+
+- **Regrouped.** The side list now reads General, Terminal, Connections,
+  Security, Data, Integrations and Diagnostics. The old Connection page
+  held five unrelated things; the shells (in-app local shell, external
+  terminal) and the window and startup options now have pages of their
+  own. The terminal colour scheme sits next to the font instead of below
+  every checkbox, and the server status readout moved to Appearance with
+  the other status bar options.
+- **Links land on the setting.** Opening Settings from an issue, the LLM
+  share popover or the Import page scrolls to the setting in question
+  and pulses it briefly.
+- **Every page looks the same.** LLM access, Session sharing and Desktop
+  integration were wider than the rest and not centred.
+- **Shorter descriptions in Settings -> Terminal.**
 
 ### Fixed
 
@@ -37,7 +59,8 @@ a prerelease upstream.
   straight over it.
 - **Selected .part files are visible in the file pane.** The orange tint
   on partial and temp files hid the selection and the hover highlight.
-- **Shorter descriptions in Settings -> Terminal.**
+- **The icon picker shows current use counts** and always opens ready to
+  pick an icon, even if you were deleting icons the last time.
 
 ---
 
