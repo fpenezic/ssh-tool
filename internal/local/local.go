@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"ssh-tool/internal/cmdmarks"
 	"ssh-tool/internal/initcmd"
 	"ssh-tool/internal/outbatch"
 
@@ -64,6 +65,9 @@ type Session struct {
 	onClose    func(sessionID string)
 
 	scrollback scrollbackBuf
+	// cmdMarks records where in the output stream each command was run;
+	// see internal/cmdmarks.
+	cmdMarks cmdmarks.Log
 
 	// outputSink is the App-supplied callback that forwards every PTY
 	// chunk to the frontend (over the same `pty_output:<id>` event
@@ -304,6 +308,19 @@ func (s *Session) SetOnClose(fn func(string)) {
 // guest is a second concurrent writer, and interleaved pty.Write calls would
 // tear multi-byte input. Dedicated mutex, not s.mu (which is held across the
 // sink call in pumpOutput).
+// WriteCommand is Write for input that runs a command (it carries Enter):
+// the mark is taken first, so it points at the command line and not at the
+// output the command is about to produce.
+func (s *Session) WriteCommand(data []byte) error {
+	s.cmdMarks.Add(s.scrollback.total(), time.Now().UnixMilli())
+	return s.Write(data)
+}
+
+// CommandMarks returns the commands run within output positions [from, to].
+func (s *Session) CommandMarks(from, to uint64) []cmdmarks.Mark {
+	return s.cmdMarks.Between(from, to)
+}
+
 func (s *Session) Write(data []byte) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()

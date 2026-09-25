@@ -1816,6 +1816,17 @@ export function LocalShellWrite(sessionID, dataB64) {
 }
 
 /**
+ * LocalShellWriteCommand is LocalShellWrite for input that runs a command;
+ * see SshWriteCommand.
+ * @param {string} sessionID
+ * @param {string} dataB64
+ * @returns {$CancellablePromise<void>}
+ */
+export function LocalShellWriteCommand(sessionID, dataB64) {
+    return $Call.ByID(4072621930, sessionID, dataB64);
+}
+
+/**
  * LogDir returns the path to the rotating log file directory so the
  * Settings page can show + open it.
  * @returns {$CancellablePromise<string>}
@@ -3507,6 +3518,17 @@ export function SshSystemCommand(connectionID) {
  */
 export function SshWrite(sessionID, dataB64) {
     return $Call.ByID(3443123936, sessionID, dataB64);
+}
+
+/**
+ * SshWriteCommand is SshWrite for input that runs a command: it also
+ * records when, for the terminal's command timestamps.
+ * @param {string} sessionID
+ * @param {string} dataB64
+ * @returns {$CancellablePromise<void>}
+ */
+export function SshWriteCommand(sessionID, dataB64) {
+    return $Call.ByID(897907337, sessionID, dataB64);
 }
 
 /**

@@ -30,6 +30,7 @@ import (
 
 	"ssh-tool/internal/backup"
 	"ssh-tool/internal/bitwarden"
+	"ssh-tool/internal/cmdmarks"
 	"ssh-tool/internal/creds"
 	"ssh-tool/internal/exporter"
 	"ssh-tool/internal/httpc"
@@ -3510,6 +3511,20 @@ func (a *App) SshRespondHostKey(challengeID string, accept bool, remember bool, 
 	return nil
 }
 
+// SshWriteCommand is SshWrite for input that runs a command: it also
+// records when, for the terminal's command timestamps.
+func (a *App) SshWriteCommand(sessionID, dataB64 string) error {
+	data, err := sshlayer.DecodeBase64(dataB64)
+	if err != nil {
+		return fmt.Errorf("invalid base64: %w", err)
+	}
+	sess, ok := a.pool.Get(sessionID)
+	if !ok {
+		return fmt.Errorf("session not found")
+	}
+	return sess.WriteCommand(data)
+}
+
 func (a *App) SshWrite(sessionID, dataB64 string) error {
 	data, err := sshlayer.DecodeBase64(dataB64)
 	if err != nil {
@@ -3785,6 +3800,9 @@ type ScrollbackSnapshot struct {
 	// 303 -> 711 lines against a terminal steady at 69). Kept because it is
 	// one cheap pass and it makes the ring's growth visible in diagnostics.
 	Lines int `json:"lines"`
+	// Marks are the commands run within the snapshot, so a replay can put
+	// their timestamps back on the right lines.
+	Marks []cmdmarks.Mark `json:"marks"`
 }
 
 // SshGetScrollback returns the buffered PTY output for a session plus the
@@ -3804,6 +3822,7 @@ func (a *App) SshGetScrollback(sessionID string) (ScrollbackSnapshot, error) {
 		B64:   sshlayer.EncodeBase64(data),
 		Cum:   cum,
 		Lines: bytes.Count(data, []byte{'\n'}),
+		Marks: sess.CommandMarks(cum-uint64(len(data)), cum),
 	}, nil
 }
 
@@ -3956,6 +3975,20 @@ func (a *App) openLocalShell(req local.SpawnRequest, connectionID, name string) 
 		Kind:      sess.Kind,
 		Display:   sess.Display,
 	}, nil
+}
+
+// LocalShellWriteCommand is LocalShellWrite for input that runs a command;
+// see SshWriteCommand.
+func (a *App) LocalShellWriteCommand(sessionID, dataB64 string) error {
+	sess, ok := a.localPool.Get(sessionID)
+	if !ok {
+		return nil
+	}
+	data, err := sshlayer.DecodeBase64(dataB64)
+	if err != nil {
+		return err
+	}
+	return sess.WriteCommand(data)
 }
 
 func (a *App) LocalShellWrite(sessionID, dataB64 string) error {
@@ -4227,6 +4260,7 @@ func (a *App) LocalShellGetScrollback(sessionID string) (ScrollbackSnapshot, err
 		B64:   sshlayer.EncodeBase64(data),
 		Cum:   cum,
 		Lines: bytes.Count(data, []byte{'\n'}),
+		Marks: sess.CommandMarks(cum-uint64(len(data)), cum),
 	}, nil
 }
 

@@ -4,7 +4,8 @@
   import { sessionCwd, parseOsc7 } from "./sessionCwd.svelte";
   import { parseOsc52 } from "./osc52";
   import { userIsTypingElsewhere, keyboardIsClaimed, onKeyboardReleased } from "./paneFocus";
-  import { Terminal } from "@xterm/xterm";
+  import { Terminal, type IDecoration, type IMarker } from "@xterm/xterm";
+  import { blockRange, fmtStamp, isCommandInput, splitAtMarks } from "./cmdStamps";
   import { FitAddon } from "@xterm/addon-fit";
   import { VS16Addon } from "./unicodeVS16";
   import { DecrqmStripper, stripSnapshot } from "./decrqm";
@@ -64,6 +65,13 @@
       ? api.localShellWrite(sid, b64)
       : api.sshWrite(sid, b64);
   }
+  // Input that runs a command goes through the *Command variant so the
+  // backend records when (see internal/cmdmarks).
+  function writeCommandIPC(sid: string, b64: string): Promise<unknown> {
+    return isLocal(sid)
+      ? api.localShellWriteCommand(sid, b64)
+      : api.sshWriteCommand(sid, b64);
+  }
   function resizeIPC(sid: string, cols: number, rows: number): Promise<unknown> {
     return isLocal(sid)
       ? api.localShellResize(sid, cols, rows)
@@ -83,6 +91,172 @@
   // wired up).
   let term: Terminal | null = $state(null);
   let fit: FitAddon | null = $state(null);
+
+  // ---------- command timestamps + copy ----------
+  //
+  // One xterm marker per command line. Its decoration sits on the last 8
+  // cells of the row: the time when that setting is on, "copy" while the
+  // mouse is over those cells (a click copies the command and its output).
+  // Markers only live as long as xterm's buffer: a reset (scrollback
+  // release, reload, redock) drops them, and the snapshot replay puts them
+  // back from the backend's marks.
+  type Stamp = { marker: IMarker; at: number; deco?: IDecoration; el?: HTMLElement };
+  const STAMP_CELLS = 8; // "HH:MM:SS"
+  let stamps: Stamp[] = [];
+  let hoverStamp: Stamp | null = null;
+
+  function paintStamp(st: Stamp) {
+    const el = st.el;
+    if (!el) return;
+    const hover = st === hoverStamp;
+    el.textContent = hover ? "⧉ copy" : terminalPrefs.commandTimestamps ? fmtStamp(st.at) : "";
+    el.classList.toggle("hover", hover);
+    // Opaque while hovered, so "copy" reads cleanly over a long command.
+    el.style.background = hover ? (term?.options.theme?.background ?? "") : "";
+    el.title = hover ? `Copy this command and its output (run ${fmtStamp(st.at)})` : "";
+  }
+
+  function decorate(st: Stamp) {
+    if (st.deco || !term) return;
+    const deco = term.registerDecoration({ marker: st.marker, anchor: "right", width: STAMP_CELLS, layer: "top" });
+    if (!deco) return;
+    deco.onRender((el) => {
+      if (st.el !== el) {
+        st.el = el;
+        el.classList.add("cmd-stamp");
+        // Keep the click from starting an xterm selection underneath.
+        el.addEventListener("mousedown", (e) => { e.stopPropagation(); e.preventDefault(); });
+        el.addEventListener("click", (e) => { e.stopPropagation(); void copyBlock(st); });
+      }
+      // Set here rather than trusted to xterm: with anchor "right" and no
+      // x offset it leaves `right` unset (the element sits at the left
+      // edge), and the element has no colour of its own - it inherited one
+      // that was invisible on a dark theme. Measured via the app log.
+      el.style.right = "0";
+      el.style.left = "auto";
+      el.style.color = term?.options.theme?.foreground ?? "";
+      paintStamp(st);
+    });
+    st.deco = deco;
+  }
+
+  function addStamp(at: number) {
+    if (!term) return;
+    const marker = term.registerMarker(0);
+    if (!marker) return;
+    const st: Stamp = { marker, at };
+    stamps.push(st);
+    marker.onDispose(() => {
+      st.deco?.dispose();
+      stamps = stamps.filter((x) => x !== st);
+      if (hoverStamp === st) hoverStamp = null;
+    });
+    decorate(st);
+  }
+
+  function clearStamps() {
+    for (const st of stamps) {
+      st.deco?.dispose();
+      st.marker.dispose();
+    }
+    stamps = [];
+    hoverStamp = null;
+    blockIdx = null;
+  }
+
+  $effect(() => {
+    void terminalPrefs.commandTimestamps;
+    for (const st of stamps) paintStamp(st);
+  });
+
+  // Live stamps in buffer order, so "previous" and "next" mean what they say.
+  function liveStamps(): Stamp[] {
+    return stamps.filter((s) => s.marker.line >= 0).sort((a, b) => a.marker.line - b.marker.line);
+  }
+
+  function rangeOf(st: Stamp): [number, number] | null {
+    if (!term) return null;
+    const list = liveStamps();
+    const idx = list.indexOf(st);
+    if (idx < 0) return null;
+    const buf = term.buffer.active;
+    return blockRange(list.map((s) => s.marker.line), idx, buf.baseY + buf.cursorY);
+  }
+
+  // Copy a command's block. Goes through xterm's own selection so wrapped
+  // lines and trailing blanks come out exactly as a drag-select would give.
+  async function copyBlock(st: Stamp) {
+    const r = rangeOf(st);
+    if (!term || !r) return;
+    const hadSel = term.hasSelection();
+    term.selectLines(r[0], r[1]);
+    const text = term.getSelection();
+    if (!hadSel) term.clearSelection();
+    try {
+      await writeClipboard(text);
+      const lines = text.split("\n");
+      const cmd = lines[0].trim();
+      const more = lines.length - 1;
+      toast.ok(`Copied: ${cmd.length > 40 ? cmd.slice(0, 40) + "..." : cmd}${more > 0 ? ` + ${more} line${more === 1 ? "" : "s"}` : ""}`);
+    } catch (e) {
+      console.warn("clipboard write failed", e);
+    }
+  }
+
+  // Which command shows "copy": the one whose stamp cells the mouse is on.
+  function onStampHover(e: MouseEvent) {
+    if (!term) return;
+    const screen = term.element?.querySelector(".xterm-screen");
+    let next: Stamp | null = null;
+    if (screen && stamps.length > 0 && terminalPrefs.commandCopy) {
+      const rect = screen.getBoundingClientRect();
+      // Only over the stamp's own cells at the right edge: showing "copy"
+      // for any hover on the row made it flicker on and off as the mouse
+      // crossed the terminal.
+      const col = Math.floor((e.clientX - rect.left) / (rect.width / term.cols));
+      if (e.clientY >= rect.top && e.clientY < rect.bottom && col >= term.cols - STAMP_CELLS && col < term.cols) {
+        const row = Math.floor((e.clientY - rect.top) / (rect.height / term.rows));
+        const line = term.buffer.active.viewportY + row;
+        next = stamps.find((s) => s.marker.line === line) ?? null;
+      }
+    }
+    if (next === hoverStamp) return;
+    const prev = hoverStamp;
+    hoverStamp = next;
+    if (prev) paintStamp(prev);
+    if (next) paintStamp(next);
+  }
+  function onStampLeave() {
+    const prev = hoverStamp;
+    hoverStamp = null;
+    if (prev) paintStamp(prev);
+  }
+
+  // Ctrl+Shift+Up / Down walk the commands, selecting one block at a time;
+  // the usual copy key then copies it. blockIdx is the selected command.
+  let blockIdx: number | null = null;
+  function selectBlock(dir: -1 | 1): boolean {
+    if (!term) return false;
+    const list = liveStamps();
+    if (list.length === 0) return false;
+    let idx = blockIdx === null || !term.hasSelection()
+      ? (dir < 0 ? list.length - 1 : null)
+      : blockIdx + dir;
+    if (idx === null || idx < 0) idx = 0;
+    if (idx >= list.length) {
+      blockIdx = null;
+      term.clearSelection();
+      term.scrollToBottom();
+      return true;
+    }
+    blockIdx = idx;
+    const r = rangeOf(list[idx]);
+    if (!r) return false;
+    term.selectLines(r[0], r[1]);
+    const buf = term.buffer.active;
+    if (r[0] < buf.viewportY || r[0] >= buf.viewportY + term.rows) term.scrollToLine(Math.max(0, r[0] - 1));
+    return true;
+  }
   let search: SearchAddon | null = null;
   let webLinks: WebLinksAddon | null = null;
 
@@ -328,6 +502,22 @@
     }
 
     const mode = copyPastePrefs.mode;
+
+    // Ctrl+Shift+Up / Down (Cmd+Shift on mac): select the previous / next
+    // command with its output; Escape drops that selection. See selectBlock.
+    const blockMod = mode === "mac" ? (e.metaKey && e.shiftKey && !e.ctrlKey) : (e.ctrlKey && e.shiftKey && !e.metaKey);
+    if (blockMod && !e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      if (selectBlock(e.key === "ArrowUp" ? -1 : 1)) {
+        e.preventDefault();
+        return false;
+      }
+      return true;
+    }
+    if (e.key === "Escape" && blockIdx !== null && term?.hasSelection()) {
+      blockIdx = null;
+      term.clearSelection();
+      return false;
+    }
 
     // Ctrl+Shift+F (or Cmd+Shift+F on mac) opens the in-app search
     // bar over the scrollback. Plain Ctrl+F belongs to the remote
@@ -867,6 +1057,7 @@
     // The decision that matters is the one at drop time.
 
     unwire();
+    clearStamps();
     try {
       term.options.scrollback = terminalPrefs.scrollback;
       term.reset();
@@ -1175,7 +1366,17 @@
       // Always write to this session - xterm's onData is the source of
       // truth for what the user typed here AND for the report responses
       // the remote app asked for (both must reach this PTY).
-      writeIPC(sessionId, toB64(bytes)).catch(console.warn);
+      if (fromUser && term && isCommandInput(data, {
+        altScreen: term.buffer.active.type === "alternate",
+        sendFocusMode: term.modes.sendFocusMode,
+        mouseTrackingMode: term.modes.mouseTrackingMode,
+      })) {
+        // Stamped before the write: the cursor is still on the command line.
+        addStamp(Date.now());
+        writeCommandIPC(sessionId, toB64(bytes)).catch(console.warn);
+      } else {
+        writeIPC(sessionId, toB64(bytes)).catch(console.warn);
+      }
       // Broadcast fans the keystroke to every other member, SSH or local
       // PTY alike (see BroadcastFanOut in app.go which handles both pools).
       // ONLY user-originated input is fanned out: a terminal report
@@ -1218,6 +1419,8 @@
     // contextmenu fires for right-click and we route by mode.
     host.addEventListener("contextmenu", onContextMenu, { capture: true });
     host.addEventListener("mousedown", onMouseDown, { capture: true });
+    host.addEventListener("mousemove", onStampHover);
+    host.addEventListener("mouseleave", onStampLeave);
     // Releases modifierClickPending after the link handler (which runs on
     // mouseup) has had its turn, so a Ctrl+click that hits no link does not
     // leave select-to-copy switched off.
@@ -1517,7 +1720,23 @@
           // corrupts the screen - text landing mid-row, box-drawing coming
           // apart. Reported on a tab left in the background long enough for
           // its scrollback to be dropped and then replayed on return.
-          try { t.write(stripSnapshot(resyncAnsi(fromB64(snap.b64))), clearReplay); }
+          //
+          // Written in pieces cut at each command mark, so a stamp can be
+          // placed while the cursor is on that command's line: xterm runs a
+          // write's callback as soon as that piece is parsed, before the
+          // next. resyncAnsi only trims the head, so the result still ends
+          // at snap.cum and the marks' offsets hold.
+          try {
+            const segs = splitAtMarks(resyncAnsi(fromB64(snap.b64)), snap.cum ?? 0, snap.marks);
+            segs.forEach((seg, i) => {
+              const last = i === segs.length - 1;
+              const mark = seg.mark;
+              t.write(stripSnapshot(seg.bytes), () => {
+                if (mark) addStamp(mark.at);
+                if (last) clearReplay();
+              });
+            });
+          }
           catch (err) { console.warn("[term] snapshot write threw", err); replaying = false; }
         }
         watermark = snap.cum ?? 0;
@@ -1865,6 +2084,8 @@
     host?.removeEventListener("wheel", onWheel, { capture: true } as any);
     host?.removeEventListener("contextmenu", onContextMenu, { capture: true } as any);
     host?.removeEventListener("mousedown", onMouseDown, { capture: true } as any);
+    host?.removeEventListener("mousemove", onStampHover);
+    host?.removeEventListener("mouseleave", onStampLeave);
     host?.removeEventListener("mouseup", onMouseUpReleaseModifier);
     host?.removeEventListener("pointerdown", onPointerDown, { capture: true } as any);
     host?.removeEventListener("pointermove", onPointerMove, { capture: true } as any);
@@ -2063,6 +2284,22 @@
      parent then shrinks, those inline dimensions stay set and the
      overflow can clip mid-glyph. max-height: 100% lets the inline
      style act as a hint, not a hard constraint. */
+  /* Command timestamp (see addStamp): xterm positions the element over the
+     last 8 cells of the command's row. Dimmed and click-through, so it
+     never gets in the way of selecting what is under it. */
+  :global(.term-host .xterm .cmd-stamp.hover) {
+    pointer-events: auto;
+    cursor: pointer;
+    opacity: 1;
+    text-decoration: underline;
+  }
+  :global(.term-host .xterm .cmd-stamp) {
+    pointer-events: none;
+    text-align: right;
+    font-size: 0.8em;
+    opacity: 0.45;
+    white-space: nowrap;
+  }
   :global(.term-host .xterm) {
     max-height: 100%;
     max-width: 100%;

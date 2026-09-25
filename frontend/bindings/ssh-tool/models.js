@@ -8,6 +8,9 @@ import { Create as $Create } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as cmdmarks$0 from "./internal/cmdmarks/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as ssh$0 from "./internal/ssh/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -4017,6 +4020,15 @@ export class ScrollbackSnapshot {
              */
             this["lines"] = 0;
         }
+        if (!("marks" in $$source)) {
+            /**
+             * Marks are the commands run within the snapshot, so a replay can put
+             * their timestamps back on the right lines.
+             * @member
+             * @type {cmdmarks$0.Mark[]}
+             */
+            this["marks"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -4027,7 +4039,11 @@ export class ScrollbackSnapshot {
      * @returns {ScrollbackSnapshot}
      */
     static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType16;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("marks" in $$parsedSource) {
+            $$parsedSource["marks"] = $$createField3_0($$parsedSource["marks"]);
+        }
         return new ScrollbackSnapshot(/** @type {Partial<ScrollbackSnapshot>} */($$parsedSource));
     }
 }
@@ -4076,7 +4092,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType16;
+        const $$createField1_0 = $$createType18;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -4260,7 +4276,7 @@ export class ShareStartInput {
      * @returns {ShareStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType18;
+        const $$createField6_0 = $$createType20;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField6_0($$parsedSource["sessions"]);
@@ -5138,7 +5154,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType20;
+        const $$createField0_0 = $$createType22;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -5492,9 +5508,11 @@ const $$createType11 = $Create.Nullable($$createType10);
 const $$createType12 = TailscaleConfig.createFrom;
 const $$createType13 = $Create.Nullable($$createType12);
 const $$createType14 = wg$0.Status.createFrom;
-const $$createType15 = ssh$0.SftpEntry.createFrom;
+const $$createType15 = cmdmarks$0.Mark.createFrom;
 const $$createType16 = $Create.Array($$createType15);
-const $$createType17 = ShareSessionInput.createFrom;
+const $$createType17 = ssh$0.SftpEntry.createFrom;
 const $$createType18 = $Create.Array($$createType17);
-const $$createType19 = ssh$0.ParsedPacket.createFrom;
+const $$createType19 = ShareSessionInput.createFrom;
 const $$createType20 = $Create.Array($$createType19);
+const $$createType21 = ssh$0.ParsedPacket.createFrom;
+const $$createType22 = $Create.Array($$createType21);

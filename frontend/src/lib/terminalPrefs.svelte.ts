@@ -14,6 +14,8 @@ const SCROLLBACK_KEY = "terminal_scrollback";
 const DISABLE_WEBGL_KEY = "terminal_disable_webgl";
 const SERVER_STATS_KEY = "server_stats_enabled";
 const BG_SCROLLBACK_DELAY_KEY = "terminal_bg_scrollback_delay";
+const COMMAND_TIMESTAMPS_KEY = "terminal_command_timestamps";
+const COMMAND_COPY_KEY = "terminal_command_copy";
 const MIN_FONT = 6;
 const MAX_FONT = 40;
 const DEFAULT_FONT = 13;
@@ -53,6 +55,13 @@ class TerminalPrefs {
   // command on the remote host, which not every box (network gear) should
   // get, and it's only worth the round-trip if the user wants it.
   serverStatsEnabled = $state(false);
+  // When true, each command line shows the time it was run at its right
+  // edge. The times are recorded either way (backend, per session), so
+  // turning this on also shows commands run before it was switched on.
+  commandTimestamps = $state(false);
+  // When true, hovering the right edge of a command line offers "copy"
+  // (the command and its output). On by default.
+  commandCopy = $state(true);
   // Grace period before a backgrounded tab drops its xterm scrollback (it is
   // replayed from the backend ring when the tab comes back). Flipping between
   // two tabs otherwise pays a drop+replay on every switch, which is wasted
@@ -122,6 +131,18 @@ class TerminalPrefs {
       // missing key is fine
     }
     try {
+      const v = await api.settingsGet(COMMAND_TIMESTAMPS_KEY);
+      if (v === "1") this.commandTimestamps = true;
+    } catch {
+      // missing key is fine
+    }
+    try {
+      const v = await api.settingsGet(COMMAND_COPY_KEY);
+      if (v === "0") this.commandCopy = false;
+    } catch {
+      // missing key is fine
+    }
+    try {
       const raw = await api.settingsGet(BG_SCROLLBACK_DELAY_KEY);
       const n = parseInt(raw, 10);
       // 0 is a real choice here (release immediately), so test the parse
@@ -139,6 +160,18 @@ class TerminalPrefs {
     if (this.serverStatsEnabled === v) return;
     this.serverStatsEnabled = v;
     api.settingsSet(SERVER_STATS_KEY, v ? "1" : "0").catch(console.warn);
+  }
+
+  setCommandTimestamps(v: boolean) {
+    if (this.commandTimestamps === v) return;
+    this.commandTimestamps = v;
+    api.settingsSet(COMMAND_TIMESTAMPS_KEY, v ? "1" : "0").catch(console.warn);
+  }
+
+  setCommandCopy(v: boolean) {
+    if (this.commandCopy === v) return;
+    this.commandCopy = v;
+    api.settingsSet(COMMAND_COPY_KEY, v ? "1" : "0").catch(console.warn);
   }
 
   setDisableWebgl(v: boolean) {

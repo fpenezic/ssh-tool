@@ -872,8 +872,9 @@ export const api = {
   getConnectionHasPassword: (connectionId: string) =>
     G.GetConnectionHasPassword(connectionId) as unknown as Promise<boolean>,
   sshWrite: (sessionId: string, dataB64: string) => G.SshWrite(sessionId, dataB64),
+  sshWriteCommand: (sessionId: string, dataB64: string) => G.SshWriteCommand(sessionId, dataB64),
   sshGetScrollback: (sessionId: string) =>
-    G.SshGetScrollback(sessionId) as unknown as Promise<{ b64: string; cum: number; lines?: number }>,
+    G.SshGetScrollback(sessionId) as unknown as Promise<{ b64: string; cum: number; lines?: number; marks?: CommandMark[] | null }>,
   sshResize: (sessionId: string, cols: number, rows: number) =>
     G.SshResize(sessionId, cols, rows),
   sshDisconnect: (sessionId: string) => G.SshDisconnect(sessionId),
@@ -1156,11 +1157,13 @@ export const api = {
     }>,
   localShellWrite: (sessionId: string, dataB64: string) =>
     G.LocalShellWrite(sessionId, dataB64),
+  localShellWriteCommand: (sessionId: string, dataB64: string) =>
+    G.LocalShellWriteCommand(sessionId, dataB64),
   localShellResize: (sessionId: string, cols: number, rows: number) =>
     G.LocalShellResize(sessionId, cols, rows),
   localShellDisconnect: (sessionId: string) => G.LocalShellDisconnect(sessionId),
   localShellGetScrollback: (sessionId: string) =>
-    G.LocalShellGetScrollback(sessionId) as unknown as Promise<{ b64?: string; cum: number; lines?: number }>,
+    G.LocalShellGetScrollback(sessionId) as unknown as Promise<{ b64?: string; cum: number; lines?: number; marks?: CommandMark[] | null }>,
   localShellList: () =>
     G.LocalShellList() as unknown as Promise<
       // connection_id / name: set when a saved local connection opened
@@ -1506,6 +1509,13 @@ export const api = {
     G.SftpPickDownloadDirDest() as unknown as Promise<string>,
   sftpCancelTransfer: (transferId: string) => G.SftpCancelTransfer(transferId),
 };
+
+/** A command run in a terminal session: `cum` is the output byte count when
+ *  Enter was sent, `at` Unix milliseconds. See internal/cmdmarks. */
+export interface CommandMark {
+  cum: number;
+  at: number;
+}
 
 export interface SftpEntry {
   name: string;

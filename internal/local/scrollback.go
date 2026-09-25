@@ -55,6 +55,13 @@ func trimToLineStart(buf []byte) []byte {
 	return out
 }
 
+// total is the number of output bytes emitted so far.
+func (b *scrollbackBuf) total() uint64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.totalEmitted
+}
+
 func (b *scrollbackBuf) snapshot() ([]byte, uint64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

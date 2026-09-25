@@ -3125,6 +3125,39 @@
           </div>
         </div>
       </label>
+
+      <label class:active={terminalPrefs.commandTimestamps}>
+        <input
+          type="checkbox"
+          checked={terminalPrefs.commandTimestamps}
+          onchange={(e) => terminalPrefs.setCommandTimestamps((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Show when each command was run</div>
+          <div class="mode-desc">
+            Time at the right edge of each command line. Always recorded,
+            so it also shows commands run before you turned this on.
+          </div>
+        </div>
+      </label>
+
+      <label class:active={terminalPrefs.commandCopy}>
+        <input
+          type="checkbox"
+          checked={terminalPrefs.commandCopy}
+          onchange={(e) => terminalPrefs.setCommandCopy((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Copy button on command lines</div>
+          <div class="mode-desc">
+            Point at the right edge of a command line to copy the command
+            and its output. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd>
+            selects a command and its output; copy it with your usual copy
+            key (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> works in every
+            copy mode). Works with this option off too.
+          </div>
+        </div>
+      </label>
     </fieldset>
 
     <p class="hint">Color scheme</p>

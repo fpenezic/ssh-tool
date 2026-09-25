@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/ssh"
 
+	"ssh-tool/internal/cmdmarks"
 	"ssh-tool/internal/creds"
 	"ssh-tool/internal/initcmd"
 	"ssh-tool/internal/outbatch"
@@ -230,6 +231,13 @@ func trimToLineStart(buf []byte) []byte {
 // snapshot returns the current buffer plus the cumulative-bytes counter at
 // snapshot time, taken under the same lock so they're consistent. The
 // frontend uses the counter as a threshold for live events to discard.
+// total is the number of output bytes emitted so far.
+func (b *scrollbackBuf) total() uint64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.totalEmitted
+}
+
 func (b *scrollbackBuf) snapshot() ([]byte, uint64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -293,6 +301,9 @@ type Session struct {
 	// scrollback accumulates raw PTY bytes so newly mounted terminals
 	// (after detach/redock or UI reload) can replay the session history.
 	scrollback scrollbackBuf
+	// cmdMarks records where in the output stream each command was run;
+	// see internal/cmdmarks.
+	cmdMarks cmdmarks.Log
 }
 
 // Scrollback returns a snapshot of the accumulated PTY output bytes together
@@ -1211,6 +1222,19 @@ func cleanup(clients []*ssh.Client) {
 // makes each Write atomic relative to other Writes; it cannot (and should not)
 // stop the remote interleaving host and guest input at the line level, which
 // is tmux semantics and the point of sharing.
+// WriteCommand is Write for input that runs a command (it carries Enter):
+// the mark is taken first, so it points at the command line and not at the
+// output the command is about to produce.
+func (s *Session) WriteCommand(data []byte) error {
+	s.cmdMarks.Add(s.scrollback.total(), time.Now().UnixMilli())
+	return s.Write(data)
+}
+
+// CommandMarks returns the commands run within output positions [from, to].
+func (s *Session) CommandMarks(from, to uint64) []cmdmarks.Mark {
+	return s.cmdMarks.Between(from, to)
+}
+
 func (s *Session) Write(data []byte) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
