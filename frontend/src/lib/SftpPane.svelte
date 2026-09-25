@@ -1003,7 +1003,9 @@
   .v-hidden .row.hidden-f .col { color: var(--overlay1); }
   .v-hidden .row.hidden-f .ico { opacity: 0.6; }
   .v-hidden.v-dirs .row.hidden-f.dir .nm { color: color-mix(in srgb, var(--blue) 55%, var(--overlay1)); }
-  .v-temp .row.temp { background: color-mix(in srgb, var(--peach) 8%, transparent); }
+  /* The tint yields to hover and selection, or a selected .part row looks
+     exactly like an unselected one (same specificity, later rule wins). */
+  .v-temp .row.temp:not(.selected):not(:hover) { background: color-mix(in srgb, var(--peach) 8%, transparent); }
   .v-temp .row.temp .ico, .v-temp .row.temp .nm { color: var(--peach); }
   .v-temp .row.temp .nm { font-style: italic; }
   .temp-badge { display: none; flex: none; font-size: 0.65rem; line-height: 1.2; padding: 0 0.3rem; border: 1px solid var(--peach); border-radius: 3px; color: var(--peach); }
