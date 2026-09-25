@@ -59,8 +59,8 @@ class TerminalPrefs {
   // edge. The times are recorded either way (backend, per session), so
   // turning this on also shows commands run before it was switched on.
   commandTimestamps = $state(false);
-  // When true, hovering the right edge of a command line offers "copy"
-  // (the command and its output). On by default.
+  // When true, hovering a command's output shows a Copy button for the
+  // command and its output. On by default.
   commandCopy = $state(true);
   // Grace period before a backgrounded tab drops its xterm scrollback (it is
   // replayed from the backend ring when the tab comes back). Flipping between

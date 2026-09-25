@@ -95,25 +95,17 @@
   // ---------- command timestamps + copy ----------
   //
   // One xterm marker per command line. Its decoration sits on the last 8
-  // cells of the row: the time when that setting is on, "copy" while the
-  // mouse is over those cells (a click copies the command and its output).
+  // cells of the row and shows the time when that setting is on. Copying a
+  // block is a separate overlay (see blockUi below).
   // Markers only live as long as xterm's buffer: a reset (scrollback
   // release, reload, redock) drops them, and the snapshot replay puts them
   // back from the backend's marks.
   type Stamp = { marker: IMarker; at: number; deco?: IDecoration; el?: HTMLElement };
   const STAMP_CELLS = 8; // "HH:MM:SS"
   let stamps: Stamp[] = [];
-  let hoverStamp: Stamp | null = null;
 
   function paintStamp(st: Stamp) {
-    const el = st.el;
-    if (!el) return;
-    const hover = st === hoverStamp;
-    el.textContent = hover ? "⧉ copy" : terminalPrefs.commandTimestamps ? fmtStamp(st.at) : "";
-    el.classList.toggle("hover", hover);
-    // Opaque while hovered, so "copy" reads cleanly over a long command.
-    el.style.background = hover ? (term?.options.theme?.background ?? "") : "";
-    el.title = hover ? `Copy this command and its output (run ${fmtStamp(st.at)})` : "";
+    if (st.el) st.el.textContent = terminalPrefs.commandTimestamps ? fmtStamp(st.at) : "";
   }
 
   function decorate(st: Stamp) {
@@ -121,13 +113,8 @@
     const deco = term.registerDecoration({ marker: st.marker, anchor: "right", width: STAMP_CELLS, layer: "top" });
     if (!deco) return;
     deco.onRender((el) => {
-      if (st.el !== el) {
-        st.el = el;
-        el.classList.add("cmd-stamp");
-        // Keep the click from starting an xterm selection underneath.
-        el.addEventListener("mousedown", (e) => { e.stopPropagation(); e.preventDefault(); });
-        el.addEventListener("click", (e) => { e.stopPropagation(); void copyBlock(st); });
-      }
+      st.el = el;
+      el.classList.add("cmd-stamp");
       // Set here rather than trusted to xterm: with anchor "right" and no
       // x offset it leaves `right` unset (the element sits at the left
       // edge), and the element has no colour of its own - it inherited one
@@ -149,7 +136,7 @@
     marker.onDispose(() => {
       st.deco?.dispose();
       stamps = stamps.filter((x) => x !== st);
-      if (hoverStamp === st) hoverStamp = null;
+      if (blockUi?.st === st) blockUi = null;
     });
     decorate(st);
   }
@@ -160,7 +147,7 @@
       st.marker.dispose();
     }
     stamps = [];
-    hoverStamp = null;
+    blockUi = null;
     blockIdx = null;
   }
 
@@ -203,33 +190,112 @@
     }
   }
 
-  // Which command shows "copy": the one whose stamp cells the mouse is on.
-  function onStampHover(e: MouseEvent) {
-    if (!term) return;
+  // Copy overlay. With the mouse resting anywhere inside a command's block
+  // (the command line through its last output line), a faint Copy button
+  // floats at the block's right edge, centred on the part of the block that
+  // is on screen. The block is shaded only while the button itself is
+  // hovered, as a preview of what will be copied. A per-row target at the
+  // edge was too small to hit; shading on every hover was distracting.
+  let wrapEl: HTMLDivElement | undefined = $state();
+  let blockUi = $state<{ st: Stamp; top: number; height: number; left: number; width: number } | null>(null);
+  let lastMouseY: number | null = null;
+  let lastMouseX = 0;
+  let copyHover = $state(false);
+
+  // The block under a screen point, with its on-screen geometry, or null.
+  // Only the right-hand strip of the terminal counts (COPY_ZONE): the
+  // button lives there, and hovering the text itself - reading it,
+  // selecting it - should not bring it up.
+  // A fixed number of cells, not a fraction: 20% of a full-screen
+  // terminal was 50+ columns of text.
+  const COPY_ZONE_CELLS = 14;
+  function blockAt(clientX: number, clientY: number): { st: Stamp; top: number; height: number; left: number; width: number } | null {
+    if (!term || !wrapEl || !terminalPrefs.commandCopy || stamps.length === 0) return null;
     const screen = term.element?.querySelector(".xterm-screen");
-    let next: Stamp | null = null;
-    if (screen && stamps.length > 0 && terminalPrefs.commandCopy) {
-      const rect = screen.getBoundingClientRect();
-      // Only over the stamp's own cells at the right edge: showing "copy"
-      // for any hover on the row made it flicker on and off as the mouse
-      // crossed the terminal.
-      const col = Math.floor((e.clientX - rect.left) / (rect.width / term.cols));
-      if (e.clientY >= rect.top && e.clientY < rect.bottom && col >= term.cols - STAMP_CELLS && col < term.cols) {
-        const row = Math.floor((e.clientY - rect.top) / (rect.height / term.rows));
-        const line = term.buffer.active.viewportY + row;
-        next = stamps.find((s) => s.marker.line === line) ?? null;
-      }
+    if (!screen) return null;
+    const rect = screen.getBoundingClientRect();
+    if (clientY < rect.top || clientY >= rect.bottom) return null;
+    const zone = (rect.width / term.cols) * COPY_ZONE_CELLS;
+    // Past the right edge (the host padding, the scrollbar) still counts.
+    if (clientX < rect.right - zone) return null;
+    const cellH = rect.height / term.rows;
+    const buf = term.buffer.active;
+    const line = buf.viewportY + Math.floor((clientY - rect.top) / cellH);
+    let st: Stamp | null = null;
+    for (const x of liveStamps()) {
+      if (x.marker.line <= line) st = x;
+      else break;
     }
-    if (next === hoverStamp) return;
-    const prev = hoverStamp;
-    hoverStamp = next;
-    if (prev) paintStamp(prev);
-    if (next) paintStamp(next);
+    const r = st ? rangeOf(st) : null;
+    if (!st || !r || line > r[1]) return null;
+    const first = Math.max(r[0], buf.viewportY);
+    const last = Math.min(r[1], buf.viewportY + term.rows - 1);
+    if (first > last) return null;
+    const wrap = wrapEl.getBoundingClientRect();
+    return {
+      st,
+      top: rect.top - wrap.top + (first - buf.viewportY) * cellH,
+      height: (last - first + 1) * cellH,
+      left: rect.left - wrap.left,
+      width: rect.width,
+    };
   }
-  function onStampLeave() {
-    const prev = hoverStamp;
-    hoverStamp = null;
-    if (prev) paintStamp(prev);
+
+  // Hover intent, as for any button that appears on hover: it shows after
+  // the mouse rests briefly in a block, and it does NOT vanish the moment
+  // the mouse leaves that block - the way to the button can cross other
+  // rows. It stays for COPY_HIDE_MS, and entering the button keeps it.
+  const COPY_SHOW_MS = 150;
+  const COPY_HIDE_MS = 600;
+  let showTimer: ReturnType<typeof setTimeout> | null = null;
+  let hideTimer: ReturnType<typeof setTimeout> | null = null;
+  function clearTimers() {
+    if (showTimer) { clearTimeout(showTimer); showTimer = null; }
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+  }
+
+  function onBlockHover(e: MouseEvent) {
+    // Not while a mouse button is down: that is a drag-select in progress.
+    if (e.buttons !== 0) { hideBlockUi(); return; }
+    lastMouseY = e.clientY;
+    lastMouseX = e.clientX;
+    if (copyHover) return; // on the button itself
+    const cand = blockAt(e.clientX, e.clientY);
+    if (blockUi && cand?.st === blockUi.st) {
+      // Still in the block that owns the button: keep it, drop any
+      // pending hide or switch.
+      clearTimers();
+      blockUi = cand; // geometry may have changed (output grew)
+      return;
+    }
+    if (showTimer) clearTimeout(showTimer);
+    showTimer = setTimeout(() => {
+      showTimer = null;
+      if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+      blockUi = lastMouseY === null ? null : blockAt(lastMouseX, lastMouseY);
+    }, COPY_SHOW_MS);
+    if (blockUi && !hideTimer) {
+      hideTimer = setTimeout(() => { hideTimer = null; if (!copyHover) blockUi = null; }, COPY_HIDE_MS);
+    }
+  }
+  function onCopyEnter() {
+    clearTimers();
+    copyHover = true;
+  }
+  function hideBlockUi() {
+    clearTimers();
+    blockUi = null;
+    copyHover = false;
+  }
+  function onBlockLeave() {
+    lastMouseY = null;
+    hideBlockUi();
+  }
+  // Scrolling moves the block under a still mouse: re-measure the one shown.
+  function updateBlockUi() {
+    if (!blockUi || lastMouseY === null) return;
+    const cand = blockAt(lastMouseX, lastMouseY);
+    blockUi = cand && cand.st === blockUi.st ? cand : null;
   }
 
   // Ctrl+Shift+Up / Down walk the commands, selecting one block at a time;
@@ -1419,8 +1485,7 @@
     // contextmenu fires for right-click and we route by mode.
     host.addEventListener("contextmenu", onContextMenu, { capture: true });
     host.addEventListener("mousedown", onMouseDown, { capture: true });
-    host.addEventListener("mousemove", onStampHover);
-    host.addEventListener("mouseleave", onStampLeave);
+    term.onScroll(() => updateBlockUi());
     // Releases modifierClickPending after the link handler (which runs on
     // mouseup) has had its turn, so a Ctrl+click that hits no link does not
     // leave select-to-copy switched off.
@@ -2084,8 +2149,6 @@
     host?.removeEventListener("wheel", onWheel, { capture: true } as any);
     host?.removeEventListener("contextmenu", onContextMenu, { capture: true } as any);
     host?.removeEventListener("mousedown", onMouseDown, { capture: true } as any);
-    host?.removeEventListener("mousemove", onStampHover);
-    host?.removeEventListener("mouseleave", onStampLeave);
     host?.removeEventListener("mouseup", onMouseUpReleaseModifier);
     host?.removeEventListener("pointerdown", onPointerDown, { capture: true } as any);
     host?.removeEventListener("pointermove", onPointerMove, { capture: true } as any);
@@ -2100,7 +2163,31 @@
   });
 </script>
 
-<div class="term-wrap" class:active class:broadcast={broadcast.hasInAnyGroup(sessionId) && broadcast.totalMembers() > 1}>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="term-wrap"
+  class:active
+  class:broadcast={broadcast.hasInAnyGroup(sessionId) && broadcast.totalMembers() > 1}
+  bind:this={wrapEl}
+  onmousemove={onBlockHover}
+  onmouseleave={onBlockLeave}
+>
+  {#if blockUi}
+    {@const ui = blockUi}
+    {#if copyHover}
+      <div class="block-shade" style:top="{ui.top}px" style:height="{ui.height}px" style:left="{ui.left}px" style:width="{ui.width}px"></div>
+    {/if}
+    <button
+      class="block-copy"
+      onmouseenter={onCopyEnter}
+      onmouseleave={() => (copyHover = false)}
+      style:top="{ui.top + ui.height / 2}px"
+      style:left="{ui.left + ui.width}px"
+      title={`Copy this command and its output (run ${fmtStamp(ui.st.at)})`}
+      onmousedown={(e) => e.preventDefault()}
+      onclick={() => copyBlock(ui.st)}
+    >⧉ Copy</button>
+  {/if}
   {#if broadcast.hasInAnyGroup(sessionId) && broadcast.totalMembers() > 1}
     {@const bcGroups = broadcast.groupsOf(sessionId).map((g) => g === "" ? "default" : g)}
     <span class="bc-label" title={`Broadcasting to: ${bcGroups.join(", ")}`}>
@@ -2157,12 +2244,36 @@
 
 <style>
   .term-wrap {
+    position: relative;
     width: 100%; height: 100%;
     display: none;
     flex-direction: column;
     min-height: 0;
   }
   .term-wrap.active { display: flex; }
+  /* Copy overlay (see updateBlockUi): the hovered command's block. */
+  .block-shade {
+    position: absolute;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--blue) 8%, transparent);
+    border-left: 2px solid color-mix(in srgb, var(--blue) 60%, transparent);
+    z-index: 5;
+  }
+  .block-copy {
+    position: absolute;
+    transform: translate(calc(-100% - 6px), -50%);
+    z-index: 6;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    border: 1px solid var(--surface1);
+    background: var(--mantle);
+    color: var(--text);
+    cursor: pointer;
+    opacity: 0.45;
+    transition: opacity 0.12s;
+  }
+  .block-copy:hover { opacity: 1; border-color: var(--blue); }
   /* Broadcast indicator - orange 2px inset shadow + small banner at
      the top. Loud enough that you can't accidentally type into a
      fan-out session without seeing it; not so loud that it occludes
@@ -2287,12 +2398,6 @@
   /* Command timestamp (see addStamp): xterm positions the element over the
      last 8 cells of the command's row. Dimmed and click-through, so it
      never gets in the way of selecting what is under it. */
-  :global(.term-host .xterm .cmd-stamp.hover) {
-    pointer-events: auto;
-    cursor: pointer;
-    opacity: 1;
-    text-decoration: underline;
-  }
   :global(.term-host .xterm .cmd-stamp) {
     pointer-events: none;
     text-align: right;

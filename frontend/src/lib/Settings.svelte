@@ -3148,10 +3148,10 @@
           onchange={(e) => terminalPrefs.setCommandCopy((e.target as HTMLInputElement).checked)}
         />
         <div>
-          <div class="mode-name">Copy button on command lines</div>
+          <div class="mode-name">Copy button on command output</div>
           <div class="mode-desc">
-            Point at the right edge of a command line to copy the command
-            and its output. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd>
+            Point at the right side of a command's output and a Copy button
+            appears for the command and everything it printed. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd>
             selects a command and its output; copy it with your usual copy
             key (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> works in every
             copy mode). Works with this option off too.
