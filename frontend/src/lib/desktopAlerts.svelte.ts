@@ -18,7 +18,8 @@ export type DesktopAlert = {
   message: string;
   // What it means and what fixing it takes, for the issues panel.
   detail: string;
-  // Settings section to open when the badge is clicked.
+  // Settings section to open when the badge is clicked; "section#setting"
+  // also highlights that setting (see flashSetting in Settings.svelte).
   section: string;
 };
 
@@ -47,7 +48,7 @@ class DesktopAlertsStore {
           id: "url-scheme-stale",
           message: "ssh-tool:// links open a different copy of ssh-tool",
           detail: "The link handler is registered to another install or an older path. Register it again from this copy.",
-          section: "desktop",
+          section: "desktop#url-scheme",
         });
       }
       if (menu.stale) {
@@ -55,7 +56,7 @@ class DesktopAlertsStore {
           id: "context-menu-stale",
           message: "The file manager's right-click menu opens a different copy",
           detail: "The menu entry points at another install or an older path. Register it again from this copy.",
-          section: "desktop",
+          section: "desktop#file-manager",
         });
       }
     } catch {
@@ -70,7 +71,7 @@ class DesktopAlertsStore {
           id: "mcp-stale",
           message: "Claude Desktop's MCP entry points at an older ssh-tool",
           detail: "Claude Desktop will start the old binary for MCP. Update the entry so it runs this one.",
-          section: "llm",
+          section: "llm#mcp-register|mcp-enable",
         });
       }
     } catch { /* same */ }

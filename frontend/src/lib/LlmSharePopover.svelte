@@ -81,7 +81,7 @@
 
   function openSettings() {
     onClose();
-    view.setTabSettingsSection("llm");
+    view.setTabSettingsSection("llm#mcp-enable");
   }
 
   async function copyPrompt() {

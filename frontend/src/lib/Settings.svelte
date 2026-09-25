@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { errMsg } from "./connectErrors";
   import { desktopAlerts } from "./desktopAlerts.svelte";
   import { isMobile } from "./platform";
@@ -2438,7 +2438,7 @@
   // "desktop" holds the install offer, the file-manager context menu and
   // the URL-scheme handler - all desktop-only, so on Android the section
   // would render a heading and nothing else.
-  const MOBILE_HIDDEN_SECTIONS = new Set(["browser", "llm", "desktop"]);
+  const MOBILE_HIDDEN_SECTIONS = new Set(["browser", "llm", "desktop", "shells"]);
 
   // Group sections by their group label for the side nav.
   const sectionsByGroup = $derived.by(() => {
@@ -2468,24 +2468,51 @@
   // pill → About). When a section is staged in view.pendingSettingsSection
   // we honour it and clear the pin so the next plain "open Settings"
   // resumes the user's last section.
+  //
+  // A pin may name a setting too: "llm#mcp-manage" opens the section and
+  // highlights the element carrying data-setting="mcp-manage". Several
+  // ids separated by "|" are tried in order, for a setting that only
+  // renders once another one is on ("llm#mcp-manage|mcp-enable").
   $effect(() => {
     const pin = view.pendingSettingsSection;
     if (!pin) return;
-    const resolved = resolveSection(pin);
+    const [sec, anchor] = pin.split("#");
+    const resolved = resolveSection(sec);
     if (resolved) {
       activeSection = resolved;
       // Persist the concrete section id (keepass/bitwarden/infisical
       // resolve to "external"); restore re-derives the tab from it.
-      api.settingsSet("settings_active_section", pin).catch(console.warn);
+      api.settingsSet("settings_active_section", sec).catch(console.warn);
+      if (anchor) flashSetting(anchor);
     }
     view.pendingSettingsSection = null;
   });
 
-  function pickSection(s: SectionId) {
+  function pickSection(s: SectionId, anchor?: string) {
     activeSection = s;
     api.settingsSet("settings_active_section", s).catch(console.warn);
     if (s === "snippets") reloadSnippets();
     if (s === "workspaces") reloadWorkspaces();
+    if (anchor) flashSetting(anchor);
+  }
+
+  // Scroll to a setting and outline it for a moment, so a deep link lands
+  // on the thing it is about instead of the top of a long section. Waits
+  // for the section to render; a section that loads its state first can
+  // take a few frames, hence the short retry.
+  async function flashSetting(spec: string, tries = 10) {
+    await tick();
+    for (const id of spec.split("|")) {
+      const el = document.querySelector<HTMLElement>(`[data-setting="${id}"]`);
+      if (!el) continue;
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      el.classList.remove("setting-flash");
+      void el.offsetWidth; // restart the animation on a repeat visit
+      el.classList.add("setting-flash");
+      setTimeout(() => el.classList.remove("setting-flash"), 2600);
+      return;
+    }
+    if (tries > 0) setTimeout(() => void flashSetting(spec, tries - 1), 100);
   }
 
   // Auto-load snippets if the initial section is "snippets".
@@ -2656,6 +2683,21 @@
           </div>
         </div>
       </label>
+
+      <label class:active={terminalPrefs.serverStatsEnabled}>
+        <input
+          type="checkbox"
+          checked={terminalPrefs.serverStatsEnabled}
+          onchange={(e) => terminalPrefs.setServerStatsEnabled((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Show server status for the focused session</div>
+          <div class="mode-desc">
+            Load, memory, disk and users in the status bar, every 10s. Runs
+            a read-only probe on the host.
+          </div>
+        </div>
+      </label>
     </fieldset>
   </div>
   {/if}
@@ -2682,8 +2724,13 @@
       {#if connectTimeoutSaved}<span class="saved-mark">saved</span>{/if}
     </label>
 
+  </div>
+  {/if}
+
+  {#if activeSection === "shells"}
+  <div class="group">
     {#if !isMobile}
-    <h2 style="margin-top: 1.5rem;">In-app local shell</h2>
+    <h2>In-app local shell</h2>
     <p class="hint">
       Which shell the top-bar <strong>Local shell</strong> button
       opens on plain click (the dropdown chevron next to it still
@@ -2820,8 +2867,14 @@
       </label>
     </fieldset>
     {/if}
+    {/if}
+  </div>
+  {/if}
 
-    <h2 style="margin-top: 1.5rem;">Window</h2>
+  {#if activeSection === "window"}
+  <div class="group">
+    {#if !isMobile}
+    <h2>Window</h2>
     {#if settingsIsMac}
       <p class="hint">
         Tray options don't apply on macOS - minimising goes to the
@@ -2873,7 +2926,7 @@
       </label>
     </fieldset>
     {/if}
-    {/if}<!-- /!isMobile: local shell + external terminal + window/tray -->
+    {/if}
 
     <h2 style="margin-top: 1.5rem;">Startup</h2>
     <p class="hint">
@@ -2960,6 +3013,77 @@
   {#if activeSection === "terminal"}
   <div class="group">
     <h2>Terminal</h2>
+    <p class="hint">
+      Font size: <strong>{terminalPrefs.fontSize}px</strong>
+      - adjust with {#if isMobile}a two-finger pinch{:else}<kbd>Ctrl</kbd>+wheel{/if} inside any terminal.
+      <button class="link" onclick={() => terminalPrefs.resetFontSize()}>Reset to 13</button>
+    </p>
+
+    <label class="num">
+      <span>Font family</span>
+      <input
+        type="text"
+        value={terminalPrefs.fontFamily}
+        onblur={(e) => terminalPrefs.setFontFamily((e.target as HTMLInputElement).value)}
+        onkeydown={(e) => {
+          if (e.key === "Enter") terminalPrefs.setFontFamily((e.currentTarget as HTMLInputElement).value);
+        }}
+        placeholder={DEFAULT_FONT_FAMILY}
+        style="width: 28rem; max-width: 100%;"
+      />
+    </label>
+    <p class="hint inline">
+      CSS font-family stack. Defaults to <code>{DEFAULT_FONT_FAMILY}</code>.
+      Clear to reset.
+    </p>
+
+    <p class="hint">Color scheme</p>
+    <div class="themes">
+      {#each themes as t (t.id)}
+        {@const active = terminalPrefs.themeId === t.id}
+        <button
+          class="theme-card"
+          class:active
+          onclick={() => terminalPrefs.setTheme(t.id)}
+          title={t.name}
+        >
+          <div
+            class="theme-preview"
+            style="background: {t.background}; color: {t.foreground}"
+          >
+            <span style="color: {t.red}">●</span><span
+              style="color: {t.green}">●</span><span
+              style="color: {t.yellow}">●</span><span
+              style="color: {t.blue}">●</span><span
+              style="color: {t.magenta}">●</span><span
+              style="color: {t.cyan}">●</span>
+            <div class="prompt">$ ls -la</div>
+          </div>
+          <div class="theme-label">
+            {t.name}
+            {#if t.isLight}<span class="light-tag">light</span>{/if}
+          </div>
+        </button>
+      {/each}
+    </div>
+
+    <fieldset class="check-cards">
+      <label class:active={terminalPrefs.disableWebgl}>
+        <input
+          type="checkbox"
+          checked={terminalPrefs.disableWebgl}
+          onchange={(e) => terminalPrefs.setDisableWebgl((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Disable WebGL renderer (use canvas fallback)</div>
+          <div class="mode-desc">
+            On by default: WebGL garbles text on some GPUs. Applies to
+            newly opened tabs.
+          </div>
+        </div>
+      </label>
+    </fieldset>
+
     {#if !isMobile}
     <p class="hint">
       Copy / paste behavior. Auto-detected from your OS on first launch
@@ -3017,30 +3141,6 @@
     </fieldset>
     {/if}
 
-    <p class="hint">
-      Font size: <strong>{terminalPrefs.fontSize}px</strong>
-      - adjust with {#if isMobile}a two-finger pinch{:else}<kbd>Ctrl</kbd>+wheel{/if} inside any terminal.
-      <button class="link" onclick={() => terminalPrefs.resetFontSize()}>Reset to 13</button>
-    </p>
-
-    <label class="num">
-      <span>Font family</span>
-      <input
-        type="text"
-        value={terminalPrefs.fontFamily}
-        onblur={(e) => terminalPrefs.setFontFamily((e.target as HTMLInputElement).value)}
-        onkeydown={(e) => {
-          if (e.key === "Enter") terminalPrefs.setFontFamily((e.currentTarget as HTMLInputElement).value);
-        }}
-        placeholder={DEFAULT_FONT_FAMILY}
-        style="width: 28rem; max-width: 100%;"
-      />
-    </label>
-    <p class="hint inline">
-      CSS font-family stack. Defaults to <code>{DEFAULT_FONT_FAMILY}</code>.
-      Clear to reset.
-    </p>
-
     <label class="num scrollback-row">
       <span>Scrollback (lines)</span>
       <input
@@ -3096,36 +3196,6 @@
         </div>
       </label>
 
-      <label class:active={terminalPrefs.disableWebgl}>
-        <input
-          type="checkbox"
-          checked={terminalPrefs.disableWebgl}
-          onchange={(e) => terminalPrefs.setDisableWebgl((e.target as HTMLInputElement).checked)}
-        />
-        <div>
-          <div class="mode-name">Disable WebGL renderer (use canvas fallback)</div>
-          <div class="mode-desc">
-            On by default: WebGL garbles text on some GPUs. Applies to
-            newly opened tabs.
-          </div>
-        </div>
-      </label>
-
-      <label class:active={terminalPrefs.serverStatsEnabled}>
-        <input
-          type="checkbox"
-          checked={terminalPrefs.serverStatsEnabled}
-          onchange={(e) => terminalPrefs.setServerStatsEnabled((e.target as HTMLInputElement).checked)}
-        />
-        <div>
-          <div class="mode-name">Show server status for the focused session</div>
-          <div class="mode-desc">
-            Load, memory, disk and users in the status bar, every 10s. Runs
-            a read-only probe on the host.
-          </div>
-        </div>
-      </label>
-
       <label class:active={terminalPrefs.commandTimestamps}>
         <input
           type="checkbox"
@@ -3159,36 +3229,6 @@
         </div>
       </label>
     </fieldset>
-
-    <p class="hint">Color scheme</p>
-    <div class="themes">
-      {#each themes as t (t.id)}
-        {@const active = terminalPrefs.themeId === t.id}
-        <button
-          class="theme-card"
-          class:active
-          onclick={() => terminalPrefs.setTheme(t.id)}
-          title={t.name}
-        >
-          <div
-            class="theme-preview"
-            style="background: {t.background}; color: {t.foreground}"
-          >
-            <span style="color: {t.red}">●</span><span
-              style="color: {t.green}">●</span><span
-              style="color: {t.yellow}">●</span><span
-              style="color: {t.blue}">●</span><span
-              style="color: {t.magenta}">●</span><span
-              style="color: {t.cyan}">●</span>
-            <div class="prompt">$ ls -la</div>
-          </div>
-          <div class="theme-label">
-            {t.name}
-            {#if t.isLight}<span class="light-tag">light</span>{/if}
-          </div>
-        </button>
-      {/each}
-    </div>
   </div>
 
   {:else if activeSection === "recording"}
@@ -4806,6 +4846,14 @@
       Bring connections in from another tool. Imports are additive -
       existing rows are never modified, re-running is safe.
     </p>
+    <p class="hint">
+      Any other format - a CSV, a spreadsheet, an inventory file, another
+      tool's export, a list pasted into a chat - can go through an LLM
+      client instead: with <button class="link" onclick={() => pickSection("llm", "mcp-manage|mcp-enable")}>LLM (MCP) access</button>
+      on and <strong>Allow manage</strong> ticked, it reads the file and
+      stages the folders and connections the way you ask for them. Nothing
+      is written until you approve the whole plan in the app.
+    </p>
     <div class="import-sources">
       {#each IMPORT_SOURCES as s (s.id)}
         <button
@@ -5319,6 +5367,7 @@
   </div>
 
   {:else if activeSection === "llm"}
+  <div class="group">
     <h2>LLM (MCP) access to sessions</h2>
     <p class="hint">
       Let an external LLM client (Claude Code, etc.) connect to ssh-tool and
@@ -5328,7 +5377,7 @@
     </p>
 
     <fieldset class="check-cards">
-      <label class:active={mcpEnabled}>
+      <label class:active={mcpEnabled} data-setting="mcp-enable">
         <input
           type="checkbox"
           checked={mcpEnabled}
@@ -5403,7 +5452,7 @@
     {/if}
 
     {#if mcpEnabled}
-      <h3 style="margin-top:1.2rem">Register with your LLM client</h3>
+      <h3 style="margin-top:1.2rem" data-setting="mcp-register">Register with your LLM client</h3>
       <p class="hint">
         Add ssh-tool as an MCP server once. It runs as a small bridge process
         the client launches (<code>{mcpExePath || "ssh-tool"} --mcp-bridge</code>).
@@ -5556,7 +5605,7 @@
             </div>
           </div>
         </label>
-        <label class:active={mcpManage}>
+        <label class:active={mcpManage} data-setting="mcp-manage">
           <input
             type="checkbox"
             checked={mcpManage}
@@ -5599,8 +5648,10 @@
         <McpGrantsList />
       </div>
     {/if}
+  </div>
 
   {:else if activeSection === "sharing"}
+  <div class="group">
     <h2>Share a session to a browser</h2>
     <p class="hint">
       Let a colleague watch - or, with your explicit approval, type into - a
@@ -5630,7 +5681,7 @@
     </fieldset>
 
     {#if shareEnabled}
-      <div class="group" style="margin-top:1rem">
+      <div style="margin-top:1rem">
         <h3>Certificate fingerprint</h3>
         <p class="hint">
           Read these words to your guest (by phone or chat) so they can confirm
@@ -5668,8 +5719,10 @@
         </label>
       </fieldset>
     {/if}
+  </div>
 
   {:else if activeSection === "desktop"}
+  <div class="group">
     <h2>Desktop integration</h2>
     <p class="hint">
       How ssh-tool hooks into the rest of the desktop: where it lives,
@@ -5710,7 +5763,7 @@
          and no icon. The startup toast offers this once; this is where
          it lives permanently, for anyone who dismissed it. -->
     {#if installState?.can_offer}
-      <h3 style="margin-top:0.8rem">Desktop integration</h3>
+      <h3 style="margin-top:0.8rem">Install to {menuName}</h3>
       {#if installState.replaces}
         <p class="hint">
           This copy is running from <code>{installState.exe_path}</code>,
@@ -5776,9 +5829,8 @@
       {/if}
     {/if}
 
-    <h2 style="margin-top: 1.5rem;">File manager</h2>
     {#if !isMobile && !settingsIsMac}
-      <h2 style="margin-top: 1.5rem;">File manager integration</h2>
+      <h2 style="margin-top: 1.5rem;" data-setting="file-manager">File manager</h2>
       <p class="hint">
         Adds <strong>Open in ssh-tool</strong> to the right-click menu
         on directories (Windows Explorer; Dolphin and the Nautilus
@@ -5818,7 +5870,7 @@
       {/if}
     {/if}
 
-    <h2 style="margin-top: 1.5rem;">Links</h2>
+    <h2 style="margin-top: 1.5rem;" data-setting="url-scheme">Links</h2>
     <p class="hint">
       Binds <code>ssh-tool://</code> links to this app, so "Open in
       ssh-tool" buttons on a web page or in another tool launch it here.
@@ -5852,7 +5904,7 @@
         <p class="hint">{urlSchemeMsg}</p>
       {/if}
     {/if}
-
+  </div>
 
   {:else if activeSection === "logs"}
   <div class="group">
@@ -6181,6 +6233,20 @@
     color: var(--text);
     letter-spacing: normal;
     text-transform: none;
+  }
+  /* Deep-link target (see flashSetting): three pulses of a mauve ring.
+     Not blue - blue already marks a ticked option card. */
+  :global(.setting-flash) {
+    animation: setting-flash 0.85s ease-out 3;
+    border-radius: 4px;
+  }
+  @keyframes -global-setting-flash {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mauve) 70%, transparent); background-color: color-mix(in srgb, var(--mauve) 14%, transparent); }
+    70% { box-shadow: 0 0 0 8px transparent; background-color: color-mix(in srgb, var(--mauve) 6%, transparent); }
+    100% { box-shadow: 0 0 0 0 transparent; background-color: transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :global(.setting-flash) { animation: none; box-shadow: 0 0 0 2px var(--mauve); }
   }
   .group {
     width: 100%;

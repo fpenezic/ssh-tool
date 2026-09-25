@@ -6,6 +6,8 @@
 
 export type SectionId =
   | "appearance"
+  | "window"
+  | "shells"
   | "connection"
   | "network"
   | "liveness"
@@ -47,10 +49,11 @@ export function isExternalTab(id: string): id is ExternalTabId {
 }
 
 export type SectionGroup =
-  | "Appearance"
-  | "Network"
+  | "General"
+  | "Terminal"
+  | "Connections"
   | "Security"
-  | "Import / Export"
+  | "Data"
   | "Integrations"
   | "Diagnostics";
 
@@ -66,26 +69,28 @@ export type SectionDef = {
 };
 
 export const SETTINGS_SECTIONS: SectionDef[] = [
-  { id: "appearance",  title: "Appearance",        group: "Appearance",     keywords: ["theme", "colors", "font", "look"] },
-  { id: "connection",  title: "Connection",        group: "Appearance",     keywords: ["defaults", "keepalive", "timeout"] },
-  { id: "terminal",    title: "Terminal",          group: "Appearance",     keywords: ["xterm", "font", "webgl", "scrollback", "cursor"] },
-  { id: "browser",     title: "Browser launcher",  group: "Appearance",     keywords: ["socks", "proxy", "chrome", "profile"] },
-  { id: "snippets",    title: "Snippets",          group: "Appearance",     keywords: ["commands", "macros"] },
-  { id: "workspaces",  title: "Workspaces",        group: "Appearance",     keywords: ["layout", "tabs", "session set"] },
-  { id: "network",     title: "Network profiles",  group: "Network",        keywords: ["wireguard", "netbird", "tailscale", "vpn", "wg", "tunnel"] },
-  { id: "liveness",    title: "Liveness probe",    group: "Network",        keywords: ["ping", "reachability", "up", "down", "probe", "status", "alive"] },
-  { id: "recording",   title: "Session recording", group: "Security",       keywords: ["asciicast", "asciinema", "capture", "replay"] },
+  { id: "appearance",  title: "Appearance",        group: "General",        keywords: ["theme", "colors", "font", "look", "density", "status bar", "server status"] },
+  { id: "window",      title: "Window & startup",  group: "General",        keywords: ["tray", "minimise", "minimize", "close", "startup", "restore", "tabs"] },
+  { id: "updates",     title: "Updates",           group: "General",        keywords: ["version", "upgrade", "release", "changelog"] },
+  { id: "terminal",    title: "Terminal",          group: "Terminal",       keywords: ["xterm", "font", "webgl", "scrollback", "cursor", "copy", "paste", "timestamp", "color scheme"] },
+  { id: "shells",      title: "Shells",            group: "Terminal",       keywords: ["local shell", "wsl", "powershell", "cmd", "external terminal", "windows terminal"] },
+  { id: "snippets",    title: "Snippets",          group: "Terminal",       keywords: ["commands", "macros"] },
+  { id: "workspaces",  title: "Workspaces",        group: "Terminal",       keywords: ["layout", "tabs", "session set"] },
+  { id: "recording",   title: "Session recording", group: "Terminal",       keywords: ["asciicast", "asciinema", "capture", "replay"] },
+  { id: "connection",  title: "Connection",        group: "Connections",    keywords: ["defaults", "keepalive", "timeout"] },
+  { id: "network",     title: "Network profiles",  group: "Connections",    keywords: ["wireguard", "netbird", "tailscale", "vpn", "wg", "tunnel"] },
+  { id: "liveness",    title: "Liveness probe",    group: "Connections",    keywords: ["ping", "reachability", "up", "down", "probe", "status", "alive"] },
+  { id: "browser",     title: "Browser launcher",  group: "Connections",    keywords: ["socks", "proxy", "chrome", "profile"] },
   { id: "vault",       title: "Vault",             group: "Security",       keywords: ["passphrase", "lock", "encryption", "master", "auto-unlock"] },
   { id: "external",    title: "External secrets",  group: "Security",       keywords: ["keepass", "kdbx", "bitwarden", "vaultwarden", "infisical", "secret", "password manager", "2fa"] },
-  { id: "backup",      title: "Backup & restore",  group: "Security",       keywords: ["snapshot", "export", "restore", "auto-backup"] },
-  { id: "sync",        title: "Sync",              group: "Security",       keywords: ["webdav", "push", "pull", "profile sync"] },
   { id: "audit",       title: "Audit log",         group: "Security",       keywords: ["history", "log", "activity"] },
-  { id: "import",      title: "Import",            group: "Import / Export", keywords: ["rdm", "devolutions", "putty", "mobaxterm", "ssh config", "superputty", "kitty"] },
-  { id: "export",      title: "Export connections", group: "Import / Export", keywords: ["backup", "csv", "dump"] },
+  { id: "backup",      title: "Backup & restore",  group: "Data",           keywords: ["snapshot", "export", "restore", "auto-backup"] },
+  { id: "sync",        title: "Sync",              group: "Data",           keywords: ["webdav", "push", "pull", "profile sync", "dropbox", "onedrive", "google drive"] },
+  { id: "import",      title: "Import",            group: "Data",           keywords: ["rdm", "devolutions", "putty", "mobaxterm", "ssh config", "superputty", "kitty"] },
+  { id: "export",      title: "Export connections", group: "Data",          keywords: ["backup", "csv", "dump"] },
   { id: "llm",         title: "LLM (MCP) access",  group: "Integrations",   keywords: ["mcp", "claude", "ai", "bridge", "yolo", "agent"] },
-  { id: "sharing",     title: "Sharing",           group: "Integrations",   keywords: ["broadcast", "share", "collaborate"] },
+  { id: "sharing",     title: "Session sharing",   group: "Integrations",   keywords: ["share", "browser", "guest", "collaborate"] },
   { id: "desktop",     title: "Desktop integration", group: "Integrations", keywords: ["install", "uninstall", "start menu", "applications menu", "launcher", "icon", "shortcut", "context menu", "explorer", "nautilus", "dolphin", "url scheme", "ssh-tool://", "protocol handler", "right-click"] },
-  { id: "updates",     title: "Updates",           group: "Diagnostics",    keywords: ["version", "upgrade", "release", "changelog"] },
   { id: "logs",        title: "Logs",              group: "Diagnostics",    keywords: ["debug", "diagnostics", "troubleshoot"] },
   { id: "about",       title: "About",             group: "Diagnostics",    keywords: ["version", "credits", "license", "profile stats"] },
 ];
