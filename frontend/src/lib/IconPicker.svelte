@@ -113,23 +113,28 @@
   let err = $state<string | null>(null);
   let fileInput: HTMLInputElement | undefined = $state();
 
-  // Picker popover state. Lazy-loads the image list on first open
-  // (DBs with hundreds of RDM-imported logos shouldn't pay the cost
-  // every time the editor mounts).
+  // Picker popover state. Loads the image list when opened, not when the
+  // editor mounts (DBs with hundreds of RDM-imported logos shouldn't pay
+  // for it on every mount).
   let pickerOpen = $state(false);
   let existing = $state<Array<{ id: string; mime: string; use_count: number }>>([]);
   let pickerLoaded = $state(false);
 
   async function openPicker() {
     pickerOpen = true;
-    if (!pickerLoaded) {
-      try {
-        existing = await api.imagesList() ?? [];
-      } catch (e: any) {
-        err = errMsg(e);
-      }
-      pickerLoaded = true;
+    // Always open in pick mode: delete mode left on from last time made a
+    // plain click ask to delete the icon you meant to choose.
+    deleteMode = false;
+    marked = new Set();
+    // Re-read on every open: the list is ids and use counts only (no image
+    // bytes), and a cached one showed an icon just put on a connection as
+    // still unused. pickerLoaded only gates the first "Loading..." state.
+    try {
+      existing = await api.imagesList() ?? [];
+    } catch (e: any) {
+      err = errMsg(e);
     }
+    pickerLoaded = true;
     // Preload thumbnails through the same cache the rest of the
     // tree uses, so flipping back to the connection list shows
     // them instantly.
@@ -140,34 +145,78 @@
   // "use it", so there is no small target to aim at inside each tile.
   let deleteMode = $state(false);
   const unusedCount = $derived(existing.filter((i) => i.use_count === 0).length);
+  // Icons Ctrl-clicked in delete mode, deleted together with one confirm.
+  let marked = $state<Set<string>>(new Set());
+  // While a confirm dialog is up, a click on it lands outside the picker;
+  // without this the picker closed under the dialog.
+  let confirming = $state(false);
 
-  async function deleteImage(img: { id: string; use_count: number }) {
+  async function confirmDelete(opts: Parameters<typeof showConfirm>[0]): Promise<boolean> {
+    confirming = true;
+    try {
+      return await showConfirm(opts);
+    } finally {
+      // The click that closed the dialog is still being dispatched; let it
+      // pass before outside clicks count again.
+      setTimeout(() => (confirming = false), 0);
+    }
+  }
+
+  function toggleMarked(id: string) {
+    const next = new Set(marked);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    marked = next;
+  }
+
+  async function deleteImages(imgs: { id: string; use_count: number }[]) {
     err = null;
-    const users = img.use_count;
-    const ok = await showConfirm({
-      title: "Delete icon",
+    if (imgs.length === 0) return;
+    const users = imgs.reduce((n, i) => n + i.use_count, 0);
+    const what = imgs.length === 1 ? "this icon" : `${imgs.length} icons`;
+    const ok = await confirmDelete({
+      title: imgs.length === 1 ? "Delete icon" : `Delete ${imgs.length} icons`,
       message: users > 0
-        ? `This icon is used by ${users} item${users === 1 ? "" : "s"}. They go back to the default icon.`
-        : "This icon is not used anywhere.",
+        ? `${what[0].toUpperCase() + what.slice(1)} ${imgs.length === 1 ? "is" : "are"} used by ${users} item${users === 1 ? "" : "s"}. They go back to the default icon.`
+        : `${what[0].toUpperCase() + what.slice(1)} ${imgs.length === 1 ? "is" : "are"} not used anywhere.`,
       okLabel: "Delete",
       danger: true,
     });
     if (!ok) return;
+    const gone = new Set<string>();
     try {
-      await api.imagesDelete(img.id);
-      existing = existing.filter((i) => i.id !== img.id);
-      if (img.id === currentIconId) onChange?.(null);
-      // Other rows wearing it still show the old icon until the tree is
-      // reloaded from the store.
-      if (users > 0) void tree.load();
+      for (const img of imgs) {
+        await api.imagesDelete(img.id);
+        gone.add(img.id);
+      }
     } catch (e: any) {
       err = errMsg(e);
     }
+    existing = existing.filter((i) => !gone.has(i.id));
+    marked = new Set([...marked].filter((id) => !gone.has(id)));
+    if (currentIconId && gone.has(currentIconId)) onChange?.(null);
+    // Other rows wearing them still show the old icon until the tree is
+    // reloaded from the store.
+    if (users > 0) void tree.load();
+  }
+
+  function onLibraryClick(e: MouseEvent, img: { id: string; use_count: number }) {
+    if (!deleteMode) {
+      void pickExisting(img.id);
+      return;
+    }
+    if (e.ctrlKey || e.metaKey) {
+      toggleMarked(img.id);
+      return;
+    }
+    // A plain click deletes just this icon; marked ones go through the
+    // "Delete N selected" button.
+    void deleteImages([img]);
   }
 
   async function deleteUnused() {
     err = null;
-    const ok = await showConfirm({
+    const ok = await confirmDelete({
       title: "Remove unused icons",
       message: `Remove ${unusedCount} uploaded icon${unusedCount === 1 ? "" : "s"} that nothing uses?`,
       okLabel: "Remove",
@@ -303,7 +352,7 @@
       role="dialog"
       aria-modal="true"
       tabindex="-1"
-      use:clickOutside={{ onOutside: () => (pickerOpen = false) }}
+      use:clickOutside={{ onOutside: () => (pickerOpen = false), enabled: !confirming }}
       onkeydown={(e) => { if (e.key === "Escape") pickerOpen = false; }}
     >
       <header>
@@ -368,9 +417,14 @@
           <button
             type="button"
             class:danger-on={deleteMode}
-            onclick={() => (deleteMode = !deleteMode)}
-            title="Click an icon to delete it"
+            onclick={() => { deleteMode = !deleteMode; marked = new Set(); }}
+            title="Click an icon to delete it; Ctrl-click to pick several"
           >{deleteMode ? "Done deleting" : "Delete icons…"}</button>
+          {#if deleteMode && marked.size > 0}
+            <button type="button" class="danger-on" onclick={() => deleteImages(existing.filter((i) => marked.has(i.id)))}>
+              Delete {marked.size} selected
+            </button>
+          {/if}
           <button type="button" disabled={unusedCount === 0} onclick={deleteUnused}>
             Remove unused ({unusedCount})
           </button>
@@ -383,10 +437,11 @@
               class="cell"
               class:current={img.id === currentIconId}
               class:unused={img.use_count === 0}
+              class:marked={marked.has(img.id)}
               title={deleteMode
                 ? `Delete (${img.use_count} use${img.use_count === 1 ? "" : "s"})`
                 : `${img.use_count} use${img.use_count === 1 ? "" : "s"}`}
-              onclick={() => (deleteMode ? deleteImage(img) : pickExisting(img.id))}
+              onclick={(e) => onLibraryClick(e, img)}
             >
               {#if url}
                 <img src={url} alt="" />
@@ -504,6 +559,7 @@
   .cell img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .cell .ph { color: var(--overlay0); font-size: 0.75rem; }
   .cell.unused img { opacity: 0.55; }
+  .grid.deleting .cell.marked { border-color: var(--red); background: color-mix(in srgb, var(--red) 20%, transparent); }
   .grid.deleting .cell:hover { border-color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
   .lib-tools { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
   .lib-tools button { font-size: 0.75rem; }
