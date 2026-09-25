@@ -122,6 +122,15 @@
     marks = marks.some((x) => x.id === m.id)
       ? marks.filter((x) => x.id !== m.id)
       : [...marks, m];
+    // Back to the search box with the query selected: the next host is
+    // typed straight over it, while the current results stay up for
+    // marking more of them. Without this a Ctrl-click left focus on the
+    // row, so typing went nowhere and Enter fired on the row as well as
+    // on the palette.
+    queueMicrotask(() => {
+      inputEl?.focus();
+      inputEl?.select();
+    });
   }
   let inputEl: HTMLInputElement | undefined = $state();
   let listEl: HTMLDivElement | undefined = $state();
@@ -434,7 +443,13 @@
     activeIdx = 0;
   });
 
+  // One choice per palette: a second Enter (a double press, or a key
+  // repeat) before the palette unmounts must not dial again.
+  let chosen = false;
+
   function chooseResult(r: Result) {
+    if (chosen) return;
+    chosen = true;
     // A marked set outranks the row that was clicked: having marked four
     // hosts, Enter plainly means "open those four". Checked before the
     // per-kind branches below, or a marked dynamic entry would dial
@@ -826,6 +841,11 @@
         {@const connected = sessCount > 0}
         {@const markId = markableId(r)}
         {@const marked = markId !== null && markedSet.has(markId)}
+        <!-- Keys are handled once, by the modal's onkeydown, on the row at
+             activeIdx (focusing a row sets it). A row-level Enter handler
+             as well made one Enter connect twice: the focused row and, as
+             the event bubbled, the row under the mouse. -->
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
           class="row"
           class:active={i === activeIdx}
@@ -842,12 +862,7 @@
             chooseResult(r);
           }}
           onmousemove={() => (activeIdx = i)}
-          onkeydown={(e) => {
-            if (e.key !== "Enter") return;
-            e.preventDefault();
-            if ((e.ctrlKey || e.metaKey) && markableId(r)) { toggleMark(r); return; }
-            chooseResult(r);
-          }}
+          onfocus={() => (activeIdx = i)}
         >
           <span
             class="icon"
