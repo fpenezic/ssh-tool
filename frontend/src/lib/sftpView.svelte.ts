@@ -1,5 +1,6 @@
-// SFTP pane view toggles (row colouring). Persisted in the settings DB,
-// which stays on this machine - profile sync does not carry it.
+// SFTP pane view toggles (row colouring). Persisted in the settings table
+// of store.db like every other app preference, so profile sync carries it
+// to other machines along with the rest of the store.
 
 import { api } from "./api";
 
