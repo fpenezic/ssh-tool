@@ -3056,13 +3056,8 @@
       />
     </label>
     <p class="hint inline">
-      How many lines xterm keeps in memory per session. Default {DEFAULT_SCROLLBACK}.
-      Applies to newly-opened sessions immediately; existing ones get
-      the new limit but won't grow the buffer they already have.
-      Note: this is the live on-screen history. When a tab is detached,
-      re-docked, or the UI reloads, only roughly the last ~2000 lines
-      replay from the backend - the full scrollback above isn't preserved
-      across those events.
+      Lines kept per tab. Default {DEFAULT_SCROLLBACK}. After a detach,
+      redock or reload only the last ~8000 lines come back.
     </p>
 
     <label class="num scrollback-row">
@@ -3080,15 +3075,9 @@
       />
     </label>
     <p class="hint inline">
-      A tab you are not looking at gives its scrollback back after this long,
-      and replays from the backend when you return. Default
-      {DEFAULT_BG_SCROLLBACK_DELAY}s. This is where the memory goes with many
-      tabs open: twenty sessions with a full buffer measured 1105 MB before
-      this existed and 592 MB after. Raise it if you flip between tabs
-      constantly and notice the replay; 0 releases the moment a tab is
-      hidden; -1 turns the whole thing off and every tab keeps its full
-      buffer. The tab keeps running either way - only the on-screen history
-      is dropped, and it replays when you come back.
+      Frees a hidden tab's scrollback after this many seconds, to save
+      memory; it comes back when you return. Default
+      {DEFAULT_BG_SCROLLBACK_DELAY}s, 0 = at once, -1 = off.
     </p>
 
     <fieldset class="check-cards">
@@ -3101,9 +3090,8 @@
         <div>
           <div class="mode-name">Auto-close tab on clean exit</div>
           <div class="mode-desc">
-            When the remote shell exits normally (Ctrl+D, <code>exit 0</code>),
-            close the tab automatically. Non-zero exits and network drops stay
-            open so you can see what happened.
+            On <code>exit 0</code> or Ctrl+D. Errors and dropped connections
+            stay open.
           </div>
         </div>
       </label>
@@ -3117,10 +3105,8 @@
         <div>
           <div class="mode-name">Disable WebGL renderer (use canvas fallback)</div>
           <div class="mode-desc">
-            On by default: the WebGL glyph atlas can spontaneously corrupt
-            into garbled text on some GPUs. Untick to opt back into WebGL
-            for faster rendering of heavy output. Reopen each terminal tab
-            for the change to take effect.
+            On by default: WebGL garbles text on some GPUs. Applies to
+            newly opened tabs.
           </div>
         </div>
       </label>
@@ -3134,11 +3120,8 @@
         <div>
           <div class="mode-name">Show server status for the focused session</div>
           <div class="mode-desc">
-            The status bar shows load, memory, disk and logged-in users for
-            the SSH host of whichever pane is focused, refreshed every 10s.
-            Off by default: it runs a small read-only probe (reads /proc, df,
-            who) on the remote, so only enable it for hosts where that's
-            wanted. Non-Linux hosts / network gear simply show nothing.
+            Load, memory, disk and users in the status bar, every 10s. Runs
+            a read-only probe on the host.
           </div>
         </div>
       </label>
