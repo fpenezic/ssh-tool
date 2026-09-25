@@ -7,6 +7,18 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **The file pane's buttons no longer cover the path in a narrow
+  window.** They move to a second row instead, and a long path shows its
+  end - the directory you are in - rather than its start.
+- **Sizes and transfer speeds say KB, MB and GB.** "95.0 M/s" could be
+  read as megabits; it is megabytes, and now says so.
+
+---
+
 ## [0.103.0] - Command timestamps, copy a command with its output, and a tidier Settings
 
 ### Added
