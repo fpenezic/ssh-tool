@@ -24,6 +24,14 @@
   // SSH login name on the target, for the "owned by someone else" mark.
   let loginUser = $state("");
   let viewMenuOpen = $state(false);
+  // The breadcrumb row scrolls rather than wraps; keep its END in view,
+  // since the directory you are in matters more than the root.
+  let crumbsEl: HTMLDivElement | undefined = $state();
+  $effect(() => {
+    void cwd;
+    const el = crumbsEl;
+    if (el) queueMicrotask(() => { el.scrollLeft = el.scrollWidth; });
+  });
   let entries = $state<SftpEntry[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
@@ -639,7 +647,7 @@
         placeholder="/path/to/dir"
       />
     {:else}
-      <div class="crumbs">
+      <div class="crumbs" bind:this={crumbsEl}>
         {#each crumbs as c, i (c.path)}
           {#if i > 0}<span class="sep">/</span>{/if}
           <button class="crumb" onclick={() => load(c.path)}>{c.name}</button>
@@ -876,18 +884,26 @@
     flex-wrap: wrap;
   }
   .toolbar button {
+    white-space: nowrap;
     background: var(--surface0); color: var(--text); border: 0;
     border-radius: 3px; padding: 0.2rem 0.5rem; cursor: pointer; font: inherit;
   }
   .toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
   .toolbar button:hover:not(:disabled) { background: var(--surface1); }
   .toolbar button.danger:hover { background: var(--red); color: var(--on-accent); }
+  /* A floor on the path's width: without one it shrank to a few
+     characters under the action buttons instead of letting them wrap to
+     a second row. Past the floor it scrolls (scrolled to the end, see
+     crumbsEl), with the scrollbar hidden. */
   .crumbs {
-    flex: 1; display: flex; align-items: center;
-    overflow: hidden; min-width: 0; gap: 0.1rem;
+    flex: 1 1 14rem; display: flex; align-items: center;
+    overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+    min-width: min(14rem, 100%); gap: 0.1rem;
     padding: 0 0.4rem;
   }
+  .crumbs::-webkit-scrollbar { display: none; }
   .crumb {
+    flex: 0 0 auto;
     background: transparent !important;
     color: var(--blue) !important;
     padding: 0.1rem 0.25rem !important;
@@ -932,7 +948,7 @@
   }
   .path-input:focus { outline: none; }
   .sep { color: var(--overlay0); }
-  .actions { display: flex; gap: 0.25rem; }
+  .actions { display: flex; gap: 0.25rem; flex-wrap: wrap; }
   .err {
     background: var(--mantle); color: var(--red);
     border-left: 3px solid var(--red);
