@@ -1177,6 +1177,37 @@ everything mobile is behind a build tag or an `isMobile` check.
     reorder bytes; `cum` is still assigned in `appendAndEmit`, after
     batching, so it stays a byte offset of what was emitted.
 
+65. **Command timestamps live in the backend, not in xterm.** An xterm
+    marker dies with the buffer, and the buffer is rebuilt from the
+    backend ring on every scrollback release (15 s in the background),
+    detach, redock and reload. So Enter at a prompt goes through
+    `SshWriteCommand` / `LocalShellWriteCommand`, which records
+    (output byte count, time) in `cmdmarks.Log` BEFORE writing - after
+    the write the count could already include the command's output.
+    Snapshots return the marks inside the ring; the replay writes the
+    snapshot in pieces cut at each mark and places the marker in each
+    piece's write callback, which xterm runs as soon as that piece is
+    parsed. `resyncAnsi` may only trim the head, or the offsets break.
+    "At a prompt" means normal buffer, focus reporting (?1004) off and
+    mouse tracking off: Claude Code and other Ink TUIs draw in the
+    normal buffer but turn ?1004 on (measured). xterm's decoration
+    API with `anchor: "right"` and no `x` leaves `right` unset and gives
+    the element no colour, so both are set in `onRender`.
+
+66. **A Settings page must be wrapped in `<div class="group">`.** The
+    width cap and centring come from `.content > .group`; three pages
+    that skipped it rendered full width. Deep links take
+    `section#setting` (several ids joined by `|`, tried in order) and
+    highlight the element with that `data-setting`; the highlight class
+    is added from script, so its CSS must be `:global(...)` with a
+    `-global-` keyframes name, or Svelte prunes it as unused.
+
+67. **`clickOutside` sees a click on a confirm dialog as outside.** A
+    popover that awaits `showConfirm` closes under its own dialog
+    unless the action is passed `enabled: false` while the confirm is
+    up (IconPicker's `confirming`). Re-enable it on the next tick: the
+    click that closed the dialog is still being dispatched.
+
 ---
 
 # Archive
