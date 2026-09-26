@@ -133,6 +133,9 @@ func decodeHetznerPage(resp *http.Response) (*hetznerPage, error) {
 
 func pickHetznerHostname(source string, s hetznerServer) string {
 	switch source {
+	case HostnameAuto:
+		pub, priv := hetznerAddrs(s)
+		return firstNonEmpty(pub, priv, s.Name)
 	case "public_ipv4":
 		if s.PublicNet.IPv4.IP != "" {
 			return s.PublicNet.IPv4.IP

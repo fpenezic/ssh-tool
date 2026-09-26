@@ -116,6 +116,11 @@ func decodeVultrPage(resp *http.Response) (*vultrPage, error) {
 
 func pickVultrHostname(source string, v vultrInstance) string {
 	switch source {
+	case HostnameAuto:
+		pub, priv := vultrAddrs(v)
+		if h := firstNonEmpty(pub, priv); h != "" {
+			return h
+		}
 	case "public_ipv4":
 		if v.MainIP != "" && v.MainIP != "0.0.0.0" {
 			return v.MainIP

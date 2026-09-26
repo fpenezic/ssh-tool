@@ -722,6 +722,41 @@ func (a *App) DynamicEntriesList(folderID string) ([]store.DynamicEntry, error) 
 	return a.db.ListDynamicEntries(folderID)
 }
 
+// DynamicPreviewHost is one instance as the editor's bastion picker shows it.
+type DynamicPreviewHost struct {
+	ExternalID string `json:"external_id"`
+	Name       string `json:"name"`
+	PublicIP   string `json:"public_ip"`
+	PrivateIP  string `json:"private_ip"`
+	Status     string `json:"status"`
+}
+
+// DynamicFolderPreviewHosts fetches a cloud provider's instances for the
+// config being edited (possibly not saved yet) with their public and private
+// addresses, so the editor can offer the ones with a public address as the
+// bastion. Writes nothing.
+func (a *App) DynamicFolderPreviewHosts(provider string, config map[string]any) ([]DynamicPreviewHost, error) {
+	if !inventory.SupportsAddresses(provider) {
+		return nil, fmt.Errorf("%s has no public/private address model", provider)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	entries, err := a.inventory.Preview(ctx, provider, config)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]DynamicPreviewHost, 0, len(entries))
+	for _, e := range entries {
+		pub, priv := inventory.Addresses(provider, e.Raw)
+		out = append(out, DynamicPreviewHost{
+			ExternalID: e.ExternalID, Name: e.Name,
+			PublicIP: pub, PrivateIP: priv, Status: e.Status,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
 // PinDynamicEntryInput captures the user's choice when promoting a
 // dynamic inventory entry into a permanent connection. TargetFolderID
 // defaults to the dynamic folder itself when empty; OverrideCredentialID
@@ -749,15 +784,6 @@ func (a *App) PinDynamicEntry(in PinDynamicEntryInput) (*store.Connection, error
 		return nil, fmt.Errorf("dynamic entry not found")
 	}
 
-	// Carry over any per-folder jump credential so the resulting
-	// connection behaves the same as the dynamic ghost did.
-	jumpCred := ""
-	if df, err := a.db.GetDynamicFolder(in.FolderID); err == nil && df != nil {
-		if s, ok := df.Config["jump_credential_id"].(string); ok {
-			jumpCred = s
-		}
-	}
-
 	target := in.TargetFolderID
 	if target == "" {
 		target = in.FolderID
@@ -767,10 +793,11 @@ func (a *App) PinDynamicEntry(in PinDynamicEntryInput) (*store.Connection, error
 		name = entry.Name
 	}
 
-	syntheticOverrides := store.InheritableSettings{}
-	tmp := store.Connection{Overrides: syntheticOverrides}
-	applyAnsibleVarsToConnection(&tmp, entry.Raw, jumpCred)
-	overrides := tmp.Overrides
+	// The pinned connection keeps what the dynamic ghost connected with:
+	// Ansible per-host vars and the bastion route (frozen to the bastion's
+	// current address, like every other field of a pin).
+	ghost := a.dynamicConnectionFor(entry, "")
+	overrides := ghost.Overrides
 
 	if in.OverrideCredentialID != "" {
 		oc := in.OverrideCredentialID
@@ -799,7 +826,7 @@ func (a *App) PinDynamicEntry(in PinDynamicEntryInput) (*store.Connection, error
 	conn, err := a.db.CreateConnection(store.NewConnection{
 		FolderID:  &folderRef,
 		Name:      name,
-		Hostname:  entry.Hostname,
+		Hostname:  ghost.Hostname,
 		Overrides: overrides,
 		Tags:      tags,
 		Notes:     "Pinned from dynamic inventory (" + entry.ExternalID + ")",
@@ -882,11 +909,6 @@ func (a *App) ConvertDynamicFolderToStatic(folderID string) (int, error) {
 		return 0, err
 	}
 
-	jumpCred := ""
-	if s, ok := df.Config["jump_credential_id"].(string); ok {
-		jumpCred = s
-	}
-
 	// Find external IDs that are already pinned - those connections
 	// exist; skip them so we don't create duplicates.
 	pinned, err := a.db.ListPinnedExternalIDs(folderID)
@@ -899,8 +921,7 @@ func (a *App) ConvertDynamicFolderToStatic(folderID string) (int, error) {
 		if _, isPinned := pinned[e.ExternalID]; isPinned {
 			continue
 		}
-		tmp := store.Connection{Overrides: store.InheritableSettings{}}
-		applyAnsibleVarsToConnection(&tmp, e.Raw, jumpCred)
+		ghost := a.dynamicConnection(&entries[i], df, "")
 		tags := e.Tags
 		if tags == nil {
 			tags = []string{}
@@ -909,9 +930,9 @@ func (a *App) ConvertDynamicFolderToStatic(folderID string) (int, error) {
 		if _, err := a.db.CreateConnection(store.NewConnection{
 			FolderID:  &folderRef,
 			Name:      e.Name,
-			Hostname:  e.Hostname,
+			Hostname:  ghost.Hostname,
 			SortOrder: int64(i),
-			Overrides: tmp.Overrides,
+			Overrides: ghost.Overrides,
 			Tags:      tags,
 			Notes:     "Converted from dynamic inventory (" + e.ExternalID + ")",
 		}); err != nil {
@@ -1096,41 +1117,20 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 	if err != nil {
 		return nil, err
 	}
-	folderRef := folderID
-	syntheticConn := store.Connection{
-		ID:        "dyn:" + entryID,
-		FolderID:  &folderRef,
-		Name:      entry.Name,
-		Hostname:  entry.Hostname,
-		Overrides: store.InheritableSettings{},
-	}
-	// Ansible-provider entries carry per-host vars in Raw - lift
-	// ansible_user / ansible_port / ansible_ssh_common_args into
-	// the synthetic connection's overrides BEFORE we resolve so
-	// the inherit cascade still wins where overrides are unset.
-	// jumpCred is the per-folder credential the user picked for
-	// every parsed jump hop (Ansible vars only carry the host, not
-	// credentials); empty string = inherit normally.
-	jumpCred := ""
-	if df, err := a.db.GetDynamicFolder(folderID); err == nil && df != nil {
-		if s, ok := df.Config["jump_credential_id"].(string); ok {
-			jumpCred = s
-		}
-	}
-	// Per-connect jump-credential override wins over the folder
-	// default. Lets the user A/B a different bastion credential
-	// without editing the folder config.
-	effectiveJumpCred := jumpCred
-	if jumpCredentialOverride != "" {
-		effectiveJumpCred = jumpCredentialOverride
-	}
-	applyAnsibleVarsToConnection(&syntheticConn, entry.Raw, effectiveJumpCred)
+	// Per-host overrides: Ansible vars (with the per-connect jump-credential
+	// override winning over the folder's) and the bastion route.
+	df, _ := a.db.GetDynamicFolder(folderID)
+	syntheticConn := a.dynamicConnection(entry, df, jumpCredentialOverride)
 
 	// Per-connect jump-host override: replace the chain built from
-	// Ansible vars (or add one if none was parsed) with a single
-	// hop the user picked. Targets the "Ansible says bastionA but
-	// I want bastionB this time" workflow.
+	// Ansible vars or the bastion rule (or add one if there was none)
+	// with a single hop the user picked. Targets the "Ansible says
+	// bastionA but I want bastionB this time" workflow.
 	if jumpHostOverride != "" {
+		effectiveJumpCred := jumpCredentialOverride
+		if effectiveJumpCred == "" && df != nil {
+			effectiveJumpCred, _ = df.Config["jump_credential_id"].(string)
+		}
 		syntheticConn.Overrides.JumpHost = buildJumpChainFromHops([]string{jumpHostOverride}, effectiveJumpCred)
 	}
 
@@ -6092,25 +6092,10 @@ func (a *App) resolveAnyConnection(connectionID string) (*store.ResolvedSettings
 	if err != nil {
 		return nil, err
 	}
-	folderRef := entry.FolderID
-	synthetic := store.Connection{
-		ID:        connectionID,
-		FolderID:  &folderRef,
-		Name:      entry.Name,
-		Hostname:  entry.Hostname,
-		Overrides: store.InheritableSettings{},
-	}
-	// Ansible-provider entries keep ansible_user / ansible_port / jump hops in
-	// Raw; the connect path lifts them into the synthetic overrides before
-	// resolving, so the copied host/user/ssh command has to do the same or it
-	// would disagree with what an actual connect uses.
-	jumpCred := ""
-	if df, err := a.db.GetDynamicFolder(entry.FolderID); err == nil && df != nil {
-		if s, ok := df.Config["jump_credential_id"].(string); ok {
-			jumpCred = s
-		}
-	}
-	applyAnsibleVarsToConnection(&synthetic, entry.Raw, jumpCred)
+	// Same per-host overrides (Ansible vars, bastion route) as a connect,
+	// or the copied host/user/ssh command would disagree with it.
+	synthetic := a.dynamicConnectionFor(entry, "")
+	synthetic.ID = connectionID
 
 	s := resolver.ResolveWith(synthetic, folders)
 	if s.Username == nil && s.AuthRef != nil {
@@ -8500,13 +8485,9 @@ func (a *App) BatchExec(in BatchExecInput) ([]sshlayer.BatchHostResult, error) {
 				})
 				continue
 			}
-			folderRef := entry.FolderID
-			synthetic := store.Connection{
-				ID: cid, FolderID: &folderRef,
-				Name: entry.Name, Hostname: entry.Hostname,
-				Overrides: store.InheritableSettings{},
-			}
-			s := resolver.ResolveWith(synthetic, folders)
+			// Same per-host overrides as an interactive connect; this
+			// path used to skip the Ansible jump hops entirely.
+			s := resolver.ResolveWith(a.dynamicConnectionFor(entry, ""), folders)
 			if s.Username == nil && s.AuthRef != nil {
 				if cred, err2 := a.db.GetCredential(*s.AuthRef); err2 == nil && cred.DefaultUsername != nil {
 					s.Username = cred.DefaultUsername

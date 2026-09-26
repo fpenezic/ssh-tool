@@ -1480,6 +1480,65 @@ export class DynamicFolderUpdateInput {
 }
 
 /**
+ * DynamicPreviewHost is one instance as the editor's bastion picker shows it.
+ */
+export class DynamicPreviewHost {
+    /**
+     * Creates a new DynamicPreviewHost instance.
+     * @param {Partial<DynamicPreviewHost>} [$$source = {}] - The source object to create the DynamicPreviewHost.
+     */
+    constructor($$source = {}) {
+        if (!("external_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["external_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("public_ip" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["public_ip"] = "";
+        }
+        if (!("private_ip" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["private_ip"] = "";
+        }
+        if (!("status" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["status"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DynamicPreviewHost instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {DynamicPreviewHost}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DynamicPreviewHost(/** @type {Partial<DynamicPreviewHost>} */($$parsedSource));
+    }
+}
+
+/**
  * DynamicProbeRequest asks to probe a set of dynamic-inventory entries in one
  * folder (external ids as the frontend renders them).
  */

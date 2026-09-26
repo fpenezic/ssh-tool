@@ -1228,6 +1228,14 @@ export const api = {
     }>>,
   dynamicFolderRefreshNow: (folderId: string) =>
     G.DynamicFolderRefreshNow(folderId),
+  dynamicFolderPreviewHosts: (provider: string, config: Record<string, any>) =>
+    G.DynamicFolderPreviewHosts(provider, config) as unknown as Promise<Array<{
+      external_id: string;
+      name: string;
+      public_ip: string;
+      private_ip: string;
+      status: string;
+    }>>,
   dynamicEntriesList: (folderId: string) =>
     G.DynamicEntriesList(folderId) as unknown as Promise<Array<{
       id: string;

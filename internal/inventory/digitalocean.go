@@ -116,6 +116,9 @@ func decodeDOPage(resp *http.Response) (*doPage, error) {
 
 func pickDOHostname(source string, d doDroplet) string {
 	switch source {
+	case HostnameAuto:
+		pub, priv := doAddrs(d)
+		return firstNonEmpty(pub, priv, d.Name)
 	case "public_ipv4":
 		for _, n := range d.Networks.V4 {
 			if n.Type == "public" && n.IPAddress != "" {

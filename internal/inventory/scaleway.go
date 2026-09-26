@@ -116,6 +116,9 @@ func decodeScalewayPage(resp *http.Response) (*scalewayPage, error) {
 
 func pickScalewayHostname(source string, s scalewayServer) string {
 	switch source {
+	case HostnameAuto:
+		pub, priv := scalewayAddrs(s)
+		return firstNonEmpty(pub, priv, s.Name)
 	case "public_ipv4":
 		if s.PublicIP.Address != "" {
 			return s.PublicIP.Address

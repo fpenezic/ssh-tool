@@ -150,6 +150,8 @@ func ec2DisplayName(i ec2Instance) string {
 
 func pickEC2Hostname(source string, i ec2Instance) string {
 	switch source {
+	case HostnameAuto:
+		return firstNonEmpty(i.PublicIP, i.PrivateIP, ec2DisplayName(i))
 	case "public_ipv4":
 		if i.PublicIP != "" {
 			return i.PublicIP

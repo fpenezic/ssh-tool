@@ -109,6 +109,9 @@ func decodeLinodePage(resp *http.Response) (*linodePage, error) {
 
 func pickLinodeHostname(source string, l linodeInstance) string {
 	switch source {
+	case HostnameAuto:
+		pub, priv := linodeAddrs(l)
+		return firstNonEmpty(pub, priv, l.Label)
 	case "public_ipv4":
 		for _, ip := range l.IPv4 {
 			if !isLinodePrivate(ip) {

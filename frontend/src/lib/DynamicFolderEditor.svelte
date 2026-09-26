@@ -9,6 +9,7 @@
   // notes / tags) are NOT edited here - the folder is a regular
   // folder under the hood. Use the standard folder editor for that.
 
+  import { untrack } from "svelte";
   import { api } from "./api";
   import { errMsg } from "./connectErrors";
   import { withTakeover } from "./connectionActions.svelte";
@@ -51,31 +52,37 @@
   // strings the backend accepts (see *.go pickXHostname switches).
   const HOSTNAME_OPTIONS: Record<string, { value: string; label: string }[]> = {
     hetzner: [
+      { value: "auto",         label: "Auto - public IPv4, or the private one through the bastion" },
       { value: "name",         label: "Server name (resolved via DNS)" },
       { value: "public_ipv4",  label: "Public IPv4" },
       { value: "private_ipv4", label: "First private network IPv4" },
     ],
     digitalocean: [
+      { value: "auto",         label: "Auto - public IPv4, or the private one through the bastion" },
       { value: "name",         label: "Droplet name" },
       { value: "public_ipv4",  label: "Public IPv4" },
       { value: "private_ipv4", label: "Private (VPC) IPv4" },
     ],
     linode: [
+      { value: "auto",         label: "Auto - public IPv4, or the private one through the bastion" },
       { value: "label",        label: "Instance label" },
       { value: "public_ipv4",  label: "Public IPv4" },
       { value: "private_ipv4", label: "Private IPv4" },
     ],
     vultr: [
+      { value: "auto",         label: "Auto - public IPv4, or the private one through the bastion" },
       { value: "label",        label: "Instance label" },
       { value: "public_ipv4",  label: "Main public IPv4" },
       { value: "private_ipv4", label: "Internal IPv4" },
     ],
     scaleway: [
+      { value: "auto",         label: "Auto - public IPv4, or the private one through the bastion" },
       { value: "name",         label: "Server name" },
       { value: "public_ipv4",  label: "Public IPv4" },
       { value: "private_ipv4", label: "Private IPv4" },
     ],
     aws_ec2: [
+      { value: "auto",         label: "Auto - public IPv4, or the private one through the bastion" },
       { value: "name_tag",     label: "Name tag" },
       { value: "public_ipv4",  label: "Public IPv4" },
       { value: "private_ipv4", label: "Private IPv4" },
@@ -183,6 +190,21 @@
   // always follow the folder's Network setting.
   let networkProfileId = $state<string>("");
 
+  // Bastion: one of this folder's own instances. Hosts with only a private
+  // address connect through it; it may have its own credential while the
+  // private hosts keep the folder's. The id is the provider's external id,
+  // the name a fallback for an instance rebuilt under a new id.
+  let bastionExternalId = $state("");
+  let bastionName = $state("");
+  let bastionCredentialId = $state("");
+  type PreviewHost = { external_id: string; name: string; public_ip: string; private_ip: string; status: string };
+  let previewHosts = $state<PreviewHost[] | null>(null);
+  let previewLoading = $state(false);
+  let previewErr = $state("");
+  const publicHosts = $derived((previewHosts ?? []).filter((h) => h.public_ip));
+  const privateOnlyCount = $derived((previewHosts ?? []).filter((h) => !h.public_ip && h.private_ip).length);
+  const BASTION_PROVIDERS = ["digitalocean", "hetzner", "scaleway", "linode", "vultr", "aws_ec2"];
+
   let saving = $state(false);
   let err = $state<string | null>(null);
   let info = $state<{ lastPulled: number | null; lastError: string } | null>(null);
@@ -205,7 +227,10 @@
         if (typeof cfg.hostname_source === "string") {
           hostnameSource = cfg.hostname_source;
         } else {
-          hostnameSource = HOSTNAME_OPTIONS[provider]?.[0]?.value ?? "name";
+          // Saved before hostname_source existed: the backend reads
+          // that as the name/label source, so show that - not "auto",
+          // which is only the default for NEW folders.
+          hostnameSource = HOSTNAME_OPTIONS[provider]?.find((o) => o.value !== "auto")?.value ?? "name";
         }
         regionOrZone = String(cfg.region ?? cfg.zone ?? "");
         includeHosts = cfg.include_hosts !== false;
@@ -219,6 +244,9 @@
         ansibleNameFrom = (cfg.name_from === "ansible_host" ? "ansible_host" : "inventory_hostname") as any;
         ansibleJumpCredentialId = String(cfg.jump_credential_id ?? "");
         networkProfileId = String(cfg.network_profile_id ?? "");
+        bastionExternalId = String(cfg.bastion_external_id ?? "");
+        bastionName = String(cfg.bastion_name ?? "");
+        bastionCredentialId = String(cfg.bastion_credential_id ?? "");
         info = { lastPulled: d.last_pulled_at ?? null, lastError: d.last_error ?? "" };
       } catch (e: any) {
         err = String(e);
@@ -274,6 +302,9 @@
     };
     if (provider === "aws_ec2") cfg.region = regionOrZone.trim();
     if (provider === "scaleway") cfg.zone = regionOrZone.trim();
+    cfg.bastion_external_id = bastionExternalId;
+    cfg.bastion_name = bastionExternalId ? bastionName : "";
+    cfg.bastion_credential_id = bastionExternalId ? bastionCredentialId : "";
     return cfg;
   }
 
@@ -302,6 +333,38 @@
     } finally {
       newTokenSaving = false;
     }
+  }
+
+  async function loadPreviewHosts() {
+    previewLoading = true;
+    previewErr = "";
+    try {
+      previewHosts = await api.dynamicFolderPreviewHosts(provider, buildConfig());
+    } catch (e: any) {
+      previewHosts = null;
+      previewErr = String(e?.message ?? e);
+    } finally {
+      previewLoading = false;
+    }
+  }
+
+  // Load the instance list as soon as the API can be asked: a token is
+  // picked (and a region/zone where the provider needs one). Keyed so it
+  // runs once per distinct token/region/network, not on every keystroke
+  // elsewhere in the form.
+  let previewKey = "";
+  $effect(() => {
+    if (!BASTION_PROVIDERS.includes(provider) || !tokenCredentialId) return;
+    if ((provider === "aws_ec2" || provider === "scaleway") && !regionOrZone.trim()) return;
+    const key = [provider, tokenCredentialId, regionOrZone.trim(), networkProfileId].join("|");
+    if (key === previewKey) return;
+    previewKey = key;
+    untrack(() => void loadPreviewHosts());
+  });
+
+  function pickBastion(id: string) {
+    bastionExternalId = id;
+    bastionName = publicHosts.find((h) => h.external_id === id)?.name ?? bastionName;
   }
 
   async function save() {
@@ -464,7 +527,10 @@
           onchange={(e) => {
             provider = (e.target as HTMLSelectElement).value as ProviderId;
             const opts = HOSTNAME_OPTIONS[provider];
-            if (opts && !opts.find((o) => o.value === hostnameSource)) {
+            // A new folder starts from the provider's first option ("auto"
+            // for the clouds); an edited one keeps its choice when the
+            // new provider has it too.
+            if (opts && (!isEdit || !opts.find((o) => o.value === hostnameSource))) {
               hostnameSource = opts[0].value;
             }
           }}
@@ -768,6 +834,51 @@
             </label>
           {/each}
         </fieldset>
+
+        {#if BASTION_PROVIDERS.includes(provider)}
+          <fieldset>
+            <legend>Bastion</legend>
+            <label>
+              <span class="lbl">Servers without a public IPv4 connect through</span>
+              <div class="token-pick">
+                <select value={bastionExternalId} onchange={(e) => pickBastion((e.currentTarget as HTMLSelectElement).value)}>
+                  <option value="">(no bastion - connect directly)</option>
+                  {#if bastionExternalId && !publicHosts.some((h) => h.external_id === bastionExternalId)}
+                    <option value={bastionExternalId}>{bastionName || bastionExternalId}</option>
+                  {/if}
+                  {#each publicHosts as h (h.external_id)}
+                    <option value={h.external_id}>{h.name} ({h.public_ip})</option>
+                  {/each}
+                </select>
+                <button type="button" class="token-add" disabled={!tokenCredentialId || previewLoading} onclick={loadPreviewHosts}>
+                  {previewLoading ? "Loading…" : "Reload"}
+                </button>
+              </div>
+              <span class="hint">
+                {#if !tokenCredentialId}
+                  Pick the API token above to list the servers with a public address.
+                {:else if previewHosts}
+                  {previewHosts.length} servers, {publicHosts.length} with a public IPv4{privateOnlyCount ? `, ${privateOnlyCount} private only` : ""}.
+                {:else}
+                  One of this folder's servers with a public IPv4.
+                {/if}
+              </span>
+            </label>
+            {#if previewErr}<div class="err">{previewErr}</div>{/if}
+            {#if bastionExternalId}
+              <label>
+                <span class="lbl">Bastion login</span>
+                <select bind:value={bastionCredentialId}>
+                  <option value="">(same as the folder)</option>
+                  {#each sshCreds as c (c.id)}
+                    <option value={c.id}>{c.name}</option>
+                  {/each}
+                </select>
+                <span class="hint">Used on the bastion itself and as the jump hop. The private servers keep the folder's login.</span>
+              </label>
+            {/if}
+          </fieldset>
+        {/if}
 
         <fieldset>
           <legend>Filter</legend>

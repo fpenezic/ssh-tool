@@ -203,13 +203,7 @@ func (a *App) ProbeDynamicEntries(req DynamicProbeRequest) []DynamicProbeResult 
 		}
 		return out
 	}
-	// Per-folder jump credential (same lookup dynamic connect uses).
-	jumpCred := ""
-	if df, err := a.db.GetDynamicFolder(req.FolderID); err == nil && df != nil {
-		if s, ok := df.Config["jump_credential_id"].(string); ok {
-			jumpCred = s
-		}
-	}
+	df, _ := a.db.GetDynamicFolder(req.FolderID)
 
 	sem := make(chan struct{}, probeConcurrency)
 	var wg sync.WaitGroup
@@ -219,14 +213,14 @@ func (a *App) ProbeDynamicEntries(req DynamicProbeRequest) []DynamicProbeResult 
 		go func(i int, id string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			out[i] = DynamicProbeResult{EntryID: id, State: a.probeDynamicOne(req.FolderID, id, folders, jumpCred)}
+			out[i] = DynamicProbeResult{EntryID: id, State: a.probeDynamicOne(req.FolderID, id, folders, df)}
 		}(i, id)
 	}
 	wg.Wait()
 	return out
 }
 
-func (a *App) probeDynamicOne(folderID, entryID string, folders []store.Folder, jumpCred string) string {
+func (a *App) probeDynamicOne(folderID, entryID string, folders []store.Folder, df *store.DynamicFolder) string {
 	entry, err := a.db.GetDynamicEntry(entryID)
 	if err != nil || entry == nil || entry.FolderID != folderID {
 		return probeUnknown
@@ -235,17 +229,9 @@ func (a *App) probeDynamicOne(folderID, entryID string, folders []store.Folder, 
 	if entry.Status != "running" {
 		return probeUnknown
 	}
-	syntheticConn := store.Connection{
-		ID:        "dyn:" + entryID,
-		FolderID:  &folderID,
-		Name:      entry.Name,
-		Hostname:  entry.Hostname,
-		Overrides: store.InheritableSettings{},
-	}
-	// Lift Ansible per-host vars (port/user/jump) exactly like a real connect,
-	// so the resolved port/profile/jump match what a connect would use.
-	applyAnsibleVarsToConnection(&syntheticConn, entry.Raw, jumpCred)
-	s := resolver.ResolveWith(syntheticConn, folders)
+	// Same per-host overrides (Ansible vars, bastion route) as a real
+	// connect, so the probe checks the path a connect would take.
+	s := resolver.ResolveWith(a.dynamicConnection(entry, df, ""), folders)
 	if !s.ProbeLiveness {
 		return probeUnknown
 	}

@@ -31,6 +31,7 @@ export {
     CredentialsUpdateInput,
     DynamicFolderCreateInput,
     DynamicFolderUpdateInput,
+    DynamicPreviewHost,
     DynamicProbeRequest,
     DynamicProbeResult,
     ExportSubtreeRequest,

@@ -404,3 +404,28 @@ func filterFromConfig(cfg map[string]any) Filter {
 	}
 	return f
 }
+
+// Preview fetches a provider's current instances for a config that may not
+// be saved yet - the editor lists them so the user can pick a bastion before
+// creating the folder. Nothing is written. The API is reached directly unless
+// the config names a network profile explicitly (an unsaved folder has no
+// inherited Network setting to follow).
+func (m *Manager) Preview(ctx context.Context, provider string, cfg map[string]any) ([]Entry, error) {
+	prov, ok := m.providers[provider]
+	if !ok {
+		return nil, fmt.Errorf("unknown provider %q", provider)
+	}
+	resolved, err := m.resolveSecrets(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if resolved["network_profile_id"] == networkDirectSentinel {
+		resolved["network_profile_id"] = ""
+	}
+	resolved[backgroundRefreshKey] = false
+	entries, err := prov.Fetch(ctx, resolved)
+	if err != nil {
+		return nil, err
+	}
+	return filterFromConfig(cfg).Apply(entries), nil
+}
