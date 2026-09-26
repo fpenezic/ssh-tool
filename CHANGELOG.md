@@ -36,6 +36,14 @@ a prerelease upstream.
   already written next to it, instead of first asking "shall I save?" in
   chat. It also picks the credential named after the client, and asks
   when there is none rather than taking a generic one.
+- **The approval dialog shows everything it will create**: the icon each
+  connection gets, and which port forwards start by themselves.
+- **Tunnels to a web UI get a free port and a bookmark** instead of a
+  fixed port that may already be taken. The bookmark always opens the
+  right port.
+- **Tidier plans.** Creating the same folder twice is refused, and hosts
+  that each repeat the same jump host are flagged, so they end up in a
+  subfolder that carries it once.
 
 ### Fixed
 
