@@ -3683,7 +3683,13 @@ func (a *App) BroadcastSetAllInGroup(groupID string, sessionIDs []string) {
 // session even when the originating window is detached and the target
 // session lives in a different window's pane tree. Returns an error
 // summary string per failing member (empty on full success).
-func (a *App) BroadcastFanOut(originID, dataB64 string) string {
+//
+// command is true when the origin's terminal classified the input as a
+// command (Enter at a shell prompt). Each target then records a command
+// mark the same way its own typed command would (WriteCommand), and gets a
+// command_stamp:<id> event first so its pane can place the timestamp while
+// the cursor is still on the command line - the echo arrives after.
+func (a *App) BroadcastFanOut(originID, dataB64 string, command bool) string {
 	a.broadcastMu.Lock()
 	// Union of every group the origin belongs to. A session in two
 	// groups broadcasts to both unions; targets de-duplicated.
@@ -3719,14 +3725,23 @@ func (a *App) BroadcastFanOut(originID, dataB64 string) string {
 		// local PTY pool. Broadcast members can mix the two - a
 		// user might want to type into three SSH boxes AND tail
 		// the local journal at the same time.
-		if sess, ok := a.pool.Get(id); ok {
-			if err := sess.Write(data); err != nil {
-				sb.WriteString(fmt.Sprintf("%s: %v\n", id, err))
-			}
-			continue
+		type writer interface {
+			Write([]byte) error
+			WriteCommand([]byte) error
 		}
-		if sess, ok := a.localPool.Get(id); ok {
-			if err := sess.Write(data); err != nil {
+		var w writer
+		if sess, ok := a.pool.Get(id); ok {
+			w = sess
+		} else if sess, ok := a.localPool.Get(id); ok {
+			w = sess
+		}
+		if w != nil {
+			write := w.Write
+			if command {
+				EventsEmit("command_stamp:"+id, map[string]int64{"at": time.Now().UnixMilli()})
+				write = w.WriteCommand
+			}
+			if err := write(data); err != nil {
 				sb.WriteString(fmt.Sprintf("%s: %v\n", id, err))
 			}
 			continue

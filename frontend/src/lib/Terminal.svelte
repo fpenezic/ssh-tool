@@ -127,6 +127,14 @@
     st.deco = deco;
   }
 
+  function termState() {
+    return {
+      altScreen: term!.buffer.active.type === "alternate",
+      sendFocusMode: term!.modes.sendFocusMode,
+      mouseTrackingMode: term!.modes.mouseTrackingMode,
+    };
+  }
+
   function addStamp(at: number) {
     if (!term) return;
     const marker = term.registerMarker(0);
@@ -1432,11 +1440,8 @@
       // Always write to this session - xterm's onData is the source of
       // truth for what the user typed here AND for the report responses
       // the remote app asked for (both must reach this PTY).
-      if (fromUser && term && isCommandInput(data, {
-        altScreen: term.buffer.active.type === "alternate",
-        sendFocusMode: term.modes.sendFocusMode,
-        mouseTrackingMode: term.modes.mouseTrackingMode,
-      })) {
+      const isCommand = fromUser && !!term && isCommandInput(data, termState());
+      if (isCommand) {
         // Stamped before the write: the cursor is still on the command line.
         addStamp(Date.now());
         writeCommandIPC(sessionId, toB64(bytes)).catch(console.warn);
@@ -1450,7 +1455,7 @@
       // shells as garbage. hasInAnyGroup: works for sessions that live only
       // in a named (non-default) broadcast group.
       if (fromUser && broadcast.hasInAnyGroup(sessionId) && broadcast.totalMembers() > 1) {
-        broadcast.fanOut(data, sessionId).catch(console.warn);
+        broadcast.fanOut(data, sessionId, isCommand).catch(console.warn);
       }
     });
 
@@ -1756,6 +1761,12 @@
       }
     }
 
+    // A command another pane broadcast to this session: stamp it like a
+    // command typed here, unless this terminal is in a TUI (its own state
+    // decides, not the origin's). Arrives before the command's echo.
+    const unC = EventsOn(`command_stamp:${sid}`, (p: { at: number }) => {
+      if (term && isCommandInput("\r", termState())) addStamp(p.at);
+    });
     const unO = EventsOn(`pty_output:${sid}`, (payload: { b64: string; cum: number }) => {
       const data = fromB64(payload.b64);
       const cum = payload.cum ?? 0;
@@ -1847,7 +1858,7 @@
       pending = [];
       gapFrames = 0;
     };
-    wiredUnsubs = [unO, unD, unS, cancelRaf];
+    wiredUnsubs = [unO, unC, unD, unS, cancelRaf];
     // Do NOT return a cleanup function from this $effect - that would
     // run on every rerun. Cleanup is in unwire() above, called from
     // onDestroy or on a real sessionId swap.

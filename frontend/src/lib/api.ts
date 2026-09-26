@@ -720,8 +720,8 @@ export const api = {
   broadcastRemove: (sessionId: string) => G.BroadcastRemove(sessionId),
   broadcastClear: () => G.BroadcastClear(),
   broadcastSetAll: (ids: string[]) => G.BroadcastSetAll(ids),
-  broadcastFanOut: (originId: string, b64: string) =>
-    G.BroadcastFanOut(originId, b64) as unknown as Promise<string>,
+  broadcastFanOut: (originId: string, b64: string, command: boolean) =>
+    G.BroadcastFanOut(originId, b64, command) as unknown as Promise<string>,
   broadcastListGroups: () =>
     G.BroadcastListGroups() as unknown as Promise<Record<string, string[]>>,
   broadcastAddTo: (groupId: string, sessionId: string) =>

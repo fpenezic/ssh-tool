@@ -193,13 +193,15 @@ class BroadcastStore {
   // every member except the origin. The backend returns a non-empty
   // string when at least one target failed; we surface that into
   // lastError so the manager modal can show it.
-  async fanOut(data: string, originSessionId: string) {
+  // command: the origin classified this input as a command at a shell
+  // prompt, so every target records a command mark (timestamp) too.
+  async fanOut(data: string, originSessionId: string, command = false) {
     // Peers across EVERY group the origin is in - checking only the
     // default group (`members`) silently dropped keystrokes for sessions
     // that live only in a named group.
     if (!this.hasPeers(originSessionId)) return;
     try {
-      const errs = await api.broadcastFanOut(originSessionId, encodeB64(data));
+      const errs = await api.broadcastFanOut(originSessionId, encodeB64(data), command);
       if (errs) this.lastError = errs;
     } catch (e: any) {
       this.lastError = e?.message ?? String(e);

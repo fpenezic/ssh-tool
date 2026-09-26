@@ -384,12 +384,19 @@ export function BroadcastClearGroup(groupID) {
  * session even when the originating window is detached and the target
  * session lives in a different window's pane tree. Returns an error
  * summary string per failing member (empty on full success).
+ * 
+ * command is true when the origin's terminal classified the input as a
+ * command (Enter at a shell prompt). Each target then records a command
+ * mark the same way its own typed command would (WriteCommand), and gets a
+ * command_stamp:<id> event first so its pane can place the timestamp while
+ * the cursor is still on the command line - the echo arrives after.
  * @param {string} originID
  * @param {string} dataB64
+ * @param {boolean} command
  * @returns {$CancellablePromise<string>}
  */
-export function BroadcastFanOut(originID, dataB64) {
-    return $Call.ByID(2752231907, originID, dataB64);
+export function BroadcastFanOut(originID, dataB64, command) {
+    return $Call.ByID(2752231907, originID, dataB64, command);
 }
 
 /**
