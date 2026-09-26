@@ -1987,6 +1987,16 @@ export function McpShareSession(sessionID, level) {
 }
 
 /**
+ * McpSystemPrompt returns the text the MCP bridge sends as its instructions,
+ * for the "Copy system prompt" buttons: clients that ignore server
+ * instructions get the very same text pasted by hand.
+ * @returns {$CancellablePromise<string>}
+ */
+export function McpSystemPrompt() {
+    return $Call.ByID(3581993408);
+}
+
+/**
  * McpUnshareSession revokes a session's grant.
  * @param {string} sessionID
  * @returns {$CancellablePromise<void>}

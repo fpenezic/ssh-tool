@@ -611,6 +611,8 @@ export type OpksshCertLifetime = {
 export const api = {
   ping: (name: string) => G.Ping(name),
   setWindowTitle: (title: string) => G.SetWindowTitle(title),
+  // The text the MCP bridge sends as its instructions (internal/mcpprompt).
+  mcpSystemPrompt: () => G.McpSystemPrompt() as unknown as Promise<string>,
 
   foldersList: () => G.FoldersList() as unknown as Promise<Folder[]>,
   foldersGet: (id: string) => G.FoldersGet(id) as unknown as Promise<Folder>,

@@ -26,7 +26,7 @@
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
   import { probeState } from "./probeState.svelte";
-  import { MCP_SYSTEM_PROMPT, MCP_SYSTEM_PROMPT_HINT } from "./mcpSystemPrompt";
+  import { MCP_SYSTEM_PROMPT_HINT } from "./mcpSystemPrompt";
   import { copyText, writeClipboard } from "./clipboard";
   import { IconCopy } from "./iconMap";
   import { localShellPrefs } from "./localShellPrefs.svelte.ts";
@@ -659,7 +659,7 @@
 
   async function copyMcpSystemPrompt() {
     try {
-      await writeClipboard(MCP_SYSTEM_PROMPT);
+      await writeClipboard(await api.mcpSystemPrompt());
       toast.ok("System prompt copied. " + MCP_SYSTEM_PROMPT_HINT);
     } catch {
       toast.err("Copy failed - clipboard unavailable");

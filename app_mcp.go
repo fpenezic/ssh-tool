@@ -10,9 +10,15 @@ import (
 
 	"github.com/google/uuid"
 
+	"ssh-tool/internal/mcpprompt"
 	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/store"
 )
+
+// McpSystemPrompt returns the text the MCP bridge sends as its instructions,
+// for the "Copy system prompt" buttons: clients that ignore server
+// instructions get the very same text pasted by hand.
+func (a *App) McpSystemPrompt() string { return mcpprompt.Text() }
 
 // AppExePath returns the absolute path of the running ssh-tool binary, so the
 // Settings page can show the exact `claude mcp add ssh-tool -- <path>

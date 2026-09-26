@@ -225,10 +225,11 @@ novel.
     `mutationTokens` set, or YOLO would prompt on mkdir/touch/git and
     defeat itself). `canRun(lvl)` is the shared authorisation check; the
     activity gate is recorded as `"yolo"` for auto-approved writes. The
-    LLM system prompt is a frontend const (`mcpSystemPrompt.ts`, the
-    single source of truth) surfaced by a "Copy system prompt" button in
-    Settings->LLM + the share popover; `docs/MCP_SYSTEM_PROMPT.md` is the
-    hand-synced human-readable mirror.
+    LLM prompt is ONE file, `internal/mcpprompt/prompt.md` (go:embed): the
+    bridge sends it as the MCP instructions and the "Copy system prompt"
+    buttons fetch the same text over IPC (`McpSystemPrompt`). There used to
+    be two texts (a Go const and a frontend const) plus a doc mirror, and
+    they drifted - the copied prompt missed tools the bridge had.
     Tools: list_sessions, read_terminal, run, type_into_terminal,
     list_files / read_file / download_file (gotcha 46), plus
     list_connections (name + folder path only, Sensitive connections

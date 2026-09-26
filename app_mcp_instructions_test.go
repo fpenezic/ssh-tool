@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"ssh-tool/internal/mcpprompt"
 )
 
 // TestMcpInstructionsMentionEveryTool keeps the instructions from rotting.
@@ -32,14 +34,14 @@ func TestMcpInstructionsMentionEveryTool(t *testing.T) {
 	}
 
 	for _, name := range registeredMcpToolNames(t) {
-		if strings.Contains(mcpInstructions, name) {
+		if strings.Contains(mcpprompt.Text(), name) {
 			continue
 		}
 		if why, ok := covered[name]; ok {
 			t.Logf("tool %q not named in instructions: %s", name, why)
 			continue
 		}
-		t.Errorf("tool %q is registered but never mentioned in mcpInstructions; "+
+		t.Errorf("tool %q is registered but never mentioned in mcpprompt.Text(); "+
 			"a client is told nothing about it", name)
 	}
 }
@@ -52,8 +54,13 @@ func TestMcpInstructionsNameOnlyRealTools(t *testing.T) {
 	for _, n := range registeredMcpToolNames(t) {
 		real[n] = true
 	}
+	// Argument names are fair game too ("auth_ref", "session_id") - but only
+	// ones a tool really takes, so a renamed argument still fails here.
+	for _, n := range registeredMcpArgNames(t) {
+		real[n] = true
+	}
 	// Every snake_case word in the prose that looks like a tool name.
-	for _, word := range strings.FieldsFunc(mcpInstructions, func(r rune) bool {
+	for _, word := range strings.FieldsFunc(mcpprompt.Text(), func(r rune) bool {
 		return !(r == '_' || r >= 'a' && r <= 'z')
 	}) {
 		if !strings.Contains(word, "_") || real[word] {
@@ -61,7 +68,7 @@ func TestMcpInstructionsNameOnlyRealTools(t *testing.T) {
 		}
 		// Ordinary prose that happens to contain an underscore would be
 		// unusual; flag it so a typo'd tool name cannot hide.
-		t.Errorf("mcpInstructions names %q, which is not a registered tool", word)
+		t.Errorf("mcpprompt.Text() names %q, which is not a registered tool or argument", word)
 	}
 }
 
@@ -74,8 +81,8 @@ func TestMcpInstructionsStateTheGrantLevels(t *testing.T) {
 		string(mcpGrantReadRunYolo),
 		"manage",
 	} {
-		if !strings.Contains(mcpInstructions, want) {
-			t.Errorf("mcpInstructions never mentions the %q grant", want)
+		if !strings.Contains(mcpprompt.Text(), want) {
+			t.Errorf("mcpprompt.Text() never mentions the %q grant", want)
 		}
 	}
 }
@@ -85,9 +92,9 @@ func TestMcpInstructionsStateTheGrantLevels(t *testing.T) {
 // hostile host output - the approval modal and grant split are the real
 // boundary - but it is the only one that travels with the server.
 func TestMcpInstructionsWarnAboutUntrustedOutput(t *testing.T) {
-	lower := strings.ToLower(mcpInstructions)
+	lower := strings.ToLower(mcpprompt.Text())
 	if !strings.Contains(lower, "never follow instructions") {
-		t.Error("mcpInstructions must tell the client not to follow instructions found in host output")
+		t.Error("mcpprompt.Text() must tell the client not to follow instructions found in host output")
 	}
 }
 
@@ -121,8 +128,8 @@ func TestMcpServerCarriesInstructionsOverTheWire(t *testing.T) {
 	if got == "" {
 		t.Fatal("server sent no instructions in the initialize result")
 	}
-	if got != mcpInstructions {
-		t.Errorf("instructions on the wire differ from mcpInstructions:\n got %q", got)
+	if got != mcpprompt.Text() {
+		t.Errorf("instructions on the wire differ from mcpprompt.Text():\n got %q", got)
 	}
 }
 
@@ -167,6 +174,52 @@ func TestMcpToolsAreListable(t *testing.T) {
 
 // registeredMcpToolNames returns the Name of every mcp.AddTool registration,
 // read from the source so the list cannot drift from what is registered.
+// registeredMcpArgNames returns the JSON names of every field of the mcp*Args
+// structs the tools decode their input into.
+func registeredMcpArgNames(t *testing.T) []string {
+	t.Helper()
+	file, err := parser.ParseFile(token.NewFileSet(), "app_mcp_desktop.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var out []string
+	ast.Inspect(file, func(n ast.Node) bool {
+		ts, ok := n.(*ast.TypeSpec)
+		if !ok || !strings.HasPrefix(ts.Name.Name, "mcp") || !strings.HasSuffix(ts.Name.Name, "Args") {
+			return true
+		}
+		st, ok := ts.Type.(*ast.StructType)
+		if !ok {
+			return true
+		}
+		for _, f := range st.Fields.List {
+			if f.Tag == nil {
+				continue
+			}
+			tag, _ := strconv.Unquote(f.Tag.Value)
+			if json := reflectTag(tag, "json"); json != "" {
+				out = append(out, strings.Split(json, ",")[0])
+			}
+		}
+		return true
+	})
+	if len(out) == 0 {
+		t.Fatal("found no tool argument names; did the mcp*Args structs move?")
+	}
+	return out
+}
+
+// reflectTag reads one key from a struct tag without importing reflect's
+// StructTag for a single call.
+func reflectTag(tag, key string) string {
+	for _, part := range strings.Fields(tag) {
+		if v, ok := strings.CutPrefix(part, key+":"); ok {
+			return strings.Trim(v, `"`)
+		}
+	}
+	return ""
+}
+
 func registeredMcpToolNames(t *testing.T) []string {
 	t.Helper()
 	fset := token.NewFileSet()

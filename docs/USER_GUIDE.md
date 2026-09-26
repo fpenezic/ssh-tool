@@ -1381,8 +1381,9 @@ mode), click **Copy system prompt** in Settings -> LLM or the
 Share-with-LLM popover, then paste it where your client keeps
 instructions: **Claude Desktop** -> Project -> *Instructions* (and
 then chat inside that project), **Claude Code** -> your `CLAUDE.md`,
-**LM Studio** and others -> the system-prompt field. The same text is
-in [`docs/MCP_SYSTEM_PROMPT.md`](MCP_SYSTEM_PROMPT.md).
+**LM Studio** and others -> the system-prompt field. It is the same text
+ssh-tool already sends to clients that read MCP server instructions; see
+[`docs/MCP_SYSTEM_PROMPT.md`](MCP_SYSTEM_PROMPT.md).
 
 Pasting it as an ordinary chat message part-way through a conversation
 often will **not** work, and that is the model behaving correctly: a

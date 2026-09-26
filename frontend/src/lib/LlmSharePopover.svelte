@@ -8,7 +8,7 @@
   import { clickOutside } from "./clickOutside";
   import { view } from "./stores.svelte";
   import { IconStop } from "./iconMap";
-  import { MCP_SYSTEM_PROMPT, MCP_SYSTEM_PROMPT_HINT } from "./mcpSystemPrompt";
+  import { MCP_SYSTEM_PROMPT_HINT } from "./mcpSystemPrompt";
   import { toast } from "./toast.svelte.ts";
   import { writeClipboard } from "./clipboard";
   import { EventsOn } from "./wailsRuntime";
@@ -88,7 +88,7 @@
     // writeClipboard tries the native Go clipboard first (the mac WKWebView
     // refuses navigator.clipboard here), then falls back to navigator.
     try {
-      await writeClipboard(MCP_SYSTEM_PROMPT);
+      await writeClipboard(await api.mcpSystemPrompt());
       toast.ok("System prompt copied. " + MCP_SYSTEM_PROMPT_HINT);
     } catch {
       toast.err("Copy failed - clipboard unavailable");
