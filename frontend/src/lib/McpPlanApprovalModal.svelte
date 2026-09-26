@@ -21,6 +21,7 @@
     via: string;
     network_profile: string;
     initial_command: string;
+    notes?: string;
     forwards: PlanForwardPreview[];
   }
   export interface PlanFolderPreview {
@@ -151,6 +152,7 @@
               {#if conn.credential}<span class="chip">cred: {conn.credential}</span>{/if}
               {#if conn.initial_command}<span class="chip">init: {conn.initial_command}</span>{/if}
             </div>
+            {#if conn.notes}<div class="notes">{conn.notes}</div>{/if}
             {#each conn.forwards as fw}
               <div class="fwd">
                 <span class="fwd-kind">{fw.kind}</span>
@@ -259,6 +261,13 @@
     margin-right: 0.4rem;
   }
   .fwd-detail { font-family: ui-monospace, monospace; color: var(--subtext0); }
+  .notes {
+    margin-top: 0.3rem;
+    font-size: 0.8rem;
+    color: var(--subtext0);
+    font-style: italic;
+    white-space: pre-wrap;
+  }
   .bookmarks { margin: 0.2rem 0 0.1rem 0.4rem; }
   .bm {
     font-size: 0.74rem; color: var(--subtext0); font-family: ui-monospace, monospace;

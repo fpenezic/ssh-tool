@@ -185,6 +185,20 @@ func (d *DB) UpdateFolderSettingsTx(tx *sql.Tx, folderID string, settings Inheri
 	return nil
 }
 
+// SetConnectionNotesTx replaces a connection's notes inside tx.
+func (d *DB) SetConnectionNotesTx(tx *sql.Tx, connID, notes string) error {
+	res, err := tx.Exec(
+		`UPDATE connections SET notes = ?, updated_at = ? WHERE id = ?`,
+		notes, now(), connID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // RenameConnectionTx changes a connection's name inside tx. Split out from
 // UpdateConnection because the plan path needs a single-column write that
 // composes with the other statements in the same transaction, and because

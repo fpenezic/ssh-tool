@@ -316,6 +316,7 @@ type mcpEditConnectionArgs struct {
 	AuthRef          *string  `json:"auth_ref,omitempty" jsonschema:"id of an EXISTING vault credential (from list_credentials); NEVER a password"`
 	NetworkProfileID *string  `json:"network_profile_id,omitempty" jsonschema:"id of an existing network profile the first hop routes through"`
 	InitialCommand   *string  `json:"initial_command,omitempty" jsonschema:"command run in the shell right after connect"`
+	Notes            *string  `json:"notes,omitempty" jsonschema:"replaces the connection's notes; an empty string removes them"`
 	Folder           *string  `json:"folder,omitempty" jsonschema:"move the connection into this folder: an existing folder id, a tmp: temp id from create_folder, or an empty string for the tree root"`
 	Icon             *string  `json:"icon,omitempty" jsonschema:"built-in icon name (see list_icons), or an empty string to remove the icon. Replaces a custom uploaded image if the connection had one"`
 	IconColor        *string  `json:"icon_color,omitempty" jsonschema:"colour for a built-in icon: red, orange, yellow, green, teal, blue, mauve or pink. Ignored on connections carrying an uploaded image"`
@@ -342,6 +343,7 @@ type mcpCreateConnectionArgs struct {
 	JumpAuthRef      string   `json:"jump_auth_ref,omitempty" jsonschema:"id of an EXISTING vault credential for the bastion; NEVER a password"`
 	InitialCommand   string   `json:"initial_command,omitempty" jsonschema:"command run in the shell right after connect (e.g. tmux attach)"`
 	Tags             []string `json:"tags,omitempty" jsonschema:"optional tags"`
+	Notes            string   `json:"notes,omitempty" jsonschema:"free-text notes shown on the connection: warnings, owners, maintenance windows, anything the source said about this host that has no field of its own"`
 	Icon             string   `json:"icon,omitempty" jsonschema:"built-in icon name shown in the tree; call list_icons for the choices. Only set one the user asked for - do not guess from the hostname"`
 	IconColor        string   `json:"icon_color,omitempty" jsonschema:"colour for the icon: red, orange, yellow, green, teal, blue, mauve or pink. Needs icon to be set"`
 	IconImage        string   `json:"icon_image,omitempty" jsonschema:"id of an icon the user already uploaded (from list_icons, which shows what each one is used by). Use it to match an existing connection's icon. Mutually exclusive with icon"`
@@ -563,7 +565,7 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 			Name: in.Name, Host: in.Host, Port: in.Port, User: in.User,
 			Folder: in.Folder, AuthRef: in.AuthRef, NetworkProfileID: in.NetworkProfileID,
 			JumpHost: in.JumpHost, JumpUser: in.JumpUser, JumpPort: in.JumpPort, JumpAuthRef: in.JumpAuthRef,
-			InitialCommand: in.InitialCommand, Tags: in.Tags,
+			InitialCommand: in.InitialCommand, Tags: in.Tags, Notes: in.Notes,
 			Icon: in.Icon, IconColor: in.IconColor, IconImage: in.IconImage,
 		})
 		if err != nil {
@@ -616,7 +618,7 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 		if err := a.planEditConnection(editConnInput{
 			ConnID: in.Connection, Name: in.Name, Host: in.Host, User: in.User, Port: in.Port,
 			AuthRef: in.AuthRef, NetworkProfileID: in.NetworkProfileID,
-			InitialCommand: in.InitialCommand, Folder: in.Folder, Clear: in.Clear,
+			InitialCommand: in.InitialCommand, Folder: in.Folder, Clear: in.Clear, Notes: in.Notes,
 			Icon: in.Icon, IconColor: in.IconColor, IconImage: in.IconImage,
 		}); err != nil {
 			return errResult(err), nil, nil

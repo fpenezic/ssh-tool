@@ -97,6 +97,7 @@ type planConn struct {
 	Jump             *planJump
 	InitialCommand   string
 	Tags             []string
+	Notes            string
 	Icon             string // built-in icon name, or ""
 	IconColor        string // palette colour name, or ""
 	IconImage        string // uploaded image id, or ""
@@ -126,6 +127,7 @@ type planEditConn struct {
 	Name          *string
 	Host          *string
 	Folder        *planRef // move; a set-but-empty ref means root
+	Notes         *string  // replaces the notes; a set-but-empty value clears them
 	SetSettings   store.InheritableSettings
 	ClearSettings []string
 	// Icon is separate from SetSettings because icons are their own columns,
@@ -285,6 +287,7 @@ type planConnInput struct {
 	JumpAuthRef      string
 	InitialCommand   string
 	Tags             []string
+	Notes            string
 	Icon             string
 	IconColor        string
 	IconImage        string
@@ -336,6 +339,7 @@ func (a *App) planAddConnection(in planConnInput) (string, error) {
 		NetworkProfileID: strings.TrimSpace(in.NetworkProfileID),
 		InitialCommand:   in.InitialCommand,
 		Tags:             in.Tags,
+		Notes:            strings.TrimSpace(in.Notes),
 		Icon:             icon,
 		IconColor:        iconColor,
 		IconImage:        iconImage,
@@ -420,6 +424,7 @@ type editConnInput struct {
 	NetworkProfileID *string
 	InitialCommand   *string
 	Folder           *string
+	Notes            *string
 	Icon             *string
 	IconColor        *string
 	IconImage        *string
@@ -458,6 +463,10 @@ func (a *App) planEditConnection(in editConnInput) error {
 	if in.Folder != nil {
 		ref := parsePlanRef(*in.Folder)
 		e.Folder = &ref
+	}
+	if in.Notes != nil {
+		n := strings.TrimSpace(*in.Notes)
+		e.Notes = &n
 	}
 	if in.User != nil {
 		e.SetSettings.Username = in.User
@@ -509,7 +518,7 @@ func (a *App) planEditConnection(in editConnInput) error {
 		}
 		e.ClearSettings = append(e.ClearSettings, c)
 	}
-	if e.Name == nil && e.Host == nil && e.Folder == nil && e.Icon == nil && e.IconColor == nil && e.IconImage == nil &&
+	if e.Name == nil && e.Host == nil && e.Folder == nil && e.Notes == nil && e.Icon == nil && e.IconColor == nil && e.IconImage == nil &&
 		len(e.ClearSettings) == 0 && settingsEmpty(e.SetSettings) {
 		return fmt.Errorf("nothing to change")
 	}
@@ -539,6 +548,9 @@ func mergeConnEdit(a *planEditConn, b planEditConn) {
 	}
 	if b.Folder != nil {
 		a.Folder = b.Folder
+	}
+	if b.Notes != nil {
+		a.Notes = b.Notes
 	}
 	if b.Icon != nil {
 		a.Icon = b.Icon
@@ -657,6 +669,7 @@ type McpPlanConnPreview struct {
 	Via            string                  `json:"via"`             // bastion "user@host" or ""
 	NetworkProfile string                  `json:"network_profile"` // name or ""
 	InitialCommand string                  `json:"initial_command"`
+	Notes          string                  `json:"notes"`
 	Forwards       []McpPlanForwardPreview `json:"forwards"`
 }
 
@@ -881,6 +894,7 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 			Via:            via,
 			NetworkProfile: np,
 			InitialCommand: c.InitialCommand,
+			Notes:          c.Notes,
 			Forwards:       renderForwards(fwdByConnTemp[c.TempID]),
 		})
 	}
@@ -932,6 +946,9 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 				from = folderPaths[*cur.FolderID]
 			}
 			ch = append(ch, fmt.Sprintf("folder: %s -> %s", from, folderLabel(*e.Folder)))
+		}
+		if e.Notes != nil && *e.Notes != cur.Notes {
+			ch = append(ch, fmt.Sprintf("notes: %q -> %q", cur.Notes, *e.Notes))
 		}
 		if e.SetSettings.Username != nil {
 			ch = append(ch, fmt.Sprintf("user: %s -> %s", strDeref(cur.Overrides.Username, "(inherited)"), *e.SetSettings.Username))
@@ -1475,6 +1492,7 @@ func (a *App) writePlan(p *mcpPlan) (string, error) {
 				Hostname:  c.Host,
 				Overrides: ov,
 				Tags:      c.Tags,
+				Notes:     c.Notes,
 				Protocol:  "ssh",
 			})
 			if err != nil {
@@ -1559,6 +1577,11 @@ func (a *App) writePlan(p *mcpPlan) (string, error) {
 			if e.Host != nil {
 				if err := a.db.SetConnectionHostnameTx(tx, e.ConnID, *e.Host); err != nil {
 					return fmt.Errorf("set hostname on %q: %w", e.ConnID, err)
+				}
+			}
+			if e.Notes != nil {
+				if err := a.db.SetConnectionNotesTx(tx, e.ConnID, *e.Notes); err != nil {
+					return fmt.Errorf("set notes on %q: %w", e.ConnID, err)
 				}
 			}
 			if e.Folder != nil {
