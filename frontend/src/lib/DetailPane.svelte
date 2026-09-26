@@ -1857,7 +1857,7 @@
     </div>
 
     {#if !isLocal}
-    <PortForwards connection={conn} />
+    <div class="form-width"><PortForwards connection={conn} /></div>
 
     <div class="quick-actions">
       <h2>Quick actions</h2>
@@ -2402,8 +2402,12 @@
   }
   .tag-input:focus { outline: none; }
 
+  /* Same cap as .form, so the forward cards line up with the fields above
+     instead of stretching across a wide window. */
+  .form-width { max-width: 1080px; }
   .quick-actions {
     margin: 1rem 0;
+    max-width: 1080px;
   }
   .quick-actions h2 {
     margin: 0 0 0.4rem 0;
