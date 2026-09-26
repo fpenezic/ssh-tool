@@ -250,7 +250,7 @@ func (d *DB) FolderConnIcons(examples int) (map[string]ConnIconUsage, error) {
 	}
 	rows, err := d.conn.Query(`
 		SELECT folder_id, name,
-		       IFNULL(icon_name, ''), IFNULL(icon_image_id, '')
+		       IFNULL(icon_name, ''), IFNULL(icon_color, ''), IFNULL(icon_image_id, '')
 		FROM connections
 		WHERE folder_id IS NOT NULL
 		ORDER BY folder_id, name`)
@@ -267,8 +267,8 @@ func (d *DB) FolderConnIcons(examples int) (map[string]ConnIconUsage, error) {
 	}
 	byFolder := map[string]*acc{}
 	for rows.Next() {
-		var fid, name, iname, image string
-		if err := rows.Scan(&fid, &name, &iname, &image); err != nil {
+		var fid, name, iname, icolor, image string
+		if err := rows.Scan(&fid, &name, &iname, &icolor, &image); err != nil {
 			return nil, err
 		}
 		a := byFolder[fid]
@@ -277,7 +277,13 @@ func (d *DB) FolderConnIcons(examples int) (map[string]ConnIconUsage, error) {
 			byFolder[fid] = a
 		}
 		a.total++
+		// A built-in icon is its name plus colour: "database (mauve)" and a
+		// plain "database" are different conventions, and an LLM copying
+		// the convention needs both halves.
 		icon := iname
+		if icon != "" && icolor != "" {
+			icon += "/" + icolor
+		}
 		if image != "" {
 			icon = image
 		}

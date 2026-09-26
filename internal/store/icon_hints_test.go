@@ -1,6 +1,9 @@
 package store
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func iconHintDB(t *testing.T) *DB {
 	t.Helper()
@@ -186,5 +189,38 @@ func TestFolderConnIconsSkipsIconlessFolders(t *testing.T) {
 	}
 	if _, ok := got[f.ID]; ok {
 		t.Error("a folder with no icons at all must be absent, not reported empty")
+	}
+}
+
+// A built-in icon's colour is part of the convention: "database (mauve)"
+// and a plain grey "database" look different in the tree, so the sample an
+// LLM copies from must carry the colour.
+func TestFolderConnIconsCarryColour(t *testing.T) {
+	db := iconHintDB(t)
+	f, err := db.CreateFolder(NewFolder{Name: "Acme"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, icon := range map[string]string{"acme-db-01": "database", "acme-app-01": "server"} {
+		c, err := db.CreateConnection(NewConnection{Name: name, Hostname: name, FolderID: &f.ID, Protocol: "ssh"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		color := ""
+		if icon == "database" {
+			color = "mauve"
+		}
+		if err := db.SetConnectionNamedIcon(c.ID, icon, color); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := db.FolderConnIcons(6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(got[f.ID].Examples, ", ")
+	if !strings.Contains(joined, "acme-db-01 -> database/mauve") || !strings.Contains(joined, "acme-app-01 -> server") ||
+		strings.Contains(joined, "server/") {
+		t.Fatalf("examples = %q", joined)
 	}
 }

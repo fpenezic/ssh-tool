@@ -303,6 +303,7 @@ type mcpSetFolderSettingsArgs struct {
 	JumpUser         string `json:"jump_user,omitempty" jsonschema:"username for the inline bastion"`
 	JumpPort         uint16 `json:"jump_port,omitempty" jsonschema:"port for the inline bastion (default 22)"`
 	JumpAuthRef      string `json:"jump_auth_ref,omitempty" jsonschema:"id of an EXISTING vault credential for the bastion; NEVER a password"`
+	ColorTag         string `json:"color_tag,omitempty" jsonschema:"colour tag the folder's connections inherit (tab and tree colour), usually marking the environment: red, orange, yellow, green, teal, blue, mauve, pink or #rrggbb. Only to follow a colour scheme the user's tree already shows in list_folders; never invent one"`
 }
 
 // mcpEditConnectionArgs edits an EXISTING connection. Every optional field is
@@ -391,6 +392,16 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 		// folder rather than on each connection. Report the nearest one up
 		// the tree so a model staging into a subsystem folder can see it.
 		hints, _ := a.db.FolderIconHints()
+		// Colour tags mark environments (prod red, staging yellow, ...);
+		// shown per folder so a new Production folder can follow suit.
+		colorTags := map[string]string{}
+		if fs, err := a.db.ListFolders(); err == nil {
+			for _, f := range fs {
+				if f.Settings.ColorTag != nil && *f.Settings.ColorTag != "" {
+					colorTags[f.ID] = *f.Settings.ColorTag
+				}
+			}
+		}
 		connIcons, _ := a.db.FolderConnIcons(6)
 		ids := make([]string, 0, len(paths))
 		for id := range paths {
@@ -403,6 +414,9 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 				p = "(root-level)"
 			}
 			fmt.Fprintf(&b, "- %s  id=%s", p, id)
+			if ct, ok := colorTags[id]; ok {
+				fmt.Fprintf(&b, "  [color tag: %s]", ct)
+			}
 			if h, ok := hints[id]; ok {
 				icon := h.IconName
 				if h.IconColor != "" {
@@ -549,6 +563,7 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 			User: in.User, Port: in.Port, AuthRef: in.AuthRef,
 			NetworkProfileID: in.NetworkProfileID, InitialCommand: in.InitialCommand,
 			JumpHost: in.JumpHost, JumpUser: in.JumpUser, JumpPort: in.JumpPort, JumpAuthRef: in.JumpAuthRef,
+			ColorTag: in.ColorTag,
 		}); err != nil {
 			return errResult(err), nil, nil
 		}

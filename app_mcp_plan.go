@@ -2,7 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -58,11 +60,21 @@ type folderSettingsInput struct {
 	JumpUser         string
 	JumpPort         uint16
 	JumpAuthRef      string
+	ColorTag         string // palette name or #rrggbb; marks the environment (prod red, ...)
 }
 
 func (f folderSettingsInput) empty() bool {
 	return f.User == "" && f.Port == 0 && f.AuthRef == "" && f.NetworkProfileID == "" &&
-		f.InitialCommand == "" && f.JumpHost == "" && f.JumpUser == "" && f.JumpPort == 0 && f.JumpAuthRef == ""
+		f.InitialCommand == "" && f.JumpHost == "" && f.JumpUser == "" && f.JumpPort == 0 && f.JumpAuthRef == "" &&
+		f.ColorTag == ""
+}
+
+var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// validColorTag accepts what the connection form's colour picker stores: a
+// palette name or a #rrggbb value.
+func validColorTag(c string) bool {
+	return c == "" || validIconColor(c) || hexColor.MatchString(c)
 }
 
 type planFolder struct {
@@ -224,6 +236,10 @@ func (a *App) planSetFolderSettings(folder string, s folderSettingsInput) error 
 	if s.empty() {
 		return fmt.Errorf("no settings given")
 	}
+	s.ColorTag = strings.TrimSpace(s.ColorTag)
+	if !validColorTag(s.ColorTag) {
+		return fmt.Errorf("unknown color_tag %q: use red, orange, yellow, green, teal, blue, mauve, pink or #rrggbb", s.ColorTag)
+	}
 	a.mcp.planMu.Lock()
 	defer a.mcp.planMu.Unlock()
 	p := a.getOrInitPlan()
@@ -249,6 +265,39 @@ func (a *App) planSetFolderSettings(folder string, s folderSettingsInput) error 
 	return nil
 }
 
+// mergeFolderSettings lays the staged values over an EXISTING folder's current
+// settings. Writing the staged set alone used to replace the whole blob, so
+// "put the jump host on Customers" also wiped that folder's credential, colour
+// tag and everything else the LLM never mentioned. Only the fields it set
+// change; JSON is the merge because InheritableSettings omits unset fields.
+func (a *App) mergeFolderSettings(folderID string, staged store.InheritableSettings) (store.InheritableSettings, error) {
+	cur, err := a.db.GetFolder(folderID)
+	if err != nil {
+		return staged, err
+	}
+	base := map[string]json.RawMessage{}
+	if b, err := json.Marshal(cur.Settings); err == nil {
+		_ = json.Unmarshal(b, &base)
+	}
+	over := map[string]json.RawMessage{}
+	b, err := json.Marshal(staged)
+	if err != nil {
+		return staged, err
+	}
+	if err := json.Unmarshal(b, &over); err != nil {
+		return staged, err
+	}
+	for k, v := range over {
+		base[k] = v
+	}
+	var out store.InheritableSettings
+	b, err = json.Marshal(base)
+	if err != nil {
+		return staged, err
+	}
+	return out, json.Unmarshal(b, &out)
+}
+
 // toInheritable builds an InheritableSettings from folder-settings input. Only
 // non-zero fields are set (nil = inherit further up / unset).
 func (f folderSettingsInput) toInheritable() store.InheritableSettings {
@@ -272,6 +321,10 @@ func (f folderSettingsInput) toInheritable() store.InheritableSettings {
 	if strings.TrimSpace(f.InitialCommand) != "" {
 		ic := f.InitialCommand
 		ov.InitialCommand = &ic
+	}
+	if f.ColorTag != "" {
+		ct := f.ColorTag
+		ov.ColorTag = &ct
 	}
 	if f.JumpHost != "" {
 		spec := store.JumpHostSpec{Hostname: f.JumpHost}
@@ -789,6 +842,9 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 		}
 		if s.AuthRef != "" {
 			out = append(out, "cred: "+credLabel(s.AuthRef, ctx))
+		}
+		if s.ColorTag != "" {
+			out = append(out, "color: "+s.ColorTag)
 		}
 		if s.NetworkProfileID != "" {
 			if n, ok := profNames[s.NetworkProfileID]; ok {
@@ -1528,6 +1584,18 @@ func (a *App) writePlan(p *mcpPlan) (string, error) {
 	connIDs := map[string]string{}
 	forwardIDs := map[string]string{}
 
+	// Merge staged folder settings into the current ones BEFORE the
+	// transaction: the store runs on one connection, so a read inside the
+	// transaction would wait forever for the connection the tx holds.
+	mergedFolderSettings := map[string]store.InheritableSettings{}
+	for _, fs := range p.folderSettings {
+		merged, err := a.mergeFolderSettings(fs.FolderID, fs.Settings.toInheritable())
+		if err != nil {
+			return "", fmt.Errorf("set settings on folder %q: %w", fs.FolderID, err)
+		}
+		mergedFolderSettings[fs.FolderID] = merged
+	}
+
 	err := a.db.WithTx(func(tx *sql.Tx) error {
 		// Folders may parent other folders in the same plan, so insert in the
 		// order given; a parent temp must appear before its child (the LLM
@@ -1558,7 +1626,7 @@ func (a *App) writePlan(p *mcpPlan) (string, error) {
 
 		// Settings on existing folders.
 		for _, fs := range p.folderSettings {
-			if err := a.db.UpdateFolderSettingsTx(tx, fs.FolderID, fs.Settings.toInheritable()); err != nil {
+			if err := a.db.UpdateFolderSettingsTx(tx, fs.FolderID, mergedFolderSettings[fs.FolderID]); err != nil {
 				return fmt.Errorf("set settings on folder %q: %w", fs.FolderID, err)
 			}
 		}

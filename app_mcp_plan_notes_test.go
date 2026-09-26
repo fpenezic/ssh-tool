@@ -177,3 +177,36 @@ func TestPlanFlagsRepeatedJump(t *testing.T) {
 		t.Fatalf("warnings: %v", pv.Warnings)
 	}
 }
+
+// Settings staged on an EXISTING folder change only the fields the LLM set.
+// They used to replace the whole settings blob, so putting a jump host on a
+// folder wiped its credential and colour tag.
+func TestPlanFolderSettingsMergeIntoExisting(t *testing.T) {
+	a := newResolveTestApp(t)
+	a.mcp = newMcpState()
+	a.mcp.manageStore = true
+
+	user, color := "ops", "#123456"
+	f, err := a.db.CreateFolder(store.NewFolder{Name: "Customers",
+		Settings: store.InheritableSettings{Username: &user, ColorTag: &color}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.planSetFolderSettings(f.ID, folderSettingsInput{JumpHost: "jump.example.com", ColorTag: "red"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.planSetFolderSettings(f.ID, folderSettingsInput{ColorTag: "crimson"}); err == nil {
+		t.Fatal("unknown colour accepted")
+	}
+	if _, err := a.writePlan(a.getOrInitPlan()); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := a.db.GetFolder(f.ID)
+	s := got.Settings
+	if s.Username == nil || *s.Username != "ops" {
+		t.Fatalf("user wiped: %+v", s)
+	}
+	if s.ColorTag == nil || *s.ColorTag != "red" || s.JumpHost == nil {
+		t.Fatalf("staged values missing: %+v", s)
+	}
+}

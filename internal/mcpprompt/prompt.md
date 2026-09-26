@@ -171,14 +171,24 @@ reports it:
 
 - "all N connections: <icon>" - they already agree, usually an uploaded
   customer logo. Give the new connections that same icon.
-- "icons vary" with samples like "db-01 -> database, nfs-01 -> hard-drive" -
-  the convention is per role. Read the role out of each new server's name and
-  pick the matching icon the same way; where a name says nothing about its
+- "icons vary" with samples like "db-01 -> database/mauve, nfs-01 ->
+  hard-drive" - the convention is per role. Read the role out of each new
+  server's name and pick the matching icon the same way, with the same colour
+  when the sample shows one; where a name says nothing about its
   role, leave that one unset.
 - nothing reported - no convention, so set no icons.
 
 A folder's own icon is shown on the folder row; do not copy it onto
-connections. A wrong icon is worse than none, because nobody goes back to fix
+connections.
+
+Environment colours follow the user's tree, never a scheme of your own. If
+list_folders shows the user already colouring environments - a colour tag,
+or a folder icon colour, that repeats across comparable folders (their
+production folders share one colour, their staging folders another) - give
+the new folders the same colour the same way, a `color_tag` via
+set_folder_settings or the icon colour, so the connections inherit it. If the
+tree shows no such pattern, set no colour: an invented one looks like the
+user's convention and is not. A wrong icon is worse than none, because nobody goes back to fix
 it.
 
 Example: the user pastes "web-1, web-2 at 10.0.0.11/12, via bastion 1.2.3.4 as
