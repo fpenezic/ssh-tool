@@ -23,6 +23,20 @@ a prerelease upstream.
   folders used to start from the server name, which often does not
   resolve. Existing folders keep their setting.
 
+### LLM integration
+
+- **Connections an LLM creates can carry notes.** "Don't restart this one,
+  finance still uses it" now lands in the connection's notes instead of
+  being squeezed into tags. The approval dialog shows them.
+- **Copy system prompt gives the same text the app sends to the LLM.**
+  There used to be two versions and the copied one had fallen behind (no
+  editing tools, older rules). Now there is one.
+- **Fewer round trips when an LLM builds connections.** It opens the
+  approval dialog as soon as the plan is ready, with its explanation
+  already written next to it, instead of first asking "shall I save?" in
+  chat. It also picks the credential named after the client, and asks
+  when there is none rather than taking a generic one.
+
 ### Fixed
 
 - **Broadcast works in groups you create.** Typing into a session that
