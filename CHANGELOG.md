@@ -9,8 +9,33 @@ a prerelease upstream.
 
 ## [Unreleased]
 
+### Dynamic inventory
+
+- **Cloud servers without a public address connect through a bastion.**
+  In a DigitalOcean, Hetzner, Scaleway, Linode, Vultr or AWS EC2 folder,
+  pick one of the folder's own servers as the bastion: servers that only
+  have a private address are reached through it, everything with a public
+  address connects directly. The editor lists the provider's servers as
+  soon as you pick the API token. The bastion can have its own login while
+  the private servers keep the folder's.
+- **New "Auto" hostname source**, the default for new cloud folders: the
+  public IPv4 when a server has one, otherwise its private one. New
+  folders used to start from the server name, which often does not
+  resolve. Existing folders keep their setting.
+
 ### Fixed
 
+- **Broadcast works in groups you create.** Typing into a session that
+  was only in a named group (not the default one) reached no other pane.
+- **Commands sent by broadcast get their timestamp in every pane**, not
+  only in the one you typed in. A pane sitting in vim, htop or a similar
+  full-screen program still gets none.
+- **The window title names the pane you are in.** With a split tab it
+  showed the first session's name; now it is the focused pane plus how
+  many others share the tab, e.g. "web-04 +3".
+- **Running a command on several dynamic hosts at once takes the same
+  route as connecting to one.** It used to ignore jump hosts from an
+  Ansible inventory.
 - **The file pane's buttons no longer cover the path in a narrow
   window.** They move to a second row instead, and a long path shows its
   end - the directory you are in - rather than its start.
