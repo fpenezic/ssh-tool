@@ -1173,11 +1173,17 @@ class PaneTreeStore {
     return s?.name ?? s?.hostname ?? leaf.sessionId;
   }
 
-  // Title of the currently active tab, or null when no tab is active.
-  // Used to reflect the active connection in the OS window/taskbar title.
+  // Title for the OS window/taskbar, or null when no tab is active. A split
+  // tab shows the FOCUSED pane - where keystrokes go - plus how many other
+  // panes share the tab ("web-04 +3"); the tab's own title would name only
+  // its first session.
   activeTitle(): string | null {
     const t = this.tabs.find((t) => t.tabId === this.activeTabId);
-    return t?.title ?? null;
+    if (!t) return null;
+    const n = countLeaves(t.root);
+    if (n < 2) return t.title ?? null;
+    const focused = findLeaf(t.root, t.activePaneId) ?? firstLeafIn(t.root);
+    return focused ? `${this.leafTitle(focused)} +${n - 1}` : t.title ?? null;
   }
 
   setHidden(tabId: string, hidden: boolean) {
@@ -1765,6 +1771,10 @@ function cloneWithFreshIds(node: PaneNode): PaneNode {
 function findLeaf(node: PaneNode, id: string): PaneLeaf | null {
   if (node.kind === "pane") return node.id === id ? node : null;
   return findLeaf(node.a, id) ?? findLeaf(node.b, id);
+}
+
+function countLeaves(node: PaneNode): number {
+  return node.kind === "pane" ? 1 : countLeaves(node.a) + countLeaves(node.b);
 }
 
 function firstLeafIn(node: PaneNode): PaneLeaf | null {
