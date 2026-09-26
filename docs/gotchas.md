@@ -1221,6 +1221,43 @@ everything mobile is behind a build tag or an `isMobile` check.
     `localStateKeys`; the match is exact, so a versioned key has to be
     listed for every version still written.
 
+69. **Turn a dynamic entry into a connection only through
+    `dynamicConnection`.** It layers the Ansible per-host vars and the
+    cloud bastion route (`applyBastion`) onto the synthetic
+    `dyn:<entry id>` connection. Connect, batch exec, liveness probe,
+    pin, convert-to-static and the copy-ssh-command helper all call it;
+    batch exec used to build its own and silently skipped the Ansible
+    jump hops. Public/private addresses are not columns: they are read
+    back from the entry's Raw JSON with `inventory.Addresses(provider,
+    raw)`, so a new cloud provider needs a case there and an `*Addrs`
+    helper its `pick*Hostname` shares (including the "auto" source).
+
+70. **Never read the store inside `WithTx`.** `store.Open` caps the pool
+    at one connection (`SetMaxOpenConns(1)`), and the transaction holds
+    it, so a plain `a.db.GetFolder` (or any non-`Tx` read) inside the
+    callback waits for itself forever - no error, no timeout, the caller
+    just hangs. Read what the write needs BEFORE opening the transaction
+    (see `writePlan`, which merges existing folder settings up front).
+
+71. **The LLM prompt is one file, and commit_plan blocks.**
+    `internal/mcpprompt/prompt.md` (go:embed) is both the MCP
+    `instructions` and the "Copy system prompt" text; there is no second
+    copy. `app_mcp_instructions_test.go` fails when the prompt misses a
+    registered tool or names a tool or argument (json tag of an
+    `mcp*Args` field) that does not exist. `commit_plan` waits for the
+    user's decision in the approval modal, so anything the model is told
+    to write "in its reply" appears only after the modal closes - ask
+    for it BEFORE the call.
+
+72. **Broadcast state has two views: `members` is only the default
+    group.** Any guard on "is there someone to fan out to" must look at
+    all groups (`hasPeers` / `hasInAnyGroup`); a `members.size` check
+    silently drops keystrokes for sessions that live only in a named
+    group. A command fanned out to peers is marked per target by the
+    backend (`WriteCommand` + a `command_stamp:<id>` event sent BEFORE
+    the write, so the marker lands on the command line, not the echo);
+    each receiver decides from its own terminal state whether to show it.
+
 ---
 
 # Archive
