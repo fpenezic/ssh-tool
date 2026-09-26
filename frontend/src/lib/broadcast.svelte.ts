@@ -109,6 +109,16 @@ class BroadcastStore {
     return out;
   }
 
+  // hasPeers reports whether the session shares any group with at least
+  // one other session, i.e. whether a fan-out from it reaches anyone.
+  hasPeers(sessionId: string): boolean {
+    void this.groupsVersion;
+    for (const set of Object.values(this.groups)) {
+      if (set.has(sessionId) && set.size > 1) return true;
+    }
+    return false;
+  }
+
   groupNames(): string[] {
     return Object.keys(this.groups).sort((a, b) => {
       // Default group ("") comes first.
@@ -184,7 +194,10 @@ class BroadcastStore {
   // string when at least one target failed; we surface that into
   // lastError so the manager modal can show it.
   async fanOut(data: string, originSessionId: string) {
-    if (this.members.size < 2) return;
+    // Peers across EVERY group the origin is in - checking only the
+    // default group (`members`) silently dropped keystrokes for sessions
+    // that live only in a named group.
+    if (!this.hasPeers(originSessionId)) return;
     try {
       const errs = await api.broadcastFanOut(originSessionId, encodeB64(data));
       if (errs) this.lastError = errs;
