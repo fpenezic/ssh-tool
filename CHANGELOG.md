@@ -7,7 +7,7 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.104.0] - Bastion routing for cloud inventories, and cleaner LLM-built connections
 
 ### Dynamic inventory
 
@@ -44,9 +44,16 @@ a prerelease upstream.
 - **Tidier plans.** Creating the same folder twice is refused, and hosts
   that each repeat the same jump host are flagged, so they end up in a
   subfolder that carries it once.
+- **Colours follow your tree.** New connections get icons in the same
+  colour as their siblings, and if your folders already mark environments
+  by colour, new ones follow suit. Where your tree has no such pattern,
+  none is invented.
 
 ### Fixed
 
+- **An LLM changing an existing folder's settings no longer wipes the
+  rest of them.** Adding a jump host to a folder used to remove its user,
+  credential and colour tag along the way.
 - **Broadcast works in groups you create.** Typing into a session that
   was only in a named group (not the default one) reached no other pane.
 - **Commands sent by broadcast get their timestamp in every pane**, not
@@ -63,6 +70,8 @@ a prerelease upstream.
   end - the directory you are in - rather than its start.
 - **Sizes and transfer speeds say KB, MB and GB.** "95.0 M/s" could be
   read as megabits; it is megabytes, and now says so.
+- **Port forwards line up with the connection form** instead of
+  stretching across a wide window.
 
 ---
 
