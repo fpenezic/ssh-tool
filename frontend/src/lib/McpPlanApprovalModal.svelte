@@ -6,10 +6,12 @@
   // never sets or sees secrets. Approve writes everything in one transaction;
   // reject discards the plan.
   import { IconBot } from "./iconMap";
+  import Icon from "./Icon.svelte";
 
   // Mirrors the Go McpPlanPreview payload (event: mcp_plan_approval_request).
   export interface PlanForwardPreview {
     kind: string;
+    auto_start?: boolean;
     detail: string;
     bookmarks: string[];
   }
@@ -22,6 +24,9 @@
     network_profile: string;
     initial_command: string;
     notes?: string;
+    icon_name?: string;
+    icon_color?: string;
+    icon_image?: string;
     forwards: PlanForwardPreview[];
   }
   export interface PlanFolderPreview {
@@ -142,6 +147,9 @@
         {#each preview.connections as conn}
           <div class="conn">
             <div class="conn-head">
+              {#if conn.icon_name || conn.icon_image}
+                <Icon imageId={conn.icon_image || null} iconName={conn.icon_name || null} iconColor={conn.icon_color || null} size={14} />
+              {/if}
               <span class="cname">{conn.name}</span>
               {#if conn.target}<span class="target">{conn.target}</span>{/if}
             </div>
@@ -157,6 +165,7 @@
               <div class="fwd">
                 <span class="fwd-kind">{fw.kind}</span>
                 <span class="fwd-detail">{fw.detail}</span>
+                {#if fw.auto_start}<span class="chip">starts on connect</span>{/if}
                 {#if fw.bookmarks?.length}
                   <div class="bookmarks">
                     {#each fw.bookmarks as bm}
@@ -240,7 +249,7 @@
     padding: 0.4rem 0; border-top: 1px solid var(--surface0);
   }
   .conn:first-of-type { border-top: 0; }
-  .conn-head { display: flex; align-items: baseline; gap: 0.5rem; }
+  .conn-head { display: flex; align-items: center; gap: 0.5rem; }
   .cname { font-weight: 600; }
   .target {
     font-family: ui-monospace, monospace; font-size: 0.78rem; color: var(--subtext0);

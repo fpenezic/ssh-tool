@@ -115,11 +115,15 @@ Tools:
   inline as `jump_host`/`jump_user` (+ optional `jump_auth_ref`), not a saved
   connection. Returns a temp id. `notes` holds free text about the host.
 - `create_forward(connection, kind, ...)` - stage a local/remote/dynamic (SOCKS)
-  forward on a staged or existing connection. Returns a temp id. For a dynamic
-  (SOCKS) forward do NOT set local_port - it gets a free port automatically and
-  is reached via bookmarks, so pinning a port is pointless.
+  forward on a staged or existing connection. Returns a temp id. Leave
+  local_port unset for a SOCKS forward and for a local forward to a web UI:
+  a free port is picked when it starts, so it never clashes, and a bookmark
+  reaches it. Set local_port only when the user asked for one or a local
+  program must find the service on a known port (a database client, RDP).
 - `set_socks_bookmarks(forward, bookmarks)` - attach named URL bookmarks to a
-  dynamic (SOCKS) forward.
+  dynamic (SOCKS) or local forward. On a local forward write the URL as
+  `http://{host}:{port}/path`; both are filled in from the live listener, so
+  the bookmark works on an auto-assigned port.
 - `edit_connection(connection, ...)` - stage a change to an EXISTING connection
   (rename, host, user, port, credential, notes, move to another folder). Only
   the fields you pass change. `clear` REMOVES a per-connection setting so it

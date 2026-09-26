@@ -354,7 +354,7 @@ type mcpCreateForwardArgs struct {
 	Connection string `json:"connection" jsonschema:"the connection this forward belongs to: a plan temp id prefixed with tmp: from create_connection, or an existing connection id"`
 	Kind       string `json:"kind" jsonschema:"local, remote or dynamic (dynamic = SOCKS5 proxy)"`
 	LocalAddr  string `json:"local_addr,omitempty" jsonschema:"local bind address (default 127.0.0.1)"`
-	LocalPort  uint16 `json:"local_port,omitempty" jsonschema:"local port to listen on (local/remote forwards). For dynamic/SOCKS forwards DO NOT set this - the port is auto-assigned; bookmarks work regardless of port"`
+	LocalPort  uint16 `json:"local_port,omitempty" jsonschema:"local port to listen on. Omit it for dynamic/SOCKS forwards and for local forwards to a web UI - a free port is picked at start and bookmarks reach it via {port}. Set it only when the user asked or a local program needs a fixed port"`
 	RemoteHost string `json:"remote_host,omitempty" jsonschema:"target host (required for local/remote, ignored for dynamic)"`
 	RemotePort uint16 `json:"remote_port,omitempty" jsonschema:"target port (required for local/remote)"`
 	AutoStart  bool   `json:"auto_start,omitempty" jsonschema:"start this forward automatically when the connection connects"`
@@ -367,8 +367,8 @@ type mcpBookmark struct {
 }
 
 type mcpSetBookmarksArgs struct {
-	Forward   string        `json:"forward" jsonschema:"the dynamic (SOCKS) forward: a plan temp id prefixed with tmp:, or an existing forward id"`
-	Bookmarks []mcpBookmark `json:"bookmarks" jsonschema:"named URL shortcuts to open through this SOCKS proxy"`
+	Forward   string        `json:"forward" jsonschema:"the dynamic (SOCKS) or local forward: a plan temp id prefixed with tmp:, or an existing forward id"`
+	Bookmarks []mcpBookmark `json:"bookmarks" jsonschema:"named URL shortcuts: any URL through a SOCKS proxy, or http://{host}:{port}/... on a local forward"`
 }
 
 // registerProvisioningTools adds the manage-grant provisioning tools. They only
@@ -572,7 +572,7 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 		if err != nil {
 			return errResult(err), nil, nil
 		}
-		return textResult("staged connection; temp id = tmp:" + id), nil, nil
+		return textResult("staged connection; temp id = tmp:" + id + a.jumpRepeatHint(id)), nil, nil
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
@@ -581,6 +581,10 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 			"pending plan. connection is a tmp: temp id from create_connection or an existing connection id. " +
 			"For a dynamic (SOCKS) forward do NOT set local_port - it is auto-assigned a free port at start " +
 			"and the user reaches it via bookmarks, so a fixed port is pointless. " +
+			"The same goes for a local forward to a web UI: leave local_port unset (a free port is picked " +
+			"at start, so it never clashes) and add a bookmark with set_socks_bookmarks whose URL uses " +
+			"{host}:{port}, e.g. http://{host}:{port}/. Set local_port only when the user asked for one or " +
+			"a local program must find the service on a known port (a database client, RDP). " +
 			"Nothing is written until commit_plan. Requires the manage grant.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpCreateForwardArgs) (*mcp.CallToolResult, any, error) {
 		id, err := a.planAddForward(in.Connection, in.Kind, in.LocalAddr, in.LocalPort,
@@ -593,8 +597,11 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "set_socks_bookmarks",
-		Description: "Attach named URL bookmarks to a dynamic (SOCKS5) forward in the pending plan. " +
-			"forward is a tmp: temp id from create_forward or an existing dynamic forward id. " +
+		Description: "Attach named URL bookmarks to a dynamic (SOCKS5) or local forward in the pending plan. " +
+			"On a SOCKS forward a bookmark is any URL reached through the proxy. On a local forward write " +
+			"it as http://{host}:{port}/path - {host} and {port} are filled in from the live listener when " +
+			"it is opened, so it keeps working on an auto-assigned port. " +
+			"forward is a tmp: temp id from create_forward or an existing forward id. " +
 			"Nothing is written until commit_plan. Requires the manage grant.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpSetBookmarksArgs) (*mcp.CallToolResult, any, error) {
 		bms := make([]store.ProxyBookmark, 0, len(in.Bookmarks))

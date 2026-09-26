@@ -181,13 +181,33 @@ func (a *App) planAddFolder(name, parent string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("folder name required")
 	}
+	ref := parsePlanRef(parent)
+	// The same name twice under one parent is always a mistake: an LLM that
+	// lost track of its own temp id stages the folder again, and the approval
+	// modal then shows two identical folders. Point it back at the one it has.
+	if ref.Temp == "" {
+		folders, err := a.db.ListFolders()
+		if err != nil {
+			return "", err
+		}
+		for _, f := range folders {
+			sameParent := (f.ParentID == nil && ref.Existing == "") ||
+				(f.ParentID != nil && *f.ParentID == ref.Existing)
+			if sameParent && strings.EqualFold(f.Name, name) {
+				return "", fmt.Errorf("folder %q already exists there (id %s) - use that id instead of creating it again", f.Name, f.ID)
+			}
+		}
+	}
 	a.mcp.planMu.Lock()
 	defer a.mcp.planMu.Unlock()
 	p := a.getOrInitPlan()
+	for _, f := range p.folders {
+		if f.Parent == ref && strings.EqualFold(f.Name, name) {
+			return "", fmt.Errorf("folder %q is already staged under that parent as tmp:%s - use that id", f.Name, f.TempID)
+		}
+	}
 	id := newTempID()
-	p.folders = append(p.folders, planFolder{
-		TempID: id, Name: name, Parent: parsePlanRef(parent),
-	})
+	p.folders = append(p.folders, planFolder{TempID: id, Name: name, Parent: ref})
 	return id, nil
 }
 
@@ -662,19 +682,25 @@ type McpPlanFolderPreview struct {
 }
 
 type McpPlanConnPreview struct {
-	Name           string                  `json:"name"`
-	Target         string                  `json:"target"` // user@host:port
-	Folder         string                  `json:"folder"`
-	Credential     string                  `json:"credential"`      // name or ""
-	Via            string                  `json:"via"`             // bastion "user@host" or ""
-	NetworkProfile string                  `json:"network_profile"` // name or ""
-	InitialCommand string                  `json:"initial_command"`
-	Notes          string                  `json:"notes"`
-	Forwards       []McpPlanForwardPreview `json:"forwards"`
+	Name           string `json:"name"`
+	Target         string `json:"target"` // user@host:port
+	Folder         string `json:"folder"`
+	Credential     string `json:"credential"`      // name or ""
+	Via            string `json:"via"`             // bastion "user@host" or ""
+	NetworkProfile string `json:"network_profile"` // name or ""
+	InitialCommand string `json:"initial_command"`
+	Notes          string `json:"notes"`
+	// The icon exactly as the tree will draw it: a built-in name + colour,
+	// or an uploaded image id.
+	IconName  string                  `json:"icon_name,omitempty"`
+	IconColor string                  `json:"icon_color,omitempty"`
+	IconImage string                  `json:"icon_image,omitempty"`
+	Forwards  []McpPlanForwardPreview `json:"forwards"`
 }
 
 type McpPlanForwardPreview struct {
 	Kind      string   `json:"kind"`
+	AutoStart bool     `json:"auto_start"`
 	Detail    string   `json:"detail"`
 	Bookmarks []string `json:"bookmarks"` // "name -> url"
 }
@@ -839,6 +865,9 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 			if la == "" {
 				la = "127.0.0.1"
 			}
+			if fw.LocalPort == 0 {
+				return fmt.Sprintf("%s (auto port) -> %s:%d", la, fw.RemoteHost, fw.RemotePort)
+			}
 			return fmt.Sprintf("%s:%d -> %s:%d", la, fw.LocalPort, fw.RemoteHost, fw.RemotePort)
 		default: // remote
 			return fmt.Sprintf("remote :%d -> %s:%d", fw.RemotePort, fw.RemoteHost, fw.RemotePort)
@@ -847,12 +876,14 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 	renderForwards := func(list []planForward) []McpPlanForwardPreview {
 		out := []McpPlanForwardPreview{}
 		for _, fw := range list {
-			fp := McpPlanForwardPreview{Kind: fw.Kind, Detail: fwdDetail(fw)}
+			fp := McpPlanForwardPreview{Kind: fw.Kind, Detail: fwdDetail(fw), AutoStart: fw.AutoStart}
 			for _, bm := range bmByForwardTemp[fw.TempID] {
 				fp.Bookmarks = append(fp.Bookmarks, bm.Name+" -> "+bm.URL)
 			}
-			if fw.Kind != "dynamic" && len(fp.Bookmarks) > 0 {
-				warn("bookmarks set on a non-dynamic forward are ignored")
+			// Local forwards open bookmarks too ({host}:{port} resolve to the
+			// live listener); only a remote forward has nothing to open locally.
+			if fw.Kind == "remote" && len(fp.Bookmarks) > 0 {
+				warn("bookmarks set on a remote forward are ignored")
 			}
 			out = append(out, fp)
 		}
@@ -895,6 +926,9 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 			NetworkProfile: np,
 			InitialCommand: c.InitialCommand,
 			Notes:          c.Notes,
+			IconName:       c.Icon,
+			IconColor:      c.IconColor,
+			IconImage:      c.IconImage,
 			Forwards:       renderForwards(fwdByConnTemp[c.TempID]),
 		})
 	}
@@ -1062,6 +1096,17 @@ func (a *App) warnRepeatedSettings(p *mcpPlan, pv *McpPlanPreview,
 		return "the tree root"
 	}
 
+	for _, r := range repeatedJumps(p.conns) {
+		where := folderName(r.Folder)
+		advice := "Put it on that folder with set_folder_settings"
+		if r.Count < r.Total {
+			advice = "Put those connections in a subfolder that carries the jump host"
+		}
+		pv.Warnings = append(pv.Warnings, fmt.Sprintf(
+			"%d of %d connections in %s repeat jump host %s. %s, so they inherit it and changing it later is one edit.",
+			r.Count, r.Total, where, r.Jump, advice))
+	}
+
 	for _, r := range repeatedSettings(p.conns) {
 		names, kind := credNames, "credential"
 		if r.Kind == "profile" {
@@ -1076,6 +1121,88 @@ func (a *App) warnRepeatedSettings(p *mcpPlan, pv *McpPlanPreview,
 				"set_folder_settings and letting them inherit it, so changing it later is one edit.",
 			r.Count, folderName(r.Folder), kind, name))
 	}
+}
+
+// repeatedJump is a jump host several staged connections in one folder carry.
+type repeatedJump struct {
+	Folder planRef
+	Jump   string // user@host:port as written
+	Count  int    // connections carrying it
+	Total  int    // connections in the folder
+}
+
+// repeatedJumps reports a jump host that two or more staged connections in
+// the same folder carry inline. Unlike credentials (see repeatedSettings),
+// this does not wait for the whole folder to agree: the connections behind a
+// bastion and the ones outside it (a public staging box, the bastion itself)
+// are exactly the split a subfolder expresses, so a partial match is the
+// common real case, not noise.
+func repeatedJumps(conns []planConn) []repeatedJump {
+	type key struct{ folder, jump string }
+	counts := map[key]int{}
+	totals := map[string]int{}
+	refs := map[string]planRef{}
+	for _, c := range conns {
+		fk := c.Folder.Temp + "\x00" + c.Folder.Existing
+		totals[fk]++
+		refs[fk] = c.Folder
+		if c.Jump != nil {
+			counts[key{fk, jumpLabel(c.Jump)}]++
+		}
+	}
+	var out []repeatedJump
+	for k, n := range counts {
+		if n >= 2 {
+			out = append(out, repeatedJump{Folder: refs[k.folder], Jump: k.jump, Count: n, Total: totals[k.folder]})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Jump < out[j].Jump })
+	return out
+}
+
+func jumpLabel(j *planJump) string {
+	s := j.Host
+	if j.Port != 0 {
+		s = fmt.Sprintf("%s:%d", j.Host, j.Port)
+	}
+	if j.User != "" {
+		s = j.User + "@" + s
+	}
+	return s
+}
+
+// jumpRepeatHint tells the LLM, in the create_connection result, that the
+// connection it just staged repeats a jump host already staged on another in
+// the same folder - while it can still restructure, rather than only in the
+// approval modal the user reads.
+func (a *App) jumpRepeatHint(tempID string) string {
+	a.mcp.planMu.Lock()
+	defer a.mcp.planMu.Unlock()
+	p := a.mcp.plan
+	if p == nil {
+		return ""
+	}
+	var mine *planConn
+	for i := range p.conns {
+		if p.conns[i].TempID == tempID {
+			mine = &p.conns[i]
+		}
+	}
+	if mine == nil || mine.Jump == nil {
+		return ""
+	}
+	n := 0
+	for _, c := range p.conns {
+		if c.Folder == mine.Folder && c.Jump != nil && jumpLabel(c.Jump) == jumpLabel(mine.Jump) {
+			n++
+		}
+	}
+	if n < 2 {
+		return ""
+	}
+	return fmt.Sprintf("\nnote: %d connections in this folder now carry jump host %s inline. "+
+		"Put them in a subfolder with that jump in set_folder_settings (discard_plan and restage if needed), "+
+		"so they inherit it.", n, jumpLabel(mine.Jump))
 }
 
 // repeatedSetting is one "every connection here carries the same value" find.
