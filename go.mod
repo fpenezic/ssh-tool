@@ -88,6 +88,7 @@ require (
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
+	mvdan.cc/sh/v3 v3.12.0
 )
 
 // replace github.com/wailsapp/wails/v2 v2.12.0 => /home/bipe/go/pkg/mod
