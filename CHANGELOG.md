@@ -7,7 +7,7 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.105.0] - Fleet tools, processes and services, and a tidier pane header
 
 ### Fleet tools
 
