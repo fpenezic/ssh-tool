@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -77,7 +78,7 @@ type activeForward struct {
 	// and LAN through the proxy.
 	allowInternal bool
 
-	state ForwardState
+	state  ForwardState
 	errMsg string
 
 	bytesIn  atomicCounter
@@ -111,8 +112,9 @@ type ForwardPool struct {
 	byID   map[string]*activeForward
 	bySess map[string]map[string]struct{} // sessionID -> set of forwardIDs
 
-	// stickyDyn remembers the OS-assigned port a dynamic (SOCKS) forward last
-	// bound, keyed by forward id, so a restart lands on the same port. An
+	// stickyDyn remembers the OS-assigned port an auto-port forward (SOCKS or
+	// local) last bound, keyed by forward id, so a restart lands on the same
+	// port. An
 	// already-launched browser keeps its --proxy-server pointing at a live
 	// listener instead of a dead one (Chromium can't be re-pointed without a
 	// full restart - see internal/ssh/browser.go).
@@ -139,6 +141,35 @@ func (p *ForwardPool) rememberStickyPort(id string, port uint16) {
 	p.stickyDyn[id] = port
 }
 
+// listenSticky binds localAddr:localPort. With no explicit port it prefers
+// the one this forward held last time, falling back to a fresh OS-assigned
+// port if that one is taken meanwhile, and remembers what it got.
+func (p *ForwardPool) listenSticky(id, localAddr string, localPort uint16) (net.Listener, uint16, error) {
+	var listener net.Listener
+	if localPort == 0 {
+		if prev := p.stickyPort(id); prev != 0 {
+			if l, e := net.Listen("tcp", net.JoinHostPort(localAddr, strconv.Itoa(int(prev)))); e == nil {
+				listener = l
+			} else {
+				log.Printf("forward %s: sticky port %d unavailable (%v); taking a new one", id, prev, e)
+			}
+		}
+	}
+	if listener == nil {
+		addr := net.JoinHostPort(localAddr, strconv.Itoa(int(localPort)))
+		l, err := net.Listen("tcp", addr)
+		if err != nil {
+			return nil, 0, fmt.Errorf("listen %s: %w", addr, err)
+		}
+		listener = l
+	}
+	if tcpAddr, ok := listener.Addr().(*net.TCPAddr); ok {
+		localPort = uint16(tcpAddr.Port)
+	}
+	p.rememberStickyPort(id, localPort)
+	return listener, localPort, nil
+}
+
 // StartLocal starts a -L forward: listen on localAddr:localPort, dial
 // remoteHost:remotePort through the session's SSH connection.
 func (p *ForwardPool) StartLocal(
@@ -149,14 +180,11 @@ func (p *ForwardPool) StartLocal(
 	if localAddr == "" {
 		localAddr = "127.0.0.1"
 	}
-	addr := fmt.Sprintf("%s:%d", localAddr, localPort)
-	listener, err := net.Listen("tcp", addr)
+	// An auto port (0) is sticky like the SOCKS one: a {port} bookmark or a
+	// browser tab opened on the last run keeps working after a restart.
+	listener, localPort, err := p.listenSticky(id, localAddr, localPort)
 	if err != nil {
-		return nil, fmt.Errorf("listen %s: %w", addr, err)
-	}
-	// Pull the actual bound port back out in case caller passed 0.
-	if tcpAddr, ok := listener.Addr().(*net.TCPAddr); ok {
-		localPort = uint16(tcpAddr.Port)
+		return nil, err
 	}
 
 	af := &activeForward{
@@ -222,30 +250,10 @@ func (p *ForwardPool) StartDynamic(
 	if localAddr == "" {
 		localAddr = "127.0.0.1"
 	}
-	var listener net.Listener
-	var err error
-	// No explicit port: prefer the one this forward held last time (sticky),
-	// falling back to a fresh OS-assigned port if it's taken meanwhile.
-	if localPort == 0 {
-		if prev := p.stickyPort(id); prev != 0 {
-			if l, e := net.Listen("tcp", fmt.Sprintf("%s:%d", localAddr, prev)); e == nil {
-				listener = l
-			} else {
-				log.Printf("forward %s: sticky port %d unavailable (%v); taking a new one", id, prev, e)
-			}
-		}
+	listener, localPort, err := p.listenSticky(id, localAddr, localPort)
+	if err != nil {
+		return nil, err
 	}
-	if listener == nil {
-		addr := fmt.Sprintf("%s:%d", localAddr, localPort)
-		listener, err = net.Listen("tcp", addr)
-		if err != nil {
-			return nil, fmt.Errorf("listen %s: %w", addr, err)
-		}
-	}
-	if tcpAddr, ok := listener.Addr().(*net.TCPAddr); ok {
-		localPort = uint16(tcpAddr.Port)
-	}
-	p.rememberStickyPort(id, localPort)
 
 	af := &activeForward{
 		id:        id,
