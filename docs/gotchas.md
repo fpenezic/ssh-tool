@@ -1258,6 +1258,54 @@ everything mobile is behind a build tag or an `isMobile` check.
     the write, so the marker lands on the command line, not the echo);
     each receiver decides from its own terminal state whether to show it.
 
+73. **The stats probe is positional: append sections, never insert.**
+    `statsProbeCommand` (`internal/ssh/serverstats.go`) is one shell line
+    split on `__SSHTOOL_SEP__`, and `parseServerStats` reads section N by
+    index (8 = `df -Pi`, 9 = failed unit count). A section inserted in the
+    middle shifts every later one and nothing fails loudly - the values
+    just go to the wrong fields. `StatsProbeCommandDarwin` stops at 7, so
+    anything past it must default to "unknown" (-1), which is why
+    `FailedUnits` and `InodePct` start at -1 rather than 0. The same probe
+    feeds local shells (`internal/local/stats.go`); a new section has to
+    be valid POSIX sh there too.
+
+74. **`systemctl --failed` counts every unit type.** The status bar chip
+    uses it, so the Services tab's Failed list must NOT add
+    `--type=service`, or a failed mount makes the chip say 1 while the
+    list it opens is empty (`ListServices` in `internal/ssh/sysinfo.go`).
+
+75. **`shellQuote` (tcpdump.go) leaves `; | &` unquoted.** It only quotes
+    strings with spaces, quotes, `$`, backtick or backslash. Anything that
+    came from a remote host or a user and goes into a command line uses
+    `quoteAlways` instead (du mount path, unit names). Unit names
+    additionally pass `unitNameRe` before reaching a shell.
+
+76. **Header buttons that `stopPropagation` hide their clicks from a
+    window listener.** `PaneNode`'s Copy / Tools menus close on a
+    capture-phase `pointerdown` on the window, checked against the two
+    anchors; a bubbling `onclick` on the window never saw the LLM or
+    tunnel button clicks and left the menu open under their popover. Any
+    new header dropdown needs the same, and opening one should close the
+    others (`openHeaderMenu`).
+
+77. **Fleet tools see dynamic hosts only once their folder was loaded.**
+    `folderHostIds` (`fleetStore.svelte.ts`) collects `dyn:<id>` from
+    `tree.dynamicEntries`, which is filled on demand
+    (`tree.loadDynamicEntries`) when a dynamic folder is opened. A parent
+    folder whose cloud subfolder was never expanded gets a Fleet run that
+    silently leaves those hosts out. Load the entries (or ask the backend
+    for them) before collecting, if this starts to matter.
+
+78. **Fleet exports carry whole numbers, and authorized_keys presence is
+    judged by the key.** A decimal point turns into a date or text in a
+    comma-decimal spreadsheet, so CSV / Copy table sizes go out as
+    integers (disks GiB, memory MiB) with the unit in the header.
+    `CopySSHKey` checks `type base64` with `grep -qF`, not the whole line:
+    matching the full line re-added the same key under a new comment.
+    The comment is limited by `keyCommentRe`; the key line itself by
+    `authorizedKeyRe`, which rules out quotes and options, so the key
+    can sit inside single quotes in the remote command.
+
 ---
 
 # Archive
