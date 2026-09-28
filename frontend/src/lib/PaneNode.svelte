@@ -7,13 +7,14 @@
   import VncPane from "./VncPane.svelte";
   import PaneNodeSelf from "./PaneNode.svelte";
   import { paneTabs, sessions, drag, tree, view, mcpShared, mcpBridge, type PaneNode } from "./stores.svelte";
+  import { fleet, TLS_WARN_DAYS } from "./fleetStore.svelte";
   import { api } from "./api";
   import { copyText, copySensitive } from "./clipboard";
   import {
     IconHost, IconUser, IconLock, IconClipboardCopy, IconFolder,
     IconRotateCw, IconSplitH, IconSplitV, IconX, IconBroadcast, IconPopOut,
     IconActivity, IconGlobe, IconTunnel, IconSearch, IconSettings, IconVpn,
-    IconBot, IconFile,
+    IconBot, IconFile, IconCopy, IconChevronDown, IconWrench, IconShieldCheck,
   } from "./iconMap";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
@@ -289,6 +290,35 @@
     node.kind === "pane" ? logtail.statsOf(node.sessionId) : null,
   );
   let showHttp = $state(false);
+  // Header menus: Copy (host / user / password / ssh command) and Tools
+  // (the one-host tools). One open at a time; any click elsewhere closes.
+  let copyMenuOpen = $state(false);
+  let toolsMenuOpen = $state(false);
+  function closeHeaderMenus() {
+    copyMenuOpen = false;
+    toolsMenuOpen = false;
+  }
+  // Capture phase: the header's other buttons (LLM, tunnels) stop their
+  // click from bubbling, so a plain window click listener never heard
+  // them and the menu stayed open under the popover they opened.
+  let copyAnchor: HTMLElement | undefined = $state();
+  let toolsAnchor: HTMLElement | undefined = $state();
+  function onPointerDownOutside(e: PointerEvent) {
+    if (!copyMenuOpen && !toolsMenuOpen) return;
+    const t = e.target as Node;
+    if (copyAnchor?.contains(t) || toolsAnchor?.contains(t)) return;
+    closeHeaderMenus();
+  }
+  // Opening one of the menus closes the header's popovers, and the other way
+  // round, so only one thing hangs off the header at a time.
+  function openHeaderMenu(which: "copy" | "tools") {
+    showLlmShare = false;
+    showTunnels = false;
+    const next = which === "copy" ? !copyMenuOpen : !toolsMenuOpen;
+    closeHeaderMenus();
+    if (which === "copy") copyMenuOpen = next;
+    else toolsMenuOpen = next;
+  }
   let showTunnels = $state(false);
   let showLlmShare = $state(false);
   let showLlmActivity = $state(false);
@@ -302,6 +332,15 @@
   // on different sessions don't fire 8 × 2s requests like the full
   // PortForwards view does; the badge only needs ballpark accuracy.
   let activeForwardCount = $state(0);
+  // Something in the Tools menu is live on this pane: the Tools button
+  // carries a dot so a background capture or tail is not lost in a menu.
+  const toolsBusy = $derived(!!tcpdumpMode || !!logtailMode || activeForwardCount > 0);
+  const toolsBusyText = $derived([
+    tcpdumpMode ? "packet capture running" : "",
+    logtailMode ? "log tail running" : "",
+    activeForwardCount > 0 ? `${activeForwardCount} port forward${activeForwardCount === 1 ? "" : "s"} active` : "",
+  ].filter(Boolean).join(", "));
+  const paneCertDays = $derived(paneSession?.connectionId ? fleet.daysLeft(paneSession.connectionId) : null);
   $effect(() => {
     // Reset whenever the session under this pane changes.
     activeForwardCount = 0;
@@ -467,6 +506,8 @@
   }
 </script>
 
+<svelte:window onpointerdowncapture={onPointerDownOutside} onkeydown={(e) => { if (e.key === "Escape") closeHeaderMenus(); }} />
+
 {#if node.kind === "pane"}
   {@const isActive = node.id === activePaneId}
   <div
@@ -512,37 +553,92 @@
         {/if}
       {/if}
       <div class="pane-actions" use:tooltipGroup>
-        <!-- Copy group: SSH only -->
+        <!-- Menu group: SSH only. Copy (the four copies that used to be four
+             icons) and Tools (the one-host tools, desktop only) as labelled
+             dropdowns side by side; the one-click icons follow. -->
         {#if !noSshPane}
           <div class="action-group">
-            <button
-              class="cp host"
-              title="Copy host"
-              onclick={(e) => { e.stopPropagation(); copyField("hostname"); }}
-            ><IconHost size={13} /></button>
-            <button
-              class="cp user"
-              title="Copy username"
-              onclick={(e) => { e.stopPropagation(); copyField("username"); }}
-            ><IconUser size={13} /></button>
-            <button
-              class="cp pass"
-              title="Copy password (clears clipboard after 30s)"
-              onclick={(e) => { e.stopPropagation(); copyPassword(); }}
-            ><IconLock size={13} /></button>
-            <button
-              class="cp ssh"
-              title="Copy ssh command"
-              onclick={(e) => { e.stopPropagation(); copyField("ssh"); }}
-            ><IconClipboardCopy size={13} /></button>
+            <div class="tunnel-anchor" bind:this={copyAnchor}>
+              <button
+                class="cp"
+                class:open={copyMenuOpen}
+                title="Copy host, user, password or ssh command"
+                aria-haspopup="menu"
+                aria-expanded={copyMenuOpen}
+                onclick={(e) => { e.stopPropagation(); openHeaderMenu("copy"); }}
+              >Copy<IconChevronDown size={10} /></button>
+              {#if copyMenuOpen}
+                <div class="hdr-menu" role="menu">
+                  <button role="menuitem" class="c-host" onclick={(e) => { e.stopPropagation(); copyMenuOpen = false; copyField("hostname"); }}><IconHost size={13} />Copy host</button>
+                  <button role="menuitem" class="c-user" onclick={(e) => { e.stopPropagation(); copyMenuOpen = false; copyField("username"); }}><IconUser size={13} />Copy username</button>
+                  <button role="menuitem" class="c-pass" onclick={(e) => { e.stopPropagation(); copyMenuOpen = false; copyPassword(); }}><IconLock size={13} />Copy password <span class="hint">clears after 30s</span></button>
+                  <button role="menuitem" class="c-ssh" onclick={(e) => { e.stopPropagation(); copyMenuOpen = false; copyField("ssh"); }}><IconClipboardCopy size={13} />Copy ssh command</button>
+                </div>
+              {/if}
+            </div>
+            <!-- An SFTP pane shares its session with the terminal next to it,
+                 whose header already carries Tools. -->
+            {#if !isMobile && node.view !== "sftp"}
+            <div class="tunnel-anchor" bind:this={toolsAnchor}>
+              <button
+                class="tools"
+                class:open={toolsMenuOpen}
+                class:has-active={toolsBusy}
+                title={toolsBusy ? `Tools - ${toolsBusyText}` : "Tools: packet capture, log tail, HTTP request, TLS certificate, port forwards"}
+                aria-haspopup="menu"
+                aria-expanded={toolsMenuOpen}
+                onclick={(e) => { e.stopPropagation(); openHeaderMenu("tools"); }}
+              >Tools<IconChevronDown size={10} />{#if toolsBusy}<span class="busy-dot"></span>{/if}</button>
+              {#if toolsMenuOpen}
+                <div class="hdr-menu" role="menu">
+                  <div class="menu-head">Watch</div>
+                  <button role="menuitem" class="c-logtail" onclick={(e) => { e.stopPropagation(); toolsMenuOpen = false; logtail.open(node.sessionId); }}>
+                    <IconFile size={13} />Log tail
+                    {#if logtailMode === "minimized" && logtailStats}<span class="hint live">running · {logtailStats.lines} lines</span>{:else if logtailMode === "open"}<span class="hint live">open</span>{/if}
+                  </button>
+                  <button role="menuitem" class="c-tcpdump" onclick={(e) => { e.stopPropagation(); toolsMenuOpen = false; tcpdump.open(node.sessionId); }}>
+                    <IconActivity size={13} />Packet capture
+                    {#if tcpdumpMode === "minimized" && tcpdumpStats}<span class="hint live">running · {tcpdumpStats.packets} pkts</span>{:else if tcpdumpMode === "open"}<span class="hint live">open</span>{/if}
+                  </button>
+                  <div class="menu-sep"></div>
+                  <div class="menu-head">Network</div>
+                  <button role="menuitem" class="c-http" onclick={(e) => { e.stopPropagation(); toolsMenuOpen = false; showHttp = true; }}><IconGlobe size={13} />HTTP / SOAP request</button>
+                  {#if paneSession?.connectionId && tree.connectionById(paneSession.connectionId)}
+                    <button role="menuitem" class="c-tls" onclick={(e) => {
+                      e.stopPropagation();
+                      toolsMenuOpen = false;
+                      const c = tree.connectionById(paneSession!.connectionId)!;
+                      fleet.show({ tool: "tls", ids: [c.id], label: c.name });
+                    }}>
+                      <IconShieldCheck size={13} />TLS certificate
+                      {#if paneCertDays !== null}<span class="hint" class:warn={paneCertDays < TLS_WARN_DAYS}>{paneCertDays < 0 ? "expired" : `${paneCertDays} days left`}</span>{/if}
+                    </button>
+                  {/if}
+                  <button role="menuitem" class="c-tunnels" onclick={(e) => { e.stopPropagation(); toolsMenuOpen = false; showTunnels = true; }}>
+                    <IconTunnel size={13} />Port forwards
+                    {#if activeForwardCount > 0}<span class="hint live">{activeForwardCount} active</span>{/if}
+                  </button>
+                </div>
+              {/if}
+              {#if showTunnels && paneSession}
+                <TunnelPopover
+                  connectionId={paneSession.connectionId}
+                  sessionId={paneSession.status === "connected" ? paneSession.sessionId : ""}
+                  onClose={() => (showTunnels = false)}
+                />
+              {/if}
+            </div>
+            {/if}
           </div>
         {/if}
 
         <!-- Tools group: SSH only. Hidden on mobile - SFTP split, tcpdump,
              HTTP probe and tunnels are advanced desktop workflows that don't
-             fit a phone toolbar. -->
+             fit a phone toolbar. Snippets and SFTP stay one click; the
+             one-host tools live in the Tools menu to the left. -->
         {#if !noSshPane && !isMobile}
           <div class="action-group">
+            {#if node.view !== "sftp"}
             <button
               class="snippets"
               title="Snippets - send a saved command (Ctrl+Shift+P)"
@@ -551,7 +647,6 @@
                 window.dispatchEvent(new CustomEvent("open-snippet-palette"));
               }}
             ><IconClipboardCopy size={13} /></button>
-            {#if node.view !== "sftp"}
               <button
                 class="openSftp"
                 title="Open SFTP browser on the same session (split right)"
@@ -561,50 +656,8 @@
                 }}
               ><IconFolder size={13} /></button>
             {/if}
-            <button
-              class="tcpdump"
-              class:running={tcpdumpMode === "open"}
-              class:bg={tcpdumpMode === "minimized"}
-              title={tcpdumpMode === "minimized" && tcpdumpStats
-                ? `Packet capture on ${tcpdumpStats.iface} running in background - ${tcpdumpStats.packets} packets${tcpdumpStats.insights > 0 ? `, ${tcpdumpStats.insights} insights` : ""} (counts in status bar; click to restore)`
-                : "Live packet capture on this host (tcpdump, or tshark where available)"}
-              onclick={(e) => { e.stopPropagation(); tcpdump.open(node.sessionId); }}
-            ><IconActivity size={13} /></button>
-            <button
-              class="logtail"
-              class:running={logtailMode === "open"}
-              class:bg={logtailMode === "minimized"}
-              title={logtailMode === "minimized" && logtailStats
-                ? `log tail on ${logtailStats.source} running in background - ${logtailStats.lines} lines (click to restore)`
-                : "Live log tail (journalctl -f / tail -F) on this host"}
-              onclick={(e) => { e.stopPropagation(); logtail.open(node.sessionId); }}
-            ><IconFile size={13} /></button>
-            <button
-              class="http"
-              title="HTTP / SOAP request (routes through this session's SOCKS5 if running)"
-              onclick={(e) => { e.stopPropagation(); showHttp = true; }}
-            ><IconGlobe size={13} /></button>
             <div class="tunnel-anchor">
-              <button
-                class="tunnels"
-                class:has-active={activeForwardCount > 0}
-                title={activeForwardCount > 0
-                  ? `${activeForwardCount} active tunnel${activeForwardCount === 1 ? "" : "s"} - toggle / open bookmarks`
-                  : "Toggle tunnels / open bookmarks"}
-                onclick={(e) => { e.stopPropagation(); showTunnels = !showTunnels; }}
-              >
-                <IconTunnel size={13} />
-              </button>
-              {#if showTunnels && paneSession}
-                <TunnelPopover
-                  connectionId={paneSession.connectionId}
-                  sessionId={paneSession.status === "connected" ? paneSession.sessionId : ""}
-                  onClose={() => (showTunnels = false)}
-                />
-              {/if}
-            </div>
-            <div class="tunnel-anchor">
-              {#if mcpBridge.enabled}
+              {#if mcpBridge.enabled && node.view !== "sftp"}
               <button
                 class="llm-share"
                 class:has-active={llmLevel !== ""}
@@ -965,44 +1018,10 @@
     color: var(--text);
   }
   /* Semantic accents - Catppuccin palette */
-  .pane-actions button.cp.host   { color: var(--blue); }
-  .pane-actions button.cp.user   { color: var(--mauve); }
-  .pane-actions button.cp.pass   { color: var(--peach); }
-  .pane-actions button.cp.ssh    { color: var(--green); }
   .pane-actions button.openSftp  { color: var(--yellow); }
   .pane-actions button.reconnect { color: var(--teal); }
-  .pane-actions button.tcpdump   { color: var(--pink); }
-  .pane-actions button.tcpdump.running { color: var(--on-accent); background: var(--pink); }
-  /* Background capture (minimised): a small pulsing green dot in the
-     corner marks "a capture runs here" without a number - the packet /
-     insight counts live in the bottom status bar now. */
-  .pane-actions button.tcpdump.bg { position: relative; color: var(--pink); }
-  .pane-actions button.tcpdump.bg::after {
-    content: "";
-    position: absolute;
-    top: 1px; right: 1px;
-    width: 5px; height: 5px;
-    border-radius: 50%;
-    background: var(--green);
-    animation: td-pulse 1.4s ease-in-out infinite;
-  }
   @keyframes td-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
   .pane-actions button.snippets  { color: var(--yellow); }
-  .pane-actions button.logtail   { color: var(--teal); }
-  .pane-actions button.logtail.running { color: var(--on-accent); background: var(--teal); }
-  .pane-actions button.logtail.bg { position: relative; color: var(--teal); }
-  .pane-actions button.logtail.bg::after {
-    content: "";
-    position: absolute;
-    top: 1px; right: 1px;
-    width: 5px; height: 5px;
-    border-radius: 50%;
-    background: var(--green);
-    animation: td-pulse 1.4s ease-in-out infinite;
-  }
-  .pane-actions button.http      { color: var(--sapphire); }
-  .pane-actions button.tunnels   { color: var(--lavender); }
-  .pane-actions button.tunnels.has-active { color: var(--green); }
   /* Robot colour encodes the grant level, so the risk is visible without
      opening the popover: blue = read-only (the default share), yellow =
      read + run (each command still gated), red = auto-run/YOLO (only
@@ -1011,6 +1030,44 @@
   .pane-actions button.llm-share.lvl-run { color: var(--yellow); }
   .pane-actions button.llm-share.lvl-yolo { color: var(--red); }
   .tunnel-anchor { position: relative; display: inline-flex; }
+  /* Labelled dropdowns: text, not an icon, so they read as menus. */
+  .pane-actions button.cp, .pane-actions button.tools {
+    width: auto; padding: 0 4px 0 6px; gap: 2px; position: relative;
+    font-size: 0.72rem; color: var(--subtext1, var(--text));
+  }
+  .pane-actions .tunnel-anchor + .tunnel-anchor { margin-left: 2px; }
+  .pane-actions button.cp.open, .pane-actions button.tools.open { background: var(--surface0); color: var(--text); }
+  .busy-dot {
+    position: absolute; top: 1px; right: 1px; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--green); animation: td-pulse 1.4s ease-in-out infinite;
+  }
+  .hdr-menu {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 60; min-width: 13.5rem;
+    background: var(--mantle); border: 1px solid var(--surface1); border-radius: 6px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4); padding: 0.25rem;
+    display: flex; flex-direction: column;
+  }
+  .pane-actions .hdr-menu button {
+    width: 100%; height: auto; justify-content: flex-start; gap: 0.5rem;
+    padding: 0.32rem 0.55rem; font-size: 0.78rem; color: var(--text); white-space: nowrap;
+  }
+  .pane-actions .hdr-menu button :global(svg) { color: var(--subtext0); flex-shrink: 0; }
+  /* Each entry keeps the accent its toolbar icon had, so the eye still
+     finds Host / Password / Capture by colour. */
+  .pane-actions .hdr-menu button.c-host :global(svg) { color: var(--blue); }
+  .pane-actions .hdr-menu button.c-user :global(svg) { color: var(--mauve); }
+  .pane-actions .hdr-menu button.c-pass :global(svg) { color: var(--peach); }
+  .pane-actions .hdr-menu button.c-ssh :global(svg) { color: var(--green); }
+  .pane-actions .hdr-menu button.c-logtail :global(svg) { color: var(--teal); }
+  .pane-actions .hdr-menu button.c-tcpdump :global(svg) { color: var(--pink); }
+  .pane-actions .hdr-menu button.c-http :global(svg) { color: var(--sapphire); }
+  .pane-actions .hdr-menu button.c-tls :global(svg) { color: var(--green); }
+  .pane-actions .hdr-menu button.c-tunnels :global(svg) { color: var(--lavender); }
+  .hdr-menu .hint { margin-left: auto; padding-left: 0.8rem; font-size: 0.7rem; color: var(--subtext0); }
+  .hdr-menu .hint.live { color: var(--green); }
+  .hdr-menu .hint.warn { color: var(--yellow); }
+  .menu-head { padding: 0.3rem 0.55rem 0.15rem; font-size: 0.64rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--subtext0); }
+  .menu-sep { height: 1px; background: var(--surface0); margin: 0.2rem 0.3rem; }
   .pane-actions button.close:hover {
     background: var(--red);
     color: var(--on-accent);
