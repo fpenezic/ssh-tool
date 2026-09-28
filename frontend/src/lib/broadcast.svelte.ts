@@ -152,9 +152,18 @@ class BroadcastStore {
     try { await api.broadcastRemove(sessionId); }
     catch (e: any) { this.lastError = e?.message ?? String(e); }
   }
+  // The pane header's quick toggle. The button lights up for membership in
+  // ANY group, so pressing it has to undo exactly that: a session in named
+  // groups leaves all of them, not just the default one (it used to stay
+  // lit and keep broadcasting). Not in any group: join the default one.
   async toggle(sessionId: string) {
-    if (this.members.has(sessionId)) await this.remove(sessionId);
-    else await this.add(sessionId);
+    const groups = this.groupsOf(sessionId);
+    if (groups.length === 0 && !this.members.has(sessionId)) {
+      await this.add(sessionId);
+      return;
+    }
+    for (const g of groups) await this.removeFrom(g, sessionId);
+    if (this.members.has(sessionId) && !groups.includes("")) await this.remove(sessionId);
   }
   async setAll(sessionIds: string[]) {
     try { await api.broadcastSetAll(sessionIds); }
