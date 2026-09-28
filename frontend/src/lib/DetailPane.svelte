@@ -10,6 +10,9 @@
   import JumpChainEditor from "./JumpChainEditor.svelte";
   import PortForwards from "./PortForwards.svelte";
   import BatchPanel from "./BatchPanel.svelte";
+  import FleetBar from "./FleetBar.svelte";
+  import FleetCards from "./FleetCards.svelte";
+  import { folderHostIds } from "./fleetStore.svelte";
   import BatchExecModal from "./BatchExecModal.svelte";
   import ColorPicker from "./ColorPicker.svelte";
   import IconPicker from "./IconPicker.svelte";
@@ -78,6 +81,8 @@
   const dynamicMulti = $derived(selection.selectedDynamicEntries());
 
   const folder = $derived(selection.selectedFolder());
+  // Every SSH host under the selected folder, for its Fleet bar.
+  const folderFleetIds = $derived(folder ? folderHostIds(folder.id) : []);
   const conn = $derived(selection.selectedConnection());
   const credList = $derived(credentials.list);
 
@@ -1217,6 +1222,7 @@
         <button onclick={() => selection.select({ kind: "none" })}>Clear</button>
       </div>
     </header>
+    <FleetBar ids={dynamicMulti.map((d) => `dyn:${d.entryId}`)} label={`${dynamicMulti.length} dynamic entries`} />
     <p class="hint">
       Ctrl-click adds / removes; Shift-click selects a range. Connect
       all opens N tabs in parallel. Batch exec runs one command
@@ -1243,6 +1249,9 @@
         <button class="danger" onclick={deleteFolder}>Delete</button>
       </div>
     </header>
+
+    <FleetBar ids={folderFleetIds} label={folder.name} folderId={folder.id} />
+    <FleetCards folderId={folder.id} ids={folderFleetIds} label={folder.name} />
 
     <div class="form">
       <p class="section-label span-2">Inherited settings - applied to all connections in this folder unless overridden</p>

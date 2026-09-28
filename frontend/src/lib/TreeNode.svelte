@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { fleet, folderHostIds, TLS_WARN_DAYS, type FleetTool } from "./fleetStore.svelte";
+  import { IconTable, IconShieldCheck, IconCompare, IconKeyRound as IconKeyRoundFleet } from "./iconMap";
   import { tree, selection, drag, sessions, paneTabs, view } from "./stores.svelte";
   import { errMsg } from "./connectErrors";
   import { expandedConnections } from "./treeState.svelte";
@@ -410,6 +412,31 @@
     selection.selectFolderById(folder.id);
   }
 
+  // The Fleet tools as menu entries; the same four the right pane's Fleet
+  // bar shows. Compare needs two hosts, so it only appears from there on.
+  function fleetItems(hostIds: string[], label: string, folderId?: string) {
+    if (hostIds.length === 0) return [];
+    const open = (tool: FleetTool) => () => fleet.show({ tool, ids: hostIds, label, folderId });
+    return [
+      { label: "Gather facts…", iconComponent: IconTable, onSelect: open("facts") },
+      { label: "Check TLS certificates…", iconComponent: IconShieldCheck, onSelect: open("tls") },
+      ...(hostIds.length >= 2 ? [{ label: "Compare file…", iconComponent: IconCompare, onSelect: open("compare") }] : []),
+      { label: "Copy SSH key…", iconComponent: IconKeyRoundFleet, onSelect: open("copykey") },
+    ];
+  }
+
+  // "cert 9d" next to a host whose last TLS check found under 14 days left.
+  function certBadge(id: string): { text: string; title: string; bad: boolean } | null {
+    const d = fleet.daysLeft(id);
+    if (d === null || d >= TLS_WARN_DAYS) return null;
+    const checked = new Date(fleet.tls[id].at).toLocaleDateString();
+    return {
+      text: d < 0 ? "cert expired" : `cert ${d}d`,
+      title: `TLS certificate ${d < 0 ? `expired ${-d} days ago` : `expires in ${d} days`} (last checked ${checked})`,
+      bad: d < 7,
+    };
+  }
+
   function openFolderMenu(e: MouseEvent) {
     // Desktop right-click selects the row first (both panes are visible, so
     // selecting is harmless and lets the menu act on the multi-selection).
@@ -441,6 +468,11 @@
         { label: "Edit dynamic config…",   iconComponent: IconSettings, onSelect: () => dynEditor.showEdit(folder.id) },
         { label: "Rename…",                iconComponent: IconPencil, onSelect: () => connectionActions.renameFolder(folder.id) },
       ] : []),
+      ...fleetItems(
+        [...new Set(ids.flatMap((fid) => folderHostIds(fid)))],
+        single ? (tree.folderById(folder.id)?.name ?? "folder") : `${ids.length} folders`,
+        single ? folder.id : undefined,
+      ),
       {
         label: single ? "Move to folder…" : `Move ${ids.length} folders to…`,
         iconComponent: IconMoveToFolder,
@@ -502,6 +534,10 @@
         iconComponent: IconCopy,
         onSelect: () => connectionActions.cloneConnection(ids[0]),
       }] : []),
+      ...fleetItems(
+        ids.filter((id) => (tree.connectionById(id)?.protocol || "ssh") === "ssh"),
+        ids.length === 1 ? (tree.connectionById(ids[0])?.name ?? "host") : `${ids.length} selected connections`,
+      ),
       {
         label: ids.length > 1 ? `Export ${ids.length}…` : "Export…",
         iconComponent: IconDownload,
@@ -1053,6 +1089,10 @@
             <span class="name">{conn.name}</span>
           {/if}
           {#if conn.favorite}<span class="fav" title="Favourite"><IconStar size={11} fill="var(--yellow)" /></span>{/if}
+          {#if certBadge(conn.id)}
+            {@const b = certBadge(conn.id)!}
+            <span class="cert-badge" class:bad={b.bad} title={b.title}>{b.text}</span>
+          {/if}
           {#if isConn}
             <span class="conn-hint">connecting…</span>
           {:else if connectErrId === conn.id}
@@ -1189,6 +1229,11 @@
     margin: 0;
     outline: none;
   }
+  .cert-badge {
+    flex-shrink: 0; font-size: 0.66rem; padding: 0 0.35rem; border-radius: 7px; margin-right: 0.2rem;
+    color: var(--yellow); background: color-mix(in srgb, var(--yellow) 16%, transparent);
+  }
+  .cert-badge.bad { color: var(--red); background: color-mix(in srgb, var(--red) 16%, transparent); }
   .name { flex: 1; min-width: 4rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .count { color: var(--overlay1); font-size: 0.75rem; }
   /* .host doubles as the local-shell Command, which can be arbitrarily long -

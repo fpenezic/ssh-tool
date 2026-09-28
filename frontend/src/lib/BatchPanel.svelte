@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FleetBar from "./FleetBar.svelte";
   import { tree, credentials, selection } from "./stores.svelte";
   import { errMsg } from "./connectErrors";
   import { connectionActions } from "./connectionActions.svelte";
@@ -197,6 +198,8 @@
       <button onclick={clearSelection}>Clear selection</button>
     </div>
   </header>
+
+  <FleetBar ids={conns.filter((c) => (c.protocol || "ssh") === "ssh").map((c) => c.id)} label={`${conns.length} selected connections`} />
 
   <div class="list">
     {#each conns as c}

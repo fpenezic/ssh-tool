@@ -180,3 +180,15 @@ export function credentialKindIcon(kind: string) {
     default:          return Key;
   }
 }
+
+// Fleet tools (Gather facts, TLS, Compare, Copy key) and the pane Tools menu.
+import Table from "@lucide/svelte/icons/table";
+import ShieldCheck from "@lucide/svelte/icons/shield-check";
+import GitCompare from "@lucide/svelte/icons/git-compare";
+import Wrench from "@lucide/svelte/icons/wrench";
+export {
+  Table as IconTable,
+  ShieldCheck as IconShieldCheck,
+  GitCompare as IconCompare,
+  Wrench as IconWrench,
+};

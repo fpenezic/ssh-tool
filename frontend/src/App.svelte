@@ -38,6 +38,7 @@
   import McpPlanApprovalModal, { type PlanPreview } from "./lib/McpPlanApprovalModal.svelte";
   import ShareApprovalModal from "./lib/ShareApprovalModal.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
+  import FleetModals from "./lib/FleetModals.svelte";
   import ExportConnectionsModal from "./lib/ExportConnectionsModal.svelte";
   import { exportModal } from "./lib/exportModal.svelte.ts";
   import FolderPicker from "./lib/FolderPicker.svelte";
@@ -1562,6 +1563,7 @@
   {/if}
 
   <ContextMenu />
+  <FleetModals />
   {#if exportModal.open}
     <ExportConnectionsModal
       connectionIds={exportModal.connectionIds}
