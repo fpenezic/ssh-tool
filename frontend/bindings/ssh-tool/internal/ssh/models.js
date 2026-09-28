@@ -140,6 +140,45 @@ export class ContainerInfo {
 }
 
 /**
+ * DirUsage is one directory in the "largest directories" list of a
+ * filesystem, size in 1024-byte blocks.
+ */
+export class DirUsage {
+    /**
+     * Creates a new DirUsage instance.
+     * @param {Partial<DirUsage>} [$$source = {}] - The source object to create the DirUsage.
+     */
+    constructor($$source = {}) {
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("size_kb" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["size_kb"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DirUsage instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {DirUsage}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DirUsage(/** @type {Partial<DirUsage>} */($$parsedSource));
+    }
+}
+
+/**
  * DiskPart is one real (non-pseudo) filesystem in the popup's storage list.
  * Sizes are in 1024-byte blocks (df -Pk), so the frontend can render absolute
  * used/total alongside the percentage.
@@ -192,6 +231,15 @@ export class DiskPart {
              */
             this["used_pct"] = 0;
         }
+        if (!("inode_pct" in $$source)) {
+            /**
+             * InodePct is df -Pi's IUse% for the same mount, -1 when the fs does
+             * not report inodes (btrfs, vfat and friends print "-").
+             * @member
+             * @type {number}
+             */
+            this["inode_pct"] = 0;
+        }
 
         Object.assign(this, $$source);
     }
@@ -204,6 +252,95 @@ export class DiskPart {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new DiskPart(/** @type {Partial<DiskPart>} */($$parsedSource));
+    }
+}
+
+/**
+ * DiskSize is one real filesystem in the facts report.
+ */
+export class DiskSize {
+    /**
+     * Creates a new DiskSize instance.
+     * @param {Partial<DiskSize>} [$$source = {}] - The source object to create the DiskSize.
+     */
+    constructor($$source = {}) {
+        if (!("mount" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["mount"] = "";
+        }
+        if (!("size_kb" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["size_kb"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DiskSize instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {DiskSize}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DiskSize(/** @type {Partial<DiskSize>} */($$parsedSource));
+    }
+}
+
+/**
+ * DiskTopResult is what DiskTopDirs found. Partial is set when du was cut
+ * off by the timeout or could not read some directories (permission), so
+ * the list is a lower bound rather than the whole picture.
+ */
+export class DiskTopResult {
+    /**
+     * Creates a new DiskTopResult instance.
+     * @param {Partial<DiskTopResult>} [$$source = {}] - The source object to create the DiskTopResult.
+     */
+    constructor($$source = {}) {
+        if (!("dirs" in $$source)) {
+            /**
+             * @member
+             * @type {DirUsage[]}
+             */
+            this["dirs"] = [];
+        }
+        if (!("partial" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["partial"] = false;
+        }
+        if (!("reason" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["reason"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DiskTopResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {DiskTopResult}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("dirs" in $$parsedSource) {
+            $$parsedSource["dirs"] = $$createField0_0($$parsedSource["dirs"]);
+        }
+        return new DiskTopResult(/** @type {Partial<DiskTopResult>} */($$parsedSource));
     }
 }
 
@@ -369,6 +506,184 @@ export class ForwardStatus {
 }
 
 /**
+ * HostFacts is one row of the report. Values that do not apply stay at
+ * their zero value / -1 and the frontend shows a dash.
+ */
+export class HostFacts {
+    /**
+     * Creates a new HostFacts instance.
+     * @param {Partial<HostFacts>} [$$source = {}] - The source object to create the HostFacts.
+     */
+    constructor($$source = {}) {
+        if (!("cpu_cores" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["cpu_cores"] = 0;
+        }
+        if (!("cpu_model" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["cpu_model"] = "";
+        }
+        if (!("mem_kb" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["mem_kb"] = 0;
+        }
+        if (!("swap_kb" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["swap_kb"] = 0;
+        }
+        if (!("disks" in $$source)) {
+            /**
+             * @member
+             * @type {DiskSize[]}
+             */
+            this["disks"] = [];
+        }
+        if (!("virt" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["virt"] = "";
+        }
+        if (!("os" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["os"] = "";
+        }
+        if (!("kernel" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["kernel"] = "";
+        }
+        if (!("uptime_sec" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["uptime_sec"] = 0;
+        }
+        if (!("timesync" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["timesync"] = "";
+        }
+        if (!("updates" in $$source)) {
+            /**
+             * -1 unknown
+             * @member
+             * @type {number}
+             */
+            this["updates"] = 0;
+        }
+        if (!("security" in $$source)) {
+            /**
+             * -1 unknown
+             * @member
+             * @type {number}
+             */
+            this["security"] = 0;
+        }
+        if (!("reboot" in $$source)) {
+            /**
+             * yes | no | unknown | ""
+             * @member
+             * @type {string}
+             */
+            this["reboot"] = "";
+        }
+        if (!("failed" in $$source)) {
+            /**
+             * -1 unknown
+             * @member
+             * @type {number}
+             */
+            this["failed"] = 0;
+        }
+        if (!("ips" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["ips"] = [];
+        }
+        if (!("gateway" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["gateway"] = "";
+        }
+        if (!("dns" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["dns"] = [];
+        }
+        if (!("ports" in $$source)) {
+            /**
+             * @member
+             * @type {number[]}
+             */
+            this["ports"] = [];
+        }
+        if (!("custom" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["custom"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new HostFacts instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {HostFacts}
+     */
+    static createFrom($$source = {}) {
+        const $$createField4_0 = $$createType3;
+        const $$createField14_0 = $$createType4;
+        const $$createField16_0 = $$createType4;
+        const $$createField17_0 = $$createType5;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("disks" in $$parsedSource) {
+            $$parsedSource["disks"] = $$createField4_0($$parsedSource["disks"]);
+        }
+        if ("ips" in $$parsedSource) {
+            $$parsedSource["ips"] = $$createField14_0($$parsedSource["ips"]);
+        }
+        if ("dns" in $$parsedSource) {
+            $$parsedSource["dns"] = $$createField16_0($$parsedSource["dns"]);
+        }
+        if ("ports" in $$parsedSource) {
+            $$parsedSource["ports"] = $$createField17_0($$parsedSource["ports"]);
+        }
+        return new HostFacts(/** @type {Partial<HostFacts>} */($$parsedSource));
+    }
+}
+
+/**
  * LogTailLine is one streamed log line with its 1-based sequence number (the
  * ring watermark a re-attaching window dedupes against).
  */
@@ -453,7 +768,7 @@ export class PacketDecode {
      * @returns {PacketDecode}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType0;
+        const $$createField2_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("fields" in $$parsedSource) {
             $$parsedSource["fields"] = $$createField2_0($$parsedSource["fields"]);
@@ -587,12 +902,71 @@ export class ParsedPacket {
      * @returns {ParsedPacket}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType2;
+        const $$createField10_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("decoded" in $$parsedSource) {
             $$parsedSource["decoded"] = $$createField10_0($$parsedSource["decoded"]);
         }
         return new ParsedPacket(/** @type {Partial<ParsedPacket>} */($$parsedSource));
+    }
+}
+
+/**
+ * ProcInfo is one row of the System status Processes tab.
+ */
+export class ProcInfo {
+    /**
+     * Creates a new ProcInfo instance.
+     * @param {Partial<ProcInfo>} [$$source = {}] - The source object to create the ProcInfo.
+     */
+    constructor($$source = {}) {
+        if (!("pid" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["pid"] = 0;
+        }
+        if (!("user" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["user"] = "";
+        }
+        if (!("cpu" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["cpu"] = 0;
+        }
+        if (!("mem" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["mem"] = 0;
+        }
+        if (!("command" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["command"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ProcInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ProcInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ProcInfo(/** @type {Partial<ProcInfo>} */($$parsedSource));
     }
 }
 
@@ -814,6 +1188,32 @@ export class ServerStats {
              */
             this["partitions"] = [];
         }
+        if (!("cpu_pct" in $$source)) {
+            /**
+             * Local-shell extras. CPUPct is set where there is no load average
+             * (Windows): busy share of all cores over a short sample, -1 elsewhere.
+             * Shell names the local shell for the status bar ("WSL Ubuntu-24.04").
+             * @member
+             * @type {number}
+             */
+            this["cpu_pct"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["shell"] = undefined;
+        }
+        if (!("failed_units" in $$source)) {
+            /**
+             * FailedUnits counts failed systemd units, -1 where there is no
+             * systemctl. Drives the status bar's "N failed" chip.
+             * @member
+             * @type {number}
+             */
+            this["failed_units"] = 0;
+        }
 
         Object.assign(this, $$source);
     }
@@ -824,8 +1224,8 @@ export class ServerStats {
      * @returns {ServerStats}
      */
     static createFrom($$source = {}) {
-        const $$createField15_0 = $$createType3;
-        const $$createField16_0 = $$createType5;
+        const $$createField15_0 = $$createType4;
+        const $$createField16_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("user_names" in $$parsedSource) {
             $$parsedSource["user_names"] = $$createField15_0($$parsedSource["user_names"]);
@@ -964,10 +1364,74 @@ export class SftpEntry {
     }
 }
 
+/**
+ * UnitInfo is one systemd service in the Services tab.
+ */
+export class UnitInfo {
+    /**
+     * Creates a new UnitInfo instance.
+     * @param {Partial<UnitInfo>} [$$source = {}] - The source object to create the UnitInfo.
+     */
+    constructor($$source = {}) {
+        if (!("unit" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["unit"] = "";
+        }
+        if (!("load" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["load"] = "";
+        }
+        if (!("active" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["active"] = "";
+        }
+        if (!("sub" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["sub"] = "";
+        }
+        if (!("description" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["description"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new UnitInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {UnitInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new UnitInfo(/** @type {Partial<UnitInfo>} */($$parsedSource));
+    }
+}
+
 // Private type creation functions
-const $$createType0 = $Create.Map($Create.Any, $Create.Any);
-const $$createType1 = PacketDecode.createFrom;
-const $$createType2 = $Create.Nullable($$createType1);
-const $$createType3 = $Create.Array($Create.Any);
-const $$createType4 = DiskPart.createFrom;
-const $$createType5 = $Create.Array($$createType4);
+const $$createType0 = DirUsage.createFrom;
+const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = DiskSize.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = $Create.Array($Create.Any);
+const $$createType5 = $Create.Array($Create.Any);
+const $$createType6 = $Create.Map($Create.Any, $Create.Any);
+const $$createType7 = PacketDecode.createFrom;
+const $$createType8 = $Create.Nullable($$createType7);
+const $$createType9 = DiskPart.createFrom;
+const $$createType10 = $Create.Array($$createType9);

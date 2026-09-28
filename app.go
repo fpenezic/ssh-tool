@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -3554,6 +3555,105 @@ func (a *App) SshServerStats(sessionID string) (*sshlayer.ServerStats, error) {
 		return nil, fmt.Errorf("no live ssh client")
 	}
 	return sshlayer.FetchServerStats(client)
+}
+
+// LocalHostStats is SshServerStats for a local shell: the same snapshot of
+// the machine the shell runs on (the WSL distro for a WSL shell), so the
+// status bar and System status popup take either without caring which.
+func (a *App) LocalHostStats(sessionID string) (*sshlayer.ServerStats, error) {
+	sess, ok := a.localPool.Get(sessionID)
+	if !ok {
+		return nil, fmt.Errorf("session not found")
+	}
+	return sess.HostStats()
+}
+
+// sshTarget resolves a live session to the client its commands run on.
+func (a *App) sshTarget(sessionID string) (*gossh.Client, error) {
+	sess, ok := a.pool.Get(sessionID)
+	if !ok {
+		return nil, fmt.Errorf("session not found")
+	}
+	client := sess.TargetClient()
+	if client == nil {
+		return nil, fmt.Errorf("no live ssh client")
+	}
+	return client, nil
+}
+
+// SshTopProcesses feeds the System status Processes tab: the heaviest
+// processes by "cpu" or "mem", limit rows (0 = the default 10).
+func (a *App) SshTopProcesses(sessionID, by string, limit int) ([]sshlayer.ProcInfo, error) {
+	c, err := a.sshTarget(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return sshlayer.TopProcesses(c, by, limit)
+}
+
+// SshServices lists systemd services ("failed", "running" or "all").
+func (a *App) SshServices(sessionID, state string) ([]sshlayer.UnitInfo, error) {
+	c, err := a.sshTarget(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return sshlayer.ListServices(c, state)
+}
+
+// SshUnitLog returns a unit's last journal lines for the Services tab.
+func (a *App) SshUnitLog(sessionID, unit string) ([]string, error) {
+	c, err := a.sshTarget(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return sshlayer.UnitLog(c, unit, 5)
+}
+
+// sudoPasswordPrefix marks an action that needs a sudo password the app
+// does not have; the frontend asks for one and calls again. Kept in sync
+// with SUDO_PROMPT_PREFIX in ServerStatusModal.svelte.
+const sudoPasswordPrefix = "sudo-password-required: "
+
+// SshSystemAction runs a process signal ("signal": pid + TERM/KILL) or a
+// service verb ("service": unit + restart/stop/start). The frontend has
+// already confirmed with the user. An empty password falls back to the
+// connection's own stored password, the same candidate tcpdump uses.
+func (a *App) SshSystemAction(sessionID, kind string, pid int, unit, verb, password string) error {
+	c, err := a.sshTarget(sessionID)
+	if err != nil {
+		return err
+	}
+	if password == "" {
+		password = a.resolveSudoCandidate(sessionID)
+	}
+	switch kind {
+	case "signal":
+		err = sshlayer.SignalProcess(c, pid, verb, password)
+	case "service":
+		err = sshlayer.ServiceAction(c, unit, verb, password)
+	default:
+		return fmt.Errorf("unknown action %q", kind)
+	}
+	if errors.Is(err, sshlayer.ErrSudoPassword) {
+		return fmt.Errorf("%sthis needs root and sudo asks for a password", sudoPasswordPrefix)
+	}
+	return err
+}
+
+// SshDiskTopDirs lists the largest directories on one filesystem of the
+// session's host. du walks every inode, so this only runs when the user
+// asks for it in the System status popup, never on the stats timer; the
+// remote side caps it with timeout and nice.
+func (a *App) SshDiskTopDirs(sessionID, mount string) (*sshlayer.DiskTopResult, error) {
+	sess, ok := a.pool.Get(sessionID)
+	if !ok {
+		return nil, fmt.Errorf("session not found")
+	}
+	client := sess.TargetClient()
+	if client == nil {
+		return nil, fmt.Errorf("no live ssh client")
+	}
+	return sshlayer.DiskTopDirs(client, mount)
 }
 
 // ----- Broadcast group -----
@@ -8482,8 +8582,29 @@ func (a *App) BatchExec(in BatchExecInput) ([]sshlayer.BatchHostResult, error) {
 	if len(in.ConnectionIDs) == 0 {
 		return nil, fmt.Errorf("no connections selected")
 	}
-	hosts := make([]sshlayer.BatchHostInput, 0, len(in.ConnectionIDs))
-	for _, cid := range in.ConnectionIDs {
+	hosts := a.batchHosts(in.ConnectionIDs)
+	return a.runBatch(hosts, in.Command, in.TimeoutSeconds), nil
+}
+
+// runBatch runs one command on already-resolved hosts with the user's
+// connect timeout. Shared by Run command and the Fleet tools.
+func (a *App) runBatch(hosts []sshlayer.BatchHostInput, command string, timeoutSeconds int) []sshlayer.BatchHostResult {
+	var ct time.Duration
+	if raw := a.SettingsGet("connect_timeout_seconds"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			ct = time.Duration(n) * time.Second
+		}
+	}
+	return sshlayer.BatchExec(a.db, a.vault, a.makeHostKeyCallback(), a.makeAlgoLookup(), ct, hosts, command, timeoutSeconds)
+}
+
+// batchHosts resolves connection ids (and "dyn:<entryId>" dynamic entries)
+// to what BatchExec needs. An id that no longer resolves becomes a host
+// with nil Settings, which BatchExec reports as skipped instead of failing
+// the whole run.
+func (a *App) batchHosts(ids []string) []sshlayer.BatchHostInput {
+	hosts := make([]sshlayer.BatchHostInput, 0, len(ids))
+	for _, cid := range ids {
 		// Dynamic-inventory entries arrive as "dyn:<entryId>" - they
 		// don't exist in the connections table; we build a synthetic
 		// connection on the fly that inherits from the dynamic
@@ -8555,15 +8676,7 @@ func (a *App) BatchExec(in BatchExecInput) ([]sshlayer.BatchHostResult, error) {
 			Hostname:     s.Hostname,
 		})
 	}
-	// Resolve the user-configurable connect timeout.
-	var ct time.Duration
-	if raw := a.SettingsGet("connect_timeout_seconds"); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
-			ct = time.Duration(n) * time.Second
-		}
-	}
-	results := sshlayer.BatchExec(a.db, a.vault, a.makeHostKeyCallback(), a.makeAlgoLookup(), ct, hosts, in.Command, in.TimeoutSeconds)
-	return results, nil
+	return hosts
 }
 
 // HttpDo issues a one-shot HTTP request. Routes through SocksAddr if

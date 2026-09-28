@@ -27,7 +27,17 @@ class LogTailStore {
   membershipVersion = $state(0);
   statsVersion = $state(0);
 
-  open(sessionId: string) {
+  // A unit handed over by another view (Services tab); the modal takes it
+  // once on mount to prefill the journal form.
+  private presets = new Map<string, { unit: string }>();
+  takePreset(sessionId: string): { unit: string } | undefined {
+    const p = this.presets.get(sessionId);
+    this.presets.delete(sessionId);
+    return p;
+  }
+
+  open(sessionId: string, preset?: { unit: string }) {
+    if (preset) this.presets.set(sessionId, preset);
     const e = this.entries.get(sessionId);
     if (e) {
       e.mode = "open";

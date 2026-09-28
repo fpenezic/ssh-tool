@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 
@@ -38,6 +39,16 @@ type ServerStats struct {
 	SwapFreeKB  int64      `json:"swap_free_kb"`
 	UserNames   []string   `json:"user_names"`
 	Partitions  []DiskPart `json:"partitions"`
+
+	// Local-shell extras. CPUPct is set where there is no load average
+	// (Windows): busy share of all cores over a short sample, -1 elsewhere.
+	// Shell names the local shell for the status bar ("WSL Ubuntu-24.04").
+	CPUPct float64 `json:"cpu_pct"`
+	Shell  string  `json:"shell,omitempty"`
+
+	// FailedUnits counts failed systemd units, -1 where there is no
+	// systemctl. Drives the status bar's "N failed" chip.
+	FailedUnits int `json:"failed_units"`
 }
 
 // DiskPart is one real (non-pseudo) filesystem in the popup's storage list.
@@ -50,6 +61,9 @@ type DiskPart struct {
 	UsedKB  int64   `json:"used_kb"`
 	AvailKB int64   `json:"avail_kb"`
 	UsedPct float64 `json:"used_pct"`
+	// InodePct is df -Pi's IUse% for the same mount, -1 when the fs does
+	// not report inodes (btrfs, vfat and friends print "-").
+	InodePct float64 `json:"inode_pct"`
 }
 
 // statsProbeCommand is a single read-only shell pipeline that gathers every
@@ -66,9 +80,32 @@ const statsProbeCommand = `cat /proc/loadavg 2>/dev/null; echo __SSHTOOL_SEP__; 
 	`hostname 2>/dev/null; echo __SSHTOOL_SEP__; ` +
 	`uname -r 2>/dev/null; echo __SSHTOOL_SEP__; ` +
 	`cat /proc/uptime 2>/dev/null; echo __SSHTOOL_SEP__; ` +
-	`nproc 2>/dev/null`
+	`nproc 2>/dev/null; echo __SSHTOOL_SEP__; ` +
+	`df -Pi 2>/dev/null; echo __SSHTOOL_SEP__; ` +
+	`command -v systemctl >/dev/null 2>&1 && systemctl --failed --no-legend --plain --no-pager 2>/dev/null | wc -l`
 
 const statsSep = "__SSHTOOL_SEP__"
+
+// StatsProbeCommand is the same probe for a local shell (Linux, WSL), which
+// runs it through sh on this machine instead of over a session.
+const StatsProbeCommand = statsProbeCommand
+
+// StatsProbeCommandDarwin fills the same sections on macOS, which has no
+// /proc: load from vm.loadavg, memory rebuilt as meminfo lines from vm_stat
+// (free + inactive + speculative pages = available), uptime from
+// kern.boottime. df -Pi is left out: BSD df puts inode columns elsewhere.
+const StatsProbeCommandDarwin = `sysctl -n vm.loadavg 2>/dev/null | tr -d '{}'; echo __SSHTOOL_SEP__; ` +
+	`vm_stat 2>/dev/null | awk -v pg="$(sysctl -n hw.pagesize)" -v tot="$(sysctl -n hw.memsize)" ` +
+	`'/Pages free/{f=$3}/Pages inactive/{i=$3}/Pages speculative/{s=$3} END{printf "MemTotal: %d kB\nMemAvailable: %d kB\n", tot/1024, (f+i+s)*pg/1024}'; echo __SSHTOOL_SEP__; ` +
+	`df -Pk 2>/dev/null; echo __SSHTOOL_SEP__; ` +
+	`who -q 2>/dev/null; echo __SSHTOOL_SEP__; ` +
+	`hostname 2>/dev/null; echo __SSHTOOL_SEP__; ` +
+	`uname -r 2>/dev/null; echo __SSHTOOL_SEP__; ` +
+	`echo $(( $(date +%s) - $(sysctl -n kern.boottime | sed 's/.*sec = \([0-9]*\).*/\1/') )); echo __SSHTOOL_SEP__; ` +
+	`sysctl -n hw.ncpu 2>/dev/null`
+
+// ParseServerStats parses the output of either probe command.
+func ParseServerStats(out string) *ServerStats { return parseServerStats(out) }
 
 // FetchServerStats runs the probe on a side channel of the given client and
 // parses the result. It opens a fresh, non-PTY session so it never touches
@@ -94,14 +131,25 @@ func FetchServerStats(client *ssh.Client) (*ServerStats, error) {
 			return nil, fmt.Errorf("stats run: %w", err)
 		}
 	}
-	return parseServerStats(string(out)), nil
+	st := parseServerStats(string(out))
+	if !st.OK {
+		// The popup then says "no readable stats"; what the host actually
+		// sent is the only way to tell a broken section from an empty
+		// channel. Logged to the in-app log (Settings -> Logs).
+		head := string(out)
+		if len(head) > 400 {
+			head = head[:400]
+		}
+		log.Printf("server stats: nothing parsed (%d bytes, run err=%v): %q", len(out), err, head)
+	}
+	return st, nil
 }
 
 // parseServerStats splits the probe output on the sentinel and parses each
 // section independently. Unknown metrics are set to -1 (pct/users) or left
 // at 0 (load). OK is true if at least one section produced a value.
 func parseServerStats(out string) *ServerStats {
-	s := &ServerStats{MemUsedPct: -1, DiskUsedPct: -1, Users: -1}
+	s := &ServerStats{MemUsedPct: -1, DiskUsedPct: -1, Users: -1, CPUPct: -1, FailedUnits: -1}
 	sections := strings.Split(out, statsSep)
 	got := false
 
@@ -192,12 +240,13 @@ func parseServerStats(out string) *ServerStats {
 				continue
 			}
 			s.Partitions = append(s.Partitions, DiskPart{
-				Mount:   mount,
-				FS:      fsName,
-				SizeKB:  size,
-				UsedKB:  used,
-				AvailKB: avail,
-				UsedPct: pct,
+				Mount:    mount,
+				FS:       fsName,
+				SizeKB:   size,
+				UsedKB:   used,
+				AvailKB:  avail,
+				UsedPct:  pct,
+				InodePct: -1,
 			})
 			got = true
 		}
@@ -259,6 +308,35 @@ func parseServerStats(out string) *ServerStats {
 		}
 	}
 
+	// Section 8: df -Pi -> same layout as df -Pk with inode counts. Statfs
+	// only, like df -Pk, so it costs nothing extra on a host with millions
+	// of small files. Matched to the partitions above by mount path.
+	if len(sections) > 8 && len(s.Partitions) > 0 {
+		inodes := map[string]float64{}
+		for _, line := range strings.Split(sections[8], "\n") {
+			f := strings.Fields(line)
+			if len(f) < 6 || !strings.HasSuffix(f[4], "%") {
+				continue // header, or "-" from a fs without inodes
+			}
+			if v, err := strconv.ParseFloat(strings.TrimSuffix(f[4], "%"), 64); err == nil {
+				inodes[strings.Join(f[5:], " ")] = v
+			}
+		}
+		for i := range s.Partitions {
+			if v, ok := inodes[s.Partitions[i].Mount]; ok {
+				s.Partitions[i].InodePct = v
+			}
+		}
+	}
+
+	// Section 9: failed unit count. Empty when systemctl is missing, which
+	// keeps FailedUnits at -1 (no chip) rather than a false 0.
+	if len(sections) > 9 {
+		if n, err := strconv.Atoi(strings.TrimSpace(sections[9])); err == nil && n >= 0 {
+			s.FailedUnits = n
+		}
+	}
+
 	s.OK = got
 	return s
 }
@@ -275,6 +353,14 @@ func isRealMount(fs, mount string, sizeKB int64) bool {
 		return false
 	}
 	if strings.HasPrefix(fs, "/dev/loop") {
+		return false
+	}
+	// macOS splits one APFS container into a sealed system snapshot at /
+	// plus helper volumes; only Data holds what the user fills.
+	if strings.HasPrefix(mount, "/System/Volumes/") && mount != "/System/Volumes/Data" {
+		return false
+	}
+	if fs == "devfs" {
 		return false
 	}
 	for _, p := range []string{"/snap", "/boot/efi", "/run", "/dev", "/sys", "/proc"} {

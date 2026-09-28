@@ -36,9 +36,11 @@
   import { EventsOn } from "./wailsRuntime";
   import UpdateModal from "./UpdateModal.svelte";
   import ServerStatusModal from "./ServerStatusModal.svelte";
+  import { level, rank, fullestPartition, fullestInodes } from "./serverStatsLevel";
 
   let updateModalOpen = $state(false);
   let statusModalOpen = $state(false);
+  let statusModalTab = $state<"overview" | "services">("overview");
 
   // Global running-tunnel count, polled on a slow interval. We don't
   // gate this on session count because the badge belongs to the
@@ -234,8 +236,8 @@
     return c ? `${c.name} · ${c.hostname}` : s.name;
   });
 
-  // The sessionId of the focused pane, but only for a CONNECTED SSH
-  // session on the terminal tab - the only case the server-stats probe can
+  // The sessionId of the focused pane, but only for a CONNECTED session
+  // (SSH or local shell) on the terminal tab - the cases the stats probe can
   // run against. Empty otherwise (so the poll idles).
   const focusedSessionId = $derived.by(() => {
     if (view.tab !== "terminal") return "";
@@ -245,7 +247,7 @@
     if (!leaf?.sessionId) return "";
     const s = sessions.tabs.find((x) => x.sessionId === leaf.sessionId);
     if (!s || s.status !== "connected") return "";
-    // Skip local shells / VNC panes - the probe is for remote SSH hosts.
+    // Skip VNC and other non-terminal panes.
     if (leaf.view && leaf.view !== "terminal") return "";
     return leaf.sessionId;
   });
@@ -259,13 +261,39 @@
   // the tunnel poll above.
   let serverStats = $state<ServerStats | null>(null);
   let statsTimer: ReturnType<typeof setInterval> | null = null;
+  // Near-limit colouring: same thresholds as the System status bars. The
+  // disk readout follows the fullest filesystem, not just / - a small root
+  // next to a full data mount is exactly what it must not hide.
+  const statsView = $derived.by(() => {
+    const s = serverStats;
+    if (!s) return null;
+    const part = fullestPartition(s);
+    const diskPct = part ? part.used_pct : s.disk_used_pct;
+    const inode = fullestInodes(s);
+    const spaceLvl = diskPct >= 0 ? level("disk", diskPct / 100) : "ok";
+    const inodeLvl = inode ? level("disk", inode.inode_pct / 100) : "ok";
+    // Inodes only ever speak up as an alarm: they colour the disk icon and
+    // take over the tooltip when they are the worse of the two.
+    const inodeWins = rank[inodeLvl] > rank[spaceLvl];
+    return {
+      cpu: s.cpu_pct >= 0 ? level("cpuPct", s.cpu_pct / 100)
+        : s.ncpu > 0 ? level("cpu", s.load1 / s.ncpu) : "ok",
+      mem: s.mem_used_pct >= 0 ? level("mem", s.mem_used_pct / 100) : "ok",
+      diskPct,
+      diskTitle: inodeWins && inode
+        ? `Inodes ${Math.round(inode.inode_pct)}% used on ${inode.mount} - disk space ${Math.round(diskPct)}% on ${part ? part.mount : "/"}`
+        : `Disk used on ${part ? part.mount : "/"} (fullest filesystem)`,
+      disk: inodeWins ? inodeLvl : spaceLvl,
+    };
+  });
   let statsInFlight = false;
 
   async function probeServerStats(sid: string) {
     if (!sid || statsInFlight) return;
     statsInFlight = true;
     try {
-      const s = await api.sshServerStats(sid);
+      const local = sessions.tabs.find((t) => t.sessionId === sid)?.kind === "local";
+      const s = await (local ? api.localHostStats(sid) : api.sshServerStats(sid));
       // Ignore a stale result if focus moved while the probe was in flight.
       if (sid === focusedSessionId) serverStats = s && s.ok ? s : null;
     } catch {
@@ -283,12 +311,8 @@
     const sid = focusedSessionId;
     if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
     if (!on || !sid) { serverStats = null; return; }
-    // Only SSH sessions have a server to probe. A local shell (or any
-    // non-SSH session) has no ssh client, so SshServerStats errors and Wails
-    // surfaces it as a noisy 422 in the console every 10s. Skip the poll for
-    // those entirely.
-    const sess = sessions.tabs.find((s) => s.sessionId === sid);
-    if (sess && sess.kind === "local") { serverStats = null; return; }
+    // SSH sessions probe the server, local shells the machine they run on
+    // (probeServerStats picks the call).
     // Probe immediately, then every 10s while focus/feature hold.
     serverStats = null;
     probeServerStats(sid);
@@ -603,20 +627,29 @@
   {#if serverStats}
     <button
       class="seg stats"
-      onclick={() => (statusModalOpen = true)}
-      title="Server status for the focused session (refreshed every 10s) - click for full system status"
+      onclick={() => { statusModalTab = "overview"; statusModalOpen = true; }}
+      title="Status of the focused session's host (refreshed every 10s) - click for full system status"
     >
-      <span class="stat" title="Load average (1 / 5 / 15 min): {serverStats.load1.toFixed(2)} / {serverStats.load5.toFixed(2)} / {serverStats.load15.toFixed(2)}">
-        <IconCpu size={11} />{serverStats.load1.toFixed(2)}
-      </span>
+      {#if serverStats.shell}
+        <span class="stat shell" title="Local shell">{serverStats.shell}</span>
+      {/if}
+      {#if serverStats.cpu_pct >= 0}
+        <span class="stat lvl-{statsView?.cpu}" title="CPU busy across {serverStats.ncpu} cores">
+          <IconCpu size={11} />{Math.round(serverStats.cpu_pct)}%
+        </span>
+      {:else}
+        <span class="stat lvl-{statsView?.cpu}" title="Load average (1 / 5 / 15 min): {serverStats.load1.toFixed(2)} / {serverStats.load5.toFixed(2)} / {serverStats.load15.toFixed(2)}{serverStats.ncpu > 0 ? ` on ${serverStats.ncpu} cores` : ""}">
+          <IconCpu size={11} />{serverStats.load1.toFixed(2)}
+        </span>
+      {/if}
       {#if serverStats.mem_used_pct >= 0}
-        <span class="stat" title="Memory used">
+        <span class="stat lvl-{statsView?.mem}" title="Memory used">
           <IconMemory size={11} />{Math.round(serverStats.mem_used_pct)}%
         </span>
       {/if}
-      {#if serverStats.disk_used_pct >= 0}
-        <span class="stat" title="Disk used on /">
-          <IconDisk size={11} />{Math.round(serverStats.disk_used_pct)}%
+      {#if statsView && statsView.diskPct >= 0}
+        <span class="stat lvl-{statsView.disk}" title={statsView.diskTitle}>
+          <IconDisk size={11} />{Math.round(statsView.diskPct)}%
         </span>
       {/if}
       {#if serverStats.users >= 0}
@@ -625,6 +658,13 @@
         </span>
       {/if}
     </button>
+    {#if serverStats.failed_units > 0}
+      <button
+        class="seg failed-chip"
+        onclick={() => { statusModalTab = "services"; statusModalOpen = true; }}
+        title="{serverStats.failed_units} failed systemd unit{serverStats.failed_units === 1 ? "" : "s"} - click for Services"
+      >{serverStats.failed_units} failed</button>
+    {/if}
   {/if}
 
   {#if statusModalOpen && serverStats && focusedSessionId}
@@ -632,6 +672,8 @@
       initial={serverStats}
       connName={focusedConnName}
       sessionId={focusedSessionId}
+      local={sessions.tabs.find((t) => t.sessionId === focusedSessionId)?.kind === "local"}
+      initialTab={statusModalTab}
       onClose={() => (statusModalOpen = false)}
     />
   {/if}
@@ -727,6 +769,19 @@
     gap: 0.2rem;
     white-space: nowrap;
   }
+  .seg.failed-chip {
+    color: var(--red);
+    background: color-mix(in srgb, var(--red) 16%, transparent);
+    border-radius: 8px;
+    padding: 0 0.5rem;
+    margin: 0 0.2rem;
+    height: 16px;
+    align-self: center;
+    font-size: 0.7rem;
+  }
+  .seg.stats .stat.shell { color: var(--overlay1); }
+  .seg.stats .stat.lvl-warn { color: var(--yellow); }
+  .seg.stats .stat.lvl-crit { color: var(--red); }
   .seg.tunnels { color: var(--green); }
   .seg.mcp { color: var(--blue); }
   /* The counter stands for every shared session at once, so it takes the

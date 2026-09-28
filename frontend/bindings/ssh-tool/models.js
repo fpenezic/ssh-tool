@@ -1116,6 +1116,73 @@ export class ContainerProbeResult {
     }
 }
 
+/**
+ * CopyKeyResult is one host's answer: present, added, would_add (check
+ * only), skipped_root, or error.
+ */
+export class CopyKeyResult {
+    /**
+     * Creates a new CopyKeyResult instance.
+     * @param {Partial<CopyKeyResult>} [$$source = {}] - The source object to create the CopyKeyResult.
+     */
+    constructor($$source = {}) {
+        if (!("connection_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["connection_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("hostname" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hostname"] = "";
+        }
+        if (!("user" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["user"] = "";
+        }
+        if (!("result" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["result"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CopyKeyResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CopyKeyResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CopyKeyResult(/** @type {Partial<CopyKeyResult>} */($$parsedSource));
+    }
+}
+
 export class CredentialsRotateAPITokenInput {
     /**
      * Creates a new CredentialsRotateAPITokenInput instance.
@@ -1775,6 +1842,219 @@ export class ExportSubtreeResult {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new ExportSubtreeResult(/** @type {Partial<ExportSubtreeResult>} */($$parsedSource));
+    }
+}
+
+/**
+ * FactsHostResult is one row of the report: the host plus what it
+ * answered, or why it did not.
+ */
+export class FactsHostResult {
+    /**
+     * Creates a new FactsHostResult instance.
+     * @param {Partial<FactsHostResult>} [$$source = {}] - The source object to create the FactsHostResult.
+     */
+    constructor($$source = {}) {
+        if (!("connection_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["connection_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("hostname" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hostname"] = "";
+        }
+        if (!("state" in $$source)) {
+            /**
+             * ok | error | skipped
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+        if (!("facts" in $$source)) {
+            /**
+             * @member
+             * @type {ssh$0.HostFacts}
+             */
+            this["facts"] = (new ssh$0.HostFacts());
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FactsHostResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FactsHostResult}
+     */
+    static createFrom($$source = {}) {
+        const $$createField5_0 = $$createType6;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("facts" in $$parsedSource) {
+            $$parsedSource["facts"] = $$createField5_0($$parsedSource["facts"]);
+        }
+        return new FactsHostResult(/** @type {Partial<FactsHostResult>} */($$parsedSource));
+    }
+}
+
+/**
+ * FactsInput is what the Gather facts dialog sends.
+ */
+export class FactsInput {
+    /**
+     * Creates a new FactsInput instance.
+     * @param {Partial<FactsInput>} [$$source = {}] - The source object to create the FactsInput.
+     */
+    constructor($$source = {}) {
+        if (!("connection_ids" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["connection_ids"] = [];
+        }
+        if (!("facts" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["facts"] = [];
+        }
+        if (!("custom" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["custom"] = "";
+        }
+        if (!("timeout_seconds" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["timeout_seconds"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FactsInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FactsInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType0;
+        const $$createField1_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("connection_ids" in $$parsedSource) {
+            $$parsedSource["connection_ids"] = $$createField0_0($$parsedSource["connection_ids"]);
+        }
+        if ("facts" in $$parsedSource) {
+            $$parsedSource["facts"] = $$createField1_0($$parsedSource["facts"]);
+        }
+        return new FactsInput(/** @type {Partial<FactsInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * FileReadResult is one host's copy of the compared file.
+ */
+export class FileReadResult {
+    /**
+     * Creates a new FileReadResult instance.
+     * @param {Partial<FileReadResult>} [$$source = {}] - The source object to create the FileReadResult.
+     */
+    constructor($$source = {}) {
+        if (!("connection_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["connection_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("hostname" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hostname"] = "";
+        }
+        if (!("state" in $$source)) {
+            /**
+             * ok | error | skipped
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+        if (!("content" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["content"] = "";
+        }
+        if (!("sha256" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["sha256"] = "";
+        }
+        if (!("truncated" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["truncated"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FileReadResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FileReadResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FileReadResult(/** @type {Partial<FileReadResult>} */($$parsedSource));
     }
 }
 
@@ -2746,7 +3026,7 @@ export class KeepassSaveInput {
      * @returns {KeepassSaveInput}
      */
     static createFrom($$source = {}) {
-        const $$createField9_0 = $$createType6;
+        const $$createField9_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("remote_config" in $$parsedSource) {
             $$parsedSource["remote_config"] = $$createField9_0($$parsedSource["remote_config"]);
@@ -3010,7 +3290,7 @@ export class LogTailSnapshotResult {
      * @returns {LogTailSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType8;
+        const $$createField0_0 = $$createType9;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("lines" in $$parsedSource) {
             $$parsedSource["lines"] = $$createField0_0($$parsedSource["lines"]);
@@ -3443,10 +3723,10 @@ export class NetworkProfileInfo {
      * @returns {NetworkProfileInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType9;
-        const $$createField6_0 = $$createType11;
-        const $$createField7_0 = $$createType13;
-        const $$createField8_0 = $$createType14;
+        const $$createField5_0 = $$createType10;
+        const $$createField6_0 = $$createType12;
+        const $$createField7_0 = $$createType14;
+        const $$createField8_0 = $$createType15;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("profile" in $$parsedSource) {
             $$parsedSource["profile"] = $$createField5_0($$parsedSource["profile"]);
@@ -4098,7 +4378,7 @@ export class ScrollbackSnapshot {
      * @returns {ScrollbackSnapshot}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType16;
+        const $$createField3_0 = $$createType17;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("marks" in $$parsedSource) {
             $$parsedSource["marks"] = $$createField3_0($$parsedSource["marks"]);
@@ -4151,7 +4431,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType18;
+        const $$createField1_0 = $$createType19;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -4335,7 +4615,7 @@ export class ShareStartInput {
      * @returns {ShareStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType20;
+        const $$createField6_0 = $$createType21;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField6_0($$parsedSource["sessions"]);
@@ -4872,6 +5152,162 @@ export class SyncStatusResult {
 }
 
 /**
+ * TLSCertResult is one host:port. DaysLeft is negative once expired.
+ */
+export class TLSCertResult {
+    /**
+     * Creates a new TLSCertResult instance.
+     * @param {Partial<TLSCertResult>} [$$source = {}] - The source object to create the TLSCertResult.
+     */
+    constructor($$source = {}) {
+        if (!("connection_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["connection_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("hostname" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hostname"] = "";
+        }
+        if (!("port" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["port"] = 0;
+        }
+        if (!("state" in $$source)) {
+            /**
+             * ok | error | skipped
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+        if (!("subject" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["subject"] = "";
+        }
+        if (!("issuer" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["issuer"] = "";
+        }
+        if (!("not_after" in $$source)) {
+            /**
+             * unix seconds
+             * @member
+             * @type {number}
+             */
+            this["not_after"] = 0;
+        }
+        if (!("days_left" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["days_left"] = 0;
+        }
+        if (!("trusted" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["trusted"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["trust_error"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TLSCertResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TLSCertResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new TLSCertResult(/** @type {Partial<TLSCertResult>} */($$parsedSource));
+    }
+}
+
+/**
+ * TLSInput asks for the certificate on each host's ports.
+ */
+export class TLSInput {
+    /**
+     * Creates a new TLSInput instance.
+     * @param {Partial<TLSInput>} [$$source = {}] - The source object to create the TLSInput.
+     */
+    constructor($$source = {}) {
+        if (!("connection_ids" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["connection_ids"] = [];
+        }
+        if (!("ports" in $$source)) {
+            /**
+             * @member
+             * @type {number[]}
+             */
+            this["ports"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TLSInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TLSInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType0;
+        const $$createField1_0 = $$createType22;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("connection_ids" in $$parsedSource) {
+            $$parsedSource["connection_ids"] = $$createField0_0($$parsedSource["connection_ids"]);
+        }
+        if ("ports" in $$parsedSource) {
+            $$parsedSource["ports"] = $$createField1_0($$parsedSource["ports"]);
+        }
+        return new TLSInput(/** @type {Partial<TLSInput>} */($$parsedSource));
+    }
+}
+
+/**
  * TabDragPayload is returned by WindowAcceptTabDrag.
  * 
  * Layout is an opaque base64-encoded JSON blob describing the pane
@@ -5213,7 +5649,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType22;
+        const $$createField0_0 = $$createType24;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -5339,7 +5775,7 @@ export class TcpdumpStartInput {
      * @returns {TcpdumpStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType6;
+        const $$createField10_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("port_overrides" in $$parsedSource) {
             $$parsedSource["port_overrides"] = $$createField10_0($$parsedSource["port_overrides"]);
@@ -5558,20 +5994,22 @@ const $$createType2 = $Create.Nullable($$createType1);
 const $$createType3 = $Create.Nullable($$createType0);
 const $$createType4 = $Create.Map($Create.Any, $Create.Any);
 const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = $Create.Map($Create.Any, $Create.Any);
-const $$createType7 = ssh$0.LogTailLine.createFrom;
-const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = wg$0.Profile.createFrom;
-const $$createType10 = NetbirdConfig.createFrom;
-const $$createType11 = $Create.Nullable($$createType10);
-const $$createType12 = TailscaleConfig.createFrom;
-const $$createType13 = $Create.Nullable($$createType12);
-const $$createType14 = wg$0.Status.createFrom;
-const $$createType15 = cmdmarks$0.Mark.createFrom;
-const $$createType16 = $Create.Array($$createType15);
-const $$createType17 = ssh$0.SftpEntry.createFrom;
-const $$createType18 = $Create.Array($$createType17);
-const $$createType19 = ShareSessionInput.createFrom;
-const $$createType20 = $Create.Array($$createType19);
-const $$createType21 = ssh$0.ParsedPacket.createFrom;
-const $$createType22 = $Create.Array($$createType21);
+const $$createType6 = ssh$0.HostFacts.createFrom;
+const $$createType7 = $Create.Map($Create.Any, $Create.Any);
+const $$createType8 = ssh$0.LogTailLine.createFrom;
+const $$createType9 = $Create.Array($$createType8);
+const $$createType10 = wg$0.Profile.createFrom;
+const $$createType11 = NetbirdConfig.createFrom;
+const $$createType12 = $Create.Nullable($$createType11);
+const $$createType13 = TailscaleConfig.createFrom;
+const $$createType14 = $Create.Nullable($$createType13);
+const $$createType15 = wg$0.Status.createFrom;
+const $$createType16 = cmdmarks$0.Mark.createFrom;
+const $$createType17 = $Create.Array($$createType16);
+const $$createType18 = ssh$0.SftpEntry.createFrom;
+const $$createType19 = $Create.Array($$createType18);
+const $$createType20 = ShareSessionInput.createFrom;
+const $$createType21 = $Create.Array($$createType20);
+const $$createType22 = $Create.Array($Create.Any);
+const $$createType23 = ssh$0.ParsedPacket.createFrom;
+const $$createType24 = $Create.Array($$createType23);

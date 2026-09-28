@@ -11,17 +11,32 @@
 -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, type ServerStats } from "./api";
-  import { IconCpu, IconMemory, IconDisk, IconUsers, IconRefresh, IconHost } from "./iconMap";
+  import { api, type ServerStats, type DiskTopResult, type ProcInfo, type UnitInfo } from "./api";
+  import { showConfirm } from "./confirmModal.svelte.ts";
+  import { showPrompt } from "./promptModal.svelte.ts";
+  import { toast } from "./toast.svelte";
+  import { logtail } from "./logtailStore.svelte";
+  import { focusSessionTerminal } from "./paneFocus";
+  import { errMsg } from "./connectErrors";
+  import { IconCpu, IconMemory, IconDisk, IconUsers, IconRefresh, IconHost, IconChevronRight, IconChevronDown } from "./iconMap";
   import { focusActivePane } from "./paneFocus";
+  import { level, levelVar } from "./serverStatsLevel";
 
   interface Props {
     initial: ServerStats;
     connName: string;
     sessionId: string;
+    // A local shell: stats come from this machine, and there is no du
+    // (Windows has none, and a local disk is one Explorer away anyway).
+    local?: boolean;
+    // Which tab to open on; the status bar's "failed" chip opens Services.
+    initialTab?: Tab;
     onClose: () => void;
   }
-  let { initial, connName, sessionId, onClose: onCloseProp }: Props = $props();
+  type Tab = "overview" | "processes" | "services";
+  let { initial, connName, sessionId, local = false, initialTab = "overview", onClose: onCloseProp }: Props = $props();
+  // svelte-ignore state_referenced_locally
+  let tab = $state<Tab>(local ? "overview" : initialTab);
 
   // The modal steals keyboard focus; hand it back to the terminal on close so
   // the user can keep typing without re-clicking the pane. Every close path
@@ -49,15 +64,188 @@
     refreshing = true;
     refreshErr = "";
     try {
-      const s = await api.sshServerStats(sessionId);
+      const s = await (local ? api.localHostStats(sessionId) : api.sshServerStats(sessionId));
       if (s && s.ok) stats = s;
       else refreshErr = "Host returned no readable stats.";
+      if (tab === "processes") void loadProcs();
+      if (tab === "services") void loadUnits();
     } catch (e: any) {
       refreshErr = "Probe failed (session may have closed).";
     } finally {
       refreshing = false;
     }
   }
+
+  // Per-mount "more" panel: inode use plus an on-demand du. du walks every
+  // inode (minutes on a slow disk or a tree of small files), so it only runs
+  // on the button, once, and the host caps it at 20s.
+  let expanded = $state<Record<string, boolean>>({});
+  let topDirs = $state<Record<string, DiskTopResult | "loading" | { error: string }>>({});
+  async function loadTopDirs(mount: string) {
+    topDirs[mount] = "loading";
+    try {
+      topDirs[mount] = await api.sshDiskTopDirs(sessionId, mount);
+    } catch (e: any) {
+      topDirs[mount] = { error: errMsg(e) };
+    }
+  }
+
+  // ---- Processes tab ----
+  let procBy = $state<"cpu" | "mem">("cpu");
+  // Row count is a per-viewer preference; storage can be missing or
+  // throw (private window), so it only ever falls back to 10.
+  const PROC_LIMITS = [5, 10, 20];
+  function readProcLimit(): number {
+    try {
+      const n = parseInt(localStorage.getItem("sysstat_proc_limit") ?? "", 10);
+      return PROC_LIMITS.includes(n) ? n : 10;
+    } catch {
+      return 10;
+    }
+  }
+  let procLimit = $state(readProcLimit());
+  function pickProcLimit(n: number) {
+    procLimit = n;
+    try { localStorage.setItem("sysstat_proc_limit", String(n)); } catch { /* not remembered */ }
+    void loadProcs();
+  }
+  let procs = $state<ProcInfo[] | null>(null);
+  let procErr = $state("");
+  let procLoading = $state(false);
+  let procMenu = $state<number | null>(null);
+  async function loadProcs() {
+    procLoading = true;
+    procErr = "";
+    try {
+      procs = (await api.sshTopProcesses(sessionId, procBy, procLimit)) ?? [];
+    } catch (e: any) {
+      procErr = errMsg(e);
+    } finally {
+      procLoading = false;
+    }
+  }
+  function sortProcs(by: "cpu" | "mem") {
+    procBy = by;
+    void loadProcs();
+  }
+
+  // ---- Services tab ----
+  // svelte-ignore state_referenced_locally
+  let svcState = $state<"failed" | "running" | "all">(initial.failed_units > 0 ? "failed" : "running");
+  let units = $state<UnitInfo[] | null>(null);
+  let svcErr = $state("");
+  let svcLoading = $state(false);
+  let svcFilter = $state("");
+  let openUnit = $state<string | null>(null);
+  let unitLogs = $state<Record<string, string[] | { error: string }>>({});
+  const shownUnits = $derived(
+    (units ?? []).filter((u) => !svcFilter || (u.unit + " " + u.description).toLowerCase().includes(svcFilter.toLowerCase())),
+  );
+  async function loadUnits() {
+    svcLoading = true;
+    svcErr = "";
+    try {
+      units = (await api.sshServices(sessionId, svcState)) ?? [];
+    } catch (e: any) {
+      svcErr = errMsg(e);
+    } finally {
+      svcLoading = false;
+    }
+  }
+  function pickSvcState(st: "failed" | "running" | "all") {
+    svcState = st;
+    openUnit = null;
+    void loadUnits();
+  }
+  async function toggleUnit(u: string) {
+    openUnit = openUnit === u ? null : u;
+    if (openUnit && !unitLogs[u]) {
+      try {
+        unitLogs[u] = (await api.sshUnitLog(sessionId, u)) ?? [];
+      } catch (e: any) {
+        unitLogs[u] = { error: errMsg(e) };
+      }
+    }
+  }
+  function quote(v: string): string {
+    return `'${v.replace(/'/g, `'\\''`)}'`;
+  }
+  // Typed, not run: the user reads the line and presses Enter. Same rule as
+  // the SFTP pane's "cd here".
+  async function statusInTerminal(u: string) {
+    const line = `\u0015systemctl status ${quote(u)} --no-pager`;
+    try {
+      await api.sshWrite(sessionId, btoa(String.fromCharCode(...new TextEncoder().encode(line))));
+      onClose();
+      if (!focusSessionTerminal(sessionId)) toast.push("ok", "Typed into the terminal - press Enter to run it");
+    } catch (e: any) {
+      toast.err(errMsg(e));
+    }
+  }
+  function tailUnit(u: string) {
+    onClose();
+    logtail.open(sessionId, { unit: u });
+  }
+
+  // A process needs a moment to exit after SIGTERM, and a restarted unit
+  // to settle; re-read the list after that instead of immediately.
+  function afterAction(kind: "signal" | "service") {
+    setTimeout(() => {
+      if (kind === "signal") void loadProcs();
+      else { unitLogs = {}; void loadUnits(); void refresh(); }
+    }, 700);
+  }
+
+  // Kept in sync with sudoPasswordPrefix in app.go.
+  const SUDO_PROMPT_PREFIX = "sudo-password-required: ";
+
+  // One confirm, then the action; a sudo password is asked for only when
+  // root is needed and the connection's own password did not work.
+  async function runAction(kind: "signal" | "service", pid: number, unit: string, verb: string, what: string, danger: boolean) {
+    procMenu = null;
+    const ok = await showConfirm({
+      title: what,
+      message: kind === "signal"
+        ? `Send SIG${verb} to PID ${pid} on ${stats.hostname || connName}?`
+        : `Run systemctl ${verb} ${unit} on ${stats.hostname || connName}?`,
+      okLabel: verb === "KILL" ? "Kill" : verb === "TERM" ? "Terminate" : verb[0].toUpperCase() + verb.slice(1),
+      danger,
+    });
+    if (!ok) return;
+    let password = "";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await api.sshSystemAction(sessionId, kind, pid, unit, verb, password);
+        toast.push("ok", kind === "signal" ? `SIG${verb} sent to ${pid}` : `${unit}: ${verb} done`);
+        afterAction(kind);
+        return;
+      } catch (e: any) {
+        const msg = errMsg(e);
+        if (!msg.includes(SUDO_PROMPT_PREFIX) && !/wrong password/.test(msg)) {
+          toast.err(msg);
+          // A failed kill is often a process that already exited: the list
+          // should stop showing it either way.
+          afterAction(kind);
+          return;
+        }
+        const pw = await showPrompt(
+          /wrong password/.test(msg) ? "Wrong password - sudo password again:" : "This needs root. sudo password:",
+          { password: true },
+        );
+        if (pw === null) return;
+        password = pw;
+      }
+    }
+  }
+
+  function selectTab(t: Tab) {
+    tab = t;
+    if (t === "processes" && !procs && !procLoading) void loadProcs();
+    if (t === "services" && !units && !svcLoading) void loadUnits();
+  }
+  onMount(() => {
+    if (tab !== "overview") selectTab(tab);
+  });
 
   function onKey(e: KeyboardEvent) {
     if (e.key === "Escape") onClose();
@@ -85,18 +273,12 @@
     return parts.join(" ");
   }
 
-  // Bar colour by saturation, with per-metric thresholds (a disk at 75% is
-  // fine; a load at 0.75/core or any real swap use is not). green -> yellow
-  // -> red. Compares against the yellow/red cut for the metric.
-  function barVar(frac: number, warn: number, crit: number): string {
-    if (frac >= crit) return "var(--red)";
-    if (frac >= warn) return "var(--yellow)";
-    return "var(--green)";
-  }
-  const cpuColor = (f: number) => barVar(f, 0.7, 1.0);
-  const memColor = (f: number) => barVar(f, 0.75, 0.9);
-  const swapColor = (f: number) => barVar(f, 0.25, 0.6);
-  const diskColor = (f: number) => barVar(f, 0.8, 0.92);
+  // Bar colour by saturation; thresholds live in serverStatsLevel.ts so the
+  // status bar icons turn at the same points.
+  const cpuColor = (f: number) => levelVar[level("cpu", f)];
+  const memColor = (f: number) => levelVar[level("mem", f)];
+  const swapColor = (f: number) => levelVar[level("swap", f)];
+  const diskColor = (f: number) => levelVar[level("disk", f)];
   function pctWidth(frac: number): string {
     return `${Math.min(100, Math.max(0, frac * 100))}%`;
   }
@@ -143,7 +325,7 @@
   onclick={onClose}
   onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") onClose(); }}
 ></div>
-<div class="modal" role="dialog" aria-labelledby="sysstat-title">
+<div class="modal" class:wide={tab !== "overview"} role="dialog" aria-labelledby="sysstat-title">
   <header>
     <div class="title-row">
       <h2 id="sysstat-title">
@@ -170,25 +352,133 @@
       {#if uptimeStr}<span class="meta">up {uptimeStr}</span>{/if}
     </div>
     {#if refreshErr}<div class="warn">{refreshErr}</div>{/if}
+    {#if !local}
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected={tab === "overview"} class:active={tab === "overview"} onclick={() => selectTab("overview")}>Overview</button>
+        <button role="tab" aria-selected={tab === "processes"} class:active={tab === "processes"} onclick={() => selectTab("processes")}>Processes</button>
+        <button role="tab" aria-selected={tab === "services"} class:active={tab === "services"} onclick={() => selectTab("services")}>
+          Services{#if stats.failed_units > 0}<span class="tab-bad">{stats.failed_units}</span>{/if}
+        </button>
+      </div>
+    {/if}
   </header>
 
   <div class="body">
+  {#if tab === "processes"}
+    <div class="tab-tools">
+      <span class="dim">Top</span>
+      {#each PROC_LIMITS as n (n)}
+        <button class="seg-btn" class:on={procLimit === n} onclick={() => pickProcLimit(n)}>{n}</button>
+      {/each}
+      <span class="dim">by</span>
+      <button class="seg-btn" class:on={procBy === "cpu"} onclick={() => sortProcs("cpu")}>CPU</button>
+      <button class="seg-btn" class:on={procBy === "mem"} onclick={() => sortProcs("mem")}>Memory</button>
+    </div>
+    {#if procErr}
+      <div class="warn">{procErr}</div>
+    {:else if !procs}
+      <div class="bar-cap">Loading…</div>
+    {:else}
+      <div class="ptable">
+        <span class="th">PID</span><span class="th">Command</span><span class="th num">CPU</span><span class="th num">Mem</span><span class="th">User</span><span class="th"></span>
+        {#each procs as p (p.pid)}
+          <span class="dim">{p.pid}</span>
+          <span class="cmd" title={p.command}>{p.command}</span>
+          <span class="num" style={level("cpuPct", p.cpu / 100) !== "ok" ? `color: ${levelVar[level("cpuPct", p.cpu / 100)]}` : ""}>{p.cpu.toFixed(0)}%</span>
+          <span class="num" style={level("mem", p.mem / 100) !== "ok" ? `color: ${levelVar[level("mem", p.mem / 100)]}` : ""}>{p.mem.toFixed(1)}%</span>
+          <span class="user" title={p.user}>{p.user}</span>
+          <span class="menu-cell">
+            <button class="icon-btn" aria-label="Actions for {p.pid}" onclick={() => (procMenu = procMenu === p.pid ? null : p.pid)}>⋯</button>
+            {#if procMenu === p.pid}
+              <div class="pmenu" role="menu">
+                <button role="menuitem" onclick={() => { navigator.clipboard.writeText(String(p.pid)); procMenu = null; }}>Copy PID</button>
+                <button role="menuitem" onclick={() => { navigator.clipboard.writeText(p.command); procMenu = null; }}>Copy command line</button>
+                <div class="msep"></div>
+                <button role="menuitem" onclick={() => runAction("signal", p.pid, "", "TERM", "Terminate process", false)}>Terminate (SIGTERM)…</button>
+                <button role="menuitem" class="bad" onclick={() => runAction("signal", p.pid, "", "KILL", "Kill process", true)}>Kill (SIGKILL)…</button>
+              </div>
+            {/if}
+          </span>
+        {/each}
+      </div>
+      <div class="bar-cap">A process of another user is signalled through sudo.</div>
+    {/if}
+  {:else if tab === "services"}
+    <div class="tab-tools">
+      <button class="seg-btn" class:on={svcState === "failed"} onclick={() => pickSvcState("failed")}>Failed</button>
+      <button class="seg-btn" class:on={svcState === "running"} onclick={() => pickSvcState("running")}>Running</button>
+      <button class="seg-btn" class:on={svcState === "all"} onclick={() => pickSvcState("all")}>All</button>
+      <input class="filter" type="search" placeholder="Filter units" bind:value={svcFilter} />
+    </div>
+    {#if svcErr}
+      <div class="warn">{svcErr}</div>
+    {:else if !units}
+      <div class="bar-cap">Loading…</div>
+    {:else if shownUnits.length === 0}
+      <div class="bar-cap">{svcState === "failed" ? "No failed services." : "Nothing matches."}</div>
+    {:else}
+      <div class="units">
+        {#each shownUnits as u (u.unit)}
+          <div class="unit" class:open={openUnit === u.unit}>
+            <button class="unit-row" onclick={() => toggleUnit(u.unit)}>
+              <span class="udot" class:failed={u.active === "failed"} class:active={u.active === "active"}></span>
+              <span class="uname">{u.unit}</span>
+              <span class="ustate">{u.active}/{u.sub}</span>
+              <span class="udesc" title={u.description}>{u.description}</span>
+            </button>
+            {#if openUnit === u.unit}
+              {@const lg = unitLogs[u.unit]}
+              <div class="unit-body">
+                {#if !lg}
+                  <div class="bar-cap">Loading journal…</div>
+                {:else if "error" in lg}
+                  <div class="warn">{lg.error}</div>
+                {:else}
+                  <pre class="ulog">{lg.length ? lg.join("\n") : "(no journal lines)"}</pre>
+                {/if}
+                <div class="unit-actions">
+                  <button class="du-btn" onclick={() => runAction("service", 0, u.unit, "restart", "Restart service", false)}>Restart…</button>
+                  {#if u.active === "active"}
+                    <button class="du-btn" onclick={() => runAction("service", 0, u.unit, "stop", "Stop service", true)}>Stop…</button>
+                  {:else}
+                    <button class="du-btn" onclick={() => runAction("service", 0, u.unit, "start", "Start service", false)}>Start…</button>
+                  {/if}
+                  <button class="du-btn" onclick={() => tailUnit(u.unit)}>Open log tail</button>
+                  <button class="more" onclick={() => statusInTerminal(u.unit)}>Status in terminal</button>
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
+  {:else}
     <!-- CPU / load -->
     <section>
-      <div class="sec-head"><IconCpu size={13} /><span>CPU load</span>
-        {#if stats.ncpu > 0}<span class="sec-note">{stats.ncpu} core{stats.ncpu === 1 ? "" : "s"}</span>{/if}
-      </div>
-      <div class="load-nums">
-        <span title="1 minute">{stats.load1.toFixed(2)}</span>
-        <span class="dim" title="5 minutes">{stats.load5.toFixed(2)}</span>
-        <span class="dim" title="15 minutes">{stats.load15.toFixed(2)}</span>
-        <span class="dim label">1 / 5 / 15 min</span>
-      </div>
-      {#if stats.ncpu > 0}
-        <div class="bar">
-          <div class="fill" style="width: {pctWidth(loadFrac)}; background: {cpuColor(loadFrac)};"></div>
+      {#if stats.cpu_pct >= 0}
+        <div class="sec-head"><IconCpu size={13} /><span>CPU</span>
+          {#if stats.ncpu > 0}<span class="sec-note">{stats.ncpu} core{stats.ncpu === 1 ? "" : "s"}</span>{/if}
         </div>
-        <div class="bar-cap">{Math.round(loadFrac * 100)}% of {stats.ncpu} core{stats.ncpu === 1 ? "" : "s"}</div>
+        <div class="bar">
+          <div class="fill" style="width: {pctWidth(stats.cpu_pct / 100)}; background: {levelVar[level('cpuPct', stats.cpu_pct / 100)]};"></div>
+        </div>
+        <div class="bar-cap">{Math.round(stats.cpu_pct)}% busy</div>
+      {:else}
+        <div class="sec-head"><IconCpu size={13} /><span>CPU load</span>
+          {#if stats.ncpu > 0}<span class="sec-note">{stats.ncpu} core{stats.ncpu === 1 ? "" : "s"}</span>{/if}
+        </div>
+        <div class="load-nums">
+          <span title="1 minute">{stats.load1.toFixed(2)}</span>
+          <span class="dim" title="5 minutes">{stats.load5.toFixed(2)}</span>
+          <span class="dim" title="15 minutes">{stats.load15.toFixed(2)}</span>
+          <span class="dim label">1 / 5 / 15 min</span>
+        </div>
+        {#if stats.ncpu > 0}
+          <div class="bar">
+            <div class="fill" style="width: {pctWidth(loadFrac)}; background: {cpuColor(loadFrac)};"></div>
+          </div>
+          <div class="bar-cap">{Math.round(loadFrac * 100)}% of {stats.ncpu} core{stats.ncpu === 1 ? "" : "s"}</div>
+        {/if}
       {/if}
     </section>
 
@@ -230,7 +520,50 @@
             <div class="bar">
               <div class="fill" style="width: {pctWidth(p.used_pct / 100)}; background: {diskColor(p.used_pct / 100)};"></div>
             </div>
-            <div class="bar-cap">{fmtBytesKB(p.used_kb)} / {fmtBytesKB(p.size_kb)} used · {fmtBytesKB(p.avail_kb)} free</div>
+            <div class="bar-cap part-cap">
+              <span>{fmtBytesKB(p.used_kb)} / {fmtBytesKB(p.size_kb)} used · {fmtBytesKB(p.avail_kb)} free</span>
+              {#if !local || p.inode_pct >= 0}<button class="more" onclick={() => (expanded[p.mount] = !expanded[p.mount])}>
+                {#if expanded[p.mount]}<IconChevronDown size={11} />{:else}<IconChevronRight size={11} />{/if}More
+              </button>{/if}
+            </div>
+            {#if p.inode_pct >= 0 && level("disk", p.inode_pct / 100) !== "ok" && !expanded[p.mount]}
+              <div class="bar-cap inode-alert" style="color: {diskColor(p.inode_pct / 100)};">
+                Inodes {Math.round(p.inode_pct)}% used - many small files can fill a disk that still shows free space
+              </div>
+            {/if}
+            {#if expanded[p.mount]}
+              {@const td = topDirs[p.mount]}
+              <div class="more-body">
+                <div class="bar-cap">
+                  {#if p.inode_pct >= 0}
+                    Inodes: <span style="color: {level('disk', p.inode_pct / 100) === 'ok' ? 'inherit' : diskColor(p.inode_pct / 100)};">{Math.round(p.inode_pct)}% used</span>
+                  {:else}
+                    Inodes: not reported by {p.fs.startsWith("/dev/") ? "this filesystem" : p.fs}
+                  {/if}
+                </div>
+                {#if local}
+                  <!-- no du for a local shell -->
+                {:else if !td}
+                  <button class="du-btn" onclick={() => loadTopDirs(p.mount)} title="Runs du -x two levels deep on the host, capped at 20s">
+                    Find largest directories
+                  </button>
+                {:else if td === "loading"}
+                  <div class="bar-cap">Scanning {p.mount}… (up to 20s)</div>
+                {:else if "error" in td}
+                  <div class="warn">{td.error}</div>
+                {:else}
+                  {#if td.partial}<div class="bar-cap">{td.reason}</div>{/if}
+                  <div class="dirs">
+                    {#each td.dirs ?? [] as d (d.path)}
+                      <span class="dir-size">{fmtBytesKB(d.size_kb)}</span><span class="dir-path" title={d.path}>{d.path}</span>
+                    {:else}
+                      <span class="bar-cap">No directories found.</span>
+                    {/each}
+                  </div>
+                  <button class="du-btn" onclick={() => loadTopDirs(p.mount)}>Scan again</button>
+                {/if}
+              </div>
+            {/if}
           </div>
         {/each}
       </section>
@@ -259,6 +592,7 @@
     {#if !stats.ok}
       <p class="hint">This host answered but returned no readable metrics.</p>
     {/if}
+  {/if}
   </div>
 </div>
 
@@ -326,6 +660,69 @@
     color: var(--yellow);
     font-size: 0.74rem;
   }
+  .tabs { display: flex; gap: 0.2rem; margin-top: 0.55rem; margin-bottom: -0.56rem; }
+  .tabs button {
+    background: none; border: 0; border-bottom: 2px solid transparent;
+    color: var(--subtext0); font: inherit; font-size: 0.78rem;
+    padding: 0.3rem 0.6rem; cursor: pointer;
+  }
+  .tabs button.active { color: var(--text); border-bottom-color: var(--blue); }
+  .tab-bad { margin-left: 0.3rem; color: var(--red); font-weight: 600; }
+  .tab-tools { display: flex; align-items: center; gap: 0.35rem; margin: 0.4rem 0 0.6rem; }
+  .dim { color: var(--subtext0); }
+  .seg-btn {
+    background: none; border: 1px solid var(--surface1); color: var(--subtext0);
+    border-radius: 4px; font: inherit; font-size: 0.74rem; padding: 0.1rem 0.55rem; cursor: pointer;
+  }
+  .seg-btn.on { background: var(--surface0); color: var(--text); border-color: var(--surface2); }
+  .filter {
+    margin-left: auto; background: var(--mantle); color: var(--text);
+    border: 1px solid var(--surface1); border-radius: 4px; font: inherit; font-size: 0.74rem;
+    padding: 0.15rem 0.45rem; width: 9rem;
+  }
+  .modal.wide { width: min(760px, 94vw); }
+  .ptable {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto minmax(0, 6rem) auto;
+    gap: 0.35rem 0.7rem; align-items: center; font-size: 0.82rem;
+  }
+  .ptable .th { color: var(--subtext0); font-size: 0.74rem; }
+  .ptable .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .ptable .cmd, .ptable .user { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ptable .cmd { font-family: ui-monospace, monospace; }
+  .menu-cell { position: relative; }
+  .pmenu {
+    position: absolute; right: 0; top: 100%; z-index: 2; min-width: 12rem;
+    background: var(--mantle); border: 1px solid var(--surface1); border-radius: 6px;
+    padding: 0.25rem; box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    display: flex; flex-direction: column;
+  }
+  .pmenu button {
+    background: none; border: 0; text-align: left; color: var(--text);
+    font: inherit; font-size: 0.76rem; padding: 0.3rem 0.5rem; border-radius: 4px; cursor: pointer;
+  }
+  .pmenu button:hover { background: var(--surface0); }
+  .pmenu button.bad { color: var(--red); }
+  .msep { height: 1px; background: var(--surface0); margin: 0.2rem 0.3rem; }
+  .units { display: flex; flex-direction: column; gap: 0.15rem; }
+  .unit-row {
+    width: 100%; display: grid; grid-template-columns: auto auto auto minmax(0, 1fr);
+    align-items: center; gap: 0.5rem; background: none; border: 0; color: var(--text);
+    font: inherit; font-size: 0.82rem; padding: 0.3rem 0.35rem; border-radius: 4px; cursor: pointer; text-align: left;
+  }
+  .unit-row:hover, .unit.open .unit-row { background: var(--surface0); }
+  .udot { width: 7px; height: 7px; border-radius: 50%; background: var(--overlay0); }
+  .udot.active { background: var(--green); }
+  .udot.failed { background: var(--red); }
+  .uname { font-family: ui-monospace, monospace; }
+  .ustate { color: var(--subtext0); font-size: 0.7rem; }
+  .udesc { color: var(--subtext0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .unit-body { padding: 0.35rem 0.5rem 0.5rem 1.2rem; }
+  .ulog {
+    margin: 0; padding: 0.4rem 0.5rem; background: var(--mantle); border-radius: 4px;
+    font-size: 0.7rem; white-space: pre-wrap; word-break: break-word; color: var(--subtext1, var(--text));
+    max-height: 9rem; overflow: auto;
+  }
+  .unit-actions { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
   .body {
     padding: 0.4rem 1rem 0.9rem;
     overflow-y: auto;
@@ -383,6 +780,34 @@
     font-variant-numeric: tabular-nums;
   }
   .part { margin-top: 0.55rem; }
+  .part-cap { display: flex; align-items: center; gap: 0.5rem; }
+  .more {
+    margin-left: auto;
+    display: inline-flex; align-items: center; gap: 0.1rem;
+    background: none; border: none; padding: 0;
+    color: var(--overlay1); font-size: 0.7rem; cursor: pointer;
+  }
+  .more:hover { color: var(--text); }
+  .more-body {
+    margin-top: 0.3rem; padding: 0.35rem 0.5rem;
+    border-left: 2px solid var(--surface1);
+  }
+  .du-btn {
+    margin-top: 0.35rem;
+    background: var(--surface0); color: var(--text);
+    border: 1px solid var(--surface1); border-radius: 4px;
+    font-size: 0.72rem; padding: 0.15rem 0.5rem; cursor: pointer;
+  }
+  .du-btn:hover { background: var(--surface1); }
+  .dirs {
+    display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.6rem;
+    margin-top: 0.3rem; font-size: 0.72rem;
+  }
+  .dir-size { color: var(--subtext0); text-align: right; font-variant-numeric: tabular-nums; }
+  .dir-path {
+    font-family: ui-monospace, monospace; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .part:first-of-type { margin-top: 0; }
   .part-head {
     display: flex; align-items: baseline; gap: 0.5rem;

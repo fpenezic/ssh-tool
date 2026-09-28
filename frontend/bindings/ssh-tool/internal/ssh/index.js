@@ -5,14 +5,20 @@
 export {
     BatchHostResult,
     ContainerInfo,
+    DirUsage,
     DiskPart,
+    DiskSize,
+    DiskTopResult,
     ForwardKind,
     ForwardState,
     ForwardStatus,
+    HostFacts,
     LogTailLine,
     PacketDecode,
     ParsedPacket,
+    ProcInfo,
     RouteResult,
     ServerStats,
-    SftpEntry
+    SftpEntry,
+    UnitInfo
 } from "./models.js";

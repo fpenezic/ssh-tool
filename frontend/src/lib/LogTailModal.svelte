@@ -9,6 +9,7 @@
   // need root); the sudo password is auto-fed from the connection when saved.
 
   import { onMount, onDestroy } from "svelte";
+  import { logtail } from "./logtailStore.svelte";
   import { errMsg } from "./connectErrors";
   import { api, type TcpdumpProbeResult, type ContainerInfo } from "./api";
   import { EventsOn } from "./wailsRuntime";
@@ -157,6 +158,9 @@
   });
 
   onMount(async () => {
+    // Opened from the Services tab on a unit: start on that unit's journal.
+    const pre = logtail.takePreset(sessionId);
+    if (pre?.unit) { kind = "journal"; unit = pre.unit; }
     try {
       probe = await api.tcpdumpProbe(sessionId);
     } catch (e: any) {

@@ -856,6 +856,35 @@ export const api = {
   // parsed (network gear, non-Linux); rejects if the session is gone.
   sshServerStats: (sessionId: string) =>
     G.SshServerStats(sessionId) as unknown as Promise<ServerStats | null>,
+  // The same snapshot for a local shell's own machine (the distro for WSL).
+  localHostStats: (sessionId: string) =>
+    G.LocalHostStats(sessionId) as unknown as Promise<ServerStats | null>,
+  // System status tabs: top processes, systemd services, and the two
+  // actions on them. sshSystemAction rejects with a "sudo-password-required: "
+  // message when root is needed and no password is known.
+  sshTopProcesses: (sessionId: string, by: "cpu" | "mem", limit: number) =>
+    G.SshTopProcesses(sessionId, by, limit) as unknown as Promise<ProcInfo[] | null>,
+  sshServices: (sessionId: string, state: "failed" | "running" | "all") =>
+    G.SshServices(sessionId, state) as unknown as Promise<UnitInfo[] | null>,
+  sshUnitLog: (sessionId: string, unit: string) =>
+    G.SshUnitLog(sessionId, unit) as unknown as Promise<string[] | null>,
+  sshSystemAction: (sessionId: string, kind: "signal" | "service", pid: number, unit: string, verb: string, password: string) =>
+    G.SshSystemAction(sessionId, kind, pid, unit, verb, password) as unknown as Promise<void>,
+  // Fleet tools: read-only facts, TLS certificates, one file across hosts,
+  // and the append-only public key copy. All take connection ids (and
+  // "dyn:<entryId>" dynamic entries) and run 8 hosts at a time.
+  gatherFacts: (input: { connection_ids: string[]; facts: string[]; custom: string; timeout_seconds: number }) =>
+    G.GatherFacts(input as any) as unknown as Promise<FactsHostResult[]>,
+  checkTLSCerts: (input: { connection_ids: string[]; ports: number[] }) =>
+    G.CheckTLSCerts(input as any) as unknown as Promise<TLSCertResult[]>,
+  readFileAcross: (ids: string[], path: string) =>
+    G.ReadFileAcross(ids, path) as unknown as Promise<FileReadResult[]>,
+  copySSHKey: (ids: string[], credentialId: string, comment: string, apply: boolean, allowRoot: boolean) =>
+    G.CopySSHKey(ids, credentialId, comment, apply, allowRoot) as unknown as Promise<CopyKeyResult[]>,
+  // Largest directories on one filesystem (du -x, two levels). Slow on big
+  // trees, so only ever on an explicit click; the host caps it at 20s.
+  sshDiskTopDirs: (sessionId: string, mount: string) =>
+    G.SshDiskTopDirs(sessionId, mount) as unknown as Promise<DiskTopResult>,
   // Abort an in-flight connect (e.g. hung on opkssh OIDC login) by its
   // connection id. No-op if nothing is connecting for that id.
   sshCancelConnect: (connectionId: string) =>
@@ -2014,6 +2043,100 @@ export interface DiskPart {
   used_kb: number;
   avail_kb: number;
   used_pct: number;
+  inode_pct: number; // -1 when the fs reports no inodes
+}
+
+export interface ProcInfo {
+  pid: number;
+  user: string;
+  cpu: number;
+  mem: number;
+  command: string;
+}
+
+export interface UnitInfo {
+  unit: string;
+  load: string;
+  active: string;
+  sub: string;
+  description: string;
+}
+
+export interface HostFacts {
+  cpu_cores: number;
+  cpu_model: string;
+  mem_kb: number;
+  swap_kb: number;
+  disks: { mount: string; size_kb: number }[] | null;
+  virt: string;
+  os: string;
+  kernel: string;
+  uptime_sec: number;
+  timesync: string;
+  updates: number;  // -1 unknown
+  security: number; // -1 unknown
+  reboot: string;   // yes | no | unknown | ""
+  failed: number;   // -1 unknown
+  ips: string[] | null;
+  gateway: string;
+  dns: string[] | null;
+  ports: number[] | null;
+  custom: string;
+}
+
+export interface FactsHostResult {
+  connection_id: string;
+  name: string;
+  hostname: string;
+  state: "ok" | "error" | "skipped";
+  error?: string;
+  facts: HostFacts;
+}
+
+export interface TLSCertResult {
+  connection_id: string;
+  name: string;
+  hostname: string;
+  port: number;
+  state: "ok" | "error" | "skipped";
+  error?: string;
+  subject: string;
+  issuer: string;
+  not_after: number;
+  days_left: number;
+  trusted: boolean;
+  trust_error?: string;
+}
+
+export interface FileReadResult {
+  connection_id: string;
+  name: string;
+  hostname: string;
+  state: "ok" | "error" | "skipped";
+  error?: string;
+  content: string;
+  sha256: string;
+  truncated: boolean;
+}
+
+export interface CopyKeyResult {
+  connection_id: string;
+  name: string;
+  hostname: string;
+  user: string;
+  result: "present" | "added" | "would_add" | "skipped_root" | "error";
+  error?: string;
+}
+
+export interface DirUsage {
+  path: string;
+  size_kb: number;
+}
+
+export interface DiskTopResult {
+  dirs: DirUsage[] | null;
+  partial: boolean;
+  reason: string;
 }
 
 export interface ServerStats {
@@ -2035,6 +2158,11 @@ export interface ServerStats {
   swap_free_kb: number;
   user_names: string[] | null;
   partitions: DiskPart[] | null;
+  // Local shells: CPU busy % where there is no load average (Windows), -1
+  // elsewhere; shell names it for the status bar ("WSL Ubuntu-24.04").
+  cpu_pct: number;
+  shell?: string;
+  failed_units: number; // -1 where there is no systemd
 }
 
 export interface GiveInternetResult {

@@ -126,3 +126,50 @@ func TestParseServerStats_PartialLoadOnly(t *testing.T) {
 		t.Errorf("expected unknown for missing sections: %+v", s)
 	}
 }
+
+func TestParseServerStatsInodes(t *testing.T) {
+	out := strings.Repeat(statsSep+"\n", 2) +
+		"Filesystem 1024-blocks Used Available Capacity Mounted on\n" +
+		"/dev/sda1 78643200 6396313 69000000 9% /\n" +
+		"/dev/sdb 314572800 303038464 11534336 97% /opt/data\n" +
+		"/dev/sdc 1000 10 990 1% /mnt/usb\n" +
+		strings.Repeat(statsSep+"\n", 6) +
+		"Filesystem Inodes IUsed IFree IUse% Mounted on\n" +
+		"/dev/sda1 4915200 120000 4795200 3% /\n" +
+		"/dev/sdb 19660800 19000000 660800 97% /opt/data\n" +
+		"/dev/sdc 0 0 0 - /mnt/usb\n"
+	s := parseServerStats(out)
+	want := map[string]float64{"/": 3, "/opt/data": 97, "/mnt/usb": -1}
+	if len(s.Partitions) != 3 {
+		t.Fatalf("partitions = %d, want 3", len(s.Partitions))
+	}
+	for _, p := range s.Partitions {
+		if p.InodePct != want[p.Mount] {
+			t.Errorf("%s inode pct = %v, want %v", p.Mount, p.InodePct, want[p.Mount])
+		}
+	}
+}
+
+func TestParseDiskTop(t *testing.T) {
+	out := "4\t/opt/data/empty\n" +
+		"900\t/opt/data/logs/app\n" +
+		"1200\t/opt/data/logs\n" +
+		"5000\t/opt/data\n" +
+		"__SSHTOOL_RC__124\n"
+	r, err := parseDiskTop(out, "/opt/data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Partial || r.Reason == "" {
+		t.Errorf("timeout must mark the result partial: %+v", r)
+	}
+	if len(r.Dirs) != 3 || r.Dirs[0].Path != "/opt/data/logs" {
+		t.Errorf("dirs = %+v, want largest first and the mount itself left out", r.Dirs)
+	}
+	if _, err := parseDiskTop("__SSHTOOL_RC__127\n", "/"); err == nil {
+		t.Error("a missing du must be an error, not an empty list")
+	}
+	if q := quoteAlways("/a;b'c"); q != `'/a;b'\''c'` {
+		t.Errorf("quote = %s", q)
+	}
+}
