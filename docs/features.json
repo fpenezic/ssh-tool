@@ -152,6 +152,11 @@
       "body": "Auto-populated folders that pull live from Proxmox VE, Hetzner Cloud, DigitalOcean, Linode, Vultr, Scaleway, AWS EC2 and Ansible files. Tag/label filters, hide-stopped, on-demand refresh, pin-one-host, convert-folder-to-static."
     },
     {
+      "icon": "list",
+      "title": "Fleet tools",
+      "body": "Select a folder or several hosts: gather facts (sizes, OS, pending and security updates, reboot required, failed units) into a report grouped by size, check TLS certificate expiry, compare one file across hosts, and copy your SSH key where it is missing. Read-only by default, 8 hosts at a time."
+    },
+    {
       "icon": "lock",
       "title": "Encrypted vault",
       "body": "Passwords, keys and API tokens sealed with Argon2id + XChaCha20-Poly1305. Machine-bound auto-unlock (DPAPI on Windows, machine-id on Linux), idle auto-lock, strength meter."

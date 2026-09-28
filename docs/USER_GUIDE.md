@@ -131,6 +131,25 @@ right:
   the logged-in users by name. A refresh button re-probes on demand.
   It reads the remote host of the focused session over a read-only
   side channel - the same probe the readout uses.
+  - Values turn yellow, then red, near their limit (load per core,
+    memory, disk). The disk figure is the **fullest** filesystem, not
+    only `/`; inode use speaks up the same way when it runs out first.
+  - **More** under a filesystem shows inode use and *Find largest
+    directories* (`du -x`, two levels, only on click, capped at 20 s).
+  - **Processes** tab: the top 5, 10 or 20 by CPU or memory; the row menu copies
+    the PID or command line, or sends SIGTERM / SIGKILL after a
+    confirmation.
+  - **Services** tab: failed, running or all units. Open one for its
+    last journal lines, restart / stop / start, a log tail on it, or
+    `systemctl status` typed into the terminal (you press Enter).
+  - Actions that need root run as the login user first, then through
+    `sudo -n`, then with the connection's stored password; only if all
+    of that fails does the app ask for a sudo password.
+  - A red **N failed** chip appears next to the readout when a systemd
+    unit has failed; it opens the Services tab.
+  - **Local shells** show the machine they run on: WSL its distro,
+    PowerShell / cmd read Windows (CPU as a busy percentage), Linux and
+    macOS the machine itself. No Processes / Services tabs there.
 - Update-available pill when a newer release is published.
 - Version pill on the right - click to jump to Settings → About.
 
@@ -207,6 +226,52 @@ that wear it.
     connections; per-stream output capped at 1 MiB; default
     per-host timeout 60 s. Save the command as a snippet straight
     from the modal so the next run is one click.
+
+### Fleet tools
+
+Selecting a folder (everything under it, subfolders and loaded cloud
+inventory entries included) or several connections shows a **Fleet**
+row in the right pane. The same entries are in the right-click menu.
+
+- **Gather facts…** - tick the facts to collect or pick a preset
+  (*Sizing*, *Patch day*, *Everything*). All commands are read-only and
+  run 8 hosts at a time. Update counts come from each host's cached
+  package lists (`apt-get -s`, `dnf -C`), so they are as fresh as the
+  host's last `apt update` / `dnf makecache`. The report groups hosts by
+  size (cores / RAM rounded to the size you would order), by OS or by
+  kernel; *Find similar* keeps the hosts built like the chosen one:
+  same cores and RAM, and the same mount points with each size within
+  5% (two "80 GB" disks never report the same byte count). Each mount
+  point seen in the report gets its own column, empty where a host does
+  not have it, plus *Disk total*; with more than six different mount
+  points they fold into one list column. In exports sizes are whole
+  numbers with the unit in the header (disks in GiB, memory in MiB), so
+  a spreadsheet sorts and sums them whatever its decimal separator.
+  *Copy table* puts the visible rows on the clipboard as an HTML table
+  (Teams and Outlook paste a table, Excel splits it into cells) with
+  tab-separated text as the plain fallback. *Export CSV* (UTF-8 with a
+  BOM, so Excel reads accents right) and *Copy as Markdown* take the
+  same rows. An optional
+  custom column runs one command of your own and shows its first line;
+  it has to pass the same read-only check as MCP commands. For a folder
+  the last run is kept and shown as cards above the folder settings.
+- **Check TLS certificates…** - dials each host on the given ports
+  straight from this machine (not through its jump host) and reads the
+  certificate: expiry, subject, issuer, and whether it is trusted.
+  Hosts you connect to by IP address are skipped. Under 14 days left, a
+  **cert Nd** badge shows next to the host in the tree. One host at a
+  time: *Tools → TLS certificate* in the pane header.
+- **Compare file…** (two or more hosts) - reads one path on every host
+  as the login user, counts how many different versions exist, and
+  diffs any two side by side. Read-only; up to 1 MiB per file.
+- **Copy SSH key…** - pick a credential that holds an SSH key, *Check
+  hosts* to see where it is already present, then add it where it is
+  missing. The line gets a comment (prefilled with the key's own comment
+  or the credential's name) so whoever reads the file later knows whose
+  key it is. Presence is judged by the key itself, so a host that has it
+  under another comment counts as already present. It only appends to
+  `~/.ssh/authorized_keys` and never removes or rewrites a line. Connections that log in as root are
+  skipped unless you tick the option.
 
 ### Right-click on a connection
 
@@ -787,9 +852,13 @@ Pane toolbar (top of each pane):
 
 - Pane title (host name) with a left-side color strip if a tag is set.
 - Connection status dot.
-- Copy buttons: Host / User / Password / ssh command (colour-coded).
-- Open **SFTP** browser on the same session as a split-right pane
-  (only on a terminal pane).
+- **Copy** menu: host, username, password (clears the clipboard after
+  30 s) or the ssh command.
+- **Snippets** and **SFTP** (the SFTP browser on the same session as a
+  split-right pane, only on a terminal pane).
+- **Tools** menu, each entry with its icon: Log tail, Packet capture,
+  HTTP / SOAP request, TLS certificate, Port forwards. A green dot on
+  Tools means a capture, tail or forward is running for that pane.
 - **Broadcast toggle** - when active the icon is orange (see below).
 - **Reconnect** - disconnect + open a fresh session.
 - **Split right** / **Split down**.
@@ -1193,8 +1262,8 @@ a workaround.
 ### Tunnels from the terminal view
 
 You don't have to scroll back to the Connections view to toggle a
-tunnel or open a bookmark - every pane header gets a **cable**
-button in the SSH-only toolbar group:
+tunnel or open a bookmark - every pane header has **Tools → Port
+forwards** (the Tools menu in the SSH-only toolbar group):
 
 - Opens a compact popover listing every forward configured on
   that pane's connection.
@@ -1627,8 +1696,8 @@ same keystroke hits the cluster.
 Three entry points:
 
 1. **Pane toolbar** - broadcast icon (radio waves) toggles the
-   active session in/out of the **default** group. Orange when
-   any group contains this session. The hover tooltip lists
+   active session into the **default** group, or out of every group
+   it is in. Orange when any group contains this session. The hover tooltip lists
    every group the session belongs to.
 2. **Right-click a tab** - "Add to broadcast" / "Remove from
    broadcast" (or "Add remaining panes to broadcast" when a tab
@@ -2139,8 +2208,7 @@ duplicates). The set:
 For when you want to see traffic on a remote interface without
 juggling a second terminal.
 
-Open it via the **Activity** icon in the pane toolbar (pink,
-between Broadcast and Reconnect).
+Open it via **Tools → Packet capture** in the pane header.
 
 What happens:
 
@@ -2196,7 +2264,7 @@ What happens:
    background: the modal hides but the capture, Insights and
    counters keep running. The bottom status bar shows a pink
    activity segment with the running packet/insight totals; the
-   pane's tcpdump icon grows a small green dot. Click either to
+   pane's Tools button grows a small green dot. Click either to
    restore. **Close** (`✕`) stops the capture and tears it down.
 10. **Stop** sends SIGINT so the kernel flushes any buffered packets,
     then closes the auxiliary SSH session.
@@ -2314,8 +2382,7 @@ Limits:
 ## 13a. Live log tail
 
 Stream a remote log while you keep working in the terminal. Open it
-via the **file** icon in the pane toolbar (teal, next to the tcpdump
-Activity icon).
+via **Tools → Log tail** in the pane header (next to Packet capture).
 
 Pick a source in the start form:
 
@@ -2380,8 +2447,7 @@ For when you need to hit an HTTP endpoint that's only reachable from
 inside the remote network - or you just want a quick request panel
 without leaving the app.
 
-Open it via the **Globe** icon in the pane toolbar (blue, next to
-tcpdump).
+Open it via **Tools → HTTP / SOAP request** in the pane header.
 
 What you can do:
 

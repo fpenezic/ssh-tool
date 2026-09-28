@@ -7,6 +7,89 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Fleet tools
+
+- **Select a folder, or several connections, and the right pane offers
+  the tools that work on many hosts at once** - no right-click needed
+  (the same entries are in the right-click menu too):
+  - **Gather facts**: tick what you want to know (CPU, memory, disks,
+    virtualization, OS, kernel, uptime, time sync, pending and security
+    updates, reboot required, failed units, addresses, DNS, listening
+    ports), or pick a preset - *Sizing* or *Patch day*. Everything runs
+    read-only, 8 hosts at a time. The report groups hosts by size
+    ("4 cores / 8 GiB ×14"), and *Find similar* on a row keeps the
+    servers built like that one - same cores and RAM, the same mount
+    points with sizes within 5% - handy when ordering new ones to match.
+    Each mount point gets its own column (up to six) plus a disk total,
+    and exports carry sizes as plain numbers so a spreadsheet can sort
+    and sum them.
+    *Copy table* pastes into Excel, Teams or Outlook as a real table;
+    there is also CSV export and Markdown. A custom column takes one
+    read-only command of your own.
+  - **Check TLS certificates** on the ports you name. Hosts you connect
+    to by name get a "cert 9d" badge in the tree once a certificate has
+    less than 14 days left.
+  - **Compare file**: read one file on every host, see how many
+    different versions exist, and diff any two side by side.
+  - **Copy SSH key**: pick a key from your credentials, check which
+    hosts already have it, then add it where it is missing, with a
+    comment of your choice after it (the key's own comment or the
+    credential's name by default). It only ever appends to
+    `authorized_keys`, never removes a line, and skips root logins unless
+    you allow them.
+- The folder view keeps the last facts run as small cards: sizes, how
+  many hosts need a reboot or have security updates, and certificates
+  about to expire.
+
+### System status
+
+- **Processes and Services tabs.** Processes shows the top 5, 10 or 20 by CPU or
+  memory, with terminate / kill behind a confirmation. Services lists
+  failed, running or all units; opening one shows its last journal
+  lines with restart / stop / start, a log tail on that unit, or
+  `systemctl status` typed into the terminal for you to run.
+- **"N failed" in the status bar** when a systemd unit has failed on the
+  focused host; a click opens the Services tab. Nothing shows while all
+  is well.
+- **Colours when something is near its limit.** CPU load, memory and
+  disk turn yellow, then red, in the status bar as they do in the
+  popup. The disk figure now follows the fullest filesystem instead of
+  only `/`, and inodes speak up the same way when they run out first.
+- **Per filesystem "More"** in the popup: inode use, and *Find largest
+  directories* (du, only on click, capped at 20 seconds).
+- **Local shells get the status bar too**: WSL shows its distro's
+  numbers, PowerShell and cmd read Windows directly (CPU as a percentage,
+  since Windows has no load average), Linux and macOS read the machine.
+  The shell's name ("WSL Ubuntu-24.04") leads the readout.
+- Actions that need root try the connection's own password with sudo
+  and ask for one only when that does not work.
+
+### Terminal
+
+- **Pane header, tidied.** The four copy buttons became one *Copy* menu,
+  and packet capture, log tail, HTTP request, TLS certificate and port
+  forwards moved into a *Tools* menu with a label next to each icon. A
+  dot on Tools means something in it is running.
+- **The broadcast toggle in the pane header leaves every group.** A pane
+  in a named group used to stay lit and keep broadcasting after the
+  click.
+
+### Port forwards
+
+- **Local forwards on an automatic port keep their port** across a
+  restart, like SOCKS forwards already did, so a bookmark or an open
+  browser tab keeps working.
+
+### Android
+
+- **Download update opens the APK in your browser**; Android installs it
+  from there. The in-app download could not replace the app's own
+  package.
+
+---
+
 ## [0.104.0] - Bastion routing for cloud inventories, and cleaner LLM-built connections
 
 ### Dynamic inventory
