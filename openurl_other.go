@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !android
 
 // Non-Windows URL opening stays on the Wails runtime, which uses the
 // platform's own opener (`open` on macOS, xdg-open and friends on

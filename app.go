@@ -6810,6 +6810,12 @@ const devReplaceErrPrefix = "dev-build-confirm: "
 // to want - it is how you stop testing and go back to a shipped version -
 // but it destroys an unreleased build, so it never happens on one click.
 func (a *App) DownloadUpdate(allowDevReplace bool) (*updater.DownloadResult, error) {
+	// Android cannot replace its own APK: the package installer does that,
+	// and it takes the file from the browser's download. The update dialog
+	// opens the APK URL in the browser instead of calling this.
+	if runtime.GOOS == "android" {
+		return nil, fmt.Errorf("on Android the update is installed from the browser download")
+	}
 	rel, err := a.resolveLatestRelease()
 	if err != nil {
 		return nil, fmt.Errorf("re-check for the latest release before downloading: %w", err)

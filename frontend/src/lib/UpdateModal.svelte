@@ -17,6 +17,7 @@
   import { updateCheck } from "./updateCheck.svelte";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { EventsOn } from "./wailsRuntime";
+  import { isAndroid } from "./platform";
 
   interface Props {
     onClose: () => void;
@@ -153,6 +154,17 @@
     }
   }
 
+  // Android cannot swap its own APK in place: the package installer does
+  // that, from a file the browser downloaded. Hand the APK URL to the
+  // system browser and let Android take it from there.
+  let browserOpened = $state(false);
+  function downloadInBrowser() {
+    if (!updateCheck.downloadURL) return;
+    api.openURL(updateCheck.downloadURL)
+      .then(() => (browserOpened = true))
+      .catch((e: any) => (downloadErr = humanError(e)));
+  }
+
   function openReleasesPage() {
     if (updateCheck.changelogURL) {
       api.openURL(updateCheck.changelogURL).catch(console.warn);
@@ -228,6 +240,13 @@
     {/if}
   </div>
 
+  {#if isAndroid && browserOpened}
+    <div class="staged ok">
+      Downloading in your browser. Open the finished APK from the browser's
+      downloads to install it; the first time, Android asks you to allow
+      installing apps from that browser.
+    </div>
+  {/if}
   {#if downloadErr}
     <!-- A package-managed install is not a failure, it is the wrong
          update route: the package manager owns the binary. Saying
@@ -276,6 +295,10 @@
            a Download button that can only fail is worse than saying so
            before it is clicked. -->
       <button class="secondary" onclick={openReleasesPage}>Release notes</button>
+    {:else if isAndroid}
+      <button class="primary" onclick={downloadInBrowser} disabled={!updateCheck.downloadURL}>
+        Download {updateCheck.latest}{updateCheck.downloadSize > 0 ? ` (${fmtMB(updateCheck.downloadSize)})` : ""} in browser
+      </button>
     {:else if !staged}
       <button
         class="primary"
