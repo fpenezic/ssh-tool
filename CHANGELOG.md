@@ -7,7 +7,7 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.106.0] - Ignore failed units by folder, local shell tabs, sortable facts
 
 ### System status
 
