@@ -1261,7 +1261,8 @@ everything mobile is behind a build tag or an `isMobile` check.
 73. **The stats probe is positional: append sections, never insert.**
     `statsProbeCommand` (`internal/ssh/serverstats.go`) is one shell line
     split on `__SSHTOOL_SEP__`, and `parseServerStats` reads section N by
-    index (8 = `df -Pi`, 9 = failed unit count). A section inserted in the
+    index (8 = `df -Pi`, 9 = a systemd marker line plus the failed unit
+    names). A section inserted in the
     middle shifts every later one and nothing fails loudly - the values
     just go to the wrong fields. `StatsProbeCommandDarwin` stops at 7, so
     anything past it must default to "unknown" (-1), which is why

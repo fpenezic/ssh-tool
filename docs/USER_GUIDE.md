@@ -146,11 +146,18 @@ right:
     `sudo -n`, then with the connection's stored password; only if all
     of that fails does the app ask for a sudo password.
   - A red **N failed** chip appears next to the readout when a systemd
-    unit has failed; it opens the Services tab.
+    unit has failed; it opens the Services tab. A failed unit there has
+    *Ignore on* this host or one of its folders (a folder covers every
+    host below it, dynamic inventory hosts too): it stays listed
+    (greyed, "ignored") but stops counting toward the chip. *Warn about failed
+    systemd units* in Settings turns the chip off everywhere.
   - **Local shells** show the machine they run on: WSL its distro,
     PowerShell / cmd read Windows (CPU as a busy percentage), Linux and
-    macOS the machine itself. No Processes / Services tabs there.
+    macOS the machine itself. WSL and Linux shells also get read-only
+    Processes and Services tabs (no kill / restart; ignore per distro).
 - Update-available pill when a newer release is published.
+- Right-click the status bar to pick which items it shows; warnings
+  (locked vault, issues, updates, sharing, VPN) always show.
 - Version pill on the right - click to jump to Settings → About.
 
 Toast notifications appear in the bottom-right corner for

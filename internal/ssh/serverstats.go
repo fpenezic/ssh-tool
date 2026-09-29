@@ -47,8 +47,11 @@ type ServerStats struct {
 	Shell  string  `json:"shell,omitempty"`
 
 	// FailedUnits counts failed systemd units, -1 where there is no
-	// systemctl. Drives the status bar's "N failed" chip.
-	FailedUnits int `json:"failed_units"`
+	// systemctl. FailedUnitNames lists them, so the status bar can leave
+	// out the ones the user chose to ignore on this host before it decides
+	// whether to show its "N failed" chip.
+	FailedUnits     int      `json:"failed_units"`
+	FailedUnitNames []string `json:"failed_unit_names"`
 }
 
 // DiskPart is one real (non-pseudo) filesystem in the popup's storage list.
@@ -82,7 +85,7 @@ const statsProbeCommand = `cat /proc/loadavg 2>/dev/null; echo __SSHTOOL_SEP__; 
 	`cat /proc/uptime 2>/dev/null; echo __SSHTOOL_SEP__; ` +
 	`nproc 2>/dev/null; echo __SSHTOOL_SEP__; ` +
 	`df -Pi 2>/dev/null; echo __SSHTOOL_SEP__; ` +
-	`command -v systemctl >/dev/null 2>&1 && systemctl --failed --no-legend --plain --no-pager 2>/dev/null | wc -l`
+	`if command -v systemctl >/dev/null 2>&1; then echo __SSHTOOL_SYSTEMD__; systemctl --failed --no-legend --plain --no-pager 2>/dev/null | awk '{print $1}'; fi`
 
 const statsSep = "__SSHTOOL_SEP__"
 
@@ -329,11 +332,18 @@ func parseServerStats(out string) *ServerStats {
 		}
 	}
 
-	// Section 9: failed unit count. Empty when systemctl is missing, which
-	// keeps FailedUnits at -1 (no chip) rather than a false 0.
+	// Section 9: failed unit names after a marker line. No marker means no
+	// systemctl, which keeps FailedUnits at -1 (no chip) rather than a
+	// false 0.
 	if len(sections) > 9 {
-		if n, err := strconv.Atoi(strings.TrimSpace(sections[9])); err == nil && n >= 0 {
-			s.FailedUnits = n
+		if rest, ok := strings.CutPrefix(strings.TrimLeft(sections[9], "\r\n"), "__SSHTOOL_SYSTEMD__"); ok {
+			s.FailedUnitNames = []string{}
+			for _, l := range strings.Split(rest, "\n") {
+				if u := strings.TrimSpace(l); u != "" {
+					s.FailedUnitNames = append(s.FailedUnitNames, u)
+				}
+			}
+			s.FailedUnits = len(s.FailedUnitNames)
 		}
 	}
 
@@ -349,7 +359,7 @@ func isRealMount(fs, mount string, sizeKB int64) bool {
 		return false
 	}
 	switch fs {
-	case "tmpfs", "devtmpfs", "overlay", "squashfs", "none", "udev":
+	case "tmpfs", "devtmpfs", "overlay", "squashfs", "none", "udev", "shm", "nsfs":
 		return false
 	}
 	if strings.HasPrefix(fs, "/dev/loop") {
@@ -365,6 +375,18 @@ func isRealMount(fs, mount string, sizeKB int64) bool {
 	}
 	for _, p := range []string{"/snap", "/boot/efi", "/run", "/dev", "/sys", "/proc"} {
 		if mount == p || strings.HasPrefix(mount, p+"/") {
+			return false
+		}
+	}
+	// Container runtimes mount per-container filesystems (shm, overlay
+	// layers, pod volumes) below their state dirs, often on the host's own
+	// disk; a busy host lists dozens. The state dir itself stays - on its
+	// own volume it is a real disk worth watching.
+	for _, p := range []string{
+		"/var/lib/docker/", "/var/lib/containers/", "/var/lib/kubelet/",
+		"/var/lib/containerd/", "/var/lib/rancher/", "/var/lib/lxc/",
+	} {
+		if strings.HasPrefix(mount, p) {
 			return false
 		}
 	}

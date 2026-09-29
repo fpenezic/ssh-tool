@@ -37,6 +37,8 @@
   import UpdateModal from "./UpdateModal.svelte";
   import ServerStatusModal from "./ServerStatusModal.svelte";
   import { level, rank, fullestPartition, fullestInodes } from "./serverStatsLevel";
+  import { failedIgnore } from "./failedIgnore.svelte";
+  import { statusBarPrefs, type StatusBarItem } from "./statusBarPrefs.svelte";
 
   let updateModalOpen = $state(false);
   let statusModalOpen = $state(false);
@@ -194,6 +196,42 @@
     view.setTabSettingsSection("workspaces");
   }
 
+  // Right-click the bar: pick what it shows. Stays open while ticking.
+  void statusBarPrefs.load();
+  const shows = (i: StatusBarItem) => statusBarPrefs.shows(i);
+  let pickOpen = $state(false);
+  let pickX = $state(0);
+  const PICK: { key: StatusBarItem; label: string }[] = [
+    { key: "workspaces", label: "Workspaces" },
+    { key: "sessions", label: "Sessions count" },
+    { key: "forwards", label: "Active port forwards" },
+    { key: "broadcast", label: "Broadcast members" },
+    { key: "focus", label: "Focused host name" },
+    { key: "shell", label: "Local shell name" },
+    { key: "cpu", label: "CPU / load" },
+    { key: "mem", label: "Memory" },
+    { key: "disk", label: "Disk" },
+    { key: "users", label: "Logged-in users" },
+  ];
+  function onBarContext(e: MouseEvent) {
+    e.preventDefault();
+    pickX = Math.min(e.clientX, window.innerWidth - 250);
+    pickOpen = true;
+  }
+  $effect(() => {
+    if (!pickOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement)?.closest(".sb-pick")) pickOpen = false;
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") pickOpen = false; };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  });
+
   $effect(() => {
     if (!wsMenuOpen) return;
     function onDoc(e: MouseEvent) {
@@ -286,6 +324,20 @@
       disk: inodeWins ? inodeLvl : spaceLvl,
     };
   });
+  // Failed units worth the chip: off in Settings, or ignored on this host,
+  // they do not count.
+  const focusedConnId = $derived(sessions.tabs.find((t) => t.sessionId === focusedSessionId)?.connectionId ?? "");
+  // Ignore lists key on the saved connection; a local shell has none, so
+  // it keys on what it runs ("WSL Ubuntu"), one list per distro/machine.
+  const ignoreKey = $derived(
+    focusedConnId || (sessions.tabs.find((t) => t.sessionId === focusedSessionId)?.kind === "local" && serverStats?.shell
+      ? `local:${serverStats.shell}` : ""),
+  );
+  const failedShown = $derived(
+    serverStats && terminalPrefs.failedUnitsChip && serverStats.failed_units > 0
+      ? failedIgnore.effective(ignoreKey, serverStats.failed_unit_names)
+      : [],
+  );
   let statsInFlight = false;
 
   async function probeServerStats(sid: string) {
@@ -414,7 +466,20 @@
   }
 </script>
 
-<footer class="statusbar">
+<footer class="statusbar" oncontextmenu={onBarContext}>
+  {#if pickOpen}
+    <div class="sb-pick" style="left: {pickX}px" role="menu">
+      <div class="pick-h">Show in status bar</div>
+      {#each PICK as p (p.key)}
+        <label class="pick-row"><input type="checkbox" checked={shows(p.key)} onchange={() => statusBarPrefs.toggle(p.key)} />{p.label}</label>
+      {/each}
+      <label class="pick-row"><input type="checkbox" checked={terminalPrefs.failedUnitsChip} onchange={() => terminalPrefs.setFailedUnitsChip(!terminalPrefs.failedUnitsChip)} />Failed units warning</label>
+      <div class="pick-sep"></div>
+      <label class="pick-row" title="Polls the focused host every 10s; off = no CPU / memory / disk / users / failed at all"><input type="checkbox" checked={terminalPrefs.serverStatsEnabled} onchange={() => terminalPrefs.setServerStatsEnabled(!terminalPrefs.serverStatsEnabled)} />Host stats (polling)</label>
+      <div class="pick-note">Warnings (vault, issues, updates, sharing, VPN) and the version always show.</div>
+    </div>
+  {/if}
+  {#if shows("workspaces")}
   <div class="ws-wrap">
     <button
       class="seg ws"
@@ -472,6 +537,9 @@
     {/if}
   </div>
 
+  {/if}
+
+  {#if shows("sessions")}
   <button
     class="seg"
     class:has-error={errorCount > 0}
@@ -483,8 +551,9 @@
     {#if connectingCount > 0}<span class="dim">+{connectingCount}…</span>{/if}
     {#if errorCount > 0}<span class="err">{errorCount}!</span>{/if}
   </button>
+  {/if}
 
-  {#if tunnelCount > 0}
+  {#if tunnelCount > 0 && shows("forwards")}
     <span class="seg tunnels" title="{tunnelCount} active port forward{tunnelCount === 1 ? "" : "s"}">
       <IconTunnel size={11} />
       <span>{tunnelCount}</span>
@@ -539,7 +608,7 @@
     </div>
   {/if}
 
-  {#if broadcast.totalMembers() > 1}
+  {#if broadcast.totalMembers() > 1 && shows("broadcast")}
     <span class="seg bcast" title="{broadcast.totalMembers()} sessions across all broadcast groups">
       <IconBroadcast size={11} />
       <span>{broadcast.totalMembers()}</span>
@@ -617,7 +686,7 @@
 
   <div class="spacer"></div>
 
-  {#if focusedConnName}
+  {#if focusedConnName && shows("focus")}
     <span class="seg focus" title="Focused pane">
       <IconHost size={11} />
       <span>{focusedConnName}</span>
@@ -625,45 +694,47 @@
   {/if}
 
   {#if serverStats}
+    {#if shows("shell") || shows("cpu") || shows("mem") || shows("disk") || shows("users")}
     <button
       class="seg stats"
       onclick={() => { statusModalTab = "overview"; statusModalOpen = true; }}
       title="Status of the focused session's host (refreshed every 10s) - click for full system status"
     >
-      {#if serverStats.shell}
+      {#if serverStats.shell && shows("shell")}
         <span class="stat shell" title="Local shell">{serverStats.shell}</span>
       {/if}
-      {#if serverStats.cpu_pct >= 0}
+      {#if shows("cpu") && serverStats.cpu_pct >= 0}
         <span class="stat lvl-{statsView?.cpu}" title="CPU busy across {serverStats.ncpu} cores">
           <IconCpu size={11} />{Math.round(serverStats.cpu_pct)}%
         </span>
-      {:else}
+      {:else if shows("cpu")}
         <span class="stat lvl-{statsView?.cpu}" title="Load average (1 / 5 / 15 min): {serverStats.load1.toFixed(2)} / {serverStats.load5.toFixed(2)} / {serverStats.load15.toFixed(2)}{serverStats.ncpu > 0 ? ` on ${serverStats.ncpu} cores` : ""}">
           <IconCpu size={11} />{serverStats.load1.toFixed(2)}
         </span>
       {/if}
-      {#if serverStats.mem_used_pct >= 0}
+      {#if serverStats.mem_used_pct >= 0 && shows("mem")}
         <span class="stat lvl-{statsView?.mem}" title="Memory used">
           <IconMemory size={11} />{Math.round(serverStats.mem_used_pct)}%
         </span>
       {/if}
-      {#if statsView && statsView.diskPct >= 0}
+      {#if statsView && statsView.diskPct >= 0 && shows("disk")}
         <span class="stat lvl-{statsView.disk}" title={statsView.diskTitle}>
           <IconDisk size={11} />{Math.round(statsView.diskPct)}%
         </span>
       {/if}
-      {#if serverStats.users >= 0}
+      {#if serverStats.users >= 0 && shows("users")}
         <span class="stat" title="Logged-in users">
           <IconUsers size={11} />{serverStats.users}
         </span>
       {/if}
     </button>
-    {#if serverStats.failed_units > 0}
+    {/if}
+    {#if failedShown.length > 0}
       <button
         class="seg failed-chip"
         onclick={() => { statusModalTab = "services"; statusModalOpen = true; }}
-        title="{serverStats.failed_units} failed systemd unit{serverStats.failed_units === 1 ? "" : "s"} - click for Services"
-      >{serverStats.failed_units} failed</button>
+        title="Failed: {failedShown.join(", ")} - click for Services"
+      >{failedShown.length} failed</button>
     {/if}
   {/if}
 
@@ -674,6 +745,7 @@
       sessionId={focusedSessionId}
       local={sessions.tabs.find((t) => t.sessionId === focusedSessionId)?.kind === "local"}
       initialTab={statusModalTab}
+      connectionId={ignoreKey}
       onClose={() => (statusModalOpen = false)}
     />
   {/if}
@@ -941,6 +1013,17 @@
 
   /* Workspace popover */
   .ws-wrap { position: relative; }
+  .sb-pick {
+    position: fixed; bottom: 26px; z-index: 5000; min-width: 230px;
+    background: var(--base); color: var(--text); border: 1px solid var(--surface1);
+    border-radius: 5px; box-shadow: 0 -6px 20px rgba(0,0,0,0.45); padding: 0.35rem 0;
+    font-size: 0.78rem;
+  }
+  .pick-h { padding: 0.2rem 0.75rem 0.35rem; color: var(--subtext0); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  .pick-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.22rem 0.75rem; cursor: pointer; }
+  .pick-row:hover { background: var(--surface0); }
+  .pick-sep { height: 1px; background: var(--surface0); margin: 0.3rem 0; }
+  .pick-note { padding: 0.3rem 0.75rem 0.15rem; color: var(--overlay1); font-size: 0.7rem; }
   .ws-menu {
     position: absolute;
     bottom: 24px;

@@ -160,7 +160,7 @@ func TestParseDiskTop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !r.Partial || r.Reason == "" {
+	if !r.Partial || !r.TimedOut || r.Reason == "" {
 		t.Errorf("timeout must mark the result partial: %+v", r)
 	}
 	if len(r.Dirs) != 3 || r.Dirs[0].Path != "/opt/data/logs" {
@@ -171,5 +171,27 @@ func TestParseDiskTop(t *testing.T) {
 	}
 	if q := quoteAlways("/a;b'c"); q != `'/a;b'\''c'` {
 		t.Errorf("quote = %s", q)
+	}
+}
+
+func TestIsRealMountContainerRuntimes(t *testing.T) {
+	cases := []struct {
+		fs, mount string
+		want      bool
+	}{
+		{"shm", "/var/lib/docker/containers/0123abcd/mounts/shm", false},
+		{"/dev/sda1", "/var/lib/docker/containers/0123abcd/mounts/shm", false},
+		{"overlay", "/var/lib/docker/overlay2/0123abcd/merged", false},
+		{"/dev/sda1", "/var/lib/kubelet/pods/0123abcd/volumes/kubernetes.io~empty-dir/cache", false},
+		{"/dev/sda1", "/var/lib/containers/storage/overlay", false},
+		{"nsfs", "/var/snapd/ns/lxd.mnt", false},
+		{"/dev/sdb1", "/var/lib/docker", true},
+		{"/dev/sdb1", "/var/lib/dockerdata", true},
+		{"/dev/sda1", "/", true},
+	}
+	for _, c := range cases {
+		if got := isRealMount(c.fs, c.mount, 1000); got != c.want {
+			t.Errorf("isRealMount(%q, %q) = %v, want %v", c.fs, c.mount, got, c.want)
+		}
 	}
 }

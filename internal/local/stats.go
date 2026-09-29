@@ -75,3 +75,33 @@ func wslStats() (*sshlayer.ServerStats, error) {
 	}
 	return st, nil
 }
+
+// sysinfoTimeout bounds one System status tab command (ps, systemctl,
+// journalctl) on a local shell.
+const sysinfoTimeout = 15 * time.Second
+
+// SupportsSysinfo: a WSL shell or a Linux machine can list processes and
+// systemd units the way an SSH host does; PowerShell, cmd and macOS cannot.
+func (s *Session) SupportsSysinfo() bool {
+	return s.Kind == "wsl" || runtime.GOOS == "linux"
+}
+
+// RunSysinfo runs one read-only command line where this shell runs (inside
+// the WSL distro for a WSL shell) for the System status Processes and
+// Services tabs. Output is stdout and stderr together, like the SSH side.
+func (s *Session) RunSysinfo(cmdline string) (string, error) {
+	if !s.SupportsSysinfo() {
+		return "", fmt.Errorf("not available for this shell")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), sysinfoTimeout)
+	defer cancel()
+	var cmd *exec.Cmd
+	if s.Kind == "wsl" {
+		cmd = exec.CommandContext(ctx, "wsl.exe", "-e", "sh", "-c", cmdline)
+	} else {
+		cmd = exec.CommandContext(ctx, "sh", "-c", cmdline)
+	}
+	hideConsole(cmd)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}

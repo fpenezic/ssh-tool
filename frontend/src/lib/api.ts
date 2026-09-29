@@ -868,6 +868,15 @@ export const api = {
     G.SshServices(sessionId, state) as unknown as Promise<UnitInfo[] | null>,
   sshUnitLog: (sessionId: string, unit: string) =>
     G.SshUnitLog(sessionId, unit) as unknown as Promise<string[] | null>,
+  // The read-only half for a local shell (WSL, or a Linux machine);
+  // localSysinfo says whether the shell supports it at all.
+  localSysinfo: (sessionId: string) => G.LocalSysinfo(sessionId) as unknown as Promise<boolean>,
+  localTopProcesses: (sessionId: string, by: "cpu" | "mem", limit: number) =>
+    G.LocalTopProcesses(sessionId, by, limit) as unknown as Promise<ProcInfo[] | null>,
+  localServices: (sessionId: string, state: "failed" | "running" | "all") =>
+    G.LocalServices(sessionId, state) as unknown as Promise<UnitInfo[] | null>,
+  localUnitLog: (sessionId: string, unit: string) =>
+    G.LocalUnitLog(sessionId, unit) as unknown as Promise<string[] | null>,
   sshSystemAction: (sessionId: string, kind: "signal" | "service", pid: number, unit: string, verb: string, password: string) =>
     G.SshSystemAction(sessionId, kind, pid, unit, verb, password) as unknown as Promise<void>,
   // Fleet tools: read-only facts, TLS certificates, one file across hosts,
@@ -2136,6 +2145,7 @@ export interface DirUsage {
 export interface DiskTopResult {
   dirs: DirUsage[] | null;
   partial: boolean;
+  timed_out?: boolean;
   reason: string;
 }
 
@@ -2163,6 +2173,7 @@ export interface ServerStats {
   cpu_pct: number;
   shell?: string;
   failed_units: number; // -1 where there is no systemd
+  failed_unit_names?: string[] | null;
 }
 
 export interface GiveInternetResult {

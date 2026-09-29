@@ -18,7 +18,8 @@
   import { logtail } from "./logtailStore.svelte";
   import { focusSessionTerminal } from "./paneFocus";
   import { errMsg } from "./connectErrors";
-  import { IconCpu, IconMemory, IconDisk, IconUsers, IconRefresh, IconHost, IconChevronRight, IconChevronDown } from "./iconMap";
+  import { failedIgnore } from "./failedIgnore.svelte";
+  import { IconCpu, IconMemory, IconDisk, IconUsers, IconRefresh, IconHost, IconChevronRight, IconChevronDown, IconAlertTriangle, IconFolder } from "./iconMap";
   import { focusActivePane } from "./paneFocus";
   import { level, levelVar } from "./serverStatsLevel";
 
@@ -31,12 +32,26 @@
     local?: boolean;
     // Which tab to open on; the status bar's "failed" chip opens Services.
     initialTab?: Tab;
+    // The saved connection behind the session: ignored failed units are
+    // remembered per connection.
+    connectionId?: string;
     onClose: () => void;
   }
   type Tab = "overview" | "processes" | "services";
-  let { initial, connName, sessionId, local = false, initialTab = "overview", onClose: onCloseProp }: Props = $props();
+  let { initial, connName, sessionId, local = false, initialTab = "overview", connectionId = "", onClose: onCloseProp }: Props = $props();
   // svelte-ignore state_referenced_locally
-  let tab = $state<Tab>(local ? "overview" : initialTab);
+  let tab = $state<Tab>(initialTab);
+  // A WSL or Linux local shell gets Processes and Services read-only (no
+  // kill, no restart: that shell is right there). PowerShell, cmd and
+  // macOS stay on Overview.
+  // svelte-ignore state_referenced_locally
+  let sysinfo = $state(!local);
+  onMount(() => {
+    if (!local) return;
+    api.localSysinfo(sessionId)
+      .then((v) => { sysinfo = !!v; if (!v) tab = "overview"; else if (tab !== "overview") selectTab(tab); })
+      .catch(() => { sysinfo = false; tab = "overview"; });
+  });
 
   // The modal steals keyboard focus; hand it back to the terminal on close so
   // the user can keep typing without re-clicking the pane. Every close path
@@ -117,7 +132,7 @@
     procLoading = true;
     procErr = "";
     try {
-      procs = (await api.sshTopProcesses(sessionId, procBy, procLimit)) ?? [];
+      procs = (await (local ? api.localTopProcesses : api.sshTopProcesses)(sessionId, procBy, procLimit)) ?? [];
     } catch (e: any) {
       procErr = errMsg(e);
     } finally {
@@ -132,6 +147,8 @@
   // ---- Services tab ----
   // svelte-ignore state_referenced_locally
   let svcState = $state<"failed" | "running" | "all">(initial.failed_units > 0 ? "failed" : "running");
+  // Failed units that still count here (not ignored on this host).
+  const failedCount = $derived(failedIgnore.effective(connectionId, stats.failed_unit_names).length);
   let units = $state<UnitInfo[] | null>(null);
   let svcErr = $state("");
   let svcLoading = $state(false);
@@ -145,7 +162,7 @@
     svcLoading = true;
     svcErr = "";
     try {
-      units = (await api.sshServices(sessionId, svcState)) ?? [];
+      units = (await (local ? api.localServices : api.sshServices)(sessionId, svcState)) ?? [];
     } catch (e: any) {
       svcErr = errMsg(e);
     } finally {
@@ -161,7 +178,7 @@
     openUnit = openUnit === u ? null : u;
     if (openUnit && !unitLogs[u]) {
       try {
-        unitLogs[u] = (await api.sshUnitLog(sessionId, u)) ?? [];
+        unitLogs[u] = (await (local ? api.localUnitLog : api.sshUnitLog)(sessionId, u)) ?? [];
       } catch (e: any) {
         unitLogs[u] = { error: errMsg(e) };
       }
@@ -173,9 +190,18 @@
   // Typed, not run: the user reads the line and presses Enter. Same rule as
   // the SFTP pane's "cd here".
   async function statusInTerminal(u: string) {
-    const line = `\u0015systemctl status ${quote(u)} --no-pager`;
+    await typeInTerminal(`systemctl status ${quote(u)} --no-pager`);
+  }
+  // The scan cut off at 20s: hand the same du to the terminal without the
+  // cap, so whoever wants the full picture can wait for it there.
+  function duInTerminal(mount: string) {
+    return typeInTerminal(`nice -n 19 du -xh -d 2 -- ${quote(mount)} 2>/dev/null | sort -rh | head -n 20`);
+  }
+  async function typeInTerminal(cmd: string) {
+    const line = `\u0015${cmd}`;
     try {
-      await api.sshWrite(sessionId, btoa(String.fromCharCode(...new TextEncoder().encode(line))));
+      const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(line)));
+      await (local ? api.localShellWrite(sessionId, b64) : api.sshWrite(sessionId, b64));
       onClose();
       if (!focusSessionTerminal(sessionId)) toast.push("ok", "Typed into the terminal - press Enter to run it");
     } catch (e: any) {
@@ -244,7 +270,8 @@
     if (t === "services" && !units && !svcLoading) void loadUnits();
   }
   onMount(() => {
-    if (tab !== "overview") selectTab(tab);
+    // A local shell opens its tab once localSysinfo has answered.
+    if (tab !== "overview" && !local) selectTab(tab);
   });
 
   function onKey(e: KeyboardEvent) {
@@ -352,12 +379,12 @@
       {#if uptimeStr}<span class="meta">up {uptimeStr}</span>{/if}
     </div>
     {#if refreshErr}<div class="warn">{refreshErr}</div>{/if}
-    {#if !local}
+    {#if sysinfo}
       <div class="tabs" role="tablist">
         <button role="tab" aria-selected={tab === "overview"} class:active={tab === "overview"} onclick={() => selectTab("overview")}>Overview</button>
         <button role="tab" aria-selected={tab === "processes"} class:active={tab === "processes"} onclick={() => selectTab("processes")}>Processes</button>
         <button role="tab" aria-selected={tab === "services"} class:active={tab === "services"} onclick={() => selectTab("services")}>
-          Services{#if stats.failed_units > 0}<span class="tab-bad">{stats.failed_units}</span>{/if}
+          Services{#if failedCount > 0}<span class="tab-bad">{failedCount}</span>{/if}
         </button>
       </div>
     {/if}
@@ -393,9 +420,11 @@
               <div class="pmenu" role="menu">
                 <button role="menuitem" onclick={() => { navigator.clipboard.writeText(String(p.pid)); procMenu = null; }}>Copy PID</button>
                 <button role="menuitem" onclick={() => { navigator.clipboard.writeText(p.command); procMenu = null; }}>Copy command line</button>
+                {#if !local}
                 <div class="msep"></div>
                 <button role="menuitem" onclick={() => runAction("signal", p.pid, "", "TERM", "Terminate process", false)}>Terminate (SIGTERM)…</button>
                 <button role="menuitem" class="bad" onclick={() => runAction("signal", p.pid, "", "KILL", "Kill process", true)}>Kill (SIGKILL)…</button>
+                {/if}
               </div>
             {/if}
           </span>
@@ -419,11 +448,13 @@
     {:else}
       <div class="units">
         {#each shownUnits as u (u.unit)}
-          <div class="unit" class:open={openUnit === u.unit}>
+          {@const ignoredIn = u.active === "failed" && connectionId ? failedIgnore.ignoredIn(connectionId, u.unit) : []}
+          {@const ignored = ignoredIn.length > 0}
+          <div class="unit" class:open={openUnit === u.unit} class:ignored>
             <button class="unit-row" onclick={() => toggleUnit(u.unit)}>
-              <span class="udot" class:failed={u.active === "failed"} class:active={u.active === "active"}></span>
+              <span class="udot" class:failed={u.active === "failed" && !ignored} class:active={u.active === "active"}></span>
               <span class="uname">{u.unit}</span>
-              <span class="ustate">{u.active}/{u.sub}</span>
+              <span class="ustate">{u.active}/{u.sub}{#if ignored}{` · ignored ${ignoredIn[0].isFolder ? `in ${ignoredIn[0].label}` : "on this host"}`}{/if}</span>
               <span class="udesc" title={u.description}>{u.description}</span>
             </button>
             {#if openUnit === u.unit}
@@ -437,6 +468,7 @@
                   <pre class="ulog">{lg.length ? lg.join("\n") : "(no journal lines)"}</pre>
                 {/if}
                 <div class="unit-actions">
+                  {#if !local}
                   <button class="du-btn" onclick={() => runAction("service", 0, u.unit, "restart", "Restart service", false)}>Restart…</button>
                   {#if u.active === "active"}
                     <button class="du-btn" onclick={() => runAction("service", 0, u.unit, "stop", "Stop service", true)}>Stop…</button>
@@ -444,6 +476,20 @@
                     <button class="du-btn" onclick={() => runAction("service", 0, u.unit, "start", "Start service", false)}>Start…</button>
                   {/if}
                   <button class="du-btn" onclick={() => tailUnit(u.unit)}>Open log tail</button>
+                  {/if}
+                  {#if u.active === "failed" && connectionId}
+                    {#if ignored}
+                      <button class="more" title={`Ignored in: ${ignoredIn.map((x) => x.label).join(", ")}. Stop ignoring clears it there, for every host it covers.`}
+                        onclick={() => failedIgnore.unignore(connectionId, u.unit)}>Stop ignoring</button>
+                    {:else}
+                      <span class="ign" title="Ignored units stay listed but do not light the status bar's failed warning. A folder covers every host below it.">
+                        Ignore on
+                        {#each failedIgnore.scopesOf(connectionId) as sc (sc.scope)}
+                          <button class="scope" title={sc.isFolder ? `Every host in ${sc.label}` : "Only this connection"} onclick={() => failedIgnore.set(sc.scope, u.unit, true)}>{#if sc.isFolder}<IconFolder size={12} />{:else}<IconHost size={12} />{/if}{sc.label}</button>
+                        {/each}
+                      </span>
+                    {/if}
+                  {/if}
                   <button class="more" onclick={() => statusInTerminal(u.unit)}>Status in terminal</button>
                 </div>
               </div>
@@ -552,7 +598,16 @@
                 {:else if "error" in td}
                   <div class="warn">{td.error}</div>
                 {:else}
-                  {#if td.partial}<div class="bar-cap">{td.reason}</div>{/if}
+                  {#if td.timed_out}
+                    <div class="du-cut" title={"du reads every file's metadata, so it is slow on trees with millions of small files (mail spools, caches, container layers, backup sets), on network or overloaded storage, and when the disk is already busy.\nThe list below only has what was counted in time - the missing part may be the biggest."}>
+                      <IconAlertTriangle size={14} />
+                      <div>
+                        <strong>Scan stopped after 20s - sizes are a lower bound.</strong>
+                        <div>Large or slow trees may be missing from the list. Run du in the terminal without the limit to see everything.</div>
+                        <button class="du-btn" onclick={() => duInTerminal(p.mount)} title="Types the command into the terminal; press Enter to run it">Type du into the terminal</button>
+                      </div>
+                    </div>
+                  {:else if td.partial}<div class="bar-cap">{td.reason}</div>{/if}
                   <div class="dirs">
                     {#each td.dirs ?? [] as d (d.path)}
                       <span class="dir-size">{fmtBytesKB(d.size_kb)}</span><span class="dir-path" title={d.path}>{d.path}</span>
@@ -710,6 +765,17 @@
     font: inherit; font-size: 0.82rem; padding: 0.3rem 0.35rem; border-radius: 4px; cursor: pointer; text-align: left;
   }
   .unit-row:hover, .unit.open .unit-row { background: var(--surface0); }
+  .ign { display: inline-flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; color: var(--subtext0); font-size: 0.74rem; }
+  /* Text actions next to the unit buttons: coloured so they read as links. */
+  .unit-actions .more { color: var(--sapphire); }
+  .unit-actions .more:hover { color: var(--text); text-decoration: underline; }
+  .scope {
+    display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer;
+    background: var(--surface0); color: var(--sapphire); border: 1px solid var(--surface1);
+    border-radius: 10px; padding: 0.08rem 0.5rem; font: inherit; font-size: 0.74rem;
+  }
+  .scope:hover { background: var(--surface1); color: var(--text); }
+  .unit.ignored .uname, .unit.ignored .udesc { color: var(--overlay1); }
   .udot { width: 7px; height: 7px; border-radius: 50%; background: var(--overlay0); }
   .udot.active { background: var(--green); }
   .udot.failed { background: var(--red); }
@@ -792,6 +858,15 @@
     margin-top: 0.3rem; padding: 0.35rem 0.5rem;
     border-left: 2px solid var(--surface1);
   }
+  .du-cut {
+    display: flex; gap: 0.45rem; align-items: flex-start; margin: 0.3rem 0 0.45rem;
+    padding: 0.45rem 0.6rem; border-radius: 5px; font-size: 0.76rem; cursor: help;
+    background: color-mix(in srgb, var(--yellow) 14%, transparent); color: var(--text);
+    border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
+  }
+  .du-cut :global(svg) { color: var(--yellow); flex-shrink: 0; margin-top: 0.1rem; }
+  .du-cut strong { color: var(--yellow); font-weight: 600; }
+  .du-cut .du-btn { margin-top: 0.35rem; cursor: pointer; }
   .du-btn {
     margin-top: 0.35rem;
     background: var(--surface0); color: var(--text);

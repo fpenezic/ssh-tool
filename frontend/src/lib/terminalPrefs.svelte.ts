@@ -13,6 +13,8 @@ const FONT_FAMILY_KEY = "terminal_font_family";
 const SCROLLBACK_KEY = "terminal_scrollback";
 const DISABLE_WEBGL_KEY = "terminal_disable_webgl";
 const SERVER_STATS_KEY = "server_stats_enabled";
+// On by default; "0" turns off the status bar's failed-units chip.
+const FAILED_UNITS_CHIP_KEY = "server_stats_failed_units";
 const BG_SCROLLBACK_DELAY_KEY = "terminal_bg_scrollback_delay";
 const COMMAND_TIMESTAMPS_KEY = "terminal_command_timestamps";
 const COMMAND_COPY_KEY = "terminal_command_copy";
@@ -55,6 +57,7 @@ class TerminalPrefs {
   // command on the remote host, which not every box (network gear) should
   // get, and it's only worth the round-trip if the user wants it.
   serverStatsEnabled = $state(false);
+  failedUnitsChip = $state(true);
   // When true, each command line shows the time it was run at its right
   // edge. The times are recorded either way (backend, per session), so
   // turning this on also shows commands run before it was switched on.
@@ -131,6 +134,12 @@ class TerminalPrefs {
       // missing key is fine
     }
     try {
+      const v = await api.settingsGet(FAILED_UNITS_CHIP_KEY);
+      if (v === "0") this.failedUnitsChip = false;
+    } catch {
+      // missing key is fine
+    }
+    try {
       const v = await api.settingsGet(COMMAND_TIMESTAMPS_KEY);
       if (v === "1") this.commandTimestamps = true;
     } catch {
@@ -160,6 +169,12 @@ class TerminalPrefs {
     if (this.serverStatsEnabled === v) return;
     this.serverStatsEnabled = v;
     api.settingsSet(SERVER_STATS_KEY, v ? "1" : "0").catch(console.warn);
+  }
+
+  setFailedUnitsChip(v: boolean) {
+    if (this.failedUnitsChip === v) return;
+    this.failedUnitsChip = v;
+    api.settingsSet(FAILED_UNITS_CHIP_KEY, v ? "1" : "0").catch(console.warn);
   }
 
   setCommandTimestamps(v: boolean) {

@@ -3568,6 +3568,52 @@ func (a *App) LocalHostStats(sessionID string) (*sshlayer.ServerStats, error) {
 	return sess.HostStats()
 }
 
+// LocalSysinfo reports whether a local shell can fill the Processes and
+// Services tabs (WSL, or a Linux machine).
+func (a *App) LocalSysinfo(sessionID string) bool {
+	sess, ok := a.localPool.Get(sessionID)
+	return ok && sess.SupportsSysinfo()
+}
+
+// localRunner is the RunFunc for a local shell's System status tabs.
+func (a *App) localRunner(sessionID string) (sshlayer.RunFunc, error) {
+	sess, ok := a.localPool.Get(sessionID)
+	if !ok {
+		return nil, fmt.Errorf("session not found")
+	}
+	if !sess.SupportsSysinfo() {
+		return nil, fmt.Errorf("not available for this shell")
+	}
+	return sess.RunSysinfo, nil
+}
+
+// LocalTopProcesses is SshTopProcesses for a local shell.
+func (a *App) LocalTopProcesses(sessionID, by string, limit int) ([]sshlayer.ProcInfo, error) {
+	run, err := a.localRunner(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return sshlayer.TopProcessesVia(run, by, limit)
+}
+
+// LocalServices is SshServices for a local shell.
+func (a *App) LocalServices(sessionID, state string) ([]sshlayer.UnitInfo, error) {
+	run, err := a.localRunner(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return sshlayer.ListServicesVia(run, state)
+}
+
+// LocalUnitLog is SshUnitLog for a local shell.
+func (a *App) LocalUnitLog(sessionID, unit string) ([]string, error) {
+	run, err := a.localRunner(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return sshlayer.UnitLogVia(run, unit, 5)
+}
+
 // sshTarget resolves a live session to the client its commands run on.
 func (a *App) sshTarget(sessionID string) (*gossh.Client, error) {
 	sess, ok := a.pool.Get(sessionID)

@@ -32,6 +32,16 @@ const (
 // (procps --sort); BusyBox ps has neither -o user:N nor --sort and gets a
 // plain error instead of a wrong list.
 func TopProcesses(client *ssh.Client, by string, limit int) ([]ProcInfo, error) {
+	return TopProcessesVia(func(cmd string) (string, error) { return runOutput(client, cmd) }, by, limit)
+}
+
+// RunFunc runs one shell command line and returns its combined output. The
+// System status tabs take one so a local shell (WSL, Linux) can feed the
+// same parsers as an SSH session.
+type RunFunc func(cmd string) (string, error)
+
+// TopProcessesVia is TopProcesses over any runner.
+func TopProcessesVia(run RunFunc, by string, limit int) ([]ProcInfo, error) {
 	if limit <= 0 {
 		limit = topProcLimit
 	}
@@ -43,7 +53,7 @@ func TopProcesses(client *ssh.Client, by string, limit int) ([]ProcInfo, error) 
 		key = "-pmem"
 	}
 	// A few spare lines: the probe's own ps and head can land on top.
-	out, err := runOutput(client, fmt.Sprintf("ps -eo pid=,user:32=,pcpu=,pmem=,args= --sort=%s 2>&1 | head -n %d", key, limit+4))
+	out, err := run(fmt.Sprintf("ps -eo pid=,user:32=,pcpu=,pmem=,args= --sort=%s 2>&1 | head -n %d", key, limit+4))
 	if err != nil && len(out) == 0 {
 		return nil, fmt.Errorf("ps: %w", err)
 	}
@@ -92,6 +102,11 @@ type UnitInfo struct {
 // ListServices lists systemd units: every failed one, or services that are
 // "running" / "all". Hosts without systemd get an error the tab shows as is.
 func ListServices(client *ssh.Client, state string) ([]UnitInfo, error) {
+	return ListServicesVia(func(cmd string) (string, error) { return runOutput(client, cmd) }, state)
+}
+
+// ListServicesVia is ListServices over any runner.
+func ListServicesVia(run RunFunc, state string) ([]UnitInfo, error) {
 	// Failed lists every unit type, not only services: the status bar
 	// chip counts systemctl --failed (mounts and timers included), and the
 	// list it opens has to show the same units.
@@ -104,7 +119,7 @@ func ListServices(client *ssh.Client, state string) ([]UnitInfo, error) {
 	default:
 		cmd += " --type=service --all"
 	}
-	out, err := runOutput(client, "command -v systemctl >/dev/null 2>&1 || { echo __NO_SYSTEMD__; exit 0; }; "+cmd+" 2>&1")
+	out, err := run("command -v systemctl >/dev/null 2>&1 || { echo __NO_SYSTEMD__; exit 0; }; " + cmd + " 2>&1")
 	if strings.Contains(out, "__NO_SYSTEMD__") {
 		return nil, errors.New("no systemd on this host")
 	}
@@ -132,10 +147,15 @@ var unitNameRe = regexp.MustCompile(`^[A-Za-z0-9@_.:\\-]+$`)
 // another unit's journal can need the adm / systemd-journal group; the
 // hint journalctl prints then is returned as a line like any other.
 func UnitLog(client *ssh.Client, unit string, n int) ([]string, error) {
+	return UnitLogVia(func(cmd string) (string, error) { return runOutput(client, cmd) }, unit, n)
+}
+
+// UnitLogVia is UnitLog over any runner.
+func UnitLogVia(run RunFunc, unit string, n int) ([]string, error) {
 	if !unitNameRe.MatchString(unit) {
 		return nil, fmt.Errorf("invalid unit name")
 	}
-	out, err := runOutput(client, fmt.Sprintf("journalctl -u %s -n %d --no-pager -o cat 2>&1", quoteAlways(unit), n))
+	out, err := run(fmt.Sprintf("journalctl -u %s -n %d --no-pager -o cat 2>&1", quoteAlways(unit), n))
 	if err != nil && out == "" {
 		return nil, fmt.Errorf("journalctl: %w", err)
 	}

@@ -64,8 +64,12 @@ func TestUnitNameGuard(t *testing.T) {
 
 func TestParseServerStatsFailedUnits(t *testing.T) {
 	base := strings.Repeat(statsSep+"\n", 9)
-	if s := parseServerStats(base + "2\n"); s.FailedUnits != 2 {
-		t.Errorf("failed = %d, want 2", s.FailedUnits)
+	s := parseServerStats(base + "__SSHTOOL_SYSTEMD__\napache2.service\nsnap.cups.cups-browsed.service\n")
+	if s.FailedUnits != 2 || len(s.FailedUnitNames) != 2 || s.FailedUnitNames[0] != "apache2.service" {
+		t.Errorf("failed = %d %v, want 2 names", s.FailedUnits, s.FailedUnitNames)
+	}
+	if s := parseServerStats(base + "__SSHTOOL_SYSTEMD__\n"); s.FailedUnits != 0 {
+		t.Errorf("systemd with nothing failed must be 0, got %d", s.FailedUnits)
 	}
 	if s := parseServerStats(base); s.FailedUnits != -1 {
 		t.Errorf("no systemctl must stay -1, got %d", s.FailedUnits)

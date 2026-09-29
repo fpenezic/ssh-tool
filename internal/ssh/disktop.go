@@ -22,7 +22,10 @@ type DirUsage struct {
 type DiskTopResult struct {
 	Dirs    []DirUsage `json:"dirs"`
 	Partial bool       `json:"partial"`
-	Reason  string     `json:"reason"`
+	// TimedOut: du hit diskTopTimeoutSec, so big trees are missing, not
+	// just the unreadable ones.
+	TimedOut bool   `json:"timed_out"`
+	Reason   string `json:"reason"`
 }
 
 // diskTopTimeoutSec caps du on the remote side. du walks every inode, so a
@@ -76,7 +79,7 @@ func parseDiskTop(out, mount string) (*DiskTopResult, error) {
 	switch rc {
 	case 0:
 	case 124:
-		res.Partial, res.Reason = true, fmt.Sprintf("stopped after %ds - sizes are a lower bound", diskTopTimeoutSec)
+		res.Partial, res.TimedOut, res.Reason = true, true, fmt.Sprintf("stopped after %ds - sizes are a lower bound", diskTopTimeoutSec)
 	case 127:
 		return nil, fmt.Errorf("du or timeout is not available on this host")
 	default:

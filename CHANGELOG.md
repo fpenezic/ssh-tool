@@ -7,6 +7,79 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### System status
+
+- **Failed units you know about can be ignored, on one host or a whole
+  folder.** In System status -> Services, a failed unit offers *Ignore
+  on* this host or any folder above it; a folder covers every host below
+  it, dynamic inventory hosts included, so one quirk shared by a cloud
+  project's image is a single click. Ignored units stay listed (greyed,
+  with where they are ignored) but no longer light the status bar's
+  "N failed" warning, so a new failure still stands out.
+- **WSL and Linux local shells get the Processes and Services tabs.**
+  The failed-units chip on a local shell now opens the same System
+  status tabs as on a connection, read-only: units and their journal,
+  the top processes, and *Ignore on this machine* (per WSL distro). No
+  kill, restart or log tail there - that shell is one click away.
+- **The failed-units warning can be switched off** altogether in
+  Settings, under the server status option.
+- **Container mounts no longer crowd the disk list.** The per-container
+  filesystems Docker, Podman, containerd and Kubernetes mount under
+  `/var/lib/...` (shm, overlay layers, pod volumes) are hidden from the
+  status bar disk readout and from Fleet facts' disk columns. The
+  runtime's state directory itself still shows when it is its own volume.
+- **A cut-off directory scan says so clearly.** When *Find largest
+  directories* hits its 20 second limit, a highlighted note explains that
+  the list is incomplete and why du can be slow (hover for details), and
+  *Type du into the terminal* puts the same scan without the limit on the
+  prompt, ready to run with Enter.
+
+### Status bar
+
+- **Right-click the status bar to choose what it shows:** workspaces,
+  session count, forwards, broadcast, focused host, and each host stat
+  (CPU / load, memory, disk, users, failed units) separately; host stats
+  polling can be switched off from there too. Warnings (locked vault,
+  issues, updates, sharing, VPN) and the version always show.
+
+### Fleet
+
+- **Gather facts table sorts by any column.** Click a header for
+  ascending, again for descending, a third time back to host name;
+  sizes, uptime and counts sort as numbers, hosts without a value go
+  last. Groups keep their order and sort inside, and Copy / CSV /
+  Markdown follow the table order.
+- **Wide facts tables scroll sideways in view.** The horizontal
+  scrollbar sits at the bottom of the window rather than under the last
+  row, and the host column stays put while scrolling.
+- **TLS warnings on a folder card can be cleared or re-checked.** *Clear*
+  drops the marks of the listed hosts (card and tree badge) until their
+  next check - for lab or self-signed certs nobody renews; *Check again*
+  runs the TLS check on just those hosts. The card now shows host names
+  for dynamic inventory hosts too, and lists every host on hover.
+- **Find similar is easier to undo:** a *Show all* button next to the
+  "Similar to" chip, and the chosen host's link turns into *Show all*.
+
+### Local shells
+
+- **The default local shell and its start directory stay on this
+  machine.** Settings -> Local shell no longer travels with profile
+  sync, so a WSL path or PowerShell choice made on Windows does not land
+  on a Mac or Linux machine that pulls the profile. A value already set
+  is kept on the machine it was set on. A saved local connection's own
+  shell and directory are part of that connection and still sync.
+
+### Connections
+
+- **Host key and login prompts show above tool windows.** A host key to
+  trust or a password / OTP asked for during a Fleet run (Gather facts,
+  TLS, Compare, Copy SSH key) or from System status used to open behind
+  that window, so the run seemed to hang.
+
+---
+
 ## [0.105.0] - Fleet tools, processes and services, and a tidier pane header
 
 ### Fleet tools

@@ -318,6 +318,15 @@ export class DiskTopResult {
              */
             this["partial"] = false;
         }
+        if (!("timed_out" in $$source)) {
+            /**
+             * TimedOut: du hit diskTopTimeoutSec, so big trees are missing, not
+             * just the unreadable ones.
+             * @member
+             * @type {boolean}
+             */
+            this["timed_out"] = false;
+        }
         if (!("reason" in $$source)) {
             /**
              * @member
@@ -1208,11 +1217,20 @@ export class ServerStats {
         if (!("failed_units" in $$source)) {
             /**
              * FailedUnits counts failed systemd units, -1 where there is no
-             * systemctl. Drives the status bar's "N failed" chip.
+             * systemctl. FailedUnitNames lists them, so the status bar can leave
+             * out the ones the user chose to ignore on this host before it decides
+             * whether to show its "N failed" chip.
              * @member
              * @type {number}
              */
             this["failed_units"] = 0;
+        }
+        if (!("failed_unit_names" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["failed_unit_names"] = [];
         }
 
         Object.assign(this, $$source);
@@ -1226,12 +1244,16 @@ export class ServerStats {
     static createFrom($$source = {}) {
         const $$createField15_0 = $$createType4;
         const $$createField16_0 = $$createType10;
+        const $$createField20_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("user_names" in $$parsedSource) {
             $$parsedSource["user_names"] = $$createField15_0($$parsedSource["user_names"]);
         }
         if ("partitions" in $$parsedSource) {
             $$parsedSource["partitions"] = $$createField16_0($$parsedSource["partitions"]);
+        }
+        if ("failed_unit_names" in $$parsedSource) {
+            $$parsedSource["failed_unit_names"] = $$createField20_0($$parsedSource["failed_unit_names"]);
         }
         return new ServerStats(/** @type {Partial<ServerStats>} */($$parsedSource));
     }

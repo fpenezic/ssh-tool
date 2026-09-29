@@ -2698,6 +2698,22 @@
           </div>
         </div>
       </label>
+
+      <label class:active={terminalPrefs.serverStatsEnabled && terminalPrefs.failedUnitsChip}>
+        <input
+          type="checkbox"
+          disabled={!terminalPrefs.serverStatsEnabled}
+          checked={terminalPrefs.failedUnitsChip}
+          onchange={(e) => terminalPrefs.setFailedUnitsChip((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Warn about failed systemd units</div>
+          <div class="mode-desc">
+            Red "N failed" next to the server status. Single units can be
+            ignored per host in System status -> Services.
+          </div>
+        </div>
+      </label>
     </fieldset>
   </div>
   {/if}
