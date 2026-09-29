@@ -163,11 +163,41 @@
     }
     return true;
   }));
+  // Header click sorts by that column (asc, desc, back to name); groups
+  // keep their order and sort inside. Exports follow the table.
+  let sortBy = $state("");
+  let sortDesc = $state(false);
+  function sortOn(h: string) {
+    if (sortBy !== h) { sortBy = h; sortDesc = false; }
+    else if (!sortDesc) sortDesc = true;
+    else { sortBy = ""; sortDesc = false; }
+  }
+  const sorted = $derived.by(() => {
+    const byName = (a: FactsHostResult, b: FactsHostResult) => a.name.localeCompare(b.name, undefined, { numeric: true });
+    const col = columns.find((c) => c.h === sortBy);
+    if (!col) return [...shown].sort(byName);
+    const key = (r: FactsHostResult): number | string | null => {
+      if (col.s) return col.s(r);
+      if (col.n) { const x = parseFloat(col.n(r)); return Number.isFinite(x) ? x : null; }
+      const v = col.v(r);
+      return v === "" || v === "-" ? null : v;
+    };
+    const dir = sortDesc ? -1 : 1;
+    return [...shown].sort((a, b) => {
+      const ka = key(a), kb = key(b);
+      // Hosts without a value sink to the bottom either way.
+      if (ka === null || kb === null) return ka === kb ? byName(a, b) : ka === null ? 1 : -1;
+      const d = typeof ka === "number" && typeof kb === "number"
+        ? ka - kb
+        : String(ka).localeCompare(String(kb), undefined, { numeric: true });
+      return d * dir || byName(a, b);
+    });
+  });
   const groups = $derived.by(() => {
     const key = (r: FactsHostResult) =>
       groupBy === "size" ? sizeKey(r) : groupBy === "os" ? (r.facts.os || "?") : groupBy === "kernel" ? (r.facts.kernel || "?") : "";
     const m = new Map<string, FactsHostResult[]>();
-    for (const r of [...shown].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))) {
+    for (const r of sorted) {
       const k = key(r);
       if (!m.has(k)) m.set(k, []);
       m.get(k)!.push(r);
@@ -198,12 +228,13 @@
   const columns = $derived.by(() => {
     // n: the plain number for exports (CSV, Copy table), so a spreadsheet
     // sorts and sums it; the header then names the unit instead.
-    const c: { h: string; v: (r: FactsHostResult) => string; n?: (r: FactsHostResult) => string; unit?: string }[] = [
+    // s: a sort key where neither the text nor n sorts right; null = no value.
+    const c: { h: string; v: (r: FactsHostResult) => string; n?: (r: FactsHostResult) => string; unit?: string; s?: (r: FactsHostResult) => number | string | null }[] = [
       { h: "Host", v: (r) => r.name },
       { h: "Address", v: (r) => r.hostname },
     ];
     if (has("cpu")) {
-      c.push({ h: "Cores", v: (r) => String(r.facts.cpu_cores || "-") });
+      c.push({ h: "Cores", v: (r) => String(r.facts.cpu_cores || "-"), s: (r) => r.facts.cpu_cores || null });
       c.push({ h: "CPU", v: (r) => r.facts.cpu_model || "-" });
     }
     if (has("mem")) {
@@ -224,11 +255,12 @@
     if (has("virt")) c.push({ h: "Virt", v: (r) => r.facts.virt === "none" ? "bare metal" : r.facts.virt || "-" });
     if (has("os")) c.push({ h: "OS", v: (r) => r.facts.os || "-" });
     if (has("kernel")) c.push({ h: "Kernel", v: (r) => r.facts.kernel || "-" });
-    if (has("uptime")) c.push({ h: "Uptime", v: (r) => uptime(r.facts.uptime_sec) });
+    if (has("uptime")) c.push({ h: "Uptime", v: (r) => uptime(r.facts.uptime_sec), s: (r) => r.facts.uptime_sec > 0 ? r.facts.uptime_sec : null });
     if (has("timesync")) c.push({ h: "NTP", v: (r) => r.facts.timesync || "-" });
-    if (has("updates")) c.push({ h: "Updates", v: (r) => r.facts.updates < 0 ? "-" : `${r.facts.updates}${r.facts.security > 0 ? ` (${r.facts.security} sec)` : ""}` });
+    if (has("updates")) c.push({ h: "Updates", v: (r) => r.facts.updates < 0 ? "-" : `${r.facts.updates}${r.facts.security > 0 ? ` (${r.facts.security} sec)` : ""}`,
+      s: (r) => r.facts.updates < 0 ? null : Math.max(r.facts.security, 0) * 1e6 + r.facts.updates });
     if (has("reboot")) c.push({ h: "Reboot", v: (r) => r.facts.reboot || "-" });
-    if (has("failed")) c.push({ h: "Failed", v: (r) => r.facts.failed < 0 ? "-" : String(r.facts.failed) });
+    if (has("failed")) c.push({ h: "Failed", v: (r) => r.facts.failed < 0 ? "-" : String(r.facts.failed), s: (r) => r.facts.failed < 0 ? null : r.facts.failed });
     if (has("ips")) c.push({ h: "IPs", v: (r) => (r.facts.ips ?? []).join(" ") || "-" });
     if (has("gateway")) c.push({ h: "Gateway", v: (r) => r.facts.gateway || "-" });
     if (has("dns")) c.push({ h: "DNS", v: (r) => (r.facts.dns ?? []).join(" ") || "-" });
@@ -246,7 +278,7 @@
   function csv(): string {
     const esc = (v: string) => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
     const lines = [columns.map((c) => esc(exHead(c))).join(",")];
-    for (const r of shown) lines.push(columns.map((c) => esc(exCell(c, r))).join(","));
+    for (const r of sorted) lines.push(columns.map((c) => esc(exCell(c, r))).join(","));
     return lines.join("\n") + "\n";
   }
   function markdown(): string {
@@ -254,7 +286,7 @@
     const lines = [
       `| ${columns.map((c) => c.h).join(" | ")} |`,
       `| ${columns.map(() => "---").join(" | ")} |`,
-      ...shown.map((r) => `| ${columns.map((c) => cell(c.v(r))).join(" | ")} |`),
+      ...sorted.map((r) => `| ${columns.map((c) => cell(c.v(r))).join(" | ")} |`),
     ];
     return lines.join("\n") + "\n";
   }
@@ -263,13 +295,13 @@
   // fallback, which Excel also splits whatever the locale's list separator.
   function tsv(): string {
     const cell = (v: string) => v.replace(/[\t\r\n]+/g, " ");
-    return [columns.map(exHead), ...shown.map((r) => columns.map((c) => exCell(c, r)))]
+    return [columns.map(exHead), ...sorted.map((r) => columns.map((c) => exCell(c, r)))]
       .map((row) => row.map(cell).join("\t")).join("\n") + "\n";
   }
   function html(): string {
     const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const th = columns.map((c) => `<th style="text-align:left;border:1px solid #999;padding:2px 6px">${esc(exHead(c))}</th>`).join("");
-    const rows = shown.map((r) => `<tr>${columns.map((c) => `<td style="border:1px solid #999;padding:2px 6px">${esc(exCell(c, r))}</td>`).join("")}</tr>`).join("");
+    const rows = sorted.map((r) => `<tr>${columns.map((c) => `<td style="border:1px solid #999;padding:2px 6px">${esc(exCell(c, r))}</td>`).join("")}</tr>`).join("");
     return `<table style="border-collapse:collapse"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>`;
   }
   // Same clipboard pattern as Run command's "Copy all": both flavours in
@@ -375,7 +407,8 @@
       </label>
       <input class="finput" type="search" placeholder="Filter hosts" bind:value={filter} />
       {#if similarTo}
-        <span class="chip">Similar to {similarTo.name} <button class="linkish" onclick={() => (similarTo = null)} aria-label="Clear similar filter">×</button></span>
+        <span class="chip similar">Similar to {similarTo.name} · {shown.length} host{shown.length === 1 ? "" : "s"}</span>
+        <button class="fbtn" onclick={() => (similarTo = null)}>Show all</button>
       {/if}
       <span class="spacer"></span>
       {#if has("reboot") && needReboot}<span class="chip warn">{needReboot} need reboot</span>{/if}
@@ -389,7 +422,7 @@
     {/if}
     <div class="table-wrap">
       <table class="ftable">
-        <thead><tr>{#each columns as c, i (i)}<th class:fmono={c.h.startsWith("/")}>{c.h}</th>{/each}<th></th></tr></thead>
+        <thead><tr>{#each columns as c, i (i)}<th class:fmono={c.h.startsWith("/")} aria-sort={sortBy === c.h ? (sortDesc ? "descending" : "ascending") : "none"}><button class="sort" class:on={sortBy === c.h} title="Sort" onclick={() => sortOn(c.h)}>{c.h}<span class="arr">{sortBy === c.h ? (sortDesc ? "▼" : "▲") : ""}</span></button></th>{/each}<th></th></tr></thead>
         <tbody>
           {#each groups as [g, rows] (g)}
             {#if groupBy !== "none"}<tr class="group"><td colspan={columns.length + 1}>{g} · {rows.length} host{rows.length === 1 ? "" : "s"}</td></tr>{/if}
@@ -400,7 +433,7 @@
                     {#if i === 0}<button class="linkish fmono" title="Connect" onclick={() => openHost(r)}>{c.v(r)}</button>{:else}{c.v(r)}{/if}
                   </td>
                 {/each}
-                <td><button class="linkish" onclick={() => (similarTo = similarTo?.connection_id === r.connection_id ? null : r)}>Find similar</button></td>
+                <td><button class="linkish" onclick={() => (similarTo = similarTo?.connection_id === r.connection_id ? null : r)}>{similarTo?.connection_id === r.connection_id ? "Show all" : "Find similar"}</button></td>
               </tr>
             {/each}
           {/each}
@@ -445,7 +478,16 @@
   .toolbar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
   .sizes { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.6rem; }
   .spacer { flex: 1; }
-  .table-wrap { overflow: auto; }
+  .table-wrap { overflow: auto; flex: 1 1 0 !important; min-height: 8rem; border: 1px solid var(--surface0); border-radius: 6px; }
+  /* Host names stay in view while scrolling sideways through the columns. */
+  .table-wrap :global(.ftable th:first-child),
+  .table-wrap :global(.ftable td:first-child) { position: sticky; left: 0; background: var(--base); z-index: 1; }
+  .table-wrap :global(.ftable th:first-child) { z-index: 2; }
+  .table-wrap :global(.ftable tr.group td:first-child) { background: var(--mantle); }
+  .similar { background: color-mix(in srgb, var(--mauve) 20%, transparent); color: var(--mauve); }
+  .sort { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; white-space: nowrap; display: inline-flex; gap: 0.25rem; align-items: center; }
+  .sort:hover, .sort.on { color: var(--text); }
+  .arr { font-size: 0.6rem; min-width: 0.6rem; }
   .linkish { background: none; border: 0; padding: 0; color: var(--blue); font: inherit; cursor: pointer; }
   .linkish:hover { text-decoration: underline; }
 </style>

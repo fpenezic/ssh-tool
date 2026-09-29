@@ -2,7 +2,7 @@
   // Last facts snapshot for a folder, as four small cards under its Fleet
   // bar. Nothing shows until the folder has been gathered once; the numbers
   // are that run's, not live.
-  import { fleet, TLS_WARN_DAYS } from "./fleetStore.svelte";
+  import { fleet, fleetHostName, TLS_WARN_DAYS } from "./fleetStore.svelte";
 
   interface Props { folderId: string; ids: string[]; label: string; }
   let { folderId, ids, label }: Props = $props();
@@ -35,7 +35,7 @@
       .sort((a, b) => a.d - b.d),
   );
   function nameOf(id: string): string {
-    return snap?.results.find((r) => r.connection_id === id)?.name ?? id;
+    return fleetHostName(id, snap?.results.find((r) => r.connection_id === id)?.name ?? fleet.tls[id]?.name);
   }
 </script>
 
@@ -63,15 +63,20 @@
       {/if}
     {/if}
     {#if certs.length}
-      <div class="card bad">
+      <div class="card bad" title={`From the last TLS check of each host in this folder and its subfolders:\n${certs.map((c) => `${nameOf(c.id)} ${c.d < 0 ? "expired" : `in ${c.d}d`}`).join("\n")}`}>
         <div class="h">TLS</div>
         <div>{certs.slice(0, 3).map((c) => `${nameOf(c.id)} ${c.d < 0 ? "expired" : `in ${c.d}d`}`).join(" · ")}{certs.length > 3 ? ` +${certs.length - 3}` : ""}</div>
+        <div class="acts">
+          <button class="link" onclick={() => fleet.show({ tool: "tls", ids: certs.map((c) => c.id), label: `${label} · expiring`, folderId })}>Check again</button>
+          <button class="link" title="Hides these warnings here and in the tree until the next TLS check of those hosts" onclick={() => fleet.clearTls(certs.map((c) => c.id))}>Clear</button>
+        </div>
       </div>
     {/if}
   </div>
 {/if}
 
 <style>
+  .acts { display: flex; gap: 0.8rem; }
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.5rem; margin-bottom: 0.8rem; }
   .card { background: var(--mantle); border: 1px solid var(--surface0); border-radius: 6px; padding: 0.45rem 0.65rem; font-size: 0.78rem; }
   .card.warn { border-color: color-mix(in srgb, var(--yellow) 45%, transparent); }

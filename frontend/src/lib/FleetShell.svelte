@@ -52,6 +52,11 @@
   .x { background: transparent; border: 0; color: var(--subtext0); font-size: 1.4rem; line-height: 1; cursor: pointer; padding: 0 0.3rem; border-radius: 3px; }
   .x:hover { background: var(--surface0); color: var(--text); }
   .body { padding: 0.8rem 1rem; overflow: auto; flex: 1; min-height: 0; font-size: 0.82rem; }
+  /* A wide dialog is a report: its body stacks, so a scroll box inside it
+     (the facts table) can take the leftover height and keep both of its
+     scrollbars on screen instead of at the far end of a long table. */
+  .modal.wide .body { display: flex; flex-direction: column; }
+  .modal.wide .body > :global(*) { flex-shrink: 0; }
   /* Shared controls for every fleet dialog body and footer. */
   .modal :global(.fbtn) {
     background: var(--surface0); color: var(--text); border: 1px solid var(--surface1);

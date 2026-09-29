@@ -27,6 +27,9 @@ export interface FactsSnapshot {
 }
 
 export interface TlsMark {
+  // Host name at check time, for cards on folders that hold no facts
+  // snapshot to look it up in (older marks lack it).
+  name?: string;
   days_left: number;
   not_after: number;
   port: number;
@@ -90,9 +93,18 @@ class FleetStore {
       if (r.state !== "ok") continue;
       const cur = next[r.connection_id];
       if (!cur || r.days_left < cur.days_left) {
-        next[r.connection_id] = { days_left: r.days_left, not_after: r.not_after, port: r.port, at: Date.now() };
+        next[r.connection_id] = { name: r.name, days_left: r.days_left, not_after: r.not_after, port: r.port, at: Date.now() };
       }
     }
+    this.tls = next;
+    await api.settingsSet("fleet_tls", JSON.stringify(next)).catch(console.warn);
+  }
+
+  // Forget the marks of these hosts (card + tree badge) until the next
+  // check - for certs nobody will renew (lab, self-signed, retired).
+  async clearTls(ids: string[]) {
+    const next = { ...this.tls };
+    for (const id of ids) delete next[id];
     this.tls = next;
     await api.settingsSet("fleet_tls", JSON.stringify(next)).catch(console.warn);
   }
@@ -107,6 +119,20 @@ class FleetStore {
 }
 
 export const fleet = new FleetStore();
+
+// Display name for a fleet host id: the saved connection, else the loaded
+// dynamic entry ("dyn:<id>"), else what the caller last saw.
+export function fleetHostName(id: string, fallback?: string): string {
+  if (id.startsWith("dyn:")) {
+    const eid = id.slice(4);
+    for (const list of Object.values(tree.dynamicEntries)) {
+      const e = list.find((x) => x.id === eid);
+      if (e) return e.name || e.hostname || fallback || id;
+    }
+    return fallback || id;
+  }
+  return tree.connectionById(id)?.name ?? fallback ?? id;
+}
 
 // Every SSH host under a folder, subfolders included: saved connections
 // plus the loaded entries of dynamic (cloud inventory) folders as
