@@ -118,7 +118,9 @@
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.6);
     display: flex; align-items: center; justify-content: center;
-    z-index: 100;
+    /* Raised mid-connection, often from a fleet run or a tool modal
+       (9000-9001); it must sit above them or the run just stalls. */
+    z-index: 9550;
   }
   .modal {
     background: var(--base); color: var(--text);
