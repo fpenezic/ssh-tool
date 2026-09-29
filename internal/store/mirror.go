@@ -113,6 +113,8 @@ var machineLocalSettings = []string{
 	"recent_connections_count",
 	"keyring_legacy_purged_v1",
 	"app_log_tail_enabled",
+	"local_shell_dir",
+	"local_shell_kind",
 }
 
 func machineLocalSettingsPlaceholders() string {

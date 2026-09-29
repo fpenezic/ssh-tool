@@ -3984,13 +3984,7 @@ func (a *App) LocalShellOpen(kind, dir string, cols, rows uint16) (*LocalShellOp
 // in. It is deliberately not resolved to an absolute path here: the WSL
 // shell takes Linux paths that mean nothing to the Windows side.
 func (a *App) localShellDirSetting() string {
-	if a.db == nil {
-		return ""
-	}
-	v, _, err := a.db.GetSetting("local_shell_dir")
-	if err != nil {
-		return ""
-	}
+	v, _ := a.localSettingGet("local_shell_dir")
 	return strings.TrimSpace(v)
 }
 

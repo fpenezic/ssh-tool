@@ -36,6 +36,10 @@ var localStateKeys = map[string]bool{
 	"last_session_tabs_v2":    true, // open-tab snapshot, written on every tab change
 	"window_state_v1":         true, // window geometry, written on move/resize
 	"settings_active_section": true, // last viewed Settings section
+	// The local shell and where it starts name paths and shells of THIS
+	// machine: a WSL path or pwsh means nothing on the Mac that pulls it.
+	"local_shell_dir":  true,
+	"local_shell_kind": true,
 }
 
 type localState struct {
