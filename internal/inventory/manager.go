@@ -74,6 +74,31 @@ func (m *Manager) Start() {
 	}
 }
 
+// ErrVaultLocked means the provider's API token is in a vault that is not
+// unlocked yet.
+var ErrVaultLocked = errors.New("vault locked - unlock it to refresh")
+
+// VaultUnlocked refreshes every dynamic folder in the background. Call it
+// after the vault opens: timer ticks that ran while it was locked skipped
+// token-backed folders, and the next tick can be many minutes away.
+func (m *Manager) VaultUnlocked() {
+	folders, err := m.db.ListDynamicFolders()
+	if err != nil {
+		log.Printf("inventory: ListDynamicFolders: %v", err)
+		return
+	}
+	for _, f := range folders {
+		if id, _ := f.Config["api_token_credential_id"].(string); id == "" {
+			continue // no token, the timer never waited on the vault
+		}
+		go func(folderID string) {
+			if err := m.Refresh(context.Background(), folderID, false); err != nil {
+				log.Printf("inventory: refresh after unlock %s: %v", folderID, err)
+			}
+		}(f.FolderID)
+	}
+}
+
 func (m *Manager) startTimer(f store.DynamicFolder) {
 	m.mu.Lock()
 	if cancel, ok := m.cancels[f.FolderID]; ok {
@@ -143,6 +168,14 @@ func (m *Manager) Refresh(ctx context.Context, folderID string, force bool) erro
 	}
 	cfg, err := m.resolveSecrets(f.Config)
 	if err != nil {
+		// The boot timer fires before a passphrase unlock (or the
+		// auto-unlock sidecar) has opened the vault. That is a wait,
+		// not a failure: keep the cache and the folder's status as they
+		// are; VaultUnlocked refreshes every folder once the token is
+		// readable. A user-forced refresh still reports it.
+		if errors.Is(err, ErrVaultLocked) && !force {
+			return nil
+		}
 		setError(err.Error())
 		return err
 	}
@@ -348,6 +381,9 @@ func (m *Manager) resolveSecrets(cfg map[string]any) (map[string]any, error) {
 			return nil, fmt.Errorf("vault get token secret: %w", err)
 		}
 		if !ok {
+			if m.vault.Status().Kind == creds.StatusLocked {
+				return nil, ErrVaultLocked
+			}
 			return nil, fmt.Errorf("token secret not in vault for credential %s", credID)
 		}
 		out["api_token_secret"] = secret

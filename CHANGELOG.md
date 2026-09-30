@@ -7,6 +7,18 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Fixes
+
+- Dynamic folders whose API token lives in the vault no longer report
+  "token secret not in vault" right after start. The background refresh now
+  waits while the vault is locked and runs for every such folder the moment
+  it is unlocked (by passphrase or auto-unlock). A manual "Refresh now" on a
+  locked vault still says so.
+- Clicking the update notification or the tray icon no longer takes a
+  maximised window down to its normal size on Windows.
+
 ## [0.106.0] - Ignore failed units by folder, local shell tabs, sortable facts
 
 ### System status

@@ -1928,6 +1928,7 @@ func (a *App) VaultUnlock(passphrase string, rememberOnMachine bool) error {
 		return err
 	}
 	a.recordAudit("vault.unlock", "", map[string]string{"sidecar": boolStr(rememberOnMachine)})
+	a.inventory.VaultUnlocked()
 	return nil
 }
 
@@ -1939,6 +1940,7 @@ func (a *App) VaultAutoUnlock() (bool, error) {
 	}
 	if ok {
 		a.recordAudit("vault.auto_unlock", "", nil)
+		a.inventory.VaultUnlocked()
 	}
 	return ok, nil
 }
@@ -4907,7 +4909,12 @@ func (a *App) ShowAndFocusMainWindow() {
 		application.Get().Show()
 	}
 	w.Show()
-	w.Restore() // no-op if not minimised; un-minimises otherwise
+	// Restore only a minimised window. On Windows Restore is SW_RESTORE,
+	// which also takes a maximised window down to its normal size - a
+	// notification or tray click used to un-maximise the app.
+	if w.IsMinimised() {
+		w.Restore()
+	}
 	w.Focus()
 	w.Flash(false)
 	a.windowHidden.Store(false)
@@ -8535,7 +8542,9 @@ func (a *App) WindowOpenLogtail(sessionID string) (string, error) {
 	name := fmt.Sprintf("logtail-%s", sessionID)
 	if w, ok := a.app.Window.GetByName(name); ok {
 		w.Show()
-		w.Restore()
+		if w.IsMinimised() {
+			w.Restore()
+		}
 		w.Focus()
 		return name, nil
 	}
