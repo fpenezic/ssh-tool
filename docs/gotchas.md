@@ -1307,6 +1307,29 @@ everything mobile is behind a build tag or an `isMobile` check.
     `authorizedKeyRe`, which rules out quotes and options, so the key
     can sit inside single quotes in the remote command.
 
+79. **Failed-unit ignore scopes are plain strings, and a local shell keys
+    on its display name.** `failedIgnore.svelte.ts` stores
+    `failed_units_ignore:<scope>` for a connection id, `folder:<id>` or
+    `local:<shell>`. A local shell has no connection, so StatusBar builds
+    `local:` + `ServerStats.shell` ("WSL Ubuntu"): renaming that label, or
+    a distro rename, orphans the list. A dynamic host finds its folder
+    through `tree.dynamicEntries` (same limit as 77), so a tab restored
+    before its folder was expanded only honours the host scope.
+
+80. **Local-shell System status tabs reuse the SSH parsers through a
+    `RunFunc`.** `TopProcessesVia` / `ListServicesVia` / `UnitLogVia`
+    (internal/ssh/sysinfo.go) take any runner; `local.Session.RunSysinfo`
+    feeds them through `wsl.exe -e sh -c` or `sh -c`. Only WSL and Linux
+    qualify (`SupportsSysinfo`) - macOS ps has no `--sort`. The actions
+    (kill, restart) stay SSH-only; nothing escalates locally.
+
+81. **Modal z-index ladder.** Fleet dialogs and System status 9000-9001,
+    ConfirmModal / PromptModal 9500, host key and auth prompts 9550, quit
+    prompt 9600. A prompt raised mid-connection must sit above every tool
+    window, or a Fleet run that hits it looks hung. A wide `FleetShell`
+    body is a flex column (children `flex-shrink: 0`), so an inner scroll
+    box needs `flex: 1 1 0` + `min-height` to keep its scrollbars on screen.
+
 ---
 
 # Archive
