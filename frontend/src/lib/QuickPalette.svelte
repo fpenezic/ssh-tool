@@ -25,6 +25,7 @@
   import { toast } from "./toast.svelte.ts";
   import { claimKeyboard } from "./paneFocus";
   import { workspaces } from "./workspaces.svelte";
+  import { quickConnect } from "./quickConnect.svelte";
   import type { Component } from "svelte";
 
   interface Props {
@@ -299,6 +300,13 @@
         haystacks: [a.title, ...(a.keywords ?? [])],
       });
     }
+    out.push({
+      kind: "action",
+      workspace: false,
+      action: { id: "quick-connect", title: "Quick connect...", hint: "open", run: () => quickConnect.show() },
+      label: "Quick connect...",
+      haystacks: ["quick connect", "ssh", "adhoc", "temporary"],
+    });
     for (const w of workspaces.list) {
       out.push({
         kind: "action",
@@ -432,6 +440,23 @@
       }
     }
     out.sort((a, b) => a.score - b.score);
+    // "root@10.0.0.5" or "admin@host:2222" reads as an address, not a search:
+    // offer a quick connect to exactly that, first.
+    const typed = q.trim();
+    if (!actionsOnly && /^[^\s@]+@[^\s@]+$/.test(typed)) {
+      out.unshift({
+        entry: {
+          kind: "action",
+          workspace: false,
+          action: { id: "quick-connect-typed", title: `Quick connect to ${typed}`, hint: "open", run: () => quickConnect.show(typed) },
+          label: `Quick connect to ${typed}`,
+          haystacks: [],
+        },
+        score: -100,
+        matchAgainst: `Quick connect to ${typed}`,
+        positions: [],
+      });
+    }
     return out.slice(0, 50);
   }
 

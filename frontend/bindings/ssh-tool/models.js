@@ -4154,6 +4154,114 @@ export class ProfileStats {
 }
 
 /**
+ * QuickConnectInput is what the quick connect dialog sends.
+ */
+export class QuickConnectInput {
+    /**
+     * Creates a new QuickConnectInput instance.
+     * @param {Partial<QuickConnectInput>} [$$source = {}] - The source object to create the QuickConnectInput.
+     */
+    constructor($$source = {}) {
+        if (!("target" in $$source)) {
+            /**
+             * [user@]host[:port], [user@][v6addr]:port
+             * @member
+             * @type {string}
+             */
+            this["target"] = "";
+        }
+        if (!("credential_id" in $$source)) {
+            /**
+             * optional vault credential
+             * @member
+             * @type {string}
+             */
+            this["credential_id"] = "";
+        }
+        if (!("folder_id" in $$source)) {
+            /**
+             * optional folder to inherit from
+             * @member
+             * @type {string}
+             */
+            this["folder_id"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new QuickConnectInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {QuickConnectInput}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new QuickConnectInput(/** @type {Partial<QuickConnectInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * QuickConnectResult carries the synthetic connection id and the display
+ * fields the frontend puts on the tab.
+ */
+export class QuickConnectResult {
+    /**
+     * Creates a new QuickConnectResult instance.
+     * @param {Partial<QuickConnectResult>} [$$source = {}] - The source object to create the QuickConnectResult.
+     */
+    constructor($$source = {}) {
+        if (!("session_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["session_id"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["network_via"] = undefined;
+        }
+        if (!("connection_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["connection_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("hostname" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hostname"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new QuickConnectResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {QuickConnectResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new QuickConnectResult(/** @type {Partial<QuickConnectResult>} */($$parsedSource));
+    }
+}
+
+/**
  * RecordingState is the payload of the "recording_changed" event and
  * the return of RecordingStart/Stop. Path is where the .cast file
  * lives (final, even after stop).

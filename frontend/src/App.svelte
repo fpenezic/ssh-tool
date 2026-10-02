@@ -44,6 +44,7 @@
   import FolderPicker from "./lib/FolderPicker.svelte";
   import DeleteConfirm from "./lib/DeleteConfirm.svelte";
   import PromptModal from "./lib/PromptModal.svelte";
+  import QuickConnectModal from "./lib/QuickConnectModal.svelte";
   import ConfirmModal from "./lib/ConfirmModal.svelte";
   import PresenceTakeoverModal from "./lib/PresenceTakeoverModal.svelte";
   import { connectionActions } from "./lib/connectionActions.svelte";
@@ -1574,6 +1575,7 @@
   {/if}
   <RecordingsModal />
   <PromptModal />
+  <QuickConnectModal />
   <ConfirmModal />
   <PresenceTakeoverModal />
 

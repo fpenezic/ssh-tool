@@ -69,6 +69,8 @@ export {
     PluginInfo,
     ProbeResult,
     ProfileStats,
+    QuickConnectInput,
+    QuickConnectResult,
     RecordingState,
     ReleaseNotes,
     RemoteOwner,

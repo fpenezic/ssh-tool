@@ -27,6 +27,13 @@ a prerelease upstream.
 
 ### Connections
 
+- Quick connect: SSH to a typed-in `user@host[:port]` without saving a
+  connection, from the tab bar's + menu or by typing the address into
+  Ctrl+K. It can borrow a folder's jump host, credential and network
+  profile, so a one-off box behind a bastion is one step. Quick tabs
+  reconnect and split like any other, stay out of restore and workspaces,
+  and "Save as connection" on the tab keeps one after all. Recent targets
+  are suggested, on this machine only.
 - Adding a tag suggests the tags already in use, most used first, as you
   type (or as soon as the field gets focus). Arrow keys and Enter pick
   one, so the same tag is not spelled three ways across the tree.

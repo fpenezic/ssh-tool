@@ -794,6 +794,32 @@ certificate your OS trusts.
 - Each session lives in the **Terminal** view; the top nav grows a
   Terminal tab once at least one session exists.
 
+### Quick connect
+
+For a host you only need once. Open it from the tab bar's **+** menu
+(**Quick connect...**), or type an address such as `root@203.0.113.10` or
+`admin@host.example.com:2222` into Ctrl+K and pick **Quick connect to ...**.
+
+- **Host** - `[user@]host[:port]`; an IPv6 address takes a port only in
+  brackets (`ops@[2001:db8::1]:2200`).
+- **Inherit from folder** (optional) - the connection behaves as if it sat
+  in that folder: its jump host, credential, network profile and other
+  inherited settings apply. Handy for a one-off box behind a customer's
+  bastion.
+- **Credential** (optional) - a vault credential. Without one, the agent
+  and default keys are tried, then you are asked for a password.
+
+Nothing is written to the profile and nothing syncs. The tab carries a
+**quick** marker; reconnect and splitting work as usual, but quick tabs are
+left out of reopen-last-session, workspaces and Ctrl+Shift+T. Right-click
+the tab for **Save as connection...** to keep it: a saved connection with
+the same host, port, user, folder and credential is created and opened in
+the editor, and the live tab now belongs to it.
+
+The last ten targets you typed are suggested in the Host field, on this
+machine only (address, folder and credential choice - no passwords). The x
+on a suggestion forgets it.
+
 ### Tabs
 
 - Tab bar **wraps** to multiple rows when names spill past a single

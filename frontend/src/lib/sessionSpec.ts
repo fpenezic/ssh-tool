@@ -72,6 +72,9 @@ export function specForSession(sessionId: string): SessionSpec | null {
     }
     return { kind: "local", shellKind: sess.hostname };
   }
+  // A quick connect is not saved on purpose; restoring it on the next start
+  // (or saving it into a workspace) would be saving it by the back door.
+  if (sess.connectionId.startsWith("quick:")) return null;
   if (sess.connectionId.startsWith("dyn:")) {
     const entryId = sess.connectionId.slice(4);
     const dyn = dynEntryFor(entryId, sess.hostname, sess.name);

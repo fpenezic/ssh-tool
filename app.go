@@ -57,6 +57,9 @@ import (
 
 // App is the root service exposed to the frontend.
 type App struct {
+	// quick holds quick-connect targets ("quick:<uuid>") for reconnect and
+	// pane splits; they are never written to the store. See app_quick.go.
+	quick quickConnStore
 	// osDarkMode caches the desktop's colour-scheme preference as
 	// reported by the platform (the xdg-desktop-portal on Linux), which
 	// is more reliable than prefers-color-scheme in the webview: on KDE
@@ -1135,6 +1138,30 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 		syntheticConn.Overrides.JumpHost = buildJumpChainFromHops([]string{jumpHostOverride}, effectiveJumpCred)
 	}
 
+	return a.connectSynthetic(syntheticConn, folders, entry.Name, entry.Hostname, overrideCredentialID, overrideUsername, overridePassword,
+		func(sessionID string, settings *store.ResolvedSettings) {
+			dynUser := ""
+			if settings.Username != nil {
+				dynUser = *settings.Username
+			}
+			a.recordAudit("ssh.connect.dynamic", "dyn:"+entryID, map[string]string{
+				"session_id": sessionID,
+				"folder_id":  folderID,
+				"host":       settings.Hostname,
+				"port":       strconv.Itoa(int(settings.Port)),
+				"user":       dynUser,
+				"name":       entry.Name,
+			})
+		})
+}
+
+// connectSynthetic dials a connection that has no row in the store - a
+// dynamic-inventory host or a quick connect - and wires the session up like
+// a saved one (pool, metadata, auto-reconnect, close cleanup). syntheticConn
+// carries the id the frontend and reconnect key on ("dyn:<entry>",
+// "quick:<uuid>") and the folder it inherits from. audit writes the
+// kind-specific connect record.
+func (a *App) connectSynthetic(syntheticConn store.Connection, folders []store.Folder, name, hostname, overrideCredentialID, overrideUsername, overridePassword string, audit func(sessionID string, settings *store.ResolvedSettings)) (*SshConnectResult, error) {
 	settings := resolver.ResolveWith(syntheticConn, folders)
 
 	// Per-attempt credential override for dynamic entries.
@@ -1184,15 +1211,15 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 	defer cancel()
 	sess, err := sshlayer.Connect(ctx, a.db, a.vault, &settings, sink, a.makeHostKeyCallback(), a.makeAlgoLookup(), ct, progress)
 	if err != nil {
-		log.Printf("ssh connect dynamic %s (%s): %v", entry.Name, settings.Hostname, err)
+		log.Printf("ssh connect %s %s (%s): %v", syntheticConn.ID, name, settings.Hostname, err)
 		return nil, err
 	}
 	a.pool.Add(sess)
 	a.metaMu.Lock()
 	a.sessionMeta[sess.ID] = sessionMetaEntry{
 		connectionID: connectionID,
-		name:         entry.Name,
-		hostname:     entry.Hostname,
+		name:         name,
+		hostname:     hostname,
 	}
 	a.metaMu.Unlock()
 	a.syncForegroundService()
@@ -1249,18 +1276,7 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 			a.spawnReconnect(sessionID, connectionID)
 		}
 	})
-	dynUser := ""
-	if settings.Username != nil {
-		dynUser = *settings.Username
-	}
-	a.recordAudit("ssh.connect.dynamic", "dyn:"+entryID, map[string]string{
-		"session_id": sess.ID,
-		"folder_id":  folderID,
-		"host":       settings.Hostname,
-		"port":       strconv.Itoa(int(settings.Port)),
-		"user":       dynUser,
-		"name":       entry.Name,
-	})
+	audit(sess.ID, &settings)
 	return &SshConnectResult{SessionID: sess.ID, NetworkVia: a.wgTrackSession(sess, &settings)}, nil
 }
 
@@ -6278,6 +6294,13 @@ func (a *App) resolveAnyConnection(connectionID string) (*store.ResolvedSettings
 // host while pinned connections worked). The entry row still knows its
 // folder, which is the only other thing the dynamic connect path needs.
 func (a *App) reconnectConnect(connID string) (*SshConnectResult, error) {
+	if strings.HasPrefix(connID, "quick:") {
+		c, ok := a.quick.get(connID)
+		if !ok {
+			return nil, fmt.Errorf("quick connection not found")
+		}
+		return a.connectQuick(c)
+	}
 	entryID, isDyn := strings.CutPrefix(connID, "dyn:")
 	if !isDyn {
 		return a.SshConnect(connID)

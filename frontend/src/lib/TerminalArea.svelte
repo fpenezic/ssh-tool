@@ -16,6 +16,7 @@
   import { IconBroadcast, IconFolder, IconBot, IconHost, IconCopy, IconWorkspace, IconPopOut, IconSplitH, IconSplitV, IconX, IconGlobe, IconPlay, IconStop, IconExternalLink, IconEyeOff, IconPencil, IconSave } from "./iconMap";
   import { workspaces, workspaceColor } from "./workspaces.svelte";
   import { confirmModal } from "./confirmModal.svelte";
+  import { quickConnect, isQuickId } from "./quickConnect.svelte";
   import { mcpLevelTitle } from "./mcpLevel";
   import Icon from "./Icon.svelte";
   import BroadcastManager from "./BroadcastManager.svelte";
@@ -236,7 +237,9 @@
     const reopenIds: string[] = [];
     for (const sid of sessionsToKill) {
       const sess = sessions.tabs.find((s) => s.sessionId === sid);
-      if (sess && sess.kind !== "local" && sess.connectionId) {
+      // Quick connects are left out: they are deliberately not saved, and
+      // reopen dials by saved connection id.
+      if (sess && sess.kind !== "local" && sess.connectionId && !isQuickId(sess.connectionId)) {
         reopenIds.push(sess.connectionId);
       }
     }
@@ -616,6 +619,22 @@
   // Returns the tab's connection id IF that connection has VNC enabled
   // and the tab isn't already a VNC console - so a right-click on an SSH
   // tab of a VNC-capable host can open the desktop. null otherwise.
+  // The first pane of a tab that is a quick connect (not saved), if any.
+  function tabQuickSession(tabId: string): string | null {
+    const t = paneTabs.tabs.find((x) => x.tabId === tabId);
+    if (!t) return null;
+    let found: string | null = null;
+    function walk(n: PaneNodeType) {
+      if (found) return;
+      if (n.kind === "pane") {
+        const s = sessions.tabs.find((x) => x.sessionId === n.sessionId);
+        if (s && isQuickId(s.connectionId)) found = s.sessionId;
+      } else { walk(n.a); walk(n.b); }
+    }
+    walk(t.root);
+    return found;
+  }
+
   function tabVncConnId(tabId: string): string | null {
     const tab = paneTabs.tabs.find((t) => t.tabId === tabId);
     if (!tab || tab.locked) return null; // locked = already a VNC tab
@@ -1232,6 +1251,9 @@
           title={st.hint}
         >
           <span class="dot" style="background: {st.color}"></span>
+          {#if tabQuickSession(t.tabId)}
+            <span class="quick-chip" title="Quick connect - not saved. Right-click to save as a connection.">quick</span>
+          {/if}
           {#if t.groupName}
             <span
               class="group-chip"
@@ -1360,6 +1382,12 @@
       </button>
       <button
         role="menuitem"
+        onclick={() => { closeNewTabMenu(); quickConnect.show(); }}
+      >
+        Quick connect...
+      </button>
+      <button
+        role="menuitem"
         onclick={() => { closeNewTabMenu(); newTabActions.openLocalShell?.(); }}
       >
         New {newTabActions.localShellLabel}
@@ -1434,6 +1462,11 @@
         {@const pc = tabProxmoxConsole(ctxMenu.tabId)!}
         <button onclick={() => { connectionActions.openVncProxmox(pc.folderId, pc.entryId); closeCtxMenu(); }}>
           Open VNC console
+        </button>
+      {/if}
+      {#if tabQuickSession(ctxMenu.tabId)}
+        <button onclick={() => { quickConnect.saveAsConnection(tabQuickSession(ctxMenu!.tabId)!); closeCtxMenu(); }}>
+          <IconSave size={13} /> Save as connection…
         </button>
       {/if}
       <button onclick={() => { renameTab(ctxMenu!.tabId); closeCtxMenu(); }}>
@@ -1729,6 +1762,18 @@
     cursor: pointer;
   }
   .ws-frame-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quick-chip {
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--peach);
+    border: 1px solid color-mix(in srgb, var(--peach) 55%, transparent);
+    border-radius: 3px;
+    padding: 0 3px;
+    margin-right: 3px;
+    flex: none;
+  }
   .ws-frame-label.compact { padding: 0 5px; }
   .ws-frame-label.drop-hover { background: color-mix(in srgb, var(--ws-color) 45%, var(--crust)); }
   .ws-dirty {

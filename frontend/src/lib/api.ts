@@ -1287,6 +1287,12 @@ export const api = {
       tags: string[];
       raw?: any;
     }>>,
+  sshQuickConnect: (input: { target: string; credential_id?: string; folder_id?: string }) =>
+    (G.SshQuickConnect({ target: input.target, credential_id: input.credential_id ?? "", folder_id: input.folder_id ?? "" } as any) as unknown as Promise<{
+      session_id: string; network_via?: string; connection_id: string; name: string; hostname: string;
+    }>).then(recordVia),
+  quickConnectionSave: (quickId: string, name: string) =>
+    G.QuickConnectionSave(quickId, name) as unknown as Promise<Connection>,
   sshConnectDynamic: (folderId: string, entryId: string) =>
     (G.SshConnectDynamic(folderId, entryId) as unknown as Promise<{ session_id: string }>).then(recordVia),
   sshConnectDynamicWithOverride: (folderId: string, entryId: string, overrideCredentialId: string) =>
