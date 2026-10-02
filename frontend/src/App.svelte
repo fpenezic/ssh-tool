@@ -174,7 +174,7 @@
       if (view.tab !== "terminal") return;
       const n = Number(e.key);
       const ok = n === 9
-        ? paneTabs.activateIndex(paneTabs.tabs.length - 1)
+        ? paneTabs.activateIndex(paneTabs.visibleTabs.length - 1)
         : paneTabs.activateIndex(n - 1);
       if (ok) {
         e.preventDefault();

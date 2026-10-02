@@ -2,8 +2,10 @@
 // can switch between.
 //   - Serialise: every open tab's pane tree, one session spec per pane
 //     (split directions and ratios included), plus title + group metadata.
-//   - Restore: disconnect everything open, reconnect each pane, rebuild the
-//     tabs with their layout and group label.
+//   - Restore: reconnect each pane and rebuild the tabs with their layout
+//     and group label, next to whatever is already open. The restored tabs
+//     carry the workspace id and sit in their own frame in the tab bar;
+//     "Save changes" writes that frame, not every open tab.
 //   - Persist via backend store (workspaces table, migration 10).
 //
 // The serialiser writes a JSON shape the backend treats as opaque
@@ -18,7 +20,7 @@
 // sessionSpec.ts, both shared with reopen-last-session.
 
 import { api, type Workspace } from "./api";
-import { paneTabs, sessions, view } from "./stores.svelte";
+import { paneTabs, sessions, view, type PaneTab } from "./stores.svelte";
 import {
   serializePaneSpec,
   restorePaneSpec,
@@ -45,18 +47,67 @@ export interface WorkspaceLayout {
   tabs: TabSpec[];
 }
 
+const COMPACT_KEY = "ws_label_compact";
+function readCompact(): boolean {
+  try { return localStorage.getItem(COMPACT_KEY) === "1"; } catch { return false; }
+}
+
 class WorkspaceStore {
   list = $state<Workspace[]>([]);
   loading = $state(false);
   error = $state<string | null>(null);
-  // The workspace currently open, if any. Set by open() and by saving the
-  // current tabs under a new name; cleared when that workspace is deleted.
-  // Lets the UI offer "Save changes" against the right one instead of making
-  // the user find it in a list and confirm an overwrite.
+  // The workspace last opened or saved into. Set by open() and the save
+  // paths; cleared when that workspace is deleted or closed.
   activeId = $state<string | null>(null);
 
+  // The workspace "Save changes" targets: the one whose frame holds the
+  // focused tab, else the last one opened while its frame is still up.
   get active(): Workspace | null {
-    return this.list.find((w) => w.id === this.activeId) ?? null;
+    const focused = paneTabs.tabs.find((t) => t.tabId === paneTabs.activeTabId)?.workspaceId;
+    const id = focused && this.isOpen(focused) ? focused
+      : this.activeId && this.isOpen(this.activeId) ? this.activeId
+      : null;
+    return id ? this.byId(id) : null;
+  }
+
+  // Workspaces whose frame changed since the last save or open (a tab was
+  // dragged in or out). Splits and renames inside the frame do not count:
+  // this is only the "membership changed, remember to save" hint.
+  dirty = $state<Record<string, true>>({});
+
+  markDirty(...ids: (string | null | undefined)[]) {
+    const next = { ...this.dirty };
+    for (const id of ids) if (id) next[id] = true;
+    this.dirty = next;
+  }
+
+  private clearDirty(id: string) {
+    if (!this.dirty[id]) return;
+    const { [id]: _, ...rest } = this.dirty;
+    this.dirty = rest;
+  }
+
+  // Frame labels shown as just the icon. A per-machine look preference, so
+  // browser storage, guarded: it may be unavailable.
+  compactLabels = $state(readCompact());
+
+  setCompactLabels(on: boolean) {
+    this.compactLabels = on;
+    try { localStorage.setItem(COMPACT_KEY, on ? "1" : "0"); } catch { /* ignore */ }
+  }
+
+  byId(id: string | undefined | null): Workspace | null {
+    if (!id) return null;
+    return this.list.find((w) => w.id === id) ?? null;
+  }
+
+  // Tabs in this workspace's frame, in bar order.
+  tabsOf(id: string): PaneTab[] {
+    return paneTabs.tabs.filter((t) => t.workspaceId === id);
+  }
+
+  isOpen(id: string): boolean {
+    return paneTabs.tabs.some((t) => t.workspaceId === id);
   }
 
   async load() {
@@ -76,8 +127,12 @@ class WorkspaceStore {
   // every pane is unrestorable (a lone VNC console) is skipped rather than
   // saved as an empty entry.
   serializeCurrent(): WorkspaceLayout {
+    return this.serializeTabs(paneTabs.tabs);
+  }
+
+  serializeTabs(from: PaneTab[]): WorkspaceLayout {
     const tabs: TabSpec[] = [];
-    for (const t of paneTabs.tabs) {
+    for (const t of from) {
       const spec = serializePaneSpec(t.root, (sid) => specForSession(sid));
       if (!spec) continue;
       tabs.push({
@@ -96,7 +151,12 @@ class WorkspaceStore {
     const layout = this.serializeCurrent();
     const created = await api.workspaceCreate(name, JSON.stringify(layout));
     await this.load();
-    if (created) this.activeId = created.id;
+    if (created) {
+      // Everything that was saved is now this workspace's frame.
+      paneTabs.setWorkspace(paneTabs.tabs.map((t) => t.tabId), created.id);
+      this.activeId = created.id;
+      this.dirty = {};
+    }
     return created;
   }
 
@@ -118,28 +178,53 @@ class WorkspaceStore {
     return this.list.find((w) => w.name.toLowerCase() === n) ?? null;
   }
 
+  // An open workspace gets its own frame written back. One that is not open
+  // takes every open tab, which then becomes its frame - the same as
+  // "Save current as" under an existing name.
   async overwrite(id: string, name: string): Promise<Workspace | null> {
-    const layout = this.serializeCurrent();
+    const open = this.isOpen(id);
+    const from = open ? this.tabsOf(id) : paneTabs.tabs;
+    const layout = this.serializeTabs(from);
     const updated = await api.workspaceUpdate(id, name, JSON.stringify(layout));
     await this.load();
-    // Saving into a workspace makes it the one you are working in, whether or
-    // not it was open before.
+    if (!open) paneTabs.setWorkspace(from.map((t) => t.tabId), id);
     this.activeId = id;
+    this.clearDirty(id);
     return updated;
+  }
+
+  // Disconnect and remove the workspace's frame. The tab bar passes its own
+  // closeTab so a closed workspace tab goes through the same teardown (and
+  // Ctrl+Shift+T stack) as any other tab.
+  async close(id: string, closeTab: (tabId: string) => Promise<void> | void) {
+    for (const t of this.tabsOf(id)) await closeTab(t.tabId);
+    if (this.activeId === id) this.activeId = null;
+    this.clearDirty(id);
   }
 
   async delete(id: string) {
     await api.workspaceDelete(id);
     if (this.activeId === id) this.activeId = null;
+    // Its tabs stay open, just no longer framed.
+    paneTabs.setWorkspace(this.tabsOf(id).map((t) => t.tabId), undefined);
     await this.load();
   }
 
-  // Restore a workspace: disconnect every open session (sessions are
-  // owned by the previous workspace - keeping them around would clutter
-  // the bar), then rebuild each saved tab, pane tree included.
+  // Restore a workspace next to the open tabs, pane trees included. Already
+  // open: focus its frame instead of connecting everything a second time.
   async open(id: string) {
     const ws = this.list.find((w) => w.id === id);
     if (!ws) throw new Error("workspace not found");
+    if (this.opening.has(id)) return; // a second click while it connects
+    const already = this.tabsOf(id);
+    if (already.length) {
+      const first = already.find((t) => !t.hidden) ?? already[0];
+      if (first.hidden) paneTabs.setHidden(first.tabId, false);
+      paneTabs.activateTab(first.tabId);
+      view.setTab("terminal");
+      this.activeId = id;
+      return;
+    }
     let layout: WorkspaceLayout;
     try {
       layout = JSON.parse(ws.layout_json);
@@ -154,27 +239,24 @@ class WorkspaceStore {
       return;
     }
 
-    // Disconnect every existing tab so the restored set has the floor.
-    // Backend keeps the SSH chain alive but our pane bookkeeping
-    // clears.
-    for (const t of [...paneTabs.tabs]) {
-      const leaves: string[] = [];
-      const walk = (n: any): void => {
-        if (n.kind === "pane") leaves.push(n.sessionId);
-        else { walk(n.a); walk(n.b); }
-      };
-      walk(t.root);
-      for (const sid of leaves) {
-        try { await api.sshDisconnect(sid); } catch { /* ignore */ }
-        sessions.remove(sid);
-      }
-      paneTabs.removeTab(t.tabId);
-    }
-
     // Rebuild each tab: one connect per pane, then the tree around them.
     // A pane that cannot be reconnected is dropped and its split collapsed,
     // so one dead host costs a pane rather than the whole tab.
     beginRestore();
+    this.opening.add(id);
+    try {
+      await this.restoreTabs(id, tabs);
+    } finally {
+      this.opening.delete(id);
+    }
+    this.activeId = id;
+    try { await api.workspaceTouchLastOpened(id); } catch { /* ignore */ }
+    await this.load();
+  }
+
+  private opening = new Set<string>();
+
+  private async restoreTabs(id: string, tabs: TabSpec[]) {
     let opened = 0;
     for (const spec of tabs) {
       const built = await restorePaneSpec(spec, (one) => connectSpec(one));
@@ -187,6 +269,7 @@ class WorkspaceStore {
         root: built.root,
         groupName: spec.groupName,
         groupColor: spec.groupColor,
+        workspaceId: id,
       });
       if (spec.titleCustom && spec.title) paneTabs.setTitle(tab.tabId, spec.title, true);
       if (!spec.title) {
@@ -196,11 +279,16 @@ class WorkspaceStore {
       opened++;
     }
     if (opened > 0) view.setTab("terminal");
-
-    this.activeId = id;
-    try { await api.workspaceTouchLastOpened(id); } catch { /* ignore */ }
-    await this.load();
   }
 }
 
 export const workspaces = new WorkspaceStore();
+
+// Frame colour for a workspace, stable per id. Workspaces have no colour of
+// their own; hashing the id keeps two open frames apart without a setting.
+const FRAME_COLORS = ["--mauve", "--teal", "--peach", "--sapphire", "--pink", "--green", "--yellow", "--flamingo"];
+export function workspaceColor(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return `var(${FRAME_COLORS[h % FRAME_COLORS.length]})`;
+}

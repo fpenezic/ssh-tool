@@ -62,6 +62,9 @@ export interface TabSpec {
   titleCustom?: boolean;
   groupName?: string;
   groupColor?: string;
+  // Only in the reopen-last-session snapshot, so a restart keeps the
+  // workspace frames. A workspace's own layout never stores it.
+  workspaceId?: string;
   sessions: SessionSpec[];
   root: SpecNode;
 }

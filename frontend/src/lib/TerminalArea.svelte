@@ -13,7 +13,9 @@
   import { broadcast } from "./broadcast.svelte";
   import { recording } from "./recording.svelte";
   import { connectionActions } from "./connectionActions.svelte";
-  import { IconBroadcast, IconFolder, IconBot, IconHost, IconCopy, IconWorkspace, IconPopOut, IconSplitH, IconSplitV, IconX, IconGlobe, IconPlay, IconStop, IconExternalLink, IconEyeOff, IconPencil } from "./iconMap";
+  import { IconBroadcast, IconFolder, IconBot, IconHost, IconCopy, IconWorkspace, IconPopOut, IconSplitH, IconSplitV, IconX, IconGlobe, IconPlay, IconStop, IconExternalLink, IconEyeOff, IconPencil, IconSave } from "./iconMap";
+  import { workspaces, workspaceColor } from "./workspaces.svelte";
+  import { confirmModal } from "./confirmModal.svelte";
   import { mcpLevelTitle } from "./mcpLevel";
   import Icon from "./Icon.svelte";
   import BroadcastManager from "./BroadcastManager.svelte";
@@ -349,6 +351,87 @@
     queueMicrotask(clampCtxMenu);
   }
 
+  // ---------- workspace frames ----------
+
+  // Tabs in the bar, in order. A run of tabs that share an open workspace is
+  // drawn as one frame: a label in front, a border around the run.
+  const visTabs = $derived(paneTabs.tabs.filter((t) => !t.hidden));
+
+  // The workspace a tab is framed by, or null. A stale id (workspace deleted
+  // since the tab was restored) draws no frame.
+  function frameOf(t: { workspaceId?: string } | undefined): string | null {
+    const id = t?.workspaceId;
+    return id && workspaces.byId(id) ? id : null;
+  }
+
+  function tabFrame(tabId: string): string | null {
+    return frameOf(paneTabs.tabs.find((x) => x.tabId === tabId));
+  }
+
+  let wsMenu = $state<{ id: string; x: number; y: number } | null>(null);
+  let wsLabelDropHover = $state<string | null>(null);
+
+  function openWsMenu(e: MouseEvent, id: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    wsMenu = { id, x: e.clientX, y: e.clientY };
+  }
+
+  async function wsSave(id: string) {
+    const w = workspaces.byId(id);
+    wsMenu = null;
+    if (!w) return;
+    try {
+      await workspaces.overwrite(w.id, w.name);
+      toast.ok(`Saved "${w.name}"`);
+    } catch (e: any) {
+      toast.err(`Save failed: ${e?.message ?? e}`);
+    }
+  }
+
+  // Frame membership follows the drop target: dropped onto a framed tab it
+  // joins that frame, onto an unframed tab it leaves its frame. Both frames
+  // touched get the unsaved marker; saving stays an explicit step.
+  function adoptFrame(tabId: string, target: string | null) {
+    const prev = paneTabs.tabs.find((x) => x.tabId === tabId)?.workspaceId ?? null;
+    if (prev === target) return;
+    paneTabs.setWorkspace([tabId], target ?? undefined);
+    workspaces.markDirty(prev, target);
+  }
+
+  function moveIntoFrame(tabIds: string[], id: string | undefined) {
+    const before = new Set(tabIds.map((x) => paneTabs.tabs.find((t) => t.tabId === x)?.workspaceId));
+    paneTabs.moveToWorkspace(tabIds, id);
+    workspaces.markDirty(id, ...before);
+  }
+
+  // Closing a frame whose tabs changed since the last save asks first, with
+  // saving pre-ticked: the frame is gone after the close, so an unsaved
+  // change cannot be saved later.
+  async function wsClose(id: string) {
+    wsMenu = null;
+    const w = workspaces.byId(id);
+    if (w && workspaces.dirty[id]) {
+      const r = await confirmModal.show({
+        title: `Close workspace "${w.name}"?`,
+        message: "Tabs were added to or removed from this workspace since it was last saved.",
+        okLabel: "Close",
+        checkboxLabel: "Save changes to the workspace first",
+        checked: true,
+      });
+      if (!r.ok) return;
+      if (r.checked) {
+        try {
+          await workspaces.overwrite(w.id, w.name);
+        } catch (e: any) {
+          toast.err(`Save failed, workspace left open: ${e?.message ?? e}`);
+          return;
+        }
+      }
+    }
+    await workspaces.close(id, closeTab);
+  }
+
   // ---------- new-tab ("+") menu ----------
 
   // The "+" offers the two ways to start a tab. Connect comes first: this
@@ -627,6 +710,20 @@
   async function onTabBarDrop(e: DragEvent) {
     if (isDetachedWindow) return;
     e.preventDefault();
+    // A tab of this window dropped on the empty part of the bar: to the end,
+    // out of any workspace frame.
+    if (drag.tabId && paneTabs.tabs.some((t) => t.tabId === drag.tabId)) {
+      const id = drag.tabId;
+      paneTabs.moveTabBefore(id, null);
+      adoptFrame(id, null);
+      drag.end(true);
+      draggingTabId = null;
+      if (dragFocusRestore) {
+        paneTabs.activateTab(dragFocusRestore);
+        dragFocusRestore = null;
+      }
+      return;
+    }
     try {
       const p = await api.windowAcceptTabDrag();
       if (!p) return;
@@ -917,8 +1014,49 @@
         <span>{paneTabs.hiddenCount}</span>
       </button>
     {/if}
-    {#each paneTabs.tabs.filter((t) => !t.hidden) as t (t.tabId)}
+    {#each visTabs as t, i (t.tabId)}
       {@const active = paneTabs.activeTabId === t.tabId}
+      {@const ws = frameOf(t)}
+      {@const wsEnd = !!ws && frameOf(visTabs[i + 1]) !== ws}
+      {#if ws && frameOf(visTabs[i - 1]) !== ws}
+        {@const w = workspaces.byId(ws)}
+        <button
+          class="ws-frame-label"
+          class:compact={workspaces.compactLabels}
+          class:drop-hover={wsLabelDropHover === ws}
+          style:--ws-color={workspaceColor(ws)}
+          title="Workspace {w?.name}{workspaces.dirty[ws] ? ' (unsaved changes)' : ''} - click for save / close, drop a tab here to add it"
+          onclick={(e) => openWsMenu(e, ws)}
+          oncontextmenu={(e) => openWsMenu(e, ws)}
+          ondragover={(e: DragEvent) => {
+            if (!drag.tabId) return;
+            e.preventDefault();
+            e.stopPropagation();
+            wsLabelDropHover = ws;
+          }}
+          ondragleave={() => { if (wsLabelDropHover === ws) wsLabelDropHover = null; }}
+          ondrop={(e: DragEvent) => {
+            if (!drag.tabId) return;
+            e.preventDefault();
+            e.stopPropagation();
+            wsLabelDropHover = null;
+            const firstOfFrame = visTabs.find((x) => x.workspaceId === ws && x.tabId !== drag.tabId);
+            if (firstOfFrame) paneTabs.moveTabBefore(drag.tabId, firstOfFrame.tabId);
+            adoptFrame(drag.tabId, ws);
+            tabReorderIndicator = null;
+            drag.end(true);
+            draggingTabId = null;
+            if (dragFocusRestore) {
+              paneTabs.activateTab(dragFocusRestore);
+              dragFocusRestore = null;
+            }
+          }}
+        >
+          <IconWorkspace size={11} />
+          {#if !workspaces.compactLabels}<span>{w?.name}</span>{/if}
+          {#if workspaces.dirty[ws]}<span class="ws-dirty"></span>{/if}
+        </button>
+      {/if}
       {@const st = tabStatus(t.tabId)}
       {@const tagCol = tabColor(t.tabId)}
       {@const segs = tabSegments(t.tabId)}
@@ -928,7 +1066,10 @@
         class:multi-selected={tabSelection.has(t.tabId)}
         class:closed={st.isClosed}
         class:tagged={!!tagCol}
+        class:ws-in={!!ws}
+        class:ws-end={wsEnd}
         style:--tag-color={tagCol || "transparent"}
+        style:--ws-color={ws ? workspaceColor(ws) : null}
         role="listitem"
         ondragenter={() => {
           // While dragging another tab, hovering this tab's label
@@ -976,6 +1117,7 @@
             const after = paneTabs.tabs[idx + 1]?.tabId ?? null;
             paneTabs.moveTabBefore(drag.tabId, after);
           }
+          adoptFrame(drag.tabId, ws);
           tabReorderIndicator = null;
           drag.end(true);
           draggingTabId = null;
@@ -1224,6 +1366,23 @@
       </button>
     </div>
   {/if}
+  {#if wsMenu}
+    {@const w = workspaces.byId(wsMenu.id)}
+    <div class="ctx-backdrop" role="presentation" onclick={() => (wsMenu = null)} oncontextmenu={(e) => { e.preventDefault(); wsMenu = null; }}></div>
+    <div class="ctx-menu" style="left: {wsMenu.x}px; top: {wsMenu.y}px;">
+      <div class="ctx-heading">Workspace {w?.name}</div>
+      <button onclick={() => wsSave(wsMenu!.id)}>
+        <IconSave size={13} /> Save changes
+      </button>
+      <button onclick={() => wsClose(wsMenu!.id)}>
+        <IconX size={13} /> Close workspace ({workspaces.tabsOf(wsMenu.id).length} tabs)
+      </button>
+      <div class="ctx-sep"></div>
+      <button onclick={() => { workspaces.setCompactLabels(!workspaces.compactLabels); wsMenu = null; }}>
+        <IconWorkspace size={13} /> {workspaces.compactLabels ? "Show workspace names" : "Compact labels (icon only)"}
+      </button>
+    </div>
+  {/if}
   {#if ctxMenu}
     <div class="ctx-backdrop" role="presentation" onclick={closeCtxMenu} oncontextmenu={(e) => { e.preventDefault(); closeCtxMenu(); }}></div>
     <div class="ctx-menu" bind:this={ctxMenuEl} style="left: {ctxMenu.x}px; top: {ctxMenu.y}px;">
@@ -1286,6 +1445,16 @@
       <button onclick={() => { paneTabs.setHidden(ctxMenu!.tabId, true); closeCtxMenu(); }}>
         <IconEyeOff size={13} /> Hide tab (keeps running)
       </button>
+      {#each workspaces.list.filter((w) => w.id !== tabFrame(ctxMenu!.tabId) && workspaces.isOpen(w.id)) as w (w.id)}
+        <button onclick={() => { moveIntoFrame(ctxTargets(ctxMenu!.tabId), w.id); closeCtxMenu(); }}>
+          <IconWorkspace size={13} /> Add to workspace "{w.name}"
+        </button>
+      {/each}
+      {#if tabFrame(ctxMenu.tabId)}
+        <button onclick={() => { moveIntoFrame(ctxTargets(ctxMenu!.tabId), undefined); closeCtxMenu(); }}>
+          <IconWorkspace size={13} /> Remove from workspace "{workspaces.byId(tabFrame(ctxMenu.tabId))?.name}"
+        </button>
+      {/if}
       {#if currentGroup(ctxMenu.tabId)}
         <button onclick={() => { paneTabs.setGroup(ctxMenu!.tabId, undefined, undefined); closeCtxMenu(); }}>
           Clear group
@@ -1527,6 +1696,47 @@
     height: 2px;
     background: var(--tag-color);
   }
+  /* Workspace frame: a border drawn over the run of tabs, closed by the
+     label on the left and the last tab on the right. An overlay rather than
+     real borders so the tab sizes do not shift when a frame appears. */
+  .tab.ws-in::after {
+    content: "";
+    position: absolute;
+    /* Over the tab's own 1px bottom/right borders, so the frame lines up
+       with the label's border instead of sitting 1px higher. */
+    inset: 0 -1px -1px 0;
+    border-top: 2px solid var(--ws-color);
+    border-bottom: 2px solid var(--ws-color);
+    pointer-events: none;
+  }
+  .tab.ws-end::after {
+    border-right: 2px solid var(--ws-color);
+    border-radius: 0 5px 5px 0;
+  }
+  .ws-frame-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 7px;
+    border: 2px solid var(--ws-color);
+    border-right: none;
+    border-radius: 5px 0 0 5px;
+    background: color-mix(in srgb, var(--ws-color) 18%, var(--crust));
+    color: var(--ws-color);
+    font-size: 0.72rem;
+    font-weight: 600;
+    max-width: 160px;
+    cursor: pointer;
+  }
+  .ws-frame-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ws-frame-label.compact { padding: 0 5px; }
+  .ws-frame-label.drop-hover { background: color-mix(in srgb, var(--ws-color) 45%, var(--crust)); }
+  .ws-dirty {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--ws-color);
+    flex: none;
+  }
+  .ws-frame-label:hover { background: color-mix(in srgb, var(--ws-color) 30%, var(--crust)); }
   .tab.active {
     background: var(--mantle);
     color: var(--text);

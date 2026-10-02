@@ -90,6 +90,7 @@ class LastSessionStore {
         titleCustom: t.titleCustom,
         groupName: t.groupName,
         groupColor: t.groupColor,
+        workspaceId: t.workspaceId,
         sessions: spec.sessions,
         root: spec.root,
       });
@@ -198,6 +199,7 @@ class LastSessionStore {
       root: built.root,
       groupName: spec.groupName,
       groupColor: spec.groupColor,
+      workspaceId: spec.workspaceId,
     });
     if (spec.titleCustom && spec.title) paneTabs.setTitle(tab.tabId, spec.title, true);
     // A tab title is normally derived from the connection; a saved one that

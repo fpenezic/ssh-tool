@@ -496,7 +496,7 @@
           <div class="ws-empty">No workspaces yet.</div>
         {:else}
           {#each workspaces.list as w (w.id)}
-            <div class="ws-row-wrap" class:active={w.id === workspaces.activeId}>
+            <div class="ws-row-wrap" class:active={workspaces.isOpen(w.id)}>
               <button
                 class="ws-row"
                 disabled={wsBusy}
@@ -512,7 +512,7 @@
                 class="ws-save"
                 disabled={wsBusy || paneTabs.tabs.length === 0}
                 onclick={(e) => saveInto(w.id, w.name, e)}
-                title="Overwrite this workspace with the current tabs"
+                title={workspaces.isOpen(w.id) ? "Save this workspace's tabs into it" : "Overwrite this workspace with all open tabs"}
                 aria-label="Overwrite {w.name}"
               ><IconSave size={11} /></button>
             </div>

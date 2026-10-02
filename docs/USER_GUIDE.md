@@ -1823,19 +1823,33 @@ own 5-15 terminals open.
 Manage them under **Settings → Appearance → Workspaces** or via the
 **Workspaces** segment in the status bar (bottom-left).
 
-- **Save current as workspace** - snapshots every open tab's
-  connection + title + group metadata.
-- **Open** - disconnects every currently open tab, then fans out
-  connect to every connection in the workspace and restores the
-  title / group chip.
-- **Save here** - overwrite an existing workspace with the current
-  tab set.
-- **Delete** - remove the workspace; doesn't touch open tabs.
+- **Save current as workspace** - snapshots every open tab: pane tree
+  (splits, directions, ratios), connection, title and group metadata.
+  Those tabs become the workspace's frame.
+- **Open** - connects every pane in the workspace and rebuilds its tabs
+  next to the ones already open; nothing you are working on is closed.
+  Opening a workspace that is already open just focuses it.
+- **The frame** - a workspace's tabs sit together in the tab bar inside a
+  coloured border, with the workspace name in front. Click the name for
+  **Save changes** (writes exactly the tabs in the frame) and **Close
+  workspace** (disconnects only those tabs). Several workspaces can be
+  open at once, each in its own frame.
+- **Save changes** in the status bar menu targets the workspace of the
+  focused tab. The save icon on a workspace that is not open overwrites
+  it with all open tabs, which then become its frame.
+- **Delete** - remove the workspace; its tabs stay open, unframed.
 
-Splits inside a tab collapse to the focused leaf when you save -
-multi-pane restore is on the roadmap. Sessions live in the shared
-backend pool, so opening a workspace re-uses already-connected SSH
-sessions when their connection ids overlap (no double-connect).
+Frame membership:
+
+- Drag a tab onto a tab inside a frame (or onto the frame's name) to add
+  it; drag it onto a tab outside the frame, or the empty end of the bar,
+  to take it out. Right-click a tab for **Add to workspace "…"** and
+  **Remove from workspace "…"**, which also act on a multi-selection.
+- A dot on the frame's name means its tabs changed since the last save.
+  Nothing is saved on its own - **Save changes** writes the frame.
+- A tab opened later lands outside the frame until you add it.
+- **Compact labels** in the name's menu shows only the icon, for a
+  narrower bar. It applies to all frames on this machine.
 
 ### Tab groups
 

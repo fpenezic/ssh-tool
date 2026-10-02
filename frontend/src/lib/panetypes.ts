@@ -39,4 +39,6 @@ export interface SerializedPaneTab {
   groupName?: string;
   groupColor?: string;
   locked?: boolean;
+  // The open workspace this tab belongs to (its frame in the tab bar).
+  workspaceId?: string;
 }

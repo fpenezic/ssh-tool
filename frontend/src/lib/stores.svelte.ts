@@ -1011,6 +1011,10 @@ export interface PaneTab {
   // from a generated one and would keep overwriting the chosen one with
   // live pane names.
   titleCustom?: boolean;
+  // Set when the tab was opened by (or saved into) a workspace. Those tabs
+  // are drawn inside the workspace's frame in the tab bar, and "Save
+  // changes" writes exactly them - not every tab that happens to be open.
+  workspaceId?: string;
 }
 
 import { EventsOn } from "./wailsRuntime";
@@ -1081,8 +1085,17 @@ class PaneTreeStore {
       groupName: layout.groupName,
       groupColor: layout.groupColor,
       locked: layout.locked,
+      workspaceId: layout.workspaceId,
     };
-    this.tabs.push(tab);
+    // A workspace tab lands at the end of its frame, not the end of the bar,
+    // so a redocked tab rejoins its workspace instead of starting a second
+    // frame for it.
+    let lastOfWs = -1;
+    if (tab.workspaceId) {
+      this.tabs.forEach((t, i) => { if (t.workspaceId === tab.workspaceId) lastOfWs = i; });
+    }
+    if (lastOfWs >= 0) this.tabs.splice(lastOfWs + 1, 0, tab);
+    else this.tabs.push(tab);
     this.activeTabId = tab.tabId;
     return tab;
   }
@@ -1108,11 +1121,41 @@ class PaneTreeStore {
     this.tabs = next;
   }
 
+  // Tabs shown in the bar, in bar order. Focus moves (close, Ctrl+Tab,
+  // Ctrl+N) walk this list: a hidden tab only comes back through the
+  // hidden-tabs menu, never by landing on it.
+  get visibleTabs(): PaneTab[] {
+    return this.tabs.filter((t) => !t.hidden);
+  }
+
   removeTab(tabId: string) {
+    const fallback = this.focusFallbackFor(tabId);
     this.tabs = this.tabs.filter((t) => t.tabId !== tabId);
-    if (this.activeTabId === tabId) {
-      this.activeTabId = this.tabs[this.tabs.length - 1]?.tabId ?? null;
+    if (this.activeTabId === tabId) this.activeTabId = fallback;
+  }
+
+  // Put tabs into a workspace frame, or take them out (id undefined).
+  setWorkspace(tabIds: Iterable<string>, workspaceId: string | undefined) {
+    const ids = new Set(tabIds);
+    this.tabs = this.tabs.map((t) => (ids.has(t.tabId) ? { ...t, workspaceId } : t));
+  }
+
+  // Menu path for frame membership: move the tabs to the end of the
+  // workspace's frame, or (id undefined) out of their frame to just behind
+  // it, so every frame stays one unbroken run in the bar.
+  moveToWorkspace(tabIds: string[], workspaceId: string | undefined) {
+    const ids = new Set(tabIds);
+    const moving = this.tabs.filter((t) => ids.has(t.tabId)).map((t) => ({ ...t, workspaceId }));
+    if (!moving.length) return;
+    const anchorWs = workspaceId ?? this.tabs.find((t) => ids.has(t.tabId))?.workspaceId;
+    const rest = this.tabs.filter((t) => !ids.has(t.tabId));
+    let at = rest.length;
+    if (anchorWs) {
+      let last = -1;
+      rest.forEach((t, i) => { if (t.workspaceId === anchorWs) last = i; });
+      if (last >= 0) at = last + 1;
     }
+    this.tabs = [...rest.slice(0, at), ...moving, ...rest.slice(at)];
   }
 
   activateTab(tabId: string) {
@@ -1126,7 +1169,7 @@ class PaneTreeStore {
   // with it in focus there is nowhere to drop until the user hovers
   // another tab first. Returns null when `tabId` is the only tab.
   focusFallbackFor(tabId: string): string | null {
-    const others = this.tabs.filter((t) => t.tabId !== tabId);
+    const others = this.visibleTabs.filter((t) => t.tabId !== tabId);
     return others[others.length - 1]?.tabId ?? null;
   }
 
@@ -1134,14 +1177,15 @@ class PaneTreeStore {
   // backward (delta=-1) with wrap-around. No-op when zero or one tab.
   // Used by Ctrl+Tab / Ctrl+Shift+Tab.
   cycleActive(delta: 1 | -1): string | null {
-    if (this.tabs.length <= 1) return this.activeTabId;
-    const idx = this.tabs.findIndex((t) => t.tabId === this.activeTabId);
+    const vis = this.visibleTabs;
+    if (vis.length === 0) return this.activeTabId;
+    const idx = vis.findIndex((t) => t.tabId === this.activeTabId);
     if (idx < 0) {
-      this.activeTabId = this.tabs[0].tabId;
+      this.activeTabId = vis[0].tabId;
       return this.activeTabId;
     }
-    const next = (idx + delta + this.tabs.length) % this.tabs.length;
-    this.activeTabId = this.tabs[next].tabId;
+    const next = (idx + delta + vis.length) % vis.length;
+    this.activeTabId = vis[next].tabId;
     return this.activeTabId;
   }
 
@@ -1149,8 +1193,9 @@ class PaneTreeStore {
   // range indices are ignored. Used by Ctrl+1..8 (and Ctrl+9 for the
   // last tab, handled by the caller).
   activateIndex(idx: number): boolean {
-    if (idx < 0 || idx >= this.tabs.length) return false;
-    this.activeTabId = this.tabs[idx].tabId;
+    const vis = this.visibleTabs;
+    if (idx < 0 || idx >= vis.length) return false;
+    this.activeTabId = vis[idx].tabId;
     return true;
   }
 
@@ -1336,6 +1381,7 @@ class PaneTreeStore {
       // Carry the group label so a popped pane keeps its group.
       groupName: tab.groupName,
       groupColor: tab.groupColor,
+      workspaceId: tab.workspaceId,
     };
     this.tabs = [
       ...this.tabs.map((t) =>
@@ -1688,6 +1734,7 @@ export function serializePaneTab(t: PaneTab): SerializedPaneTab {
     groupName: t.groupName,
     groupColor: t.groupColor,
     locked: t.locked,
+    workspaceId: t.workspaceId,
   };
 }
 

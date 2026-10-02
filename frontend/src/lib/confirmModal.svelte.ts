@@ -32,6 +32,8 @@ class ConfirmModalStore {
     cancelLabel?: string;
     danger?: boolean;
     checkboxLabel?: string;
+    // Initial state of the checkbox (default unchecked).
+    checked?: boolean;
   }): Promise<ConfirmResult> {
     return new Promise((resolve) => {
       this.pending = {
@@ -41,7 +43,7 @@ class ConfirmModalStore {
         cancelLabel: opts.cancelLabel ?? "Cancel",
         danger: !!opts.danger,
         checkboxLabel: opts.checkboxLabel,
-        checked: false,
+        checked: !!opts.checked,
         resolve,
       };
     });
