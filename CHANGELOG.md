@@ -9,6 +9,28 @@ a prerelease upstream.
 
 ## [Unreleased]
 
+### Workspaces
+
+- Opening a workspace no longer closes the tabs you were working in. Its
+  tabs open next to them, grouped in a coloured frame with the workspace
+  name in front. Click the name to save the frame back into the workspace
+  or close just those tabs. Opening a workspace that is already open
+  focuses it instead of connecting everything twice, and several
+  workspaces can be open side by side.
+- "Save changes" writes only the workspace's own tabs, so tabs opened for
+  something else stay out of it.
+- Drag a tab into a frame to add it to the workspace, or out of it to
+  remove it; the tab's right-click menu has the same as Add to / Remove
+  from workspace. A dot on the frame's name marks changes not saved yet.
+- Frame names can be shown as just an icon (Compact labels in the name's
+  menu).
+
+### Connections
+
+- Adding a tag suggests the tags already in use, most used first, as you
+  type (or as soon as the field gets focus). Arrow keys and Enter pick
+  one, so the same tag is not spelled three ways across the tree.
+
 ### Fixes
 
 - Dynamic folders whose API token lives in the vault no longer report
@@ -16,6 +38,9 @@ a prerelease upstream.
   waits while the vault is locked and runs for every such folder the moment
   it is unlocked (by passphrase or auto-unlock). A manual "Refresh now" on a
   locked vault still says so.
+- Closing the focused tab no longer moves focus onto a hidden tab. Focus
+  goes to the last visible tab, and Ctrl+Tab and Ctrl+1..9 skip hidden tabs
+  as well.
 - Clicking the update notification or the tray icon no longer takes a
   maximised window down to its normal size on Windows.
 
