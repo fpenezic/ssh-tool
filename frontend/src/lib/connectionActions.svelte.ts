@@ -12,21 +12,12 @@ import { toast } from "./toast.svelte.ts";
 import { unwrapRaw } from "./connectErrors";
 import { presenceTakeover, isBusyElsewhere } from "./presenceTakeover.svelte.ts";
 import { EventsOn } from "./wailsRuntime";
+import { connectPrefs, BULK_CONCURRENT, BULK_STAGGER_MS, BULK_CONFIRM_ABOVE } from "./connectPrefs.svelte";
 
-// Above this many hosts in one Connect-all, ask for confirmation first -
-// a whole-folder Enter shouldn't silently open dozens of sessions.
-const BULK_CONNECT_CONFIRM_THRESHOLD = 5;
-
-// Cap how many connects handshake at once. Firing N dials in the same
-// tick hammers a shared jump host with N simultaneous handshakes; a
-// bastion's MaxStartups then RSTs some (seen as "handshake failed: EOF")
-// and the batch stalls on retries. A small pool keeps the bastion under
-// its start limit while the batch still runs concurrently overall.
-const BULK_CONNECT_MAX_CONCURRENT = 4;
-
-// Extra stagger between starting each worker's dial, so even within the
-// pool the handshakes don't all land in the exact same tick.
-const BULK_CONNECT_STAGGER_MS = 150;
+// Bulk connect limits come from Settings -> Connection (connectPrefs):
+// confirm above N hosts, at most N handshakes at once, a stagger between
+// starts. See connectPrefs.svelte.ts for why the parallelism is capped -
+// a bastion's MaxStartups drops handshakes past ~10 in flight.
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -480,7 +471,8 @@ class ConnectionActionsStore {
     // folder of hosts), so confirm first past a threshold. Small batches
     // just go, with a toast so the user knows the connects are running in
     // the background rather than nothing having happened.
-    if (conns.length > BULK_CONNECT_CONFIRM_THRESHOLD) {
+    await connectPrefs.load();
+    if (conns.length > connectPrefs.get(BULK_CONFIRM_ABOVE)) {
       const ok = await showConfirm({
         title: "Connect to multiple hosts",
         message: `This will open ${conns.length} SSH connections at once. Continue?`,
@@ -493,8 +485,8 @@ class ConnectionActionsStore {
     }
     const results = await runPooled(
       conns,
-      BULK_CONNECT_MAX_CONCURRENT,
-      BULK_CONNECT_STAGGER_MS,
+      connectPrefs.get(BULK_CONCURRENT),
+      connectPrefs.get(BULK_STAGGER_MS),
       async (c) => {
         // Local-shell connections don't dial SSH; route them through the
         // local path (which adds its own session + tab).
@@ -532,7 +524,8 @@ class ConnectionActionsStore {
   // don't block the rest.
   async connectDynamicMany(targets: Array<{ folderId: string; entryId: string }>) {
     if (targets.length === 0) return;
-    if (targets.length > BULK_CONNECT_CONFIRM_THRESHOLD) {
+    await connectPrefs.load();
+    if (targets.length > connectPrefs.get(BULK_CONFIRM_ABOVE)) {
       const ok = await showConfirm({
         title: "Connect to multiple hosts",
         message: `This will open ${targets.length} SSH connections at once. Continue?`,
@@ -544,7 +537,7 @@ class ConnectionActionsStore {
       toast.info(`Connecting to ${targets.length} connections in the background...`);
     }
     // Mark every target as pending BEFORE the pool gates them. Only
-    // BULK_CONNECT_MAX_CONCURRENT run at a time, so without this the hosts
+    // the configured number run at a time, so without this the hosts
     // waiting their turn showed no state at all - indistinguishable from
     // "the click did nothing", and with no Cancel to press either, since
     // they had not reached the backend yet.
@@ -564,8 +557,8 @@ class ConnectionActionsStore {
     try {
       results = await runPooled(
       targets,
-      BULK_CONNECT_MAX_CONCURRENT,
-      BULK_CONNECT_STAGGER_MS,
+      connectPrefs.get(BULK_CONCURRENT),
+      connectPrefs.get(BULK_STAGGER_MS),
       async (t) => {
         // Reach into the cached entry to surface name + hostname
         // in the tab; the backend will resolve everything else.

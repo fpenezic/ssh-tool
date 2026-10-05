@@ -4,8 +4,9 @@
   import { api } from "./api";
   import {
     IconGlobe, dynamicEntryIcon,
-    IconHost, IconUser, IconLock, IconClipboardCopy, IconTerminal,
+    IconHost, IconUser, IconLock, IconClipboardCopy, IconTerminal, IconFolder,
   } from "./iconMap";
+  import { dynRef } from "./jumpRefs";
   import { explain as explainConnectError, unwrapRaw as unwrapConnectErr, errMsg } from "./connectErrors";
   import { toast } from "./toast.svelte";
   import { copyText, copySensitive, writeClipboard } from "./clipboard";
@@ -619,6 +620,27 @@
     </section>
   {/if}
 
+  {#if entry?.external_id && (tree.bastionMap.get(dynRef(folderId, entry.external_id)) ?? []).length}
+    {@const jumpUsers = tree.bastionMap.get(dynRef(folderId, entry.external_id)) ?? []}
+    <section class="jump-users">
+      <h3>Jump host for ({jumpUsers.length})</h3>
+      <ul>
+        {#each jumpUsers as u (u.kind + u.id)}
+          <li>
+            <button class="usage-link" type="button" title={`Reveal ${u.label} in the connections tree`}
+              onclick={() => view.reveal(u.kind, u.id)}>
+              {#if u.kind === "folder"}
+                <IconFolder size={13} /> <strong>{u.label}</strong> <span class="muted">- everything in it</span>
+              {:else}
+                <IconHost size={13} /> <strong>{u.label}</strong> <span class="muted">- {tree.connectionById(u.id)?.hostname ?? ""}</span>
+              {/if}
+            </button>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
+
   {#if rawJSON}
     <section class="raw">
       <button class="raw-toggle" onclick={() => rawOpen = !rawOpen}>
@@ -863,4 +885,12 @@
     font-size: 0.72rem;
   }
   .err-clear:hover { background: var(--surface0); color: var(--text); }
+  .jump-users ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+  .usage-link {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    background: none; border: 0; padding: 0.1rem 0.2rem; color: var(--text);
+    font: inherit; font-size: 0.85rem; cursor: pointer; border-radius: 3px;
+  }
+  .usage-link:hover { background: var(--surface0); }
+  .muted { color: var(--overlay1); }
 </style>

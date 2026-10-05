@@ -39,7 +39,8 @@ describe("bastionUsage", () => {
   ];
   const entries = { pv: [{ external_id: "qemu/101", name: "vpn-01", hostname: "10.0.0.5" }] };
   const dynFolders = { pv: { config: { bastion_external_id: "qemu/101" } } };
-  const m = bastionUsage(folders, connections, entries, dynFolders);
+  const raw = bastionUsage(folders, connections, entries, dynFolders);
+  const m = new Map([...raw].map(([k, v]) => [k, v.map((u) => u.label)]));
 
   it("counts references and typed-in hops by address, never the bastion itself", () => {
     expect(m.get("b1")).toEqual(["folder Customer A", "db-01"]);
@@ -49,5 +50,16 @@ describe("bastionUsage", () => {
   });
   it("marks inventory hosts by hostname and by the folder's bastion route", () => {
     expect(m.get(dynRef("pv", "qemu/101"))).toEqual(["folder Lab", "inventory folder pxmx"]);
+  });
+});
+
+describe("bastionUsage ids", () => {
+  it("carries kind and id for revealing the user in the tree", () => {
+    const m = bastionUsage(
+      [{ id: "f1", name: "A", settings: { jump_host: ref("b1") } }],
+      [{ id: "b1", name: "bastion", hostname: "b.example.com" }],
+      {}, {},
+    );
+    expect(m.get("b1")).toEqual([{ kind: "folder", id: "f1", label: "folder A" }]);
   });
 });

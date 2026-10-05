@@ -18,6 +18,7 @@
   import { SETTINGS_SECTIONS, EXTERNAL_TABS, isExternalTab, type SectionId, type SectionDef, type ExternalTabId } from "./settingsSections";
   import { terminalPrefs, DEFAULT_FONT_FAMILY, DEFAULT_SCROLLBACK, DEFAULT_BG_SCROLLBACK_DELAY } from "./terminalPrefs.svelte";
   import { appPrefs } from "./appPrefs.svelte";
+  import { connectPrefs, type IntPref, RECONNECT_ATTEMPTS, RECONNECT_MAX_DELAY, BULK_CONCURRENT, BULK_STAGGER_MS, BULK_CONFIRM_ABOVE, BASTION_LINGER } from "./connectPrefs.svelte";
   import { vaultPrefs } from "./vaultPrefs.svelte";
   import { lastSession } from "./lastSession.svelte";
   import { workspaces } from "./workspaces.svelte";
@@ -475,6 +476,7 @@
     }
   }
 
+  onMount(() => { void connectPrefs.load(); });
   onMount(async () => {
     try {
       const v = await api.settingsGet("preferred_browser_path");
@@ -2787,13 +2789,14 @@
   <div class="group">
     <h2>Connection</h2>
     <p class="hint">
-      Applies to TCP dial + SSH handshake on every hop. The default
+      The connect timeout applies to the TCP dial and SSH handshake on every hop. The default
       (20s) is generous for most networks; raise it for slow or
       unreliable links, lower it if you want to fail fast.
     </p>
-    <label class="num">
-      <span>Connect timeout (seconds)</span>
+    <div class="pref-grid">
+      <label for="pref-connect-timeout">Connect timeout</label>
       <input
+        id="pref-connect-timeout"
         type="number"
         min="1"
         max="300"
@@ -2802,8 +2805,61 @@
         onblur={saveConnectTimeout}
         onkeydown={(e) => { if (e.key === "Enter") saveConnectTimeout(); }}
       />
-      {#if connectTimeoutSaved}<span class="saved-mark">saved</span>{/if}
-    </label>
+      <span class="unit">seconds, default 20{#if connectTimeoutSaved} <span class="saved-mark">saved</span>{/if}</span>
+      <span></span>
+    </div>
+
+    {#snippet prefRow(p: IntPref, label: string, unit: string)}
+      <label for={"pref-" + p.key}>{label}</label>
+      <input
+        id={"pref-" + p.key}
+        type="number"
+        min={p.min}
+        max={p.max}
+        step="1"
+        value={connectPrefs.get(p)}
+        onchange={(e) => { void connectPrefs.set(p, Number((e.target as HTMLInputElement).value)); }}
+      />
+      <span class="unit">{unit}</span>
+      {#if connectPrefs.get(p) !== p.def}
+        <button class="link-btn" onclick={() => connectPrefs.set(p, p.def)} title="Reset to default ({p.def})">Reset</button>
+      {:else}<span></span>{/if}
+    {/snippet}
+
+    <h3>Auto-reconnect</h3>
+    <p class="hint inline">
+      When a session with auto-reconnect drops. The wait doubles from 1s
+      per attempt, up to the cap.
+    </p>
+    <div class="pref-grid">
+      {@render prefRow(RECONNECT_ATTEMPTS, "Attempts", `${RECONNECT_ATTEMPTS.min}-${RECONNECT_ATTEMPTS.max}, default ${RECONNECT_ATTEMPTS.def}`)}
+      {@render prefRow(RECONNECT_MAX_DELAY, "Longest wait between attempts", `seconds, default ${RECONNECT_MAX_DELAY.def}`)}
+    </div>
+
+    <h3>Connect all</h3>
+    <p class="hint inline">
+      Opening many hosts at once (a folder, a multi-selection). Every
+      handshake still in progress counts against the bastion's sshd
+      MaxStartups (default 10): past that it drops new ones, seen as
+      "handshake failed: EOF". Hence at most 10 at once and never less
+      than 50 ms between starts.
+    </p>
+    <div class="pref-grid">
+      {@render prefRow(BULK_CONCURRENT, "Handshakes at once", `${BULK_CONCURRENT.min}-${BULK_CONCURRENT.max}, default ${BULK_CONCURRENT.def}`)}
+      {@render prefRow(BULK_STAGGER_MS, "Pause between starts", `ms, min ${BULK_STAGGER_MS.min}, default ${BULK_STAGGER_MS.def}`)}
+      {@render prefRow(BULK_CONFIRM_ABOVE, "Ask before connecting more than", `hosts, default ${BULK_CONFIRM_ABOVE.def}`)}
+    </div>
+
+    <h3>Shared bastion</h3>
+    <p class="hint inline">
+      Sessions behind the same jump host share one connection to it. This
+      is how long it stays open after the last of them closes - longer
+      means a quick reconnect skips the bastion handshake. 0 closes it at
+      once.
+    </p>
+    <div class="pref-grid">
+      {@render prefRow(BASTION_LINGER, "Keep open after last session", `seconds, default ${BASTION_LINGER.def}`)}
+    </div>
 
   </div>
   {/if}
@@ -6424,6 +6480,28 @@
   }
   .about-path { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .about-path code { word-break: break-all; }
+  /* Connection settings: one aligned grid per group - label, input,
+     unit/default, reset. */
+  .pref-grid {
+    display: grid;
+    grid-template-columns: 16rem 6rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.35rem 0.6rem;
+    margin: 0.3rem 0 0.4rem;
+    max-width: 44rem;
+  }
+  .pref-grid > label { font-size: 0.85rem; color: var(--subtext1); }
+  .pref-grid input[type="number"] {
+    width: 100%; box-sizing: border-box;
+    background: var(--mantle); color: var(--text);
+    border: 1px solid var(--surface1); border-radius: 4px;
+    padding: 0.25rem 0.45rem; font: inherit; font-size: 0.85rem;
+  }
+  .pref-grid .unit { color: var(--overlay1); font-size: 0.75rem; }
+  @media (max-width: 640px) {
+    .pref-grid { grid-template-columns: 1fr 6rem; }
+    .pref-grid .unit, .pref-grid > :nth-child(4n) { grid-column: 1 / -1; }
+  }
   .link-btn {
     background: none; border: 0; padding: 0;
     color: var(--sapphire); cursor: pointer; font: inherit; font-size: 0.8rem;

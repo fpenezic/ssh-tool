@@ -26,11 +26,11 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// bastionLinger is how long a shared prefix stays up after its last
-// target session closes. Short on purpose: just enough to cover a quick
+// bastionLingerDefault is how long a shared prefix stays up after its last
+// target session closes. Short by default: just enough to cover a quick
 // disconnect/reconnect without holding the bastion open - a fresh connect
-// + jump comes up fast anyway.
-const bastionLinger = 10 * time.Second
+// + jump comes up fast anyway. Settings -> Connection overrides it.
+const bastionLingerDefault = 10 * time.Second
 
 // jumpEntry is one shared jump-prefix connection.
 type jumpEntry struct {
@@ -48,6 +48,15 @@ type jumpPool struct {
 	// build dials a jump prefix. A field so tests can inject a fake
 	// without a real bastion; production wires BuildJumpChainVia.
 	build func(ctx context.Context, settings *store.ResolvedSettings, deps sshlayer.JumpPrefixDeps) (*ssh.Client, func(), string, error)
+	// linger returns the current idle linger; nil means the default.
+	linger func() time.Duration
+}
+
+func (p *jumpPool) lingerFor() time.Duration {
+	if p.linger == nil {
+		return bastionLingerDefault
+	}
+	return p.linger()
 }
 
 func newJumpPool() *jumpPool {
@@ -115,11 +124,12 @@ func (p *jumpPool) acquire(
 			return
 		}
 		// Last rider gone: arm the idle linger. If nobody re-acquires the
-		// key within bastionLinger, close the prefix and drop the entry.
+		// key within the linger, close the prefix and drop the entry.
 		if e.stopTimer != nil {
 			e.stopTimer.Stop()
 		}
-		e.stopTimer = time.AfterFunc(bastionLinger, func() {
+		linger := p.lingerFor()
+		e.stopTimer = time.AfterFunc(linger, func() {
 			p.mu.Lock()
 			// Re-check under the lock: a reacquire may have bumped refs.
 			if e.refs > 0 || p.entries[key] != e {
@@ -128,7 +138,7 @@ func (p *jumpPool) acquire(
 			}
 			delete(p.entries, key)
 			p.mu.Unlock()
-			log.Printf("jump pool: shared bastion for key %q idle %s, closing", key, bastionLinger)
+			log.Printf("jump pool: shared bastion for key %q idle %s, closing", key, linger)
 			e.cleanup()
 		})
 	}

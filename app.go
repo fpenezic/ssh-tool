@@ -491,6 +491,9 @@ func (a *App) initialise() {
 	a.initAuthPrompts()
 	a.pool = sshlayer.NewPool()
 	a.jumpPool = newJumpPool()
+	a.jumpPool.linger = func() time.Duration {
+		return time.Duration(a.intSetting("bastion_linger_seconds", int(bastionLingerDefault/time.Second), 0, 3600)) * time.Second
+	}
 	a.localPool = local.NewPool()
 	a.vncBridge = sshlayer.NewVncBridge()
 	a.vncSessions = map[string]*vncSessionMeta{}
@@ -4696,6 +4699,33 @@ func (a *App) shouldMinimiseToTray() bool {
 	return a.boolSetting("minimize_to_tray")
 }
 
+// intSetting reads an integer setting clamped to [min, max], or def when it
+// is unset or not a number.
+func (a *App) intSetting(key string, def, min, max int) int {
+	if a.db == nil {
+		return def
+	}
+	v, _, err := a.db.GetSetting(key)
+	if err != nil || v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil {
+		return def
+	}
+	return clampInt(n, min, max)
+}
+
+func clampInt(n, min, max int) int {
+	if n < min {
+		return min
+	}
+	if n > max {
+		return max
+	}
+	return n
+}
+
 func (a *App) boolSetting(key string) bool {
 	if a.db == nil {
 		return false
@@ -6347,8 +6377,31 @@ func (a *App) SshReopen(connectionID string) (*SshConnectResult, error) {
 	return a.reconnectConnect(connectionID)
 }
 
+// Auto-reconnect limits (Settings -> Connection). The delay doubles from
+// 1s per attempt up to the cap.
+const (
+	reconnectAttemptsDefault = 5
+	reconnectMaxDelayDefault = 16
+)
+
+// reconnectDelays is the wait before each attempt: 1, 2, 4, ... seconds,
+// capped at maxDelay.
+func reconnectDelays(attempts, maxDelay int) []int64 {
+	out := make([]int64, attempts)
+	d := int64(1)
+	for i := range out {
+		if d > int64(maxDelay) {
+			d = int64(maxDelay)
+		}
+		out[i] = d
+		d *= 2
+	}
+	return out
+}
+
 func (a *App) runReconnect(oldID, connID string, cancel <-chan struct{}) {
-	const maxAttempts = 5
+	maxAttempts := a.intSetting("reconnect_max_attempts", reconnectAttemptsDefault, 1, 50)
+	maxDelay := a.intSetting("reconnect_max_delay_seconds", reconnectMaxDelayDefault, 1, 300)
 	defer func() {
 		a.reconnectMu.Lock()
 		delete(a.reconnects, oldID)
@@ -6356,7 +6409,7 @@ func (a *App) runReconnect(oldID, connID string, cancel <-chan struct{}) {
 		a.reconnectMu.Unlock()
 	}()
 
-	delaysSec := []int64{1, 2, 4, 8, 16}
+	delaysSec := reconnectDelays(maxAttempts, maxDelay)
 	attemptEvent := "session_reconnect_attempt:" + oldID
 	successEvent := "session_reconnect_success:" + oldID
 	failedEvent := "session_reconnect_failed:" + oldID

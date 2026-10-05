@@ -29,6 +29,7 @@
 
   // Pretty labels for facet keys.
   const FACET_LABEL: Record<FacetKey, string> = {
+    role: "Role",
     auth: "Auth",
     user: "User",
     via:  "Via",

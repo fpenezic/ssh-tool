@@ -21,12 +21,13 @@
 
 import { api, type Connection, type Folder } from "./api";
 import { tree, credentials } from "./stores.svelte";
+import { dynRef } from "./jumpRefs";
 
 const KEY = "tree_active_tags";
 const FACETS_KEY = "tree_active_facets";
 
 // Facets we derive from a connection. Ordered for stable rendering.
-export const FACET_KEYS = ["auth", "user", "via", "port"] as const;
+export const FACET_KEYS = ["role", "auth", "user", "via", "port"] as const;
 export type FacetKey = (typeof FACET_KEYS)[number];
 
 class TagFilterStore {
@@ -94,6 +95,13 @@ class TagFilterStore {
     else next.set(key, cur);
     this.activeFacets = next;
     this.persist();
+    // An inventory bastion can only match once its folder's entries are
+    // loaded; folders nobody expanded would otherwise just disappear.
+    if (key === "role") {
+      for (const fid of Object.keys(tree.dynamicFolders)) {
+        if (tree.dynamicEntries[fid] === undefined) void tree.loadDynamicEntries(fid);
+      }
+    }
   }
 
   isFacetActive(key: FacetKey, value: string): boolean {
@@ -123,6 +131,14 @@ class TagFilterStore {
     const firstHop = resolved.firstJumpHostname;
     if (firstHop) out.set("via", [firstHop]);
 
+    // role - "bastion" when other chains jump through it (the same map
+    // as the tree's bastion marks), "behind-bastion" when its own
+    // connect goes through a jump chain, own or inherited.
+    const roles: string[] = [];
+    if (tree.bastionMap.has(conn.id)) roles.push("bastion");
+    if (firstHop) roles.push("behind-bastion");
+    if (roles.length) out.set("role", roles);
+
     // port - connection-level override (folder default skipped - too
     // noisy to facet every conn by its inherited port).
     if (conn.overrides?.port) out.set("port", [String(conn.overrides.port)]);
@@ -141,6 +157,16 @@ class TagFilterStore {
         let inner = acc.get(k);
         if (!inner) { inner = new Map(); acc.set(k, inner); }
         for (const v of vals) inner.set(v, (inner.get(v) ?? 0) + 1);
+      }
+    }
+    // Inventory hosts take part in the role facet only (see
+    // dynamicEntryMatches).
+    for (const [fid, list] of Object.entries(tree.dynamicEntries)) {
+      for (const e of list ?? []) {
+        if (!e.external_id || !tree.bastionMap.has(dynRef(fid, e.external_id))) continue;
+        let inner = acc.get("role");
+        if (!inner) { inner = new Map(); acc.set("role", inner); }
+        inner.set("bastion", (inner.get("bastion") ?? 0) + 1);
       }
     }
     // Sort: count desc, then value asc.
@@ -169,12 +195,27 @@ class TagFilterStore {
     return this.passesAll(c);
   }
 
+  // An inventory host has no user tags and none of the auth/user/via/port
+  // facets, but it can be a bastion: it passes only a filter made of the
+  // role facet alone, with "bastion" accepted.
+  dynamicEntryMatches(folderId: string, externalId: string): boolean {
+    if (!this.isFilterActive()) return true;
+    if (this.active.size > 0) return false;
+    for (const [k, accepted] of this.activeFacets) {
+      if (k !== "role" || !accepted.has("bastion")) return false;
+    }
+    return !!externalId && tree.bastionMap.has(dynRef(folderId, externalId));
+  }
+
   // Folder is visible if any descendant matches. Same recursive
   // walk as before.
   folderHasMatch(folderId: string): boolean {
     if (!this.isFilterActive()) return true;
     for (const c of tree.connectionsIn(folderId)) {
       if (this.passesAll(c)) return true;
+    }
+    for (const e of tree.dynamicEntries[folderId] ?? []) {
+      if (this.dynamicEntryMatches(folderId, e.external_id)) return true;
     }
     for (const sub of tree.childrenOf(folderId)) {
       if (this.folderHasMatch(sub.id)) return true;
@@ -246,8 +287,14 @@ function resolveLite(c: Connection): {
   }
 
   let firstJumpHostname: string | undefined;
-  if (jumpChain?.kind === "chain" && jumpChain.chain?.hostname) {
-    firstJumpHostname = jumpChain.chain.hostname;
+  const first = jumpChain?.kind === "chain" ? jumpChain.chain : undefined;
+  if (first?.connection_id) {
+    // A saved-connection / inventory hop, by name. A bastion that sits in
+    // the folder it is the jump host for connects directly (the backend
+    // stops at itself), so it is not "behind" its own chain.
+    if (first.connection_id !== c.id) firstJumpHostname = tree.jumpRefLabel(first.connection_id);
+  } else if (first?.hostname) {
+    firstJumpHostname = first.hostname;
   }
 
   return { username, authRef, firstJumpHostname };

@@ -265,6 +265,8 @@
   const dynamicBuckets = $derived.by(() => {
     void tree.version;
     void nameFilter.query;
+    void tagFilter.activeFacets;
+    void tagFilter.active;
     const entries = tree.dynamicEntries[folder.id] ?? [];
     const q = nameFilter.query.trim().toLowerCase();
     // Tag match included so typing a group name (Ansible) or label
@@ -272,6 +274,7 @@
     // folder. Without this the filter only looked at name / hostname
     // and tags felt like a dead-end.
     const passes = (e: typeof entries[0]) => {
+      if (!tagFilter.dynamicEntryMatches(folder.id, e.external_id)) return false;
       if (!q) return true;
       if (e.name.toLowerCase().includes(q)) return true;
       if (e.hostname.toLowerCase().includes(q)) return true;
@@ -454,7 +457,7 @@
     if (appPrefs.jumpMarks === "off") return null;
     const who = tree.bastionMap.get(key);
     if (!who?.length) return null;
-    const shown = who.slice(0, 8).join("\n") + (who.length > 8 ? `\n... and ${who.length - 8} more` : "");
+    const shown = who.slice(0, 8).map((w) => w.label).join("\n") + (who.length > 8 ? `\n... and ${who.length - 8} more` : "");
     return { count: who.length, title: `Jump host for:\n${shown}` };
   }
   function routedMark(conn: { overrides?: { jump_host?: any } | null }): string | null {
@@ -463,6 +466,22 @@
     if (jh?.kind !== "chain") return null;
     const hops = jumpChainHostnames(jh.chain);
     return hops.length ? `Through ${hops.join(" -> ")}` : null;
+  }
+
+  // A folder that sets its own jump chain (what its contents inherit), or
+  // an inventory folder with a bastion route. Shown in both mark modes:
+  // one mark per folder says where the chains come from.
+  function folderJumpMark(): string | null {
+    if (appPrefs.jumpMarks === "off") return null;
+    const jh = folder.settings?.jump_host;
+    if (jh?.kind === "chain") {
+      const hops = jumpChainHostnames(jh.chain);
+      if (hops.length) return `Everything in this folder connects through ${hops.join(" -> ")}`;
+    }
+    const cfg = tree.dynamicFolders[folder.id]?.config;
+    const b = cfg?.bastion_name || cfg?.bastion_external_id;
+    if (b) return `Hosts without a public address connect through ${b}`;
+    return null;
   }
 
   // "cert 9d" next to a host whose last TLS check found under 14 days left.
@@ -930,6 +949,9 @@
         onclick={(e) => { e.stopPropagation(); retryDynamicRefresh(); }}
       >!</button>
     {/if}
+    {#if folderJumpMark()}
+      <span class="jump-mark routed folder-jump" title={folderJumpMark()}><IconRouted size={11} /></span>
+    {/if}
     {#if isDynamicFolder}
       <span class="dyn-tag" title={dynamicTooltip}>{dynamicMeta?.provider ?? "dyn"}</span>
     {/if}
@@ -1326,6 +1348,7 @@
     flex-shrink: 0; display: inline-flex; align-items: center; gap: 0.15rem;
     font-size: 0.66rem; margin-right: 0.25rem; color: var(--overlay1);
   }
+  .jump-mark.folder-jump { color: var(--teal); }
   .jump-mark.bastion {
     color: var(--teal); padding: 0 0.3rem; border-radius: 7px;
     background: color-mix(in srgb, var(--teal) 14%, transparent);
