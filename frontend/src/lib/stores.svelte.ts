@@ -1,4 +1,4 @@
-import { jumpReferrers } from "./jumpRefs";
+import { jumpReferrers, bastionUsage } from "./jumpRefs";
 import { api, type Folder, type Connection, type CredentialRef, type CredentialFolder, type InheritableSettings } from "./api";
 import { rebalanceEven } from "./paneSplit";
 import { expandedConnections, expandedCredentials } from "./treeState.svelte";
@@ -137,6 +137,13 @@ class TreeStore {
     if (!id) return null;
     return this.folders.find((f) => f.id === id) ?? null;
   }
+
+  // Who jumps through each host, for the tree's bastion marks. Keyed by
+  // connection id or "dyn:<folderId>/<externalId>". Recomputed with the
+  // tree; inventory hosts count once their folder's entries are loaded.
+  bastionMap = $derived.by(() =>
+    bastionUsage(this.folders, this.connections as any, this.dynamicEntries, this.dynamicFolders),
+  );
 
   // Display name for a jump-hop reference: a saved connection by name, an
   // inventory host ("dyn:<folderId>/<externalId>") by its entry name once

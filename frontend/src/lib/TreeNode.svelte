@@ -1,7 +1,8 @@
 <script lang="ts">
   import { fleet, folderHostIds, folderHostIdsLoaded, unloadedDynamicUnder, TLS_WARN_DAYS, type FleetTool } from "./fleetStore.svelte";
-  import { IconTable, IconShieldCheck, IconCompare, IconKeyRound as IconKeyRoundFleet } from "./iconMap";
-  import { tree, selection, drag, sessions, paneTabs, view } from "./stores.svelte";
+  import { IconTable, IconShieldCheck, IconCompare, IconKeyRound as IconKeyRoundFleet, IconBastion, IconRouted } from "./iconMap";
+  import { dynRef } from "./jumpRefs";
+  import { tree, selection, drag, sessions, paneTabs, view, jumpChainHostnames } from "./stores.svelte";
   import { errMsg } from "./connectErrors";
   import { expandedConnections } from "./treeState.svelte";
   import { probeState } from "./probeState.svelte";
@@ -444,6 +445,24 @@
       { label: "Compare file…", iconComponent: IconCompare, onSelect: open("compare") },
       { label: "Copy SSH key…", iconComponent: IconKeyRoundFleet, onSelect: open("copykey") },
     ];
+  }
+
+  // Jump host marks (Settings -> Appearance). A bastion shows how many
+  // things jump through it; "routed" marks only a chain set on the
+  // connection itself - an inherited folder chain would mark every row.
+  function bastionMark(key: string): { count: number; title: string } | null {
+    if (appPrefs.jumpMarks === "off") return null;
+    const who = tree.bastionMap.get(key);
+    if (!who?.length) return null;
+    const shown = who.slice(0, 8).join("\n") + (who.length > 8 ? `\n... and ${who.length - 8} more` : "");
+    return { count: who.length, title: `Jump host for:\n${shown}` };
+  }
+  function routedMark(conn: { overrides?: { jump_host?: any } | null }): string | null {
+    if (appPrefs.jumpMarks !== "routed") return null;
+    const jh = conn.overrides?.jump_host;
+    if (jh?.kind !== "chain") return null;
+    const hops = jumpChainHostnames(jh.chain);
+    return hops.length ? `Through ${hops.join(" -> ")}` : null;
   }
 
   // "cert 9d" next to a host whose last TLS check found under 14 days left.
@@ -976,6 +995,10 @@
               >{dynStage !== undefined ? "◌" : dynLive ? "●" : (dprobe === "up" || dprobe === "down") ? "○" : ""}</span>
               <span class="dyn-icon"><HIc size={13} /></span>
               <span class="dyn-name">{e.name}</span>
+              {#if bastionMark(dynRef(folder.id, e.external_id))}
+                {@const m = bastionMark(dynRef(folder.id, e.external_id))!}
+                <span class="jump-mark bastion" title={m.title}><IconBastion size={11} />{m.count}</span>
+              {/if}
               <span class="dyn-host mono">{e.hostname}</span>
               {#if e.status === "stopped"}<span class="dyn-status">stopped</span>{/if}
             </div>
@@ -1026,6 +1049,10 @@
               <span class="dyn-icon"><GIc size={13} /></span>
               <span class="dyn-kind mono">{e.kind === "guest_vm" ? "VM" : "LXC"}</span>
               <span class="dyn-name">{e.name}</span>
+              {#if bastionMark(dynRef(folder.id, e.external_id))}
+                {@const m = bastionMark(dynRef(folder.id, e.external_id))!}
+                <span class="jump-mark bastion" title={m.title}><IconBastion size={11} />{m.count}</span>
+              {/if}
               <span class="dyn-host mono">{e.hostname}</span>
               {#if e.status === "stopped"}<span class="dyn-status">stopped</span>{/if}
             </div>
@@ -1144,6 +1171,13 @@
             <span class="name">{conn.name}</span>
           {/if}
           {#if conn.favorite}<span class="fav" title="Favourite"><IconStar size={11} fill="var(--yellow)" /></span>{/if}
+          {#if bastionMark(conn.id)}
+            {@const m = bastionMark(conn.id)!}
+            <span class="jump-mark bastion" title={m.title}><IconBastion size={11} />{m.count}</span>
+          {/if}
+          {#if routedMark(conn)}
+            <span class="jump-mark routed" title={routedMark(conn)}><IconRouted size={11} /></span>
+          {/if}
           {#if certBadge(conn.id)}
             {@const b = certBadge(conn.id)!}
             <span class="cert-badge" class:bad={b.bad} title={b.title}>{b.text}</span>
@@ -1287,6 +1321,14 @@
   .cert-badge {
     flex-shrink: 0; font-size: 0.66rem; padding: 0 0.35rem; border-radius: 7px; margin-right: 0.2rem;
     color: var(--yellow); background: color-mix(in srgb, var(--yellow) 16%, transparent);
+  }
+  .jump-mark {
+    flex-shrink: 0; display: inline-flex; align-items: center; gap: 0.15rem;
+    font-size: 0.66rem; margin-right: 0.25rem; color: var(--overlay1);
+  }
+  .jump-mark.bastion {
+    color: var(--teal); padding: 0 0.3rem; border-radius: 7px;
+    background: color-mix(in srgb, var(--teal) 14%, transparent);
   }
   .cert-badge.bad { color: var(--red); background: color-mix(in srgb, var(--red) 16%, transparent); }
   .name { flex: 1; min-width: 4rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

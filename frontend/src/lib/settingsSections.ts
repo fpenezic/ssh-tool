@@ -6,6 +6,7 @@
 
 export type SectionId =
   | "appearance"
+  | "tree"
   | "window"
   | "shells"
   | "connection"
@@ -70,6 +71,7 @@ export type SectionDef = {
 
 export const SETTINGS_SECTIONS: SectionDef[] = [
   { id: "appearance",  title: "Appearance",        group: "General",        keywords: ["theme", "colors", "font", "look", "density", "status bar", "server status"] },
+  { id: "tree",        title: "Connection tree",   group: "General",        keywords: ["jump host", "bastion", "marks", "row", "color tag", "active row", "sidebar"] },
   { id: "window",      title: "Window & startup",  group: "General",        keywords: ["tray", "minimise", "minimize", "close", "startup", "restore", "tabs"] },
   { id: "updates",     title: "Updates",           group: "General",        keywords: ["version", "upgrade", "release", "changelog"] },
   { id: "terminal",    title: "Terminal",          group: "Terminal",       keywords: ["xterm", "font", "webgl", "scrollback", "cursor", "copy", "paste", "timestamp", "color scheme"] },

@@ -126,6 +126,11 @@ export function credentialIconFor(c: { kind: string; config?: Record<string, unk
   return credentialKindIcon(c.kind);
 }
 
+// Jump host marks in the tree.
+import Waypoints from "@lucide/svelte/icons/waypoints";
+import Route from "@lucide/svelte/icons/route";
+export { Waypoints as IconBastion, Route as IconRouted };
+
 // Split layout icons (separate so we can import lazily if needed)
 import Columns2 from "@lucide/svelte/icons/columns-2";
 import Rows2 from "@lucide/svelte/icons/rows-2";

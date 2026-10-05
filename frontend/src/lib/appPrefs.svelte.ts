@@ -17,6 +17,7 @@ const TAG_BG_KEY = "ui_tag_bg";
 const ACTIVE_ROW_KEY = "ui_active_row_emphasis";
 const TAB_TIMER_KEY = "ui_tab_timer";
 const THEME_KEY = "ui_theme";
+const JUMP_MARKS_KEY = "ui_jump_marks";
 // localStorage mirror of the theme, read synchronously at boot before the
 // WebView paints. The authoritative value lives in the settings DB, but
 // settingsGet is an async IPC round-trip - reconciling it only after the
@@ -26,6 +27,11 @@ const THEME_KEY = "ui_theme";
 const THEME_CACHE_KEY = "ui_theme_cache";
 
 export type Density = "compact" | "comfortable" | "cozy";
+
+// Jump host marks in the connection tree. "bastions": a host other chains
+// jump through. "routed": also connections with a jump chain of their
+// OWN - an inherited folder chain would mark every row in the folder.
+export type JumpMarks = "off" | "bastions" | "routed";
 
 // Toggle the theme classes on <html>. Shared by the early boot path and
 // the reactive apply() so both stay in sync. "mocha" = no class (the
@@ -68,6 +74,7 @@ class AppPrefs {
   // When true, the tab bar shows a small "Nm" / "Nh" timer next to
   // each connected session indicating uptime since connect.
   tabTimer = $state<boolean>(false);
+  jumpMarks = $state<JumpMarks>("bastions");
   // UI theme variant. "mocha" = default Catppuccin Mocha with a
   // slightly lifted muted-text floor. "hc" = high contrast,
   // applied via the `theme-hc` class on <html>. "system" follows the
@@ -110,6 +117,10 @@ class AppPrefs {
     try {
       const v = await api.settingsGet(TAB_TIMER_KEY);
       this.tabTimer = v === "1";
+    } catch { /* missing key fine */ }
+    try {
+      const v = await api.settingsGet(JUMP_MARKS_KEY);
+      if (v === "off" || v === "bastions" || v === "routed") this.jumpMarks = v;
     } catch { /* missing key fine */ }
     try {
       const v = await api.settingsGet(THEME_KEY);
@@ -198,6 +209,12 @@ class AppPrefs {
     if (this.activeRowEmphasis === v) return;
     this.activeRowEmphasis = v;
     api.settingsSet(ACTIVE_ROW_KEY, v ? "1" : "0").catch(console.warn);
+  }
+
+  setJumpMarks(v: JumpMarks) {
+    if (this.jumpMarks === v) return;
+    this.jumpMarks = v;
+    api.settingsSet(JUMP_MARKS_KEY, v).catch(console.warn);
   }
 
   setTabTimer(v: boolean) {

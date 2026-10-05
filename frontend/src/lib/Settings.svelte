@@ -2670,38 +2670,6 @@
     {/if}
 
     <fieldset class="check-cards">
-      <label class:active={appPrefs.tagBackground}>
-        <input
-          type="checkbox"
-          checked={appPrefs.tagBackground}
-          onchange={(e) => appPrefs.setTagBackground((e.target as HTMLInputElement).checked)}
-        />
-        <div>
-          <div class="mode-name">Color tag as row background</div>
-          <div class="mode-desc">
-            In addition to the left strip, tint the whole row with
-            the connection / folder's colour tag. Stronger visual
-            grouping at the cost of contrast.
-          </div>
-        </div>
-      </label>
-
-      <label class:active={appPrefs.activeRowEmphasis}>
-        <input
-          type="checkbox"
-          checked={appPrefs.activeRowEmphasis}
-          onchange={(e) => appPrefs.setActiveRowEmphasis((e.target as HTMLInputElement).checked)}
-        />
-        <div>
-          <div class="mode-name">Emphasise active session row</div>
-          <div class="mode-desc">
-            The tree row matching the currently focused terminal
-            tab gets a brighter highlight so it stands out from
-            other live connections.
-          </div>
-        </div>
-      </label>
-
       <label class:active={appPrefs.tabTimer}>
         <input
           type="checkbox"
@@ -2747,6 +2715,70 @@
           </div>
         </div>
       </label>
+    </fieldset>
+  </div>
+  {/if}
+
+  {#if activeSection === "tree"}
+  <div class="group">
+    <h2>Connection tree</h2>
+    <p class="hint">How rows in the connection tree look. Density and font size are under Appearance.</p>
+
+    <h3>Jump host marks</h3>
+    <fieldset class="modes">
+      {#each [
+        { id: "off", name: "Off", desc: "No marks." },
+        { id: "bastions", name: "Bastions only", desc: "Marks hosts other connections jump through, with how many." },
+        { id: "routed", name: "Bastions and routed connections", desc: "Also marks connections with a jump chain of their own. Chains inherited from a folder are left unmarked." },
+      ] as m (m.id)}
+        <label class:active={appPrefs.jumpMarks === m.id}>
+          <input
+            type="radio"
+            name="jump-marks"
+            checked={appPrefs.jumpMarks === m.id}
+            onchange={() => appPrefs.setJumpMarks(m.id as any)}
+          />
+          <div>
+            <div class="mode-name">{m.name}</div>
+            <div class="mode-desc">{m.desc}</div>
+          </div>
+        </label>
+      {/each}
+    </fieldset>
+
+    <fieldset class="check-cards">
+      <label class:active={appPrefs.tagBackground}>
+        <input
+          type="checkbox"
+          checked={appPrefs.tagBackground}
+          onchange={(e) => appPrefs.setTagBackground((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Color tag as row background</div>
+          <div class="mode-desc">
+            In addition to the left strip, tint the whole row with
+            the connection / folder's colour tag. Stronger visual
+            grouping at the cost of contrast.
+          </div>
+        </div>
+      </label>
+
+      <label class:active={appPrefs.activeRowEmphasis}>
+        <input
+          type="checkbox"
+          checked={appPrefs.activeRowEmphasis}
+          onchange={(e) => appPrefs.setActiveRowEmphasis((e.target as HTMLInputElement).checked)}
+        />
+        <div>
+          <div class="mode-name">Emphasise active session row</div>
+          <div class="mode-desc">
+            The tree row matching the currently focused terminal
+            tab gets a brighter highlight so it stands out from
+            other live connections.
+          </div>
+        </div>
+      </label>
+
     </fieldset>
   </div>
   {/if}
