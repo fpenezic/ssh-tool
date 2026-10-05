@@ -193,6 +193,34 @@ class WorkspaceStore {
     return updated;
   }
 
+  // Save just these tabs as a workspace - a new one, or (existingId) over an
+  // existing one - and gather them into its frame. The other tabs are left
+  // alone, so picking five of six tabs needs no closing of the sixth.
+  async saveTabsAs(name: string, tabIds: string[], existingId?: string): Promise<Workspace | null> {
+    const ids = new Set(tabIds);
+    const from = paneTabs.tabs.filter((t) => ids.has(t.tabId));
+    const layout = JSON.stringify(this.serializeTabs(from));
+    let ws: Workspace | null;
+    if (existingId) {
+      // Tabs still framed for the old content of that workspace drop out of
+      // the frame: the workspace is now exactly the chosen tabs.
+      paneTabs.setWorkspace(this.tabsOf(existingId).filter((t) => !ids.has(t.tabId)).map((t) => t.tabId), undefined);
+      ws = await api.workspaceUpdate(existingId, name, layout);
+    } else {
+      ws = await api.workspaceCreate(name, layout);
+    }
+    await this.load();
+    const id = existingId ?? ws?.id;
+    if (id) {
+      const before = from.map((t) => t.workspaceId);
+      paneTabs.moveToWorkspace(from.map((t) => t.tabId), id);
+      this.markDirty(...before.filter((b) => b !== id));
+      this.clearDirty(id);
+      this.activeId = id;
+    }
+    return ws;
+  }
+
   // Disconnect and remove the workspace's frame. The tab bar passes its own
   // closeTab so a closed workspace tab goes through the same teardown (and
   // Ctrl+Shift+T stack) as any other tab.

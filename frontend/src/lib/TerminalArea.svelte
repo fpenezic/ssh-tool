@@ -402,6 +402,30 @@
     workspaces.markDirty(prev, target);
   }
 
+  // "New workspace from N tabs": the chosen tabs only, the rest stay as they
+  // are. Reusing a name asks before replacing that workspace.
+  async function newWorkspaceFromTabs(tabId: string) {
+    const ids = ctxTargets(tabId);
+    const name = (await showPrompt(ids.length > 1 ? `Workspace name for ${ids.length} tabs?` : "Workspace name?"))?.trim();
+    if (!name) return;
+    const existing = workspaces.findByName(name);
+    if (existing) {
+      const r = await confirmModal.show({
+        title: "Overwrite workspace",
+        message: `"${existing.name}" already exists. Replace it with the ${ids.length === 1 ? "selected tab" : `${ids.length} selected tabs`}?`,
+        okLabel: "Overwrite",
+      });
+      if (!r.ok) return;
+    }
+    try {
+      await workspaces.saveTabsAs(existing?.name ?? name, ids, existing?.id);
+      tabSelection.clear();
+      toast.ok(`Saved workspace "${existing?.name ?? name}"`);
+    } catch (e: any) {
+      toast.err(`Save failed: ${e?.message ?? e}`);
+    }
+  }
+
   function moveIntoFrame(tabIds: string[], id: string | undefined) {
     const before = new Set(tabIds.map((x) => paneTabs.tabs.find((t) => t.tabId === x)?.workspaceId));
     paneTabs.moveToWorkspace(tabIds, id);
@@ -1437,6 +1461,9 @@
         <button onclick={() => { bulkHideTabs(ctxMenu!.tabId); closeCtxMenu(); }}>
           <IconEyeOff size={13} /> Hide {bulkN} tabs (keep running)
         </button>
+        <button onclick={() => { const id = ctxMenu!.tabId; closeCtxMenu(); newWorkspaceFromTabs(id); }}>
+          <IconWorkspace size={13} /> New workspace from {bulkN} tabs…
+        </button>
         <button onclick={() => { bulkMergeIntoGrid(ctxMenu!.tabId); closeCtxMenu(); }}>
           <IconSplitV size={13} /> Merge {bulkN} tabs into a grid
         </button>
@@ -1486,6 +1513,11 @@
       {#if tabFrame(ctxMenu.tabId)}
         <button onclick={() => { moveIntoFrame(ctxTargets(ctxMenu!.tabId), undefined); closeCtxMenu(); }}>
           <IconWorkspace size={13} /> Remove from workspace "{workspaces.byId(tabFrame(ctxMenu.tabId))?.name}"
+        </button>
+      {/if}
+      {#if ctxTargets(ctxMenu.tabId).length === 1}
+        <button onclick={() => { const id = ctxMenu!.tabId; closeCtxMenu(); newWorkspaceFromTabs(id); }}>
+          <IconWorkspace size={13} /> New workspace from this tab…
         </button>
       {/if}
       {#if currentGroup(ctxMenu.tabId)}

@@ -1849,6 +1849,10 @@ own 5-15 terminals open.
 Manage them under **Settings → Appearance → Workspaces** or via the
 **Workspaces** segment in the status bar (bottom-left).
 
+- **New workspace from N tabs** - select tabs (Ctrl/Shift+click), then
+  right-click one of them: only the selected tabs are saved and framed,
+  the rest stay as they are. A single tab's menu has the same as **New
+  workspace from this tab**.
 - **Save current as workspace** - snapshots every open tab: pane tree
   (splits, directions, ratios), connection, title and group metadata.
   Those tabs become the workspace's frame.
