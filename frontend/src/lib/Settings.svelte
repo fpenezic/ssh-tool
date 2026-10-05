@@ -8,7 +8,7 @@
   import KeepassSettings from "./KeepassSettings.svelte";
   import BitwardenSettings from "./BitwardenSettings.svelte";
   import InfisicalSettings from "./InfisicalSettings.svelte";
-  import { api, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type SuperPuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo } from "./api";
+  import { api, type AboutInfo, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type SuperPuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo } from "./api";
   import { vaultState } from "./vaultState.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
   import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
@@ -186,6 +186,38 @@
       toast.err(errMsg(e));
     }
   }
+  let aboutInfo = $state<AboutInfo | null>(null);
+  const frontendDeps = __FRONTEND_DEPS__;
+
+  // Plain-text build + environment summary for a bug report. Only what the
+  // About panel shows: no hosts, no profile contents, no secrets.
+  function diagnosticsText(): string {
+    const v = versionInfo, a = aboutInfo;
+    const lines = [
+      `${v?.name ?? "ssh-tool"} ${v?.version ?? "?"} (commit ${v?.commit ?? "?"}, ${a?.commit_date ?? "?"}, schema v${v?.schema_version ?? "?"})`,
+      `Platform: ${a?.os_name ? a.os_name + " " : ""}(${a?.os ?? "?"})`,
+      `Engine: ${a?.engine || "unknown"}`,
+      `Go: ${a?.go_version ?? "?"}`,
+      "",
+      "Components:",
+      ...(a?.components ?? []).map((c) => `  ${c.name}: ${c.version}`),
+      ...frontendDeps.map((c) => `  ${c.name}: ${c.version}`),
+      "",
+      "Plugins:",
+      ...(a?.plugins ?? []).map((p) => `  ${p.name}: ${p.installed ? (p.version || "installed") : "not installed"}`),
+    ];
+    return lines.join("\n");
+  }
+
+  async function copyDiagnostics() {
+    try {
+      await navigator.clipboard.writeText(diagnosticsText());
+      toast.ok("Diagnostics copied");
+    } catch (e: any) {
+      toast.err(`Copy failed: ${e?.message ?? e}`);
+    }
+  }
+
   let versionInfo = $state<{ name: string; version: string; commit: string; schema_version: number } | null>(null);
   // Profile statistics for the About section. profileStats() counts
   // straight from the DB (incl. resolved VNC, configured forwards +
@@ -484,6 +516,7 @@
     try { logDirPath = (await api.logDir()) ?? ""; } catch { /* ignore */ }
     try { recordingsDirPath = (await api.recordingsDir()) ?? ""; } catch { /* ignore */ }
     try { versionInfo = await api.appVersion(); } catch { /* ignore */ }
+    try { aboutInfo = await api.appAbout(); } catch { /* ignore */ }
     // Make sure the terminal prefs are loaded so the radio sits on the
     // right value when this page first opens.
     await copyPastePrefs.load();
@@ -5956,9 +5989,61 @@
         </dd>
         <dt>Commit</dt>
         <dd><code>{versionInfo.commit}</code></dd>
+        {#if aboutInfo?.commit_date && aboutInfo.commit_date !== "unknown"}
+          <dt>Built from</dt>
+          <dd>{aboutInfo.commit_date}</dd>
+        {/if}
         <dt>Schema</dt>
         <dd><code>v{versionInfo.schema_version}</code></dd>
+        {#if aboutInfo}
+          <dt>Platform</dt>
+          <dd>{aboutInfo.os_name ? aboutInfo.os_name + " " : ""}<span class="hint inline">({aboutInfo.os})</span></dd>
+          <dt>Engine</dt>
+          <dd>{aboutInfo.engine || "unknown"}</dd>
+          <dt>Go</dt>
+          <dd><code>{aboutInfo.go_version}</code></dd>
+          <dt>Plugins</dt>
+          <dd>
+            {#each aboutInfo.plugins as p, i (p.name)}
+              {i > 0 ? " · " : ""}{p.name}
+              <span class="hint inline">{p.installed ? (p.version || "installed") : "not installed"}</span>
+            {/each}
+          </dd>
+          <dt>Data</dt>
+          <dd class="about-path">
+            <code>{aboutInfo.data_dir}</code>
+            <button class="link-btn" onclick={() => api.aboutOpenDir("data").catch((e) => toast.err(String(e)))}>Open</button>
+          </dd>
+          <dt>Logs</dt>
+          <dd class="about-path">
+            <code>{aboutInfo.log_dir}</code>
+            <button class="link-btn" onclick={() => api.aboutOpenDir("logs").catch((e) => toast.err(String(e)))}>Open</button>
+          </dd>
+        {/if}
       </dl>
+      {#if aboutInfo}
+        <details class="about-components">
+          <summary>Components ({aboutInfo.components.length + frontendDeps.length})</summary>
+          <dl class="about-list">
+            {#each aboutInfo.components as c (c.name)}
+              <dt>{c.name}</dt>
+              <dd><code>{c.version}</code></dd>
+            {/each}
+            {#each frontendDeps as c (c.name)}
+              <dt>{c.name}</dt>
+              <dd><code>{c.version}</code></dd>
+            {/each}
+          </dl>
+        </details>
+      {/if}
+      <div class="about-actions">
+        <button onclick={copyDiagnostics} title="Version, platform and component versions as text for a bug report - no hosts or profile data">
+          <IconCopy size={13} /> Copy diagnostics
+        </button>
+        <button class="link-btn" onclick={() => api.openURL("https://github.com/fpenezic/ssh-tool")}>GitHub</button>
+        <button class="link-btn" onclick={() => api.openURL("https://github.com/fpenezic/ssh-tool/issues")}>Report an issue</button>
+        <span class="hint inline">Apache 2.0</span>
+      </div>
     {:else}
       <p class="hint">Loading…</p>
     {/if}
@@ -6022,9 +6107,6 @@
       Version and commit are injected at build time via ldflags. A
       <code>dev</code> tag means the binary was built without those
       flags (typically <code>go run .</code> during development).
-    </p>
-    <p class="hint">
-      Source + issues: see project docs.
     </p>
   </div>
   {/if}
@@ -6308,6 +6390,17 @@
     margin: 0.5rem 0 0.8rem;
     font-size: 0.85rem;
   }
+  .about-path { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .about-path code { word-break: break-all; }
+  .link-btn {
+    background: none; border: 0; padding: 0;
+    color: var(--sapphire); cursor: pointer; font: inherit; font-size: 0.8rem;
+  }
+  .link-btn:hover { text-decoration: underline; }
+  .about-components { margin: 0 0 0.8rem; font-size: 0.85rem; }
+  .about-components summary { cursor: pointer; color: var(--subtext0); }
+  .about-actions { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; margin-bottom: 0.8rem; }
+  .about-actions > button:first-child { display: inline-flex; align-items: center; gap: 0.35rem; }
   .about-list dt {
     color: var(--subtext0);
     text-transform: uppercase;

@@ -8,6 +8,9 @@ export {
 };
 
 export {
+    AboutComponent,
+    AboutInfo,
+    AboutPlugin,
     ActiveSessionInfo,
     AppVersionInfo,
     AuditListInput,

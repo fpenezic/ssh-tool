@@ -40,6 +40,11 @@ var appVersion = "dev"
 // Short commit hash; "unknown" when missing.
 var appCommit = "unknown"
 
+// Injected at build time via -ldflags="-X main.appCommitDate=YYYY-MM-DD".
+// Date of that commit (reproducible, unlike the build clock); "unknown"
+// when missing.
+var appCommitDate = "unknown"
+
 func main() {
 	// `ssh-tool --mcp-bridge` runs as a dumb stdio<->socket pipe so an LLM
 	// client (Claude Code) can reach the running desktop app's MCP server.

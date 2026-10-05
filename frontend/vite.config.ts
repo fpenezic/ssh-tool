@@ -1,6 +1,25 @@
 import {defineConfig} from 'vite'
 import {svelte} from '@sveltejs/vite-plugin-svelte'
 import {resolve} from 'node:path'
+import {readFileSync} from 'node:fs'
+
+// Versions of the frontend libraries that actually got bundled, read from
+// their installed package.json at build time, for Settings -> About. The
+// installed copy, not the range in our package.json: "^6.1.0-beta" says
+// little about which beta shipped.
+function installedVersion(pkg: string): string {
+  try {
+    return JSON.parse(readFileSync(resolve(__dirname, 'node_modules', pkg, 'package.json'), 'utf8')).version
+  } catch {
+    return 'unknown'
+  }
+}
+const frontendDeps = [
+  ['xterm.js', '@xterm/xterm'],
+  ['Svelte', 'svelte'],
+  ['noVNC', '@novnc/novnc'],
+  ['Vite', 'vite'],
+].map(([name, pkg]) => ({name, module: pkg, version: installedVersion(pkg)}))
 
 // Desktop app loads bundle from embedded FS - no network cost - so
 // the "chunks > 500 KB" warning is noise. Bump the limit instead of
@@ -8,6 +27,9 @@ import {resolve} from 'node:path'
 // user-visible win).
 export default defineConfig({
   plugins: [svelte()],
+  define: {
+    __FRONTEND_DEPS__: JSON.stringify(frontendDeps),
+  },
   server: {
     host: '127.0.0.1',
   },

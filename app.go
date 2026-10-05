@@ -4288,6 +4288,10 @@ func (a *App) RecordingsOpenDir() error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
+	return openDirInFileManager(dir)
+}
+
+func openDirInFileManager(dir string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":

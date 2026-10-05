@@ -43,6 +43,10 @@ tasks:
         sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo dev)}"
       APP_COMMIT:
         sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
+      # Commit date, not the wall clock: the same commit builds the same
+      # binary, and About can say how old the build is.
+      APP_COMMIT_DATE:
+        sh: git log -1 --format=%cs 2>/dev/null || echo unknown
       # -extldflags carries 16 KB page alignment. Android 15+ ships
       # devices with 16 KB memory pages and will not load a .so whose
       # LOAD segments are aligned to the old 4 KB; recent devices warn
@@ -51,7 +55,7 @@ tasks:
       # -ldflags rather than as a second one on the command line, which
       # would replace this one and drop the version stamp. Harmless on
       # 4 KB devices - a larger alignment is always valid.
-      BUILD_FLAGS: '{{if eq .PRODUCTION "true"}}-tags production,android -trimpath -buildvcs=false -ldflags="-w -s -X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}} -extldflags=-Wl,-z,max-page-size=16384"{{else}}-tags android,debug -buildvcs=false -gcflags=all="-l" -ldflags="-X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}} -extldflags=-Wl,-z,max-page-size=16384"{{end}}'
+      BUILD_FLAGS: '{{if eq .PRODUCTION "true"}}-tags production,android -trimpath -buildvcs=false -ldflags="-w -s -X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}} -X main.appCommitDate={{.APP_COMMIT_DATE}} -extldflags=-Wl,-z,max-page-size=16384"{{else}}-tags android,debug -buildvcs=false -gcflags=all="-l" -ldflags="-X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}} -X main.appCommitDate={{.APP_COMMIT_DATE}} -extldflags=-Wl,-z,max-page-size=16384"{{end}}'
     env:
       PRODUCTION: '{{.PRODUCTION | default "false"}}'
 
@@ -108,6 +112,10 @@ tasks:
         sh: echo "${SSHTOOL_VERSION:-$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo dev)}"
       APP_COMMIT:
         sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
+      # Commit date, not the wall clock: the same commit builds the same
+      # binary, and About can say how old the build is.
+      APP_COMMIT_DATE:
+        sh: git log -1 --format=%cs 2>/dev/null || echo unknown
       # -extldflags carries 16 KB page alignment, and this is the copy
       # that matters: compile:go:shared is what actually links
       # libwails.so. Android 15+ ships devices with 16 KB memory pages
@@ -117,7 +125,7 @@ tasks:
       # defaults to 4 KB. It has to sit inside this -ldflags rather than
       # as a second one on the command line, which would replace this
       # one and drop the version stamp. Harmless on 4 KB devices.
-      BUILD_FLAGS: '{{if eq .PRODUCTION "true"}}-tags production,android -trimpath -buildvcs=false -ldflags="-w -s -X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}} -extldflags=-Wl,-z,max-page-size=16384"{{else}}-tags android,debug -buildvcs=false -gcflags=all="-l" -ldflags="-X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}} -extldflags=-Wl,-z,max-page-size=16384"{{end}}'
+      BUILD_FLAGS: '{{if eq .PRODUCTION "true"}}-tags production,android -trimpath -buildvcs=false -ldflags="-w -s -X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}} -X main.appCommitDate={{.APP_COMMIT_DATE}} -extldflags=-Wl,-z,max-page-size=16384"{{else}}-tags android,debug -buildvcs=false -gcflags=all="-l" -ldflags="-X main.appVersion={{.APP_VERSION}} -X main.appCommit={{.APP_COMMIT}} -X main.appCommitDate={{.APP_COMMIT_DATE}} -extldflags=-Wl,-z,max-page-size=16384"{{end}}'
 
   compile:go:all-archs:
     summary: Compile Go code for all Android architectures (fat APK)

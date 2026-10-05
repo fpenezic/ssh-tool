@@ -25,3 +25,6 @@ declare module "@novnc/novnc" {
     focus(options?: FocusOptions): void;
   }
 }
+
+// Injected by vite.config.ts: bundled frontend library versions (About).
+declare const __FRONTEND_DEPS__: Array<{ name: string; module: string; version: string }>;

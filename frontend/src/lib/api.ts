@@ -926,6 +926,8 @@ export const api = {
   openURL: (url: string) => G.OpenURL(url),
   logDir: () => G.LogDir() as unknown as Promise<string>,
   appVersion: () => G.AppVersion() as unknown as Promise<AppVersionInfo>,
+  appAbout: () => G.AppAbout() as unknown as Promise<AboutInfo>,
+  aboutOpenDir: (which: "data" | "logs") => G.AboutOpenDir(which) as unknown as Promise<void>,
   profileStats: () => G.ProfileStats() as unknown as Promise<ProfileStats>,
 
   keepassList: () =>
@@ -2023,6 +2025,18 @@ export interface BackupInfo {
 export interface AutoBackupPrefs {
   enabled: boolean;
   keep_last: number;
+}
+
+export interface AboutInfo {
+  commit_date: string;
+  go_version: string;
+  os: string;
+  os_name: string;
+  engine: string;
+  components: Array<{ name: string; module?: string; version: string }>;
+  plugins: Array<{ name: string; installed: boolean; version?: string }>;
+  data_dir: string;
+  log_dir: string;
 }
 
 export interface Workspace {
