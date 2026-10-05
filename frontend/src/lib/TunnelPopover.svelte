@@ -13,6 +13,8 @@
   // intentionally before deciding what to do).
 
   import { onMount, onDestroy } from "svelte";
+  import { errMsg } from "./connectErrors";
+  import { toast } from "./toast.svelte.ts";
   import {
     api,
     type PortForward,
@@ -89,7 +91,7 @@
       giPort = res.remote_port;
       active = (await api.forwardsActive(sessionId)) ?? [];
     } catch (e) {
-      err = String((e as any)?.message ?? e);
+      err = errMsg(e);
     } finally {
       giBusy = false;
     }
@@ -102,7 +104,7 @@
       await api.forwardsStop(id);
       active = sessionId ? (await api.forwardsActive(sessionId)) ?? [] : [];
     } catch (e) {
-      err = String((e as any)?.message ?? e);
+      err = errMsg(e);
     } finally {
       busy = { ...busy, [id]: false };
     }
@@ -129,7 +131,7 @@
         active = [];
       }
     } catch (e) {
-      err = String((e as any)?.message ?? e);
+      err = errMsg(e);
     }
   }
 
@@ -160,15 +162,36 @@
       if (isRunning(spec)) {
         await api.forwardsStop(spec.id);
       } else {
+        err = null;
+        freePortFor = null;
         await api.forwardsStart(spec.id, sessionId);
       }
       // Refresh active list immediately so the row's icon flips
       // without waiting for the 2s poll.
       active = (await api.forwardsActive(sessionId)) ?? [];
     } catch (e) {
-      err = String((e as any)?.message ?? e);
+      err = errMsg(e);
+      if (spec.local_port && spec.kind !== "remote" && PORT_TAKEN.test(err)) freePortFor = spec;
     } finally {
       busy = { ...busy, [spec.id]: false };
+    }
+  }
+
+  // Same retry as the connection pane: a taken fixed port can still start
+  // once on a free one, the saved port stays.
+  let freePortFor = $state<PortForward | null>(null);
+  const PORT_TAKEN = /local port \d+ is (already used by|in use by)/;
+
+  async function startOnFreePort(spec: PortForward) {
+    if (!sessionId) return;
+    err = null;
+    freePortFor = null;
+    try {
+      const st = await api.forwardsStartFreePort(spec.id, sessionId);
+      toast.info(`Started on port ${st.local_port} for this run`);
+      active = (await api.forwardsActive(sessionId)) ?? [];
+    } catch (e) {
+      err = errMsg(e);
     }
   }
 
@@ -182,7 +205,7 @@
     try {
       await api.sshLaunchBrowser(spec.id, bm.url);
     } catch (e) {
-      err = String((e as any)?.message ?? e);
+      err = errMsg(e);
     }
   }
 
@@ -197,7 +220,15 @@
 </script>
 
 <div class="pop" use:clickOutside={{ onOutside: onClose }}>
-  {#if err}<div class="err">{err}</div>{/if}
+  {#if err}
+    <div class="err">
+      {err}
+      {#if freePortFor}
+        {@const spec = freePortFor}
+        <button class="err-act" onclick={() => startOnFreePort(spec)}>Start on a free port</button>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Give internet: reverse HTTP proxy for an offline server -->
   <div class="gi">
@@ -329,6 +360,7 @@
     font-size: 0.8rem;
   }
   .err, .err-line { color: var(--red); }
+  .err-act { display: block; margin-top: 0.35rem; font-size: 0.75rem; }
   .err {
     padding: 0.4rem 0.5rem;
     background: var(--surface0);

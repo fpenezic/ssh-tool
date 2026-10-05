@@ -24,6 +24,8 @@
     ids.map((id) => tree.connectionById(id)).filter((c): c is Connection => !!c)
   );
   const credList = $derived(credentials.list);
+  // Fleet tools also take inventory hosts selected alongside.
+  const fleetIds = $derived(selection.fleetHostIds());
 
   // Form state. Resets when selection changes.
   let usernameMode = $state<Mode>("leave");
@@ -199,7 +201,7 @@
     </div>
   </header>
 
-  <FleetBar ids={conns.filter((c) => (c.protocol || "ssh") === "ssh").map((c) => c.id)} label={`${conns.length} selected connections`} />
+  <FleetBar ids={fleetIds} label={fleetIds.length === conns.length ? `${conns.length} selected connections` : `${fleetIds.length} selected hosts`} />
 
   <div class="list">
     {#each conns as c}

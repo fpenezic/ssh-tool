@@ -124,7 +124,7 @@ class ConnectionActionsStore {
   // Delete modal: items + a pending op fired on confirm. Shared by
   // the connections tree AND the credentials tree - DeleteConfirm
   // renders all four kinds.
-  deleteItems = $state<Array<{ kind: "folder" | "connection" | "credentialFolder" | "credential"; name: string; detail?: string }>>([]);
+  deleteItems = $state<Array<{ kind: "folder" | "connection" | "credentialFolder" | "credential"; name: string; detail?: string; warn?: string }>>([]);
   deletePending: (() => Promise<void>) | null = null;
 
   openMoveTo(connIds: string[], folderIds: string[]) {
@@ -695,7 +695,7 @@ class ConnectionActionsStore {
     const items = ids
       .map((id) => tree.connectionById(id))
       .filter((c): c is Connection => !!c)
-      .map((c) => ({ kind: "connection" as const, name: c.name, detail: c.hostname }));
+      .map((c) => ({ kind: "connection" as const, name: c.name, detail: c.hostname, warn: tree.deleteWarn(c) }));
     this.deleteItems = items;
     this.deletePending = async () => {
       for (const id of ids) {
@@ -828,7 +828,7 @@ function collectDescendantFolderIds(id: string, out: Set<string>) {
 
 function collectFolderVictims(
   folderId: string,
-  out: Array<{ kind: "folder" | "connection" | "credentialFolder" | "credential"; name: string; detail?: string }>,
+  out: Array<{ kind: "folder" | "connection" | "credentialFolder" | "credential"; name: string; detail?: string; warn?: string }>,
 ) {
   const f = tree.folderById(folderId);
   if (!f) return;
@@ -844,7 +844,7 @@ function collectFolderVictims(
       : undefined,
   });
   for (const c of childConns) {
-    out.push({ kind: "connection", name: c.name, detail: c.hostname });
+    out.push({ kind: "connection", name: c.name, detail: c.hostname, warn: tree.deleteWarn(c) });
   }
   for (const sub of childFolders) {
     collectFolderVictims(sub.id, out);
@@ -856,7 +856,7 @@ function collectFolderVictims(
 // exact list the backend cascade will delete.
 function collectCredFolderVictims(
   folderId: string,
-  out: Array<{ kind: "folder" | "connection" | "credentialFolder" | "credential"; name: string; detail?: string }>,
+  out: Array<{ kind: "folder" | "connection" | "credentialFolder" | "credential"; name: string; detail?: string; warn?: string }>,
 ) {
   const f = credentials.folders.find((x) => x.id === folderId);
   if (!f) return;

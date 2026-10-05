@@ -52,6 +52,9 @@ type ForwardStatus struct {
 	BytesIn    uint64       `json:"bytes_in"`
 	BytesOut   uint64       `json:"bytes_out"`
 	StartedAt  int64        `json:"started_at"`
+	// MovedFrom is the port an auto-port forward held last time and could
+	// not get back at this start (0 = it did, or the port is fixed).
+	MovedFrom uint16 `json:"moved_from,omitempty"`
 }
 
 // activeForward is the live state of a single forward. Owned by the
@@ -68,6 +71,7 @@ type activeForward struct {
 
 	localAddr  string
 	localPort  uint16
+	movedFrom  uint16 // sticky auto port that was taken at start (0 = none)
 	remoteHost string
 	remotePort uint16
 
@@ -102,6 +106,7 @@ func (f *activeForward) snapshot() ForwardStatus {
 		BytesIn:    f.bytesIn.load(),
 		BytesOut:   f.bytesOut.load(),
 		StartedAt:  f.started,
+		MovedFrom:  f.movedFrom,
 	}
 }
 
@@ -143,23 +148,33 @@ func (p *ForwardPool) rememberStickyPort(id string, port uint16) {
 
 // listenSticky binds localAddr:localPort. With no explicit port it prefers
 // the one this forward held last time, falling back to a fresh OS-assigned
-// port if that one is taken meanwhile, and remembers what it got.
-func (p *ForwardPool) listenSticky(id, localAddr string, localPort uint16) (net.Listener, uint16, error) {
-	var listener net.Listener
+// port if that one is taken meanwhile, and remembers what it got. movedFrom
+// is that previous port when the fallback happened (0 otherwise), so the UI
+// can say the tunnel moved instead of a {port} bookmark silently changing.
+//
+// An explicit port that is taken comes back as *PortInUseError, naming the
+// forward of ours that holds it when there is one.
+func (p *ForwardPool) listenSticky(id, localAddr string, localPort uint16) (listener net.Listener, port, movedFrom uint16, err error) {
 	if localPort == 0 {
 		if prev := p.stickyPort(id); prev != 0 {
 			if l, e := net.Listen("tcp", net.JoinHostPort(localAddr, strconv.Itoa(int(prev)))); e == nil {
 				listener = l
 			} else {
 				log.Printf("forward %s: sticky port %d unavailable (%v); taking a new one", id, prev, e)
+				movedFrom = prev
 			}
 		}
+	} else if holder := p.holderOf(localAddr, localPort); holder != "" {
+		return nil, 0, 0, &PortInUseError{Addr: localAddr, Port: localPort, HolderID: holder}
 	}
 	if listener == nil {
 		addr := net.JoinHostPort(localAddr, strconv.Itoa(int(localPort)))
-		l, err := net.Listen("tcp", addr)
-		if err != nil {
-			return nil, 0, fmt.Errorf("listen %s: %w", addr, err)
+		l, lerr := net.Listen("tcp", addr)
+		if lerr != nil {
+			if inUse, reserved := classifyListenErr(lerr); inUse || reserved {
+				return nil, 0, 0, &PortInUseError{Addr: localAddr, Port: localPort, Reserved: reserved, Err: lerr}
+			}
+			return nil, 0, 0, fmt.Errorf("listen %s: %w", addr, lerr)
 		}
 		listener = l
 	}
@@ -167,7 +182,7 @@ func (p *ForwardPool) listenSticky(id, localAddr string, localPort uint16) (net.
 		localPort = uint16(tcpAddr.Port)
 	}
 	p.rememberStickyPort(id, localPort)
-	return listener, localPort, nil
+	return listener, localPort, movedFrom, nil
 }
 
 // StartLocal starts a -L forward: listen on localAddr:localPort, dial
@@ -182,7 +197,7 @@ func (p *ForwardPool) StartLocal(
 	}
 	// An auto port (0) is sticky like the SOCKS one: a {port} bookmark or a
 	// browser tab opened on the last run keeps working after a restart.
-	listener, localPort, err := p.listenSticky(id, localAddr, localPort)
+	listener, localPort, movedFrom, err := p.listenSticky(id, localAddr, localPort)
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +209,7 @@ func (p *ForwardPool) StartLocal(
 		listener:   listener,
 		localAddr:  localAddr,
 		localPort:  localPort,
+		movedFrom:  movedFrom,
 		remoteHost: remoteHost,
 		remotePort: remotePort,
 		state:      StateListening,
@@ -250,7 +266,7 @@ func (p *ForwardPool) StartDynamic(
 	if localAddr == "" {
 		localAddr = "127.0.0.1"
 	}
-	listener, localPort, err := p.listenSticky(id, localAddr, localPort)
+	listener, localPort, movedFrom, err := p.listenSticky(id, localAddr, localPort)
 	if err != nil {
 		return nil, err
 	}
@@ -262,6 +278,7 @@ func (p *ForwardPool) StartDynamic(
 		listener:  listener,
 		localAddr: localAddr,
 		localPort: localPort,
+		movedFrom: movedFrom,
 		state:     StateListening,
 		started:   time.Now().Unix(),
 		done:      make(chan struct{}),

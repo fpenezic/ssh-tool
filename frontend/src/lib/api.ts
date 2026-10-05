@@ -34,6 +34,11 @@ export interface JumpHostSpec {
   port?: number;
   username?: string;
   auth_ref?: string;
+  // A saved connection used as this hop; the other fields are then ignored
+  // and the connection's own settings (and jump chain) apply at connect.
+  connection_id?: string;
+  // Filled in by the backend's expansion only (resolved previews).
+  name?: string;
   via?: JumpHostSpec;
 }
 
@@ -1398,6 +1403,10 @@ export const api = {
     G.ForwardsActive(sessionId) as unknown as Promise<ForwardStatus[]>,
   forwardsStart: (forwardId: string, sessionId: string) =>
     G.ForwardsStart(forwardId, sessionId) as unknown as Promise<ForwardStatus>,
+  forwardsStartFreePort: (forwardId: string, sessionId: string) =>
+    G.ForwardsStartFreePort(forwardId, sessionId) as unknown as Promise<ForwardStatus>,
+  forwardsPortCheck: (addr: string, port: number, excludeId = "") =>
+    G.ForwardsPortCheck(addr, port, excludeId) as unknown as Promise<PortCheckResult>,
   forwardsStop: (forwardId: string) => G.ForwardsStop(forwardId),
   sshGiveInternet: (sessionId: string, remotePort: number, allowInternal = false) =>
     G.SshGiveInternet(sessionId, remotePort, allowInternal) as unknown as Promise<GiveInternetResult>,
@@ -2312,6 +2321,13 @@ export interface McpApprovalRequest {
   command: string;
 }
 
+export interface PortCheckResult {
+  in_use: boolean;
+  reserved: boolean;
+  holder?: string;
+  saved_on?: string[];
+}
+
 export interface ForwardStatus {
   id: string;
   kind: "local" | "remote" | "dynamic" | "reverse-proxy";
@@ -2325,6 +2341,7 @@ export interface ForwardStatus {
   bytes_in: number;
   bytes_out: number;
   started_at: number;
+  moved_from?: number;
 }
 
 export interface ForwardCreateInput {

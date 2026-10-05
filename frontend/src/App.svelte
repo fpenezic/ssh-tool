@@ -683,6 +683,12 @@
   EventsOn("sync_auto_pushed", (gen: any) => {
     toast.info(`Synced (generation ${gen})`, 2000);
   });
+  // Tunnels started without a click (auto-start, reconnect restore) report
+  // a failed start here, and any start reports an auto port that moved.
+  EventsOn("forward_notice", (n: any) => {
+    if (n?.level === "err") toast.err(n.message, 8000);
+    else if (n?.message) toast.info(n.message, 6000);
+  });
   // Live pull applied the other machine's profile into the running DB.
   // Reload every store that reads from it; SSH sessions are untouched.
   EventsOn("profile_reloaded", async () => {

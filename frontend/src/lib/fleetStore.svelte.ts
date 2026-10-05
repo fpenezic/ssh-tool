@@ -134,6 +134,28 @@ export function fleetHostName(id: string, fallback?: string): string {
   return tree.connectionById(id)?.name ?? fallback ?? id;
 }
 
+// Dynamic (cloud inventory) folders under folderId, itself included, whose
+// entries were never loaded into the tree - a subfolder nobody expanded.
+// folderHostIds cannot see their hosts until they are.
+export function unloadedDynamicUnder(folderId: string): string[] {
+  const out: string[] = [];
+  const walk = (fid: string) => {
+    if (tree.isDynamic(fid) && tree.dynamicEntries[fid] === undefined) out.push(fid);
+    for (const f of tree.folders.filter((x) => x.parent_id === fid)) walk(f.id);
+  };
+  walk(folderId);
+  return out;
+}
+
+// folderHostIds after loading the cached entries of every dynamic subfolder
+// that was never expanded. Reads what the last inventory refresh stored;
+// it does not refresh the provider.
+export async function folderHostIdsLoaded(folderIds: string[]): Promise<string[]> {
+  const missing = [...new Set(folderIds.flatMap(unloadedDynamicUnder))];
+  await Promise.all(missing.map((fid) => tree.loadDynamicEntries(fid)));
+  return [...new Set(folderIds.flatMap(folderHostIds))];
+}
+
 // Every SSH host under a folder, subfolders included: saved connections
 // plus the loaded entries of dynamic (cloud inventory) folders as
 // "dyn:<id>". Local shells, RDP and VNC-only entries are left out - there

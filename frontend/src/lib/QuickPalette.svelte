@@ -23,6 +23,7 @@
   import Icon from "./Icon.svelte";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
+  import { errMsg } from "./connectErrors";
   import { claimKeyboard } from "./paneFocus";
   import { workspaces } from "./workspaces.svelte";
   import { quickConnect } from "./quickConnect.svelte";
@@ -553,7 +554,7 @@
             await api.forwardsStart(spec.id, sid);
           }
         } catch (e) {
-          toast.err(`Tunnel ${running ? "stop" : "start"} failed: ${(e as any)?.message ?? String(e)}`);
+          toast.err(`Tunnel ${running ? "stop" : "start"} failed: ${errMsg(e)}`);
         }
       });
       return;
@@ -572,7 +573,7 @@
           }
           await api.sshLaunchBrowser(spec.id, bm.url);
         } catch (e) {
-          toast.err(`Open bookmark failed: ${(e as any)?.message ?? String(e)}`);
+          toast.err(`Open bookmark failed: ${errMsg(e)}`);
         }
       });
       return;

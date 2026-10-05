@@ -231,8 +231,8 @@ func (a *App) probeDynamicOne(folderID, entryID string, folders []store.Folder, 
 	}
 	// Same per-host overrides (Ansible vars, bastion route) as a real
 	// connect, so the probe checks the path a connect would take.
-	s := resolver.ResolveWith(a.dynamicConnection(entry, df, ""), folders)
-	if !s.ProbeLiveness {
+	s, err := resolver.ResolveWithRefs(a.db, a.dynamicConnection(entry, df, ""), folders)
+	if err != nil || !s.ProbeLiveness {
 		return probeUnknown
 	}
 	return a.probeResolved(&s)

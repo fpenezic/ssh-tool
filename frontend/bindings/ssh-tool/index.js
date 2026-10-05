@@ -70,6 +70,7 @@ export {
     OpksshCertStatusResult,
     PinDynamicEntryInput,
     PluginInfo,
+    PortCheckResult,
     ProbeResult,
     ProfileStats,
     QuickConnectInput,

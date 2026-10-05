@@ -421,8 +421,14 @@ func buildHopChain(s *store.ResolvedSettings) []hop {
 			if j.AuthRef != nil {
 				authRef = j.AuthRef
 			}
+			label := "jump " + j.Hostname
+			if j.Name != "" {
+				// A hop expanded from a saved bastion connection: name it
+				// the way the user knows it.
+				label = "jump " + j.Name
+			}
 			chain = append(chain, hop{
-				Label:    "jump " + j.Hostname,
+				Label:    label,
 				Hostname: j.Hostname,
 				Port:     port,
 				Username: user,
@@ -731,7 +737,7 @@ func Connect(
 			progress("Tunnel dial " + h.Label)
 			debug("%s: dial %s through previous hop", h.Label, addr)
 			t0 := time.Now()
-			netConn, err := prev.Dial("tcp", addr)
+			netConn, err := dialThrough(prev, addr, connectTimeout)
 			if err != nil {
 				debug("%s: jump dial failed after %s: %v", h.Label, time.Since(t0).Round(time.Millisecond), err)
 				cleanup(clients)

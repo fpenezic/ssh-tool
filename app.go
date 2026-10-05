@@ -535,6 +535,20 @@ func (a *App) initialise() {
 	sshlayer.JumpPrefixHook = func(ctx context.Context, s *store.ResolvedSettings, deps sshlayer.JumpPrefixDeps) (*gossh.Client, func(), string, error) {
 		return a.jumpPool.acquire(ctx, s, deps)
 	}
+	// Jump hops that reference an inventory host resolve through the same
+	// synthetic connection a direct connect to that host builds.
+	resolver.DynamicHostLookup = a.dynamicHostForRef
+	resolver.DynamicSelfRef = func(connID string) string {
+		entryID, ok := strings.CutPrefix(connID, "dyn:")
+		if !ok || strings.Contains(entryID, "/") {
+			return ""
+		}
+		e, err := a.db.GetDynamicEntry(entryID)
+		if err != nil || e == nil || e.ExternalID == "" {
+			return ""
+		}
+		return resolver.DynRef(e.FolderID, e.ExternalID)
+	}
 	// Same tunnels for dynamic-inventory API calls (a Proxmox that is
 	// only reachable over VPN). Manual refreshes may start the tunnel;
 	// timer refreshes only ride one that's already up
@@ -1162,7 +1176,10 @@ func (a *App) sshConnectDynamicInternal(folderID, entryID, overrideCredentialID,
 // "quick:<uuid>") and the folder it inherits from. audit writes the
 // kind-specific connect record.
 func (a *App) connectSynthetic(syntheticConn store.Connection, folders []store.Folder, name, hostname, overrideCredentialID, overrideUsername, overridePassword string, audit func(sessionID string, settings *store.ResolvedSettings)) (*SshConnectResult, error) {
-	settings := resolver.ResolveWith(syntheticConn, folders)
+	settings, err := resolver.ResolveWithRefs(a.db, syntheticConn, folders)
+	if err != nil {
+		return nil, err
+	}
 
 	// Per-attempt credential override for dynamic entries.
 	if overrideCredentialID != "" {
@@ -5007,7 +5024,7 @@ func (a *App) ForwardsStart(forwardID, sessionID string) (*sshlayer.ForwardStatu
 	if !ok {
 		return nil, fmt.Errorf("session not connected")
 	}
-	return startForward(a.forwards, sess, spec)
+	return a.startForwardFor(sess, spec, false)
 }
 
 // ForwardsStop tears down a running forward by spec id.
@@ -5090,9 +5107,7 @@ func (a *App) forwardsAutoStartFor(connectionID, sessionID string) {
 		if !spec.AutoStart {
 			continue
 		}
-		if _, err := startForward(a.forwards, sess, &spec); err != nil {
-			log.Printf("auto-start forward %s: %v", spec.ID, err)
-		}
+		_, _ = a.startForwardFor(sess, &spec, true)
 	}
 }
 
@@ -6279,7 +6294,10 @@ func (a *App) resolveAnyConnection(connectionID string) (*store.ResolvedSettings
 	synthetic := a.dynamicConnectionFor(entry, "")
 	synthetic.ID = connectionID
 
-	s := resolver.ResolveWith(synthetic, folders)
+	s, err := resolver.ResolveWithRefs(a.db, synthetic, folders)
+	if err != nil {
+		return nil, err
+	}
 	if s.Username == nil && s.AuthRef != nil {
 		if cred, err2 := a.db.GetCredential(*s.AuthRef); err2 == nil && cred.DefaultUsername != nil {
 			s.Username = cred.DefaultUsername
@@ -6410,9 +6428,7 @@ func (a *App) restoreForwardsOnReconnect(oldID, connID, newID string) {
 		if !ok {
 			continue // spec deleted since the drop
 		}
-		if _, err := startForward(a.forwards, sess, &spec); err != nil {
-			log.Printf("reconnect forward restore %s: %v", id, err)
-		}
+		_, _ = a.startForwardFor(sess, &spec, true)
 	}
 }
 
@@ -8705,7 +8721,14 @@ func (a *App) batchHosts(ids []string) []sshlayer.BatchHostInput {
 			}
 			// Same per-host overrides as an interactive connect; this
 			// path used to skip the Ansible jump hops entirely.
-			s := resolver.ResolveWith(a.dynamicConnectionFor(entry, ""), folders)
+			s, rerr := resolver.ResolveWithRefs(a.db, a.dynamicConnectionFor(entry, ""), folders)
+			if rerr != nil {
+				hosts = append(hosts, sshlayer.BatchHostInput{
+					ConnectionID: cid, Settings: nil,
+					Name: entry.Name, Hostname: entry.Hostname,
+				})
+				continue
+			}
 			if s.Username == nil && s.AuthRef != nil {
 				if cred, err2 := a.db.GetCredential(*s.AuthRef); err2 == nil && cred.DefaultUsername != nil {
 					s.Username = cred.DefaultUsername

@@ -6,6 +6,7 @@
     type ForwardStatus,
     type Connection,
     type ProxyBookmark,
+    type PortCheckResult,
   } from "./api";
   import { sessions, tree, paneTabs } from "./stores.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
@@ -103,6 +104,29 @@
   // "" = the default for this kind (the user's own browser for a local
   // forward, an isolated profile for SOCKS). See SshLaunchBrowser.
   let nBrowserMode = $state("");
+
+  // Local port conflicts, checked as the port is typed: another saved
+  // tunnel on the same port, or something listening there right now.
+  // Remote forwards bind on the server, so there is nothing to check here.
+  let portCheck = $state<PortCheckResult | null>(null);
+  $effect(() => {
+    const port = nLocalPort;
+    const addr = nLocalAddr;
+    const kind = nKind;
+    const self = editingForwardId ?? "";
+    if (!showAdd || kind === "remote" || !port) {
+      portCheck = null;
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        portCheck = await api.forwardsPortCheck(addr || "127.0.0.1", port, self);
+      } catch {
+        portCheck = null;
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  });
 
   // Reset the address defaults to loopback when the user switches kind,
   // unless they've typed their own value. Keeps both fields meaningful per
@@ -253,12 +277,33 @@
     }
   }
 
+  // A fixed port that turned out to be taken can still be started once on
+  // a free port; the saved port stays as it is.
+  let freePortFor = $state<PortForward | null>(null);
+  const PORT_TAKEN = /local port \d+ is (already used by|in use by)/;
+
   async function startForward(spec: PortForward) {
     err = null;
+    freePortFor = null;
     const sid = await ensureSession();
     if (!sid) return;
     try {
       await api.forwardsStart(spec.id, sid);
+      await reload();
+    } catch (e: any) {
+      err = errMsg(e);
+      if (spec.local_port && spec.kind !== "remote" && PORT_TAKEN.test(err)) freePortFor = spec;
+    }
+  }
+
+  async function startOnFreePort(spec: PortForward) {
+    err = null;
+    freePortFor = null;
+    const sid = await ensureSession();
+    if (!sid) return;
+    try {
+      const st = await api.forwardsStartFreePort(spec.id, sid);
+      toast.info(`Started on port ${st.local_port} for this run`);
       await reload();
     } catch (e: any) {
       err = errMsg(e);
@@ -397,7 +442,15 @@
     <button onclick={() => { if (showAdd) { cancelForm(); } else { resetForm(); showAdd = true; } }}>{showAdd ? "Cancel" : "+ Add"}</button>
   </header>
 
-  {#if err}<div class="err">{err}</div>{/if}
+  {#if err}
+    <div class="err">
+      {err}
+      {#if freePortFor}
+        {@const spec = freePortFor}
+        <button class="err-act" onclick={() => startOnFreePort(spec)}>Start on a free port</button>
+      {/if}
+    </div>
+  {/if}
 
   {#if showAdd}
     <div class="add-form">
@@ -430,6 +483,20 @@
           <input type="number" bind:value={nLocalPort} placeholder="0 = auto" />
         </label>
       </div>
+      {#if portCheck && (portCheck.in_use || portCheck.reserved || portCheck.saved_on?.length)}
+        <div class="port-warn">
+          {#if portCheck.reserved}
+            <div>Port {nLocalPort} is reserved by Windows (excluded port range).</div>
+          {:else if portCheck.holder}
+            <div>Port {nLocalPort} is in use right now by {portCheck.holder}.</div>
+          {:else if portCheck.in_use}
+            <div>Port {nLocalPort} is in use right now by another program.</div>
+          {/if}
+          {#if portCheck.saved_on?.length}
+            <div>Also set on {portCheck.saved_on.join(", ")}.</div>
+          {/if}
+        </div>
+      {/if}
       {#if nKind !== "dynamic"}
         <!-- Line 2: the TARGET side that the listener dials.
              local -> target reached FROM the server; remote -> target on THIS machine. -->
@@ -622,6 +689,17 @@
   header strong {
     font-size: 0.78rem; text-transform: uppercase;
     color: var(--subtext0); letter-spacing: 0.04em;
+  }
+  .port-warn {
+    font-size: 0.75rem;
+    color: var(--peach);
+    background: color-mix(in srgb, var(--peach) 10%, transparent);
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+  }
+  .err-act {
+    margin-left: 0.5rem;
+    font-size: 0.75rem;
   }
   .err {
     color: var(--red); background: var(--crust);

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { fleet, folderHostIds, TLS_WARN_DAYS, type FleetTool } from "./fleetStore.svelte";
+  import { fleet, folderHostIds, folderHostIdsLoaded, unloadedDynamicUnder, TLS_WARN_DAYS, type FleetTool } from "./fleetStore.svelte";
   import { IconTable, IconShieldCheck, IconCompare, IconKeyRound as IconKeyRoundFleet } from "./iconMap";
   import { tree, selection, drag, sessions, paneTabs, view } from "./stores.svelte";
   import { errMsg } from "./connectErrors";
@@ -425,6 +425,27 @@
     ];
   }
 
+  // Fleet items for folders. A dynamic subfolder nobody expanded has no
+  // entries in the tree yet, so the host list is built on select, after
+  // loading them - otherwise those hosts were silently left out.
+  function folderFleetItems(folderIds: string[], label: string, folderId?: string) {
+    const known = [...new Set(folderIds.flatMap((fid) => folderHostIds(fid)))];
+    const pending = folderIds.some((fid) => unloadedDynamicUnder(fid).length > 0);
+    if (!pending) return fleetItems(known, label, folderId);
+    const open = (tool: FleetTool) => async () => {
+      const ids = await folderHostIdsLoaded(folderIds);
+      if (ids.length === 0) { toast.info(`No SSH hosts in ${label}`); return; }
+      if (tool === "compare" && ids.length < 2) { toast.info(`Compare needs two hosts; ${label} has one`); return; }
+      fleet.show({ tool, ids, label, folderId });
+    };
+    return [
+      { label: "Gather facts…", iconComponent: IconTable, onSelect: open("facts") },
+      { label: "Check TLS certificates…", iconComponent: IconShieldCheck, onSelect: open("tls") },
+      { label: "Compare file…", iconComponent: IconCompare, onSelect: open("compare") },
+      { label: "Copy SSH key…", iconComponent: IconKeyRoundFleet, onSelect: open("copykey") },
+    ];
+  }
+
   // "cert 9d" next to a host whose last TLS check found under 14 days left.
   function certBadge(id: string): { text: string; title: string; bad: boolean } | null {
     const d = fleet.daysLeft(id);
@@ -468,8 +489,8 @@
         { label: "Edit dynamic config…",   iconComponent: IconSettings, onSelect: () => dynEditor.showEdit(folder.id) },
         { label: "Rename…",                iconComponent: IconPencil, onSelect: () => connectionActions.renameFolder(folder.id) },
       ] : []),
-      ...fleetItems(
-        [...new Set(ids.flatMap((fid) => folderHostIds(fid)))],
+      ...folderFleetItems(
+        ids,
         single ? (tree.folderById(folder.id)?.name ?? "folder") : `${ids.length} folders`,
         single ? folder.id : undefined,
       ),
@@ -534,10 +555,16 @@
         iconComponent: IconCopy,
         onSelect: () => connectionActions.cloneConnection(ids[0]),
       }] : []),
-      ...fleetItems(
-        ids.filter((id) => (tree.connectionById(id)?.protocol || "ssh") === "ssh"),
-        ids.length === 1 ? (tree.connectionById(ids[0])?.name ?? "host") : `${ids.length} selected connections`,
-      ),
+      ...(() => {
+        // Inventory hosts selected alongside count too (mixed selection).
+        const hosts = selection.fleetHostIds();
+        const mixed = hosts.length !== ids.length || hosts.some((h) => h.startsWith("dyn:"));
+        return fleetItems(
+          hosts,
+          hosts.length === 1 ? (tree.connectionById(ids[0])?.name ?? "host")
+            : mixed ? `${hosts.length} selected hosts` : `${ids.length} selected connections`,
+        );
+      })(),
       {
         label: ids.length > 1 ? `Export ${ids.length}…` : "Export…",
         iconComponent: IconDownload,
@@ -575,10 +602,10 @@
         iconComponent: IconPlay,
         onSelect: () => (one ? connectDynamic(folderId, entry) : connectionActions.connectDynamicMany(sel)),
       },
-      ...fleetItems(
-        sel.map((t) => "dyn:" + t.entryId),
-        one ? entry.name : `${sel.length} selected hosts`,
-      ),
+      ...(() => {
+        const hosts = selection.fleetHostIds();
+        return fleetItems(hosts, hosts.length === 1 ? entry.name : `${hosts.length} selected hosts`);
+      })(),
       ...(one && entry.hostname ? [{
         label: "Copy address",
         iconComponent: IconCopy,

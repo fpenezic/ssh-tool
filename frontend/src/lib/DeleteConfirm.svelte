@@ -10,6 +10,7 @@
     kind: "folder" | "connection" | "credentialFolder" | "credential";
     name: string;
     detail?: string;  // hostname, child count, etc.
+    warn?: string;    // consequence worth a red line (e.g. used as a jump host)
   }
 
   interface Props {
@@ -53,6 +54,7 @@
           <span class="ic"><Ic size={13} /></span>
           <span class="nm">{it.name}</span>
           {#if it.detail}<span class="dt">{it.detail}</span>{/if}
+          {#if it.warn}<div class="warn">{it.warn}</div>{/if}
         </li>
       {/each}
     </ul>
@@ -109,6 +111,7 @@
   .ic { text-align: center; }
   .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dt { color: var(--overlay0); font-size: 0.78rem; }
+  .warn { grid-column: 2 / -1; color: var(--red); font-size: 0.78rem; }
   .actions {
     display: flex;
     justify-content: flex-end;

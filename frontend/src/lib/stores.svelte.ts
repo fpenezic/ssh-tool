@@ -1,3 +1,4 @@
+import { jumpReferrers } from "./jumpRefs";
 import { api, type Folder, type Connection, type CredentialRef, type CredentialFolder, type InheritableSettings } from "./api";
 import { rebalanceEven } from "./paneSplit";
 import { expandedConnections, expandedCredentials } from "./treeState.svelte";
@@ -135,6 +136,47 @@ class TreeStore {
   folderById(id: string | null): Folder | null {
     if (!id) return null;
     return this.folders.find((f) => f.id === id) ?? null;
+  }
+
+  // Display name for a jump-hop reference: a saved connection by name, an
+  // inventory host ("dyn:<folderId>/<externalId>") by its entry name once
+  // that folder's entries are loaded.
+  jumpRefLabel(ref: string): string {
+    if (ref.startsWith("dyn:")) {
+      const rest = ref.slice(4);
+      const i = rest.indexOf("/");
+      const fid = rest.slice(0, i);
+      const ext = rest.slice(i + 1);
+      const list = this.dynamicEntries[fid];
+      if (!list) return `${ext} (inventory)`;
+      return list.find((e) => e.external_id === ext)?.name ?? `${ext} (gone from inventory)`;
+    }
+    return this.connectionById(ref)?.name ?? "(deleted connection)";
+  }
+
+  // The inventory entry a "dyn:" jump reference points at, if loaded.
+  jumpRefEntry(ref: string) {
+    if (!ref.startsWith("dyn:")) return null;
+    const rest = ref.slice(4);
+    const i = rest.indexOf("/");
+    return this.dynamicEntries[rest.slice(0, i)]?.find((e) => e.external_id === rest.slice(i + 1)) ?? null;
+  }
+
+  // Names of the folders and connections whose own jump chain uses this
+  // connection as a bastion. Shown before a delete: those chains would
+  // fail with "the jump host connection was deleted" afterwards.
+  jumpReferrers(connectionId: string): string[] {
+    return jumpReferrers(connectionId, this.folders, this.connections);
+  }
+
+  // Delete-dialog warning for a connection other chains jump through:
+  // after the delete those connections fail with "the jump host connection
+  // was deleted".
+  deleteWarn(c: Connection): string | undefined {
+    const refs = this.jumpReferrers(c.id);
+    if (!refs.length) return undefined;
+    const shown = refs.slice(0, 5).join(", ") + (refs.length > 5 ? ` and ${refs.length - 5} more` : "");
+    return `Jump host for ${shown} - they will fail to connect.`;
   }
 
   connectionById(id: string | null): Connection | null {
@@ -304,22 +346,19 @@ class TreeStore {
   }
 }
 
-// jumpChainHostnames flattens a JumpHostSpec linked list into a
-// bastion-first array. The on-wire shape nests `via` for each
-// additional hop, so a 2-bastion chain looks like:
-//   { hostname: "b2", via: { hostname: "b1" } }
-// which we render as ["b1", "b2"] (closest-to-target last).
-function jumpChainHostnames(spec: { hostname?: string; via?: any } | undefined | null): string[] {
-  if (!spec) return [];
+// jumpChainHostnames flattens a JumpHostSpec linked list into the order the
+// backend dials it: the spec itself first, then each `via` (see
+// buildHopChain in internal/ssh/session.go). A hop that references a saved
+// connection shows that connection's name.
+export function jumpChainHostnames(spec: { hostname?: string; connection_id?: string; via?: any } | undefined | null): string[] {
   const out: string[] = [];
-  // Walk via-chain first so the outermost bastion lands at the
-  // start of the list.
-  let cur: any = spec.via;
-  while (cur) {
-    if (cur.hostname) out.unshift(cur.hostname);
+  let cur: any = spec;
+  let guard = 0;
+  while (cur && guard++ < 100) {
+    if (cur.connection_id) out.push(tree.jumpRefLabel(cur.connection_id));
+    else if (cur.hostname) out.push(cur.hostname);
     cur = cur.via;
   }
-  if (spec.hostname) out.push(spec.hostname);
   return out;
 }
 
@@ -510,6 +549,12 @@ class SelectionStore {
       next.delete(key);
     } else {
       if (this.current.kind !== "dynamicEntry") {
+        // Same as toggleConnection: a saved-connection anchor stays selected.
+        if (this.current.kind === "connection") {
+          const c = new Set(this.extras);
+          c.add(this.current.id);
+          this.extras = c;
+        }
         this.current = { kind: "dynamicEntry", folderId, entryId };
         return;
       }
@@ -558,6 +603,15 @@ class SelectionStore {
     return out;
   }
 
+  // Every selected SSH host for the fleet tools, saved connections and
+  // inventory hosts ("dyn:<entryId>") together. Local shells are left out.
+  fleetHostIds(): string[] {
+    const conns = this.selectedConnectionIds().filter(
+      (id) => (tree.connectionById(id)?.protocol || "ssh") === "ssh",
+    );
+    return [...conns, ...this.selectedDynamicEntries().map((d) => "dyn:" + d.entryId)];
+  }
+
   // Single-click on a connection: clear multi, anchor here.
   selectConnection(id: string) {
     this.select({ kind: "connection", id });
@@ -582,8 +636,15 @@ class SelectionStore {
     if (next.has(id)) {
       next.delete(id);
     } else {
-      // First multi-click without an anchor: become anchor.
+      // First multi-click without a connection anchor: become anchor. A
+      // dynamic host that was the anchor stays selected (as an extra), so
+      // a fleet tool can run over saved and inventory hosts together.
       if (this.current.kind !== "connection") {
+        if (this.current.kind === "dynamicEntry") {
+          const d = new Set(this.dynamicExtras);
+          d.add(SelectionStore.dynKey(this.current.folderId, this.current.entryId));
+          this.dynamicExtras = d;
+        }
         this.current = { kind: "connection", id };
         return;
       }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
+	"ssh-tool/internal/resolver"
 	"ssh-tool/internal/store"
 )
 
@@ -159,6 +160,10 @@ func Apply(
 	// folders by id. Without remapping, every child gets the archive's
 	// original id which doesn't exist in this DB (FK constraint fails).
 	folderIDMap := map[string]string{}
+	// folderWritten: archive folder ids whose row this import created or
+	// overwrote - the ones whose jump-chain connection references get
+	// remapped once the connection ids are known.
+	folderWritten := map[string]bool{}
 	credIDMap := map[string]string{}
 
 	// resolveAuthRef maps an archive credential id to its final local id.
@@ -410,6 +415,7 @@ func Apply(
 			case ConflictOverwrite:
 				sum.FoldersUpdated = append(sum.FoldersUpdated, f.Name)
 				folderIDMap[f.ID] = existing.ID
+				folderWritten[f.ID] = true
 				if !opts.DryRun {
 					settings, dropped := remapAuthRefInSettings(f.Settings, resolveAuthRef)
 					noteDropped(dropped)
@@ -483,6 +489,7 @@ func Apply(
 			continue
 		}
 		folderIDMap[f.ID] = created.ID
+		folderWritten[f.ID] = true
 		setIcon(f.IconImageID, func(imgID string) error {
 			return db.SetFolderIcon(created.ID, imgID)
 		}, "folder", f.Name)
@@ -600,6 +607,58 @@ func Apply(
 			setNamedIcon(c.IconName, c.IconColor, func(n, col string) error {
 				return db.SetConnectionNamedIcon(created.ID, n, col)
 			}, "conn", c.Name)
+		}
+	}
+
+	// ----- Jump hops that reference a saved connection -----
+	// They carry archive connection ids, which only exist once the pass
+	// above has minted the new rows. Rewrite them now on every folder and
+	// connection this import wrote; a reference to a connection that is
+	// not in the archive and not already here is kept and reported, and
+	// fails with a clear "deleted" error at connect.
+	if !opts.DryRun {
+		remapRef := func(id string) (string, bool) {
+			// An inventory host reference names its dynamic folder, whose
+			// id the folder pass may have changed; the provider id stays.
+			if fid, ext, ok := resolver.ParseDynRef(id); ok {
+				if nf, ok := folderIDMap[fid]; ok {
+					return resolver.DynRef(nf, ext), true
+				}
+				_, here := folderByID[fid]
+				return id, here
+			}
+			if nid, ok := connIDMap[id]; ok {
+				return nid, true
+			}
+			_, here := connByID[id]
+			return id, here
+		}
+		for _, f := range arc.Folders {
+			if !folderWritten[f.ID] || !chainHasConnRef(f.Settings.JumpHost) {
+				continue
+			}
+			settings, _ := remapAuthRefInSettings(f.Settings, resolveAuthRef)
+			missing := remapJumpConnRefs(settings.JumpHost, remapRef)
+			for _, m := range missing {
+				sum.Warnings = append(sum.Warnings, fmt.Sprintf("folder %s: jump host connection %s is not in the archive", f.Name, m))
+			}
+			if _, err := db.UpdateFolder(store.UpdateFolder{ID: folderIDMap[f.ID], Settings: &settings}); err != nil {
+				sum.Warnings = append(sum.Warnings, fmt.Sprintf("folder %s: jump host remap: %v", f.Name, err))
+			}
+		}
+		for _, c := range arc.Connections {
+			newID, ok := connIDMap[c.ID]
+			if !ok || !connPassEligible[c.ID] || !chainHasConnRef(c.Overrides.JumpHost) {
+				continue
+			}
+			overrides, _ := remapAuthRefInSettings(c.Overrides, resolveAuthRef)
+			missing := remapJumpConnRefs(overrides.JumpHost, remapRef)
+			for _, m := range missing {
+				sum.Warnings = append(sum.Warnings, fmt.Sprintf("conn %s: jump host connection %s is not in the archive", c.Name, m))
+			}
+			if _, err := db.UpdateConnection(store.UpdateConnection{ID: newID, Overrides: &overrides}); err != nil {
+				sum.Warnings = append(sum.Warnings, fmt.Sprintf("conn %s: jump host remap: %v", c.Name, err))
+			}
 		}
 	}
 
@@ -765,6 +824,38 @@ func remapJumpChain(spec store.JumpHostSpec, resolve func(id string) (string, bo
 		out.Via = &via
 	}
 	return out, dropped
+}
+
+func chainHasConnRef(j *store.JumpHostOverride) bool {
+	if j == nil || j.Chain == nil {
+		return false
+	}
+	for cur := j.Chain; cur != nil; cur = cur.Via {
+		if cur.ConnectionID != nil && *cur.ConnectionID != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// remapJumpConnRefs rewrites the connection references of a chain in
+// place (the chain is a fresh copy from remapJumpChain) and returns the
+// ids it could not place.
+func remapJumpConnRefs(j *store.JumpHostOverride, remap func(id string) (string, bool)) (missing []string) {
+	if j == nil {
+		return nil
+	}
+	for cur := j.Chain; cur != nil; cur = cur.Via {
+		if cur.ConnectionID == nil || *cur.ConnectionID == "" {
+			continue
+		}
+		nid, ok := remap(*cur.ConnectionID)
+		if !ok {
+			missing = append(missing, *cur.ConnectionID)
+		}
+		cur.ConnectionID = &nid
+	}
+	return missing
 }
 
 // topoSortFolders orders the slice so every entry's parent appears

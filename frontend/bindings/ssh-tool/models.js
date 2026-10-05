@@ -4199,6 +4199,64 @@ export class PluginInfo {
 }
 
 /**
+ * PortCheckResult is what the tunnel editor shows under the local port.
+ */
+export class PortCheckResult {
+    /**
+     * Creates a new PortCheckResult instance.
+     * @param {Partial<PortCheckResult>} [$$source = {}] - The source object to create the PortCheckResult.
+     */
+    constructor($$source = {}) {
+        if (!("in_use" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["in_use"] = false;
+        }
+        if (!("reserved" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["reserved"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * running tunnel of ours, by label
+             * @member
+             * @type {string | undefined}
+             */
+            this["holder"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * other saved tunnels with the same port
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["saved_on"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new PortCheckResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {PortCheckResult}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("saved_on" in $$parsedSource) {
+            $$parsedSource["saved_on"] = $$createField3_0($$parsedSource["saved_on"]);
+        }
+        return new PortCheckResult(/** @type {Partial<PortCheckResult>} */($$parsedSource));
+    }
+}
+
+/**
  * ProbeResult is one connection's liveness state, returned over IPC.
  */
 export class ProbeResult {

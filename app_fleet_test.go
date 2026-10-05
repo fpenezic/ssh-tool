@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strconv"
 	"testing"
+
+	"ssh-tool/internal/store"
 )
 
 func TestAuthorizedKeyRe(t *testing.T) {
@@ -40,8 +42,9 @@ func TestCheckOneTLS(t *testing.T) {
 	u, _ := url.Parse(srv.URL)
 	port, _ := strconv.Atoi(u.Port())
 
+	a := &App{}
 	j := TLSCertResult{Hostname: "localhost", Port: port}
-	checkOneTLS(&j)
+	a.checkOneTLS(&j, nil)
 	if j.State != "ok" || j.NotAfter == 0 || j.DaysLeft <= 0 {
 		t.Fatalf("result = %+v", j)
 	}
@@ -49,8 +52,15 @@ func TestCheckOneTLS(t *testing.T) {
 		t.Errorf("a self-signed test cert must be untrusted: %+v", j)
 	}
 
+	// With resolved settings and no jump chain, DialVia dials directly.
+	viaSettings := TLSCertResult{Hostname: "localhost", Port: port}
+	a.checkOneTLS(&viaSettings, &store.ResolvedSettings{Hostname: "localhost", Port: 22})
+	if viaSettings.State != "ok" || viaSettings.NotAfter != j.NotAfter {
+		t.Errorf("settings path = %+v", viaSettings)
+	}
+
 	ip := TLSCertResult{Hostname: "127.0.0.1", Port: port}
-	checkOneTLS(&ip)
+	a.checkOneTLS(&ip, nil)
 	if ip.State != "skipped" {
 		t.Errorf("an IP host must be skipped, got %+v", ip)
 	}

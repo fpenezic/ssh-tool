@@ -540,3 +540,54 @@ func TestNamedIconRoundTrip(t *testing.T) {
 		t.Fatalf("StripIcon left named icons: %+v %+v", arcStripped.Folders[0], arcStripped.Connections[0])
 	}
 }
+
+// A jump hop that references a saved bastion connection carries the archive
+// id; on import it must point at the bastion's NEW row, in a folder's chain
+// as well as a connection's.
+func TestJumpConnectionRefRoundTrip(t *testing.T) {
+	src := openTestDB(t)
+	bastion, err := src.CreateConnection(store.NewConnection{Name: "bastion", Hostname: "bastion.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := func() *store.JumpHostOverride {
+		id := bastion.ID
+		return &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{ConnectionID: &id}}
+	}
+	if _, err := src.CreateFolder(store.NewFolder{Name: "behind", Settings: store.InheritableSettings{JumpHost: ref()}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.CreateConnection(store.NewConnection{Name: "db", Hostname: "db.example.com",
+		Overrides: store.InheritableSettings{JumpHost: ref()}}); err != nil {
+		t.Fatal(err)
+	}
+	arc, err := Build(src, nil, nil, Options{}, noSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dst := openTestDB(t)
+	if _, err := Apply(dst, arc, ImportOptions{}, rejectSecrets); err != nil {
+		t.Fatal(err)
+	}
+	conns, _ := dst.ListConnections(nil)
+	var newBastion, db *store.Connection
+	for i := range conns {
+		switch conns[i].Name {
+		case "bastion":
+			newBastion = &conns[i]
+		case "db":
+			db = &conns[i]
+		}
+	}
+	if newBastion == nil || db == nil {
+		t.Fatalf("imported connections: %+v", conns)
+	}
+	if got := *db.Overrides.JumpHost.Chain.ConnectionID; got != newBastion.ID {
+		t.Errorf("connection ref = %s, want new bastion id %s", got, newBastion.ID)
+	}
+	folders, _ := dst.ListFolders()
+	if len(folders) != 1 || *folders[0].Settings.JumpHost.Chain.ConnectionID != newBastion.ID {
+		t.Errorf("folder ref not remapped: %+v", folders)
+	}
+}

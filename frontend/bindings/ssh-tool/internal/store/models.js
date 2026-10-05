@@ -1729,6 +1729,12 @@ export class InheritableSettings {
 
 /**
  * JumpHostSpec describes one hop. Recursive via.
+ * 
+ * ConnectionID makes the hop a reference to a saved connection instead of a
+ * typed-in host: at connect time resolver.ExpandJumpRefs replaces it with
+ * that connection's resolved host, port, user and credential, preceded by
+ * the connection's own jump chain. The other fields of a reference hop are
+ * ignored, so the bastion has one source of truth.
  */
 export class JumpHostSpec {
     /**
@@ -1767,9 +1773,26 @@ export class JumpHostSpec {
         if (/** @type {any} */(false)) {
             /**
              * @member
+             * @type {string | null | undefined}
+             */
+            this["connection_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
              * @type {JumpHostSpec | null | undefined}
              */
             this["via"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Name is the referenced connection's name, filled in by the expansion
+             * only (never saved) so connect progress and errors can say which
+             * bastion failed.
+             * @member
+             * @type {string | undefined}
+             */
+            this["name"] = undefined;
         }
 
         Object.assign(this, $$source);
@@ -1781,10 +1804,10 @@ export class JumpHostSpec {
      * @returns {JumpHostSpec}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType10;
+        const $$createField5_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("via" in $$parsedSource) {
-            $$parsedSource["via"] = $$createField4_0($$parsedSource["via"]);
+            $$parsedSource["via"] = $$createField5_0($$parsedSource["via"]);
         }
         return new JumpHostSpec(/** @type {Partial<JumpHostSpec>} */($$parsedSource));
     }

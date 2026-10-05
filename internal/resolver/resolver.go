@@ -4,6 +4,8 @@
 package resolver
 
 import (
+	"strings"
+
 	"ssh-tool/internal/store"
 )
 
@@ -19,7 +21,33 @@ func ResolveConnection(db *store.DB, connectionID string) (*store.ResolvedSettin
 		return nil, err
 	}
 	rs := ResolveWith(*conn, folders)
+	if err := ExpandJumpRefs(&rs, conn.ID, folders, DBLookup(db)); err != nil {
+		return nil, err
+	}
 	return &rs, nil
+}
+
+// ResolveWithRefs is ResolveWith plus the bastion-connection expansion, for
+// connections that have no row of their own (dynamic hosts, quick connect)
+// but inherit a jump chain that may reference saved connections.
+func ResolveWithRefs(db *store.DB, conn store.Connection, folders []store.Folder) (store.ResolvedSettings, error) {
+	rs := ResolveWith(conn, folders)
+	err := ExpandJumpRefs(&rs, conn.ID, folders, DBLookup(db))
+	return rs, err
+}
+
+// DBLookup reads referenced connections straight from the store.
+func DBLookup(db *store.DB) ConnLookup {
+	return func(id string) (*store.Connection, error) {
+		if strings.HasPrefix(id, DynRefPrefix) {
+			return lookupDynamic(id)
+		}
+		c, err := db.GetConnection(id)
+		if err != nil || c == nil {
+			return nil, errDeletedRef(id)
+		}
+		return c, nil
+	}
 }
 
 // ResolveWith is pure: same inputs -> same outputs. Used by tests exhaustively.

@@ -499,6 +499,15 @@ export class ForwardStatus {
              */
             this["started_at"] = 0;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * MovedFrom is the port an auto-port forward held last time and could
+             * not get back at this start (0 = it did, or the port is fixed).
+             * @member
+             * @type {number | undefined}
+             */
+            this["moved_from"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tree, credentials, selection, sessions, paneTabs, view } from "./stores.svelte";
+  import { tree, credentials, selection, sessions, paneTabs, view, jumpChainHostnames } from "./stores.svelte";
   import { isMobile } from "./platform";
   import { toast } from "./toast.svelte";
   import { writeClipboard } from "./clipboard";
@@ -12,7 +12,7 @@
   import BatchPanel from "./BatchPanel.svelte";
   import FleetBar from "./FleetBar.svelte";
   import FleetCards from "./FleetCards.svelte";
-  import { folderHostIds } from "./fleetStore.svelte";
+  import { folderHostIds, unloadedDynamicUnder } from "./fleetStore.svelte";
   import BatchExecModal from "./BatchExecModal.svelte";
   import ColorPicker from "./ColorPicker.svelte";
   import IconPicker from "./IconPicker.svelte";
@@ -83,6 +83,13 @@
   const folder = $derived(selection.selectedFolder());
   // Every SSH host under the selected folder, for its Fleet bar.
   const folderFleetIds = $derived(folder ? folderHostIds(folder.id) : []);
+  // Load the cached entries of dynamic subfolders nobody expanded, so the
+  // Fleet bar counts and runs on their hosts too (folderFleetIds follows).
+  $effect(() => {
+    const fid = folder?.id;
+    if (!fid) return;
+    for (const d of unloadedDynamicUnder(fid)) void tree.loadDynamicEntries(d);
+  });
   const conn = $derived(selection.selectedConnection());
   const credList = $derived(credentials.list);
 
@@ -525,19 +532,9 @@
     ];
   })();
 
-  // Walk a JumpHostSpec linked list (outer = closest to target,
-  // innermost via = furthest bastion) and return bastion-first
-  // hostnames. Same shape resolved settings emit.
+  // Dial order, bastion-first; saved-connection hops by name.
   function jumpChainNames(spec: any): string[] {
-    if (!spec) return [];
-    const out: string[] = [];
-    let cur = spec.via;
-    while (cur) {
-      if (cur.hostname) out.unshift(cur.hostname);
-      cur = cur.via;
-    }
-    if (spec.hostname) out.push(spec.hostname);
-    return out;
+    return jumpChainHostnames(spec);
   }
 
   // Reset the per-connect credential override when the selected
@@ -810,7 +807,7 @@
 
   // Delete confirm modal state - used by every delete path (single
   // folder/conn, multi-select). The pending action runs on confirm.
-  let deleteItems = $state<Array<{ kind: "folder" | "connection"; name: string; detail?: string }>>([]);
+  let deleteItems = $state<Array<{ kind: "folder" | "connection"; name: string; detail?: string; warn?: string }>>([]);
   let deletePending: (() => Promise<void>) | null = null;
 
   // Walk a folder subtree to collect the names of everything that
@@ -818,7 +815,7 @@
   // ON DELETE CASCADE will actually nuke.
   function collectFolderVictims(
     folderId: string,
-    out: Array<{ kind: "folder" | "connection"; name: string; detail?: string }>
+    out: Array<{ kind: "folder" | "connection"; name: string; detail?: string; warn?: string }>
   ) {
     const f = tree.folderById(folderId);
     if (!f) return;
@@ -832,7 +829,7 @@
         : undefined,
     });
     for (const c of childConns) {
-      out.push({ kind: "connection", name: c.name, detail: c.hostname });
+      out.push({ kind: "connection", name: c.name, detail: c.hostname, warn: tree.deleteWarn(c) });
     }
     for (const sub of childFolders) {
       collectFolderVictims(sub.id, out);
@@ -857,7 +854,7 @@
     const items: typeof deleteItems = [];
     for (const id of connIds) {
       const c = tree.connectionById(id);
-      if (c) items.push({ kind: "connection", name: c.name, detail: c.hostname });
+      if (c) items.push({ kind: "connection", name: c.name, detail: c.hostname, warn: tree.deleteWarn(c) });
     }
     deleteItems = items;
     deletePending = async () => {
@@ -1264,7 +1261,7 @@
         <button onclick={() => selection.select({ kind: "none" })}>Clear</button>
       </div>
     </header>
-    <FleetBar ids={dynamicMulti.map((d) => `dyn:${d.entryId}`)} label={`${dynamicMulti.length} dynamic entries`} />
+    <FleetBar ids={selection.fleetHostIds()} label={selection.fleetHostIds().length === dynamicMulti.length ? `${dynamicMulti.length} dynamic entries` : `${selection.fleetHostIds().length} selected hosts`} />
     <p class="hint">
       Ctrl-click adds / removes; Shift-click selects a range. Connect
       all opens N tabs in parallel. Batch exec runs one command
@@ -1677,7 +1674,7 @@
         {/if}
       </label>
       <div class="span-2">
-        <JumpChainEditor value={editing.jumpHost} onChange={(v) => { if (editing) editing = { ...editing, jumpHost: v }; }} />
+        <JumpChainEditor selfId={conn?.id} value={editing.jumpHost} onChange={(v) => { if (editing) editing = { ...editing, jumpHost: v }; }} />
         {#if inhJump.from && !editing.jumpHost}
           {@const inhChain = jumpChainNames((inhJump.value as any)?.chain)}
           <span class="inh-hint">

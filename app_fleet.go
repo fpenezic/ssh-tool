@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	sshlayer "ssh-tool/internal/ssh"
+	"ssh-tool/internal/store"
 )
 
 // FactsInput is what the Gather facts dialog sends.
@@ -97,7 +99,9 @@ type TLSCertResult struct {
 // CheckTLSCerts reads the certificate each host serves on each port. Only
 // hosts reached by a name are checked: a certificate is issued for a name,
 // so a connection that dials an IP has nothing meaningful to compare. The
-// dial goes straight from this machine, not through the host's jump chain.
+// port is reached the way a connect reaches the host: from its last jump
+// host when it has a chain (a bastion-only host would otherwise always fail
+// here), else over its network profile, else directly.
 func (a *App) CheckTLSCerts(in TLSInput) ([]TLSCertResult, error) {
 	if len(in.ConnectionIDs) == 0 {
 		return nil, fmt.Errorf("no connections selected")
@@ -108,27 +112,29 @@ func (a *App) CheckTLSCerts(in TLSInput) ([]TLSCertResult, error) {
 	}
 	hosts := a.batchHosts(in.ConnectionIDs)
 	var jobs []TLSCertResult
+	var settings []*store.ResolvedSettings
 	for _, h := range hosts {
 		for _, p := range ports {
 			jobs = append(jobs, TLSCertResult{ConnectionID: h.ConnectionID, Name: h.Name, Hostname: h.Hostname, Port: p})
+			settings = append(settings, h.Settings)
 		}
 	}
 	sem := make(chan struct{}, 8)
 	var wg sync.WaitGroup
 	for i := range jobs {
 		wg.Add(1)
-		go func(j *TLSCertResult) {
+		go func(j *TLSCertResult, i int) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			checkOneTLS(j)
-		}(&jobs[i])
+			a.checkOneTLS(j, settings[i])
+		}(&jobs[i], i)
 	}
 	wg.Wait()
 	return jobs, nil
 }
 
-func checkOneTLS(j *TLSCertResult) {
+func (a *App) checkOneTLS(j *TLSCertResult, settings *store.ResolvedSettings) {
 	host := strings.TrimSpace(j.Hostname)
 	if host == "" {
 		j.State, j.Error = "skipped", "no hostname"
@@ -138,16 +144,35 @@ func checkOneTLS(j *TLSCertResult) {
 		j.State, j.Error = "skipped", "connected by IP address - no name to check a certificate against"
 		return
 	}
-	dialer := &net.Dialer{Timeout: 6 * time.Second}
-	conn, err := tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, strconv.Itoa(j.Port)), &tls.Config{
+	addr := net.JoinHostPort(host, strconv.Itoa(j.Port))
+	var raw net.Conn
+	if settings != nil {
+		c, cleanup, err := sshlayer.DialVia(context.Background(), a.db, a.vault, settings, addr,
+			a.makeHostKeyCallback(), a.makeAlgoLookup(), 8*time.Second)
+		if err != nil {
+			j.State, j.Error = "error", err.Error()
+			return
+		}
+		defer cleanup()
+		raw = c
+	} else {
+		c, err := net.DialTimeout("tcp", addr, 6*time.Second)
+		if err != nil {
+			j.State, j.Error = "error", err.Error()
+			return
+		}
+		defer c.Close()
+		raw = c
+	}
+	_ = raw.SetDeadline(time.Now().Add(10 * time.Second))
+	conn := tls.Client(raw, &tls.Config{
 		ServerName:         host,
 		InsecureSkipVerify: true, // read the cert whatever it is; trust is judged below
 	})
-	if err != nil {
+	if err := conn.Handshake(); err != nil {
 		j.State, j.Error = "error", err.Error()
 		return
 	}
-	defer conn.Close()
 	certs := conn.ConnectionState().PeerCertificates
 	if len(certs) == 0 {
 		j.State, j.Error = "error", "no certificate presented"

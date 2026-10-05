@@ -390,7 +390,12 @@ func dialChainFrom(
 				return nil, func() {}, "", fmt.Errorf("%s: dial: %w", h.Label, err)
 			}
 			networkVia = via
+			// Non-interactive auth only on this path, so the whole handshake
+			// can be bounded: a host that accepts TCP but never speaks SSH
+			// must not hold the caller (or the bastion pool's lock).
+			_ = conn.SetDeadline(time.Now().Add(connectTimeout))
 			sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
+			_ = conn.SetDeadline(time.Time{})
 			if err != nil {
 				_ = conn.Close()
 				closeAll()
@@ -398,12 +403,14 @@ func dialChainFrom(
 			}
 			client = ssh.NewClient(sshConn, chans, reqs)
 		} else {
-			netConn, err := prev.Dial("tcp", addr)
+			netConn, err := dialThrough(prev, addr, connectTimeout)
 			if err != nil {
 				closeAll()
 				return nil, func() {}, "", fmt.Errorf("%s: dial through jump: %w", h.Label, err)
 			}
+			_ = netConn.SetDeadline(time.Now().Add(connectTimeout))
 			sshConn, chans, reqs, err := ssh.NewClientConn(netConn, addr, cfg)
+			_ = netConn.SetDeadline(time.Time{})
 			if err != nil {
 				_ = netConn.Close()
 				closeAll()

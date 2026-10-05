@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+
 	"ssh-tool/internal/inventory"
+	"ssh-tool/internal/resolver"
 	"ssh-tool/internal/store"
 )
 
@@ -44,6 +47,34 @@ func (a *App) dynamicConnection(entry *store.DynamicEntry, df *store.DynamicFold
 		a.applyBastion(&c, entry, df)
 	}
 	return c
+}
+
+// dynamicHostForRef resolves a jump-hop reference to an inventory host
+// ("dyn:<folderId>/<externalId>", see resolver.DynRef) to the connection a
+// direct connect to that host uses: its folder's inheritance, Ansible vars
+// and bastion route included, and the address from the last refresh. The
+// id is the reference itself so the chain's loop check sees it.
+func (a *App) dynamicHostForRef(ref string) (*store.Connection, error) {
+	folderID, externalID, ok := resolver.ParseDynRef(ref)
+	if !ok {
+		return nil, fmt.Errorf("invalid inventory jump host reference %q", ref)
+	}
+	folder, err := a.db.GetFolder(folderID)
+	if err != nil || folder == nil {
+		return nil, fmt.Errorf("the inventory folder of the jump host was deleted")
+	}
+	entries, err := a.db.ListDynamicEntries(folderID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range entries {
+		if entries[i].ExternalID == externalID {
+			c := a.dynamicConnectionFor(&entries[i], "")
+			c.ID = ref
+			return &c, nil
+		}
+	}
+	return nil, fmt.Errorf("jump host %s is not in the inventory of %q (as of its last refresh)", externalID, folder.Name)
 }
 
 // dynamicConnectionFor is dynamicConnection when the caller has not loaded

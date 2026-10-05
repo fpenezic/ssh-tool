@@ -196,7 +196,7 @@ func (j *JumpHostOverride) UnmarshalJSON(b []byte) error {
 				return err
 			}
 			if spec.Hostname != "" || spec.Port != nil || spec.Username != nil ||
-				spec.AuthRef != nil || spec.Via != nil {
+				spec.AuthRef != nil || spec.ConnectionID != nil || spec.Via != nil {
 				j.Chain = &spec
 			}
 		}
@@ -205,12 +205,23 @@ func (j *JumpHostOverride) UnmarshalJSON(b []byte) error {
 }
 
 // JumpHostSpec describes one hop. Recursive via.
+//
+// ConnectionID makes the hop a reference to a saved connection instead of a
+// typed-in host: at connect time resolver.ExpandJumpRefs replaces it with
+// that connection's resolved host, port, user and credential, preceded by
+// the connection's own jump chain. The other fields of a reference hop are
+// ignored, so the bastion has one source of truth.
 type JumpHostSpec struct {
-	Hostname string        `json:"hostname"`
-	Port     *uint16       `json:"port,omitempty"`
-	Username *string       `json:"username,omitempty"`
-	AuthRef  *string       `json:"auth_ref,omitempty"`
-	Via      *JumpHostSpec `json:"via,omitempty"`
+	Hostname     string        `json:"hostname"`
+	Port         *uint16       `json:"port,omitempty"`
+	Username     *string       `json:"username,omitempty"`
+	AuthRef      *string       `json:"auth_ref,omitempty"`
+	ConnectionID *string       `json:"connection_id,omitempty"`
+	Via          *JumpHostSpec `json:"via,omitempty"`
+	// Name is the referenced connection's name, filled in by the expansion
+	// only (never saved) so connect progress and errors can say which
+	// bastion failed.
+	Name string `json:"name,omitempty"`
 }
 
 // ResolvedSettings is the merged result the SSH layer consumes.
