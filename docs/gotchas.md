@@ -1292,10 +1292,10 @@ everything mobile is behind a build tag or an `isMobile` check.
 77. **Fleet tools see dynamic hosts only once their folder was loaded.**
     `folderHostIds` (`fleetStore.svelte.ts`) collects `dyn:<id>` from
     `tree.dynamicEntries`, which is filled on demand
-    (`tree.loadDynamicEntries`) when a dynamic folder is opened. A parent
-    folder whose cloud subfolder was never expanded gets a Fleet run that
-    silently leaves those hosts out. Load the entries (or ask the backend
-    for them) before collecting, if this starts to matter.
+    (`tree.loadDynamicEntries`) when a dynamic folder is opened. Callers
+    that act on a folder go through `folderHostIdsLoaded` (menu) or load
+    `unloadedDynamicUnder` first (Fleet bar); a new caller of the plain
+    `folderHostIds` on a folder silently misses never-expanded subfolders.
 
 78. **Fleet exports carry whole numbers, and authorized_keys presence is
     judged by the key.** A decimal point turns into a date or text in a
@@ -1373,6 +1373,36 @@ everything mobile is behind a build tag or an `isMobile` check.
     one. Guard it with `IsMinimised()`; `Focus()` already un-minimises.
     Calling it unconditionally in "show the main window" made every
     notification or tray click shrink a maximised app.
+
+87. **A jump hop can be a reference; expand it before anything reads the
+    chain.** `JumpHostSpec.connection_id` points at a saved connection or,
+    as `dyn:<folderId>/<externalId>`, at an inventory host (provider id,
+    never the entry row id - that changes on re-add and differs per
+    machine). `resolver.ResolveConnection` / `ResolveWithRefs` expand it;
+    a path that calls plain `ResolveWith` and dials hands the SSH layer a
+    hop with an empty hostname. Rules in `jumprefs.go`: the referenced
+    bastion's own chain is prepended only when it is the FIRST hop; a
+    bastion meeting itself in its (inherited) chain keeps only the hops
+    before itself (folder "jump through the bastion that lives in it");
+    any other repeat is a loop error. Import remaps both forms
+    (`exporter/importer.go`, after the connection pass).
+
+88. **Nothing bounded a dial through a bastion.** `ssh.Client.Dial` has no
+    context and the bastion gives up on a dead target only after its own
+    TCP timeout (~2 min), and `ssh.NewClientConn` has no deadline at all,
+    so a host that accepts TCP but never speaks SSH hung the connect - and,
+    on the shared-bastion path, the pool lock. Use `dialThrough` for
+    direct-tcpip and a conn deadline around non-interactive handshakes
+    (`dialChainFrom`). Never put that deadline on `Connect`'s own target
+    handshake: it carries interactive auth (password, keyboard prompts).
+
+89. **A taken local port is a typed error, not text.** `listenSticky`
+    returns `*PortInUseError` (holder forward id, or Windows' excluded
+    range via WSAEACCES 10013; Go's `syscall.EADDRINUSE` is NOT the WSA
+    10048 code). The app rewrites it in `forwardErr`; starts nobody clicked
+    (auto-start, reconnect restore) must go through `startForwardFor(...,
+    true)` or their failure only reaches the log. Frontend callers show
+    Go errors through `errMsg` - `e.message` is a JSON envelope.
 
 ---
 

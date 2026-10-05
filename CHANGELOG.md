@@ -7,6 +7,50 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Jump hosts
+
+- A jump hop can now be a saved connection or a host from any inventory
+  folder (Proxmox, Hetzner, DigitalOcean, Linode, Vultr, Scaleway, AWS
+  EC2, Ansible) instead of a typed-in host. Pick "Saved connection" on the
+  hop: the bastion's address, user, credential and its own jump chain are
+  read from it at connect, so changing the bastion once changes every chain
+  through it. An inventory host follows its address from the last refresh.
+- A bastion inside the folder it is the jump host for connects directly,
+  and its neighbours go through it.
+- Connect errors name the bastion by its connection name.
+- Deleting a connection that other chains jump through warns first.
+- The connect order shown in the editor tooltip and the "inherited" hint
+  was reversed for chains of two or more hops.
+- A host that does not answer behind a bastion, or accepts the connection
+  but never completes the SSH handshake, now fails after the connect
+  timeout instead of staying on "connecting".
+
+### Tunnels
+
+- A local port that is taken says who holds it: another tunnel (by name
+  and connection), another program, or a Windows reserved port range.
+  "Start on a free port" runs the tunnel once on a free port, keeping the
+  saved one.
+- The tunnel editor warns while you type a port that is in use or set on
+  another saved tunnel.
+- Tunnels that start on their own (auto-start, after a reconnect) report a
+  failed start, and an auto-port tunnel says when it could not get its
+  previous port back.
+- The tunnel popover and the quick palette showed some errors as raw JSON.
+
+### Fleet tools
+
+- Running a fleet tool on a folder includes hosts of inventory subfolders
+  that were never expanded.
+- Saved connections and inventory hosts selected together (Ctrl+click) can
+  go into Compare file and the other fleet tools as one set.
+- The TLS certificate check reaches a host the way a connect does: through
+  its jump chain or network profile, so bastion-only hosts no longer fail.
+
+---
+
 ## [0.107.0] - Workspace frames, quick connect, richer About
 
 Workspace tweaks, quick connect for one-off hosts, and an About page
