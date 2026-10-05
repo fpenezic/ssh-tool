@@ -62,6 +62,27 @@
     });
     return rows.filter((_, i) => keep.has(i));
   });
+  // One colour per variant, so the host chips and the Left/Right headers
+  // say at a glance which hosts share a file. Variant 1 (most common) is
+  // green; the odd ones out get warmer colours.
+  const VARIANT_COLORS = ["--green", "--peach", "--mauve", "--sky", "--pink", "--yellow", "--flamingo", "--teal"];
+  function variantColor(n: number): string {
+    return n > 0 ? `var(${VARIANT_COLORS[(n - 1) % VARIANT_COLORS.length]})` : "var(--overlay1)";
+  }
+  // "Most common" only when it really is: a tie at the top has no majority.
+  const hasMajority = $derived(variants.length > 1 && variants[0].hosts.length > variants[1].hosts.length);
+
+  function diffAgainstFirst(vi: number) {
+    leftId = variants[0].hosts[0].connection_id;
+    rightId = variants[vi].hosts[0].connection_id;
+  }
+
+  // Click a host chip to put it on the right, Shift+click for the left.
+  function pickHost(e: MouseEvent, id: string) {
+    if (e.shiftKey) leftId = id;
+    else rightId = id;
+  }
+
   function variantOf(id: string): number {
     const r = ok.find((x) => x.connection_id === id);
     return r ? variants.findIndex((v) => v.sha === r.sha256) + 1 : 0;
@@ -92,6 +113,35 @@
         {#each failed as f (f.connection_id)}<div><span class="fmono">{f.name}</span> <span class="fdim">{f.error}</span></div>{/each}
       </details>
     {/if}
+    {#if ok.length >= 2 && variants.length === 1}
+      <p class="fok same">Identical on all {ok.length} hosts.</p>
+    {/if}
+    {#if variants.length > 1}
+      <div class="variants">
+        {#each variants as v, vi (v.sha)}
+          <div class="variant" style:--vc={variantColor(vi + 1)}>
+            <div class="vhead">
+              <span class="vname">Variant {vi + 1}</span>
+              <span class="fdim">{v.hosts.length} host{v.hosts.length === 1 ? "" : "s"}{vi === 0 && hasMajority ? " · most common" : ""} · {v.sha.slice(0, 10)}</span>
+              {#if vi > 0}
+                <button class="fbtn vdiff" onclick={() => diffAgainstFirst(vi)} title="Diff this variant against variant 1">Diff vs variant 1</button>
+              {/if}
+            </div>
+            <div class="chips">
+              {#each v.hosts as h (h.connection_id)}
+                <button
+                  class="chip fmono"
+                  class:on-left={h.connection_id === leftId}
+                  class:on-right={h.connection_id === rightId}
+                  title="Click: show on the right · Shift+click: show on the left"
+                  onclick={(e) => pickHost(e, h.connection_id)}
+                >{h.name}{h.connection_id === leftId ? " (L)" : h.connection_id === rightId ? " (R)" : ""}</button>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
     {#if ok.length >= 2}
       <div class="row">
         <label class="row"><span class="fdim">Left</span>
@@ -113,8 +163,8 @@
           <p class="fwarn">These files are too large to diff here.</p>
         {:else}
           <div class="diff fmono">
-            <div class="dh">{left.name} · {left.sha256.slice(0, 10)}{left.truncated ? " · first 1 MiB" : ""}</div>
-            <div class="dh">{right.name} · {right.sha256.slice(0, 10)}{right.truncated ? " · first 1 MiB" : ""}</div>
+            <div class="dh" style:--vc={variantColor(variantOf(left.connection_id))}><span class="vdot"></span>{left.name} · variant {variantOf(left.connection_id)} · {left.sha256.slice(0, 10)}{left.truncated ? " · first 1 MiB" : ""}</div>
+            <div class="dh" style:--vc={variantColor(variantOf(right.connection_id))}><span class="vdot"></span>{right.name} · variant {variantOf(right.connection_id)} · {right.sha256.slice(0, 10)}{right.truncated ? " · first 1 MiB" : ""}</div>
             {#each visible as r, i (i)}
               {#if r.kind === "same"}
                 <div class="dl"><span class="n">{r.ln}</span>{r.left}</div>
@@ -147,6 +197,31 @@
   .row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
   .path { width: 26rem; }
   .failed { margin-bottom: 0.6rem; font-size: 0.76rem; }
+  .same { margin: 0 0 0.6rem; }
+  .variants { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.7rem; }
+  .variant {
+    border: 1px solid color-mix(in srgb, var(--vc) 45%, var(--surface0));
+    border-left: 3px solid var(--vc);
+    border-radius: 5px;
+    padding: 0.35rem 0.6rem;
+    background: color-mix(in srgb, var(--vc) 6%, transparent);
+  }
+  .vhead { display: flex; align-items: center; gap: 0.6rem; font-size: 0.78rem; margin-bottom: 0.3rem; }
+  .vname { font-weight: 600; color: var(--vc); }
+  .vdiff { margin-left: auto; font-size: 0.72rem; padding: 0.1rem 0.5rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .chip {
+    font-size: 0.72rem;
+    background: var(--mantle);
+    color: var(--text);
+    border: 1px solid var(--surface1);
+    border-radius: 4px;
+    padding: 0.05rem 0.45rem;
+    cursor: pointer;
+  }
+  .chip:hover { border-color: var(--vc); }
+  .chip.on-left, .chip.on-right { border-color: var(--vc); background: color-mix(in srgb, var(--vc) 20%, var(--mantle)); }
+  .vdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--vc); margin-right: 0.4rem; vertical-align: middle; }
   .diff {
     display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     font-size: 0.74rem; line-height: 1.55; border: 1px solid var(--surface0); border-radius: 6px; overflow: hidden;

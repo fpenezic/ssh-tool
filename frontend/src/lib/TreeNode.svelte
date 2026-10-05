@@ -561,6 +561,32 @@
       },
     ]);
   }
+  // Right-click on a dynamic (inventory) host: connect and the fleet tools,
+  // acting on the dynamic multi-selection like the saved-connection menu
+  // does on its own. Fleet tools take dynamic hosts as "dyn:<entryId>".
+  function openDynMenu(e: MouseEvent, folderId: string, entry: { id: string; name: string; hostname: string; status: string }) {
+    e.stopPropagation();
+    if (!selection.isDynamicEntrySelected(folderId, entry.id)) selection.selectDynamicEntry(folderId, entry.id);
+    const sel = selection.selectedDynamicEntries();
+    const one = sel.length <= 1;
+    contextMenu.show(e, [
+      {
+        label: one ? "Connect" : `Connect all (${sel.length})`,
+        iconComponent: IconPlay,
+        onSelect: () => (one ? connectDynamic(folderId, entry) : connectionActions.connectDynamicMany(sel)),
+      },
+      ...fleetItems(
+        sel.map((t) => "dyn:" + t.entryId),
+        one ? entry.name : `${sel.length} selected hosts`,
+      ),
+      ...(one && entry.hostname ? [{
+        label: "Copy address",
+        iconComponent: IconCopy,
+        onSelect: () => navigator.clipboard.writeText(entry.hostname).catch(console.warn),
+      }] : []),
+    ]);
+  }
+
   function toggle(e: Event) {
     e.stopPropagation();
     expandedConnections.toggle(folder.id);
@@ -900,6 +926,7 @@
               tabindex="0"
               onclick={(ev) => onDynRowClick(ev, folder.id, e.id)}
               ondblclick={() => connectDynamic(folder.id, e)}
+              oncontextmenu={(ev) => openDynMenu(ev, folder.id, e)}
               onkeydown={(ev) => {
                 if (ev.key === "Enter") {
                   ev.preventDefault();
@@ -948,6 +975,7 @@
               tabindex="0"
               onclick={(ev) => onDynRowClick(ev, folder.id, e.id)}
               ondblclick={() => connectDynamic(folder.id, e)}
+              oncontextmenu={(ev) => openDynMenu(ev, folder.id, e)}
               onkeydown={(ev) => {
                 if (ev.key === "Enter") {
                   ev.preventDefault();
