@@ -7,7 +7,10 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.107.0] - Workspace frames, quick connect, richer About
+
+Workspace tweaks, quick connect for one-off hosts, and an About page
+with more detail on the components inside the build.
 
 ### Workspaces
 
@@ -22,8 +25,29 @@ a prerelease upstream.
 - Drag a tab into a frame to add it to the workspace, or out of it to
   remove it; the tab's right-click menu has the same as Add to / Remove
   from workspace. A dot on the frame's name marks changes not saved yet.
+- New workspace from selected tabs: Ctrl/Shift+click the tabs you want,
+  right-click, and only those become the workspace - no need to close the
+  ones that do not belong.
 - Frame names can be shown as just an icon (Compact labels in the name's
   menu).
+
+### Settings
+
+- About shows what the build is made of and runs on: commit date, OS,
+  the rendering engine (WebView2 or WebKitGTK version), Go, installed
+  plugins with their versions, and the data and log folders with an Open
+  button. A collapsible Components list names the bundled versions of
+  Wails, opkssh, WireGuard, the SSH library, SQLite, xterm.js, Svelte and
+  more, all read from the binary itself. "Copy diagnostics" puts the lot on
+  the clipboard as text for a bug report - no hosts or profile data.
+
+### Fleet
+
+- Compare file across more than two hosts shows each variant as a coloured
+  group with its hosts, the most common one first, so it is clear which
+  servers differ. "Diff vs variant 1" diffs an odd one out against the
+  majority; clicking a host puts it on the right (Shift+click: left), and
+  the diff headers carry the variant colour.
 
 ### Connections
 
@@ -39,6 +63,10 @@ a prerelease upstream.
   one, so the same tag is not spelled three ways across the tree.
 
 ### Fixes
+
+- Dynamic inventory hosts have a right-click menu again: connect (or
+  connect all selected), the fleet tools - gather facts, TLS check, compare
+  a file across the selected hosts, copy SSH key - and copy address.
 
 - Dynamic folders whose API token lives in the vault no longer report
   "token secret not in vault" right after start. The background refresh now
