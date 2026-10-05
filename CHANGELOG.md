@@ -7,7 +7,10 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.108.0] - Bastions as connections, port conflicts, connection settings
+
+A jump host can now be any saved connection or inventory host, defined
+once. Plus clearer tunnel port conflicts and more connection settings.
 
 ### Jump hosts
 
@@ -48,6 +51,14 @@ a prerelease upstream.
   previous port back.
 - The tunnel popover and the quick palette showed some errors as raw JSON.
 
+### MCP
+
+- The provisioning tools take jump_connection: a saved connection, an
+  inventory host or one created earlier in the same plan as the bastion,
+  on create_connection, set_folder_settings and now edit_connection too.
+  An inline jump host that matches a saved connection gets a hint to
+  reference it instead.
+
 ### Settings
 
 - Settings -> Connection adds auto-reconnect attempts and the longest wait
@@ -57,6 +68,19 @@ a prerelease upstream.
   from Appearance to the new Connection tree section.
 - Resolved & inherited sits at the bottom of the connection detail and
   starts collapsed.
+
+### Under the hood
+
+- Wails v3.0.0-beta.28 (from beta.18): among others, the window recovers
+  when the WebView2 process fails instead of staying blank, and a right
+  click on the Linux tray icon no longer also runs the click action.
+- opkssh 0.16 / openpubkey 0.25. opkssh 0.16 changes how GQ signatures
+  are verified: with GitHub as the provider and GQ signing, a client and
+  a server on different sides of 0.16 do not accept each other's
+  signatures. Other providers are not affected.
+- The opkssh login opens the browser through the same launcher as every
+  other link, with no console window.
+- Go 1.26, newer x/crypto, x/net, SQLite driver, SFTP and MCP SDK.
 
 ### Fleet tools
 
