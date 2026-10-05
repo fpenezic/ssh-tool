@@ -1404,6 +1404,19 @@ everything mobile is behind a build tag or an `isMobile` check.
     true)` or their failure only reaches the log. Frontend callers show
     Go errors through `errMsg` - `e.message` is a JSON envelope.
 
+90. **Three places key an inventory host the same way.** Jump references,
+    the tree's bastion marks (`bastionUsage`) and the role filter all use
+    `dyn:<folderId>/<externalId>` (`resolver.DynRef` / `jumpRefs.dynRef`).
+    A directly connected dynamic host carries `dyn:<entryId>` instead;
+    `resolver.DynamicSelfRef` maps it so the chain's self check works.
+    Change one format and the marks, the filter and "a bastion inside its
+    own folder" silently stop matching.
+
+91. **Connection behaviour limits live twice.** `connectPrefs.svelte.ts`
+    (IntPref min/max/default for the Settings UI and bulk connect) and the
+    backend clamps in `runReconnect` / the jump pool's `linger`
+    (`intSetting`). Keep them equal; the backend clamp is what applies.
+
 ---
 
 # Archive

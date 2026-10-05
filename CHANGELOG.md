@@ -21,6 +21,14 @@ a prerelease upstream.
   and its neighbours go through it.
 - Connect errors name the bastion by its connection name.
 - Deleting a connection that other chains jump through warns first.
+- Bastions are marked in the tree with how many use them, a folder that
+  sets a jump chain carries a route mark, and the connection detail lists
+  who jumps through it, each entry one click from the tree. Settings ->
+  Connection tree chooses Off, Bastions only (default) or Bastions and
+  routed connections.
+- The tag filter gets a Role group: role:bastion (inventory hosts
+  included) and role:behind-bastion. The Via filter names a saved-
+  connection bastion.
 - The connect order shown in the editor tooltip and the "inherited" hint
   was reversed for chains of two or more hops.
 - A host that does not answer behind a bastion, or accepts the connection
@@ -39,6 +47,16 @@ a prerelease upstream.
   failed start, and an auto-port tunnel says when it could not get its
   previous port back.
 - The tunnel popover and the quick palette showed some errors as raw JSON.
+
+### Settings
+
+- Settings -> Connection adds auto-reconnect attempts and the longest wait
+  between them, Connect all parallelism, pause and confirm threshold, and
+  how long a shared bastion connection stays open after its last session.
+- Tree-row options (colour tag as background, active row emphasis) moved
+  from Appearance to the new Connection tree section.
+- Resolved & inherited sits at the bottom of the connection detail and
+  starts collapsed.
 
 ### Fleet tools
 

@@ -206,6 +206,25 @@ Above the tree, a **tag filter** row exposes every distinct tag
 across your connections. Click a tag to filter the tree to entries
 that wear it.
 
+Below the tags are pills derived from the connections themselves:
+**Role** (`bastion` - other chains jump through it; `behind-bastion` -
+it connects through a jump chain, its own or its folder's), **Auth**,
+**User**, **Via** (first jump hop) and **Port**. Different groups
+narrow each other; values within one group add up. Inventory hosts
+only take part in `role:bastion`, and only while Role is the sole
+active filter - they have no tags or saved auth to match on.
+
+### Jump host marks
+
+A host other connections jump through gets a small mark with how many
+use it; hover for the list. The connection's detail ends with **Jump
+host for**, each entry revealing that folder or connection in the
+tree. A folder that sets its own jump chain, or an inventory folder
+with a bastion route, carries a route mark. Settings → Connection
+tree picks *Off*, *Bastions only* (default) or *Bastions and routed
+connections*; the last also marks connections with a jump chain of
+their own, but not ones that only inherit their folder's.
+
 ### Drag and drop
 
 - Drag a folder or connection between folders (drop intents:
@@ -262,9 +281,9 @@ row in the right pane. The same entries are in the right-click menu.
   custom column runs one command of your own and shows its first line;
   it has to pass the same read-only check as MCP commands. For a folder
   the last run is kept and shown as cards above the folder settings.
-- **Check TLS certificates…** - dials each host on the given ports
-  straight from this machine (not through its jump host) and reads the
-  certificate: expiry, subject, issuer, and whether it is trusted.
+- **Check TLS certificates…** - reaches each host on the given ports
+  the way a connect does (through its jump chain or network profile)
+  and reads the certificate: expiry, subject, issuer, and whether it is trusted.
   Hosts you connect to by IP address are skipped. Under 14 days left, a
   **cert Nd** badge shows next to the host in the tree. One host at a
   time: *Tools → TLS certificate* in the pane header.
@@ -360,8 +379,15 @@ Two-column grid (auto-fit on narrow widths). Fields:
   `conn_pass:<connID>`. Set / Clear buttons; an inline hint shows
   when a password is stored. This is independent of the credential
   selection above.
-- **Jump host chain** - recursive editor. Each hop has hostname,
-  user, port, credential, and optionally another `via` hop.
+- **Jump host chain** - one row per hop, in connect order. A hop is
+  either **Manual** (hostname, port, user, credential) or a **Saved
+  connection**: any saved connection or any host of an inventory
+  folder. A saved-connection hop reads the bastion's address, user,
+  credential and its own jump chain at connect time, so changing the
+  bastion once changes every chain through it; an inventory host
+  follows its address from the last refresh. A bastion inside the
+  folder it is the jump host for connects directly. If the bastion is
+  deleted, or drops out of its inventory, the connect says so.
 - **Color tag** - picker; resolves through folder ancestors if
   unset on the connection.
 - **Auto-reconnect** - On / Off / Inherit. When on, sessions that
@@ -1199,6 +1225,14 @@ Below the connection editor: **Port forwards** section. Three kinds:
 - Forwards are defined per-connection but only run while a session
   for that connection is connected.
 - Each forward has a Start / Stop toggle on the row.
+- A local port that is already taken says by what: another tunnel (by
+  name and connection), another program, or a Windows reserved port
+  range. **Start on a free port** runs it once on a free port and keeps
+  the saved one. The editor warns while you type a port that is in use
+  or set on another saved tunnel. Tunnels that start on their own
+  (auto-start, after a reconnect) report a failed start as a
+  notification, and an auto-port tunnel says when it could not get its
+  previous port back.
 - The Forwards header shows running counts; rows show live byte
   counters (in / out).
 
@@ -2764,6 +2798,14 @@ Side-nav with grouped panels (last-opened section persists as
 - **UI font size (px)** - scales the whole app's rem-based sizes
   (tree, panels, modals). 11-18, default 13. Terminal has its own
   font size knob.
+- **Show session uptime in tab bar** - opt-in. Small "5m" / "2h" /
+  "1d3h" indicator next to each connected tab's label showing how
+  long the session has been up. Refreshes every 30 s.
+
+### Appearance → Connection tree
+
+- **Jump host marks** - Off / Bastions only (default) / Bastions and
+  routed connections. See *Jump host marks* in section 3.
 - **Color tag as row background** - opt-in. In addition to the
   3px left strip, tints the whole row with the connection /
   folder's colour tag (~14 % opacity, brighter on hover /
@@ -2772,15 +2814,24 @@ Side-nav with grouped panels (last-opened section persists as
   the currently focused terminal pane gets a bright cyan inset on
   the right edge so it stands out from other live (but not focused)
   connections.
-- **Show session uptime in tab bar** - opt-in. Small "5m" / "2h" /
-  "1d3h" indicator next to each connected tab's label showing how
-  long the session has been up. Refreshes every 30 s.
 
 ### Appearance → Connection
 
 - **Connect timeout (seconds)** - applies to both TCP dial and SSH
-  handshake on every hop. Default 20s; raise for slow / unreliable
-  links, lower to fail fast. Saved as `connect_timeout_seconds`.
+  handshake on every hop, and to opening a channel through a bastion.
+  Default 20s; raise for slow / unreliable links, lower to fail fast.
+  Saved as `connect_timeout_seconds`.
+- **Auto-reconnect** - number of attempts (default 5) and the longest
+  wait between them (default 16 s); the wait doubles from 1 s.
+- **Connect all** - handshakes at once (default 4, at most 10), pause
+  between starts (default 150 ms, at least 50) and the host count above
+  which it asks first (default 5). The limits exist because every
+  handshake in progress counts against a bastion's sshd `MaxStartups`
+  (default 10); past it new ones are dropped as "handshake failed:
+  EOF".
+- **Shared bastion** - how long the shared connection to a jump host
+  stays open after the last session through it closes (default 10 s,
+  0 closes it at once).
 - **In-app local shell** - which shell the top-bar **Local
   shell** button opens on plain click. Auto + per-platform list
   (Windows: WSL / PowerShell / cmd; macOS: zsh / bash; Linux:
