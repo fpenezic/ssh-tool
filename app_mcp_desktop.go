@@ -303,6 +303,7 @@ type mcpSetFolderSettingsArgs struct {
 	JumpUser         string `json:"jump_user,omitempty" jsonschema:"username for the inline bastion"`
 	JumpPort         uint16 `json:"jump_port,omitempty" jsonschema:"port for the inline bastion (default 22)"`
 	JumpAuthRef      string `json:"jump_auth_ref,omitempty" jsonschema:"id of an EXISTING vault credential for the bastion; NEVER a password"`
+	JumpConnection   string `json:"jump_connection,omitempty" jsonschema:"the bastion as a SAVED connection instead of jump_host: an existing connection id or an inventory host id (both from list_connections), or tmp:<id> of a connection created earlier in this plan. Its address, user, credential and own jump chain are read from it at connect, so the bastion is defined once. Use it when the bastion is already in the tree or is being created in this plan. Mutually exclusive with jump_host"`
 	ColorTag         string `json:"color_tag,omitempty" jsonschema:"colour tag the folder's connections inherit (tab and tree colour), usually marking the environment: red, orange, yellow, green, teal, blue, mauve, pink or #rrggbb. Only to follow a colour scheme the user's tree already shows in list_folders; never invent one"`
 }
 
@@ -323,6 +324,7 @@ type mcpEditConnectionArgs struct {
 	Icon             *string  `json:"icon,omitempty" jsonschema:"built-in icon name (see list_icons), or an empty string to remove the icon. Replaces a custom uploaded image if the connection had one"`
 	IconColor        *string  `json:"icon_color,omitempty" jsonschema:"colour for a built-in icon: red, orange, yellow, green, teal, blue, mauve or pink. Ignored on connections carrying an uploaded image"`
 	IconImage        *string  `json:"icon_image,omitempty" jsonschema:"id of an already-uploaded icon (from list_icons), or an empty string to remove it. Mutually exclusive with icon"`
+	JumpConnection   *string  `json:"jump_connection,omitempty" jsonschema:"make this connection hop through a SAVED connection: an existing connection id or an inventory host id (from list_connections), or tmp:<id> of a connection created earlier in this plan. Replaces any jump chain set on the connection; to go back to the folder's, put jump_host in clear"`
 	Clear            []string `json:"clear,omitempty" jsonschema:"settings to REMOVE from this connection so it inherits them from its folder again; e.g. auth_ref, username, port, jump_host, network_profile_id, initial_command"`
 }
 
@@ -343,6 +345,7 @@ type mcpCreateConnectionArgs struct {
 	JumpUser         string   `json:"jump_user,omitempty" jsonschema:"username for the inline bastion"`
 	JumpPort         uint16   `json:"jump_port,omitempty" jsonschema:"port for the inline bastion (default 22)"`
 	JumpAuthRef      string   `json:"jump_auth_ref,omitempty" jsonschema:"id of an EXISTING vault credential for the bastion; NEVER a password"`
+	JumpConnection   string   `json:"jump_connection,omitempty" jsonschema:"the bastion as a SAVED connection instead of jump_host: an existing connection id or an inventory host id (both from list_connections), or tmp:<id> of a connection created earlier in this plan. Its address, user, credential and own jump chain are read from it at connect, so the bastion is defined once. Use it when the bastion is already in the tree or is being created in this plan. Mutually exclusive with jump_host"`
 	InitialCommand   string   `json:"initial_command,omitempty" jsonschema:"command run in the shell right after connect (e.g. tmux attach)"`
 	Tags             []string `json:"tags,omitempty" jsonschema:"optional tags"`
 	Notes            string   `json:"notes,omitempty" jsonschema:"free-text notes shown on the connection: warnings, owners, maintenance windows, anything the source said about this host that has no field of its own"`
@@ -555,7 +558,8 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "set_folder_settings",
 		Description: "Set inheritable defaults on a folder so its connections inherit them instead of " +
-			"repeating the same jump host / credential / network profile on each one. folder is a tmp: " +
+			"repeating the same jump host / credential / network profile on each one. A bastion that is a " +
+			"connection goes in jump_connection, otherwise inline in jump_host. folder is a tmp: " +
 			"temp id from create_folder or an existing folder id. Reference credentials by EXISTING id " +
 			"(auth_ref / jump_auth_ref) - never a password. Nothing is written until commit_plan. Requires the manage grant.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpSetFolderSettingsArgs) (*mcp.CallToolResult, any, error) {
@@ -563,7 +567,7 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 			User: in.User, Port: in.Port, AuthRef: in.AuthRef,
 			NetworkProfileID: in.NetworkProfileID, InitialCommand: in.InitialCommand,
 			JumpHost: in.JumpHost, JumpUser: in.JumpUser, JumpPort: in.JumpPort, JumpAuthRef: in.JumpAuthRef,
-			ColorTag: in.ColorTag,
+			JumpConnection: in.JumpConnection, ColorTag: in.ColorTag,
 		}); err != nil {
 			return errResult(err), nil, nil
 		}
@@ -574,13 +578,15 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 		Name: "create_connection",
 		Description: "Stage a new SSH connection in the pending provisioning plan. Reference an EXISTING " +
 			"vault credential via auth_ref (from list_credentials) - you can never set a password. A bastion " +
-			"is given inline as jump_host/jump_user (+ optional jump_auth_ref), not a saved connection. " +
+			"that is already a connection (in the tree or created earlier in this plan) goes in jump_connection; " +
+			"one that is not is given inline as jump_host/jump_user (+ optional jump_auth_ref). " +
 			"Returns a temp id for attaching forwards. Nothing is written until commit_plan. Requires the manage grant.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpCreateConnectionArgs) (*mcp.CallToolResult, any, error) {
 		id, err := a.planAddConnection(planConnInput{
 			Name: in.Name, Host: in.Host, Port: in.Port, User: in.User,
 			Folder: in.Folder, AuthRef: in.AuthRef, NetworkProfileID: in.NetworkProfileID,
 			JumpHost: in.JumpHost, JumpUser: in.JumpUser, JumpPort: in.JumpPort, JumpAuthRef: in.JumpAuthRef,
+			JumpConnection: in.JumpConnection,
 			InitialCommand: in.InitialCommand, Tags: in.Tags, Notes: in.Notes,
 			Icon: in.Icon, IconColor: in.IconColor, IconImage: in.IconImage,
 		})
@@ -643,6 +649,7 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 			AuthRef: in.AuthRef, NetworkProfileID: in.NetworkProfileID,
 			InitialCommand: in.InitialCommand, Folder: in.Folder, Clear: in.Clear, Notes: in.Notes,
 			Icon: in.Icon, IconColor: in.IconColor, IconImage: in.IconImage,
+			JumpConnection: in.JumpConnection,
 		}); err != nil {
 			return errResult(err), nil, nil
 		}

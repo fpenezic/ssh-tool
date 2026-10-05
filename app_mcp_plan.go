@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"ssh-tool/internal/resolver"
 	"ssh-tool/internal/store"
 )
 
@@ -60,13 +61,17 @@ type folderSettingsInput struct {
 	JumpUser         string
 	JumpPort         uint16
 	JumpAuthRef      string
-	ColorTag         string // palette name or #rrggbb; marks the environment (prod red, ...)
+	// JumpConnection: the bastion as a saved connection or inventory host
+	// (normalised by normalizeJumpConnection; "tmp:<id>" for one staged in
+	// this plan). Mutually exclusive with JumpHost.
+	JumpConnection string
+	ColorTag       string // palette name or #rrggbb; marks the environment (prod red, ...)
 }
 
 func (f folderSettingsInput) empty() bool {
 	return f.User == "" && f.Port == 0 && f.AuthRef == "" && f.NetworkProfileID == "" &&
 		f.InitialCommand == "" && f.JumpHost == "" && f.JumpUser == "" && f.JumpPort == 0 && f.JumpAuthRef == "" &&
-		f.ColorTag == ""
+		f.JumpConnection == "" && f.ColorTag == ""
 }
 
 var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
@@ -107,6 +112,7 @@ type planConn struct {
 	AuthRef          string  // existing vault credential id, or ""
 	NetworkProfileID string  // existing network profile id, or ""
 	Jump             *planJump
+	JumpConn         string // normalised jump_connection, see normalizeJumpConnection
 	InitialCommand   string
 	Tags             []string
 	Notes            string
@@ -236,6 +242,14 @@ func (a *App) planSetFolderSettings(folder string, s folderSettingsInput) error 
 	if s.empty() {
 		return fmt.Errorf("no settings given")
 	}
+	if s.JumpConnection != "" && s.JumpHost != "" {
+		return fmt.Errorf("set jump_host or jump_connection, not both")
+	}
+	jc, err := a.normalizeJumpConnection(s.JumpConnection)
+	if err != nil {
+		return err
+	}
+	s.JumpConnection = jc
 	s.ColorTag = strings.TrimSpace(s.ColorTag)
 	if !validColorTag(s.ColorTag) {
 		return fmt.Errorf("unknown color_tag %q: use red, orange, yellow, green, teal, blue, mauve, pink or #rrggbb", s.ColorTag)
@@ -342,7 +356,114 @@ func (f folderSettingsInput) toInheritable() store.InheritableSettings {
 		}
 		ov.JumpHost = &store.JumpHostOverride{Kind: "chain", Chain: &spec}
 	}
+	if f.JumpConnection != "" {
+		ov.JumpHost = jumpConnOverride(f.JumpConnection)
+	}
 	return ov
+}
+
+// jumpConnOverride is a one-hop chain through a saved connection or
+// inventory host (see resolver.ExpandJumpRefs).
+func jumpConnOverride(ref string) *store.JumpHostOverride {
+	r := ref
+	return &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{ConnectionID: &r}}
+}
+
+// normalizeJumpConnection turns what the LLM passed as jump_connection into
+// the reference a jump hop stores: a saved connection id (checked), a
+// "tmp:<id>" of a connection staged in this plan (checked at commit), or an
+// inventory host. Inventory hosts arrive as list_connections shows them
+// ("dyn:<folderId>:<entryId>"), as "dyn:<entryId>", or already as
+// "dyn:<folderId>/<externalId>"; the provider's id is what is stored, so the
+// reference survives inventory refreshes.
+func (a *App) normalizeJumpConnection(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(raw, "tmp:") {
+		return raw, nil
+	}
+	if _, _, ok := resolver.ParseDynRef(raw); ok {
+		return raw, nil
+	}
+	if rest, ok := strings.CutPrefix(raw, "dyn:"); ok {
+		entryID := rest
+		if i := strings.LastIndex(rest, ":"); i >= 0 {
+			entryID = rest[i+1:]
+		}
+		e, err := a.db.GetDynamicEntry(entryID)
+		if err != nil || e == nil || e.ExternalID == "" {
+			return "", fmt.Errorf("no inventory host %q", raw)
+		}
+		return resolver.DynRef(e.FolderID, e.ExternalID), nil
+	}
+	if _, err := a.db.GetConnection(raw); err != nil {
+		return "", fmt.Errorf("no connection with id %q for jump_connection", raw)
+	}
+	return raw, nil
+}
+
+// planJumpLabel names a jump_connection for the plan preview: the staged or
+// saved connection's name, or the inventory host's, with a note saying
+// which. An unknown reference says so instead of hiding it.
+func (a *App) planJumpLabel(p *mcpPlan, ref string) string {
+	if tmp, ok := strings.CutPrefix(ref, "tmp:"); ok {
+		for _, c := range p.conns {
+			if c.TempID == tmp {
+				return c.Name + " (created in this plan)"
+			}
+		}
+		return ref + " (UNKNOWN staged connection)"
+	}
+	if fid, ext, ok := resolver.ParseDynRef(ref); ok {
+		if entries, err := a.db.ListDynamicEntries(fid); err == nil {
+			for _, e := range entries {
+				if e.ExternalID == ext {
+					return e.Name + " (inventory host)"
+				}
+			}
+		}
+		return ext + " (inventory host, not in the last refresh)"
+	}
+	if c, err := a.db.GetConnection(ref); err == nil && c != nil {
+		return c.Name + " (saved connection)"
+	}
+	return ref + " (UNKNOWN connection)"
+}
+
+// resolveJumpTemps rewrites "tmp:<id>" connection references in a chain to
+// the ids the plan's writes produced. The chain is plan-owned, so it is
+// changed in place.
+func resolveJumpTemps(jh *store.JumpHostOverride, connIDs map[string]string) error {
+	if jh == nil || jh.Chain == nil {
+		return nil
+	}
+	for cur := jh.Chain; cur != nil; cur = cur.Via {
+		if cur.ConnectionID == nil {
+			continue
+		}
+		if tmp, ok := strings.CutPrefix(*cur.ConnectionID, "tmp:"); ok {
+			rid, ok := connIDs[tmp]
+			if !ok {
+				return fmt.Errorf("jump_connection %q is not a connection created in this plan", *cur.ConnectionID)
+			}
+			cur.ConnectionID = &rid
+		}
+	}
+	return nil
+}
+
+func hasJumpTemp(jh *store.JumpHostOverride) bool {
+	if jh == nil || jh.Chain == nil {
+		return false
+	}
+	for cur := jh.Chain; cur != nil; cur = cur.Via {
+		if cur.ConnectionID != nil && strings.HasPrefix(*cur.ConnectionID, "tmp:") {
+			return true
+		}
+	}
+	return false
 }
 
 // planConnInput is the flat input the create_connection tool passes in.
@@ -358,6 +479,7 @@ type planConnInput struct {
 	JumpUser         string
 	JumpPort         uint16
 	JumpAuthRef      string
+	JumpConnection   string
 	InitialCommand   string
 	Tags             []string
 	Notes            string
@@ -422,6 +544,16 @@ func (a *App) planAddConnection(in planConnInput) (string, error) {
 			Host: jh, User: strings.TrimSpace(in.JumpUser),
 			Port: in.JumpPort, AuthRef: strings.TrimSpace(in.JumpAuthRef),
 		}
+	}
+	if strings.TrimSpace(in.JumpConnection) != "" {
+		if c.Jump != nil {
+			return "", fmt.Errorf("set jump_host or jump_connection, not both")
+		}
+		jc, err := a.normalizeJumpConnection(in.JumpConnection)
+		if err != nil {
+			return "", err
+		}
+		c.JumpConn = jc
 	}
 	a.mcp.planMu.Lock()
 	defer a.mcp.planMu.Unlock()
@@ -501,6 +633,7 @@ type editConnInput struct {
 	Icon             *string
 	IconColor        *string
 	IconImage        *string
+	JumpConnection   *string // bastion as a saved connection / inventory host; "" is rejected (use clear jump_host)
 	Clear            []string
 }
 
@@ -555,6 +688,19 @@ func (a *App) planEditConnection(in editConnInput) error {
 	}
 	if in.InitialCommand != nil {
 		e.SetSettings.InitialCommand = in.InitialCommand
+	}
+	if in.JumpConnection != nil {
+		if strings.TrimSpace(*in.JumpConnection) == "" {
+			return fmt.Errorf("jump_connection cannot be empty; to remove the jump host use clear: [\"jump_host\"]")
+		}
+		jc, err := a.normalizeJumpConnection(*in.JumpConnection)
+		if err != nil {
+			return err
+		}
+		if jc == in.ConnID {
+			return fmt.Errorf("a connection cannot be its own jump host")
+		}
+		e.SetSettings.JumpHost = jumpConnOverride(jc)
 	}
 	if in.Icon != nil {
 		icon := strings.TrimSpace(*in.Icon)
@@ -649,13 +795,16 @@ func mergeConnEdit(a *planEditConn, b planEditConn) {
 	if b.SetSettings.InitialCommand != nil {
 		a.SetSettings.InitialCommand = b.SetSettings.InitialCommand
 	}
+	if b.SetSettings.JumpHost != nil {
+		a.SetSettings.JumpHost = b.SetSettings.JumpHost
+	}
 	a.ClearSettings = append(a.ClearSettings, b.ClearSettings...)
 }
 
 // settingsEmpty reports whether an edit set no inheritable value at all.
 func settingsEmpty(s store.InheritableSettings) bool {
 	return s.Username == nil && s.Port == nil && s.AuthRef == nil &&
-		s.NetworkProfileID == nil && s.InitialCommand == nil
+		s.NetworkProfileID == nil && s.InitialCommand == nil && s.JumpHost == nil
 }
 
 // planRenameFolder stages a rename of an existing folder.
@@ -840,6 +989,9 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 			}
 			out = append(out, "via "+via)
 		}
+		if s.JumpConnection != "" {
+			out = append(out, "via "+a.planJumpLabel(p, s.JumpConnection))
+		}
 		if s.AuthRef != "" {
 			out = append(out, "cred: "+credLabel(s.AuthRef, ctx))
 		}
@@ -964,6 +1116,9 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 				via += " (cred: " + credLabel(c.Jump.AuthRef, "jump host") + ")"
 			}
 		}
+		if c.JumpConn != "" {
+			via = a.planJumpLabel(p, c.JumpConn)
+		}
 		np := ""
 		if c.NetworkProfileID != "" {
 			if n, ok := profNames[c.NetworkProfileID]; ok {
@@ -1045,6 +1200,9 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 		}
 		if e.SetSettings.Port != nil {
 			ch = append(ch, fmt.Sprintf("port: %s -> %d", portLabel(cur.Overrides.Port), *e.SetSettings.Port))
+		}
+		if jh := e.SetSettings.JumpHost; jh != nil && jh.Chain != nil && jh.Chain.ConnectionID != nil {
+			ch = append(ch, "jump host: via "+a.planJumpLabel(p, *jh.Chain.ConnectionID))
 		}
 		if e.SetSettings.AuthRef != nil {
 			ch = append(ch, fmt.Sprintf("credential: %s -> %s",
@@ -1202,8 +1360,8 @@ func repeatedJumps(conns []planConn) []repeatedJump {
 		fk := c.Folder.Temp + "\x00" + c.Folder.Existing
 		totals[fk]++
 		refs[fk] = c.Folder
-		if c.Jump != nil {
-			counts[key{fk, jumpLabel(c.Jump)}]++
+		if k := planJumpKey(c); k != "" {
+			counts[key{fk, k}]++
 		}
 	}
 	var out []repeatedJump
@@ -1214,6 +1372,18 @@ func repeatedJumps(conns []planConn) []repeatedJump {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Jump < out[j].Jump })
 	return out
+}
+
+// planJumpKey identifies a staged connection's jump host for the repeat
+// checks: the inline bastion as written, or the jump_connection reference.
+func planJumpKey(c planConn) string {
+	switch {
+	case c.JumpConn != "":
+		return "jump_connection " + c.JumpConn
+	case c.Jump != nil:
+		return jumpLabel(c.Jump)
+	}
+	return ""
 }
 
 func jumpLabel(j *planJump) string {
@@ -1244,21 +1414,53 @@ func (a *App) jumpRepeatHint(tempID string) string {
 			mine = &p.conns[i]
 		}
 	}
-	if mine == nil || mine.Jump == nil {
+	if mine == nil || planJumpKey(*mine) == "" {
 		return ""
+	}
+	hint := ""
+	// An inline bastion that is already a saved connection: point at it, so
+	// the bastion stays defined once.
+	if mine.Jump != nil {
+		if id, name := a.savedConnAt(mine.Jump.Host, mine.Jump.Port); id != "" {
+			hint += fmt.Sprintf("\nnote: jump host %s is the saved connection %q (id %s). "+
+				"jump_connection %s reads its address, user and credential from it instead of repeating them.",
+				mine.Jump.Host, name, id, id)
+		}
 	}
 	n := 0
 	for _, c := range p.conns {
-		if c.Folder == mine.Folder && c.Jump != nil && jumpLabel(c.Jump) == jumpLabel(mine.Jump) {
+		if c.Folder == mine.Folder && planJumpKey(c) == planJumpKey(*mine) {
 			n++
 		}
 	}
-	if n < 2 {
-		return ""
+	if n >= 2 {
+		hint += fmt.Sprintf("\nnote: %d connections in this folder now carry jump host %s. "+
+			"Put them in a subfolder with that jump in set_folder_settings (discard_plan and restage if needed), "+
+			"so they inherit it.", n, planJumpKey(*mine))
 	}
-	return fmt.Sprintf("\nnote: %d connections in this folder now carry jump host %s inline. "+
-		"Put them in a subfolder with that jump in set_folder_settings (discard_plan and restage if needed), "+
-		"so they inherit it.", n, jumpLabel(mine.Jump))
+	return hint
+}
+
+// savedConnAt finds a saved connection reached at host:port (port 0 = 22),
+// for suggesting jump_connection over a retyped bastion.
+func (a *App) savedConnAt(host string, port uint16) (id, name string) {
+	if port == 0 {
+		port = 22
+	}
+	conns, err := a.db.ListConnections(nil) // nil = every connection
+	if err != nil {
+		return "", ""
+	}
+	folders, _ := a.db.ListFolders()
+	for _, c := range conns {
+		if !strings.EqualFold(c.Hostname, host) {
+			continue
+		}
+		if resolver.ResolveWith(c, folders).Port == port {
+			return c.ID, c.Name
+		}
+	}
+	return "", ""
 }
 
 // repeatedSetting is one "every connection here carries the same value" find.
@@ -1470,7 +1672,18 @@ func (a *App) validatePlanRefs(p *mcpPlan) error {
 
 	// checkFolderSettings validates the credential / network-profile refs a
 	// folder-settings block carries (never a secret - only ids).
+	// A jump_connection given as tmp:<id> must name a connection staged in
+	// this plan (existing ids and inventory hosts were checked when staged).
+	checkJumpTemp := func(what, ref string) error {
+		if tmp, ok := strings.CutPrefix(ref, "tmp:"); ok && !tempConns[tmp] {
+			return fmt.Errorf("%s jump_connection %q is not a connection staged in this plan", what, ref)
+		}
+		return nil
+	}
 	checkFolderSettings := func(what string, s folderSettingsInput) error {
+		if err := checkJumpTemp(what, s.JumpConnection); err != nil {
+			return err
+		}
 		if s.AuthRef != "" && !credOK[s.AuthRef] {
 			return fmt.Errorf("%s references unknown credential id %q", what, s.AuthRef)
 		}
@@ -1507,6 +1720,12 @@ func (a *App) validatePlanRefs(p *mcpPlan) error {
 		}
 	}
 	for _, c := range p.conns {
+		if err := checkJumpTemp("connection "+c.Name, c.JumpConn); err != nil {
+			return err
+		}
+		if c.JumpConn == "tmp:"+c.TempID {
+			return fmt.Errorf("connection %q cannot be its own jump host", c.Name)
+		}
 		if c.AuthRef != "" && !credOK[c.AuthRef] {
 			return fmt.Errorf("connection %q references unknown credential id %q", c.Name, c.AuthRef)
 		}
@@ -1528,6 +1747,11 @@ func (a *App) validatePlanRefs(p *mcpPlan) error {
 	for _, e := range p.editConns {
 		if _, err := a.db.GetConnection(e.ConnID); err != nil {
 			return fmt.Errorf("edit targets unknown connection id %q", e.ConnID)
+		}
+		if jh := e.SetSettings.JumpHost; jh != nil && jh.Chain != nil && jh.Chain.ConnectionID != nil {
+			if err := checkJumpTemp("edit of "+e.ConnID, *jh.Chain.ConnectionID); err != nil {
+				return err
+			}
 		}
 		if e.SetSettings.AuthRef != nil && *e.SetSettings.AuthRef != "" && !credOK[*e.SetSettings.AuthRef] {
 			return fmt.Errorf("edit of %q references unknown credential id %q", e.ConnID, *e.SetSettings.AuthRef)
@@ -1596,6 +1820,21 @@ func (a *App) writePlan(p *mcpPlan) (string, error) {
 		mergedFolderSettings[fs.FolderID] = merged
 	}
 
+	// Jump references to connections staged in this same plan ("tmp:<id>")
+	// only resolve once those connections exist, which is after folders are
+	// created. Such writes go in without the jump host and are completed
+	// once every connection id is known.
+	type pendingFolderJump struct {
+		id       string
+		settings store.InheritableSettings
+	}
+	type pendingConnJump struct {
+		id string
+		jh *store.JumpHostOverride
+	}
+	var pendingFolders []pendingFolderJump
+	var pendingConns []pendingConnJump
+
 	err := a.db.WithTx(func(tx *sql.Tx) error {
 		// Folders may parent other folders in the same plan, so insert in the
 		// order given; a parent temp must appear before its child (the LLM
@@ -1617,16 +1856,28 @@ func (a *App) writePlan(p *mcpPlan) (string, error) {
 			if f.Settings != nil {
 				nf.Settings = f.Settings.toInheritable()
 			}
+			full := nf.Settings
+			if hasJumpTemp(nf.Settings.JumpHost) {
+				nf.Settings.JumpHost = nil
+			}
 			id, err := a.db.CreateFolderTx(tx, nf)
 			if err != nil {
 				return err
+			}
+			if hasJumpTemp(full.JumpHost) {
+				pendingFolders = append(pendingFolders, pendingFolderJump{id, full})
 			}
 			folderIDs[f.TempID] = id
 		}
 
 		// Settings on existing folders.
 		for _, fs := range p.folderSettings {
-			if err := a.db.UpdateFolderSettingsTx(tx, fs.FolderID, mergedFolderSettings[fs.FolderID]); err != nil {
+			merged := mergedFolderSettings[fs.FolderID]
+			if hasJumpTemp(merged.JumpHost) {
+				pendingFolders = append(pendingFolders, pendingFolderJump{fs.FolderID, merged})
+				merged.JumpHost = nil
+			}
+			if err := a.db.UpdateFolderSettingsTx(tx, fs.FolderID, merged); err != nil {
 				return fmt.Errorf("set settings on folder %q: %w", fs.FolderID, err)
 			}
 		}
@@ -1681,6 +1932,13 @@ func (a *App) writePlan(p *mcpPlan) (string, error) {
 				}
 				ov.JumpHost = &store.JumpHostOverride{Kind: "chain", Chain: &spec}
 			}
+			var laterJump *store.JumpHostOverride
+			if c.JumpConn != "" {
+				ov.JumpHost = jumpConnOverride(c.JumpConn)
+				if hasJumpTemp(ov.JumpHost) {
+					laterJump, ov.JumpHost = ov.JumpHost, nil
+				}
+			}
 			id, err := a.db.CreateConnectionTx(tx, store.NewConnection{
 				FolderID:  folder,
 				Name:      c.Name,
@@ -1704,6 +1962,28 @@ func (a *App) writePlan(p *mcpPlan) (string, error) {
 				}
 			}
 			connIDs[c.TempID] = id
+			if laterJump != nil {
+				pendingConns = append(pendingConns, pendingConnJump{id, laterJump})
+			}
+		}
+
+		// Every staged connection exists now: complete the jump hosts that
+		// referenced one of them.
+		for _, pf := range pendingFolders {
+			if err := resolveJumpTemps(pf.settings.JumpHost, connIDs); err != nil {
+				return err
+			}
+			if err := a.db.UpdateFolderSettingsTx(tx, pf.id, pf.settings); err != nil {
+				return fmt.Errorf("set jump host on folder %q: %w", pf.id, err)
+			}
+		}
+		for _, pc := range pendingConns {
+			if err := resolveJumpTemps(pc.jh, connIDs); err != nil {
+				return err
+			}
+			if err := a.db.PatchConnectionOverridesTx(tx, pc.id, store.InheritableSettings{JumpHost: pc.jh}, nil); err != nil {
+				return fmt.Errorf("set jump host on connection %q: %w", pc.id, err)
+			}
 		}
 
 		for _, fw := range p.forwards {
@@ -1798,6 +2078,9 @@ func (a *App) writePlan(p *mcpPlan) (string, error) {
 				}
 			}
 			if !settingsEmpty(e.SetSettings) || len(e.ClearSettings) > 0 {
+				if err := resolveJumpTemps(e.SetSettings.JumpHost, connIDs); err != nil {
+					return err
+				}
 				if err := a.db.PatchConnectionOverridesTx(tx, e.ConnID, e.SetSettings, e.ClearSettings); err != nil {
 					return fmt.Errorf("update settings on %q: %w", e.ConnID, err)
 				}
