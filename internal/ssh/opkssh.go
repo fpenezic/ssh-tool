@@ -683,23 +683,30 @@ func runOpksshLoginNative(ctx context.Context, cfg *OpksshConfig) (keyPEM, certB
 		return nil, nil, fmt.Errorf("opkssh: provider config rejected: %w", err)
 	}
 
-	provider, err := provCfg.ToProvider(true)
+	// With a host hook (android Intent, Windows ShellExecuteW) the provider
+	// must NOT also launch the browser itself: openpubkey calls the
+	// override IN ADDITION to its own launcher (util.OpenUrl) when
+	// openBrowser is true - the override is meant as a test mock. Since
+	// openpubkey v0.25 that launcher is powershell.exe on Windows, so the
+	// login flashed a console and opened two tabs.
+	provider, err := provCfg.ToProvider(BrowserOpenHook == nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("opkssh: create provider: %w", err)
 	}
-
-	// On platforms where the default browser launcher (util.OpenUrl ->
-	// xdg-open / open / start) does not exist - notably android - route
-	// the OIDC login URL through the host hook instead. SetOpenBrowserOverride
-	// lives on the concrete *providers.StandardOp, not the OpenIdProvider
-	// interface, so reach it via a narrow type assertion.
 	if BrowserOpenHook != nil {
+		// SetOpenBrowserOverride lives on the concrete *providers.StandardOp,
+		// not the OpenIdProvider interface, so reach it via a narrow type
+		// assertion. A provider without it gets the default launcher back,
+		// or nothing would open at all.
 		if so, ok := provider.(interface {
 			SetOpenBrowserOverride(providers.BrowserOpenOverrideFunc)
 		}); ok {
 			so.SetOpenBrowserOverride(providers.BrowserOpenOverrideFunc(BrowserOpenHook))
 		} else {
 			log.Printf("opkssh: provider has no browser-open override; falling back to default launcher")
+			if provider, err = provCfg.ToProvider(true); err != nil {
+				return nil, nil, fmt.Errorf("opkssh: create provider: %w", err)
+			}
 		}
 	}
 

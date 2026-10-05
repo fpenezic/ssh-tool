@@ -1417,6 +1417,14 @@ everything mobile is behind a build tag or an `isMobile` check.
     backend clamps in `runReconnect` / the jump pool's `linger`
     (`intSetting`). Keep them equal; the backend clamp is what applies.
 
+92. **openpubkey's browser override is additive.** `SetOpenBrowserOverride`
+    is a test hook: with `ToProvider(true)` the provider runs its own
+    launcher (`util.OpenUrl`, powershell.exe on Windows since openpubkey
+    v0.25) AND the override - a console flash and two browser tabs. With
+    `BrowserOpenHook` set, build the provider with `ToProvider(false)`
+    (`runOpksshLoginNative`). Windows wires the hook to ShellExecuteW in
+    `openurl_windows.go`.
+
 ---
 
 # Archive

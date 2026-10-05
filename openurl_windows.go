@@ -29,13 +29,40 @@ package main
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 	"syscall"
 	"unsafe"
+
+	sshlayer "ssh-tool/internal/ssh"
 )
 
+// The opkssh OIDC login opens its authorize URL through openpubkey's own
+// launcher unless a hook is set. Since openpubkey v0.25 that launcher runs
+// powershell.exe on Windows - a console program, so a terminal window
+// flashed up before the browser on every login. Route it through
+// ShellExecuteW like every other link the app opens.
+func init() {
+	sshlayer.BrowserOpenHook = openLoginURL
+}
+
+// openLoginURL opens an OIDC login URL, accepting only http(s): the URL
+// comes from the provider's discovery document, and ShellExecuteW would
+// run anything else it was handed (a file path, a custom scheme).
+func openLoginURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("login url: %w", err)
+	}
+	if s := strings.ToLower(u.Scheme); (s != "http" && s != "https") || u.Host == "" {
+		return fmt.Errorf("login url: refusing to open %q", u.Scheme+"://"+u.Host)
+	}
+	return openURLPlatform(raw)
+}
+
 var (
-	shell32            = syscall.NewLazyDLL("shell32.dll")
-	procShellExecuteW  = shell32.NewProc("ShellExecuteW")
+	shell32           = syscall.NewLazyDLL("shell32.dll")
+	procShellExecuteW = shell32.NewProc("ShellExecuteW")
 )
 
 // Return values below 33 are error codes; anything higher is a (legacy,
