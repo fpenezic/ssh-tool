@@ -1330,6 +1330,50 @@ everything mobile is behind a build tag or an `isMobile` check.
     body is a flex column (children `flex-shrink: 0`), so an inner scroll
     box needs `flex: 1 1 0` + `min-height` to keep its scrollbars on screen.
 
+82. **Workspace frames rely on one invariant: a workspace's tabs are one
+    contiguous run in `paneTabs.tabs`.** The tab bar draws a frame per run,
+    so a stray member elsewhere draws a second frame. Every path that adds
+    or moves a framed tab keeps the run whole: `addTabFromLayout` splices a
+    tab with `workspaceId` after the last tab of its workspace (redock),
+    `moveToWorkspace` relocates the tabs it reassigns, and a bar drop takes
+    the frame of the tab it lands on. A new path that inserts tabs must do
+    the same. `workspaceId` travels in `SerializedPaneTab` and in the
+    reopen-last-session `TabSpec`, never in a workspace's own layout JSON.
+    The dirty dot tracks membership changes only, not splits inside a frame.
+
+83. **Quick-connect ids (`quick:<uuid>`) exist only in `App.quick`.** They
+    are never in the store, so anything that dials by connection id must
+    special-case them: `reconnectConnect` (reconnect, Reconnect button,
+    pane split via `SshReopen`) looks them up there; `specForSession`
+    returns null and `closeTab` leaves them off the Ctrl+Shift+T stack, or
+    they would be restored or saved into workspaces by the back door. They
+    share the dial path with dynamic hosts through `connectSynthetic`; each
+    caller passes its own audit record. A restart forgets them, by design.
+
+84. **About reads versions from the binary, two ways.** Go modules come from
+    `debug.ReadBuildInfo` (survives `-trimpath` and `-s -w`); a module only
+    shows if it is in the `aboutModules` list and linked into this build.
+    Frontend versions are a Vite `define` (`__FRONTEND_DEPS__`, declared in
+    `vite-env.d.ts`) - vitest has no such define, so a test that imports
+    `Settings.svelte` would hit an undefined global. `main.appCommitDate`
+    is an ldflag in every platform Taskfile; android has two BUILD_FLAGS
+    and both carry it. A build without it shows "unknown" and About hides
+    the row.
+
+85. **The inventory timer runs before the vault is open.** It fires 2s
+    after start, ahead of a passphrase or sidecar unlock. A token-backed
+    folder then gets `ErrVaultLocked` from `resolveSecrets`, and a timer
+    refresh (force=false) treats that as a wait: no `last_error` write, the
+    cache stays. `VaultUnlock` / `VaultAutoUnlock` call
+    `inventory.VaultUnlocked()` to refresh those folders at once. A forced
+    (user) refresh still reports the locked vault.
+
+86. **On Windows, `Window.Restore()` un-maximises.** It is `SW_RESTORE`,
+    which restores a maximised window to normal size as well as a minimised
+    one. Guard it with `IsMinimised()`; `Focus()` already un-minimises.
+    Calling it unconditionally in "show the main window" made every
+    notification or tray click shrink a maximised app.
+
 ---
 
 # Archive
