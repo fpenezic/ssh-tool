@@ -219,7 +219,10 @@ author asks to ship/promote/release:
      for when Wails v3 stable.
 
 2. Update `CHANGELOG.md`: new `## [vX.Y.Z]` block at the top,
-   grouped by area, prose written for a returning user.
+   grouped by area, prose written for a returning user. The block opens
+   with one or two short plain-language sentences (before the first `###`)
+   naming what the release is about - the GitHub release notes and the
+   website show it first. A summary, not a second changelog.
 
 3. Commit changelog as final release commit: `chore(release): v0.X.Y`.
 
