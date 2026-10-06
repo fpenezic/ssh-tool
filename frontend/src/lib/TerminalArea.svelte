@@ -15,7 +15,7 @@
   import { connectionActions } from "./connectionActions.svelte";
   import { IconBroadcast, IconFolder, IconBot, IconHost, IconCopy, IconWorkspace, IconPopOut, IconSplitH, IconSplitV, IconX, IconGlobe, IconPlay, IconStop, IconExternalLink, IconEyeOff, IconPencil, IconSave } from "./iconMap";
   import { workspaces, workspaceColor } from "./workspaces.svelte";
-  import { confirmModal } from "./confirmModal.svelte";
+  import { confirmModal } from "./confirmModal.svelte.ts";
   import { quickConnect, isQuickId } from "./quickConnect.svelte";
   import { mcpLevelTitle } from "./mcpLevel";
   import Icon from "./Icon.svelte";
