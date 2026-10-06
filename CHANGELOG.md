@@ -7,6 +7,16 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Fixes
+
+- macOS builds failed since 0.107.0: a frontend import resolved to the
+  wrong file on a case-insensitive filesystem. A test now catches this on
+  any platform.
+
+---
+
 ## [0.108.0] - Bastions as connections, port conflicts, connection settings
 
 A jump host can now be any saved connection or inventory host, defined

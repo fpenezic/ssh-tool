@@ -1425,6 +1425,13 @@ everything mobile is behind a build tag or an `isMobile` check.
     (`runOpksshLoginNative`). Windows wires the hook to ShellExecuteW in
     `openurl_windows.go`.
 
+93. **Stores and components that differ only in case.** `confirmModal.svelte.ts`
+    sits next to `ConfirmModal.svelte` (also promptModal, contextMenu,
+    tagFilter). Import such a store with its full `.svelte.ts` name: on
+    macOS's case-insensitive filesystem `./confirmModal.svelte` resolves to
+    the component and vite fails, while Linux CI builds fine.
+    `caseImports.test.ts` enforces it.
+
 ---
 
 # Archive
