@@ -334,7 +334,9 @@ func dialChainFrom(
 	closeAll := func() { cleanup(clients) }
 
 	for i, h := range chain {
+		isLastHop := i == len(chain)-1
 		var methods []ssh.AuthMethod
+		var material *AuthMaterial
 		if h.AuthRef != nil {
 			cred, err := db.GetCredential(*h.AuthRef)
 			if err != nil {
@@ -349,17 +351,19 @@ func dialChainFrom(
 			// Background ctx: the opkssh 5-min timeout still bounds it.
 			auth, err := ResolveAuth(context.Background(), cred, vault, nil)
 			if err != nil {
-				isLastHop := i == len(chain)-1
 				if !(isLastHop && settings.PasswordOverride != nil) {
 					closeAll()
 					return nil, func() {}, "", fmt.Errorf("%s: %w", h.Label, err)
 				}
 			} else {
+				material = auth
 				methods = auth.ToAuthMethods()
 			}
 		}
-		if i == len(chain)-1 && settings.PasswordOverride != nil {
-			methods = append(methods, ssh.Password(*settings.PasswordOverride))
+		// Connection password and credential password as one method; no
+		// prompt on these non-interactive paths (see targetAuthMethods).
+		if isLastHop {
+			methods = targetAuthMethods(material, settings.PasswordOverride, false, h.Label, h.Hostname, int(h.Port), nil)
 		}
 		if h.Username == "" {
 			closeAll()

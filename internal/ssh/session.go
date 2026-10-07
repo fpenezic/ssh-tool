@@ -575,7 +575,9 @@ func Connect(
 			Hint:  "connecting to " + h.Label,
 		})
 
+		isLastHop := i == len(chain)-1
 		var methods []ssh.AuthMethod
+		var material *AuthMaterial
 		if h.AuthRef != nil {
 			cred, err := db.GetCredential(*h.AuthRef)
 			if err != nil {
@@ -594,7 +596,6 @@ func Connect(
 				// the inherited credential may be broken (e.g. RDM-imported
 				// password credential with vault_key = NULL) while the override
 				// is perfectly valid.
-				isLastHop := i == len(chain)-1
 				if isLastHop && settings.PasswordOverride != nil {
 					log.Printf("ssh: %s credential resolve failed (%v); per-connection password override will be used instead", h.Label, err)
 				} else {
@@ -602,6 +603,7 @@ func Connect(
 					return nil, fmt.Errorf("%s: %w", h.Label, err)
 				}
 			} else {
+				material = auth
 				methods = auth.ToAuthMethods()
 				var algos []string
 				for _, signer := range auth.Signers {
@@ -612,22 +614,19 @@ func Connect(
 					h.Label, h.Username, len(methods), algos, cred.Name, cred.Kind)
 			}
 		}
-		// For the target hop, add a per-connection password override as an
-		// additional auth method (appended so key auth is tried first).
-		if i == len(chain)-1 && settings.PasswordOverride != nil {
-			methods = append(methods, ssh.Password(*settings.PasswordOverride))
-		}
-		// The last hop gets interactive fallback methods (keyboard-interactive +
-		// password callback) appended LAST, so configured auth is tried first and
-		// the user is only prompted when it fails or the server demands it (PAM
-		// 2FA). Only the target hop - a jump host asking interactively mid-chain
-		// would be surprising and is rare.
-		if i == len(chain)-1 {
+		// The target hop: key methods, then the connection's own password and
+		// the credential's as ONE password method ending in the interactive
+		// prompt, then keyboard-interactive (see targetAuthMethods - x/crypto
+		// skips a second method of the same name). Configured auth is tried
+		// first; the user is only prompted when it fails or the server
+		// demands it (PAM 2FA). A jump host asking interactively mid-chain
+		// would be surprising and is rare, so only the target prompts.
+		if isLastHop {
 			// The username closure, not h.Username: a hop with no configured
 			// user gets one prompted for below, after this line runs but
 			// before the server issues its first challenge.
-			methods = append(methods, interactiveAuthMethods(
-				h.Label, h.Hostname, int(h.Port), func() string { return h.Username })...)
+			methods = targetAuthMethods(material, settings.PasswordOverride, true,
+				h.Label, h.Hostname, int(h.Port), func() string { return h.Username })
 		}
 		if h.Username == "" {
 			// No configured username: prompt for one instead of failing, so a

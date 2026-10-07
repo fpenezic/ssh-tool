@@ -2,9 +2,11 @@ package ssh
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
+	"slices"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -107,6 +109,19 @@ type AuthMaterial struct {
 // that ssh.ClientConfig wants. Order matters - we try the strongest method
 // first.
 func (m *AuthMaterial) ToAuthMethods() []ssh.AuthMethod {
+	methods := m.KeyMethods()
+	if m.Password != "" {
+		methods = append(methods, ssh.Password(m.Password))
+	}
+	return methods
+}
+
+// KeyMethods is ToAuthMethods without the password: for the target hop,
+// whose password goes into passwordSequence with the connection's own.
+func (m *AuthMaterial) KeyMethods() []ssh.AuthMethod {
+	if m == nil {
+		return nil
+	}
 	var methods []ssh.AuthMethod
 	if len(m.Signers) > 0 {
 		methods = append(methods, ssh.PublicKeys(m.Signers...))
@@ -114,8 +129,80 @@ func (m *AuthMaterial) ToAuthMethods() []ssh.AuthMethod {
 	if m.Agent != nil {
 		methods = append(methods, ssh.PublicKeysCallback(m.Agent.Signers))
 	}
-	if m.Password != "" {
-		methods = append(methods, ssh.Password(m.Password))
+	return methods
+}
+
+var errNoMorePasswords = errors.New("no more passwords to try")
+
+// passwordSequence offers several passwords as ONE "password" auth method,
+// tried in order, then the interactive prompt (nil = none).
+//
+// x/crypto never retries a method name that already failed: with two
+// ssh.Password methods in the list the second is skipped, so a
+// connection's own password behind a folder credential's password never
+// reached the server ("attempted methods [none password]"), and the
+// password prompt fallback was dead whenever a stored password was wrong.
+// Empty and repeated passwords are dropped.
+func passwordSequence(passwords []string, prompt func() (string, error)) ssh.AuthMethod {
+	var list []string
+	for _, p := range passwords {
+		if p != "" && !slices.Contains(list, p) {
+			list = append(list, p)
+		}
+	}
+	n := len(list)
+	if prompt != nil {
+		n++
+	}
+	if n == 0 {
+		return nil
+	}
+	i := 0
+	return ssh.RetryableAuthMethod(ssh.PasswordCallback(func() (string, error) {
+		defer func() { i++ }()
+		switch {
+		case i < len(list):
+			return list[i], nil
+		case i == len(list) && prompt != nil:
+			return prompt()
+		}
+		return "", errNoMorePasswords
+	}), n)
+}
+
+// targetAuthMethods assembles the target hop's methods: key-based ones from
+// the credential, then every stored password (the connection's own first -
+// it is the more specific setting - then the credential's) as a single
+// password method that ends in the interactive prompt, then
+// keyboard-interactive. With no stored password, keyboard-interactive
+// comes before the password prompt, as it always did.
+func targetAuthMethods(m *AuthMaterial, override *string, interactive bool, label, host string, port int, userFn func() string) []ssh.AuthMethod {
+	methods := m.KeyMethods()
+	var stored []string
+	if override != nil {
+		stored = append(stored, *override)
+	}
+	if m != nil {
+		stored = append(stored, m.Password)
+	}
+	var ki ssh.AuthMethod
+	var prompt func() (string, error)
+	if interactive && InteractiveAuthHook != nil {
+		ki = interactiveKI(label, host, port, userFn)
+		prompt = interactivePasswordPrompt(label, host, port, userFn)
+	}
+	if passwordSequence(stored, nil) != nil { // any stored password
+		methods = append(methods, passwordSequence(stored, prompt))
+		if ki != nil {
+			methods = append(methods, ki)
+		}
+		return methods
+	}
+	if ki != nil {
+		methods = append(methods, ki)
+	}
+	if pw := passwordSequence(nil, prompt); pw != nil {
+		methods = append(methods, pw)
 	}
 	return methods
 }
@@ -136,10 +223,17 @@ func interactiveAuthMethods(label, host string, port int, userFn func() string) 
 	if InteractiveAuthHook == nil {
 		return nil
 	}
+	return []ssh.AuthMethod{
+		interactiveKI(label, host, port, userFn),
+		ssh.PasswordCallback(interactivePasswordPrompt(label, host, port, userFn)),
+	}
+}
+
+func interactiveKI(label, host string, port int, userFn func() string) ssh.AuthMethod {
 	if userFn == nil {
 		userFn = func() string { return "" }
 	}
-	ki := ssh.KeyboardInteractive(func(name, instruction string, questions []string, echos []bool) ([]string, error) {
+	return ssh.KeyboardInteractive(func(name, instruction string, questions []string, echos []bool) ([]string, error) {
 		if len(questions) == 0 {
 			// The protocol allows an info-only exchange with no questions; a
 			// nil answer set acknowledges it without prompting the user.
@@ -155,7 +249,13 @@ func interactiveAuthMethods(label, host string, port int, userFn func() string) 
 		}
 		return InteractiveAuthHook(label, host, port, userFn(), name, instruction, prompts)
 	})
-	pw := ssh.PasswordCallback(func() (string, error) {
+}
+
+func interactivePasswordPrompt(label, host string, port int, userFn func() string) func() (string, error) {
+	if userFn == nil {
+		userFn = func() string { return "" }
+	}
+	return func() (string, error) {
 		answers, err := InteractiveAuthHook(label, host, port, userFn(), "", "",
 			[]InteractiveAuthPrompt{{Echo: false, Text: "Password:"}})
 		if err != nil {
@@ -165,8 +265,7 @@ func interactiveAuthMethods(label, host string, port int, userFn func() string) 
 			return "", fmt.Errorf("no password provided")
 		}
 		return answers[0], nil
-	})
-	return []ssh.AuthMethod{ki, pw}
+	}
 }
 
 // InlineAuthMethods builds SSH auth methods from raw secret material that
