@@ -96,3 +96,8 @@ class ExpandedSet {
 
 export const expandedConnections = new ExpandedSet(CONN_KEY);
 export const expandedCredentials = new ExpandedSet(CRED_KEY);
+
+// Connections whose tree bookmarks are folded away. Inverse of the sets
+// above: bookmark rows show by default, so only the collapsed ones are
+// stored.
+export const collapsedBookmarks = new ExpandedSet("tree_collapsed_bookmarks");

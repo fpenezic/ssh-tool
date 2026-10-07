@@ -25,6 +25,9 @@
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
   import { isMobile } from "./platform";
+  import TreeBookmarkRows from "./TreeBookmarkRows.svelte";
+  import TreeBookmarkToggle from "./TreeBookmarkToggle.svelte";
+  import { treeBookmarks } from "./treeBookmarks.svelte";
 
   interface Props {
     folder: Folder;
@@ -141,6 +144,7 @@
     const meta = e.metaKey || lastMouseMods.meta;
     const shift = e.shiftKey || lastMouseMods.shift;
     lastMouseMods = { ctrl: false, meta: false, shift: false };
+    treeBookmarks.selected = null;
 
     console.debug("[tree] conn click", {
       ctrl, meta, shift,
@@ -1100,7 +1104,7 @@
           : conn.hostname}
         <div
           class="row conn {indicatorClass('connection', conn.id)}"
-          class:selected={selConn}
+          class:selected={selConn && !treeBookmarks.selectedUnder(conn.id)}
           class:anchor={isAnchor && selConn}
           class:connecting={isConn}
           class:live={isLive}
@@ -1200,6 +1204,7 @@
           {#if routedMark(conn)}
             <span class="jump-mark routed" title={routedMark(conn)}><IconRouted size={11} /></span>
           {/if}
+          <TreeBookmarkToggle connId={conn.id} />
           {#if certBadge(conn.id)}
             {@const b = certBadge(conn.id)!}
             <span class="cert-badge" class:bad={b.bad} title={b.title}>{b.text}</span>
@@ -1217,6 +1222,7 @@
             <span class="host">{conn.hostname}</span>
           {/if}
         </div>
+        <TreeBookmarkRows connId={conn.id} depth={depth + 2} />
       {/each}
     </div>
   {/if}

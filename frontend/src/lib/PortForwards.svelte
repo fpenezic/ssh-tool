@@ -13,7 +13,8 @@
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte";
   import { copyText } from "./clipboard";
-  import { IconGlobe } from "./iconMap";
+  import { IconGlobe, IconBookmark } from "./iconMap";
+  import { treeBookmarks } from "./treeBookmarks.svelte";
   import { errMsg } from "./connectErrors";
 
   interface Props {
@@ -55,6 +56,8 @@
     } catch (e) {
       err = errMsg(e);
     }
+    // Bookmarks pinned to the tree hang off these specs.
+    void treeBookmarks.refresh();
   }
 
   onMount(() => {
@@ -371,11 +374,13 @@
   let editBmIndex = $state<number | null>(null);
   let newBmName = $state("");
   let newBmUrl = $state("");
+  let newBmInTree = $state(false);
 
   function openAddBookmark(spec: PortForward) {
     addBookmarkFor = spec.id;
     editBmIndex = null;
     newBmName = "";
+    newBmInTree = false;
     // Local forwards start from their own address, so the common case
     // is typing a path onto the end rather than the whole URL. A SOCKS
     // proxy has no single address to suggest.
@@ -389,12 +394,14 @@
     editBmIndex = index;
     newBmName = bm.name;
     newBmUrl = bm.url;
+    newBmInTree = !!bm.in_tree;
   }
 
   async function saveBookmark(spec: PortForward) {
     if (!newBmName.trim() || !newBmUrl.trim()) return;
     const existing = spec.bookmarks ?? [];
     const entry: ProxyBookmark = { name: newBmName.trim(), url: newBmUrl.trim() };
+    if (newBmInTree) entry.in_tree = true;
     // Edit replaces in place; add appends.
     const updated: ProxyBookmark[] =
       editBmIndex !== null
@@ -404,6 +411,20 @@
       await api.forwardsSetBookmarks(spec.id, updated);
       addBookmarkFor = null;
       editBmIndex = null;
+      await reload();
+    } catch (e: any) {
+      err = errMsg(e);
+    }
+  }
+
+  async function toggleInTree(spec: PortForward, index: number) {
+    const updated = (spec.bookmarks ?? []).map((bm, i) => {
+      if (i !== index) return bm;
+      const { in_tree, ...rest } = bm;
+      return in_tree ? rest : { ...rest, in_tree: true };
+    });
+    try {
+      await api.forwardsSetBookmarks(spec.id, updated);
       await reload();
     } catch (e: any) {
       err = errMsg(e);
@@ -634,6 +655,10 @@
                     title={running ? bm.url : `Connect, start the proxy, and open ${bm.url}`}
                     onclick={() => launchBrowser(spec, bm.url)}
                   >{bm.name}</button>
+                  <button class="bm-pin" class:on={bm.in_tree}
+                    title={bm.in_tree ? "Shown under the connection in the tree - click to hide" : "Show under the connection in the tree"}
+                    onclick={() => toggleInTree(spec, i)}
+                  ><IconBookmark size={11} fill={bm.in_tree ? "currentColor" : "none"} /></button>
                   <button class="bm-edit" title="Edit bookmark" onclick={() => openEditBookmark(spec, i)}>✎</button>
                   <button class="bm-del" title="Remove bookmark" onclick={() => removeBookmark(spec, i)}>×</button>
                 </span>
@@ -646,6 +671,9 @@
                     placeholder={spec.kind === "local" && !spec.local_port ? "http://127.0.0.1:{port}/path" : "https://…"}
                     class="bm-input bm-url"
                   />
+                  <label class="bm-tree" title="Show this bookmark under the connection in the tree">
+                    <input type="checkbox" bind:checked={newBmInTree} /> In tree
+                  </label>
                   <button class="bm-save" onclick={() => saveBookmark(spec)}>{editBmIndex !== null ? "Save" : "Add"}</button>
                   <button onclick={() => { addBookmarkFor = null; editBmIndex = null; }}>✕</button>
                 </span>
@@ -835,6 +863,16 @@
     font: inherit; font-size: 0.75rem; cursor: pointer; line-height: 1;
   }
   .bm-edit:hover { color: var(--blue); }
+  .bm-pin {
+    display: inline-flex; align-items: center;
+    background: transparent; border: 0; border-left: 1px solid var(--surface0);
+    color: var(--overlay0); padding: 0.2rem 0.35rem; cursor: pointer; line-height: 1;
+  }
+  .bm-pin:hover, .bm-pin.on { color: var(--mauve); }
+  .bm-tree {
+    display: inline-flex; align-items: center; gap: 0.2rem;
+    font-size: 0.75rem; color: var(--subtext0); white-space: nowrap; cursor: pointer;
+  }
   .bm-del {
     background: transparent; border: 0; border-left: 1px solid var(--surface0);
     color: var(--overlay0); padding: 0.2rem 0.35rem;

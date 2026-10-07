@@ -145,7 +145,9 @@ import Play from "@lucide/svelte/icons/play";
 import Square from "@lucide/svelte/icons/square";
 import ExternalLink from "@lucide/svelte/icons/external-link";
 import PictureInPicture from "@lucide/svelte/icons/picture-in-picture";
+import Bookmark from "@lucide/svelte/icons/bookmark";
 export {
+  Bookmark as IconBookmark,
   Cable as IconTunnel,
   Play as IconPlay,
   Square as IconStop,

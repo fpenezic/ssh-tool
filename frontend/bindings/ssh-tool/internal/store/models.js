@@ -2083,6 +2083,15 @@ export class ProxyBookmark {
              */
             this["url"] = "";
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * InTree shows the bookmark as a row under its connection in the
+             * connection tree. Lives in the bookmarks JSON column, so no migration.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["in_tree"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

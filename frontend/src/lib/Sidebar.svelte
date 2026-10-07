@@ -1,6 +1,9 @@
 <script lang="ts">
   import { tree, selection, drag, sessions, paneTabs, view } from "./stores.svelte";
   import TreeNode from "./TreeNode.svelte";
+  import TreeBookmarkRows from "./TreeBookmarkRows.svelte";
+  import TreeBookmarkToggle from "./TreeBookmarkToggle.svelte";
+  import { treeBookmarks } from "./treeBookmarks.svelte";
   import { renameState } from "./renameState.svelte";
   import { api } from "./api";
   import { computeIntent, isInvalidDrop, applyDrop, applyDropToRoot, applyMultiDrop, applyMultiDropToRoot, type DragKind } from "./treeDnd";
@@ -138,6 +141,7 @@
     const meta = e.metaKey || lastMouseMods.meta;
     const shift = e.shiftKey || lastMouseMods.shift;
     lastMouseMods = { ctrl: false, meta: false, shift: false };
+    treeBookmarks.selected = null;
 
     if (shift) {
       selection.rangeConnection(connId, tree.flatVisibleConnectionIds());
@@ -157,6 +161,13 @@
       lastClickAt = now;
     }
   }
+
+  // Bookmarks pinned to the tree come from the forwards table; reload them
+  // with the tree (import, MCP plans and sync all bump tree.version).
+  $effect(() => {
+    void tree.version;
+    void treeBookmarks.refresh();
+  });
 
   const roots = $derived.by(() => {
     void tree.version;
@@ -602,7 +613,7 @@
         {@const probe = isLive ? null : probeState.stateOf(conn.id)}
         <div
           class="row conn {indicatorClass(conn.id)}"
-          class:selected={sel}
+          class:selected={sel && !treeBookmarks.selectedUnder(conn.id)}
           class:connecting={isConn}
           class:live={isLive}
           role="treeitem"
@@ -657,12 +668,14 @@
             {#if isConn}<IconLoading size={13} class="spin" />{:else}<IconHost size={13} />{/if}
           </span>
           <span class="name">{conn.name}</span>
+          <TreeBookmarkToggle connId={conn.id} />
           {#if isConn}
             <span class="conn-hint">connecting…</span>
           {:else if connectErrId === conn.id}
             <span class="conn-err" title={connectErr ?? ""}><IconX size={12} /></span>
           {/if}
         </div>
+        <TreeBookmarkRows connId={conn.id} depth={1} />
       {/each}
     </div>
   {/if}

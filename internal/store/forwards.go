@@ -12,6 +12,9 @@ import (
 type ProxyBookmark struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`
+	// InTree shows the bookmark as a row under its connection in the
+	// connection tree. Lives in the bookmarks JSON column, so no migration.
+	InTree bool `json:"in_tree,omitempty"`
 }
 
 // PortForward is the persisted spec of a forward (not its running state).

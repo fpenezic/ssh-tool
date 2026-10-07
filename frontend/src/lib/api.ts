@@ -1695,6 +1695,8 @@ export interface RdmAttentionItem {
 export interface ProxyBookmark {
   name: string;
   url: string;
+  /** Shown as a row under its connection in the connection tree. */
+  in_tree?: boolean;
 }
 
 export interface Snippet {

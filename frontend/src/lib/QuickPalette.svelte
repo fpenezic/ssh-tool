@@ -27,6 +27,7 @@
   import { claimKeyboard } from "./paneFocus";
   import { workspaces } from "./workspaces.svelte";
   import { quickConnect } from "./quickConnect.svelte";
+  import { openBookmark, sessionFor } from "./treeBookmarks.svelte";
   import type { Component } from "svelte";
 
   interface Props {
@@ -549,7 +550,7 @@
           if (running) {
             await api.forwardsStop(spec.id);
           } else {
-            const sid = await ensureSessionForConnection(spec.connection_id);
+            const sid = await sessionFor(spec.connection_id);
             if (!sid) return;
             await api.forwardsStart(spec.id, sid);
           }
@@ -564,18 +565,7 @@
       const bm = r.entry.bookmark;
       const running = r.entry.running;
       onClose();
-      queueMicrotask(async () => {
-        try {
-          if (!running) {
-            const sid = await ensureSessionForConnection(spec.connection_id);
-            if (!sid) return;
-            await api.forwardsStart(spec.id, sid);
-          }
-          await api.sshLaunchBrowser(spec.id, bm.url);
-        } catch (e) {
-          toast.err(`Open bookmark failed: ${errMsg(e)}`);
-        }
-      });
+      queueMicrotask(() => void openBookmark(spec, bm, running));
       return;
     }
     // Connection: connect immediately (the whole point of the palette).
@@ -643,46 +633,6 @@
       toast.err(`Connect failed: ${failed[0]}`);
     } else if (failed.length > 1) {
       toast.err(`${failed.length} of ${set.length} failed to connect:\n${failed.join("\n")}`);
-    }
-  }
-
-  // Pick the most recently opened connected session matching the given
-  // connection, mirroring PortForwards.svelte's behaviour. Returns
-  // null when no live session exists - the caller surfaces the error.
-  function activeSessionForConnection(connectionId: string): string | null {
-    const match = sessions.tabs
-      .filter((t) => t.connectionId === connectionId && t.status === "connected")
-      .at(-1);
-    return match?.sessionId ?? null;
-  }
-
-  // ensureSessionForConnection returns a live session id for the given
-  // connection, opening one on demand if nothing is connected yet.
-  // The auto-opened session gets a tab so it's visible (and closeable)
-  // to the user - silently held sessions are confusing later. Returns
-  // null on failure and surfaces an alert.
-  async function ensureSessionForConnection(connectionId: string): Promise<string | null> {
-    const existing = activeSessionForConnection(connectionId);
-    if (existing) return existing;
-    const c = tree.connectionById(connectionId);
-    if (!c) {
-      toast.err(`Connection not found.`);
-      return null;
-    }
-    try {
-      const res = await api.sshConnect(connectionId);
-      sessions.add({
-        sessionId: res.session_id,
-        connectionId,
-        name: c.name,
-        hostname: c.hostname,
-        status: "connected",
-      });
-      paneTabs.addTab(res.session_id, c.name);
-      return res.session_id;
-    } catch (e) {
-      toast.err(`Connect failed: ${(e as any)?.message ?? String(e)}`);
-      return null;
     }
   }
 
