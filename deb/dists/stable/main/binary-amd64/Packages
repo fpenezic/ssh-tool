@@ -1,23 +1,5 @@
 Package: ssh-tool
 Architecture: amd64
-Version: 0.104.0-1
-Priority: extra
-Section: default
-Maintainer: Filip Penezic <108677346+fpenezic@users.noreply.github.com>
-Installed-Size: 32004
-Depends: libgtk-4-1, libwebkitgtk-6.0-4
-Filename: pool/main/ssh-tool_0.104.0_amd64.deb
-Size: 12655962
-MD5sum: 0bc17ee700e572a8631bb9838e6abeab
-SHA1: cf9a19a70664c40f248ed649571c4d7f6cc1eaee
-SHA256: 8d77474d60d65ab04c49801b157dde826c15e9df913a16fc3571d0a5cb276986
-SHA512: 52c88c88cca32dc8f15c2e42dd1544e538da36d28a5eb04270cd6872d5ba9f2821d414f11fa731426c211fb8ce354847392794c1d56d3c3d0918070117b33992
-Homepage: https://sshtool.app
-Description: Cross-platform SSH connection manager
-License: Apache-2.0
-
-Package: ssh-tool
-Architecture: amd64
 Version: 0.105.0-1
 Priority: extra
 Section: default
@@ -84,6 +66,24 @@ MD5sum: 91f743f09e9a697387bc6f9711acf5b4
 SHA1: 841af6f6735060db4347a8bd2f39ae53dcf1826b
 SHA256: f4abba7d0ab54b0a25923211c59d17faca9b51e1699892fc6113ef67e0f88bcd
 SHA512: 6c97696f265f6ce49b6377b3d82f20df8f1a90ee403b735102bf6a6fb8658821d14b1626992645ebd329026706e21451bec81d32dd08fcbef870d29b685da528
+Homepage: https://sshtool.app
+Description: Cross-platform SSH connection manager
+License: Apache-2.0
+
+Package: ssh-tool
+Architecture: amd64
+Version: 0.109.0-1
+Priority: extra
+Section: default
+Maintainer: Filip Penezic <108677346+fpenezic@users.noreply.github.com>
+Installed-Size: 33629
+Depends: libgtk-4-1, libwebkitgtk-6.0-4
+Filename: pool/main/ssh-tool_0.109.0_amd64.deb
+Size: 13281894
+MD5sum: af07d2b82f206201f280ee4153d2cb11
+SHA1: 708d10bc4ee90693a4451a235bdfac1125c83b1d
+SHA256: 401f8277c97a8726ea292254b74117ce931d1e6054a1afbcea29cfbdf152fab8
+SHA512: 4197529b108a8b132c6b255273be7d040dc0cbcaf19b434601aaeda03701809250128fc87b95c29c55acbc62977b7c43e4dad24e047f435375495b1ccb23f9d9
 Homepage: https://sshtool.app
 Description: Cross-platform SSH connection manager
 License: Apache-2.0
