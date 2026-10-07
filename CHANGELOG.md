@@ -7,7 +7,11 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.109.0] - Bookmarks in the tree, credential search, password fix
+
+Forward bookmarks can sit right under their connection in the tree,
+credentials get a search box, and a connection's own password now works
+inside a folder that has a password credential.
 
 ### Connection tree
 
