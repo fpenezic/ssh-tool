@@ -5,11 +5,12 @@
   import { isInvalidCredDrop, applyCredDrop, type CredDragKind } from "./credentialDnd";
   import CredFolderNode from "./CredFolderNode.svelte";
   import { expiryInfo } from "./credExpiry";
+  import { credKindLabel } from "./credFilter";
   import Icon from "./Icon.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
-  import { credentialIconFor, IconFolderPlus, IconPlus, IconRotateCw, IconKey, IconExpandAll, IconCollapseAll } from "./iconMap";
+  import { credentialIconFor, IconFolderPlus, IconPlus, IconRotateCw, IconKey, IconExpandAll, IconCollapseAll, IconSearch, IconX } from "./iconMap";
   import { connectionActions } from "./connectionActions.svelte";
   import { IconLock } from "./iconMap";
   import { vaultState } from "./vaultState.svelte";
@@ -73,8 +74,23 @@
     await credentials.load();
   }
 
-  const rootFolders = $derived(credentials.foldersIn(null));
-  const rootCreds = $derived(credentials.credsIn(null));
+  const rootFolders = $derived(credentials.visibleFoldersIn(null));
+  const rootCreds = $derived(credentials.visibleCredsIn(null));
+
+  function onSearchKey(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      credentials.query = "";
+      (e.currentTarget as HTMLInputElement).blur();
+    } else if (e.key === "Enter") {
+      // Enter opens the first hit, so "type a name, Enter" lands on it.
+      const first = credentials.flatVisibleCredentialIds()[0];
+      if (first) {
+        e.preventDefault();
+        selection.selectCredentialById(first);
+      }
+    }
+  }
 
   // ---------- DnD: only the "drop to root" handlers stay here; per-
   // folder drop is handled inside CredFolderNode. ----------
@@ -172,6 +188,21 @@
       <p class="muted">Add one above to connect with key or password auth.</p>
     </div>
   {:else}
+    <div class="search-row">
+      <IconSearch size={12} />
+      <input
+        type="text"
+        class="search-input"
+        placeholder="Search by name, user, tag or folder…"
+        bind:value={credentials.query}
+        onkeydown={onSearchKey}
+      />
+      {#if credentials.searching()}
+        <button class="search-clear" onclick={() => (credentials.query = "")} title="Clear search">
+          <IconX size={12} />
+        </button>
+      {/if}
+    </div>
     <div
       class="tree"
       class:drop-root={drag.overCredFolderId === "ROOT"}
@@ -189,13 +220,11 @@
       {#each rootCreds as c (c.id)}
         {@const sel = selection.isCredentialSelected(c.id)}
         {@const KindIcon = credentialIconFor(c)}
-        {@const isKeepass = !!c.config?.keepass_ref}
-        {@const isBitwarden = !!c.config?.bitwarden_ref}
-        {@const isInfisical = !!c.config?.infisical_ref}
         {@const ex = expiryInfo(c.expires_at)}
         <div class="row cred-row"
           class:selected={sel}
           style="--depth: 0"
+          title={c.hint ? `${c.name} - ${c.hint}` : undefined}
           role="treeitem"
           tabindex="0"
           aria-selected={sel}
@@ -215,23 +244,18 @@
           <span class="icon"><Icon imageId={c.icon_image_id} iconName={c.icon_name} iconColor={c.icon_color} size={14}>
             <KindIcon size={14} />
           </Icon></span>
-          <div class="meta">
-            <div class="name">
-              {c.name}
-              {#if ex.level === "soon" || ex.level === "expired"}
-                <span class="cred-expiry {ex.level}" title={ex.label}>{ex.level === "expired" ? "expired" : ex.label}</span>
-              {/if}
-            </div>
-            <div class="sub">
-              <span class="kind">{isKeepass ? "keepass" : isBitwarden ? "bitwarden" : isInfisical ? "infisical" : c.kind}</span>
-              {#if c.hint}<span class="hint-text">· {c.hint}</span>{/if}
-            </div>
-          </div>
+          <span class="name">
+            {c.name}
+            {#if ex.level === "soon" || ex.level === "expired"}
+              <span class="cred-expiry {ex.level}" title={ex.label}>{ex.level === "expired" ? "expired" : ex.label}</span>
+            {/if}
+          </span>
+          <span class="kind-label">{credKindLabel(c)}</span>
         </div>
       {/each}
 
       {#if rootFolders.length === 0 && rootCreds.length === 0}
-        <div class="hint">No credentials yet. Use the new-credential button above.</div>
+        <div class="hint">{credentials.searching() ? "Nothing matches the search." : "No credentials yet. Use the new-credential button above."}</div>
       {/if}
     </div>
   {/if}
@@ -312,6 +336,25 @@
   .actions button:hover { background: var(--surface0); color: var(--text); }
   .actions .iconbtn { display: inline-flex; align-items: center; gap: 0.1rem; }
   .tree { flex: 1; overflow: auto; padding: 0.4rem 0; }
+  .search-row {
+    display: flex; align-items: center; gap: 0.35rem;
+    padding: 0.35rem 0.6rem;
+    border-bottom: 1px solid var(--surface0);
+    color: var(--overlay0);
+  }
+  .search-input {
+    flex: 1; min-width: 0;
+    background: var(--crust); color: var(--text);
+    border: 1px solid var(--surface0); border-radius: 3px;
+    font: inherit; font-size: 0.78rem;
+    padding: 0.25rem 0.4rem; outline: none;
+  }
+  .search-input:focus { border-color: var(--surface2); }
+  .search-clear {
+    background: transparent; border: 0; color: var(--overlay0);
+    cursor: pointer; padding: 2px; display: inline-flex; align-items: center;
+  }
+  .search-clear:hover { color: var(--text); }
   .hint, .err { padding: 0.6rem 0.8rem; color: var(--overlay0); }
   .err { color: var(--red); }
   .row {
@@ -325,11 +368,8 @@
   .row:focus { outline: 1px solid var(--blue); outline-offset: -1px; }
   .chev { width: 1rem; color: var(--overlay0); font-size: 0.85rem; text-align: center; }
   .icon { width: 1.2rem; text-align: center; font-size: 0.85rem; }
-  .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .meta { flex: 1; min-width: 0; }
-  .sub { font-size: 0.72rem; color: var(--overlay1); margin-top: var(--row-sub-gap); }
-  .kind { background: var(--surface0); padding: 0.05rem 0.3rem; border-radius: 2px; margin-right: 0.2rem; }
-  .hint-text { color: var(--overlay0); }
+  .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kind-label { flex-shrink: 0; color: var(--overlay1); font-size: 0.75rem; margin-left: 0.4rem; }
   .cred-expiry { margin-left: 0.35rem; padding: 0 0.3rem; border-radius: 999px; font-size: 0.65rem; font-weight: 600; vertical-align: middle; }
   .cred-expiry.soon { background: var(--yellow); color: var(--on-accent); }
   .cred-expiry.expired { background: var(--red); color: var(--on-accent); }

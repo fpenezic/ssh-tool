@@ -12,6 +12,7 @@
   } from "./credentialDnd";
   import type { CredentialRef, CredentialFolder } from "./api";
   import { expiryInfo } from "./credExpiry";
+  import { credKindLabel } from "./credFilter";
   import CredFolderNodeSelf from "./CredFolderNode.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { IconFolder, credentialKindIcon, IconFolderPlus, IconKey, IconPencil, IconTrash } from "./iconMap";
@@ -24,9 +25,10 @@
   }
   let { folder, depth }: Props = $props();
 
-  const open = $derived(expandedCredentials.isExpanded(folder.id));
-  const subFolders = $derived(credentials.foldersIn(folder.id));
-  const folderCreds = $derived(credentials.credsIn(folder.id));
+  // A search narrows the contents and shows every folder it keeps open.
+  const open = $derived(credentials.isFolderOpen(folder.id));
+  const subFolders = $derived(credentials.visibleFoldersIn(folder.id));
+  const folderCreds = $derived(credentials.visibleCredsIn(folder.id));
   const hasChildren = $derived(subFolders.length + folderCreds.length > 0);
 
   function toggle() {
@@ -216,6 +218,7 @@
       class="row cred-row"
       class:selected={sel}
       style="--depth: {depth + 1}"
+      title={c.hint ? `${c.name} - ${c.hint}` : undefined}
       role="treeitem"
       tabindex="0"
       aria-selected={sel}
@@ -235,18 +238,13 @@
       <span class="icon"><Icon imageId={c.icon_image_id} iconName={c.icon_name} iconColor={c.icon_color} size={14}>
         <KindIcon size={14} />
       </Icon></span>
-      <div class="meta">
-        <div class="name">
-          {c.name}
-          {#if ex.level === "soon" || ex.level === "expired"}
-            <span class="cred-expiry {ex.level}" title={ex.label}>{ex.level === "expired" ? "expired" : ex.label}</span>
-          {/if}
-        </div>
-        <div class="sub">
-          <span class="kind">{c.kind}</span>
-          {#if c.hint}<span class="hint-text">· {c.hint}</span>{/if}
-        </div>
-      </div>
+      <span class="name">
+        {c.name}
+        {#if ex.level === "soon" || ex.level === "expired"}
+          <span class="cred-expiry {ex.level}" title={ex.label}>{ex.level === "expired" ? "expired" : ex.label}</span>
+        {/if}
+      </span>
+      <span class="kind-label">{credKindLabel(c)}</span>
     </div>
   {/each}
 {/if}
@@ -272,11 +270,8 @@
   }
   .chev:hover { color: var(--text); }
   .icon { width: 1.2rem; text-align: center; font-size: 0.85rem; }
-  .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .meta { flex: 1; min-width: 0; }
-  .sub { font-size: 0.72rem; color: var(--overlay1); margin-top: var(--row-sub-gap); }
-  .kind { background: var(--surface0); padding: 0.05rem 0.3rem; border-radius: 2px; margin-right: 0.2rem; }
-  .hint-text { color: var(--overlay0); }
+  .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kind-label { flex-shrink: 0; color: var(--overlay1); font-size: 0.75rem; margin-left: 0.4rem; }
   .cred-expiry { margin-left: 0.35rem; padding: 0 0.3rem; border-radius: 999px; font-size: 0.65rem; font-weight: 600; vertical-align: middle; }
   .cred-expiry.soon { background: var(--yellow); color: var(--on-accent); }
   .cred-expiry.expired { background: var(--red); color: var(--on-accent); }

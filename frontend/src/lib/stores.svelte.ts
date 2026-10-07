@@ -1,4 +1,5 @@
 import { jumpReferrers, bastionUsage } from "./jumpRefs";
+import { credMatches } from "./credFilter";
 import { api, type Folder, type Connection, type CredentialRef, type CredentialFolder, type InheritableSettings } from "./api";
 import { rebalanceEven } from "./paneSplit";
 import { expandedConnections, expandedCredentials } from "./treeState.svelte";
@@ -418,6 +419,50 @@ class CredentialStore {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  // ----- search (the filter box above the credentials tree) -----
+  query = $state("");
+
+  searching(): boolean {
+    return this.query.trim() !== "";
+  }
+
+  private folderNamesOf(folderId: string | null): string[] {
+    const out: string[] = [];
+    let f = this.folderById(folderId);
+    let guard = 0;
+    while (f && guard++ < 1000) {
+      out.push(f.name);
+      f = this.folderById(f.parent_id ?? null);
+    }
+    return out;
+  }
+
+  // credsIn narrowed by the search.
+  visibleCredsIn(folderId: string | null): CredentialRef[] {
+    const all = this.credsIn(folderId);
+    if (!this.searching()) return all;
+    const names = this.folderNamesOf(folderId);
+    return all.filter((c) => credMatches(c, this.query, names));
+  }
+
+  // foldersIn narrowed to folders with a match somewhere inside.
+  visibleFoldersIn(parentId: string | null): CredentialFolder[] {
+    const all = this.foldersIn(parentId);
+    if (!this.searching()) return all;
+    return all.filter((f) => this.folderHasMatch(f.id));
+  }
+
+  folderHasMatch(folderId: string): boolean {
+    if (this.visibleCredsIn(folderId).length > 0) return true;
+    return this.foldersIn(folderId).some((f) => this.folderHasMatch(f.id));
+  }
+
+  // A search opens every folder it shows; the saved expand state is left
+  // alone and comes back when the box is cleared.
+  isFolderOpen(folderId: string): boolean {
+    return this.searching() || expandedCredentials.isExpanded(folderId);
+  }
+
   // Depth-first list of every credential id currently visible in the
   // tree, honouring expand state. Used by Shift+click to compute a
   // range that crosses folder boundaries. Root credentials lead, then
@@ -425,9 +470,9 @@ class CredentialStore {
   flatVisibleCredentialIds(): string[] {
     const out: string[] = [];
     const visit = (parentId: string | null) => {
-      for (const c of this.credsIn(parentId)) out.push(c.id);
-      for (const f of this.foldersIn(parentId)) {
-        if (expandedCredentials.isExpanded(f.id)) visit(f.id);
+      for (const c of this.visibleCredsIn(parentId)) out.push(c.id);
+      for (const f of this.visibleFoldersIn(parentId)) {
+        if (this.isFolderOpen(f.id)) visit(f.id);
       }
     };
     visit(null);
@@ -440,9 +485,9 @@ class CredentialStore {
   flatVisibleCredentialFolderIds(): string[] {
     const out: string[] = [];
     const visit = (parentId: string | null) => {
-      for (const f of this.foldersIn(parentId)) {
+      for (const f of this.visibleFoldersIn(parentId)) {
         out.push(f.id);
-        if (expandedCredentials.isExpanded(f.id)) visit(f.id);
+        if (this.isFolderOpen(f.id)) visit(f.id);
       }
     };
     visit(null);
