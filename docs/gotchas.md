@@ -1432,6 +1432,14 @@ everything mobile is behind a build tag or an `isMobile` check.
     the component and vite fails, while Linux CI builds fine.
     `caseImports.test.ts` enforces it.
 
+94. **x/crypto never retries an auth method name.** Once a "password"
+    method fails, every later "password" method in `ClientConfig.Auth` is
+    skipped. Two `ssh.Password` entries (a credential's and the
+    connection's own), or a stored password followed by the prompt's
+    `PasswordCallback`, silently lose the second. Feed all passwords for a
+    hop through `passwordSequence` (one `RetryableAuthMethod`), via
+    `targetAuthMethods`; never append another password method.
+
 ---
 
 # Archive

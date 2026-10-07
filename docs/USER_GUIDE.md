@@ -374,11 +374,15 @@ Two-column grid (auto-fit on narrow widths). Fields:
 
 - **Name**, **Hostname**, **Username**, **Port**
 - **Credential** - pick from your credential list, or leave blank
-  to inherit from a folder
+  to inherit from a folder. **None** (first in the list) stops the
+  folder's credential from being inherited: the connection's own
+  password below is used, or the username and password are asked when
+  you connect.
 - **Password** - per-connection override stored in the vault under
   `conn_pass:<connID>`. Set / Clear buttons; an inline hint shows
-  when a password is stored. This is independent of the credential
-  selection above.
+  when a password is stored. When the credential (own or inherited) is
+  also a password, this one is tried first and the credential's only if
+  it fails - the editor marks it as **Password overridden**.
 - **Jump host chain** - one row per hop, in connect order. A hop is
   either **Manual** (hostname, port, user, credential) or a **Saved
   connection**: any saved connection or any host of an inventory
@@ -519,6 +523,15 @@ Cold load shows pulsing skeleton rows instead of a blank panel.
 
 The Credentials view mirrors the Connections layout: folder tree on
 the left, credential editor on the right.
+
+Rows are one line, like connection rows: the kind (or the external
+backend) sits on the right, the hint shows in the row's tooltip.
+
+**Search.** The box above the tree filters by name, default username,
+hint, tags, kind, backend and folder name. Every word you type must
+match somewhere, so `root prod` finds root credentials under a prod
+folder. Folders with hits open while you search. Enter selects the first
+hit, Escape clears the box.
 
 ### Credential kinds
 
@@ -1242,6 +1255,15 @@ Dynamic and local forwards both have an **Open URL…** button and
 per-forward **bookmarks** - the URLs you reach through that tunnel,
 as quick-launch buttons. They appear in the forwards list, in the
 tunnel popover on a pane header, and in the quick palette.
+
+**Bookmarks in the connection tree.** The bookmark button on a
+bookmark's chip (or **In tree** when adding one) shows it as a row under
+its connection, with a mauve bookmark icon and the URL's host on the
+right. It behaves like a connection row: click selects, double-click or
+Enter opens it - connecting and starting the tunnel first if they are
+not up - and right-click offers **Open** and **Hide from tree**. The
+connection row gets a small badge with the count; click it to fold the
+bookmarks away (remembered, like open folders).
 
 For a local forward the prompt starts filled in with the forward's own
 address, so opening it is one click rather than retyping

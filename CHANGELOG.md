@@ -9,11 +9,38 @@ a prerelease upstream.
 
 ## [Unreleased]
 
+### Connection tree
+
+- Forward bookmarks can be shown in the connection tree, as rows under
+  their connection. Turn it on per bookmark with the bookmark button on
+  its chip in Port forwards, or "In tree" when adding one. Double-click
+  or Enter opens it, connecting and starting the tunnel first when
+  needed. A badge on the connection shows how many there are and folds
+  them away.
+
+### Credentials
+
+- Search box above the credentials tree: matches name, default user,
+  hint, tags, kind, backend and folder names. Every word must match,
+  folders with hits open, Enter selects the first hit, Escape clears.
+- Credential rows are one line, like connection rows: the kind sits on
+  the right and the hint moved to the row tooltip.
+- A connection's credential can be set to **None**: the folder's
+  credential is no longer inherited, so the connection's own password is
+  used, or the username and password are asked at connect.
+- The connection editor says when the connection's own password
+  overrides the credential's password.
+
 ### Fixes
 
 - macOS builds failed since 0.107.0: a frontend import resolved to the
   wrong file on a case-insensitive filesystem. A test now catches this on
   any platform.
+- A connection with its own password inside a folder whose credential is
+  a password failed with "unable to authenticate": only the first
+  password was ever sent. The connection's password is now tried first,
+  then the credential's. The same bug stopped the password prompt from
+  appearing after a wrong saved password.
 
 ---
 
