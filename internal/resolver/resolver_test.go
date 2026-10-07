@@ -301,3 +301,17 @@ func TestInitialCommandLineDelayInheritedAndOverridden(t *testing.T) {
 		t.Fatalf("unset delay should be 0, got %d", r4.InitialCommandLineDelayMs)
 	}
 }
+
+// "None" on a connection: an explicit "" credential stops the folder's from
+// being inherited and resolves to no credential at all.
+func TestEmptyAuthRefStopsInheritance(t *testing.T) {
+	f := folder("f", nil, store.InheritableSettings{AuthRef: ptr("cred-folder")})
+	c := conn("c", ptr("f"), "h.example.com", store.InheritableSettings{AuthRef: ptr("")})
+	if rs := ResolveWith(c, []store.Folder{f}); rs.AuthRef != nil {
+		t.Errorf("auth ref = %q, want nil", *rs.AuthRef)
+	}
+	c2 := conn("c2", ptr("f"), "h.example.com", store.InheritableSettings{})
+	if rs := ResolveWith(c2, []store.Folder{f}); rs.AuthRef == nil || *rs.AuthRef != "cred-folder" {
+		t.Errorf("inherited auth ref = %v", rs.AuthRef)
+	}
+}

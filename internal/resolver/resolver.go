@@ -178,11 +178,18 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 	if netProfile != nil && *netProfile == "" {
 		netProfile = nil
 	}
+	// Same for the credential: an explicit "" on a connection stops the
+	// folder's credential from being inherited ("None" in the editor), so
+	// the connection's own password or the connect-time prompt is used.
+	authRef := s.AuthRef
+	if authRef != nil && *authRef == "" {
+		authRef = nil
+	}
 	return store.ResolvedSettings{
 		Hostname:                  hostname,
 		Username:                  s.Username,
 		Port:                      port,
-		AuthRef:                   s.AuthRef,
+		AuthRef:                   authRef,
 		JumpHost:                  jh,
 		SSHOptions:                ssh,
 		EnvVars:                   env,

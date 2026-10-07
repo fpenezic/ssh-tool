@@ -76,6 +76,18 @@
       .map((g) => ({ value: g.cred.id, label: g.label }));
   }
 
+  // "None" in the connection's credential picker: stored as auth_ref "",
+  // which stops the folder's credential from being inherited (the backend
+  // resolver turns "" into no credential). The connection's own password
+  // is then used, or the user is asked at connect.
+  const AUTH_NONE = "__none__";
+  function encodeAuthRef(v: string | undefined): string {
+    return v === "" ? AUTH_NONE : (v ?? "");
+  }
+  function decodeAuthRef(v: string): string | undefined {
+    return v === AUTH_NONE ? "" : (v || undefined);
+  }
+
   const multiCount = $derived(selection.multiCount());
   const folderMultiCount = $derived(selection.folderMultiCount());
   const dynamicMulti = $derived(selection.selectedDynamicEntries());
@@ -492,7 +504,10 @@
   // SSH auth credentials for the connection picker. api_token is filtered out
   // (see sshCredOptions) but a value already stored on this connection is
   // kept, so opening an existing config cannot silently drop its reference.
-  const credOptions = $derived(sshCredOptions(editing?.authRef));
+  const credOptions = $derived([
+    { value: AUTH_NONE, label: "None - do not inherit, ask at connect" },
+    ...sshCredOptions(editing?.authRef),
+  ]);
   let newTagInput = $state("");
 
   // A local-shell connection ("telnet", serial console, "claude", ...):
@@ -567,7 +582,7 @@
         notes: conn.notes,
         username: conn.overrides?.username ?? "",
         port: conn.overrides?.port?.toString() ?? "",
-        authRef: conn.overrides?.auth_ref ?? "",
+        authRef: encodeAuthRef(conn.overrides?.auth_ref),
         jumpHost: conn.overrides?.jump_host,
         colorTag: conn.overrides?.color_tag ?? "",
         autoReconnect: encodeBool(conn.overrides?.auto_reconnect),
@@ -614,7 +629,7 @@
       editing.notes !== (conn.notes ?? "") ||
       editing.username !== (o.username ?? "") ||
       numText(editing.port) !== (o.port?.toString() ?? "") ||
-      editing.authRef !== (o.auth_ref ?? "") ||
+      editing.authRef !== encodeAuthRef(o.auth_ref) ||
       editing.colorTag !== (o.color_tag ?? "") ||
       editing.autoReconnect !== encodeBool(o.auto_reconnect) ||
       editing.verbose !== encodeBool(o.verbose) ||
@@ -701,7 +716,7 @@
       const n = p === "" ? NaN : parseInt(p, 10);
       overrides.port = isNaN(n) ? undefined : n;
     }
-    overrides.auth_ref = editing.authRef || undefined;
+    overrides.auth_ref = decodeAuthRef(editing.authRef);
     overrides.jump_host = editing.jumpHost;
     overrides.color_tag = editing.colorTag || undefined;
     overrides.auto_reconnect = decodeBool(editing.autoReconnect);
@@ -900,6 +915,7 @@
   // with no auth_ref of its own still authenticates with the folder's key,
   // and carries exactly the same risk.
   const effectiveAuthCred = $derived.by(() => {
+    if (editing?.authRef === AUTH_NONE) return null;
     const inherited = conn
       ? tree.inheritedFieldForConnection(conn.id, "auth_ref")
       : { value: undefined, from: null };
@@ -1644,6 +1660,14 @@
           {@const inhCredName = credentials.byId(String(inhAuth.value))?.name ?? String(inhAuth.value)}
           <span class="inh-hint">inherited from <strong>{inhAuth.from.name}</strong>: {inhCredName}</span>
         {/if}
+        {#if editing.authRef === AUTH_NONE}
+          <span class="inh-hint">
+            No credential{#if inhAuth.from}{" "}(not inheriting <strong>{inhAuth.from.name}</strong>){/if}:
+            {passwordHasValue ? "this connection's password is used" : "username and password are asked at connect when not set here"}.
+          </span>
+        {:else if passwordHasValue && effectiveAuthCred?.kind === "password"}
+          <span class="inh-hint"><strong>Password overridden</strong> - this connection's password is tried first, the credential's only if it fails.</span>
+        {/if}
       </label>
       <label class="span-2">Password
         <div class="row pass-row">
@@ -2002,7 +2026,7 @@
             <tr>
               <td>credential</td>
               <td>{resolved.auth_ref ? (credentials.byId(resolved.auth_ref)?.name ?? resolved.auth_ref) : "-"}</td>
-              <td>{ovr.auth_ref ? "override" : "inherited"}</td>
+              <td>{ovr.auth_ref === "" ? "none (override)" : ovr.auth_ref ? "override" : "inherited"}</td>
             </tr>
             <tr>
               <td>jump chain</td>
