@@ -17,7 +17,8 @@
     { title: "Hardware", facts: [
       { key: "cpu", label: "CPU cores and model" },
       { key: "mem", label: "Memory and swap" },
-      { key: "disks", label: "Disks (size per filesystem)" },
+      { key: "disks", label: "Disks (size and use per filesystem)" },
+      { key: "inodes", label: "Inode use" },
       { key: "virt", label: "Virtualization" },
     ] },
     { title: "System", facts: [
@@ -28,7 +29,10 @@
     ] },
     { title: "Maintenance", facts: [
       { key: "updates", label: "Pending updates (and security)" },
+      { key: "lastpatch", label: "Last package update" },
+      { key: "kernelpending", label: "Newer kernel installed" },
       { key: "reboot", label: "Reboot required" },
+      { key: "reboots", label: "Boots in the last 30 days" },
       { key: "failed", label: "Failed systemd units" },
     ] },
     { title: "Network", facts: [
@@ -40,7 +44,10 @@
   ];
   const PRESETS: Record<string, string[]> = {
     sizing: ["cpu", "mem", "disks", "virt", "os", "kernel", "uptime"],
-    patch: ["os", "kernel", "uptime", "updates", "reboot", "failed"],
+    patch: ["os", "kernel", "uptime", "updates", "lastpatch", "kernelpending", "reboot", "failed"],
+    // What a recurring (monthly) report to a customer usually covers:
+    // patch level, capacity, availability.
+    report: ["os", "kernel", "uptime", "timesync", "updates", "lastpatch", "kernelpending", "reboot", "reboots", "failed", "disks", "inodes"],
     all: GROUPS.flatMap((g) => g.facts.map((f) => f.key)),
   };
 
@@ -123,14 +130,19 @@
     const s = steps.find((x) => g <= x * 1.02) ?? Math.round(g);
     return `${s} GiB`;
   }
+  // The host's own filesystems: network shares (CIFS, NFS) are listed in
+  // their own column but stay out of totals and "Find similar".
+  function localDisks(r: FactsHostResult) {
+    return (r.facts.disks ?? []).filter((d) => !d.network);
+  }
   function diskLayout(r: FactsHostResult): string {
-    return (r.facts.disks ?? []).map((d) => `${d.mount} ${gib(d.size_kb)}`).join(", ") || "-";
+    return (r.facts.disks ?? []).map((d) => `${d.mount}${d.network ? " (net)" : ""} ${gib(d.size_kb)}${d.used_pct !== undefined ? ` ${d.used_pct}%` : ""}`).join(", ") || "-";
   }
   // Same mount points, each within 5% of the other's size: two "80 GB"
   // disks never report the same byte count, and rounding to whole GiB
   // would still split 79.4 from 80.2.
   function sameDisks(a: FactsHostResult, b: FactsHostResult): boolean {
-    const da = a.facts.disks ?? [], db = b.facts.disks ?? [];
+    const da = localDisks(a), db = localDisks(b);
     if (da.length !== db.length) return false;
     const bm = new Map(db.map((d) => [d.mount, d.size_kb]));
     return da.every((d) => {
@@ -139,7 +151,7 @@
     });
   }
   function diskTotalKB(r: FactsHostResult): number {
-    return (r.facts.disks ?? []).reduce((n, d) => n + d.size_kb, 0);
+    return localDisks(r).reduce((n, d) => n + d.size_kb, 0);
   }
   function sizeKey(r: FactsHostResult): string {
     const f = r.facts;
@@ -149,6 +161,29 @@
     if (!sec) return "-";
     const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600);
     return d > 0 ? `${d}d ${h}h` : `${h}h ${Math.floor((sec % 3600) / 60)}m`;
+  }
+
+  // Highest use across a host's filesystems, with the mount it is on.
+  function maxUse(list: { mount: string; pct: number }[]): { mount: string; pct: number } | null {
+    return list.reduce<{ mount: string; pct: number } | null>((m, d) => (!m || d.pct > m.pct ? d : m), null);
+  }
+  function diskUse(r: FactsHostResult) {
+    return maxUse((r.facts.disks ?? []).filter((d) => d.used_pct !== undefined).map((d) => ({ mount: d.mount, pct: d.used_pct! })));
+  }
+  function inodeUse(r: FactsHostResult) {
+    return maxUse(r.facts.inodes ?? []);
+  }
+  const DISK_WARN = 80, DISK_BAD = 90;
+  const PATCH_OLD_DAYS = 30;
+  // Age of the last package change as of the snapshot, not of today: a
+  // report opened next week must say what was true when it was collected.
+  function patchAgeDays(r: FactsHostResult): number | null {
+    const t = r.facts.last_patch ?? 0;
+    return t > 0 && snap ? Math.floor((snap.at / 1000 - t) / 86400) : null;
+  }
+  function isoDate(sec: number): string {
+    const d = new Date(sec * 1000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
 
   const okRows = $derived((snap?.results ?? []).filter((r) => r.state === "ok"));
@@ -212,12 +247,16 @@
   const needReboot = $derived(okRows.filter((r) => r.facts.reboot === "yes").length);
   const withSecurity = $derived(okRows.filter((r) => r.facts.security > 0).length);
   const withFailed = $derived(okRows.filter((r) => r.facts.failed > 0).length);
+  const diskFull = $derived(okRows.filter((r) => Math.max(diskUse(r)?.pct ?? 0, inodeUse(r)?.pct ?? 0) >= DISK_WARN).length);
+  const oldKernel = $derived(okRows.filter((r) => r.facts.kernel_pending === "yes").length);
+  const notPatched = $derived(okRows.filter((r) => (patchAgeDays(r) ?? 0) >= PATCH_OLD_DAYS).length);
 
   // Every mount point seen in this report, "/" first. Up to MAX_MOUNT_COLS
   // of them each get a column (a host without that mount leaves it empty),
   // so Excel can sort and filter per mount; past that the table would get
   // too wide and they fold back into one list cell.
   const MAX_MOUNT_COLS = 6;
+  const netMounts = $derived(new Set(okRows.flatMap((r) => (r.facts.disks ?? []).filter((d) => d.network).map((d) => d.mount))));
   const allMounts = $derived.by(() => {
     const set = new Set<string>();
     for (const r of okRows) for (const d of r.facts.disks ?? []) set.add(d.mount);
@@ -245,22 +284,38 @@
       if (allMounts.length <= MAX_MOUNT_COLS) {
         for (const m of allMounts) {
           const kbOf = (r: FactsHostResult) => (r.facts.disks ?? []).find((x) => x.mount === m)?.size_kb;
-          c.push({ h: m, v: (r) => { const k = kbOf(r); return k ? gib(k) : ""; }, n: (r) => { const k = kbOf(r); return k ? gibNum(k) : ""; } });
+          const useOf = (r: FactsHostResult) => (r.facts.disks ?? []).find((x) => x.mount === m)?.used_pct;
+          c.push({ h: netMounts.has(m) ? `${m} (net)` : m, v: (r) => { const k = kbOf(r), u = useOf(r); return k ? `${gib(k)}${u !== undefined ? ` · ${u}%` : ""}` : ""; }, n: (r) => { const k = kbOf(r); return k ? gibNum(k) : ""; } });
         }
       } else {
         c.push({ h: "Disks", v: diskLayout });
       }
       c.push({ h: "Disk total", v: (r) => gib(diskTotalKB(r)), n: (r) => gibNum(diskTotalKB(r)) });
+      c.push({ h: "Disk use", v: (r) => { const u = diskUse(r); return u ? `${u.pct}% ${u.mount}` : "-"; },
+        n: (r) => String(diskUse(r)?.pct ?? ""), unit: "% max", s: (r) => diskUse(r)?.pct ?? null });
     }
+    if (has("inodes")) c.push({ h: "Inode use", v: (r) => { const u = inodeUse(r); return u ? `${u.pct}% ${u.mount}` : "-"; },
+      n: (r) => String(inodeUse(r)?.pct ?? ""), unit: "% max", s: (r) => inodeUse(r)?.pct ?? null });
     if (has("virt")) c.push({ h: "Virt", v: (r) => r.facts.virt === "none" ? "bare metal" : r.facts.virt || "-" });
     if (has("os")) c.push({ h: "OS", v: (r) => r.facts.os || "-" });
     if (has("kernel")) c.push({ h: "Kernel", v: (r) => r.facts.kernel || "-" });
-    if (has("uptime")) c.push({ h: "Uptime", v: (r) => uptime(r.facts.uptime_sec), s: (r) => r.facts.uptime_sec > 0 ? r.facts.uptime_sec : null });
+    if (has("uptime")) c.push({ h: "Uptime", v: (r) => uptime(r.facts.uptime_sec), n: (r) => r.facts.uptime_sec > 0 ? String(Math.floor(r.facts.uptime_sec / 86400)) : "", unit: "days",
+      s: (r) => r.facts.uptime_sec > 0 ? r.facts.uptime_sec : null });
     if (has("timesync")) c.push({ h: "NTP", v: (r) => r.facts.timesync || "-" });
-    if (has("updates")) c.push({ h: "Updates", v: (r) => r.facts.updates < 0 ? "-" : `${r.facts.updates}${r.facts.security > 0 ? ` (${r.facts.security} sec)` : ""}`,
-      s: (r) => r.facts.updates < 0 ? null : Math.max(r.facts.security, 0) * 1e6 + r.facts.updates });
+    if (has("updates")) {
+      c.push({ h: "Updates", v: (r) => r.facts.updates < 0 ? "-" : String(r.facts.updates), s: (r) => r.facts.updates < 0 ? null : r.facts.updates });
+      c.push({ h: "Security", v: (r) => r.facts.security < 0 ? "-" : String(r.facts.security), s: (r) => r.facts.security < 0 ? null : r.facts.security });
+    }
+    if (has("lastpatch")) c.push({ h: "Last update", v: (r) => { const t = r.facts.last_patch ?? 0; const d = patchAgeDays(r); return t > 0 ? `${isoDate(t)} (${d}d)` : "-"; },
+      n: (r) => (r.facts.last_patch ?? 0) > 0 ? isoDate(r.facts.last_patch!) : "", unit: "date", s: (r) => (r.facts.last_patch ?? 0) || null });
+    if (has("kernelpending")) c.push({ h: "Newer kernel", v: (r) => r.facts.kernel_pending === "yes" ? (r.facts.kernel_latest || "yes") : r.facts.kernel_pending || "-" });
     if (has("reboot")) c.push({ h: "Reboot", v: (r) => r.facts.reboot || "-" });
-    if (has("failed")) c.push({ h: "Failed", v: (r) => r.facts.failed < 0 ? "-" : String(r.facts.failed), s: (r) => r.facts.failed < 0 ? null : r.facts.failed });
+    if (has("reboots")) c.push({ h: "Boots 30d", v: (r) => (r.facts.reboots_30d ?? -1) < 0 ? "-" : String(r.facts.reboots_30d), s: (r) => (r.facts.reboots_30d ?? -1) < 0 ? null : r.facts.reboots_30d! });
+    if (has("failed")) {
+      c.push({ h: "Failed", v: (r) => r.facts.failed < 0 ? "-" : String(r.facts.failed), s: (r) => r.facts.failed < 0 ? null : r.facts.failed });
+      // Older snapshots carry only the count.
+      if (okRows.some((r) => r.facts.failed_units)) c.push({ h: "Failed units", v: (r) => (r.facts.failed_units ?? []).join(" ") || "" });
+    }
     if (has("ips")) c.push({ h: "IPs", v: (r) => (r.facts.ips ?? []).join(" ") || "-" });
     if (has("gateway")) c.push({ h: "Gateway", v: (r) => r.facts.gateway || "-" });
     if (has("dns")) c.push({ h: "DNS", v: (r) => (r.facts.dns ?? []).join(" ") || "-" });
@@ -270,8 +325,14 @@
   });
   function cellClass(h: string, r: FactsHostResult): string {
     if (h === "Reboot" && r.facts.reboot === "yes") return "fwarn";
-    if (h === "Updates" && r.facts.security > 0) return "ferr";
-    if (h === "Failed" && r.facts.failed > 0) return "ferr";
+    if (h === "Security" && r.facts.security > 0) return "ferr";
+    if ((h === "Failed" || h === "Failed units") && r.facts.failed > 0) return "ferr";
+    if (h === "Disk use" || h === "Inode use") {
+      const p = (h === "Disk use" ? diskUse(r) : inodeUse(r))?.pct ?? 0;
+      return p >= DISK_BAD ? "ferr" : p >= DISK_WARN ? "fwarn" : "";
+    }
+    if (h === "Newer kernel" && r.facts.kernel_pending === "yes") return "fwarn";
+    if (h === "Last update" && (patchAgeDays(r) ?? 0) >= PATCH_OLD_DAYS) return "fwarn";
     return "";
   }
 
@@ -370,6 +431,7 @@
         <select class="fselect" value={preset} onchange={(e) => applyPreset((e.target as HTMLSelectElement).value)}>
           <option value="sizing">Sizing (hardware + OS)</option>
           <option value="patch">Patch day (updates, reboot, failed units)</option>
+          <option value="report">Monthly report (patching, capacity, availability)</option>
           <option value="all">Everything</option>
           <option value="custom">Custom</option>
         </select>
@@ -392,7 +454,7 @@
         <span class="fdim">Timeout per host</span>
         <input class="finput num" type="number" min="5" max="300" bind:value={timeout} /> <span class="fdim">s · 8 hosts at a time</span>
       </label>
-      <p class="fdim note">Update counts come from each host's cached package lists (apt -s, dnf -C), so they are as fresh as the host's last apt update / dnf makecache.</p>
+      <p class="fdim note">Update counts come from each host's cached package lists (apt -s, dnf -C), so they are as fresh as the host's last apt update / dnf makecache. "Last package update" is the last upgrade in apt or dnf history (the last package change where neither exists); "Boots" reads wtmp and shows "-" where the host keeps none.</p>
       {#if runErr}<p class="ferr">{runErr}</p>{/if}
     </div>
   {:else}
@@ -414,6 +476,9 @@
       {#if has("reboot") && needReboot}<span class="chip warn">{needReboot} need reboot</span>{/if}
       {#if has("updates") && withSecurity}<span class="chip bad">{withSecurity} with security updates</span>{/if}
       {#if has("failed") && withFailed}<span class="chip bad">{withFailed} with failed units</span>{/if}
+      {#if (has("disks") || has("inodes")) && diskFull}<span class="chip warn" title="A filesystem at {DISK_WARN}% or more, space or inodes">{diskFull} with a filesystem over {DISK_WARN}%</span>{/if}
+      {#if has("kernelpending") && oldKernel}<span class="chip warn">{oldKernel} not on the newest kernel</span>{/if}
+      {#if has("lastpatch") && notPatched}<span class="chip warn">{notPatched} not updated in {PATCH_OLD_DAYS}+ days</span>{/if}
     </div>
     {#if has("cpu") || has("mem")}
       <div class="sizes"><span class="fdim">Sizes:</span>

@@ -17,6 +17,7 @@ export {
     ForwardStatus,
     HostFacts,
     LogTailLine,
+    MountPct,
     PacketDecode,
     ParsedPacket,
     ProcInfo,

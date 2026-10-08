@@ -256,7 +256,9 @@ export class DiskPart {
 }
 
 /**
- * DiskSize is one real filesystem in the facts report.
+ * DiskSize is one real filesystem in the facts report. Network marks a
+ * share mounted from elsewhere (CIFS, NFS, sshfs): its size says nothing
+ * about the host's own disks.
  */
 export class DiskSize {
     /**
@@ -277,6 +279,20 @@ export class DiskSize {
              * @type {number}
              */
             this["size_kb"] = 0;
+        }
+        if (!("used_pct" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["used_pct"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["network"] = undefined;
         }
 
         Object.assign(this, $$source);
@@ -807,6 +823,13 @@ export class HostFacts {
              */
             this["disks"] = [];
         }
+        if (!("inodes" in $$source)) {
+            /**
+             * @member
+             * @type {MountPct[]}
+             */
+            this["inodes"] = [];
+        }
         if (!("virt" in $$source)) {
             /**
              * @member
@@ -874,6 +897,47 @@ export class HostFacts {
              */
             this["failed"] = 0;
         }
+        if (!("failed_units" in $$source)) {
+            /**
+             * FailedUnits names the failed units counted in Failed.
+             * @member
+             * @type {string[]}
+             */
+            this["failed_units"] = [];
+        }
+        if (!("last_patch" in $$source)) {
+            /**
+             * LastPatch: unix seconds of the last upgrade transaction (or, without
+             * a history log, the last package change), 0 unknown.
+             * @member
+             * @type {number}
+             */
+            this["last_patch"] = 0;
+        }
+        if (!("kernel_latest" in $$source)) {
+            /**
+             * KernelLatest is the newest kernel in /boot; KernelPending says
+             * whether it is newer than the running one (yes | no | unknown | "").
+             * @member
+             * @type {string}
+             */
+            this["kernel_latest"] = "";
+        }
+        if (!("kernel_pending" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["kernel_pending"] = "";
+        }
+        if (!("reboots_30d" in $$source)) {
+            /**
+             * -1 unknown
+             * @member
+             * @type {number}
+             */
+            this["reboots_30d"] = 0;
+        }
         if (!("ips" in $$source)) {
             /**
              * @member
@@ -920,21 +984,29 @@ export class HostFacts {
      */
     static createFrom($$source = {}) {
         const $$createField4_0 = $$createType3;
-        const $$createField14_0 = $$createType4;
-        const $$createField16_0 = $$createType4;
-        const $$createField17_0 = $$createType5;
+        const $$createField5_0 = $$createType5;
+        const $$createField15_0 = $$createType6;
+        const $$createField20_0 = $$createType6;
+        const $$createField22_0 = $$createType6;
+        const $$createField23_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("disks" in $$parsedSource) {
             $$parsedSource["disks"] = $$createField4_0($$parsedSource["disks"]);
         }
+        if ("inodes" in $$parsedSource) {
+            $$parsedSource["inodes"] = $$createField5_0($$parsedSource["inodes"]);
+        }
+        if ("failed_units" in $$parsedSource) {
+            $$parsedSource["failed_units"] = $$createField15_0($$parsedSource["failed_units"]);
+        }
         if ("ips" in $$parsedSource) {
-            $$parsedSource["ips"] = $$createField14_0($$parsedSource["ips"]);
+            $$parsedSource["ips"] = $$createField20_0($$parsedSource["ips"]);
         }
         if ("dns" in $$parsedSource) {
-            $$parsedSource["dns"] = $$createField16_0($$parsedSource["dns"]);
+            $$parsedSource["dns"] = $$createField22_0($$parsedSource["dns"]);
         }
         if ("ports" in $$parsedSource) {
-            $$parsedSource["ports"] = $$createField17_0($$parsedSource["ports"]);
+            $$parsedSource["ports"] = $$createField23_0($$parsedSource["ports"]);
         }
         return new HostFacts(/** @type {Partial<HostFacts>} */($$parsedSource));
     }
@@ -976,6 +1048,44 @@ export class LogTailLine {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new LogTailLine(/** @type {Partial<LogTailLine>} */($$parsedSource));
+    }
+}
+
+/**
+ * MountPct is one filesystem's inode use.
+ */
+export class MountPct {
+    /**
+     * Creates a new MountPct instance.
+     * @param {Partial<MountPct>} [$$source = {}] - The source object to create the MountPct.
+     */
+    constructor($$source = {}) {
+        if (!("mount" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["mount"] = "";
+        }
+        if (!("pct" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["pct"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MountPct instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {MountPct}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new MountPct(/** @type {Partial<MountPct>} */($$parsedSource));
     }
 }
 
@@ -1025,7 +1135,7 @@ export class PacketDecode {
      * @returns {PacketDecode}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType6;
+        const $$createField2_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("fields" in $$parsedSource) {
             $$parsedSource["fields"] = $$createField2_0($$parsedSource["fields"]);
@@ -1159,7 +1269,7 @@ export class ParsedPacket {
      * @returns {ParsedPacket}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType8;
+        const $$createField10_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("decoded" in $$parsedSource) {
             $$parsedSource["decoded"] = $$createField10_0($$parsedSource["decoded"]);
@@ -1490,9 +1600,9 @@ export class ServerStats {
      * @returns {ServerStats}
      */
     static createFrom($$source = {}) {
-        const $$createField15_0 = $$createType4;
-        const $$createField16_0 = $$createType10;
-        const $$createField20_0 = $$createType4;
+        const $$createField15_0 = $$createType6;
+        const $$createField16_0 = $$createType12;
+        const $$createField20_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("user_names" in $$parsedSource) {
             $$parsedSource["user_names"] = $$createField15_0($$parsedSource["user_names"]);
@@ -1698,10 +1808,12 @@ const $$createType0 = DirUsage.createFrom;
 const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = DiskSize.createFrom;
 const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = $Create.Array($Create.Any);
-const $$createType5 = $Create.Array($Create.Any);
-const $$createType6 = $Create.Map($Create.Any, $Create.Any);
-const $$createType7 = PacketDecode.createFrom;
-const $$createType8 = $Create.Nullable($$createType7);
-const $$createType9 = DiskPart.createFrom;
-const $$createType10 = $Create.Array($$createType9);
+const $$createType4 = MountPct.createFrom;
+const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = $Create.Array($Create.Any);
+const $$createType7 = $Create.Array($Create.Any);
+const $$createType8 = $Create.Map($Create.Any, $Create.Any);
+const $$createType9 = PacketDecode.createFrom;
+const $$createType10 = $Create.Nullable($$createType9);
+const $$createType11 = DiskPart.createFrom;
+const $$createType12 = $Create.Array($$createType11);

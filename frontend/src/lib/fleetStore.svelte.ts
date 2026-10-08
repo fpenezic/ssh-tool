@@ -210,14 +210,18 @@ export async function folderHostIdsLoaded(folderIds: string[]): Promise<string[]
 // Every SSH host under a folder, subfolders included: saved connections
 // plus the loaded entries of dynamic (cloud inventory) folders as
 // "dyn:<id>". Local shells, RDP and VNC-only entries are left out - there
-// is nothing to run a command on.
+// is nothing to run a command on - and so are inventory VMs the provider
+// reports stopped: each would only cost a connect timeout and land in
+// "Did not answer".
 export function folderHostIds(folderId: string): string[] {
   const out: string[] = [];
   const walk = (fid: string) => {
     for (const c of tree.connectionsIn(fid)) {
       if ((c.protocol || "ssh") === "ssh") out.push(c.id);
     }
-    for (const e of tree.dynamicEntries[fid] ?? []) out.push(`dyn:${e.id}`);
+    for (const e of tree.dynamicEntries[fid] ?? []) {
+      if (e.status !== "stopped") out.push(`dyn:${e.id}`);
+    }
     for (const f of tree.folders.filter((x) => x.parent_id === fid)) walk(f.id);
   };
   walk(folderId);

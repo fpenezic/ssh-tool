@@ -260,7 +260,7 @@ inventory entries included) or several connections shows a **Fleet**
 row in the right pane. The same entries are in the right-click menu.
 
 - **Gather facts…** - tick the facts to collect or pick a preset
-  (*Sizing*, *Patch day*, *Everything*). All commands are read-only and
+  (*Sizing*, *Patch day*, *Monthly report*, *Everything*). All commands are read-only and
   run 8 hosts at a time. Update counts come from each host's cached
   package lists (`apt-get -s`, `dnf -C`), so they are as fresh as the
   host's last `apt update` / `dnf makecache`. The report groups hosts by
@@ -273,6 +273,20 @@ row in the right pane. The same entries are in the right-click menu.
   points they fold into one list column. In exports sizes are whole
   numbers with the unit in the header (disks in GiB, memory in MiB), so
   a spreadsheet sorts and sums them whatever its decimal separator.
+  For recurring reports to a customer the *Monthly report* preset adds
+  what such a report usually asks for: use per filesystem (space and
+  inodes, highest shown in *Disk use* / *Inode use*, yellow from 80%,
+  red from 90%), *Last update* (the last package transaction that upgraded
+  something, from `/var/log/apt/history.log*` or `dnf history`, both
+  readable without root; without either, when the package database last
+  changed), *Newer kernel* (a newer kernel image in `/boot`
+  than the one running; unknown in containers and where image names
+  carry no version) and *Boots 30d* (boots recorded in wtmp over the
+  last 30 days, "-" where the host keeps no wtmp). Chips on top count
+  hosts with a filesystem over 80%, not on the newest kernel, or not
+  updated in 30 days or more, measured at collection time. Failed units
+  are listed by name. Network shares (CIFS, NFS, sshfs) are marked
+  "(net)" and do not count toward *Disk total* or *Find similar*.
   *Copy table* puts the visible rows on the clipboard as an HTML table
   (Teams and Outlook paste a table, Excel splits it into cells) with
   tab-separated text as the plain fallback. *Export CSV* (UTF-8 with a

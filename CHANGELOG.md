@@ -7,6 +7,34 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Fleet
+
+- Gather facts has a *Monthly report* preset for the recurring report a
+  customer contract asks for: patch level, capacity and availability.
+  New facts: disk use per filesystem (with the highest in a *Disk use*
+  column), *Inode use*, *Last update* (the last upgrade, from apt or dnf history),
+  *Newer kernel* (installed but not running) and *Boots 30d*. Cells turn
+  yellow or red past 80% / 90% use, a kernel waiting for a reboot, or
+  30 days without an update, and chips on top count those hosts.
+- Gather facts: failed systemd units are listed by name (*Failed units*),
+  not only counted. Updates and security updates are separate columns,
+  and security counts packages rather than advisory lines (one package
+  can carry several advisories). Network shares (CIFS, NFS, sshfs) are
+  marked "(net)" and left out of *Disk total* and *Find similar*. Exports
+  give uptime in days as a number.
+- Fleet tools (and Run command on many hosts) no longer fail with
+  "handshake failed: i/o timeout" on servers that are slow to accept a
+  key, e.g. when their opkssh AuthorizedKeysCommand waits on a slow DNS
+  resolver. The connect timeout now covers reaching the server; once it
+  answers, authentication gets up to 90 seconds.
+- Fleet tools on a folder leave out inventory VMs the provider reports
+  stopped; picking hosts by hand still includes them.
+- Gather facts: a host that runs out of time is listed under "Did not
+  answer" with the fact it was still collecting, instead of showing as
+  answered with the rest of its facts empty.
+
 ## [0.110.0] - Upload to and download from many hosts
 
 Send a file to many hosts, or collect files such as logs from all of them

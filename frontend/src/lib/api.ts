@@ -2118,7 +2118,8 @@ export interface HostFacts {
   cpu_model: string;
   mem_kb: number;
   swap_kb: number;
-  disks: { mount: string; size_kb: number }[] | null;
+  disks: { mount: string; size_kb: number; used_pct?: number; network?: boolean }[] | null;
+  inodes?: { mount: string; pct: number }[] | null;
   virt: string;
   os: string;
   kernel: string;
@@ -2128,6 +2129,11 @@ export interface HostFacts {
   security: number; // -1 unknown
   reboot: string;   // yes | no | unknown | ""
   failed: number;   // -1 unknown
+  failed_units?: string[] | null;
+  last_patch?: number;      // unix seconds, 0 unknown
+  kernel_latest?: string;
+  kernel_pending?: string;  // yes | no | unknown | ""
+  reboots_30d?: number;     // -1 unknown
   ips: string[] | null;
   gateway: string;
   dns: string[] | null;

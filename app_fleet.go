@@ -62,7 +62,15 @@ func (a *App) GatherFacts(in FactsInput) ([]FactsHostResult, error) {
 	out := make([]FactsHostResult, 0, len(raw))
 	for _, r := range raw {
 		row := FactsHostResult{ConnectionID: r.ConnectionID, Name: r.Name, Hostname: r.Hostname, State: r.State, Error: r.Error}
-		if r.State == "ok" || r.Stdout != "" {
+		switch {
+		case r.Error == sshlayer.ErrBatchTimeout.Error():
+			// A partial report would read as "this host has no updates /
+			// no failed units"; say which fact was still running instead.
+			row.Error = fmt.Sprintf("timed out after %ds", timeout)
+			if k := sshlayer.RunningFact(r.Stdout); k != "" {
+				row.Error += " while collecting " + k
+			}
+		case r.State == "ok" || r.Stdout != "":
 			row.Facts = sshlayer.ParseFacts(r.Stdout)
 			row.State = "ok"
 			row.Error = ""

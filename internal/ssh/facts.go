@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // A fact is one column of the Gather facts report: a short, read-only shell
@@ -25,19 +26,42 @@ var factCommands = map[string]string{
 	// not hammer the mirrors. The count is as fresh as the last apt update
 	// / dnf makecache on that host.
 	"updates": `if command -v apt-get >/dev/null 2>&1; then u=$(apt-get -s -o Debug::NoLocking=1 upgrade 2>/dev/null | grep '^Inst '); echo "$u" | grep -c '^Inst '; echo "$u" | grep -ci 'security';` +
-		` elif command -v dnf >/dev/null 2>&1; then dnf -q -C check-update 2>/dev/null | grep -cE '^[^[:space:]]+\.[^[:space:]]+[[:space:]]'; dnf -q -C updateinfo list --security 2>/dev/null | grep -c .;` +
+		` elif command -v dnf >/dev/null 2>&1; then dnf -q -C check-update 2>/dev/null | grep -cE '^[^[:space:]]+\.[^[:space:]]+[[:space:]]'; dnf -q -C updateinfo list --security 2>/dev/null | awk '{print $NF}' | sed 's/-[^-]*-[^-]*$//' | sort -u | grep -c .;` +
 		` elif command -v zypper >/dev/null 2>&1; then zypper -q --no-refresh lu 2>/dev/null | grep -c '^v '; zypper -q --no-refresh lp --category security 2>/dev/null | grep -c '^[^-+]*|';` +
 		` else echo -; echo -; fi`,
-	"reboot":  `if [ -f /var/run/reboot-required ]; then echo yes; elif command -v needs-restarting >/dev/null 2>&1; then needs-restarting -r >/dev/null 2>&1; case $? in 0) echo no;; 1) echo yes;; *) echo unknown;; esac; else echo no; fi`,
-	"failed":  `command -v systemctl >/dev/null 2>&1 && systemctl --failed --no-legend --plain --no-pager 2>/dev/null | wc -l || echo -`,
+	"reboot": `if [ -f /var/run/reboot-required ]; then echo yes; elif command -v needs-restarting >/dev/null 2>&1; then needs-restarting -r >/dev/null 2>&1; case $? in 0) echo no;; 1) echo yes;; *) echo unknown;; esac; else echo no; fi`,
+	// "ok" then one failed unit per line; "-" without systemd.
+	"failed":  `if command -v systemctl >/dev/null 2>&1; then echo ok; systemctl --failed --no-legend --plain --no-pager 2>/dev/null | awk '{print $1}'; else echo -; fi`,
 	"ips":     `hostname -I 2>/dev/null || ip -o -4 addr show scope global 2>/dev/null | awk '{print $4}'`,
 	"gateway": `ip route show default 2>/dev/null | awk '/default/{print $3; exit}'`,
 	"dns":     `awk '/^nameserver/{print $2}' /etc/resolv.conf 2>/dev/null`,
 	"ports":   `ss -Htln 2>/dev/null | awk '{print $4}' | sed 's/.*://' | sort -un`,
+	"inodes":  `df -Pi`,
+	// The last package transaction that upgraded something: apt's history
+	// log (rotated copies included) or dnf history, newest first, both
+	// readable without root. Printed as "YYYY-MM-DD HH:MM" in the host's
+	// time. Without either it falls back to when the package database last
+	// changed, as unix seconds - an install counts there too.
+	"lastpatch": `if [ -d /var/lib/dpkg/info ]; then` +
+		` d=$(zcat -f /var/log/apt/history.log* 2>/dev/null | awk '/^Start-Date:/{d=$2" "substr($3,1,5)} /^Upgrade:/{if(d>b)b=d} END{print b}');` +
+		` if [ -n "$d" ]; then echo "$d"; else stat -c %Y $(ls -t /var/lib/dpkg/info/*.list | head -n 1); fi;` +
+		` elif command -v rpm >/dev/null 2>&1; then` +
+		` d=$(command -v dnf >/dev/null 2>&1 && dnf -q -C history list 2>/dev/null | awk -F'|' 'NF>=5{a=$4; gsub(/ /,"",a); n=split(a,x,","); for(i=1;i<=n;i++) if(x[i]=="U"||x[i]=="Upgrade"||x[i]=="Update"){t=$3; gsub(/^ +| +$/,"",t); print t; exit}}');` +
+		` if [ -n "$d" ]; then echo "$d"; else rpm -qa --qf '%{INSTALLTIME}\n' | sort -n | tail -n 1; fi;` +
+		` elif [ -f /lib/apk/db/installed ]; then stat -c %Y /lib/apk/db/installed;` +
+		` else echo -; fi`,
+	// Running kernel, newest kernel image in /boot, and the newer of the
+	// two by version order. Containers and distros whose image names carry
+	// no version (Arch) print no newest: unknown, not "up to date".
+	"kernelpending": `r=$(uname -r); echo "$r"; n=$(ls /boot 2>/dev/null | sed -n 's/^vmlinuz-//p' | grep -v rescue | grep '[0-9]' | sort -V | tail -n 1);` +
+		` if [ -n "$n" ]; then echo "$n"; printf '%s\n%s\n' "$r" "$n" | sort -V | tail -n 1; fi`,
+	// Boots recorded in wtmp over the last 30 days, the current one
+	// included. No wtmp (or a last without -s) reads as unknown.
+	"reboots": `o=$(last -x -s -30days reboot 2>/dev/null) && echo "$o" | grep -c '^reboot' || echo -`,
 }
 
 // FactKeys lists the known facts in report column order.
-var FactKeys = []string{"cpu", "mem", "disks", "virt", "os", "kernel", "uptime", "timesync", "updates", "reboot", "failed", "ips", "gateway", "dns", "ports"}
+var FactKeys = []string{"cpu", "mem", "disks", "inodes", "virt", "os", "kernel", "uptime", "timesync", "updates", "lastpatch", "kernelpending", "reboot", "reboots", "failed", "ips", "gateway", "dns", "ports"}
 
 const factMarker = "__SSHTOOL_FACT__"
 
@@ -62,10 +86,26 @@ func BuildFactsCommand(keys []string, custom string) (string, error) {
 	return b.String() + "true", nil
 }
 
-// DiskSize is one real filesystem in the facts report.
+// DiskSize is one real filesystem in the facts report. Network marks a
+// share mounted from elsewhere (CIFS, NFS, sshfs): its size says nothing
+// about the host's own disks.
 type DiskSize struct {
-	Mount  string `json:"mount"`
-	SizeKB int64  `json:"size_kb"`
+	Mount   string `json:"mount"`
+	SizeKB  int64  `json:"size_kb"`
+	UsedPct int    `json:"used_pct"`
+	Network bool   `json:"network,omitempty"`
+}
+
+// isNetworkSource: "//server/share" (CIFS/SMB) or "host:/path" /
+// "user@host:path" (NFS, sshfs, GlusterFS).
+func isNetworkSource(fs string) bool {
+	return strings.HasPrefix(fs, "//") || strings.Contains(fs, ":")
+}
+
+// MountPct is one filesystem's inode use.
+type MountPct struct {
+	Mount string `json:"mount"`
+	Pct   int    `json:"pct"`
 }
 
 // HostFacts is one row of the report. Values that do not apply stay at
@@ -76,6 +116,7 @@ type HostFacts struct {
 	MemKB     int64      `json:"mem_kb"`
 	SwapKB    int64      `json:"swap_kb"`
 	Disks     []DiskSize `json:"disks"`
+	Inodes    []MountPct `json:"inodes"`
 	Virt      string     `json:"virt"`
 	OS        string     `json:"os"`
 	Kernel    string     `json:"kernel"`
@@ -85,16 +126,26 @@ type HostFacts struct {
 	Security  int        `json:"security"` // -1 unknown
 	Reboot    string     `json:"reboot"`   // yes | no | unknown | ""
 	Failed    int        `json:"failed"`   // -1 unknown
-	IPs       []string   `json:"ips"`
-	Gateway   string     `json:"gateway"`
-	DNS       []string   `json:"dns"`
-	Ports     []int      `json:"ports"`
-	Custom    string     `json:"custom"`
+	// FailedUnits names the failed units counted in Failed.
+	FailedUnits []string `json:"failed_units"`
+	// LastPatch: unix seconds of the last upgrade transaction (or, without
+	// a history log, the last package change), 0 unknown.
+	LastPatch int64 `json:"last_patch"`
+	// KernelLatest is the newest kernel in /boot; KernelPending says
+	// whether it is newer than the running one (yes | no | unknown | "").
+	KernelLatest  string   `json:"kernel_latest"`
+	KernelPending string   `json:"kernel_pending"`
+	Reboots30d    int      `json:"reboots_30d"` // -1 unknown
+	IPs           []string `json:"ips"`
+	Gateway       string   `json:"gateway"`
+	DNS           []string `json:"dns"`
+	Ports         []int    `json:"ports"`
+	Custom        string   `json:"custom"`
 }
 
 // ParseFacts turns the script's output into a HostFacts.
 func ParseFacts(out string) HostFacts {
-	f := HostFacts{Updates: -1, Security: -1, Failed: -1}
+	f := HostFacts{Updates: -1, Security: -1, Failed: -1, Reboots30d: -1}
 	for key, val := range splitFacts(out) {
 		lines := nonEmptyLines(val)
 		first := ""
@@ -121,10 +172,39 @@ func ParseFacts(out string) HostFacts {
 				size, _ := strconv.ParseInt(c[1], 10, 64)
 				mount := strings.Join(c[5:], " ")
 				if isRealMount(c[0], mount, size) {
-					f.Disks = append(f.Disks, DiskSize{Mount: mount, SizeKB: size})
+					f.Disks = append(f.Disks, DiskSize{Mount: mount, SizeKB: size, UsedPct: atoiOr(strings.TrimSuffix(c[4], "%"), 0), Network: isNetworkSource(c[0])})
 				}
 			}
 			sort.Slice(f.Disks, func(i, j int) bool { return f.Disks[i].Mount < f.Disks[j].Mount })
+		case "inodes":
+			// Same columns as df -Pk with inode counts; btrfs and other
+			// filesystems without a fixed inode table print "-" and drop out.
+			for _, l := range lines {
+				c := strings.Fields(l)
+				if len(c) < 6 || !strings.HasSuffix(c[4], "%") {
+					continue
+				}
+				total, _ := strconv.ParseInt(c[1], 10, 64)
+				mount := strings.Join(c[5:], " ")
+				if isRealMount(c[0], mount, total) && !isNetworkSource(c[0]) {
+					f.Inodes = append(f.Inodes, MountPct{Mount: mount, Pct: atoiOr(strings.TrimSuffix(c[4], "%"), 0)})
+				}
+			}
+			sort.Slice(f.Inodes, func(i, j int) bool { return f.Inodes[i].Mount < f.Inodes[j].Mount })
+		case "lastpatch":
+			f.LastPatch = parsePatchTime(first)
+		case "kernelpending":
+			f.Kernel = first
+			f.KernelPending = "unknown"
+			if len(lines) >= 3 {
+				f.KernelLatest = lines[1]
+				f.KernelPending = "no"
+				if lines[2] != first {
+					f.KernelPending = "yes"
+				}
+			}
+		case "reboots":
+			f.Reboots30d = atoiOr(first, -1)
 		case "virt":
 			f.Virt = first
 		case "os":
@@ -145,7 +225,10 @@ func ParseFacts(out string) HostFacts {
 		case "reboot":
 			f.Reboot = first
 		case "failed":
-			f.Failed = atoiOr(first, -1)
+			if first == "ok" {
+				f.FailedUnits = lines[1:]
+				f.Failed = len(f.FailedUnits)
+			}
 		case "ips":
 			for _, l := range lines {
 				f.IPs = append(f.IPs, strings.Fields(l)...)
@@ -165,6 +248,30 @@ func ParseFacts(out string) HostFacts {
 		}
 	}
 	return f
+}
+
+// parsePatchTime reads the lastpatch value: unix seconds from the
+// fallback, or a history-log "YYYY-MM-DD HH:MM", taken as local time (the
+// date is what the report shows). 0 when neither.
+func parsePatchTime(v string) int64 {
+	if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+		return n
+	}
+	if t, err := time.ParseInLocation("2006-01-02 15:04", strings.Join(strings.Fields(v), " "), time.Local); err == nil {
+		return t.Unix()
+	}
+	return 0
+}
+
+// RunningFact names the fact whose marker came last in a partial output:
+// the one a timed-out script was still running. "" when none started.
+func RunningFact(out string) string {
+	i := strings.LastIndex(out, factMarker)
+	if i < 0 {
+		return ""
+	}
+	k, _, _ := strings.Cut(out[i+len(factMarker):], "\n")
+	return strings.TrimSpace(k)
 }
 
 func splitFacts(out string) map[string]string {
