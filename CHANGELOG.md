@@ -7,6 +7,34 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Fleet
+
+- **Download files** from many hosts: a file, a folder or a pattern like
+  `/var/log/nginx/*.log`, into one local folder with a subfolder per
+  host. Sizes are checked first and a download over 500 MB asks once
+  more; "Skip size check" starts at once.
+- **Upload file** to many hosts: a file or a folder into a remote
+  directory, with skip / replace-if-changed / always-replace for files
+  already there and optional permissions.
+- Both can be minimised to the status bar while they run.
+
+### Terminal
+
+- With several tabs selected, the tab menu offers Upload, Download and
+  Reconnect for all of them. Upload and download go over the open
+  sessions, so hosts behind a password prompt or 2FA work too.
+
+### Fixes
+
+- Emptying a local forward's port and saving now switches it to an
+  automatic port; the old fixed port used to stay.
+- The settings button in a pane header now finds inventory hosts in the
+  tree.
+
+---
+
 ## [0.109.0] - Bookmarks in the tree, credential search, password fix
 
 Forward bookmarks can sit right under their connection in the tree,

@@ -154,7 +154,7 @@
     {
       "icon": "list",
       "title": "Fleet tools",
-      "body": "Select a folder or several hosts: gather facts (sizes, OS, pending and security updates, reboot required, failed units) into a report grouped by size, check TLS certificate expiry, compare one file across hosts, and copy your SSH key where it is missing. Read-only by default, 8 hosts at a time."
+      "body": "Select a folder or several hosts: gather facts (sizes, OS, pending and security updates, reboot required, failed units) into a report grouped by size, check TLS certificate expiry, compare one file across hosts, copy your SSH key where it is missing, upload a file to every host or collect files (logs) from all of them into a folder per host. Read-only by default, 8 hosts at a time."
     },
     {
       "icon": "lock",

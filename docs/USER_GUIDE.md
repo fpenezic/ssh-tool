@@ -298,6 +298,32 @@ row in the right pane. The same entries are in the right-click menu.
   under another comment counts as already present. It only appends to
   `~/.ssh/authorized_keys` and never removes or rewrites a line. Connections that log in as root are
   skipped unless you tick the option.
+- **Download files…** - a remote file, a folder (with everything in it)
+  or a pattern such as `/var/log/nginx/*.log` from every host, into one
+  local folder with a subfolder per host named after the connection -
+  collecting logs is the typical use. Patterns are matched over SFTP,
+  not by a shell: `*`, `?` and `[..]` work, `**` and `{a,b}` do not.
+  *Skip compressed files* leaves out rotated `.gz` / `.xz` / `.zst`
+  archives. Download first lists what each host has (nothing is fetched
+  yet) and starts right away when the total is under 500 MB; above that
+  it shows the sizes per host and asks once more. *Check sizes* shows
+  them without downloading, *Skip size check* starts at once. A file
+  that fails (rotated away, unreadable) does not stop the rest of that
+  host. Files already in the local folder are replaced.
+- **Upload file…** - one local file or folder to every host, into a
+  remote directory (`~/` by default; created when missing). When a file
+  is already there: *Skip it* (default), *Replace if changed* (size
+  differs or yours is newer; uploaded files keep your file's time, so a
+  second run skips what the first sent) or *Always replace*. Optional
+  permissions (`0755`).
+
+Upload and download run as each host's login user, 8 hosts at a time,
+with progress per host, *Cancel* and *Retry N failed*. There is no sudo
+step: a path the login user cannot read or write fails for that host,
+and anything after the copy is done by hand. The minimise button (or a
+click outside) puts a running transfer in the status bar - progress
+while it runs, *done* or *N failed* once it ends; click it to bring the
+dialog back. The x button stops the transfer (after asking) and closes.
 
 ### Right-click on a connection
 
@@ -871,6 +897,12 @@ on a suggestion forgets it.
   **Record session** (or **Stop recording**), **Add to broadcast**
   (or **Remove from broadcast** / **Add remaining panes to
   broadcast**), **Ungroup tabs** (when grouped), **Close tab**.
+- With several tabs selected (Ctrl/Cmd+click, Shift+click), right-click
+  one of them for actions on all of them, among them **Upload file to N
+  tabs…**, **Download files from N tabs…** and **Reconnect N tabs**.
+  Upload and download are the Fleet tools above, but over each tab's
+  open session - no new login, so hosts behind a password prompt or 2FA
+  work too. Reconnect follows the bulk-connect limits in Settings.
 
 ### Session recording
 

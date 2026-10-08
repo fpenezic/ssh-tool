@@ -1440,6 +1440,12 @@ everything mobile is behind a build tag or an `isMobile` check.
     hop through `passwordSequence` (one `RetryableAuthMethod`), via
     `targetAuthMethods`; never append another password method.
 
+95. **A cleared `<input type="number">` binds `null` in Svelte 5**, not
+    `undefined`. Code that sends "clear this field" only for `undefined`
+    silently keeps the old value (a forward's fixed port survived being
+    emptied). Normalise number fields before building the payload
+    (`portOrUndef` in PortForwards.svelte).
+
 ---
 
 # Archive
