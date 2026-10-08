@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fleet, folderHostIds, folderHostIdsLoaded, unloadedDynamicUnder, TLS_WARN_DAYS, type FleetTool } from "./fleetStore.svelte";
-  import { IconTable, IconShieldCheck, IconCompare, IconKeyRound as IconKeyRoundFleet, IconBastion, IconRouted } from "./iconMap";
+  import { IconTable, IconShieldCheck, IconCompare, IconKeyRound as IconKeyRoundFleet, IconBastion, IconRouted, IconUpload } from "./iconMap";
   import { dynRef } from "./jumpRefs";
   import { tree, selection, drag, sessions, paneTabs, view, jumpChainHostnames } from "./stores.svelte";
   import { errMsg } from "./connectErrors";
@@ -429,6 +429,8 @@
       { label: "Gather facts…", iconComponent: IconTable, onSelect: open("facts") },
       { label: "Check TLS certificates…", iconComponent: IconShieldCheck, onSelect: open("tls") },
       ...(hostIds.length >= 2 ? [{ label: "Compare file…", iconComponent: IconCompare, onSelect: open("compare") }] : []),
+      { label: "Download files…", iconComponent: IconDownload, onSelect: open("download") },
+      { label: "Upload file…", iconComponent: IconUpload, onSelect: open("upload") },
       { label: "Copy SSH key…", iconComponent: IconKeyRoundFleet, onSelect: open("copykey") },
     ];
   }
@@ -450,6 +452,8 @@
       { label: "Gather facts…", iconComponent: IconTable, onSelect: open("facts") },
       { label: "Check TLS certificates…", iconComponent: IconShieldCheck, onSelect: open("tls") },
       { label: "Compare file…", iconComponent: IconCompare, onSelect: open("compare") },
+      { label: "Download files…", iconComponent: IconDownload, onSelect: open("download") },
+      { label: "Upload file…", iconComponent: IconUpload, onSelect: open("upload") },
       { label: "Copy SSH key…", iconComponent: IconKeyRoundFleet, onSelect: open("copykey") },
     ];
   }

@@ -18,7 +18,8 @@
   import { errMsg } from "./connectErrors";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
-  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot, IconSave } from "./iconMap";
+  import { fleet } from "./fleetStore.svelte";
+  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot, IconSave, IconUpload, IconDownload } from "./iconMap";
   import McpActivityPanel from "./McpActivityPanel.svelte";
   import { mcpCounterTitle } from "./mcpLevel";
   import { networkProfiles } from "./networkProfiles.svelte";
@@ -666,6 +667,31 @@
     </div>
   {/if}
 
+  <!-- A minimised fleet upload / download: progress while it runs, the
+       outcome once it ends; a click brings the dialog back. -->
+  {#if fleet.transfer && fleet.transferMinimized}
+    {@const t = fleet.transferStatus}
+    <button
+      class="seg transfer"
+      class:live={t?.running}
+      class:bad={!!t && !t.running && t.failed > 0}
+      onclick={() => fleet.restoreTransfer()}
+      title={t
+        ? `${t.tool === "upload" ? "Upload to" : "Download from"} ${t.hosts} host${t.hosts === 1 ? "" : "s"}: ${t.done} done${t.failed ? `, ${t.failed} failed` : ""}${t.running ? "" : " - finished"}. Click to open.`
+        : "Fleet transfer - click to open"}
+    >
+      {#if fleet.transfer.tool === "upload"}<IconUpload size={11} />{:else}<IconDownload size={11} />{/if}
+      {#if t?.running}
+        <span>{t.total > 0 ? Math.min(100, Math.round((t.bytes / t.total) * 100)) : 0}%</span>
+        <span class="tr-hosts">{t.done}/{t.hosts}</span>
+      {:else if t}
+        <span>{t.failed ? `${t.failed} failed` : "done"}</span>
+      {:else}
+        <span>{fleet.transfer.tool}</span>
+      {/if}
+    </button>
+  {/if}
+
   <!-- Locked-vault pill. The earlier "Lock vault" pill was withdrawn as a
        rare action not worth the space, and that still holds - this is the
        opposite case. The vault can be locked while the app is fully usable
@@ -879,6 +905,10 @@
     50% { opacity: 0.5; }
   }
   .seg.tcpdump { color: var(--pink); }
+  .seg.transfer { color: var(--blue); cursor: pointer; }
+  .seg.transfer.bad { color: var(--red); }
+  .seg.transfer .tr-hosts { color: var(--subtext0); }
+  .seg.transfer.live > :global(svg) { animation: sb-pulse 1.4s ease-in-out infinite; }
   .seg.tcpdump .td-num {
     background: var(--surface1);
     color: var(--text);

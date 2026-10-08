@@ -2247,6 +2247,122 @@ export class FileReadResult {
 }
 
 /**
+ * FleetDownloadInput is what the Fleet "Download files" dialog sends.
+ */
+export class FleetDownloadInput {
+    /**
+     * Creates a new FleetDownloadInput instance.
+     * @param {Partial<FleetDownloadInput>} [$$source = {}] - The source object to create the FleetDownloadInput.
+     */
+    constructor($$source = {}) {
+        if (!("ids" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["ids"] = [];
+        }
+        if (!("options" in $$source)) {
+            /**
+             * @member
+             * @type {ssh$0.FleetDownloadOptions}
+             */
+            this["options"] = (new ssh$0.FleetDownloadOptions());
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {{ [_ in string]?: string } | undefined}
+             */
+            this["labels"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FleetDownloadInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FleetDownloadInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType4;
+        const $$createField1_0 = $$createType11;
+        const $$createField2_0 = $$createType12;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("ids" in $$parsedSource) {
+            $$parsedSource["ids"] = $$createField0_0($$parsedSource["ids"]);
+        }
+        if ("options" in $$parsedSource) {
+            $$parsedSource["options"] = $$createField1_0($$parsedSource["options"]);
+        }
+        if ("labels" in $$parsedSource) {
+            $$parsedSource["labels"] = $$createField2_0($$parsedSource["labels"]);
+        }
+        return new FleetDownloadInput(/** @type {Partial<FleetDownloadInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * FleetUploadInput is what the Fleet "Upload file" dialog sends.
+ */
+export class FleetUploadInput {
+    /**
+     * Creates a new FleetUploadInput instance.
+     * @param {Partial<FleetUploadInput>} [$$source = {}] - The source object to create the FleetUploadInput.
+     */
+    constructor($$source = {}) {
+        if (!("ids" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["ids"] = [];
+        }
+        if (!("options" in $$source)) {
+            /**
+             * @member
+             * @type {ssh$0.FleetUploadOptions}
+             */
+            this["options"] = (new ssh$0.FleetUploadOptions());
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Labels names "session:<id>" hosts (open tabs) for the results and
+             * the download folders; saved connections are named from the DB.
+             * @member
+             * @type {{ [_ in string]?: string } | undefined}
+             */
+            this["labels"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FleetUploadInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FleetUploadInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType4;
+        const $$createField1_0 = $$createType13;
+        const $$createField2_0 = $$createType12;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("ids" in $$parsedSource) {
+            $$parsedSource["ids"] = $$createField0_0($$parsedSource["ids"]);
+        }
+        if ("options" in $$parsedSource) {
+            $$parsedSource["options"] = $$createField1_0($$parsedSource["options"]);
+        }
+        if ("labels" in $$parsedSource) {
+            $$parsedSource["labels"] = $$createField2_0($$parsedSource["labels"]);
+        }
+        return new FleetUploadInput(/** @type {Partial<FleetUploadInput>} */($$parsedSource));
+    }
+}
+
+/**
  * FoldersCreateInput keeps the IPC signature flat (Wails generator handles
  * nested types via JSON but flat shape is simpler to call from TS).
  */
@@ -3214,7 +3330,7 @@ export class KeepassSaveInput {
      * @returns {KeepassSaveInput}
      */
     static createFrom($$source = {}) {
-        const $$createField9_0 = $$createType11;
+        const $$createField9_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("remote_config" in $$parsedSource) {
             $$parsedSource["remote_config"] = $$createField9_0($$parsedSource["remote_config"]);
@@ -3478,7 +3594,7 @@ export class LogTailSnapshotResult {
      * @returns {LogTailSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType13;
+        const $$createField0_0 = $$createType15;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("lines" in $$parsedSource) {
             $$parsedSource["lines"] = $$createField0_0($$parsedSource["lines"]);
@@ -3911,10 +4027,10 @@ export class NetworkProfileInfo {
      * @returns {NetworkProfileInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType14;
-        const $$createField6_0 = $$createType16;
-        const $$createField7_0 = $$createType18;
-        const $$createField8_0 = $$createType19;
+        const $$createField5_0 = $$createType16;
+        const $$createField6_0 = $$createType18;
+        const $$createField7_0 = $$createType20;
+        const $$createField8_0 = $$createType21;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("profile" in $$parsedSource) {
             $$parsedSource["profile"] = $$createField5_0($$parsedSource["profile"]);
@@ -4732,7 +4848,7 @@ export class ScrollbackSnapshot {
      * @returns {ScrollbackSnapshot}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType21;
+        const $$createField3_0 = $$createType23;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("marks" in $$parsedSource) {
             $$parsedSource["marks"] = $$createField3_0($$parsedSource["marks"]);
@@ -4785,7 +4901,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType23;
+        const $$createField1_0 = $$createType25;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -4969,7 +5085,7 @@ export class ShareStartInput {
      * @returns {ShareStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType25;
+        const $$createField6_0 = $$createType27;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField6_0($$parsedSource["sessions"]);
@@ -5649,7 +5765,7 @@ export class TLSInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType26;
+        const $$createField1_0 = $$createType28;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("connection_ids" in $$parsedSource) {
             $$parsedSource["connection_ids"] = $$createField0_0($$parsedSource["connection_ids"]);
@@ -6003,7 +6119,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType28;
+        const $$createField0_0 = $$createType30;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -6129,7 +6245,7 @@ export class TcpdumpStartInput {
      * @returns {TcpdumpStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType11;
+        const $$createField10_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("port_overrides" in $$parsedSource) {
             $$parsedSource["port_overrides"] = $$createField10_0($$parsedSource["port_overrides"]);
@@ -6353,21 +6469,23 @@ const $$createType7 = $Create.Nullable($$createType4);
 const $$createType8 = $Create.Map($Create.Any, $Create.Any);
 const $$createType9 = $Create.Nullable($$createType8);
 const $$createType10 = ssh$0.HostFacts.createFrom;
-const $$createType11 = $Create.Map($Create.Any, $Create.Any);
-const $$createType12 = ssh$0.LogTailLine.createFrom;
-const $$createType13 = $Create.Array($$createType12);
-const $$createType14 = wg$0.Profile.createFrom;
-const $$createType15 = NetbirdConfig.createFrom;
-const $$createType16 = $Create.Nullable($$createType15);
-const $$createType17 = TailscaleConfig.createFrom;
+const $$createType11 = ssh$0.FleetDownloadOptions.createFrom;
+const $$createType12 = $Create.Map($Create.Any, $Create.Any);
+const $$createType13 = ssh$0.FleetUploadOptions.createFrom;
+const $$createType14 = ssh$0.LogTailLine.createFrom;
+const $$createType15 = $Create.Array($$createType14);
+const $$createType16 = wg$0.Profile.createFrom;
+const $$createType17 = NetbirdConfig.createFrom;
 const $$createType18 = $Create.Nullable($$createType17);
-const $$createType19 = wg$0.Status.createFrom;
-const $$createType20 = cmdmarks$0.Mark.createFrom;
-const $$createType21 = $Create.Array($$createType20);
-const $$createType22 = ssh$0.SftpEntry.createFrom;
+const $$createType19 = TailscaleConfig.createFrom;
+const $$createType20 = $Create.Nullable($$createType19);
+const $$createType21 = wg$0.Status.createFrom;
+const $$createType22 = cmdmarks$0.Mark.createFrom;
 const $$createType23 = $Create.Array($$createType22);
-const $$createType24 = ShareSessionInput.createFrom;
+const $$createType24 = ssh$0.SftpEntry.createFrom;
 const $$createType25 = $Create.Array($$createType24);
-const $$createType26 = $Create.Array($Create.Any);
-const $$createType27 = ssh$0.ParsedPacket.createFrom;
-const $$createType28 = $Create.Array($$createType27);
+const $$createType26 = ShareSessionInput.createFrom;
+const $$createType27 = $Create.Array($$createType26);
+const $$createType28 = $Create.Array($Create.Any);
+const $$createType29 = ssh$0.ParsedPacket.createFrom;
+const $$createType30 = $Create.Array($$createType29);

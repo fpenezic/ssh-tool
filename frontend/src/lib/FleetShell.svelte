@@ -3,6 +3,7 @@
   // scope under it, a scrolling body and a footer row. Wide mode is for the
   // report and the diff, which want the room.
   import type { Snippet } from "svelte";
+  import { IconMinus } from "./iconMap";
 
   interface Props {
     title: string;
@@ -11,28 +12,44 @@
     onClose: () => void;
     children: Snippet;
     footer?: Snippet;
+    // Set for long-running tools: a minimise button in the title row, and
+    // while minimised nothing is drawn (the caller stays mounted).
+    onMinimize?: () => void;
+    minimized?: boolean;
+    // Backdrop click and Escape; defaults to onClose. A running transfer
+    // minimises there, while x (onClose) stops it.
+    onDismiss?: () => void;
   }
-  let { title, sub, wide = false, onClose, children, footer }: Props = $props();
+  let { title, sub, wide = false, onClose, children, footer, onMinimize, minimized = false, onDismiss }: Props = $props();
+  const dismiss = () => (onDismiss ?? onClose)();
 
   function onKey(e: KeyboardEvent) {
-    if (e.key === "Escape") onClose();
+    if (e.key === "Escape" && !minimized) dismiss();
   }
 </script>
 
 <svelte:window onkeydown={onKey} />
 
-<div class="backdrop" role="presentation" onclick={onClose}></div>
+{#if !minimized}
+<div class="backdrop" role="presentation" onclick={dismiss}></div>
 <div class="modal" class:wide role="dialog" aria-labelledby="fleet-title">
   <header>
     <div class="title-row">
       <h2 id="fleet-title">{title}</h2>
-      <button class="x" onclick={onClose} aria-label="Close">×</button>
+      <span class="actions">
+        {#if onMinimize}
+          <button class="x min" onclick={onMinimize} aria-label="Minimise"
+            title="Minimise to the status bar - keeps running, click it there to come back"><IconMinus size={15} /></button>
+        {/if}
+        <button class="x" onclick={onClose} aria-label="Close">×</button>
+      </span>
     </div>
     <div class="sub">{sub}</div>
   </header>
   <div class="body">{@render children()}</div>
   {#if footer}<footer>{@render footer()}</footer>{/if}
 </div>
+{/if}
 
 <style>
   .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 9000; }
@@ -51,6 +68,8 @@
   .sub { margin-top: 0.2rem; color: var(--subtext0); font-size: 0.76rem; }
   .x { background: transparent; border: 0; color: var(--subtext0); font-size: 1.4rem; line-height: 1; cursor: pointer; padding: 0 0.3rem; border-radius: 3px; }
   .x:hover { background: var(--surface0); color: var(--text); }
+  .actions { display: inline-flex; gap: 0.2rem; }
+  .x.min { display: inline-flex; align-items: center; padding: 0.15rem 0.3rem; }
   .body { padding: 0.8rem 1rem; overflow: auto; flex: 1; min-height: 0; font-size: 0.82rem; }
   /* A wide dialog is a report: its body stacks, so a scroll box inside it
      (the facts table) can take the leftover height and keep both of its

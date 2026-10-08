@@ -456,6 +456,11 @@ func (s *Session) SftpDownload(remotePath, localPath string, onProgress func(wri
 	if err != nil {
 		return 0, err
 	}
+	return downloadFile(cli, remotePath, localPath, onProgress, cancel)
+}
+
+// downloadFile is SftpDownload on any SFTP client (see uploadFile).
+func downloadFile(cli *sftp.Client, remotePath, localPath string, onProgress func(written, total int64), cancel <-chan struct{}) (int64, error) {
 	fi, err := cli.Stat(remotePath)
 	if err != nil {
 		return 0, err
@@ -518,6 +523,12 @@ func (s *Session) SftpUpload(localPath, remotePath string, onProgress func(writt
 	if err != nil {
 		return 0, err
 	}
+	return uploadFile(cli, localPath, remotePath, onProgress, cancel)
+}
+
+// uploadFile is SftpUpload on any SFTP client - the session's cached one,
+// or a fleet upload's own per-host client.
+func uploadFile(cli *sftp.Client, localPath, remotePath string, onProgress func(written, total int64), cancel <-chan struct{}) (int64, error) {
 	src, err := os.Open(localPath)
 	if err != nil {
 		return 0, err
@@ -721,6 +732,23 @@ func (s *Session) SftpUploadDir(localRoot, remoteRoot string, onProgress func(Di
 	if err != nil {
 		return err
 	}
+	_, err = uploadDir(cli, localRoot, remoteRoot, onProgress, cancel, nil)
+	return err
+}
+
+// uploadPolicy lets a caller of uploadDir leave some files alone and act
+// on each one written. Both are optional.
+type uploadPolicy struct {
+	// skip reports that the remote file should be left as it is.
+	skip func(local os.FileInfo, remotePath string) bool
+	// after runs once a file is in place (chmod, mtime).
+	after func(local os.FileInfo, remotePath string) error
+}
+
+// uploadDir mirrors a local tree into remoteRoot on cli. Returns how many
+// files the policy skipped; skipped bytes still count as done, so the
+// progress bar reaches the end.
+func uploadDir(cli *sftp.Client, localRoot, remoteRoot string, onProgress func(DirProgress), cancel <-chan struct{}, pol *uploadPolicy) (int, error) {
 	type item struct {
 		Local string
 		Size  int64
@@ -750,24 +778,25 @@ func (s *Session) SftpUploadDir(localRoot, remoteRoot string, onProgress func(Di
 		return nil
 	})
 	if werr != nil {
-		return werr
+		return 0, werr
 	}
 	// Make remote dirs (parents before children - Walk returns parents
 	// first so the order is already correct).
 	if err := cli.MkdirAll(remoteRoot); err != nil && !strings.Contains(err.Error(), "exists") {
-		return err
+		return 0, err
 	}
 	for _, d := range dirs {
 		if err := cli.MkdirAll(d); err != nil && !strings.Contains(err.Error(), "exists") {
-			return err
+			return 0, err
 		}
 	}
 
+	skipped := 0
 	prog := DirProgress{FilesTotal: len(items), BytesTotal: totalBytes}
 	for i, it := range items {
 		select {
 		case <-cancel:
-			return ErrTransferCancelled
+			return skipped, ErrTransferCancelled
 		default:
 		}
 		rel, _ := filepath.Rel(localRoot, it.Local)
@@ -778,14 +807,35 @@ func (s *Session) SftpUploadDir(localRoot, remoteRoot string, onProgress func(Di
 		// Parent might not exist if a stray top-level file landed first;
 		// safe to attempt.
 		_ = cli.MkdirAll(path.Dir(remotePath))
-		n, uerr := s.SftpUpload(it.Local, remotePath, func(_, _ int64) {}, cancel)
-		prog.BytesDone += n
+		var fi os.FileInfo
+		if pol != nil {
+			var serr error
+			if fi, serr = os.Stat(it.Local); serr != nil {
+				return skipped, fmt.Errorf("upload %s: %w", rel, serr)
+			}
+			if pol.skip != nil && pol.skip(fi, remotePath) {
+				skipped++
+				prog.BytesDone += it.Size
+				continue
+			}
+		}
+		base := prog.BytesDone
+		n, uerr := uploadFile(cli, it.Local, remotePath, func(w, _ int64) {
+			prog.BytesDone = base + w
+			onProgress(prog)
+		}, cancel)
+		prog.BytesDone = base + n
 		if uerr != nil {
-			return fmt.Errorf("upload %s: %w", rel, uerr)
+			return skipped, fmt.Errorf("upload %s: %w", rel, uerr)
+		}
+		if pol != nil && pol.after != nil {
+			if err := pol.after(fi, remotePath); err != nil {
+				return skipped, fmt.Errorf("upload %s: %w", rel, err)
+			}
 		}
 	}
 	prog.FilesDone = len(items)
 	prog.CurrentPath = ""
 	onProgress(prog)
-	return nil
+	return skipped, nil
 }

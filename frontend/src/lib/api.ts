@@ -895,6 +895,17 @@ export const api = {
     G.ReadFileAcross(ids, path) as unknown as Promise<FileReadResult[]>,
   copySSHKey: (ids: string[], credentialId: string, comment: string, apply: boolean, allowRoot: boolean) =>
     G.CopySSHKey(ids, credentialId, comment, apply, allowRoot) as unknown as Promise<CopyKeyResult[]>,
+  // Upload one file or directory to many hosts. Subscribe to
+  // "fleet_upload:<runId>" first; sftpCancelTransfer(runId) stops it.
+  fleetUploadStart: (runId: string, ids: string[], options: FleetUploadOptions, labels?: Record<string, string>) =>
+    G.FleetUploadStart(runId, { ids, options, labels } as any) as Promise<void>,
+  // Download from many: scan first (files + bytes per host, nothing
+  // fetched), then start; events on "fleet_download:<runId>".
+  fleetDownloadScan: (ids: string[], options: FleetDownloadOptions, labels?: Record<string, string>) =>
+    G.FleetDownloadScan({ ids, options, labels } as any) as unknown as Promise<FleetTransferHost[]>,
+  fleetDownloadStart: (runId: string, ids: string[], options: FleetDownloadOptions, labels?: Record<string, string>) =>
+    G.FleetDownloadStart(runId, { ids, options, labels } as any) as Promise<void>,
+  fleetOpenDir: (dir: string) => G.FleetOpenDir(dir) as Promise<void>,
   // Largest directories on one filesystem (du -x, two levels). Slow on big
   // trees, so only ever on an explicit click; the host caps it at 20s.
   sshDiskTopDirs: (sessionId: string, mount: string) =>
@@ -2157,6 +2168,42 @@ export interface FileReadResult {
   content: string;
   sha256: string;
   truncated: boolean;
+}
+
+export interface FleetUploadOptions {
+  local_path: string;
+  remote_dir: string;
+  existing: "skip" | "overwrite" | "changed";
+  mode: string;
+}
+
+export interface FleetDownloadOptions {
+  remote_path: string;
+  local_dir: string;
+  skip_compressed: boolean;
+}
+
+export interface FleetTransferHost {
+  connection_id: string;
+  name: string;
+  hostname: string;
+  state: "queued" | "connecting" | "transferring" | "done" | "error" | "cancelled";
+  target?: string;
+  files_done: number;
+  files_total: number;
+  files_skipped: number;
+  unreadable: number;
+  bytes: number;
+  total: number;
+  current?: string;
+  error?: string;
+  duration_ms: number;
+}
+
+export interface FleetTransferEvent {
+  host?: FleetTransferHost;
+  done?: boolean;
+  results?: FleetTransferHost[];
 }
 
 export interface CopyKeyResult {

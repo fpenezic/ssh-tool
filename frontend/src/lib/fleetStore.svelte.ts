@@ -5,9 +5,9 @@
 // their own.
 
 import { api, type FactsHostResult, type TLSCertResult } from "./api";
-import { tree } from "./stores.svelte";
+import { tree, sessions } from "./stores.svelte";
 
-export type FleetTool = "facts" | "tls" | "compare" | "copykey";
+export type FleetTool = "facts" | "tls" | "compare" | "copykey" | "upload" | "download";
 
 export interface FleetOpen {
   tool: FleetTool;
@@ -18,6 +18,16 @@ export interface FleetOpen {
   label: string;
   // Facts: open straight on the stored report instead of the form.
   showSnapshot?: boolean;
+}
+
+export interface TransferStatus {
+  tool: "upload" | "download";
+  running: boolean;
+  hosts: number;
+  done: number;
+  failed: number;
+  bytes: number;
+  total: number;
 }
 
 export interface FactsSnapshot {
@@ -54,11 +64,41 @@ class FleetStore {
     } catch { /* no marks yet */ }
   }
 
+  // Upload / download live in their own slot: they can run for minutes,
+  // so the dialog can be minimised to the status bar while the other
+  // fleet tools are used. One transfer at a time.
+  transfer = $state<FleetOpen | null>(null);
+  transferMinimized = $state(false);
+  // What the status bar shows for a minimised transfer, kept up to date by
+  // the dialog.
+  transferStatus = $state<TransferStatus | null>(null);
+
   show(o: FleetOpen) {
+    if (o.tool === "upload" || o.tool === "download") {
+      if (this.transfer && this.transferStatus?.running) {
+        this.transferMinimized = false;
+        return; // finish (or cancel) the running one first; it is shown
+      }
+      this.transfer = o;
+      this.transferMinimized = false;
+      this.transferStatus = null;
+      return;
+    }
     this.open = o;
   }
   close() {
     this.open = null;
+  }
+  closeTransfer() {
+    this.transfer = null;
+    this.transferMinimized = false;
+    this.transferStatus = null;
+  }
+  minimizeTransfer() {
+    if (this.transfer) this.transferMinimized = true;
+  }
+  restoreTransfer() {
+    this.transferMinimized = false;
   }
 
   async snapshot(folderId: string): Promise<FactsSnapshot | null> {
@@ -121,8 +161,13 @@ class FleetStore {
 export const fleet = new FleetStore();
 
 // Display name for a fleet host id: the saved connection, else the loaded
-// dynamic entry ("dyn:<id>"), else what the caller last saw.
+// dynamic entry ("dyn:<id>"), an open tab's session ("session:<id>", the
+// transfers on selected tabs), else what the caller last saw.
 export function fleetHostName(id: string, fallback?: string): string {
+  if (id.startsWith("session:")) {
+    const s = sessions.tabs.find((x) => x.sessionId === id.slice(8));
+    return s?.name || s?.hostname || fallback || "session";
+  }
   if (id.startsWith("dyn:")) {
     const eid = id.slice(4);
     for (const list of Object.values(tree.dynamicEntries)) {
@@ -150,6 +195,12 @@ export function unloadedDynamicUnder(folderId: string): string[] {
 // folderHostIds after loading the cached entries of every dynamic subfolder
 // that was never expanded. Reads what the last inventory refresh stored;
 // it does not refresh the provider.
+// Display names for the transfer IPCs: open-tab hosts have no row in the
+// database for the backend to read a name from.
+export function fleetLabels(ids: string[]): Record<string, string> {
+  return Object.fromEntries(ids.filter((id) => id.startsWith("session:")).map((id) => [id, fleetHostName(id)]));
+}
+
 export async function folderHostIdsLoaded(folderIds: string[]): Promise<string[]> {
   const missing = [...new Set(folderIds.flatMap(unloadedDynamicUnder))];
   await Promise.all(missing.map((fid) => tree.loadDynamicEntries(fid)));

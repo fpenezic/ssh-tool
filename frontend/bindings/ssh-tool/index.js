@@ -43,6 +43,8 @@ export {
     FactsHostResult,
     FactsInput,
     FileReadResult,
+    FleetDownloadInput,
+    FleetUploadInput,
     FoldersCreateInput,
     FoldersUpdateInput,
     ForwardCreateInput,

@@ -354,6 +354,245 @@ export class DiskTopResult {
 }
 
 /**
+ * FleetDownloadOptions fetches the same remote path from many hosts into
+ * one local folder, each host under its own subfolder.
+ */
+export class FleetDownloadOptions {
+    /**
+     * Creates a new FleetDownloadOptions instance.
+     * @param {Partial<FleetDownloadOptions>} [$$source = {}] - The source object to create the FleetDownloadOptions.
+     */
+    constructor($$source = {}) {
+        if (!("remote_path" in $$source)) {
+            /**
+             * RemotePath is a file, a directory (fetched recursively) or a glob
+             * such as /var/log/nginx/*.log. "~" and relative paths are taken
+             * from the login user's home. The glob is matched by the SFTP
+             * client, not a shell: * ? [..] work, ** and {a,b} do not.
+             * @member
+             * @type {string}
+             */
+            this["remote_path"] = "";
+        }
+        if (!("local_dir" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["local_dir"] = "";
+        }
+        if (!("skip_compressed" in $$source)) {
+            /**
+             * SkipCompressed leaves out rotated archives (.gz, .xz, .zst, ...).
+             * @member
+             * @type {boolean}
+             */
+            this["skip_compressed"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FleetDownloadOptions instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FleetDownloadOptions}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FleetDownloadOptions(/** @type {Partial<FleetDownloadOptions>} */($$parsedSource));
+    }
+}
+
+/**
+ * FleetTransferHost is one host's progress and, once State is final, result.
+ */
+export class FleetTransferHost {
+    /**
+     * Creates a new FleetTransferHost instance.
+     * @param {Partial<FleetTransferHost>} [$$source = {}] - The source object to create the FleetTransferHost.
+     */
+    constructor($$source = {}) {
+        if (!("connection_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["connection_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("hostname" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hostname"] = "";
+        }
+        if (!("state" in $$source)) {
+            /**
+             * State: "queued" | "connecting" | "transferring" | "done" | "error" | "cancelled".
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["target"] = undefined;
+        }
+        if (!("files_done" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["files_done"] = 0;
+        }
+        if (!("files_total" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["files_total"] = 0;
+        }
+        if (!("files_skipped" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["files_skipped"] = 0;
+        }
+        if (!("unreadable" in $$source)) {
+            /**
+             * Unreadable counts remote entries a download could not list or read
+             * as the login user (permission denied); they are left out.
+             * @member
+             * @type {number}
+             */
+            this["unreadable"] = 0;
+        }
+        if (!("bytes" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["bytes"] = 0;
+        }
+        if (!("total" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["total"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["current"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+        if (!("duration_ms" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["duration_ms"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FleetTransferHost instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FleetTransferHost}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FleetTransferHost(/** @type {Partial<FleetTransferHost>} */($$parsedSource));
+    }
+}
+
+/**
+ * FleetUploadOptions is one file or directory sent to many hosts.
+ */
+export class FleetUploadOptions {
+    /**
+     * Creates a new FleetUploadOptions instance.
+     * @param {Partial<FleetUploadOptions>} [$$source = {}] - The source object to create the FleetUploadOptions.
+     */
+    constructor($$source = {}) {
+        if (!("local_path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["local_path"] = "";
+        }
+        if (!("remote_dir" in $$source)) {
+            /**
+             * RemoteDir is where the file or directory lands, as <dir>/<name>.
+             * Empty or "~" is the login user's home; "~/x" and relative paths are
+             * under it. Created when missing.
+             * @member
+             * @type {string}
+             */
+            this["remote_dir"] = "";
+        }
+        if (!("existing" in $$source)) {
+            /**
+             * Existing decides what happens to a file already on the host:
+             *   "skip"      - leave it (default)
+             *   "overwrite" - always replace
+             *   "changed"   - replace when the size differs or the local copy is
+             *                 newer; uploaded files take the local mtime, so a
+             *                 second run skips what the first one sent
+             * @member
+             * @type {string}
+             */
+            this["existing"] = "";
+        }
+        if (!("mode" in $$source)) {
+            /**
+             * Mode is an octal permission set on every uploaded file ("0755");
+             * empty leaves the server's default.
+             * @member
+             * @type {string}
+             */
+            this["mode"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FleetUploadOptions instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FleetUploadOptions}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FleetUploadOptions(/** @type {Partial<FleetUploadOptions>} */($$parsedSource));
+    }
+}
+
+/**
  * ForwardKind tags which of the three SSH forwarding modes a Forward
  * represents.
  * @readonly

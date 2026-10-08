@@ -3,7 +3,7 @@
   // tools that act on many hosts at once, in plain sight instead of behind
   // a right-click. Read-only tools first; the one that writes stands apart.
   import { fleet, type FleetTool } from "./fleetStore.svelte";
-  import { IconTable, IconShieldCheck, IconCompare, IconKeyRound } from "./iconMap";
+  import { IconTable, IconShieldCheck, IconCompare, IconKeyRound, IconUpload, IconDownload } from "./iconMap";
 
   interface Props {
     ids: string[];
@@ -23,6 +23,9 @@
   <button disabled={ids.length === 0} onclick={() => open("tls")}><IconShieldCheck size={13} />Check TLS certificates…</button>
   <button disabled={ids.length < 2} title={ids.length < 2 ? "Needs two or more hosts" : ""} onclick={() => open("compare")}><IconCompare size={13} />Compare file…</button>
   <span class="sep"></span>
+  <button disabled={ids.length === 0} onclick={() => open("download")}><IconDownload size={13} />Download files…</button>
+  <span class="sep"></span>
+  <button disabled={ids.length === 0} onclick={() => open("upload")}><IconUpload size={13} />Upload file…</button>
   <button disabled={ids.length === 0} onclick={() => open("copykey")}><IconKeyRound size={13} />Copy SSH key…</button>
   {#if ids.length === 0}<span class="none">No SSH hosts here.</span>{/if}
 </div>

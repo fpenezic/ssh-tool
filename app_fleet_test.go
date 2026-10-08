@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/store"
 )
 
@@ -76,5 +77,18 @@ func TestKeyCommentRe(t *testing.T) {
 		if keyCommentRe.MatchString(bad) {
 			t.Errorf("accepted %q", bad)
 		}
+	}
+}
+
+// Download folders: named after the connection, legal on every OS, and
+// unique even when two hosts share a name (case-insensitively).
+func TestFleetHostDirs(t *testing.T) {
+	got := fleetHostDirs([]sshlayer.BatchHostInput{
+		{ConnectionID: "a", Name: "web:01"},
+		{ConnectionID: "b", Name: "Web_01"},
+		{ConnectionID: "c", Name: "", Hostname: "db.example.com"},
+	})
+	if got["a"] != "web_01" || got["b"] != "Web_01-2" || got["c"] != "db.example.com" {
+		t.Errorf("dirs = %v", got)
 	}
 }

@@ -8734,13 +8734,18 @@ func (a *App) BatchExec(in BatchExecInput) ([]sshlayer.BatchHostResult, error) {
 // runBatch runs one command on already-resolved hosts with the user's
 // connect timeout. Shared by Run command and the Fleet tools.
 func (a *App) runBatch(hosts []sshlayer.BatchHostInput, command string, timeoutSeconds int) []sshlayer.BatchHostResult {
-	var ct time.Duration
+	return sshlayer.BatchExec(a.db, a.vault, a.makeHostKeyCallback(), a.makeAlgoLookup(), a.batchConnectTimeout(), hosts, command, timeoutSeconds)
+}
+
+// batchConnectTimeout is the user's connect timeout for the quiet,
+// tab-less paths (batch exec, fleet tools); 0 = the layer's default.
+func (a *App) batchConnectTimeout() time.Duration {
 	if raw := a.SettingsGet("connect_timeout_seconds"); raw != "" {
 		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
-			ct = time.Duration(n) * time.Second
+			return time.Duration(n) * time.Second
 		}
 	}
-	return sshlayer.BatchExec(a.db, a.vault, a.makeHostKeyCallback(), a.makeAlgoLookup(), ct, hosts, command, timeoutSeconds)
+	return 0
 }
 
 // batchHosts resolves connection ids (and "dyn:<entryId>" dynamic entries)

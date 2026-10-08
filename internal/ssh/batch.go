@@ -82,6 +82,10 @@ type BatchHostInput struct {
 	Settings     *store.ResolvedSettings
 	Name         string
 	Hostname     string
+	// Session, when set, is an open session to use instead of dialing:
+	// fleet transfers on selected tabs reuse its SFTP client (no new
+	// login, so hosts behind an interactive prompt or 2FA work too).
+	Session *Session
 }
 
 func runOneBatch(

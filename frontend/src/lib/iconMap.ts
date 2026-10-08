@@ -18,6 +18,8 @@ import Info from "@lucide/svelte/icons/info";
 import Monitor from "@lucide/svelte/icons/monitor";
 import Key from "@lucide/svelte/icons/key";
 import KeyRound from "@lucide/svelte/icons/key-round";
+import Upload from "@lucide/svelte/icons/upload";
+import Minus from "@lucide/svelte/icons/minus";
 import KeySquare from "@lucide/svelte/icons/key-square";
 import Lock from "@lucide/svelte/icons/lock";
 import Plus from "@lucide/svelte/icons/plus";
@@ -55,6 +57,8 @@ export {
   Monitor as IconMonitor,
   Key as IconKey,
   KeyRound as IconKeyRound,
+  Upload as IconUpload,
+  Minus as IconMinus,
   KeySquare as IconKeySquare,
   Lock as IconLock,
   Plus as IconPlus,
