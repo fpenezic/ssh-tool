@@ -7,7 +7,11 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.110.0] - Upload to and download from many hosts
+
+Send a file to many hosts, or collect files such as logs from all of them
+into a folder per host - from the Fleet bar or from selected terminal
+tabs. Plus two fixes.
 
 ### Fleet
 
