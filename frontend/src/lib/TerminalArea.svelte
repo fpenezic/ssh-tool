@@ -13,7 +13,8 @@
   import { broadcast } from "./broadcast.svelte";
   import { recording } from "./recording.svelte";
   import { connectionActions } from "./connectionActions.svelte";
-  import { IconBroadcast, IconFolder, IconBot, IconHost, IconCopy, IconWorkspace, IconPopOut, IconSplitH, IconSplitV, IconX, IconGlobe, IconPlay, IconStop, IconExternalLink, IconEyeOff, IconPencil, IconSave } from "./iconMap";
+  import { IconBroadcast, IconFolder, IconBot, IconHost, IconCopy, IconWorkspace, IconPopOut, IconSplitH, IconSplitV, IconX, IconGlobe, IconPlay, IconStop, IconExternalLink, IconEyeOff, IconPencil, IconSave, IconUpload, IconDownload, IconRefresh } from "./iconMap";
+  import { fleet } from "./fleetStore.svelte";
   import { workspaces, workspaceColor } from "./workspaces.svelte";
   import { confirmModal } from "./confirmModal.svelte.ts";
   import { quickConnect, isQuickId } from "./quickConnect.svelte";
@@ -571,6 +572,35 @@
   function bulkRemoveFromBroadcast(tabId: string) {
     for (const sid of ctxTargetSessions(tabId)) broadcast.remove(sid);
     tabSelection.clear();
+  }
+
+  // Connected SSH sessions among the targeted tabs: what Upload / Download
+  // can use (they go over each session's own SFTP, no new login).
+  function ctxSshSessions(tabId: string, connectedOnly: boolean): string[] {
+    return ctxTargetSessions(tabId).filter((sid) => {
+      const s = sessions.tabs.find((x) => x.sessionId === sid);
+      return s && (s.kind ?? "ssh") === "ssh" && (!connectedOnly || s.status === "connected");
+    });
+  }
+
+  function bulkTransfer(tabId: string, tool: "upload" | "download") {
+    const sids = ctxSshSessions(tabId, true);
+    tabSelection.clear();
+    if (sids.length === 0) {
+      toast.err("No connected SSH session among the selected tabs");
+      return;
+    }
+    fleet.show({
+      tool,
+      ids: sids.map((sid) => `session:${sid}`),
+      label: `${sids.length} open session${sids.length === 1 ? "" : "s"}`,
+    });
+  }
+
+  function bulkReconnect(tabId: string) {
+    const sids = ctxSshSessions(tabId, false);
+    tabSelection.clear();
+    void connectionActions.reconnectSessions(sids);
   }
 
   async function bulkCloseTabs(tabId: string) {
@@ -1458,6 +1488,15 @@
             <IconBot size={13} /> Share {bulkN} with LLM - auto-run (YOLO)
           </button>
         {/if}
+        <button onclick={() => { const id = ctxMenu!.tabId; closeCtxMenu(); bulkTransfer(id, "upload"); }}>
+          <IconUpload size={13} /> Upload file to {bulkN} tabs…
+        </button>
+        <button onclick={() => { const id = ctxMenu!.tabId; closeCtxMenu(); bulkTransfer(id, "download"); }}>
+          <IconDownload size={13} /> Download files from {bulkN} tabs…
+        </button>
+        <button onclick={() => { const id = ctxMenu!.tabId; closeCtxMenu(); bulkReconnect(id); }}>
+          <IconRefresh size={13} /> Reconnect {bulkN} tabs
+        </button>
         <button onclick={() => { bulkHideTabs(ctxMenu!.tabId); closeCtxMenu(); }}>
           <IconEyeOff size={13} /> Hide {bulkN} tabs (keep running)
         </button>

@@ -109,6 +109,56 @@ interface MoveTarget {
   title: string;
 }
 class ConnectionActionsStore {
+  // Reconnect an open SSH session in place: tear it down, open a new one
+  // for the same connection and swap it into the panes that showed the
+  // old one. Throws on failure (the caller reports). Name/hostname come
+  // off the tab, not tree.connectionById: a dynamic-inventory session's
+  // connectionId is "dyn:<entryId>", which sshReopen resolves backend-side.
+  async reconnectSession(oldId: string): Promise<void> {
+    const sess = sessions.tabs.find((s) => s.sessionId === oldId);
+    if (!sess) return;
+    // Tear down first so the new session doesn't share quirks with the
+    // dying one (forwards / SFTP cache live on Session).
+    try { await api.sshDisconnect(oldId); } catch { /* already gone */ }
+    sessions.remove(oldId);
+    const r = await api.sshReopen(sess.connectionId);
+    sessions.add({
+      sessionId: r.session_id,
+      connectionId: sess.connectionId,
+      name: sess.name,
+      hostname: sess.hostname,
+      status: "connected",
+    });
+    paneTabs.swapSessionId(oldId, r.session_id);
+  }
+
+  // Reconnect several (selected tabs) under the bulk-connect limits, one
+  // summary toast at the end. Local shells and VNC are left out.
+  async reconnectSessions(ids: string[]): Promise<void> {
+    const ssh = ids.filter((id) => {
+      const s = sessions.tabs.find((x) => x.sessionId === id);
+      return s && (s.kind ?? "ssh") === "ssh";
+    });
+    if (ssh.length === 0) {
+      toast.info("No SSH session among the selected tabs");
+      return;
+    }
+    await connectPrefs.load();
+    toast.info(`Reconnecting ${ssh.length} session${ssh.length === 1 ? "" : "s"}...`);
+    const failed: string[] = [];
+    await runPooled(ssh, connectPrefs.get(BULK_CONCURRENT), connectPrefs.get(BULK_STAGGER_MS), async (id) => {
+      const name = sessions.tabs.find((x) => x.sessionId === id)?.name ?? id;
+      try {
+        await this.reconnectSession(id);
+      } catch (e) {
+        failed.push(`${name}: ${unwrapRaw(String((e as any)?.message ?? e))}`);
+        throw e;
+      }
+    });
+    if (failed.length === 0) toast.ok(`Reconnected ${ssh.length} session${ssh.length === 1 ? "" : "s"}`);
+    else toast.err(`${failed.length} of ${ssh.length} failed to reconnect:\n${failed.join("\n")}`);
+  }
+
   // Move-to-folder modal
   movePending = $state<MoveTarget | null>(null);
 
