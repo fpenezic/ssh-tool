@@ -12,7 +12,9 @@ package ssh
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
@@ -148,7 +150,7 @@ func runOneBatch(
 	case <-ctx.Done():
 		_ = sess.Signal(ssh.SIGINT)
 		_ = sess.Close()
-		r.Error = "command timed out"
+		r.Error = ErrBatchTimeout.Error()
 		r.Stdout = stdout.String()
 		r.Stderr = stderr.String()
 		r.DurationMs = time.Since(t0).Milliseconds()
@@ -171,6 +173,35 @@ func runOneBatch(
 	r.Error = err.Error()
 	return r
 }
+
+// quietAuthBudget bounds the handshake once the server has answered. The
+// connect timeout alone was too short: a server whose AuthorizedKeysCommand
+// (opkssh verify) waits on a slow resolver takes 10-30s to accept a key,
+// while an interactive connect, which has no deadline, gets through.
+const quietAuthBudget = 90 * time.Second
+
+// bannerDeadlineConn keeps the connect timeout only until the server's
+// first bytes (its SSH version line) arrive, then moves the deadline to
+// quietAuthBudget. A host that accepts TCP but never speaks SSH still
+// fails at the connect timeout; one that is merely slow to authenticate
+// gets the time it needs. The caller clears the deadline after the
+// handshake as before.
+type bannerDeadlineConn struct {
+	net.Conn
+	once sync.Once
+}
+
+func (c *bannerDeadlineConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	if n > 0 {
+		c.once.Do(func() { _ = c.Conn.SetDeadline(time.Now().Add(quietAuthBudget)) })
+	}
+	return n, err
+}
+
+// ErrBatchTimeout is the Error text of a host whose command outran the
+// batch timeout; its partial output is kept.
+var ErrBatchTimeout = errors.New("command timed out")
 
 // captureBuf is a small bounded buffer so a runaway `cat /dev/urandom`
 // doesn't OOM the app. Caps at 1 MiB per stream.
@@ -402,7 +433,7 @@ func dialChainFrom(
 			// can be bounded: a host that accepts TCP but never speaks SSH
 			// must not hold the caller (or the bastion pool's lock).
 			_ = conn.SetDeadline(time.Now().Add(connectTimeout))
-			sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
+			sshConn, chans, reqs, err := ssh.NewClientConn(&bannerDeadlineConn{Conn: conn}, addr, cfg)
 			_ = conn.SetDeadline(time.Time{})
 			if err != nil {
 				_ = conn.Close()
@@ -417,7 +448,7 @@ func dialChainFrom(
 				return nil, func() {}, "", fmt.Errorf("%s: dial through jump: %w", h.Label, err)
 			}
 			_ = netConn.SetDeadline(time.Now().Add(connectTimeout))
-			sshConn, chans, reqs, err := ssh.NewClientConn(netConn, addr, cfg)
+			sshConn, chans, reqs, err := ssh.NewClientConn(&bannerDeadlineConn{Conn: netConn}, addr, cfg)
 			_ = netConn.SetDeadline(time.Time{})
 			if err != nil {
 				_ = netConn.Close()
