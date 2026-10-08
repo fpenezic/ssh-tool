@@ -192,9 +192,9 @@
         connection_id: connection.id,
         kind: nKind,
         local_addr: nLocalAddr || undefined,
-        local_port: nLocalPort,
+        local_port: portOrUndef(nLocalPort),
         remote_host: nKind === "dynamic" ? undefined : nRemoteHost || undefined,
-        remote_port: nKind === "dynamic" ? undefined : nRemotePort,
+        remote_port: nKind === "dynamic" ? undefined : portOrUndef(nRemotePort),
         auto_start: nAutoStart,
         description: nDesc,
       });
@@ -208,22 +208,31 @@
 
   // Partial update via the backend's clear-flags: an emptied field is
   // cleared (back to inherit/null) rather than left unchanged.
+  // A cleared number input binds null, not undefined; 0 is the placeholder's
+  // "auto". Both mean "no port" - send a clear, not a value the backend
+  // would ignore (that kept the old fixed port when switching to auto).
+  function portOrUndef(v: number | null | undefined): number | undefined {
+    return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : undefined;
+  }
+
   async function updateForward() {
     if (!editingForwardId) return;
     err = null;
     const isDyn = nKind === "dynamic";
+    const localPort = portOrUndef(nLocalPort);
+    const remotePort = portOrUndef(nRemotePort);
     try {
       await api.forwardsUpdate({
         id: editingForwardId,
         local_addr: nLocalAddr || undefined,
         clear_local_addr: !nLocalAddr,
-        local_port: nLocalPort,
-        clear_local_port: nLocalPort === undefined,
+        local_port: localPort,
+        clear_local_port: localPort === undefined,
         // dynamic forwards have no remote host/port - always clear them.
         remote_host: isDyn ? undefined : (nRemoteHost || undefined),
         clear_remote_host: isDyn || !nRemoteHost,
-        remote_port: isDyn ? undefined : nRemotePort,
-        clear_remote_port: isDyn || nRemotePort === undefined,
+        remote_port: isDyn ? undefined : remotePort,
+        clear_remote_port: isDyn || remotePort === undefined,
         auto_start: nAutoStart,
         description: nDesc,
         browser_mode: nBrowserMode,
