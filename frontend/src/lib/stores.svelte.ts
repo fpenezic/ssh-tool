@@ -1007,7 +1007,7 @@ class ViewStore {
   // Set by reveal() to ask the connections Sidebar to scroll a row
   // into view once the tree has re-rendered with the ancestors
   // expanded. Sidebar consumes it in an $effect and nulls it back out.
-  pendingTreeReveal = $state<{ kind: "folder" | "connection"; id: string } | null>(null);
+  pendingTreeReveal = $state<{ kind: "folder" | "connection" | "dynamic"; id: string } | null>(null);
 
   // Jump from elsewhere (e.g. a credential's "Used by" list) to a
   // connection or folder in the connections tree: switch to that
@@ -1015,6 +1015,10 @@ class ViewStore {
   // it, and queue a scroll-into-view. Lazy imports avoid a circular
   // module ref at the top of the file.
   reveal(kind: "folder" | "connection", id: string) {
+    if (kind === "connection" && id.startsWith("dyn:")) {
+      void this.revealDynamic(id.slice(4));
+      return;
+    }
     this.tab = "connections";
     // Expand every ancestor folder so the target row exists in the DOM.
     let folderId: string | null;
@@ -1032,6 +1036,35 @@ class ViewStore {
       folderId = tree.folderById(folderId)?.parent_id ?? null;
     }
     this.pendingTreeReveal = { kind, id };
+  }
+
+  // reveal() for an inventory host ("dyn:<entryId>" sessions): find the
+  // dynamic folder holding the entry - loading the cached entries of
+  // folders nobody expanded yet - then expand down to it and select it.
+  async revealDynamic(entryId: string) {
+    this.tab = "connections";
+    const owner = () => {
+      for (const [fid, list] of Object.entries(tree.dynamicEntries)) {
+        if (list.some((e) => e.id === entryId)) return fid;
+      }
+      return null;
+    };
+    let folderId = owner();
+    for (const fid of Object.keys(tree.dynamicFolders)) {
+      if (folderId) break;
+      if (!tree.dynamicEntries[fid]) {
+        await tree.loadDynamicEntries(fid);
+        folderId = owner();
+      }
+    }
+    if (!folderId) return; // the host left the inventory since connecting
+    selection.selectDynamicEntry(folderId, entryId);
+    let f: string | null = folderId;
+    for (let i = 0; i < 10000 && f; i++) {
+      expandedConnections.set(f, true);
+      f = tree.folderById(f)?.parent_id ?? null;
+    }
+    this.pendingTreeReveal = { kind: "dynamic", id: "dyn:" + entryId };
   }
 
   setTab(t: ViewTab) {

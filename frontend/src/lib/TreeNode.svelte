@@ -992,6 +992,8 @@
             {@const dynStage = connectionActions.connectStage["dyn:" + e.id]}
             <div
               class="row dyn-entry"
+              data-kind="dynamic"
+              data-id={"dyn:" + e.id}
               class:stopped={e.status === "stopped"}
               class:live={dynLive}
               class:active-session={appPrefs.activeRowEmphasis && "dyn:" + e.id === activeConnId}
@@ -1045,6 +1047,8 @@
             {@const dynStage = connectionActions.connectStage["dyn:" + e.id]}
             <div
               class="row dyn-entry"
+              data-kind="dynamic"
+              data-id={"dyn:" + e.id}
               class:stopped={e.status === "stopped"}
               class:live={dynLive}
               class:active-session={appPrefs.activeRowEmphasis && "dyn:" + e.id === activeConnId}
