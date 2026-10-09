@@ -374,6 +374,48 @@
 
   let wsMenu = $state<{ id: string; x: number; y: number } | null>(null);
   let wsLabelDropHover = $state<string | null>(null);
+  // A tab hovering the left edge of a workspace label goes in front of the
+  // workspace, outside it - the only way to put a tab first when a
+  // workspace starts the bar. The rest of the label still adds to it.
+  let wsLabelEdge = $state<string | null>(null);
+  function onLabelEdge(e: DragEvent): boolean {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    return e.clientX < r.left + Math.max(6, r.width * 0.35);
+  }
+
+  // Dragging a workspace label moves the whole workspace: its tabs as one
+  // block, in their order. Not a tab drag (drag.tabId stays empty), so the
+  // panes offer no split zones.
+  let draggingWs = $state<string | null>(null);
+  function wsTabIds(ws: string): string[] {
+    return paneTabs.tabs.filter((t) => t.workspaceId === ws).map((t) => t.tabId);
+  }
+  // The tab a block dropped on `t` goes in front of: next to t, or past the
+  // whole workspace t belongs to, so another workspace is never split.
+  function wsAnchor(t: { tabId: string; workspaceId?: string }, onLeft: boolean): string | null {
+    const tabs = paneTabs.tabs;
+    const other = frameOf(t);
+    if (other) {
+      const ids = wsTabIds(other);
+      if (onLeft) return ids[0];
+      const lastIdx = tabs.findIndex((x) => x.tabId === ids[ids.length - 1]);
+      return tabs[lastIdx + 1]?.tabId ?? null;
+    }
+    if (onLeft) return t.tabId;
+    const idx = tabs.findIndex((x) => x.tabId === t.tabId);
+    return tabs[idx + 1]?.tabId ?? null;
+  }
+  function moveWsBlock(ws: string, before: string | null) {
+    const ids = wsTabIds(ws);
+    if (before && ids.includes(before)) return;
+    for (const id of ids) paneTabs.moveTabBefore(id, before);
+  }
+  function endWsDrag() {
+    draggingWs = null;
+    tabReorderIndicator = null;
+    wsLabelEdge = null;
+    wsLabelDropHover = null;
+  }
 
   function openWsMenu(e: MouseEvent, id: string) {
     e.preventDefault();
@@ -783,6 +825,11 @@
   async function onTabBarDrop(e: DragEvent) {
     if (isDetachedWindow) return;
     e.preventDefault();
+    if (draggingWs) {
+      moveWsBlock(draggingWs, null);
+      endWsDrag();
+      return;
+    }
     // A tab of this window dropped on the empty part of the bar: to the end,
     // out of any workspace frame.
     if (drag.tabId && paneTabs.tabs.some((t) => t.tabId === drag.tabId)) {
@@ -1097,25 +1144,65 @@
           class="ws-frame-label"
           class:compact={workspaces.compactLabels}
           class:drop-hover={wsLabelDropHover === ws}
+          class:dragging={draggingWs === ws}
           style:--ws-color={workspaceColor(ws)}
-          title="Workspace {w?.name}{workspaces.dirty[ws] ? ' (unsaved changes)' : ''} - click for save / close, drop a tab here to add it"
+          title="Workspace {w?.name}{workspaces.dirty[ws] ? ' (unsaved changes)' : ''} - click for save / close, drag to move the whole workspace, drop a tab here to add it (on the left edge: in front of it, outside)"
           onclick={(e) => openWsMenu(e, ws)}
           oncontextmenu={(e) => openWsMenu(e, ws)}
-          ondragover={(e: DragEvent) => {
-            if (!drag.tabId) return;
-            e.preventDefault();
+          draggable={!isDetachedWindow}
+          ondragstart={(e: DragEvent) => {
             e.stopPropagation();
-            wsLabelDropHover = ws;
+            draggingWs = ws;
+            try {
+              e.dataTransfer?.setData("application/x-ssh-tool-workspace", ws);
+              if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+            } catch { /* ignore */ }
           }}
-          ondragleave={() => { if (wsLabelDropHover === ws) wsLabelDropHover = null; }}
-          ondrop={(e: DragEvent) => {
+          ondragend={endWsDrag}
+          ondragover={(e: DragEvent) => {
+            if (draggingWs) {
+              if (draggingWs === ws) return;
+              e.preventDefault();
+              e.stopPropagation();
+              // Left half: in front of this workspace; right half: after it.
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              const onLeft = e.clientX < r.left + r.width / 2;
+              const ids = wsTabIds(ws);
+              wsLabelEdge = onLeft ? ws : null;
+              tabReorderIndicator = onLeft ? null : { tabId: ids[ids.length - 1], side: "right" };
+              return;
+            }
             if (!drag.tabId) return;
             e.preventDefault();
             e.stopPropagation();
+            const edge = onLabelEdge(e);
+            wsLabelEdge = edge ? ws : null;
+            wsLabelDropHover = edge ? null : ws;
+          }}
+          ondragleave={() => {
+            if (wsLabelDropHover === ws) wsLabelDropHover = null;
+            if (wsLabelEdge === ws) wsLabelEdge = null;
+          }}
+          ondrop={(e: DragEvent) => {
+            if (draggingWs) {
+              if (draggingWs === ws) return;
+              e.preventDefault();
+              e.stopPropagation();
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              const first = paneTabs.tabs.find((x) => x.workspaceId === ws);
+              if (first) moveWsBlock(draggingWs, wsAnchor(first, e.clientX < r.left + r.width / 2));
+              endWsDrag();
+              return;
+            }
+            if (!drag.tabId) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const edge = onLabelEdge(e);
             wsLabelDropHover = null;
+            wsLabelEdge = null;
             const firstOfFrame = visTabs.find((x) => x.workspaceId === ws && x.tabId !== drag.tabId);
             if (firstOfFrame) paneTabs.moveTabBefore(drag.tabId, firstOfFrame.tabId);
-            adoptFrame(drag.tabId, ws);
+            adoptFrame(drag.tabId, edge ? null : ws);
             tabReorderIndicator = null;
             drag.end(true);
             draggingTabId = null;
@@ -1125,6 +1212,7 @@
             }
           }}
         >
+          {#if wsLabelEdge === ws}<span class="ws-edge-bar"></span>{/if}
           <IconWorkspace size={11} />
           {#if !workspaces.compactLabels}<span>{w?.name}</span>{/if}
           {#if workspaces.dirty[ws]}<span class="ws-dirty"></span>{/if}
@@ -1154,6 +1242,21 @@
           paneTabs.activateTab(t.tabId);
         }}
         ondragover={(e: DragEvent) => {
+          if (draggingWs) {
+            if (t.workspaceId === draggingWs) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            const onLeft = e.clientX < rect.left + rect.width / 2;
+            // Over another workspace the block lands at that workspace's
+            // edge; show the bar there.
+            const other = frameOf(t);
+            const ids = other ? wsTabIds(other) : [];
+            const at = other ? (onLeft ? ids[0] : ids[ids.length - 1]) : t.tabId;
+            wsLabelEdge = other && onLeft ? other : null;
+            tabReorderIndicator = other && onLeft ? null : { tabId: at, side: onLeft ? "left" : "right" };
+            return;
+          }
           // Accept tab-on-tab drops so the tab bar reorders. We
           // figure out left/right insertion side from the cursor's
           // X relative to this tab's midpoint. The pane underneath
@@ -1175,6 +1278,15 @@
           if (tabReorderIndicator?.tabId === t.tabId) tabReorderIndicator = null;
         }}
         ondrop={(e: DragEvent) => {
+          if (draggingWs) {
+            if (t.workspaceId === draggingWs) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            moveWsBlock(draggingWs, wsAnchor(t, e.clientX < rect.left + rect.width / 2));
+            endWsDrag();
+            return;
+          }
           if (!drag.tabId || drag.tabId === t.tabId) return;
           e.preventDefault();
           e.stopPropagation();
@@ -1846,6 +1958,9 @@
     flex: none;
   }
   .ws-frame-label.compact { padding: 0 5px; }
+  .ws-frame-label { position: relative; cursor: grab; }
+  .ws-frame-label.dragging { opacity: 0.5; }
+  .ws-edge-bar { position: absolute; left: -3px; top: 0; bottom: 0; width: 2px; background: var(--blue); pointer-events: none; }
   .ws-frame-label.drop-hover { background: color-mix(in srgb, var(--ws-color) 45%, var(--crust)); }
   .ws-dirty {
     width: 6px; height: 6px; border-radius: 50%;
