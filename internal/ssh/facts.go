@@ -37,6 +37,13 @@ var factCommands = map[string]string{
 	"dns":     `awk '/^nameserver/{print $2}' /etc/resolv.conf 2>/dev/null`,
 	"ports":   `ss -Htln 2>/dev/null | awk '{print $4}' | sed 's/.*://' | sort -un`,
 	"inodes":  `df -Pi`,
+	// Containers through docker, else podman, as the login user: that
+	// needs the docker group (or rootless podman, which lists only the
+	// user's own containers). "noaccess" when the engine refuses, "none"
+	// without one - never a silent empty list.
+	"containers": `c=; for x in docker podman; do command -v $x >/dev/null 2>&1 && { c=$x; break; }; done;` +
+		` if [ -z "$c" ]; then echo none; elif ! ids=$($c ps -aq 2>/dev/null); then echo "noaccess $c";` +
+		` else echo "ok $c"; [ -n "$ids" ] && $c inspect --format '{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}|{{.State.ExitCode}}|{{.RestartCount}}|{{.State.StartedAt}}|{{.Config.Image}}|{{index .Config.Labels "com.docker.compose.project"}}' $ids 2>/dev/null; fi`,
 	// The last package transaction that upgraded something: apt's history
 	// log (rotated copies included) or dnf history, newest first, both
 	// readable without root. Printed as "YYYY-MM-DD HH:MM" in the host's
@@ -50,18 +57,91 @@ var factCommands = map[string]string{
 		` if [ -n "$d" ]; then echo "$d"; else rpm -qa --qf '%{INSTALLTIME}\n' | sort -n | tail -n 1; fi;` +
 		` elif [ -f /lib/apk/db/installed ]; then stat -c %Y /lib/apk/db/installed;` +
 		` else echo -; fi`,
-	// Running kernel, newest kernel image in /boot, and the newer of the
-	// two by version order. Containers and distros whose image names carry
+	// Running kernel, newest kernel image in /boot, the newer of the two by
+	// version order, and when that image was installed: its ctime, which
+	// the copy cannot carry over (rpm and kernel-install keep the package's
+	// mtime, days before the install). That is how long a reboot has waited. Containers and distros whose image names carry
 	// no version (Arch) print no newest: unknown, not "up to date".
 	"kernelpending": `r=$(uname -r); echo "$r"; n=$(ls /boot 2>/dev/null | sed -n 's/^vmlinuz-//p' | grep -v rescue | grep '[0-9]' | sort -V | tail -n 1);` +
-		` if [ -n "$n" ]; then echo "$n"; printf '%s\n%s\n' "$r" "$n" | sort -V | tail -n 1; fi`,
+		` if [ -n "$n" ]; then echo "$n"; printf '%s\n%s\n' "$r" "$n" | sort -V | tail -n 1; stat -c %Z "/boot/vmlinuz-$n" 2>/dev/null; fi`,
 	// Boots recorded in wtmp over the last 30 days, the current one
 	// included. No wtmp (or a last without -s) reads as unknown.
 	"reboots": `o=$(last -x -s -30days reboot 2>/dev/null) && echo "$o" | grep -c '^reboot' || echo -`,
 }
 
+// FactInfo describes one fact for the Gather facts form and the MCP
+// list_facts tool: the one place its label lives.
+type FactInfo struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	Group string `json:"group"`
+}
+
+// FactCatalog is every fact in form and report column order.
+var FactCatalog = []FactInfo{
+	{"cpu", "CPU cores and model", "Hardware"},
+	{"mem", "Memory and swap", "Hardware"},
+	{"disks", "Disks (size and use per filesystem)", "Hardware"},
+	{"inodes", "Inode use", "Hardware"},
+	{"virt", "Virtualization", "Hardware"},
+	{"os", "Distro and version", "System"},
+	{"kernel", "Kernel", "System"},
+	{"uptime", "Uptime", "System"},
+	{"timesync", "Time sync", "System"},
+	{"containers", "Containers (docker / podman)", "System"},
+	{"updates", "Pending updates (and security)", "Maintenance"},
+	{"lastpatch", "Last package update", "Maintenance"},
+	{"kernelpending", "Newer kernel installed", "Maintenance"},
+	{"reboot", "Reboot required", "Maintenance"},
+	{"reboots", "Boots in the last 30 days", "Maintenance"},
+	{"failed", "Failed systemd units", "Maintenance"},
+	{"ips", "IP addresses", "Network"},
+	{"gateway", "Default gateway", "Network"},
+	{"dns", "DNS resolvers", "Network"},
+	{"ports", "Listening TCP ports", "Network"},
+}
+
+// FactPreset is a named set of facts. Keys are stable: a folder remembers
+// the preset its last run used.
+type FactPreset struct {
+	Key   string   `json:"key"`
+	Label string   `json:"label"`
+	Facts []string `json:"facts"`
+}
+
+// FactPresets are the built-in presets, in menu order. "all" is filled in
+// from the catalog.
+var FactPresets = []FactPreset{
+	{"sizing", "Sizing (hardware + OS)", []string{"cpu", "mem", "disks", "virt", "os", "kernel", "uptime"}},
+	{"patch", "Patch day (updates, reboot, failed units)", []string{"os", "kernel", "uptime", "updates", "lastpatch", "kernelpending", "reboot", "failed"}},
+	// Health check: what a recurring report to a customer usually covers.
+	{"report", "Health check (patching, capacity, availability)", []string{"os", "kernel", "uptime", "timesync", "updates", "lastpatch", "kernelpending", "reboot", "reboots", "failed", "disks", "inodes", "containers"}},
+	{"all", "Everything", nil},
+}
+
 // FactKeys lists the known facts in report column order.
-var FactKeys = []string{"cpu", "mem", "disks", "inodes", "virt", "os", "kernel", "uptime", "timesync", "updates", "lastpatch", "kernelpending", "reboot", "reboots", "failed", "ips", "gateway", "dns", "ports"}
+var FactKeys = func() []string {
+	out := make([]string, len(FactCatalog))
+	for i, f := range FactCatalog {
+		out[i] = f.Key
+	}
+	return out
+}()
+
+func init() {
+	for i := range FactPresets {
+		if FactPresets[i].Key == "all" {
+			FactPresets[i].Facts = FactKeys
+		}
+	}
+}
+
+// FactCommand returns the shell snippet behind a fact, for showing the
+// user exactly what will run.
+func FactCommand(key string) (string, bool) {
+	c, ok := factCommands[key]
+	return c, ok
+}
 
 const factMarker = "__SSHTOOL_FACT__"
 
@@ -102,6 +182,18 @@ func isNetworkSource(fs string) bool {
 	return strings.HasPrefix(fs, "//") || strings.Contains(fs, ":")
 }
 
+// Container is one docker / podman container.
+type Container struct {
+	Name      string `json:"name"`
+	State     string `json:"state"`  // running | exited | restarting | created | paused | dead
+	Health    string `json:"health"` // healthy | unhealthy | starting | ""
+	ExitCode  int    `json:"exit_code"`
+	Restarts  int    `json:"restarts"`   // restarts by the engine since the container was created
+	StartedAt int64  `json:"started_at"` // unix seconds, 0 never started
+	Image     string `json:"image"`
+	Project   string `json:"project"` // compose project, "" outside one
+}
+
 // MountPct is one filesystem's inode use.
 type MountPct struct {
 	Mount string `json:"mount"`
@@ -126,6 +218,11 @@ type HostFacts struct {
 	Security  int        `json:"security"` // -1 unknown
 	Reboot    string     `json:"reboot"`   // yes | no | unknown | ""
 	Failed    int        `json:"failed"`   // -1 unknown
+	// ContainerAccess: ok | noaccess | none (no docker or podman) | ""
+	// (not collected). ContainerEngine is docker or podman.
+	ContainerAccess string      `json:"container_access"`
+	ContainerEngine string      `json:"container_engine"`
+	Containers      []Container `json:"containers"`
 	// FailedUnits names the failed units counted in Failed.
 	FailedUnits []string `json:"failed_units"`
 	// LastPatch: unix seconds of the last upgrade transaction (or, without
@@ -133,14 +230,16 @@ type HostFacts struct {
 	LastPatch int64 `json:"last_patch"`
 	// KernelLatest is the newest kernel in /boot; KernelPending says
 	// whether it is newer than the running one (yes | no | unknown | "").
-	KernelLatest  string   `json:"kernel_latest"`
-	KernelPending string   `json:"kernel_pending"`
-	Reboots30d    int      `json:"reboots_30d"` // -1 unknown
-	IPs           []string `json:"ips"`
-	Gateway       string   `json:"gateway"`
-	DNS           []string `json:"dns"`
-	Ports         []int    `json:"ports"`
-	Custom        string   `json:"custom"`
+	KernelLatest  string `json:"kernel_latest"`
+	KernelPending string `json:"kernel_pending"`
+	// KernelLatestAt: unix seconds the newest image was installed, 0 unknown.
+	KernelLatestAt int64    `json:"kernel_latest_at"`
+	Reboots30d     int      `json:"reboots_30d"` // -1 unknown
+	IPs            []string `json:"ips"`
+	Gateway        string   `json:"gateway"`
+	DNS            []string `json:"dns"`
+	Ports          []int    `json:"ports"`
+	Custom         string   `json:"custom"`
 }
 
 // ParseFacts turns the script's output into a HostFacts.
@@ -202,7 +301,12 @@ func ParseFacts(out string) HostFacts {
 				if lines[2] != first {
 					f.KernelPending = "yes"
 				}
+				if len(lines) >= 4 {
+					f.KernelLatestAt, _ = strconv.ParseInt(lines[3], 10, 64)
+				}
 			}
+		case "containers":
+			f.ContainerAccess, f.ContainerEngine, f.Containers = parseContainers(lines)
 		case "reboots":
 			f.Reboots30d = atoiOr(first, -1)
 		case "virt":
@@ -248,6 +352,45 @@ func ParseFacts(out string) HostFacts {
 		}
 	}
 	return f
+}
+
+// parseContainers reads the containers section: a status line, then one
+// "|"-separated inspect line per container.
+func parseContainers(lines []string) (access, engine string, list []Container) {
+	if len(lines) == 0 {
+		return "", "", nil
+	}
+	head := strings.Fields(lines[0])
+	if len(head) == 0 {
+		return "", "", nil
+	}
+	access = head[0]
+	if len(head) > 1 {
+		engine = head[1]
+	}
+	if access != "ok" {
+		return access, engine, nil
+	}
+	list = []Container{}
+	for _, l := range lines[1:] {
+		p := strings.Split(l, "|")
+		if len(p) < 8 {
+			continue
+		}
+		c := Container{
+			Name: strings.TrimPrefix(p[0], "/"), State: p[1], Health: p[2],
+			ExitCode: atoiOr(p[3], 0), Restarts: atoiOr(p[4], 0), Image: p[6], Project: p[7],
+		}
+		if c.Project == "<no value>" {
+			c.Project = ""
+		}
+		if t, err := time.Parse(time.RFC3339Nano, p[5]); err == nil && t.Year() > 1970 {
+			c.StartedAt = t.Unix()
+		}
+		list = append(list, c)
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
+	return access, engine, list
 }
 
 // parsePatchTime reads the lastpatch value: unix seconds from the

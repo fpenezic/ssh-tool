@@ -260,7 +260,9 @@ inventory entries included) or several connections shows a **Fleet**
 row in the right pane. The same entries are in the right-click menu.
 
 - **Gather facts…** - tick the facts to collect or pick a preset
-  (*Sizing*, *Patch day*, *Monthly report*, *Everything*). All commands are read-only and
+  (*Sizing*, *Patch day*, *Health check*, *Everything*). *Save as
+  preset…* keeps the ticked facts, the custom column and the timeout
+  under a name; a folder opens on the choice its last run used. All commands are read-only and
   run 8 hosts at a time. Update counts come from each host's cached
   package lists (`apt-get -s`, `dnf -C`), so they are as fresh as the
   host's last `apt update` / `dnf makecache`. The report groups hosts by
@@ -273,20 +275,62 @@ row in the right pane. The same entries are in the right-click menu.
   points they fold into one list column. In exports sizes are whole
   numbers with the unit in the header (disks in GiB, memory in MiB), so
   a spreadsheet sorts and sums them whatever its decimal separator.
-  For recurring reports to a customer the *Monthly report* preset adds
-  what such a report usually asks for: use per filesystem (space and
-  inodes, highest shown in *Disk use* / *Inode use*, yellow from 80%,
-  red from 90%), *Last update* (the last package transaction that upgraded
+  For recurring reports to a customer the *Health check* preset adds
+  what such a report usually asks for: use per filesystem (each mount
+  cell reads "40 GiB · 72%", with inode use added when it is 80% or
+  more; yellow from 80%, red from 90%; exports split it into size, use
+  and inode columns per mount), *Last update* (the last package transaction that upgraded
   something, from `/var/log/apt/history.log*` or `dnf history`, both
   readable without root; without either, when the package database last
   changed), *Newer kernel* (a newer kernel image in `/boot`
   than the one running; unknown in containers and where image names
   carry no version) and *Boots 30d* (boots recorded in wtmp over the
-  last 30 days, "-" where the host keeps no wtmp). Chips on top count
+  last 30 days, "-" where the host keeps no wtmp) and *Containers*
+  (docker, else podman: name, state, health, exit code, restarts by the
+  engine, image and compose project). Containers are read as the login
+  user like every other fact - no sudo - so the user must be in the
+  `docker` group; rootless podman lists only that user's own containers.
+  Without access the column reads "no access" and the report says so,
+  never "no containers". In the report a container that is unhealthy,
+  restarting, dead or exited with an error is red; one the engine
+  restarted (crash, out of memory) within the last 7 days is yellow - a
+  redeploy recreates the container and does not count; one that exited
+  with code 0 is listed for information. *Report settings…* takes
+  containers stopped on purpose (by name), like expected failed units. Chips on top count
   hosts with a filesystem over 80%, not on the newest kernel, or not
   updated in 30 days or more, measured at collection time. Failed units
   are listed by name. Network shares (CIFS, NFS, sshfs) are marked
   "(net)" and do not count toward *Disk total* or *Find similar*.
+  *Report* (next to *Table*) turns a run into a health report: a status
+  per host (green, yellow, red), findings that need someone (failed
+  services, filesystems over 80% with their trend and the date they
+  would fill at that pace, pending reboots, security updates, hosts not
+  updated in 30 days, hosts that did not answer), optionally the changes
+  since an earlier run (new or missing hosts, kernel and OS changes, reboots,
+  services that failed or recovered, new or closed ports, disk use that
+  moved 5 points or more) and disk trends with a small chart, then the
+  full table as an appendix. A host is red when it did not answer, has a
+  failed unit or a filesystem at the critical level; yellow for a
+  filesystem at the warning level, a reboot waiting longer than its grace
+  period (14 days by default, counted from when the newest kernel was
+  installed, else from the last upgrade), no update for the
+  set number of days, or security updates while its last update is older
+  than the grace period (7 days by default - updates released since the
+  last patch day are listed, not flagged). *Report settings…* sets those
+  thresholds and the *expected failed units* (a unit that fails by
+  design, such as irqbalance on a small VM): they are listed apart and
+  do not colour a host; *expected* next to a unit in the report adds it.
+  Settings are kept per folder, except *Prepared by*, which signs every
+  report (top and bottom, with the time the file was generated), and the
+  *Logo* shown top right (PNG, JPEG, WebP or SVG; embedded in the saved
+  file).
+  *Save report…* writes it as one HTML file;
+  open it in a browser to print or save as PDF. Runs on a folder are
+  kept (the last 24) for those comparisons and trends; runs on a hand-
+  picked set of hosts are not. *Changes since* appears only when you pick
+  a run to compare with (*Compare with* above the report, not part of
+  the saved file); *delete this run* there drops a test run from the
+  history.
   *Copy table* puts the visible rows on the clipboard as an HTML table
   (Teams and Outlook paste a table, Excel splits it into cells) with
   tab-separated text as the plain fallback. *Export CSV* (UTF-8 with a
@@ -1530,6 +1574,17 @@ What the LLM can do:
   until a connect) and open one. Opening a session always asks you to
   approve first, and the new session is then shared with the LLM
   automatically so it can start working.
+- **list_facts / gather_facts / facts_history / facts_snapshot** - for a
+  status or health report over many servers ("write the monthly report
+  for the Hetzner folder"). `gather_facts` runs Gather facts on a folder
+  (or listed hosts) with the fixed, read-only fact snippets - never the
+  custom column. Before anything connects you get one approval listing
+  every host (untick the ones to leave out), every fact and the exact
+  script. A folder run is stored in that folder's report history, so it
+  also shows under Gather facts > Report. The LLM gets the folder's
+  report settings with the results (thresholds, expected failed units)
+  and is told to apply them. `facts_history` and `facts_snapshot` read
+  stored runs without connecting, e.g. to compare with last month.
 
 **Create connections in bulk (Allow manage).** The Share-with-LLM
 popover has an *Allow manage (create connections)* toggle. It is off by
@@ -1975,11 +2030,16 @@ Frame membership:
 
 - Drag a tab onto a tab inside a frame (or onto the frame's name) to add
   it; drag it onto a tab outside the frame, or the empty end of the bar,
-  to take it out. Right-click a tab for **Add to workspace "…"** and
+  to take it out. Dropped on the left edge of the frame's name, a tab
+  goes in front of the frame, outside it - the way to put a tab first
+  when a workspace starts the bar. Right-click a tab for **Add to workspace "…"** and
   **Remove from workspace "…"**, which also act on a multi-selection.
 - A dot on the frame's name means its tabs changed since the last save.
   Nothing is saved on its own - **Save changes** writes the frame.
 - A tab opened later lands outside the frame until you add it.
+- Drag the frame's name (the icon, or the full name) to move the whole
+  workspace: its tabs move as one block, in order. Dropped on another
+  workspace it lands before or after that workspace, never inside it.
 - **Compact labels** in the name's menu shows only the icon, for a
   narrower bar. It applies to all frames on this machine.
 

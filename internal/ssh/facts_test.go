@@ -61,13 +61,16 @@ func TestParseFactsMissingSections(t *testing.T) {
 }
 
 func TestParseFactsMaintenance(t *testing.T) {
-	out := factMarker + "kernelpending\n6.1.0-25-amd64\n6.1.0-26-amd64\n6.1.0-26-amd64\n" +
+	out := factMarker + "kernelpending\n6.1.0-25-amd64\n6.1.0-26-amd64\n6.1.0-26-amd64\n1759500000\n" +
 		factMarker + "lastpatch\n1759900000\n" +
 		factMarker + "reboots\n2\n" +
 		factMarker + "inodes\nFilesystem Inodes IUsed IFree IUse% Mounted on\n/dev/sda1 655360 600000 55360 92% /\n/dev/sdb1 - - - - /data\ntmpfs 1000 1 999 1% /run\n"
 	f := ParseFacts(out)
 	if f.Kernel != "6.1.0-25-amd64" || f.KernelLatest != "6.1.0-26-amd64" || f.KernelPending != "yes" {
 		t.Errorf("kernel = %q %q %q", f.Kernel, f.KernelLatest, f.KernelPending)
+	}
+	if f.KernelLatestAt != 1759500000 {
+		t.Errorf("kernel installed at = %d", f.KernelLatestAt)
 	}
 	if f.LastPatch != 1759900000 || f.Reboots30d != 2 {
 		t.Errorf("lastpatch/reboots = %d %d", f.LastPatch, f.Reboots30d)
@@ -133,5 +136,56 @@ func TestParsePatchTime(t *testing.T) {
 	}
 	if parsePatchTime("-") != 0 {
 		t.Error("unknown")
+	}
+}
+
+// Every catalog entry has a command and every command an entry; presets
+// only name known facts.
+func TestFactCatalogMatchesCommands(t *testing.T) {
+	if len(FactCatalog) != len(factCommands) {
+		t.Errorf("catalog %d, commands %d", len(FactCatalog), len(factCommands))
+	}
+	for _, f := range FactCatalog {
+		if _, ok := factCommands[f.Key]; !ok {
+			t.Errorf("no command for %q", f.Key)
+		}
+	}
+	for _, p := range FactPresets {
+		if len(p.Facts) == 0 {
+			t.Errorf("preset %q is empty", p.Key)
+		}
+		for _, k := range p.Facts {
+			if _, ok := factCommands[k]; !ok {
+				t.Errorf("preset %q names unknown fact %q", p.Key, k)
+			}
+		}
+	}
+}
+
+func TestParseContainers(t *testing.T) {
+	out := factMarker + "containers\nok docker\n" +
+		"/web|running|unhealthy|0|3|2026-10-05T10:00:00.123456789Z|nginx:1.27|shop\n" +
+		"/job|exited||0|0|2026-10-01T02:00:00Z|busybox|<no value>\n" +
+		"/db|running||0|0|0001-01-01T00:00:00Z|postgres:16|shop\n"
+	f := ParseFacts(out)
+	if f.ContainerAccess != "ok" || f.ContainerEngine != "docker" || len(f.Containers) != 3 {
+		t.Fatalf("containers = %q %q %+v", f.ContainerAccess, f.ContainerEngine, f.Containers)
+	}
+	web := f.Containers[2]
+	if web.Name != "web" || web.Health != "unhealthy" || web.Restarts != 3 || web.Project != "shop" || web.StartedAt == 0 {
+		t.Errorf("web = %+v", web)
+	}
+	if f.Containers[1].Project != "" || f.Containers[0].StartedAt != 0 {
+		t.Errorf("job/db = %+v", f.Containers[:2])
+	}
+	for _, c := range []string{"noaccess docker", "none"} {
+		f := ParseFacts(factMarker + "containers\n" + c + "\n")
+		if f.ContainerAccess == "ok" || f.Containers != nil {
+			t.Errorf("%s = %+v", c, f)
+		}
+	}
+	// An engine with no containers is ok and empty, not unknown.
+	if f := ParseFacts(factMarker + "containers\nok podman\n"); f.ContainerAccess != "ok" || f.Containers == nil {
+		t.Errorf("empty = %+v", f)
 	}
 }

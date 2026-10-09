@@ -95,6 +95,91 @@ export class BatchHostResult {
 }
 
 /**
+ * Container is one docker / podman container.
+ */
+export class Container {
+    /**
+     * Creates a new Container instance.
+     * @param {Partial<Container>} [$$source = {}] - The source object to create the Container.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("state" in $$source)) {
+            /**
+             * running | exited | restarting | created | paused | dead
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+        if (!("health" in $$source)) {
+            /**
+             * healthy | unhealthy | starting | ""
+             * @member
+             * @type {string}
+             */
+            this["health"] = "";
+        }
+        if (!("exit_code" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["exit_code"] = 0;
+        }
+        if (!("restarts" in $$source)) {
+            /**
+             * restarts by the engine since the container was created
+             * @member
+             * @type {number}
+             */
+            this["restarts"] = 0;
+        }
+        if (!("started_at" in $$source)) {
+            /**
+             * unix seconds, 0 never started
+             * @member
+             * @type {number}
+             */
+            this["started_at"] = 0;
+        }
+        if (!("image" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["image"] = "";
+        }
+        if (!("project" in $$source)) {
+            /**
+             * compose project, "" outside one
+             * @member
+             * @type {string}
+             */
+            this["project"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Container instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {Container}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new Container(/** @type {Partial<Container>} */($$parsedSource));
+    }
+}
+
+/**
  * ContainerInfo is one running container as the picker shows it.
  */
 export class ContainerInfo {
@@ -366,6 +451,102 @@ export class DiskTopResult {
             $$parsedSource["dirs"] = $$createField0_0($$parsedSource["dirs"]);
         }
         return new DiskTopResult(/** @type {Partial<DiskTopResult>} */($$parsedSource));
+    }
+}
+
+/**
+ * FactInfo describes one fact for the Gather facts form and the MCP
+ * list_facts tool: the one place its label lives.
+ */
+export class FactInfo {
+    /**
+     * Creates a new FactInfo instance.
+     * @param {Partial<FactInfo>} [$$source = {}] - The source object to create the FactInfo.
+     */
+    constructor($$source = {}) {
+        if (!("key" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["key"] = "";
+        }
+        if (!("label" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["label"] = "";
+        }
+        if (!("group" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["group"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FactInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FactInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FactInfo(/** @type {Partial<FactInfo>} */($$parsedSource));
+    }
+}
+
+/**
+ * FactPreset is a named set of facts. Keys are stable: a folder remembers
+ * the preset its last run used.
+ */
+export class FactPreset {
+    /**
+     * Creates a new FactPreset instance.
+     * @param {Partial<FactPreset>} [$$source = {}] - The source object to create the FactPreset.
+     */
+    constructor($$source = {}) {
+        if (!("key" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["key"] = "";
+        }
+        if (!("label" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["label"] = "";
+        }
+        if (!("facts" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["facts"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FactPreset instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FactPreset}
+     */
+    static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType2;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("facts" in $$parsedSource) {
+            $$parsedSource["facts"] = $$createField2_0($$parsedSource["facts"]);
+        }
+        return new FactPreset(/** @type {Partial<FactPreset>} */($$parsedSource));
     }
 }
 
@@ -897,6 +1078,29 @@ export class HostFacts {
              */
             this["failed"] = 0;
         }
+        if (!("container_access" in $$source)) {
+            /**
+             * ContainerAccess: ok | noaccess | none (no docker or podman) | ""
+             * (not collected). ContainerEngine is docker or podman.
+             * @member
+             * @type {string}
+             */
+            this["container_access"] = "";
+        }
+        if (!("container_engine" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["container_engine"] = "";
+        }
+        if (!("containers" in $$source)) {
+            /**
+             * @member
+             * @type {Container[]}
+             */
+            this["containers"] = [];
+        }
         if (!("failed_units" in $$source)) {
             /**
              * FailedUnits names the failed units counted in Failed.
@@ -929,6 +1133,14 @@ export class HostFacts {
              * @type {string}
              */
             this["kernel_pending"] = "";
+        }
+        if (!("kernel_latest_at" in $$source)) {
+            /**
+             * KernelLatestAt: unix seconds the newest image was installed, 0 unknown.
+             * @member
+             * @type {number}
+             */
+            this["kernel_latest_at"] = 0;
         }
         if (!("reboots_30d" in $$source)) {
             /**
@@ -983,12 +1195,13 @@ export class HostFacts {
      * @returns {HostFacts}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType3;
-        const $$createField5_0 = $$createType5;
-        const $$createField15_0 = $$createType6;
-        const $$createField20_0 = $$createType6;
-        const $$createField22_0 = $$createType6;
-        const $$createField23_0 = $$createType7;
+        const $$createField4_0 = $$createType4;
+        const $$createField5_0 = $$createType6;
+        const $$createField17_0 = $$createType8;
+        const $$createField18_0 = $$createType2;
+        const $$createField24_0 = $$createType2;
+        const $$createField26_0 = $$createType2;
+        const $$createField27_0 = $$createType9;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("disks" in $$parsedSource) {
             $$parsedSource["disks"] = $$createField4_0($$parsedSource["disks"]);
@@ -996,17 +1209,20 @@ export class HostFacts {
         if ("inodes" in $$parsedSource) {
             $$parsedSource["inodes"] = $$createField5_0($$parsedSource["inodes"]);
         }
+        if ("containers" in $$parsedSource) {
+            $$parsedSource["containers"] = $$createField17_0($$parsedSource["containers"]);
+        }
         if ("failed_units" in $$parsedSource) {
-            $$parsedSource["failed_units"] = $$createField15_0($$parsedSource["failed_units"]);
+            $$parsedSource["failed_units"] = $$createField18_0($$parsedSource["failed_units"]);
         }
         if ("ips" in $$parsedSource) {
-            $$parsedSource["ips"] = $$createField20_0($$parsedSource["ips"]);
+            $$parsedSource["ips"] = $$createField24_0($$parsedSource["ips"]);
         }
         if ("dns" in $$parsedSource) {
-            $$parsedSource["dns"] = $$createField22_0($$parsedSource["dns"]);
+            $$parsedSource["dns"] = $$createField26_0($$parsedSource["dns"]);
         }
         if ("ports" in $$parsedSource) {
-            $$parsedSource["ports"] = $$createField23_0($$parsedSource["ports"]);
+            $$parsedSource["ports"] = $$createField27_0($$parsedSource["ports"]);
         }
         return new HostFacts(/** @type {Partial<HostFacts>} */($$parsedSource));
     }
@@ -1135,7 +1351,7 @@ export class PacketDecode {
      * @returns {PacketDecode}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType8;
+        const $$createField2_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("fields" in $$parsedSource) {
             $$parsedSource["fields"] = $$createField2_0($$parsedSource["fields"]);
@@ -1269,7 +1485,7 @@ export class ParsedPacket {
      * @returns {ParsedPacket}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType10;
+        const $$createField10_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("decoded" in $$parsedSource) {
             $$parsedSource["decoded"] = $$createField10_0($$parsedSource["decoded"]);
@@ -1600,9 +1816,9 @@ export class ServerStats {
      * @returns {ServerStats}
      */
     static createFrom($$source = {}) {
-        const $$createField15_0 = $$createType6;
-        const $$createField16_0 = $$createType12;
-        const $$createField20_0 = $$createType6;
+        const $$createField15_0 = $$createType2;
+        const $$createField16_0 = $$createType14;
+        const $$createField20_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("user_names" in $$parsedSource) {
             $$parsedSource["user_names"] = $$createField15_0($$parsedSource["user_names"]);
@@ -1806,14 +2022,16 @@ export class UnitInfo {
 // Private type creation functions
 const $$createType0 = DirUsage.createFrom;
 const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = DiskSize.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = MountPct.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = $Create.Array($Create.Any);
-const $$createType7 = $Create.Array($Create.Any);
-const $$createType8 = $Create.Map($Create.Any, $Create.Any);
-const $$createType9 = PacketDecode.createFrom;
-const $$createType10 = $Create.Nullable($$createType9);
-const $$createType11 = DiskPart.createFrom;
-const $$createType12 = $Create.Array($$createType11);
+const $$createType2 = $Create.Array($Create.Any);
+const $$createType3 = DiskSize.createFrom;
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = MountPct.createFrom;
+const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = Container.createFrom;
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = $Create.Array($Create.Any);
+const $$createType10 = $Create.Map($Create.Any, $Create.Any);
+const $$createType11 = PacketDecode.createFrom;
+const $$createType12 = $Create.Nullable($$createType11);
+const $$createType13 = DiskPart.createFrom;
+const $$createType14 = $Create.Array($$createType13);

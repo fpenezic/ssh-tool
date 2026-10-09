@@ -4,11 +4,14 @@
 
 export {
     BatchHostResult,
+    Container,
     ContainerInfo,
     DirUsage,
     DiskPart,
     DiskSize,
     DiskTopResult,
+    FactInfo,
+    FactPreset,
     FleetDownloadOptions,
     FleetTransferHost,
     FleetUploadOptions,

@@ -9,12 +9,49 @@ a prerelease upstream.
 
 ## [Unreleased]
 
+### Tabs
+
+- Drag a workspace by its name in the tab bar to move all its tabs
+  together. A tab dropped on the left edge of a workspace's name goes in
+  front of the workspace without joining it, so a tab can now sit first
+  when a workspace starts the bar.
+
 ### Fleet
 
-- Gather facts has a *Monthly report* preset for the recurring report a
+- Gather facts reads docker / podman containers (state, health, exit
+  code, engine restarts, compose project), and the Health check preset
+  and report include them: unhealthy, restarting or failed containers
+  need action, ones that crashed and came back recently need attention,
+  and containers stopped on purpose can be marked expected. Read as the
+  login user, so it needs the docker group; without it the report says
+  "no access" rather than "no containers".
+- MCP: an LLM can gather facts from a folder or a list of hosts
+  (`list_facts`, `gather_facts`) and read stored runs (`facts_history`,
+  `facts_snapshot`) to write a status or health report. One approval
+  lists every host - untick any to leave it out - every fact and the
+  exact script; nothing connects before it. Folder runs land in the
+  folder's report history, and the LLM gets the folder's thresholds and
+  expected failed units with the results.
+
+- Gather facts has a *Report* view: a health report with a status per
+  host, only the findings that need someone, optionally the changes
+  since a run you pick, and disk trends (growth per 30 days, the date a filesystem would
+  fill at that pace), the full table as an appendix. *Save report…*
+  writes one HTML file to print or save as PDF. The last 24 runs per
+  folder are kept for the comparisons. *Report settings…* (per folder)
+  sets the warning and critical disk levels, how old the last update
+  must be before pending security updates flag a host, how long a reboot
+  may wait (counted from when the new kernel was installed), and failed units
+  that are expected and only listed. A *Prepared by* name and the time
+  the file was generated sign every report, with an optional company
+  logo.
+- Gather facts: *Save as preset…* keeps a set of facts (with the custom
+  column and timeout) under a name, and a folder opens on the facts its
+  last run used.
+- Gather facts has a *Health check* preset for the recurring report a
   customer contract asks for: patch level, capacity and availability.
-  New facts: disk use per filesystem (with the highest in a *Disk use*
-  column), *Inode use*, *Last update* (the last upgrade, from apt or dnf history),
+  New facts: disk and inode use per filesystem (in the mount's cell;
+  separate columns in exports), *Last update* (the last upgrade, from apt or dnf history),
   *Newer kernel* (installed but not running) and *Boots 30d*. Cells turn
   yellow or red past 80% / 90% use, a kernel waiting for a reboot, or
   30 days without an update, and chips on top count those hosts.
@@ -31,6 +68,10 @@ a prerelease upstream.
   answers, authentication gets up to 90 seconds.
 - Fleet tools on a folder leave out inventory VMs the provider reports
   stopped; picking hosts by hand still includes them.
+- Gather facts on a folder asks the hosts the folder has when you press
+  Run, not when the dialog opened: after pinning an inventory host, *Run
+  again* no longer counted it twice (as the new connection and as an
+  "unknown dynamic entry").
 - Gather facts: a host that runs out of time is listed under "Did not
   answer" with the fact it was still collecting, instead of showing as
   answered with the rest of its facts empty.

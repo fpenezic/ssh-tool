@@ -130,6 +130,9 @@ type mcpState struct {
 
 	approvalsMu sync.Mutex
 	approvals   map[string]chan mcpDecision // approvalID -> response channel
+	// factsPicks holds the host ids the user kept in a gather_facts
+	// approval, set just before the decision is sent. Guarded by approvalsMu.
+	factsPicks map[string][]string
 
 	// activity is a bounded ring of what the LLM did, newest last. Feeds the
 	// live LLM-activity panel; a copy is also written to audit.db when the
@@ -149,8 +152,9 @@ const mcpActivityOutputCap = 16 * 1024
 
 func newMcpState() *mcpState {
 	return &mcpState{
-		grants:    map[string]mcpGrantLevel{},
-		approvals: map[string]chan mcpDecision{},
+		grants:     map[string]mcpGrantLevel{},
+		approvals:  map[string]chan mcpDecision{},
+		factsPicks: map[string][]string{},
 	}
 }
 

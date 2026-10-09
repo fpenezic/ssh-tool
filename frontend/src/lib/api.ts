@@ -889,6 +889,21 @@ export const api = {
   // "dyn:<entryId>" dynamic entries) and run 8 hosts at a time.
   gatherFacts: (input: { connection_ids: string[]; facts: string[]; custom: string; timeout_seconds: number }) =>
     G.GatherFacts(input as any) as unknown as Promise<FactsHostResult[]>,
+  // The fact catalog, presets and report defaults (one source, in Go), and
+  // a folder's stored runs.
+  factsCatalog: () => G.FactsCatalog() as unknown as Promise<FactsCatalog>,
+  factsHistory: (folderId: string) =>
+    G.FactsHistory(folderId) as unknown as Promise<FactsRunStored[] | null>,
+  factsSaveRun: (folderId: string, run: FactsRunStored) =>
+    G.FactsSaveRun(folderId, run as any) as unknown as Promise<void>,
+  factsDeleteRun: (folderId: string, at: number) =>
+    G.FactsDeleteRun(folderId, at) as unknown as Promise<void>,
+  factsReportSettingsGet: (folderId: string) =>
+    G.FactsReportSettingsGet(folderId) as unknown as Promise<ReportSettingsWire>,
+  factsReportSettingsSet: (folderId: string, rs: ReportSettingsWire) =>
+    G.FactsReportSettingsSet(folderId, rs as any) as unknown as Promise<void>,
+  mcpFactsApprovalRespond: (approvalId: string, approve: boolean, hostIds: string[]) =>
+    G.McpFactsApprovalRespond(approvalId, approve, hostIds) as unknown as Promise<void>,
   checkTLSCerts: (input: { connection_ids: string[]; ports: number[] }) =>
     G.CheckTLSCerts(input as any) as unknown as Promise<TLSCertResult[]>,
   readFileAcross: (ids: string[], path: string) =>
@@ -2130,15 +2145,53 @@ export interface HostFacts {
   reboot: string;   // yes | no | unknown | ""
   failed: number;   // -1 unknown
   failed_units?: string[] | null;
+  container_access?: string;  // ok | noaccess | none | "" (not collected)
+  container_engine?: string;
+  containers?: FactsContainer[] | null;
   last_patch?: number;      // unix seconds, 0 unknown
   kernel_latest?: string;
   kernel_pending?: string;  // yes | no | unknown | ""
+  kernel_latest_at?: number; // unix seconds the newest kernel was installed, 0 unknown
   reboots_30d?: number;     // -1 unknown
   ips: string[] | null;
   gateway: string;
   dns: string[] | null;
   ports: number[] | null;
   custom: string;
+}
+
+export interface FactsContainer {
+  name: string;
+  state: string;
+  health: string;
+  exit_code: number;
+  restarts: number;
+  started_at: number;
+  image: string;
+  project: string;
+}
+export interface FactInfo { key: string; label: string; group: string; }
+export interface FactPresetInfo { key: string; label: string; facts: string[]; }
+export interface ReportSettingsWire {
+  expectedUnits: string[];
+  diskWarn: number;
+  diskBad: number;
+  securityGraceDays: number;
+  rebootGraceDays: number;
+  staleDays: number;
+  expectedContainers: string[];
+  containerRestartDays: number;
+}
+export interface FactsCatalog {
+  facts: FactInfo[];
+  presets: FactPresetInfo[];
+  report_defaults: ReportSettingsWire;
+  history_max: number;
+}
+export interface FactsRunStored {
+  at: number;
+  facts: string[];
+  results: FactsHostResult[];
 }
 
 export interface FactsHostResult {

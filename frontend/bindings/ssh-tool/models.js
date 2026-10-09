@@ -2034,6 +2034,70 @@ export class ExportSubtreeResult {
 }
 
 /**
+ * FactsCatalogInfo is everything the dialog needs to draw its form.
+ */
+export class FactsCatalogInfo {
+    /**
+     * Creates a new FactsCatalogInfo instance.
+     * @param {Partial<FactsCatalogInfo>} [$$source = {}] - The source object to create the FactsCatalogInfo.
+     */
+    constructor($$source = {}) {
+        if (!("facts" in $$source)) {
+            /**
+             * @member
+             * @type {ssh$0.FactInfo[]}
+             */
+            this["facts"] = [];
+        }
+        if (!("presets" in $$source)) {
+            /**
+             * @member
+             * @type {ssh$0.FactPreset[]}
+             */
+            this["presets"] = [];
+        }
+        if (!("report_defaults" in $$source)) {
+            /**
+             * @member
+             * @type {FactsReportSettings}
+             */
+            this["report_defaults"] = (new FactsReportSettings());
+        }
+        if (!("history_max" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["history_max"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FactsCatalogInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FactsCatalogInfo}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType11;
+        const $$createField1_0 = $$createType13;
+        const $$createField2_0 = $$createType14;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("facts" in $$parsedSource) {
+            $$parsedSource["facts"] = $$createField0_0($$parsedSource["facts"]);
+        }
+        if ("presets" in $$parsedSource) {
+            $$parsedSource["presets"] = $$createField1_0($$parsedSource["presets"]);
+        }
+        if ("report_defaults" in $$parsedSource) {
+            $$parsedSource["report_defaults"] = $$createField2_0($$parsedSource["report_defaults"]);
+        }
+        return new FactsCatalogInfo(/** @type {Partial<FactsCatalogInfo>} */($$parsedSource));
+    }
+}
+
+/**
  * FactsHostResult is one row of the report: the host plus what it
  * answered, or why it did not.
  */
@@ -2096,7 +2160,7 @@ export class FactsHostResult {
      * @returns {FactsHostResult}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType10;
+        const $$createField5_0 = $$createType15;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("facts" in $$parsedSource) {
             $$parsedSource["facts"] = $$createField5_0($$parsedSource["facts"]);
@@ -2162,6 +2226,152 @@ export class FactsInput {
             $$parsedSource["facts"] = $$createField1_0($$parsedSource["facts"]);
         }
         return new FactsInput(/** @type {Partial<FactsInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * FactsReportSettings: thresholds and expected failed units of one folder
+ * (or "_" for hand-picked hosts). JSON names match what the dialog stored
+ * before this moved to Go.
+ */
+export class FactsReportSettings {
+    /**
+     * Creates a new FactsReportSettings instance.
+     * @param {Partial<FactsReportSettings>} [$$source = {}] - The source object to create the FactsReportSettings.
+     */
+    constructor($$source = {}) {
+        if (!("expectedUnits" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["expectedUnits"] = [];
+        }
+        if (!("diskWarn" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["diskWarn"] = 0;
+        }
+        if (!("diskBad" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["diskBad"] = 0;
+        }
+        if (!("securityGraceDays" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["securityGraceDays"] = 0;
+        }
+        if (!("rebootGraceDays" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["rebootGraceDays"] = 0;
+        }
+        if (!("staleDays" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["staleDays"] = 0;
+        }
+        if (!("expectedContainers" in $$source)) {
+            /**
+             * Containers stopped on purpose (by name), and how recent an engine
+             * restart must be to flag a container (a crash loop that settled).
+             * @member
+             * @type {string[]}
+             */
+            this["expectedContainers"] = [];
+        }
+        if (!("containerRestartDays" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["containerRestartDays"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FactsReportSettings instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FactsReportSettings}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType4;
+        const $$createField6_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("expectedUnits" in $$parsedSource) {
+            $$parsedSource["expectedUnits"] = $$createField0_0($$parsedSource["expectedUnits"]);
+        }
+        if ("expectedContainers" in $$parsedSource) {
+            $$parsedSource["expectedContainers"] = $$createField6_0($$parsedSource["expectedContainers"]);
+        }
+        return new FactsReportSettings(/** @type {Partial<FactsReportSettings>} */($$parsedSource));
+    }
+}
+
+/**
+ * FactsRun is one stored Gather facts run.
+ */
+export class FactsRun {
+    /**
+     * Creates a new FactsRun instance.
+     * @param {Partial<FactsRun>} [$$source = {}] - The source object to create the FactsRun.
+     */
+    constructor($$source = {}) {
+        if (!("at" in $$source)) {
+            /**
+             * unix milliseconds
+             * @member
+             * @type {number}
+             */
+            this["at"] = 0;
+        }
+        if (!("facts" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["facts"] = [];
+        }
+        if (!("results" in $$source)) {
+            /**
+             * @member
+             * @type {FactsHostResult[]}
+             */
+            this["results"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FactsRun instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FactsRun}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType4;
+        const $$createField2_0 = $$createType17;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("facts" in $$parsedSource) {
+            $$parsedSource["facts"] = $$createField1_0($$parsedSource["facts"]);
+        }
+        if ("results" in $$parsedSource) {
+            $$parsedSource["results"] = $$createField2_0($$parsedSource["results"]);
+        }
+        return new FactsRun(/** @type {Partial<FactsRun>} */($$parsedSource));
     }
 }
 
@@ -2287,8 +2497,8 @@ export class FleetDownloadInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType11;
-        const $$createField2_0 = $$createType12;
+        const $$createField1_0 = $$createType18;
+        const $$createField2_0 = $$createType19;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ids" in $$parsedSource) {
             $$parsedSource["ids"] = $$createField0_0($$parsedSource["ids"]);
@@ -2346,8 +2556,8 @@ export class FleetUploadInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType13;
-        const $$createField2_0 = $$createType12;
+        const $$createField1_0 = $$createType20;
+        const $$createField2_0 = $$createType19;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ids" in $$parsedSource) {
             $$parsedSource["ids"] = $$createField0_0($$parsedSource["ids"]);
@@ -3330,7 +3540,7 @@ export class KeepassSaveInput {
      * @returns {KeepassSaveInput}
      */
     static createFrom($$source = {}) {
-        const $$createField9_0 = $$createType12;
+        const $$createField9_0 = $$createType19;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("remote_config" in $$parsedSource) {
             $$parsedSource["remote_config"] = $$createField9_0($$parsedSource["remote_config"]);
@@ -3594,7 +3804,7 @@ export class LogTailSnapshotResult {
      * @returns {LogTailSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType15;
+        const $$createField0_0 = $$createType22;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("lines" in $$parsedSource) {
             $$parsedSource["lines"] = $$createField0_0($$parsedSource["lines"]);
@@ -4027,10 +4237,10 @@ export class NetworkProfileInfo {
      * @returns {NetworkProfileInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType16;
-        const $$createField6_0 = $$createType18;
-        const $$createField7_0 = $$createType20;
-        const $$createField8_0 = $$createType21;
+        const $$createField5_0 = $$createType23;
+        const $$createField6_0 = $$createType25;
+        const $$createField7_0 = $$createType27;
+        const $$createField8_0 = $$createType28;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("profile" in $$parsedSource) {
             $$parsedSource["profile"] = $$createField5_0($$parsedSource["profile"]);
@@ -4848,7 +5058,7 @@ export class ScrollbackSnapshot {
      * @returns {ScrollbackSnapshot}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType23;
+        const $$createField3_0 = $$createType30;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("marks" in $$parsedSource) {
             $$parsedSource["marks"] = $$createField3_0($$parsedSource["marks"]);
@@ -4901,7 +5111,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType25;
+        const $$createField1_0 = $$createType32;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -5085,7 +5295,7 @@ export class ShareStartInput {
      * @returns {ShareStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType27;
+        const $$createField6_0 = $$createType34;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField6_0($$parsedSource["sessions"]);
@@ -5765,7 +5975,7 @@ export class TLSInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType28;
+        const $$createField1_0 = $$createType35;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("connection_ids" in $$parsedSource) {
             $$parsedSource["connection_ids"] = $$createField0_0($$parsedSource["connection_ids"]);
@@ -6119,7 +6329,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType30;
+        const $$createField0_0 = $$createType37;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -6245,7 +6455,7 @@ export class TcpdumpStartInput {
      * @returns {TcpdumpStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType12;
+        const $$createField10_0 = $$createType19;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("port_overrides" in $$parsedSource) {
             $$parsedSource["port_overrides"] = $$createField10_0($$parsedSource["port_overrides"]);
@@ -6468,24 +6678,31 @@ const $$createType6 = $Create.Nullable($$createType5);
 const $$createType7 = $Create.Nullable($$createType4);
 const $$createType8 = $Create.Map($Create.Any, $Create.Any);
 const $$createType9 = $Create.Nullable($$createType8);
-const $$createType10 = ssh$0.HostFacts.createFrom;
-const $$createType11 = ssh$0.FleetDownloadOptions.createFrom;
-const $$createType12 = $Create.Map($Create.Any, $Create.Any);
-const $$createType13 = ssh$0.FleetUploadOptions.createFrom;
-const $$createType14 = ssh$0.LogTailLine.createFrom;
-const $$createType15 = $Create.Array($$createType14);
-const $$createType16 = wg$0.Profile.createFrom;
-const $$createType17 = NetbirdConfig.createFrom;
-const $$createType18 = $Create.Nullable($$createType17);
-const $$createType19 = TailscaleConfig.createFrom;
-const $$createType20 = $Create.Nullable($$createType19);
-const $$createType21 = wg$0.Status.createFrom;
-const $$createType22 = cmdmarks$0.Mark.createFrom;
-const $$createType23 = $Create.Array($$createType22);
-const $$createType24 = ssh$0.SftpEntry.createFrom;
-const $$createType25 = $Create.Array($$createType24);
-const $$createType26 = ShareSessionInput.createFrom;
-const $$createType27 = $Create.Array($$createType26);
-const $$createType28 = $Create.Array($Create.Any);
-const $$createType29 = ssh$0.ParsedPacket.createFrom;
+const $$createType10 = ssh$0.FactInfo.createFrom;
+const $$createType11 = $Create.Array($$createType10);
+const $$createType12 = ssh$0.FactPreset.createFrom;
+const $$createType13 = $Create.Array($$createType12);
+const $$createType14 = FactsReportSettings.createFrom;
+const $$createType15 = ssh$0.HostFacts.createFrom;
+const $$createType16 = FactsHostResult.createFrom;
+const $$createType17 = $Create.Array($$createType16);
+const $$createType18 = ssh$0.FleetDownloadOptions.createFrom;
+const $$createType19 = $Create.Map($Create.Any, $Create.Any);
+const $$createType20 = ssh$0.FleetUploadOptions.createFrom;
+const $$createType21 = ssh$0.LogTailLine.createFrom;
+const $$createType22 = $Create.Array($$createType21);
+const $$createType23 = wg$0.Profile.createFrom;
+const $$createType24 = NetbirdConfig.createFrom;
+const $$createType25 = $Create.Nullable($$createType24);
+const $$createType26 = TailscaleConfig.createFrom;
+const $$createType27 = $Create.Nullable($$createType26);
+const $$createType28 = wg$0.Status.createFrom;
+const $$createType29 = cmdmarks$0.Mark.createFrom;
 const $$createType30 = $Create.Array($$createType29);
+const $$createType31 = ssh$0.SftpEntry.createFrom;
+const $$createType32 = $Create.Array($$createType31);
+const $$createType33 = ShareSessionInput.createFrom;
+const $$createType34 = $Create.Array($$createType33);
+const $$createType35 = $Create.Array($Create.Any);
+const $$createType36 = ssh$0.ParsedPacket.createFrom;
+const $$createType37 = $Create.Array($$createType36);

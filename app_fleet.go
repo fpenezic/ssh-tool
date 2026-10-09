@@ -58,7 +58,20 @@ func (a *App) GatherFacts(in FactsInput) ([]FactsHostResult, error) {
 	if timeout <= 0 {
 		timeout = 30
 	}
-	raw := a.runBatch(a.batchHosts(in.ConnectionIDs), cmd, timeout)
+	// An inventory host that left the cache since the caller listed it
+	// (pinned into a saved connection, removed by a refresh) is not a host
+	// that failed to answer: leave it out.
+	hosts := a.batchHosts(in.ConnectionIDs)
+	live := hosts[:0]
+	for _, h := range hosts {
+		if strings.HasPrefix(h.ConnectionID, "dyn:") && h.Settings == nil {
+			if e, _ := a.db.GetDynamicEntry(strings.TrimPrefix(h.ConnectionID, "dyn:")); e == nil {
+				continue
+			}
+		}
+		live = append(live, h)
+	}
+	raw := a.runBatch(live, cmd, timeout)
 	out := make([]FactsHostResult, 0, len(raw))
 	for _, r := range raw {
 		row := FactsHostResult{ConnectionID: r.ConnectionID, Name: r.Name, Hostname: r.Hostname, State: r.State, Error: r.Error}

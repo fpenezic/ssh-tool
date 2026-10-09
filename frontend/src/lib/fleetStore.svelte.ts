@@ -4,7 +4,7 @@
 // restart keeps them; they are what was measured, never refreshed on
 // their own.
 
-import { api, type FactsHostResult, type TLSCertResult } from "./api";
+import { api, type FactsCatalog, type FactsContainer, type FactsHostResult, type ReportSettingsWire, type TLSCertResult } from "./api";
 import { tree, sessions } from "./stores.svelte";
 
 export type FleetTool = "facts" | "tls" | "compare" | "copykey" | "upload" | "download";
@@ -46,14 +46,62 @@ export interface TlsMark {
   at: number;
 }
 
+// What a health report counts as a problem, per folder: every contract
+// has its own thresholds, and every fleet a unit or two that fails by
+// design (irqbalance on a small VM). Security updates and a pending reboot
+// colour a host only past their grace days: what arrived on this week's
+// patch day is normal. Defaults and the fact catalog come from Go
+// (FactsCatalog), shared with the MCP tools.
+export type ReportSettings = ReportSettingsWire;
+
+// Containers that need someone: unhealthy, restarting, dead, or exited
+// with an error. Expected (stopped on purpose) ones never count. Shared by
+// the table colours and the report.
+export function containerProblem(c: FactsContainer): string | null {
+  if (c.health === "unhealthy") return "unhealthy";
+  if (c.state === "restarting") return "restarting";
+  if (c.state === "dead") return "dead";
+  if (c.state === "exited" && c.exit_code !== 0) return `exited with code ${c.exit_code}`;
+  return null;
+}
+export function containerIssues(f: { containers?: FactsContainer[] | null }, rs: ReportSettings, atMs: number) {
+  const expected = new Set(rs.expectedContainers ?? []);
+  const list = (f.containers ?? []).filter((c) => !expected.has(c.name));
+  const problems = list.filter((c) => containerProblem(c));
+  // Restarted by the engine (crash, OOM) and started again recently: it
+  // runs now, but it fell over. A redeploy recreates the container and
+  // resets the count, so a deploy alone never shows here.
+  const restarted = list.filter((c) => !containerProblem(c) && c.restarts > 0 && c.started_at > 0 &&
+    atMs / 1000 - c.started_at < (rs.containerRestartDays ?? 7) * 86400);
+  return { problems, restarted };
+}
+
 // The badge threshold: under this many days a cert shows in the tree.
 export const TLS_WARN_DAYS = 14;
 
 class FleetStore {
   open = $state<FleetOpen | null>(null);
   snapshots = $state<Record<string, FactsSnapshot>>({});
+  // Oldest first, the latest run included. Loaded on demand per folder.
+  history = $state<Record<string, FactsSnapshot[]>>({});
   tls = $state<Record<string, TlsMark>>({});
   private loaded = false;
+
+  // Fact list, presets, report defaults and history size, loaded once.
+  catalog = $state<FactsCatalog | null>(null);
+  async loadCatalog(): Promise<FactsCatalog> {
+    if (!this.catalog) this.catalog = await api.factsCatalog();
+    return this.catalog;
+  }
+
+  // A run stored by someone else (the MCP gather_facts tool) makes the
+  // cached copies stale.
+  forgetFacts(folderId: string) {
+    const { [folderId]: _h, ...hist } = this.history;
+    const { [folderId]: _s, ...snaps } = this.snapshots;
+    this.history = hist;
+    this.snapshots = snaps;
+  }
 
   async init() {
     if (this.loaded) return;
@@ -116,7 +164,66 @@ class FleetStore {
 
   async saveSnapshot(folderId: string, s: FactsSnapshot) {
     this.snapshots = { ...this.snapshots, [folderId]: s };
-    await api.settingsSet(`fleet_facts:${folderId}`, JSON.stringify(s)).catch(console.warn);
+    await api.factsSaveRun(folderId, s).catch(console.warn);
+    this.history = { ...this.history, [folderId]: (await api.factsHistory(folderId).catch(() => null)) ?? [s] };
+  }
+
+  // Runs stored for a folder, oldest first. A folder from before the
+  // history existed starts with its one stored snapshot.
+  async loadHistory(folderId: string): Promise<FactsSnapshot[]> {
+    if (this.history[folderId]) return this.history[folderId];
+    const hist = (await api.factsHistory(folderId).catch(() => null)) ?? [];
+    this.history = { ...this.history, [folderId]: hist };
+    return hist;
+  }
+
+  // Drop one stored run (a test run, a run against the wrong hosts).
+  async deleteRun(folderId: string, at: number) {
+    await api.factsDeleteRun(folderId, at).catch(console.warn);
+    this.forgetFacts(folderId);
+    await this.loadHistory(folderId);
+  }
+
+  reportSettings = $state<Record<string, ReportSettings>>({});
+  // "Prepared by" on every report: one person signs them all, so it is
+  // kept once rather than per folder.
+  reportAuthor = $state("");
+  async loadReportAuthor(): Promise<string> {
+    try {
+      this.reportAuthor = (await api.settingsGet("fleet_report_author")) ?? "";
+    } catch { /* none */ }
+    return this.reportAuthor;
+  }
+  async saveReportAuthor(v: string) {
+    this.reportAuthor = v;
+    await api.settingsSet("fleet_report_author", v).catch(console.warn);
+  }
+  // Company logo on every report, as a data: URI so the saved HTML file
+  // carries it. "" = none.
+  reportLogo = $state("");
+  async loadReportLogo(): Promise<string> {
+    try {
+      this.reportLogo = (await api.settingsGet("fleet_report_logo")) ?? "";
+    } catch { /* none */ }
+    return this.reportLogo;
+  }
+  async saveReportLogo(v: string) {
+    this.reportLogo = v;
+    await api.settingsSet("fleet_report_logo", v).catch(console.warn);
+  }
+
+  // Folder runs have their own; a hand-picked set of hosts shares one.
+  async loadReportSettings(folderId?: string): Promise<ReportSettings> {
+    const key = folderId || "_";
+    if (this.reportSettings[key]) return this.reportSettings[key];
+    const rs = await api.factsReportSettingsGet(folderId ?? "");
+    this.reportSettings = { ...this.reportSettings, [key]: rs };
+    return rs;
+  }
+  async saveReportSettings(folderId: string | undefined, rs: ReportSettings) {
+    const key = folderId || "_";
+    this.reportSettings = { ...this.reportSettings, [key]: rs };
+    await api.factsReportSettingsSet(folderId ?? "", rs).catch(console.warn);
   }
 
   // Keep the soonest-expiring port per connection; a host that answered on

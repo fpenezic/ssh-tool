@@ -36,6 +36,8 @@
   import AuthPromptModal from "./lib/AuthPromptModal.svelte";
   import McpApprovalModal from "./lib/McpApprovalModal.svelte";
   import McpPlanApprovalModal, { type PlanPreview } from "./lib/McpPlanApprovalModal.svelte";
+  import McpFactsApprovalModal, { type FactsApprovalRequest } from "./lib/McpFactsApprovalModal.svelte";
+  import { fleet } from "./lib/fleetStore.svelte";
   import ShareApprovalModal from "./lib/ShareApprovalModal.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import FleetModals from "./lib/FleetModals.svelte";
@@ -101,6 +103,8 @@
   // Pending LLM provisioning-plan approval (mcp_plan_approval_request). Only
   // one is in flight at a time (commit_plan blocks until answered).
   let planApproval = $state<PlanPreview | null>(null);
+  // Pending LLM gather_facts approval (mcp_facts_approval_request).
+  let factsApproval = $state<FactsApprovalRequest | null>(null);
 
   // Detached-window mode: the backend opens new top-level windows with
   // URL like "/?detached=<tabId>". When that param exists we render a
@@ -783,6 +787,20 @@
       `Review ${cn} connection${cn === 1 ? "" : "s"} the LLM prepared before they are added.`,
     ).catch(() => {});
     planApproval = data as PlanPreview;
+  });
+
+  EventsOn("mcp_facts_approval_request", (data: any) => {
+    api.requestAttention().catch(() => {});
+    const n = data?.hosts?.length ?? 0;
+    api.sendPromptNotification(
+      "LLM wants to gather facts",
+      `Review the ${n} host${n === 1 ? "" : "s"} and the facts before anything connects.`,
+    ).catch(() => {});
+    factsApproval = data as FactsApprovalRequest;
+  });
+  // A run stored outside the dialog (gather_facts over MCP).
+  EventsOn("fleet_facts_saved", (data: any) => {
+    if (data?.folder_id) fleet.forgetFacts(data.folder_id);
   });
 
   // Keep the "shared with LLM" tab markers in sync.
@@ -1512,6 +1530,18 @@
         mcpApprovalStore.shift();
         if (mcpApprovalStore.queue.length === 0) api.clearAttention().catch(() => {});
         await api.mcpApprovalRespond(a.approvalId, decision);
+      }}
+    />
+  {/if}
+
+  {#if factsApproval}
+    <McpFactsApprovalModal
+      req={factsApproval}
+      onRespond={async (approve, ids) => {
+        const r = factsApproval!;
+        factsApproval = null;
+        api.clearAttention().catch(() => {});
+        await api.mcpFactsApprovalRespond(r.approval_id, approve, ids);
       }}
     />
   {/if}
