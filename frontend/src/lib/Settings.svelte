@@ -5721,8 +5721,10 @@
         <strong>Claude Code</strong>: <code>CLAUDE.md</code>; others: the
         system-prompt field. Sent as an ordinary chat message it may simply be
         ignored, and that is the model behaving correctly.
-        <button class="link-btn" onclick={copyMcpSystemPrompt}>Copy system prompt</button>
       </p>
+      <div class="cd-row">
+        <button class="primary" onclick={copyMcpSystemPrompt}>Copy system prompt</button>
+      </div>
 
       <fieldset class="check-cards">
         <label class:active={mcpTcp}>
