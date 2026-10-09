@@ -1446,6 +1446,33 @@ everything mobile is behind a build tag or an `isMobile` check.
     emptied). Normalise number fields before building the payload
     (`portOrUndef` in PortForwards.svelte).
 
+96. **The quiet connect deadline covered authentication.** `dialChainFrom`
+    bounds the handshake for tab-less connects (fleet, batch, bastion
+    pool). Set once to the connect timeout, it also capped auth, so a
+    server whose AuthorizedKeysCommand is slow (opkssh verify on a slow
+    resolver: 10-30s) failed every host with "i/o timeout" while an
+    interactive connect worked. `bannerDeadlineConn` moves the deadline to
+    `quietAuthBudget` once the server's first bytes arrive; keep the
+    connect timeout for "TCP open, no SSH", never for auth.
+
+97. **Package-manager output that is not what it looks like.**
+    `dnf updateinfo list --security` prints advisory/package pairs, not
+    packages (283 "security updates" on a host with 12 updates): count
+    unique names. A `/boot/vmlinuz-*` mtime is the package's, days before
+    the install (rpm and kernel-install preserve it): use the ctime for
+    "installed when". The newest rpm INSTALLTIME is any install, not the
+    last patch day: read `dnf history` / apt `history.log` for upgrades.
+
+98. **Facts catalog, presets, report defaults and run history are owned
+    by Go** (`internal/ssh/facts.go`, `app_facts_store.go`). The Gather
+    facts dialog and the MCP tools both read them through IPC. Do not
+    add a frontend copy of a label, preset or threshold - the two drift,
+    and the LLM then applies different rules than the report shows.
+
+99. **Svelte drops whitespace at the end of an `{#if}` block.**
+    `{#if a}A · {/if}B` renders "A ·B". Build such separators in an
+    expression (`{a ? \`A · \` : ""}B`).
+
 ---
 
 # Archive
