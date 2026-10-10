@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -712,14 +713,17 @@ func shellEscapeBPF(bpf string) string {
 }
 
 // sshExclusionFromAddr builds the literal `not ( host H and port P )` clause
-// from a "host:port" address string, returning ok=false when the address is
-// unusable or contains characters that could corrupt the BPF.
+// from a "host:port" address string, returning ok=false unless the host is
+// an IP address and the port a number. The address can come from the remote
+// host's own output ($SSH_CONNECTION, ss) and the clause ends up as bare
+// words in a sudo command line, so it is parsed, not screened: a denylist of
+// characters let ; | & < > and a newline through.
 func sshExclusionFromAddr(addr string) (string, bool) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil || host == "" || port == "" {
 		return "", false
 	}
-	if strings.ContainsAny(host, " ()\\'\"`$") || !isNumericPort(port) {
+	if _, err := netip.ParseAddr(host); err != nil || strings.Contains(host, "%") || !isNumericPort(port) {
 		return "", false
 	}
 	// Plain BPF, NOT shell-escaped. Callers decide the escaping, because the

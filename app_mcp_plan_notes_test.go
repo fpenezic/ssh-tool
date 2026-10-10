@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"ssh-tool/internal/store"
 )
@@ -208,5 +210,51 @@ func TestPlanFolderSettingsMergeIntoExisting(t *testing.T) {
 	}
 	if s.ColorTag == nil || *s.ColorTag != "red" || s.JumpHost == nil {
 		t.Fatalf("staged values missing: %+v", s)
+	}
+}
+
+// Staging while commit_plan waits for the user must not ride along: the user
+// approved the preview, and a connection added during the wait was not in it.
+func TestPlanCommitWritesOnlyWhatWasPreviewed(t *testing.T) {
+	a := newResolveTestApp(t)
+	a.mcp = newMcpState()
+	a.mcp.manageStore = true
+	if a.ctx == nil {
+		a.ctx = context.Background()
+	}
+
+	if _, err := a.planAddConnection(planConnInput{Name: "shown", Host: "10.0.0.1"}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { _, err := a.planCommit(); done <- err }()
+
+	// Wait for the approval to be pending, then stage more before answering.
+	var id string
+	for i := 0; i < 200 && id == ""; i++ {
+		a.mcp.approvalsMu.Lock()
+		for k := range a.mcp.approvals {
+			id = k
+		}
+		a.mcp.approvalsMu.Unlock()
+		time.Sleep(5 * time.Millisecond)
+	}
+	if id == "" {
+		t.Fatal("approval never became pending")
+	}
+	if _, err := a.planAddConnection(planConnInput{Name: "sneaked", Host: "10.0.0.2"}); err != nil {
+		t.Fatal(err)
+	}
+	a.McpApprovalRespond(id, "run")
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	conns, _ := a.db.ListConnections(nil)
+	if len(conns) != 1 || conns[0].Name != "shown" {
+		t.Fatalf("written: %+v, want only \"shown\"", conns)
+	}
+	if p := a.mcp.plan; p == nil || len(p.conns) != 1 {
+		t.Fatalf("the connection staged during the wait should wait for its own commit, plan = %+v", p)
 	}
 }

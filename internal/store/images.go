@@ -164,6 +164,8 @@ type ImageUsage struct {
 
 // ListImageUsage returns every uploaded icon along with up to `limit` names of
 // the connections and folders using it, most recently updated first.
+// Sensitive connections are not named: the only caller is the MCP bridge,
+// which must not learn they exist.
 func (d *DB) ListImageUsage(limit int) ([]ImageUsage, error) {
 	if limit <= 0 {
 		limit = 3
@@ -177,7 +179,7 @@ func (d *DB) ListImageUsage(limit int) ([]ImageUsage, error) {
 		u := ImageUsage{ID: im.ID, MIME: im.MIME, UseCount: im.UseCount}
 		rows, err := d.conn.Query(`
 			SELECT name FROM (
-			    SELECT name, updated_at FROM connections WHERE icon_image_id = ?
+			    SELECT name, updated_at FROM connections WHERE icon_image_id = ? AND sensitive = 0
 			    UNION ALL
 			    SELECT name, updated_at FROM folders WHERE icon_image_id = ?
 			) ORDER BY updated_at DESC LIMIT ?`, im.ID, im.ID, limit)
@@ -243,7 +245,8 @@ type ConnIconUsage struct {
 }
 
 // FolderConnIcons maps folder id -> what its OWN connections use. Folders
-// whose connections carry no icons at all are absent.
+// whose connections carry no icons at all are absent. Sensitive connections
+// are left out (MCP-only caller, see ListImageUsage).
 func (d *DB) FolderConnIcons(examples int) (map[string]ConnIconUsage, error) {
 	if examples <= 0 {
 		examples = 6
@@ -252,7 +255,7 @@ func (d *DB) FolderConnIcons(examples int) (map[string]ConnIconUsage, error) {
 		SELECT folder_id, name,
 		       IFNULL(icon_name, ''), IFNULL(icon_color, ''), IFNULL(icon_image_id, '')
 		FROM connections
-		WHERE folder_id IS NOT NULL
+		WHERE folder_id IS NOT NULL AND sensitive = 0
 		ORDER BY folder_id, name`)
 	if err != nil {
 		return nil, err

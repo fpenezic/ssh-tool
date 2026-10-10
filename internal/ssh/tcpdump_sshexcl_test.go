@@ -54,6 +54,10 @@ func TestSSHExclusionFromAddr(t *testing.T) {
 			addr: "1.2.3.4$(rm -rf):22",
 			ok:   false,
 		},
+		{name: "semicolon in host", addr: "1.2.3.4;reboot:22", ok: false},
+		{name: "pipe in host", addr: "1.2.3.4|id:22", ok: false},
+		{name: "newline in host", addr: "1.2.3.4\nid:22", ok: false},
+		{name: "name, not an address", addr: "evil.example.com:22", ok: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

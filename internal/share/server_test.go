@@ -1,8 +1,11 @@
 package share
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 )
 
 // TestSessionClosedEndsShareWhenLast verifies that when a share's last live
@@ -83,5 +86,24 @@ func TestSessionClosedKeepsMultiSessionShare(t *testing.T) {
 	srv.mu.Unlock()
 	if !stillThere {
 		t.Fatal("share ended while a second session was still live")
+	}
+}
+
+// An unused link past tokenTTL is refused when it is opened, not only when
+// another share happens to be registered.
+func TestExpiredUnusedTokenRefusedOnAccess(t *testing.T) {
+	srv := NewServer(Config{Resolve: func(string) (Sourced, bool) { return nil, false }})
+	share := newShareSession("sh1", "127.0.0.1:0", "host", LevelControl, true, 0, nil,
+		[]SharedSession{{Slot: "s1", RealID: "real1", Name: "n"}})
+	share.created = time.Now().Add(-tokenTTL - time.Minute)
+	srv.mu.Lock()
+	srv.byID[share.id] = share
+	srv.byToken[share.token] = share
+	srv.mu.Unlock()
+
+	rec := httptest.NewRecorder()
+	srv.handleGuest(rec, httptest.NewRequest("GET", "/s/"+share.token, nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expired token answered %d, want 404", rec.Code)
 	}
 }

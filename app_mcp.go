@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"ssh-tool/internal/mcpprompt"
+	"ssh-tool/internal/resolver"
 	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/store"
 )
@@ -409,12 +410,27 @@ func (a *App) requestApproval(sessionID, sessionName, kind, command string) mcpD
 
 	select {
 	case d := <-ch:
-		return d
+		return approvalFor(kind, d)
 	case <-a.ctx.Done():
 		return mcpDecisionDeny
 	case <-time.After(mcpApprovalTimeout):
 		return mcpDecisionDeny
 	}
+}
+
+// approvalFor keeps only the answer the modal for kind offers: "type" for a
+// type request, "run" for the rest. Anything else (a stale or mismatched
+// response to the shared approvals map) is a deny, so no caller has to
+// remember which non-deny answers it should accept.
+func approvalFor(kind string, d mcpDecision) mcpDecision {
+	want := mcpDecisionRun
+	if kind == "type" {
+		want = mcpDecisionType
+	}
+	if d != want {
+		return mcpDecisionDeny
+	}
+	return d
 }
 
 // requestPlanApproval emits the rich provisioning-plan approval request and
@@ -757,6 +773,47 @@ func (a *App) folderPathIndex() map[string]string {
 // the gate (opening a session spends credentials and may trigger a host-key
 // prompt). A Sensitive connection is refused.
 //
+// jumpsThroughSensitive reports whether opening connectionID (a saved id or
+// "dyn:<entryID>") would hop through a connection the user marked
+// sensitive. A hop spends that bastion's credentials, so it is the same as
+// opening it. The chain is expanded the way a connect expands it
+// (resolver.ExpandJumpRefs, which follows each referenced bastion's own
+// chain) with a lookup that notes every connection it reads: the expanded
+// hops no longer say which connection they came from.
+func (a *App) jumpsThroughSensitive(connectionID string) bool {
+	folders, err := a.db.ListFolders()
+	if err != nil {
+		return false // connect reports the real error
+	}
+	var conn store.Connection
+	if entryID, ok := strings.CutPrefix(connectionID, "dyn:"); ok {
+		entry, err := a.db.GetDynamicEntry(entryID)
+		if err != nil || entry == nil {
+			return false
+		}
+		conn = a.dynamicConnectionFor(entry, "")
+		conn.ID = connectionID
+	} else {
+		c, err := a.db.GetConnection(connectionID)
+		if err != nil || c == nil {
+			return false
+		}
+		conn = *c
+	}
+	sensitive := false
+	base := resolver.DBLookup(a.db)
+	lookup := func(id string) (*store.Connection, error) {
+		c, err := base(id)
+		if err == nil && c != nil && c.Sensitive {
+			sensitive = true
+		}
+		return c, err
+	}
+	rs := resolver.ResolveWith(conn, folders)
+	_ = resolver.ExpandJumpRefs(&rs, conn.ID, folders, lookup)
+	return sensitive
+}
+
 // mcpConnectGrant is the access an LLM-opened session gets: read or
 // read-run. Yolo is never granted from here: it is the user's own opt-out of
 // per-command prompts, set in the share dialog, and an LLM asking for it on a
@@ -816,6 +873,10 @@ func (a *App) mcpConnect(connectionID, level string) (string, error) {
 			folder = a.folderPathIndex()[*conn.FolderID]
 		}
 		connect = func() (*SshConnectResult, error) { return a.SshConnect(connectionID) }
+	}
+
+	if a.jumpsThroughSensitive(uiConnectionID) {
+		return "", fmt.Errorf("this connection's jump chain goes through a connection marked sensitive, which the LLM cannot use")
 	}
 
 	label := name

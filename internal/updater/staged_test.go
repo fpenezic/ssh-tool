@@ -3,6 +3,7 @@ package updater
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -103,5 +104,13 @@ func TestPendingStagedAcceptsIntactDownload(t *testing.T) {
 	clearStagedAt(manifest)
 	if _, ok := pendingStagedAt(manifest); ok {
 		t.Error("ClearStaged left the manifest behind")
+	}
+}
+
+// An update without a digest is refused before anything is downloaded.
+func TestDownloadRefusesMissingDigest(t *testing.T) {
+	_, err := Download("https://example.com/ssh-tool.exe", "", "v9.9.9", nil)
+	if err == nil || !strings.Contains(err.Error(), "no sha256") {
+		t.Fatalf("err = %v, want a refusal", err)
 	}
 }

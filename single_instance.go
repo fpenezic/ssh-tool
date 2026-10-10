@@ -13,15 +13,24 @@
 // Falls back to "act as the primary" if the lock file is stale
 // (port unreachable) - fresh listener, overwrite the lock.
 //
-// Loopback-only, no auth on the wire - we trust anything that can
-// already write to %APPDATA%\ssh-tool\.
+// Loopback-only, and loopback is shared by every user on the machine
+// (RDS, a multi-user Linux box), so a message must carry the token from
+// instance.token - a 0600 file in the data dir that only this user can
+// read. Without it any local process could make the app open a shell in a
+// directory of its choosing (--open-dir) or fetch an import URL. The port
+// stays alone in instance.lock so an older build still finds the primary.
 
 package main
 
 import (
 	"bufio"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -41,7 +50,12 @@ type instanceMsg struct {
 	// suggest otherwise. Empty when the sender predates this field.
 	Version string `json:"version,omitempty"`
 	ExePath string `json:"exe_path,omitempty"`
+	Token   string `json:"token,omitempty"`
 }
+
+// instanceMsgMax caps what serveInstance reads: an argv is a handful of
+// short strings.
+const instanceMsgMax = 64 << 10
 
 // trySendToRunning is called BEFORE we initialise the application
 // bits. If a primary instance is already up, hand off our argv and
@@ -65,6 +79,7 @@ func trySendToRunning(argv []string) bool {
 		Argv:    argv,
 		Version: appVersion,
 		ExePath: exePath,
+		Token:   readInstanceToken(),
 	}); err != nil {
 		return false
 	}
@@ -85,6 +100,11 @@ func startInstanceServer(handler func(msg instanceMsg)) (cancel func(), err erro
 		return nil, fmt.Errorf("listen: %w", err)
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
+	token, err := writeInstanceToken()
+	if err != nil {
+		_ = ln.Close()
+		return nil, err
+	}
 	if err := writeInstanceLockPort(port); err != nil {
 		_ = ln.Close()
 		return nil, err
@@ -95,20 +115,28 @@ func startInstanceServer(handler func(msg instanceMsg)) (cancel func(), err erro
 			if err != nil {
 				return
 			}
-			go serveInstance(conn, handler)
+			go serveInstance(conn, token, handler)
 		}
 	}()
 	return func() {
 		_ = ln.Close()
 		_ = os.Remove(instanceLockPath())
+		_ = os.Remove(instanceTokenPath())
 	}, nil
 }
 
-func serveInstance(conn net.Conn, handler func(msg instanceMsg)) {
+func serveInstance(conn net.Conn, token string, handler func(msg instanceMsg)) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
 	var msg instanceMsg
-	if err := json.NewDecoder(conn).Decode(&msg); err != nil {
+	if err := json.NewDecoder(io.LimitReader(conn, instanceMsgMax)).Decode(&msg); err != nil {
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(msg.Token), []byte(token)) != 1 {
+		// No ack: an older build handing off without a token treats the
+		// missing ack as delivered and exits, which is the old behaviour
+		// for a message the primary did not act on.
+		log.Printf("instance handoff refused: missing or wrong token")
 		return
 	}
 	// Ack first so the secondary can exit fast; then dispatch.
@@ -118,6 +146,32 @@ func serveInstance(conn net.Conn, handler func(msg instanceMsg)) {
 
 func instanceLockPath() string {
 	return filepath.Join(store.DataDir(), "instance.lock")
+}
+
+func instanceTokenPath() string {
+	return filepath.Join(store.DataDir(), "instance.token")
+}
+
+// writeInstanceToken makes a fresh per-run token. Written before the port
+// so a secondary that sees the port also finds the token.
+func writeInstanceToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	t := hex.EncodeToString(b)
+	if err := os.WriteFile(instanceTokenPath(), []byte(t), 0o600); err != nil {
+		return "", err
+	}
+	return t, nil
+}
+
+func readInstanceToken() string {
+	b, err := os.ReadFile(instanceTokenPath())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
 
 func writeInstanceLockPort(port int) error {

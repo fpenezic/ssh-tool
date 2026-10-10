@@ -95,6 +95,13 @@ func Download(url, wantSHA256, version string, onProgress ProgressFunc) (*Downlo
 	if url == "" {
 		return nil, errors.New("updater: empty url")
 	}
+	// No digest, no install. The release metadata always carries one
+	// (GitHub's asset digest, or the mirror's sha256); a release without it
+	// is malformed or tampered with, and installing an unverified binary
+	// over the running one is the one thing an updater must not do.
+	if strings.TrimSpace(wantSHA256) == "" {
+		return nil, errors.New("updater: the release lists no sha256 for this download; refusing to install an unverified binary")
+	}
 	exePath, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("updater: locate exe: %w", err)
@@ -156,14 +163,11 @@ func Download(url, wantSHA256, version string, onProgress ProgressFunc) (*Downlo
 		return nil, fmt.Errorf("updater: download too small (%d bytes)", n)
 	}
 	gotSHA := hex.EncodeToString(hasher.Sum(nil))
-	verified := false
-	if wantSHA256 != "" {
-		if !strings.EqualFold(gotSHA, wantSHA256) {
-			_ = os.Remove(tmpPath)
-			return nil, fmt.Errorf("updater: checksum mismatch - the downloaded file does not match the release manifest (got %s, want %s); refusing to install", gotSHA, wantSHA256)
-		}
-		verified = true
+	if !strings.EqualFold(gotSHA, strings.TrimSpace(wantSHA256)) {
+		_ = os.Remove(tmpPath)
+		return nil, fmt.Errorf("updater: checksum mismatch - the downloaded file does not match the release manifest (got %s, want %s); refusing to install", gotSHA, wantSHA256)
 	}
+	verified := true
 	if err := os.Chmod(tmpPath, 0o755); err != nil {
 		_ = os.Remove(tmpPath)
 		return nil, err

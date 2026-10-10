@@ -82,3 +82,25 @@ func TestMcpConnectGrantNeverYolo(t *testing.T) {
 		}
 	}
 }
+
+func TestApprovalForMatchesKind(t *testing.T) {
+	cases := []struct {
+		kind string
+		in   mcpDecision
+		want mcpDecision
+	}{
+		{"run", mcpDecisionRun, mcpDecisionRun},
+		{"run", mcpDecisionType, mcpDecisionDeny},
+		{"type", mcpDecisionType, mcpDecisionType},
+		{"type", mcpDecisionRun, mcpDecisionDeny},
+		{"file", mcpDecisionRun, mcpDecisionRun},
+		{"file", mcpDecisionType, mcpDecisionDeny},
+		{"connect", mcpDecisionType, mcpDecisionDeny},
+		{"connect", mcpDecisionDeny, mcpDecisionDeny},
+	}
+	for _, c := range cases {
+		if got := approvalFor(c.kind, c.in); got != c.want {
+			t.Errorf("approvalFor(%s, %s) = %s, want %s", c.kind, c.in, got, c.want)
+		}
+	}
+}

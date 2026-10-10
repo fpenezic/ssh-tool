@@ -398,8 +398,12 @@ func (a *App) normalizeJumpConnection(raw string) (string, error) {
 		}
 		return resolver.DynRef(e.FolderID, e.ExternalID), nil
 	}
-	if _, err := a.db.GetConnection(raw); err != nil {
+	if c, err := a.db.GetConnection(raw); err != nil || c == nil {
 		return "", fmt.Errorf("no connection with id %q for jump_connection", raw)
+	} else if c.Sensitive {
+		// A hop spends the bastion's credentials just as connecting to it
+		// does, and connect refuses a sensitive connection.
+		return "", errSensitiveConn
 	}
 	return raw, nil
 }
@@ -574,6 +578,11 @@ func (a *App) planAddForward(connection, kind, localAddr string, localPort uint1
 	if ref.empty() {
 		return "", fmt.Errorf("connection ref required")
 	}
+	if ref.Existing != "" {
+		if c, err := a.db.GetConnection(ref.Existing); err == nil && c != nil && c.Sensitive {
+			return "", errSensitiveConn
+		}
+	}
 	if kind != "dynamic" && (strings.TrimSpace(remoteHost) == "" || remotePort == 0) {
 		return "", fmt.Errorf("%s forward needs remote_host and remote_port", kind)
 	}
@@ -647,8 +656,10 @@ func (a *App) planEditConnection(in editConnInput) error {
 	}
 	// Fail fast on a bad id: the LLM is likely working from a stale listing,
 	// and reporting that now beats a confusing failure at commit time.
-	if _, err := a.db.GetConnection(in.ConnID); err != nil {
+	if c, err := a.db.GetConnection(in.ConnID); err != nil || c == nil {
 		return fmt.Errorf("no connection with id %q", in.ConnID)
+	} else if c.Sensitive {
+		return errSensitiveConn
 	}
 
 	e := planEditConn{ConnID: in.ConnID}
@@ -842,6 +853,10 @@ func (a *App) planDiscard() {
 	a.mcp.plan = nil
 	a.mcp.planMu.Unlock()
 }
+
+// errSensitiveConn: the user marked the connection sensitive, so the LLM
+// may not open it, edit it, add forwards to it or route through it.
+var errSensitiveConn = fmt.Errorf("that connection is marked sensitive; the LLM cannot open, change or route through it")
 
 var errManageOff = fmt.Errorf("the manage grant is off; the user must enable \"Allow manage\" in the LLM Share popover before you can create connections")
 
@@ -1453,7 +1468,7 @@ func (a *App) savedConnAt(host string, port uint16) (id, name string) {
 	}
 	folders, _ := a.db.ListFolders()
 	for _, c := range conns {
-		if !strings.EqualFold(c.Hostname, host) {
+		if c.Sensitive || !strings.EqualFold(c.Hostname, host) {
 			continue
 		}
 		if resolver.ResolveWith(c, folders).Port == port {
@@ -1590,12 +1605,19 @@ func (a *App) connectionLabel(id string) string {
 // planCommit renders the plan to the approval modal, blocks on the user's
 // decision, and on approval writes everything in one transaction. Returns a
 // summary string. Clears the plan either way.
+//
+// The plan is taken out of a.mcp.plan before the modal opens. Tool calls can
+// run while the approval waits, and staging appends to a.mcp.plan: had the
+// commit kept the shared pointer, anything staged during the wait would be
+// written without having been in the preview the user approved. Now it lands
+// in a fresh plan that needs its own commit.
 func (a *App) planCommit() (string, error) {
 	if !a.mcpManageAllowed() {
 		return "", errManageOff
 	}
 	a.mcp.planMu.Lock()
 	p := a.mcp.plan
+	a.mcp.plan = nil
 	a.mcp.planMu.Unlock()
 	if p == nil || (len(p.folders) == 0 && len(p.folderSettings) == 0 && len(p.conns) == 0 &&
 		len(p.forwards) == 0 && len(p.bookmarks) == 0 && len(p.editConns) == 0 && len(p.editFolders) == 0) {
@@ -1604,7 +1626,6 @@ func (a *App) planCommit() (string, error) {
 
 	// Validate auth_refs up front so a bad ref is reported before the modal.
 	if err := a.validatePlanRefs(p); err != nil {
-		a.planDiscard()
 		return "", err
 	}
 
@@ -1613,17 +1634,15 @@ func (a *App) planCommit() (string, error) {
 	// Approval (reuses the approvals channel plumbing).
 	decision := a.requestPlanApproval(preview)
 	if decision != mcpDecisionRun {
-		a.planDiscard()
 		a.recordActivity(McpActivity{
 			Kind: "provision", Session: "plan", Command: a.planSummary(p), Gate: "denied",
 		})
 		return "", fmt.Errorf("plan rejected by user")
 	}
 
+	// p is already detached, so a failed (rolled back) commit cannot be
+	// re-committed either.
 	created, err := a.writePlan(p)
-	// Clear the plan regardless of outcome; a failed commit rolled back, and a
-	// half-applied plan must not be re-committed.
-	a.planDiscard()
 	if err != nil {
 		a.recordActivity(McpActivity{
 			Kind: "provision", Session: "plan", Command: a.planSummary(p),
@@ -1787,6 +1806,8 @@ func (a *App) validatePlanRefs(p *mcpPlan) error {
 		if fw.Conn.Existing != "" {
 			if c, err := a.db.GetConnection(fw.Conn.Existing); err != nil || c == nil {
 				return fmt.Errorf("a %s forward references unknown connection id %q", fw.Kind, fw.Conn.Existing)
+			} else if c.Sensitive {
+				return errSensitiveConn
 			}
 		}
 	}

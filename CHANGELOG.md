@@ -99,6 +99,33 @@ a prerelease upstream.
   a newline as well.
 - MCP: an LLM opening a connection can ask for read or read-run access,
   never auto-run (yolo); the approval shows which access it asked for.
+- MCP: committing a plan writes exactly what the approval showed. Items an
+  LLM staged while the approval was open used to be written with it; they
+  now wait for their own commit.
+- MCP: a connection marked sensitive is off limits in every tool, not only
+  connect. The LLM can no longer edit it, add a forward to it, use it as a
+  jump host, or open a connection whose jump chain goes through it, and
+  its name no longer shows in icon and jump hints.
+- MCP: an approval answer only counts for the kind of request it was shown
+  for.
+- Opening the app a second time hands its arguments to the running one
+  only with a token from the data folder. Before, any local program,
+  including another user's on a shared machine, could make the app open a
+  local shell in a chosen folder or fetch an import link.
+- Updates without a published sha256 are refused instead of installed
+  unverified.
+- Links opened from the app go to the browser only when they are http,
+  https or mailto; file: and custom protocol links are refused.
+- *Open in external terminal* and *Open in system terminal* refuse a host
+  or user name that starts with `-` or holds shell characters; such a name
+  could make ssh or the shell run a command on this machine.
+- The SSH exclusion in a packet capture is used only when the address the
+  server reports is a real IP address and port.
+- An unused session-share link expires after 30 minutes even when no
+  other share is started.
+- The app log file is readable by its owner only.
+- Revealing a credential's secret, or copying a connection's password, is
+  written to the audit log.
 
 ## [0.110.0] - Upload to and download from many hosts
 

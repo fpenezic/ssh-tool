@@ -407,6 +407,10 @@ func (s *Server) handleGuest(w http.ResponseWriter, r *http.Request) {
 	token, tail, _ := strings.Cut(rest, "/")
 
 	s.mu.Lock()
+	// Expire on access too: gcLocked only runs when another share is
+	// registered, so without this an unused link outlived tokenTTL for as
+	// long as nobody started a new share.
+	s.gcLocked()
 	share := s.byToken[token]
 	bind := s.bind
 	cert := s.cert

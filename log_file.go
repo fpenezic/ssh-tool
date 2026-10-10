@@ -37,10 +37,14 @@ func openLogFile(path string) io.Writer {
 }
 
 func (r *rotatingFile) open() error {
-	f, err := os.OpenFile(r.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	// 0600: the log carries host names, helper output and error text that
+	// other local users have no business reading. Chmod covers a file an
+	// older build created 0644.
+	f, err := os.OpenFile(r.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}
+	_ = f.Chmod(0o600)
 	if st, err := f.Stat(); err == nil {
 		r.bytes = st.Size()
 	}

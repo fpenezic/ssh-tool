@@ -1620,8 +1620,15 @@ func (a *App) CredentialsRotatePassword(id, newPassword string) (*store.Credenti
 	return a.credSvc.RotatePassword(id, newPassword)
 }
 
+// CredentialsRevealSecret returns a credential's plaintext (show / copy in
+// the credential editor). Audited like a history reveal: a plaintext
+// leaving the vault is worth a line in the log.
 func (a *App) CredentialsRevealSecret(id string) (string, error) {
-	return a.credSvc.RevealSecret(id)
+	v, err := a.credSvc.RevealSecret(id)
+	if err == nil {
+		a.recordAudit("credential.reveal", id, nil)
+	}
+	return v, err
 }
 
 type CredentialsRotateKeyInput struct {
@@ -4816,6 +4823,9 @@ func (a *App) LaunchExternalTerminal(connectionID, kind string) error {
 	if err != nil {
 		return fmt.Errorf("resolve: %w", err)
 	}
+	if err := checkExternalSSHTarget(settings); err != nil {
+		return err
+	}
 	args := buildSSHArgs(settings)
 	switch kind {
 	case "", "windowsterminal":
@@ -6517,6 +6527,9 @@ func (a *App) sshSystemArgv(connectionID string) ([]string, error) {
 	if s.Hostname == "" {
 		return nil, fmt.Errorf("connection has no hostname")
 	}
+	if err := checkExternalSSHTarget(s); err != nil {
+		return nil, err
+	}
 
 	argv := []string{"ssh"}
 
@@ -6571,6 +6584,10 @@ func (a *App) SshSystemCommand(connectionID string) (string, error) {
 // WebView is left as the only thing that might act on the URL, and the
 // caller needs to know that happened instead of showing nothing.
 func (a *App) OpenURL(url string) error {
+	if !openableURL(url) {
+		log.Printf("open url refused: scheme not http, https or mailto (%d chars)", len(url))
+		return fmt.Errorf("only http, https and mailto links open from the app")
+	}
 	if err := BrowserOpenURL(url); err != nil {
 		log.Printf("open url (%d chars): %v", len(url), err)
 		return err
@@ -7303,6 +7320,14 @@ func noPasswordReason(kind store.CredentialKind, name string) string {
 // Use cases: pasting a sudo password into an open terminal without
 // flipping to the credentials tab.
 func (a *App) ConnectionRevealPassword(connectionID string) (string, error) {
+	v, err := a.connectionRevealPassword(connectionID)
+	if err == nil {
+		a.recordAudit("connection.password.reveal", connectionID, nil)
+	}
+	return v, err
+}
+
+func (a *App) connectionRevealPassword(connectionID string) (string, error) {
 	s, err := a.resolveAnyConnection(connectionID)
 	if err != nil {
 		return "", err
@@ -7946,7 +7971,7 @@ func (a *App) resolveSudoCandidate(sessionID string) string {
 			return pass
 		}
 	}
-	if pass, err := a.ConnectionRevealPassword(connID); err == nil && pass != "" {
+	if pass, err := a.connectionRevealPassword(connID); err == nil && pass != "" {
 		return pass
 	}
 	return ""

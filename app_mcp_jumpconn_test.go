@@ -96,3 +96,60 @@ func TestPlanJumpConnectionExistingAndHint(t *testing.T) {
 		t.Error("a connection as its own jump host accepted")
 	}
 }
+
+// A sensitive connection is off limits to the LLM in every plan tool, not
+// only connect: no edit, no forward on it, no hop through it, and its name
+// does not come back in a hint.
+func TestPlanRefusesSensitiveConnection(t *testing.T) {
+	a := newResolveTestApp(t)
+	a.mcp = newMcpState()
+	a.mcp.manageStore = true
+
+	c, err := a.db.CreateConnection(store.NewConnection{Name: "vault-db", Hostname: "db.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	yes := true
+	if _, err := a.db.UpdateConnection(store.UpdateConnection{ID: c.ID, Sensitive: &yes}); err != nil {
+		t.Fatal(err)
+	}
+	host := "evil.example.com"
+	if err := a.planEditConnection(editConnInput{ConnID: c.ID, Host: &host}); err != errSensitiveConn {
+		t.Errorf("edit: err = %v", err)
+	}
+	if _, err := a.planAddForward(c.ID, "local", "", 0, "10.0.0.1", 5432, false, ""); err != errSensitiveConn {
+		t.Errorf("forward: err = %v", err)
+	}
+	if _, err := a.planAddConnection(planConnInput{Name: "x", Host: "x.example.com", JumpConnection: c.ID}); err == nil {
+		t.Error("jump through a sensitive connection accepted")
+	}
+	if id, name := a.savedConnAt("db.example.com", 22); id != "" || name != "" {
+		t.Errorf("savedConnAt named a sensitive connection: %s %s", id, name)
+	}
+}
+
+func TestJumpsThroughSensitive(t *testing.T) {
+	a := newResolveTestApp(t)
+	bastion, _ := a.db.CreateConnection(store.NewConnection{Name: "bastion", Hostname: "bastion.example.com"})
+	yes := true
+	if _, err := a.db.UpdateConnection(store.UpdateConnection{ID: bastion.ID, Sensitive: &yes}); err != nil {
+		t.Fatal(err)
+	}
+	mid, _ := a.db.CreateConnection(store.NewConnection{Name: "mid", Hostname: "mid.example.com",
+		Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain",
+			Chain: &store.JumpHostSpec{ConnectionID: &bastion.ID}}}})
+	inner, _ := a.db.CreateConnection(store.NewConnection{Name: "inner", Hostname: "inner.example.com",
+		Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain",
+			Chain: &store.JumpHostSpec{ConnectionID: &mid.ID}}}})
+	plain, _ := a.db.CreateConnection(store.NewConnection{Name: "plain", Hostname: "plain.example.com"})
+
+	if !a.jumpsThroughSensitive(mid.ID) {
+		t.Error("direct hop through a sensitive bastion not caught")
+	}
+	if !a.jumpsThroughSensitive(inner.ID) {
+		t.Error("sensitive bastion two references deep not caught")
+	}
+	if a.jumpsThroughSensitive(plain.ID) {
+		t.Error("plain connection flagged")
+	}
+}
