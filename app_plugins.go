@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -79,6 +80,13 @@ type PluginInfo struct {
 	// Version is the installed helper's stamped version ("" if it
 	// couldn't be read, "dev" for un-stamped local builds).
 	Version string `json:"version"`
+	// EngineVersion is the NetBird / Tailscale library the helper was
+	// built with (e.g. "0.80.0"), read from the binary's Go build info, so
+	// it works for helpers published before anyone thought to print it.
+	EngineVersion string `json:"engine_version"`
+	// Latest is the newest helper release this app speaks ("" when it
+	// could not be fetched).
+	Latest string `json:"latest"`
 	// UpdateAvailable is true when the installed helper's version
 	// differs from the running app - after an app update, the bundled
 	// helper is a version behind and should be re-downloaded. Helper
@@ -104,6 +112,47 @@ func pluginVersion(exe string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// pluginEngineModule is the Go module each helper embeds.
+var pluginEngineModule = map[string]string{
+	"netbird":   "github.com/netbirdio/netbird",
+	"tailscale": "tailscale.com",
+}
+
+// pluginEngineVersion reads the embedded engine's module version from the
+// helper binary's Go build info (no exec, so no console flash and no
+// helper change needed). "" when the binary has none or is not Go.
+func pluginEngineVersion(name, exe string) string {
+	mod := pluginEngineModule[name]
+	if mod == "" {
+		return ""
+	}
+	bi, err := buildinfo.ReadFile(exe)
+	if err != nil {
+		return ""
+	}
+	for _, d := range bi.Deps {
+		if d.Path != mod {
+			continue
+		}
+		v := d.Version
+		if d.Replace != nil && d.Replace.Version != "" {
+			v = d.Replace.Version
+		}
+		return strings.TrimPrefix(v, "v")
+	}
+	return ""
+}
+
+// PluginDownloadProgress is the plugin_download_progress event: which
+// step a plugin download is on, and bytes for the download step.
+type PluginDownloadProgress struct {
+	Name    string `json:"name"`
+	Phase   string `json:"phase"` // resolve | download | verify | install
+	Version string `json:"version,omitempty"`
+	Read    int64  `json:"read"`
+	Total   int64  `json:"total"`
+}
+
 // PluginsStatus reports every known plugin's install state + version.
 func (a *App) PluginsStatus() []PluginInfo {
 	out := make([]PluginInfo, 0, len(knownPlugins))
@@ -122,9 +171,10 @@ func (a *App) PluginsStatus() []PluginInfo {
 	latestHelper := a.latestHelperVersion()
 	for _, name := range knownPlugins {
 		p, ok := pluginPath(name)
-		info := PluginInfo{Name: name, Installed: ok, Path: p, Supported: supported}
+		info := PluginInfo{Name: name, Installed: ok, Path: p, Supported: supported, Latest: latestHelper}
 		if ok {
 			info.Version = pluginVersion(p)
+			info.EngineVersion = pluginEngineVersion(name, p)
 			// Flag an update only when we could read a real installed
 			// version AND know the latest helper release AND they differ.
 			// A "dev" helper (un-stamped local build) never nags.
@@ -163,6 +213,12 @@ func (a *App) PluginDownload(name string) (string, error) {
 	if !valid {
 		return "", fmt.Errorf("unknown plugin %q", name)
 	}
+
+	progress := func(p PluginDownloadProgress) {
+		p.Name = name
+		EventsEmit("plugin_download_progress", p)
+	}
+	progress(PluginDownloadProgress{Phase: "resolve"})
 
 	ua := "ssh-tool/" + appVersion
 	// Helpers ship on their own helper-vN tag now, decoupled from the app
@@ -204,19 +260,32 @@ func (a *App) PluginDownload(name string) (string, error) {
 		return "", fmt.Errorf("download: HTTP %d", resp.StatusCode)
 	}
 	h := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(tmp, h), io.LimitReader(resp.Body, 512<<20)); err != nil {
+	total := resp.ContentLength
+	if total <= 0 {
+		total = asset.Size
+	}
+	var lastEmit time.Time
+	pw := &progressCounter{onWrite: func(read int64) {
+		if now := time.Now(); now.Sub(lastEmit) >= 150*time.Millisecond || read == total {
+			lastEmit = now
+			progress(PluginDownloadProgress{Phase: "download", Version: rel.Version, Read: read, Total: total})
+		}
+	}}
+	if _, err := io.Copy(io.MultiWriter(tmp, h, pw), io.LimitReader(resp.Body, 512<<20)); err != nil {
 		tmp.Close()
 		return "", fmt.Errorf("download: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
 		return "", err
 	}
+	progress(PluginDownloadProgress{Phase: "verify", Version: rel.Version, Read: total, Total: total})
 	if got := hex.EncodeToString(h.Sum(nil)); !strings.EqualFold(got, asset.SHA256) {
 		return "", fmt.Errorf("sha256 mismatch: got %s want %s", got, asset.SHA256)
 	}
 	if err := os.Chmod(tmpPath, 0o755); err != nil {
 		return "", err
 	}
+	progress(PluginDownloadProgress{Phase: "install", Version: rel.Version, Read: total, Total: total})
 	dst := filepath.Join(pluginsDir(), pluginBinaryName(name))
 	// Replace atomically; Windows needs the old file gone first.
 	_ = os.Remove(dst)
@@ -238,4 +307,17 @@ func (a *App) PluginRemove(name string) error {
 	a.recordAudit("plugin.remove", name, nil)
 	EventsEmit("plugins_changed", name)
 	return nil
+}
+
+// progressCounter counts bytes written through it and reports the running
+// total.
+type progressCounter struct {
+	n       int64
+	onWrite func(n int64)
+}
+
+func (p *progressCounter) Write(b []byte) (int, error) {
+	p.n += int64(len(b))
+	p.onWrite(p.n)
+	return len(b), nil
 }

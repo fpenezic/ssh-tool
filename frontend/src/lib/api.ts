@@ -204,8 +204,21 @@ export interface PluginInfo {
   installed: boolean;
   path: string;
   version: string;
+  /** NetBird / Tailscale library version inside the helper ("" if unknown). */
+  engine_version: string;
+  /** Newest helper release this app speaks ("" if it could not be fetched). */
+  latest: string;
   update_available: boolean;
   supported: boolean;
+}
+
+/** plugin_download_progress event payload. */
+export interface PluginDownloadProgress {
+  name: string;
+  phase: "resolve" | "download" | "verify" | "install";
+  version?: string;
+  read: number;
+  total: number;
 }
 
 export interface KeepassDatabaseInfo {
@@ -2071,7 +2084,7 @@ export interface AboutInfo {
   os_name: string;
   engine: string;
   components: Array<{ name: string; module?: string; version: string }>;
-  plugins: Array<{ name: string; installed: boolean; version?: string }>;
+  plugins: Array<{ name: string; installed: boolean; version?: string; engine_version?: string }>;
   data_dir: string;
   log_dir: string;
 }

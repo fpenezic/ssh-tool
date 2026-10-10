@@ -28,7 +28,7 @@
   import type { ServerStats } from "./api";
   import { syncState } from "./syncState.svelte";
   import { workspaces } from "./workspaces.svelte";
-  import { updateCheck } from "./updateCheck.svelte";
+  import { updateCheck, openPlugins } from "./updateCheck.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
@@ -903,6 +903,17 @@
       title="A newer release is available - click to view release notes"
     >
       <span>↑ {updateCheck.latest} available</span>
+    </button>
+  {/if}
+
+  {#if updateCheck.pluginUpdates.length > 0}
+    {@const pu = updateCheck.pluginUpdates}
+    <button
+      class="seg update plugin-update"
+      onclick={openPlugins}
+      title={pu.map((u) => `${u.label}: ${u.version || "installed"} -> ${u.latest}`).join("\n") + "\nClick to open Plugins."}
+    >
+      <span>↑ {pu.length === 1 ? `${pu[0].label} plugin` : `${pu.length} plugins`} update</span>
     </button>
   {/if}
 

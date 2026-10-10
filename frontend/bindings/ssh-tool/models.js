@@ -192,6 +192,14 @@ export class AboutPlugin {
              */
             this["version"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * EngineVersion: the NetBird / Tailscale library inside the helper.
+             * @member
+             * @type {string | undefined}
+             */
+            this["engine_version"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -4488,6 +4496,25 @@ export class PluginInfo {
              * @type {string}
              */
             this["version"] = "";
+        }
+        if (!("engine_version" in $$source)) {
+            /**
+             * EngineVersion is the NetBird / Tailscale library the helper was
+             * built with (e.g. "0.80.0"), read from the binary's Go build info, so
+             * it works for helpers published before anyone thought to print it.
+             * @member
+             * @type {string}
+             */
+            this["engine_version"] = "";
+        }
+        if (!("latest" in $$source)) {
+            /**
+             * Latest is the newest helper release this app speaks ("" when it
+             * could not be fetched).
+             * @member
+             * @type {string}
+             */
+            this["latest"] = "";
         }
         if (!("update_available" in $$source)) {
             /**

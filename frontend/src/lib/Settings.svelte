@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import { EventsOn } from "./wailsRuntime";
   import { errMsg } from "./connectErrors";
   import { desktopAlerts } from "./desktopAlerts.svelte";
   import { isMobile } from "./platform";
@@ -8,7 +9,7 @@
   import KeepassSettings from "./KeepassSettings.svelte";
   import BitwardenSettings from "./BitwardenSettings.svelte";
   import InfisicalSettings from "./InfisicalSettings.svelte";
-  import { api, type AboutInfo, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type SuperPuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo } from "./api";
+  import { api, type AboutInfo, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type SuperPuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo, type PluginDownloadProgress } from "./api";
   import { vaultState } from "./vaultState.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
   import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
@@ -1726,7 +1727,42 @@
   }
 
   async function refreshPlugins() {
-    try { plugins = (await api.pluginsStatus()) ?? []; } catch { /* ignore */ }
+    try {
+      plugins = (await api.pluginsStatus()) ?? [];
+      updateCheck.applyPluginStatus(plugins);
+    } catch { /* ignore */ }
+  }
+
+  // Download progress per plugin (the Go side reports resolve / download /
+  // verify / install), and a refresh of both the plugin cards and About
+  // when a plugin is installed or removed - About used to keep the list it
+  // read when Settings opened.
+  let pluginProgress = $state<Record<string, PluginDownloadProgress>>({});
+  $effect(() => {
+    const offProgress = EventsOn<PluginDownloadProgress>("plugin_download_progress", (p) => {
+      pluginProgress = { ...pluginProgress, [p.name]: p };
+    });
+    const offChanged = EventsOn("plugins_changed", async () => {
+      await refreshPlugins();
+      try { aboutInfo = await api.appAbout(); } catch { /* ignore */ }
+    });
+    return () => { offProgress(); offChanged(); };
+  });
+  function fmtMB(n: number): string {
+    return (n / 1048576).toFixed(1);
+  }
+  function progressText(p: PluginDownloadProgress): string {
+    switch (p.phase) {
+      case "resolve": return "Looking up the latest helper release…";
+      case "download": return p.total > 0
+        ? `Downloading ${p.version ?? ""} - ${fmtMB(p.read)} of ${fmtMB(p.total)} MB`
+        : `Downloading ${p.version ?? ""} - ${fmtMB(p.read)} MB`;
+      case "verify": return "Verifying the checksum…";
+      case "install": return "Installing…";
+    }
+  }
+  function engineLabel(name: string): string {
+    return name === "netbird" ? "NetBird" : name === "tailscale" ? "Tailscale" : name;
   }
 
   // Pre-fill the NetBird device name with "<hostname>.ssh-tool" the
@@ -1822,12 +1858,18 @@
   }
   async function pluginDownload(name: string) {
     pluginBusy = true;
+    pluginProgress = { ...pluginProgress, [name]: { name, phase: "resolve", read: 0, total: 0 } };
     try {
       await api.pluginDownload(name);
       await refreshPlugins();
-      toast.ok(`${name} plugin installed`);
+      const p = plugins.find((x) => x.name === name);
+      toast.ok(`${engineLabel(name)} plugin installed${p?.version ? ` (${p.version})` : ""}`);
     } catch (e: any) { toast.err(errMsg(e)); }
-    finally { pluginBusy = false; }
+    finally {
+      pluginBusy = false;
+      const { [name]: _, ...rest } = pluginProgress;
+      pluginProgress = rest;
+    }
   }
   async function pluginRemove(name: string) {
     const ok = await showConfirm({
@@ -3478,12 +3520,30 @@
           {:else}
             <span class="np-pill">not installed</span>
           {/if}
+          {#if pl.installed && pl.engine_version}<span class="np-kind">{engineLabel(pl.name)} {pl.engine_version}</span>{/if}
           {#if pl.installed}<span class="np-meta">{pl.path}</span>{/if}
         </div>
         {#if pl.supported}
-          {#if pl.update_available}
+          {#if pluginProgress[pl.name]}
+            {@const pp = pluginProgress[pl.name]}
+            <div class="plugin-progress">
+              <div class="plugin-progress-bar">
+                <!-- Empty while the release is looked up, then only ever
+                     grows: download fills it, verify / install hold it full.
+                     An animated placeholder here flashed full and snapped
+                     back to 0% when the download started. -->
+                <div
+                  class="plugin-progress-fill"
+                  style:width={pp.phase === "resolve" ? "0%"
+                    : pp.phase === "download" ? (pp.total > 0 ? `${Math.min(100, (pp.read / pp.total) * 100)}%` : "0%")
+                    : "100%"}
+                ></div>
+              </div>
+              <span class="hint">{progressText(pp)}</span>
+            </div>
+          {:else if pl.update_available}
             <p class="hint" style="margin:0.2rem 0">
-              Installed {pl.version || "(unknown)"}, app is {versionInfo?.version ?? "?"}. Reinstall to match.
+              Installed {pl.version || "(unknown)"}; {pl.latest || "a newer helper"} is available.
             </p>
           {/if}
           <div class="np-actions">
@@ -6130,7 +6190,7 @@
           <dd>
             {#each aboutInfo.plugins as p, i (p.name)}
               {i > 0 ? " · " : ""}{p.name}
-              <span class="hint inline">{p.installed ? (p.version || "installed") : "not installed"}</span>
+              <span class="hint inline">{p.installed ? `${p.version || "installed"}${p.engine_version ? `, ${engineLabel(p.name)} ${p.engine_version}` : ""}` : "not installed"}</span>
             {/each}
           </dd>
           <dt>Data</dt>
@@ -7696,4 +7756,7 @@
     font-size: 0.7rem;
     text-decoration: underline;
   }
+  .plugin-progress { display: flex; flex-direction: column; gap: 0.25rem; margin: 0.35rem 0; }
+  .plugin-progress-bar { height: 4px; background: var(--surface0); border-radius: 2px; overflow: hidden; }
+  .plugin-progress-fill { height: 100%; background: var(--blue); transition: width 0.15s linear; }
 </style>

@@ -7,6 +7,8 @@
 // whether to render the pill.
 
 import { api } from "./api";
+import { toast } from "./toast.svelte.ts";
+import type { PluginInfo } from "./api";
 
 class UpdateCheckStore {
   current = $state<string>("");
@@ -17,6 +19,9 @@ class UpdateCheckStore {
   downloadSize = $state<number>(0);
   lastCheckedAt = $state<number>(0);
   lastError = $state<string>("");
+  // Installed helpers with a newer helper release; the status bar shows a
+  // pill while this is non-empty.
+  pluginUpdates = $state<{ name: string; label: string; version: string; latest: string }[]>([]);
 
   async run() {
     try {
@@ -32,7 +37,46 @@ class UpdateCheckStore {
     } catch (e: any) {
       this.lastError = e?.message ?? String(e);
     }
+    if (!this.lastError) await this.checkPlugins();
   }
+
+  // Installed NetBird / Tailscale helpers with a newer helper release get
+  // one toast per (plugin, release) per run of the app; a click opens
+  // Settings -> Network profiles, where the Update button is. Helpers ship
+  // on their own release line, so the app's own update pill does not
+  // cover them.
+  private notifiedPlugins = new Set<string>();
+  private async checkPlugins() {
+    let list: PluginInfo[] = [];
+    try { list = (await api.pluginsStatus()) ?? []; } catch { return; }
+    this.applyPluginStatus(list);
+    for (const u of this.pluginUpdates) {
+      const key = `${u.name}@${u.latest}`;
+      if (this.notifiedPlugins.has(key)) continue;
+      this.notifiedPlugins.add(key);
+      toast.info(`${u.label} plugin update: ${u.version || "installed"} -> ${u.latest}. Click to open Plugins.`, 12000, openPlugins);
+    }
+  }
+
+  // Settings calls this with its own fresh status (after an install or
+  // remove), so the status bar pill clears without waiting for the next
+  // 6-hour check.
+  applyPluginStatus(list: PluginInfo[]) {
+    this.pluginUpdates = list
+      .filter((p) => p.installed && p.update_available && p.latest)
+      .map((p) => ({
+        name: p.name,
+        label: p.name === "netbird" ? "NetBird" : p.name === "tailscale" ? "Tailscale" : p.name,
+        version: p.version,
+        latest: p.latest,
+      }));
+  }
+}
+
+// Settings -> Network profiles holds the Plugins cards and their Update
+// button. Imported lazily: stores imports half the app.
+export function openPlugins() {
+  void import("./stores.svelte").then(({ view }) => view.setTabSettingsSection("network"));
 }
 
 export const updateCheck = new UpdateCheckStore();

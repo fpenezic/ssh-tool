@@ -26,6 +26,17 @@ a prerelease upstream.
   closing the advisories reported against the old ones. They ship as
   `helper-v1.1`; the app now understands patched helper releases and
   offers the update under Settings -> Network profiles -> Plugins.
+- A plugin download shows its progress (finding the release,
+  downloading with MB done, verifying, installing) instead of a button
+  that just stays greyed out.
+- Plugin cards and About show the helper release and the NetBird /
+  Tailscale version inside it (e.g. helper-v1.1, NetBird 0.80.0), and
+  About updates when a plugin is installed or removed - it used to say
+  "not installed" until Settings was reopened.
+- An installed plugin with a newer helper release gets a toast and a
+  status bar pill; a click opens the Plugins cards. The update hint says
+  which helper release is available instead of comparing with the app
+  version.
 
 ### Tabs
 

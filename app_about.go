@@ -33,6 +33,8 @@ type AboutPlugin struct {
 	Name      string `json:"name"`
 	Installed bool   `json:"installed"`
 	Version   string `json:"version,omitempty"`
+	// EngineVersion: the NetBird / Tailscale library inside the helper.
+	EngineVersion string `json:"engine_version,omitempty"`
 }
 
 // AboutInfo is everything the About panel shows beyond AppVersion.
@@ -156,6 +158,7 @@ func (a *App) AppAbout() AboutInfo {
 		if ok {
 			if _, err := os.Stat(p); err == nil {
 				ap.Version = pluginVersion(p)
+				ap.EngineVersion = pluginEngineVersion(name, p)
 			}
 		}
 		info.Plugins = append(info.Plugins, ap)
