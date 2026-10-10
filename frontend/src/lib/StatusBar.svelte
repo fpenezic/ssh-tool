@@ -18,8 +18,9 @@
   import { errMsg } from "./connectErrors";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
+  import { logtail } from "./logtailStore.svelte";
   import { fleet } from "./fleetStore.svelte";
-  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot, IconSave, IconUpload, IconDownload } from "./iconMap";
+  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot, IconSave, IconUpload, IconDownload, IconFile } from "./iconMap";
   import McpActivityPanel from "./McpActivityPanel.svelte";
   import { mcpCounterTitle } from "./mcpLevel";
   import { networkProfiles } from "./networkProfiles.svelte";
@@ -450,6 +451,63 @@
     return () => document.removeEventListener("mousedown", onDoc);
   });
 
+  // Log tails, the same way as captures: one segment while any tail is
+  // open, minimised or detached; a click jumps to it (one) or picks (more).
+  const logtailRows = $derived.by(() => {
+    void logtail.membershipVersion;
+    void logtail.statsVersion;
+    return logtail.list().map((l) => {
+      const tab = paneTabs.findTabForSession(l.sessionId);
+      const sess = sessions.tabs.find((s) => s.sessionId === l.sessionId);
+      const conn = sess ? tree.connectionById(sess.connectionId) : null;
+      return {
+        sessionId: l.sessionId,
+        mode: l.mode,
+        stats: l.stats,
+        name: conn ? conn.name : (sess?.name ?? l.sessionId.slice(0, 8)),
+        host: conn?.hostname ?? sess?.hostname ?? "",
+        tabTitle: tab?.title ?? "-",
+      };
+    });
+  });
+  const logtailAgg = $derived.by(() => {
+    let lines = 0, running = 0;
+    for (const r of logtailRows) {
+      if (r.stats) {
+        lines += r.stats.lines;
+        if (r.stats.running) running++;
+      }
+    }
+    return { count: logtailRows.length, lines, running };
+  });
+  let logtailMenuOpen = $state(false);
+
+  // A detached tail lives in its own window: bring that window forward
+  // (WindowOpenLogtail focuses an existing one). Otherwise jump to the
+  // session's tab and open the tail there.
+  function gotoLogtail(sessionId: string) {
+    logtailMenuOpen = false;
+    if (logtail.modeOf(sessionId) === "detached") {
+      api.windowOpenLogtail(sessionId).catch(console.warn);
+      return;
+    }
+    view.setTab("terminal");
+    paneTabs.revealSession(sessionId);
+    logtail.open(sessionId);
+  }
+  function logtailSegmentClick() {
+    if (logtailRows.length === 1) gotoLogtail(logtailRows[0].sessionId);
+    else logtailMenuOpen = !logtailMenuOpen;
+  }
+  $effect(() => {
+    if (!logtailMenuOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (!(e.target as HTMLElement)?.closest(".lt-wrap")) logtailMenuOpen = false;
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  });
+
   // Pin the Settings target section to About before flipping the
   // view. setTabSettingsSection drives a reactive pendingSection
   // pickup inside Settings so the jump works even when Settings
@@ -655,6 +713,44 @@
                   <span class="td-row-iface">{r.stats.iface}</span>
                   <span class="td-row-pkts">{fmtCount(r.stats.packets)}</span>
                   {#if r.stats.insights > 0}<span class="td-alert">{fmtCount(r.stats.insights)}</span>{/if}
+                {:else}
+                  <span class="td-row-iface dim">starting…</span>
+                {/if}
+                {#if r.mode === "minimized"}<span class="td-bg">bg</span>{/if}
+              </span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  {#if logtailAgg.count > 0}
+    <div class="td-wrap lt-wrap">
+      <button
+        class="seg logtail"
+        class:live={logtailAgg.running > 0}
+        onclick={logtailSegmentClick}
+        title={`${logtailAgg.count} log tail${logtailAgg.count === 1 ? "" : "s"} · ${logtailAgg.lines} lines${logtailAgg.count === 1 ? " - click to open" : " - click to pick"}`}
+      >
+        <IconFile size={11} />
+        {#if logtailAgg.count > 1}<span class="td-num">{logtailAgg.count}</span>{/if}
+        <span>{fmtCount(logtailAgg.lines)}</span>
+      </button>
+      {#if logtailMenuOpen}
+        <div class="td-menu" role="menu">
+          <div class="td-menu-head">Log tails</div>
+          {#each logtailRows as r (r.sessionId)}
+            <button class="td-row" onclick={() => gotoLogtail(r.sessionId)} title={`${r.name}${r.host ? " · " + r.host : ""} - tab ${r.tabTitle}`}>
+              <span class="td-dot" class:live={r.stats?.running}></span>
+              <span class="td-row-name lt-name">{r.name}</span>
+              <span class="td-row-tab">{r.tabTitle}</span>
+              <span class="td-row-meta">
+                {#if r.stats}
+                  <span class="td-row-iface">{r.stats.source}</span>
+                  <span class="td-row-pkts">{fmtCount(r.stats.lines)}</span>
+                {:else if r.mode === "detached"}
+                  <span class="td-row-iface dim">own window</span>
                 {:else}
                   <span class="td-row-iface dim">starting…</span>
                 {/if}
@@ -905,6 +1001,10 @@
     50% { opacity: 0.5; }
   }
   .seg.tcpdump { color: var(--pink); }
+  .seg.logtail { color: var(--teal); }
+  .seg.logtail .td-num { background: var(--surface1); color: var(--text); border-radius: 999px; padding: 0 0.3rem; font-size: 0.6rem; font-weight: 700; }
+  .seg.logtail.live > :global(svg) { animation: sb-pulse 1.4s ease-in-out infinite; }
+  .td-row-name.lt-name { color: var(--teal); }
   .seg.transfer { color: var(--blue); cursor: pointer; }
   .seg.transfer.bad { color: var(--red); }
   .seg.transfer .tr-hosts { color: var(--subtext0); }

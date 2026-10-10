@@ -1,7 +1,8 @@
 // Which status bar items the user wants to see (right-click the bar).
 // Stored as the list of HIDDEN items, so anything added later shows by
 // default. Indicators that flag a problem or a live exposure (vault
-// locked, issues, update, shared / MCP sessions, VPN, sync, captures) and
+// locked, issues, update, shared / MCP sessions, VPN, sync, captures, log
+// tails) and
 // the version (the way to About) are not in the list and always show.
 
 import { api } from "./api";

@@ -156,6 +156,9 @@ right:
     macOS the machine itself. WSL and Linux shells also get read-only
     Processes and Services tabs (no kill / restart; ignore per distro).
 - Update-available pill when a newer release is published.
+- A log tail segment shows while any log tail runs (open, minimised or in
+  its own window), the way captures do: click it to open the tail, or
+  pick one when several run.
 - Right-click the status bar to pick which items it shows; warnings
   (locked vault, issues, updates, sharing, VPN) always show.
 - Version pill on the right - click to jump to Settings → About.

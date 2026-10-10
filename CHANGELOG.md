@@ -15,6 +15,10 @@ a prerelease upstream.
   together. A tab dropped on the left edge of a workspace's name goes in
   front of the workspace without joining it, so a tab can now sit first
   when a workspace starts the bar.
+- The status bar shows running log tails the way it shows captures: a
+  segment with the line count while any tail is open, minimised or in its
+  own window. A click opens the tail (or brings its window forward); with
+  several, it lists them to pick from.
 
 ### Fleet
 
