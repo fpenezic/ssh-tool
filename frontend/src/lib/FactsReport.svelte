@@ -57,6 +57,7 @@
   // an appendix. Everything is derived from stored snapshots; nothing is
   // fetched here.
   import type { FactsHostResult } from "./api";
+  import { failedIgnore } from "./failedIgnore.svelte";
   import { fleet, containerIssues, containerProblem, type FactsSnapshot, type ReportSettings } from "./fleetStore.svelte";
 
   interface Props {
@@ -83,7 +84,10 @@
   const expected = $derived(new Set(rs.expectedUnits));
   // Failed units that count: the expected ones are listed apart. Older
   // runs carry only a count, which counts as is.
-  const unexpectedUnits = (r: FactsHostResult) => (r.facts.failed_units ?? []).filter((u) => !expected.has(u));
+  // Expected: on the report's own list, or ignored for this host or a
+  // folder above it (the status bar's failed-units ignore).
+  const isExpected = (r: FactsHostResult, u: string) => expected.has(u) || failedIgnore.isIgnored(r.connection_id, u);
+  const unexpectedUnits = (r: FactsHostResult) => (r.facts.failed_units ?? []).filter((u) => !isExpected(r, u));
   const failedCount = (r: FactsHostResult) => r.facts.failed_units ? unexpectedUnits(r).length : Math.max(r.facts.failed, 0);
   const DAY = 86400;
 
@@ -182,7 +186,7 @@
   // Expected units that did fail, with the hosts: listed, not counted.
   const expectedSeen = $derived.by(() => {
     const m = new Map<string, string[]>();
-    for (const r of ok) for (const u of r.facts.failed_units ?? []) if (expected.has(u)) m.set(u, [...(m.get(u) ?? []), r.name]);
+    for (const r of ok) for (const u of r.facts.failed_units ?? []) if (isExpected(r, u)) m.set(u, [...(m.get(u) ?? []), r.name]);
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   });
   const fullRows = $derived(ok.flatMap((r) => fsUse(r).filter((u) => u.pct >= DISK_WARN).map((u) => ({ r, ...u, trend: trendOf(r.connection_id, u.mount, u.kind) })))
@@ -259,8 +263,8 @@
       if (has(base, "uptime") && has(snap, "uptime") && b.uptime_sec > 0 && b.uptime_sec < (snap.at - base.at) / 1000) out.push({ host: name(r), what: `rebooted (up ${Math.floor(b.uptime_sec / DAY)}d)` });
       if (a.failed_units && b.failed_units) {
         const pa = new Set(a.failed_units), pb = new Set(b.failed_units);
-        for (const u of pb) if (!pa.has(u) && !expected.has(u)) out.push({ host: name(r), what: `${u} failed`, level: "red" });
-        for (const u of pa) if (!pb.has(u) && !expected.has(u)) out.push({ host: name(r), what: `${u} no longer failed`, level: "green" });
+        for (const u of pb) if (!pa.has(u) && !isExpected(r, u)) out.push({ host: name(r), what: `${u} failed`, level: "red" });
+        for (const u of pa) if (!pb.has(u) && !isExpected(r, u)) out.push({ host: name(r), what: `${u} no longer failed`, level: "green" });
       }
       if (has(base, "ports") && has(snap, "ports")) {
         const pa = new Set(a.ports ?? []), pb = new Set(b.ports ?? []);

@@ -320,6 +320,8 @@ row in the right pane. The same entries are in the right-click menu.
   thresholds and the *expected failed units* (a unit that fails by
   design, such as irqbalance on a small VM): they are listed apart and
   do not colour a host; *expected* next to a unit in the report adds it.
+  Units ignored in Server status (for the host or a folder above it)
+  count as expected too.
   Settings are kept per folder, except *Prepared by*, which signs every
   report (top and bottom, with the time the file was generated), and the
   *Logo* shown top right (PNG, JPEG, WebP or SVG; embedded in the saved

@@ -4,6 +4,7 @@
   // one" is one click (Find similar), with reboot / security counts on top.
   import { onMount } from "svelte";
   import { api, type FactsHostResult } from "./api";
+  import { failedIgnore } from "./failedIgnore.svelte";
   import { fleet, containerIssues, containerProblem, folderHostIds, folderHostIdsLoaded, type FleetOpen, type FactsSnapshot, type ReportSettings } from "./fleetStore.svelte";
   import { toast } from "./toast.svelte";
   import { connectionActions } from "./connectionActions.svelte";
@@ -388,7 +389,7 @@
   });
   const needReboot = $derived(okRows.filter((r) => r.facts.reboot === "yes").length);
   const withSecurity = $derived(okRows.filter((r) => r.facts.security > 0).length);
-  const withFailed = $derived(okRows.filter((r) => r.facts.failed_units ? r.facts.failed_units.some((u) => !rs.expectedUnits.includes(u)) : r.facts.failed > 0).length);
+  const withFailed = $derived(okRows.filter((r) => r.facts.failed_units ? r.facts.failed_units.some((u) => !rs.expectedUnits.includes(u) && !failedIgnore.isIgnored(r.connection_id, u)) : r.facts.failed > 0).length);
   const diskFull = $derived(okRows.filter((r) => Math.max(diskUse(r)?.pct ?? 0, inodeUse(r)?.pct ?? 0) >= DISK_WARN).length);
   const oldKernel = $derived(okRows.filter((r) => r.facts.kernel_pending === "yes").length);
   const notPatched = $derived(okRows.filter((r) => (patchAgeDays(r) ?? 0) >= PATCH_OLD_DAYS).length);

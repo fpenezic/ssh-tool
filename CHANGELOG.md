@@ -42,7 +42,8 @@ a prerelease upstream.
   sets the warning and critical disk levels, how old the last update
   must be before pending security updates flag a host, how long a reboot
   may wait (counted from when the new kernel was installed), and failed units
-  that are expected and only listed. A *Prepared by* name and the time
+  that are expected and only listed (units already ignored in Server
+  status, for the host or a folder above it, count as expected too). A *Prepared by* name and the time
   the file was generated sign every report, with an optional company
   logo.
 - Gather facts: *Save as preset…* keeps a set of facts (with the custom
