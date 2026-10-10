@@ -77,6 +77,25 @@ a prerelease upstream.
   answer" with the fact it was still collecting, instead of showing as
   answered with the rest of its facts empty.
 
+### Security
+
+- Values the app passes to remote commands (capture interface and
+  filter, log tail unit / path / container, route lookup) are quoted
+  unless they are plain words. Before, a value containing `;`, `|` or
+  `&` reached the remote shell unquoted.
+- Links with a `vbscript:` URL are refused like `data:` and `blob:`.
+- MCP: the read-only check that lets an LLM's command run without asking
+  now reads the whole command. Before, a second line (`ls` then a newline
+  and anything), `env CMD`, `find -delete` / `-exec`, `sed -i`, awk's
+  `system()` and setting forms such as `git config KEY VALUE`, `date -s`
+  or `ip link set` passed as reads and ran without an approval. A
+  `VAR=value` prefix other than the locale ones now asks too. `awk`,
+  `sed`, `less` and `more` left the built-in list; add them to the
+  allowlist in Settings to auto-run them again. The yolo check sees past
+  a newline as well.
+- MCP: an LLM opening a connection can ask for read or read-run access,
+  never auto-run (yolo); the approval shows which access it asked for.
+
 ## [0.110.0] - Upload to and download from many hosts
 
 Send a file to many hosts, or collect files such as logs from all of them

@@ -1553,7 +1553,13 @@ What the LLM can do:
   run immediately; anything that could change state pops an approval
   prompt where you **Run** it or **Deny**. You can extend the
   auto-run allowlist in Settings; mutating commands (sudo, rm, ...)
-  always prompt.
+  always prompt. Arguments count too: `find -delete`, `sort -o`,
+  `ip link set`, `git branch NAME` and a `VAR=value` prefix other than
+  the locale ones prompt, and so does a command spread over several
+  lines. `awk`, `sed`, `less` and `more` are not on the built-in list
+  (they can edit files or run commands); add them to the allowlist if
+  you want them auto-run. The Gather facts custom column uses the same
+  list.
 - **type_into_terminal** - on approval, types text into your live
   terminal **without pressing Enter**, so you review it and submit it
   yourself.

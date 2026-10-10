@@ -757,15 +757,23 @@ func (a *App) folderPathIndex() map[string]string {
 // the gate (opening a session spends credentials and may trigger a host-key
 // prompt). A Sensitive connection is refused.
 //
+// mcpConnectGrant is the access an LLM-opened session gets: read or
+// read-run. Yolo is never granted from here: it is the user's own opt-out of
+// per-command prompts, set in the share dialog, and an LLM asking for it on a
+// connect would grant itself prompt-free writes.
+func mcpConnectGrant(level string) mcpGrantLevel {
+	if mcpGrantLevel(level) == mcpGrantReadOnly {
+		return mcpGrantReadOnly
+	}
+	return mcpGrantReadRun
+}
+
 // connectionID is either a saved-connection id, or "dyn:<folderID>:<entryID>"
 // for a dynamic-inventory host (as returned by list_connections). The two are
 // resolved to a common (name, hostname, folder, connect-func) shape and share
 // the approval + post-connect wiring below.
 func (a *App) mcpConnect(connectionID, level string) (string, error) {
-	lvl := mcpGrantLevel(level)
-	if lvl != mcpGrantReadOnly && lvl != mcpGrantReadRun && lvl != mcpGrantReadRunYolo {
-		lvl = mcpGrantReadRun // default to the useful-but-gated level, never yolo
-	}
+	lvl := mcpConnectGrant(level)
 
 	var (
 		name, hostname, folder string
@@ -814,7 +822,9 @@ func (a *App) mcpConnect(connectionID, level string) (string, error) {
 	if folder != "" {
 		label = folder + "/" + name
 	}
-	if a.requestApproval("", label, "connect", label) != mcpDecisionRun {
+	// For a connect the request's command is the access the session will
+	// get, so the modal shows it next to the host.
+	if a.requestApproval("", label, "connect", string(lvl)) != mcpDecisionRun {
 		a.recordActivity(McpActivity{
 			Kind: "connect", Session: label, Command: label, Gate: "denied",
 		})

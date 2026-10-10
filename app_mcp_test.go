@@ -39,8 +39,8 @@ func TestYoloGateDecision(t *testing.T) {
 		cmd  string
 		want string
 	}{
-		{mcpGrantReadRun, "cat /etc/hosts", "auto"},        // read-only, gated level
-		{mcpGrantReadRunYolo, "cat /etc/hosts", "auto"},    // read-only, yolo
+		{mcpGrantReadRun, "cat /etc/hosts", "auto"},              // read-only, gated level
+		{mcpGrantReadRunYolo, "cat /etc/hosts", "auto"},          // read-only, yolo
 		{mcpGrantReadRun, "systemctl restart nginx", "prompt"},   // write, gated -> modal
 		{mcpGrantReadRunYolo, "systemctl restart nginx", "yolo"}, // write, yolo -> auto
 		{mcpGrantReadRunYolo, "echo hi > /tmp/x", "yolo"},        // benign write, yolo
@@ -68,6 +68,17 @@ func TestWindowsPathToWSL(t *testing.T) {
 	for _, c := range cases {
 		if got := windowsPathToWSL(c.in); got != c.want {
 			t.Errorf("windowsPathToWSL(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestMcpConnectGrantNeverYolo(t *testing.T) {
+	for in, want := range map[string]mcpGrantLevel{
+		"read": mcpGrantReadOnly, "read-run": mcpGrantReadRun,
+		"read-run-yolo": mcpGrantReadRun, "": mcpGrantReadRun, "admin": mcpGrantReadRun,
+	} {
+		if got := mcpConnectGrant(in); got != want {
+			t.Errorf("mcpConnectGrant(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

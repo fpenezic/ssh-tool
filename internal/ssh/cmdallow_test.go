@@ -58,12 +58,12 @@ func TestIsReadOnly(t *testing.T) {
 		{"vim /etc/hosts", false},
 
 		// Structural rejections.
-		{"cat /etc/passwd > /tmp/out", false},   // redirection
-		{"echo hi >> /root/.bashrc", false},     // append
-		{"ls $(rm -rf /tmp)", false},            // command substitution
-		{"ls `whoami`", false},                  // backticks
-		{"ls /tmp &", false},                    // backgrounding
-		{"cat <(rm x)", false},                  // process substitution
+		{"cat /etc/passwd > /tmp/out", false}, // redirection
+		{"echo hi >> /root/.bashrc", false},   // append
+		{"ls $(rm -rf /tmp)", false},          // command substitution
+		{"ls `whoami`", false},                // backticks
+		{"ls /tmp &", false},                  // backgrounding
+		{"cat <(rm x)", false},                // process substitution
 
 		// A read piped into a mutation must fail (every segment checked).
 		{"cat list | xargs rm", false},
@@ -184,6 +184,88 @@ func TestIsDangerous(t *testing.T) {
 	for _, c := range safe {
 		if IsDangerous(c) {
 			t.Errorf("IsDangerous(%q) = true, want false (not catastrophic)", c)
+		}
+	}
+}
+
+// Bypasses found in the 2026-10 audit: each looked like a read to the old
+// classifier and ran without an approval.
+func TestIsReadOnlyAuditBypasses(t *testing.T) {
+	for _, c := range []string{
+		"ls\nrm -rf /tmp/x",
+		"ls\r\nreboot",
+		"ls\rreboot",
+		"env rm -rf /tmp/x",
+		"find /tmp -delete",
+		"find / -exec rm {} +",
+		"find . -fprint /etc/x",
+		"sed -i s/a/b/ /etc/hosts",
+		"sed -n 1e\\ id x",
+		"awk 'BEGIN{system(\"reboot\")}'",
+		"less +!id x",
+		"git config core.pager 'sh -c id'",
+		"git config --unset user.name",
+		"git branch evil",
+		"git tag v9",
+		"git remote add x https://example.com/x",
+		"sort -o /etc/passwd x",
+		"sort -uo /etc/passwd x",
+		"sort --compress-program=sh x",
+		"date -s 2020-01-01",
+		"hostname evil",
+		"dmesg -C",
+		"journalctl --vacuum-time=1s",
+		"ss -K dst 10.0.0.1",
+		"uniq in /etc/out",
+		"xxd -r dump /bin/ls",
+		"mount /dev/sdb1 /mnt",
+		"ifconfig eth0 down",
+		"ip link set eth0 down",
+		"ip route add default via 10.0.0.1",
+		"ip netns exec x sh",
+		"rg --pre ./evil x",
+		"PAGER='sh -c id' git log",
+		"LD_PRELOAD=/tmp/x.so ls",
+	} {
+		if IsReadOnly(c, nil) {
+			t.Errorf("IsReadOnly(%q) = true, want a prompt", c)
+		}
+	}
+}
+
+func TestIsReadOnlyCommonReadsStillAutoRun(t *testing.T) {
+	for _, c := range []string{
+		"ls -la /etc",
+		"cat /etc/os-release | grep -i version",
+		"find /var/log -name '*.gz' -mtime +7",
+		"sort -n x | uniq -c",
+		"date +%s",
+		"hostname -f",
+		"dmesg -T | tail",
+		"journalctl -u nginx -n 50 --no-pager",
+		"ss -tlnp",
+		"ip -br addr",
+		"ip route show",
+		"mount",
+		"ifconfig eth0",
+		"env",
+		"git config --get user.name",
+		"git branch -a",
+		"git remote -v",
+		"git log --oneline -5",
+		"LANG=C df -h",
+		"systemctl status nginx\nsystemctl is-active nginx",
+	} {
+		if !IsReadOnly(c, nil) {
+			t.Errorf("IsReadOnly(%q) = false, want auto-run", c)
+		}
+	}
+}
+
+func TestIsDangerousSeesPastNewline(t *testing.T) {
+	for _, c := range []string{"ls\nshutdown now", "true\r\nrm -rf /"} {
+		if !IsDangerous(c) {
+			t.Errorf("IsDangerous(%q) = false", c)
 		}
 	}
 }

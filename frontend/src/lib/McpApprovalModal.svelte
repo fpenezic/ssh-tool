@@ -33,8 +33,12 @@
     {#if kind === "connect"}
       <p>
         An external LLM is requesting to open an SSH session for
-        <strong>{command}</strong> and work on it. Approving spends the saved
+        <strong>{sessionName}</strong> and work on it. Approving spends the saved
         credentials for this connection.
+      </p>
+      <p>
+        Access once connected:
+        <strong>{command === "read" ? "read only (terminal output)" : "read and run (each change asks you first)"}</strong>
       </p>
     {:else}
       <p>

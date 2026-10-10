@@ -14,14 +14,19 @@ import (
 
 // readOnlyCommands is the built-in allowlist of leading command tokens that
 // only inspect state. A command auto-runs only if EVERY segment of a pipeline
-// (split on |, &&, ||, ;) starts with one of these AND the whole line carries
+// (split on |, &&, ||, ; and newlines) starts with one of these, passes its
+// argument check (argsReadOnly) AND the whole line carries
 // no mutation markers (see mutationMarkers / redirection checks).
+//
+// Not here on purpose: awk and sed (system(), sed's e / w commands and -i
+// make an edit or a shell out look like a filter), less / more (an
+// interactive pager can run commands). A user who wants them auto-run adds
+// them to mcp_readonly_extra, which is their call.
 var readOnlyCommands = map[string]bool{
-	"cat": true, "ls": true, "head": true, "tail": true, "less": true,
-	"more": true, "grep": true, "egrep": true, "fgrep": true, "rg": true,
+	"cat": true, "ls": true, "head": true, "tail": true, "grep": true, "egrep": true, "fgrep": true, "rg": true,
 	"find": true, "locate": true, "file": true, "stat": true, "readlink": true,
 	"realpath": true, "wc": true, "sort": true, "uniq": true, "cut": true,
-	"tr": true, "awk": true, "sed": true, "column": true, "nl": true,
+	"tr": true, "column": true, "nl": true,
 	"journalctl": true, "dmesg": true, "uptime": true, "who": true, "w": true,
 	"whoami": true, "id": true, "groups": true, "hostname": true, "uname": true,
 	"date": true, "env": true, "printenv": true, "echo": true, "which": true,
@@ -60,14 +65,131 @@ var subcommandReadOnly = map[string]map[string]bool{
 		"remote": true, "config": true, "rev-parse": true, "describe": true,
 		"ls-files": true, "blame": true, "tag": true, "reflog": true, "shortlog": true,
 	},
-	"apt": {"list": true, "show": true, "policy": true, "search": true},
+	"apt":       {"list": true, "show": true, "policy": true, "search": true},
 	"apt-cache": {"policy": true, "show": true, "search": true, "showpkg": true, "stats": true},
-	"dpkg": {"-l": true, "-L": true, "-s": true, "-S": true, "--list": true, "--status": true},
-	"rpm": {"-q": true, "-qa": true, "-qi": true, "-ql": true},
-	"snap": {"list": true, "info": true, "version": true},
-	"pip": {"list": true, "show": true, "freeze": true},
-	"pip3": {"list": true, "show": true, "freeze": true},
-	"npm": {"ls": true, "list": true, "view": true, "outdated": true},
+	"dpkg":      {"-l": true, "-L": true, "-s": true, "-S": true, "--list": true, "--status": true},
+	"rpm":       {"-q": true, "-qa": true, "-qi": true, "-ql": true},
+	"snap":      {"list": true, "info": true, "version": true},
+	"pip":       {"list": true, "show": true, "freeze": true},
+	"pip3":      {"list": true, "show": true, "freeze": true},
+	"npm":       {"ls": true, "list": true, "view": true, "outdated": true},
+}
+
+// argsReadOnly vets the arguments of allowlisted commands that have a write,
+// exec or set mode behind a flag or an extra operand (find -delete, sort -o,
+// date -s, ip link set, git branch <new>). A command missing here is
+// read-only whatever its arguments.
+var argsReadOnly = map[string]func(args []string) bool{
+	"find": func(a []string) bool {
+		return !anyArg(a, "-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls")
+	},
+	"sort": func(a []string) bool {
+		return !hasShortFlag(a, 'o') && !anyArgPrefix(a, "--output", "--compress-program")
+	},
+	"date": func(a []string) bool { return !hasShortFlag(a, 's') && !anyArgPrefix(a, "--set") },
+	"hostname": func(a []string) bool {
+		return len(nonFlagArgs(a)) == 0 && !hasShortFlag(a, 'F', 'b') && !anyArgPrefix(a, "--file", "--boot")
+	},
+	"dmesg": func(a []string) bool {
+		return !hasShortFlag(a, 'c', 'C', 'D', 'E', 'n') && !anyArgPrefix(a, "--clear", "--read-clear", "--console")
+	},
+	"journalctl": func(a []string) bool {
+		return !anyArgPrefix(a, "--vacuum", "--rotate", "--flush", "--sync", "--relinquish-var", "--smart-relinquish-var", "--setup-keys", "--update-catalog")
+	},
+	"ss":   func(a []string) bool { return !hasShortFlag(a, 'K') && !anyArgPrefix(a, "--kill") },
+	"file": func(a []string) bool { return !hasShortFlag(a, 'C') && !anyArgPrefix(a, "--compile") },
+	"tree": func(a []string) bool { return !hasShortFlag(a, 'o') },
+	"sar":  func(a []string) bool { return !hasShortFlag(a, 'o') },
+	"rg":   func(a []string) bool { return !anyArgPrefix(a, "--pre") },
+	"uniq": func(a []string) bool { return len(nonFlagArgs(a)) <= 1 }, // a 2nd operand is the output file
+	"xxd": func(a []string) bool {
+		return len(nonFlagArgs(a)) <= 1 && !hasShortFlag(a, 'r') && !anyArgPrefix(a, "-revert")
+	},
+	"mount":    func(a []string) bool { return len(nonFlagArgs(a)) == 0 && !hasShortFlag(a, 'a') },
+	"ifconfig": func(a []string) bool { return len(nonFlagArgs(a)) <= 1 },
+	"env":      func(a []string) bool { return len(a) == 0 }, // env CMD runs CMD
+	"ip": func(a []string) bool {
+		return !anyArg(a, "add", "del", "delete", "set", "flush", "change", "replace",
+			"append", "prepend", "exec", "-b", "-batch", "--batch", "-force", "save", "restore", "attach", "detach")
+	},
+}
+
+// subArgsReadOnly vets the arguments after an allowed subcommand verb where
+// the verb has a writing form (git branch NAME creates a branch).
+var subArgsReadOnly = map[string]map[string]func(args []string) bool{
+	"git": {
+		"config": func(a []string) bool {
+			return anyArg(a, "--get", "--get-all", "--get-regexp", "--list", "-l") &&
+				!anyArg(a, "--unset", "--unset-all", "--add", "--replace-all", "--rename-section", "--remove-section", "--edit", "-e")
+		},
+		"branch": func(a []string) bool {
+			return onlyFlags(a, "-a", "-r", "-l", "-v", "-vv", "--all", "--remotes", "--list", "--show-current")
+		},
+		"tag": func(a []string) bool { return onlyFlags(a, "-l", "--list", "-n") },
+		"remote": func(a []string) bool {
+			return len(a) == 0 || onlyFlags(a, "-v", "--verbose") || (len(a) >= 1 && (a[0] == "show" || a[0] == "get-url"))
+		},
+	},
+}
+
+func anyArg(args []string, want ...string) bool {
+	for _, a := range args {
+		for _, w := range want {
+			if a == w {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func anyArgPrefix(args []string, want ...string) bool {
+	for _, a := range args {
+		for _, w := range want {
+			if strings.HasPrefix(a, w) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasShortFlag reports whether a short-option cluster (-x, -abx) contains
+// any of letters. Long options (--x) are not short flags.
+func hasShortFlag(args []string, letters ...byte) bool {
+	for _, a := range args {
+		if len(a) < 2 || a[0] != '-' || a[1] == '-' {
+			continue
+		}
+		for _, l := range letters {
+			if strings.IndexByte(a[1:], l) >= 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// onlyFlags: every arg is one of allowed (no operand that would name a new
+// branch or tag).
+func onlyFlags(args []string, allowed ...string) bool {
+	for _, a := range args {
+		if !anyArg([]string{a}, allowed...) {
+			return false
+		}
+	}
+	return true
+}
+
+// safeEnvPrefix lists VAR=val prefixes that only change formatting. Any
+// other assignment can change what a read-only command runs (PAGER,
+// LESSOPEN, GIT_PAGER, LD_PRELOAD, GIT_EXTERNAL_DIFF), so it prompts.
+func safeEnvPrefix(name string) bool {
+	switch name {
+	case "LANG", "LANGUAGE", "TZ", "TERM", "COLUMNS", "LINES", "NO_COLOR":
+		return true
+	}
+	return strings.HasPrefix(name, "LC_")
 }
 
 // mutationTokens are command names that ALWAYS force approval regardless of
@@ -134,7 +256,12 @@ func IsReadOnly(command string, extra []string) bool {
 			// state for later; treat as not auto-runnable.
 			return false
 		}
-		lead := cmd[0]
+		for _, tok := range fields[:len(fields)-len(cmd)] {
+			if !safeEnvPrefix(tok[:strings.IndexByte(tok, '=')]) {
+				return false
+			}
+		}
+		lead, args := cmd[0], cmd[1:]
 
 		if mutationTokens[lead] {
 			return false
@@ -143,16 +270,22 @@ func IsReadOnly(command string, extra []string) bool {
 			continue
 		}
 		if readOnlyCommands[lead] {
+			if check, ok := argsReadOnly[lead]; ok && !check(args) {
+				return false
+			}
 			continue
 		}
 		if verbs, ok := subcommandReadOnly[lead]; ok {
 			// Need a subcommand and it must be an inspect verb. Find the first
 			// non-flag-ish token after the command for tools like git/systemctl;
 			// for dpkg/rpm the verb IS a flag, so just check any token matches.
-			if segmentSubcommandOK(cmd[1:], verbs) {
-				continue
+			if !segmentSubcommandOK(args, verbs) {
+				return false
 			}
-			return false
+			if check, ok := subArgsReadOnly[lead][args[0]]; ok && !check(args[1:]) {
+				return false
+			}
+			continue
 		}
 		return false
 	}
@@ -160,13 +293,15 @@ func IsReadOnly(command string, extra []string) bool {
 }
 
 // splitSegments breaks a command line on the shell operators that chain
-// separate commands: |, ||, &&, ;. Quote handling is intentionally minimal -
+// separate commands: |, ||, &&, ; and a newline (the remote shell runs each
+// line as its own command; missing it let "ls\nrm -rf x" classify as ls).
+// Quote handling is intentionally minimal -
 // a read-only classifier errs toward "not read-only", and any exotic quoting
 // that hides an operator just means we prompt, which is the safe default.
 func splitSegments(command string) []string {
 	// Normalise the two-char operators to a single sentinel first, then split
 	// on the sentinel and the single-char separators.
-	repl := strings.NewReplacer("&&", "\x00", "||", "\x00", "|", "\x00", ";", "\x00")
+	repl := strings.NewReplacer("&&", "\x00", "||", "\x00", "|", "\x00", ";", "\x00", "\r\n", "\x00", "\n", "\x00", "\r", "\x00")
 	parts := strings.Split(repl.Replace(command), "\x00")
 	var out []string
 	for _, p := range parts {
