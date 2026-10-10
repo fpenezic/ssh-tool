@@ -161,7 +161,11 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" bin/* --clobber
           else
+            # --latest=false: GitHub otherwise flags the newest release
+            # "Latest", and /releases/latest (older app builds, the web
+            # mirror) would then point at a helper instead of the app.
             gh release create "$tag" bin/* \
               --title "$tag" \
+              --latest=false \
               --notes "Sidecar tunnel helpers (NetBird, Tailscale). Downloaded automatically by ssh-tool; see Settings > Network profiles > Plugins."
           fi
