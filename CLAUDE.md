@@ -158,7 +158,9 @@ cd frontend && npm run test        # vitest, 26 files / 298 cases
 
 Narrower runs while iterating: `go test ./internal/resolver/`
 (inheritance), `./internal/creds/` (vault + machine sidecar),
-`./internal/ssh/` (the largest suite). Android still has to compile:
+`./internal/ssh/` (the largest suite). Android still has to compile,
+the main package included (gotcha 100 has the NDK command; the CI
+android job is the only other place an untagged file meets android):
 `GOOS=android GOARCH=arm64 go build -tags android ./internal/ssh/`.
 
 Regenerate bindings after IPC changes:

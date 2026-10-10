@@ -1473,6 +1473,17 @@ everything mobile is behind a build tag or an `isMobile` check.
     `{#if a}A · {/if}B` renders "A ·B". Build such separators in an
     expression (`{a ? \`A · \` : ""}B`).
 
+100. **Untagged `app_*.go` files build on android too; the MCP tool args
+    do not.** The MCP args structs live in `app_mcp_desktop.go`
+    (`//go:build !android && !ios`, and a test parses them there). A
+    shared file that names one (`mcpGatherFacts(in mcpFactsArgs)`)
+    compiles on desktop and in every Go test, and fails only in the CI
+    android job - after the tag is pushed. Give the shared code its own
+    struct and convert in the handler (`factsGatherRequest(in)`; struct
+    conversion ignores tags). Before tagging, compile the main package
+    for android, not just `./internal/ssh/`:
+    `CC=$ANDROID_HOME/ndk/<ver>/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang CGO_ENABLED=1 GOOS=android GOARCH=arm64 go build -tags android -buildmode=c-shared -o /tmp/x.so .`
+
 ---
 
 # Archive

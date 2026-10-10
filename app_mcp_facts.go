@@ -280,7 +280,19 @@ func (a *App) McpFactsApprovalRespond(approvalID string, approve bool, hostIDs [
 	return nil
 }
 
-func (a *App) mcpGatherFacts(in mcpFactsArgs) (string, error) {
+// factsGatherRequest is gather_facts' input. It mirrors mcpFactsArgs, which
+// lives in the desktop-only app_mcp_desktop.go next to the other tool args
+// (a test reads them there); this file also builds on android, so it takes
+// its own copy and the handler converts (same fields, tags aside).
+type factsGatherRequest struct {
+	Folder         string
+	ConnectionIDs  []string
+	Facts          []string
+	Preset         string
+	TimeoutSeconds int
+}
+
+func (a *App) mcpGatherFacts(in factsGatherRequest) (string, error) {
 	keys, err := a.resolveFactKeys(in.Facts, in.Preset)
 	if err != nil {
 		return "", err
