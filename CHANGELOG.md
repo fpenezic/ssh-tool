@@ -19,6 +19,14 @@ a prerelease upstream.
 - A release candidate is no longer treated as a development build, so
   updating from one does not warn that a dev build will be replaced.
 
+### Plugins
+
+- The NetBird and Tailscale helpers are rebuilt on current dependencies
+  (NetBird 0.80, golang.org/x/crypto, x/net, gRPC, quic-go and others),
+  closing the advisories reported against the old ones. They ship as
+  `helper-v1.1`; the app now understands patched helper releases and
+  offers the update under Settings -> Network profiles -> Plugins.
+
 ### Tabs
 
 - Drag a workspace by its name in the tab bar to move all its tabs

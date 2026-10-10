@@ -55,6 +55,11 @@ Add a `protocol` integer to the `ready` event:
 - New tag namespace: `helper-vN` (e.g. `helper-v1`), a plain integer
   major that tracks the protocol major. A helper release contains all
   helper binaries for all platforms (netbird + tailscale x os/arch).
+- Patched rebuilds of the same protocol (dependency fixes) ship as
+  `helper-vN.P` (`helper-v1.1`): release tags are immutable, so
+  `helper-vN` cannot be re-released. The app picks the highest major it
+  speaks, then the highest patch. Apps from before patch tags ignore
+  `helper-vN.P` and keep `helper-vN` until the app itself is updated.
 - CI: a `helper-*` tag triggers a helpers-only workflow (build-helpers
   job, no app/android). Publishes a GitHub release named `helper-vN`
   with the helper assets. The app-tag workflow STOPS building helpers.

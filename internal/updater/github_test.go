@@ -86,10 +86,12 @@ func TestHelperTagMajor(t *testing.T) {
 		{"helper-v1", 1, true},
 		{"helper-v2", 2, true},
 		{"helper-v10", 10, true},
-		{"helper-v", 0, false},    // no number
-		{"helper-vx", 0, false},   // non-numeric
-		{"v0.49.0", 0, false},     // app tag
-		{"helper-v1.2", 0, false}, // not a bare major
+		{"helper-v", 0, false},   // no number
+		{"helper-vx", 0, false},  // non-numeric
+		{"v0.49.0", 0, false},    // app tag
+		{"helper-v1.2", 1, true}, // a patched helper keeps its major
+		{"helper-v1.", 0, false},
+		{"helper-v1.2.3", 0, false},
 		{"", 0, false},
 	}
 	for _, c := range cases {
@@ -186,5 +188,35 @@ func TestPickLatestAppPrereleaseChannel(t *testing.T) {
 	rcOnly := func(tag string) bool { return strings.HasSuffix(tag, "-rc1") }
 	if b := pickLatestApp(list, isApp, newer, rcOnly); b == nil || b.TagName != "v0.111.0-rc1" {
 		t.Fatalf("rc channel picked %+v", b)
+	}
+}
+
+// A patched helper (helper-v1.1) is picked over the original helper-v1, and
+// a higher major still wins when the app speaks it.
+func TestHelperPatchTagOrdering(t *testing.T) {
+	for _, c := range []struct {
+		tag          string
+		major, patch int
+	}{{"helper-v1", 1, 0}, {"helper-v1.1", 1, 1}, {"helper-v1.10", 1, 10}, {"helper-v2", 2, 0}} {
+		m, p, ok := helperTagVersion(c.tag)
+		if !ok || m != c.major || p != c.patch {
+			t.Errorf("helperTagVersion(%q) = %d.%d,%v", c.tag, m, p, ok)
+		}
+	}
+}
+
+func TestPickHelperReleasePrefersPatch(t *testing.T) {
+	list := []ghReleasePayload{ // newest-first, as GitHub returns them
+		{TagName: "v0.111.0"},
+		{TagName: "helper-v1.1"},
+		{TagName: "helper-v2"},
+		{TagName: "helper-v1"},
+		{TagName: "helper-v1.2", Draft: true},
+	}
+	if b := pickHelperRelease(list, 1); b == nil || b.TagName != "helper-v1.1" {
+		t.Fatalf("max 1 picked %+v, want helper-v1.1", b)
+	}
+	if b := pickHelperRelease(list, 2); b == nil || b.TagName != "helper-v2" {
+		t.Fatalf("max 2 picked %+v, want helper-v2", b)
 	}
 }

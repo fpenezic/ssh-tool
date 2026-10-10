@@ -98,22 +98,7 @@ func FetchGitHubHelperRelease(repo string, maxMajor int, userAgent string) (*Rel
 	if err := json.Unmarshal(body, &list); err != nil {
 		return nil, fmt.Errorf("malformed github releases list: %w", err)
 	}
-	// GitHub returns releases newest-first, so the first tag matching the
-	// highest compatible major wins. Track the best major seen so a
-	// helper-v1 release isn't picked over a newer helper-v2 the app also
-	// supports (both <= maxMajor).
-	bestMajor := -1
-	var best *ghReleasePayload
-	for i := range list {
-		major, ok := helperTagMajor(list[i].TagName)
-		if !ok || major > maxMajor {
-			continue
-		}
-		if major > bestMajor {
-			bestMajor = major
-			best = &list[i]
-		}
-	}
+	best := pickHelperRelease(list, maxMajor)
 	if best == nil {
 		return nil, fmt.Errorf("no helper release found (tag helper-v<=%d) in %s", maxMajor, repo)
 	}
@@ -256,21 +241,72 @@ func filterReleaseList(list []ghReleasePayload, inRange func(tag string) bool) [
 	return out
 }
 
-// helperTagMajor parses "helper-v<N>" -> N. Reports ok=false for any
-// other tag shape (app tags, malformed).
-func helperTagMajor(tag string) (int, bool) {
-	rest, ok := strings.CutPrefix(tag, "helper-v")
-	if !ok || rest == "" {
-		return 0, false
+// pickHelperRelease chooses the helper release for an app that speaks
+// protocol majors up to maxMajor. Split out for unit testing without HTTP.
+func pickHelperRelease(list []ghReleasePayload, maxMajor int) *ghReleasePayload {
+	// The highest compatible major wins, so a helper-v1 release is not
+	// picked over a newer helper-v2 the app also speaks. Within a major the
+	// highest patch wins (helper-v1.2 over helper-v1.1 over helper-v1):
+	// release tags are immutable here, so a patched helper (a dependency
+	// fix, say) cannot reuse helper-vN and ships as helper-vN.P. Apps from
+	// before patch tags skip helper-vN.P and keep helper-vN. Drafts are
+	// skipped (the API lists them to maintainers).
+	bestMajor, bestPatch := -1, -1
+	var best *ghReleasePayload
+	for i := range list {
+		if list[i].Draft {
+			continue
+		}
+		major, patch, ok := helperTagVersion(list[i].TagName)
+		if !ok || major > maxMajor {
+			continue
+		}
+		if major > bestMajor || (major == bestMajor && patch > bestPatch) {
+			bestMajor, bestPatch = major, patch
+			best = &list[i]
+		}
 	}
-	n := 0
-	for _, c := range rest {
-		if c < '0' || c > '9' {
+	return best
+}
+
+// helperTagMajor parses "helper-v<N>" or "helper-v<N>.<P>" -> N. Reports
+// ok=false for any other tag shape (app tags, malformed).
+func helperTagMajor(tag string) (int, bool) {
+	major, _, ok := helperTagVersion(tag)
+	return major, ok
+}
+
+// helperTagVersion parses "helper-v<N>" (patch 0) and "helper-v<N>.<P>".
+// N is the protocol major the app checks against MaxProtocol; P orders
+// patched rebuilds of the same protocol.
+func helperTagVersion(tag string) (major, patch int, ok bool) {
+	rest, found := strings.CutPrefix(tag, "helper-v")
+	if !found || rest == "" {
+		return 0, 0, false
+	}
+	majStr, patchStr, dotted := strings.Cut(rest, ".")
+	num := func(s string) (int, bool) {
+		if s == "" || len(s) > 6 {
 			return 0, false
 		}
-		n = n*10 + int(c-'0')
+		n := 0
+		for _, c := range s {
+			if c < '0' || c > '9' {
+				return 0, false
+			}
+			n = n*10 + int(c-'0')
+		}
+		return n, true
 	}
-	return n, true
+	if major, ok = num(majStr); !ok {
+		return 0, 0, false
+	}
+	if dotted {
+		if patch, ok = num(patchStr); !ok {
+			return 0, 0, false
+		}
+	}
+	return major, patch, true
 }
 
 func fetchGitHubRelease(url, userAgent string) (*ReleaseInfo, error) {
