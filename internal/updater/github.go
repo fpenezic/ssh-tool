@@ -135,7 +135,11 @@ func FetchGitHubHelperRelease(repo string, maxMajor int, userAgent string) (*Rel
 // newer(a, b) reports whether tag a is a strictly newer app version
 // than b - injected so the updater stays free of a semver dependency,
 // same pattern as FetchGitHubReleasesBetween.
-func FetchGitHubLatestApp(repo, userAgent string, isAppTag func(tag string) bool, newer func(a, b string) bool) (*ReleaseInfo, error) {
+//
+// allowPre picks which prereleases count (the release-candidate channel
+// passes one accepting -rcN tags); nil keeps prereleases out, as the stable
+// channel wants.
+func FetchGitHubLatestApp(repo, userAgent string, isAppTag func(tag string) bool, newer func(a, b string) bool, allowPre func(tag string) bool) (*ReleaseInfo, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=100", repo)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -160,7 +164,7 @@ func FetchGitHubLatestApp(repo, userAgent string, isAppTag func(tag string) bool
 	if err := json.Unmarshal(body, &list); err != nil {
 		return nil, fmt.Errorf("malformed github releases list: %w", err)
 	}
-	best := pickLatestApp(list, isAppTag, newer)
+	best := pickLatestApp(list, isAppTag, newer, allowPre)
 	if best == nil {
 		return nil, fmt.Errorf("no app release found in %s", repo)
 	}
@@ -173,13 +177,16 @@ func FetchGitHubLatestApp(repo, userAgent string, isAppTag func(tag string) bool
 
 // pickLatestApp selects the highest-version app release from a GitHub
 // releases list. Split out for unit testing without HTTP. Skips drafts,
-// prereleases, and non-app tags; among the rest returns the one no other
-// release is newer than.
-func pickLatestApp(list []ghReleasePayload, isAppTag func(tag string) bool, newer func(a, b string) bool) *ghReleasePayload {
+// non-app tags and prereleases allowPre does not accept (all of them when it
+// is nil); among the rest returns the one no other release is newer than.
+func pickLatestApp(list []ghReleasePayload, isAppTag func(tag string) bool, newer func(a, b string) bool, allowPre func(tag string) bool) *ghReleasePayload {
 	var best *ghReleasePayload
 	for i := range list {
 		r := &list[i]
-		if r.TagName == "" || r.Draft || r.Prerelease || !isAppTag(r.TagName) {
+		if r.TagName == "" || r.Draft || !isAppTag(r.TagName) {
+			continue
+		}
+		if r.Prerelease && (allowPre == nil || !allowPre(r.TagName)) {
 			continue
 		}
 		if best == nil || newer(r.TagName, best.TagName) {

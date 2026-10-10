@@ -79,17 +79,17 @@ func TestAssetPlatformKey(t *testing.T) {
 
 func TestHelperTagMajor(t *testing.T) {
 	cases := []struct {
-		tag     string
-		want    int
-		wantOK  bool
+		tag    string
+		want   int
+		wantOK bool
 	}{
 		{"helper-v1", 1, true},
 		{"helper-v2", 2, true},
 		{"helper-v10", 10, true},
-		{"helper-v", 0, false},      // no number
-		{"helper-vx", 0, false},     // non-numeric
-		{"v0.49.0", 0, false},       // app tag
-		{"helper-v1.2", 0, false},   // not a bare major
+		{"helper-v", 0, false},    // no number
+		{"helper-vx", 0, false},   // non-numeric
+		{"v0.49.0", 0, false},     // app tag
+		{"helper-v1.2", 0, false}, // not a bare major
 		{"", 0, false},
 	}
 	for _, c := range cases {
@@ -138,8 +138,8 @@ func TestPickLatestApp(t *testing.T) {
 	// update check must still pick the newest v* app release, never the
 	// helper.
 	list := []ghReleasePayload{
-		{TagName: "helper-v1"},                // freshly re-published, newest by date
-		{TagName: "v0.68.0"},                  // the real latest app release
+		{TagName: "helper-v1"}, // freshly re-published, newest by date
+		{TagName: "v0.68.0"},   // the real latest app release
 		{TagName: "v0.67.2"},
 		{TagName: "v0.68.1-rc1", Prerelease: true},
 		{TagName: "v0.60.0-draft", Draft: true},
@@ -151,7 +151,7 @@ func TestPickLatestApp(t *testing.T) {
 	rank := map[string]int{"v0.67.2": 6702, "v0.68.0": 6800}
 	newer := func(a, b string) bool { return rank[a] > rank[b] }
 
-	best := pickLatestApp(list, isAppTag, newer)
+	best := pickLatestApp(list, isAppTag, newer, nil)
 	if best == nil {
 		t.Fatal("pickLatestApp returned nil")
 	}
@@ -165,7 +165,26 @@ func TestPickLatestApp_NoAppReleases(t *testing.T) {
 	isAppTag := func(tag string) bool {
 		return strings.HasPrefix(tag, "v") && !strings.HasPrefix(tag, "helper-")
 	}
-	if best := pickLatestApp(list, isAppTag, func(a, b string) bool { return false }); best != nil {
+	if best := pickLatestApp(list, isAppTag, func(a, b string) bool { return false }, nil); best != nil {
 		t.Fatalf("expected nil when no app releases, got %q", best.TagName)
+	}
+}
+
+// The rc channel takes release candidates; stable and -test prereleases
+// stay out either way.
+func TestPickLatestAppPrereleaseChannel(t *testing.T) {
+	list := []ghReleasePayload{
+		{TagName: "v0.110.0"},
+		{TagName: "v0.111.0-rc1", Prerelease: true},
+		{TagName: "v0.111.0-test", Prerelease: true},
+	}
+	isApp := func(string) bool { return true }
+	newer := func(a, b string) bool { return a > b } // lexical is enough for these tags
+	if b := pickLatestApp(list, isApp, newer, nil); b == nil || b.TagName != "v0.110.0" {
+		t.Fatalf("stable picked %+v", b)
+	}
+	rcOnly := func(tag string) bool { return strings.HasSuffix(tag, "-rc1") }
+	if b := pickLatestApp(list, isApp, newer, rcOnly); b == nil || b.TagName != "v0.111.0-rc1" {
+		t.Fatalf("rc channel picked %+v", b)
 	}
 }

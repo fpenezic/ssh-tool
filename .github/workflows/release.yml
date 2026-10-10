@@ -470,11 +470,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${{ github.ref_name }}"
+          # A release candidate (vX.Y.Z-rcN) is offered in the app on the
+          # rc update channel, and its update dialog shows these notes:
+          # the X.Y.Z block when the changelog already has one, else the
+          # [Unreleased] block it is being built from. Other prereleases
+          # (-test) keep the fixed text.
+          note="Pre-release build for testing. Not published to sshtool.app."
+          : > /tmp/notes.md
+          if echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+$'; then
+            ver="${tag#v}"; ver="${ver%%-*}"
+            for head in "v?$ver" "Unreleased"; do
+              awk -v h="$head" '
+                $0 ~ "^## \\[" h "\\]" { on=1; next }
+                on && /^## \[/ { exit }
+                on { print }
+              ' CHANGELOG.md > /tmp/notes.md
+              [ -s /tmp/notes.md ] && break
+            done
+            if [ -s /tmp/notes.md ]; then
+              printf 'Release candidate for %s - offered in the app on the release candidates update channel.\n\n' "$ver" | cat - /tmp/notes.md > /tmp/notes2.md
+              mv /tmp/notes2.md /tmp/notes.md
+            fi
+          fi
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" bin/* --clobber
+          elif [ -s /tmp/notes.md ]; then
+            gh release create "$tag" bin/* --title "$tag" --prerelease --notes-file /tmp/notes.md
           else
-            gh release create "$tag" bin/* --title "$tag" --prerelease \
-              --notes "Pre-release build for testing. Not published to sshtool.app."
+            gh release create "$tag" bin/* --title "$tag" --prerelease --notes "$note"
           fi
 
   # Build the apt + dnf repository and publish it to GitHub Pages, so

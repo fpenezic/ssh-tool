@@ -21,7 +21,12 @@ func isDevBuild() bool {
 	if v == "" || v == "dev" || v == "unknown" {
 		return true
 	}
-	// A release tag is bare: v0.94.0. Anything carrying a describe
-	// suffix (-12-gabc1234) or -dirty is a build from between tags.
+	// A release tag is bare: v0.94.0, and a release candidate is a release
+	// too (v0.95.0-rc1): CI builds both from their tags. Anything carrying
+	// a describe suffix (-12-gabc1234) or -dirty is a build from between
+	// tags.
+	if isRCTag(v) {
+		return false
+	}
 	return strings.Contains(v, "-")
 }

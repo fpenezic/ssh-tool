@@ -236,6 +236,13 @@ author asks to ship/promote/release:
    escape hatch (CI down): `task <os>:build` + `gh release create`.
 
 Notes:
+- Release candidates: tag `vX.Y.Z-rcN` from a commit whose CHANGELOG
+  still has `[Unreleased]` (or already `[X.Y.Z]`). CI publishes a GitHub
+  prerelease with that block as notes; apps on the *Release candidates*
+  update channel are offered it, nobody else is (apt/dnf/AUR/sshtool.app
+  skip prereleases). The real `vX.Y.Z` tag supersedes it; delete the RC
+  release afterwards (`gh release delete vX.Y.Z-rcN --cleanup-tag`).
+  `-test` tags are prereleases no channel offers.
 - New landing feature? Edit `docs/features.json`; the website
   fetches it from this repo (raw.githubusercontent) on a timer -
   no push, no web deploy.

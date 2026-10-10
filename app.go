@@ -6784,9 +6784,15 @@ func (a *App) resolveLatestRelease() (*resolvedRelease, error) {
 		// by GitHub (most-recent published_at) and offered to users as an
 		// app update. isAppTag keeps only v* app tags; semverGreater ranks
 		// them.
+		// The rc channel also takes release candidates (vX.Y.Z-rcN
+		// prereleases); stable never sees a prerelease.
+		var allowPre func(string) bool
+		if a.updateChannel() == updateChannelRC {
+			allowPre = isRCTag
+		}
 		gh, err := updater.FetchGitHubLatestApp(updateGitHubRepo,
 			fmt.Sprintf("ssh-tool/%s", appVersion),
-			isAppReleaseTag, semverGreater)
+			isAppReleaseTag, semverGreater, allowPre)
 		if err == nil {
 			out := &resolvedRelease{
 				Version:      gh.Version,
@@ -7025,7 +7031,12 @@ func (a *App) FetchReleaseNotesRange(fromVersion, toVersion string) []ReleaseNot
 	if err != nil || len(rels) == 0 {
 		return single()
 	}
-	out := make([]ReleaseNotes, 0, len(rels))
+	out := make([]ReleaseNotes, 0, len(rels)+1)
+	// The list skips prereleases, so a release candidate as the target is
+	// missing from it; put its own notes first (newest-first order).
+	if isRCTag(toVersion) {
+		out = append(out, a.FetchReleaseNotes(toVersion))
+	}
 	for _, r := range rels {
 		out = append(out, ReleaseNotes{
 			Version:    r.Version,
@@ -7248,9 +7259,12 @@ func isAppReleaseTag(tag string) bool {
 
 // semverGreater reports whether `a` parses to a strictly higher
 // semantic version than `b`. Both are expected to look like
-// "v1.2.3" or "1.2.3"; pre-release / build metadata are ignored
-// for the comparison. Unparseable inputs return false so a malformed
-// server response never claims an update is available.
+// "v1.2.3" or "1.2.3". A release candidate ranks below its release
+// (v1.2.3-rc1 < v1.2.3-rc2 < v1.2.3), so someone on an RC is offered the
+// release it led to. Any other suffix (a git describe -12-gabc, -dirty,
+// -test) is ignored, as before: a dev build from after a tag is not
+// behind that tag. Unparseable inputs return false so a malformed server
+// response never claims an update is available.
 func semverGreater(a, b string) bool {
 	pa, ok1 := parseSemver(a)
 	pb, ok2 := parseSemver(b)
@@ -7262,7 +7276,16 @@ func semverGreater(a, b string) bool {
 			return pa[i] > pb[i]
 		}
 	}
-	return false
+	ra, rb := rcNumber(a), rcNumber(b)
+	switch {
+	case ra == 0 && rb == 0:
+		return false
+	case ra == 0: // a is the release, b a candidate for it
+		return true
+	case rb == 0:
+		return false
+	}
+	return ra > rb
 }
 
 func parseSemver(s string) ([3]int, bool) {

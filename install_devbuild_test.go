@@ -16,7 +16,8 @@ func TestIsDevBuild(t *testing.T) {
 		"v0.94.0-4-g271ae09",       // untagged build between releases
 		"v0.94.0-4-g271ae09-dirty", // uncommitted changes
 		"v0.94.0-dirty",            // tagged, but the tree was dirty
-		"v1.0.0-rc1",               // pre-release, not a release
+		"v1.0.0-rc1-2-g271ae09",    // commits after a release candidate
+		"v1.0.0-test",              // a test prerelease
 	}
 	for _, v := range dev {
 		appVersion = v
@@ -25,7 +26,9 @@ func TestIsDevBuild(t *testing.T) {
 		}
 	}
 
-	releases := []string{"v0.94.0", "v1.0.0", "v0.100.3"}
+	// A release candidate is built by CI from its tag and installed by the
+	// updater on the rc channel, like a release.
+	releases := []string{"v0.94.0", "v1.0.0", "v0.100.3", "v1.0.0-rc1"}
 	for _, v := range releases {
 		appVersion = v
 		if isDevBuild() {

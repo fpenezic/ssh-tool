@@ -134,6 +134,7 @@
           ]),
   ];
   let updateCheckDisabled = $state<boolean>(false);
+  let updateChannel = $state<"stable" | "rc">("stable");
   let updateBusy = $state(false);
   let updateError = $state<string | null>(null);
   let updateMsg = $state<string | null>(null);
@@ -515,6 +516,9 @@
       const v = await api.settingsGet("update_check_disabled");
       updateCheckDisabled = v === "1" || v === "true";
     } catch { /* default enabled */ }
+    try {
+      updateChannel = (await api.settingsGet("update_channel")) === "rc" ? "rc" : "stable";
+    } catch { /* default stable */ }
     try { logDirPath = (await api.logDir()) ?? ""; } catch { /* ignore */ }
     try { recordingsDirPath = (await api.recordingsDir()) ?? ""; } catch { /* ignore */ }
     try { versionInfo = await api.appVersion(); } catch { /* ignore */ }
@@ -738,6 +742,14 @@
     externalTerminal = next;
     try { await api.settingsSet("external_terminal_kind", next); }
     catch (e) { console.warn("external_terminal_kind save:", e); }
+  }
+  // Switching channel re-checks at once, so the status bar pill reflects
+  // the new channel without waiting for the 6-hour timer.
+  async function setUpdateChannel(next: "stable" | "rc") {
+    updateChannel = next;
+    try { await api.settingsSet("update_channel", next); }
+    catch (e) { console.warn("update_channel save:", e); return; }
+    if (!updateCheckDisabled) updateCheck.run().catch(console.warn);
   }
   async function toggleUpdateCheckDisabled(next: boolean) {
     updateCheckDisabled = next;
@@ -3124,6 +3136,28 @@
           </div>
         </div>
       </label>
+    </fieldset>
+
+    <h3 style="margin-top:1.2rem">Channel</h3>
+    <fieldset class="modes">
+      {#each [
+        { id: "stable", name: "Stable", desc: "Releases only. The default." },
+        { id: "rc", name: "Release candidates", desc: "Also the test builds of the next release (vX.Y.Z-rcN), with their changelog, before everyone else gets them. You move on to the release when it ships. There is no way back to an older version: leaving this channel keeps the candidate until the next release overtakes it." },
+      ] as c (c.id)}
+        <label class:active={updateChannel === c.id}>
+          <input
+            type="radio"
+            name="updateChannel"
+            checked={updateChannel === c.id}
+            disabled={updateCheckDisabled}
+            onchange={() => setUpdateChannel(c.id as "stable" | "rc")}
+          />
+          <div>
+            <div class="mode-name">{c.name}</div>
+            <div class="mode-desc">{c.desc}</div>
+          </div>
+        </label>
+      {/each}
     </fieldset>
 
     <h3 style="margin-top:1.2rem">Install update</h3>

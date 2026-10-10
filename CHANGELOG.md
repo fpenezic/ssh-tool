@@ -9,6 +9,16 @@ a prerelease upstream.
 
 ## [Unreleased]
 
+### Updates
+
+- Settings -> Updates has a *Channel*: *Release candidates* is an opt-in
+  for the test builds of the next release (`vX.Y.Z-rcN`). They install
+  through the same updater, the update dialog shows the changelog of the
+  release they lead to, and the release itself replaces the candidate
+  when it ships. *Stable* stays the default and never sees a candidate.
+- A release candidate is no longer treated as a development build, so
+  updating from one does not warn that a dev build will be replaced.
+
 ### Tabs
 
 - Drag a workspace by its name in the tab bar to move all its tabs

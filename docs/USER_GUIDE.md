@@ -155,7 +155,13 @@ right:
     PowerShell / cmd read Windows (CPU as a busy percentage), Linux and
     macOS the machine itself. WSL and Linux shells also get read-only
     Processes and Services tabs (no kill / restart; ignore per distro).
-- Update-available pill when a newer release is published.
+- Update-available pill when a newer release is published. Settings ->
+  Updates -> *Channel*: *Stable* (default) offers releases only;
+  *Release candidates* also offers the test builds of the next release
+  (`vX.Y.Z-rcN`), with that release's changelog in the update dialog, and
+  moves on to the release itself when it ships. Leaving the channel keeps
+  an installed candidate until a release overtakes it - there is no
+  downgrade.
 - A log tail segment shows while any log tail runs (open, minimised or in
   its own window), the way captures do: click it to open the tail, or
   pick one when several run.
@@ -3435,7 +3441,7 @@ are not present on mobile. VNC on mobile is untested.
 - HashiCorp Vault / Vaultwarden sync (placeholder kind only)
 - ssh_config auto-import of IdentityFile content (security gate)
 - Git-as-sync (separate roadmap)
-- Auto-update channel, packaging (.AppImage / .msi / NSIS)
+- Packaging (.AppImage / .msi / NSIS)
 - Android: in-app auto-update, signed release build / Play / F-Droid,
   android in CI (local sideload build only for now)
 - iOS build (shares build tags with android, not produced)
