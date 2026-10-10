@@ -44,6 +44,10 @@
   // the server; render an indeterminate bar instead of a percentage.
   let progRead = $state(0);
   let progTotal = $state(0);
+  // Until the first progress event nothing is known: the bar stays empty.
+  // Going indeterminate there flashed a moving bar that snapped back to
+  // 0% when the real numbers arrived.
+  let progSeen = $state(false);
   const progPct = $derived(progTotal > 0 ? Math.min(100, Math.round((progRead / progTotal) * 100)) : 0);
 
   function fmtMB(bytes: number): string {
@@ -98,9 +102,11 @@
     pkgManaged = false;
     progRead = 0;
     progTotal = 0;
+    progSeen = false;
     const unProg = EventsOn("update_download_progress", (p: { read: number; total: number }) => {
       progRead = p.read;
       progTotal = p.total;
+      progSeen = true;
     });
     // Set when this call hands the work to a confirmed retry: the retry
     // owns the busy flag from then on, so our finally must not clear it
@@ -261,11 +267,13 @@
   {/if}
   {#if downloadBusy}
     <div class="staged progress-row">
-      <div class="bar" class:indeterminate={progTotal <= 0}>
-        <div class="fill" style={progTotal > 0 ? `width: ${progPct}%` : ""}></div>
+      <div class="bar" class:indeterminate={progSeen && progTotal <= 0}>
+        <div class="fill" style={progSeen && progTotal <= 0 ? "" : `width: ${progPct}%`}></div>
       </div>
       <span class="bar-label">
-        {#if progTotal > 0}
+        {#if !progSeen}
+          Starting the download…
+        {:else if progTotal > 0}
           {fmtMB(progRead)} / {fmtMB(progTotal)} ({progPct}%)
         {:else}
           {fmtMB(progRead)} downloaded…

@@ -29,6 +29,8 @@ a prerelease upstream.
 - A plugin download shows its progress (finding the release,
   downloading with MB done, verifying, installing) instead of a button
   that just stays greyed out.
+- The app update's progress bar no longer flashes a moving bar that
+  snaps back to 0% when the download starts.
 - Plugin cards and About show the helper release and the NetBird /
   Tailscale version inside it (e.g. helper-v1.1, NetBird 0.80.0), and
   About updates when a plugin is installed or removed - it used to say
