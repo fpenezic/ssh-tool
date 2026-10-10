@@ -945,6 +945,9 @@ export function CredentialsList() {
 }
 
 /**
+ * CredentialsRevealSecret returns a credential's plaintext (show / copy in
+ * the credential editor). Audited like a history reveal: a plaintext
+ * leaving the vault is worth a line in the log.
  * @param {string} id
  * @returns {$CancellablePromise<string>}
  */
