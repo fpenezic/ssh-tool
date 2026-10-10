@@ -743,18 +743,21 @@ func isNumericPort(s string) bool {
 	return true
 }
 
-// shellQuote wraps a single argument in '...' with embedded quotes
-// escaped. Good enough for the small set of values we shove through -
-// interface names + BPF filters that legitimately need quoting.
+// shellQuote makes s one shell word. Plain words (interface names, unit
+// names, paths) stay bare so the command reads naturally in logs; anything
+// with a character outside the safe set is single-quoted. An allowlist, not
+// a denylist: the old denylist let ; | & < > ( ) through bare.
 func shellQuote(s string) string {
 	if s == "" {
 		return "''"
 	}
-	if strings.IndexAny(s, " \t\"'$`\\") < 0 {
+	if strings.Trim(s, shellSafeChars) == "" {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
+
+const shellSafeChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.,:/@%+="
 
 // buildCaptureCommand composes the capture command line for the configured
 // engine. Split out of StartTcpdump so both engines are covered by table tests

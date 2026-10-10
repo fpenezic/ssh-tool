@@ -37,7 +37,7 @@ function isExternal(href: string): boolean {
   if (target.protocol === "about:" || target.protocol === "javascript:") {
     return false;
   }
-  if (target.protocol === "blob:" || target.protocol === "data:") {
+  if (target.protocol === "blob:" || target.protocol === "data:" || target.protocol === "vbscript:") {
     // These would replace the document too, but they carry no origin to
     // compare. Nothing in this app navigates to one; treat as external
     // so it is refused rather than silently allowed.

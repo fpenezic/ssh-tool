@@ -753,7 +753,8 @@ func decodeTsharkNTP(cols []string) *PacketDecode {
 	d := newDecode("ntp")
 	setIf(d, cols, "version", tsFieldNTPVersion)
 	setIf(d, cols, "stratum", tsFieldNTPStratum)
-	name := ntpModeName(byte(atoiSafe(mode)))
+	m, _ := strconv.ParseUint(mode, 10, 8) // 0-7 on the wire; junk reads as 0
+	name := ntpModeName(byte(m))
 	d.Fields["mode"] = name
 	d.Summary = "NTP " + name
 	if st := d.Fields["stratum"]; st != "" {

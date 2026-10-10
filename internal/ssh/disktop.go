@@ -95,9 +95,8 @@ func parseDiskTop(out, mount string) (*DiskTopResult, error) {
 	return res, nil
 }
 
-// quoteAlways single-quotes s unconditionally. shellQuote leaves strings
-// without spaces or quotes bare, which lets ; | & through; a mount path
-// comes from the remote df output, so it gets no such benefit of the doubt.
+// quoteAlways single-quotes s unconditionally: a mount path comes from the
+// remote df output, so it is quoted even when it looks like a plain word.
 func quoteAlways(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
