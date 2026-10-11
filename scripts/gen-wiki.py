@@ -29,6 +29,9 @@ PAGES = {
     "Mobile": ["22"],
 }
 
+# guide sections that deliberately have no wiki page
+SKIP = {"Table of contents", "What's not in the app (yet)"}
+
 HEAD = re.compile(r"^## (?:(\d+[a-z]?)\. )?(.+)$")
 ANCHOR = re.compile(r'^<a id="([^"]+)"></a>\s*$')
 
@@ -66,6 +69,10 @@ def main():
     missing = [k for keys in PAGES.values() for k in keys if k not in secs]
     if missing:
         sys.exit(f"guide sections not found: {missing}")
+    mapped = {k for keys in PAGES.values() for k in keys}
+    unmapped = [k for k in secs if k not in mapped and k not in SKIP]
+    if unmapped:
+        sys.exit(f"guide sections with no wiki page (add them to PAGES or SKIP): {unmapped}")
     # anchor -> page, for cross-page links
     where = {}
     for page, keys in PAGES.items():
@@ -85,7 +92,12 @@ def main():
     for page, keys in PAGES.items():
         path = wiki / f"{page}.md"
         old = path.read_text(encoding="utf-8") if path.exists() else f"# {page.replace('-', ' ')}\n\n"
-        pre = old.split("\n## ", 1)[0].rstrip() + "\n"
+        # The preamble ends at the first section; a section's own <a id>
+        # line sits right above its heading and belongs to the section.
+        pre = old.split("\n## ", 1)[0].rstrip().split("\n")
+        while pre and ANCHOR.match(pre[-1]) or pre and not pre[-1].strip():
+            pre.pop()
+        pre = "\n".join(pre) + "\n"
         body = []
         for k in keys:
             lines = [relink(page, l) for l in secs[k]]
