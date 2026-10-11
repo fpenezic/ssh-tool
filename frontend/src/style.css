@@ -242,3 +242,25 @@ html, body {
     border-color: var(--accent) !important;
     background: color-mix(in oklab, var(--accent) 6%, transparent);
 }
+
+/* Themed <select> everywhere, matching the text inputs. :where() keeps it
+   at zero specificity, so a component's own select style still wins.
+   Without it most selects were the engine's default control (white box,
+   black border) next to themed inputs. The open popup list stays a
+   native menu, coloured by color-scheme above. */
+:where(select) {
+    background: var(--mantle);
+    color: var(--text);
+    border: 1px solid var(--surface0);
+    border-radius: 4px;
+    padding: 0.35rem 0.5rem;
+    font: inherit;
+}
+:where(select):focus {
+    outline: 1px solid var(--blue);
+    border-color: var(--blue);
+}
+:where(select):disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
