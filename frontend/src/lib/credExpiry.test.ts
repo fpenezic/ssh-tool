@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expiringCredentials, fmtDuration, opksshExpiry } from "./credExpiry";
+import { dateInDays, daysUntil, expiringCredentials, fmtDuration, opksshExpiry } from "./credExpiry";
 
 const DAY = 86_400;
 const now = Date.UTC(2026, 8, 23);
@@ -49,5 +49,16 @@ describe("fmtDuration", () => {
     expect(fmtDuration(59)).toBe("0m");
     expect(fmtDuration(3 * 86_400 + 4 * 3600 + 120)).toBe("3d 4h");
     expect(fmtDuration(45 * 60)).toBe("45m");
+  });
+});
+
+describe("dateInDays / daysUntil", () => {
+  const now = new Date(2026, 0, 30); // local 2026-01-30
+  it("adds days across a month end", () => {
+    expect(dateInDays(90, now)).toBe("2026-04-30");
+    expect(dateInDays(2, now)).toBe("2026-02-01");
+  });
+  it("round-trips", () => {
+    for (const n of [0, 1, 30, 90, 365]) expect(daysUntil(dateInDays(n, now), now)).toBe(n);
   });
 });

@@ -88,3 +88,20 @@ export function opksshExpiry(start: number, end: number, now = Date.now()): Opks
   if (fraction < OPK_SOON) return { level: "soon", remaining, fraction, label };
   return { level: "ok", remaining, fraction, label };
 }
+
+// dateInDays returns the local date n days from today as YYYY-MM-DD, the
+// format an <input type=date> binds.
+export function dateInDays(n: number, now = new Date()): string {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + n);
+  const pad = (x: number) => String(x).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// daysUntil is the inverse: whole days from today to a YYYY-MM-DD date
+// (negative when it is in the past).
+export function daysUntil(date: string, now = new Date()): number {
+  const [y, m, d] = date.split("-").map(Number);
+  const target = new Date(y, m - 1, d).getTime();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.round((target - today) / 86_400_000);
+}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ExpiryInput from "./ExpiryInput.svelte";
   import { credentials, selection } from "./stores.svelte";
   import { errMsg } from "./connectErrors";
   import { toast } from "./toast.svelte";
@@ -522,7 +523,7 @@
         </label>
         {#if kind === "api_token" || kind === "password" || kind === "key_generate" || kind === "key_import_paste" || kind === "key_file_ref"}
           <label>Expires <span class="hint inline">(optional - warns you before a time-limited token / key lapses)</span>
-            <input type="date" bind:value={expiresDate} />
+            <ExpiryInput bind:value={expiresDate} />
           </label>
         {/if}
 

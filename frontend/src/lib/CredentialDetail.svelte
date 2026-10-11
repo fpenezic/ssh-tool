@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ExpiryInput from "./ExpiryInput.svelte";
   import { credentials, selection, view } from "./stores.svelte";
   import { toast } from "./toast.svelte";
   import { expiryInfo } from "./credExpiry";
@@ -708,9 +709,11 @@
       <IconPicker
         kind="credentialFolder"
         targetId={credFolder.id}
+        currentIconId={credFolder.icon_image_id ?? null}
         currentIconName={credFolder.icon_name}
         currentIconColor={credFolder.icon_color}
         fallbackEmoji=""
+        onChange={() => credentials.load()}
         onNamedChange={() => credentials.load()}
       />
     </div>
@@ -751,7 +754,7 @@
         </label>
         {#if cred.kind === "api_token" || cred.kind === "password" || cred.kind === "key"}
           <label>Expires <span class="hint inline">(optional - clear to remove)</span>
-            <input type="date" bind:value={editExpires} />
+            <ExpiryInput bind:value={editExpires} />
           </label>
         {/if}
         <IconPicker
