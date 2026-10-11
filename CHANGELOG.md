@@ -7,7 +7,7 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.111.0] - Corporate VPNs without the vendor client
 
 Corporate VPNs without the vendor client: Cisco AnyConnect, Fortinet, F5, GlobalProtect and Pulse as network profiles, with client certificates kept in the vault and one-time codes from Bitwarden or KeePass filled in at login. Also new: a Health check report for Gather facts, a release-candidate update channel, and a round of security hardening across MCP, links and remote commands.
 
