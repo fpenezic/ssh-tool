@@ -3962,27 +3962,23 @@
           card above before creating an OpenConnect profile.
         </p>
       {/if}
-      <div class="oc-grid">
-        <label>
+      <div class="oc-form">
+        <label class="oc-field">
           <span>VPN type</span>
           <select bind:value={oc.flavor}>
             {#each Object.entries(ocFlavorTitle) as [v, t]}<option value={v}>{t}</option>{/each}
           </select>
         </label>
-        <label title="Address or URL, with the group path if the gateway uses one">
+        <label class="oc-field" title="Address or URL, with the group path if the gateway uses one">
           <span>Gateway</span>
           <input bind:value={oc.server} placeholder="vpn.example.com/group" />
         </label>
-        <label title="Picks this login group when the gateway offers several">
-          <span>Group <span class="hint inline">(optional)</span></span>
-          <input bind:value={oc.auth_group} placeholder="staff" />
-        </label>
-        <span></span>
-        <label title="Blank = the password credential's username, else asked at login">
+
+        <label class="oc-field" title="Blank = the password credential's username, else asked at login">
           <span>Username</span>
           <input bind:value={oc.username} placeholder="alice" />
         </label>
-        <label>
+        <div class="oc-field">
           <span>Password</span>
           {#if ocNewPassword || !oc.password_credential_id}
             <PasswordInput bind:value={ocNewPassword} placeholder={oc.password_credential_id ? "" : "blank = asked at login"} />
@@ -3990,8 +3986,13 @@
           {#if !ocNewPassword}
             <SearchableSelect bind:value={oc.password_credential_id} options={passwordCredOptions} emptyLabel="or pick a stored password…" />
           {/if}
+        </div>
+
+        <label class="oc-field" title="Asked at login when blank, if the gateway asks for one">
+          <span>Second username <span class="hint inline">(blank = asked)</span></span>
+          <input bind:value={oc.second_username} />
         </label>
-        <label title="A secondary login or a one-time code, when the gateway asks">
+        <label class="oc-field" title="A secondary login or a one-time code, when the gateway asks">
           <span>Second password</span>
           <select bind:value={oc.second_password}>
             <option value="prompt">Ask at login (hardware / app token)</option>
@@ -4000,63 +4001,65 @@
           </select>
         </label>
         {#if oc.second_password === "totp"}
-          <label title="Both factors then live in one place - your call">
+          <div class="oc-field oc-span" title="Both factors then live in one place - your call">
             <span>Item with the TOTP</span>
             <SearchableSelect bind:value={oc.second_credential_id} options={totpCredOptions} placeholder="Search…" emptyLabel="Pick a Bitwarden / KeePass item…" />
-          </label>
+          </div>
         {:else if oc.second_password === "credential"}
-          <label>
+          <div class="oc-field oc-span">
             <span>Second password credential</span>
             <SearchableSelect bind:value={oc.second_credential_id} options={passwordCredOptions} placeholder="Search…" emptyLabel="Pick a credential…" />
-          </label>
-        {:else}
-          <span></span>
-        {/if}
-        <label title="Blank = asked at login, when the gateway asks for one">
-          <span>Second username <span class="hint inline">(blank = asked)</span></span>
-          <input bind:value={oc.second_username} placeholder="" />
-        </label>
-        <div class="oc-mtu">
-          <label title="Blank = the gateway's">
-            <span>MTU</span>
-            <input type="number" min="576" max="9000" bind:value={ocMtu} placeholder="1300" />
-          </label>
-          <label class="np-kindpick"><input type="checkbox" bind:checked={oc.no_udp} /> TLS only (no DTLS)</label>
-        </div>
-      </div>
-      <div class="oc-cert">
-        <span>Client certificate <span class="hint inline">(optional - stored in the vault)</span></span>
-        <div class="row" style="gap:0.75rem; flex-wrap:wrap">
-          <label class="np-kindpick"><input type="radio" bind:group={ocCertMode} value="pick" /> Stored</label>
-          <label class="np-kindpick"><input type="radio" bind:group={ocCertMode} value="file" /> Import file</label>
-          <label class="np-kindpick"><input type="radio" bind:group={ocCertMode} value="paste" /> Paste PEM</label>
-        </div>
-        {#if ocCertMode === "pick"}
-          <SearchableSelect bind:value={oc.client_cert_credential_id} options={certCredOptions} emptyLabel="None" />
-        {:else}
-          <div class="oc-grid">
-            {#if ocCertMode === "file"}
-              <label>
-                <span>Certificate (.pfx / .p12 / .pem)</span>
-                <input type="file" accept={CERT_FILE_ACCEPT} onchange={(e) => (ocCertFile = (e.target as HTMLInputElement).files?.[0] ?? null)} />
-              </label>
-              <label title="Only when the key is not inside the certificate file">
-                <span>Separate key file <span class="hint inline">(optional)</span></span>
-                <input type="file" accept={CERT_FILE_ACCEPT} onchange={(e) => (ocCertKeyFile = (e.target as HTMLInputElement).files?.[0] ?? null)} />
-              </label>
-            {:else}
-              <label class="oc-span">
-                <span>Certificate and private key (PEM)</span>
-                <textarea rows="5" class="mono" bind:value={ocCertPaste} spellcheck="false"
-                  placeholder={"-----BEGIN CERTIFICATE-----\n...\n-----BEGIN PRIVATE KEY-----\n..."}></textarea>
-              </label>
-            {/if}
-            <label title="Opens a .pfx / .p12 or an encrypted key now; it is not stored">
-              <span>File password <span class="hint inline">(if any)</span></span>
-              <PasswordInput bind:value={ocCertPassword} />
-            </label>
           </div>
         {/if}
+
+        <div class="oc-field oc-span">
+          <div class="oc-cert-head">
+            <span>Client certificate <span class="hint inline">(optional, stored in the vault)</span></span>
+            <div class="oc-choices">
+              <label class="oc-choice"><input type="radio" bind:group={ocCertMode} value="pick" /> Stored</label>
+              <label class="oc-choice"><input type="radio" bind:group={ocCertMode} value="file" /> Import file</label>
+              <label class="oc-choice"><input type="radio" bind:group={ocCertMode} value="paste" /> Paste PEM</label>
+            </div>
+          </div>
+          {#if ocCertMode === "pick"}
+            <SearchableSelect bind:value={oc.client_cert_credential_id} options={certCredOptions} emptyLabel="None" />
+          {:else}
+            <div class="oc-form oc-nested">
+              {#if ocCertMode === "file"}
+                <label class="oc-field">
+                  <span>Certificate (.pfx / .p12 / .pem)</span>
+                  <input type="file" accept={CERT_FILE_ACCEPT} onchange={(e) => (ocCertFile = (e.target as HTMLInputElement).files?.[0] ?? null)} />
+                </label>
+                <label class="oc-field" title="Only when the key is not inside the certificate file">
+                  <span>Separate key file <span class="hint inline">(optional)</span></span>
+                  <input type="file" accept={CERT_FILE_ACCEPT} onchange={(e) => (ocCertKeyFile = (e.target as HTMLInputElement).files?.[0] ?? null)} />
+                </label>
+              {:else}
+                <label class="oc-field oc-span">
+                  <span>Certificate and private key (PEM)</span>
+                  <textarea rows="5" class="mono" bind:value={ocCertPaste} spellcheck="false"
+                    placeholder={"-----BEGIN CERTIFICATE-----\n...\n-----BEGIN PRIVATE KEY-----\n..."}></textarea>
+                </label>
+              {/if}
+              <label class="oc-field" title="Opens a .pfx / .p12 or an encrypted key now; it is not stored">
+                <span>File password <span class="hint inline">(if any)</span></span>
+                <PasswordInput bind:value={ocCertPassword} />
+              </label>
+            </div>
+          {/if}
+        </div>
+
+        <label class="oc-field" title="Picks this login group when the gateway offers several">
+          <span>Group <span class="hint inline">(optional)</span></span>
+          <input bind:value={oc.auth_group} placeholder="staff" />
+        </label>
+        <div class="oc-field">
+          <span>Tunnel</span>
+          <div class="oc-tunnel">
+            <input type="number" min="576" max="9000" bind:value={ocMtu} placeholder="MTU" title="Blank = the gateway's MTU" />
+            <label class="oc-choice"><input type="checkbox" bind:checked={oc.no_udp} /> TLS only (no DTLS)</label>
+          </div>
+        </div>
       </div>
       {#if npEditingId && oc.pins?.length}
         <p class="hint inline">Trusted gateway certificate: <code>{oc.pins[0]}</code> (changing the gateway address forgets it).</p>
@@ -6684,18 +6687,28 @@
   .np-actions button { padding: 0.3rem 0.6rem; }
   .np-actions select { max-width: 11rem; }
   .np-spacer { flex: 1; }
-  .oc-grid {
+  /* OpenConnect form: two fixed columns, one per field pair; the base
+     label style (column, top margin) is reset so rows line up. */
+  .oc-form {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-    gap: 0.6rem 1rem;
-    align-items: end;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 1rem;
+    align-items: start;
+    margin-top: 0.8rem;
   }
-  .oc-grid label, .oc-cert { display: flex; flex-direction: column; gap: 0.2rem; }
-  .oc-grid .oc-span { grid-column: 1 / -1; }
-  .oc-mtu { display: flex; gap: 0.75rem; align-items: end; }
-  .oc-mtu label:first-child { max-width: 7rem; }
-  .oc-cert { margin-top: 0.6rem; }
-  .oc-cert textarea { width: 100%; font-family: var(--mono, monospace); font-size: 0.8rem; }
+  .oc-form.oc-nested { margin-top: 0.4rem; }
+  .oc-field { display: flex; flex-direction: column; gap: 0.3rem; margin: 0; font-size: 0.85rem; color: var(--subtext1); min-width: 0; }
+  .oc-field input:not([type="checkbox"]):not([type="radio"]), .oc-field select, .oc-field textarea { max-width: none; width: 100%; box-sizing: border-box; }
+  .oc-span { grid-column: 1 / -1; }
+  .oc-cert-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .oc-choices { display: flex; gap: 1rem; }
+  .oc-choice { display: inline-flex; flex-direction: row; align-items: center; gap: 0.35rem; margin: 0; cursor: pointer; color: var(--text); }
+  .oc-tunnel { display: flex; align-items: center; gap: 1rem; }
+  .oc-tunnel input[type="number"] { width: 7rem !important; }
+  .oc-field textarea { font-family: var(--mono, monospace); font-size: 0.8rem; }
+  @media (max-width: 640px) {
+    .oc-form { grid-template-columns: minmax(0, 1fr); }
+  }
   .np-idle-global {
     margin-top: 0.8rem;
     max-width: 32rem;
@@ -6721,6 +6734,8 @@
   }
   .np-kindpick {
     display: inline-flex;
+    flex-direction: row;
+    margin-top: 0;
     align-items: center;
     gap: 0.25rem;
     font-size: 0.85rem;
