@@ -33,10 +33,11 @@ import (
 // knownPlugins is the set the UI offers.
 var knownPlugins = []string{"netbird", "tailscale", "openconnect"}
 
-// pluginSource is where a plugin's releases live. NetBird and Tailscale
-// ship together from this repository as helper-vN; newer plugins come from
-// the separate plugins repository (its own license per plugin - the
-// OpenConnect one is GPL), tagged per plugin.
+// pluginSource is where a plugin's releases live: the separate plugins
+// repository, one tag namespace per plugin (<name>-vN[.P]), each plugin
+// with its own licence (the OpenConnect one is GPL). App versions before
+// the move fetched NetBird and Tailscale from this repository's helper-vN
+// releases; those stay published for them.
 type pluginSource struct {
 	repo, tagPrefix string
 }
@@ -44,11 +45,7 @@ type pluginSource struct {
 const pluginsGitHubRepo = "fpenezic/ssh-tool-plugins"
 
 func sourceOf(name string) pluginSource {
-	switch name {
-	case "openconnect":
-		return pluginSource{pluginsGitHubRepo, "openconnect-v"}
-	}
-	return pluginSource{updateGitHubRepo, "helper-v"}
+	return pluginSource{pluginsGitHubRepo, name + "-v"}
 }
 
 func pluginsDir() string {
@@ -181,10 +178,12 @@ func (a *App) PluginsStatus() []PluginInfo {
 	// helper into the plugins dir by hand still works: pluginPath
 	// finds it regardless of this flag.
 	supported := runtime.GOOS == "windows" || runtime.GOOS == "linux"
-	// Latest published helper-release version, fetched once here (best
-	// effort, short timeout). Helpers ship on their own helper-vN tag now,
+	// Latest published release per plugin, fetched once here (best
+	// effort, short timeout). Plugins ship on their own <name>-vN tags,
 	// decoupled from the app version, so "update available" compares the
-	// installed helper against the newest helper RELEASE, not the app.
+	// installed plugin against its newest RELEASE, not the app. A plugin
+	// still stamped helper-vN (installed before the move) differs from
+	// any <name>-vN tag, so it is offered the update.
 	// Empty on any failure (offline, rate-limited) -> we simply don't flag
 	// an update rather than nagging or blocking the card.
 	latest := map[pluginSource]string{}
@@ -214,7 +213,7 @@ func (a *App) PluginsStatus() []PluginInfo {
 }
 
 // latestPluginVersion returns the tag of the newest release of a plugin source this
-// app can speak to (helper-v<=MaxProtocol), or "" if it can't be
+// app can speak to (<name>-v<=MaxProtocol), or "" if it can't be
 // determined right now. Best effort: any error yields "" so PluginsStatus
 // degrades to "no update flagged" rather than failing.
 func (a *App) latestPluginVersion(src pluginSource) string {
@@ -246,8 +245,8 @@ func (a *App) PluginDownload(name string) (string, error) {
 	progress(PluginDownloadProgress{Phase: "resolve"})
 
 	ua := "ssh-tool/" + appVersion
-	// Helpers ship on their own helper-vN tag now, decoupled from the app
-	// version (docs/helper-release-plan.md). Pull from the newest helper
+	// Plugins ship on their own <name>-vN tags, decoupled from the app
+	// version (docs/helper-release-plan.md). Pull from the newest plugin
 	// release whose protocol major this app speaks - so a helper can be
 	// patched without an app release, and updating the app doesn't force a
 	// helper re-download unless the protocol major actually changed.

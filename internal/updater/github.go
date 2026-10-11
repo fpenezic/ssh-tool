@@ -66,18 +66,11 @@ func FetchGitHubByTag(repo, tag, userAgent string) (*ReleaseInfo, error) {
 		userAgent)
 }
 
-// FetchGitHubHelperRelease returns the newest published release whose
-// tag is "helper-v<major>" with major <= maxMajor - i.e. the newest
-// helper release this app can still speak to. The helpers ship on their
+// FetchGitHubPluginRelease returns the newest published release of one
+// plugin whose tag is "<prefix><major>[.<patch>]" with major <= maxMajor -
+// the newest release this app can still speak to. Plugins ship on their
 // own tag namespace, decoupled from the app version (see
-// docs/helper-release-plan.md); the app picks the highest compatible
-// major, and within it the most recent release. Returns an error if the
-// list can't be fetched or no compatible helper release exists yet.
-func FetchGitHubHelperRelease(repo string, maxMajor int, userAgent string) (*ReleaseInfo, error) {
-	return FetchGitHubPluginRelease(repo, "helper-v", maxMajor, userAgent)
-}
-
-// FetchGitHubPluginRelease is FetchGitHubHelperRelease for any tag prefix:
+// docs/helper-release-plan.md):
 // plugins published from their own repository tag per plugin
 // ("openconnect-v1", "openconnect-v1.2") instead of the shared helper-vN.
 func FetchGitHubPluginRelease(repo, tagPrefix string, maxMajor int, userAgent string) (*ReleaseInfo, error) {
@@ -248,13 +241,8 @@ func filterReleaseList(list []ghReleasePayload, inRange func(tag string) bool) [
 	return out
 }
 
-// pickHelperRelease chooses the helper release for an app that speaks
-// protocol majors up to maxMajor. Split out for unit testing without HTTP.
-func pickHelperRelease(list []ghReleasePayload, maxMajor int) *ghReleasePayload {
-	return pickPluginRelease(list, "helper-v", maxMajor)
-}
-
-// pickPluginRelease is pickHelperRelease for any tag prefix.
+// pickPluginRelease chooses the release for an app that speaks protocol
+// majors up to maxMajor: highest major, then highest patch.
 func pickPluginRelease(list []ghReleasePayload, tagPrefix string, maxMajor int) *ghReleasePayload {
 	// The highest compatible major wins, so a helper-v1 release is not
 	// picked over a newer helper-v2 the app also speaks. Within a major the

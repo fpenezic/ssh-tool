@@ -1832,7 +1832,7 @@
   }
   function progressText(p: PluginDownloadProgress): string {
     switch (p.phase) {
-      case "resolve": return "Looking up the latest helper release…";
+      case "resolve": return "Looking up the latest plugin release…";
       case "download": return p.total > 0
         ? `Downloading ${p.version ?? ""} - ${fmtMB(p.read)} of ${fmtMB(p.total)} MB`
         : `Downloading ${p.version ?? ""} - ${fmtMB(p.read)} MB`;
@@ -3673,14 +3673,15 @@
       Userspace tunnels - no TUN adapter, no admin rights, no system
       routes. Assign a profile to a folder or connection (Network
       setting) and its first SSH hop dials through the tunnel.
-      WireGuard is built in; NetBird needs the optional plugin below.
+      WireGuard is built in; NetBird, Tailscale and OpenConnect need the
+      optional plugins below.
     </p>
 
     <h3 style="margin-top:0.8rem">Plugins</h3>
     <p class="hint">
-      Optional overlay-network clients, kept out of the main app to
-      keep it small. Downloaded from the GitHub release matching this
-      version and verified by checksum before install.
+      Optional VPN clients, kept out of the main app to keep it small.
+      Downloaded from the ssh-tool-plugins releases and verified by
+      checksum before install.
     </p>
     {#each plugins as pl (pl.name)}
       <div class="np-card">

@@ -213,10 +213,10 @@ func TestPickHelperReleasePrefersPatch(t *testing.T) {
 		{TagName: "helper-v1"},
 		{TagName: "helper-v1.2", Draft: true},
 	}
-	if b := pickHelperRelease(list, 1); b == nil || b.TagName != "helper-v1.1" {
+	if b := pickPluginRelease(list, "helper-v", 1); b == nil || b.TagName != "helper-v1.1" {
 		t.Fatalf("max 1 picked %+v, want helper-v1.1", b)
 	}
-	if b := pickHelperRelease(list, 2); b == nil || b.TagName != "helper-v2" {
+	if b := pickPluginRelease(list, "helper-v", 2); b == nil || b.TagName != "helper-v2" {
 		t.Fatalf("max 2 picked %+v, want helper-v2", b)
 	}
 }
