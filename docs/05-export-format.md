@@ -31,7 +31,7 @@ change), `generated_at`, `generated_by`, then the sections:
 | `folders` | connection-tree folders, flat, hierarchy via a parent id |
 | `connections` | connections, each referencing its folder |
 | `credentials` | optional; present only with `IncludeCredentials` |
-| `credential_folders` | the credential tree's own hierarchy - separate from connection folders |
+| `credential_folders` | the credential tree's own hierarchy - separate from connection folders; carries the folder icon (built-in, or an uploaded image from `images`) |
 | `images` | custom icon blobs, base64, content-addressed by md5 on import |
 | `forwards` | port forwards per connection; SOCKS bookmarks travel inline |
 | `encrypted_secrets` | credential secrets, `credentialID -> base64(nonce \|\| ciphertext)` |

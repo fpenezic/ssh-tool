@@ -125,7 +125,7 @@ Common keys:
   - Linux: `$XDG_CONFIG_HOME/ssh-tool/` (defaults `~/.config/...`).
   - macOS: `~/Library/Application Support/ssh-tool/`.
   - Windows: `%APPDATA%\ssh-tool\`.
-- SQLite: `DataDir/ssh-tool.db`, 0600.
+- SQLite: `DataDir/store.db`, 0600.
 - Vault: `DataDir/vault.sealed`, 0600.
 - Logfile: `DataDir/logs/app.log`, rotated 5 MiB × 3 historical
   copies. Path visible in Settings → Logs.

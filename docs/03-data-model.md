@@ -1,8 +1,8 @@
 # Data Model
 
-The DB lives at `DataDir/ssh-tool.db` (SQLite via `modernc.org/sqlite`,
+The DB lives at `DataDir/store.db` (SQLite via `modernc.org/sqlite`,
 WAL mode, foreign keys on). Schema is versioned in `schema_meta.value`
-and migrated in order on every startup. Current head: **v25**. The audit log lives in a separate audit.db (machine-local, not in this schema).
+and migrated in order on every startup. Current head: **v27**. The audit log lives in a separate audit.db (machine-local, not in this schema).
 
 The canonical migration source is `internal/store/migrations.go`. This
 doc summarises the current shape and lists each migration's purpose.
@@ -87,6 +87,8 @@ secret is preserved in the vault under `:hist:<id>` for rollback
 
 ### `credential_folders` (v4)
 Folder tree for credentials, parallel to `folders` for connections.
+Icons: built-in `icon_name` / `icon_color` (v22 / v23) or an uploaded
+`icon_image_id` (v27), one source at a time.
 
 ### `known_hosts` (v3)
 TOFU host key store. Unique on `(hostname, port, key_type)`. Migration
@@ -103,8 +105,9 @@ density, base font size, connect timeout, vault auto-lock minutes,
 active-settings-section, broadcast group state, etc.
 
 ### `images` (v5)
-Content-addressed (md5) image blob store. Connections, folders, and
-credentials reference an image via `icon_image_id`. The dedup is
+Content-addressed (md5) image blob store. Connections, folders,
+credentials and credential folders (v27) reference an image via
+`icon_image_id`. The dedup is
 load-bearing for RDM imports where many entries share the same icon.
 
 ### `snippets` (v9)
@@ -238,6 +241,13 @@ the network profile to dial the server through, empty meaning direct.
 - v24: `connections.protocol` (`ssh` default) + `local_shell_kind`,
   which is what makes a local-shell tab a connection row.
 - v25: `connections.open_hidden` - open the tab without focusing it.
+- v26: `connections.local_shell_dir` (start directory of a local shell;
+  empty = the app-wide setting) and `port_forwards.browser_mode`
+  (`system` / `isolated` / `persistent` browser for that forward's
+  bookmarks).
+- v27: `credential_folders.icon_image_id` - uploaded icon, like the
+  other three tree kinds; cleared by `DeleteImage`, counted by
+  `ListImageIDs`, kept by `DeleteUnusedImages`.
 
 ### `audit_events` (v13, separate DB)
 Lives in `audit.db`, not `store.db` - it is machine-local and
@@ -317,6 +327,8 @@ Vault keys for various features:
 | 23 | repair + extend: icon_name/icon_color also on credential_refs + credential_folders (v22 was amended in place to add these after shipping a 2-table form; runner now applies ALTERs per-statement and tolerates duplicate-column) |
 | 24 | protocol + local_shell_kind on connections (local-shell connections: "ssh" default vs "local" - a saved local PTY running the connection's initial_command; telnet/serial/"claude"/REPL) |
 | 25 | open_hidden on connections (connect normally but leave the tab out of the tab bar - background helpers like a keepalive loop or a tail; the bar shows a hidden-tab count and Ctrl+K still finds them) |
+| 26 | local_shell_dir on connections (local shell start directory) + browser_mode on port_forwards (system / isolated / persistent browser for a forward's bookmarks) |
+| 27 | icon_image_id on credential_folders (uploaded icon; v22 gave them built-in icons only) |
 
 Migration runner: `runMigrations` in `internal/store/migrations.go`.
 Each migration applies inside a transaction; failure rolls back and

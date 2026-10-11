@@ -767,6 +767,11 @@ header). Modal walks through:
   SHA-256 fingerprint and chain, and **Replace certificate** imports a
   renewed one - every profile using the credential picks it up.
 
+**Expiry.** Passwords, keys and API tokens take an optional expiry: pick
+a date, type **in N days**, or click 30d / 90d / 365d; the field shows
+how many days a picked date is away. Expired and soon-to-expire
+credentials (14 days) get a badge in the list and a status bar warning.
+
 ### One-time codes (TOTP)
 
 A Bitwarden / Vaultwarden item or a KeePass entry that carries a TOTP
@@ -2877,8 +2882,9 @@ obvious without reading hostnames.
 <a id="custom-icons"></a>
 ## 17. Custom icons
 
-Both connections and folders accept a custom icon - PNG, SVG, JPG,
-WebP, or GIF, up to 256 KB. Set via the **Icon** field in the editor:
+Connections, folders, credentials and credential folders accept a
+custom icon - PNG, SVG, JPG, WebP, or GIF, up to 256 KB - or a built-in
+icon with a colour. Set via the **Icon** field in the editor:
 
 - **Upload** - file picker, uploads + assigns in one step.
 - **Clear** - reverts to the default icon (Lucide monitor / folder).
@@ -3525,15 +3531,18 @@ are not present on mobile. VNC on mobile is untested.
 
 ## Storage locations
 
-- **SQLite database** - connections, folders, credentials metadata,
-  port forwards, known hosts, images, settings, snippets, workspaces.
-  Path is OS-dependent (under your config directory). Schema at
-  migration 10.
-- **File vault** - encrypted credential secrets + per-connection
-  passwords. Path shown in Settings (Vault section, when implemented
-  - for now visible only in the file system).
-- **Auto-unlock sidecar** - optional, in the OS keychain when
-  available.
+Everything lives in the app's data folder: `%APPDATA%\ssh-tool`
+(Windows) or `$XDG_DATA_HOME/ssh-tool`, by default
+`~/.local/share/ssh-tool` (Linux).
+
+- **SQLite database** (`store.db`) - connections, folders,
+  credential metadata, network profiles, port forwards, known hosts,
+  icons, settings, snippets, workspaces. The schema migrates itself on
+  start; Settings -> About shows its version.
+- **File vault** (`vault.enc`) - encrypted credential secrets,
+  per-connection passwords, client certificates.
+- **Auto-unlock sidecar** (`vault.enc.local.key`) - optional, machine-
+  bound (DPAPI on Windows, machine id on Linux); no OS keychain is used.
 - **Rolling log file** - `%APPDATA%\ssh-tool\logs\app.log` (Windows)
   or the equivalent XDG dir on Linux. 5 MiB cap, three historical
   files kept (`.1`, `.2`, `.3`). Path shown in Settings → Logs.

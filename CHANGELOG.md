@@ -30,6 +30,8 @@ Corporate VPNs without the vendor client: Cisco AnyConnect, Fortinet, F5, Global
 ### Credentials
 
 - New **client certificate** credential: import a `.pfx` / `.p12` (including the AES-encrypted ones current OpenSSL and Windows export), a PEM with certificate and key, or a certificate + key pair. Kept in the vault, so it syncs and backs up; the file password is only used to open it. The certificate's expiry drives the usual expiry warning, and *Replace certificate* takes a renewed one.
+- A credential's expiry can be set as **in N days** (or 30 / 90 / 365 with one click) next to the date, and a picked date shows how many days away it is.
+- Credential folders can wear an uploaded icon like connections, folders and credentials; before, they only had the built-in icons. Exports carry it.
 - **One-time codes**: a Bitwarden / Vaultwarden item or KeePass entry with a TOTP shows the current code with *Copy code*, and **One-time code from** on a folder or connection answers an SSH server's verification-code question from it, next to the stored password or key - for example a key from the vault plus a code from Vaultwarden. Each answer is sent once per connect, and only what is left is asked. *One-time code from* has its own From Bitwarden / From KeePass pickers.
 
 ### Updates
