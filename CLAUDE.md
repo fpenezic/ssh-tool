@@ -250,6 +250,10 @@ Notes:
   skip prereleases). The real `vX.Y.Z` tag supersedes it; delete the RC
   release afterwards (`gh release delete vX.Y.Z-rcN --cleanup-tag`).
   `-test` tags are prereleases no channel offers.
+- Wiki (`ssh-tool.wiki`) tracks the latest release: after the tag,
+  `scripts/gen-wiki.py <wiki clone>` regenerates the pages built from
+  `docs/USER_GUIDE.md` (Home, FAQ, MCP and Session sharing are written
+  by hand), review the diff, commit and push the wiki.
 - New landing feature? Edit `docs/features.json`; the website
   fetches it from this repo (raw.githubusercontent) on a timer -
   no push, no web deploy.
