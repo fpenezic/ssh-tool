@@ -230,6 +230,10 @@ author asks to ship/promote/release:
    with one or two short plain-language sentences (before the first `###`)
    naming what the release is about - the GitHub release notes and the
    website show it first. A summary, not a second changelog.
+   No hard wrap in the release block: one line per paragraph and per
+   bullet. The block is rendered as release notes (GitHub, the website,
+   the in-app update dialog), and a line break inside `**bold**` or a
+   link breaks the formatting there. Older blocks keep their wrapping.
 
 3. Commit changelog as final release commit: `chore(release): v0.X.Y`.
 

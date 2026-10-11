@@ -9,220 +9,79 @@ a prerelease upstream.
 
 ## [Unreleased]
 
-Corporate SSL VPNs - Cisco AnyConnect, Fortinet, F5, GlobalProtect,
-Pulse - as network profiles, with client certificates kept in the vault,
-and one-time codes from Bitwarden or KeePass answering SSH and VPN
-logins. The VPN plugins move to their own repository.
+Corporate VPNs without the vendor client: Cisco AnyConnect, Fortinet, F5, GlobalProtect and Pulse as network profiles, with client certificates kept in the vault and one-time codes from Bitwarden or KeePass filled in at login. Also new: a Health check report for Gather facts, a release-candidate update channel, and a round of security hardening across MCP, links and remote commands.
 
 ### VPN profiles
 
-- New **OpenConnect** network profiles for SSL VPN gateways: Cisco
-  AnyConnect and ocserv, Fortinet, F5 BIG-IP, Palo Alto GlobalProtect,
-  Pulse / Ivanti and Juniper Network Connect, through the optional
-  OpenConnect plugin. Userspace like the others - no adapter, no admin
-  rights - so two gateways can be up at once, even with overlapping
-  address ranges.
-- Logins with a username, a password (typed on the profile, stored, from
-  Bitwarden / KeePass, or asked) and a second password for gateways with
-  a second login or a one-time code: asked (MobilePASS and other
-  tokens), a stored password, or an item's TOTP. Prompts say which login
-  each field belongs to (`[1st login - password]`); a rejected login is
-  asked again in full instead of resending stored answers into a
-  lockout. Each login round is logged without its values.
-- Client certificate login, from a certificate credential or imported
-  on the profile form from a file or pasted PEM.
-- Self-signed or private-CA gateway certificates: the first connect
-  asks once and **Trust & remember** pins it on the profile.
-- **Details** on a running profile: address, gateway, transport, MTU,
-  routes, DNS and banner, with Copy. MTU override and TLS-only option.
-- A synced OpenConnect profile already up on another machine gets the
-  take-over prompt WireGuard has: most gateways allow one session per
-  user.
+- New **OpenConnect** network profiles for SSL VPN gateways: Cisco AnyConnect and ocserv, Fortinet, F5 BIG-IP, Palo Alto GlobalProtect, Pulse / Ivanti and Juniper Network Connect, through the optional OpenConnect plugin. Userspace like the others - no adapter, no admin rights - so two gateways can be up at once, even with overlapping address ranges.
+- Logins with a username, a password (typed on the profile, stored, from Bitwarden / KeePass, or asked) and a second password for gateways with a second login or a one-time code: asked (MobilePASS and other tokens), a stored password, or an item's TOTP. Prompts say which login each field belongs to (`[1st login - password]`); a rejected login is asked again in full instead of resending stored answers into a lockout. Each login round is logged without its values.
+- Client certificate login, from a certificate credential or imported on the profile form from a file or pasted PEM.
+- Self-signed or private-CA gateway certificates: the first connect asks once and **Trust & remember** pins it on the profile.
+- **Details** on a running profile: address, gateway, transport, MTU, routes, DNS and banner, with Copy. MTU override and TLS-only option.
+- A synced OpenConnect profile already up on another machine gets the take-over prompt WireGuard has: most gateways allow one session per user.
 
 ### Network profiles
 
-- **Stop an idle tunnel**: how long a tunnel stays up after its last
-  SSH session closes is now a setting (right away, minutes, hours or
-  never; default 2 minutes), with a per-profile override on each card.
-- Connection and folder pickers name the real profile type (AnyConnect,
-  NetBird, Tailscale, WireGuard); everything that was not NetBird used
-  to say WireGuard.
+- **Stop an idle tunnel**: how long a tunnel stays up after its last SSH session closes is now a setting (right away, minutes, hours or never; default 2 minutes), with a per-profile override on each card.
+- Connection and folder pickers name the real profile type (AnyConnect, NetBird, Tailscale, WireGuard); everything that was not NetBird used to say WireGuard.
 - Profile cards fit on one row; the profile form is two columns.
-- A disabled *Add profile* button looks disabled and says what is
-  missing, instead of doing nothing on click.
+- A disabled *Add profile* button looks disabled and says what is missing, instead of doing nothing on click.
 
 ### Credentials
 
-- New **client certificate** credential: import a `.pfx` / `.p12`
-  (including the AES-encrypted ones current OpenSSL and Windows export),
-  a PEM with certificate and key, or a certificate + key pair. Kept in
-  the vault, so it syncs and backs up; the file password is only used to
-  open it. The certificate's expiry drives the usual expiry warning, and
-  *Replace certificate* takes a renewed one.
-- **One-time codes**: a Bitwarden / Vaultwarden item or KeePass entry
-  with a TOTP shows the current code with *Copy code*, and **One-time
-  code from** on a folder or connection answers an SSH server's
-  verification-code question from it, next to the stored password or
-  key - for example a key from the vault plus a code from Vaultwarden.
-  Each answer is sent once per connect, and only what is left is asked.
-  *One-time code from* has its own From Bitwarden / From KeePass
-  pickers.
+- New **client certificate** credential: import a `.pfx` / `.p12` (including the AES-encrypted ones current OpenSSL and Windows export), a PEM with certificate and key, or a certificate + key pair. Kept in the vault, so it syncs and backs up; the file password is only used to open it. The certificate's expiry drives the usual expiry warning, and *Replace certificate* takes a renewed one.
+- **One-time codes**: a Bitwarden / Vaultwarden item or KeePass entry with a TOTP shows the current code with *Copy code*, and **One-time code from** on a folder or connection answers an SSH server's verification-code question from it, next to the stored password or key - for example a key from the vault plus a code from Vaultwarden. Each answer is sent once per connect, and only what is left is asked. *One-time code from* has its own From Bitwarden / From KeePass pickers.
 
 ### Updates
 
-- Settings -> Updates has a *Channel*: *Release candidates* is an opt-in
-  for the test builds of the next release (`vX.Y.Z-rcN`). They install
-  through the same updater, the update dialog shows the changelog of the
-  release they lead to, and the release itself replaces the candidate
-  when it ships. *Stable* stays the default and never sees a candidate.
-- A release candidate is no longer treated as a development build, so
-  updating from one does not warn that a dev build will be replaced.
+- Settings -> Updates has a *Channel*: *Release candidates* is an opt-in for the test builds of the next release (`vX.Y.Z-rcN`). They install through the same updater, the update dialog shows the changelog of the release they lead to, and the release itself replaces the candidate when it ships. *Stable* stays the default and never sees a candidate.
+- A release candidate is no longer treated as a development build, so updating from one does not warn that a dev build will be replaced.
 
 ### Plugins
 
-- The VPN plugins (NetBird, Tailscale and the new OpenConnect) now live
-  in their own repository,
-  [ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins), each
-  released on its own (`netbird-v1.2`, `tailscale-v1.2`,
-  `openconnect-v1`). Installed NetBird / Tailscale helpers are offered
-  the update once; older app versions keep downloading from the
-  previous releases.
-- The NetBird and Tailscale helpers are rebuilt on current dependencies
-  (NetBird 0.80, golang.org/x/crypto, x/net, gRPC, quic-go and others),
-  closing the advisories reported against the old ones. They ship as
-  `helper-v1.1`; the app now understands patched helper releases and
-  offers the update under Settings -> Network profiles -> Plugins.
-- A plugin download shows its progress (finding the release,
-  downloading with MB done, verifying, installing) instead of a button
-  that just stays greyed out.
-- The app update's progress bar no longer flashes a moving bar that
-  snaps back to 0% when the download starts.
-- Plugin cards and About show the helper release and the NetBird /
-  Tailscale version inside it (e.g. helper-v1.1, NetBird 0.80.0), and
-  About updates when a plugin is installed or removed - it used to say
-  "not installed" until Settings was reopened.
-- An installed plugin with a newer helper release gets a toast and a
-  status bar pill; a click opens the Plugins cards. The update hint says
-  which helper release is available instead of comparing with the app
-  version.
+- The VPN plugins (NetBird, Tailscale and the new OpenConnect) now live in their own repository, [ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins), each released on its own (`netbird-v1.2`, `tailscale-v1.2`, `openconnect-v1`). Installed NetBird / Tailscale helpers are offered the update once; older app versions keep downloading from the previous releases.
+- The NetBird and Tailscale helpers are rebuilt on current dependencies (NetBird 0.80, golang.org/x/crypto, x/net, gRPC, quic-go and others), closing the advisories reported against the old ones. They ship as `helper-v1.1`; the app now understands patched helper releases and offers the update under Settings -> Network profiles -> Plugins.
+- A plugin download shows its progress (finding the release, downloading with MB done, verifying, installing) instead of a button that just stays greyed out.
+- The app update's progress bar no longer flashes a moving bar that snaps back to 0% when the download starts.
+- Plugin cards and About show the helper release and the NetBird / Tailscale version inside it (e.g. helper-v1.1, NetBird 0.80.0), and About updates when a plugin is installed or removed - it used to say "not installed" until Settings was reopened.
+- An installed plugin with a newer helper release gets a toast and a status bar pill; a click opens the Plugins cards. The update hint says which helper release is available instead of comparing with the app version.
 
 ### Tabs
 
-- Drag a workspace by its name in the tab bar to move all its tabs
-  together. A tab dropped on the left edge of a workspace's name goes in
-  front of the workspace without joining it, so a tab can now sit first
-  when a workspace starts the bar.
-- The status bar shows running log tails the way it shows captures: a
-  segment with the line count while any tail is open, minimised or in its
-  own window. A click opens the tail (or brings its window forward); with
-  several, it lists them to pick from.
+- Drag a workspace by its name in the tab bar to move all its tabs together. A tab dropped on the left edge of a workspace's name goes in front of the workspace without joining it, so a tab can now sit first when a workspace starts the bar.
+- The status bar shows running log tails the way it shows captures: a segment with the line count while any tail is open, minimised or in its own window. A click opens the tail (or brings its window forward); with several, it lists them to pick from.
 
 ### Fleet
 
-- Gather facts reads docker / podman containers (state, health, exit
-  code, engine restarts, compose project), and the Health check preset
-  and report include them: unhealthy, restarting or failed containers
-  need action, ones that crashed and came back recently need attention,
-  and containers stopped on purpose can be marked expected. Read as the
-  login user, so it needs the docker group; without it the report says
-  "no access" rather than "no containers".
-- MCP: an LLM can gather facts from a folder or a list of hosts
-  (`list_facts`, `gather_facts`) and read stored runs (`facts_history`,
-  `facts_snapshot`) to write a status or health report. One approval
-  lists every host - untick any to leave it out - every fact and the
-  exact script; nothing connects before it. Folder runs land in the
-  folder's report history, and the LLM gets the folder's thresholds and
-  expected failed units with the results.
+- Gather facts reads docker / podman containers (state, health, exit code, engine restarts, compose project), and the Health check preset and report include them: unhealthy, restarting or failed containers need action, ones that crashed and came back recently need attention, and containers stopped on purpose can be marked expected. Read as the login user, so it needs the docker group; without it the report says "no access" rather than "no containers".
+- MCP: an LLM can gather facts from a folder or a list of hosts (`list_facts`, `gather_facts`) and read stored runs (`facts_history`, `facts_snapshot`) to write a status or health report. One approval lists every host - untick any to leave it out - every fact and the exact script; nothing connects before it. Folder runs land in the folder's report history, and the LLM gets the folder's thresholds and expected failed units with the results.
 
-- Gather facts has a *Report* view: a health report with a status per
-  host, only the findings that need someone, optionally the changes
-  since a run you pick, and disk trends (growth per 30 days, the date a filesystem would
-  fill at that pace), the full table as an appendix. *Save report…*
-  writes one HTML file to print or save as PDF. The last 24 runs per
-  folder are kept for the comparisons. *Report settings…* (per folder)
-  sets the warning and critical disk levels, how old the last update
-  must be before pending security updates flag a host, how long a reboot
-  may wait (counted from when the new kernel was installed), and failed units
-  that are expected and only listed (units already ignored in Server
-  status, for the host or a folder above it, count as expected too). A *Prepared by* name and the time
-  the file was generated sign every report, with an optional company
-  logo.
-- Gather facts: *Save as preset…* keeps a set of facts (with the custom
-  column and timeout) under a name, and a folder opens on the facts its
-  last run used.
-- Gather facts has a *Health check* preset for the recurring report a
-  customer contract asks for: patch level, capacity and availability.
-  New facts: disk and inode use per filesystem (in the mount's cell;
-  separate columns in exports), *Last update* (the last upgrade, from apt or dnf history),
-  *Newer kernel* (installed but not running) and *Boots 30d*. Cells turn
-  yellow or red past 80% / 90% use, a kernel waiting for a reboot, or
-  30 days without an update, and chips on top count those hosts.
-- Gather facts: failed systemd units are listed by name (*Failed units*),
-  not only counted. Updates and security updates are separate columns,
-  and security counts packages rather than advisory lines (one package
-  can carry several advisories). Network shares (CIFS, NFS, sshfs) are
-  marked "(net)" and left out of *Disk total* and *Find similar*. Exports
-  give uptime in days as a number.
-- Fleet tools (and Run command on many hosts) no longer fail with
-  "handshake failed: i/o timeout" on servers that are slow to accept a
-  key, e.g. when their opkssh AuthorizedKeysCommand waits on a slow DNS
-  resolver. The connect timeout now covers reaching the server; once it
-  answers, authentication gets up to 90 seconds.
-- Fleet tools on a folder leave out inventory VMs the provider reports
-  stopped; picking hosts by hand still includes them.
-- Gather facts on a folder asks the hosts the folder has when you press
-  Run, not when the dialog opened: after pinning an inventory host, *Run
-  again* no longer counted it twice (as the new connection and as an
-  "unknown dynamic entry").
-- Gather facts: a host that runs out of time is listed under "Did not
-  answer" with the fact it was still collecting, instead of showing as
-  answered with the rest of its facts empty.
+- Gather facts has a *Report* view: a health report with a status per host, only the findings that need someone, optionally the changes since a run you pick, and disk trends (growth per 30 days, the date a filesystem would fill at that pace), the full table as an appendix. *Save report…* writes one HTML file to print or save as PDF. The last 24 runs per folder are kept for the comparisons. *Report settings…* (per folder) sets the warning and critical disk levels, how old the last update must be before pending security updates flag a host, how long a reboot may wait (counted from when the new kernel was installed), and failed units that are expected and only listed (units already ignored in Server status, for the host or a folder above it, count as expected too). A *Prepared by* name and the time the file was generated sign every report, with an optional company logo.
+- Gather facts: *Save as preset…* keeps a set of facts (with the custom column and timeout) under a name, and a folder opens on the facts its last run used.
+- Gather facts has a *Health check* preset for the recurring report a customer contract asks for: patch level, capacity and availability. New facts: disk and inode use per filesystem (in the mount's cell; separate columns in exports), *Last update* (the last upgrade, from apt or dnf history), *Newer kernel* (installed but not running) and *Boots 30d*. Cells turn yellow or red past 80% / 90% use, a kernel waiting for a reboot, or 30 days without an update, and chips on top count those hosts.
+- Gather facts: failed systemd units are listed by name (*Failed units*), not only counted. Updates and security updates are separate columns, and security counts packages rather than advisory lines (one package can carry several advisories). Network shares (CIFS, NFS, sshfs) are marked "(net)" and left out of *Disk total* and *Find similar*. Exports give uptime in days as a number.
+- Fleet tools (and Run command on many hosts) no longer fail with "handshake failed: i/o timeout" on servers that are slow to accept a key, e.g. when their opkssh AuthorizedKeysCommand waits on a slow DNS resolver. The connect timeout now covers reaching the server; once it answers, authentication gets up to 90 seconds.
+- Fleet tools on a folder leave out inventory VMs the provider reports stopped; picking hosts by hand still includes them.
+- Gather facts on a folder asks the hosts the folder has when you press Run, not when the dialog opened: after pinning an inventory host, *Run again* no longer counted it twice (as the new connection and as an "unknown dynamic entry").
+- Gather facts: a host that runs out of time is listed under "Did not answer" with the fact it was still collecting, instead of showing as answered with the rest of its facts empty.
 
 ### Security
 
-- Values the app passes to remote commands (capture interface and
-  filter, log tail unit / path / container, route lookup) are quoted
-  unless they are plain words. Before, a value containing `;`, `|` or
-  `&` reached the remote shell unquoted.
+- Values the app passes to remote commands (capture interface and filter, log tail unit / path / container, route lookup) are quoted unless they are plain words. Before, a value containing `;`, `|` or `&` reached the remote shell unquoted.
 - Links with a `vbscript:` URL are refused like `data:` and `blob:`.
-- MCP: the read-only check that lets an LLM's command run without asking
-  now reads the whole command. Before, a second line (`ls` then a newline
-  and anything), `env CMD`, `find -delete` / `-exec`, `sed -i`, awk's
-  `system()` and setting forms such as `git config KEY VALUE`, `date -s`
-  or `ip link set` passed as reads and ran without an approval. A
-  `VAR=value` prefix other than the locale ones now asks too. `awk`,
-  `sed`, `less` and `more` left the built-in list; add them to the
-  allowlist in Settings to auto-run them again. The yolo check sees past
-  a newline as well.
-- MCP: an LLM opening a connection can ask for read or read-run access,
-  never auto-run (yolo); the approval shows which access it asked for.
-- MCP: committing a plan writes exactly what the approval showed. Items an
-  LLM staged while the approval was open used to be written with it; they
-  now wait for their own commit.
-- MCP: a connection marked sensitive is off limits in every tool, not only
-  connect. The LLM can no longer edit it, add a forward to it, use it as a
-  jump host, or open a connection whose jump chain goes through it, and
-  its name no longer shows in icon and jump hints.
-- MCP: an approval answer only counts for the kind of request it was shown
-  for.
-- Opening the app a second time hands its arguments to the running one
-  only with a token from the data folder. Before, any local program,
-  including another user's on a shared machine, could make the app open a
-  local shell in a chosen folder or fetch an import link.
-- Updates without a published sha256 are refused instead of installed
-  unverified.
-- Links opened from the app go to the browser only when they are http,
-  https or mailto; file: and custom protocol links are refused.
-- *Open in external terminal* and *Open in system terminal* refuse a host
-  or user name that starts with `-` or holds shell characters; such a name
-  could make ssh or the shell run a command on this machine.
-- The SSH exclusion in a packet capture is used only when the address the
-  server reports is a real IP address and port.
-- An unused session-share link expires after 30 minutes even when no
-  other share is started.
+- MCP: the read-only check that lets an LLM's command run without asking now reads the whole command. Before, a second line (`ls` then a newline and anything), `env CMD`, `find -delete` / `-exec`, `sed -i`, awk's `system()` and setting forms such as `git config KEY VALUE`, `date -s` or `ip link set` passed as reads and ran without an approval. A `VAR=value` prefix other than the locale ones now asks too. `awk`, `sed`, `less` and `more` left the built-in list; add them to the allowlist in Settings to auto-run them again. The yolo check sees past a newline as well.
+- MCP: an LLM opening a connection can ask for read or read-run access, never auto-run (yolo); the approval shows which access it asked for.
+- MCP: committing a plan writes exactly what the approval showed. Items an LLM staged while the approval was open used to be written with it; they now wait for their own commit.
+- MCP: a connection marked sensitive is off limits in every tool, not only connect. The LLM can no longer edit it, add a forward to it, use it as a jump host, or open a connection whose jump chain goes through it, and its name no longer shows in icon and jump hints.
+- MCP: an approval answer only counts for the kind of request it was shown for.
+- Opening the app a second time hands its arguments to the running one only with a token from the data folder. Before, any local program, including another user's on a shared machine, could make the app open a local shell in a chosen folder or fetch an import link.
+- Updates without a published sha256 are refused instead of installed unverified.
+- Links opened from the app go to the browser only when they are http, https or mailto; file: and custom protocol links are refused.
+- *Open in external terminal* and *Open in system terminal* refuse a host or user name that starts with `-` or holds shell characters; such a name could make ssh or the shell run a command on this machine.
+- The SSH exclusion in a packet capture is used only when the address the server reports is a real IP address and port.
+- An unused session-share link expires after 30 minutes even when no other share is started.
 - The app log file is readable by its owner only.
-- Revealing a credential's secret, or copying a connection's password, is
-  written to the audit log.
+- Revealing a credential's secret, or copying a connection's password, is written to the audit log.
 
 ## [0.110.0] - Upload to and download from many hosts
 
