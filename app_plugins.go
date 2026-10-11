@@ -31,7 +31,25 @@ import (
 )
 
 // knownPlugins is the set the UI offers.
-var knownPlugins = []string{"netbird", "tailscale"}
+var knownPlugins = []string{"netbird", "tailscale", "openconnect"}
+
+// pluginSource is where a plugin's releases live. NetBird and Tailscale
+// ship together from this repository as helper-vN; newer plugins come from
+// the separate plugins repository (its own license per plugin - the
+// OpenConnect one is GPL), tagged per plugin.
+type pluginSource struct {
+	repo, tagPrefix string
+}
+
+const pluginsGitHubRepo = "fpenezic/ssh-tool-plugins"
+
+func sourceOf(name string) pluginSource {
+	switch name {
+	case "openconnect":
+		return pluginSource{pluginsGitHubRepo, "openconnect-v"}
+	}
+	return pluginSource{updateGitHubRepo, "helper-v"}
+}
 
 func pluginsDir() string {
 	return filepath.Join(store.DataDir(), "plugins")
@@ -114,8 +132,9 @@ func pluginVersion(exe string) string {
 
 // pluginEngineModule is the Go module each helper embeds.
 var pluginEngineModule = map[string]string{
-	"netbird":   "github.com/netbirdio/netbird",
-	"tailscale": "tailscale.com",
+	"netbird":     "github.com/netbirdio/netbird",
+	"tailscale":   "tailscale.com",
+	"openconnect": "github.com/sagernet/sing-openconnect",
 }
 
 // pluginEngineVersion reads the embedded engine's module version from the
@@ -168,8 +187,14 @@ func (a *App) PluginsStatus() []PluginInfo {
 	// installed helper against the newest helper RELEASE, not the app.
 	// Empty on any failure (offline, rate-limited) -> we simply don't flag
 	// an update rather than nagging or blocking the card.
-	latestHelper := a.latestHelperVersion()
+	latest := map[pluginSource]string{}
 	for _, name := range knownPlugins {
+		src := sourceOf(name)
+		latestHelper, seen := latest[src]
+		if !seen {
+			latestHelper = a.latestPluginVersion(src)
+			latest[src] = latestHelper
+		}
 		p, ok := pluginPath(name)
 		info := PluginInfo{Name: name, Installed: ok, Path: p, Supported: supported, Latest: latestHelper}
 		if ok {
@@ -188,12 +213,12 @@ func (a *App) PluginsStatus() []PluginInfo {
 	return out
 }
 
-// latestHelperVersion returns the tag of the newest helper release this
+// latestPluginVersion returns the tag of the newest release of a plugin source this
 // app can speak to (helper-v<=MaxProtocol), or "" if it can't be
 // determined right now. Best effort: any error yields "" so PluginsStatus
 // degrades to "no update flagged" rather than failing.
-func (a *App) latestHelperVersion() string {
-	rel, err := updater.FetchGitHubHelperRelease(updateGitHubRepo, tunnelhelper.MaxProtocol(), "ssh-tool/"+appVersion)
+func (a *App) latestPluginVersion(src pluginSource) string {
+	rel, err := updater.FetchGitHubPluginRelease(src.repo, src.tagPrefix, tunnelhelper.MaxProtocol(), "ssh-tool/"+appVersion)
 	if err != nil {
 		return ""
 	}
@@ -226,7 +251,8 @@ func (a *App) PluginDownload(name string) (string, error) {
 	// release whose protocol major this app speaks - so a helper can be
 	// patched without an app release, and updating the app doesn't force a
 	// helper re-download unless the protocol major actually changed.
-	rel, err := updater.FetchGitHubHelperRelease(updateGitHubRepo, tunnelhelper.MaxProtocol(), ua)
+	src := sourceOf(name)
+	rel, err := updater.FetchGitHubPluginRelease(src.repo, src.tagPrefix, tunnelhelper.MaxProtocol(), ua)
 	if err != nil {
 		return "", fmt.Errorf("fetch helper release: %w", err)
 	}

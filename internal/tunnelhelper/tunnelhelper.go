@@ -6,8 +6,11 @@
 //	stdout, line JSON:
 //	  {"event":"ready","socks":"127.0.0.1:PORT","protocol":N}
 //	  {"event":"status","peers":N}
-//	  {"event":"error","error":"..."}
-//	stdin: closed by us -> helper shuts down.
+//	  {"event":"error","error":"...","cert_pin":"..."}
+//	  {"event":"auth","id":"..","message":"..","fields":[...]}  (optional)
+//	  {"event":"info","info":{...}}                              (optional)
+//	stdin: JSON lines answering auth events ({"cmd":"auth"|"cancel"});
+//	       closed by us -> helper shuts down.
 //
 // The ready event carries a protocol version the app validates against
 // minProtocol/maxProtocol; a mismatch is rejected with an actionable
@@ -51,6 +54,89 @@ type Proc struct {
 	mu     sync.Mutex
 	peers  int
 	exited bool
+	info   json.RawMessage
+
+	stdinMu sync.Mutex
+}
+
+// AuthField is one input of a login form a helper forwards.
+type AuthField struct {
+	Key     string       `json:"key"`
+	Name    string       `json:"name"`
+	Label   string       `json:"label"`
+	Kind    string       `json:"kind"` // text | password | select
+	Value   string       `json:"value,omitempty"`
+	Options []AuthOption `json:"options,omitempty"`
+}
+
+// AuthOption is one choice of a select field.
+type AuthOption struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+// AuthChallenge is a login form the helper needs answered (VPN gateways
+// ask for user, password, a one-time code... in one or several rounds).
+type AuthChallenge struct {
+	ID      string      `json:"id"`
+	Message string      `json:"message"`
+	Banner  string      `json:"banner"`
+	Error   string      `json:"error"` // the server rejected the previous answer
+	Fields  []AuthField `json:"fields"`
+}
+
+// CertUntrustedError is a helper refusing a gateway certificate the system
+// does not trust. Pin is what to pass back (after the user agrees) to
+// trust exactly this certificate.
+type CertUntrustedError struct {
+	Msg, Pin, Subject string
+	// Changed: the certificate no longer matches the pinned one.
+	Changed bool
+}
+
+func (e *CertUntrustedError) Error() string { return e.Msg }
+
+// Options tunes one spawn. Zero value = the plain NetBird / Tailscale
+// contract.
+type Options struct {
+	// OnAuth answers a login challenge by calling p.Answer / p.Cancel.
+	// Called on its own goroutine; nil makes any challenge a failure.
+	OnAuth func(p *Proc, ch AuthChallenge)
+	// OnInfo is called after the tunnel description changes once ready
+	// (rekey, reconnect, transport switch), for the UI to refresh.
+	OnInfo func(p *Proc)
+	// ReadyTimeout overrides readyTimeout (a login with a typed one-time
+	// code takes longer than a NetBird registration).
+	ReadyTimeout time.Duration
+}
+
+// Answer submits values (field key -> value) for an auth challenge.
+func (p *Proc) Answer(id string, values map[string]string) error {
+	return p.send(map[string]any{"cmd": "auth", "id": id, "values": values})
+}
+
+// Cancel abandons the login; the helper exits.
+func (p *Proc) Cancel(id string) error {
+	return p.send(map[string]any{"cmd": "cancel", "id": id})
+}
+
+func (p *Proc) send(v any) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	p.stdinMu.Lock()
+	defer p.stdinMu.Unlock()
+	_, err = p.stdin.Write(append(b, '\n'))
+	return err
+}
+
+// Info is the helper's latest tunnel description (addresses, routes, DNS,
+// MTU...), nil when it sends none.
+func (p *Proc) Info() json.RawMessage {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.info
 }
 
 // DialContext dials through the helper's SOCKS5 proxy. Hostnames are
@@ -64,6 +150,7 @@ type Status struct {
 	Running   bool
 	StartedAt int64
 	Peers     int
+	Info      json.RawMessage // helper's tunnel description, nil if none
 }
 
 type helperEvent struct {
@@ -71,6 +158,17 @@ type helperEvent struct {
 	Socks string `json:"socks"`
 	Peers int    `json:"peers"`
 	Error string `json:"error"`
+	// error: an untrusted gateway certificate (trust on first use).
+	CertPin     string `json:"cert_pin"`
+	CertSubject string `json:"cert_subject"`
+	CertChanged bool   `json:"cert_changed"`
+	// auth
+	ID      string      `json:"id"`
+	Message string      `json:"message"`
+	Banner  string      `json:"banner"`
+	Fields  []AuthField `json:"fields"`
+	// info
+	Info json.RawMessage `json:"info"`
 	// Protocol is the helper protocol version, carried on the ready
 	// event. Absent (0) means a pre-versioning helper from the app-tag
 	// era, which the app treats as too old. See protocol version range
@@ -117,6 +215,13 @@ func NewManager(onExit func(profileID string)) *Manager {
 // the child's environment (used for the setup-key secret - never put
 // secrets in args).
 func (m *Manager) Ensure(profileID, name, exePath string, args, env []string) (*Proc, error) {
+	return m.EnsureWith(profileID, name, exePath, args, env, Options{})
+}
+
+// EnsureWith is Ensure with spawn options (auth relay, ready timeout).
+// The manager lock is held across the spawn, so a second connect through
+// the same profile waits for the first login instead of starting another.
+func (m *Manager) EnsureWith(profileID, name, exePath string, args, env []string, opts Options) (*Proc, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if p, ok := m.procs[profileID]; ok {
@@ -128,7 +233,7 @@ func (m *Manager) Ensure(profileID, name, exePath string, args, env []string) (*
 		}
 		delete(m.procs, profileID)
 	}
-	p, err := spawn(profileID, name, exePath, args, env)
+	p, err := spawn(profileID, name, exePath, args, env, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +295,7 @@ func (m *Manager) Status(profileID string) Status {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return Status{Running: true, StartedAt: p.startedAt.Unix(), Peers: p.peers}
+	return Status{Running: true, StartedAt: p.startedAt.Unix(), Peers: p.peers, Info: p.info}
 }
 
 // reap waits for process exit, marks the proc dead and drops it from
@@ -256,7 +361,7 @@ func checkProtocol(v int) error {
 	return nil
 }
 
-func spawn(profileID, name, exePath string, args, env []string) (*Proc, error) {
+func spawn(profileID, name, exePath string, args, env []string, opts Options) (*Proc, error) {
 	cmd := exec.Command(exePath, args...)
 	cmd.Env = append(cmd.Environ(), env...)
 	configureSysProcAttr(cmd) // hide console window on Windows
@@ -311,9 +416,27 @@ func spawn(profileID, name, exePath string, args, env []string) (*Proc, error) {
 				p.mu.Lock()
 				p.peers = ev.Peers
 				p.mu.Unlock()
+			case "info":
+				p.mu.Lock()
+				p.info = append(json.RawMessage(nil), ev.Info...)
+				p.mu.Unlock()
+				if got && opts.OnInfo != nil {
+					go opts.OnInfo(p)
+				}
+			case "auth":
+				ch := AuthChallenge{ID: ev.ID, Message: ev.Message, Banner: ev.Banner, Error: ev.Error, Fields: ev.Fields}
+				if opts.OnAuth == nil {
+					_ = p.Cancel(ch.ID)
+					continue
+				}
+				go opts.OnAuth(p, ch)
 			case "error":
 				if !got {
 					got = true
+					if ev.CertPin != "" {
+						readyCh <- &CertUntrustedError{Msg: ev.Error, Pin: ev.CertPin, Subject: ev.CertSubject, Changed: ev.CertChanged}
+						break
+					}
 					readyCh <- fmt.Errorf("%s", ev.Error)
 				} else {
 					log.Printf("helper[%s]: error: %s", name, ev.Error)
@@ -325,6 +448,10 @@ func spawn(profileID, name, exePath string, args, env []string) (*Proc, error) {
 		}
 	}()
 
+	timeout := readyTimeout
+	if opts.ReadyTimeout > 0 {
+		timeout = opts.ReadyTimeout
+	}
 	select {
 	case err := <-readyCh:
 		if err != nil {
@@ -333,11 +460,11 @@ func spawn(profileID, name, exePath string, args, env []string) (*Proc, error) {
 			go func() { _ = cmd.Wait() }() // reap the failed child
 			return nil, err
 		}
-	case <-time.After(readyTimeout):
+	case <-time.After(timeout):
 		_ = stdin.Close()
 		_ = cmd.Process.Kill()
 		go func() { _ = cmd.Wait() }()
-		return nil, fmt.Errorf("helper did not become ready within %s", readyTimeout)
+		return nil, fmt.Errorf("helper did not become ready within %s", timeout)
 	}
 
 	socksDialer, err := proxy.SOCKS5("tcp", p.socksAddr, nil, proxy.Direct)

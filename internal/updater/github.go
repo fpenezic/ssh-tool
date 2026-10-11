@@ -74,6 +74,13 @@ func FetchGitHubByTag(repo, tag, userAgent string) (*ReleaseInfo, error) {
 // major, and within it the most recent release. Returns an error if the
 // list can't be fetched or no compatible helper release exists yet.
 func FetchGitHubHelperRelease(repo string, maxMajor int, userAgent string) (*ReleaseInfo, error) {
+	return FetchGitHubPluginRelease(repo, "helper-v", maxMajor, userAgent)
+}
+
+// FetchGitHubPluginRelease is FetchGitHubHelperRelease for any tag prefix:
+// plugins published from their own repository tag per plugin
+// ("openconnect-v1", "openconnect-v1.2") instead of the shared helper-vN.
+func FetchGitHubPluginRelease(repo, tagPrefix string, maxMajor int, userAgent string) (*ReleaseInfo, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=100", repo)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -98,9 +105,9 @@ func FetchGitHubHelperRelease(repo string, maxMajor int, userAgent string) (*Rel
 	if err := json.Unmarshal(body, &list); err != nil {
 		return nil, fmt.Errorf("malformed github releases list: %w", err)
 	}
-	best := pickHelperRelease(list, maxMajor)
+	best := pickPluginRelease(list, tagPrefix, maxMajor)
 	if best == nil {
-		return nil, fmt.Errorf("no helper release found (tag helper-v<=%d) in %s", maxMajor, repo)
+		return nil, fmt.Errorf("no plugin release found (tag %s<=%d) in %s", tagPrefix, maxMajor, repo)
 	}
 	raw, err := json.Marshal(best)
 	if err != nil {
@@ -244,6 +251,11 @@ func filterReleaseList(list []ghReleasePayload, inRange func(tag string) bool) [
 // pickHelperRelease chooses the helper release for an app that speaks
 // protocol majors up to maxMajor. Split out for unit testing without HTTP.
 func pickHelperRelease(list []ghReleasePayload, maxMajor int) *ghReleasePayload {
+	return pickPluginRelease(list, "helper-v", maxMajor)
+}
+
+// pickPluginRelease is pickHelperRelease for any tag prefix.
+func pickPluginRelease(list []ghReleasePayload, tagPrefix string, maxMajor int) *ghReleasePayload {
 	// The highest compatible major wins, so a helper-v1 release is not
 	// picked over a newer helper-v2 the app also speaks. Within a major the
 	// highest patch wins (helper-v1.2 over helper-v1.1 over helper-v1):
@@ -257,7 +269,7 @@ func pickHelperRelease(list []ghReleasePayload, maxMajor int) *ghReleasePayload 
 		if list[i].Draft {
 			continue
 		}
-		major, patch, ok := helperTagVersion(list[i].TagName)
+		major, patch, ok := tagVersion(tagPrefix, list[i].TagName)
 		if !ok || major > maxMajor {
 			continue
 		}
@@ -280,7 +292,12 @@ func helperTagMajor(tag string) (int, bool) {
 // N is the protocol major the app checks against MaxProtocol; P orders
 // patched rebuilds of the same protocol.
 func helperTagVersion(tag string) (major, patch int, ok bool) {
-	rest, found := strings.CutPrefix(tag, "helper-v")
+	return tagVersion("helper-v", tag)
+}
+
+// tagVersion parses "<prefix><N>" and "<prefix><N>.<P>".
+func tagVersion(prefix, tag string) (major, patch int, ok bool) {
+	rest, found := strings.CutPrefix(tag, prefix)
 	if !found || rest == "" {
 		return 0, 0, false
 	}

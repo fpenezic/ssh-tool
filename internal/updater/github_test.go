@@ -220,3 +220,20 @@ func TestPickHelperReleasePrefersPatch(t *testing.T) {
 		t.Fatalf("max 2 picked %+v, want helper-v2", b)
 	}
 }
+
+// A plugin from its own repository tags per plugin; other plugins' tags in
+// the same repository are not mistaken for it.
+func TestPickPluginReleaseByPrefix(t *testing.T) {
+	list := []ghReleasePayload{
+		{TagName: "netbird-v1.3"},
+		{TagName: "openconnect-v1.1"},
+		{TagName: "openconnect-v2"},
+		{TagName: "openconnect-v1"},
+	}
+	if b := pickPluginRelease(list, "openconnect-v", 1); b == nil || b.TagName != "openconnect-v1.1" {
+		t.Fatalf("picked %+v, want openconnect-v1.1", b)
+	}
+	if b := pickPluginRelease(list, "tailscale-v", 1); b != nil {
+		t.Fatalf("picked %+v for a plugin with no release", b)
+	}
+}
