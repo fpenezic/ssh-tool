@@ -1652,6 +1652,25 @@ func (a *App) CredentialsRotateAPIToken(in CredentialsRotateAPITokenInput) (*sto
 	return a.credSvc.RotateAPIToken(in.ID, in.TokenID, in.NewSecret)
 }
 
+// CredentialsReplaceCertificateInput carries a renewed client
+// certificate for an existing certificate credential: the file (base64
+// over IPC), an optional separate key file and the password that opens
+// them.
+type CredentialsReplaceCertificateInput struct {
+	ID       string `json:"id"`
+	Data     []byte `json:"data"`
+	KeyData  []byte `json:"key_data"`
+	Password string `json:"password"`
+}
+
+func (a *App) CredentialsReplaceCertificate(in CredentialsReplaceCertificateInput) (*store.CredentialRef, error) {
+	cred, err := a.credSvc.ReplaceCertificate(in.ID, in.Data, in.KeyData, in.Password)
+	if err == nil {
+		a.recordAudit("credential.certificate.replace", in.ID, nil)
+	}
+	return cred, err
+}
+
 // ----- Credential folders -----
 
 func (a *App) CredentialFoldersList() ([]store.CredentialFolder, error) {
@@ -3540,6 +3559,11 @@ func (a *App) makeHostKeyCallback() gossh.HostKeyCallback {
 // SshRespondHostKey is called by the frontend after the user decides on a
 // host key challenge. remember=true persists the key to known_hosts.
 func (a *App) SshRespondHostKey(challengeID string, accept bool, remember bool, hostname string, port int, keyType string, keyB64 string, fingerprint string) error {
+	// A VPN gateway certificate rides the same dialog; its answer is kept
+	// on the network profile, never in known_hosts.
+	if respondTrustChallenge(challengeID, accept, remember) {
+		return nil
+	}
 	a.pendingHostKeysMu.Lock()
 	ch, ok := a.pendingHostKeys[challengeID]
 	a.pendingHostKeysMu.Unlock()
@@ -5386,6 +5410,9 @@ func (a *App) SettingsSet(key, value string) error {
 	if key == "mcp_bridge_tcp" {
 		a.setMcpTCP(value == "1" || value == "true")
 	}
+	if key == idleStopSettingKey {
+		a.rearmIdleStop("")
+	}
 	// Toggling session sharing: bring the server up (IPC surface live) or tear
 	// every active share down. Mirrors the MCP arm.
 	if key == "share_enabled" {
@@ -5421,7 +5448,13 @@ func (a *App) SettingsDelete(key string) error {
 	if localStateKeys[key] {
 		return a.localSettingDelete(key)
 	}
-	return a.db.DeleteSetting(key)
+	if err := a.db.DeleteSetting(key); err != nil {
+		return err
+	}
+	if key == idleStopSettingKey {
+		a.rearmIdleStop("")
+	}
+	return nil
 }
 
 // ----- Images -----
@@ -7327,6 +7360,8 @@ func noPasswordReason(kind store.CredentialKind, name string) string {
 		return cred + " authenticates through your SSH agent, so there is no password to copy"
 	case store.CredOpkssh:
 		return cred + " authenticates with an opkssh certificate, so there is no password to copy"
+	case store.CredCertificate:
+		return cred + " is a client certificate (used by VPN profiles, not for SSH login), so there is no password to copy"
 	case store.CredAPIToken:
 		return cred + " is an API token (used by inventory providers, not for SSH login), so there is no password to copy"
 	case store.CredVault:

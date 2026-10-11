@@ -9,6 +9,7 @@
 import { api } from "./api";
 import { toast } from "./toast.svelte.ts";
 import type { PluginInfo } from "./api";
+import { pluginTitle } from "./networkKind";
 
 class UpdateCheckStore {
   current = $state<string>("");
@@ -66,7 +67,7 @@ class UpdateCheckStore {
       .filter((p) => p.installed && p.update_available && p.latest)
       .map((p) => ({
         name: p.name,
-        label: p.name === "netbird" ? "NetBird" : p.name === "tailscale" ? "Tailscale" : p.name,
+        label: pluginTitle(p.name),
         version: p.version,
         latest: p.latest,
       }));

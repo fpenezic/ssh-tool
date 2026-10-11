@@ -18,6 +18,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,12 +59,12 @@ type NetbirdConfig struct {
 // under DataDir/tailscale/<profileID>/. ControlURL is blank for
 // Tailscale's own control plane, set for a self-hosted Headscale.
 type TailscaleConfig struct {
-	Kind              string `json:"kind"` // "tailscale"
-	ControlURL        string `json:"control_url"`
-	Hostname          string `json:"hostname"`
+	Kind                string `json:"kind"` // "tailscale"
+	ControlURL          string `json:"control_url"`
+	Hostname            string `json:"hostname"`
 	AuthKeyCredentialID string `json:"auth_key_credential_id"`
-	Mode              string `json:"mode,omitempty"`
-	Paused            bool   `json:"paused,omitempty"`
+	Mode                string `json:"mode,omitempty"`
+	Paused              bool   `json:"paused,omitempty"`
 }
 
 // profilePolicy is the kind/mode/paused triple every profile kind
@@ -72,6 +73,60 @@ type profilePolicy struct {
 	Kind   string `json:"kind"`
 	Mode   string `json:"mode"`
 	Paused bool   `json:"paused"`
+	// IdleStopMinutes overrides the global idle stop for this profile:
+	// nil = global, 0 = at once, -1 = never.
+	IdleStopMinutes *int `json:"idle_stop_minutes,omitempty"`
+}
+
+// idleStopNever keeps a tunnel up until it is stopped by hand or the
+// app quits.
+const idleStopNever = -1
+
+// idleStopSettingKey holds the global idle stop in minutes (same
+// encoding as the per-profile override); unset means wgLinger.
+const idleStopSettingKey = "network_idle_stop_minutes"
+
+// idleStopFor resolves how long the profile's tunnel lingers after its
+// last session closes: the profile override, else the global setting,
+// else wgLinger. ok=false means never stop.
+func (a *App) idleStopFor(p profilePolicy) (time.Duration, bool) {
+	m := p.IdleStopMinutes
+	if m == nil {
+		if v, ok, _ := a.db.GetSetting(idleStopSettingKey); ok {
+			if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+				m = &n
+			}
+		}
+	}
+	switch {
+	case m == nil:
+		return wgLinger, true
+	case *m < 0:
+		return 0, false
+	default:
+		return time.Duration(*m) * time.Minute, true
+	}
+}
+
+// carryIdleStop copies idle_stop_minutes from a profile's old config
+// JSON into a freshly marshalled one. The edit paths rebuild the config
+// from a typed struct per kind, which knows nothing about this shared
+// field and would silently reset it to the default.
+func carryIdleStop(oldJSON, newJSON string) string {
+	var old map[string]json.RawMessage
+	if json.Unmarshal([]byte(oldJSON), &old) != nil || old["idle_stop_minutes"] == nil {
+		return newJSON
+	}
+	m := map[string]json.RawMessage{}
+	if json.Unmarshal([]byte(newJSON), &m) != nil {
+		return newJSON
+	}
+	m["idle_stop_minutes"] = old["idle_stop_minutes"]
+	out, err := json.Marshal(m)
+	if err != nil {
+		return newJSON
+	}
+	return string(out)
 }
 
 func parsePolicy(configJSON string) profilePolicy {
@@ -121,6 +176,8 @@ func (a *App) ensureTunnel(row *store.NetworkProfile) (tunnelDialer, error) {
 		return a.ensureNetbirdTunnel(row)
 	case kindTailscale:
 		return a.ensureTailscaleTunnel(row)
+	case kindOpenConnect:
+		return a.ensureOpenConnectTunnel(row)
 	default:
 		return a.ensureWgTunnel(row.ID)
 	}
@@ -355,6 +412,7 @@ func (a *App) ensureNetbirdTunnel(row *store.NetworkProfile) (tunnelDialer, erro
 //	paused      -> plain direct dial (tunnel never starts)
 //	mode auto   -> direct probe first, tunnel fallback
 //	mode always -> tunnel, errors surface
+//
 // physicalDialLocalAddr returns the physical NIC's address as a TCP LocalAddr to
 // bind direct dials to, or nil when physical-NIC binding is off or no NIC is
 // found (nil LocalAddr = default OS behaviour).
@@ -619,17 +677,21 @@ func secretlessJSON(p *wg.Profile) (string, error) {
 // the parsed secretless config for display. Kind selects which of
 // Profile (WireGuard) / Netbird is populated.
 type NetworkProfileInfo struct {
-	ID        string         `json:"id"`
-	Name      string         `json:"name"`
-	Kind      string           `json:"kind"` // "wireguard" | "netbird" | "tailscale"
-	Mode      string           `json:"mode"`
-	Paused    bool             `json:"paused"`
-	Profile   wg.Profile       `json:"profile"`             // WG only
-	Netbird   *NetbirdConfig   `json:"netbird,omitempty"`   // NetBird only
-	Tailscale *TailscaleConfig `json:"tailscale,omitempty"` // Tailscale only
-	Status    wg.Status        `json:"status"`
-	CreatedAt int64          `json:"created_at"`
-	UpdatedAt int64          `json:"updated_at"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Kind   string `json:"kind"` // "wireguard" | "netbird" | "tailscale"
+	Mode   string `json:"mode"`
+	Paused bool   `json:"paused"`
+	// IdleStopMinutes is the per-profile override: null = global
+	// setting, -1 never, otherwise minutes.
+	IdleStopMinutes *int               `json:"idle_stop_minutes"`
+	Profile         wg.Profile         `json:"profile"`               // WG only
+	Netbird         *NetbirdConfig     `json:"netbird,omitempty"`     // NetBird only
+	Tailscale       *TailscaleConfig   `json:"tailscale,omitempty"`   // Tailscale only
+	OpenConnect     *OpenConnectConfig `json:"openconnect,omitempty"` // OpenConnect only
+	Status          wg.Status          `json:"status"`
+	CreatedAt       int64              `json:"created_at"`
+	UpdatedAt       int64              `json:"updated_at"`
 }
 
 func (a *App) infoFor(row store.NetworkProfile) NetworkProfileInfo {
@@ -637,7 +699,8 @@ func (a *App) infoFor(row store.NetworkProfile) NetworkProfileInfo {
 	info := NetworkProfileInfo{
 		ID: row.ID, Name: row.Name,
 		Kind: pol.Kind, Mode: pol.Mode, Paused: pol.Paused,
-		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		IdleStopMinutes: pol.IdleStopMinutes,
+		CreatedAt:       row.CreatedAt, UpdatedAt: row.UpdatedAt,
 		Status: a.tunnelStatus(row.ID),
 	}
 	switch pol.Kind {
@@ -649,6 +712,10 @@ func (a *App) infoFor(row store.NetworkProfile) NetworkProfileInfo {
 		var ts TailscaleConfig
 		_ = json.Unmarshal([]byte(row.ConfigJSON), &ts)
 		info.Tailscale = &ts
+	case kindOpenConnect:
+		var oc OpenConnectConfig
+		_ = json.Unmarshal([]byte(row.ConfigJSON), &oc)
+		info.OpenConnect = &oc
 	default:
 		_ = json.Unmarshal([]byte(row.ConfigJSON), &info.Profile)
 		info.Profile.ID = row.ID
@@ -822,7 +889,7 @@ func (a *App) NetworkProfileUpdateNetbird(id, name, managementURL, deviceName, s
 	if err != nil {
 		return nil, err
 	}
-	updated, err := a.db.UpdateNetworkProfile(id, name, string(b))
+	updated, err := a.db.UpdateNetworkProfile(id, name, carryIdleStop(row.ConfigJSON, string(b)))
 	if err != nil {
 		return nil, err
 	}
@@ -887,7 +954,7 @@ func (a *App) NetworkProfileUpdateTailscale(id, name, controlURL, hostname, auth
 	if err != nil {
 		return nil, err
 	}
-	updated, err := a.db.UpdateNetworkProfile(id, name, string(b))
+	updated, err := a.db.UpdateNetworkProfile(id, name, carryIdleStop(row.ConfigJSON, string(b)))
 	if err != nil {
 		return nil, err
 	}
@@ -940,7 +1007,7 @@ func (a *App) NetworkProfileUpdate(id, name, confText string) (*NetworkProfileIn
 			return nil, err
 		}
 	}
-	updated, err := a.db.UpdateNetworkProfile(id, name, cfg)
+	updated, err := a.db.UpdateNetworkProfile(id, name, carryIdleStop(row.ConfigJSON, cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -1044,6 +1111,48 @@ func (a *App) NetworkProfileSetPolicy(id, mode string, paused bool) (*NetworkPro
 	return &info, nil
 }
 
+// NetworkProfileSetIdleStop sets how many minutes the profile's tunnel
+// stays up after its last SSH session closes (0 = at once, -1 = never);
+// nil drops the override so the global setting applies. An idle running
+// tunnel is re-armed with the new value at once.
+func (a *App) NetworkProfileSetIdleStop(id string, minutes *int) (*NetworkProfileInfo, error) {
+	if minutes != nil && *minutes < idleStopNever {
+		return nil, fmt.Errorf("minutes must be -1 (never) or more")
+	}
+	row, err := a.db.GetNetworkProfile(id)
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]json.RawMessage{}
+	if strings.TrimSpace(row.ConfigJSON) != "" {
+		if err := json.Unmarshal([]byte(row.ConfigJSON), &m); err != nil {
+			return nil, fmt.Errorf("bad config: %w", err)
+		}
+	}
+	if minutes == nil {
+		delete(m, "idle_stop_minutes")
+	} else {
+		m["idle_stop_minutes"], _ = json.Marshal(*minutes)
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := a.db.UpdateNetworkProfile(id, row.Name, string(out))
+	if err != nil {
+		return nil, err
+	}
+	a.rearmIdleStop(id)
+	val := "global"
+	if minutes != nil {
+		val = strconv.Itoa(*minutes)
+	}
+	a.recordAudit("network.profile.idle_stop", id, map[string]string{"minutes": val})
+	EventsEmit("network_tunnel_changed", id)
+	info := a.infoFor(*updated)
+	return &info, nil
+}
+
 // ----- Tunnel lifecycle: stop when the last session using it closes -----
 
 // wgLinger is how long an idle tunnel stays up after its last SSH
@@ -1089,32 +1198,71 @@ func (a *App) wgRelease(sessionID string) {
 		return
 	}
 	delete(a.wgSessProfile, sessionID)
+	if a.profileInUseLocked(pid) {
+		return
+	}
+	a.scheduleIdleStopLocked(pid)
+}
+
+// rearmIdleStop restarts the idle-stop countdown of running tunnels no
+// session holds, so a changed idle stop (per profile, or the global
+// one when id is "") takes effect without waiting for a reconnect.
+func (a *App) rearmIdleStop(id string) {
+	rows, err := a.db.ListNetworkProfiles()
+	if err != nil {
+		return
+	}
+	a.wgSessMu.Lock()
+	defer a.wgSessMu.Unlock()
+	for _, r := range rows {
+		if (id != "" && r.ID != id) || !a.tunnelStatus(r.ID).Running || a.profileInUseLocked(r.ID) {
+			continue
+		}
+		a.scheduleIdleStopLocked(r.ID)
+	}
+}
+
+// profileInUseLocked reports whether any session still holds the
+// profile's tunnel. Caller holds wgSessMu.
+func (a *App) profileInUseLocked(pid string) bool {
 	for _, p := range a.wgSessProfile {
 		if p == pid {
-			return // still in use
+			return true
 		}
 	}
+	return false
+}
+
+// scheduleIdleStopLocked (re)arms the profile's idle stop with its own
+// idle_stop_minutes. Caller holds wgSessMu.
+func (a *App) scheduleIdleStopLocked(pid string) {
 	if a.wgStopTimers == nil {
 		a.wgStopTimers = map[string]*time.Timer{}
 	}
 	if t := a.wgStopTimers[pid]; t != nil {
 		t.Stop()
+		delete(a.wgStopTimers, pid)
 	}
-	a.wgStopTimers[pid] = time.AfterFunc(wgLinger, func() {
+	linger, stop := wgLinger, true
+	if row, err := a.db.GetNetworkProfile(pid); err == nil {
+		linger, stop = a.idleStopFor(parsePolicy(row.ConfigJSON))
+	}
+	if !stop {
+		return // the profile keeps its tunnel up until stopped by hand
+	}
+	a.wgStopTimers[pid] = time.AfterFunc(linger, func() {
 		a.wgSessMu.Lock()
 		delete(a.wgStopTimers, pid)
-		for _, p := range a.wgSessProfile {
-			if p == pid {
-				a.wgSessMu.Unlock()
-				return // reacquired while lingering
-			}
+		if a.profileInUseLocked(pid) {
+			a.wgSessMu.Unlock()
+			return // reacquired while lingering
 		}
 		a.wgSessMu.Unlock()
 		name := pid
 		if t := a.wgman.Get(pid); t != nil {
 			name = t.Name
 		}
-		log.Printf("wg: tunnel %s idle for %s, stopping", name, wgLinger)
+		log.Printf("wg: tunnel %s idle for %s, stopping", name, linger)
 		a.tunnelStop(pid)
 		EventsEmit("network_tunnel_changed", pid)
 	})

@@ -93,6 +93,7 @@ import LoaderCircle from "@lucide/svelte/icons/loader-circle";
 import Radio from "@lucide/svelte/icons/radio";
 import Settings from "@lucide/svelte/icons/settings";
 import Globe from "@lucide/svelte/icons/globe";
+import FileBadge from "@lucide/svelte/icons/file-badge";
 import GlobeLock from "@lucide/svelte/icons/globe-lock";
 import Activity from "@lucide/svelte/icons/activity";
 import Search from "@lucide/svelte/icons/search";
@@ -188,6 +189,7 @@ export function credentialKindIcon(kind: string) {
     case "key":       return KeyRound;
     case "opkssh":    return KeySquare;
     case "api_token": return Globe;
+    case "certificate": return FileBadge;
     default:          return Key;
   }
 }

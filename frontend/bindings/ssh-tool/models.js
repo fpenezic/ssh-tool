@@ -1379,6 +1379,69 @@ export class CopyKeyResult {
     }
 }
 
+/**
+ * CredentialsReplaceCertificateInput carries a renewed client
+ * certificate for an existing certificate credential: the file (base64
+ * over IPC), an optional separate key file and the password that opens
+ * them.
+ */
+export class CredentialsReplaceCertificateInput {
+    /**
+     * Creates a new CredentialsReplaceCertificateInput instance.
+     * @param {Partial<CredentialsReplaceCertificateInput>} [$$source = {}] - The source object to create the CredentialsReplaceCertificateInput.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("data" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["data"] = "";
+        }
+        if (!("key_data" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["key_data"] = "";
+        }
+        if (!("password" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["password"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CredentialsReplaceCertificateInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CredentialsReplaceCertificateInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $Create.ByteSlice;
+        const $$createField2_0 = $Create.ByteSlice;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("data" in $$parsedSource) {
+            $$parsedSource["data"] = $$createField1_0($$parsedSource["data"]);
+        }
+        if ("key_data" in $$parsedSource) {
+            $$parsedSource["key_data"] = $$createField2_0($$parsedSource["key_data"]);
+        }
+        return new CredentialsReplaceCertificateInput(/** @type {Partial<CredentialsReplaceCertificateInput>} */($$parsedSource));
+    }
+}
+
 export class CredentialsRotateAPITokenInput {
     /**
      * Creates a new CredentialsRotateAPITokenInput instance.
@@ -4190,6 +4253,15 @@ export class NetworkProfileInfo {
              */
             this["paused"] = false;
         }
+        if (!("idle_stop_minutes" in $$source)) {
+            /**
+             * IdleStopMinutes is the per-profile override: null = global
+             * setting, -1 never, otherwise minutes.
+             * @member
+             * @type {number | null}
+             */
+            this["idle_stop_minutes"] = null;
+        }
         if (!("profile" in $$source)) {
             /**
              * WG only
@@ -4213,6 +4285,14 @@ export class NetworkProfileInfo {
              * @type {TailscaleConfig | null | undefined}
              */
             this["tailscale"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * OpenConnect only
+             * @member
+             * @type {OpenConnectConfig | null | undefined}
+             */
+            this["openconnect"] = undefined;
         }
         if (!("status" in $$source)) {
             /**
@@ -4245,24 +4325,222 @@ export class NetworkProfileInfo {
      * @returns {NetworkProfileInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType23;
-        const $$createField6_0 = $$createType25;
-        const $$createField7_0 = $$createType27;
-        const $$createField8_0 = $$createType28;
+        const $$createField6_0 = $$createType23;
+        const $$createField7_0 = $$createType25;
+        const $$createField8_0 = $$createType27;
+        const $$createField9_0 = $$createType29;
+        const $$createField10_0 = $$createType30;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("profile" in $$parsedSource) {
-            $$parsedSource["profile"] = $$createField5_0($$parsedSource["profile"]);
+            $$parsedSource["profile"] = $$createField6_0($$parsedSource["profile"]);
         }
         if ("netbird" in $$parsedSource) {
-            $$parsedSource["netbird"] = $$createField6_0($$parsedSource["netbird"]);
+            $$parsedSource["netbird"] = $$createField7_0($$parsedSource["netbird"]);
         }
         if ("tailscale" in $$parsedSource) {
-            $$parsedSource["tailscale"] = $$createField7_0($$parsedSource["tailscale"]);
+            $$parsedSource["tailscale"] = $$createField8_0($$parsedSource["tailscale"]);
+        }
+        if ("openconnect" in $$parsedSource) {
+            $$parsedSource["openconnect"] = $$createField9_0($$parsedSource["openconnect"]);
         }
         if ("status" in $$parsedSource) {
-            $$parsedSource["status"] = $$createField8_0($$parsedSource["status"]);
+            $$parsedSource["status"] = $$createField10_0($$parsedSource["status"]);
         }
         return new NetworkProfileInfo(/** @type {Partial<NetworkProfileInfo>} */($$parsedSource));
+    }
+}
+
+/**
+ * OpenConnectConfig is the stored (secretless) OpenConnect profile.
+ * Secrets stay in credentials and are resolved at login.
+ */
+export class OpenConnectConfig {
+    /**
+     * Creates a new OpenConnectConfig instance.
+     * @param {Partial<OpenConnectConfig>} [$$source = {}] - The source object to create the OpenConnectConfig.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * "openconnect"
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("server" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["server"] = "";
+        }
+        if (!("flavor" in $$source)) {
+            /**
+             * anyconnect | fortinet | f5 | gp | pulse | nc
+             * @member
+             * @type {string}
+             */
+            this["flavor"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["auth_group"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Pins are the trusted gateway certificates (pin-sha256:...), set by the
+             * trust-on-first-use prompt. Empty = the system trust store decides.
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["pins"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["mtu"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["base_mtu"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["no_udp"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * First login: Username ("" = the credential's default username, else
+             * asked) and PasswordCredentialID ("" = asked).
+             * @member
+             * @type {string | undefined}
+             */
+            this["username"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["password_credential_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Second login (AnyConnect secondary authentication, an OTP round):
+             * SecondUsername ("" = asked at login), SecondPassword one of the
+             * ocSecond* sources, SecondCredentialID the credential behind it.
+             * @member
+             * @type {string | undefined}
+             */
+            this["second_username"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["second_password"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["second_credential_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * ClientCertCredentialID names a certificate credential: the
+             * imported certificate + key live in the vault (and sync with it).
+             * @member
+             * @type {string | undefined}
+             */
+            this["client_cert_credential_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["mode"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["paused"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new OpenConnectConfig instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {OpenConnectConfig}
+     */
+    static createFrom($$source = {}) {
+        const $$createField4_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("pins" in $$parsedSource) {
+            $$parsedSource["pins"] = $$createField4_0($$parsedSource["pins"]);
+        }
+        return new OpenConnectConfig(/** @type {Partial<OpenConnectConfig>} */($$parsedSource));
+    }
+}
+
+/**
+ * OpenConnectProfileInput is the create / update payload.
+ */
+export class OpenConnectProfileInput {
+    /**
+     * Creates a new OpenConnectProfileInput instance.
+     * @param {Partial<OpenConnectProfileInput>} [$$source = {}] - The source object to create the OpenConnectProfileInput.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("config" in $$source)) {
+            /**
+             * @member
+             * @type {OpenConnectConfig}
+             */
+            this["config"] = (new OpenConnectConfig());
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new OpenConnectProfileInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {OpenConnectProfileInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType28;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("config" in $$parsedSource) {
+            $$parsedSource["config"] = $$createField1_0($$parsedSource["config"]);
+        }
+        return new OpenConnectProfileInput(/** @type {Partial<OpenConnectProfileInput>} */($$parsedSource));
     }
 }
 
@@ -5085,7 +5363,7 @@ export class ScrollbackSnapshot {
      * @returns {ScrollbackSnapshot}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType30;
+        const $$createField3_0 = $$createType32;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("marks" in $$parsedSource) {
             $$parsedSource["marks"] = $$createField3_0($$parsedSource["marks"]);
@@ -5138,7 +5416,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType32;
+        const $$createField1_0 = $$createType34;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -5322,7 +5600,7 @@ export class ShareStartInput {
      * @returns {ShareStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType34;
+        const $$createField6_0 = $$createType36;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField6_0($$parsedSource["sessions"]);
@@ -6002,7 +6280,7 @@ export class TLSInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType35;
+        const $$createField1_0 = $$createType37;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("connection_ids" in $$parsedSource) {
             $$parsedSource["connection_ids"] = $$createField0_0($$parsedSource["connection_ids"]);
@@ -6356,7 +6634,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType37;
+        const $$createField0_0 = $$createType39;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -6488,6 +6766,45 @@ export class TcpdumpStartInput {
             $$parsedSource["port_overrides"] = $$createField10_0($$parsedSource["port_overrides"]);
         }
         return new TcpdumpStartInput(/** @type {Partial<TcpdumpStartInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * TotpCode is the current one-time code of a credential's external item.
+ */
+export class TotpCode {
+    /**
+     * Creates a new TotpCode instance.
+     * @param {Partial<TotpCode>} [$$source = {}] - The source object to create the TotpCode.
+     */
+    constructor($$source = {}) {
+        if (!("code" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["code"] = "";
+        }
+        if (!("remaining" in $$source)) {
+            /**
+             * seconds the code stays valid
+             * @member
+             * @type {number}
+             */
+            this["remaining"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TotpCode instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TotpCode}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new TotpCode(/** @type {Partial<TotpCode>} */($$parsedSource));
     }
 }
 
@@ -6723,13 +7040,15 @@ const $$createType24 = NetbirdConfig.createFrom;
 const $$createType25 = $Create.Nullable($$createType24);
 const $$createType26 = TailscaleConfig.createFrom;
 const $$createType27 = $Create.Nullable($$createType26);
-const $$createType28 = wg$0.Status.createFrom;
-const $$createType29 = cmdmarks$0.Mark.createFrom;
-const $$createType30 = $Create.Array($$createType29);
-const $$createType31 = ssh$0.SftpEntry.createFrom;
+const $$createType28 = OpenConnectConfig.createFrom;
+const $$createType29 = $Create.Nullable($$createType28);
+const $$createType30 = wg$0.Status.createFrom;
+const $$createType31 = cmdmarks$0.Mark.createFrom;
 const $$createType32 = $Create.Array($$createType31);
-const $$createType33 = ShareSessionInput.createFrom;
+const $$createType33 = ssh$0.SftpEntry.createFrom;
 const $$createType34 = $Create.Array($$createType33);
-const $$createType35 = $Create.Array($Create.Any);
-const $$createType36 = ssh$0.ParsedPacket.createFrom;
-const $$createType37 = $Create.Array($$createType36);
+const $$createType35 = ShareSessionInput.createFrom;
+const $$createType36 = $Create.Array($$createType35);
+const $$createType37 = $Create.Array($Create.Any);
+const $$createType38 = ssh$0.ParsedPacket.createFrom;
+const $$createType39 = $Create.Array($$createType38);

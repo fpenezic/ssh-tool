@@ -838,6 +838,12 @@ export const CredentialKind = {
      * inventory providers.
      */
     CredAPIToken: "api_token",
+
+    /**
+     * CredCertificate is a client TLS certificate + key (VPN client-cert
+     * auth), stored in the vault as a PEM bundle. Not SSH auth material.
+     */
+    CredCertificate: "certificate",
 };
 
 /**
@@ -1529,6 +1535,17 @@ export class InheritableSettings {
         }
         if (/** @type {any} */(false)) {
             /**
+             * OTPRef names a Bitwarden / KeePass credential whose item TOTP answers
+             * the server's verification-code question, next to whatever AuthRef
+             * authenticates with (a key plus a code from the password manager).
+             * "" stops an inherited one.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["otp_ref"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * @member
              * @type {JumpHostOverride | null | undefined}
              */
@@ -1706,14 +1723,14 @@ export class InheritableSettings {
      * @returns {InheritableSettings}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType0;
         const $$createField5_0 = $$createType0;
+        const $$createField6_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ssh_options" in $$parsedSource) {
-            $$parsedSource["ssh_options"] = $$createField4_0($$parsedSource["ssh_options"]);
+            $$parsedSource["ssh_options"] = $$createField5_0($$parsedSource["ssh_options"]);
         }
         if ("env_vars" in $$parsedSource) {
-            $$parsedSource["env_vars"] = $$createField5_0($$parsedSource["env_vars"]);
+            $$parsedSource["env_vars"] = $$createField6_0($$parsedSource["env_vars"]);
         }
         return new InheritableSettings(/** @type {Partial<InheritableSettings>} */($$parsedSource));
     }
@@ -2144,6 +2161,14 @@ export class ResolvedSettings {
              */
             this["auth_ref"] = null;
         }
+        if (!("otp_ref" in $$source)) {
+            /**
+             * TOTP source credential, nil = none
+             * @member
+             * @type {string | null}
+             */
+            this["otp_ref"] = null;
+        }
         if (!("jump_host" in $$source)) {
             /**
              * @member
@@ -2285,18 +2310,18 @@ export class ResolvedSettings {
      * @returns {ResolvedSettings}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType10;
-        const $$createField5_0 = $$createType0;
+        const $$createField5_0 = $$createType10;
         const $$createField6_0 = $$createType0;
+        const $$createField7_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("jump_host" in $$parsedSource) {
-            $$parsedSource["jump_host"] = $$createField4_0($$parsedSource["jump_host"]);
+            $$parsedSource["jump_host"] = $$createField5_0($$parsedSource["jump_host"]);
         }
         if ("ssh_options" in $$parsedSource) {
-            $$parsedSource["ssh_options"] = $$createField5_0($$parsedSource["ssh_options"]);
+            $$parsedSource["ssh_options"] = $$createField6_0($$parsedSource["ssh_options"]);
         }
         if ("env_vars" in $$parsedSource) {
-            $$parsedSource["env_vars"] = $$createField6_0($$parsedSource["env_vars"]);
+            $$parsedSource["env_vars"] = $$createField7_0($$parsedSource["env_vars"]);
         }
         return new ResolvedSettings(/** @type {Partial<ResolvedSettings>} */($$parsedSource));
     }

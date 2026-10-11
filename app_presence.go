@@ -280,10 +280,11 @@ type RemoteOwner struct {
 // the take-over dialog instead of a raw connect failure.
 const errProfileBusyPrefix = "network profile is active on another machine: "
 
-// presenceBlocksBringUp checks, for a WG profile about to come up,
+// presenceBlocksBringUp checks, for a profile about to come up,
 // whether another machine owns it and the user hasn't forced it. A
-// consumed force clears itself. WireGuard only - NetBird gives each
-// machine its own peer, so there's no identity conflict to guard.
+// consumed force clears itself. WireGuard and OpenConnect only - NetBird
+// and Tailscale give each machine its own peer, so there's no identity
+// conflict to guard.
 func (a *App) presenceBlocksBringUp(profileID string) (owner string, blocked bool) {
 	a.presence.mu.Lock()
 	if a.presence.force[profileID] {

@@ -510,7 +510,7 @@
         <span class="pane-host">{paneSession.hostname}</span>
       {/if}
       {#if paneSession?.networkVia}
-        <span class="vpn-badge" title="First hop dials through WireGuard profile '{paneSession.networkVia}'">
+        <span class="vpn-badge" title="First hop dials through network profile '{paneSession.networkVia}'">
           <IconVpn size={10} /> {paneSession.networkVia}
         </span>
       {/if}

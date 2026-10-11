@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { profileKindTitle } from "./networkKind";
   import { tree, credentials, selection, sessions, paneTabs, view, jumpChainHostnames } from "./stores.svelte";
   import { isMobile } from "./platform";
   import { toast } from "./toast.svelte";
@@ -116,6 +117,14 @@
     new Set(credList.filter((c) => !!c.config?.bitwarden_ref).map((c) => c.id)),
   );
 
+  // Credentials that can supply a one-time code: only external items
+  // (Bitwarden / KeePass) carry a TOTP secret.
+  const otpCredOptions = $derived(
+    credList
+      .filter((c) => !!c.config?.bitwarden_ref || !!c.config?.keepass_ref)
+      .map((c) => ({ value: c.id, label: c.name })),
+  );
+
   // Same, for Infisical-backed credentials.
   const infisicalCredIds = $derived(
     new Set(credList.filter((c) => !!c.config?.infisical_ref).map((c) => c.id)),
@@ -184,9 +193,19 @@
   // KeePass entry-picker modal. `target` says which editor the chosen entry's
   // auto-created credential should be assigned to.
   let kpPickerOpen = $state(false);
-  let kpPickerTarget = $state<"folder" | "connection" | null>(null);
+  // "-otp" targets fill the One-time code picker instead of the credential.
+  type PickerTarget = "folder" | "connection" | "folder-otp" | "connection-otp";
+  let kpPickerTarget = $state<PickerTarget | null>(null);
+  // assignPicked puts a credential made from a picked external item into
+  // the field the picker was opened for.
+  function assignPicked(target: PickerTarget | null, id: string) {
+    if (target === "folder" && editingFolder) editingFolder = { ...editingFolder, authRef: id };
+    else if (target === "folder-otp" && editingFolder) editingFolder = { ...editingFolder, otpRef: id };
+    else if (target === "connection" && editing) editing = { ...editing, authRef: id };
+    else if (target === "connection-otp" && editing) editing = { ...editing, otpRef: id };
+  }
 
-  function openKeepassPicker(target: "folder" | "connection") {
+  function openKeepassPicker(target: PickerTarget) {
     kpPickerTarget = target;
     kpPickerOpen = true;
   }
@@ -212,11 +231,7 @@
         folder_id: null,
       });
       await credentials.load();
-      if (kpPickerTarget === "folder" && editingFolder) {
-        editingFolder = { ...editingFolder, authRef: cred.id };
-      } else if (kpPickerTarget === "connection" && editing) {
-        editing = { ...editing, authRef: cred.id };
-      }
+      assignPicked(kpPickerTarget, cred.id);
       toast.ok(`Using KeePass entry "${r.name}"`);
     } catch (e) {
       toast.err("KeePass: " + errMsg(e));
@@ -227,9 +242,9 @@
 
   // Bitwarden item-picker modal, same shape as the KeePass one.
   let bwPickerOpen = $state(false);
-  let bwPickerTarget = $state<"folder" | "connection" | null>(null);
+  let bwPickerTarget = $state<PickerTarget | null>(null);
 
-  function openBitwardenPicker(target: "folder" | "connection") {
+  function openBitwardenPicker(target: PickerTarget) {
     bwPickerTarget = target;
     bwPickerOpen = true;
   }
@@ -253,11 +268,7 @@
         folder_id: null,
       });
       await credentials.load();
-      if (bwPickerTarget === "folder" && editingFolder) {
-        editingFolder = { ...editingFolder, authRef: cred.id };
-      } else if (bwPickerTarget === "connection" && editing) {
-        editing = { ...editing, authRef: cred.id };
-      }
+      assignPicked(bwPickerTarget, cred.id);
       toast.ok(`Using Bitwarden item "${r.name}"`);
     } catch (e) {
       toast.err("Bitwarden: " + errMsg(e));
@@ -319,6 +330,7 @@
     username: string;
     port: string;
     authRef: string;
+    otpRef: string;
     jumpHost: JumpHostOverride | undefined;
     colorTag: string;
     autoReconnect: string;
@@ -365,6 +377,7 @@
         username: folder.settings.username ?? "",
         port: folder.settings.port?.toString() ?? "",
         authRef: folder.settings.auth_ref ?? "",
+        otpRef: folder.settings.otp_ref ?? "",
         jumpHost: folder.settings.jump_host,
         colorTag: folder.settings.color_tag ?? "",
         autoReconnect: encodeBool(folder.settings.auto_reconnect),
@@ -395,6 +408,7 @@
       editingFolder.username !== (s.username ?? "") ||
       numText(editingFolder.port) !== (s.port?.toString() ?? "") ||
       editingFolder.authRef !== (s.auth_ref ?? "") ||
+      editingFolder.otpRef !== (s.otp_ref ?? "") ||
       editingFolder.colorTag !== (s.color_tag ?? "") ||
       editingFolder.autoReconnect !== encodeBool(s.auto_reconnect) ||
       editingFolder.verbose !== encodeBool(s.verbose) ||
@@ -422,6 +436,7 @@
       settings.port = isNaN(n) ? undefined : n;
     }
     settings.auth_ref = editingFolder.authRef || undefined;
+    settings.otp_ref = editingFolder.otpRef || undefined;
     settings.jump_host = editingFolder.jumpHost;
     settings.color_tag = editingFolder.colorTag || undefined;
     settings.auto_reconnect = decodeBool(editingFolder.autoReconnect);
@@ -483,6 +498,7 @@
     username: string;
     port: string;
     authRef: string;
+    otpRef: string;
     jumpHost: JumpHostOverride | undefined;
     colorTag: string;
     autoReconnect: string;
@@ -583,6 +599,7 @@
         username: conn.overrides?.username ?? "",
         port: conn.overrides?.port?.toString() ?? "",
         authRef: encodeAuthRef(conn.overrides?.auth_ref),
+        otpRef: encodeAuthRef(conn.overrides?.otp_ref),
         jumpHost: conn.overrides?.jump_host,
         colorTag: conn.overrides?.color_tag ?? "",
         autoReconnect: encodeBool(conn.overrides?.auto_reconnect),
@@ -630,6 +647,7 @@
       editing.username !== (o.username ?? "") ||
       numText(editing.port) !== (o.port?.toString() ?? "") ||
       editing.authRef !== encodeAuthRef(o.auth_ref) ||
+      editing.otpRef !== encodeAuthRef(o.otp_ref) ||
       editing.colorTag !== (o.color_tag ?? "") ||
       editing.autoReconnect !== encodeBool(o.auto_reconnect) ||
       editing.verbose !== encodeBool(o.verbose) ||
@@ -717,6 +735,7 @@
       overrides.port = isNaN(n) ? undefined : n;
     }
     overrides.auth_ref = decodeAuthRef(editing.authRef);
+    overrides.otp_ref = decodeAuthRef(editing.otpRef);
     overrides.jump_host = editing.jumpHost;
     overrides.color_tag = editing.colorTag || undefined;
     overrides.auto_reconnect = decodeBool(editing.autoReconnect);
@@ -1356,6 +1375,26 @@
           <span class="kp-badge">Infisical-backed - secret read from the server at connect</span>
         {/if}
       </label>
+      {#if otpCredOptions.length > 0 || editingFolder.otpRef || hasKeepass || hasBitwarden}
+        <label>One-time code from
+          <div class="cred-picker-row">
+            <SearchableSelect
+              bind:value={editingFolder.otpRef}
+              options={otpCredOptions}
+              placeholder="(none)"
+            />
+            {#if hasKeepass}
+              <button type="button" class="kp-btn" onclick={() => openKeepassPicker("folder-otp")}
+                title="Use the TOTP of a KeePass entry">From KeePass</button>
+            {/if}
+            {#if hasBitwarden}
+              <button type="button" class="kp-btn" onclick={() => openBitwardenPicker("folder-otp")}
+                title="Use the TOTP of a Bitwarden item">From Bitwarden</button>
+            {/if}
+          </div>
+          <span class="inh-hint">Answers the server's verification-code question from this item's TOTP, next to the credential above.</span>
+        </label>
+      {/if}
 
       <div class="span-2"><JumpChainEditor
         value={editingFolder.jumpHost}
@@ -1406,13 +1445,13 @@
         </select>
       </label>
 
-      <label title="Route the first SSH hop of every connection in this folder through a userspace WireGuard tunnel.">
+      <label title="Route the first SSH hop of every connection in this folder through a userspace VPN tunnel (WireGuard, NetBird, Tailscale or OpenConnect).">
         Network (inherited by children)
         <select bind:value={editingFolder.networkProfile}>
           <option value="">(inherit from parent)</option>
           <option value="__direct__">Direct - no tunnel</option>
           {#each networkProfiles.list as np (np.id)}
-            <option value={np.id}>via {np.name} ({np.kind === "netbird" ? "NetBird" : "WireGuard"})</option>
+            <option value={np.id}>via {np.name} ({profileKindTitle(np)})</option>
           {/each}
         </select>
         <span class="field-note">
@@ -1669,6 +1708,31 @@
           <span class="inh-hint"><strong>Password overridden</strong> - this connection's password is tried first, the credential's only if it fails.</span>
         {/if}
       </label>
+      {#if otpCredOptions.length > 0 || editing.otpRef || hasKeepass || hasBitwarden}
+        {@const inhOtp = tree.inheritedFieldForConnection(conn.id, "otp_ref")}
+        <label>One-time code from
+          <div class="cred-picker-row">
+            <SearchableSelect
+              bind:value={editing.otpRef}
+              options={[{ value: AUTH_NONE, label: "None - do not inherit" }, ...otpCredOptions]}
+              placeholder="(none)"
+            />
+            {#if hasKeepass}
+              <button type="button" class="kp-btn" onclick={() => openKeepassPicker("connection-otp")}
+                title="Use the TOTP of a KeePass entry">From KeePass</button>
+            {/if}
+            {#if hasBitwarden}
+              <button type="button" class="kp-btn" onclick={() => openBitwardenPicker("connection-otp")}
+                title="Use the TOTP of a Bitwarden item">From Bitwarden</button>
+            {/if}
+          </div>
+          {#if inhOtp.from && !editing.otpRef}
+            <span class="inh-hint">inherited from <strong>{inhOtp.from.name}</strong>: {credentials.byId(String(inhOtp.value))?.name ?? String(inhOtp.value)}</span>
+          {:else}
+            <span class="inh-hint">Answers the server's verification-code question from this item's TOTP, next to the credential above.</span>
+          {/if}
+        </label>
+      {/if}
       <label class="span-2">Password
         <div class="row pass-row">
           <PasswordInput
@@ -1745,13 +1809,13 @@
           <option value="off">Off</option>
         </select>
       </label>
-      <label title="Route the first SSH hop through a userspace WireGuard tunnel (no TUN adapter, no admin rights).">
+      <label title="Route the first SSH hop through a userspace VPN tunnel (no TUN adapter, no admin rights).">
         Network
         <select bind:value={editing.networkProfile}>
           <option value="">(inherit from folder)</option>
           <option value="__direct__">Direct - no tunnel</option>
           {#each networkProfiles.list as np (np.id)}
-            <option value={np.id}>via {np.name} ({np.kind === "netbird" ? "NetBird" : "WireGuard"})</option>
+            <option value={np.id}>via {np.name} ({profileKindTitle(np)})</option>
           {/each}
         </select>
         <span class="field-note">

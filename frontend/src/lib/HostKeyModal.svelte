@@ -25,16 +25,18 @@
     unknownCount?: number;
   }
   let { challengeId, hostname, port, keyType, fingerprint, status, oldFingerprint, keyB64, onRespond, onAcceptAll, queueLength = 0, unknownCount = 0 }: Props = $props();
+  // A VPN gateway certificate (OpenConnect profile) rides the same dialog.
+  const isCert = $derived(keyType.startsWith("TLS certificate"));
 </script>
 
 <div class="overlay" role="dialog" aria-modal="true">
   <div class="modal">
     {#if status === "changed"}
       <header class="warn">
-        <h1>Host key changed - possible attack!</h1>
+        <h1>{isCert ? "VPN gateway certificate changed" : "Host key changed"} - possible attack!</h1>
       </header>
       <p class="warn-text">
-        The SSH host key for <strong>{hostname}:{port}</strong> has changed since your last connection.
+        The {isCert ? "certificate of the VPN gateway" : "SSH host key for"} <strong>{hostname}:{port}</strong> has changed since your last connection.
         This could indicate a man-in-the-middle attack. Verify with the server administrator before accepting.
       </p>
       <dl>
@@ -45,13 +47,13 @@
     {:else}
       <header>
         <span class="icon"><IconKeyRound size={18} /></span>
-        <h1>Unknown host key</h1>
+        <h1>{isCert ? "Untrusted VPN gateway certificate" : "Unknown host key"}</h1>
       </header>
       <p>
         The authenticity of <strong>{hostname}:{port}</strong> cannot be established.
       </p>
       <dl>
-        <dt>Key type</dt><dd>{keyType}</dd>
+        <dt>{isCert ? "Certificate" : "Key type"}</dt><dd>{keyType}</dd>
         <dt>Fingerprint</dt><dd class="fp">{fingerprint}</dd>
       </dl>
       <p class="hint">Verify this fingerprint with the server administrator before accepting.</p>

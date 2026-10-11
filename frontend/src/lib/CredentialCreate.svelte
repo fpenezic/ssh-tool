@@ -8,6 +8,7 @@
   import PasswordInput from "./PasswordInput.svelte";
   import SearchableSelect from "./SearchableSelect.svelte";
   import { clickOutside } from "./clickOutside";
+  import { fileToBase64, CERT_FILE_ACCEPT } from "./fileB64";
 
   interface Props {
     onClose: () => void;
@@ -19,7 +20,7 @@
   }
   let { onClose, defaultFolderId = null }: Props = $props();
 
-  let kind = $state<"password" | "key_generate" | "key_import_paste" | "key_file_ref" | "agent" | "opkssh" | "api_token" | "keepass" | "bitwarden" | "infisical">("password");
+  let kind = $state<"password" | "key_generate" | "key_import_paste" | "key_file_ref" | "agent" | "opkssh" | "api_token" | "certificate" | "keepass" | "bitwarden" | "infisical">("password");
   let name = $state("");
   let hint = $state("");
   let defaultUser = $state("");
@@ -50,6 +51,10 @@
 
   let apiTokenID = $state("");
   let apiTokenSecret = $state("");
+  // certificate: the picked file(s); the password only opens them here.
+  let certFile = $state<File | null>(null);
+  let certKeyFile = $state<File | null>(null);
+  let certPassword = $state("");
 
   // keepass reference
   let kpDatabases = $state<{ id: string; name: string }[]>([]);
@@ -375,6 +380,21 @@
             api_token_secret: apiTokenSecret,
           } as CredentialCreateInput;
           break;
+        case "certificate":
+          if (!certFile) {
+            err = "Pick the certificate file";
+            busy = false;
+            return;
+          }
+          input = {
+            ...base,
+            expires_at: undefined, // taken from the certificate itself
+            kind: "certificate",
+            cert_data: await fileToBase64(certFile),
+            cert_key_data: certKeyFile ? await fileToBase64(certKeyFile) : "",
+            cert_password: certPassword,
+          } as CredentialCreateInput;
+          break;
         case "keepass":
           if (!kpDbId || !kpEntryUuid) {
             err = "Pick a KeePass database and entry";
@@ -480,6 +500,7 @@
             <option value="agent">SSH agent</option>
             <option value="opkssh">opkssh profile</option>
             <option value="api_token">API token (proxmox, hetzner, …)</option>
+            <option value="certificate">Client certificate (VPN)</option>
             <optgroup label="External secret managers">
               <option value="keepass">From KeePass database</option>
               <option value="bitwarden">From Bitwarden server</option>
@@ -596,6 +617,23 @@
             providers (proxmox, hetzner). Not SSH auth material -
             it's stored exactly as you enter it and handed to the
             integration that asks for it by credential id.
+          </p>
+        {:else if kind === "certificate"}
+          <label>Certificate file *
+            <input type="file" accept={CERT_FILE_ACCEPT} onchange={(e) => (certFile = (e.target as HTMLInputElement).files?.[0] ?? null)} />
+          </label>
+          <label>Separate key file <span class="hint inline">(only when the key is not inside the certificate file)</span>
+            <input type="file" accept={CERT_FILE_ACCEPT} onchange={(e) => (certKeyFile = (e.target as HTMLInputElement).files?.[0] ?? null)} />
+          </label>
+          <label>Password <span class="hint inline">(for a .pfx / .p12 or an encrypted key)</span>
+            <PasswordInput bind:value={certPassword} />
+          </label>
+          <p class="hint">
+            A .pfx / .p12, or a PEM with the certificate and key, or a
+            certificate + key pair. The certificate and key are stored
+            in the vault, so they sync like any other credential; the
+            password only opens the file now and is not kept. The expiry
+            comes from the certificate.
           </p>
         {:else if kind === "keepass"}
           {#if kpDatabases.length === 0}

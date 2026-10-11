@@ -7,7 +7,7 @@
  */
 
 export type CredKind =
-  | "password" | "key" | "agent" | "opkssh" | "vault" | "api_token";
+  | "password" | "key" | "agent" | "opkssh" | "vault" | "api_token" | "certificate";
 
 /** Kinds that authenticate with a key/certificate rather than a password. */
 export function isKeyAuthKind(kind: CredKind | undefined): boolean {
@@ -49,7 +49,8 @@ export function shouldWarnPasswordWithKey(
  * Credentials offerable as SSH auth.
  *
  * api_token exists for the dynamic-inventory providers (Proxmox, Hetzner, ...)
- * and cannot authenticate an SSH session, so offering it only invites a
+ * and certificate for VPN client-cert auth; neither can authenticate an SSH
+ * session, so offering it only invites a
  * connection that fails at connect time. One already stored on the entity
  * stays listed, so opening an existing config does not silently drop it.
  */
@@ -58,5 +59,5 @@ export function isSelectableSSHCred(
   credId: string,
   currentRef: string | null | undefined,
 ): boolean {
-  return kind !== "api_token" || credId === currentRef;
+  return (kind !== "api_token" && kind !== "certificate") || credId === currentRef;
 }

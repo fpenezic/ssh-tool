@@ -51,6 +51,9 @@ export interface InheritableSettings {
   username?: string;
   port?: number;
   auth_ref?: string;
+  // Bitwarden / KeePass credential whose item TOTP answers the server's
+  // verification-code question; "" stops an inherited one.
+  otp_ref?: string;
   jump_host?: JumpHostOverride;
   ssh_options?: Record<string, string>;
   env_vars?: Record<string, string>;
@@ -118,6 +121,7 @@ export interface ResolvedSettings {
   username: string | null;
   port: number;
   auth_ref: string | null;
+  otp_ref: string | null;
   jump_host: JumpHostSpec | null;
   ssh_options: Record<string, string>;
   env_vars: Record<string, string>;
@@ -185,15 +189,58 @@ export interface TailscaleConfig {
   paused?: boolean;
 }
 
+export interface OpenConnectConfig {
+  kind?: string;
+  server: string;
+  flavor: "anyconnect" | "fortinet" | "f5" | "gp" | "pulse" | "nc";
+  auth_group?: string;
+  pins?: string[];
+  mtu?: number;
+  base_mtu?: number;
+  no_udp?: boolean;
+  username?: string;
+  password_credential_id: string;
+  second_username?: string;
+  second_password?: "prompt" | "credential" | "totp";
+  second_credential_id: string;
+  client_cert_credential_id: string;
+  mode?: "always" | "auto";
+  paused?: boolean;
+}
+
+/** What the OpenConnect helper reports about a live tunnel. */
+export interface VpnTunnelInfo {
+  flavor: string;
+  server: string;
+  gateway: string;
+  transport: string;
+  mtu: number;
+  local_mtu: number;
+  addresses: string[];
+  routes: string[];
+  excluded_routes?: string[];
+  dns: string[];
+  search_domains?: string[];
+  split_dns?: string[];
+  tunnel_all_dns: boolean;
+  banner?: string;
+  idle_timeout_s?: number;
+  auth_expires?: number;
+  reason: string;
+}
+
 export interface NetworkProfileInfo {
   id: string;
   name: string;
-  kind: "wireguard" | "netbird" | "tailscale";
+  kind: "wireguard" | "netbird" | "tailscale" | "openconnect";
   mode: "always" | "auto" | "";
   paused: boolean;
+  /** Per-profile idle stop override: null = global, -1 never, else minutes. */
+  idle_stop_minutes: number | null;
   profile: WgProfile;
   netbird?: NetbirdConfig;
   tailscale?: TailscaleConfig;
+  openconnect?: OpenConnectConfig;
   status: WgStatus;
   created_at: number;
   updated_at: number;
@@ -395,7 +442,7 @@ export interface CredentialRef {
   id: string;
   folder_id: string | null;
   name: string;
-  kind: "password" | "key" | "agent" | "opkssh" | "vault" | "api_token";
+  kind: "password" | "key" | "agent" | "opkssh" | "vault" | "api_token" | "certificate";
   storage_mode: "managed" | "file_ref" | "external";
   hint: string;
   tags: string[];
@@ -574,6 +621,17 @@ export type CredentialCreateInput =
       name: string;
       api_token_id: string;
       api_token_secret: string;
+      hint?: string;
+      tags?: string[];
+    } & CommonCreateExtras)
+  | ({
+      kind: "certificate";
+      name: string;
+      /** base64 of the .p12 / .pfx / .pem file */
+      cert_data: string;
+      /** base64 of a separate key file (PEM), "" when the key is in cert_data */
+      cert_key_data?: string;
+      cert_password?: string;
       hint?: string;
       tags?: string[];
     } & CommonCreateExtras)
@@ -807,6 +865,9 @@ export const api = {
     private_openssh?: string;
     passphrase?: string;
   }) => G.CredentialsRotateKey(input as any) as unknown as Promise<CredentialRef>,
+  /** data / key_data are base64; key_data "" when the key is inside data. */
+  credentialsReplaceCertificate: (input: { id: string; data: string; key_data?: string; password?: string }) =>
+    G.CredentialsReplaceCertificate(input as any) as unknown as Promise<CredentialRef>,
   credentialsRotateAPIToken: (input: {
     id: string;
     token_id?: string | null;   // null = leave unchanged
@@ -818,6 +879,8 @@ export const api = {
     G.CredentialsHistory(id) as unknown as Promise<CredentialHistoryEntry[]>,
   credentialsSecretHistory: (id: string) =>
     G.CredentialsSecretHistory(id) as unknown as Promise<CredentialSecretHistoryEntry[]>,
+  credentialsTotpCode: (id: string) =>
+    G.CredentialsTotpCode(id) as unknown as Promise<{ code: string; remaining: number }>,
   credentialsRevealSecretHistory: (historyId: string) =>
     G.CredentialsRevealSecretHistory(historyId) as unknown as Promise<string>,
   credentialsDeleteSecretHistory: (historyId: string) =>
@@ -1046,6 +1109,8 @@ export const api = {
   networkProfileStop: (id: string) => G.NetworkProfileStop(id),
   networkProfileSetPolicy: (id: string, mode: string, paused: boolean) =>
     G.NetworkProfileSetPolicy(id, mode, paused) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileSetIdleStop: (id: string, minutes: number | null) =>
+    G.NetworkProfileSetIdleStop(id, minutes as any) as unknown as Promise<NetworkProfileInfo>,
   networkProfileTest: (id: string) =>
     G.NetworkProfileTest(id) as unknown as Promise<WgStatus>,
   networkProfileCreateNetbird: (name: string, managementURL: string, deviceName: string, setupKeyCredentialId: string) =>
@@ -1056,6 +1121,14 @@ export const api = {
     G.NetworkProfileCreateTailscale(name, controlURL, hostname, authKeyCredentialId) as unknown as Promise<NetworkProfileInfo>,
   networkProfileUpdateTailscale: (id: string, name: string, controlURL: string, hostname: string, authKeyCredentialId: string) =>
     G.NetworkProfileUpdateTailscale(id, name, controlURL, hostname, authKeyCredentialId) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileCreateOpenConnect: (name: string, config: OpenConnectConfig) =>
+    G.NetworkProfileCreateOpenConnect({ name, config } as any) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileUpdateOpenConnect: (id: string, name: string, config: OpenConnectConfig) =>
+    G.NetworkProfileUpdateOpenConnect(id, { name, config } as any) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileTunnelInfo: async (id: string): Promise<VpnTunnelInfo | null> => {
+    const raw = (await G.NetworkProfileTunnelInfo(id)) as unknown as string;
+    return raw ? (JSON.parse(raw) as VpnTunnelInfo) : null;
+  },
   pluginsStatus: () => G.PluginsStatus() as unknown as Promise<PluginInfo[]>,
   pluginDownload: (name: string) => G.PluginDownload(name) as unknown as Promise<string>,
   pluginRemove: (name: string) => G.PluginRemove(name),

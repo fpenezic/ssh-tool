@@ -75,6 +75,13 @@ type CreateInput struct {
 	APITokenID     string `json:"api_token_id"`
 	APITokenSecret string `json:"api_token_secret"`
 
+	// certificate - the imported file (.p12 / .pfx / .pem; base64 over
+	// IPC) and the password that opens it. Only the converted bundle is
+	// stored; see ParseClientCert.
+	CertData     []byte `json:"cert_data"`
+	CertKeyData  []byte `json:"cert_key_data"` // optional separate key file (PEM)
+	CertPassword string `json:"cert_password"`
+
 	// keepass - a reference into a registered .kdbx. No secret is passed or
 	// stored; the secret is read from KeePass at connect time.
 	KeepassDBID      string `json:"keepass_db_id"`
@@ -135,6 +142,8 @@ func (s *Service) Create(in CreateInput) (*CreateResult, error) {
 		return s.createOpkssh(in)
 	case "api_token":
 		return s.createAPIToken(in)
+	case "certificate":
+		return s.createCertificate(in)
 	case "keepass":
 		return s.createKeepass(in)
 	case "bitwarden":
@@ -165,12 +174,12 @@ func (s *Service) createKeepass(in CreateInput) (*CreateResult, error) {
 		kind = store.CredKey
 	}
 	cred, err := s.DB.CreateCredential(store.NewCredential{
-		FolderID:             in.FolderID,
-		Name:                 in.Name,
-		Kind:                 kind,
-		StorageMode:          store.StorageExternal,
-		Hint:                 hintStr(in.Hint),
-		Tags:                 in.Tags,
+		FolderID:    in.FolderID,
+		Name:        in.Name,
+		Kind:        kind,
+		StorageMode: store.StorageExternal,
+		Hint:        hintStr(in.Hint),
+		Tags:        in.Tags,
 		Config: map[string]any{
 			"keepass_ref": map[string]any{
 				"db_id":      in.KeepassDBID,
@@ -371,15 +380,15 @@ func (s *Service) createKeyGenerate(in CreateInput) (*CreateResult, error) {
 	}
 	pubCopy := gen.PublicOpenSSH
 	cred, err := s.DB.CreateCredential(store.NewCredential{
-		FolderID:        in.FolderID,
-		Name:            in.Name,
-		Kind:            store.CredKey,
-		StorageMode:     store.StorageManaged,
-		Hint:            hintStr(in.Hint),
-		Tags:            in.Tags,
-		Config:          cfg,
-		PublicKey:       &pubCopy,
-		DefaultUsername: in.DefaultUsername,
+		FolderID:             in.FolderID,
+		Name:                 in.Name,
+		Kind:                 store.CredKey,
+		StorageMode:          store.StorageManaged,
+		Hint:                 hintStr(in.Hint),
+		Tags:                 in.Tags,
+		Config:               cfg,
+		PublicKey:            &pubCopy,
+		DefaultUsername:      in.DefaultUsername,
 		RotationReminderDays: in.RotationReminderDays,
 		ExpiresAt:            in.ExpiresAt,
 	})
@@ -437,15 +446,15 @@ func (s *Service) createKeyImportPaste(in CreateInput) (*CreateResult, error) {
 	}
 	pubCopy := parsed.PublicOpenSSH
 	cred, err := s.DB.CreateCredential(store.NewCredential{
-		FolderID:        in.FolderID,
-		Name:            in.Name,
-		Kind:            store.CredKey,
-		StorageMode:     store.StorageManaged,
-		Hint:            hintStr(in.Hint),
-		Tags:            in.Tags,
-		Config:          cfg,
-		PublicKey:       &pubCopy,
-		DefaultUsername: in.DefaultUsername,
+		FolderID:             in.FolderID,
+		Name:                 in.Name,
+		Kind:                 store.CredKey,
+		StorageMode:          store.StorageManaged,
+		Hint:                 hintStr(in.Hint),
+		Tags:                 in.Tags,
+		Config:               cfg,
+		PublicKey:            &pubCopy,
+		DefaultUsername:      in.DefaultUsername,
 		RotationReminderDays: in.RotationReminderDays,
 		ExpiresAt:            in.ExpiresAt,
 	})
@@ -504,15 +513,15 @@ func (s *Service) createKeyFileRef(in CreateInput) (*CreateResult, error) {
 		}
 	}
 	cred, err := s.DB.CreateCredential(store.NewCredential{
-		FolderID:        in.FolderID,
-		Name:            in.Name,
-		Kind:            store.CredKey,
-		StorageMode:     store.StorageFileRef,
-		Hint:            hintStr(in.Hint),
-		Tags:            in.Tags,
-		Config:          cfg,
-		PublicKey:       pubKey,
-		DefaultUsername: in.DefaultUsername,
+		FolderID:             in.FolderID,
+		Name:                 in.Name,
+		Kind:                 store.CredKey,
+		StorageMode:          store.StorageFileRef,
+		Hint:                 hintStr(in.Hint),
+		Tags:                 in.Tags,
+		Config:               cfg,
+		PublicKey:            pubKey,
+		DefaultUsername:      in.DefaultUsername,
 		RotationReminderDays: in.RotationReminderDays,
 		ExpiresAt:            in.ExpiresAt,
 	})

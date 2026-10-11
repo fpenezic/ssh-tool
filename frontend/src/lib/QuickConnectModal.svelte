@@ -40,7 +40,7 @@
     tree.folders.map((f) => ({ id: f.id, path: pathOf(f.id) })).sort((a, b) => a.path.localeCompare(b.path)),
   );
   const credOptions = $derived(
-    credentials.list.filter((c) => c.kind !== "api_token").sort((a, b) => a.name.localeCompare(b.name)),
+    credentials.list.filter((c) => c.kind !== "api_token" && c.kind !== "certificate").sort((a, b) => a.name.localeCompare(b.name)),
   );
 
   const suggestions = $derived.by(() => {

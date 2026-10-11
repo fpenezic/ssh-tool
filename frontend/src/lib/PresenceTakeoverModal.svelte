@@ -22,9 +22,9 @@
 
     {#if pt.phase === "asking"}
       <p class="msg">
-        This WireGuard profile's tunnel is live on <strong>{pt.machineName}</strong>.
-        Connecting here makes both machines fight for the same identity and
-        degrades both. Ask <strong>{pt.machineName}</strong> to disconnect and
+        This profile's tunnel is live on <strong>{pt.machineName}</strong>.
+        Both machines would use the same identity: a WireGuard tunnel
+        degrades on both, and most VPN gateways drop the older login. Ask <strong>{pt.machineName}</strong> to disconnect and
         take over here?
       </p>
       <div class="row">

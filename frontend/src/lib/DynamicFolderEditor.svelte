@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { profileKindTitle } from "./networkKind";
   // Editor for a dynamic-inventory folder. Creates a new dynamic
   // folder when `existingFolderId` is null, edits an existing one
   // when set. Provider-specific config is kept generic in the IPC
@@ -633,7 +634,7 @@
               <option value="">(same as the folder's Network setting)</option>
               <option value="__direct__">Direct - no tunnel</option>
               {#each networkProfiles.list as np (np.id)}
-                <option value={np.id}>via {np.name} ({np.kind === "netbird" ? "NetBird" : "WireGuard"})</option>
+                <option value={np.id}>via {np.name} ({profileKindTitle(np)})</option>
               {/each}
             </select>
             <span class="hint">
@@ -794,7 +795,7 @@
               <option value="">(same as the folder's Network setting)</option>
               <option value="__direct__">Direct - no tunnel</option>
               {#each networkProfiles.list as np (np.id)}
-                <option value={np.id}>via {np.name} ({np.kind === "netbird" ? "NetBird" : "WireGuard"})</option>
+                <option value={np.id}>via {np.name} ({profileKindTitle(np)})</option>
               {/each}
             </select>
             <span class="hint">

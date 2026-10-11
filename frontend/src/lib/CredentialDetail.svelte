@@ -10,11 +10,12 @@
   import Icon from "./Icon.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
-  import { writeClipboard } from "./clipboard";
+  import { writeClipboard, copySensitive } from "./clipboard";
   import IconPicker from "./IconPicker.svelte";
   import PasswordStrengthMeter from "./PasswordStrengthMeter.svelte";
   import PasswordInput from "./PasswordInput.svelte";
   import { errMsg } from "./connectErrors";
+  import { fileToBase64, CERT_FILE_ACCEPT } from "./fileB64";
 
   type Props = {
     onCreateCredential?: (folderId: string | null) => void;
@@ -333,6 +334,21 @@
     } catch (e: any) { revealErr = errMsg(e); }
   }
 
+  // ----- one-time code (external item with a TOTP secret) -----
+  let totpErr = $state<string | null>(null);
+  const hasExternalItem = $derived(
+    !!cred && cred.storage_mode === "external" &&
+    (!!cred.config?.bitwarden_ref || !!cred.config?.keepass_ref));
+
+  async function copyTotp() {
+    if (!cred) return;
+    totpErr = null;
+    try {
+      const t = await api.credentialsTotpCode(cred.id);
+      await copySensitive(t.code, { label: `Code (valid ${t.remaining}s)` });
+    } catch (e: any) { totpErr = errMsg(e); }
+  }
+
   function hideSecret() {
     revealedSecret = null;
     if (revealTimer) { clearTimeout(revealTimer); revealTimer = null; }
@@ -529,6 +545,36 @@
     : cred?.kind === "api_token" ? "Show token secret"
     : "Show private key"
   );
+
+  // ----- certificate replace (renewal) -----
+  let certFile = $state<File | null>(null);
+  let certKeyFile = $state<File | null>(null);
+  let certPassword = $state("");
+  let certBusy = $state(false);
+  let certInput = $state<HTMLInputElement | null>(null);
+  let certKeyInput = $state<HTMLInputElement | null>(null);
+  async function replaceCertificate() {
+    if (!cred || !certFile) return;
+    certBusy = true;
+    try {
+      await api.credentialsReplaceCertificate({
+        id: cred.id,
+        data: await fileToBase64(certFile),
+        key_data: certKeyFile ? await fileToBase64(certKeyFile) : "",
+        password: certPassword,
+      });
+      certFile = certKeyFile = null;
+      certPassword = "";
+      if (certInput) certInput.value = "";
+      if (certKeyInput) certKeyInput.value = "";
+      await credentials.load();
+      toast.ok("Certificate replaced");
+    } catch (e) {
+      toast.err(`Replace failed: ${errMsg(e)}`);
+    } finally {
+      certBusy = false;
+    }
+  }
 
   // ----- api_token edit/rotate -----
   // token_id is a config field (may be empty for providers like Hetzner).
@@ -744,6 +790,12 @@
       </dl>
     {/if}
 
+    {#if hasExternalItem}
+      <h2>One-time code</h2>
+      {#if totpErr}<div class="err">{totpErr}</div>{/if}
+      <button onclick={copyTotp} title="Copies the current TOTP code of the linked item; it also answers a server's verification-code question at connect">Copy code</button>
+    {/if}
+
     <!-- Reveal secret (password / managed key / api_token) -->
     {#if cred.storage_mode === "managed" && (cred.kind === "password" || cred.kind === "key" || cred.kind === "api_token")}
       <h2>Secret</h2>
@@ -838,6 +890,33 @@
       {:else}
         <button onclick={() => (pwRotateOpen = true)}>Rotate password…</button>
       {/if}
+    {/if}
+
+    <!-- Client certificate -->
+    {#if cred.kind === "certificate"}
+      <h2>Certificate</h2>
+      <dl>
+        <dt>Subject</dt><dd><code>{String(cred.config?.subject ?? "")}</code></dd>
+        <dt>Issuer</dt><dd><code>{String(cred.config?.issuer ?? "")}</code></dd>
+        <dt>SHA-256</dt><dd><code class="fp">{String(cred.config?.fingerprint ?? "")}</code></dd>
+        {#if Number(cred.config?.chain_len ?? 0) > 0}
+          <dt>Chain</dt><dd>{cred.config?.chain_len} intermediate certificate(s)</dd>
+        {/if}
+      </dl>
+      <div class="form">
+        <label>Replace with a renewed certificate
+          <input bind:this={certInput} type="file" accept={CERT_FILE_ACCEPT} onchange={(e) => (certFile = (e.target as HTMLInputElement).files?.[0] ?? null)} />
+        </label>
+        {#if certFile}
+          <label>Separate key file <span class="hint inline">(only when the key is not inside the certificate file)</span>
+            <input bind:this={certKeyInput} type="file" accept={CERT_FILE_ACCEPT} onchange={(e) => (certKeyFile = (e.target as HTMLInputElement).files?.[0] ?? null)} />
+          </label>
+          <label>Password <span class="hint inline">(for a .pfx / .p12 or an encrypted key)</span>
+            <PasswordInput bind:value={certPassword} />
+          </label>
+          <div><button class="primary" disabled={certBusy} onclick={replaceCertificate}>{certBusy ? "Replacing…" : "Replace certificate"}</button></div>
+        {/if}
+      </div>
     {/if}
 
     <!-- API token fields -->
@@ -1302,4 +1381,5 @@
     background: var(--base); border-left: 3px solid var(--yellow);
     padding: 0.4rem 0.6rem; border-radius: 4px; margin: 0;
   }
+  .fp { word-break: break-all; }
 </style>

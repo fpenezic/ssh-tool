@@ -623,7 +623,7 @@
     <button
       class="seg vpn"
       onclick={() => view.setTabSettingsSection("network")}
-      title={`WireGuard up: ${runningVpns.map((p) => p.name).join(", ")} - click to manage`}
+      title={`VPN up: ${runningVpns.map((p) => p.name).join(", ")} - click to manage`}
     >
       <IconVpn size={11} />
       <span>{runningVpns.length === 1 ? runningVpns[0].name : runningVpns.length}</span>

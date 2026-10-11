@@ -190,6 +190,31 @@ export class CreateInput {
              */
             this["api_token_secret"] = "";
         }
+        if (!("cert_data" in $$source)) {
+            /**
+             * certificate - the imported file (.p12 / .pfx / .pem; base64 over
+             * IPC) and the password that opens it. Only the converted bundle is
+             * stored; see ParseClientCert.
+             * @member
+             * @type {string}
+             */
+            this["cert_data"] = "";
+        }
+        if (!("cert_key_data" in $$source)) {
+            /**
+             * optional separate key file (PEM)
+             * @member
+             * @type {string}
+             */
+            this["cert_key_data"] = "";
+        }
+        if (!("cert_password" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["cert_password"] = "";
+        }
         if (!("keepass_db_id" in $$source)) {
             /**
              * keepass - a reference into a registered .kdbx. No secret is passed or
@@ -314,12 +339,20 @@ export class CreateInput {
     static createFrom($$source = {}) {
         const $$createField4_0 = $$createType0;
         const $$createField9_0 = $$createType2;
+        const $$createField23_0 = $Create.ByteSlice;
+        const $$createField24_0 = $Create.ByteSlice;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField4_0($$parsedSource["tags"]);
         }
         if ("params" in $$parsedSource) {
             $$parsedSource["params"] = $$createField9_0($$parsedSource["params"]);
+        }
+        if ("cert_data" in $$parsedSource) {
+            $$parsedSource["cert_data"] = $$createField23_0($$parsedSource["cert_data"]);
+        }
+        if ("cert_key_data" in $$parsedSource) {
+            $$parsedSource["cert_key_data"] = $$createField24_0($$parsedSource["cert_key_data"]);
         }
         return new CreateInput(/** @type {Partial<CreateInput>} */($$parsedSource));
     }

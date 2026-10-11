@@ -14,10 +14,12 @@
     value: string;
     options: Option[];
     placeholder?: string;
+    /** Label of the empty value ("" ); "(inherit)" for settings that inherit. */
+    emptyLabel?: string;
     onChange?: (v: string) => void;
   };
 
-  let { value = $bindable(), options, placeholder = "Search…", onChange }: Props = $props();
+  let { value = $bindable(), options, placeholder = "Search…", emptyLabel = "(inherit)", onChange }: Props = $props();
 
   let open = $state(false);
   let query = $state("");
@@ -29,7 +31,7 @@
   // The label shown on the trigger button - looked up from options
   // every render so changes to value (or the option list) propagate.
   const triggerLabel = $derived.by(() => {
-    if (!value) return "(inherit)";
+    if (!value) return emptyLabel;
     const hit = options.find((o) => o.value === value);
     return hit?.label ?? value;
   });
@@ -133,7 +135,7 @@
           onmousemove={() => (activeIdx = -1)}
           onclick={() => pickOption("")}
         >
-          (inherit)
+          {emptyLabel}
         </button>
         {#each filtered as o, i (o.value)}
           <button

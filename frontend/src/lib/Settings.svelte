@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ocFlavorTitle, pluginTitle } from "./networkKind";
   import { onMount, tick } from "svelte";
   import { EventsOn } from "./wailsRuntime";
   import { errMsg } from "./connectErrors";
@@ -38,6 +39,7 @@
   import LogViewer from "./LogViewer.svelte";
   import UpdateModal from "./UpdateModal.svelte";
   import SearchableSelect from "./SearchableSelect.svelte";
+  import { fileToBase64, CERT_FILE_ACCEPT } from "./fileB64";
   import { updateCheck } from "./updateCheck.svelte";
 
   let browserPath = $state("");
@@ -1617,8 +1619,22 @@
   let npName = $state("");
   let npConf = $state("");
   let npEditingId = $state<string | null>(null);
-  let npEditKind = $state<"wireguard" | "netbird" | "tailscale">("wireguard");
-  let npKind = $state<"wireguard" | "netbird" | "tailscale">("wireguard");
+  let npEditKind = $state<"wireguard" | "netbird" | "tailscale" | "openconnect">("wireguard");
+  let npKind = $state<"wireguard" | "netbird" | "tailscale" | "openconnect">("wireguard");
+  // OpenConnect form fields
+  const ocEmpty = (): import("./api").OpenConnectConfig => ({ server: "", flavor: "anyconnect", second_password: "prompt", password_credential_id: "", second_credential_id: "", client_cert_credential_id: "" });
+  let oc = $state<import("./api").OpenConnectConfig>(ocEmpty());
+  let ocMtu = $state("");
+  // Inline secrets typed on the profile form: stored as credentials in the
+  // vault when the profile is added / saved, then referenced by id.
+  let ocNewPassword = $state("");
+  let ocCertMode = $state<"pick" | "file" | "paste">("pick");
+  let ocCertFile = $state<File | null>(null);
+  let ocCertKeyFile = $state<File | null>(null);
+  let ocCertPaste = $state("");
+  let ocCertPassword = $state("");
+  // Live tunnel details, per profile, shown on demand.
+  let npInfoOpen = $state<Record<string, import("./api").VpnTunnelInfo | null | undefined>>({});
   let npBusy = $state(false);
   // NetBird form fields
   let nbManagement = $state("");
@@ -1645,6 +1661,30 @@
   let pluginBusy = $state(false);
   const nbInstalled = $derived(plugins.some((p) => p.name === "netbird" && p.installed));
   const tsInstalled = $derived(plugins.some((p) => p.name === "tailscale" && p.installed));
+  const ocInstalled = $derived(plugins.some((p) => p.name === "openconnect" && p.installed));
+  // Credentials holding a password (vault or an external backend).
+  // Client certificate credentials for the OpenConnect profile.
+  const certCredOptions = $derived(
+    credentials.list
+      .filter((c) => c.kind === "certificate")
+      .map((c) => ({ value: c.id, label: `${c.name} - ${String(c.config?.subject ?? "")}` })),
+  );
+  // Why "Add profile" is disabled for an OpenConnect profile - a disabled
+  // button alone gave no clue.
+  const ocMissing = $derived(
+    [!npName.trim() && "a name", !oc.server.trim() && "the gateway", !ocInstalled && "the OpenConnect plugin"].filter(Boolean).join(", "),
+  );
+  const passwordCredOptions = $derived(
+    credentials.list
+      .filter((c) => c.kind === "password")
+      .map((c) => ({ value: c.id, label: c.name })),
+  );
+  // External items that can carry a TOTP secret.
+  const totpCredOptions = $derived(
+    credentials.list
+      .filter((c) => !!c.config?.bitwarden_ref || !!c.config?.keepass_ref)
+      .map((c) => ({ value: c.id, label: c.name })),
+  );
   // api_token credentials for the setup-key picker.
   const apiTokenCredOptions = $derived(
     credentials.list
@@ -1653,6 +1693,41 @@
   );
 
   let wgBindPhysical = $state(false);
+  // Idle stop: minutes a tunnel stays up after its last SSH session
+  // closes. -1 = never. The global value applies to every profile
+  // without its own override; unset means the built-in 2 minutes.
+  const IDLE_STOP_KEY = "network_idle_stop_minutes";
+  const IDLE_STOP_DEFAULT = 2;
+  const IDLE_STOP_PRESETS = [0, 1, 2, 5, 10, 15, 30, 60, 120, 240, -1];
+  let idleStopGlobal = $state(IDLE_STOP_DEFAULT);
+  function idleStopLabel(m: number): string {
+    if (m < 0) return "Never";
+    if (m === 0) return "Right away";
+    if (m < 60 || m % 60) return `After ${m} min`;
+    return `After ${m / 60} h`;
+  }
+  function idleStopShort(m: number): string {
+    if (m < 0) return "never";
+    if (m === 0) return "at once";
+    return m < 60 || m % 60 ? `${m} min` : `${m / 60} h`;
+  }
+  function idleStopOptions(cur: number | null): number[] {
+    return cur === null || IDLE_STOP_PRESETS.includes(cur) ? IDLE_STOP_PRESETS : [...IDLE_STOP_PRESETS, cur].sort((a, b) => (a < 0 ? 1 : b < 0 ? -1 : a - b));
+  }
+  async function setIdleStopGlobal(v: string) {
+    try {
+      const m = Number(v);
+      if (m === IDLE_STOP_DEFAULT) await api.settingsDelete(IDLE_STOP_KEY);
+      else await api.settingsSet(IDLE_STOP_KEY, String(m));
+      idleStopGlobal = m;
+    } catch (e) { toast.err(errMsg(e)); }
+  }
+  async function npSetIdleStop(np: NetworkProfileInfo, v: string) {
+    try {
+      await api.networkProfileSetIdleStop(np.id, v === "" ? null : Number(v));
+      await networkProfiles.load(true);
+    } catch (e) { toast.err(errMsg(e)); }
+  }
   let livenessProbe = $state(false);
   let livenessDynamic = $state(false);
   let livenessKeepTunnel = $state(false);
@@ -1664,6 +1739,10 @@
       credentials.load().catch(() => {});
       refreshPlugins();
       api.wgBindPhysicalGet().then((v) => (wgBindPhysical = v)).catch(() => {});
+      api.settingsGet(IDLE_STOP_KEY).then((v) => {
+        const n = parseInt(v, 10);
+        idleStopGlobal = v.trim() !== "" && !isNaN(n) ? n : IDLE_STOP_DEFAULT;
+      }).catch(() => {});
     }
     if (activeSection === "liveness") {
       api.settingsGet("liveness_probe_enabled").then((v) => (livenessProbe = v === "1")).catch(() => {});
@@ -1762,7 +1841,66 @@
     }
   }
   function engineLabel(name: string): string {
-    return name === "netbird" ? "NetBird" : name === "tailscale" ? "Tailscale" : name;
+    return pluginTitle(name);
+  }
+  const kindTitle = pluginTitle;
+
+  function ocConfigFromForm(): import("./api").OpenConnectConfig {
+    const n = parseInt(ocMtu, 10);
+    return { ...oc, server: oc.server.trim(), mtu: isNaN(n) ? 0 : n };
+  }
+  async function npCreateOpenConnect() {
+    npBusy = true;
+    try {
+      await ocStoreInlineSecrets();
+      await api.networkProfileCreateOpenConnect(npName.trim(), ocConfigFromForm());
+      npCancelEdit();
+      await networkProfiles.load(true);
+      toast.ok("OpenConnect profile added");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
+  async function npSaveOpenConnect() {
+    if (!npEditingId) return;
+    npBusy = true;
+    try {
+      await ocStoreInlineSecrets();
+      await api.networkProfileUpdateOpenConnect(npEditingId, npName.trim(), ocConfigFromForm());
+      npCancelEdit();
+      await networkProfiles.load(true);
+      toast.ok("Profile saved");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
+  async function npToggleInfo(np: NetworkProfileInfo) {
+    if (np.id in npInfoOpen) {
+      const next = { ...npInfoOpen };
+      delete next[np.id];
+      npInfoOpen = next;
+      return;
+    }
+    npInfoOpen = { ...npInfoOpen, [np.id]: undefined };
+    try {
+      npInfoOpen = { ...npInfoOpen, [np.id]: await api.networkProfileTunnelInfo(np.id) };
+    } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  function tunnelInfoText(i: import("./api").VpnTunnelInfo): string {
+    const lines = [
+      `type:       ${ocFlavorTitle[i.flavor] ?? i.flavor}`,
+      `server:     ${i.server}${i.gateway ? ` (${i.gateway})` : ""}`,
+      `transport:  ${i.transport || "-"}`,
+      `address:    ${i.addresses.join(", ") || "-"}`,
+      `mtu:        ${i.mtu || "-"}${i.local_mtu && i.local_mtu !== i.mtu ? ` (local ${i.local_mtu})` : ""}`,
+      `dns:        ${i.dns.join(", ") || "-"}${i.tunnel_all_dns ? " (all queries)" : ""}`,
+    ];
+    if (i.search_domains?.length) lines.push(`search:     ${i.search_domains.join(", ")}`);
+    if (i.split_dns?.length) lines.push(`split dns:  ${i.split_dns.join(", ")}`);
+    lines.push(`routes:     ${i.routes.length ? i.routes.join("\n            ") : "all traffic"}`);
+    if (i.excluded_routes?.length) lines.push(`excluded:   ${i.excluded_routes.join("\n            ")}`);
+    if (i.idle_timeout_s) lines.push(`idle:       ${i.idle_timeout_s}s`);
+    if (i.auth_expires) lines.push(`login ends: ${new Date(i.auth_expires * 1000).toLocaleString()}`);
+    if (i.banner) lines.push("", i.banner);
+    return lines.join("\n");
   }
 
   // Pre-fill the NetBird device name with "<hostname>.ssh-tool" the
@@ -1996,6 +2134,12 @@
       nbCredId = np.netbird?.setup_key_credential_id ?? "";
       return;
     }
+    if (np.kind === "openconnect") {
+      oc = { ...ocEmpty(), ...(np.openconnect ?? {}) };
+      ocResetInline();
+      ocMtu = np.openconnect?.mtu ? String(np.openconnect.mtu) : "";
+      return;
+    }
     if (np.kind === "tailscale") {
       tsControl = np.tailscale?.control_url ?? "";
       tsHostname = np.tailscale?.hostname ?? "";
@@ -2017,6 +2161,37 @@
     nbManagement = ""; nbDevice = ""; nbCredId = "";
     tsControl = ""; tsHostname = ""; tsCredId = "";
     tsNewKeyOpen = false; tsNewKeyName = ""; tsNewKeySecret = "";
+    oc = ocEmpty(); ocMtu = "";
+    ocResetInline();
+  }
+  function ocResetInline() {
+    ocNewPassword = ""; ocCertMode = "pick"; ocCertFile = null; ocCertKeyFile = null;
+    ocCertPaste = ""; ocCertPassword = "";
+  }
+  // ocStoreInlineSecrets turns what was typed into the form into vault
+  // credentials and points the profile at them. Runs before the profile
+  // create / update, so a failed import leaves no half-made profile.
+  async function ocStoreInlineSecrets() {
+    const base = npName.trim() || oc.server.trim();
+    if (ocNewPassword) {
+      const r = await api.credentialsCreate({
+        kind: "password", name: `${base} - VPN password`, password: ocNewPassword,
+        default_username: oc.username?.trim() || undefined,
+      } as any);
+      oc.password_credential_id = r.credential!.id;
+      ocNewPassword = "";
+    }
+    if (ocCertMode === "file" && ocCertFile || ocCertMode === "paste" && ocCertPaste.trim()) {
+      const data = ocCertMode === "file" ? await fileToBase64(ocCertFile!) : btoa(unescape(encodeURIComponent(ocCertPaste)));
+      const r = await api.credentialsCreate({
+        kind: "certificate", name: `${base} - client certificate`, cert_data: data,
+        cert_key_data: ocCertMode === "file" && ocCertKeyFile ? await fileToBase64(ocCertKeyFile) : "",
+        cert_password: ocCertPassword,
+      });
+      oc.client_cert_credential_id = r.credential!.id;
+      ocCertMode = "pick"; ocCertFile = null; ocCertKeyFile = null; ocCertPaste = ""; ocCertPassword = "";
+    }
+    await credentials.load();
   }
   async function npSaveEdit() {
     if (!npEditingId) return;
@@ -3510,7 +3685,7 @@
     {#each plugins as pl (pl.name)}
       <div class="np-card">
         <div class="np-head">
-          <strong>{pl.name === "netbird" ? "NetBird" : pl.name === "tailscale" ? "Tailscale" : pl.name}</strong>
+          <strong>{pluginTitle(pl.name)}</strong>
           {#if !pl.supported}
             <span class="np-pill">not on this platform</span>
           {:else if pl.installed && pl.update_available}
@@ -3582,6 +3757,15 @@
 
     </fieldset>
 
+    <label class="np-mode np-idle-global">Stop an idle tunnel
+      <select value={String(idleStopGlobal)} onchange={(e) => setIdleStopGlobal((e.target as HTMLSelectElement).value)}>
+        {#each idleStopOptions(idleStopGlobal) as m (m)}
+          <option value={String(m)}>{idleStopLabel(m)}{m === IDLE_STOP_DEFAULT ? " (default)" : ""}</option>
+        {/each}
+      </select>
+      <span class="hint inline">Counted from when the last SSH session through the tunnel closes. A profile can override it.</span>
+    </label>
+
     <h3 style="margin-top:1.2rem">Profiles</h3>
 
     {#if networkProfiles.error}
@@ -3592,7 +3776,7 @@
       <div class="np-card">
         <div class="np-head">
           <strong>{np.name}</strong>
-          <span class="np-kind">{np.kind === "netbird" ? "NetBird" : np.kind === "tailscale" ? "Tailscale" : "WireGuard"}</span>
+          <span class="np-kind">{kindTitle(np.kind)}</span>
           {#if np.paused}
             <span class="np-pill paused">paused</span>
           {:else if np.status.running}
@@ -3603,7 +3787,7 @@
             <span class="np-pill">idle</span>
           {/if}
           {#if npRemoteOwners[np.id]}
-            <span class="np-pill remote" title="This WireGuard tunnel is live on another synced machine. Only one machine can hold it at a time.">
+            <span class="np-pill remote" title={np.kind === "wireguard" || np.kind === "openconnect" ? "This tunnel is live on another synced machine. Only one machine can hold it at a time." : "This tunnel is also up on another synced machine."}>
               up on {npRemoteOwners[np.id].machine_name}
             </span>
           {/if}
@@ -3612,6 +3796,9 @@
               {np.netbird?.device_name || "ssh-tool"}
               {#if np.netbird?.management_url}&nbsp;· {np.netbird.management_url}{/if}
               {#if np.status.running && (np.status.peers ?? 0) > 0}&nbsp;· {np.status.peers} peer{np.status.peers === 1 ? "" : "s"}{/if}
+            {:else if np.kind === "openconnect"}
+              {np.openconnect?.server}
+              &nbsp;· {ocFlavorTitle[np.openconnect?.flavor ?? "anyconnect"]}
             {:else if np.kind === "tailscale"}
               {np.tailscale?.hostname || "ssh-tool"}
               {#if np.tailscale?.control_url}&nbsp;· {np.tailscale.control_url}{/if}
@@ -3626,21 +3813,34 @@
           </span>
         </div>
         <div class="np-actions">
-          <label class="np-mode">Mode
+          <label class="np-mode" title="Always: every connect goes through the tunnel. Auto: try direct first, fall back to the tunnel.">Mode
             <select
               value={np.mode === "auto" ? "auto" : "always"}
               onchange={(e) => npSetPolicy(np, (e.target as HTMLSelectElement).value, np.paused)}
             >
               <option value="always">Always via tunnel</option>
-              <option value="auto">Auto - direct first, tunnel fallback</option>
+              <option value="auto">Auto (direct first)</option>
             </select>
           </label>
-          <button onclick={() => npSetPolicy(np, np.mode === "auto" ? "auto" : "always", !np.paused)}>
-            {np.paused ? "Resume" : "Pause (go direct)"}
+          <label class="np-mode" title="How long the tunnel stays up after its last SSH session closes">Stop when idle
+            <select
+              value={np.idle_stop_minutes === null || np.idle_stop_minutes === undefined ? "" : String(np.idle_stop_minutes)}
+              onchange={(e) => npSetIdleStop(np, (e.target as HTMLSelectElement).value)}
+            >
+              <option value="">Global ({idleStopShort(idleStopGlobal)})</option>
+              {#each idleStopOptions(np.idle_stop_minutes ?? null) as m (m)}
+                <option value={String(m)}>{idleStopLabel(m)}</option>
+              {/each}
+            </select>
+          </label>
+          <span class="np-spacer"></span>
+          <button onclick={() => npSetPolicy(np, np.mode === "auto" ? "auto" : "always", !np.paused)}
+            title={np.paused ? "Use the tunnel again" : "Dial direct, never start the tunnel"}>
+            {np.paused ? "Resume" : "Pause"}
           </button>
           <button onclick={() => npTest(np)} disabled={npBusy || np.paused}>Test</button>
           {#if np.status.running}
-            <button onclick={() => api.networkProfileStop(np.id).catch((e) => toast.err(errMsg(e)))}>Stop tunnel</button>
+            <button onclick={() => api.networkProfileStop(np.id).catch((e) => toast.err(errMsg(e)))} title="Stop the running tunnel">Stop</button>
           {/if}
           {#if npRemoteOwners[np.id]}
             <button
@@ -3651,9 +3851,26 @@
               {npDisconnecting[np.id] ? "Disconnecting…" : `Disconnect on ${npRemoteOwners[np.id].machine_name}`}
             </button>
           {/if}
+          {#if np.kind === "openconnect" && np.status.running}
+            <button onclick={() => npToggleInfo(np)}>{np.id in npInfoOpen ? "Hide details" : "Details"}</button>
+          {/if}
           <button onclick={() => npStartEdit(np)}>Edit</button>
           <button class="danger" onclick={() => npDelete(np)}>Delete</button>
         </div>
+        {#if np.id in npInfoOpen}
+          {@const ti = npInfoOpen[np.id]}
+          {#if ti === undefined}
+            <p class="hint">Loading…</p>
+          {:else if ti === null}
+            <p class="hint">The tunnel is down or reported nothing yet.</p>
+          {:else}
+            <pre class="np-info">{tunnelInfoText(ti)}</pre>
+            <div class="row" style="gap:0.5rem">
+              <button onclick={() => copyText(tunnelInfoText(ti), { label: "Tunnel details" })}>Copy</button>
+              <button onclick={() => { const n = { ...npInfoOpen }; delete n[np.id]; npInfoOpen = n; npToggleInfo(np); }}>Refresh</button>
+            </div>
+          {/if}
+        {/if}
       </div>
     {/each}
     {#if networkProfiles.list.length === 0 && !networkProfiles.loading}
@@ -3668,6 +3885,7 @@
         <label class="np-kindpick"><input type="radio" bind:group={npKind} value="wireguard" /> WireGuard</label>
         <label class="np-kindpick"><input type="radio" bind:group={npKind} value="netbird" /> NetBird</label>
         <label class="np-kindpick"><input type="radio" bind:group={npKind} value="tailscale" /> Tailscale</label>
+        <label class="np-kindpick"><input type="radio" bind:group={npKind} value="openconnect" /> OpenConnect</label>
       </div>
     {/if}
 
@@ -3702,7 +3920,7 @@
           <SearchableSelect
             bind:value={nbCredId}
             options={apiTokenCredOptions}
-            placeholder="Pick an API-token credential holding the setup key…"
+            emptyLabel="Pick an API-token credential holding the setup key…"
           />
           <span class="hint inline">
             A NetBird <strong>setup key</strong> (from Setup Keys in the
@@ -3736,6 +3954,121 @@
           <button class="primary" onclick={npCreateNetbird} disabled={npBusy || !nbInstalled || !npName.trim() || !nbCredId}>Add profile</button>
         {/if}
       </div>
+    {:else if (npEditingId ? npEditKind : npKind) === "openconnect"}
+      {#if !ocInstalled}
+        <p class="hint warn-note">
+          The OpenConnect plugin is not installed. Install it in the Plugins
+          card above before creating an OpenConnect profile.
+        </p>
+      {/if}
+      <div class="oc-grid">
+        <label>
+          <span>VPN type</span>
+          <select bind:value={oc.flavor}>
+            {#each Object.entries(ocFlavorTitle) as [v, t]}<option value={v}>{t}</option>{/each}
+          </select>
+        </label>
+        <label title="Address or URL, with the group path if the gateway uses one">
+          <span>Gateway</span>
+          <input bind:value={oc.server} placeholder="vpn.example.com/group" />
+        </label>
+        <label title="Picks this login group when the gateway offers several">
+          <span>Group <span class="hint inline">(optional)</span></span>
+          <input bind:value={oc.auth_group} placeholder="staff" />
+        </label>
+        <span></span>
+        <label title="Blank = the password credential's username, else asked at login">
+          <span>Username</span>
+          <input bind:value={oc.username} placeholder="alice" />
+        </label>
+        <label>
+          <span>Password</span>
+          {#if ocNewPassword || !oc.password_credential_id}
+            <PasswordInput bind:value={ocNewPassword} placeholder={oc.password_credential_id ? "" : "blank = asked at login"} />
+          {/if}
+          {#if !ocNewPassword}
+            <SearchableSelect bind:value={oc.password_credential_id} options={passwordCredOptions} emptyLabel="or pick a stored password…" />
+          {/if}
+        </label>
+        <label title="A secondary login or a one-time code, when the gateway asks">
+          <span>Second password</span>
+          <select bind:value={oc.second_password}>
+            <option value="prompt">Ask at login (hardware / app token)</option>
+            <option value="totp">One-time code from Bitwarden / KeePass</option>
+            <option value="credential">Stored password</option>
+          </select>
+        </label>
+        {#if oc.second_password === "totp"}
+          <label title="Both factors then live in one place - your call">
+            <span>Item with the TOTP</span>
+            <SearchableSelect bind:value={oc.second_credential_id} options={totpCredOptions} placeholder="Search…" emptyLabel="Pick a Bitwarden / KeePass item…" />
+          </label>
+        {:else if oc.second_password === "credential"}
+          <label>
+            <span>Second password credential</span>
+            <SearchableSelect bind:value={oc.second_credential_id} options={passwordCredOptions} placeholder="Search…" emptyLabel="Pick a credential…" />
+          </label>
+        {:else}
+          <span></span>
+        {/if}
+        <label title="Blank = asked at login, when the gateway asks for one">
+          <span>Second username <span class="hint inline">(blank = asked)</span></span>
+          <input bind:value={oc.second_username} placeholder="" />
+        </label>
+        <div class="oc-mtu">
+          <label title="Blank = the gateway's">
+            <span>MTU</span>
+            <input type="number" min="576" max="9000" bind:value={ocMtu} placeholder="1300" />
+          </label>
+          <label class="np-kindpick"><input type="checkbox" bind:checked={oc.no_udp} /> TLS only (no DTLS)</label>
+        </div>
+      </div>
+      <div class="oc-cert">
+        <span>Client certificate <span class="hint inline">(optional - stored in the vault)</span></span>
+        <div class="row" style="gap:0.75rem; flex-wrap:wrap">
+          <label class="np-kindpick"><input type="radio" bind:group={ocCertMode} value="pick" /> Stored</label>
+          <label class="np-kindpick"><input type="radio" bind:group={ocCertMode} value="file" /> Import file</label>
+          <label class="np-kindpick"><input type="radio" bind:group={ocCertMode} value="paste" /> Paste PEM</label>
+        </div>
+        {#if ocCertMode === "pick"}
+          <SearchableSelect bind:value={oc.client_cert_credential_id} options={certCredOptions} emptyLabel="None" />
+        {:else}
+          <div class="oc-grid">
+            {#if ocCertMode === "file"}
+              <label>
+                <span>Certificate (.pfx / .p12 / .pem)</span>
+                <input type="file" accept={CERT_FILE_ACCEPT} onchange={(e) => (ocCertFile = (e.target as HTMLInputElement).files?.[0] ?? null)} />
+              </label>
+              <label title="Only when the key is not inside the certificate file">
+                <span>Separate key file <span class="hint inline">(optional)</span></span>
+                <input type="file" accept={CERT_FILE_ACCEPT} onchange={(e) => (ocCertKeyFile = (e.target as HTMLInputElement).files?.[0] ?? null)} />
+              </label>
+            {:else}
+              <label class="oc-span">
+                <span>Certificate and private key (PEM)</span>
+                <textarea rows="5" class="mono" bind:value={ocCertPaste} spellcheck="false"
+                  placeholder={"-----BEGIN CERTIFICATE-----\n...\n-----BEGIN PRIVATE KEY-----\n..."}></textarea>
+              </label>
+            {/if}
+            <label title="Opens a .pfx / .p12 or an encrypted key now; it is not stored">
+              <span>File password <span class="hint inline">(if any)</span></span>
+              <PasswordInput bind:value={ocCertPassword} />
+            </label>
+          </div>
+        {/if}
+      </div>
+      {#if npEditingId && oc.pins?.length}
+        <p class="hint inline">Trusted gateway certificate: <code>{oc.pins[0]}</code> (changing the gateway address forgets it).</p>
+      {/if}
+      <div class="row" style="gap:0.5rem">
+        {#if npEditingId}
+          <button class="primary" onclick={npSaveOpenConnect} disabled={npBusy || !npName.trim() || !oc.server.trim()}>Save changes</button>
+          <button onclick={npCancelEdit}>Cancel</button>
+        {:else}
+          <button class="primary" onclick={npCreateOpenConnect} disabled={npBusy || !ocInstalled || !npName.trim() || !oc.server.trim()}>Add profile</button>
+          {#if ocMissing}<span class="hint inline">Needs {ocMissing}.</span>{/if}
+        {/if}
+      </div>
     {:else if (npEditingId ? npEditKind : npKind) === "tailscale"}
       {#if !tsInstalled}
         <p class="hint warn-note">
@@ -3762,7 +4095,7 @@
           <SearchableSelect
             bind:value={tsCredId}
             options={apiTokenCredOptions}
-            placeholder="Pick an API-token credential holding the auth key…"
+            emptyLabel="Pick an API-token credential holding the auth key…"
           />
           <span class="hint inline">
             A Tailscale <strong>auth key</strong> (Settings -&gt; Keys in the
@@ -6314,6 +6647,15 @@
     gap: 0.5rem;
     flex-wrap: wrap;
   }
+  .np-info {
+    margin: 0.4rem 0 0.3rem;
+    padding: 0.5rem 0.6rem;
+    background: var(--bg-2, rgba(127,127,127,0.08));
+    border-radius: 4px;
+    font-size: 0.8rem;
+    white-space: pre-wrap;
+    user-select: text;
+  }
   .np-meta {
     color: var(--subtext0);
     font-size: 0.78rem;
@@ -6335,8 +6677,27 @@
   .np-actions {
     display: flex;
     align-items: end;
-    gap: 0.45rem;
+    gap: 0.4rem;
     flex-wrap: wrap;
+  }
+  .np-actions button { padding: 0.3rem 0.6rem; }
+  .np-actions select { max-width: 11rem; }
+  .np-spacer { flex: 1; }
+  .oc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 0.6rem 1rem;
+    align-items: end;
+  }
+  .oc-grid label, .oc-cert { display: flex; flex-direction: column; gap: 0.2rem; }
+  .oc-grid .oc-span { grid-column: 1 / -1; }
+  .oc-mtu { display: flex; gap: 0.75rem; align-items: end; }
+  .oc-mtu label:first-child { max-width: 7rem; }
+  .oc-cert { margin-top: 0.6rem; }
+  .oc-cert textarea { width: 100%; font-family: var(--mono, monospace); font-size: 0.8rem; }
+  .np-idle-global {
+    margin-top: 0.8rem;
+    max-width: 32rem;
   }
   .np-mode {
     display: flex;
@@ -6346,6 +6707,9 @@
     color: var(--subtext0);
   }
   .np-actions button.danger { color: var(--red); }
+  /* No global disabled look exists, and a disabled "Add profile" read as
+     a button that silently did nothing. */
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
   .np-kind {
     font-size: 0.68rem;
     font-weight: 600;
