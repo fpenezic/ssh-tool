@@ -525,6 +525,14 @@ var migrations = []struct {
 		`ALTER TABLE connections ADD COLUMN local_shell_dir TEXT;
 		 ALTER TABLE port_forwards ADD COLUMN browser_mode TEXT NOT NULL DEFAULT '';`,
 	},
+	{
+		27,
+		// Credential folders get an uploaded-image icon like folders,
+		// connections and credentials already have (v22 gave them only a
+		// built-in icon). Mutually exclusive with icon_name / icon_color,
+		// cleared by DeleteImage like the other three references.
+		`ALTER TABLE credential_folders ADD COLUMN icon_image_id TEXT REFERENCES images(id);`,
+	},
 }
 
 // LatestSchemaVersion is the version a freshly-migrated DB lands on.

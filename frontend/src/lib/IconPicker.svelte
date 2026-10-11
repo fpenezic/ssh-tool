@@ -38,8 +38,10 @@
       await api.imagesSetFolder(targetId, imageId);
     } else if (kind === "connection") {
       await api.imagesSetConnection(targetId, imageId);
-    } else {
+    } else if (kind === "credential") {
       await api.imagesSetCredential(targetId, imageId);
+    } else {
+      await api.imagesSetCredentialFolder(targetId, imageId);
     }
   }
 
@@ -54,10 +56,10 @@
     onNamedChange,
   }: Props = $props();
 
-  // All four kinds support built-in icons. Only credential folders lack an
-  // uploaded-image option (they never had an icon_image_id column).
+  // All four kinds support built-in icons and uploaded images (credential
+  // folders since schema v27).
   const supportsNamed = true;
-  const supportsUpload = $derived(kind !== "credentialFolder");
+  const supportsUpload = true;
 
   // Which picker tab is showing: the uploaded-image library, or the
   // built-in lucide set.

@@ -157,11 +157,12 @@ type ArchivePortForward struct {
 }
 
 type ArchiveCredFolder struct {
-	ID        string  `json:"id" toml:"id"`
-	ParentID  *string `json:"parent_id,omitempty" toml:"parent_id,omitempty"`
-	Name      string  `json:"name" toml:"name"`
-	IconName  *string `json:"icon_name,omitempty" toml:"icon_name,omitempty"`
-	IconColor *string `json:"icon_color,omitempty" toml:"icon_color,omitempty"`
+	ID          string  `json:"id" toml:"id"`
+	ParentID    *string `json:"parent_id,omitempty" toml:"parent_id,omitempty"`
+	Name        string  `json:"name" toml:"name"`
+	IconImageID *string `json:"icon_image_id,omitempty" toml:"icon_image_id,omitempty"`
+	IconName    *string `json:"icon_name,omitempty" toml:"icon_name,omitempty"`
+	IconColor   *string `json:"icon_color,omitempty" toml:"icon_color,omitempty"`
 }
 
 type ArchiveCredential struct {
@@ -577,11 +578,12 @@ func Build(
 				continue
 			}
 			arc.CredentialFolders = append(arc.CredentialFolders, ArchiveCredFolder{
-				ID:        f.ID,
-				ParentID:  f.ParentID,
-				Name:      f.Name,
-				IconName:  f.IconName,
-				IconColor: f.IconColor,
+				ID:          f.ID,
+				ParentID:    f.ParentID,
+				Name:        f.Name,
+				IconImageID: f.IconImageID,
+				IconName:    f.IconName,
+				IconColor:   f.IconColor,
 			})
 		}
 	}
@@ -631,6 +633,11 @@ func Build(
 		}
 		for i := range arc.Credentials {
 			if err := collect(&arc.Credentials[i].IconImageID); err != nil {
+				return nil, err
+			}
+		}
+		for i := range arc.CredentialFolders {
+			if err := collect(&arc.CredentialFolders[i].IconImageID); err != nil {
 				return nil, err
 			}
 		}
@@ -684,6 +691,7 @@ func applyStrips(arc *Archive, opts Options) {
 			arc.Credentials[i].IconColor = nil
 		}
 		for i := range arc.CredentialFolders {
+			arc.CredentialFolders[i].IconImageID = nil
 			arc.CredentialFolders[i].IconName = nil
 			arc.CredentialFolders[i].IconColor = nil
 		}

@@ -5527,6 +5527,12 @@ func (a *App) ImagesSetCredential(credID, imageID string) error {
 	return a.db.SetCredentialIcon(credID, imageID)
 }
 
+// ImagesSetCredentialFolder sets an uploaded image as a credential
+// folder's icon ("" clears it), replacing any built-in icon.
+func (a *App) ImagesSetCredentialFolder(folderID, imageID string) error {
+	return a.db.SetCredentialFolderIcon(folderID, imageID)
+}
+
 // IconSetFolderNamed sets a built-in (lucide) icon + palette colour on a
 // folder. Empty name clears it (folder reverts to the default icon).
 // Clears any uploaded image - a folder has one icon source at a time.

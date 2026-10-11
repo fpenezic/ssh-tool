@@ -702,10 +702,17 @@ export class CredentialFolder {
              */
             this["sort_order"] = 0;
         }
+        if (!("icon_image_id" in $$source)) {
+            /**
+             * Uploaded image (since schema v27) or built-in (lucide) icon +
+             * palette colour; one source at a time.
+             * @member
+             * @type {string | null}
+             */
+            this["icon_image_id"] = null;
+        }
         if (!("icon_name" in $$source)) {
             /**
-             * Built-in (lucide) icon + palette colour. Credential folders never
-             * had an uploaded-image icon, so these are the only icon fields.
              * @member
              * @type {string | null}
              */

@@ -1777,6 +1777,17 @@ export function ImagesSetCredential(credID, imageID) {
 }
 
 /**
+ * ImagesSetCredentialFolder sets an uploaded image as a credential
+ * folder's icon ("" clears it), replacing any built-in icon.
+ * @param {string} folderID
+ * @param {string} imageID
+ * @returns {$CancellablePromise<void>}
+ */
+export function ImagesSetCredentialFolder(folderID, imageID) {
+    return $Call.ByID(1217463760, folderID, imageID);
+}
+
+/**
  * ImagesSetFolder assigns an image to a folder. Pass empty imageID to
  * clear the icon (folder reverts to the default emoji).
  * @param {string} folderID

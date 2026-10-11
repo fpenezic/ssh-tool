@@ -304,12 +304,13 @@ type CredentialFolder struct {
 	ParentID  *string `json:"parent_id"`
 	Name      string  `json:"name"`
 	SortOrder int64   `json:"sort_order"`
-	// Built-in (lucide) icon + palette colour. Credential folders never
-	// had an uploaded-image icon, so these are the only icon fields.
-	IconName  *string `json:"icon_name"`
-	IconColor *string `json:"icon_color"`
-	CreatedAt int64   `json:"created_at"`
-	UpdatedAt int64   `json:"updated_at"`
+	// Uploaded image (since schema v27) or built-in (lucide) icon +
+	// palette colour; one source at a time.
+	IconImageID *string `json:"icon_image_id"`
+	IconName    *string `json:"icon_name"`
+	IconColor   *string `json:"icon_color"`
+	CreatedAt   int64   `json:"created_at"`
+	UpdatedAt   int64   `json:"updated_at"`
 }
 
 // CredentialRef holds metadata only. Secrets live in vault under VaultKey.

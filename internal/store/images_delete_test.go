@@ -75,3 +75,45 @@ func TestDeleteUnusedImagesKeepsUsedOnes(t *testing.T) {
 		}
 	}
 }
+
+// A credential folder can wear an uploaded icon (schema v27): it counts as
+// a use, survives the unused-image sweep, is cleared by DeleteImage, and
+// a built-in icon replaces it.
+func TestCredentialFolderImageIcon(t *testing.T) {
+	db := iconHintDB(t)
+	img, err := db.PutImage([]byte("<svg id='cf'/>"), "image/svg+xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cf, err := db.CreateCredentialFolder("Customers", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetCredentialFolderIcon(cf.ID, img); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := db.GetCredentialFolder(cf.ID); got.IconImageID == nil || *got.IconImageID != img {
+		t.Fatalf("icon_image_id = %v", got.IconImageID)
+	}
+	if ids, _ := db.ListImageIDs(); len(ids) != 1 || ids[0].UseCount != 1 {
+		t.Fatalf("use count = %+v", ids)
+	}
+	if n, _ := db.DeleteUnusedImages(); n != 0 {
+		t.Fatalf("sweep removed %d images, the folder's icon among them", n)
+	}
+	if err := db.SetCredentialFolderNamedIcon(cf.ID, "key", "blue"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := db.GetCredentialFolder(cf.ID); got.IconImageID != nil || got.IconName == nil {
+		t.Fatalf("named icon did not replace the image: %+v", got)
+	}
+	if err := db.SetCredentialFolderIcon(cf.ID, img); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := db.DeleteImage(img); err != nil || n != 1 {
+		t.Fatalf("delete = %d, %v", n, err)
+	}
+	if got, _ := db.GetCredentialFolder(cf.ID); got.IconImageID != nil {
+		t.Fatalf("folder still points at the deleted image")
+	}
+}

@@ -237,9 +237,22 @@ func (d *DB) SetCredentialNamedIcon(id, name, color string) error {
 	return err
 }
 
+// SetCredentialFolderIcon sets an uploaded image as a credential folder's
+// icon, clearing any built-in one. Empty imageID clears it.
+func (d *DB) SetCredentialFolderIcon(id, imageID string) error {
+	var v interface{}
+	if imageID != "" {
+		v = imageID
+	}
+	_, err := d.conn.Exec(
+		"UPDATE credential_folders SET icon_image_id=?, icon_name=NULL, icon_color=NULL, updated_at=? WHERE id=?",
+		v, now(), id,
+	)
+	return err
+}
+
 // SetCredentialFolderNamedIcon sets a built-in icon + palette colour on a
-// credential folder. Credential folders have no uploaded-image option, so
-// this is their only icon. Empty name clears it.
+// credential folder, clearing any uploaded image. Empty name clears it.
 func (d *DB) SetCredentialFolderNamedIcon(id, name, color string) error {
 	var n, c interface{}
 	if name != "" {
@@ -249,7 +262,7 @@ func (d *DB) SetCredentialFolderNamedIcon(id, name, color string) error {
 		}
 	}
 	_, err := d.conn.Exec(
-		"UPDATE credential_folders SET icon_name=?, icon_color=?, updated_at=? WHERE id=?",
+		"UPDATE credential_folders SET icon_name=?, icon_color=?, icon_image_id=NULL, updated_at=? WHERE id=?",
 		n, c, now(), id,
 	)
 	return err

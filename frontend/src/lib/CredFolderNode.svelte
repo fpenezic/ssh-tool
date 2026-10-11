@@ -199,7 +199,7 @@
     onclick={(e) => { e.stopPropagation(); toggle(); }}
     title={open ? "Collapse" : "Expand"}
   >{hasChildren ? (open ? "▾" : "▸") : " "}</button>
-  <span class="icon"><Icon imageId={null} iconName={folder.icon_name} iconColor={folder.icon_color} size={14}>
+  <span class="icon"><Icon imageId={folder.icon_image_id} iconName={folder.icon_name} iconColor={folder.icon_color} size={14}>
     <IconFolder size={14} />
   </Icon></span>
   <span class="name">{folder.name}</span>

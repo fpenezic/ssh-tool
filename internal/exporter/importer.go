@@ -309,6 +309,9 @@ func Apply(
 			setNamedIcon(f.IconName, f.IconColor, func(n, c string) error {
 				return db.SetCredentialFolderNamedIcon(created.ID, n, c)
 			}, "credential folder", f.Name)
+			setIcon(f.IconImageID, func(imgID string) error {
+				return db.SetCredentialFolderIcon(created.ID, imgID)
+			}, "credential folder", f.Name)
 		}
 	}
 

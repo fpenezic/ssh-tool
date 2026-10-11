@@ -432,6 +432,7 @@ export interface CredentialFolder {
   parent_id: string | null;
   name: string;
   sort_order: number;
+  icon_image_id: string | null;
   icon_name: string | null;
   icon_color: string | null;
   created_at: number;
@@ -818,6 +819,7 @@ export const api = {
   imagesSetFolder: (folderId: string, imageId: string) => G.ImagesSetFolder(folderId, imageId),
   imagesSetConnection: (connId: string, imageId: string) => G.ImagesSetConnection(connId, imageId),
   imagesSetCredential: (credId: string, imageId: string) => G.ImagesSetCredential(credId, imageId),
+  imagesSetCredentialFolder: (folderId: string, imageId: string) => G.ImagesSetCredentialFolder(folderId, imageId),
   iconSetFolderNamed: (folderId: string, name: string, color: string) => G.IconSetFolderNamed(folderId, name, color),
   iconSetConnectionNamed: (connId: string, name: string, color: string) => G.IconSetConnectionNamed(connId, name, color),
   iconSetCredentialNamed: (credId: string, name: string, color: string) => G.IconSetCredentialNamed(credId, name, color),
