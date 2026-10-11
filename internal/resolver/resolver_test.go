@@ -315,3 +315,18 @@ func TestEmptyAuthRefStopsInheritance(t *testing.T) {
 		t.Errorf("inherited auth ref = %v", rs.AuthRef)
 	}
 }
+
+// The one-time code source inherits on its own, independent of the auth
+// credential, and "" stops it.
+func TestOTPRefInheritedIndependently(t *testing.T) {
+	f := folder("f", nil, store.InheritableSettings{OTPRef: ptr("cred-bw")})
+	c := conn("c", ptr("f"), "h.example.com", store.InheritableSettings{AuthRef: ptr("cred-key")})
+	rs := ResolveWith(c, []store.Folder{f})
+	if rs.OTPRef == nil || *rs.OTPRef != "cred-bw" || rs.AuthRef == nil || *rs.AuthRef != "cred-key" {
+		t.Fatalf("otp=%v auth=%v", rs.OTPRef, rs.AuthRef)
+	}
+	c2 := conn("c2", ptr("f"), "h.example.com", store.InheritableSettings{OTPRef: ptr("")})
+	if rs := ResolveWith(c2, []store.Folder{f}); rs.OTPRef != nil {
+		t.Errorf("otp ref = %q, want nil", *rs.OTPRef)
+	}
+}

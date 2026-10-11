@@ -398,6 +398,7 @@ func dialChainFrom(
 		// Connection password and credential password as one method; no
 		// prompt on these non-interactive paths (see targetAuthMethods).
 		if isLastHop {
+			material = applyOTPRef(db, settings, material)
 			methods = targetAuthMethods(material, settings.PasswordOverride, false, h.Label, h.Hostname, int(h.Port), nil)
 		}
 		if h.Username == "" {

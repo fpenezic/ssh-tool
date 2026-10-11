@@ -47,9 +47,9 @@ type Connection struct {
 	// Ignored for SSH connections.
 	LocalShellDir *string             `json:"local_shell_dir,omitempty"`
 	Overrides     InheritableSettings `json:"overrides"`
-	Tags           []string            `json:"tags"`
-	Notes          string              `json:"notes"`
-	Favorite       bool                `json:"favorite"`
+	Tags          []string            `json:"tags"`
+	Notes         string              `json:"notes"`
+	Favorite      bool                `json:"favorite"`
 	// OpenHidden starts this connection's tab hidden - the session runs
 	// normally, it just stays out of the tab bar. For background helpers
 	// whose output nobody watches.
@@ -80,9 +80,14 @@ type Connection struct {
 // JumpHost uses the JumpHostOverride wrapper because there's a meaningful
 // "explicit no-jump" case that's distinct from "inherit".
 type InheritableSettings struct {
-	Username          *string           `json:"username,omitempty"`
-	Port              *uint16           `json:"port,omitempty"`
-	AuthRef           *string           `json:"auth_ref,omitempty"`
+	Username *string `json:"username,omitempty"`
+	Port     *uint16 `json:"port,omitempty"`
+	AuthRef  *string `json:"auth_ref,omitempty"`
+	// OTPRef names a Bitwarden / KeePass credential whose item TOTP answers
+	// the server's verification-code question, next to whatever AuthRef
+	// authenticates with (a key plus a code from the password manager).
+	// "" stops an inherited one.
+	OTPRef            *string           `json:"otp_ref,omitempty"`
 	JumpHost          *JumpHostOverride `json:"jump_host,omitempty"`
 	SSHOptions        map[string]string `json:"ssh_options,omitempty"`
 	EnvVars           map[string]string `json:"env_vars,omitempty"`
@@ -230,6 +235,7 @@ type ResolvedSettings struct {
 	Username          *string           `json:"username"`
 	Port              uint16            `json:"port"`
 	AuthRef           *string           `json:"auth_ref"`
+	OTPRef            *string           `json:"otp_ref"` // TOTP source credential, nil = none
 	JumpHost          *JumpHostSpec     `json:"jump_host"`
 	SSHOptions        map[string]string `json:"ssh_options"`
 	EnvVars           map[string]string `json:"env_vars"`
@@ -279,6 +285,9 @@ const (
 	// SSH auth - referenced by external integrations like the dynamic
 	// inventory providers.
 	CredAPIToken CredentialKind = "api_token"
+	// CredCertificate is a client TLS certificate + key (VPN client-cert
+	// auth), stored in the vault as a PEM bundle. Not SSH auth material.
+	CredCertificate CredentialKind = "certificate"
 )
 
 type StorageMode string

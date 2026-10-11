@@ -321,6 +321,9 @@ func settingsUsesCred(s *InheritableSettings, credID string) bool {
 	if s.AuthRef != nil && *s.AuthRef == credID {
 		return true
 	}
+	if s.OTPRef != nil && *s.OTPRef == credID {
+		return true
+	}
 	if s.JumpHost != nil && s.JumpHost.Kind == "chain" && s.JumpHost.Chain != nil {
 		if jumpUsesCred(s.JumpHost.Chain, credID) {
 			return true

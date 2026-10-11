@@ -92,6 +92,7 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		Username:          firstNonNil(over.Username, base.Username),
 		Port:              firstNonNilU16(over.Port, base.Port),
 		AuthRef:           firstNonNil(over.AuthRef, base.AuthRef),
+		OTPRef:            firstNonNil(over.OTPRef, base.OTPRef),
 		JumpHost:          firstNonNilJH(over.JumpHost, base.JumpHost),
 		ColorTag:          firstNonNil(over.ColorTag, base.ColorTag),
 		BroadcastGroupID:  firstNonNil(over.BroadcastGroupID, base.BroadcastGroupID),
@@ -185,8 +186,13 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 	if authRef != nil && *authRef == "" {
 		authRef = nil
 	}
+	otpRef := s.OTPRef
+	if otpRef != nil && *otpRef == "" {
+		otpRef = nil
+	}
 	return store.ResolvedSettings{
 		Hostname:                  hostname,
+		OTPRef:                    otpRef,
 		Username:                  s.Username,
 		Port:                      port,
 		AuthRef:                   authRef,

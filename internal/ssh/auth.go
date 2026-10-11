@@ -4,15 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
+	"regexp"
 	"slices"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 
 	"ssh-tool/internal/creds"
 	"ssh-tool/internal/store"
+	"ssh-tool/internal/totp"
 )
 
 // ErrVaultLocked is returned by ResolveAuth (via resolvePassword /
@@ -103,6 +107,10 @@ type AuthMaterial struct {
 	Password string
 	Signers  []ssh.Signer // public-key / cert auth
 	Agent    agent.ExtendedAgent
+	// TOTP is the one-time-code secret (otpauth URI or base32) of the
+	// external item the credential points at, "" when it has none. Used to
+	// answer a keyboard-interactive verification-code question.
+	TOTP string
 }
 
 // ToAuthMethods turns the resolved material into the slice of AuthMethods
@@ -185,11 +193,24 @@ func targetAuthMethods(m *AuthMaterial, override *string, interactive bool, labe
 	if m != nil {
 		stored = append(stored, m.Password)
 	}
+	fill := &kiAutofill{}
+	if len(stored) > 0 {
+		fill.password = stored[0]
+		if fill.password == "" && len(stored) > 1 {
+			fill.password = stored[1]
+		}
+	}
+	if m != nil {
+		fill.totp = m.TOTP
+	}
 	var ki ssh.AuthMethod
 	var prompt func() (string, error)
 	if interactive && InteractiveAuthHook != nil {
-		ki = interactiveKI(label, host, port, userFn)
+		ki = interactiveKI(label, host, port, userFn, fill)
 		prompt = interactivePasswordPrompt(label, host, port, userFn)
+	} else if fill.totp != "" {
+		// No one to ask, but a 2FA server can still be answered in full.
+		ki = interactiveKI(label, host, port, userFn, fill)
 	}
 	if passwordSequence(stored, nil) != nil { // any stored password
 		methods = append(methods, passwordSequence(stored, prompt))
@@ -224,12 +245,16 @@ func interactiveAuthMethods(label, host string, port int, userFn func() string) 
 		return nil
 	}
 	return []ssh.AuthMethod{
-		interactiveKI(label, host, port, userFn),
+		interactiveKI(label, host, port, userFn, nil),
 		ssh.PasswordCallback(interactivePasswordPrompt(label, host, port, userFn)),
 	}
 }
 
-func interactiveKI(label, host string, port int, userFn func() string) ssh.AuthMethod {
+// interactiveKI answers keyboard-interactive challenges: questions fill can
+// answer (stored password, verification code from the item's TOTP) are
+// answered without asking, the rest go to InteractiveAuthHook. With no hook,
+// a challenge fill cannot fully answer fails the method. fill may be nil.
+func interactiveKI(label, host string, port int, userFn func() string, fill *kiAutofill) ssh.AuthMethod {
 	if userFn == nil {
 		userFn = func() string { return "" }
 	}
@@ -239,16 +264,93 @@ func interactiveKI(label, host string, port int, userFn func() string) ssh.AuthM
 			// nil answer set acknowledges it without prompting the user.
 			return nil, nil
 		}
-		prompts := make([]InteractiveAuthPrompt, len(questions))
-		for i, q := range questions {
+		answers, missing := fill.answer(questions, echos)
+		if len(missing) == 0 {
+			return answers, nil
+		}
+		if InteractiveAuthHook == nil {
+			return nil, fmt.Errorf("server asked %q and nobody can answer", questions[missing[0]])
+		}
+		prompts := make([]InteractiveAuthPrompt, len(missing))
+		for j, i := range missing {
 			echo := false
 			if i < len(echos) {
 				echo = echos[i]
 			}
-			prompts[i] = InteractiveAuthPrompt{Echo: echo, Text: q}
+			prompts[j] = InteractiveAuthPrompt{Echo: echo, Text: questions[i]}
 		}
-		return InteractiveAuthHook(label, host, port, userFn(), name, instruction, prompts)
+		got, err := InteractiveAuthHook(label, host, port, userFn(), name, instruction, prompts)
+		if err != nil {
+			return nil, err
+		}
+		for j, i := range missing {
+			if j < len(got) {
+				answers[i] = got[j]
+			}
+		}
+		return answers, nil
 	})
+}
+
+// kiAutofill answers the keyboard-interactive questions the connection can
+// answer itself. Each kind is used once per connect: a code or password the
+// server rejected is not offered again (a retry loop could lock the account),
+// the next round goes to the user.
+type kiAutofill struct {
+	password string
+	totp     string
+	now      func() time.Time // nil = time.Now; tests pin it
+
+	pwUsed, totpUsed bool
+}
+
+var (
+	otpQuestionRe = regexp.MustCompile(`(?i)verification code|one[- ]?time|\botp\b|totp|authenticator|2fa|two[- ]factor|\bmfa\b`)
+	pwQuestionRe  = regexp.MustCompile(`(?i)password`)
+	pwChangeRe    = regexp.MustCompile(`(?i)\bnew\b|retype|again|confirm|current|old`)
+)
+
+// answer returns an answer slice the size of questions plus the indexes it
+// could not fill. Echoed questions (a username, a menu choice) are never
+// filled.
+func (f *kiAutofill) answer(questions []string, echos []bool) ([]string, []int) {
+	answers := make([]string, len(questions))
+	var missing []int
+	if f == nil {
+		for i := range questions {
+			missing = append(missing, i)
+		}
+		return answers, missing
+	}
+	usedPw, usedTotp := false, false
+	for i, q := range questions {
+		echo := i < len(echos) && echos[i]
+		switch {
+		case echo:
+		case f.totp != "" && !f.totpUsed && otpQuestionRe.MatchString(q):
+			sp, err := totp.Parse(f.totp)
+			if err != nil {
+				log.Printf("ssh: stored TOTP unusable: %v", err)
+				break
+			}
+			now := time.Now
+			if f.now != nil {
+				now = f.now
+			}
+			answers[i] = sp.Code(now())
+			usedTotp = true
+			continue
+		case f.password != "" && !f.pwUsed && pwQuestionRe.MatchString(q) &&
+			!pwChangeRe.MatchString(q) && !otpQuestionRe.MatchString(q):
+			answers[i] = f.password
+			usedPw = true
+			continue
+		}
+		missing = append(missing, i)
+	}
+	f.pwUsed = f.pwUsed || usedPw
+	f.totpUsed = f.totpUsed || usedTotp
+	return answers, missing
 }
 
 func interactivePasswordPrompt(label, host string, port int, userFn func() string) func() (string, error) {
@@ -318,6 +420,12 @@ var BitwardenResolveHook func(cred *store.CredentialRef) (secret string, handled
 // fall through).
 var InfisicalResolveHook func(cred *store.CredentialRef) (secret string, handled bool, err error)
 
+// TOTPSecretHook, when set by the host, returns the TOTP secret of the
+// external item (Bitwarden / KeePass) a credential points at, or "" when it
+// has none. Errors are swallowed by the host: a missing code only means the
+// user is asked for it.
+var TOTPSecretHook func(cred *store.CredentialRef) string
+
 // ResolveAuth turns a credential reference into AuthMaterial. Side-effecting
 // for `opkssh` (may run the OIDC login) and `agent` (opens UDS connection).
 // ctx cancels an in-flight opkssh OIDC login; the other kinds ignore it.
@@ -332,7 +440,7 @@ func ResolveAuth(ctx context.Context, cred *store.CredentialRef, vault *creds.Va
 			return nil, err
 		}
 		if handled {
-			return externalAuthMaterial(cred, secret)
+			return withTOTP(externalAuthMaterial(cred, secret))(cred)
 		}
 	}
 	// A credential carrying a Bitwarden reference resolves the same way, from the
@@ -343,7 +451,7 @@ func ResolveAuth(ctx context.Context, cred *store.CredentialRef, vault *creds.Va
 			return nil, err
 		}
 		if handled {
-			return externalAuthMaterial(cred, secret)
+			return withTOTP(externalAuthMaterial(cred, secret))(cred)
 		}
 	}
 	// A credential carrying an Infisical reference resolves the same way, from a
@@ -354,7 +462,7 @@ func ResolveAuth(ctx context.Context, cred *store.CredentialRef, vault *creds.Va
 			return nil, err
 		}
 		if handled {
-			return externalAuthMaterial(cred, secret)
+			return withTOTP(externalAuthMaterial(cred, secret))(cred)
 		}
 	}
 	switch cred.Kind {
@@ -370,6 +478,40 @@ func ResolveAuth(ctx context.Context, cred *store.CredentialRef, vault *creds.Va
 		return nil, fmt.Errorf("vault credential type not yet supported")
 	default:
 		return nil, fmt.Errorf("unknown credential kind: %s", cred.Kind)
+	}
+}
+
+// applyOTPRef points the target hop's TOTP at the settings' otp_ref
+// credential, which wins over the auth credential's own item. A missing or
+// unreadable source leaves the code to the user.
+func applyOTPRef(db *store.DB, settings *store.ResolvedSettings, m *AuthMaterial) *AuthMaterial {
+	if settings == nil || settings.OTPRef == nil || TOTPSecretHook == nil || db == nil {
+		return m
+	}
+	cred, err := db.GetCredential(*settings.OTPRef)
+	if err != nil {
+		log.Printf("ssh: one-time code credential %s: %v", *settings.OTPRef, err)
+		return m
+	}
+	secret := TOTPSecretHook(cred)
+	if secret == "" {
+		log.Printf("ssh: one-time code credential %s has no TOTP", cred.Name)
+		return m
+	}
+	if m == nil {
+		m = &AuthMaterial{}
+	}
+	m.TOTP = secret
+	return m
+}
+
+// withTOTP attaches the external item's TOTP secret to resolved material.
+func withTOTP(m *AuthMaterial, err error) func(*store.CredentialRef) (*AuthMaterial, error) {
+	return func(cred *store.CredentialRef) (*AuthMaterial, error) {
+		if err == nil && m != nil && TOTPSecretHook != nil {
+			m.TOTP = TOTPSecretHook(cred)
+		}
+		return m, err
 	}
 }
 

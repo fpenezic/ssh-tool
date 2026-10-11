@@ -368,6 +368,11 @@ func applyBatchPatch(ov *InheritableSettings, patch InheritableSettings, clear m
 	} else if patch.AuthRef != nil {
 		ov.AuthRef = patch.AuthRef
 	}
+	if clear["otp_ref"] {
+		ov.OTPRef = nil
+	} else if patch.OTPRef != nil {
+		ov.OTPRef = patch.OTPRef
+	}
 	if clear["jump_host"] {
 		ov.JumpHost = nil
 	} else if patch.JumpHost != nil {

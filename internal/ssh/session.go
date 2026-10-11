@@ -625,6 +625,7 @@ func Connect(
 			// The username closure, not h.Username: a hop with no configured
 			// user gets one prompted for below, after this line runs but
 			// before the server issues its first challenge.
+			material = applyOTPRef(db, settings, material)
 			methods = targetAuthMethods(material, settings.PasswordOverride, true,
 				h.Label, h.Hostname, int(h.Port), func() string { return h.Username })
 		}

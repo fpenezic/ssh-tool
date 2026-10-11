@@ -60,6 +60,7 @@ type AuthPromptEvent struct {
 func (a *App) initAuthPrompts() {
 	sshlayer.UsernamePromptHook = a.promptUsername
 	sshlayer.InteractiveAuthHook = a.promptInteractiveAuth
+	sshlayer.TOTPSecretHook = a.externalTOTPSecret
 }
 
 // registerPrompt allocates a pending-prompt channel and returns its id.
