@@ -1258,11 +1258,13 @@ func (a *App) scheduleIdleStopLocked(pid string) {
 			return // reacquired while lingering
 		}
 		a.wgSessMu.Unlock()
-		name := pid
-		if t := a.wgman.Get(pid); t != nil {
-			name = t.Name
+		// Named from the profile row, not the WireGuard manager: the idle
+		// stop covers every kind, and only WG tunnels live in wgman.
+		name, kind := pid, kindWireguard
+		if row, err := a.db.GetNetworkProfile(pid); err == nil {
+			name, kind = row.Name, parsePolicy(row.ConfigJSON).Kind
 		}
-		log.Printf("wg: tunnel %s idle for %s, stopping", name, linger)
+		log.Printf("network: %s tunnel %q idle for %s, stopping", kind, name, linger)
 		a.tunnelStop(pid)
 		EventsEmit("network_tunnel_changed", pid)
 	})
