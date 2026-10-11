@@ -29,6 +29,8 @@ type Spec struct {
 }
 
 // ErrUnsupported marks a secret form this package cannot turn into codes.
+// Parse errors are constant text built on ErrUnsupported: they never quote
+// the input, which carries the secret, because callers log them.
 var ErrUnsupported = errors.New("totp: unsupported secret")
 
 // Parse accepts an otpauth://totp/ URI or a bare base32 secret (spaces,
@@ -54,10 +56,12 @@ func Parse(s string) (Spec, error) {
 func parseURI(s string) (Spec, error) {
 	u, err := url.Parse(s)
 	if err != nil {
-		return Spec{}, fmt.Errorf("%w: %v", ErrUnsupported, err)
+		// Not the url error: it quotes the whole URI, secret included,
+		// and callers log Parse errors.
+		return Spec{}, fmt.Errorf("%w: malformed otpauth URI", ErrUnsupported)
 	}
 	if !strings.EqualFold(u.Host, "totp") {
-		return Spec{}, fmt.Errorf("%w: otpauth type %q (only totp)", ErrUnsupported, u.Host)
+		return Spec{}, fmt.Errorf("%w: otpauth type is not totp", ErrUnsupported)
 	}
 	q := u.Query()
 	key, err := decodeBase32(q.Get("secret"))
@@ -68,21 +72,21 @@ func parseURI(s string) (Spec, error) {
 	if d := q.Get("digits"); d != "" {
 		n, err := strconv.Atoi(d)
 		if err != nil || n < 6 || n > 10 {
-			return Spec{}, fmt.Errorf("%w: digits %q", ErrUnsupported, d)
+			return Spec{}, fmt.Errorf("%w: digits out of range", ErrUnsupported)
 		}
 		sp.Digits = n
 	}
 	if p := q.Get("period"); p != "" {
 		n, err := strconv.Atoi(p)
 		if err != nil || n < 1 || n > 3600 {
-			return Spec{}, fmt.Errorf("%w: period %q", ErrUnsupported, p)
+			return Spec{}, fmt.Errorf("%w: period out of range", ErrUnsupported)
 		}
 		sp.Period = n
 	}
 	if a := q.Get("algorithm"); a != "" {
 		a = strings.ToUpper(a)
 		if a != "SHA1" && a != "SHA256" && a != "SHA512" {
-			return Spec{}, fmt.Errorf("%w: algorithm %q", ErrUnsupported, a)
+			return Spec{}, fmt.Errorf("%w: unknown algorithm", ErrUnsupported)
 		}
 		sp.Algorithm = a
 	}

@@ -3,6 +3,7 @@ package totp
 import (
 	"encoding/base32"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -90,5 +91,25 @@ func TestFromKeePassFields(t *testing.T) {
 	}
 	if FromKeePassFields(func(string) string { return "" }) != "" {
 		t.Fatal("no secret should give no URI")
+	}
+}
+
+// Parse errors end up in the app log, so none may carry the secret.
+func TestParseErrorsDoNotQuoteTheSecret(t *testing.T) {
+	const secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+	for _, in := range []string{
+		"otpauth://totp/x?secret=" + secret + "&digits=12",
+		"otpauth://totp/x?secret=" + secret + "&period=-5",
+		"otpauth://totp/x?secret=" + secret + "&algorithm=MD5",
+		"otpauth://hotp/" + secret + "?secret=" + secret,
+		"otpauth://totp/%zz?secret=" + secret,
+	} {
+		_, err := Parse(in)
+		if err == nil {
+			t.Fatalf("%q parsed", in)
+		}
+		if strings.Contains(err.Error(), secret) {
+			t.Fatalf("error leaks the secret: %v", err)
+		}
 	}
 }
