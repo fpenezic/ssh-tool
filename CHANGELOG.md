@@ -25,6 +25,7 @@ Corporate VPNs without the vendor client: Cisco AnyConnect, Fortinet, F5, Global
 - **Stop an idle tunnel**: how long a tunnel stays up after its last SSH session closes is now a setting (right away, minutes, hours or never; default 2 minutes), with a per-profile override on each card.
 - Connection and folder pickers name the real profile type (AnyConnect, NetBird, Tailscale, WireGuard); everything that was not NetBird used to say WireGuard.
 - Profile cards fit on one row; the profile form is two columns.
+- Drop-down lists across the app match the text fields of the current theme instead of the plain system control.
 - A disabled *Add profile* button looks disabled and says what is missing, instead of doing nothing on click.
 
 ### Credentials
