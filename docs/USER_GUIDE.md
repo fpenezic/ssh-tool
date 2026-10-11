@@ -23,7 +23,7 @@ implemented.
 6. [SFTP file browser](#sftp-file-browser)
 6b. [VNC console](#vnc-console)
 7. [Port forwards](#port-forwards)
-7b. [Network profiles (WireGuard / NetBird / Tailscale)](#network-profiles)
+7b. [Network profiles (WireGuard / NetBird / Tailscale / OpenConnect)](#network-profiles)
 8. [Broadcast input (multi-session)](#broadcast-input)
 9. [Multi-window: detach + redock](#multi-window)
 10. [Workspaces](#workspaces)
@@ -654,6 +654,11 @@ Each credential has a **kind** that determines auth behaviour:
   (organizations and collections included); nothing is copied into
   ssh-tool's own store. Picked as "From Bitwarden server" in the
   credential editor. See the Bitwarden section below.
+- **client certificate** - a TLS client certificate and its private
+  key, for VPN gateways that log in with a certificate (OpenConnect
+  profiles). Imported from a `.pfx` / `.p12`, a PEM with certificate and
+  key, or a certificate + key pair; stored in the vault, so it syncs and
+  backs up with everything else. Not offered as SSH auth.
 
 ### Storage modes
 
@@ -751,6 +756,47 @@ header). Modal walks through:
 - **Agent** - optional socket path + fingerprint hint.
 - **opkssh** - provider config YAML + max cert age / refresh
   threshold parameters.
+- **Client certificate (VPN)** - pick the certificate file (`.pfx`,
+  `.p12`, `.pem`, `.crt`), a separate key file if the key is not inside
+  it, and the file's password if it has one. Both AES-encrypted `.pfx`
+  files (current OpenSSL and Windows exports) and older ones import.
+  The password only opens the file and is not kept; the vault holds the
+  certificate chain and the key. The certificate's own expiry date
+  becomes the credential's expiry, so the list badge and the status bar
+  warn before it lapses. The detail panel shows subject, issuer,
+  SHA-256 fingerprint and chain, and **Replace certificate** imports a
+  renewed one - every profile using the credential picks it up.
+
+### One-time codes (TOTP)
+
+A Bitwarden / Vaultwarden item or a KeePass entry that carries a TOTP
+(an `otpauth://` URI, a bare base32 secret, KeePassXC's `otp` field or
+KeePass 2's TimeOtp fields) can answer verification-code questions:
+
+- **Copy code** - the credential detail panel of such an item shows the
+  current code and the seconds left.
+- **SSH** - set **One-time code from** on a folder or connection (it
+  inherits like the credential, and has its own **From Bitwarden** /
+  **From KeePass** pickers). When the server asks for a password and a
+  verification code (keyboard-interactive), the stored password answers
+  the password question and the item's TOTP answers the code question;
+  only what is left is asked. The credential and the code can come from
+  different places - a key from the vault plus a code from Vaultwarden
+  is one connection. Each answer is sent once per connect: if the server
+  rejects it, you are asked next time instead of the app retrying into
+  a lockout.
+- **VPN** - an OpenConnect profile's second password can be the TOTP of
+  an item (see Network profiles).
+
+Picking an item for the code always uses its TOTP, whichever field you
+click in the picker; an item with a password and a TOTP can be both the
+credential and the code source. If the item has no TOTP or the server
+cannot be reached, you are simply asked for the code.
+
+Keeping the password and the TOTP in the same item puts both factors in
+one place - convenient, but a leak of that vault gives both. ssh-tool
+itself does not store TOTP secrets for that reason; hardware and app
+tokens (MobilePASS and the like) are answered in the login prompt.
 
 ### Icon
 
@@ -1733,7 +1779,7 @@ SSH session and starts the tunnel if needed.
 ---
 
 <a id="network-profiles"></a>
-## 7b. Network profiles (WireGuard / NetBird / Tailscale)
+## 7b. Network profiles (WireGuard / NetBird / Tailscale / OpenConnect)
 
 A network profile routes a connection's **first SSH hop** through an
 overlay VPN, so you can reach hosts that only live on a private
@@ -1750,7 +1796,11 @@ went through a tunnel shows a small VPN badge with the profile name,
 and the status bar shows which tunnels are up.
 
 Tunnels start on demand (first connection through them) and stop on
-their own about two minutes after the last session using them closes.
+their own after the last session using them closes. **Stop an idle
+tunnel** (at the top of the page) sets how long they linger: right away,
+1 minute to 4 hours, or never (default 2 minutes). Each profile card has
+**Stop when idle** to override it for that profile; **Global** follows
+the page setting. A change applies to idle tunnels at once.
 Dynamic-inventory folders can fetch their provider API through a
 profile too (for a Proxmox reachable only over the VPN); a background
 refresh never starts a tunnel by itself.
@@ -1769,6 +1819,19 @@ Each profile has a mode and a pause switch:
 - **Pause** - a per-profile kill switch: every connection using it
   dials direct and the tunnel is stopped immediately. For "I'm on the
   network, leave the VPN alone."
+
+### Plugins
+
+NetBird, Tailscale and OpenConnect run as optional **plugins**: small
+helper programs, one per profile, kept out of the app to keep it small
+(and, for OpenConnect, because its engine is GPL-licensed). Install them
+from the **Plugins** cards on this page: each is downloaded from the
+[ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins)
+releases and checked against its sha256 digest before install. The card
+shows the plugin release and the engine version inside it, and an
+update is offered there (and as a status bar pill) when a newer plugin
+release is out. Plugins are desktop only; Android cannot start helper
+processes.
 
 ### WireGuard profiles
 
@@ -1875,6 +1938,59 @@ the target, the node is almost certainly not permitted by the ACL.
 Each machine keeps its Tailscale node state locally (under the data
 dir), not synced. Deleting the profile removes that state and the node
 stops checking in.
+
+### OpenConnect profiles (AnyConnect, Fortinet, F5, GlobalProtect, Pulse)
+
+SSL VPN gateways through the optional **OpenConnect plugin**: Cisco
+AnyConnect and ocserv, Fortinet SSL VPN, F5 BIG-IP, Palo Alto
+GlobalProtect, Pulse / Ivanti and Juniper Network Connect. Like the
+others it runs in userspace, so two gateways can be up at the same time,
+even with overlapping address ranges. Desktop only.
+
+A profile needs:
+
+- **VPN type** and **Gateway** - the address or URL, with the group path
+  if the gateway uses one (`vpn.example.com/staff`). **Group** picks a
+  login group when the gateway offers several.
+- **Username** and **Password** - type the password on the form (it is
+  saved in the vault as a credential named after the profile), pick a
+  stored password (vault, Bitwarden or KeePass), or leave it blank to be
+  asked at login. A blank username falls back to the password
+  credential's username, else it is asked.
+- **Second password** - for gateways with a second login or a one-time
+  code: **Ask at login** (hardware or app tokens such as MobilePASS),
+  **One-time code from** a Bitwarden / KeePass item's TOTP, or a
+  **Stored password**. **Second username** is asked when blank.
+- **Client certificate** (optional) - a stored certificate credential,
+  or import one right here from a file or pasted PEM.
+- **MTU** (optional, caps the tunnel MTU) and **TLS only** (no DTLS /
+  UDP, for networks that block it).
+
+**Login prompts** show the gateway's message and banner and name each
+field: `[1st login - password]`, `[2nd login - password / one-time
+code]`. What the profile can answer is filled in, the rest is asked.
+If the gateway rejects a login, the next form is asked in full rather
+than resending stored answers, so a wrong value cannot lock the account
+through retries. The app log records each login round (field names and
+where each answer came from, never the values) for troubleshooting.
+
+**Gateway certificate.** A certificate the system trusts is accepted.
+Otherwise (self-signed, private CA) the first connect shows **Untrusted
+VPN gateway certificate** with its subject and fingerprint; **Trust &
+remember** pins it on the profile. A changed certificate asks again.
+Changing the gateway address forgets the pin.
+
+**Details.** A running profile has a **Details** button: tunnel address,
+gateway, transport (DTLS or TLS), MTU, routes, DNS servers and search
+domains and the gateway banner, with **Copy** for a support ticket.
+
+**One login per user.** Most gateways allow one session per user and
+drop the older one. A synced OpenConnect profile that is up on another
+machine therefore gets the same take-over prompt as WireGuard: take it
+over, connect anyway, or cancel.
+
+SAML / browser (single sign-on) login is not supported yet; such a
+gateway reports it clearly.
 
 ---
 

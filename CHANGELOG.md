@@ -9,6 +9,65 @@ a prerelease upstream.
 
 ## [Unreleased]
 
+Corporate SSL VPNs - Cisco AnyConnect, Fortinet, F5, GlobalProtect,
+Pulse - as network profiles, with client certificates kept in the vault,
+and one-time codes from Bitwarden or KeePass answering SSH and VPN
+logins. The VPN plugins move to their own repository.
+
+### VPN profiles
+
+- New **OpenConnect** network profiles for SSL VPN gateways: Cisco
+  AnyConnect and ocserv, Fortinet, F5 BIG-IP, Palo Alto GlobalProtect,
+  Pulse / Ivanti and Juniper Network Connect, through the optional
+  OpenConnect plugin. Userspace like the others - no adapter, no admin
+  rights - so two gateways can be up at once, even with overlapping
+  address ranges.
+- Logins with a username, a password (typed on the profile, stored, from
+  Bitwarden / KeePass, or asked) and a second password for gateways with
+  a second login or a one-time code: asked (MobilePASS and other
+  tokens), a stored password, or an item's TOTP. Prompts say which login
+  each field belongs to (`[1st login - password]`); a rejected login is
+  asked again in full instead of resending stored answers into a
+  lockout. Each login round is logged without its values.
+- Client certificate login, from a certificate credential or imported
+  on the profile form from a file or pasted PEM.
+- Self-signed or private-CA gateway certificates: the first connect
+  asks once and **Trust & remember** pins it on the profile.
+- **Details** on a running profile: address, gateway, transport, MTU,
+  routes, DNS and banner, with Copy. MTU override and TLS-only option.
+- A synced OpenConnect profile already up on another machine gets the
+  take-over prompt WireGuard has: most gateways allow one session per
+  user.
+
+### Network profiles
+
+- **Stop an idle tunnel**: how long a tunnel stays up after its last
+  SSH session closes is now a setting (right away, minutes, hours or
+  never; default 2 minutes), with a per-profile override on each card.
+- Connection and folder pickers name the real profile type (AnyConnect,
+  NetBird, Tailscale, WireGuard); everything that was not NetBird used
+  to say WireGuard.
+- Profile cards fit on one row; the profile form is two columns.
+- A disabled *Add profile* button looks disabled and says what is
+  missing, instead of doing nothing on click.
+
+### Credentials
+
+- New **client certificate** credential: import a `.pfx` / `.p12`
+  (including the AES-encrypted ones current OpenSSL and Windows export),
+  a PEM with certificate and key, or a certificate + key pair. Kept in
+  the vault, so it syncs and backs up; the file password is only used to
+  open it. The certificate's expiry drives the usual expiry warning, and
+  *Replace certificate* takes a renewed one.
+- **One-time codes**: a Bitwarden / Vaultwarden item or KeePass entry
+  with a TOTP shows the current code with *Copy code*, and **One-time
+  code from** on a folder or connection answers an SSH server's
+  verification-code question from it, next to the stored password or
+  key - for example a key from the vault plus a code from Vaultwarden.
+  Each answer is sent once per connect, and only what is left is asked.
+  *One-time code from* has its own From Bitwarden / From KeePass
+  pickers.
+
 ### Updates
 
 - Settings -> Updates has a *Channel*: *Release candidates* is an opt-in
@@ -21,6 +80,13 @@ a prerelease upstream.
 
 ### Plugins
 
+- The VPN plugins (NetBird, Tailscale and the new OpenConnect) now live
+  in their own repository,
+  [ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins), each
+  released on its own (`netbird-v1.2`, `tailscale-v1.2`,
+  `openconnect-v1`). Installed NetBird / Tailscale helpers are offered
+  the update once; older app versions keep downloading from the
+  previous releases.
 - The NetBird and Tailscale helpers are rebuilt on current dependencies
   (NetBird 0.80, golang.org/x/crypto, x/net, gRPC, quic-go and others),
   closing the advisories reported against the old ones. They ship as

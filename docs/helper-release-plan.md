@@ -6,7 +6,12 @@ release cadence, decoupled from the app version, with an explicit
 protocol handshake so an app + helper mismatch fails clearly instead of
 mysteriously.
 
-Decision (author): SAME repo, SEPARATE release tag. Helpers live in
+> **Superseded in v0.111.0:** the helpers moved to their own repository,
+> [ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins), one
+> tag namespace per plugin. See "Move to ssh-tool-plugins" at the end;
+> the sections before it are the history of how the split started.
+
+Decision (author, v0.50.0): SAME repo, SEPARATE release tag. Helpers live in
 `ssh-tool` (`netbird-helper/`, later `tailscale-helper/`) but ship under
 a `helper-vN` tag on their own GitHub release. The app fetches from the
 newest `helper-*` release, not from its own app release.
@@ -117,3 +122,34 @@ Built on the split + protocol v1 base, released together as helper-v1:
   (each machine its own node - no single-owner conflict).
 - Needs a Tailscale account/tailnet to test - author will set up a test
   tenant when we get there.
+
+## Move to ssh-tool-plugins (v0.111.0)
+
+The OpenConnect plugin brought a GPL-3.0 engine (sing-openconnect). It
+cannot share a module tree with the Apache-2.0 app, and a third plugin
+on one shared `helper-vN` tag made every plugin release rebuild the
+others. So all plugins moved out:
+
+- Repository `fpenezic/ssh-tool-plugins`: `netbird/`, `tailscale/`,
+  `openconnect/`, each its own Go module and `LICENSE` (Apache-2.0,
+  Apache-2.0, GPL-3.0-or-later). The protocol is documented there in
+  `PROTOCOL.md`; the app talks to a plugin only over that process
+  boundary.
+- Tags per plugin: `netbird-vN[.P]`, `tailscale-vN[.P]`,
+  `openconnect-vN[.P]`, N = protocol major as before. Each tag builds
+  and publishes only that plugin (linux amd64 / arm64, windows amd64),
+  never marked Latest, with a SHA256SUMS file next to the assets.
+- App: `sourceOf(name)` = plugins repo + `<name>-v`;
+  `FetchGitHubPluginRelease(repo, prefix, maxMajor)` picks the release.
+  The asset names did not change.
+- The first plugins-repo releases continue the patch numbering
+  (`netbird-v1.2`, `tailscale-v1.2`) so nobody reads them as older than
+  `helper-v1.1`. An installed helper still stamped `helper-v1.1` differs
+  from the new tag and is offered the update once.
+- The app repository keeps its `helper-v1` / `helper-v1.1` releases for
+  app versions from before the move; nothing new is published there.
+
+Protocol 1 grew additively for OpenConnect (still 1): `auth` events and
+`auth` / `cancel` commands for interactive login, `info` events with the
+tunnel details, and `cert_pin` / `cert_subject` / `cert_changed` on an
+`error` for trust-on-first-use of the gateway certificate.

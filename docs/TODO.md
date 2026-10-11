@@ -187,14 +187,38 @@ Mediums + selected Lows tracked here.
   key only) and sidecar-SOCKS routing for Netbird / Tailscale; neither
   accepts a self-signed server certificate; KeePass lacks per-entry
   auto-type / URL matching.
-- **TOTP auto-fill from a credential backend** - both backends already
-  read the TOTP field (`internal/bitwarden` exposes `FieldTotp` /
-  `HasTotp`, KeePass entries carry one) but nothing generates a code.
-  Pairs with the interactive MFA prompt that already exists: when a host
-  asks for a verification code and the credential holds a TOTP secret,
-  offer the current code instead of making the user reach for their
-  phone. RFC 6238 over the sealed secret is a few lines; the work is the
-  prompt plumbing, and never logging or caching the generated code.
+- **TOTP auto-fill** - done in v0.111.0 (SSH keyboard-interactive and
+  the OpenConnect second password, from Bitwarden / KeePass items).
+  ssh-tool deliberately does not store TOTP secrets itself: both factors
+  in one vault is a single factor.
+- **"Used by" for network profiles** - credential usage and the delete
+  confirm list connections and folders only. A credential referenced by
+  a network profile (NetBird / Tailscale key, OpenConnect password,
+  second password or client certificate) is not listed, and deleting it
+  breaks the profile at its next connect (with a clear error).
+
+## VPN plugins
+
+Repository: ssh-tool-plugins (one module, licence and tag namespace per
+plugin).
+
+- **OpenVPN** - candidate engine: a pure-Go client (minivpn) into the
+  same netstack + SOCKS shape. Needs a look at cipher / TLS-auth coverage
+  against real configs before committing.
+- **Check Point** - candidate: snx-rs (Rust); evaluate whether it can
+  run without a TUN device, else it does not fit the userspace model.
+- **OpenConnect SAML / browser login** - the helper reports such a
+  gateway as unsupported today. Needs a webview or system-browser flow
+  that hands the cookie back to the helper.
+- **OpenConnect session cookie reuse** - reconnect without a new login
+  while the gateway's session is valid (fewer MFA prompts).
+- **Login lockout guard** - stop a profile's connect after two rejected
+  logins in a row instead of showing the form again.
+- **Details view for WireGuard / NetBird / Tailscale** - the OpenConnect
+  Details panel (addresses, routes, DNS, MTU) for the other kinds.
+- **Fortinet, F5, GlobalProtect, Pulse** - supported by the engine and
+  selectable, but only AnyConnect / ocserv has been tested against real
+  gateways.
 
 ---
 
@@ -373,8 +397,8 @@ Mediums + selected Lows tracked here.
   cert acquisition + EV process is the open question.
 - **macOS universal** - Taskfile + Info.plist exist; needs Apple
   Developer ID + notarisation.
-- **macOS NetBird helper.** The `build-helpers` CI job builds the
-  NetBird sidecar for Linux (amd64/arm64) and Windows (amd64) only.
+- **macOS plugins.** The ssh-tool-plugins release workflow builds the
+  plugins for Linux (amd64/arm64) and Windows (amd64) only.
   A macOS helper needs a signed + notarised binary or Gatekeeper
   blocks the spawn - same signing story as the app. Add `darwin-amd64`
   / `darwin-arm64` legs once macOS signing exists; `PluginsStatus`

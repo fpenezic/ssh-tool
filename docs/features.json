@@ -63,9 +63,10 @@
     },
     {
       "title": "Overlay-network profiles",
-      "body": "Reach hosts on a private network - a client's WireGuard, a Hetzner internal net, a NetBird or Tailscale overlay - by routing the SSH hop through a userspace tunnel. No system VPN, several up at once. WireGuard is built in; NetBird and Tailscale are one-click plugins. A folder-level Network setting sends every host under it through the same tunnel.",
+      "body": "Reach hosts on a private network - a client's WireGuard or AnyConnect, a Hetzner internal net, a NetBird or Tailscale overlay - by routing the SSH hop through a userspace tunnel. No system VPN, several up at once. WireGuard is built in; NetBird, Tailscale and OpenConnect are one-click plugins. A folder-level Network setting sends every host under it through the same tunnel.",
       "keys": [
         "WireGuard",
+        "AnyConnect",
         "NetBird",
         "Tailscale",
         "auto"
@@ -169,7 +170,7 @@
     {
       "icon": "lock",
       "title": "Interactive username and 2FA prompts",
-      "body": "Leave a connection without a username and pick it at connect time - handy when one key logs into several accounts. When the server asks for a typed password or a verification code (keyboard-interactive / PAM 2FA), or a stored key is rejected, ssh-tool prompts and passes your answer through instead of failing. Configured auth is tried first; jump hosts keep their fixed credentials."
+      "body": "Leave a connection without a username and pick it at connect time - handy when one key logs into several accounts. When the server asks for a typed password or a verification code (keyboard-interactive / PAM 2FA), the stored password answers and a TOTP from a Bitwarden or KeePass item fills the code - a key from the vault plus a code from Vaultwarden is one connection. Whatever is left is prompted instead of failing; each answer is sent once, so retries cannot lock an account."
     },
     {
       "icon": "split",
@@ -199,7 +200,12 @@
     {
       "icon": "shield",
       "title": "Userspace VPN profiles",
-      "body": "Route a connection's first SSH hop through WireGuard, NetBird or Tailscale without a TUN adapter, admin rights, or system routes. Assign a profile to a folder and the whole tree rides the tunnel. Auto-mode dials direct when you're on-site, tunnel when remote. NetBird and Tailscale ship as optional plugins."
+      "body": "Route a connection's first SSH hop through WireGuard, NetBird, Tailscale or a corporate SSL VPN without a TUN adapter, admin rights, or system routes. Assign a profile to a folder and the whole tree rides the tunnel. Auto-mode dials direct when you're on-site, tunnel when remote; an idle tunnel stops after a delay you choose. NetBird, Tailscale and OpenConnect ship as optional plugins."
+    },
+    {
+      "icon": "shield",
+      "title": "AnyConnect, Fortinet, F5 - in userspace",
+      "body": "Connect to Cisco AnyConnect / ocserv, Fortinet, F5 BIG-IP, GlobalProtect and Pulse gateways without the vendor client: two gateways at once, even with overlapping subnets. Password, second login or one-time code (asked, stored, or a TOTP from Bitwarden / KeePass), and client certificates imported from .pfx or PEM into the vault - expiry tracked, renewals one click. Self-signed gateways are pinned on first use; a Details view shows routes, DNS and MTU."
     },
     {
       "icon": "clock",

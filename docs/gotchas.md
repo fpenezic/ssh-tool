@@ -563,7 +563,8 @@ everything mobile is behind a build tag or an `isMobile` check.
     build-stamp logic, update ALL of `build/{linux,windows,darwin,android,
     ios}/Taskfile.yml`, not just the desktop ones.
 
-37. **NetBird lives in a SEPARATE module (`netbird-helper/`), built as a
+37. **NetBird lives in a SEPARATE module (`netbird/` in the
+    ssh-tool-plugins repository since v0.111.0), built as a
     sidecar plugin - never import it into the main module.** netbirdio/
     netbird needs 8 go.mod `replace` directives (its own wireguard-go fork
     among them), which would silently swap the upstream `wireguard-go`
@@ -594,11 +595,15 @@ everything mobile is behind a build tag or an `isMobile` check.
     UI hides / disables the NetBird path there. Tailscale (gotcha 40) is
     the same: desktop-only sidecar.
 
-40. **Helpers ship on their OWN `helper-vN` release, decoupled from the
-    app version - and speak a versioned protocol.** Two sidecar kinds now:
-    `netbird-helper/` (CGO, wireguard-go fork, needs Zig for the Windows
-    cross-build) and `tailscale-helper/` (tsnet, pure Go, CGO-free).
-    Both are separate go modules - never import either into the main app.
+40. **Plugins ship on their OWN releases, decoupled from the app version -
+    and speak a versioned protocol.** Since v0.111.0 they live in the
+    ssh-tool-plugins repository, one tag namespace per plugin
+    (`netbird-vN[.P]`, `tailscale-vN[.P]`, `openconnect-vN[.P]`); the
+    `helper-vN` text below is the pre-move layout, kept in the app repo's
+    releases for older app versions. `netbird/` (CGO, wireguard-go fork,
+    needs Zig for the Windows cross-build), `tailscale/` (tsnet, pure Go)
+    and `openconnect/` (GPL engine, pure Go) are separate go modules -
+    never import any into the main app.
     Key points:
     - The helper `ready` event carries `"protocol":N`. The app declares a
       supported range in `internal/tunnelhelper` (minProtocol/maxProtocol,
@@ -609,7 +614,7 @@ everything mobile is behind a build tag or an `isMobile` check.
       on a `helper-v<N>` tag (major == protocol major), NOT by the app
       release. `release.yml` no longer builds helpers. The app downloads
       the newest `helper-v<=maxProtocol>` release at runtime
-      (`updater.FetchGitHubHelperRelease`, `PluginDownload`), and
+      (`updater.FetchGitHubPluginRelease`, `PluginDownload`), and
       "update available" compares the installed helper against that
       release, not the app version.
     - One `tunnelhelper.Manager` (`app.nbman`) drives BOTH kinds - it's
@@ -1483,6 +1488,43 @@ everything mobile is behind a build tag or an `isMobile` check.
     conversion ignores tags). Before tagging, compile the main package
     for android, not just `./internal/ssh/`:
     `CC=$ANDROID_HOME/ndk/<ver>/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang CGO_ENABLED=1 GOOS=android GOARCH=arm64 go build -tags android -buildmode=c-shared -o /tmp/x.so .`
+101. **OpenConnect login forms: field names do not say which login they
+    are.** ocserv asks the one-time code in a LATER round under the same
+    field name `password` as the first password - only the round's
+    message ("Please enter your OTP password.") tells them apart
+    (`ocOTPRe`). A Cisco ASA double-auth form shows `username`,
+    `password`, `secondary_username`, `secondary_password` in ONE round
+    with identical labels ("Username:", "Password:"). Rules in
+    `ocAuthFiller.fill`: `secondary_*` or an OTP-worded round = the second
+    login; a blank second username is ASKED, never copied from the first
+    (the ASA wants a different account there and a copied one is a failed
+    login that counts toward lockout); a round with `error` set (the
+    gateway rejected the last answer) is asked in full with nothing
+    autofilled - by then every source was used and guessing by order put
+    the second password into the first one's field. Each round is logged
+    with field names, labels, roles and the answer's source, never values.
+
+102. **`x/crypto/pkcs12` cannot read current .pfx files.** It only knows
+    the legacy RC2 / 3DES bags; OpenSSL 3's default and current Windows
+    exports use AES-256 (PBES2) and fail with an unhelpful error. Client
+    certificates go through `software.sslmate.com/src/go-pkcs12`
+    (`DecodeChain`), see `creds.ParseClientCert`. In a PEM the leaf is the
+    certificate that matches the key, not the first one in the file.
+
+103. **A field shared by every network profile kind is dropped by the
+    per-kind edit paths.** `NetworkProfileUpdate*` rebuild the config
+    JSON from a typed struct (wg.Profile, NetbirdConfig, ...) that does
+    not declare shared fields such as `idle_stop_minutes`, so an edit
+    silently reset it. Every update path wraps its JSON in
+    `carryIdleStop(old, new)`; a new shared field needs the same, or a
+    map-patch like `patchPolicyJSON`.
+
+104. **Settings had no disabled button style, and SearchableSelect's empty
+    choice says "(inherit)".** A disabled "Add profile" looked clickable
+    and did nothing, with no hint why. Settings now dims `:disabled`
+    buttons and the OpenConnect form says what is missing. Outside
+    inheritance contexts pass `emptyLabel` ("Ask at login", "None") -
+    "(inherit)" on a VPN profile field reads as a bug.
 
 ---
 

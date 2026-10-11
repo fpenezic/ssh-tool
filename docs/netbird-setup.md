@@ -15,8 +15,9 @@ than one machine or sync your profile across them.
 ## 1. Install the plugin
 
 Settings -> Network profiles -> **Plugins** -> Download next to
-NetBird. It fetches the helper for your OS from the matching ssh-tool
-release and verifies the checksum before installing. One-time.
+NetBird. It fetches the helper for your OS from the
+[ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins) releases
+and verifies the checksum before installing. One-time.
 
 ## 2. Create the RIGHT key in NetBird
 

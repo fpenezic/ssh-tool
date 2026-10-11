@@ -11,14 +11,16 @@ Cross-platform SSH connection manager that replaces Devolutions RDM
 for daily use. Tree of connections with folders + inheritance,
 encrypted credential vault, multi-tab terminal with split panes,
 port forwards (incl. SOCKS5 with isolated-browser launcher),
-userspace VPN profiles (WireGuard built in; NetBird + Tailscale as
-optional sidecar plugins),
+userspace VPN profiles (WireGuard built in; NetBird, Tailscale and
+OpenConnect - AnyConnect, Fortinet, F5, GlobalProtect, Pulse - as
+optional sidecar plugins from the separate ssh-tool-plugins repo),
 opkssh certificate auth, dynamic inventory from Proxmox, Hetzner,
 DigitalOcean, Linode, Vultr, Scaleway, AWS EC2, Ansible static
 inventory (`.ini` / `.yml`), userspace WireGuard network profiles
 (in-process netstack, no TUN adapter; first SSH hop + provider APIs
-dial through them) plus NetBird profiles via an optional sidecar
-plugin (desktop-only). Local audit log + sealed password / API-token
+dial through them) plus the plugin-backed profiles (desktop-only).
+TOTP codes from Bitwarden / KeePass items answer SSH and VPN logins.
+Local audit log + sealed password / API-token
 history (last 5 rotations).
 
 Author wants 300+ connections, daily-driver UX, full opkssh support
@@ -26,6 +28,10 @@ Author wants 300+ connections, daily-driver UX, full opkssh support
 
 ## Repo state
 
+- VPN plugins (NetBird, Tailscale, OpenConnect) live in the sibling repo
+  `git@github.com:fpenezic/ssh-tool-plugins.git`, one Go module + licence
+  per plugin, released on `<plugin>-vN[.P]` tags (gotcha 40,
+  `docs/helper-release-plan.md`). The protocol is its `PROTOCOL.md`.
 - Remote: `git@github.com:fpenezic/ssh-tool.git`
 - Default branch: `main`.
 - History starts at the open-source release; earlier development
@@ -102,7 +108,8 @@ ssh-tool/
 │  ├─ backup/              encrypted store+vault snapshots, scheduler
 │  ├─ ssh/                 SSH client, opkssh, forwards, browser, tcpdump, VNC bridge
 │  ├─ wg/                  userspace WireGuard (wireguard-go + netstack) network profiles
-│  ├─ tunnelhelper/        sidecar (plugin) process manager: spawn + SOCKS5 dialer (NetBird, Tailscale)
+│  ├─ tunnelhelper/        sidecar (plugin) process manager: spawn, login relay, SOCKS5 dialer
+│  ├─ totp/                RFC 6238 codes from otpauth URIs / KeePass fields
 │  ├─ inventory/           dynamic providers: Proxmox, Hetzner, DO, Linode, Vultr, Scaleway, AWS EC2, Ansible
 │  ├─ httpc/               HTTP/SOAP probe (used by HttpModal)
 │  ├─ local/               in-app local PTY (Win/Mac/Linux shells)
@@ -114,8 +121,6 @@ ssh-tool/
 │  ├─ updater/             in-app update check + staged install
 │  ├─ exporter/            encrypted archive export / import
 │  └─ initcmd/             initial-command sequencing
-├─ netbird-helper/         optional sidecar plugin (separate Go module)
-├─ tailscale-helper/       optional sidecar plugin (separate Go module)
 ├─ frontend/
 │  ├─ src/                 App.svelte + lib/* (~80 components/stores)
 │  ├─ bindings/            wails-generated, committed (regenerated on build)

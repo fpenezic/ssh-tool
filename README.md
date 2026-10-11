@@ -34,6 +34,14 @@ test status varies).
 - **Share a session** - to a plain web browser (a colleague watches,
   or types in with your approval; encrypted, per-guest word-code
   confirmation, no cloud relay) or to an external LLM over MCP.
+- **Userspace VPN profiles** - WireGuard built in; NetBird,
+  Tailscale and OpenConnect (Cisco AnyConnect, Fortinet, F5,
+  GlobalProtect, Pulse) as optional plugins from
+  [ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins). No
+  TUN adapter or admin rights; several gateways at once.
+- **External secrets and one-time codes** - KeePass, Vaultwarden /
+  Bitwarden and Infisical read at connect time; a TOTP from a Bitwarden
+  or KeePass item answers SSH and VPN code prompts.
 - **opkssh** native (no external binary) certificate flow.
 - **SFTP** browser with native OS drag-and-drop upload, a paste-able
   path bar, owner/group names, and quick view + in-place editing with
@@ -172,7 +180,8 @@ ssh-tool/
 │  ├─ exporter/       encrypted archive export / import
 │  ├─ importer/       RDM, ssh_config, MobaXterm, PuTTY, SuperPuTTY
 │  ├─ wg/             userspace WireGuard network profiles
-│  ├─ tunnelhelper/   sidecar plugin manager (NetBird, Tailscale)
+│  ├─ tunnelhelper/   VPN plugin manager (NetBird, Tailscale, OpenConnect)
+│  ├─ totp/           RFC 6238 one-time codes
 │  ├─ keepass/        .kdbx credential backend
 │  ├─ bitwarden/      Bitwarden / Vaultwarden credential backend
 │  ├─ infisical/      Infisical credential backend
@@ -183,8 +192,6 @@ ssh-tool/
 │  ├─ presence/       LAN presence for shared sessions
 │  ├─ updater/        in-app update check + staged install
 │  └─ initcmd/        initial-command sequencing
-├─ netbird-helper/    optional sidecar plugin (separate module)
-├─ tailscale-helper/  optional sidecar plugin (separate module)
 ├─ frontend/          Svelte 5 + xterm.js
 └─ docs/              user guide, app description, TODO, etc.
 ```
