@@ -1525,6 +1525,21 @@ everything mobile is behind a build tag or an `isMobile` check.
     buttons and the OpenConnect form says what is missing. Outside
     inheritance contexts pass `emptyLabel` ("Ask at login", "None") -
     "(inherit)" on a VPN profile field reads as a bug.
+105. **A parser of secret material must not quote its input in errors.**
+    `url.Parse` (and many decoders) put the whole input into the error
+    text; `totp.Parse` wrapped it, the SSH autofill and the OpenConnect
+    filler logged it, and a malformed `otpauth://...?secret=...` URI
+    landed in app.log (CodeQL go/clear-text-logging). Parse errors of
+    anything that carries a secret are constant text on a sentinel
+    (`totp.ErrUnsupported`), and `TestParseErrorsDoNotQuoteTheSecret`
+    feeds secret-bearing input through every error path. Same rule for
+    the next secret format (certificates, keys, tokens): log the kind of
+    failure, never the value or a wrapped library error that echoes it.
+
+    The OpenConnect form also showed the base Settings `label` style
+    (column + top margin) leaking into radio / checkbox labels and grid
+    cells; dense forms reset it on their own field class (`.oc-field`,
+    `.oc-choice`) instead of fighting it per element.
 
 ---
 
