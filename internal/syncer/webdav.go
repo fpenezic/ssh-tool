@@ -30,6 +30,10 @@ import (
 // ErrNotFound marks a 404 from the server (missing meta/snapshot).
 var ErrNotFound = fmt.Errorf("not found")
 
+// ErrLocked is a WebDAV 423: the server (Nextcloud) holds a lock on the
+// file while another client writes it. Transient; retry shortly.
+var ErrLocked = fmt.Errorf("locked by the server (HTTP 423)")
+
 // ValidateURL enforces the transport policy: https only, because
 // WebDAV basic auth would otherwise cross the wire in plaintext (the
 // snapshot itself is sealed, but the server credentials are not).
@@ -135,6 +139,9 @@ func (w *WebDAV) Get(name string) ([]byte, error) {
 	if resp.StatusCode == 404 {
 		return nil, ErrNotFound
 	}
+	if resp.StatusCode == http.StatusLocked {
+		return nil, fmt.Errorf("GET %s: %w", name, ErrLocked)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("GET %s: HTTP %d", name, resp.StatusCode)
 	}
@@ -150,6 +157,9 @@ func (w *WebDAV) Put(name string, data []byte) error {
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusLocked {
+		return fmt.Errorf("PUT %s: %w", name, ErrLocked)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("PUT %s: HTTP %d", name, resp.StatusCode)
 	}

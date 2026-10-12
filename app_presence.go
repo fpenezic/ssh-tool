@@ -17,6 +17,7 @@ package main
 // needed. Only meaningful when sync is configured; a no-op otherwise.
 
 import (
+	"errors"
 	"log"
 	"os"
 	"sync"
@@ -39,7 +40,12 @@ const presencePoll = 25 * time.Second
 // kill-request nonces already honoured (so one isn't re-run after we
 // legitimately reconnect).
 type presenceState struct {
-	mu       sync.Mutex
+	mu sync.Mutex
+	// io serialises this machine's read-modify-write of the shared file:
+	// a tunnel coming up or down and the poll loop each run one, and two
+	// at once raced each other (lost updates, and Nextcloud answering
+	// the second with HTTP 423).
+	io       sync.Mutex
 	machine  string
 	owned    map[string]string // profileID -> kind, tunnels we own
 	handled  map[string]bool   // honoured kill nonces
@@ -111,15 +117,47 @@ func (a *App) presenceLoadSave(fn func(*presence.File)) {
 		return
 	}
 	defer t.Close()
-	f, err := presence.Load(t, syncNotFound)
+	a.presence.io.Lock()
+	defer a.presence.io.Unlock()
+	f, err := presenceLoad(t)
 	if err != nil {
 		log.Printf("presence: load: %v", err)
 		return
 	}
 	fn(f)
-	if err := presence.Save(t, f); err != nil {
+	if err := presenceSave(t, f); err != nil {
 		log.Printf("presence: save: %v", err)
 	}
+}
+
+// presenceLoad / presenceSave retry a file the WebDAV server holds
+// locked (Nextcloud answers HTTP 423 while another machine writes it); a
+// lock that outlasts the retries is returned as the error.
+func presenceLoad(t presence.Transport) (*presence.File, error) {
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * time.Second)
+		}
+		var f *presence.File
+		if f, err = presence.Load(t, syncNotFound); err == nil || !errors.Is(err, syncer.ErrLocked) {
+			return f, err
+		}
+	}
+	return nil, err
+}
+
+func presenceSave(t presence.Transport, f *presence.File) error {
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * time.Second)
+		}
+		if err = presence.Save(t, f); err == nil || !errors.Is(err, syncer.ErrLocked) {
+			return err
+		}
+	}
+	return err
 }
 
 // presencePublish records this machine as owner of a profile's tunnel
@@ -323,7 +361,7 @@ func (a *App) NetworkProfilePresence(profileID string) RemoteOwner {
 		return RemoteOwner{}
 	}
 	defer t.Close()
-	f, err := presence.Load(t, syncNotFound)
+	f, err := presenceLoad(t)
 	if err != nil {
 		return RemoteOwner{}
 	}
@@ -351,7 +389,9 @@ func (a *App) NetworkProfileTakeOver(profileID string) (int, error) {
 		return 0, nil
 	}
 	defer t.Close()
-	f, err := presence.Load(t, syncNotFound)
+	a.presence.io.Lock()
+	defer a.presence.io.Unlock()
+	f, err := presenceLoad(t)
 	if err != nil {
 		return 0, err
 	}
@@ -363,7 +403,7 @@ func (a *App) NetworkProfileTakeOver(profileID string) (int, error) {
 	if _, done := f.RequestKill(profileID, self, machineName(), nonce); !done {
 		return 0, nil
 	}
-	if err := presence.Save(t, f); err != nil {
+	if err := presenceSave(t, f); err != nil {
 		return 0, err
 	}
 	// Authorise the next bring-up: once the owner releases (or the
@@ -396,7 +436,9 @@ func (a *App) NetworkProfileDisconnectRemote(profileID string) (int, error) {
 		return 0, nil
 	}
 	defer t.Close()
-	f, err := presence.Load(t, syncNotFound)
+	a.presence.io.Lock()
+	defer a.presence.io.Unlock()
+	f, err := presenceLoad(t)
 	if err != nil {
 		return 0, err
 	}
@@ -408,7 +450,7 @@ func (a *App) NetworkProfileDisconnectRemote(profileID string) (int, error) {
 	if _, done := f.RequestKill(profileID, self, machineName(), nonce); !done {
 		return 0, nil
 	}
-	if err := presence.Save(t, f); err != nil {
+	if err := presenceSave(t, f); err != nil {
 		return 0, err
 	}
 	log.Printf("presence: requested remote disconnect of profile %s", profileID)
