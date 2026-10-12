@@ -202,20 +202,25 @@ Mediums + selected Lows tracked here.
 Repository: ssh-tool-plugins (one module, licence and tag namespace per
 plugin).
 
-- **OpenVPN** - candidate engine: a pure-Go client (minivpn) into the
-  same netstack + SOCKS shape. Needs a look at cipher / TLS-auth coverage
-  against real configs before committing.
-- **Check Point** - candidate: snx-rs (Rust); evaluate whether it can
-  run without a TUN device, else it does not fit the userspace model.
+- **OpenVPN follow-ups** - tls-crypt-v2 (client key wrapped by the
+  server key, increasingly the Access Server default), PKCS#12 import
+  inside the .ovpn, `fragment`. Tested only against the OpenVPN 2.6 lab server so
+  far, not yet against a production Access Server / pfSense.
+- **Check Point** - candidate: snx-rs (Rust, AGPL-3.0, active). The TUN
+  device is a small seam (`tunnel/device.rs`; tunnels already take
+  `no_routing` / `no_dns`): replace it with a packet channel + smoltcp
+  SOCKS, map `SecurePrompt` onto auth events, cargo cross builds in the
+  plugins CI. Blocked on a gateway to test against.
 - **OpenConnect SAML / browser login** - the helper reports such a
   gateway as unsupported today. Needs a webview or system-browser flow
   that hands the cookie back to the helper.
-- **OpenConnect session cookie reuse** - reconnect without a new login
-  while the gateway's session is valid (fewer MFA prompts).
 - **Login lockout guard** - stop a profile's connect after two rejected
   logins in a row instead of showing the form again.
-- **Details view for WireGuard / NetBird / Tailscale** - the OpenConnect
-  Details panel (addresses, routes, DNS, MTU) for the other kinds.
+- **Details view for WireGuard / NetBird / Tailscale** - the OpenConnect /
+  OpenVPN Details panel (addresses, routes, DNS, MTU) for the other kinds.
+- **OpenConnect session reuse beyond AnyConnect** - the cookie patch
+  covers the AnyConnect flavor only; Fortinet / GlobalProtect / F5 keep
+  their session in other fields.
 - **Fortinet, F5, GlobalProtect, Pulse** - supported by the engine and
   selectable, but only AnyConnect / ocserv has been tested against real
   gateways.

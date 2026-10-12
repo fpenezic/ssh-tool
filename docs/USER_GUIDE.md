@@ -23,7 +23,7 @@ implemented.
 6. [SFTP file browser](#sftp-file-browser)
 6b. [VNC console](#vnc-console)
 7. [Port forwards](#port-forwards)
-7b. [Network profiles (WireGuard / NetBird / Tailscale / OpenConnect)](#network-profiles)
+7b. [Network profiles (WireGuard / NetBird / Tailscale / OpenConnect / OpenVPN)](#network-profiles)
 8. [Broadcast input (multi-session)](#broadcast-input)
 9. [Multi-window: detach + redock](#multi-window)
 10. [Workspaces](#workspaces)
@@ -1784,16 +1784,23 @@ SSH session and starts the tunnel if needed.
 ---
 
 <a id="network-profiles"></a>
-## 7b. Network profiles (WireGuard / NetBird / Tailscale / OpenConnect)
+## 7b. Network profiles (WireGuard / NetBird / Tailscale / OpenConnect / OpenVPN)
 
 A network profile routes a connection's **first SSH hop** through an
 overlay VPN, so you can reach hosts that only live on a private
-network (a client's WireGuard, a Hetzner internal network, a NetBird
-tailnet) without setting up a system-wide VPN. Everything runs in
+network (a client's WireGuard or OpenVPN, a Hetzner internal network, a
+NetBird tailnet) without setting up a system-wide VPN. Everything runs in
 **userspace**: no TUN adapter, no admin rights, no system routes, and
 several profiles can be up at once toward different networks.
 
-Manage profiles in **Settings -> Network profiles**. Assign one to a
+Manage profiles in **Settings -> Network profiles**: the list on the
+left holds **General** (plugins, defaults, the app proxy), your profiles
+(a green dot when the tunnel is up, **via proxy** when it is reachable
+through the app proxy) and **New profile**. A profile opens on four tabs:
+**Overview** (mode, idle stop, how many connections and web bookmarks use
+it, when the session ends), **Settings** (the profile itself, and Delete),
+**Proxy** and **Details**; **Test**, **Pause**, **Browser** and **Stop**
+sit above them. Assign a profile to a
 folder or a connection via its **Network** setting (in the detail
 pane); the setting inherits down the tree like the others, so a whole
 "client-X" folder can go through one tunnel. A pane whose first hop
@@ -1802,10 +1809,10 @@ and the status bar shows which tunnels are up.
 
 Tunnels start on demand (first connection through them) and stop on
 their own after the last session using them closes. **Stop an idle
-tunnel** (at the top of the page) sets how long they linger: right away,
-1 minute to 4 hours, or never (default 2 minutes). Each profile card has
-**Stop when idle** to override it for that profile; **Global** follows
-the page setting. A change applies to idle tunnels at once.
+tunnel** (under General) sets how long they linger: right away,
+1 minute to 4 hours, or never (default 2 minutes). A profile's Overview
+has **Stop when idle** to override it for that profile; **Global** follows
+the General setting. A change applies to idle tunnels at once.
 Dynamic-inventory folders can fetch their provider API through a
 profile too (for a Proxmox reachable only over the VPN); a background
 refresh never starts a tunnel by itself.
@@ -1827,16 +1834,86 @@ Each profile has a mode and a pause switch:
 
 ### Plugins
 
-NetBird, Tailscale and OpenConnect run as optional **plugins**: small
+NetBird, Tailscale, OpenConnect and OpenVPN run as optional **plugins**: small
 helper programs, one per profile, kept out of the app to keep it small
 (and, for OpenConnect, because its engine is GPL-licensed). Install them
-from the **Plugins** cards on this page: each is downloaded from the
+under **General -> Plugins** on this page: each is downloaded from the
 [ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins)
 releases and checked against its sha256 digest before install. The card
 shows the plugin release and the engine version inside it, and an
 update is offered there (and as a status bar pill) when a newer plugin
 release is out. Plugins are desktop only; Android cannot start helper
 processes.
+
+### Browser through a profile
+
+**Browser** on a profile opens an isolated browser (its own
+profile per VPN, kept between launches, apart from your everyday
+browser) that reaches the customer's intranet through that VPN: the
+profile's networks, the host names of connections that use it and names
+only the customer's DNS knows go through the tunnel; everything else
+(the internet) goes out directly, so a split VPN behaves as usual. The
+tunnel comes up with the first page that needs it.
+
+**Web bookmarks** live in the connection tree: **New web bookmark** (the
+tree's + menu, or a folder's right-click menu) takes a name and an
+address. A bookmark has a **Network** setting like any connection,
+inherited from its folders, so a bookmark in a customer's folder opens
+in that customer's VPN browser; with no profile (or Direct) it opens in
+your normal browser. Double-click or **Open** opens it. The browser reaches the app
+through a proxy on `127.0.0.1` without a password (browsers cannot send
+SOCKS credentials, the same as the SSH dynamic forwards); it closes after
+30 minutes without traffic and reopens on the same port.
+
+### App proxy (programs and a CI runner through the VPNs)
+
+The **app proxy** (General -> App proxy) is one SOCKS5 proxy for things
+outside the app - a CI runner, `curl`, a script, a database tool - that
+reaches every profile you mark **Reachable through the app proxy** (a
+profile's Proxy tab). Each address goes through the VPN whose networks
+contain it; anything no marked profile covers is refused, so it is not a
+way out to the internet. It always asks for a username and password
+(`ssh-tool` and a generated password, kept in the vault); **Copy proxy
+address** gives `socks5://ssh-tool:<password>@127.0.0.1:<port>`. A
+tunnel comes up with the first connection through it (a login or
+one-time code is asked as usual) and the idle stop applies after the last
+one closes. The app has to be running; the listener starts with it.
+
+A profile's networks are the routes the server pushed (from the last
+connect; a full-tunnel default route is left out), the addresses of
+connections in the tree that use it, and any **Extra networks** on its
+Proxy tab, which lists them all. Host names of those connections go to
+their profile as well and are resolved inside the VPN. When two profiles
+carry the same network, the more specific one wins, then the one that is
+up; **When networks overlap, use** picks one profile to take every
+address its networks contain. The summary under it names each overlap
+and which profile wins it.
+
+For a **GitLab runner in Docker**, without touching `.gitlab-ci.yml`:
+
+1. Turn the app proxy on. **Copy gateway command** (the "A CI runner in
+   Docker" card) gives a `docker run` for a small gateway container
+   (tun2socks) that sends only the marked profiles' networks into the
+   proxy (**Show networks** lists them). Everything else - your GitLab,
+   cache, registry - stays on the normal network. After adding a profile
+   or a network, recreate the gateway with a freshly copied command.
+2. In the runner's `config.toml`, under `[runners.docker]`:
+   `network_mode = "container:sshtool-gw"`. Every job container then
+   shares the gateway's network. Docker refuses `extra_hosts` together
+   with this mode; move those entries to the gateway (`--add-host` on
+   its `docker run`), the jobs see its hosts file.
+
+A profile can also have a **Separate proxy for this VPN only** (its Proxy
+tab): its own port and password and its own gateway command
+(`sshtool-gw-<profile>`), for one runner per customer that must stay
+apart from the others, overlapping address ranges included.
+
+Docker Desktop reaches a proxy on `127.0.0.1` through
+`host.docker.internal`; a Linux Docker host needs the proxy on the
+docker bridge address (or `0.0.0.0`, firewalled). Only TCP goes through
+(SSH, HTTPS, registries); a job resolves names with its own DNS, so a
+name only the customer's DNS knows needs an address (or an `--add-host`
+on the gateway).
 
 ### WireGuard profiles
 
@@ -1979,15 +2056,37 @@ than resending stored answers, so a wrong value cannot lock the account
 through retries. The app log records each login round (field names and
 where each answer came from, never the values) for troubleshooting.
 
+**Password change.** When the gateway asks for a new password at login
+(expired, or Cisco ASA offering a change before it expires), the form is
+asked as `[password change - new password]` / `[password change -
+confirm new password]`. Nothing stored is filled into it, and the two
+entries must match before anything is sent. Leave both blank to skip an
+optional change. Once the tunnel is up, the new password replaces the
+old one in the vault credential it came from (the old one stays in the
+credential's history). A typed password, or one from Bitwarden or
+KeePass, has to be updated there by hand; the log says so.
+
+**Session reuse (AnyConnect).** The idle stop takes the tunnel down
+without logging out of the gateway: the session stays open there until
+the gateway's own idle timeout, and the next connect resumes it with no
+login and no one-time code. If the gateway no longer knows the session,
+the normal login follows. The session cookie is held in memory only,
+never in the vault or sync, so quitting the app or stopping the profile
+by hand logs out for good. **Log out of the gateway** under Idle stop
+turns this off for a profile. A dropped network inside a running tunnel
+reconnects on its own with the same session either way.
+
 **Gateway certificate.** A certificate the system trusts is accepted.
 Otherwise (self-signed, private CA) the first connect shows **Untrusted
 VPN gateway certificate** with its subject and fingerprint; **Trust &
 remember** pins it on the profile. A changed certificate asks again.
 Changing the gateway address forgets the pin.
 
-**Details.** A running profile has a **Details** button: tunnel address,
+**Details.** A running profile's **Details** tab shows the tunnel address,
 gateway, transport (DTLS or TLS), MTU, routes, DNS servers and search
-domains and the gateway banner, with **Copy** for a support ticket.
+domains and the gateway banner, with **Copy** for a support ticket. When
+the gateway announces them, it also shows when the session ends (the
+gateway disconnects then and asks for a new login) and its idle timeout.
 
 **One login per user.** Most gateways allow one session per user and
 drop the older one. A synced OpenConnect profile that is up on another
@@ -1996,6 +2095,58 @@ over, connect anyway, or cancel.
 
 SAML / browser (single sign-on) login is not supported yet; such a
 gateway reports it clearly.
+
+### OpenVPN profiles
+
+OpenVPN 2.x servers (OpenVPN Community and Access Server, pfSense,
+OPNsense, router firmware) through the optional **OpenVPN plugin**, an
+OpenVPN client written for ssh-tool. Like the others it runs in
+userspace: no TAP / TUN driver, no admin rights, several servers at once.
+Desktop only.
+
+**Import** the server's `.ovpn` (or paste it). Files it references must
+be inline (`<ca>`, `<cert>`, `<key>`, `<tls-auth>` / `<tls-crypt>`), as
+exported client profiles usually are. The configuration is checked when
+the profile is saved. Its secrets do not stay in the profile: the client
+certificate and key become a **certificate credential** (vault, synced,
+expiry warning like any credential; renew it there), the tls-auth /
+tls-crypt key goes to the vault. **Import again** on an existing profile
+to replace the configuration; a certificate in the new file renews the
+profile's certificate credential (the old one stays in its history).
+
+When the file has `auth-user-pass`, the form asks for:
+
+- **Username** and **Password** - typed (saved as a credential), a
+  stored password (vault, Bitwarden or KeePass), or blank to be asked.
+- **One-time code** - the answer to the server's challenge: a
+  `static-challenge` in the file, or a question the server asks at login
+  (dynamic challenge, or a pending login with a question, as OpenVPN
+  Access Server asks for its OTP):
+  **Ask at login**, a **TOTP** from a Bitwarden / KeePass item, or a
+  **Stored password**.
+
+A refused login is asked again in full (no stored value is retried), and
+the app log records each login round without the values. When the server
+hands out an auth-token, renegotiations and reconnects use it, so a
+one-time code is not asked again for the life of the session.
+
+What works: UDP and TCP with several `remote` lines tried in order,
+tls-auth and tls-crypt, AES-GCM, ChaCha20-Poly1305 and AES-CBC (with
+cipher negotiation), key renegotiation from either side, reconnects
+after a network loss or a server restart, `remote-cert-tls server` and
+`verify-x509-name`, and servers that compress (`comp-lzo`, `compress
+lzo` / `lz4` / `lz4-v2`: what the server compresses is unpacked, what the
+app sends is never compressed). Not supported: TAP (layer 2),
+tls-crypt-v2, PKCS#12 / smart cards (import the key as PEM). **Details**
+shows the address, routes, DNS, transport and cipher of a running
+profile. The take-over prompt for a profile up on another synced machine
+applies as for OpenConnect.
+
+**Login in the browser.** A server that finishes the login on a web page
+(SAML / SSO, or Access Server's web login) opens that page in your
+browser during the connect; the tunnel comes up once you are done there.
+A server that waits for an approval on your phone just holds the connect
+open until you approve.
 
 ---
 

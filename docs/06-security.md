@@ -79,6 +79,19 @@ Common keys:
   so two rotations within the same second can't collide.
 - `conn_pass:{connectionID}` - per-connection password override
   (migration 7).
+- `wg_private_key:{profileID}`, `wg_psk:{profileID}:{peer}` -
+  WireGuard profile keys.
+- `ovpn_static_key:{profileID}` - an OpenVPN profile's tls-auth /
+  tls-crypt key. Its client certificate + key are an ordinary
+  `certificate` credential (`cred:`). The assembled .ovpn reaches the
+  plugin in an environment variable, never argv or a file.
+- An AnyConnect session cookie (session reuse after an idle stop) is
+  kept in process memory only, never in the vault, the store or sync.
+- `local_proxy:{profileID}` - the password of a profile's local SOCKS5
+  proxy. The proxy always requires it (RFC 1929, compared in constant
+  time), since the port is reachable by other local processes and
+  containers; it listens on 127.0.0.1 unless the user picks another
+  address.
 - Various app-level keys for machine binding, etc.
 
 ## Credential secret history (migration 14)

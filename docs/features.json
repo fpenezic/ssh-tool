@@ -63,10 +63,11 @@
     },
     {
       "title": "Overlay-network profiles",
-      "body": "Reach hosts on a private network - a client's WireGuard or AnyConnect, a Hetzner internal net, a NetBird or Tailscale overlay - by routing the SSH hop through a userspace tunnel. No system VPN, several up at once. WireGuard is built in; NetBird, Tailscale and OpenConnect are one-click plugins. A folder-level Network setting sends every host under it through the same tunnel.",
+      "body": "Reach hosts on a private network - a client's WireGuard, OpenVPN or AnyConnect, a Hetzner internal net, a NetBird or Tailscale overlay - by routing the SSH hop through a userspace tunnel. No system VPN, several up at once. WireGuard is built in; NetBird, Tailscale, OpenConnect and OpenVPN are one-click plugins. A folder-level Network setting sends every host under it through the same tunnel.",
       "keys": [
         "WireGuard",
         "AnyConnect",
+        "OpenVPN",
         "NetBird",
         "Tailscale",
         "auto"
@@ -200,7 +201,12 @@
     {
       "icon": "shield",
       "title": "Userspace VPN profiles",
-      "body": "Route a connection's first SSH hop through WireGuard, NetBird, Tailscale or a corporate SSL VPN without a TUN adapter, admin rights, or system routes. Assign a profile to a folder and the whole tree rides the tunnel. Auto-mode dials direct when you're on-site, tunnel when remote; an idle tunnel stops after a delay you choose. NetBird, Tailscale and OpenConnect ship as optional plugins."
+      "body": "Route a connection's first SSH hop through WireGuard, NetBird, Tailscale, OpenVPN or a corporate SSL VPN without a TUN adapter, admin rights, or system routes. Assign a profile to a folder and the whole tree rides the tunnel. Auto-mode dials direct when you're on-site, tunnel when remote; an idle tunnel stops after a delay you choose. NetBird, Tailscale, OpenConnect and OpenVPN ship as optional plugins."
+    },
+    {
+      "icon": "shield",
+      "title": "OpenVPN without the OpenVPN client",
+      "body": "Import an .ovpn and connect in userspace: no TAP / TUN driver, no admin rights, several servers at once. UDP or TCP, tls-auth and tls-crypt, AES-GCM, ChaCha20 and CBC, renegotiation either way, username and password with a static or dynamic challenge answered from a stored TOTP. The certificate and keys from the file go to the vault, the certificate as a credential with its expiry tracked."
     },
     {
       "icon": "shield",

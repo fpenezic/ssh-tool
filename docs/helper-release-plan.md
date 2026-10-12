@@ -149,6 +149,12 @@ others. So all plugins moved out:
 - The app repository keeps its `helper-v1` / `helper-v1.1` releases for
   app versions from before the move; nothing new is published there.
 
+The OpenVPN plugin (`openvpn/`, Apache-2.0, own client in
+`openvpn/internal/ovpn`) joined later on `openvpn-vN[.P]` tags, same
+protocol 1: `auth` events with `username` / `password` / `response`
+fields, and a `--check` flag the app runs on import to validate a
+configuration.
+
 Protocol 1 grew additively for OpenConnect (still 1): `auth` events and
 `auth` / `cancel` commands for interactive login, `info` events with the
 tunnel details, and `cert_pin` / `cert_subject` / `cert_changed` on an

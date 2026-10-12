@@ -197,8 +197,8 @@ CREATE TABLE pinned_dynamic_entries (
 
 ### `network_profiles` (v17)
 Userspace VPN profiles. `config_json` is polymorphic and carries a
-`kind` field (`wireguard` | `netbird` | `tailscale`) plus the fields
-that kind needs.
+`kind` field (`wireguard` | `netbird` | `tailscale` | `openconnect` |
+`openvpn`) plus the fields that kind needs.
 
 ```sql
 CREATE TABLE network_profiles (
@@ -474,6 +474,23 @@ field inside `config_json` selects WireGuard vs NetBird.
   secret is stored on the row. Peer registration state (device keys)
   lives on disk under `DataDir/netbird/<id>/` and is intentionally
   **not** synced, so each machine registers as its own peer.
+
+- **OpenConnect** (`kind: "openconnect"`): gateway, VPN type, login
+  sources (credential ids, TOTP item), pinned gateway certificate,
+  `logout_on_idle`; the client certificate is a `certificate`
+  credential referenced by id.
+- **OpenVPN** (`kind: "openvpn"`): `config` is the imported .ovpn with
+  `<cert>`, `<key>`, `<tls-auth>` / `<tls-crypt>` removed, plus a
+  summary from the plugin's check (`server`, `remotes`,
+  `auth_user_pass`, `static_challenge`, `static_key`) and the same
+  login sources as OpenConnect. The certificate + key become a
+  `certificate` credential (`client_cert_credential_id`); the static
+  key lives in the vault under `ovpn_static_key:<id>`.
+
+Deleting a profile clears every `network_profile_id` that points at it
+(connections, folders, inventory folders; Bitwarden / Infisical servers
+go direct), and startup sweeps references to profiles that no longer
+exist.
 
 Connections and folders select a profile through a new inheritable
 setting **`network_profile_id`** (in `overrides_json` / folder

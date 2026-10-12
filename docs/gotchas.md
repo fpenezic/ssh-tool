@@ -1541,6 +1541,64 @@ everything mobile is behind a build tag or an `isMobile` check.
     cells; dense forms reset it on their own field class (`.oc-field`,
     `.oc-choice`) instead of fighting it per element.
 
+106. **An OpenConnect session is ended by `Close`, kept by a detach.**
+    sing-openconnect's `Client.Close` sends the CSTP DISCONNECT, which
+    the gateway takes as a logout: the cookie is dead afterwards. Session
+    reuse therefore needs the helper to exit WITHOUT `Close` (`detach`
+    command -> `os.Exit`), and only the idle stop detaches; a manual stop,
+    a profile edit / delete and app quit go through `tunnelStop` (stdin
+    EOF -> `Close`) and forget the cookie. The cookie is a bearer
+    credential for the session: memory only (`ocSessions`), never the
+    vault or sync. Two more traps from the lab: the engine reads a bare
+    `ClientOptions.Cookie` as `name=value` split at the first `=`, so a
+    base64 token with padding became name "abc", value "=" ("direct
+    cookie does not contain webvpn") - always pass `webvpn=<cookie>`.
+    And the engine exposes no cookie at all: the plugin vendors it with
+    small patches (`openconnect/third_party`, each marked "ssh-tool
+    patch" and listed there; one also fixes the DTLS MTU probe buffer);
+    re-apply them when updating the engine. Lab check: ocserv with `cookie-timeout`,
+    login -> detach -> resume shows zero auth rounds, a normal stop ->
+    resume falls back to a full login.
+
+    The fake helper in `internal/tunnelhelper/auth_test.go` covers the
+    `session` event and that `Manager.Detach` sends `detach` rather than
+    closing stdin.
+
+107. **OpenVPN key directions are not all the same way round.** The
+    plugin's own client (`ssh-tool-plugins/openvpn/internal/ovpn`) got
+    the data channel wrong first: the CLIENT sends with key 0 of the
+    256-byte key block and receives with key 1 (OpenVPN's
+    KEY_DIRECTION_NORMAL on the client side), the opposite of tls-crypt,
+    where the client sends with key 1. tls-auth follows the
+    configuration's key direction (`key-direction 1` / `tls-auth x 1` on
+    a client; none = bidirectional). AEAD AD is opcode + peer id +
+    packet id for P_DATA_V2 but only the packet id for P_DATA_V1, and
+    the tag goes BEFORE the ciphertext. On renegotiation both sides send
+    a SOFT_RESET (the server waits for ours on the new key id, else "key
+    IDs out of sync"), and a server with auth-gen-token renews the token
+    in a second PUSH_REPLY after each renegotiation - ignoring later
+    pushes failed the next renegotiation with "token expired". Every
+    one of these only shows against a real server: the lab matrix
+    (`ovmatrix` cases: tls-auth, tls-crypt, TCP, CBC / ChaCha, stub
+    framing, net30, renegotiation by either side and across the 7->1 key
+    id wrap, auth-token, CRV1, static challenge, restarts, 3% loss) is
+    the regression test, plus `go test -tags lab -run OpenVPNLab` for
+    the app glue.
+
+108. **tun2socks sends EVERYTHING to the proxy by default.** Its
+    entrypoint clones the main table, replaces the default route with
+    the tun device and adds `ip rule not fwmark 0x22b table 0x22b`, so
+    `TUN_INCLUDED_ROUTES` adds nothing - every destination, the runner's
+    git and S3 cache included, went into the customer VPN. The generated
+    gateway command deletes that catch-all rule (`EXTRA_COMMANDS='ip rule
+    del not fwmark 0x22b table 0x22b'`), leaving only the included
+    routes. Also: Docker refuses `extra_hosts` with
+    `network_mode = "container:..."` (put them on the gateway, jobs share
+    its hosts file), and a Linux Docker host cannot reach a proxy bound
+    to 127.0.0.1 (Docker Desktop can, via host.docker.internal).
+    `go test -tags lab -run OpenVPNLabLocalProxy` checks both directions:
+    the VPN target through the gateway, a LAN container not through it.
+
 ---
 
 # Archive
