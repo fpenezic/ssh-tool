@@ -48,6 +48,7 @@
     contextMenu.show(e, [
       { label: "New connection",     iconComponent: IconHost, onSelect: addConnection },
       { label: "New local shell…",   iconComponent: IconTerminal, onSelect: addLocalConnection },
+      { label: "New web bookmark…",  iconComponent: IconGlobe, onSelect: () => connectionActions.addWebConnectionUnder(targetFolderId() ?? null) },
       { label: "New folder",         iconComponent: IconFolderPlus, onSelect: addRootFolder },
       { label: "New dynamic folder…", iconComponent: IconRefresh, onSelect: () => dynEditor.showNew(null) },
     ]);

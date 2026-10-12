@@ -18,6 +18,7 @@ export function pluginTitle(name: string): string {
     case "netbird": return "NetBird";
     case "tailscale": return "Tailscale";
     case "openconnect": return "OpenConnect";
+    case "openvpn": return "OpenVPN";
     case "wireguard": return "WireGuard";
     default: return name;
   }

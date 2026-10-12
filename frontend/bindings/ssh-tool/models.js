@@ -3660,6 +3660,147 @@ export class LoadTextFileResult {
 }
 
 /**
+ * LocalProxyConfig is the profile's local proxy setting (config_json
+ * "local_proxy").
+ */
+export class LocalProxyConfig {
+    /**
+     * Creates a new LocalProxyConfig instance.
+     * @param {Partial<LocalProxyConfig>} [$$source = {}] - The source object to create the LocalProxyConfig.
+     */
+    constructor($$source = {}) {
+        if (!("enabled" in $$source)) {
+            /**
+             * Enabled: the profile's own proxy on Port.
+             * @member
+             * @type {boolean}
+             */
+            this["enabled"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Shared: the profile takes part in the shared proxy, which picks a
+             * profile by destination (app_sharedproxy.go).
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["shared"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * listen address, default 127.0.0.1
+             * @member
+             * @type {string | undefined}
+             */
+            this["bind"] = undefined;
+        }
+        if (!("port" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["port"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Networks are extra destinations for the gateway's routes, beyond
+             * what the profile knows (pushed routes, connections in the tree).
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["networks"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LocalProxyConfig instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {LocalProxyConfig}
+     */
+    static createFrom($$source = {}) {
+        const $$createField4_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("networks" in $$parsedSource) {
+            $$parsedSource["networks"] = $$createField4_0($$parsedSource["networks"]);
+        }
+        return new LocalProxyConfig(/** @type {Partial<LocalProxyConfig>} */($$parsedSource));
+    }
+}
+
+/**
+ * LocalProxyDetails is what the UI shows / copies for a profile's proxy.
+ */
+export class LocalProxyDetails {
+    /**
+     * Creates a new LocalProxyDetails instance.
+     * @param {Partial<LocalProxyDetails>} [$$source = {}] - The source object to create the LocalProxyDetails.
+     */
+    constructor($$source = {}) {
+        if (!("url" in $$source)) {
+            /**
+             * socks5://user:pass@host:port, for the host
+             * @member
+             * @type {string}
+             */
+            this["url"] = "";
+        }
+        if (!("routes" in $$source)) {
+            /**
+             * destinations to send to the proxy
+             * @member
+             * @type {string[]}
+             */
+            this["routes"] = [];
+        }
+        if (!("sources" in $$source)) {
+            /**
+             * where they came from, for the hint
+             * @member
+             * @type {string[]}
+             */
+            this["sources"] = [];
+        }
+        if (!("gateway" in $$source)) {
+            /**
+             * docker run for a tun2socks gateway
+             * @member
+             * @type {string}
+             */
+            this["gateway"] = "";
+        }
+        if (!("listening" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["listening"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LocalProxyDetails instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {LocalProxyDetails}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType4;
+        const $$createField2_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("routes" in $$parsedSource) {
+            $$parsedSource["routes"] = $$createField1_0($$parsedSource["routes"]);
+        }
+        if ("sources" in $$parsedSource) {
+            $$parsedSource["sources"] = $$createField2_0($$parsedSource["sources"]);
+        }
+        return new LocalProxyDetails(/** @type {Partial<LocalProxyDetails>} */($$parsedSource));
+    }
+}
+
+/**
  * LocalShellList returns metadata for every live local session so the
  * frontend can resurrect tabs after a reload.
  */
@@ -4262,6 +4403,21 @@ export class NetworkProfileInfo {
              */
             this["idle_stop_minutes"] = null;
         }
+        if (!("local_proxy" in $$source)) {
+            /**
+             * @member
+             * @type {LocalProxyConfig}
+             */
+            this["local_proxy"] = (new LocalProxyConfig());
+        }
+        if (!("local_proxy_listening" in $$source)) {
+            /**
+             * LocalProxyListening: the local proxy is on and its port is bound.
+             * @member
+             * @type {boolean}
+             */
+            this["local_proxy_listening"] = false;
+        }
         if (!("profile" in $$source)) {
             /**
              * WG only
@@ -4293,6 +4449,14 @@ export class NetworkProfileInfo {
              * @type {OpenConnectConfig | null | undefined}
              */
             this["openconnect"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * OpenVPN only
+             * @member
+             * @type {OpenVPNConfig | null | undefined}
+             */
+            this["openvpn"] = undefined;
         }
         if (!("status" in $$source)) {
             /**
@@ -4326,27 +4490,75 @@ export class NetworkProfileInfo {
      */
     static createFrom($$source = {}) {
         const $$createField6_0 = $$createType23;
-        const $$createField7_0 = $$createType25;
-        const $$createField8_0 = $$createType27;
-        const $$createField9_0 = $$createType29;
-        const $$createField10_0 = $$createType30;
+        const $$createField8_0 = $$createType24;
+        const $$createField9_0 = $$createType26;
+        const $$createField10_0 = $$createType28;
+        const $$createField11_0 = $$createType30;
+        const $$createField12_0 = $$createType32;
+        const $$createField13_0 = $$createType33;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("local_proxy" in $$parsedSource) {
+            $$parsedSource["local_proxy"] = $$createField6_0($$parsedSource["local_proxy"]);
+        }
         if ("profile" in $$parsedSource) {
-            $$parsedSource["profile"] = $$createField6_0($$parsedSource["profile"]);
+            $$parsedSource["profile"] = $$createField8_0($$parsedSource["profile"]);
         }
         if ("netbird" in $$parsedSource) {
-            $$parsedSource["netbird"] = $$createField7_0($$parsedSource["netbird"]);
+            $$parsedSource["netbird"] = $$createField9_0($$parsedSource["netbird"]);
         }
         if ("tailscale" in $$parsedSource) {
-            $$parsedSource["tailscale"] = $$createField8_0($$parsedSource["tailscale"]);
+            $$parsedSource["tailscale"] = $$createField10_0($$parsedSource["tailscale"]);
         }
         if ("openconnect" in $$parsedSource) {
-            $$parsedSource["openconnect"] = $$createField9_0($$parsedSource["openconnect"]);
+            $$parsedSource["openconnect"] = $$createField11_0($$parsedSource["openconnect"]);
+        }
+        if ("openvpn" in $$parsedSource) {
+            $$parsedSource["openvpn"] = $$createField12_0($$parsedSource["openvpn"]);
         }
         if ("status" in $$parsedSource) {
-            $$parsedSource["status"] = $$createField10_0($$parsedSource["status"]);
+            $$parsedSource["status"] = $$createField13_0($$parsedSource["status"]);
         }
         return new NetworkProfileInfo(/** @type {Partial<NetworkProfileInfo>} */($$parsedSource));
+    }
+}
+
+/**
+ * NetworkProfileUsage is how many connections and web bookmarks resolve
+ * to each profile (inherited from folders included), for the profile
+ * page's "Used by".
+ */
+export class NetworkProfileUsage {
+    /**
+     * Creates a new NetworkProfileUsage instance.
+     * @param {Partial<NetworkProfileUsage>} [$$source = {}] - The source object to create the NetworkProfileUsage.
+     */
+    constructor($$source = {}) {
+        if (!("connections" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["connections"] = 0;
+        }
+        if (!("web" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["web"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new NetworkProfileUsage instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {NetworkProfileUsage}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new NetworkProfileUsage(/** @type {Partial<NetworkProfileUsage>} */($$parsedSource));
     }
 }
 
@@ -4471,6 +4683,17 @@ export class OpenConnectConfig {
         }
         if (/** @type {any} */(false)) {
             /**
+             * LogoutOnIdle ends the gateway session when the idle stop takes the
+             * tunnel down. Default (false): the helper detaches, the session
+             * stays open at the gateway until its own idle timeout, and the next
+             * connect resumes it with the cookie instead of a new login.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["logout_on_idle"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * @member
              * @type {string | undefined}
              */
@@ -4535,12 +4758,200 @@ export class OpenConnectProfileInput {
      * @returns {OpenConnectProfileInput}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType28;
+        const $$createField1_0 = $$createType29;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("config" in $$parsedSource) {
             $$parsedSource["config"] = $$createField1_0($$parsedSource["config"]);
         }
         return new OpenConnectProfileInput(/** @type {Partial<OpenConnectProfileInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * OpenVPNConfig is an OpenVPN profile's stored configuration.
+ */
+export class OpenVPNConfig {
+    /**
+     * Creates a new OpenVPNConfig instance.
+     * @param {Partial<OpenVPNConfig>} [$$source = {}] - The source object to create the OpenVPNConfig.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * "openvpn"
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("config" in $$source)) {
+            /**
+             * Config is the .ovpn text without <cert>, <key>, <tls-auth> and
+             * <tls-crypt> (those live in the vault, see the file comment).
+             * @member
+             * @type {string}
+             */
+            this["config"] = "";
+        }
+        if (!("server" in $$source)) {
+            /**
+             * Summary of the configuration, from the plugin's check: what the UI
+             * shows and asks for.
+             * first remote, host:port/proto
+             * @member
+             * @type {string}
+             */
+            this["server"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["remotes"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["auth_user_pass"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["static_challenge"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * StaticKey is "tls-auth" / "tls-crypt" when the key is in the vault.
+             * @member
+             * @type {string | undefined}
+             */
+            this["static_key"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Login, same sources as OpenConnect: Username ("" = the credential's
+             * default username, else asked), PasswordCredentialID ("" = asked).
+             * @member
+             * @type {string | undefined}
+             */
+            this["username"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["password_credential_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * SecondPassword answers a static or dynamic challenge (a one-time
+             * code): ocSecondPrompt / ocSecondTOTP / ocSecondCredential.
+             * @member
+             * @type {string | undefined}
+             */
+            this["second_password"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["second_credential_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["client_cert_credential_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["mode"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["paused"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new OpenVPNConfig instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {OpenVPNConfig}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("remotes" in $$parsedSource) {
+            $$parsedSource["remotes"] = $$createField3_0($$parsedSource["remotes"]);
+        }
+        return new OpenVPNConfig(/** @type {Partial<OpenVPNConfig>} */($$parsedSource));
+    }
+}
+
+/**
+ * OpenVPNProfileInput is the create / update payload. ConfigText is a
+ * freshly imported .ovpn (secrets included); "" on update keeps the
+ * stored one.
+ */
+export class OpenVPNProfileInput {
+    /**
+     * Creates a new OpenVPNProfileInput instance.
+     * @param {Partial<OpenVPNProfileInput>} [$$source = {}] - The source object to create the OpenVPNProfileInput.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("config_text" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["config_text"] = "";
+        }
+        if (!("config" in $$source)) {
+            /**
+             * @member
+             * @type {OpenVPNConfig}
+             */
+            this["config"] = (new OpenVPNConfig());
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new OpenVPNProfileInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {OpenVPNProfileInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType31;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("config" in $$parsedSource) {
+            $$parsedSource["config"] = $$createField2_0($$parsedSource["config"]);
+        }
+        return new OpenVPNProfileInput(/** @type {Partial<OpenVPNProfileInput>} */($$parsedSource));
     }
 }
 
@@ -5363,7 +5774,7 @@ export class ScrollbackSnapshot {
      * @returns {ScrollbackSnapshot}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType32;
+        const $$createField3_0 = $$createType35;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("marks" in $$parsedSource) {
             $$parsedSource["marks"] = $$createField3_0($$parsedSource["marks"]);
@@ -5416,7 +5827,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType34;
+        const $$createField1_0 = $$createType37;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -5600,12 +6011,158 @@ export class ShareStartInput {
      * @returns {ShareStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType36;
+        const $$createField6_0 = $$createType39;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField6_0($$parsedSource["sessions"]);
         }
         return new ShareStartInput(/** @type {Partial<ShareStartInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * SharedProxyConfig is the app setting sharedProxyKey.
+ */
+export class SharedProxyConfig {
+    /**
+     * Creates a new SharedProxyConfig instance.
+     * @param {Partial<SharedProxyConfig>} [$$source = {}] - The source object to create the SharedProxyConfig.
+     */
+    constructor($$source = {}) {
+        if (!("enabled" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["enabled"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["bind"] = undefined;
+        }
+        if (!("port" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["port"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Use is a manual override: this profile takes every destination its
+             * networks contain, whatever another profile also covers. "" = by
+             * route (most specific wins).
+             * @member
+             * @type {string | undefined}
+             */
+            this["use"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SharedProxyConfig instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {SharedProxyConfig}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new SharedProxyConfig(/** @type {Partial<SharedProxyConfig>} */($$parsedSource));
+    }
+}
+
+/**
+ * SharedProxyDetails is the shared proxy's URL, routes and gateway.
+ */
+export class SharedProxyDetails {
+    /**
+     * Creates a new SharedProxyDetails instance.
+     * @param {Partial<SharedProxyDetails>} [$$source = {}] - The source object to create the SharedProxyDetails.
+     */
+    constructor($$source = {}) {
+        if (!("url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["url"] = "";
+        }
+        if (!("routes" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["routes"] = [];
+        }
+        if (!("profiles" in $$source)) {
+            /**
+             * profile name -> routes
+             * @member
+             * @type {{ [_ in string]?: number }}
+             */
+            this["profiles"] = {};
+        }
+        if (!("overlaps" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["overlaps"] = [];
+        }
+        if (!("gateway" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["gateway"] = "";
+        }
+        if (!("listening" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["listening"] = false;
+        }
+        if (!("hosts" in $$source)) {
+            /**
+             * connection name -> profile, for the hint
+             * @member
+             * @type {{ [_ in string]?: string }}
+             */
+            this["hosts"] = {};
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SharedProxyDetails instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {SharedProxyDetails}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType4;
+        const $$createField2_0 = $$createType40;
+        const $$createField3_0 = $$createType4;
+        const $$createField6_0 = $$createType19;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("routes" in $$parsedSource) {
+            $$parsedSource["routes"] = $$createField1_0($$parsedSource["routes"]);
+        }
+        if ("profiles" in $$parsedSource) {
+            $$parsedSource["profiles"] = $$createField2_0($$parsedSource["profiles"]);
+        }
+        if ("overlaps" in $$parsedSource) {
+            $$parsedSource["overlaps"] = $$createField3_0($$parsedSource["overlaps"]);
+        }
+        if ("hosts" in $$parsedSource) {
+            $$parsedSource["hosts"] = $$createField6_0($$parsedSource["hosts"]);
+        }
+        return new SharedProxyDetails(/** @type {Partial<SharedProxyDetails>} */($$parsedSource));
     }
 }
 
@@ -6280,7 +6837,7 @@ export class TLSInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType37;
+        const $$createField1_0 = $$createType41;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("connection_ids" in $$parsedSource) {
             $$parsedSource["connection_ids"] = $$createField0_0($$parsedSource["connection_ids"]);
@@ -6634,7 +7191,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType39;
+        const $$createField0_0 = $$createType43;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -7035,20 +7592,24 @@ const $$createType19 = $Create.Map($Create.Any, $Create.Any);
 const $$createType20 = ssh$0.FleetUploadOptions.createFrom;
 const $$createType21 = ssh$0.LogTailLine.createFrom;
 const $$createType22 = $Create.Array($$createType21);
-const $$createType23 = wg$0.Profile.createFrom;
-const $$createType24 = NetbirdConfig.createFrom;
-const $$createType25 = $Create.Nullable($$createType24);
-const $$createType26 = TailscaleConfig.createFrom;
-const $$createType27 = $Create.Nullable($$createType26);
-const $$createType28 = OpenConnectConfig.createFrom;
-const $$createType29 = $Create.Nullable($$createType28);
-const $$createType30 = wg$0.Status.createFrom;
-const $$createType31 = cmdmarks$0.Mark.createFrom;
-const $$createType32 = $Create.Array($$createType31);
-const $$createType33 = ssh$0.SftpEntry.createFrom;
-const $$createType34 = $Create.Array($$createType33);
-const $$createType35 = ShareSessionInput.createFrom;
-const $$createType36 = $Create.Array($$createType35);
-const $$createType37 = $Create.Array($Create.Any);
-const $$createType38 = ssh$0.ParsedPacket.createFrom;
+const $$createType23 = LocalProxyConfig.createFrom;
+const $$createType24 = wg$0.Profile.createFrom;
+const $$createType25 = NetbirdConfig.createFrom;
+const $$createType26 = $Create.Nullable($$createType25);
+const $$createType27 = TailscaleConfig.createFrom;
+const $$createType28 = $Create.Nullable($$createType27);
+const $$createType29 = OpenConnectConfig.createFrom;
+const $$createType30 = $Create.Nullable($$createType29);
+const $$createType31 = OpenVPNConfig.createFrom;
+const $$createType32 = $Create.Nullable($$createType31);
+const $$createType33 = wg$0.Status.createFrom;
+const $$createType34 = cmdmarks$0.Mark.createFrom;
+const $$createType35 = $Create.Array($$createType34);
+const $$createType36 = ssh$0.SftpEntry.createFrom;
+const $$createType37 = $Create.Array($$createType36);
+const $$createType38 = ShareSessionInput.createFrom;
 const $$createType39 = $Create.Array($$createType38);
+const $$createType40 = $Create.Map($Create.Any, $Create.Any);
+const $$createType41 = $Create.Array($Create.Any);
+const $$createType42 = ssh$0.ParsedPacket.createFrom;
+const $$createType43 = $Create.Array($$createType42);

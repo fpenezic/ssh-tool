@@ -108,20 +108,32 @@ func (a *App) idleStopFor(p profilePolicy) (time.Duration, bool) {
 	}
 }
 
-// carryIdleStop copies idle_stop_minutes from a profile's old config
+// carryIdleStop copies the shared per-profile fields (idle_stop_minutes,
+// local_proxy, last_routes) from a profile's old config
 // JSON into a freshly marshalled one. The edit paths rebuild the config
 // from a typed struct per kind, which knows nothing about this shared
 // field and would silently reset it to the default.
 func carryIdleStop(oldJSON, newJSON string) string {
 	var old map[string]json.RawMessage
-	if json.Unmarshal([]byte(oldJSON), &old) != nil || old["idle_stop_minutes"] == nil {
+	if json.Unmarshal([]byte(oldJSON), &old) != nil {
 		return newJSON
 	}
 	m := map[string]json.RawMessage{}
 	if json.Unmarshal([]byte(newJSON), &m) != nil {
 		return newJSON
 	}
-	m["idle_stop_minutes"] = old["idle_stop_minutes"]
+	// Per-profile settings kept outside the typed edit forms: the idle
+	// stop override, the local proxy and the routes it last learned.
+	carried := false
+	for _, k := range []string{"idle_stop_minutes", "local_proxy", "last_routes"} {
+		if old[k] != nil {
+			m[k] = old[k]
+			carried = true
+		}
+	}
+	if !carried {
+		return newJSON
+	}
 	out, err := json.Marshal(m)
 	if err != nil {
 		return newJSON
@@ -178,6 +190,8 @@ func (a *App) ensureTunnel(row *store.NetworkProfile) (tunnelDialer, error) {
 		return a.ensureTailscaleTunnel(row)
 	case kindOpenConnect:
 		return a.ensureOpenConnectTunnel(row)
+	case kindOpenVPN:
+		return a.ensureOpenVPNTunnel(row)
 	default:
 		return a.ensureWgTunnel(row.ID)
 	}
@@ -187,7 +201,8 @@ func (a *App) ensureTunnel(row *store.NetworkProfile) (tunnelDialer, error) {
 // releases its presence claim so other synced machines see it free.
 func (a *App) tunnelStop(profileID string) {
 	a.wgman.Stop(profileID)
-	a.nbman.Stop(profileID)
+	a.nbman.Stop(profileID) // ends an OpenConnect session at the gateway too
+	ocSessionSet(profileID, "")
 	go a.presenceClear(profileID)
 }
 
@@ -684,14 +699,18 @@ type NetworkProfileInfo struct {
 	Paused bool   `json:"paused"`
 	// IdleStopMinutes is the per-profile override: null = global
 	// setting, -1 never, otherwise minutes.
-	IdleStopMinutes *int               `json:"idle_stop_minutes"`
-	Profile         wg.Profile         `json:"profile"`               // WG only
-	Netbird         *NetbirdConfig     `json:"netbird,omitempty"`     // NetBird only
-	Tailscale       *TailscaleConfig   `json:"tailscale,omitempty"`   // Tailscale only
-	OpenConnect     *OpenConnectConfig `json:"openconnect,omitempty"` // OpenConnect only
-	Status          wg.Status          `json:"status"`
-	CreatedAt       int64              `json:"created_at"`
-	UpdatedAt       int64              `json:"updated_at"`
+	IdleStopMinutes *int             `json:"idle_stop_minutes"`
+	LocalProxy      LocalProxyConfig `json:"local_proxy"`
+	// LocalProxyListening: the local proxy is on and its port is bound.
+	LocalProxyListening bool               `json:"local_proxy_listening"`
+	Profile             wg.Profile         `json:"profile"`               // WG only
+	Netbird             *NetbirdConfig     `json:"netbird,omitempty"`     // NetBird only
+	Tailscale           *TailscaleConfig   `json:"tailscale,omitempty"`   // Tailscale only
+	OpenConnect         *OpenConnectConfig `json:"openconnect,omitempty"` // OpenConnect only
+	OpenVPN             *OpenVPNConfig     `json:"openvpn,omitempty"`     // OpenVPN only
+	Status              wg.Status          `json:"status"`
+	CreatedAt           int64              `json:"created_at"`
+	UpdatedAt           int64              `json:"updated_at"`
 }
 
 func (a *App) infoFor(row store.NetworkProfile) NetworkProfileInfo {
@@ -701,8 +720,12 @@ func (a *App) infoFor(row store.NetworkProfile) NetworkProfileInfo {
 		Kind: pol.Kind, Mode: pol.Mode, Paused: pol.Paused,
 		IdleStopMinutes: pol.IdleStopMinutes,
 		CreatedAt:       row.CreatedAt, UpdatedAt: row.UpdatedAt,
-		Status: a.tunnelStatus(row.ID),
+		Status:     a.tunnelStatus(row.ID),
+		LocalProxy: profileLocalProxy(row.ConfigJSON),
 	}
+	localProxies.Lock()
+	info.LocalProxyListening = localProxies.m[row.ID] != nil
+	localProxies.Unlock()
 	switch pol.Kind {
 	case kindNetbird:
 		var nb NetbirdConfig
@@ -716,6 +739,10 @@ func (a *App) infoFor(row store.NetworkProfile) NetworkProfileInfo {
 		var oc OpenConnectConfig
 		_ = json.Unmarshal([]byte(row.ConfigJSON), &oc)
 		info.OpenConnect = &oc
+	case kindOpenVPN:
+		var ov OpenVPNConfig
+		_ = json.Unmarshal([]byte(row.ConfigJSON), &ov)
+		info.OpenVPN = &ov
 	default:
 		_ = json.Unmarshal([]byte(row.ConfigJSON), &info.Profile)
 		info.Profile.ID = row.ID
@@ -1035,14 +1062,18 @@ func (a *App) NetworkProfileRenderConf(id string) (string, error) {
 }
 
 // NetworkProfileDelete stops the tunnel and removes the row + vault
-// secrets. Connections still referencing the id fail to connect with
-// "not found" - visible, not silent.
+// secrets; connections and folders set to it fall back to their
+// inherited network (store.DeleteNetworkProfile). An OpenVPN profile's
+// certificate credential stays: it is an ordinary credential now.
 func (a *App) NetworkProfileDelete(id string) error {
 	row, err := a.db.GetNetworkProfile(id)
 	if err != nil {
 		return err
 	}
 	a.tunnelStop(id)
+	stopLocalProxy(id)
+	_ = a.vault.Delete(localProxyVaultKey(id))
+	sharedRoutesInvalidate()
 	// WG secrets live in the vault keyed by profile; NetBird/Tailscale
 	// keep their registration state on disk. Clean up whichever this
 	// profile has.
@@ -1051,6 +1082,8 @@ func (a *App) NetworkProfileDelete(id string) error {
 		_ = os.RemoveAll(netbirdStateDir(id))
 	case kindTailscale:
 		_ = os.RemoveAll(tailscaleStateDir(id))
+	case kindOpenVPN:
+		_ = a.vault.Delete(ovpnStaticKeyVaultKey(id))
 	default:
 		var p wg.Profile
 		_ = json.Unmarshal([]byte(row.ConfigJSON), &p)
@@ -1265,7 +1298,7 @@ func (a *App) scheduleIdleStopLocked(pid string) {
 			name, kind = row.Name, parsePolicy(row.ConfigJSON).Kind
 		}
 		log.Printf("network: %s tunnel %q idle for %s, stopping", kind, name, linger)
-		a.tunnelStop(pid)
+		a.idleStopTunnel(pid, kind)
 		EventsEmit("network_tunnel_changed", pid)
 	})
 }
@@ -1310,6 +1343,8 @@ func (a *App) stopTunnelsOnQuit() {
 		})
 	}
 	a.stopPresencePoll()
+	stopLocalProxies()
+	stopBrowserProxies()
 
 	// Shared bastions first: a prefix may itself ride a WG tunnel, so
 	// close the prefixes before tearing the tunnels down.

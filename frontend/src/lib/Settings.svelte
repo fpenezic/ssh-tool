@@ -1619,8 +1619,8 @@
   let npName = $state("");
   let npConf = $state("");
   let npEditingId = $state<string | null>(null);
-  let npEditKind = $state<"wireguard" | "netbird" | "tailscale" | "openconnect">("wireguard");
-  let npKind = $state<"wireguard" | "netbird" | "tailscale" | "openconnect">("wireguard");
+  let npEditKind = $state<"wireguard" | "netbird" | "tailscale" | "openconnect" | "openvpn">("wireguard");
+  let npKind = $state<"wireguard" | "netbird" | "tailscale" | "openconnect" | "openvpn">("wireguard");
   // OpenConnect form fields
   const ocEmpty = (): import("./api").OpenConnectConfig => ({ server: "", flavor: "anyconnect", second_password: "prompt", password_credential_id: "", second_credential_id: "", client_cert_credential_id: "" });
   let oc = $state<import("./api").OpenConnectConfig>(ocEmpty());
@@ -1633,6 +1633,19 @@
   let ocCertKeyFile = $state<File | null>(null);
   let ocCertPaste = $state("");
   let ocCertPassword = $state("");
+  // OpenVPN form fields. ovText is a newly imported .ovpn (secrets
+  // included; the backend moves them to the vault), "" = keep the stored.
+  const ovEmpty = (): import("./api").OpenVPNConfig => ({ second_password: "prompt", password_credential_id: "", second_credential_id: "", client_cert_credential_id: "" });
+  let ov = $state<import("./api").OpenVPNConfig>(ovEmpty());
+  let ovText = $state("");
+  let ovFileName = $state("");
+  let ovPasteOpen = $state(false);
+  let ovNewPassword = $state("");
+  // What the imported (or stored) configuration asks for, to show only
+  // the fields that matter.
+  const ovNeedsLogin = $derived(ovText ? /^\s*auth-user-pass\b/m.test(ovText) : !!ov.auth_user_pass);
+  const ovChallenge = $derived(ovText ? (ovText.match(/^\s*static-challenge\s+"([^"]*)"/m)?.[1] ?? "") : (ov.static_challenge ?? ""));
+  const ovHasCert = $derived(/<cert>/.test(ovText));
   // Live tunnel details, per profile, shown on demand.
   let npInfoOpen = $state<Record<string, import("./api").VpnTunnelInfo | null | undefined>>({});
   let npBusy = $state(false);
@@ -1662,6 +1675,7 @@
   const nbInstalled = $derived(plugins.some((p) => p.name === "netbird" && p.installed));
   const tsInstalled = $derived(plugins.some((p) => p.name === "tailscale" && p.installed));
   const ocInstalled = $derived(plugins.some((p) => p.name === "openconnect" && p.installed));
+  const ovInstalled = $derived(plugins.some((p) => p.name === "openvpn" && p.installed));
   // Credentials holding a password (vault or an external backend).
   // Client certificate credentials for the OpenConnect profile.
   const certCredOptions = $derived(
@@ -1673,6 +1687,9 @@
   // button alone gave no clue.
   const ocMissing = $derived(
     [!npName.trim() && "a name", !oc.server.trim() && "the gateway", !ocInstalled && "the OpenConnect plugin"].filter(Boolean).join(", "),
+  );
+  const ovMissing = $derived(
+    [!npName.trim() && "a name", !ovText.trim() && "an .ovpn configuration", !ovInstalled && "the OpenVPN plugin"].filter(Boolean).join(", "),
   );
   const passwordCredOptions = $derived(
     credentials.list
@@ -1739,6 +1756,8 @@
       credentials.load().catch(() => {});
       refreshPlugins();
       api.wgBindPhysicalGet().then((v) => (wgBindPhysical = v)).catch(() => {});
+      spLoad();
+      npLoadUsage();
       api.settingsGet(IDLE_STOP_KEY).then((v) => {
         const n = parseInt(v, 10);
         idleStopGlobal = v.trim() !== "" && !isNaN(n) ? n : IDLE_STOP_DEFAULT;
@@ -1854,8 +1873,8 @@
     try {
       await ocStoreInlineSecrets();
       await api.networkProfileCreateOpenConnect(npName.trim(), ocConfigFromForm());
-      npCancelEdit();
       await networkProfiles.load(true);
+      npDone();
       toast.ok("OpenConnect profile added");
     } catch (e: any) { toast.err(errMsg(e)); }
     finally { npBusy = false; }
@@ -1866,29 +1885,71 @@
     try {
       await ocStoreInlineSecrets();
       await api.networkProfileUpdateOpenConnect(npEditingId, npName.trim(), ocConfigFromForm());
-      npCancelEdit();
       await networkProfiles.load(true);
+      npDone();
       toast.ok("Profile saved");
     } catch (e: any) { toast.err(errMsg(e)); }
     finally { npBusy = false; }
   }
-  async function npToggleInfo(np: NetworkProfileInfo) {
-    if (np.id in npInfoOpen) {
-      const next = { ...npInfoOpen };
-      delete next[np.id];
-      npInfoOpen = next;
-      return;
-    }
-    npInfoOpen = { ...npInfoOpen, [np.id]: undefined };
+  async function ovPickFile(e: Event) {
+    const f = (e.target as HTMLInputElement).files?.[0];
+    if (!f) return;
+    ovText = await f.text();
+    ovFileName = f.name;
+    if (!npName.trim()) npName = f.name.replace(/\.(ovpn|conf)$/i, "");
+  }
+  async function ovStoreInlineSecrets() {
+    if (!ovNewPassword) return;
+    const base = npName.trim() || "OpenVPN";
+    const r = await api.credentialsCreate({
+      kind: "password", name: `${base} - VPN password`, password: ovNewPassword,
+      default_username: ov.username?.trim() || undefined,
+    } as any);
+    ov.password_credential_id = r.credential!.id;
+    ovNewPassword = "";
+    await credentials.load();
+  }
+  function ovResetInline() {
+    ovText = ""; ovFileName = ""; ovPasteOpen = false; ovNewPassword = "";
+  }
+  async function npCreateOpenVPN() {
+    npBusy = true;
     try {
-      npInfoOpen = { ...npInfoOpen, [np.id]: await api.networkProfileTunnelInfo(np.id) };
+      await ovStoreInlineSecrets();
+      await api.networkProfileCreateOpenVPN(npName.trim(), ovText, { ...ov, username: ov.username?.trim() });
+      await Promise.all([networkProfiles.load(true), credentials.load()]);
+      npDone();
+      toast.ok("OpenVPN profile added");
     } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
+  async function npSaveOpenVPN() {
+    if (!npEditingId) return;
+    npBusy = true;
+    try {
+      await ovStoreInlineSecrets();
+      await api.networkProfileUpdateOpenVPN(npEditingId, npName.trim(), ovText, { ...ov, username: ov.username?.trim() });
+      await Promise.all([networkProfiles.load(true), credentials.load()]);
+      npDone();
+      toast.ok("Profile saved");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
+  function tunnelDur(sec: number): string {
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+    if (h && m) return `${h}h ${m}m`;
+    if (h) return `${h}h`;
+    return m ? `${m} min` : `${sec}s`;
+  }
+  function tunnelInRel(unix: number): string {
+    const left = unix - Math.floor(Date.now() / 1000);
+    return left > 0 ? `in ${tunnelDur(left)}` : "already passed";
   }
   function tunnelInfoText(i: import("./api").VpnTunnelInfo): string {
     const lines = [
-      `type:       ${ocFlavorTitle[i.flavor] ?? i.flavor}`,
+      `type:       ${i.flavor === "openvpn" ? "OpenVPN" : ocFlavorTitle[i.flavor] ?? i.flavor}`,
       `server:     ${i.server}${i.gateway ? ` (${i.gateway})` : ""}`,
-      `transport:  ${i.transport || "-"}`,
+      `transport:  ${i.transport || "-"}${i.cipher ? `, ${i.cipher}` : ""}`,
       `address:    ${i.addresses.join(", ") || "-"}`,
       `mtu:        ${i.mtu || "-"}${i.local_mtu && i.local_mtu !== i.mtu ? ` (local ${i.local_mtu})` : ""}`,
       `dns:        ${i.dns.join(", ") || "-"}${i.tunnel_all_dns ? " (all queries)" : ""}`,
@@ -1897,8 +1958,8 @@
     if (i.split_dns?.length) lines.push(`split dns:  ${i.split_dns.join(", ")}`);
     lines.push(`routes:     ${i.routes.length ? i.routes.join("\n            ") : "all traffic"}`);
     if (i.excluded_routes?.length) lines.push(`excluded:   ${i.excluded_routes.join("\n            ")}`);
-    if (i.idle_timeout_s) lines.push(`idle:       ${i.idle_timeout_s}s`);
-    if (i.auth_expires) lines.push(`login ends: ${new Date(i.auth_expires * 1000).toLocaleString()}`);
+    if (i.auth_expires) lines.push(`session:    ends ${new Date(i.auth_expires * 1000).toLocaleString()} (${tunnelInRel(i.auth_expires)}) - the gateway disconnects then and asks for a new login`);
+    if (i.idle_timeout_s) lines.push(`idle:       gateway drops the session after ${tunnelDur(i.idle_timeout_s)} without traffic`);
     if (i.banner) lines.push("", i.banner);
     return lines.join("\n");
   }
@@ -2050,8 +2111,8 @@
     npBusy = true;
     try {
       await api.networkProfileCreateNetbird(npName.trim(), nbManagement.trim(), nbDevice.trim(), nbCredId);
-      npCancelEdit();
       await networkProfiles.load(true);
+      npDone();
       toast.ok("NetBird profile added");
     } catch (e: any) { toast.err(errMsg(e)); }
     finally { npBusy = false; }
@@ -2061,8 +2122,8 @@
     npBusy = true;
     try {
       await api.networkProfileUpdateNetbird(npEditingId, npName.trim(), nbManagement.trim(), nbDevice.trim(), nbCredId);
-      npCancelEdit();
       await networkProfiles.load(true);
+      npDone();
       toast.ok("Profile saved");
     } catch (e: any) { toast.err(errMsg(e)); }
     finally { npBusy = false; }
@@ -2096,8 +2157,8 @@
     npBusy = true;
     try {
       await api.networkProfileCreateTailscale(npName.trim(), tsControl.trim(), tsHostname.trim(), tsCredId);
-      npCancelEdit();
       await networkProfiles.load(true);
+      npDone();
       toast.ok("Tailscale profile added");
     } catch (e: any) { toast.err(errMsg(e)); }
     finally { npBusy = false; }
@@ -2107,8 +2168,8 @@
     npBusy = true;
     try {
       await api.networkProfileUpdateTailscale(npEditingId, npName.trim(), tsControl.trim(), tsHostname.trim(), tsCredId);
-      npCancelEdit();
       await networkProfiles.load(true);
+      npDone();
       toast.ok("Profile saved");
     } catch (e: any) { toast.err(errMsg(e)); }
     finally { npBusy = false; }
@@ -2118,8 +2179,8 @@
     npBusy = true;
     try {
       await api.networkProfileCreate(npName.trim(), npConf);
-      npName = ""; npConf = "";
       await networkProfiles.load(true);
+      npDone();
       toast.ok("Profile added");
     } catch (e: any) { toast.err(errMsg(e)); }
     finally { npBusy = false; }
@@ -2132,6 +2193,11 @@
       nbManagement = np.netbird?.management_url ?? "";
       nbDevice = np.netbird?.device_name ?? "";
       nbCredId = np.netbird?.setup_key_credential_id ?? "";
+      return;
+    }
+    if (np.kind === "openvpn") {
+      ov = { ...ovEmpty(), ...(np.openvpn ?? {}) };
+      ovResetInline();
       return;
     }
     if (np.kind === "openconnect") {
@@ -2163,6 +2229,8 @@
     tsNewKeyOpen = false; tsNewKeyName = ""; tsNewKeySecret = "";
     oc = ocEmpty(); ocMtu = "";
     ocResetInline();
+    ov = ovEmpty();
+    ovResetInline();
   }
   function ocResetInline() {
     ocNewPassword = ""; ocCertMode = "pick"; ocCertFile = null; ocCertKeyFile = null;
@@ -2198,8 +2266,8 @@
     npBusy = true;
     try {
       await api.networkProfileUpdate(npEditingId, npName.trim(), npConf);
-      npCancelEdit();
       await networkProfiles.load(true);
+      npDone();
       toast.ok("Profile saved");
     } catch (e: any) { toast.err(errMsg(e)); }
     finally { npBusy = false; }
@@ -2207,13 +2275,16 @@
   async function npDelete(np: NetworkProfileInfo) {
     const ok = await showConfirm({
       title: "Delete network profile",
-      message: `Delete "${np.name}"? Connections still assigned to it will fail to connect until you change their Network setting.`,
+      message: `Delete "${np.name}"? Connections and folders set to it fall back to their inherited network.`,
       okLabel: "Delete",
     });
     if (!ok) return;
     try {
       await api.networkProfileDelete(np.id);
-      await networkProfiles.load(true);
+      // The delete also cleared the profile from connections / folders.
+      await Promise.all([networkProfiles.load(true), tree.load()]);
+      npSel = "general";
+      npCancelEdit();
     } catch (e: any) { toast.err(errMsg(e)); }
   }
   async function npSetPolicy(np: NetworkProfileInfo, mode: string, paused: boolean) {
@@ -2222,14 +2293,193 @@
       await networkProfiles.load(true);
     } catch (e: any) { toast.err(errMsg(e)); }
   }
+  // Browser through a profile (web bookmarks live in the tree).
+  async function npBrowser(np: NetworkProfileInfo, url: string) {
+    try { await api.networkProfileOpenBrowser(np.id, url); } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  // App proxy (the "shared" proxy in code): one SOCKS for every profile
+  // marked shared, picking the profile by destination.
+  let sp = $state<{ enabled: boolean; bind: string; port: number; use: string; listening: boolean }>({ enabled: false, bind: "127.0.0.1", port: 1080, use: "", listening: false });
+  const spProfiles = $derived(networkProfiles.list.filter((p) => p.local_proxy?.shared));
+  let spDetails = $state<import("./api").SharedProxyDetails | null>(null);
+  async function spLoad() {
+    try {
+      const r = await api.networkSharedProxyGet();
+      sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, use: r.config.use || "", listening: r.listening };
+      spDetails = sp.enabled ? await api.networkSharedProxyDetails() : null;
+    } catch { /* shown on save */ }
+  }
+  async function spSave() {
+    try {
+      await api.networkSharedProxySet({ enabled: sp.enabled, bind: sp.bind.trim(), port: Number(sp.port), use: sp.use });
+      await spLoad();
+      toast.ok(sp.enabled ? `App proxy on ${sp.bind}:${sp.port}` : "App proxy off");
+    } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  async function spCopy(what: "url" | "gateway" | "routes") {
+    try {
+      const d = await api.networkSharedProxyDetails();
+      spDetails = d;
+      copyText(what === "url" ? d.url : what === "gateway" ? d.gateway : d.routes.join(","), { label: what === "url" ? "Proxy URL" : what === "gateway" ? "Gateway command" : "Routes" });
+    } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  // Local proxy panel per profile (form state while open).
+  type LpForm = { enabled: boolean; shared: boolean; bind: string; port: number; networksText: string; details?: import("./api").LocalProxyDetails };
+  let lpOpen = $state<Record<string, LpForm>>({});
+  async function lpLoad(np: NetworkProfileInfo) {
+    const c = np.local_proxy ?? { enabled: false, port: 0 };
+    const f: LpForm = { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080, networksText: (c.networks ?? []).join("\n") };
+    try { f.details = await api.networkProfileLocalProxyDetails(np.id); } catch { /* shown on save */ }
+    lpOpen = { ...lpOpen, [np.id]: f };
+  }
+  async function lpSave(np: NetworkProfileInfo) {
+    const f = lpOpen[np.id];
+    if (!f) return;
+    try {
+      await api.networkProfileSetLocalProxy(np.id, {
+        enabled: f.enabled, shared: f.shared, bind: f.bind.trim(), port: Number(f.port),
+        networks: f.networksText.split(/[\s,]+/).filter(Boolean),
+      });
+      await networkProfiles.load(true);
+      f.details = await api.networkProfileLocalProxyDetails(np.id);
+      lpOpen = { ...lpOpen, [np.id]: f };
+      toast.ok("Proxy settings saved");
+      spLoad();
+    } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  async function lpCopy(np: NetworkProfileInfo, what: "url" | "gateway" | "routes") {
+    try {
+      const d = await api.networkProfileLocalProxyDetails(np.id);
+      const text = what === "url" ? d.url : what === "gateway" ? d.gateway : d.routes.join(",");
+      copyText(text, { label: what === "url" ? "Proxy URL" : what === "gateway" ? "Gateway command" : "Routes" });
+    } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  // Tests run per profile: one slow VPN login must not grey out the
+  // other profiles' buttons.
+  let npTesting = $state<Record<string, boolean>>({});
   async function npTest(np: NetworkProfileInfo) {
-    npBusy = true;
+    npTesting = { ...npTesting, [np.id]: true };
     try {
       const st = await api.networkProfileTest(np.id);
       toast.ok(st.running ? `Tunnel ${np.name} is up` : `Tunnel ${np.name} did not start`);
       await networkProfiles.load(true);
     } catch (e: any) { toast.err(errMsg(e)); }
-    finally { npBusy = false; }
+    finally {
+      const n = { ...npTesting };
+      delete n[np.id];
+      npTesting = n;
+    }
+  }
+
+  // Page layout: a list (General, the profiles, New profile) beside the
+  // selected item; a profile opens on tabs.
+  type NpTab = "overview" | "settings" | "proxy" | "details";
+  const NP_TABS: [NpTab, string][] = [["overview", "Overview"], ["settings", "Settings"], ["proxy", "Proxy"], ["details", "Details"]];
+  let npSel = $state<string>("general");
+  let npTab = $state<NpTab>("overview");
+  const npCur = $derived(networkProfiles.list.find((p) => p.id === npSel) ?? null);
+  const npUpCount = $derived(networkProfiles.list.filter((p) => p.status.running && !p.paused).length);
+  let npUsage = $state<Record<string, { connections: number; web: number }>>({});
+  let spShowRoutes = $state(false);
+  function npLoadUsage() {
+    api.networkProfilesUsage().then((u) => (npUsage = u ?? {})).catch(() => {});
+  }
+  function npSelect(id: string) {
+    npSel = id;
+    npCancelEdit();
+    const np = networkProfiles.list.find((p) => p.id === id);
+    if (np) npOpenTab(npTab, np);
+  }
+  function npOpenTab(t: NpTab, np: NetworkProfileInfo | null = npCur) {
+    npTab = t;
+    if (!np) return;
+    if (t === "settings" && npEditingId !== np.id) npStartEdit(np);
+    if (t === "proxy") lpLoad(np);
+    if ((t === "details" || t === "overview") && np.status.running && (np.kind === "openconnect" || np.kind === "openvpn")) npRefreshInfo(np);
+  }
+  // After a create or save: the list has reloaded; open the profile (a
+  // new one on its Overview, a saved one stays on Settings).
+  function npDone() {
+    const id = npEditingId;
+    const name = npName.trim();
+    npCancelEdit();
+    const np = id
+      ? networkProfiles.list.find((p) => p.id === id)
+      : networkProfiles.list.filter((p) => p.name === name).sort((a, b) => b.created_at - a.created_at)[0];
+    npLoadUsage();
+    if (!np) return;
+    npSel = np.id;
+    npOpenTab(id ? "settings" : "overview", np);
+  }
+  // Revert the Settings form to the stored profile.
+  function npRevert() {
+    const np = npCur;
+    npCancelEdit();
+    if (np) npStartEdit(np);
+  }
+  async function npRefreshInfo(np: NetworkProfileInfo) {
+    try {
+      npInfoOpen = { ...npInfoOpen, [np.id]: await api.networkProfileTunnelInfo(np.id) };
+    } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  function npKindLine(np: NetworkProfileInfo): string {
+    if (np.kind === "openconnect") return `OpenConnect - ${ocFlavorTitle[np.openconnect?.flavor ?? "anyconnect"]}`;
+    return kindTitle(np.kind);
+  }
+  function npServerLine(np: NetworkProfileInfo): string {
+    switch (np.kind) {
+      case "netbird": return [kindTitle(np.kind), np.netbird?.device_name || "ssh-tool", np.netbird?.management_url].filter(Boolean).join(" - ");
+      case "tailscale": return [kindTitle(np.kind), np.tailscale?.hostname || "ssh-tool", np.tailscale?.control_url].filter(Boolean).join(" - ");
+      case "openvpn": return [kindTitle(np.kind), np.openvpn?.server, np.openvpn?.static_key].filter(Boolean).join(" - ");
+      case "openconnect": return [npKindLine(np), np.openconnect?.server].filter(Boolean).join(" - ");
+      default: return [kindTitle(np.kind), np.profile.peers?.[0]?.endpoint].filter(Boolean).join(" - ");
+    }
+  }
+  function npUsageText(id: string): string {
+    const u = npUsage[id];
+    if (!u || (!u.connections && !u.web)) return "nothing yet - set it as the Network of a folder or connection";
+    const parts = [];
+    if (u.connections) parts.push(`${u.connections} ${u.connections === 1 ? "connection" : "connections"}`);
+    if (u.web) parts.push(`${u.web} web ${u.web === 1 ? "bookmark" : "bookmarks"}`);
+    return parts.join(", ");
+  }
+  function npSessionText(np: NetworkProfileInfo): string {
+    const ti = npInfoOpen[np.id];
+    if (!np.status.running || !ti?.auth_expires) return "";
+    return `ends ${new Date(ti.auth_expires * 1000).toLocaleString()} (${tunnelInRel(ti.auth_expires)}, the gateway's limit)`;
+  }
+  function npPresenceText(np: NetworkProfileInfo): string {
+    if (np.paused) return "Paused: connections dial directly.";
+    const ro = npRemoteOwners[np.id];
+    if (ro) return `Up on ${ro.machine_name}.`;
+    if (np.status.running) return "Up on this machine. It stops by itself after the idle time without sessions.";
+    return "Down. Comes up with the first connection through it.";
+  }
+  // WireGuard / NetBird / Tailscale details (OpenConnect and OpenVPN ask
+  // the plugin for theirs).
+  function npStatusText(np: NetworkProfileInfo): string {
+    if (!np.status.running) return "The tunnel is down.";
+    const st = np.status;
+    const lines = [`type:       ${kindTitle(np.kind)}`];
+    if (np.kind === "wireguard") {
+      lines.push(`address:    ${np.profile.addresses?.join(", ") || "-"}`);
+      if (np.profile.peers?.length) lines.push(`peer:       ${np.profile.peers[0].endpoint}`);
+      if (st.last_handshake > 0) lines.push(`handshake:  ${new Date(st.last_handshake * 1000).toLocaleTimeString()}`);
+    } else if ((st.peers ?? 0) > 0) {
+      lines.push(`peers:      ${st.peers}`);
+    }
+    if (st.rx_bytes > 0 || st.tx_bytes > 0) lines.push(`rx / tx:    ${fmtBytes(st.rx_bytes)} / ${fmtBytes(st.tx_bytes)}`);
+    return lines.join("\n");
+  }
+  function fmtBytes(n: number): string {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KiB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MiB`;
+  }
+  // The proxy password stays off the screen; Copy puts the full address
+  // on the clipboard.
+  function maskProxyURL(u: string): string {
+    return u.replace(/:([^:@/]+)@/, ":******@");
   }
 
   // Refresh the profile counts + active-tunnel count every time the
@@ -3667,229 +3917,7 @@
   </div>
 
   {:else if activeSection === "network"}
-  <div class="group">
-    <h2>Network profiles</h2>
-    <p class="hint">
-      Userspace tunnels - no TUN adapter, no admin rights, no system
-      routes. Assign a profile to a folder or connection (Network
-      setting) and its first SSH hop dials through the tunnel.
-      WireGuard is built in; NetBird, Tailscale and OpenConnect need the
-      optional plugins below.
-    </p>
-
-    <h3 style="margin-top:0.8rem">Plugins</h3>
-    <p class="hint">
-      Optional VPN clients, kept out of the main app to keep it small.
-      Downloaded from the ssh-tool-plugins releases and verified by
-      checksum before install.
-    </p>
-    {#each plugins as pl (pl.name)}
-      <div class="np-card">
-        <div class="np-head">
-          <strong>{pluginTitle(pl.name)}</strong>
-          {#if !pl.supported}
-            <span class="np-pill">not on this platform</span>
-          {:else if pl.installed && pl.update_available}
-            <span class="np-pill paused">update available</span>
-          {:else if pl.installed}
-            <span class="np-pill running">installed{pl.version ? ` ${pl.version}` : ""}</span>
-          {:else}
-            <span class="np-pill">not installed</span>
-          {/if}
-          {#if pl.installed && pl.engine_version}<span class="np-kind">{engineLabel(pl.name)} {pl.engine_version}</span>{/if}
-          {#if pl.installed}<span class="np-meta">{pl.path}</span>{/if}
-        </div>
-        {#if pl.supported}
-          {#if pluginProgress[pl.name]}
-            {@const pp = pluginProgress[pl.name]}
-            <div class="plugin-progress">
-              <div class="plugin-progress-bar">
-                <!-- Empty while the release is looked up, then only ever
-                     grows: download fills it, verify / install hold it full.
-                     An animated placeholder here flashed full and snapped
-                     back to 0% when the download started. -->
-                <div
-                  class="plugin-progress-fill"
-                  style:width={pp.phase === "resolve" ? "0%"
-                    : pp.phase === "download" ? (pp.total > 0 ? `${Math.min(100, (pp.read / pp.total) * 100)}%` : "0%")
-                    : "100%"}
-                ></div>
-              </div>
-              <span class="hint">{progressText(pp)}</span>
-            </div>
-          {:else if pl.update_available}
-            <p class="hint" style="margin:0.2rem 0">
-              Installed {pl.version || "(unknown)"}; {pl.latest || "a newer helper"} is available.
-            </p>
-          {/if}
-          <div class="np-actions">
-            {#if pl.installed}
-              <button class:primary={pl.update_available} onclick={() => pluginDownload(pl.name)} disabled={pluginBusy}>
-                {pl.update_available ? "Update" : "Reinstall"}
-              </button>
-              <button class="danger" onclick={() => pluginRemove(pl.name)} disabled={pluginBusy}>Remove</button>
-            {:else}
-              <button class="primary" onclick={() => pluginDownload(pl.name)} disabled={pluginBusy}>Download</button>
-            {/if}
-          </div>
-        {/if}
-      </div>
-    {/each}
-
-    <fieldset class="check-cards" style="margin-top:1rem">
-      <label class:active={wgBindPhysical}>
-        <input
-          type="checkbox"
-          checked={wgBindPhysical}
-          onchange={(e) => toggleWgBindPhysical((e.target as HTMLInputElement).checked)}
-        />
-        <div>
-          <div class="mode-name">Bind WireGuard to the physical network adapter</div>
-          <div class="mode-desc">
-            Sends the built-in WireGuard tunnel's traffic straight out your real
-            network adapter instead of letting the OS route it. Turn this on if
-            another VPN is active (for example a UniFi Identity "TUN Mode" split
-            tunnel) that takes over the default route - without it the WireGuard
-            handshake gets swallowed by that VPN and never connects. Leave off
-            otherwise. Running tunnels restart when you change this.
-          </div>
-        </div>
-      </label>
-
-    </fieldset>
-
-    <label class="np-mode np-idle-global">Stop an idle tunnel
-      <select value={String(idleStopGlobal)} onchange={(e) => setIdleStopGlobal((e.target as HTMLSelectElement).value)}>
-        {#each idleStopOptions(idleStopGlobal) as m (m)}
-          <option value={String(m)}>{idleStopLabel(m)}{m === IDLE_STOP_DEFAULT ? " (default)" : ""}</option>
-        {/each}
-      </select>
-      <span class="hint inline">Counted from when the last SSH session through the tunnel closes. A profile can override it.</span>
-    </label>
-
-    <h3 style="margin-top:1.2rem">Profiles</h3>
-
-    {#if networkProfiles.error}
-      <p class="hint" style="color: var(--red)">{networkProfiles.error}</p>
-    {/if}
-
-    {#each networkProfiles.list as np (np.id)}
-      <div class="np-card">
-        <div class="np-head">
-          <strong>{np.name}</strong>
-          <span class="np-kind">{kindTitle(np.kind)}</span>
-          {#if np.paused}
-            <span class="np-pill paused">paused</span>
-          {:else if np.status.running}
-            <span class="np-pill running" title={np.kind === "wireguard" && np.status.last_handshake > 0
-              ? `last handshake ${new Date(np.status.last_handshake * 1000).toLocaleTimeString()}`
-              : "up"}>up</span>
-          {:else}
-            <span class="np-pill">idle</span>
-          {/if}
-          {#if npRemoteOwners[np.id]}
-            <span class="np-pill remote" title={np.kind === "wireguard" || np.kind === "openconnect" ? "This tunnel is live on another synced machine. Only one machine can hold it at a time." : "This tunnel is also up on another synced machine."}>
-              up on {npRemoteOwners[np.id].machine_name}
-            </span>
-          {/if}
-          <span class="np-meta">
-            {#if np.kind === "netbird"}
-              {np.netbird?.device_name || "ssh-tool"}
-              {#if np.netbird?.management_url}&nbsp;· {np.netbird.management_url}{/if}
-              {#if np.status.running && (np.status.peers ?? 0) > 0}&nbsp;· {np.status.peers} peer{np.status.peers === 1 ? "" : "s"}{/if}
-            {:else if np.kind === "openconnect"}
-              {np.openconnect?.server}
-              &nbsp;· {ocFlavorTitle[np.openconnect?.flavor ?? "anyconnect"]}
-            {:else if np.kind === "tailscale"}
-              {np.tailscale?.hostname || "ssh-tool"}
-              {#if np.tailscale?.control_url}&nbsp;· {np.tailscale.control_url}{/if}
-              {#if np.status.running && (np.status.peers ?? 0) > 0}&nbsp;· {np.status.peers} peer{np.status.peers === 1 ? "" : "s"}{/if}
-            {:else}
-              {np.profile.addresses?.join(", ")}
-              {#if np.profile.peers?.length}&nbsp;→ {np.profile.peers[0].endpoint}{/if}
-              {#if np.status.running && (np.status.rx_bytes > 0 || np.status.tx_bytes > 0)}
-                &nbsp;· rx {(np.status.rx_bytes / 1024).toFixed(0)}K tx {(np.status.tx_bytes / 1024).toFixed(0)}K
-              {/if}
-            {/if}
-          </span>
-        </div>
-        <div class="np-actions">
-          <label class="np-mode" title="Always: every connect goes through the tunnel. Auto: try direct first, fall back to the tunnel.">Mode
-            <select
-              value={np.mode === "auto" ? "auto" : "always"}
-              onchange={(e) => npSetPolicy(np, (e.target as HTMLSelectElement).value, np.paused)}
-            >
-              <option value="always">Always via tunnel</option>
-              <option value="auto">Auto (direct first)</option>
-            </select>
-          </label>
-          <label class="np-mode" title="How long the tunnel stays up after its last SSH session closes">Stop when idle
-            <select
-              value={np.idle_stop_minutes === null || np.idle_stop_minutes === undefined ? "" : String(np.idle_stop_minutes)}
-              onchange={(e) => npSetIdleStop(np, (e.target as HTMLSelectElement).value)}
-            >
-              <option value="">Global ({idleStopShort(idleStopGlobal)})</option>
-              {#each idleStopOptions(np.idle_stop_minutes ?? null) as m (m)}
-                <option value={String(m)}>{idleStopLabel(m)}</option>
-              {/each}
-            </select>
-          </label>
-          <span class="np-spacer"></span>
-          <button onclick={() => npSetPolicy(np, np.mode === "auto" ? "auto" : "always", !np.paused)}
-            title={np.paused ? "Use the tunnel again" : "Dial direct, never start the tunnel"}>
-            {np.paused ? "Resume" : "Pause"}
-          </button>
-          <button onclick={() => npTest(np)} disabled={npBusy || np.paused}>Test</button>
-          {#if np.status.running}
-            <button onclick={() => api.networkProfileStop(np.id).catch((e) => toast.err(errMsg(e)))} title="Stop the running tunnel">Stop</button>
-          {/if}
-          {#if npRemoteOwners[np.id]}
-            <button
-              onclick={() => npDisconnectRemote(np)}
-              disabled={npDisconnecting[np.id]}
-              title="Ask {npRemoteOwners[np.id].machine_name} to drop this tunnel so it's free"
-            >
-              {npDisconnecting[np.id] ? "Disconnecting…" : `Disconnect on ${npRemoteOwners[np.id].machine_name}`}
-            </button>
-          {/if}
-          {#if np.kind === "openconnect" && np.status.running}
-            <button onclick={() => npToggleInfo(np)}>{np.id in npInfoOpen ? "Hide details" : "Details"}</button>
-          {/if}
-          <button onclick={() => npStartEdit(np)}>Edit</button>
-          <button class="danger" onclick={() => npDelete(np)}>Delete</button>
-        </div>
-        {#if np.id in npInfoOpen}
-          {@const ti = npInfoOpen[np.id]}
-          {#if ti === undefined}
-            <p class="hint">Loading…</p>
-          {:else if ti === null}
-            <p class="hint">The tunnel is down or reported nothing yet.</p>
-          {:else}
-            <pre class="np-info">{tunnelInfoText(ti)}</pre>
-            <div class="row" style="gap:0.5rem">
-              <button onclick={() => copyText(tunnelInfoText(ti), { label: "Tunnel details" })}>Copy</button>
-              <button onclick={() => { const n = { ...npInfoOpen }; delete n[np.id]; npInfoOpen = n; npToggleInfo(np); }}>Refresh</button>
-            </div>
-          {/if}
-        {/if}
-      </div>
-    {/each}
-    {#if networkProfiles.list.length === 0 && !networkProfiles.loading}
-      <p class="hint">No profiles yet - add one below.</p>
-    {/if}
-
-    <h3 style="margin-top:1.2rem">{npEditingId ? "Edit profile" : "Add profile"}</h3>
-
-    {#if !npEditingId}
-      <div class="row" style="gap:0.5rem; align-items:center">
-        <span class="hint" style="margin:0">Type:</span>
-        <label class="np-kindpick"><input type="radio" bind:group={npKind} value="wireguard" /> WireGuard</label>
-        <label class="np-kindpick"><input type="radio" bind:group={npKind} value="netbird" /> NetBird</label>
-        <label class="np-kindpick"><input type="radio" bind:group={npKind} value="tailscale" /> Tailscale</label>
-        <label class="np-kindpick"><input type="radio" bind:group={npKind} value="openconnect" /> OpenConnect</label>
-      </div>
-    {/if}
-
+  {#snippet npForm()}
     <label>
       <span>Name</span>
       <input bind:value={npName} placeholder="e.g. office-vpn" />
@@ -3898,8 +3926,8 @@
     {#if (npEditingId ? npEditKind : npKind) === "netbird"}
       {#if !nbInstalled}
         <p class="hint warn-note">
-          The NetBird plugin is not installed. Install it in the Plugins
-          card above before creating a NetBird profile.
+          The NetBird plugin is not installed. Install it under General > Plugins
+          before creating a NetBird profile.
         </p>
       {/if}
       <label>
@@ -3950,7 +3978,7 @@
       <div class="row" style="gap:0.5rem">
         {#if npEditingId}
           <button class="primary" onclick={npSaveNetbird} disabled={npBusy || !npName.trim()}>Save changes</button>
-          <button onclick={npCancelEdit}>Cancel</button>
+          <button onclick={npRevert}>Revert</button>
         {:else}
           <button class="primary" onclick={npCreateNetbird} disabled={npBusy || !nbInstalled || !npName.trim() || !nbCredId}>Add profile</button>
         {/if}
@@ -3958,8 +3986,8 @@
     {:else if (npEditingId ? npEditKind : npKind) === "openconnect"}
       {#if !ocInstalled}
         <p class="hint warn-note">
-          The OpenConnect plugin is not installed. Install it in the Plugins
-          card above before creating an OpenConnect profile.
+          The OpenConnect plugin is not installed. Install it under General > Plugins
+          before creating an OpenConnect profile.
         </p>
       {/if}
       <div class="oc-form">
@@ -4060,6 +4088,14 @@
             <label class="oc-choice"><input type="checkbox" bind:checked={oc.no_udp} /> TLS only (no DTLS)</label>
           </div>
         </div>
+        {#if oc.flavor === "anyconnect"}
+          <div class="oc-field">
+            <span>Idle stop</span>
+            <label class="oc-choice" title="Off (default): the idle stop leaves the gateway session open, and the next connect resumes it without a login while the gateway still holds it. On: the idle stop logs out.">
+              <input type="checkbox" bind:checked={oc.logout_on_idle} /> Log out of the gateway
+            </label>
+          </div>
+        {/if}
       </div>
       {#if npEditingId && oc.pins?.length}
         <p class="hint inline">Trusted gateway certificate: <code>{oc.pins[0]}</code> (changing the gateway address forgets it).</p>
@@ -4067,17 +4103,87 @@
       <div class="row" style="gap:0.5rem">
         {#if npEditingId}
           <button class="primary" onclick={npSaveOpenConnect} disabled={npBusy || !npName.trim() || !oc.server.trim()}>Save changes</button>
-          <button onclick={npCancelEdit}>Cancel</button>
+          <button onclick={npRevert}>Revert</button>
         {:else}
           <button class="primary" onclick={npCreateOpenConnect} disabled={npBusy || !ocInstalled || !npName.trim() || !oc.server.trim()}>Add profile</button>
           {#if ocMissing}<span class="hint inline">Needs {ocMissing}.</span>{/if}
         {/if}
       </div>
+    {:else if (npEditingId ? npEditKind : npKind) === "openvpn"}
+      {#if !ovInstalled}
+        <p class="hint warn-note">
+          The OpenVPN plugin is not installed. Install it under General > Plugins
+          before creating an OpenVPN profile.
+        </p>
+      {/if}
+      <div class="oc-form">
+        <div class="oc-field oc-span">
+          <span>Configuration (.ovpn) {#if npEditingId && !ovText}<span class="hint inline">- {ov.server}{ov.static_key ? `, ${ov.static_key}` : ""}; import again to replace</span>{/if}</span>
+          <div class="oc-tunnel">
+            <input type="file" accept=".ovpn,.conf,text/plain" onchange={ovPickFile} />
+            <label class="oc-choice"><input type="checkbox" bind:checked={ovPasteOpen} /> Paste instead</label>
+          </div>
+          {#if ovPasteOpen}
+            <textarea rows="6" class="mono" bind:value={ovText} spellcheck="false" placeholder={"client\nremote vpn.example.com 1194 udp\n<ca>\n...\n</ca>"}></textarea>
+          {:else if ovFileName}
+            <span class="hint inline">{ovFileName}: {ovNeedsLogin ? "username + password" : "certificate only"}{ovChallenge ? `, challenge "${ovChallenge}"` : ""}{ovHasCert ? "; its certificate and key go to a certificate credential" : ""}</span>
+          {/if}
+        </div>
+
+        {#if ovNeedsLogin}
+          <label class="oc-field" title="Blank = the password credential's username, else asked at login">
+            <span>Username</span>
+            <input bind:value={ov.username} placeholder="alice" />
+          </label>
+          <div class="oc-field">
+            <span>Password</span>
+            {#if ovNewPassword || !ov.password_credential_id}
+              <PasswordInput bind:value={ovNewPassword} placeholder={ov.password_credential_id ? "" : "blank = asked at login"} />
+            {/if}
+            {#if !ovNewPassword}
+              <SearchableSelect bind:value={ov.password_credential_id} options={passwordCredOptions} emptyLabel="or pick a stored password…" />
+            {/if}
+          </div>
+          <label class="oc-field" title="The answer to the server's challenge (static-challenge in the configuration, or a question the server asks at login), usually a one-time code">
+            <span>One-time code {#if ovChallenge}<span class="hint inline">({ovChallenge})</span>{/if}</span>
+            <select bind:value={ov.second_password}>
+              <option value="prompt">Ask at login (hardware / app token)</option>
+              <option value="totp">From Bitwarden / KeePass (TOTP)</option>
+              <option value="credential">Stored password</option>
+            </select>
+          </label>
+          {#if ov.second_password === "totp"}
+            <div class="oc-field" title="Both factors then live in one place - your call">
+              <span>Item with the TOTP</span>
+              <SearchableSelect bind:value={ov.second_credential_id} options={totpCredOptions} placeholder="Search…" emptyLabel="Pick a Bitwarden / KeePass item…" />
+            </div>
+          {:else if ov.second_password === "credential"}
+            <div class="oc-field">
+              <span>Credential with the answer</span>
+              <SearchableSelect bind:value={ov.second_credential_id} options={passwordCredOptions} placeholder="Search…" emptyLabel="Pick a credential…" />
+            </div>
+          {/if}
+        {/if}
+
+        <div class="oc-field oc-span" title="Taken from the .ovpn when it has one; pick another stored certificate to replace it">
+          <span>Client certificate <span class="hint inline">({ovHasCert && !ov.client_cert_credential_id ? "from the .ovpn" : "stored in the vault"})</span></span>
+          <SearchableSelect bind:value={ov.client_cert_credential_id} options={certCredOptions} emptyLabel={ovHasCert ? "The one in the .ovpn" : "None"} />
+        </div>
+      </div>
+      <div class="row" style="gap:0.5rem">
+        {#if npEditingId}
+          <button class="primary" onclick={npSaveOpenVPN} disabled={npBusy || !npName.trim()}>Save changes</button>
+          <button onclick={npRevert}>Revert</button>
+        {:else}
+          <button class="primary" onclick={npCreateOpenVPN} disabled={npBusy || !ovInstalled || !npName.trim() || !ovText.trim()}>Add profile</button>
+          {#if ovMissing}<span class="hint inline">Needs {ovMissing}.</span>{/if}
+        {/if}
+      </div>
     {:else if (npEditingId ? npEditKind : npKind) === "tailscale"}
       {#if !tsInstalled}
         <p class="hint warn-note">
-          The Tailscale plugin is not installed. Install it in the Plugins
-          card above before creating a Tailscale profile.
+          The Tailscale plugin is not installed. Install it under General > Plugins
+          before creating a Tailscale profile.
         </p>
       {/if}
       <label>
@@ -4127,7 +4233,7 @@
       <div class="row" style="gap:0.5rem">
         {#if npEditingId}
           <button class="primary" onclick={npSaveTailscale} disabled={npBusy || !npName.trim()}>Save changes</button>
-          <button onclick={npCancelEdit}>Cancel</button>
+          <button onclick={npRevert}>Revert</button>
         {:else}
           <button class="primary" onclick={npCreateTailscale} disabled={npBusy || !tsInstalled || !npName.trim() || !tsCredId}>Add profile</button>
         {/if}
@@ -4145,7 +4251,7 @@
       <div class="row" style="gap:0.5rem">
         {#if npEditingId}
           <button class="primary" onclick={npSaveEdit} disabled={npBusy || !npName.trim()}>Save changes</button>
-          <button onclick={npCancelEdit}>Cancel</button>
+          <button onclick={npRevert}>Revert</button>
         {:else}
           <button class="primary" onclick={npCreate} disabled={npBusy || !npName.trim() || !npConf.trim()}>Add profile</button>
         {/if}
@@ -4165,6 +4271,384 @@
         connect from more than one machine.
       </p>
     {/if}
+  {/snippet}
+  <div class="group group-wide np-page">
+    <div class="np-title">
+      <h2>Network profiles</h2>
+      {#if npUpCount}<span class="hint inline">{npUpCount} {npUpCount === 1 ? "tunnel" : "tunnels"} up</span>{/if}
+    </div>
+    <p class="hint">
+      Userspace tunnels - no TUN adapter, no admin rights, no system
+      routes. Assign a profile to a folder or connection (Network
+      setting) and its first SSH hop dials through the tunnel.
+    </p>
+    {#if networkProfiles.error}
+      <p class="hint" style="color: var(--red)">{networkProfiles.error}</p>
+    {/if}
+
+    <div class="np-split">
+      <nav class="np-list" aria-label="Network profiles">
+        <button class="np-row" class:sel={npSel === "general"} onclick={() => npSelect("general")}>
+          <span class="np-row-text"><strong>General</strong><small>plugins, app proxy</small></span>
+        </button>
+        <div class="np-list-sep"></div>
+        {#each networkProfiles.list as np (np.id)}
+          <button class="np-row" class:sel={npSel === np.id} onclick={() => npSelect(np.id)}>
+            <span class="np-dot" class:up={np.status.running && !np.paused} class:paused={np.paused} class:remote={!!npRemoteOwners[np.id]}></span>
+            <span class="np-row-text"><strong>{np.name}</strong><small>{npKindLine(np)}</small></span>
+            {#if np.local_proxy?.shared}<span class="np-badge" title="Reachable through the app proxy">via proxy</span>{/if}
+          </button>
+        {/each}
+        {#if networkProfiles.list.length === 0 && !networkProfiles.loading}
+          <p class="hint np-list-empty">No profiles yet.</p>
+        {/if}
+        <button class="np-new" class:sel={npSel === "new"} onclick={() => npSelect("new")}>+ New profile</button>
+      </nav>
+
+      <div class="np-detail">
+        {#if npSel === "general"}
+          <h3>Plugins</h3>
+          <p class="hint">
+            Optional VPN clients, kept out of the main app to keep it small.
+            Downloaded from the ssh-tool-plugins releases and verified by
+            checksum before install. WireGuard is built in.
+          </p>
+          {#each plugins as pl (pl.name)}
+            <div class="np-card">
+              <div class="np-head">
+                <strong>{pluginTitle(pl.name)}</strong>
+                {#if !pl.supported}
+                  <span class="np-pill">not on this platform</span>
+                {:else if pl.installed && pl.update_available}
+                  <span class="np-pill paused">update available</span>
+                {:else if pl.installed}
+                  <span class="np-pill running">installed{pl.version ? ` ${pl.version}` : ""}</span>
+                {:else}
+                  <span class="np-pill">not installed</span>
+                {/if}
+                {#if pl.installed && pl.engine_version}<span class="np-kind">{engineLabel(pl.name)} {pl.engine_version}</span>{/if}
+                {#if pl.installed}<span class="np-meta">{pl.path}</span>{/if}
+              </div>
+              {#if pl.supported}
+                {#if pluginProgress[pl.name]}
+                  {@const pp = pluginProgress[pl.name]}
+                  <div class="plugin-progress">
+                    <div class="plugin-progress-bar">
+                      <!-- Empty while the release is looked up, then only ever
+                           grows: download fills it, verify / install hold it full.
+                           An animated placeholder here flashed full and snapped
+                           back to 0% when the download started. -->
+                      <div
+                        class="plugin-progress-fill"
+                        style:width={pp.phase === "resolve" ? "0%"
+                          : pp.phase === "download" ? (pp.total > 0 ? `${Math.min(100, (pp.read / pp.total) * 100)}%` : "0%")
+                          : "100%"}
+                      ></div>
+                    </div>
+                    <span class="hint">{progressText(pp)}</span>
+                  </div>
+                {:else if pl.update_available}
+                  <p class="hint" style="margin:0.2rem 0">
+                    Installed {pl.version || "(unknown)"}; {pl.latest || "a newer helper"} is available.
+                  </p>
+                {/if}
+                <div class="np-actions">
+                  {#if pl.installed}
+                    <button class:primary={pl.update_available} onclick={() => pluginDownload(pl.name)} disabled={pluginBusy}>
+                      {pl.update_available ? "Update" : "Reinstall"}
+                    </button>
+                    <button class="danger" onclick={() => pluginRemove(pl.name)} disabled={pluginBusy}>Remove</button>
+                  {:else}
+                    <button class="primary" onclick={() => pluginDownload(pl.name)} disabled={pluginBusy}>Download</button>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {/each}
+
+          <h3 class="np-h3">Defaults for every profile</h3>
+          <label class="np-field">
+            <span>Stop an idle tunnel</span>
+            <select value={String(idleStopGlobal)} onchange={(e) => setIdleStopGlobal((e.target as HTMLSelectElement).value)}>
+              {#each idleStopOptions(idleStopGlobal) as m (m)}
+                <option value={String(m)}>{idleStopLabel(m)}{m === IDLE_STOP_DEFAULT ? " (default)" : ""}</option>
+              {/each}
+            </select>
+            <span class="hint inline">Counted from when the last session through the tunnel closes. A profile can override it.</span>
+          </label>
+          <fieldset class="check-cards" style="margin-top:0.8rem">
+            <label class:active={wgBindPhysical}>
+              <input
+                type="checkbox"
+                checked={wgBindPhysical}
+                onchange={(e) => toggleWgBindPhysical((e.target as HTMLInputElement).checked)}
+              />
+              <div>
+                <div class="mode-name">WireGuard: send through the physical network card</div>
+                <div class="mode-desc">
+                  For when another VPN on this machine (for example a UniFi
+                  Identity "TUN Mode" split tunnel) takes the default route and
+                  swallows the WireGuard handshake. Leave off otherwise.
+                  Running tunnels restart when you change this.
+                </div>
+              </div>
+            </label>
+          </fieldset>
+
+          <div class="np-h3 np-sp-head">
+            <h3>App proxy</h3>
+            {#if sp.enabled}
+              <span class="hint inline" class:warn={!sp.listening}>{sp.listening ? `listening on ${sp.bind}:${sp.port}` : "not listening - port taken?"}</span>
+            {/if}
+            <span class="np-spacer"></span>
+            <label class="oc-choice"><input type="checkbox" checked={sp.enabled} onchange={(e) => { sp.enabled = (e.target as HTMLInputElement).checked; spSave(); }} /> On</label>
+          </div>
+          <p class="hint">
+            Lets programs outside ssh-tool reach your customers through these
+            VPNs: one SOCKS5 proxy for every profile marked
+            <span class="np-badge">via proxy</span> (a profile's Proxy tab).
+            Each address goes through the VPN whose networks contain it;
+            anything else is refused. The VPN comes up on first use, with its
+            login.
+          </p>
+          {#if sp.enabled}
+            <div class="oc-form np-sp-form">
+              <label class="oc-field" title="127.0.0.1 is enough for Docker Desktop (host.docker.internal). A Linux Docker host needs the docker bridge address or 0.0.0.0 - firewall the port then.">
+                <span>Listen address</span>
+                <input bind:value={sp.bind} placeholder="127.0.0.1" />
+              </label>
+              <label class="oc-field">
+                <span>Port</span>
+                <div class="row" style="gap:0.5rem; margin:0">
+                  <input type="number" min="1" max="65535" bind:value={sp.port} style="width:7rem" />
+                  <button onclick={spSave}>Save</button>
+                </div>
+              </label>
+              <label class="oc-field oc-span" title="When two VPNs carry the same network: by default the most specific network wins, then the VPN that is up. A VPN picked here takes every address its networks contain.">
+                <span>When networks overlap, use</span>
+                <select bind:value={sp.use} onchange={spSave} style="max-width:20rem">
+                  <option value="">The VPN that is up</option>
+                  {#each spProfiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+                </select>
+              </label>
+            </div>
+            {#if spDetails}
+              <p class="hint">
+                {#if Object.keys(spDetails.profiles).length}
+                  Through it: {Object.entries(spDetails.profiles).map(([n, c]) => `${n} (${c} ${c === 1 ? "network" : "networks"})`).join(", ")}.
+                  {spDetails.overlaps.length ? "" : "No overlaps."}
+                {:else}
+                  No profile goes through it yet: open a profile's Proxy tab and tick Reachable through the app proxy.
+                {/if}
+              </p>
+              {#each spDetails.overlaps as o}
+                <p class="hint inline warn">Overlap {o}</p>
+              {/each}
+              <div class="np-use">
+                <div class="np-use-card">
+                  <strong>A program on this machine</strong>
+                  <p class="hint">curl, a script, a database tool: give it the proxy address with its password.</p>
+                  <code class="np-code">{maskProxyURL(spDetails.url)}</code>
+                  <div class="row" style="gap:0.5rem"><button onclick={() => spCopy("url")}>Copy proxy address</button></div>
+                </div>
+                <div class="np-use-card">
+                  <strong>A CI runner in Docker</strong>
+                  <p class="hint">
+                    Jobs cannot use a proxy by themselves. A small gateway
+                    container sends only these networks into the proxy; the
+                    runner joins its network with
+                    <code>network_mode = "container:sshtool-gw"</code>, and its
+                    other traffic stays local.
+                  </p>
+                  <div class="row" style="gap:0.5rem">
+                    <button onclick={() => spCopy("gateway")}>Copy gateway command</button>
+                    <button onclick={() => (spShowRoutes = !spShowRoutes)}>{spShowRoutes ? "Hide networks" : `Show networks (${spDetails.routes.length})`}</button>
+                  </div>
+                  {#if spShowRoutes}
+                    <pre class="np-info">{spDetails.routes.join("\n") || "none yet"}</pre>
+                  {/if}
+                  <p class="hint inline">After adding a VPN or a network, recreate the gateway with a freshly copied command.</p>
+                </div>
+              </div>
+            {/if}
+          {/if}
+
+        {:else if npSel === "new"}
+          <h3>New profile</h3>
+          <div class="row" style="gap:0.5rem; align-items:center">
+            <span class="hint" style="margin:0">Type:</span>
+            <label class="np-kindpick"><input type="radio" bind:group={npKind} value="wireguard" /> WireGuard</label>
+            <label class="np-kindpick"><input type="radio" bind:group={npKind} value="netbird" /> NetBird</label>
+            <label class="np-kindpick"><input type="radio" bind:group={npKind} value="tailscale" /> Tailscale</label>
+            <label class="np-kindpick"><input type="radio" bind:group={npKind} value="openconnect" /> OpenConnect</label>
+            <label class="np-kindpick"><input type="radio" bind:group={npKind} value="openvpn" /> OpenVPN</label>
+          </div>
+          {@render npForm()}
+
+        {:else if npCur}
+          {@const np = npCur}
+          <div class="np-head">
+            <h3 class="np-name">{np.name}</h3>
+            {#if np.paused}
+              <span class="np-pill paused">paused</span>
+            {:else if np.status.running}
+              <span class="np-pill running">up</span>
+            {:else}
+              <span class="np-pill">down</span>
+            {/if}
+            {#if npRemoteOwners[np.id]}
+              <span class="np-pill remote" title={np.kind === "wireguard" || np.kind === "openconnect" || np.kind === "openvpn" ? "This tunnel is live on another synced machine. Only one machine can hold it at a time." : "This tunnel is also up on another synced machine."}>
+                up on {npRemoteOwners[np.id].machine_name}
+              </span>
+            {/if}
+          </div>
+          <div class="np-meta">{npServerLine(np)}</div>
+          <div class="np-actions">
+            <button onclick={() => npTest(np)} disabled={npTesting[np.id] || np.paused}>{npTesting[np.id] ? "Testing…" : "Test"}</button>
+            <button onclick={() => npSetPolicy(np, np.mode === "auto" ? "auto" : "always", !np.paused)}
+              title={np.paused ? "Use the tunnel again" : "Dial direct, never start the tunnel"}>
+              {np.paused ? "Resume" : "Pause"}
+            </button>
+            <button onclick={() => npBrowser(np, "")} title="An isolated browser through this VPN: the customer's networks go through the tunnel, the rest directly">Browser</button>
+            {#if np.status.running}
+              <button onclick={() => api.networkProfileStop(np.id).catch((e) => toast.err(errMsg(e)))} title="Stop the running tunnel">Stop</button>
+            {/if}
+            {#if npRemoteOwners[np.id]}
+              <button
+                onclick={() => npDisconnectRemote(np)}
+                disabled={npDisconnecting[np.id]}
+                title="Ask {npRemoteOwners[np.id].machine_name} to drop this tunnel so it's free"
+              >
+                {npDisconnecting[np.id] ? "Disconnecting…" : `Disconnect on ${npRemoteOwners[np.id].machine_name}`}
+              </button>
+            {/if}
+          </div>
+
+          <div class="np-tabs" role="tablist">
+            {#each NP_TABS as [t, label] (t)}
+              <button role="tab" aria-selected={npTab === t} class:sel={npTab === t} onclick={() => npOpenTab(t)}>{label}</button>
+            {/each}
+          </div>
+
+          {#if npTab === "overview"}
+            <div class="np-grid">
+              <label class="np-field" title="Always: every connect goes through the tunnel. Auto: try direct first, fall back to the tunnel.">
+                <span>Mode</span>
+                <select
+                  value={np.mode === "auto" ? "auto" : "always"}
+                  onchange={(e) => npSetPolicy(np, (e.target as HTMLSelectElement).value, np.paused)}
+                >
+                  <option value="always">Always via tunnel</option>
+                  <option value="auto">Auto (direct first)</option>
+                </select>
+              </label>
+              <label class="np-field" title="How long the tunnel stays up after its last session closes">
+                <span>Stop when idle</span>
+                <select
+                  value={np.idle_stop_minutes === null || np.idle_stop_minutes === undefined ? "" : String(np.idle_stop_minutes)}
+                  onchange={(e) => npSetIdleStop(np, (e.target as HTMLSelectElement).value)}
+                >
+                  <option value="">Global ({idleStopShort(idleStopGlobal)})</option>
+                  {#each idleStopOptions(np.idle_stop_minutes ?? null) as m (m)}
+                    <option value={String(m)}>{idleStopLabel(m)}</option>
+                  {/each}
+                </select>
+              </label>
+            </div>
+            <dl class="np-facts">
+              <dt>Used by</dt><dd>{npUsageText(np.id)}</dd>
+              {#if npSessionText(np)}<dt>Session</dt><dd>{npSessionText(np)}</dd>{/if}
+              <dt>Proxy</dt>
+              <dd>
+                {np.local_proxy?.shared ? "via the app proxy" : ""}{np.local_proxy?.shared && np.local_proxy?.enabled ? ", " : ""}{np.local_proxy?.enabled ? `own proxy on port ${np.local_proxy.port}` : ""}{!np.local_proxy?.shared && !np.local_proxy?.enabled ? "off" : ""}
+              </dd>
+            </dl>
+            <p class="hint">{npPresenceText(np)}</p>
+
+          {:else if npTab === "settings"}
+            {@render npForm()}
+            <div class="np-danger">
+              <button class="danger" onclick={() => npDelete(np)}>Delete profile</button>
+            </div>
+
+          {:else if npTab === "proxy"}
+            {@const lp = lpOpen[np.id]}
+            {#if !lp}
+              <p class="hint">Loading…</p>
+            {:else}
+              <div class="oc-form np-sp-form">
+                <label class="oc-choice oc-span">
+                  <input type="checkbox" bind:checked={lp.shared} /> Reachable through the app proxy
+                  <button class="link-btn" onclick={() => npSelect("general")}>(General &gt; App proxy)</button>
+                </label>
+                <label class="oc-choice oc-span" title="A SOCKS5 proxy for this VPN alone, with its own password; the tunnel comes up on the first connection">
+                  <input type="checkbox" bind:checked={lp.enabled} /> Separate proxy for this VPN only
+                </label>
+                {#if lp.enabled}
+                  <label class="oc-field" title="127.0.0.1 is enough for Docker Desktop (host.docker.internal). A Linux Docker host needs the docker bridge address or 0.0.0.0 - firewall the port then.">
+                    <span>Listen address</span>
+                    <input bind:value={lp.bind} placeholder="127.0.0.1" />
+                  </label>
+                  <label class="oc-field">
+                    <span>Port</span>
+                    <input type="number" min="1" max="65535" bind:value={lp.port} />
+                  </label>
+                {/if}
+                <label class="oc-field oc-span" title="Destinations sent through this VPN besides the networks the server pushes and the addresses of connections using it - one CIDR or address per line">
+                  <span>Extra networks <span class="hint inline">(one per line)</span></span>
+                  <textarea rows="2" class="mono" bind:value={lp.networksText} placeholder="10.20.0.0/16"></textarea>
+                </label>
+                <div class="row oc-span" style="gap:0.5rem">
+                  <button class="primary" onclick={() => lpSave(np)}>Save</button>
+                </div>
+              </div>
+              {#if lp.details}
+                <h3 class="np-h3">Networks {np.local_proxy?.shared ? "the app proxy sends" : "a proxy sends"} through this VPN</h3>
+                <pre class="np-info">{lp.details.routes.join("\n") || "none yet - connect once, or add connections or networks"}</pre>
+                <p class="hint inline">{lp.details.sources.join("; ")}</p>
+              {/if}
+              {#if np.local_proxy?.enabled && lp.details?.url}
+                <h3 class="np-h3">This VPN's own proxy {#if !np.local_proxy_listening}<span class="hint inline warn">not listening - port taken?</span>{/if}</h3>
+                <div class="np-use">
+                  <div class="np-use-card">
+                    <strong>A program on this machine</strong>
+                    <code class="np-code">{maskProxyURL(lp.details.url)}</code>
+                    <div class="row" style="gap:0.5rem"><button onclick={() => lpCopy(np, "url")}>Copy proxy address</button></div>
+                  </div>
+                  <div class="np-use-card">
+                    <strong>A CI runner in Docker</strong>
+                    <p class="hint">A gateway container for this VPN only; the runner joins it with <code>network_mode = "container:NAME"</code>.</p>
+                    <div class="row" style="gap:0.5rem"><button onclick={() => lpCopy(np, "gateway")}>Copy gateway command</button></div>
+                  </div>
+                </div>
+              {/if}
+            {/if}
+
+          {:else if npTab === "details"}
+            {#if np.kind === "openconnect" || np.kind === "openvpn"}
+              {@const ti = npInfoOpen[np.id]}
+              {#if !np.status.running}
+                <p class="hint">The tunnel is down.</p>
+              {:else if ti === undefined}
+                <p class="hint">Loading…</p>
+              {:else if ti === null}
+                <p class="hint">The tunnel reported nothing yet.</p>
+              {:else}
+                <pre class="np-info">{tunnelInfoText(ti)}</pre>
+                <div class="row" style="gap:0.5rem">
+                  <button onclick={() => copyText(tunnelInfoText(ti), { label: "Tunnel details" })}>Copy</button>
+                  <button onclick={() => npRefreshInfo(np)}>Refresh</button>
+                </div>
+              {/if}
+            {:else}
+              <pre class="np-info">{npStatusText(np)}</pre>
+            {/if}
+          {/if}
+        {:else}
+          <p class="hint">Pick a profile on the left.</p>
+        {/if}
+      </div>
+    </div>
   </div>
 
   {:else if activeSection === "liveness"}
@@ -6636,6 +7120,127 @@
 </section>
 
 <style>
+  /* Network profiles page: list beside the selected item. */
+  .np-title { display: flex; align-items: baseline; gap: 0.8rem; }
+  .np-split {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    gap: 1.2rem;
+    margin-top: 0.8rem;
+    align-items: start;
+  }
+  .np-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    position: sticky;
+    top: 0;
+  }
+  .np-row, .np-new {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: 2.6rem;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+  }
+  .np-row:hover, .np-new:hover { background: var(--surface0); }
+  .np-row.sel, .np-new.sel { background: var(--surface0); border-color: var(--blue); }
+  .np-new { color: var(--blue); margin-top: 0.3rem; min-height: 2.2rem; }
+  .np-row-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .np-row-text strong, .np-row-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .np-row-text small { color: var(--subtext0); font-size: 0.75rem; }
+  .np-list-sep { height: 1px; background: var(--surface0); margin: 0.3rem 0; }
+  .np-list-empty { margin: 0.3rem 0.6rem; }
+  .np-dot {
+    width: 9px; height: 9px; flex: none;
+    border-radius: 50%;
+    border: 2px solid var(--overlay0);
+  }
+  .np-dot.up { background: var(--green); border-color: var(--green); }
+  .np-dot.paused { border-color: var(--yellow); }
+  .np-dot.remote:not(.up) { border-color: var(--mauve); }
+  .np-badge {
+    font-size: 0.68rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    border: 1px solid var(--blue);
+    color: var(--blue);
+    white-space: nowrap;
+  }
+  .np-detail { min-width: 0; }
+  .np-detail h3:first-child { margin-top: 0; }
+  .np-h3 { margin-top: 1.4rem; }
+  .np-name { margin: 0; }
+  .np-sp-head { display: flex; align-items: center; gap: 0.8rem; }
+  .np-sp-head h3 { margin: 0; }
+  .np-sp-form { margin-top: 0.4rem; }
+  .np-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.85rem;
+    color: var(--subtext1);
+  }
+  .np-field select { max-width: 20rem; }
+  .np-tabs {
+    display: flex;
+    gap: 0.2rem;
+    border-bottom: 1px solid var(--surface0);
+    margin: 0.8rem 0 0.9rem;
+  }
+  .np-tabs button {
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 0.45rem 0.9rem;
+    color: var(--subtext0);
+    cursor: pointer;
+  }
+  .np-tabs button.sel { color: var(--text); border-bottom-color: var(--blue); font-weight: 600; }
+  .np-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem 1rem; }
+  .np-facts {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 0.35rem 1rem;
+    margin: 1rem 0 0.4rem;
+    font-size: 0.88rem;
+  }
+  .np-facts dt { color: var(--subtext0); }
+  .np-facts dd { margin: 0; }
+  .np-danger { margin-top: 1.4rem; padding-top: 0.8rem; border-top: 1px solid var(--surface0); }
+  .np-danger .danger { color: var(--red); }
+  .np-use { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; margin-top: 0.6rem; }
+  .np-use-card {
+    border: 1px solid var(--surface0);
+    border-radius: 6px;
+    padding: 0.7rem 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .np-use-card .hint { margin: 0; }
+  .np-code {
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+    background: var(--mantle);
+    padding: 0.3rem 0.45rem;
+    border-radius: 4px;
+    user-select: text;
+  }
+  .hint.warn { color: var(--yellow); }
+  @media (max-width: 760px) {
+    .np-split { grid-template-columns: minmax(0, 1fr); }
+    .np-list { position: static; }
+    .np-grid, .np-use { grid-template-columns: minmax(0, 1fr); }
+  }
   .np-card {
     border: 1px solid var(--surface0);
     border-radius: 6px;
@@ -6650,6 +7255,9 @@
     align-items: center;
     gap: 0.5rem;
     flex-wrap: wrap;
+  }
+  .np-proxy {
+    margin-top: 0.5rem;
   }
   .np-info {
     margin: 0.4rem 0 0.3rem;
@@ -6685,7 +7293,6 @@
     flex-wrap: wrap;
   }
   .np-actions button { padding: 0.3rem 0.6rem; }
-  .np-actions select { max-width: 11rem; }
   .np-spacer { flex: 1; }
   /* OpenConnect form: two fixed columns, one per field pair; the base
      label style (column, top margin) is reset so rows line up. */
@@ -6708,10 +7315,6 @@
   .oc-field textarea { font-family: var(--mono, monospace); font-size: 0.8rem; }
   @media (max-width: 640px) {
     .oc-form { grid-template-columns: minmax(0, 1fr); }
-  }
-  .np-idle-global {
-    margin-top: 0.8rem;
-    max-width: 32rem;
   }
   .np-mode {
     display: flex;

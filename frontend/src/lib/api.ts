@@ -198,6 +198,7 @@ export interface OpenConnectConfig {
   mtu?: number;
   base_mtu?: number;
   no_udp?: boolean;
+  logout_on_idle?: boolean;
   username?: string;
   password_credential_id: string;
   second_username?: string;
@@ -208,7 +209,61 @@ export interface OpenConnectConfig {
   paused?: boolean;
 }
 
-/** What the OpenConnect helper reports about a live tunnel. */
+export interface OpenVPNConfig {
+  kind?: string;
+  /** The .ovpn without its secrets (those are in the vault). */
+  config?: string;
+  server?: string;
+  remotes?: string[];
+  auth_user_pass?: boolean;
+  static_challenge?: string;
+  static_key?: "" | "tls-auth" | "tls-crypt";
+  username?: string;
+  password_credential_id: string;
+  second_password?: "prompt" | "credential" | "totp";
+  second_credential_id: string;
+  client_cert_credential_id: string;
+  mode?: "always" | "auto";
+  paused?: boolean;
+}
+
+/** A profile exposed as a local SOCKS5 proxy (CI runner gateway). */
+export interface LocalProxyConfig {
+  enabled: boolean;
+  /** Part of the shared proxy (one SOCKS for every shared profile). */
+  shared?: boolean;
+
+  bind?: string;
+  port: number;
+  networks?: string[];
+}
+
+export interface SharedProxyConfig {
+  enabled: boolean;
+  bind?: string;
+  port: number;
+  /** Manual override: this profile takes everything its networks contain. "" = by route. */
+  use?: string;
+}
+
+export interface SharedProxyDetails {
+  url: string;
+  routes: string[];
+  profiles: Record<string, number>;
+  overlaps: string[];
+  gateway: string;
+  listening: boolean;
+}
+
+export interface LocalProxyDetails {
+  url: string;
+  routes: string[];
+  sources: string[];
+  gateway: string;
+  listening: boolean;
+}
+
+/** What the OpenConnect / OpenVPN helper reports about a live tunnel. */
 export interface VpnTunnelInfo {
   flavor: string;
   server: string;
@@ -223,6 +278,7 @@ export interface VpnTunnelInfo {
   search_domains?: string[];
   split_dns?: string[];
   tunnel_all_dns: boolean;
+  cipher?: string;
   banner?: string;
   idle_timeout_s?: number;
   auth_expires?: number;
@@ -232,15 +288,18 @@ export interface VpnTunnelInfo {
 export interface NetworkProfileInfo {
   id: string;
   name: string;
-  kind: "wireguard" | "netbird" | "tailscale" | "openconnect";
+  kind: "wireguard" | "netbird" | "tailscale" | "openconnect" | "openvpn";
   mode: "always" | "auto" | "";
   paused: boolean;
   /** Per-profile idle stop override: null = global, -1 never, else minutes. */
   idle_stop_minutes: number | null;
+  local_proxy: LocalProxyConfig;
+  local_proxy_listening: boolean;
   profile: WgProfile;
   netbird?: NetbirdConfig;
   tailscale?: TailscaleConfig;
   openconnect?: OpenConnectConfig;
+  openvpn?: OpenVPNConfig;
   status: WgStatus;
   created_at: number;
   updated_at: number;
@@ -1127,6 +1186,29 @@ export const api = {
     G.NetworkProfileCreateOpenConnect({ name, config } as any) as unknown as Promise<NetworkProfileInfo>,
   networkProfileUpdateOpenConnect: (id: string, name: string, config: OpenConnectConfig) =>
     G.NetworkProfileUpdateOpenConnect(id, { name, config } as any) as unknown as Promise<NetworkProfileInfo>,
+  /** configText: a freshly imported .ovpn (secrets included); "" on update keeps the stored one. */
+  networkProfileCreateOpenVPN: (name: string, configText: string, config: OpenVPNConfig) =>
+    G.NetworkProfileCreateOpenVPN({ name, config_text: configText, config } as any) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileUpdateOpenVPN: (id: string, name: string, configText: string, config: OpenVPNConfig) =>
+    G.NetworkProfileUpdateOpenVPN(id, { name, config_text: configText, config } as any) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileSetLocalProxy: (id: string, cfg: LocalProxyConfig) =>
+    G.NetworkProfileSetLocalProxy(id, cfg as any) as unknown as Promise<NetworkProfileInfo>,
+  /** Open url ("" = blank) in the profile's isolated browser through its VPN. */
+  networkProfileOpenBrowser: (id: string, url: string) =>
+    G.NetworkProfileOpenBrowser(id, url) as unknown as Promise<{ pid: number }>,
+  /** Open a web bookmark connection (through its network profile's browser, else the normal one). */
+  connectionOpenWeb: (id: string) => G.ConnectionOpenWeb(id) as unknown as Promise<void>,
+  networkSharedProxyGet: async (): Promise<{ config: SharedProxyConfig; listening: boolean }> => {
+    const r = (await G.NetworkSharedProxyGet()) as unknown as [SharedProxyConfig, boolean];
+    return { config: r[0], listening: r[1] };
+  },
+  networkSharedProxySet: (cfg: SharedProxyConfig) => G.NetworkSharedProxySet(cfg as any) as unknown as Promise<void>,
+  networkSharedProxyDetails: () => G.NetworkSharedProxyDetails() as unknown as Promise<SharedProxyDetails>,
+  networkProfileLocalProxyDetails: (id: string) =>
+    G.NetworkProfileLocalProxyDetails(id) as unknown as Promise<LocalProxyDetails>,
+  /** Connections and web bookmarks resolving to each profile, by profile id. */
+  networkProfilesUsage: () =>
+    G.NetworkProfilesUsage() as unknown as Promise<Record<string, { connections: number; web: number }>>,
   networkProfileTunnelInfo: async (id: string): Promise<VpnTunnelInfo | null> => {
     const raw = (await G.NetworkProfileTunnelInfo(id)) as unknown as string;
     return raw ? (JSON.parse(raw) as VpnTunnelInfo) : null;

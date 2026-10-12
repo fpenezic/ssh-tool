@@ -73,6 +73,9 @@ func (a *App) ProbeConnections(ids []string) []ProbeResult {
 
 // probeOne resolves a connection and returns its liveness state.
 func (a *App) probeOne(id string) string {
+	if c, err := a.db.GetConnection(id); err == nil && c != nil && (c.Protocol == "local" || c.Protocol == "web") {
+		return probeUnknown // no SSH port to knock on
+	}
 	s, err := resolver.ResolveConnection(a.db, id)
 	if err != nil || s.Hostname == "" {
 		return probeUnknown

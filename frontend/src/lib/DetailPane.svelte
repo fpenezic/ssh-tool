@@ -18,7 +18,7 @@
   import ColorPicker from "./ColorPicker.svelte";
   import IconPicker from "./IconPicker.svelte";
   import Icon from "./Icon.svelte";
-  import { IconFolder, IconHost, IconLock, IconUser, IconClipboardCopy, IconTerminal, IconMonitor, IconStar } from "./iconMap";
+  import { IconFolder, IconHost, IconLock, IconUser, IconClipboardCopy, IconTerminal, IconMonitor, IconStar, IconGlobe } from "./iconMap";
   import DeleteConfirm from "./DeleteConfirm.svelte";
   import { connectionActions } from "./connectionActions.svelte";
   import { explain as explainConnectError, unwrapRaw as unwrapConnectErr, errMsg } from "./connectErrors";
@@ -530,6 +530,8 @@
   // no SSH host/port/auth/jump/VNC - just a shell kind + a command. The
   // editor hides the SSH-only fields when this is true.
   const isLocal = $derived(conn?.protocol === "local");
+  // A web bookmark: name, address, Network (which VPN browser opens it).
+  const isWeb = $derived(conn?.protocol === "web");
 
   // Shell-kind options for a local connection, per platform (mirrors the
   // nav launcher's list in App.svelte). "" = auto. resolveShell validates
@@ -1511,7 +1513,7 @@
           onclick={toggleFavorite}
         ><IconStar size={16} fill={conn.favorite ? "currentColor" : "none"} /></button>
         <Icon imageId={conn.icon_image_id} iconName={conn.icon_name} iconColor={conn.icon_color} size={18}>
-          {#if isLocal}<IconTerminal size={18} />{:else}<IconHost size={18} />{/if}
+          {#if isLocal}<IconTerminal size={18} />{:else if isWeb}<IconGlobe size={18} />{:else}<IconHost size={18} />{/if}
         </Icon>
         {conn.name}
       </h1>
@@ -1526,9 +1528,13 @@
         >
           {#if savedHint && !dirty}✓ Saved{:else if dirty}Save *{:else}Save{/if}
         </button>
+        {#if isWeb}
+          <button class="primary" onclick={() => connectionActions.openWeb(conn!.id)} title="Open in the browser of the folder's network profile (its VPN), else your normal browser">Open</button>
+        {:else}
         <button class="primary" disabled={connecting} onclick={connect}>
           {connecting ? (connectStage ?? "Connecting…") : (overrideCredId ? "Connect (override)" : "Connect")}
         </button>
+        {/if}
         {#if conn.overrides?.vnc_enabled}
           <button class="vnc-btn" title="Open the VNC console for this host" onclick={openVncConsole}>
             <IconMonitor size={13} /> VNC
@@ -1541,7 +1547,7 @@
             Cancel
           </button>
         {/if}
-        {#if !isLocal}
+        {#if !isLocal && !isWeb}
           <button
             class="ghost"
             title="Use a different credential just for the next connect attempt"
@@ -1631,10 +1637,12 @@
           <input bind:value={editing.localShellDir} placeholder="Leave empty for the app default" />
           <span class="field-note">Empty falls back to the app-wide setting in Settings, and then to your home directory. <strong>WSL</strong> takes a Linux path (<code>/srv/app</code>).</span>
         </label>
+      {:else if isWeb}
+        <label class="span-2" title="The page to open. It goes through the network profile below (inherited from the folder) when there is one.">Address<input bind:value={editing.hostname} placeholder="https://grafana.customer.lan" /></label>
       {:else}
         <label title="The address to connect to: a DNS hostname or an IP. This is what SSH dials, not the display name above.">Hostname / IP address<input bind:value={editing.hostname} placeholder="host.example.com or 10.0.0.5" /></label>
       {/if}
-      {#if !isLocal}
+      {#if !isLocal && !isWeb}
       <div class="row">
         <label class="grow">
           Username
@@ -1795,6 +1803,7 @@
       /></div>
 
       {#if !isLocal}
+      {#if !isWeb}
       <label>Auto-reconnect
         <select bind:value={editing.autoReconnect}>
           <option value="">(inherit from folder)</option>
@@ -1809,7 +1818,8 @@
           <option value="off">Off</option>
         </select>
       </label>
-      <label title="Route the first SSH hop through a userspace VPN tunnel (no TUN adapter, no admin rights).">
+      {/if}
+      <label title={isWeb ? "Which VPN's browser opens this page. Direct = your normal browser." : "Route the first SSH hop through a userspace VPN tunnel (no TUN adapter, no admin rights)."}>
         Network
         <select bind:value={editing.networkProfile}>
           <option value="">(inherit from folder)</option>
@@ -1824,6 +1834,7 @@
             Settings -&gt; Network profiles</button>.
         </span>
       </label>
+      {#if !isWeb}
       <label title="Anti-idle: send an SSH keepalive every N seconds so a bastion or firewall doesn't drop the connection when it's quiet. Blank inherits the folder's value; 0 sends nothing. A dead connection is still detected either way - with 0 it just takes up to a minute longer.">
         Keepalive / anti-idle (s)
         <input
@@ -1837,6 +1848,9 @@
         <span class="field-note">Stops idle drops. Blank = inherit folder, 0 = send nothing (a dead link is still detected, just slower).</span>
       </label>
       {/if}
+      {/if}
+
+      {#if !isWeb}
 
       <label class="span-2" title="A command run in the shell right after connect - e.g. cd /var/www, tmux new -A -s main, source venv/bin/activate. Blank inherits the folder's value.">
         {isLocal ? "Command" : "Initial command"}
@@ -1866,7 +1880,9 @@
         />
         <span class="field-note">{isLocal ? "0 = no pause." : "Blank = inherit folder, 0 = no pause."} Raise it when a line starts a new shell (<code>sudo su - user</code>) and the lines after it get swallowed.</span>
       </label>
+      {/if}
 
+      {#if !isWeb}
       <label class="span-2 inline-check" title="Connect as usual, but leave the tab out of the tab bar. For background helpers - a keepalive loop, a tail, a watcher - where the point is that it runs, not that you watch it.">
         <input type="checkbox" bind:checked={editing.openHidden} />
         <span class="inline-check-text">
@@ -1877,8 +1893,9 @@
           </span>
         </span>
       </label>
+      {/if}
 
-      {#if !isMobile && !isLocal}
+      {#if !isMobile && !isLocal && !isWeb}
       <div class="span-2 vnc-section" class:on={editing.vncEnabled === "on"}>
         <div class="vnc-head">
           <button type="button"
@@ -2013,7 +2030,7 @@
       {/if}
     </div>
 
-    {#if !isLocal}
+    {#if !isLocal && !isWeb}
     <div class="form-width"><PortForwards connection={conn} /></div>
 
     <div class="quick-actions">
@@ -2061,7 +2078,7 @@
       </div>
     {/if}
 
-    {#if !isLocal}
+    {#if !isLocal && !isWeb}
     <details class="resolved">
       <summary><h2>Resolved &amp; inherited</h2></summary>
       {#if resolveErr}

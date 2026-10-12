@@ -474,6 +474,14 @@ func (a *App) initialise() {
 	if err := db.SeedDefaultSnippets(); err != nil {
 		log.Printf("seed default snippets: %v", err) // non-fatal - empty palette is fine
 	}
+	// References to deleted network profiles (left before the delete
+	// cleaned them up) fail every dial; clear them so those connections
+	// fall back to their inherited network.
+	if n, err := db.SweepOrphanNetworkRefs(); err != nil {
+		log.Printf("network: sweep orphan profile references: %v", err)
+	} else if n > 0 {
+		log.Printf("network: cleared %d reference(s) to deleted network profiles", n)
+	}
 	vault := creds.NewVault()
 	vault.SetPath(creds.DefaultPath())
 
@@ -571,6 +579,9 @@ func (a *App) initialise() {
 	a.applyBackupSchedulerConfig()
 	a.backupSched.Start()
 	a.startAutoSync()
+	// Profiles exposed as a local SOCKS proxy (a CI runner's gateway)
+	// listen from the start; tunnels still come up on first use.
+	a.startLocalProxies()
 	a.sessionMeta = map[string]sessionMetaEntry{}
 	// Restore log-tail toggle from settings. Default = on (matches
 	// initial constructor state). Stored as "0"/"1".

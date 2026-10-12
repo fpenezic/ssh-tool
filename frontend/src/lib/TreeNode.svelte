@@ -527,6 +527,7 @@
         { label: "New subfolder…",       iconComponent: IconFolderPlus, onSelect: () => connectionActions.addSubfolderUnder(folder.id) },
         { label: "New connection here…", iconComponent: IconHost, onSelect: () => connectionActions.addConnectionUnder(folder.id) },
         { label: "New local shell here…", iconComponent: IconTerminal, onSelect: () => connectionActions.addLocalConnectionUnder(folder.id) },
+        { label: "New web bookmark here…", iconComponent: IconGlobe, onSelect: () => connectionActions.addWebConnectionUnder(folder.id) },
         { label: "New dynamic subfolder…", iconComponent: IconRefresh, onSelect: () => dynEditor.showNew(folder.id) },
         { label: "Rename…",              iconComponent: IconPencil, onSelect: () => connectionActions.renameFolder(folder.id) },
       ] : []),
@@ -1177,7 +1178,7 @@
               <IconLoading size={14} class="spin" />
             {:else}
               <Icon imageId={conn.icon_image_id} iconName={conn.icon_name} iconColor={conn.icon_color} size={14}>
-                <IconHost size={14} />
+                {#if conn.protocol === "web"}<IconGlobe size={14} />{:else if conn.protocol === "local"}<IconTerminal size={14} />{:else}<IconHost size={14} />{/if}
               </Icon>
             {/if}
           </span>

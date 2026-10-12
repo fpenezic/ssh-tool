@@ -362,6 +362,7 @@ class ConnectionActionsStore {
     const c = tree.connectionById(id);
     if (!c) return false;
     if (c.protocol === "local") return this.connectLocal(c);
+    if (c.protocol === "web") return this.openWeb(c.id);
     try {
       const r = await api.connectionsResolve(id);
       if (r?.vnc_enabled && r?.vnc_default) {
@@ -392,6 +393,7 @@ class ConnectionActionsStore {
     // command (telnet / serial / "claude" / a REPL). No SSH dial, no
     // credential override, no WG take-over - none of that applies.
     if (c.protocol === "local") return this.connectLocal(c);
+    if (c.protocol === "web") return this.openWeb(c.id);
     const override = opts?.overrideCredentialId ?? "";
     const attempt = async () => override
       ? api.sshConnectWithOverride(c.id, override)
@@ -545,6 +547,7 @@ class ConnectionActionsStore {
           if (!ok) throw new Error("local connect failed");
           return;
         }
+        if (c.protocol === "web") return; // a bookmark, not a session
         // Same take-over offer as connectOne (the singleton dialog
         // serialises if several share a busy profile).
         const res = await withTakeover(() => api.sshConnect(c.id));
@@ -830,6 +833,39 @@ class ConnectionActionsStore {
       await tree.load();
       if (conn?.id) selection.select({ kind: "connection", id: conn.id });
     } catch (e) { console.error("create connection:", e); }
+  }
+
+  // Open a web bookmark: the backend picks the network profile's browser
+  // (inherited like any setting) or the normal one.
+  async openWeb(id: string): Promise<boolean> {
+    try {
+      await api.connectionOpenWeb(id);
+      return true;
+    } catch (e: any) {
+      toast.err(e?.message ?? String(e));
+      return false;
+    }
+  }
+
+  // Create a web bookmark under a folder: a name and an address. It opens
+  // through the folder's network profile, if it has one.
+  async addWebConnectionUnder(folderId: string | null) {
+    const url = await showPrompt("Web address? (opens through the folder's VPN, if it has one)", "https://");
+    if (!url?.trim() || url.trim() === "https://") return;
+    let fallback = url.trim();
+    try { fallback = new URL(url.trim()).hostname || fallback; } catch { /* keep */ }
+    const name = await showPrompt("Name?", fallback);
+    if (!name?.trim()) return;
+    try {
+      const conn: any = await api.connectionsCreate({
+        folderId: folderId ?? undefined,
+        name: name.trim(),
+        hostname: url.trim(),
+        protocol: "web",
+      });
+      await tree.load();
+      if (conn?.id) selection.select({ kind: "connection", id: conn.id });
+    } catch (e) { console.error("create web bookmark:", e); }
   }
 
   // Create a local-shell connection under a folder (telnet / serial /
