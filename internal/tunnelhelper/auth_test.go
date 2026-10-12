@@ -27,6 +27,20 @@ func fakeHelper(mode string) {
 	case "cert":
 		out(map[string]string{"event": "error", "error": "not trusted", "cert_pin": "pin-sha256:AAAA", "cert_subject": "CN=vpn.example.com"})
 		return
+	case "session":
+		ln, _ := net.Listen("tcp", "127.0.0.1:0")
+		out(map[string]any{"event": "ready", "socks": ln.Addr().String(), "protocol": 1})
+		out(map[string]any{"event": "session", "cookie": "c00kie=="})
+		sc := bufio.NewScanner(os.Stdin)
+		for sc.Scan() {
+			var c struct{ Cmd string }
+			_ = json.Unmarshal(sc.Bytes(), &c)
+			if c.Cmd == "detach" {
+				_ = os.WriteFile(os.Getenv("TUNNELHELPER_MARK"), []byte("detach"), 0o600)
+				return
+			}
+		}
+		_ = os.WriteFile(os.Getenv("TUNNELHELPER_MARK"), []byte("eof"), 0o600)
 	case "auth":
 		out(map[string]any{"event": "auth", "id": "1", "message": "Please enter your OTP password.",
 			"fields": []map[string]string{{"key": "main:password:1", "name": "password", "label": "Password:", "kind": "password"}}})
@@ -101,5 +115,42 @@ func TestUntrustedCertCarriesPin(t *testing.T) {
 	var ce *CertUntrustedError
 	if !errors.As(err, &ce) || ce.Pin != "pin-sha256:AAAA" || ce.Subject != "CN=vpn.example.com" {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// The session cookie reaches OnSession, and Detach ends the helper with
+// the detach command, not the stdin EOF that would log out.
+func TestSessionCookieAndDetach(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mark := t.TempDir() + "/mark"
+	cookies := make(chan string, 1)
+	m := NewManager(nil)
+	_, err = m.EnsureWith("p1", "fake", exe, []string{"-test.run=^$"},
+		[]string{"TUNNELHELPER_FAKE=session", "TUNNELHELPER_MARK=" + mark},
+		Options{ReadyTimeout: 20 * time.Second, OnSession: func(c string) { cookies <- c }})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	select {
+	case c := <-cookies:
+		if c != "c00kie==" {
+			t.Fatalf("cookie = %q", c)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("no session event")
+	}
+	start := time.Now()
+	m.Detach("p1")
+	if b, _ := os.ReadFile(mark); string(b) != "detach" {
+		t.Fatalf("helper saw %q, want detach", b)
+	}
+	if time.Since(start) > 3*time.Second {
+		t.Fatalf("detach took %s", time.Since(start))
+	}
+	if m.Get("p1") != nil {
+		t.Fatal("detached helper still listed")
 	}
 }

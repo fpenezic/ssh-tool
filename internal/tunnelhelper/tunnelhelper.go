@@ -105,6 +105,12 @@ type Options struct {
 	// OnInfo is called after the tunnel description changes once ready
 	// (rekey, reconnect, transport switch), for the UI to refresh.
 	OnInfo func(p *Proc)
+	// OnSession receives the session cookie a helper reports for a later
+	// resume (openconnect, when asked for it). Secret: never log it.
+	OnSession func(cookie string)
+	// OnOpenURL shows a login page the helper asks for (a web / SSO
+	// login the server holds the connect open for).
+	OnOpenURL func(url string)
 	// ReadyTimeout overrides readyTimeout (a login with a typed one-time
 	// code takes longer than a NetBird registration).
 	ReadyTimeout time.Duration
@@ -169,6 +175,10 @@ type helperEvent struct {
 	Fields  []AuthField `json:"fields"`
 	// info
 	Info json.RawMessage `json:"info"`
+	// session: a session cookie to resume with (openconnect)
+	Cookie string `json:"cookie"`
+	// open_url: a login page for the user's browser (openvpn pending auth)
+	URL string `json:"url"`
 	// Protocol is the helper protocol version, carried on the ready
 	// event. Absent (0) means a pre-versioning helper from the app-tag
 	// era, which the app treats as too old. See protocol version range
@@ -274,6 +284,36 @@ func (m *Manager) Stop(profileID string) {
 	}
 	stopProc(p)
 	log.Printf("tunnelhelper: %s stopped", p.Name)
+}
+
+// Detach stops one helper with the "detach" command: it exits without
+// ending its session at the gateway, so a later start can resume it. A
+// helper that does not exit on its own (one that predates the command)
+// gets the normal Stop.
+func (m *Manager) Detach(profileID string) {
+	m.mu.Lock()
+	p, ok := m.procs[profileID]
+	if ok {
+		delete(m.procs, profileID)
+	}
+	m.mu.Unlock()
+	if !ok {
+		return
+	}
+	if p.send(map[string]any{"cmd": "detach"}) == nil {
+		for i := 0; i < 30; i++ {
+			p.mu.Lock()
+			exited := p.exited
+			p.mu.Unlock()
+			if exited {
+				log.Printf("tunnelhelper: %s detached", p.Name)
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	stopProc(p)
+	log.Printf("tunnelhelper: %s stopped (detach not supported)", p.Name)
 }
 
 // StopAll tears down everything (app shutdown).
@@ -422,6 +462,14 @@ func spawn(profileID, name, exePath string, args, env []string, opts Options) (*
 				p.mu.Unlock()
 				if got && opts.OnInfo != nil {
 					go opts.OnInfo(p)
+				}
+			case "open_url":
+				if opts.OnOpenURL != nil && ev.URL != "" {
+					go opts.OnOpenURL(ev.URL)
+				}
+			case "session":
+				if opts.OnSession != nil && ev.Cookie != "" {
+					opts.OnSession(ev.Cookie)
 				}
 			case "auth":
 				ch := AuthChallenge{ID: ev.ID, Message: ev.Message, Banner: ev.Banner, Error: ev.Error, Fields: ev.Fields}

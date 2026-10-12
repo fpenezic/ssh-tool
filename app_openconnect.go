@@ -66,8 +66,56 @@ type OpenConnectConfig struct {
 	// imported certificate + key live in the vault (and sync with it).
 	ClientCertCredentialID string `json:"client_cert_credential_id,omitempty"`
 
+	// LogoutOnIdle ends the gateway session when the idle stop takes the
+	// tunnel down. Default (false): the helper detaches, the session
+	// stays open at the gateway until its own idle timeout, and the next
+	// connect resumes it with the cookie instead of a new login.
+	LogoutOnIdle bool `json:"logout_on_idle,omitempty"`
+
 	Mode   string `json:"mode,omitempty"`
 	Paused bool   `json:"paused,omitempty"`
+}
+
+// ocSessions holds the AnyConnect session cookie of each profile whose
+// tunnel is up or was detached by the idle stop: memory only (never the
+// vault, the store or sync), so it dies with the app. A cookie is a
+// bearer credential for the session, as good as a completed login.
+var ocSessions = struct {
+	sync.Mutex
+	m map[string]string
+}{m: map[string]string{}}
+
+func ocSessionGet(profileID string) string {
+	ocSessions.Lock()
+	defer ocSessions.Unlock()
+	return ocSessions.m[profileID]
+}
+
+func ocSessionSet(profileID, cookie string) {
+	ocSessions.Lock()
+	defer ocSessions.Unlock()
+	if cookie == "" {
+		delete(ocSessions.m, profileID)
+		return
+	}
+	ocSessions.m[profileID] = cookie
+}
+
+// idleStopTunnel is the idle stop: an OpenConnect tunnel with a session
+// cookie detaches (the gateway session survives for a resume), anything
+// else stops for good.
+func (a *App) idleStopTunnel(profileID, kind string) {
+	if kind == kindOpenConnect && ocSessionGet(profileID) != "" {
+		row, err := a.db.GetNetworkProfile(profileID)
+		var cfg OpenConnectConfig
+		if err == nil && json.Unmarshal([]byte(row.ConfigJSON), &cfg) == nil && !cfg.LogoutOnIdle {
+			a.nbman.Detach(profileID)
+			go a.presenceClear(profileID)
+			log.Printf("openconnect %s: gateway session kept for the next connect", row.Name)
+			return
+		}
+	}
+	a.tunnelStop(profileID)
 }
 
 var ocFlavors = map[string]bool{"anyconnect": true, "fortinet": true, "f5": true, "gp": true, "pulse": true, "nc": true}
@@ -136,10 +184,27 @@ func (a *App) ensureOpenConnectTunnel(row *store.NetworkProfile) (tunnelDialer, 
 	for attempt := 0; ; attempt++ {
 		args := ocArgs(&cfg, pins)
 		filler := &ocAuthFiller{a: a, row: row, cfg: &cfg}
-		p, err := a.nbman.EnsureWith(row.ID, row.Name, exe, args, env, tunnelhelper.Options{
+		runEnv := env
+		if cfg.Flavor == "anyconnect" {
+			// Ask for the session cookie, and resume a detached session
+			// with the one from the last run. A helper that predates
+			// this ignores both variables and logs in as before.
+			runEnv = append(append([]string{}, env...), "SSHTOOL_OC_SESSION=1")
+			if c := ocSessionGet(row.ID); c != "" {
+				runEnv = append(runEnv, "SSHTOOL_OC_COOKIE="+c)
+				filler.resuming = true
+				log.Printf("openconnect %s: resuming the gateway session", row.Name)
+			}
+		}
+		connectStart := time.Now()
+		p, err := a.nbman.EnsureWith(row.ID, row.Name, exe, args, runEnv, tunnelhelper.Options{
 			ReadyTimeout: 6 * time.Minute, // typed one-time codes take a while
 			OnAuth:       filler.handle,
-			OnInfo:       func(*tunnelhelper.Proc) { EventsEmit("network_tunnel_changed", row.ID) },
+			OnInfo: func(p *tunnelhelper.Proc) {
+				a.rememberRoutes(row.ID, p.Info())
+				EventsEmit("network_tunnel_changed", row.ID)
+			},
+			OnSession: func(c string) { ocSessionSet(row.ID, c) },
 		})
 		var ce *tunnelhelper.CertUntrustedError
 		if errors.As(err, &ce) && attempt == 0 {
@@ -156,15 +221,21 @@ func (a *App) ensureOpenConnectTunnel(row *store.NetworkProfile) (tunnelDialer, 
 			continue
 		}
 		if err != nil {
+			ocSessionSet(row.ID, "")
 			log.Printf("openconnect %s: connect to %s failed: %v", row.Name, cfg.Server, err)
 			if filler.changeSent() {
 				log.Printf("openconnect %s: a password change was sent before the failure - the gateway may already use the new password; the stored credential was not updated", row.Name)
 			}
 			return nil, fmt.Errorf("profile %s: %w", row.Name, err)
 		}
-		log.Printf("openconnect %s: connected to %s", row.Name, cfg.Server)
+		if filler.wasResumed() {
+			log.Printf("openconnect %s: connected to %s in %s (session resumed, no login)", row.Name, cfg.Server, time.Since(connectStart).Round(10*time.Millisecond))
+		} else {
+			log.Printf("openconnect %s: connected to %s in %s", row.Name, cfg.Server, time.Since(connectStart).Round(10*time.Millisecond))
+		}
 		filler.commitChange()
 		a.wgTouch(row.ID)
+		a.rememberRoutes(row.ID, p.Info())
 		a.recordAudit("network.tunnel.start", row.ID, map[string]string{"name": row.Name, "kind": kindOpenConnect})
 		go a.presencePublish(row.ID, kindOpenConnect)
 		EventsEmit("network_tunnel_changed", row.ID)
@@ -339,6 +410,7 @@ type ocAuthFiller struct {
 	cfg *OpenConnectConfig
 
 	mu                         sync.Mutex
+	resuming                   bool // a saved session cookie is being tried
 	user1, pass1, user2, pass2 bool
 	sawPassword                bool
 	// lastPassCred is the credential that answered the latest password
@@ -424,6 +496,15 @@ func (f *ocAuthFiller) setRole(key, name, role string) {
 var ocOTPRe = regexp.MustCompile(`(?i)\botp\b|one[- ]?time|token|passcode|verification|code|2fa|mfa|second`)
 
 func (f *ocAuthFiller) handle(p *tunnelhelper.Proc, ch tunnelhelper.AuthChallenge) {
+	f.mu.Lock()
+	if f.resuming {
+		// A login form while resuming: the gateway no longer knows the
+		// session (expired, or ended elsewhere). Normal login from here.
+		f.resuming = false
+		ocSessionSet(f.row.ID, "")
+		log.Printf("openconnect %s: the saved gateway session has expired, logging in", f.row.Name)
+	}
+	f.mu.Unlock()
 	if ocIsPasswordChange(ch) {
 		f.handleChange(p, ch)
 		return
@@ -877,4 +958,12 @@ func (f *ocAuthFiller) changeSent() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.newPassword != ""
+}
+
+// wasResumed reports a connect that came up on the saved session, with
+// no login form in between.
+func (f *ocAuthFiller) wasResumed() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.resuming
 }
