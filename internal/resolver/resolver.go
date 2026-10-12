@@ -191,7 +191,9 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 		otpRef = nil
 	}
 	return store.ResolvedSettings{
-		Hostname:                  hostname,
+		// A pasted hostname can carry a newline or spaces; every dial and
+		// probe goes through here, so older rows work too.
+		Hostname:                  strings.TrimSpace(hostname),
 		OTPRef:                    otpRef,
 		Username:                  s.Username,
 		Port:                      port,

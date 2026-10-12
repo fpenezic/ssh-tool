@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type NewConnection struct {
@@ -50,7 +51,7 @@ func (d *DB) CreateConnection(in NewConnection) (*Connection, error) {
 		`INSERT INTO connections
 		 (id, folder_id, name, hostname, sort_order, overrides_json, tags_json, notes, favorite, sensitive, open_hidden, protocol, local_shell_kind, local_shell_dir, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?)`,
-		id, in.FolderID, in.Name, in.Hostname, in.SortOrder,
+		id, in.FolderID, in.Name, strings.TrimSpace(in.Hostname), in.SortOrder,
 		string(overrides), string(tagsJSON), in.Notes, protocol, in.LocalShellKind, in.LocalShellDir, ts, ts,
 	)
 	if err != nil {
@@ -149,7 +150,7 @@ func (d *DB) UpdateConnection(in UpdateConnection) (*Connection, error) {
 	}
 	newHost := existing.Hostname
 	if in.Hostname != nil {
-		newHost = *in.Hostname
+		newHost = strings.TrimSpace(*in.Hostname)
 	}
 	newSort := existing.SortOrder
 	if in.SortOrder != nil {

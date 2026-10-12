@@ -330,3 +330,12 @@ func TestOTPRefInheritedIndependently(t *testing.T) {
 		t.Errorf("otp ref = %q, want nil", *rs.OTPRef)
 	}
 }
+
+// A pasted hostname with a trailing newline used to reach the dialer as
+// "10.0.0.5\n:22" ("no such host").
+func TestResolveTrimsHostname(t *testing.T) {
+	rs := ResolveWith(store.Connection{Hostname: " 10.0.0.5\r\n"}, nil)
+	if rs.Hostname != "10.0.0.5" {
+		t.Fatalf("hostname = %q", rs.Hostname)
+	}
+}

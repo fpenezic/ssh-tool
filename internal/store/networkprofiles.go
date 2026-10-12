@@ -94,7 +94,75 @@ func (d *DB) ListNetworkProfiles() ([]NetworkProfile, error) {
 	return out, rows.Err()
 }
 
+// DeleteNetworkProfile removes the profile and every reference to it, so
+// what pointed at it falls back to its inherited network: connections,
+// folders and inventory folders drop the setting (an inheritable
+// override), the Bitwarden / Infisical servers, which have nothing to
+// inherit, go direct. Left in place, a reference fails every dial with
+// "network profile <id> not found".
 func (d *DB) DeleteNetworkProfile(id string) error {
-	_, err := d.conn.Exec(`DELETE FROM network_profiles WHERE id = ?`, id)
-	return err
+	return d.WithTx(func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`DELETE FROM network_profiles WHERE id = ?`, id); err != nil {
+			return err
+		}
+		_, err := clearNetworkRefs(tx, "%s = ?", id)
+		return err
+	})
+}
+
+// SweepOrphanNetworkRefs clears references to profiles that no longer
+// exist - left by a delete before DeleteNetworkProfile cleaned up, or by
+// a sync that brought references without their profile. Returns how many
+// rows changed.
+func (d *DB) SweepOrphanNetworkRefs() (int64, error) {
+	var n int64
+	err := d.WithTx(func(tx *sql.Tx) error {
+		var err error
+		n, err = clearNetworkRefs(tx, "%[1]s NOT IN ('', '"+networkDirectSentinel+"') AND %[1]s NOT IN (SELECT id FROM network_profiles)")
+		return err
+	})
+	return n, err
+}
+
+// networkDirectSentinel is the inventory editor's explicit "Direct"
+// choice (internal/inventory), not a profile id.
+const networkDirectSentinel = "__direct__"
+
+// clearNetworkRefs drops the network profile references matching cond,
+// a WHERE fragment with %[1]s for the referenced value.
+func clearNetworkRefs(tx *sql.Tx, cond string, args ...any) (int64, error) {
+	type ref struct{ table, col, stamp string }
+	jsonRefs := []ref{
+		{"connections", "overrides_json", "updated_at"},
+		{"folders", "settings_json", "updated_at"},
+		{"dynamic_folders", "config_json", ""},
+	}
+	var total int64
+	for _, r := range jsonRefs {
+		val := fmt.Sprintf(`(CASE WHEN json_valid(%s) THEN json_extract(%s, '$.network_profile_id') END)`, r.col, r.col)
+		set := fmt.Sprintf(`%s = json_remove(%s, '$.network_profile_id')`, r.col, r.col)
+		q := fmt.Sprintf(`UPDATE %s SET %s`, r.table, set)
+		a := append([]any{}, args...)
+		if r.stamp != "" {
+			q += ", " + r.stamp + " = ?"
+			a = append([]any{now()}, a...)
+		}
+		q += " WHERE " + fmt.Sprintf(cond, val)
+		res, err := tx.Exec(q, a...)
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", r.table, err)
+		}
+		n, _ := res.RowsAffected()
+		total += n
+	}
+	for _, table := range []string{"bitwarden_servers", "infisical_servers"} {
+		q := fmt.Sprintf(`UPDATE %s SET network_profile_id = '', updated_at = ? WHERE `, table) + fmt.Sprintf(cond, "network_profile_id")
+		res, err := tx.Exec(q, append([]any{now()}, args...)...)
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", table, err)
+		}
+		n, _ := res.RowsAffected()
+		total += n
+	}
+	return total, nil
 }
