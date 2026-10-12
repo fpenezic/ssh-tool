@@ -157,9 +157,13 @@ func (a *App) ensureOpenConnectTunnel(row *store.NetworkProfile) (tunnelDialer, 
 		}
 		if err != nil {
 			log.Printf("openconnect %s: connect to %s failed: %v", row.Name, cfg.Server, err)
+			if filler.changeSent() {
+				log.Printf("openconnect %s: a password change was sent before the failure - the gateway may already use the new password; the stored credential was not updated", row.Name)
+			}
 			return nil, fmt.Errorf("profile %s: %w", row.Name, err)
 		}
 		log.Printf("openconnect %s: connected to %s", row.Name, cfg.Server)
+		filler.commitChange()
 		a.wgTouch(row.ID)
 		a.recordAudit("network.tunnel.start", row.ID, map[string]string{"name": row.Name, "kind": kindOpenConnect})
 		go a.presencePublish(row.ID, kindOpenConnect)
@@ -337,6 +341,13 @@ type ocAuthFiller struct {
 	mu                         sync.Mutex
 	user1, pass1, user2, pass2 bool
 	sawPassword                bool
+	// lastPassCred is the credential that answered the latest password
+	// field ("" when the user typed it or it was a one-time code): the
+	// account a following password-change form is about.
+	lastPassCred string
+	// changeCred / newPassword hold a password change the gateway was
+	// sent, written to the credential once the tunnel is up.
+	changeCred, newPassword string
 	// roles names each field fill saw (by key) as the first or second
 	// login's username / password, so the prompt and the log can say
 	// which one the gateway is asking for.
@@ -349,7 +360,56 @@ const (
 	ocRolePass1 = "1st login - password"
 	ocRoleUser2 = "2nd login - username"
 	ocRolePass2 = "2nd login - password / one-time code"
+
+	ocRoleOldPass     = "password change - current password"
+	ocRoleNewPass     = "password change - new password"
+	ocRoleConfirmPass = "password change - confirm new password"
 )
+
+var (
+	ocChangeMsgRe    = regexp.MustCompile(`(?i)expire|must be changed|change (your |the )?password|password change|new password|reset`)
+	ocConfirmFieldRe = regexp.MustCompile(`(?i)confirm|verify|re-?enter|re-?type|repeat|again`)
+	ocNewFieldRe     = regexp.MustCompile(`(?i)\bnew`)
+	ocOldFieldRe     = regexp.MustCompile(`(?i)\bold|current|existing`)
+	ocVerifyCodeRe   = regexp.MustCompile(`(?i)verification|code|token|otp`)
+)
+
+// ocIsPasswordChange spots a "your password expired, pick a new one"
+// form. Gateways name it differently, so it looks at both the message
+// and the fields: two or more password fields where one is a new or a
+// confirm field, or a change wording with at least one password field.
+// A one-time code field ("verification code") is never a confirm field.
+func ocIsPasswordChange(ch tunnelhelper.AuthChallenge) bool {
+	pw, named := 0, false
+	for _, fl := range ch.Fields {
+		if fl.Kind != "password" {
+			continue
+		}
+		pw++
+		id := fl.Name + " " + fl.Label
+		if ocVerifyCodeRe.MatchString(id) && !ocNewFieldRe.MatchString(id) {
+			continue
+		}
+		if ocNewFieldRe.MatchString(id) || ocConfirmFieldRe.MatchString(id) {
+			named = true
+		}
+	}
+	if pw == 0 {
+		return false
+	}
+	return (pw >= 2 && named) || ocChangeMsgRe.MatchString(ch.Message+" "+ch.Error)
+}
+
+func ocChangeRole(fl tunnelhelper.AuthField) string {
+	id := fl.Name + " " + fl.Label
+	switch {
+	case ocConfirmFieldRe.MatchString(id):
+		return ocRoleConfirmPass
+	case ocOldFieldRe.MatchString(id):
+		return ocRoleOldPass
+	}
+	return ocRoleNewPass
+}
 
 func (f *ocAuthFiller) setRole(key, name, role string) {
 	if f.roles == nil {
@@ -364,6 +424,10 @@ func (f *ocAuthFiller) setRole(key, name, role string) {
 var ocOTPRe = regexp.MustCompile(`(?i)\botp\b|one[- ]?time|token|passcode|verification|code|2fa|mfa|second`)
 
 func (f *ocAuthFiller) handle(p *tunnelhelper.Proc, ch tunnelhelper.AuthChallenge) {
+	if ocIsPasswordChange(ch) {
+		f.handleChange(p, ch)
+		return
+	}
 	values, missing := f.fill(ch)
 	f.mu.Lock()
 	line := ocDescribeRound(ch, values, missing, f.roles)
@@ -439,6 +503,7 @@ func (f *ocAuthFiller) fill(ch tunnelhelper.AuthChallenge) (map[string]string, [
 			}
 			missing = append(missing, i)
 		}
+		f.lastPassCred = ""
 		return values, missing
 	}
 	for i, fl := range ch.Fields {
@@ -480,6 +545,7 @@ func (f *ocAuthFiller) fill(ch tunnelhelper.AuthChallenge) (map[string]string, [
 				if cfg.PasswordCredentialID != "" {
 					if s, err := f.a.ocCredentialSecret(cfg.PasswordCredentialID); err == nil {
 						values[fl.Key] = s
+						f.lastPassCred = cfg.PasswordCredentialID
 						continue
 					} else {
 						log.Printf("openconnect %s: password credential: %v", f.row.Name, err)
@@ -492,6 +558,10 @@ func (f *ocAuthFiller) fill(ch tunnelhelper.AuthChallenge) (map[string]string, [
 				f.pass2, f.sawPassword = true, true
 				if s := f.secondSecret(); s != "" {
 					values[fl.Key] = s
+					f.lastPassCred = ""
+					if cfg.SecondPassword == ocSecondCredential {
+						f.lastPassCred = cfg.SecondCredentialID
+					}
 					continue
 				}
 			}
@@ -500,9 +570,143 @@ func (f *ocAuthFiller) fill(ch tunnelhelper.AuthChallenge) (map[string]string, [
 			values[fl.Key] = fl.Value // a prefilled default
 			continue
 		}
+		if fl.Kind == "password" {
+			f.lastPassCred = ""
+		}
 		missing = append(missing, i)
 	}
 	return values, missing
+}
+
+// handleChange answers a password-change form. Nothing stored goes into
+// the new-password fields: the user types them (or leaves them blank to
+// skip an optional change), and where the gateway
+// asks twice the two must match before anything is sent - a mismatch the
+// gateway rejects is one more failed login on the account. A "current
+// password" field is filled from the credential that just logged in.
+// The new password is written to that credential once the tunnel is up
+// (commitChange), not before: the gateway may still refuse it.
+func (f *ocAuthFiller) handleChange(p *tunnelhelper.Proc, ch tunnelhelper.AuthChallenge) {
+	f.mu.Lock()
+	cred := f.lastPassCred
+	values := map[string]string{}
+	var missing []int
+	for i, fl := range ch.Fields {
+		switch fl.Kind {
+		case "select":
+			if v := pickOption(fl, f.cfg.AuthGroup); v != "" {
+				values[fl.Key] = v
+				continue
+			}
+		case "password":
+			role := ocChangeRole(fl)
+			f.setRole(fl.Key, fl.Name, role)
+			if role == ocRoleOldPass && cred != "" && ch.Error == "" {
+				if s, err := f.a.ocCredentialSecret(cred); err == nil {
+					values[fl.Key] = s
+					continue
+				}
+			}
+		default:
+			if fl.Value != "" {
+				values[fl.Key] = fl.Value
+				continue
+			}
+		}
+		missing = append(missing, i)
+	}
+	line := ocDescribeRound(ch, values, missing, f.roles)
+	f.mu.Unlock()
+	src := "typed at login"
+	if cred != "" {
+		src = "credential " + cred
+	}
+	log.Printf("openconnect %s: password change requested (previous password: %s): %s", f.row.Name, src, line)
+	var newPW string
+	for attempt := 1; ; attempt++ {
+		if err := f.prompt(ch, values, missing); err != nil {
+			log.Printf("openconnect %s: password change cancelled", f.row.Name)
+			_ = p.Cancel(ch.ID)
+			return
+		}
+		var ok bool
+		newPW, ok = ocNewPassword(ch, values, f.roles)
+		if ok {
+			break
+		}
+		log.Printf("openconnect %s: password change: the new passwords do not match (attempt %d)", f.row.Name, attempt)
+		if attempt == 3 {
+			_ = p.Cancel(ch.ID)
+			return
+		}
+		ch.Error = "The new passwords do not match - type them again."
+	}
+	if newPW == "" {
+		log.Printf("openconnect %s: password change skipped (new password left blank)", f.row.Name)
+	} else {
+		f.mu.Lock()
+		f.changeCred, f.newPassword = cred, newPW
+		f.mu.Unlock()
+		log.Printf("openconnect %s: password change sent to the gateway", f.row.Name)
+	}
+	if err := p.Answer(ch.ID, values); err != nil {
+		log.Printf("openconnect %s: answer: %v", f.row.Name, err)
+	}
+}
+
+// ocNewPassword returns the new password typed into a change form and
+// whether every new / confirm field agrees on it. All of them left blank
+// agree on "": an optional change (Cisco ASA: "Leave both boxes blank to
+// continue using current password") is skipped that way, and a gateway
+// that insists answers with an error round.
+func ocNewPassword(ch tunnelhelper.AuthChallenge, values map[string]string, roles map[string]string) (string, bool) {
+	var pw string
+	seen := false
+	for _, fl := range ch.Fields {
+		r := roles[fl.Key]
+		if r != ocRoleNewPass && r != ocRoleConfirmPass {
+			continue
+		}
+		v := values[fl.Key]
+		if seen && v != pw {
+			return "", false
+		}
+		pw, seen = v, true
+	}
+	return pw, true
+}
+
+// commitChange stores a password the gateway accepted (the tunnel came
+// up after the change) in the credential it replaced. A typed or an
+// external (Bitwarden / KeePass) password is only logged: there is
+// nothing here to write it to.
+func (f *ocAuthFiller) commitChange() {
+	f.mu.Lock()
+	cred, pw := f.changeCred, f.newPassword
+	f.mu.Unlock()
+	if pw == "" {
+		return
+	}
+	name := f.row.Name
+	if cred == "" {
+		log.Printf("openconnect %s: password changed at the gateway; the old one was typed, no credential to update", name)
+		return
+	}
+	c, err := f.a.db.GetCredential(cred)
+	if err != nil || c == nil {
+		log.Printf("openconnect %s: password changed at the gateway; credential %s not found: %v", name, cred, err)
+		return
+	}
+	if c.StorageMode != store.StorageManaged || c.Kind != store.CredPassword {
+		log.Printf("openconnect %s: password changed at the gateway; credential %q is %s/%s - update it there", name, c.Name, c.StorageMode, c.Kind)
+		return
+	}
+	if _, err := f.a.credSvc.RotatePassword(cred, pw); err != nil {
+		log.Printf("openconnect %s: password changed at the gateway; updating credential %q failed: %v", name, c.Name, err)
+		return
+	}
+	f.a.recordAudit("credential.rotate", cred, map[string]string{"via": "vpn password change", "profile": name})
+	log.Printf("openconnect %s: password changed at the gateway, credential %q updated", name, c.Name)
 }
 
 func (f *ocAuthFiller) firstUser() string {
@@ -667,4 +871,10 @@ func (a *App) NetworkProfileUpdateOpenConnect(id string, in OpenConnectProfileIn
 // tunnel is down or the helper reports none.
 func (a *App) NetworkProfileTunnelInfo(id string) string {
 	return string(a.nbman.Status(id).Info)
+}
+
+func (f *ocAuthFiller) changeSent() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.newPassword != ""
 }

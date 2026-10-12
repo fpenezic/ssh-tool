@@ -85,3 +85,62 @@ func TestOCFillerRejectedRoundAsksAll(t *testing.T) {
 		t.Fatalf("roles = %v", f.roles)
 	}
 }
+
+// A password-change form is told apart from login and one-time code
+// rounds, and its fields get change roles, not login ones.
+func TestOCPasswordChangeDetection(t *testing.T) {
+	ch := func(msg string, fields ...tunnelhelper.AuthField) tunnelhelper.AuthChallenge {
+		return tunnelhelper.AuthChallenge{ID: "1", Message: msg, Fields: fields}
+	}
+	cases := []struct {
+		name string
+		ch   tunnelhelper.AuthChallenge
+		want bool
+	}{
+		{"asa change", ch("Password change required.", ocField("new_password", "new_password", "password"), ocField("verify_password", "verify_password", "password")), true},
+		{"fields only", ch("", ocField("new_password", "new_password", "password"), ocField("confirm", "confirm", "password")), true},
+		{"expired, one field", ch("Your password has expired. Enter a new password.", ocField("password", "password", "password")), true},
+		{"asa double auth", ch("Please enter your username and password.", ocField("username", "username", "text"), ocField("password", "password", "password"), ocField("secondary_password", "secondary_password", "password")), false},
+		{"otp round", ch("Please enter your OTP password.", ocField("password", "password", "password")), false},
+		{"verification code", ch("", ocField("password", "password", "password"), ocField("verification_code", "verification_code", "password")), false},
+		{"no password field", ch("Your password expires in 3 days.", ocField("answer", "answer", "text")), false},
+	}
+	for _, c := range cases {
+		if got := ocIsPasswordChange(c.ch); got != c.want {
+			t.Errorf("%s: ocIsPasswordChange = %v, want %v", c.name, got, c.want)
+		}
+	}
+	if r := ocChangeRole(ocField("verify_password", "verify_password", "password")); r != ocRoleConfirmPass {
+		t.Errorf("verify role = %q", r)
+	}
+	if r := ocChangeRole(ocField("old_password", "old_password", "password")); r != ocRoleOldPass {
+		t.Errorf("old role = %q", r)
+	}
+	if r := ocChangeRole(ocField("password", "password", "password")); r != ocRoleNewPass {
+		t.Errorf("plain role = %q", r)
+	}
+}
+
+// The new password is only taken when every new / confirm field agrees;
+// all blank skips the change.
+func TestOCNewPasswordMatch(t *testing.T) {
+	c := tunnelhelper.AuthChallenge{Fields: []tunnelhelper.AuthField{
+		ocField("old", "old_password", "password"),
+		ocField("new", "new_password", "password"),
+		ocField("verify", "verify_password", "password"),
+	}}
+	roles := map[string]string{"old": ocRoleOldPass, "new": ocRoleNewPass, "verify": ocRoleConfirmPass}
+	if pw, ok := ocNewPassword(c, map[string]string{"old": "a", "new": "b", "verify": "b"}, roles); !ok || pw != "b" {
+		t.Fatalf("match: %q %v", pw, ok)
+	}
+	if _, ok := ocNewPassword(c, map[string]string{"old": "a", "new": "b", "verify": "c"}, roles); ok {
+		t.Fatal("mismatch accepted")
+	}
+	// Both blank: an optional change skipped.
+	if pw, ok := ocNewPassword(c, map[string]string{"old": "a"}, roles); !ok || pw != "" {
+		t.Fatalf("blank: %q %v", pw, ok)
+	}
+	if _, ok := ocNewPassword(c, map[string]string{"old": "a", "new": "b"}, roles); ok {
+		t.Fatal("confirm left blank accepted")
+	}
+}

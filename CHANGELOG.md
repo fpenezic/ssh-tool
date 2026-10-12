@@ -7,6 +7,14 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Network profiles
+
+- **OpenConnect: password change at login.** When the gateway asks for a new password (expired, or offered by Cisco ASA before it expires), the form is recognised and asked as "new password" / "confirm new password" - nothing stored is filled into it, and the two must match before anything is sent. Leaving both blank skips an optional change. Once the tunnel is up, the new password replaces the old one in the vault credential it came from (the old one stays in the credential history); a typed or Bitwarden / KeePass password is only noted in the log. Before this, the change form was taken for a second login and could receive the second password or a one-time code.
+
+---
+
 ## [0.111.0] - Corporate VPNs without the vendor client
 
 Corporate VPNs without the vendor client: Cisco AnyConnect, Fortinet, F5, GlobalProtect and Pulse as network profiles, with client certificates kept in the vault and one-time codes from Bitwarden or KeePass filled in at login. Also new: a Health check report for Gather facts, a release-candidate update channel, and a round of security hardening across MCP, links and remote commands.
