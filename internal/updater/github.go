@@ -74,6 +74,32 @@ func FetchGitHubByTag(repo, tag, userAgent string) (*ReleaseInfo, error) {
 // plugins published from their own repository tag per plugin
 // ("openconnect-v1", "openconnect-v1.2") instead of the shared helper-vN.
 func FetchGitHubPluginRelease(repo, tagPrefix string, maxMajor int, userAgent string) (*ReleaseInfo, error) {
+	list, err := fetchReleaseList(repo, userAgent)
+	if err != nil {
+		return nil, err
+	}
+	return pluginReleaseFrom(list, repo, tagPrefix, maxMajor)
+}
+
+// FetchGitHubPluginReleases is FetchGitHubPluginRelease for several
+// plugins of one repository with a single API call (the plugins card
+// lists them all; one call per plugin made it wait seconds). Plugins
+// without a usable release are absent from the map.
+func FetchGitHubPluginReleases(repo string, tagPrefixes []string, maxMajor int, userAgent string) (map[string]*ReleaseInfo, error) {
+	list, err := fetchReleaseList(repo, userAgent)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]*ReleaseInfo{}
+	for _, p := range tagPrefixes {
+		if r, err := pluginReleaseFrom(list, repo, p, maxMajor); err == nil {
+			out[p] = r
+		}
+	}
+	return out, nil
+}
+
+func fetchReleaseList(repo, userAgent string) ([]ghReleasePayload, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=100", repo)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -98,6 +124,10 @@ func FetchGitHubPluginRelease(repo, tagPrefix string, maxMajor int, userAgent st
 	if err := json.Unmarshal(body, &list); err != nil {
 		return nil, fmt.Errorf("malformed github releases list: %w", err)
 	}
+	return list, nil
+}
+
+func pluginReleaseFrom(list []ghReleasePayload, repo, tagPrefix string, maxMajor int) (*ReleaseInfo, error) {
 	best := pickPluginRelease(list, tagPrefix, maxMajor)
 	if best == nil {
 		return nil, fmt.Errorf("no plugin release found (tag %s<=%d) in %s", tagPrefix, maxMajor, repo)

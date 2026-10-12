@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"ssh-tool/internal/store"
@@ -31,7 +32,7 @@ import (
 )
 
 // knownPlugins is the set the UI offers.
-var knownPlugins = []string{"netbird", "tailscale", "openconnect"}
+var knownPlugins = []string{"netbird", "tailscale", "openconnect", "openvpn"}
 
 // pluginSource is where a plugin's releases live: the separate plugins
 // repository, one tag namespace per plugin (<name>-vN[.P]), each plugin
@@ -171,57 +172,81 @@ type PluginDownloadProgress struct {
 
 // PluginsStatus reports every known plugin's install state + version.
 func (a *App) PluginsStatus() []PluginInfo {
-	out := make([]PluginInfo, 0, len(knownPlugins))
 	// Only platforms the release actually builds a helper for. macOS
 	// is excluded until the signed/notarised darwin helper ships (see
 	// TODO) - otherwise the download would 404. A user who drops a
 	// helper into the plugins dir by hand still works: pluginPath
 	// finds it regardless of this flag.
 	supported := runtime.GOOS == "windows" || runtime.GOOS == "linux"
-	// Latest published release per plugin, fetched once here (best
-	// effort, short timeout). Plugins ship on their own <name>-vN tags,
-	// decoupled from the app version, so "update available" compares the
-	// installed plugin against its newest RELEASE, not the app. A plugin
-	// still stamped helper-vN (installed before the move) differs from
-	// any <name>-vN tag, so it is offered the update.
-	// Empty on any failure (offline, rate-limited) -> we simply don't flag
-	// an update rather than nagging or blocking the card.
-	latest := map[pluginSource]string{}
-	for _, name := range knownPlugins {
-		src := sourceOf(name)
-		latestHelper, seen := latest[src]
-		if !seen {
-			latestHelper = a.latestPluginVersion(src)
-			latest[src] = latestHelper
-		}
-		p, ok := pluginPath(name)
-		info := PluginInfo{Name: name, Installed: ok, Path: p, Supported: supported, Latest: latestHelper}
-		if ok {
-			info.Version = pluginVersion(p)
-			info.EngineVersion = pluginEngineVersion(name, p)
-			// Flag an update only when we could read a real installed
-			// version AND know the latest helper release AND they differ.
-			// A "dev" helper (un-stamped local build) never nags.
-			if info.Version != "" && info.Version != "dev" &&
-				latestHelper != "" && info.Version != latestHelper {
-				info.UpdateAvailable = true
+	// Latest published release per plugin: plugins ship on their own
+	// <name>-vN tags, decoupled from the app version, so "update
+	// available" compares the installed plugin against its newest
+	// RELEASE, not the app. A plugin still stamped helper-vN (installed
+	// before the move) differs from any <name>-vN tag, so it is offered
+	// the update. One API call for all of them, cached (pluginLatest);
+	// "" on any failure, so the card never nags or blocks offline.
+	latest := a.pluginLatest()
+	// The --version probes start a process each (a console-less one on
+	// Windows, still ~100 ms): run them side by side.
+	out := make([]PluginInfo, len(knownPlugins))
+	var wg sync.WaitGroup
+	for i, name := range knownPlugins {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			p, ok := pluginPath(name)
+			info := PluginInfo{Name: name, Installed: ok, Path: p, Supported: supported, Latest: latest[name]}
+			if ok {
+				info.Version = pluginVersion(p)
+				info.EngineVersion = pluginEngineVersion(name, p)
+				// Flag an update only when we could read a real installed
+				// version AND know the latest release AND they differ. A
+				// "dev" helper (un-stamped local build) never nags.
+				if info.Version != "" && info.Version != "dev" &&
+					info.Latest != "" && info.Version != info.Latest {
+					info.UpdateAvailable = true
+				}
 			}
-		}
-		out = append(out, info)
+			out[i] = info
+		}()
 	}
+	wg.Wait()
 	return out
 }
 
-// latestPluginVersion returns the tag of the newest release of a plugin source this
-// app can speak to (<name>-v<=MaxProtocol), or "" if it can't be
-// determined right now. Best effort: any error yields "" so PluginsStatus
-// degrades to "no update flagged" rather than failing.
-func (a *App) latestPluginVersion(src pluginSource) string {
-	rel, err := updater.FetchGitHubPluginRelease(src.repo, src.tagPrefix, tunnelhelper.MaxProtocol(), "ssh-tool/"+appVersion)
-	if err != nil {
-		return ""
+// pluginLatestCache is the newest release tag per plugin, refreshed at
+// most every pluginLatestTTL (the Settings page and the update check both
+// ask; GitHub's anonymous API allows 60 calls an hour).
+var pluginLatestCache struct {
+	sync.Mutex
+	at     time.Time
+	latest map[string]string
+}
+
+const pluginLatestTTL = 10 * time.Minute
+
+func (a *App) pluginLatest() map[string]string {
+	pluginLatestCache.Lock()
+	defer pluginLatestCache.Unlock()
+	if pluginLatestCache.latest != nil && time.Since(pluginLatestCache.at) < pluginLatestTTL {
+		return pluginLatestCache.latest
 	}
-	return rel.Version
+	prefixes := make([]string, 0, len(knownPlugins))
+	for _, name := range knownPlugins {
+		prefixes = append(prefixes, sourceOf(name).tagPrefix)
+	}
+	rels, err := updater.FetchGitHubPluginReleases(pluginsGitHubRepo, prefixes, tunnelhelper.MaxProtocol(), "ssh-tool/"+appVersion)
+	latest := map[string]string{}
+	if err != nil {
+		return latest // not cached: the next look tries again
+	}
+	for _, name := range knownPlugins {
+		if r := rels[sourceOf(name).tagPrefix]; r != nil {
+			latest[name] = r.Version
+		}
+	}
+	pluginLatestCache.at, pluginLatestCache.latest = time.Now(), latest
+	return latest
 }
 
 // PluginDownload fetches the plugin binary for this platform from the
