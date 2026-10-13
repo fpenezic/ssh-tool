@@ -7,7 +7,9 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.112.1] - Signed Fedora packages
+
+The Fedora repository installs again with `gpgcheck=1`: its packages are now signed, not only the metadata.
 
 ### Packages
 
