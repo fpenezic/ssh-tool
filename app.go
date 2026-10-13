@@ -3457,7 +3457,7 @@ func (a *App) makeAlgoLookup() sshlayer.HostKeyAlgoLookup {
 		if err != nil || stored == nil {
 			return nil
 		}
-		return []string{stored.KeyType}
+		return sshlayer.HostKeyAlgorithmsFor(stored.KeyType)
 	}
 }
 
