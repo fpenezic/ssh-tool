@@ -88,9 +88,30 @@ no root. You can do the same later from
 **Settings > Desktop integration**, and undo it there too.
 `build/linux/install-user.sh` does the same from a shell if you prefer.
 
-Distro packages (.deb / .rpm / pacman) build from this repo with
-`task linux:create:deb` and friends, but are not attached to releases
-yet - see [`docs/TODO.md`](docs/TODO.md).
+Or install a package, which pulls in GTK and WebKitGTK by itself and
+updates with the system. Every release attaches a `.deb` (Debian /
+Ubuntu) and an `.rpm` (Fedora), and
+[repo.sshtool.app](https://repo.sshtool.app) serves them as a signed apt
+and dnf repository, so `apt upgrade` / `dnf upgrade` bring new versions:
+
+```bash
+# Debian / Ubuntu
+curl -fsSL https://repo.sshtool.app/ssh-tool.asc | sudo gpg --dearmor -o /usr/share/keyrings/ssh-tool.gpg
+echo 'deb [signed-by=/usr/share/keyrings/ssh-tool.gpg] https://repo.sshtool.app/deb stable main' | sudo tee /etc/apt/sources.list.d/ssh-tool.list
+sudo apt update && sudo apt install ssh-tool
+
+# Fedora (RHEL 10 and its rebuilds have no webkitgtk6.0 package)
+sudo tee /etc/yum.repos.d/ssh-tool.repo <<'EOF'
+[ssh-tool]
+name=ssh-tool
+baseurl=https://repo.sshtool.app/rpm
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://repo.sshtool.app/ssh-tool.asc
+EOF
+sudo dnf install ssh-tool
+```
 
 ### Windows
 

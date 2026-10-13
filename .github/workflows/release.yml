@@ -540,7 +540,7 @@ jobs:
         if: steps.gate.outputs.enabled == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y apt-utils createrepo-c gnupg
+          sudo apt-get install -y apt-utils createrepo-c gnupg rpm
 
       # The packages come from the build job rather than being rebuilt
       # here, so the repository serves the EXACT bytes attached to the

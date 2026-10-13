@@ -28,10 +28,13 @@ have() { command -v "$1" >/dev/null 2>&1; }
 missing=""
 have apt-ftparchive || missing="$missing apt-utils(apt-ftparchive)"
 have createrepo_c   || missing="$missing createrepo_c"
-if [ -n "$keyid" ]; then have gpg || missing="$missing gnupg"; fi
+if [ -n "$keyid" ]; then
+    have gpg     || missing="$missing gnupg"
+    have rpmsign || missing="$missing rpm(rpmsign)"
+fi
 if [ -n "$missing" ]; then
     echo "missing tools:$missing" >&2
-    echo "on Debian/Ubuntu: sudo apt install apt-utils createrepo-c gnupg" >&2
+    echo "on Debian/Ubuntu: sudo apt install apt-utils createrepo-c gnupg rpm" >&2
     exit 1
 fi
 
@@ -109,6 +112,19 @@ fi
 rpmroot="$outdir/rpm"
 mkdir -p "$rpmroot"
 cp "$pkgdir"/*.rpm "$rpmroot"/ 2>/dev/null || { echo "no .rpm files in $pkgdir" >&2; exit 1; }
+
+if [ -n "$keyid" ]; then
+    # The packages themselves are signed too, not only repomd.xml: dnf's
+    # gpgcheck=1 checks each package's own signature, and an unsigned one
+    # fails the install ("The package is not signed") however well the
+    # metadata is signed. Signing adds a header to the copy here; the
+    # payload stays byte for byte the release asset. Packages pulled from
+    # older releases are signed the same way (--addsign on an already
+    # signed package just adds the same signature again).
+    # __gpg: Ubuntu's rpm points at a gpg2 binary that does not exist.
+    rpmsign --define "_gpg_name $keyid" --define "__gpg $(command -v gpg)" \
+        --addsign "$rpmroot"/*.rpm >/dev/null
+fi
 createrepo_c --quiet "$rpmroot"
 
 if [ -n "$keyid" ]; then

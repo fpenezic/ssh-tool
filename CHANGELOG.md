@@ -7,6 +7,15 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Packages
+
+- **The Fedora repository installs again with the instructions as given.** The dnf repository signed its metadata but not the packages, so `dnf install ssh-tool` with `gpgcheck=1` failed with "The package is not signed". Every package in the repository is now signed with the repository key, older versions included. If you switched to `gpgcheck=0` as a workaround, you can turn it back on.
+- **The README describes the apt and dnf repository** at repo.sshtool.app; it still said the .deb and .rpm were not attached to releases.
+
+---
+
 ## [0.112.0] - OpenVPN, and your VPNs for a CI runner
 
 OpenVPN joins the VPN profiles, AnyConnect sessions now resume without a new login, and one proxy lets a CI runner, a script or a browser reach your customers through the VPNs. The Network profiles page is reorganised into a list with a tab per profile.
