@@ -32,7 +32,7 @@ import (
 )
 
 // knownPlugins is the set the UI offers.
-var knownPlugins = []string{"netbird", "tailscale", "openconnect", "openvpn"}
+var knownPlugins = []string{"netbird", "tailscale", "openconnect", "openvpn", "checkpoint"}
 
 // pluginSource is where a plugin's releases live: the separate plugins
 // repository, one tag namespace per plugin (<name>-vN[.P]), each plugin

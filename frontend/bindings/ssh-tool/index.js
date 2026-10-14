@@ -22,6 +22,8 @@ export {
     BitwardenEnsureCredentialInput,
     BitwardenSaveInput,
     BrowserLaunchResult,
+    CheckpointConfig,
+    CheckpointProfileInput,
     ClaudeDesktopInfo,
     ConnectionCopyInfo,
     ConnectionsBatchUpdateInput,
