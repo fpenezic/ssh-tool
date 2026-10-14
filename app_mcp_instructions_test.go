@@ -172,37 +172,43 @@ func TestMcpToolsAreListable(t *testing.T) {
 	}
 }
 
+// mcpToolFiles are the files that register MCP tools and declare their
+// argument structs.
+var mcpToolFiles = []string{"app_mcp_desktop.go", "app_mcp_kafka.go"}
+
 // registeredMcpToolNames returns the Name of every mcp.AddTool registration,
 // read from the source so the list cannot drift from what is registered.
 // registeredMcpArgNames returns the JSON names of every field of the mcp*Args
 // structs the tools decode their input into.
 func registeredMcpArgNames(t *testing.T) []string {
 	t.Helper()
-	file, err := parser.ParseFile(token.NewFileSet(), "app_mcp_desktop.go", nil, 0)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
 	var out []string
-	ast.Inspect(file, func(n ast.Node) bool {
-		ts, ok := n.(*ast.TypeSpec)
-		if !ok || !strings.HasPrefix(ts.Name.Name, "mcp") || !strings.HasSuffix(ts.Name.Name, "Args") {
-			return true
+	for _, f := range mcpToolFiles {
+		file, err := parser.ParseFile(token.NewFileSet(), f, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", f, err)
 		}
-		st, ok := ts.Type.(*ast.StructType)
-		if !ok {
-			return true
-		}
-		for _, f := range st.Fields.List {
-			if f.Tag == nil {
-				continue
+		ast.Inspect(file, func(n ast.Node) bool {
+			ts, ok := n.(*ast.TypeSpec)
+			if !ok || !strings.HasPrefix(ts.Name.Name, "mcp") || !strings.HasSuffix(ts.Name.Name, "Args") {
+				return true
 			}
-			tag, _ := strconv.Unquote(f.Tag.Value)
-			if json := reflectTag(tag, "json"); json != "" {
-				out = append(out, strings.Split(json, ",")[0])
+			st, ok := ts.Type.(*ast.StructType)
+			if !ok {
+				return true
 			}
-		}
-		return true
-	})
+			for _, f := range st.Fields.List {
+				if f.Tag == nil {
+					continue
+				}
+				tag, _ := strconv.Unquote(f.Tag.Value)
+				if json := reflectTag(tag, "json"); json != "" {
+					out = append(out, strings.Split(json, ",")[0])
+				}
+			}
+			return true
+		})
+	}
 	if len(out) == 0 {
 		t.Fatal("found no tool argument names; did the mcp*Args structs move?")
 	}
@@ -224,7 +230,7 @@ func registeredMcpToolNames(t *testing.T) []string {
 	t.Helper()
 	fset := token.NewFileSet()
 	var out []string
-	for _, f := range []string{"app_mcp_desktop.go"} {
+	for _, f := range mcpToolFiles {
 		file, err := parser.ParseFile(fset, f, nil, 0)
 		if err != nil {
 			t.Fatalf("parse %s: %v", f, err)

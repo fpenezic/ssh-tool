@@ -10,7 +10,7 @@
   import KeepassSettings from "./KeepassSettings.svelte";
   import BitwardenSettings from "./BitwardenSettings.svelte";
   import InfisicalSettings from "./InfisicalSettings.svelte";
-  import { api, type AboutInfo, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type SuperPuttyImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo, type PluginDownloadProgress } from "./api";
+  import { api, type AboutInfo, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type SuperPuttyImportSummary, type KafkaToolImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo, type PluginDownloadProgress } from "./api";
   import { vaultState } from "./vaultState.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
   import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
@@ -1137,7 +1137,7 @@
   // One Settings section, many sources. The picker at the top selects
   // which importer's flow renders below; each keeps its own state so
   // switching sources doesn't wipe a summary you were reading.
-  type ImportSource = "rdm" | "sshconfig" | "mobaxterm" | "putty" | "superputty" | "archive";
+  type ImportSource = "rdm" | "sshconfig" | "mobaxterm" | "putty" | "superputty" | "kafkatool" | "archive";
   // Ordered by expected traffic: our own archive format first (also
   // hosts the ssh-tool:// handler registration), then the common
   // tool migrations, RDM last.
@@ -1149,6 +1149,7 @@
     { id: "superputty", name: "SuperPuTTY", desc: "Sessions.xml - SSH sessions + folders" },
     { id: "mobaxterm", name: "MobaXterm", desc: ".mxtsessions export - SSH sessions + bookmark folders" },
     { id: "rdm", name: "Devolutions RDM", desc: "JSON export - folders, connections, jumps, icons" },
+    { id: "kafkatool", name: "kafka-tool", desc: "profiles.json - Kafka clusters with their SSH tunnels" },
   ];
 
   // Reads a session-export file as text. File.text() always decodes
@@ -1240,6 +1241,32 @@
     } finally {
       superBusy = false;
       if (superInputEl) superInputEl.value = "";
+    }
+  }
+
+  // ----- kafka-tool import -----
+
+  let kafkaInputEl: HTMLInputElement | undefined = $state();
+  let kafkaBusy = $state(false);
+  let kafkaError = $state<string | null>(null);
+  let kafkaSummary = $state<KafkaToolImportSummary | null>(null);
+  let kafkaTargetFolderID = $state(""); // "" = root
+
+  async function onKafkaToolFile(e: Event) {
+    const f = (e.target as HTMLInputElement).files?.[0];
+    if (!f) return;
+    kafkaBusy = true;
+    kafkaError = null;
+    kafkaSummary = null;
+    try {
+      const text = await readImportFile(f);
+      kafkaSummary = await api.kafkaToolImport(text, kafkaTargetFolderID || undefined);
+      await tree.load();
+    } catch (err) {
+      kafkaError = errMsg(err);
+    } finally {
+      kafkaBusy = false;
+      if (kafkaInputEl) kafkaInputEl.value = "";
     }
   }
 
@@ -6393,6 +6420,57 @@
           <details>
             <summary>Warnings</summary>
             <ul>{#each superSummary.warnings as w}<li>{w}</li>{/each}</ul>
+          </details>
+        {/if}
+      </div>
+    {/if}
+  </div>
+
+  {:else if importSource === "kafkatool"}
+  <div class="group">
+    <h2>kafka-tool</h2>
+    <p class="hint">
+      kafka-tool keeps its cluster profiles in <code>~/.config/kafka-tool/profiles.json</code>.
+      Each profile becomes a connection with Kafka enabled, in a <code>kafka-tool</code> folder:
+      the SSH host (and its proxy jump) when the profile used a tunnel, else the brokers directly.
+      SSH passwords go to the vault (unlock it first); key files are not read - attach a key
+      credential afterwards.
+    </p>
+    <label>Target folder
+      <select bind:value={kafkaTargetFolderID} disabled={kafkaBusy}>
+        <option value="">(root)</option>
+        {#each rdmFolderOptions as f (f.id)}
+          <option value={f.id}>{folderLabel(f)}</option>
+        {/each}
+      </select>
+    </label>
+    <div class="row">
+      <input
+        type="file"
+        accept=".json,application/json,text/plain"
+        bind:this={kafkaInputEl}
+        onchange={onKafkaToolFile}
+        disabled={kafkaBusy}
+      />
+      {#if kafkaBusy}<span class="hint">Importing…</span>{/if}
+    </div>
+    {#if kafkaError}<div class="err">{kafkaError}</div>{/if}
+    {#if kafkaSummary}
+      <div class="import-summary ok">
+        <strong>kafka-tool import:</strong>
+        <ul>
+          <li>Connections created: {kafkaSummary.connections_created}</li>
+          <li>Folders created: {kafkaSummary.folders_created}</li>
+          <li>Skipped: {kafkaSummary.connections_skipped}</li>
+          <li>SSH passwords stored in the vault: {kafkaSummary.passwords_stored}</li>
+          {#if kafkaSummary.warnings.length}
+            <li class="warn">Notes: {kafkaSummary.warnings.length}</li>
+          {/if}
+        </ul>
+        {#if kafkaSummary.warnings.length}
+          <details open>
+            <summary>Notes</summary>
+            <ul>{#each kafkaSummary.warnings as w}<li>{w}</li>{/each}</ul>
           </details>
         {/if}
       </div>

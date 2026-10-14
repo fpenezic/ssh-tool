@@ -31,6 +31,8 @@
   import { connectionActions } from "./connectionActions.svelte";
   import { unwrapRaw, errMsg } from "./connectErrors";
   import { reopenLocalShell } from "./sessionSpec";
+  import { endSession, kafkaTabs } from "./kafkaState.svelte";
+  import KafkaPane from "./KafkaPane.svelte";
 
   interface Props {
     tabId: string;
@@ -232,7 +234,13 @@
   // broadcast / split / forwards just like a local pane, plus the
   // split controls (the locked tab refuses them).
   const isVncPane = $derived(node.kind === "pane" && node.view === "vnc");
-  const noSshPane = $derived(isLocalPane || isVncPane);
+  // A Kafka tab: KafkaPane draws its own toolbar; the header keeps the LLM
+  // share, the edit button and the layout group. It splits only when the
+  // host is reached over SSH (a split opens a terminal on that host).
+  const isKafkaPane = $derived(node.kind === "pane" && node.view === "kafka");
+  const kafkaInfo = $derived(isKafkaPane && node.kind === "pane" ? kafkaTabs.get(node.sessionId) : undefined);
+  const noSshPane = $derived(isLocalPane || isVncPane || isKafkaPane);
+  const canSplit = $derived(!isVncPane && (!isKafkaPane || kafkaInfo?.transport === "tunnel"));
 
   // VNC console state surfaced from VncPane via $bindable + an onControls
   // callback, so the pane header can render the status pill + control
@@ -484,11 +492,7 @@
       // stays - closing one side of a split must not kill it.
       tcpdump.close(sessionId);
       try {
-        if (sess?.kind === "local") {
-          await api.localShellDisconnect(sessionId);
-        } else {
-          await api.sshDisconnect(sessionId);
-        }
+        await endSession(sessionId, sess?.kind);
       } catch {}
       sessions.remove(sessionId);
     }
@@ -779,11 +783,56 @@
           </div>
         {/if}
 
+        <!-- Kafka group: transport + security badges, LLM share, edit. -->
+        {#if isKafkaPane && kafkaInfo}
+          <span class="kafka-badge" title="Brokers: {kafkaInfo.bootstrap.join(', ')}">
+            {kafkaInfo.transport === "tunnel" ? "via SSH" : kafkaInfo.transport.startsWith("jump:") ? `via ${kafkaInfo.transport.slice(5)}` : "direct"}
+            {#if kafkaInfo.security !== "plaintext"} · {kafkaInfo.security}{/if}
+          </span>
+          {#if kafkaInfo.read_only}
+            <span class="kafka-badge ro" title="Writes are refused on this connection (Kafka read-only)">read-only</span>
+          {/if}
+          <div class="action-group">
+            <div class="tunnel-anchor">
+              {#if mcpBridge.enabled && !isMobile}
+              <button
+                class="llm-share"
+                class:has-active={llmLevel !== ""}
+                class:lvl-run={llmLevel === "read-run"}
+                class:lvl-yolo={llmLevel === "read-run-yolo"}
+                title={llmTitle}
+                onclick={(e) => { e.stopPropagation(); showLlmShare = !showLlmShare; }}
+              >
+                <IconBot size={13} />
+              </button>
+              {/if}
+              {#if showLlmShare && node.kind === "pane"}
+                <LlmSharePopover
+                  sessionId={node.sessionId}
+                  onClose={() => (showLlmShare = false)}
+                  onViewActivity={() => { showLlmShare = false; showLlmActivity = true; }}
+                />
+              {/if}
+              {#if showLlmActivity && node.kind === "pane"}
+                <McpActivityPanel sessionId={node.sessionId} onClose={() => (showLlmActivity = false)} />
+              {/if}
+            </div>
+            <button
+              class="edit-conn"
+              title="Edit this connection (jump to its settings in the tree)"
+              onclick={(e) => {
+                e.stopPropagation();
+                if (paneSession?.connectionId) view.reveal("connection", paneSession.connectionId);
+              }}
+            ><IconSettings size={13} /></button>
+          </div>
+        {/if}
+
         <!-- Layout group. VNC tabs are locked to one full leaf: no splits.
              Splits are hidden on mobile (a phone has no room for side-by-side
              panes); the close button stays. -->
         <div class="action-group">
-          {#if !isVncPane && !isMobile}
+          {#if canSplit && !isMobile}
             <button title="Split right" onclick={(e) => { e.stopPropagation(); splitLeaf("horizontal"); }}><IconSplitH size={13} /></button>
             <button title="Split down"  onclick={(e) => { e.stopPropagation(); splitLeaf("vertical"); }}><IconSplitV size={13} /></button>
           {/if}
@@ -803,6 +852,8 @@
     <div class="term-wrap" data-session={node.sessionId} data-view={node.view ?? "term"}>
       {#if node.view === "sftp"}
         <SftpPane sessionId={node.sessionId} />
+      {:else if node.view === "kafka"}
+        <KafkaPane sessionId={node.sessionId} />
       {:else if node.view === "vnc"}
         <VncPane
           sessionId={node.sessionId}
@@ -903,6 +954,15 @@
     white-space: nowrap;
     min-width: 0;
   }
+  .kafka-badge {
+    font-size: 0.66rem;
+    padding: 0 0.35rem;
+    border-radius: 3px;
+    background: var(--surface0);
+    color: var(--subtext0);
+    white-space: nowrap;
+  }
+  .kafka-badge.ro { color: var(--peach); }
   /* VNC status pill in the header (connected / connecting / error). */
   .vnc-pill {
     font-size: 0.72rem;

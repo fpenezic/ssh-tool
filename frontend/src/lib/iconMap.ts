@@ -209,3 +209,8 @@ export {
   GitCompare as IconCompare,
   Wrench as IconWrench,
 };
+
+// Kafka tab.
+import Workflow from "@lucide/svelte/icons/workflow";
+import Send from "@lucide/svelte/icons/send";
+export { Workflow as IconKafka, Send as IconSend };

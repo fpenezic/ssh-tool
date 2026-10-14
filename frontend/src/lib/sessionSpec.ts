@@ -90,6 +90,11 @@ export function specForSession(sessionId: string): SessionSpec | null {
   // so they don't get mis-saved as an ssh/dyn tab and reopened as a
   // terminal on next launch.
   if (sess.kind === "vnc") return null;
+  // A Kafka tab reopens from its connection: the handle is the backend's,
+  // the settings that built it are the connection's.
+  if (sess.kind === "kafka") {
+    return sess.connectionId ? { kind: "kafka", connectionId: sess.connectionId } : null;
+  }
 
   if (sess.kind === "local") {
     // A saved local-shell connection (connectionId set, non-dyn) must
@@ -135,6 +140,10 @@ export async function connectSpec(spec: SessionSpec): Promise<string | null> {
 
   if (kind === "ssh" && spec.connectionId) {
     return connectionActions.connectSessionOnly(spec.connectionId);
+  }
+
+  if (kind === "kafka" && spec.connectionId) {
+    return connectionActions.openKafkaSessionOnly(spec.connectionId);
   }
 
   if (kind === "dyn" && (spec.externalId || spec.entryId)) {

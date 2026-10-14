@@ -192,7 +192,7 @@ export function focusSessionTerminal(sessionId: string): boolean {
   );
   for (const w of wraps) {
     const view = w.dataset.view ?? "term";
-    if (view === "sftp" || view === "vnc") continue;
+    if (view === "sftp" || view === "vnc" || view === "kafka") continue;
     const ta = w.querySelector(
       ".xterm-helper-textarea",
     ) as HTMLTextAreaElement | null;

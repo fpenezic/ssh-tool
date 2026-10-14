@@ -361,3 +361,47 @@ func TestTunnelOnlyInheritedAndOverridden(t *testing.T) {
 		t.Fatalf("default should be off, got %v %v", r.TunnelOnly, r.TunnelAutostart)
 	}
 }
+
+func TestKafkaSettingsInherited(t *testing.T) {
+	// A folder holding a cluster's hosts sets Kafka once.
+	f := folder("kafka", nil, store.InheritableSettings{
+		KafkaEnabled:   ptr(true),
+		KafkaBootstrap: ptr(" 127.0.0.1:9092\n"),
+	})
+	c := conn("c1", ptr("kafka"), "h", store.InheritableSettings{})
+	r := ResolveWith(c, []store.Folder{f})
+	if !r.KafkaEnabled || r.KafkaBootstrap != "127.0.0.1:9092" || !r.KafkaUseTunnel {
+		t.Fatalf("child should inherit kafka, through the tunnel by default: %v %q %v",
+			r.KafkaEnabled, r.KafkaBootstrap, r.KafkaUseTunnel)
+	}
+	// One host reaches the brokers directly and names its own seed.
+	c2 := conn("c2", ptr("kafka"), "h", store.InheritableSettings{
+		KafkaUseTunnel: ptr(false),
+		KafkaBootstrap: ptr("b1:9093"),
+	})
+	r = ResolveWith(c2, []store.Folder{f})
+	if !r.KafkaEnabled || r.KafkaBootstrap != "b1:9093" || r.KafkaUseTunnel {
+		t.Fatalf("overrides should win: %v %q %v", r.KafkaEnabled, r.KafkaBootstrap, r.KafkaUseTunnel)
+	}
+	// Unset everywhere: off, no bootstrap, writable, plaintext.
+	r = ResolveWith(conn("c3", nil, "h", store.InheritableSettings{}), nil)
+	if r.KafkaEnabled || r.KafkaBootstrap != "" || r.KafkaReadOnly || r.KafkaTLS || r.KafkaSASL != "" || r.KafkaCredentialRef != nil {
+		t.Fatalf("default should be off: %+v", r)
+	}
+	// A production folder: read-only, SCRAM over TLS with a shared login.
+	prod := folder("prod", nil, store.InheritableSettings{
+		KafkaReadOnly:      ptr(true),
+		KafkaTLS:           ptr(true),
+		KafkaSASL:          ptr("scram-sha-512"),
+		KafkaCredentialRef: ptr("cred-1"),
+	})
+	r = ResolveWith(conn("c4", ptr("prod"), "h", store.InheritableSettings{}), []store.Folder{prod})
+	if !r.KafkaReadOnly || !r.KafkaTLS || r.KafkaSASL != "scram-sha-512" || r.KafkaCredentialRef == nil || *r.KafkaCredentialRef != "cred-1" {
+		t.Fatalf("prod folder not inherited: %+v", r)
+	}
+	// "" on the connection stops the inherited credential.
+	r = ResolveWith(conn("c5", ptr("prod"), "h", store.InheritableSettings{KafkaCredentialRef: ptr("")}), []store.Folder{prod})
+	if r.KafkaCredentialRef != nil {
+		t.Fatalf("explicit none should clear the credential: %v", *r.KafkaCredentialRef)
+	}
+}

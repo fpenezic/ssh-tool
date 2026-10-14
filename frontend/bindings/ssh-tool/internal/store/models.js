@@ -1742,6 +1742,94 @@ export class InheritableSettings {
              */
             this["tunnel_autostart"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * KafkaEnabled shows the "Open Kafka" action and the editor's Kafka
+             * section. Opt-in like VNC: most hosts have no broker behind them.
+             * Tri-state inheritance so a folder holding a cluster's hosts enables
+             * it once.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["kafka_enabled"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * KafkaBootstrap is the seed broker list ("a:9092,b:9092"; a missing
+             * port means 9092), as seen from wherever the brokers are dialed from:
+             * the connection's host when KafkaUseTunnel, else this machine or the
+             * last jump host. Often "127.0.0.1:9092" on a broker host itself.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["kafka_bootstrap"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * KafkaUseTunnel: broker connections are opened as channels on an SSH
+             * session to this connection's host (so broker names resolve there).
+             * When false they are dialed like DialVia does - from the last jump
+             * host, else from here over the network profile. nil resolves to true:
+             * a cluster behind the host is the usual case.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["kafka_use_tunnel"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * KafkaDefault makes the Kafka tab the default connect action
+             * (double-click / Enter), like VncDefault. Only honoured when
+             * KafkaEnabled resolves true.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["kafka_default"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * KafkaReadOnly refuses every write: produce, topic create / delete /
+             * config / partitions / truncate, group offset reset / delete. Enforced
+             * in the backend, not only hidden in the UI. For production clusters.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["kafka_read_only"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * KafkaTLS wraps every broker connection in TLS (end to end, inside the
+             * tunnel); KafkaTLSSkipVerify accepts any broker certificate.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["kafka_tls"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["kafka_tls_skip_verify"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * KafkaSASL is the SASL mechanism: "" none, "plain", "scram-sha-256",
+             * "scram-sha-512". The login comes from KafkaCredentialRef: its default
+             * username and its password (vault, KeePass, Bitwarden, Infisical).
+             * An explicit "" credential stops an inherited one.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["kafka_sasl"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["kafka_credential_ref"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -2346,6 +2434,71 @@ export class ResolvedSettings {
              * @type {boolean}
              */
             this["tunnel_autostart"] = false;
+        }
+        if (!("kafka_enabled" in $$source)) {
+            /**
+             * Kafka*: see InheritableSettings. KafkaBootstrap is trimmed, "" when
+             * unset; KafkaUseTunnel defaults to true.
+             * @member
+             * @type {boolean}
+             */
+            this["kafka_enabled"] = false;
+        }
+        if (!("kafka_bootstrap" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["kafka_bootstrap"] = "";
+        }
+        if (!("kafka_use_tunnel" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["kafka_use_tunnel"] = false;
+        }
+        if (!("kafka_default" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["kafka_default"] = false;
+        }
+        if (!("kafka_read_only" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["kafka_read_only"] = false;
+        }
+        if (!("kafka_tls" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["kafka_tls"] = false;
+        }
+        if (!("kafka_tls_skip_verify" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["kafka_tls_skip_verify"] = false;
+        }
+        if (!("kafka_sasl" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["kafka_sasl"] = "";
+        }
+        if (!("kafka_credential_ref" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["kafka_credential_ref"] = null;
         }
 
         Object.assign(this, $$source);

@@ -1,0 +1,383 @@
+package kafka
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/twmb/franz-go/pkg/kfake"
+	"github.com/twmb/franz-go/pkg/kgo"
+)
+
+func TestParseBootstrap(t *testing.T) {
+	cases := []struct {
+		in      string
+		want    []string
+		wantErr bool
+	}{
+		{"a:9093", []string{"a:9093"}, false},
+		{"a", []string{"a:9092"}, false},
+		{" a:1, b ,a:1\nc:3;d:4 ", []string{"a:1", "b:9092", "c:3", "d:4"}, false},
+		{"[::1]:9093", []string{"[::1]:9093"}, false},
+		{"::1", []string{"[::1]:9092"}, false},
+		{"[fe80::1]", []string{"[fe80::1]:9092"}, false},
+		{"", nil, true},
+		{" , ", nil, true},
+		{"a:0", nil, true},
+		{"a:x", nil, true},
+		{":9092", nil, true},
+	}
+	for _, c := range cases {
+		got, err := ParseBootstrap(c.in)
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("ParseBootstrap(%q) = %v, want error", c.in, got)
+			}
+			continue
+		}
+		if err != nil || fmt.Sprint(got) != fmt.Sprint(c.want) {
+			t.Errorf("ParseBootstrap(%q) = %v, %v; want %v", c.in, got, err, c.want)
+		}
+	}
+}
+
+// t0 is the timestamp of the first seeded record; record i of a partition is
+// t0 + i seconds.
+var t0 = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+
+// newFake starts an in-memory cluster with topic "orders" (3 partitions,
+// perPart records each: key k<p>-<i>, value v<i>, a header) and an empty
+// topic "empty".
+func newFake(t *testing.T, perPart int) *kfake.Cluster {
+	t.Helper()
+	fc, err := kfake.NewCluster(kfake.NumBrokers(1), kfake.SeedTopics(3, "orders", "empty"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(fc.Close)
+	produce(t, fc.ListenAddrs(), perPart, 0)
+	return fc
+}
+
+// produce writes perPart records into each partition of "orders", numbering
+// them from first.
+func produce(t *testing.T, seeds []string, perPart, first int) {
+	t.Helper()
+	cl, err := kgo.NewClient(kgo.SeedBrokers(seeds...), kgo.RecordPartitioner(kgo.ManualPartitioner()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	var recs []*kgo.Record
+	for p := int32(0); p < 3; p++ {
+		for i := first; i < first+perPart; i++ {
+			recs = append(recs, &kgo.Record{
+				Topic:     "orders",
+				Partition: p,
+				Key:       []byte(fmt.Sprintf("k%d-%d", p, i)),
+				Value:     []byte(fmt.Sprintf("v%d", i)),
+				Headers:   []kgo.RecordHeader{{Key: "h", Value: []byte{0xff, 0x00}}},
+				Timestamp: t0.Add(time.Duration(i) * time.Second),
+			})
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := cl.ProduceSync(ctx, recs...).FirstErr(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func openFake(t *testing.T, fc *kfake.Cluster) *Cluster {
+	t.Helper()
+	c, err := Open(Config{Bootstrap: fc.ListenAddrs()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(c.Close)
+	return c
+}
+
+func ctx10(t *testing.T) context.Context {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+	return ctx
+}
+
+func TestOverviewAndTopics(t *testing.T) {
+	fc := newFake(t, 4)
+	c := openFake(t, fc)
+	ctx := ctx10(t)
+
+	ov, err := c.Overview(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ov.Brokers) != 1 || ov.Topics != 2 || ov.Partitions != 6 {
+		t.Fatalf("overview = %+v", ov)
+	}
+
+	topics, err := c.Topics(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(topics) != 2 || topics[0].Name != "empty" || topics[1].Name != "orders" {
+		t.Fatalf("topics = %+v", topics)
+	}
+	o := topics[1]
+	if o.Partitions != 3 || o.ReplicationFactor != 1 || o.Messages != 12 || o.Offline != 0 || o.UnderReplicated != 0 {
+		t.Fatalf("orders = %+v", o)
+	}
+	if topics[0].Messages != 0 {
+		t.Fatalf("empty = %+v", topics[0])
+	}
+}
+
+func TestTopicDetail(t *testing.T) {
+	fc := newFake(t, 5)
+	c := openFake(t, fc)
+	ctx := ctx10(t)
+
+	d, err := c.TopicDetail(ctx, "orders")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Messages != 15 || len(d.Partitions) != 3 {
+		t.Fatalf("detail = %+v", d)
+	}
+	for i, p := range d.Partitions {
+		if p.Partition != int32(i) || p.StartOffset != 0 || p.EndOffset != 5 || p.Leader < 0 || len(p.Replicas) != 1 {
+			t.Fatalf("partition %d = %+v", i, p)
+		}
+	}
+	if d.ConfigError != "" {
+		t.Fatalf("config error: %s", d.ConfigError)
+	}
+
+	if _, err := c.TopicDetail(ctx, "nope"); err == nil {
+		t.Fatal("unknown topic: want error")
+	}
+}
+
+// drain polls a consumer until it leaves the running state and returns
+// every record it buffered.
+func drain(t *testing.T, k *Consumer) ([]Message, ConsumeSnapshot) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	var all []Message
+	var after uint64
+	for {
+		s := k.Snapshot(after, 0)
+		all = append(all, s.Messages...)
+		if n := len(s.Messages); n > 0 {
+			after = s.Messages[n-1].Seq
+		}
+		if s.State != ConsumeRunning && len(s.Messages) == 0 {
+			return all, s
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("consumer still running after 15s: %+v (got %d)", s, len(all))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestConsumeModes(t *testing.T) {
+	fc := newFake(t, 10)
+	c := openFake(t, fc)
+
+	cases := []struct {
+		name string
+		req  ConsumeRequest
+		want int
+		// first is the expected first offset of every partition read.
+		first int64
+	}{
+		{"earliest", ConsumeRequest{Mode: FromEarliest, Partition: -1, StopAtEnd: true}, 30, 0},
+		{"last 3", ConsumeRequest{Mode: FromLast, N: 3, Partition: -1, StopAtEnd: true}, 9, 7},
+		{"last more than there is", ConsumeRequest{Mode: FromLast, N: 50, Partition: -1, StopAtEnd: true}, 30, 0},
+		{"offset 6", ConsumeRequest{Mode: FromOffset, N: 6, Partition: -1, StopAtEnd: true}, 12, 6},
+		{"offset past the end", ConsumeRequest{Mode: FromOffset, N: 99, Partition: -1, StopAtEnd: true}, 0, 0},
+		{"one partition", ConsumeRequest{Mode: FromEarliest, Partition: 1, StopAtEnd: true}, 10, 0},
+		{"limit", ConsumeRequest{Mode: FromEarliest, Partition: -1, Limit: 7}, 7, 0},
+		{"timestamp", ConsumeRequest{Mode: FromTimestamp, Timestamp: t0.Add(8 * time.Second).UnixMilli(), Partition: -1, StopAtEnd: true}, 6, 8},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.req.Topic = "orders"
+			k, err := c.Consume(ctx10(t), tc.req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer k.Stop()
+			msgs, s := drain(t, k)
+			if s.State != ConsumeDone || len(msgs) != tc.want {
+				t.Fatalf("state %s, %d records; want done, %d (err %q)", s.State, len(msgs), tc.want, s.Error)
+			}
+			firsts := map[int32]int64{}
+			for i, m := range msgs {
+				if m.Seq != uint64(i+1) {
+					t.Fatalf("record %d has seq %d", i, m.Seq)
+				}
+				if f, ok := firsts[m.Partition]; !ok || m.Offset < f {
+					firsts[m.Partition] = m.Offset
+				}
+				if tc.req.Partition >= 0 && m.Partition != tc.req.Partition {
+					t.Fatalf("record from partition %d", m.Partition)
+				}
+			}
+			if tc.req.Limit == 0 {
+				for p, f := range firsts {
+					if f != tc.first {
+						t.Fatalf("partition %d starts at %d, want %d", p, f, tc.first)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestConsumePayloads(t *testing.T) {
+	fc := newFake(t, 1)
+	c := openFake(t, fc)
+	k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "orders", Mode: FromEarliest, Partition: 2, StopAtEnd: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer k.Stop()
+	msgs, _ := drain(t, k)
+	if len(msgs) != 1 {
+		t.Fatalf("got %d records", len(msgs))
+	}
+	m := msgs[0]
+	if m.Key == nil || m.Key.Text != "k2-0" || m.Key.Encoding != "utf8" {
+		t.Fatalf("key = %+v", m.Key)
+	}
+	if m.Value == nil || m.Value.Text != "v0" {
+		t.Fatalf("value = %+v", m.Value)
+	}
+	// 0xff 0x00 is not UTF-8: base64.
+	if len(m.Headers) != 1 || m.Headers[0].Value.Encoding != "base64" || m.Headers[0].Value.Text != "/wA=" || m.Headers[0].Value.Size != 2 {
+		t.Fatalf("headers = %+v", m.Headers)
+	}
+	if m.Timestamp != t0.UnixMilli() {
+		t.Fatalf("timestamp = %d", m.Timestamp)
+	}
+	if m.Size != len("k2-0")+len("v0")+len("h")+2 {
+		t.Fatalf("size = %d", m.Size)
+	}
+}
+
+func TestConsumeLatestFollows(t *testing.T) {
+	fc := newFake(t, 3)
+	c := openFake(t, fc)
+	k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "orders", Mode: FromLatest, Partition: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer k.Stop()
+
+	produce(t, fc.ListenAddrs(), 2, 100)
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		s := k.Snapshot(0, 0)
+		if s.Received == 6 {
+			for _, m := range s.Messages {
+				if m.Value.Text != "v100" && m.Value.Text != "v101" {
+					t.Fatalf("old record %q", m.Value.Text)
+				}
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("received %d, want 6", s.Received)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	k.Stop()
+	if s := k.Snapshot(0, 0); s.State != ConsumeStopped {
+		t.Fatalf("after Stop: %s", s.State)
+	}
+}
+
+func TestConsumeBufferAndPaging(t *testing.T) {
+	fc := newFake(t, 10)
+	c := openFake(t, fc)
+	k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "orders", Mode: FromEarliest, Partition: -1, StopAtEnd: true, BufferMessages: 8})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer k.Stop()
+	select {
+	case <-k.Done():
+	case <-time.After(15 * time.Second):
+		t.Fatal("consumer did not finish")
+	}
+	s := k.Snapshot(0, 3)
+	if s.Received != 30 || s.Dropped != 22 || s.Buffered != 8 || len(s.Messages) != 3 {
+		t.Fatalf("snapshot = %+v", s)
+	}
+	if s.Messages[0].Seq != 23 {
+		t.Fatalf("oldest buffered seq = %d, want 23", s.Messages[0].Seq)
+	}
+	if s := k.Snapshot(28, 0); len(s.Messages) != 2 || s.Messages[0].Seq != 29 {
+		t.Fatalf("after 28: %+v", s.Messages)
+	}
+	if s := k.Snapshot(30, 0); len(s.Messages) != 0 {
+		t.Fatalf("after the last: %+v", s.Messages)
+	}
+}
+
+func TestConsumeErrors(t *testing.T) {
+	fc := newFake(t, 1)
+	c := openFake(t, fc)
+	ctx := ctx10(t)
+	if _, err := c.Consume(ctx, ConsumeRequest{Topic: "nope", Mode: FromEarliest, Partition: -1}); err == nil {
+		t.Fatal("unknown topic: want error")
+	}
+	if _, err := c.Consume(ctx, ConsumeRequest{Topic: "orders", Mode: FromEarliest, Partition: 7}); err == nil {
+		t.Fatal("unknown partition: want error")
+	}
+	if _, err := c.Consume(ctx, ConsumeRequest{Topic: "orders", Mode: "sideways", Partition: -1}); err == nil {
+		t.Fatal("unknown mode: want error")
+	}
+}
+
+func TestConsumeEmptyStopAtEnd(t *testing.T) {
+	fc := newFake(t, 1)
+	c := openFake(t, fc)
+	k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "empty", Mode: FromEarliest, Partition: -1, StopAtEnd: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-k.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("consumer of an empty topic did not finish")
+	}
+	if s := k.Snapshot(0, 0); s.State != ConsumeDone || s.Received != 0 {
+		t.Fatalf("snapshot = %+v", s)
+	}
+}
+
+func TestCloseStopsConsumers(t *testing.T) {
+	fc := newFake(t, 1)
+	c, err := Open(Config{Bootstrap: fc.ListenAddrs()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "orders", Mode: FromLatest, Partition: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Close()
+	select {
+	case <-k.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not stop the consumer")
+	}
+	if _, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "orders", Mode: FromLatest, Partition: -1}); err == nil {
+		t.Fatal("Consume after Close: want error")
+	}
+}

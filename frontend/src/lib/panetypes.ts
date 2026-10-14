@@ -19,7 +19,10 @@ export interface PaneLeaf {
   // splits or toggles (the tab is locked to a single full leaf).
   // "unavailable" is guest-only: the share projection downgrades sftp/vnc
   // leaves to it, since a browser guest has neither.
-  view?: "terminal" | "sftp" | "vnc" | "unavailable";
+  // "kafka" renders a Kafka cluster tab (KafkaPane); its sessionId is the
+  // cluster handle ("kafka:..."), not an SSH session. It splits like a
+  // terminal: a split next to it opens a terminal on the same host.
+  view?: "terminal" | "sftp" | "vnc" | "kafka" | "unavailable";
 }
 
 export interface PaneSplit {

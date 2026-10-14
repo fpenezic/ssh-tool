@@ -29,6 +29,8 @@
   import { focusActivePane } from "./paneFocus";
   import { reopenLocalShell } from "./sessionSpec";
   import { newTabActions } from "./newTabActions.svelte.ts";
+  import { endSession, kafkaEnabledFor } from "./kafkaState.svelte";
+  import { IconKafka } from "./iconMap";
   let broadcastManagerOpen = $state(false);
   let shareDialogOpen = $state(false);
   // The ShareDialog defaults its tab selection to the ACTIVE tab, so switch to
@@ -241,7 +243,7 @@
       const sess = sessions.tabs.find((s) => s.sessionId === sid);
       // Quick connects are left out: they are deliberately not saved, and
       // reopen dials by saved connection id.
-      if (sess && sess.kind !== "local" && sess.connectionId && !isQuickId(sess.connectionId)) {
+      if (sess && sess.kind !== "local" && sess.kind !== "kafka" && sess.connectionId && !isQuickId(sess.connectionId)) {
         reopenIds.push(sess.connectionId);
       }
     }
@@ -262,11 +264,7 @@
       tcpdump.close(sid);
       logtail.close(sid);
       try {
-        if (sess?.kind === "local") {
-          await api.localShellDisconnect(sid);
-        } else {
-          await api.sshDisconnect(sid);
-        }
+        await endSession(sid, sess?.kind);
       } catch {}
       sessions.remove(sid);
     }
@@ -662,7 +660,7 @@
       const sess = sessions.tabs.find((x) => x.sessionId === sid);
       // Only connected SSH sessions can be shared; skip the rest quietly
       // rather than failing the whole batch on one local shell.
-      if (!sess || sess.status !== "connected" || sess.kind === "local") continue;
+      if (!sess || sess.status !== "connected" || sess.kind === "local" || sess.kind === "vnc") continue;
       try { await api.mcpShareSession(sid, level); ok++; } catch { /* keep going */ }
     }
     if (ok > 0) toast.ok(`Shared ${ok} session${ok === 1 ? "" : "s"} with the LLM`);
@@ -730,6 +728,17 @@
     }
     walk(t.root);
     return found;
+  }
+
+  // The tab's connection id when it has Kafka enabled and the tab is not
+  // already its Kafka tab - so a right-click on a broker host's terminal can
+  // open the cluster.
+  function tabKafkaConnId(tabId: string): string | null {
+    const cid = tabConnectionId(tabId);
+    if (!cid || cid.startsWith("dyn:")) return null;
+    const sid = tabPrimarySession(tabId)?.sessionId;
+    if (sessions.tabs.find((s) => s.sessionId === sid)?.kind === "kafka") return null;
+    return kafkaEnabledFor(tree.connectionById(cid)) ? cid : null;
   }
 
   function tabVncConnId(tabId: string): string | null {
@@ -1611,6 +1620,11 @@
       <button onclick={() => { duplicateTab(ctxMenu!.tabId); closeCtxMenu(); }}>
         <IconCopy size={13} /> Duplicate tab
       </button>
+      {#if tabKafkaConnId(ctxMenu.tabId)}
+        <button onclick={() => { connectionActions.openKafka(tabKafkaConnId(ctxMenu!.tabId)!); closeCtxMenu(); }}>
+          <IconKafka size={13} /> Open Kafka
+        </button>
+      {/if}
       {#if tabVncConnId(ctxMenu.tabId)}
         <button onclick={() => { connectionActions.openVncConnection(tabVncConnId(ctxMenu!.tabId)!); closeCtxMenu(); }}>
           Open VNC console

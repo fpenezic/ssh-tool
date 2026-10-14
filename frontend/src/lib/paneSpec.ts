@@ -24,8 +24,8 @@ export const PANE_SPEC_VERSION = 2;
 /** How a single session gets re-established. Mirrors the flat SavedTab that
  *  lastSession has always written, so one restore path serves both. */
 export interface SessionSpec {
-  kind: "ssh" | "dyn" | "local";
-  connectionId?: string; // ssh, and saved local connections
+  kind: "ssh" | "dyn" | "local" | "kafka";
+  connectionId?: string; // ssh, kafka, and saved local connections
   folderId?: string;     // dyn
   entryId?: string;      // dyn - row id, regenerates on every provider refresh
   externalId?: string;   // dyn - provider-stable id, the real restore key
@@ -41,7 +41,7 @@ export interface SpecLeaf {
   /** Index into the tab's `sessions` array. Two leaves sharing a session
    *  (terminal + SFTP on one client) carry the same ref. */
   ref: number;
-  view?: "terminal" | "sftp";
+  view?: "terminal" | "sftp" | "kafka";
 }
 
 export interface SpecSplit {
@@ -102,7 +102,7 @@ export function serializePaneSpec(root: PaneNode, specOf: SpecOfSession): {
         refs.set(n.sessionId, ref);
       }
       const leaf: SpecLeaf = { kind: "pane", ref };
-      if (n.view === "sftp") leaf.view = "sftp";
+      if (n.view === "sftp" || n.view === "kafka") leaf.view = n.view;
       return leaf;
     }
     const a = walk(n.a);
@@ -157,7 +157,7 @@ export async function restorePaneSpec(
       const sid = ids[node.ref];
       if (!sid) return null;
       const leaf: PaneLeaf = { kind: "pane", id: genId("pane"), sessionId: sid };
-      if (node.view === "sftp") leaf.view = "sftp";
+      if (node.view === "sftp" || node.view === "kafka") leaf.view = node.view;
       return leaf;
     }
     const a = walk(node.a);
