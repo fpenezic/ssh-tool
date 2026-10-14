@@ -309,18 +309,25 @@ func (a *App) ocCredentialUser(credID string) string {
 	return *cred.DefaultUsername
 }
 
-// ocTrustPrompt asks about an untrusted / changed gateway certificate with
-// the host-key dialog. Returns (accepted, remember).
+// ocTrustPrompt asks about an untrusted / changed OpenConnect gateway
+// certificate. Returns (accepted, remember).
 func (a *App) ocTrustPrompt(cfg *OpenConnectConfig, ce *tunnelhelper.CertUntrustedError) (bool, bool) {
 	u, _ := url.Parse(cfg.Server)
 	host, port := u.Hostname(), 443
 	if p := u.Port(); p != "" {
 		fmt.Sscan(p, &port)
 	}
+	return a.gatewayTrustPrompt(host, port, cfg.Pins, ce)
+}
+
+// gatewayTrustPrompt asks about an untrusted / changed VPN gateway
+// certificate with the host-key dialog (any plugin that reports cert_pin).
+// pins are the ones trusted so far. Returns (accepted, remember).
+func (a *App) gatewayTrustPrompt(host string, port int, pins []string, ce *tunnelhelper.CertUntrustedError) (bool, bool) {
 	status, oldFP := "unknown", ""
 	if ce.Changed {
 		status = "changed"
-		oldFP = strings.Join(cfg.Pins, ", ")
+		oldFP = strings.Join(pins, ", ")
 	}
 	challengeID, ch := a.registerTrustChallenge()
 	defer a.unregisterTrustChallenge(challengeID)
