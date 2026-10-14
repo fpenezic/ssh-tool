@@ -6,6 +6,7 @@
 import { api, type Connection } from "./api";
 import { tree, sessions, paneTabs, view, selection, credentials, type PaneNode } from "./stores.svelte";
 import { vncSessions } from "./vncState.svelte.ts";
+import { kafkaTabs } from "./kafkaState.svelte";
 import { showPrompt } from "./promptModal.svelte.ts";
 import { showConfirm } from "./confirmModal.svelte.ts";
 import { toast } from "./toast.svelte.ts";
@@ -376,6 +377,9 @@ class ConnectionActionsStore {
       }
       if (r?.vnc_enabled && r?.vnc_default) {
         return this.openVncConnection(id);
+      }
+      if (r?.kafka_enabled && r?.kafka_default) {
+        return this.openKafka(id);
       }
     } catch {
       // resolve failed - fall through to a normal SSH connect
@@ -761,6 +765,54 @@ class ConnectionActionsStore {
     }
   }
 
+  // Open a Kafka tab for a connection with Kafka enabled. A tab already open
+  // on the same connection is brought forward instead of a second one.
+  async openKafka(id: string): Promise<boolean> {
+    const c = tree.connectionById(id);
+    if (!c) return false;
+    const existing = sessions.tabs.find((s) => s.kind === "kafka" && s.connectionId === id);
+    if (existing) {
+      const tab = paneTabs.tabs.find((t) => hasSession(t.root, existing.sessionId));
+      if (tab) {
+        paneTabs.activeTabId = tab.tabId;
+        view.setTab("terminal");
+        return true;
+      }
+    }
+    const sid = await this.openKafkaSessionOnly(id);
+    if (!sid) return false;
+    paneTabs.addKafkaTab(sid, `${c.name} (Kafka)`);
+    view.setTab("terminal");
+    return true;
+  }
+
+  // The session half of openKafka: opens the handle and registers the
+  // session, no tab. Used by workspace / last-session restore too.
+  async openKafkaSessionOnly(id: string): Promise<string | null> {
+    const c = tree.connectionById(id);
+    if (!c) return null;
+    try {
+      const info = await api.kafkaOpen(id);
+      this.addKafkaSession(info, c.hostname);
+      return info.id;
+    } catch (e) {
+      toast.err(`Kafka: ${unwrapRaw(String((e as any)?.message ?? e))}`);
+      return null;
+    }
+  }
+
+  addKafkaSession(info: import("./api").KafkaClusterInfo, hostname: string) {
+    kafkaTabs.set(info);
+    sessions.add({
+      sessionId: info.id,
+      connectionId: info.connection_id,
+      name: `${info.name} (Kafka)`,
+      hostname: hostname || info.bootstrap.join(","),
+      kind: "kafka",
+      status: "connecting",
+    });
+  }
+
   // Open a VNC console tab for a Proxmox VM/LXC dynamic entry.
   async openVncProxmox(folderId: string, entryId: string): Promise<boolean> {
     const entries = tree.dynamicEntries[folderId] ?? [];
@@ -1031,4 +1083,8 @@ export const connectionActions = new ConnectionActionsStore();
 // this event (same pattern as "vault-unlock-now").
 export function openTunnelsPanel() {
   window.dispatchEvent(new CustomEvent("open-tunnels-panel"));
+}
+
+function hasSession(n: PaneNode, sessionId: string): boolean {
+  return n.kind === "pane" ? n.sessionId === sessionId : hasSession(n.a, sessionId) || hasSession(n.b, sessionId);
 }

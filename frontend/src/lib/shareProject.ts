@@ -55,7 +55,7 @@ export function projectTabs(
   function rewrite(node: PaneNode): PaneNode {
     if (node.kind === "pane") {
       const leaf = node as PaneLeaf;
-      if (leaf.view === "sftp" || leaf.view === "vnc") {
+      if (leaf.view === "sftp" || leaf.view === "vnc" || leaf.view === "kafka") {
         return { ...leaf, view: "unavailable", sessionId: "" };
       }
       return { ...leaf, sessionId: slotFor(leaf.sessionId) };
@@ -85,7 +85,7 @@ export function realSessionIds(tabs: PaneTab[]): string[] {
   function walk(node: PaneNode) {
     if (node.kind === "pane") {
       const leaf = node as PaneLeaf;
-      if (leaf.view !== "sftp" && leaf.view !== "vnc" && leaf.sessionId) {
+      if (leaf.view !== "sftp" && leaf.view !== "vnc" && leaf.view !== "kafka" && leaf.sessionId) {
         out.add(leaf.sessionId);
       }
     } else {

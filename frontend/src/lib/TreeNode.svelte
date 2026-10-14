@@ -15,7 +15,8 @@
   import Icon from "./Icon.svelte";
   import { IconFolder, IconHost, IconTunnel, IconLoading, IconX, IconStar, IconGlobe, dynamicEntryIcon,
     IconFolderPlus, IconKey, IconPencil, IconTrash, IconSettings, IconRefresh, IconPlay,
-    IconExternalLink, IconMonitor, IconCopy, IconDownload, IconMoveToFolder, IconTerminal } from "./iconMap";
+    IconExternalLink, IconMonitor, IconCopy, IconDownload, IconMoveToFolder, IconTerminal, IconKafka } from "./iconMap";
+  import { kafkaEnabledFor } from "./kafkaState.svelte";
   import { computeIntent, isInvalidDrop, applyDrop, applyMultiDrop, type DragKind, type DropIntent } from "./treeDnd";
   import { setMultiDragImage } from "./dragImage";
   import { contextMenu } from "./contextMenu.svelte.ts";
@@ -592,6 +593,11 @@
         label: "Open VNC console",
         iconComponent: IconMonitor,
         onSelect: () => connectionActions.openVncConnection(ids[0]),
+      }] : []),
+      ...(ids.length === 1 && kafkaEnabledFor(tree.connectionById(ids[0])) ? [{
+        label: "Open Kafka",
+        iconComponent: IconKafka,
+        onSelect: () => connectionActions.openKafka(ids[0]),
       }] : []),
       {
         label: allFav

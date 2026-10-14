@@ -165,6 +165,40 @@ type InheritableSettings struct {
 	// is open). Only meaningful when TunnelOnly resolves true. Tri-state
 	// inheritance.
 	TunnelAutostart *bool `json:"tunnel_autostart,omitempty"`
+	// KafkaEnabled shows the "Open Kafka" action and the editor's Kafka
+	// section. Opt-in like VNC: most hosts have no broker behind them.
+	// Tri-state inheritance so a folder holding a cluster's hosts enables
+	// it once.
+	KafkaEnabled *bool `json:"kafka_enabled,omitempty"`
+	// KafkaBootstrap is the seed broker list ("a:9092,b:9092"; a missing
+	// port means 9092), as seen from wherever the brokers are dialed from:
+	// the connection's host when KafkaUseTunnel, else this machine or the
+	// last jump host. Often "127.0.0.1:9092" on a broker host itself.
+	KafkaBootstrap *string `json:"kafka_bootstrap,omitempty"`
+	// KafkaUseTunnel: broker connections are opened as channels on an SSH
+	// session to this connection's host (so broker names resolve there).
+	// When false they are dialed like DialVia does - from the last jump
+	// host, else from here over the network profile. nil resolves to true:
+	// a cluster behind the host is the usual case.
+	KafkaUseTunnel *bool `json:"kafka_use_tunnel,omitempty"`
+	// KafkaDefault makes the Kafka tab the default connect action
+	// (double-click / Enter), like VncDefault. Only honoured when
+	// KafkaEnabled resolves true.
+	KafkaDefault *bool `json:"kafka_default,omitempty"`
+	// KafkaReadOnly refuses every write: produce, topic create / delete /
+	// config / partitions / truncate, group offset reset / delete. Enforced
+	// in the backend, not only hidden in the UI. For production clusters.
+	KafkaReadOnly *bool `json:"kafka_read_only,omitempty"`
+	// KafkaTLS wraps every broker connection in TLS (end to end, inside the
+	// tunnel); KafkaTLSSkipVerify accepts any broker certificate.
+	KafkaTLS           *bool `json:"kafka_tls,omitempty"`
+	KafkaTLSSkipVerify *bool `json:"kafka_tls_skip_verify,omitempty"`
+	// KafkaSASL is the SASL mechanism: "" none, "plain", "scram-sha-256",
+	// "scram-sha-512". The login comes from KafkaCredentialRef: its default
+	// username and its password (vault, KeePass, Bitwarden, Infisical).
+	// An explicit "" credential stops an inherited one.
+	KafkaSASL          *string `json:"kafka_sasl,omitempty"`
+	KafkaCredentialRef *string `json:"kafka_credential_ref,omitempty"`
 }
 
 // JumpHostOverride is tagged-union with two variants: "none" (explicit
@@ -281,6 +315,17 @@ type ResolvedSettings struct {
 	// resolved value is what the connection is, not how this session runs.
 	TunnelOnly      bool `json:"tunnel_only"`
 	TunnelAutostart bool `json:"tunnel_autostart"`
+	// Kafka*: see InheritableSettings. KafkaBootstrap is trimmed, "" when
+	// unset; KafkaUseTunnel defaults to true.
+	KafkaEnabled       bool    `json:"kafka_enabled"`
+	KafkaBootstrap     string  `json:"kafka_bootstrap"`
+	KafkaUseTunnel     bool    `json:"kafka_use_tunnel"`
+	KafkaDefault       bool    `json:"kafka_default"`
+	KafkaReadOnly      bool    `json:"kafka_read_only"`
+	KafkaTLS           bool    `json:"kafka_tls"`
+	KafkaTLSSkipVerify bool    `json:"kafka_tls_skip_verify"`
+	KafkaSASL          string  `json:"kafka_sasl"`
+	KafkaCredentialRef *string `json:"kafka_credential_ref"`
 	// PasswordOverride carries a per-connection plaintext password resolved
 	// from the vault by app.go before passing to the SSH layer. Never
 	// serialised to JSON (not shown in the resolved-settings preview).

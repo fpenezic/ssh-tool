@@ -62,6 +62,8 @@ export {
     InfisicalSaveInput,
     InstallState,
     IntegrationStatus,
+    KafkaClusterInfo,
+    KafkaCreateTopicInput,
     KeepassEnsureCredentialInput,
     KeepassSaveInput,
     LoadTextFileResult,

@@ -64,6 +64,7 @@
   import { vaultPrefs } from "./lib/vaultPrefs.svelte";
   import { lastSession } from "./lib/lastSession.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
+  import { endSession, kafkaPaletteActions } from "./lib/kafkaState.svelte";
 
   // Arriving at the terminal view puts the cursor in it, whichever route
   // got here: the toolbar button, a keyboard shortcut, closing Settings,
@@ -243,7 +244,7 @@
     const reopenIds: string[] = [];
     for (const sid of sessionIds) {
       const s = sessions.tabs.find((x) => x.sessionId === sid);
-      if (s && s.kind !== "local" && s.connectionId) reopenIds.push(s.connectionId);
+      if (s && s.kind !== "local" && s.kind !== "kafka" && s.connectionId) reopenIds.push(s.connectionId);
     }
     if (reopenIds.length > 0) {
       closedTabs.push({
@@ -257,8 +258,7 @@
     for (const sid of sessionIds) {
       const s = sessions.tabs.find((x) => x.sessionId === sid);
       try {
-        if (s?.kind === "local") await api.localShellDisconnect(sid);
-        else await api.sshDisconnect(sid);
+        await endSession(sid, s?.kind);
       } catch {}
       sessions.remove(sid);
     }
@@ -900,6 +900,16 @@
     view.setTab("terminal");
   });
 
+  // Same for a Kafka tab the LLM opened with open_kafka.
+  EventsOn("mcp_kafka_opened", (info: any) => {
+    if (isDetached) return;
+    if (!info?.id || sessions.tabs.find((s) => s.sessionId === info.id)) return;
+    const conn = tree.connectionById(info.connection_id);
+    connectionActions.addKafkaSession(info, conn?.hostname ?? "");
+    paneTabs.addKafkaTab(info.id, `${info.name} (Kafka)`);
+    view.setTab("terminal");
+  });
+
   // Load saved layout once at boot so the sidebar comes up at the
   // last-used width instead of the 320 default.
   layoutPrefs.load();
@@ -1295,7 +1305,7 @@
 {/if}
 
 {#if showPalette && vaultReady}
-  <QuickPalette actions={paletteActions} onClose={() => {
+  <QuickPalette actions={[...paletteActions, ...kafkaPaletteActions()]} onClose={() => {
     showPalette = false;
     if (view.tab === "terminal") focusActivePane();
   }} />

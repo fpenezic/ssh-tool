@@ -3570,6 +3570,168 @@ export class IntegrationStatus {
 }
 
 /**
+ * KafkaClusterInfo describes an open cluster handle.
+ */
+export class KafkaClusterInfo {
+    /**
+     * Creates a new KafkaClusterInfo instance.
+     * @param {Partial<KafkaClusterInfo>} [$$source = {}] - The source object to create the KafkaClusterInfo.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("connection_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["connection_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("bootstrap" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["bootstrap"] = [];
+        }
+        if (!("transport" in $$source)) {
+            /**
+             * Transport is "tunnel", "jump:<bastion host>" or "direct".
+             * @member
+             * @type {string}
+             */
+            this["transport"] = "";
+        }
+        if (!("state" in $$source)) {
+            /**
+             * State is the SSH session state of a tunnel transport (kafka.Transport*),
+             * "" for the others; Error the last connect error.
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+        if (!("read_only" in $$source)) {
+            /**
+             * ReadOnly: the backend refuses every write on this handle.
+             * Sensitive mirrors the connection's flag (destructive actions ask for
+             * the topic name to be typed). Security is "plaintext", "tls", or the
+             * SASL mechanism with "+tls" when both.
+             * @member
+             * @type {boolean}
+             */
+            this["read_only"] = false;
+        }
+        if (!("sensitive" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["sensitive"] = false;
+        }
+        if (!("security" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["security"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new KafkaClusterInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {KafkaClusterInfo}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("bootstrap" in $$parsedSource) {
+            $$parsedSource["bootstrap"] = $$createField3_0($$parsedSource["bootstrap"]);
+        }
+        return new KafkaClusterInfo(/** @type {Partial<KafkaClusterInfo>} */($$parsedSource));
+    }
+}
+
+/**
+ * KafkaCreateTopicInput creates a topic. Partitions / ReplicationFactor -1
+ * take the broker defaults.
+ */
+export class KafkaCreateTopicInput {
+    /**
+     * Creates a new KafkaCreateTopicInput instance.
+     * @param {Partial<KafkaCreateTopicInput>} [$$source = {}] - The source object to create the KafkaCreateTopicInput.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("partitions" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["partitions"] = 0;
+        }
+        if (!("replication_factor" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["replication_factor"] = 0;
+        }
+        if (!("configs" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in string]?: string }}
+             */
+            this["configs"] = {};
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new KafkaCreateTopicInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {KafkaCreateTopicInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType20;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("configs" in $$parsedSource) {
+            $$parsedSource["configs"] = $$createField3_0($$parsedSource["configs"]);
+        }
+        return new KafkaCreateTopicInput(/** @type {Partial<KafkaCreateTopicInput>} */($$parsedSource));
+    }
+}
+
+/**
  * KeepassEnsureCredentialInput picks a KeePass entry+field straight from the
  * connection auth picker. The app finds an existing credential that already
  * references the exact same entry+field (so choosing it twice reuses one) or
@@ -4412,6 +4574,15 @@ export class McpGrantInfo {
              * @type {string}
              */
             this["level"] = "";
+        }
+        if (!("kind" in $$source)) {
+            /**
+             * Kind is "ssh" or "kafka" (a shared Kafka tab; Hostname is then the
+             * bootstrap list).
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
         }
 
         Object.assign(this, $$source);

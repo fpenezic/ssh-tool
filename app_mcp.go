@@ -263,13 +263,20 @@ type McpGrantInfo struct {
 	Name      string `json:"name"`
 	Hostname  string `json:"hostname"`
 	Level     string `json:"level"`
+	// Kind is "ssh" or "kafka" (a shared Kafka tab; Hostname is then the
+	// bootstrap list).
+	Kind string `json:"kind"`
 }
 
 // McpShareSession grants the LLM access to a live session at the given level
 // ("read", "read-run" or "read-run-yolo"). Sharing a session that isn't in the
 // pool is rejected so a grant can't dangle without a session.
 func (a *App) McpShareSession(sessionID, level string) error {
-	if _, ok := a.pool.Get(sessionID); !ok {
+	if strings.HasPrefix(sessionID, "kafka:") {
+		if _, err := a.kafkaGet(sessionID); err != nil {
+			return fmt.Errorf("Kafka tab not open")
+		}
+	} else if _, ok := a.pool.Get(sessionID); !ok {
 		return fmt.Errorf("session not connected")
 	}
 	lvl := mcpGrantLevel(level)
@@ -303,14 +310,26 @@ func (a *App) McpListGrants() []McpGrantInfo {
 	}
 	a.mcp.mu.Unlock()
 
+	// Kafka tabs first, under their own lock, so the two locks never nest.
+	kafkaNames := map[string][2]string{}
+	a.kafkaMu.Lock()
+	for _, id := range ids {
+		if kc, ok := a.kafkaClusters[id]; ok {
+			kafkaNames[id] = [2]string{kc.info.Name + " (Kafka)", strings.Join(kc.info.Bootstrap, ",")}
+		}
+	}
+	a.kafkaMu.Unlock()
+
 	out := []McpGrantInfo{}
 	a.metaMu.Lock()
 	defer a.metaMu.Unlock()
 	for _, id := range ids {
-		info := McpGrantInfo{SessionID: id, Level: string(levels[id])}
+		info := McpGrantInfo{SessionID: id, Level: string(levels[id]), Kind: "ssh"}
 		if meta, ok := a.sessionMeta[id]; ok {
 			info.Name = meta.name
 			info.Hostname = meta.hostname
+		} else if k, ok := kafkaNames[id]; ok {
+			info.Kind, info.Name, info.Hostname = "kafka", k[0], k[1]
 		}
 		out = append(out, info)
 	}
@@ -489,6 +508,7 @@ type mcpSessionInfo struct {
 	Name      string `json:"name"`
 	Hostname  string `json:"hostname"`
 	Level     string `json:"level"`
+	Kind      string `json:"kind"`
 }
 
 // mcpListSessions returns only the sessions the user has shared.
@@ -498,7 +518,7 @@ func (a *App) mcpListSessions() []mcpSessionInfo {
 	for _, g := range grants {
 		out = append(out, mcpSessionInfo{
 			SessionID: g.SessionID, Name: g.Name,
-			Hostname: g.Hostname, Level: g.Level,
+			Hostname: g.Hostname, Level: g.Level, Kind: g.Kind,
 		})
 	}
 	return out
@@ -661,6 +681,8 @@ type mcpConnectionInfo struct {
 	Name         string `json:"name"`
 	Folder       string `json:"folder"` // "/"-joined folder path, "" at root
 	Dynamic      bool   `json:"dynamic,omitempty"`
+	// Kafka: the connection has kafka_enabled, so open_kafka works on it.
+	Kafka bool `json:"kafka,omitempty"`
 }
 
 // mcpListConnections returns saved connections AND dynamic-inventory hosts
@@ -680,6 +702,7 @@ func (a *App) mcpListConnections(query string) ([]mcpConnectionInfo, error) {
 			strings.Contains(strings.ToLower(name), q) ||
 			strings.Contains(strings.ToLower(folder), q)
 	}
+	allFolders, _ := a.db.ListFolders()
 	out := []mcpConnectionInfo{}
 	for _, c := range conns {
 		if c.Sensitive {
@@ -694,6 +717,7 @@ func (a *App) mcpListConnections(query string) ([]mcpConnectionInfo, error) {
 		}
 		out = append(out, mcpConnectionInfo{
 			ConnectionID: c.ID, Name: c.Name, Folder: folder,
+			Kafka: resolver.ResolveWith(c, allFolders).KafkaEnabled,
 		})
 	}
 

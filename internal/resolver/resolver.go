@@ -101,18 +101,27 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		InitialCommand:    firstNonNil(over.InitialCommand, base.InitialCommand),
 		InitialCommandLineDelayMs: firstNonNilU32(
 			over.InitialCommandLineDelayMs, base.InitialCommandLineDelayMs),
-		AutoReconnect:    firstNonNilBool(over.AutoReconnect, base.AutoReconnect),
-		Verbose:          firstNonNilBool(over.Verbose, base.Verbose),
-		ProbeLiveness:    firstNonNilBool(over.ProbeLiveness, base.ProbeLiveness),
-		VncEnabled:       firstNonNilBool(over.VncEnabled, base.VncEnabled),
-		VncPort:          firstNonNilU16(over.VncPort, base.VncPort),
-		VncUseTunnel:     firstNonNilBool(over.VncUseTunnel, base.VncUseTunnel),
-		VncDefault:       firstNonNilBool(over.VncDefault, base.VncDefault),
-		NetworkProfileID: firstNonNil(over.NetworkProfileID, base.NetworkProfileID),
-		TunnelOnly:       firstNonNilBool(over.TunnelOnly, base.TunnelOnly),
-		TunnelAutostart:  firstNonNilBool(over.TunnelAutostart, base.TunnelAutostart),
-		SSHOptions:       mergeMap(base.SSHOptions, over.SSHOptions),
-		EnvVars:          mergeMap(base.EnvVars, over.EnvVars),
+		AutoReconnect:      firstNonNilBool(over.AutoReconnect, base.AutoReconnect),
+		Verbose:            firstNonNilBool(over.Verbose, base.Verbose),
+		ProbeLiveness:      firstNonNilBool(over.ProbeLiveness, base.ProbeLiveness),
+		VncEnabled:         firstNonNilBool(over.VncEnabled, base.VncEnabled),
+		VncPort:            firstNonNilU16(over.VncPort, base.VncPort),
+		VncUseTunnel:       firstNonNilBool(over.VncUseTunnel, base.VncUseTunnel),
+		VncDefault:         firstNonNilBool(over.VncDefault, base.VncDefault),
+		NetworkProfileID:   firstNonNil(over.NetworkProfileID, base.NetworkProfileID),
+		TunnelOnly:         firstNonNilBool(over.TunnelOnly, base.TunnelOnly),
+		TunnelAutostart:    firstNonNilBool(over.TunnelAutostart, base.TunnelAutostart),
+		KafkaEnabled:       firstNonNilBool(over.KafkaEnabled, base.KafkaEnabled),
+		KafkaBootstrap:     firstNonNil(over.KafkaBootstrap, base.KafkaBootstrap),
+		KafkaUseTunnel:     firstNonNilBool(over.KafkaUseTunnel, base.KafkaUseTunnel),
+		KafkaDefault:       firstNonNilBool(over.KafkaDefault, base.KafkaDefault),
+		KafkaReadOnly:      firstNonNilBool(over.KafkaReadOnly, base.KafkaReadOnly),
+		KafkaTLS:           firstNonNilBool(over.KafkaTLS, base.KafkaTLS),
+		KafkaTLSSkipVerify: firstNonNilBool(over.KafkaTLSSkipVerify, base.KafkaTLSSkipVerify),
+		KafkaSASL:          firstNonNil(over.KafkaSASL, base.KafkaSASL),
+		KafkaCredentialRef: firstNonNil(over.KafkaCredentialRef, base.KafkaCredentialRef),
+		SSHOptions:         mergeMap(base.SSHOptions, over.SSHOptions),
+		EnvVars:            mergeMap(base.EnvVars, over.EnvVars),
 	}
 	return out
 }
@@ -192,6 +201,18 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 	if otpRef != nil && *otpRef == "" {
 		otpRef = nil
 	}
+	kafkaBootstrap := ""
+	if s.KafkaBootstrap != nil {
+		kafkaBootstrap = strings.TrimSpace(*s.KafkaBootstrap)
+	}
+	kafkaSASL := ""
+	if s.KafkaSASL != nil {
+		kafkaSASL = *s.KafkaSASL
+	}
+	kafkaCred := s.KafkaCredentialRef
+	if kafkaCred != nil && *kafkaCred == "" {
+		kafkaCred = nil
+	}
 	return store.ResolvedSettings{
 		// A pasted hostname can carry a newline or spaces; every dial and
 		// probe goes through here, so older rows work too.
@@ -214,14 +235,23 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 		// Default true: probe unless a folder explicitly opted out. The global
 		// switch gates whether probing runs at all; this only lets a folder
 		// exclude itself.
-		ProbeLiveness:    s.ProbeLiveness == nil || *s.ProbeLiveness,
-		VncEnabled:       s.VncEnabled != nil && *s.VncEnabled,
-		VncPort:          vncPort,
-		VncUseTunnel:     s.VncUseTunnel != nil && *s.VncUseTunnel,
-		VncDefault:       s.VncDefault != nil && *s.VncDefault,
-		NetworkProfileID: netProfile,
-		TunnelOnly:       s.TunnelOnly != nil && *s.TunnelOnly,
-		TunnelAutostart:  s.TunnelAutostart != nil && *s.TunnelAutostart,
+		ProbeLiveness:      s.ProbeLiveness == nil || *s.ProbeLiveness,
+		VncEnabled:         s.VncEnabled != nil && *s.VncEnabled,
+		VncPort:            vncPort,
+		VncUseTunnel:       s.VncUseTunnel != nil && *s.VncUseTunnel,
+		VncDefault:         s.VncDefault != nil && *s.VncDefault,
+		NetworkProfileID:   netProfile,
+		TunnelOnly:         s.TunnelOnly != nil && *s.TunnelOnly,
+		TunnelAutostart:    s.TunnelAutostart != nil && *s.TunnelAutostart,
+		KafkaEnabled:       s.KafkaEnabled != nil && *s.KafkaEnabled,
+		KafkaBootstrap:     kafkaBootstrap,
+		KafkaUseTunnel:     s.KafkaUseTunnel == nil || *s.KafkaUseTunnel,
+		KafkaDefault:       s.KafkaDefault != nil && *s.KafkaDefault,
+		KafkaReadOnly:      s.KafkaReadOnly != nil && *s.KafkaReadOnly,
+		KafkaTLS:           s.KafkaTLS != nil && *s.KafkaTLS,
+		KafkaTLSSkipVerify: s.KafkaTLSSkipVerify != nil && *s.KafkaTLSSkipVerify,
+		KafkaSASL:          kafkaSASL,
+		KafkaCredentialRef: kafkaCred,
 	}
 }
 

@@ -15,6 +15,7 @@
   import { api } from "./api";
   import { sessions, paneTabs, view, tree, decodePaneLayout, encodePaneLayouts } from "./stores.svelte";
   import { vncSessions } from "./vncState.svelte.ts";
+  import { kafkaTabs } from "./kafkaState.svelte";
   import TerminalArea from "./TerminalArea.svelte";
   import { broadcast } from "./broadcast.svelte";
   import { recording } from "./recording.svelte";
@@ -110,6 +111,22 @@
         });
       }
 
+      // Kafka tabs: the cluster handle (and its consumers) live on the
+      // backend, so the tab carries on where the other window left it.
+      const kafkas = await kafkaTabs.refresh();
+      for (const k of kafkas) {
+        if (allowedIds && !allowedIds.has(k.id)) continue;
+        if (sessions.tabs.find((t) => t.sessionId === k.id)) continue;
+        sessions.add({
+          sessionId: k.id,
+          connectionId: k.connection_id,
+          name: `${k.name} (Kafka)`,
+          hostname: k.bootstrap.join(","),
+          status: "connected",
+          kind: "kafka",
+        });
+      }
+
       // Restore the pane tree from the serialized layout so splits and
       // group metadata survive the detach. If the main window didn't
       // ship a layout (legacy / direct open), fall back to one tab
@@ -128,6 +145,10 @@
         for (const v of vncs) {
           if (allowedIds && !allowedIds.has(v.session_id)) continue;
           paneTabs.addVncTab(v.session_id, v.title);
+        }
+        for (const k of kafkas) {
+          if (allowedIds && !allowedIds.has(k.id)) continue;
+          paneTabs.addKafkaTab(k.id, `${k.name} (Kafka)`);
         }
       }
     } catch (e: any) {

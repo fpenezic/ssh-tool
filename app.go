@@ -323,6 +323,12 @@ type App struct {
 	// way local PTYs do.
 	vncMu       sync.Mutex
 	vncSessions map[string]*vncSessionMeta
+
+	// kafkaMu guards the open Kafka cluster handles and their consumers
+	// (app_kafka.go).
+	kafkaMu        sync.Mutex
+	kafkaClusters  map[string]*kafkaCluster
+	kafkaConsumers map[string]*kafkaConsumer
 }
 
 // vncSessionMeta is one live VNC console. The upstream factory is
@@ -519,6 +525,8 @@ func (a *App) initialise() {
 	a.localPool = local.NewPool()
 	a.vncBridge = sshlayer.NewVncBridge()
 	a.vncSessions = map[string]*vncSessionMeta{}
+	a.kafkaClusters = map[string]*kafkaCluster{}
+	a.kafkaConsumers = map[string]*kafkaConsumer{}
 	a.recorder = recorder.NewManager()
 	a.termSizes = map[string][2]uint16{}
 	a.forwards = sshlayer.NewForwardPool()

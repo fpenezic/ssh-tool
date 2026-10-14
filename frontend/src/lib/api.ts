@@ -77,6 +77,17 @@ export interface InheritableSettings {
   // and, with tunnel_autostart, starts with the app. Absent = inherit.
   tunnel_only?: boolean;
   tunnel_autostart?: boolean;
+  // Kafka tab (internal/kafka). kafka_use_tunnel absent resolves to true;
+  // kafka_credential_ref "" stops an inherited one.
+  kafka_enabled?: boolean;
+  kafka_bootstrap?: string;
+  kafka_use_tunnel?: boolean;
+  kafka_default?: boolean;
+  kafka_read_only?: boolean;
+  kafka_tls?: boolean;
+  kafka_tls_skip_verify?: boolean;
+  kafka_sasl?: string;
+  kafka_credential_ref?: string;
 }
 
 export interface Folder {
@@ -144,6 +155,181 @@ export interface ResolvedSettings {
   network_profile_id: string | null;
   tunnel_only: boolean;
   tunnel_autostart: boolean;
+  kafka_enabled: boolean;
+  kafka_bootstrap: string;
+  kafka_use_tunnel: boolean;
+  kafka_default: boolean;
+  kafka_read_only: boolean;
+  kafka_tls: boolean;
+  kafka_tls_skip_verify: boolean;
+  kafka_sasl: string;
+  kafka_credential_ref: string | null;
+}
+
+// ----- Kafka (app_kafka.go / internal/kafka) -----
+
+export interface KafkaClusterInfo {
+  id: string;
+  connection_id: string;
+  name: string;
+  bootstrap: string[];
+  // "tunnel" | "jump:<host>" | "direct"
+  transport: string;
+  // SSH session state of a tunnel transport: idle | connecting | connected
+  // | error | closed; "" for the others.
+  state: string;
+  error?: string;
+  read_only: boolean;
+  sensitive: boolean;
+  security: string;
+}
+
+export interface KafkaBroker { id: number; host: string; port: number; rack?: string }
+
+export interface KafkaOverview {
+  cluster_id: string;
+  controller: number;
+  brokers: KafkaBroker[];
+  topics: number;
+  partitions: number;
+}
+
+export interface KafkaTopicSummary {
+  name: string;
+  partitions: number;
+  replication_factor: number;
+  internal: boolean;
+  messages: number; // -1 = unknown
+  under_replicated: number;
+  offline: number;
+  error?: string;
+}
+
+export interface KafkaPartitionInfo {
+  partition: number;
+  leader: number;
+  replicas: number[];
+  isr: number[];
+  offline: number[];
+  start_offset: number;
+  end_offset: number;
+  error?: string;
+}
+
+export interface KafkaConfigEntry {
+  name: string;
+  value: string;
+  source: string;
+  override: boolean;
+  sensitive: boolean;
+}
+
+export interface KafkaTopicDetail {
+  name: string;
+  internal: boolean;
+  replication_factor: number;
+  messages: number;
+  partitions: KafkaPartitionInfo[];
+  configs: KafkaConfigEntry[];
+  config_error?: string;
+}
+
+export interface KafkaTopicMetrics {
+  sampled_at: number;
+  messages: number;
+  end_offsets: number;
+  leader_bytes: number;
+  total_bytes: number;
+  size_error?: string;
+}
+
+export type KafkaStartMode = "earliest" | "latest" | "last" | "offset" | "timestamp";
+
+export interface KafkaConsumeRequest {
+  topic: string;
+  mode: KafkaStartMode;
+  n: number;
+  timestamp: number;
+  partition: number; // -1 = all
+  limit: number; // 0 = none
+  stop_at_end: boolean;
+  buffer_messages?: number;
+  buffer_bytes?: number;
+}
+
+export interface KafkaPayload { text: string; encoding: "utf8" | "base64"; size: number }
+
+export interface KafkaMessage {
+  seq: number;
+  partition: number;
+  offset: number;
+  timestamp: number;
+  key: KafkaPayload | null;
+  value: KafkaPayload | null;
+  headers: { key: string; value: KafkaPayload }[];
+  size: number;
+}
+
+export interface KafkaConsumeSnapshot {
+  state: "running" | "done" | "stopped" | "error";
+  error?: string;
+  messages: KafkaMessage[];
+  received: number;
+  dropped: number;
+  buffered: number;
+  partitions: number[];
+}
+
+export interface KafkaPayloadInput { text: string; encoding: "utf8" | "base64" }
+
+export interface KafkaProduceRequest {
+  topic: string;
+  partition: number; // -1 = partitioner
+  key: KafkaPayloadInput | null;
+  value: KafkaPayloadInput | null;
+  headers: { key: string; value: KafkaPayloadInput }[];
+}
+
+export interface KafkaProduceResult { partition: number; offset: number; timestamp: number }
+
+export interface KafkaGroupSummary {
+  name: string;
+  state: string;
+  protocol_type: string;
+  members: number;
+  lag: number; // -1 = unknown
+  topics: string[];
+  error?: string;
+}
+
+export interface KafkaGroupDetail extends KafkaGroupSummary {
+  assignor: string;
+  member_list: { id: string; client_id: string; host: string; assigned: Record<string, number[]> }[];
+  partitions: {
+    topic: string;
+    partition: number;
+    committed: number;
+    end: number;
+    lag: number;
+    member?: string;
+    error?: string;
+  }[];
+}
+
+export interface KafkaResetGroupRequest {
+  group: string;
+  topic: string;
+  mode: KafkaStartMode;
+  n: number;
+  timestamp: number;
+}
+
+export interface KafkaToolImportSummary {
+  folders_created: number;
+  connections_created: number;
+  connections_skipped: number;
+  passwords_stored: number;
+  warnings: string[];
 }
 
 // ----- Network profiles (userspace WireGuard) -----
@@ -1466,6 +1652,51 @@ export const api = {
   getConnectionHasVncPassword: (connectionId: string) =>
     G.GetConnectionHasVncPassword(connectionId) as unknown as Promise<boolean>,
 
+  // Kafka tab. kafkaOpen does no I/O; the data calls may wait for the SSH
+  // session (and its prompts) on a cold tab.
+  kafkaOpen: (connectionId: string) =>
+    nn(G.KafkaOpen(connectionId)) as Promise<KafkaClusterInfo>,
+  kafkaStatus: (clusterId: string) =>
+    nn(G.KafkaStatus(clusterId)) as Promise<KafkaClusterInfo>,
+  kafkaClose: (clusterId: string) => G.KafkaClose(clusterId) as unknown as Promise<void>,
+  kafkaList: () => G.KafkaList() as unknown as Promise<KafkaClusterInfo[]>,
+  kafkaOverview: (clusterId: string) =>
+    nn(G.KafkaOverview(clusterId)) as Promise<KafkaOverview>,
+  kafkaTopics: (clusterId: string, includeInternal: boolean) =>
+    G.KafkaTopics(clusterId, includeInternal) as unknown as Promise<KafkaTopicSummary[] | null>,
+  kafkaTopicDetail: (clusterId: string, topic: string) =>
+    nn(G.KafkaTopicDetail(clusterId, topic)) as Promise<KafkaTopicDetail>,
+  kafkaTopicMetrics: (clusterId: string, topic: string) =>
+    nn(G.KafkaTopicMetrics(clusterId, topic)) as Promise<KafkaTopicMetrics>,
+  kafkaConsumeStart: (clusterId: string, req: KafkaConsumeRequest) =>
+    G.KafkaConsumeStart(clusterId, req as any) as unknown as Promise<string>,
+  kafkaConsumeSnapshot: (consumerId: string, after: number, max: number) =>
+    nn(G.KafkaConsumeSnapshot(consumerId, after, max)) as Promise<KafkaConsumeSnapshot>,
+  kafkaConsumeStop: (consumerId: string) =>
+    G.KafkaConsumeStop(consumerId) as unknown as Promise<void>,
+  kafkaProduce: (clusterId: string, req: KafkaProduceRequest) =>
+    nn(G.KafkaProduce(clusterId, req as any)) as Promise<KafkaProduceResult>,
+  kafkaCreateTopic: (clusterId: string, input: { name: string; partitions: number; replication_factor: number; configs: Record<string, string> }) =>
+    G.KafkaCreateTopic(clusterId, input as any) as unknown as Promise<void>,
+  kafkaDeleteTopic: (clusterId: string, topic: string) =>
+    G.KafkaDeleteTopic(clusterId, topic) as unknown as Promise<void>,
+  kafkaAlterTopicConfig: (clusterId: string, topic: string, set: Record<string, string>, remove: string[]) =>
+    G.KafkaAlterTopicConfig(clusterId, topic, set, remove) as unknown as Promise<void>,
+  kafkaSetPartitions: (clusterId: string, topic: string, total: number) =>
+    G.KafkaSetPartitions(clusterId, topic, total) as unknown as Promise<void>,
+  kafkaSetReplicationFactor: (clusterId: string, topic: string, rf: number) =>
+    G.KafkaSetReplicationFactor(clusterId, topic, rf) as unknown as Promise<void>,
+  kafkaTruncate: (clusterId: string, topic: string) =>
+    G.KafkaTruncate(clusterId, topic) as unknown as Promise<void>,
+  kafkaGroups: (clusterId: string) =>
+    G.KafkaGroups(clusterId) as unknown as Promise<KafkaGroupSummary[] | null>,
+  kafkaGroup: (clusterId: string, group: string) =>
+    nn(G.KafkaGroup(clusterId, group)) as Promise<KafkaGroupDetail>,
+  kafkaResetGroupOffsets: (clusterId: string, req: KafkaResetGroupRequest) =>
+    G.KafkaResetGroupOffsets(clusterId, req as any) as unknown as Promise<void>,
+  kafkaDeleteGroup: (clusterId: string, group: string) =>
+    G.KafkaDeleteGroup(clusterId, group) as unknown as Promise<void>,
+
   dynamicFolderCreate: (input: {
     parent_id?: string | null;
     name: string;
@@ -1720,6 +1951,8 @@ export const api = {
     nn(G.PuttyRegImport(text, rootFolderID ?? "")) as Promise<PuttyImportSummary>,
   superPuttyImport: (text: string, rootFolderID?: string) =>
     nn(G.SuperPuttyImport(text, rootFolderID ?? "")) as Promise<SuperPuttyImportSummary>,
+  kafkaToolImport: (text: string, rootFolderID?: string) =>
+    nn(G.KafkaToolImport(text, rootFolderID ?? "")) as Promise<KafkaToolImportSummary>,
 
   saveTextFile: (suggestedName: string, content: string) =>
     G.SaveTextFile(suggestedName, content) as unknown as Promise<string>,
@@ -2589,6 +2822,8 @@ export interface McpGrantInfo {
   name: string;
   hostname: string;
   level: McpGrantLevel;
+  // "ssh" or "kafka" (a shared Kafka tab; hostname is then its brokers).
+  kind?: string;
 }
 
 // One recorded LLM action (event: "mcp_activity" for live, McpActivityList for

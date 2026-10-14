@@ -1112,7 +1112,9 @@ export interface SessionTab {
   // and so panel toolbars hide SSH-only controls (broadcast, port
   // forwards, SFTP, opkssh refresh) on local tabs. Defaults to "ssh"
   // for backward compatibility.
-  kind?: "ssh" | "local" | "vnc";
+  // "kafka": a Kafka cluster tab; sessionId is the backend cluster handle
+  // and connectionId the connection it was opened from.
+  kind?: "ssh" | "local" | "vnc" | "kafka";
   status: "connecting" | "connected" | "disconnected" | "error" | "reconnecting";
   statusHint?: string;
   // While status === "reconnecting", the most recent retry attempt and
@@ -1217,6 +1219,24 @@ class PaneTreeStore {
       root: { kind: "pane", id: leafId, sessionId, view: "vnc" },
       activePaneId: leafId,
       locked: true,
+    };
+    this.tabs.push(tab);
+    this.activeTabId = tab.tabId;
+    return tab;
+  }
+
+  // addKafkaTab adds a single-leaf Kafka tab. Not locked: a split beside it
+  // opens a terminal on the connection's host (splitLeaf reopens the
+  // connection), which is the usual "watch the topic, tail the broker log"
+  // layout.
+  addKafkaTab(sessionId: string, title: string): PaneTab {
+    const leafId = genId("pane");
+    const tab: PaneTab = {
+      tabId: genId("tab"),
+      title,
+      rootPaneId: leafId,
+      root: { kind: "pane", id: leafId, sessionId, view: "kafka" },
+      activePaneId: leafId,
     };
     this.tabs.push(tab);
     this.activeTabId = tab.tabId;
@@ -2328,6 +2348,7 @@ class SessionStore {
     // a local session id is just wrong.
     const kind = this.tabs.find((t) => t.sessionId === sessionId)?.kind;
     if (kind === "local") api.localShellDisconnect(sessionId).catch(() => {});
+    else if (kind === "kafka") api.kafkaClose(sessionId).catch(() => {});
     else api.sshDisconnect(sessionId).catch(() => {});
     this.remove(sessionId);
     if (paneTabs.tabs.length === 0) {
