@@ -647,7 +647,7 @@
         class:tun-wait={tunnels.list.some((t) => t.state === "reconnecting" || t.state === "connecting")}
         class:tun-up={tunnels.upCount > 0}
         onclick={() => (showTunnelsPanel = !showTunnelsPanel)}
-        title={`Tunnels: ${tunnels.upCount} up of ${tunnels.list.length}` + (tunnels.troubleCount > 0 ? ` - ${tunnels.troubleCount} failing or reconnecting` : "") + " - click to manage"}
+        title={`Tunnels: ${tunnels.upCount} up of ${tunnels.list.length}` + (tunnels.troubleCount > 0 ? ` - ${tunnels.troubleCount} failing or reconnecting` : "") + ` - ${tunnelCount} port forward${tunnelCount === 1 ? "" : "s"} listening in all sessions - click to manage`}
       >
         <IconTunnel size={11} />
         <span class="seg-label">Tunnels</span>
@@ -656,13 +656,16 @@
       </button>
       {#if showTunnelsPanel}
         <div class="tun-pop">
-          <TunnelsPanel onClose={() => (showTunnelsPanel = false)} />
+          <TunnelsPanel forwardCount={tunnelCount} onClose={() => (showTunnelsPanel = false)} />
         </div>
       {/if}
     </div>
   {/if}
 
-  {#if tunnelCount > 0 && shows("forwards")}
+  <!-- With tunnels around, the Tunnels segment carries the forward count
+       (tooltip + panel header): two cable icons with overlapping counts
+       side by side read as one thing said twice. -->
+  {#if tunnelCount > 0 && shows("forwards") && !(tunnels.list.length > 0 && shows("tunnels"))}
     <span class="seg tunnels" title="{tunnelCount} active port forward{tunnelCount === 1 ? "" : "s"}">
       <IconTunnel size={11} />
       <span>{tunnelCount}</span>

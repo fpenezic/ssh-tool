@@ -3,6 +3,7 @@
   import { tree, credentials, selection, sessions, paneTabs, view, jumpChainHostnames } from "./stores.svelte";
   import { isMobile } from "./platform";
   import { toast } from "./toast.svelte";
+  import { tunnels } from "./tunnels.svelte.ts";
   import { writeClipboard } from "./clipboard";
   import PasswordInput from "./PasswordInput.svelte";
   import { effectiveAuthRef, isKeyAuthKind, isSelectableSSHCred } from "./authWarning";
@@ -498,6 +499,10 @@
   // ----- Connection editing -----
 
   let resolved = $state<ResolvedSettings | null>(null);
+
+  // This connection's tunnel, when it is a tunnel-only connection; the
+  // header then offers Start / Stop tunnel ahead of Open terminal.
+  const connTunnel = $derived(conn ? tunnels.byConnection(conn.id) : undefined);
 
   // tunnel_only as the folder chain from folderId upwards sets it (the value
   // an "(inherit)" choice would get). Walked live from the tree so the
@@ -1588,6 +1593,22 @@
         </button>
         {#if isWeb}
           <button class="primary" onclick={() => connectionActions.openWeb(conn!.id)} title="Open in the browser of the folder's network profile (its VPN), else your normal browser">Open</button>
+        {:else if connTunnel && !overrideCredId}
+          <!-- A tunnel connection: the header offers the tunnel first, a
+               terminal second. A credential override stays a terminal
+               connect (the branch below). -->
+          {#if tunnels.running(connTunnel)}
+            <button class="primary" onclick={() => tunnels.stop(conn!.id)}
+              title="Stop this connection's tunnel ({connTunnel.state})">Stop tunnel</button>
+          {:else}
+            <button class="primary" onclick={() => tunnels.start(conn!.id)}
+              title={connTunnel.state === "error" ? "Try the tunnel again" : "Start this connection's tunnel: no shell, no tab, just its port forwards"}>
+              {connTunnel.state === "error" ? "Try again" : "Start tunnel"}
+            </button>
+          {/if}
+          <button disabled={connecting} onclick={connect} title="Open a terminal on this host, next to the tunnel">
+            {connecting ? (connectStage ?? "Connecting…") : "Open terminal"}
+          </button>
         {:else}
         <button class="primary" disabled={connecting} onclick={connect}>
           {connecting ? (connectStage ?? "Connecting…") : (overrideCredId ? "Connect (override)" : "Connect")}

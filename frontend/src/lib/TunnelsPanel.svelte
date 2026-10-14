@@ -13,9 +13,12 @@
   import { IconTunnel, IconPlay, IconStop, IconTerminal, IconX, IconExternalLink } from "./iconMap";
 
   interface Props {
+    // Listening port forwards across every session (tunnels and terminal
+    // tabs alike) - the status bar's forwards count, shown here instead.
+    forwardCount: number;
     onClose: () => void;
   }
-  let { onClose }: Props = $props();
+  let { forwardCount, onClose }: Props = $props();
 
   let filter = $state("");
   let expanded = $state<Set<string>>(new Set());
@@ -150,6 +153,7 @@
       <IconTunnel size={13} />
       <span>Tunnels</span>
       <span class="count">{tunnels.upCount}/{tunnels.list.length} up</span>
+      <span class="count" title="Listening port forwards in all sessions, terminal tabs included">- {forwardCount} forward{forwardCount === 1 ? "" : "s"} listening</span>
     </div>
     <div class="head-actions">
       <button disabled={stoppedShown.length === 0} onclick={startAll} title="Start every stopped tunnel shown">

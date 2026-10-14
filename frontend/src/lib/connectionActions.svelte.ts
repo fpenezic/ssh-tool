@@ -521,8 +521,6 @@ class ConnectionActionsStore {
     }
   }
 
-  // Connect to many connections. Pushes a tab per success; failures
-  // land in lastConnectError keyed by connectionID.
   // Double-click / Enter on a tunnel: start it, or say it is already up.
   // Never stops it - a stray double-click must not drop a tunnel.
   private startTunnelDefault(c: Connection) {
@@ -573,6 +571,8 @@ class ConnectionActionsStore {
     return items;
   }
 
+  // Connect to many connections. Pushes a tab per success; failures
+  // land in lastConnectError keyed by connectionID.
   async connectMany(ids: string[]) {
     // Tunnels in the selection start in the tunnel manager; the rest open
     // terminals as before.
