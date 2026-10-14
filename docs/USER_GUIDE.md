@@ -494,6 +494,11 @@ Two-column grid (auto-fit on narrow widths). Fields:
 - **Verbose connect log** - On / Off / Inherit. Emits TCP / handshake
   / auth diagnostics to the Connect diagnostics block below the
   header during connect.
+- **Tunnel only** - On / Off / Inherit. The connection runs as a
+  tunnel: no shell, no tab, just its port forwards. See
+  [Tunnel connections](#tunnel-connections).
+- **Start tunnel on app launch** - On / Off / Inherit. Shown only while
+  Tunnel only is on; starts the tunnel when the app starts.
 - **Keepalive interval (s)** - seconds between SSH keepalive global
   requests. Empty = inherit, 0 = off. Useful for connections behind
   NAT that drop idle TCP sessions after 1-5 minutes.
@@ -1388,7 +1393,13 @@ Below the connection editor: **Port forwards** section. Three kinds:
 ### Lifecycle
 
 - Forwards are defined per-connection but only run while a session
-  for that connection is connected.
+  for that connection is connected - a terminal tab, or the
+  connection's tunnel (see [Tunnel connections](#tunnel-connections)).
+- A forward runs in one session at a time. With two sessions on the
+  same connection (two terminals, or a terminal next to its tunnel)
+  the second does not start the forwards the first already runs, and
+  the Port forwards section shows each forward's state whichever
+  session holds it.
 - Each forward has a Start / Stop toggle on the row.
 - A local port that is already taken says by what: another tunnel (by
   name and connection), another program, or a Windows reserved port
@@ -1499,6 +1510,64 @@ through its own forward.
 If a jump host genuinely cannot see part of a customer's estate, give
 that segment its own forward. The extra window is correct there, not
 a workaround.
+
+<a id="tunnel-connections"></a>
+### Tunnel connections (no tab)
+
+A connection that exists only for its forwards - a jump into a
+customer network that carries a Kafka broker, a database port and a
+SOCKS proxy for the web GUIs - does not need a terminal. Set **Tunnel
+only** on it, or on a whole folder of them, and it runs like `ssh -N`:
+the session connects without a shell or PTY, holds the forwards, and
+opens no tab. Accounts without a login shell work too, since no shell
+is ever asked for.
+
+- **Starting.** Double-click or Enter on a tunnel connection starts
+  the tunnel instead of opening a terminal. It never stops one that is
+  already up. Right-click offers **Start tunnel** / **Stop tunnel**,
+  **Show in Tunnels panel** and **Open terminal**, for when you want a
+  shell on the same host. Selecting several and picking Connect all
+  starts the tunnels among them.
+- **Which forwards come up.** The ones marked auto-start. Start the
+  others by hand in the Tunnels panel or in the connection's Port
+  forwards section, which for a tunnel connection acts on the tunnel
+  (and offers **Start tunnel** while it is down).
+- **On app launch.** **Start tunnel on app launch** (On / Off /
+  Inherit, offered only while Tunnel only is on) starts the tunnel once
+  the vault gate is passed. A launch start keeps retrying while the
+  network or the server is not there yet, so starting the app before
+  Wi-Fi or a VPN is fine. If you choose **Skip** at the vault gate,
+  tunnels that need a vault credential wait in error and start on
+  their own after the next unlock. A tunnel you stopped by hand is not
+  restarted by a UI reload.
+- **After a drop.** A tunnel that was up and lost its connection
+  reconnects until it succeeds or you stop it, waiting 1, 2, 4 ... up
+  to 60 seconds between tries, and brings back every forward that was
+  running, the ones started by hand included. Only network failures
+  are retried: a rejected host key or a failed login stops the tunnel
+  in error rather than asking again every minute. A start by hand
+  tries once and reports what went wrong. Tunnels reconnect whatever
+  the connection's Auto-reconnect setting says.
+- **The Tunnels panel.** The status bar shows **Tunnels n/m** (up of
+  all) whenever a tunnel connection exists - green while tunnels are
+  up, yellow while one is connecting or reconnecting, red with a count
+  when one failed. Click it for the panel: tunnels grouped by folder,
+  each with its state and uptime, the reconnect countdown, the last
+  error, and Start / Stop; **Start all** / **Stop all** and a filter at
+  the top. Click a tunnel to see its forwards (state, traffic, Start /
+  Stop each), **Show in tree** and **Open terminal**. A failed tunnel
+  offers **Try again** and **Clear error** (leaves it stopped). The
+  item can be hidden from the status bar by right-clicking the bar.
+- **In the tree** a tunnel connection carries a small cable icon,
+  green while up, yellow while connecting, red when it failed.
+- **Deleting** a tunnel connection stops its tunnel.
+- **Quitting** the app disconnects tunnels like any other session; the
+  quit prompt says how many of the open sessions are tunnels. With
+  close-to-tray on, closing the window keeps them running.
+
+Both settings are part of the profile, so they sync to your other
+machines like every connection setting: a tunnel set to start on
+launch starts on each of them.
 
 ### Tunnels from the terminal view
 

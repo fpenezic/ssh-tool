@@ -7,6 +7,26 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased] - Tunnel manager
+
+Connections that exist only for their port forwards can now run as tunnels: no shell and no tab, started with the app if you like, kept up through drops, and managed from one panel in the status bar.
+
+### Tunnels
+
+- **Tunnel-only connections.** A new **Tunnel only** setting on a connection or a folder (inherited like the others) makes the connection a tunnel, the `ssh -N` case: it connects without a shell or a terminal and holds just its port forwards. Double-click or Enter starts the tunnel instead of opening a tab, and never stops one that is already up. Right-click offers Start / Stop tunnel, Show in Tunnels panel and **Open terminal** for when you do want a shell there. Accounts without a login shell work, since no shell is asked for.
+- **Start tunnels with the app.** **Start tunnel on app launch** (only offered while Tunnel only is on) brings the tunnel up once the vault gate is passed. A launch start keeps retrying while the network or the server is not there yet, so starting the app before Wi-Fi or a VPN is fine. After "Skip" at the vault gate, tunnels that need a vault credential wait in error and start on their own after the next unlock.
+- **Tunnels panel.** A **Tunnels n/m** segment in the status bar (green, yellow while one reconnects, red when one failed) opens a panel with every tunnel grouped by folder: state and uptime, the reconnect countdown, the last error, Start / Stop per tunnel and for all of them, a filter, and per tunnel its forwards with their state, traffic and a Start / Stop of their own. A failed tunnel offers **Try again** and **Clear error**. Tunnel connections also get a small cable icon in the tree, coloured by state.
+- **Tunnels come back after a drop.** A tunnel that was up and lost its connection reconnects until it succeeds or you stop it, waiting 1, 2, 4 ... up to 60 seconds between tries, and brings back every forward that was running, the ones started by hand included. Only network failures are retried: a rejected host key or a failed login stops the tunnel in error instead of asking again every minute. A start by hand tries once and reports.
+- **Port forwards in the editor follow the tunnel.** For a tunnel connection the Port forwards section shows the tunnel's forwards with their live state, starts and stops them in the tunnel, and offers **Start tunnel** while it is down instead of opening a terminal tab.
+- **Deleting a connection stops its tunnel**, whether it was deleted here, by an MCP plan or by a sync pull, so no hidden session keeps its ports.
+
+### Port forwards
+
+- **A forward no longer starts twice.** With two sessions on one connection (two terminals, or a terminal next to its tunnel), the second one started the auto-start forwards again: fixed ports failed with "port in use", and an auto-port or remote forward really started twice and left the first listener running with nothing to stop it. A forward that already runs in another session is now left alone, and the Port forwards section shows each forward's state whichever session holds it.
+- **The quit prompt counts tunnels separately**, so one open tab next to three tunnels no longer reads as "4 active SSH sessions" without explanation.
+
+---
+
 ## [0.112.1] - Signed Fedora packages
 
 The Fedora repository installs again with `gpgcheck=1`: its packages are now signed, not only the metadata.

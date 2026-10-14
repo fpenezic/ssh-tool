@@ -1599,6 +1599,35 @@ everything mobile is behind a build tag or an `isMobile` check.
     `go test -tags lab -run OpenVPNLabLocalProxy` checks both directions:
     the VPN target through the gateway, a LAN container not through it.
 
+109. **A tunnel session has no shell, and the resolved `tunnel_only` is not
+    how a session runs.** The tunnel manager (`app_tunnels.go`) opens a
+    saved connection through `sshConnectWith(..., tunnel=true)`, which sets
+    `ResolvedSettings.TunnelOnly`; `sshlayer.Connect` then skips
+    `NewSession`/`RequestPty`/`Shell` and `waitTunnel` waits on the target
+    client instead, so `stdin`/`channel` are nil and `Write` errors. The
+    resolved value (folder inheritance) only says what the connection IS -
+    its default action - so every other `sshlayer.Connect` caller sets it
+    to false itself: the synthetic path (`connectSynthetic`, inventory
+    hosts + quick connect) and the VNC bridge. Miss that on a new connect
+    path and a folder's `tunnel_only` gives you a tab over a session with
+    no shell. Related rules:
+    - `sessionMeta.tunnel` keeps tunnel sessions out of
+      `SshActiveSessions`, which every window's tab recovery reads. The
+      meta is written BEFORE `pool.Add`, else a window recovering at that
+      moment builds a tab for it.
+    - A tunnel's close hook goes to `tunnelSessionClosed`, not
+      `spawnReconnect`. The tunnel loop retries only `tunnelRetryable`
+      (network) failures: a login or host-key failure retried every
+      minute would put its prompt up every minute.
+    - The forward pool keys listeners by SPEC id, so a spec may run in
+      one session at a time; `forwardsAutoStartFor` and
+      `restoreForwardsOnReconnect` skip specs running anywhere
+      (`forwards.List("")`), and `PortForwards.svelte` reads live state
+      the same way, not per session.
+    - `TunnelsList` stops tunnels whose connection row is gone; the
+      frontend lists on every tree reload, which covers deletes from the
+      UI, MCP plans and sync pulls alike.
+
 ---
 
 # Archive
