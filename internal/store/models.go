@@ -155,6 +155,16 @@ type InheritableSettings struct {
 	// first ride the previous hop's SSH channel and need no network
 	// of their own.
 	NetworkProfileID *string `json:"network_profile_id,omitempty"`
+	// TunnelOnly marks a connection that exists for its port forwards (the
+	// `ssh -N` case): the default action starts it in the tunnel manager -
+	// no shell, no PTY, no tab - instead of opening a terminal. A terminal
+	// is still one right-click away. Tri-state inheritance so a folder of
+	// tunnels sets it once.
+	TunnelOnly *bool `json:"tunnel_only,omitempty"`
+	// TunnelAutostart starts the tunnel when the app starts (once the vault
+	// is open). Only meaningful when TunnelOnly resolves true. Tri-state
+	// inheritance.
+	TunnelAutostart *bool `json:"tunnel_autostart,omitempty"`
 }
 
 // JumpHostOverride is tagged-union with two variants: "none" (explicit
@@ -265,6 +275,12 @@ type ResolvedSettings struct {
 	// the userspace WireGuard tunnel of this network profile. An
 	// explicit "" override normalizes to nil here.
 	NetworkProfileID *string `json:"network_profile_id"`
+	// TunnelOnly / TunnelAutostart: see InheritableSettings. The SSH layer
+	// reads TunnelOnly as "open no shell"; the app sets it per connect (a
+	// tunnel-only connection can still be opened as a terminal), so the
+	// resolved value is what the connection is, not how this session runs.
+	TunnelOnly      bool `json:"tunnel_only"`
+	TunnelAutostart bool `json:"tunnel_autostart"`
 	// PasswordOverride carries a per-connection plaintext password resolved
 	// from the vault by app.go before passing to the SSH layer. Never
 	// serialised to JSON (not shown in the resolved-settings preview).

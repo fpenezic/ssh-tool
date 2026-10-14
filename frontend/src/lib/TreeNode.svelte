@@ -13,7 +13,7 @@
   import { api, type Folder } from "./api";
   import TreeNodeSelf from "./TreeNode.svelte";
   import Icon from "./Icon.svelte";
-  import { IconFolder, IconHost, IconLoading, IconX, IconStar, IconGlobe, dynamicEntryIcon,
+  import { IconFolder, IconHost, IconTunnel, IconLoading, IconX, IconStar, IconGlobe, dynamicEntryIcon,
     IconFolderPlus, IconKey, IconPencil, IconTrash, IconSettings, IconRefresh, IconPlay,
     IconExternalLink, IconMonitor, IconCopy, IconDownload, IconMoveToFolder, IconTerminal } from "./iconMap";
   import { computeIntent, isInvalidDrop, applyDrop, applyMultiDrop, type DragKind, type DropIntent } from "./treeDnd";
@@ -21,6 +21,7 @@
   import { contextMenu } from "./contextMenu.svelte.ts";
   import { exportModal } from "./exportModal.svelte.ts";
   import { connectionActions } from "./connectionActions.svelte";
+  import { tunnels } from "./tunnels.svelte.ts";
   import { dynEditor } from "./dynEditor.svelte";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
@@ -574,12 +575,14 @@
     if (!selection.isConnectionSelected(conn.id)) selection.selectConnection(conn.id);
     const ids = selection.selectedConnectionIds();
     const allFav = ids.every((id) => tree.connectionById(id)?.favorite);
+    const allTunnels = ids.every((id) => tunnels.isTunnel(id));
     contextMenu.show(e, [
-      {
+      ...connectionActions.tunnelMenuItems(ids),
+      ...(allTunnels ? [] : [{
         label: ids.length > 1 ? `Connect all (${ids.length})` : "Connect",
         iconComponent: IconPlay,
         onSelect: () => connectionActions.connectMany(ids),
-      },
+      }]),
       ...(ids.length === 1 ? [{
         label: "Open in external terminal",
         iconComponent: IconExternalLink,
@@ -1204,6 +1207,10 @@
             />
           {:else}
             <span class="name">{conn.name}</span>
+            {#if tunnels.byConnection(conn.id)}
+              {@const tun = tunnels.byConnection(conn.id)!}
+              <span class="tun-badge tun-{tun.state}" title="Tunnel: {tun.state}{tun.error ? ` - ${tun.error}` : ""}"><IconTunnel size={11} /></span>
+            {/if}
           {/if}
           {#if conn.favorite}<span class="fav" title="Favourite"><IconStar size={11} fill="var(--yellow)" /></span>{/if}
           {#if bastionMark(conn.id)}
@@ -1401,6 +1408,11 @@
     margin-left: 0.3rem;
   }
   .conn-hint { color: var(--yellow); font-size: 0.72rem; margin-left: 0.3rem; }
+  /* Tunnel-only connection: state of its tunnel (app_tunnels.go). */
+  .tun-badge { display: inline-flex; align-items: center; margin-left: 0.3rem; color: var(--overlay0); flex-shrink: 0; }
+  .tun-badge.tun-connected { color: var(--green); }
+  .tun-badge.tun-connecting, .tun-badge.tun-reconnecting { color: var(--yellow); }
+  .tun-badge.tun-error { color: var(--red); }
   .fav { color: var(--yellow); font-size: 0.78rem; margin-left: 0.25rem; }
   .conn-err  { color: var(--red); font-size: 0.78rem; margin-left: 0.3rem; cursor: help; }
 

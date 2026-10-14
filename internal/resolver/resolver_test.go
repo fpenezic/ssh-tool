@@ -339,3 +339,25 @@ func TestResolveTrimsHostname(t *testing.T) {
 		t.Fatalf("hostname = %q", rs.Hostname)
 	}
 }
+
+func TestTunnelOnlyInheritedAndOverridden(t *testing.T) {
+	// A folder of tunnels: children inherit tunnel_only and autostart.
+	f := folder("tunnels", nil, store.InheritableSettings{
+		TunnelOnly:      ptr(true),
+		TunnelAutostart: ptr(true),
+	})
+	c := conn("c1", ptr("tunnels"), "h", store.InheritableSettings{})
+	if r := ResolveWith(c, []store.Folder{f}); !r.TunnelOnly || !r.TunnelAutostart {
+		t.Fatalf("child should inherit tunnel_only + autostart, got %v %v", r.TunnelOnly, r.TunnelAutostart)
+	}
+	// One connection in the folder opts out of the launch start only.
+	c2 := conn("c2", ptr("tunnels"), "h", store.InheritableSettings{TunnelAutostart: ptr(false)})
+	if r := ResolveWith(c2, []store.Folder{f}); !r.TunnelOnly || r.TunnelAutostart {
+		t.Fatalf("autostart override should win, got %v %v", r.TunnelOnly, r.TunnelAutostart)
+	}
+	// Unset everywhere resolves off: a plain connection opens a terminal.
+	c3 := conn("c3", nil, "h", store.InheritableSettings{})
+	if r := ResolveWith(c3, nil); r.TunnelOnly || r.TunnelAutostart {
+		t.Fatalf("default should be off, got %v %v", r.TunnelOnly, r.TunnelAutostart)
+	}
+}

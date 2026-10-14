@@ -10,7 +10,7 @@ import { api } from "./api";
 const KEY = "statusbar_hidden";
 
 export type StatusBarItem =
-  | "workspaces" | "sessions" | "forwards" | "broadcast" | "focus"
+  | "workspaces" | "sessions" | "tunnels" | "forwards" | "broadcast" | "focus"
   | "shell" | "cpu" | "mem" | "disk" | "users";
 
 class StatusBarPrefs {

@@ -13,6 +13,9 @@ import { unwrapRaw } from "./connectErrors";
 import { presenceTakeover, isBusyElsewhere } from "./presenceTakeover.svelte.ts";
 import { EventsOn } from "./wailsRuntime";
 import { connectPrefs, BULK_CONCURRENT, BULK_STAGGER_MS, BULK_CONFIRM_ABOVE } from "./connectPrefs.svelte";
+import { tunnels } from "./tunnels.svelte.ts";
+import type { MenuItem } from "./contextMenu.svelte.ts";
+import { IconPlay, IconStop, IconTunnel, IconTerminal, IconX } from "./iconMap";
 
 // Bulk connect limits come from Settings -> Connection (connectPrefs):
 // confirm above N hosts, at most N handshakes at once, a stagger between
@@ -358,6 +361,8 @@ class ConnectionActionsStore {
   // KVM-over-IP console). The explicit Connect button and batch connects
   // still go through connectOne (SSH); this only governs the default
   // gesture. Falls back to SSH if resolving fails.
+  // A tunnel-only connection starts its tunnel in the tunnel manager (no
+  // tab); "Open terminal" in the right-click menu is the way to a shell.
   async connectDefault(id: string): Promise<boolean> {
     const c = tree.connectionById(id);
     if (!c) return false;
@@ -365,6 +370,10 @@ class ConnectionActionsStore {
     if (c.protocol === "web") return this.openWeb(c.id);
     try {
       const r = await api.connectionsResolve(id);
+      if (r?.tunnel_only) {
+        this.startTunnelDefault(c);
+        return true;
+      }
       if (r?.vnc_enabled && r?.vnc_default) {
         return this.openVncConnection(id);
       }
@@ -514,8 +523,69 @@ class ConnectionActionsStore {
 
   // Connect to many connections. Pushes a tab per success; failures
   // land in lastConnectError keyed by connectionID.
+  // Double-click / Enter on a tunnel: start it, or say it is already up.
+  // Never stops it - a stray double-click must not drop a tunnel.
+  private startTunnelDefault(c: Connection) {
+    const t = tunnels.byConnection(c.id);
+    if (t && tunnels.running(t)) {
+      toast.info(`Tunnel ${c.name} is ${t.state} - click to open the Tunnels panel`, 3000, openTunnelsPanel);
+      return;
+    }
+    void tunnels.start(c.id);
+    toast.info(`Starting tunnel ${c.name}...`, 2500, openTunnelsPanel);
+  }
+
+  // Right-click entries for tunnel connections, shown above the usual ones.
+  // Tunnels in the selection get start/stop; "Open terminal" opens a shell
+  // on a single tunnel connection, which the default action no longer does.
+  tunnelMenuItems(ids: string[]): MenuItem[] {
+    const tun = ids.map((id) => tunnels.byConnection(id)).filter((t) => !!t);
+    if (tun.length === 0) return [];
+    const items: MenuItem[] = [];
+    const stopped = tun.filter((t) => !tunnels.running(t));
+    const running = tun.filter((t) => tunnels.running(t));
+    if (stopped.length > 0) {
+      items.push({
+        label: stopped.length > 1 ? `Start ${stopped.length} tunnels` : "Start tunnel",
+        iconComponent: IconPlay,
+        onSelect: () => { for (const t of stopped) void tunnels.start(t.connection_id); },
+      });
+    }
+    if (running.length > 0) {
+      items.push({
+        label: running.length > 1 ? `Stop ${running.length} tunnels` : "Stop tunnel",
+        iconComponent: IconStop,
+        onSelect: () => { for (const t of running) void tunnels.stop(t.connection_id); },
+      });
+    }
+    const failed = tun.filter((t) => t.state === "error");
+    if (failed.length > 0) {
+      items.push({
+        label: failed.length > 1 ? `Clear ${failed.length} tunnel errors` : "Clear tunnel error",
+        iconComponent: IconX,
+        onSelect: () => { for (const t of failed) void tunnels.stop(t.connection_id); },
+      });
+    }
+    items.push({ label: "Show in Tunnels panel", iconComponent: IconTunnel, onSelect: openTunnelsPanel });
+    if (ids.length === 1) {
+      items.push({ label: "Open terminal", iconComponent: IconTerminal, onSelect: () => void this.connectOne(ids[0]) });
+    }
+    return items;
+  }
+
   async connectMany(ids: string[]) {
+    // Tunnels in the selection start in the tunnel manager; the rest open
+    // terminals as before.
+    const tunnelIds = ids.filter((id) => tunnels.isTunnel(id));
+    for (const id of tunnelIds) void tunnels.start(id);
+    if (tunnelIds.length > 0) {
+      toast.info(
+        tunnelIds.length > 1 ? `Starting ${tunnelIds.length} tunnels...` : "Starting tunnel...",
+        2500, openTunnelsPanel,
+      );
+    }
     const conns = ids
+      .filter((id) => !tunnels.isTunnel(id))
       .map((id) => tree.connectionById(id))
       .filter((c): c is Connection => !!c);
     if (conns.length === 0) return;
@@ -956,3 +1026,9 @@ function collectCredFolderVictims(
 }
 
 export const connectionActions = new ConnectionActionsStore();
+
+// The Tunnels panel lives in the status bar; anything else opens it with
+// this event (same pattern as "vault-unlock-now").
+export function openTunnelsPanel() {
+  window.dispatchEvent(new CustomEvent("open-tunnels-panel"));
+}

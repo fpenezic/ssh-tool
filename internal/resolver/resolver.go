@@ -109,6 +109,8 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		VncUseTunnel:     firstNonNilBool(over.VncUseTunnel, base.VncUseTunnel),
 		VncDefault:       firstNonNilBool(over.VncDefault, base.VncDefault),
 		NetworkProfileID: firstNonNil(over.NetworkProfileID, base.NetworkProfileID),
+		TunnelOnly:       firstNonNilBool(over.TunnelOnly, base.TunnelOnly),
+		TunnelAutostart:  firstNonNilBool(over.TunnelAutostart, base.TunnelAutostart),
 		SSHOptions:       mergeMap(base.SSHOptions, over.SSHOptions),
 		EnvVars:          mergeMap(base.EnvVars, over.EnvVars),
 	}
@@ -218,6 +220,8 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 		VncUseTunnel:     s.VncUseTunnel != nil && *s.VncUseTunnel,
 		VncDefault:       s.VncDefault != nil && *s.VncDefault,
 		NetworkProfileID: netProfile,
+		TunnelOnly:       s.TunnelOnly != nil && *s.TunnelOnly,
+		TunnelAutostart:  s.TunnelAutostart != nil && *s.TunnelAutostart,
 	}
 }
 

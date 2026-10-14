@@ -113,6 +113,8 @@ export {
     TcpdumpSnapshotResult,
     TcpdumpStartInput,
     TotpCode,
+    TunnelForwardInfo,
+    TunnelInfo,
     UpdateCheckResult,
     VncSession,
     WindowTarget

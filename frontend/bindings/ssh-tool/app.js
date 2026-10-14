@@ -4415,6 +4415,53 @@ export function TcpdumpStop(dumpID) {
 }
 
 /**
+ * TunnelStart brings a tunnel-only connection's tunnel up. It returns once
+ * the start is queued; progress and failure arrive through tunnels_changed
+ * and TunnelsList, since a connect can wait on a host-key or login prompt for
+ * as long as the user takes. Starting a tunnel that is already up or on its
+ * way up is a no-op; starting a failed one tries again.
+ * @param {string} connectionID
+ * @returns {$CancellablePromise<void>}
+ */
+export function TunnelStart(connectionID) {
+    return $Call.ByID(1895896037, connectionID);
+}
+
+/**
+ * TunnelStop takes a tunnel down: cancels a pending connect or reconnect,
+ * then disconnects the session. A no-op for a stopped tunnel.
+ * @param {string} connectionID
+ * @returns {$CancellablePromise<void>}
+ */
+export function TunnelStop(connectionID) {
+    return $Call.ByID(1402901687, connectionID);
+}
+
+/**
+ * TunnelsAutostart starts every tunnel marked "start on app launch". The
+ * frontend calls it each time the vault gate is passed. The first call
+ * starts them all; later calls (a UI reload, an unlock after "Skip") only
+ * retry the ones that failed on a locked vault, so a tunnel the user
+ * stopped by hand stays stopped. Returns how many it started.
+ * @returns {$CancellablePromise<number>}
+ */
+export function TunnelsAutostart() {
+    return $Call.ByID(3787997569);
+}
+
+/**
+ * TunnelsList returns every tunnel-only connection plus any tunnel still
+ * running for a connection that has since stopped being one, sorted by
+ * folder path and name.
+ * @returns {$CancellablePromise<$models.TunnelInfo[]>}
+ */
+export function TunnelsList() {
+    return $Call.ByID(1051561308).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType215($result);
+    }));
+}
+
+/**
  * URLSchemeIntegration reports the handler registration AND whether it
  * still points at this binary. Installing to a per-user location moves
  * the executable, and the registration keeps pointing at wherever it
@@ -4512,7 +4559,7 @@ export function VaultLock(forgetSidecar) {
  */
 export function VaultStatus() {
     return $Call.ByID(704376449).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType214($result);
+        return $$createType216($result);
     }));
 }
 
@@ -4559,7 +4606,7 @@ export function VncLastError(sessionID) {
  */
 export function VncOpenConnection(connectionID) {
     return $Call.ByID(40425702, connectionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType216($result);
+        return $$createType218($result);
     }));
 }
 
@@ -4574,7 +4621,7 @@ export function VncOpenConnection(connectionID) {
  */
 export function VncOpenPinnedProxmox(connectionID) {
     return $Call.ByID(3943515215, connectionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType216($result);
+        return $$createType218($result);
     }));
 }
 
@@ -4589,7 +4636,7 @@ export function VncOpenPinnedProxmox(connectionID) {
  */
 export function VncOpenProxmox(folderID, entryID) {
     return $Call.ByID(2470244949, folderID, entryID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType216($result);
+        return $$createType218($result);
     }));
 }
 
@@ -4601,7 +4648,7 @@ export function VncOpenProxmox(folderID, entryID) {
  */
 export function VncSessionList() {
     return $Call.ByID(1649682954).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType217($result);
+        return $$createType219($result);
     }));
 }
 
@@ -4632,7 +4679,7 @@ export function WgBindPhysicalSet(on) {
  */
 export function WindowAcceptTabDrag() {
     return $Call.ByID(1574582034).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType219($result);
+        return $$createType221($result);
     }));
 }
 
@@ -4706,7 +4753,7 @@ export function WindowDetachTabAt(tabID, screenX, screenY, sessions, layout) {
  */
 export function WindowListTargets(callerName) {
     return $Call.ByID(2387681781, callerName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType221($result);
+        return $$createType223($result);
     }));
 }
 
@@ -4774,7 +4821,7 @@ export function WindowStartTabDrag(tabID, sessions, layout) {
  */
 export function WorkspaceCreate(name, layoutJSON) {
     return $Call.ByID(2050853866, name, layoutJSON).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType223($result);
+        return $$createType225($result);
     }));
 }
 
@@ -4804,7 +4851,7 @@ export function WorkspaceTouchLastOpened(id) {
  */
 export function WorkspaceUpdate(id, name, layoutJSON) {
     return $Call.ByID(1777295735, id, name, layoutJSON).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType223($result);
+        return $$createType225($result);
     }));
 }
 
@@ -4815,7 +4862,7 @@ export function WorkspaceUpdate(id, name, layoutJSON) {
  */
 export function WorkspacesList() {
     return $Call.ByID(3941184719).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType224($result);
+        return $$createType226($result);
     }));
 }
 
@@ -5034,14 +5081,16 @@ const $$createType210 = $models.TcpdumpProbeResult.createFrom;
 const $$createType211 = $Create.Nullable($$createType210);
 const $$createType212 = $models.TcpdumpSnapshotResult.createFrom;
 const $$createType213 = $Create.Nullable($$createType212);
-const $$createType214 = creds$0.Status.createFrom;
-const $$createType215 = $models.VncSession.createFrom;
-const $$createType216 = $Create.Nullable($$createType215);
-const $$createType217 = $Create.Array($$createType215);
-const $$createType218 = $models.TabDragPayload.createFrom;
-const $$createType219 = $Create.Nullable($$createType218);
-const $$createType220 = $models.WindowTarget.createFrom;
-const $$createType221 = $Create.Array($$createType220);
-const $$createType222 = store$0.Workspace.createFrom;
-const $$createType223 = $Create.Nullable($$createType222);
-const $$createType224 = $Create.Array($$createType222);
+const $$createType214 = $models.TunnelInfo.createFrom;
+const $$createType215 = $Create.Array($$createType214);
+const $$createType216 = creds$0.Status.createFrom;
+const $$createType217 = $models.VncSession.createFrom;
+const $$createType218 = $Create.Nullable($$createType217);
+const $$createType219 = $Create.Array($$createType217);
+const $$createType220 = $models.TabDragPayload.createFrom;
+const $$createType221 = $Create.Nullable($$createType220);
+const $$createType222 = $models.WindowTarget.createFrom;
+const $$createType223 = $Create.Array($$createType222);
+const $$createType224 = store$0.Workspace.createFrom;
+const $$createType225 = $Create.Nullable($$createType224);
+const $$createType226 = $Create.Array($$createType224);

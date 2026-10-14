@@ -50,6 +50,7 @@
   import ConfirmModal from "./lib/ConfirmModal.svelte";
   import PresenceTakeoverModal from "./lib/PresenceTakeoverModal.svelte";
   import { connectionActions } from "./lib/connectionActions.svelte";
+  import { tunnels } from "./lib/tunnels.svelte.ts";
   import DetachedWindow from "./lib/DetachedWindow.svelte";
   import LogTailWindow from "./lib/LogTailWindow.svelte";
   import ResizeHandle from "./lib/ResizeHandle.svelte";
@@ -358,6 +359,9 @@
   // sessions. Backend cancels the close and emits "quit_request"; we
   // surface a modal and call ConfirmQuit() if the user accepts.
   let quitPromptCount = $state<number | null>(null);
+  // Tunnels have no tab, so say how many of the sessions the count holds
+  // are tunnels - otherwise one open tab can read as "4 sessions".
+  const quitTunnels = $derived(tunnels.list.filter((t) => t.session_id).length);
   EventsOn("quit_request", (count: any) => {
     quitPromptCount = typeof count === "number" ? count : Number(count ?? 0);
     api.requestAttention().catch(() => {});
@@ -1189,6 +1193,11 @@
     // if recovery brought anything back this was a UI reload and the
     // backend sessions are already live).
     lastSession.restoreOnStartup(recovered).catch(console.warn).finally(() => {
+      // Tunnels marked "start on app launch". After the restore prompt so
+      // a host-key or login prompt from a tunnel does not stack on it;
+      // the backend acts once per process, so a UI reload or a second
+      // unlock does not restart tunnels stopped by hand.
+      api.tunnelsAutostart().catch(console.warn);
       // Ask about installing only once the startup flow is done: the
       // vault is open, the tree is loaded and the session-restore
       // prompt (which is also a dialog) has had its turn. Stacking two
@@ -1578,7 +1587,7 @@
       <div class="quit-modal" role="dialog" aria-modal="true">
         <h2>Quit ssh-tool?</h2>
         <p>
-          {quitPromptCount} active SSH session{quitPromptCount === 1 ? "" : "s"}
+          {quitPromptCount} active SSH session{quitPromptCount === 1 ? "" : "s"}{#if quitTunnels > 0}{" "}({quitTunnels === quitPromptCount ? "all" : quitTunnels} of them tunnel{quitTunnels === 1 ? "" : "s"}){/if}
           will be disconnected.
         </p>
         <div class="actions">

@@ -333,7 +333,7 @@ func ValidOverrideField(name string) bool {
 		"color_tag", "broadcast_group_id", "keepalive_interval", "terminal_type",
 		"initial_command", "initial_command_line_delay_ms", "auto_reconnect",
 		"verbose", "probe_liveness", "vnc_enabled", "vnc_port", "vnc_use_tunnel",
-		"vnc_default", "network_profile_id":
+		"vnc_default", "network_profile_id", "tunnel_only", "tunnel_autostart":
 		return true
 	}
 	return false

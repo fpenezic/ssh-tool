@@ -287,6 +287,9 @@ func (a *App) VncOpenConnection(connectionID string) (*VncSession, error) {
 			return nil, fmt.Errorf("VNC tunnel needs SSH credentials on the connection")
 		}
 		addr := fmt.Sprintf("127.0.0.1:%d", port)
+		// The resolved flag is about the connection's default action; the
+		// VNC bridge keeps opening its session the way it always has.
+		settings.TunnelOnly = false
 		open = func(ctx context.Context) (sshlayer.VncUpstream, error) {
 			sink := vncNullSink{}
 			sess, e := sshlayer.Connect(context.Background(), a.db, a.vault, settings, sink, a.makeHostKeyCallback(), a.makeAlgoLookup(), 0, nil)

@@ -73,6 +73,10 @@ export interface InheritableSettings {
   // "" = explicitly direct (breaks an inherited profile); id = a
   // network_profiles row; absent = inherit.
   network_profile_id?: string;
+  // Tunnel manager: the connection runs as a shell-less tunnel (no tab)
+  // and, with tunnel_autostart, starts with the app. Absent = inherit.
+  tunnel_only?: boolean;
+  tunnel_autostart?: boolean;
 }
 
 export interface Folder {
@@ -138,6 +142,8 @@ export interface ResolvedSettings {
   vnc_use_tunnel: boolean;
   vnc_default: boolean;
   network_profile_id: string | null;
+  tunnel_only: boolean;
+  tunnel_autostart: boolean;
 }
 
 // ----- Network profiles (userspace WireGuard) -----
@@ -1604,6 +1610,13 @@ export const api = {
   forwardsPortCheck: (addr: string, port: number, excludeId = "") =>
     G.ForwardsPortCheck(addr, port, excludeId) as unknown as Promise<PortCheckResult>,
   forwardsStop: (forwardId: string) => G.ForwardsStop(forwardId),
+
+  // Tunnel manager (app_tunnels.go). Start/stop return at once; state
+  // changes arrive as the "tunnels_changed" event.
+  tunnelsList: () => G.TunnelsList() as unknown as Promise<TunnelInfo[]>,
+  tunnelStart: (connectionId: string) => G.TunnelStart(connectionId),
+  tunnelStop: (connectionId: string) => G.TunnelStop(connectionId),
+  tunnelsAutostart: () => G.TunnelsAutostart() as unknown as Promise<number>,
   sshGiveInternet: (sessionId: string, remotePort: number, allowInternal = false) =>
     G.SshGiveInternet(sessionId, remotePort, allowInternal) as unknown as Promise<GiveInternetResult>,
   sshLaunchBrowser: (forwardId: string, url: string) =>
@@ -2620,6 +2633,39 @@ export interface ForwardStatus {
   bytes_out: number;
   started_at: number;
   moved_from?: number;
+}
+
+export type TunnelState = "stopped" | "connecting" | "connected" | "reconnecting" | "error";
+
+export interface TunnelForwardInfo {
+  id: string;
+  kind: "local" | "remote" | "dynamic";
+  local_addr: string;
+  local_port: number;
+  remote_host: string;
+  remote_port: number;
+  description: string;
+  auto_start: boolean;
+  // Live listener state, "" while the forward is not running.
+  state: "" | "listening" | "stopped" | "error";
+  error?: string;
+  bytes_in: number;
+  bytes_out: number;
+}
+
+export interface TunnelInfo {
+  connection_id: string;
+  name: string;
+  hostname: string;
+  folder_path: string;
+  autostart: boolean;
+  state: TunnelState;
+  session_id?: string;
+  error?: string;
+  since: number;
+  attempt: number;
+  next_retry: number;
+  forwards: TunnelForwardInfo[];
 }
 
 export interface ForwardCreateInput {

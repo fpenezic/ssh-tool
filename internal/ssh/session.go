@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -304,6 +305,43 @@ type Session struct {
 	// cmdMarks records where in the output stream each command was run;
 	// see internal/cmdmarks.
 	cmdMarks cmdmarks.Log
+
+	// tunnelOnly: the session carries port forwards and nothing else (the
+	// `ssh -N` case). No shell channel, so stdin and channel stay nil and
+	// the session lives as long as the target client does.
+	tunnelOnly bool
+}
+
+// TunnelOnly reports whether this session was opened without a shell.
+func (s *Session) TunnelOnly() bool { return s.tunnelOnly }
+
+// waitTunnel is the wait goroutine of a tunnel-only session. With no shell
+// channel to wait on, the session ends when the target client's transport
+// does: a server or network drop, the keepalive giving up (it closes the
+// transport), or Disconnect closing the stack. Mirrors the shell path's
+// teardown order.
+func waitTunnel(s *Session, target *ssh.Client, sink EventSink) {
+	err := target.Wait()
+	reason := "remote closed"
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
+		reason = fmt.Sprintf("session ended: %v", err)
+	}
+	s.closedOnce.Do(func() {
+		close(s.closed)
+		s.CloseSFTP()
+		s.mu.Lock()
+		onClose := s.onClose
+		s.mu.Unlock()
+		if onClose != nil {
+			onClose(s.ID)
+		}
+	})
+	sink.EmitState(s.ID, SessionState{State: "disconnected", Reason: reason})
+	s.mu.Lock()
+	stack := s.stack
+	s.mu.Unlock()
+	cleanup(stack)
+	s.releaseSharedPrefix()
 }
 
 // Scrollback returns a snapshot of the accumulated PTY output bytes together
@@ -768,10 +806,28 @@ func Connect(
 		log.Printf("ssh: hop %d (%s) authenticated", i, h.Label)
 		debug("%s: authenticated", h.Label)
 	}
+	target := clients[len(clients)-1]
+
+	if settings.TunnelOnly {
+		debug("all hops up, tunnel only: no shell on target")
+		s := &Session{
+			ID:            sessionID,
+			conn:          rawConn,
+			stack:         clients,
+			closed:        make(chan struct{}),
+			NetworkVia:    networkVia,
+			releasePrefix: releasePrefix,
+			tunnelOnly:    true,
+		}
+		go waitTunnel(s, target, sink)
+		go runKeepalive(s, keepaliveInterval(settings.KeepaliveInterval))
+		sink.EmitState(sessionID, SessionState{State: "connected"})
+		connectDone = true
+		return s, nil
+	}
+
 	debug("all hops up, opening PTY shell on target")
 	progress("Opening shell")
-
-	target := clients[len(clients)-1]
 
 	sess, err := target.NewSession()
 	if err != nil {
@@ -1242,6 +1298,9 @@ func (s *Session) CommandMarks(from, to uint64) []cmdmarks.Mark {
 }
 
 func (s *Session) Write(data []byte) error {
+	if s.tunnelOnly {
+		return fmt.Errorf("tunnel-only session has no shell")
+	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	_, err := s.stdin.Write(data)

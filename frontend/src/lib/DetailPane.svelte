@@ -340,6 +340,8 @@
     networkProfile: string;
     initialCommand: string;
     initialCommandDelay: string;
+    tunnelOnly: string;
+    tunnelAutostart: string;
   } | null>(null);
 
   // Same api_token exclusion as the connection picker, keyed on the folder's
@@ -392,6 +394,8 @@
           folder.settings.initial_command_line_delay_ms !== undefined
             ? String(folder.settings.initial_command_line_delay_ms)
             : "",
+        tunnelOnly: encodeBool(folder.settings.tunnel_only),
+        tunnelAutostart: encodeBool(folder.settings.tunnel_autostart),
       };
     } else {
       editingFolder = null;
@@ -413,6 +417,8 @@
       editingFolder.autoReconnect !== encodeBool(s.auto_reconnect) ||
       editingFolder.verbose !== encodeBool(s.verbose) ||
       editingFolder.probeLiveness !== encodeBool(s.probe_liveness) ||
+      editingFolder.tunnelOnly !== encodeBool(s.tunnel_only) ||
+      editingFolder.tunnelAutostart !== encodeBool(s.tunnel_autostart) ||
       numText(editingFolder.keepalive) !== (s.keepalive_interval !== undefined ? String(s.keepalive_interval) : "") ||
       editingFolder.networkProfile !== encodeNetProfile(s.network_profile_id) ||
       editingFolder.initialCommand !== (s.initial_command ?? "") ||
@@ -442,6 +448,8 @@
     settings.auto_reconnect = decodeBool(editingFolder.autoReconnect);
     settings.verbose = decodeBool(editingFolder.verbose);
     settings.probe_liveness = decodeBool(editingFolder.probeLiveness);
+    settings.tunnel_only = decodeBool(editingFolder.tunnelOnly);
+    settings.tunnel_autostart = decodeBool(editingFolder.tunnelAutostart);
     {
       const k = numText(editingFolder.keepalive);
       if (k === "") {
@@ -490,6 +498,19 @@
   // ----- Connection editing -----
 
   let resolved = $state<ResolvedSettings | null>(null);
+
+  // tunnel_only as the folder chain from folderId upwards sets it (the value
+  // an "(inherit)" choice would get). Walked live from the tree so the
+  // editor reacts to the select before anything is saved.
+  function inheritedTunnelOnly(folderId: string | null | undefined): boolean {
+    for (let i = 0; i < 10000 && folderId; i++) {
+      const f = tree.folderById(folderId);
+      if (!f) break;
+      if (f.settings?.tunnel_only !== undefined && f.settings?.tunnel_only !== null) return !!f.settings.tunnel_only;
+      folderId = f.parent_id;
+    }
+    return false;
+  }
   let resolveErr = $state<string | null>(null);
   let editing = $state<{
     name: string;
@@ -511,11 +532,24 @@
     networkProfile: string;
     initialCommand: string;
     initialCommandDelay: string;
+    tunnelOnly: string;
+    tunnelAutostart: string;
     localShellKind: string;
     localShellDir: string;
     openHidden: boolean;
     tags: string[];
   } | null>(null);
+
+  // "Start tunnel on app launch" only means something for a tunnel, so the
+  // editors show it only while Tunnel only is in effect.
+  const connTunnelOnly = $derived(
+    !!editing && (editing.tunnelOnly === "on" ||
+      (editing.tunnelOnly === "" && inheritedTunnelOnly(conn?.folder_id)))
+  );
+  const folderTunnelOnly = $derived(
+    !!editingFolder && (editingFolder.tunnelOnly === "on" ||
+      (editingFolder.tunnelOnly === "" && inheritedTunnelOnly(folder?.parent_id)))
+  );
 
   // SSH auth credentials for the connection picker. api_token is filtered out
   // (see sshCredOptions) but a value already stored on this connection is
@@ -621,6 +655,8 @@
           conn.overrides?.initial_command_line_delay_ms !== undefined
             ? String(conn.overrides.initial_command_line_delay_ms)
             : "",
+        tunnelOnly: encodeBool(conn.overrides?.tunnel_only),
+        tunnelAutostart: encodeBool(conn.overrides?.tunnel_autostart),
         openHidden: !!conn.open_hidden,
         localShellKind: conn.local_shell_kind ?? "",
         localShellDir: conn.local_shell_dir ?? "",
@@ -658,6 +694,8 @@
       numText(editing.vncPort) !== (o.vnc_port !== undefined ? String(o.vnc_port) : "") ||
       editing.vncTunnel !== encodeBool(o.vnc_use_tunnel) ||
       editing.vncDefault !== encodeBool(o.vnc_default) ||
+      editing.tunnelOnly !== encodeBool(o.tunnel_only) ||
+      editing.tunnelAutostart !== encodeBool(o.tunnel_autostart) ||
       editing.networkProfile !== encodeNetProfile(o.network_profile_id) ||
       editing.initialCommand !== (o.initial_command ?? "") ||
       numText(editing.initialCommandDelay) !==
@@ -763,6 +801,8 @@
     }
     overrides.vnc_use_tunnel = decodeBool(editing.vncTunnel);
     overrides.vnc_default = decodeBool(editing.vncDefault);
+    overrides.tunnel_only = decodeBool(editing.tunnelOnly);
+    overrides.tunnel_autostart = decodeBool(editing.tunnelAutostart);
     overrides.network_profile_id = decodeNetProfile(editing.networkProfile);
     overrides.initial_command = editing.initialCommand.trim() || undefined;
     overrides.initial_command_line_delay_ms = parseDelayMs(editing.initialCommandDelay);
@@ -1430,6 +1470,24 @@
         </select>
       </label>
 
+      <label title="Connections in this folder run as tunnels: no shell and no tab, only their port forwards. Double-click starts the tunnel; the Tunnels panel in the status bar lists them.">Tunnel only
+        <select bind:value={editingFolder.tunnelOnly}>
+          <option value="">(inherit from parent)</option>
+          <option value="on">On - start as a tunnel, no terminal</option>
+          <option value="off">Off - open a terminal</option>
+        </select>
+      </label>
+
+      {#if folderTunnelOnly}
+      <label title="Start these tunnels when the app starts (once the vault is open). Only applies to tunnel-only connections.">Start tunnel on app launch
+        <select bind:value={editingFolder.tunnelAutostart}>
+          <option value="">(inherit from parent)</option>
+          <option value="on">On</option>
+          <option value="off">Off</option>
+        </select>
+      </label>
+      {/if}
+
       <label>Verbose connect log
         <select bind:value={editingFolder.verbose}>
           <option value="">(inherit from parent)</option>
@@ -1818,6 +1876,22 @@
           <option value="off">Off</option>
         </select>
       </label>
+      <label title="Run this connection as a tunnel: no shell and no tab, only its port forwards (like ssh -N). Double-click starts the tunnel; right-click still opens a terminal. The Tunnels panel in the status bar lists it.">Tunnel only
+        <select bind:value={editing.tunnelOnly}>
+          <option value="">(inherit from folder)</option>
+          <option value="on">On - start as a tunnel, no terminal</option>
+          <option value="off">Off - open a terminal</option>
+        </select>
+      </label>
+      {#if connTunnelOnly}
+      <label title="Start this tunnel when the app starts (once the vault is open). Only applies when Tunnel only is on.">Start tunnel on app launch
+        <select bind:value={editing.tunnelAutostart}>
+          <option value="">(inherit from folder)</option>
+          <option value="on">On</option>
+          <option value="off">Off</option>
+        </select>
+      </label>
+      {/if}
       {/if}
       <label title={isWeb ? "Which VPN's browser opens this page. Direct = your normal browser." : "Route the first SSH hop through a userspace VPN tunnel (no TUN adapter, no admin rights)."}>
         Network
@@ -2130,6 +2204,11 @@
               <td>verbose</td>
               <td>{resolved.verbose ? "on" : "off"}</td>
               <td>{ovr.verbose !== undefined ? "override" : "inherited"}</td>
+            </tr>
+            <tr>
+              <td>tunnel only</td>
+              <td>{resolved.tunnel_only ? (resolved.tunnel_autostart ? "on, starts on launch" : "on") : "off"}</td>
+              <td>{ovr.tunnel_only !== undefined || ovr.tunnel_autostart !== undefined ? "override" : "inherited"}</td>
             </tr>
             <tr>
               <td>keepalive</td>
