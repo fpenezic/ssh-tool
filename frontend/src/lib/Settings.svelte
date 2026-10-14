@@ -1619,8 +1619,8 @@
   let npName = $state("");
   let npConf = $state("");
   let npEditingId = $state<string | null>(null);
-  let npEditKind = $state<"wireguard" | "netbird" | "tailscale" | "openconnect" | "openvpn">("wireguard");
-  let npKind = $state<"wireguard" | "netbird" | "tailscale" | "openconnect" | "openvpn">("wireguard");
+  let npEditKind = $state<"wireguard" | "netbird" | "tailscale" | "openconnect" | "openvpn" | "checkpoint">("wireguard");
+  let npKind = $state<"wireguard" | "netbird" | "tailscale" | "openconnect" | "openvpn" | "checkpoint">("wireguard");
   // OpenConnect form fields
   const ocEmpty = (): import("./api").OpenConnectConfig => ({ server: "", flavor: "anyconnect", second_password: "prompt", password_credential_id: "", second_credential_id: "", client_cert_credential_id: "" });
   let oc = $state<import("./api").OpenConnectConfig>(ocEmpty());
@@ -1646,6 +1646,10 @@
   const ovNeedsLogin = $derived(ovText ? /^\s*auth-user-pass\b/m.test(ovText) : !!ov.auth_user_pass);
   const ovChallenge = $derived(ovText ? (ovText.match(/^\s*static-challenge\s+"([^"]*)"/m)?.[1] ?? "") : (ov.static_challenge ?? ""));
   const ovHasCert = $derived(/<cert>/.test(ovText));
+  // Check Point form fields.
+  const cpEmpty = (): import("./api").CheckpointConfig => ({ server: "", second_password: "prompt", password_credential_id: "", second_credential_id: "" });
+  let cp = $state<import("./api").CheckpointConfig>(cpEmpty());
+  let cpNewPassword = $state("");
   // Live tunnel details, per profile, shown on demand.
   let npInfoOpen = $state<Record<string, import("./api").VpnTunnelInfo | null | undefined>>({});
   let npBusy = $state(false);
@@ -1676,6 +1680,7 @@
   const tsInstalled = $derived(plugins.some((p) => p.name === "tailscale" && p.installed));
   const ocInstalled = $derived(plugins.some((p) => p.name === "openconnect" && p.installed));
   const ovInstalled = $derived(plugins.some((p) => p.name === "openvpn" && p.installed));
+  const cpInstalled = $derived(plugins.some((p) => p.name === "checkpoint" && p.installed));
   // Credentials holding a password (vault or an external backend).
   // Client certificate credentials for the OpenConnect profile.
   const certCredOptions = $derived(
@@ -1690,6 +1695,9 @@
   );
   const ovMissing = $derived(
     [!npName.trim() && "a name", !ovText.trim() && "an .ovpn configuration", !ovInstalled && "the OpenVPN plugin"].filter(Boolean).join(", "),
+  );
+  const cpMissing = $derived(
+    [!npName.trim() && "a name", !cp.server.trim() && "the gateway", !cpInstalled && "the Check Point plugin"].filter(Boolean).join(", "),
   );
   const passwordCredOptions = $derived(
     credentials.list
@@ -1935,6 +1943,43 @@
     } catch (e: any) { toast.err(errMsg(e)); }
     finally { npBusy = false; }
   }
+  async function cpStoreInlineSecrets() {
+    if (!cpNewPassword) return;
+    const base = npName.trim() || cp.server.trim();
+    const r = await api.credentialsCreate({
+      kind: "password", name: `${base} - VPN password`, password: cpNewPassword,
+      default_username: cp.username?.trim() || undefined,
+    } as any);
+    cp.password_credential_id = r.credential!.id;
+    cpNewPassword = "";
+    await credentials.load();
+  }
+  function cpConfigFromForm(): import("./api").CheckpointConfig {
+    return { ...cp, server: cp.server.trim(), username: cp.username?.trim(), login_option: cp.login_option?.trim() };
+  }
+  async function npCreateCheckpoint() {
+    npBusy = true;
+    try {
+      await cpStoreInlineSecrets();
+      await api.networkProfileCreateCheckpoint(npName.trim(), cpConfigFromForm());
+      await networkProfiles.load(true);
+      npDone();
+      toast.ok("Check Point profile added");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
+  async function npSaveCheckpoint() {
+    if (!npEditingId) return;
+    npBusy = true;
+    try {
+      await cpStoreInlineSecrets();
+      await api.networkProfileUpdateCheckpoint(npEditingId, npName.trim(), cpConfigFromForm());
+      await networkProfiles.load(true);
+      npDone();
+      toast.ok("Profile saved");
+    } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npBusy = false; }
+  }
   function tunnelDur(sec: number): string {
     const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
     if (h && m) return `${h}h ${m}m`;
@@ -1947,7 +1992,7 @@
   }
   function tunnelInfoText(i: import("./api").VpnTunnelInfo): string {
     const lines = [
-      `type:       ${i.flavor === "openvpn" ? "OpenVPN" : ocFlavorTitle[i.flavor] ?? i.flavor}`,
+      `type:       ${ocFlavorTitle[i.flavor] ?? pluginTitle(i.flavor)}`,
       `server:     ${i.server}${i.gateway ? ` (${i.gateway})` : ""}`,
       `transport:  ${i.transport || "-"}${i.cipher ? `, ${i.cipher}` : ""}`,
       `address:    ${i.addresses.join(", ") || "-"}`,
@@ -2200,6 +2245,11 @@
       ovResetInline();
       return;
     }
+    if (np.kind === "checkpoint") {
+      cp = { ...cpEmpty(), ...(np.checkpoint ?? {}) };
+      cpNewPassword = "";
+      return;
+    }
     if (np.kind === "openconnect") {
       oc = { ...ocEmpty(), ...(np.openconnect ?? {}) };
       ocResetInline();
@@ -2231,6 +2281,7 @@
     ocResetInline();
     ov = ovEmpty();
     ovResetInline();
+    cp = cpEmpty(); cpNewPassword = "";
   }
   function ocResetInline() {
     ocNewPassword = ""; ocCertMode = "pick"; ocCertFile = null; ocCertKeyFile = null;
@@ -2395,7 +2446,7 @@
     if (!np) return;
     if (t === "settings" && npEditingId !== np.id) npStartEdit(np);
     if (t === "proxy") lpLoad(np);
-    if ((t === "details" || t === "overview") && np.status.running && (np.kind === "openconnect" || np.kind === "openvpn")) npRefreshInfo(np);
+    if ((t === "details" || t === "overview") && np.status.running && pluginReportsInfo(np.kind)) npRefreshInfo(np);
   }
   // After a create or save: the list has reloaded; open the profile (a
   // new one on its Overview, a saved one stays on Settings).
@@ -2422,6 +2473,10 @@
       npInfoOpen = { ...npInfoOpen, [np.id]: await api.networkProfileTunnelInfo(np.id) };
     } catch (e: any) { toast.err(errMsg(e)); }
   }
+  // Kinds whose plugin describes the live tunnel itself (Details).
+  function pluginReportsInfo(kind: string): boolean {
+    return kind === "openconnect" || kind === "openvpn" || kind === "checkpoint";
+  }
   function npKindLine(np: NetworkProfileInfo): string {
     if (np.kind === "openconnect") return `OpenConnect - ${ocFlavorTitle[np.openconnect?.flavor ?? "anyconnect"]}`;
     return kindTitle(np.kind);
@@ -2432,6 +2487,7 @@
       case "tailscale": return [kindTitle(np.kind), np.tailscale?.hostname || "ssh-tool", np.tailscale?.control_url].filter(Boolean).join(" - ");
       case "openvpn": return [kindTitle(np.kind), np.openvpn?.server, np.openvpn?.static_key].filter(Boolean).join(" - ");
       case "openconnect": return [npKindLine(np), np.openconnect?.server].filter(Boolean).join(" - ");
+      case "checkpoint": return [kindTitle(np.kind), np.checkpoint?.server, np.checkpoint?.login_option].filter(Boolean).join(" - ");
       default: return [kindTitle(np.kind), np.profile.peers?.[0]?.endpoint].filter(Boolean).join(" - ");
     }
   }
@@ -2455,8 +2511,8 @@
     if (np.status.running) return "Up on this machine. It stops by itself after the idle time without sessions.";
     return "Down. Comes up with the first connection through it.";
   }
-  // WireGuard / NetBird / Tailscale details (OpenConnect and OpenVPN ask
-  // the plugin for theirs).
+  // WireGuard / NetBird / Tailscale details (OpenConnect, OpenVPN and
+  // Check Point ask the plugin for theirs).
   function npStatusText(np: NetworkProfileInfo): string {
     if (!np.status.running) return "The tunnel is down.";
     const st = np.status;
@@ -4179,6 +4235,67 @@
           {#if ovMissing}<span class="hint inline">Needs {ovMissing}.</span>{/if}
         {/if}
       </div>
+    {:else if (npEditingId ? npEditKind : npKind) === "checkpoint"}
+      {#if !cpInstalled}
+        <p class="hint warn-note">
+          The Check Point plugin is not installed. Install it under General > Plugins
+          before creating a Check Point profile.
+        </p>
+      {/if}
+      <div class="oc-form">
+        <label class="oc-field oc-span" title="The gateway's address, as in Endpoint Security VPN or snx (host, or host:port)">
+          <span>Gateway</span>
+          <input bind:value={cp.server} placeholder="vpn.example.com" />
+        </label>
+        <label class="oc-field" title="Blank = the password credential's username, else asked at login">
+          <span>Username</span>
+          <input bind:value={cp.username} placeholder="alice" />
+        </label>
+        <div class="oc-field">
+          <span>Password</span>
+          {#if cpNewPassword || !cp.password_credential_id}
+            <PasswordInput bind:value={cpNewPassword} placeholder={cp.password_credential_id ? "" : "blank = asked at login"} />
+          {/if}
+          {#if !cpNewPassword}
+            <SearchableSelect bind:value={cp.password_credential_id} options={passwordCredOptions} emptyLabel="or pick a stored password…" />
+          {/if}
+        </div>
+        <label class="oc-field" title="When the gateway asks for a further factor after the password, usually a one-time code">
+          <span>One-time code</span>
+          <select bind:value={cp.second_password}>
+            <option value="prompt">Ask at login (hardware / app token)</option>
+            <option value="totp">From Bitwarden / KeePass (TOTP)</option>
+            <option value="credential">Stored password</option>
+          </select>
+        </label>
+        {#if cp.second_password === "totp"}
+          <div class="oc-field" title="Both factors then live in one place - your call">
+            <span>Item with the TOTP</span>
+            <SearchableSelect bind:value={cp.second_credential_id} options={totpCredOptions} placeholder="Search…" emptyLabel="Pick a Bitwarden / KeePass item…" />
+          </div>
+        {:else if cp.second_password === "credential"}
+          <div class="oc-field">
+            <span>Credential with the answer</span>
+            <SearchableSelect bind:value={cp.second_credential_id} options={passwordCredOptions} placeholder="Search…" emptyLabel="Pick a credential…" />
+          </div>
+        {/if}
+        <label class="oc-field" title="The gateway's login option id, when it offers several (vpn_Username_Password is the usual username + password one). Certificate and browser (SAML) logins are not supported yet.">
+          <span>Login option <span class="hint inline">(optional)</span></span>
+          <input bind:value={cp.login_option} placeholder="vpn_Username_Password" />
+        </label>
+      </div>
+      {#if npEditingId && cp.pins?.length}
+        <p class="hint inline">Trusted gateway certificate: <code>{cp.pins[0]}</code> (changing the gateway address forgets it).</p>
+      {/if}
+      <div class="row" style="gap:0.5rem">
+        {#if npEditingId}
+          <button class="primary" onclick={npSaveCheckpoint} disabled={npBusy || !npName.trim() || !cp.server.trim()}>Save changes</button>
+          <button onclick={npRevert}>Revert</button>
+        {:else}
+          <button class="primary" onclick={npCreateCheckpoint} disabled={npBusy || !cpInstalled || !npName.trim() || !cp.server.trim()}>Add profile</button>
+          {#if cpMissing}<span class="hint inline">Needs {cpMissing}.</span>{/if}
+        {/if}
+      </div>
     {:else if (npEditingId ? npEditKind : npKind) === "tailscale"}
       {#if !tsInstalled}
         <p class="hint warn-note">
@@ -4482,6 +4599,7 @@
             <label class="np-kindpick"><input type="radio" bind:group={npKind} value="tailscale" /> Tailscale</label>
             <label class="np-kindpick"><input type="radio" bind:group={npKind} value="openconnect" /> OpenConnect</label>
             <label class="np-kindpick"><input type="radio" bind:group={npKind} value="openvpn" /> OpenVPN</label>
+            <label class="np-kindpick"><input type="radio" bind:group={npKind} value="checkpoint" /> Check Point</label>
           </div>
           {@render npForm()}
 
@@ -4497,7 +4615,7 @@
               <span class="np-pill">down</span>
             {/if}
             {#if npRemoteOwners[np.id]}
-              <span class="np-pill remote" title={np.kind === "wireguard" || np.kind === "openconnect" || np.kind === "openvpn" ? "This tunnel is live on another synced machine. Only one machine can hold it at a time." : "This tunnel is also up on another synced machine."}>
+              <span class="np-pill remote" title={np.kind === "wireguard" || pluginReportsInfo(np.kind) ? "This tunnel is live on another synced machine. Only one machine can hold it at a time." : "This tunnel is also up on another synced machine."}>
                 up on {npRemoteOwners[np.id].machine_name}
               </span>
             {/if}
@@ -4625,7 +4743,7 @@
             {/if}
 
           {:else if npTab === "details"}
-            {#if np.kind === "openconnect" || np.kind === "openvpn"}
+            {#if pluginReportsInfo(np.kind)}
               {@const ti = npInfoOpen[np.id]}
               {#if !np.status.running}
                 <p class="hint">The tunnel is down.</p>

@@ -192,6 +192,8 @@ func (a *App) ensureTunnel(row *store.NetworkProfile) (tunnelDialer, error) {
 		return a.ensureOpenConnectTunnel(row)
 	case kindOpenVPN:
 		return a.ensureOpenVPNTunnel(row)
+	case kindCheckpoint:
+		return a.ensureCheckpointTunnel(row)
 	default:
 		return a.ensureWgTunnel(row.ID)
 	}
@@ -708,6 +710,7 @@ type NetworkProfileInfo struct {
 	Tailscale           *TailscaleConfig   `json:"tailscale,omitempty"`   // Tailscale only
 	OpenConnect         *OpenConnectConfig `json:"openconnect,omitempty"` // OpenConnect only
 	OpenVPN             *OpenVPNConfig     `json:"openvpn,omitempty"`     // OpenVPN only
+	Checkpoint          *CheckpointConfig  `json:"checkpoint,omitempty"`  // Check Point only
 	Status              wg.Status          `json:"status"`
 	CreatedAt           int64              `json:"created_at"`
 	UpdatedAt           int64              `json:"updated_at"`
@@ -743,6 +746,10 @@ func (a *App) infoFor(row store.NetworkProfile) NetworkProfileInfo {
 		var ov OpenVPNConfig
 		_ = json.Unmarshal([]byte(row.ConfigJSON), &ov)
 		info.OpenVPN = &ov
+	case kindCheckpoint:
+		var cp CheckpointConfig
+		_ = json.Unmarshal([]byte(row.ConfigJSON), &cp)
+		info.Checkpoint = &cp
 	default:
 		_ = json.Unmarshal([]byte(row.ConfigJSON), &info.Profile)
 		info.Profile.ID = row.ID

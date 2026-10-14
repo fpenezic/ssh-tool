@@ -1510,7 +1510,7 @@
         </select>
       </label>
 
-      <label title="Route the first SSH hop of every connection in this folder through a userspace VPN tunnel (WireGuard, NetBird, Tailscale or OpenConnect).">
+      <label title="Route the first SSH hop of every connection in this folder through a userspace VPN tunnel (WireGuard, NetBird, Tailscale, OpenConnect, OpenVPN or Check Point).">
         Network (inherited by children)
         <select bind:value={editingFolder.networkProfile}>
           <option value="">(inherit from parent)</option>

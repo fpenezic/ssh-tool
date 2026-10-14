@@ -19,6 +19,7 @@ export function pluginTitle(name: string): string {
     case "tailscale": return "Tailscale";
     case "openconnect": return "OpenConnect";
     case "openvpn": return "OpenVPN";
+    case "checkpoint": return "Check Point";
     case "wireguard": return "WireGuard";
     default: return name;
   }

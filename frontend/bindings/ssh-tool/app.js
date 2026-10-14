@@ -2378,6 +2378,17 @@ export function NetworkProfileCreate(name, confText) {
 }
 
 /**
+ * NetworkProfileCreateCheckpoint stores a Check Point profile.
+ * @param {$models.CheckpointProfileInput} $in
+ * @returns {$CancellablePromise<$models.NetworkProfileInfo | null>}
+ */
+export function NetworkProfileCreateCheckpoint($in) {
+    return $Call.ByID(3876964068, $in).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType130($result);
+    }));
+}
+
+/**
  * @param {string} name
  * @param {string} managementURL
  * @param {string} deviceName
@@ -2616,6 +2627,20 @@ export function NetworkProfileTunnelInfo(id) {
  */
 export function NetworkProfileUpdate(id, name, confText) {
     return $Call.ByID(1523773567, id, name, confText).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType130($result);
+    }));
+}
+
+/**
+ * NetworkProfileUpdateCheckpoint edits a Check Point profile, keeping its
+ * policy and trusted certificate (unless the gateway address changed).
+ * Restarts the helper so the new settings take effect.
+ * @param {string} id
+ * @param {$models.CheckpointProfileInput} $in
+ * @returns {$CancellablePromise<$models.NetworkProfileInfo | null>}
+ */
+export function NetworkProfileUpdateCheckpoint(id, $in) {
+    return $Call.ByID(2048692877, id, $in).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType130($result);
     }));
 }

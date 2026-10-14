@@ -233,6 +233,21 @@ export interface OpenVPNConfig {
   paused?: boolean;
 }
 
+export interface CheckpointConfig {
+  kind?: string;
+  /** The gateway, host or host:port. */
+  server: string;
+  /** The gateway's login option id; blank = its username + password one. */
+  login_option?: string;
+  pins?: string[];
+  username?: string;
+  password_credential_id: string;
+  second_password?: "prompt" | "credential" | "totp";
+  second_credential_id: string;
+  mode?: "always" | "auto";
+  paused?: boolean;
+}
+
 /** A profile exposed as a local SOCKS5 proxy (CI runner gateway). */
 export interface LocalProxyConfig {
   enabled: boolean;
@@ -269,7 +284,7 @@ export interface LocalProxyDetails {
   listening: boolean;
 }
 
-/** What the OpenConnect / OpenVPN helper reports about a live tunnel. */
+/** What the OpenConnect / OpenVPN / Check Point helper reports about a live tunnel. */
 export interface VpnTunnelInfo {
   flavor: string;
   server: string;
@@ -294,7 +309,7 @@ export interface VpnTunnelInfo {
 export interface NetworkProfileInfo {
   id: string;
   name: string;
-  kind: "wireguard" | "netbird" | "tailscale" | "openconnect" | "openvpn";
+  kind: "wireguard" | "netbird" | "tailscale" | "openconnect" | "openvpn" | "checkpoint";
   mode: "always" | "auto" | "";
   paused: boolean;
   /** Per-profile idle stop override: null = global, -1 never, else minutes. */
@@ -306,6 +321,7 @@ export interface NetworkProfileInfo {
   tailscale?: TailscaleConfig;
   openconnect?: OpenConnectConfig;
   openvpn?: OpenVPNConfig;
+  checkpoint?: CheckpointConfig;
   status: WgStatus;
   created_at: number;
   updated_at: number;
@@ -1197,6 +1213,10 @@ export const api = {
     G.NetworkProfileCreateOpenVPN({ name, config_text: configText, config } as any) as unknown as Promise<NetworkProfileInfo>,
   networkProfileUpdateOpenVPN: (id: string, name: string, configText: string, config: OpenVPNConfig) =>
     G.NetworkProfileUpdateOpenVPN(id, { name, config_text: configText, config } as any) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileCreateCheckpoint: (name: string, config: CheckpointConfig) =>
+    G.NetworkProfileCreateCheckpoint({ name, config } as any) as unknown as Promise<NetworkProfileInfo>,
+  networkProfileUpdateCheckpoint: (id: string, name: string, config: CheckpointConfig) =>
+    G.NetworkProfileUpdateCheckpoint(id, { name, config } as any) as unknown as Promise<NetworkProfileInfo>,
   networkProfileSetLocalProxy: (id: string, cfg: LocalProxyConfig) =>
     G.NetworkProfileSetLocalProxy(id, cfg as any) as unknown as Promise<NetworkProfileInfo>,
   /** Open url ("" = blank) in the profile's isolated browser through its VPN. */

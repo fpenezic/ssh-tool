@@ -739,6 +739,156 @@ export class BrowserLaunchResult {
 }
 
 /**
+ * CheckpointConfig is the stored (secretless) Check Point profile.
+ */
+export class CheckpointConfig {
+    /**
+     * Creates a new CheckpointConfig instance.
+     * @param {Partial<CheckpointConfig>} [$$source = {}] - The source object to create the CheckpointConfig.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * "checkpoint"
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("server" in $$source)) {
+            /**
+             * Server is the gateway, host or host:port.
+             * @member
+             * @type {string}
+             */
+            this["server"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * LoginOption is the gateway's login option id ("" = its username +
+             * password one, vpn_Username_Password).
+             * @member
+             * @type {string | undefined}
+             */
+            this["login_option"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Pins are the trusted gateway certificates (pin-sha256:...), set by the
+             * trust-on-first-use prompt. Empty = the system trust store decides.
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["pins"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Login, same sources as OpenVPN: Username ("" = the credential's
+             * default username, else asked), PasswordCredentialID ("" = asked).
+             * @member
+             * @type {string | undefined}
+             */
+            this["username"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["password_credential_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * SecondPassword answers a further factor the gateway asks for (a
+             * one-time code): ocSecondPrompt / ocSecondTOTP / ocSecondCredential.
+             * @member
+             * @type {string | undefined}
+             */
+            this["second_password"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["second_credential_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["mode"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["paused"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CheckpointConfig instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CheckpointConfig}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("pins" in $$parsedSource) {
+            $$parsedSource["pins"] = $$createField3_0($$parsedSource["pins"]);
+        }
+        return new CheckpointConfig(/** @type {Partial<CheckpointConfig>} */($$parsedSource));
+    }
+}
+
+/**
+ * CheckpointProfileInput is the create / update payload.
+ */
+export class CheckpointProfileInput {
+    /**
+     * Creates a new CheckpointProfileInput instance.
+     * @param {Partial<CheckpointProfileInput>} [$$source = {}] - The source object to create the CheckpointProfileInput.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("config" in $$source)) {
+            /**
+             * @member
+             * @type {CheckpointConfig}
+             */
+            this["config"] = (new CheckpointConfig());
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CheckpointProfileInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CheckpointProfileInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType5;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("config" in $$parsedSource) {
+            $$parsedSource["config"] = $$createField1_0($$parsedSource["config"]);
+        }
+        return new CheckpointProfileInput(/** @type {Partial<CheckpointProfileInput>} */($$parsedSource));
+    }
+}
+
+/**
  * ClaudeDesktopInfo is what the Settings page renders: where the config is,
  * whether we are already in it, and whether the entry still points at this
  * binary (it won't after the app moves, e.g. a portable build on a new path).
@@ -940,7 +1090,7 @@ export class ConnectionsBatchUpdateInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType5;
+        const $$createField1_0 = $$createType6;
         const $$createField2_0 = $$createType4;
         const $$createField3_0 = $$createType4;
         const $$createField4_0 = $$createType4;
@@ -1078,7 +1228,7 @@ export class ConnectionsCreateInput {
      * @returns {ConnectionsCreateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType5;
+        const $$createField4_0 = $$createType6;
         const $$createField5_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("overrides" in $$parsedSource) {
@@ -1228,8 +1378,8 @@ export class ConnectionsUpdateInput {
      * @returns {ConnectionsUpdateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType6;
-        const $$createField7_0 = $$createType7;
+        const $$createField6_0 = $$createType7;
+        const $$createField7_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("overrides" in $$parsedSource) {
             $$parsedSource["overrides"] = $$createField6_0($$parsedSource["overrides"]);
@@ -1663,8 +1813,8 @@ export class CredentialsUpdateInput {
      * @returns {CredentialsUpdateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType7;
-        const $$createField7_0 = $$createType9;
+        const $$createField6_0 = $$createType8;
+        const $$createField7_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField6_0($$parsedSource["tags"]);
@@ -1739,8 +1889,8 @@ export class DynamicFolderCreateInput {
      * @returns {DynamicFolderCreateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType5;
-        const $$createField4_0 = $$createType8;
+        const $$createField2_0 = $$createType6;
+        const $$createField4_0 = $$createType9;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("settings" in $$parsedSource) {
             $$parsedSource["settings"] = $$createField2_0($$parsedSource["settings"]);
@@ -1796,7 +1946,7 @@ export class DynamicFolderUpdateInput {
      * @returns {DynamicFolderUpdateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType8;
+        const $$createField2_0 = $$createType9;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("config" in $$parsedSource) {
             $$parsedSource["config"] = $$createField2_0($$parsedSource["config"]);
@@ -2151,9 +2301,9 @@ export class FactsCatalogInfo {
      * @returns {FactsCatalogInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType11;
-        const $$createField1_0 = $$createType13;
-        const $$createField2_0 = $$createType14;
+        const $$createField0_0 = $$createType12;
+        const $$createField1_0 = $$createType14;
+        const $$createField2_0 = $$createType15;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("facts" in $$parsedSource) {
             $$parsedSource["facts"] = $$createField0_0($$parsedSource["facts"]);
@@ -2231,7 +2381,7 @@ export class FactsHostResult {
      * @returns {FactsHostResult}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType15;
+        const $$createField5_0 = $$createType16;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("facts" in $$parsedSource) {
             $$parsedSource["facts"] = $$createField5_0($$parsedSource["facts"]);
@@ -2434,7 +2584,7 @@ export class FactsRun {
      */
     static createFrom($$source = {}) {
         const $$createField1_0 = $$createType4;
-        const $$createField2_0 = $$createType17;
+        const $$createField2_0 = $$createType18;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("facts" in $$parsedSource) {
             $$parsedSource["facts"] = $$createField1_0($$parsedSource["facts"]);
@@ -2568,8 +2718,8 @@ export class FleetDownloadInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType18;
-        const $$createField2_0 = $$createType19;
+        const $$createField1_0 = $$createType19;
+        const $$createField2_0 = $$createType20;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ids" in $$parsedSource) {
             $$parsedSource["ids"] = $$createField0_0($$parsedSource["ids"]);
@@ -2627,8 +2777,8 @@ export class FleetUploadInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType20;
-        const $$createField2_0 = $$createType19;
+        const $$createField1_0 = $$createType21;
+        const $$createField2_0 = $$createType20;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ids" in $$parsedSource) {
             $$parsedSource["ids"] = $$createField0_0($$parsedSource["ids"]);
@@ -2691,7 +2841,7 @@ export class FoldersCreateInput {
      * @returns {FoldersCreateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType5;
+        const $$createField3_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("settings" in $$parsedSource) {
             $$parsedSource["settings"] = $$createField3_0($$parsedSource["settings"]);
@@ -2758,7 +2908,7 @@ export class FoldersUpdateInput {
      * @returns {FoldersUpdateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType6;
+        const $$createField5_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("settings" in $$parsedSource) {
             $$parsedSource["settings"] = $$createField5_0($$parsedSource["settings"]);
@@ -3611,7 +3761,7 @@ export class KeepassSaveInput {
      * @returns {KeepassSaveInput}
      */
     static createFrom($$source = {}) {
-        const $$createField9_0 = $$createType19;
+        const $$createField9_0 = $$createType20;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("remote_config" in $$parsedSource) {
             $$parsedSource["remote_config"] = $$createField9_0($$parsedSource["remote_config"]);
@@ -4016,7 +4166,7 @@ export class LogTailSnapshotResult {
      * @returns {LogTailSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType22;
+        const $$createField0_0 = $$createType23;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("lines" in $$parsedSource) {
             $$parsedSource["lines"] = $$createField0_0($$parsedSource["lines"]);
@@ -4458,6 +4608,14 @@ export class NetworkProfileInfo {
              */
             this["openvpn"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Check Point only
+             * @member
+             * @type {CheckpointConfig | null | undefined}
+             */
+            this["checkpoint"] = undefined;
+        }
         if (!("status" in $$source)) {
             /**
              * @member
@@ -4489,13 +4647,14 @@ export class NetworkProfileInfo {
      * @returns {NetworkProfileInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType23;
-        const $$createField8_0 = $$createType24;
-        const $$createField9_0 = $$createType26;
-        const $$createField10_0 = $$createType28;
-        const $$createField11_0 = $$createType30;
-        const $$createField12_0 = $$createType32;
-        const $$createField13_0 = $$createType33;
+        const $$createField6_0 = $$createType24;
+        const $$createField8_0 = $$createType25;
+        const $$createField9_0 = $$createType27;
+        const $$createField10_0 = $$createType29;
+        const $$createField11_0 = $$createType31;
+        const $$createField12_0 = $$createType33;
+        const $$createField13_0 = $$createType34;
+        const $$createField14_0 = $$createType35;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("local_proxy" in $$parsedSource) {
             $$parsedSource["local_proxy"] = $$createField6_0($$parsedSource["local_proxy"]);
@@ -4515,8 +4674,11 @@ export class NetworkProfileInfo {
         if ("openvpn" in $$parsedSource) {
             $$parsedSource["openvpn"] = $$createField12_0($$parsedSource["openvpn"]);
         }
+        if ("checkpoint" in $$parsedSource) {
+            $$parsedSource["checkpoint"] = $$createField13_0($$parsedSource["checkpoint"]);
+        }
         if ("status" in $$parsedSource) {
-            $$parsedSource["status"] = $$createField13_0($$parsedSource["status"]);
+            $$parsedSource["status"] = $$createField14_0($$parsedSource["status"]);
         }
         return new NetworkProfileInfo(/** @type {Partial<NetworkProfileInfo>} */($$parsedSource));
     }
@@ -4758,7 +4920,7 @@ export class OpenConnectProfileInput {
      * @returns {OpenConnectProfileInput}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType29;
+        const $$createField1_0 = $$createType30;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("config" in $$parsedSource) {
             $$parsedSource["config"] = $$createField1_0($$parsedSource["config"]);
@@ -4946,7 +5108,7 @@ export class OpenVPNProfileInput {
      * @returns {OpenVPNProfileInput}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType31;
+        const $$createField2_0 = $$createType32;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("config" in $$parsedSource) {
             $$parsedSource["config"] = $$createField2_0($$parsedSource["config"]);
@@ -5774,7 +5936,7 @@ export class ScrollbackSnapshot {
      * @returns {ScrollbackSnapshot}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType35;
+        const $$createField3_0 = $$createType37;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("marks" in $$parsedSource) {
             $$parsedSource["marks"] = $$createField3_0($$parsedSource["marks"]);
@@ -5827,7 +5989,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType37;
+        const $$createField1_0 = $$createType39;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -6011,7 +6173,7 @@ export class ShareStartInput {
      * @returns {ShareStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType39;
+        const $$createField6_0 = $$createType41;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField6_0($$parsedSource["sessions"]);
@@ -6146,9 +6308,9 @@ export class SharedProxyDetails {
      */
     static createFrom($$source = {}) {
         const $$createField1_0 = $$createType4;
-        const $$createField2_0 = $$createType40;
+        const $$createField2_0 = $$createType42;
         const $$createField3_0 = $$createType4;
-        const $$createField6_0 = $$createType19;
+        const $$createField6_0 = $$createType20;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("routes" in $$parsedSource) {
             $$parsedSource["routes"] = $$createField1_0($$parsedSource["routes"]);
@@ -6837,7 +6999,7 @@ export class TLSInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType41;
+        const $$createField1_0 = $$createType43;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("connection_ids" in $$parsedSource) {
             $$parsedSource["connection_ids"] = $$createField0_0($$parsedSource["connection_ids"]);
@@ -7191,7 +7353,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType43;
+        const $$createField0_0 = $$createType45;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -7317,7 +7479,7 @@ export class TcpdumpStartInput {
      * @returns {TcpdumpStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType19;
+        const $$createField10_0 = $$createType20;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("port_overrides" in $$parsedSource) {
             $$parsedSource["port_overrides"] = $$createField10_0($$parsedSource["port_overrides"]);
@@ -7613,7 +7775,7 @@ export class TunnelInfo {
      * @returns {TunnelInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField11_0 = $$createType45;
+        const $$createField11_0 = $$createType47;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("forwards" in $$parsedSource) {
             $$parsedSource["forwards"] = $$createField11_0($$parsedSource["forwards"]);
@@ -7831,44 +7993,46 @@ const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = AboutPlugin.createFrom;
 const $$createType3 = $Create.Array($$createType2);
 const $$createType4 = $Create.Array($Create.Any);
-const $$createType5 = store$0.InheritableSettings.createFrom;
-const $$createType6 = $Create.Nullable($$createType5);
-const $$createType7 = $Create.Nullable($$createType4);
-const $$createType8 = $Create.Map($Create.Any, $Create.Any);
-const $$createType9 = $Create.Nullable($$createType8);
-const $$createType10 = ssh$0.FactInfo.createFrom;
-const $$createType11 = $Create.Array($$createType10);
-const $$createType12 = ssh$0.FactPreset.createFrom;
-const $$createType13 = $Create.Array($$createType12);
-const $$createType14 = FactsReportSettings.createFrom;
-const $$createType15 = ssh$0.HostFacts.createFrom;
-const $$createType16 = FactsHostResult.createFrom;
-const $$createType17 = $Create.Array($$createType16);
-const $$createType18 = ssh$0.FleetDownloadOptions.createFrom;
-const $$createType19 = $Create.Map($Create.Any, $Create.Any);
-const $$createType20 = ssh$0.FleetUploadOptions.createFrom;
-const $$createType21 = ssh$0.LogTailLine.createFrom;
-const $$createType22 = $Create.Array($$createType21);
-const $$createType23 = LocalProxyConfig.createFrom;
-const $$createType24 = wg$0.Profile.createFrom;
-const $$createType25 = NetbirdConfig.createFrom;
-const $$createType26 = $Create.Nullable($$createType25);
-const $$createType27 = TailscaleConfig.createFrom;
-const $$createType28 = $Create.Nullable($$createType27);
-const $$createType29 = OpenConnectConfig.createFrom;
-const $$createType30 = $Create.Nullable($$createType29);
-const $$createType31 = OpenVPNConfig.createFrom;
-const $$createType32 = $Create.Nullable($$createType31);
-const $$createType33 = wg$0.Status.createFrom;
-const $$createType34 = cmdmarks$0.Mark.createFrom;
-const $$createType35 = $Create.Array($$createType34);
-const $$createType36 = ssh$0.SftpEntry.createFrom;
+const $$createType5 = CheckpointConfig.createFrom;
+const $$createType6 = store$0.InheritableSettings.createFrom;
+const $$createType7 = $Create.Nullable($$createType6);
+const $$createType8 = $Create.Nullable($$createType4);
+const $$createType9 = $Create.Map($Create.Any, $Create.Any);
+const $$createType10 = $Create.Nullable($$createType9);
+const $$createType11 = ssh$0.FactInfo.createFrom;
+const $$createType12 = $Create.Array($$createType11);
+const $$createType13 = ssh$0.FactPreset.createFrom;
+const $$createType14 = $Create.Array($$createType13);
+const $$createType15 = FactsReportSettings.createFrom;
+const $$createType16 = ssh$0.HostFacts.createFrom;
+const $$createType17 = FactsHostResult.createFrom;
+const $$createType18 = $Create.Array($$createType17);
+const $$createType19 = ssh$0.FleetDownloadOptions.createFrom;
+const $$createType20 = $Create.Map($Create.Any, $Create.Any);
+const $$createType21 = ssh$0.FleetUploadOptions.createFrom;
+const $$createType22 = ssh$0.LogTailLine.createFrom;
+const $$createType23 = $Create.Array($$createType22);
+const $$createType24 = LocalProxyConfig.createFrom;
+const $$createType25 = wg$0.Profile.createFrom;
+const $$createType26 = NetbirdConfig.createFrom;
+const $$createType27 = $Create.Nullable($$createType26);
+const $$createType28 = TailscaleConfig.createFrom;
+const $$createType29 = $Create.Nullable($$createType28);
+const $$createType30 = OpenConnectConfig.createFrom;
+const $$createType31 = $Create.Nullable($$createType30);
+const $$createType32 = OpenVPNConfig.createFrom;
+const $$createType33 = $Create.Nullable($$createType32);
+const $$createType34 = $Create.Nullable($$createType5);
+const $$createType35 = wg$0.Status.createFrom;
+const $$createType36 = cmdmarks$0.Mark.createFrom;
 const $$createType37 = $Create.Array($$createType36);
-const $$createType38 = ShareSessionInput.createFrom;
+const $$createType38 = ssh$0.SftpEntry.createFrom;
 const $$createType39 = $Create.Array($$createType38);
-const $$createType40 = $Create.Map($Create.Any, $Create.Any);
-const $$createType41 = $Create.Array($Create.Any);
-const $$createType42 = ssh$0.ParsedPacket.createFrom;
-const $$createType43 = $Create.Array($$createType42);
-const $$createType44 = TunnelForwardInfo.createFrom;
+const $$createType40 = ShareSessionInput.createFrom;
+const $$createType41 = $Create.Array($$createType40);
+const $$createType42 = $Create.Map($Create.Any, $Create.Any);
+const $$createType43 = $Create.Array($Create.Any);
+const $$createType44 = ssh$0.ParsedPacket.createFrom;
 const $$createType45 = $Create.Array($$createType44);
+const $$createType46 = TunnelForwardInfo.createFrom;
+const $$createType47 = $Create.Array($$createType46);
