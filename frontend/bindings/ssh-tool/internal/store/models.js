@@ -1720,6 +1720,28 @@ export class InheritableSettings {
              */
             this["network_profile_id"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * TunnelOnly marks a connection that exists for its port forwards (the
+             * `ssh -N` case): the default action starts it in the tunnel manager -
+             * no shell, no PTY, no tab - instead of opening a terminal. A terminal
+             * is still one right-click away. Tri-state inheritance so a folder of
+             * tunnels sets it once.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["tunnel_only"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * TunnelAutostart starts the tunnel when the app starts (once the vault
+             * is open). Only meaningful when TunnelOnly resolves true. Tri-state
+             * inheritance.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["tunnel_autostart"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -2306,6 +2328,24 @@ export class ResolvedSettings {
              * @type {string | null}
              */
             this["network_profile_id"] = null;
+        }
+        if (!("tunnel_only" in $$source)) {
+            /**
+             * TunnelOnly / TunnelAutostart: see InheritableSettings. The SSH layer
+             * reads TunnelOnly as "open no shell"; the app sets it per connect (a
+             * tunnel-only connection can still be opened as a terminal), so the
+             * resolved value is what the connection is, not how this session runs.
+             * @member
+             * @type {boolean}
+             */
+            this["tunnel_only"] = false;
+        }
+        if (!("tunnel_autostart" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["tunnel_autostart"] = false;
         }
 
         Object.assign(this, $$source);

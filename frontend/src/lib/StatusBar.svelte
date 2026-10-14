@@ -15,6 +15,8 @@
   import { issues } from "./issues.svelte";
   import IssuesPanel from "./IssuesPanel.svelte";
   import SharePanel from "./SharePanel.svelte";
+  import TunnelsPanel from "./TunnelsPanel.svelte";
+  import { tunnels } from "./tunnels.svelte.ts";
   import { errMsg } from "./connectErrors";
   import { broadcast } from "./broadcast.svelte";
   import { tcpdump } from "./tcpdumpStore.svelte";
@@ -64,6 +66,30 @@
     if (vaultState.status === "unlocked") void issues.refreshOpkssh();
   });
   let showSharePanel = $state(false);
+
+  // Tunnel manager segment + panel. The store reloads on tunnels_changed;
+  // a tree reload means a connection or folder edit may have turned
+  // "Tunnel only" on or off, so refresh then too. Anything outside the
+  // status bar (tree menu, the default-action toast) opens the panel
+  // through the open-tunnels-panel window event.
+  let showTunnelsPanel = $state(false);
+  $effect(() => {
+    void tree.version;
+    void tunnels.refresh();
+  });
+  onMount(() => {
+    const open = () => (showTunnelsPanel = true);
+    window.addEventListener("open-tunnels-panel", open);
+    return () => window.removeEventListener("open-tunnels-panel", open);
+  });
+  $effect(() => {
+    if (!showTunnelsPanel) return;
+    function onDoc(e: MouseEvent) {
+      if (!(e.target as HTMLElement)?.closest(".tun-wrap")) showTunnelsPanel = false;
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  });
   let tunnelTimer: ReturnType<typeof setInterval> | null = null;
 
   let unsubOpenUpdate: null | (() => void) = null;
@@ -206,6 +232,7 @@
   const PICK: { key: StatusBarItem; label: string }[] = [
     { key: "workspaces", label: "Workspaces" },
     { key: "sessions", label: "Sessions count" },
+    { key: "tunnels", label: "Tunnels" },
     { key: "forwards", label: "Active port forwards" },
     { key: "broadcast", label: "Broadcast members" },
     { key: "focus", label: "Focused host name" },
@@ -612,6 +639,29 @@
   </button>
   {/if}
 
+  {#if tunnels.list.length > 0 && shows("tunnels")}
+    <div class="tun-wrap">
+      <button
+        class="seg tunmgr"
+        class:tun-err={tunnels.list.some((t) => t.state === "error")}
+        class:tun-wait={tunnels.list.some((t) => t.state === "reconnecting" || t.state === "connecting")}
+        class:tun-up={tunnels.upCount > 0}
+        onclick={() => (showTunnelsPanel = !showTunnelsPanel)}
+        title={`Tunnels: ${tunnels.upCount} up of ${tunnels.list.length}` + (tunnels.troubleCount > 0 ? ` - ${tunnels.troubleCount} failing or reconnecting` : "") + " - click to manage"}
+      >
+        <IconTunnel size={11} />
+        <span class="seg-label">Tunnels</span>
+        <span>{tunnels.upCount}/{tunnels.list.length}</span>
+        {#if tunnels.troubleCount > 0}<span class="err">{tunnels.troubleCount}!</span>{/if}
+      </button>
+      {#if showTunnelsPanel}
+        <div class="tun-pop">
+          <TunnelsPanel onClose={() => (showTunnelsPanel = false)} />
+        </div>
+      {/if}
+    </div>
+  {/if}
+
   {#if tunnelCount > 0 && shows("forwards")}
     <span class="seg tunnels" title="{tunnelCount} active port forward{tunnelCount === 1 ? "" : "s"}">
       <IconTunnel size={11} />
@@ -999,6 +1049,12 @@
   .seg.share.controlled { color: var(--yellow); }
   .seg.share .dot { font-size: 0.7rem; }
   .mcp-anchor { position: relative; display: inline-flex; }
+  .tun-wrap { position: relative; display: inline-flex; }
+  .tun-pop { position: absolute; bottom: 100%; left: 0; margin-bottom: 0.3rem; z-index: 60; }
+  .seg.tunmgr { cursor: pointer; }
+  .seg.tunmgr.tun-up { color: var(--green); }
+  .seg.tunmgr.tun-wait { color: var(--yellow); }
+  .seg.tunmgr.tun-err { color: var(--red); }
   /* The share segment sits on the LEFT of the status bar (before the spacer),
      so anchor the popover to the left edge - right:0 pushed it off-screen. */
   .share-pop { position: absolute; bottom: 100%; left: 0; margin-bottom: 0.3rem; z-index: 60; }

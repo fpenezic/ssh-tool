@@ -16,6 +16,7 @@
   import { IconGlobe, IconBookmark } from "./iconMap";
   import { treeBookmarks } from "./treeBookmarks.svelte";
   import { errMsg } from "./connectErrors";
+  import { tunnels } from "./tunnels.svelte.ts";
 
   interface Props {
     connection: Connection;
@@ -26,33 +27,54 @@
   let active = $state<ForwardStatus[]>([]);
   let err = $state<string | null>(null);
 
+  // A tunnel-only connection's forwards belong to its tunnel session (no
+  // tab), so while the tunnel is up this list reads and drives THAT session.
+  // A terminal opened on the same connection does not start the forwards the
+  // tunnel holds, and starting them there only fails with "port in use".
+  const tunnel = $derived(tunnels.byConnection(connection.id));
+  const tunnelSessionId = $derived(
+    tunnel?.state === "connected" ? tunnel.session_id : undefined
+  );
+
   // The active SSH session for this connection (if any). Used to start
   // forwards on demand. If multiple sessions exist for the same connection
-  // we use the most recently opened one.
+  // we use the most recently opened one; a running tunnel wins.
   const activeSession = $derived(
-    sessions.tabs
-      .filter((t) => t.connectionId === connection.id && t.status === "connected")
-      .at(-1)
+    tunnelSessionId
+      ? { sessionId: tunnelSessionId }
+      : sessions.tabs
+          .filter((t) => t.connectionId === connection.id && t.status === "connected")
+          .at(-1)
   );
 
   // While a session for this connection is mid-reconnect, its forwards are torn
   // down and will be restored on success. Show "reconnecting" instead of the
   // bare "stopped" so the user knows they're coming back.
   const reconnecting = $derived(
+    tunnel?.state === "connecting" || tunnel?.state === "reconnecting" ||
     sessions.tabs.some(
       (t) => t.connectionId === connection.id && t.status === "reconnecting"
     )
   );
 
+  // A stopped tunnel: "start" means start the tunnel (it brings up the
+  // auto-start forwards), not open a terminal tab to hang the forward on.
+  const tunnelStopped = $derived(!!tunnel && !tunnelSessionId && !reconnecting);
+
+  // Live state of THIS connection's forwards, whichever session runs them:
+  // the tunnel, a terminal tab, or a terminal next to a running tunnel (the
+  // pool keys forwards by spec id, so each spec runs in at most one).
+  async function liveForwards(): Promise<ForwardStatus[]> {
+    const ids = new Set(specs.map((f) => f.id));
+    const all = (await api.forwardsActive("")) ?? [];
+    return all.filter((f) => ids.has(f.id));
+  }
+
   async function reload() {
     err = null;
     try {
       specs = (await api.forwardsList(connection.id)) ?? [];
-      if (activeSession) {
-        active = (await api.forwardsActive(activeSession.sessionId)) ?? [];
-      } else {
-        active = [];
-      }
+      active = await liveForwards();
     } catch (e) {
       err = errMsg(e);
     }
@@ -65,11 +87,9 @@
     // Light polling of live status while this view is mounted. 2s feels
     // responsive without spamming the backend.
     const t = setInterval(async () => {
-      if (activeSession) {
-        try {
-          active = (await api.forwardsActive(activeSession.sessionId)) ?? [];
-        } catch {}
-      }
+      try {
+        active = await liveForwards();
+      } catch {}
     }, 2000);
     return () => clearInterval(t);
   });
@@ -472,6 +492,12 @@
     <button onclick={() => { if (showAdd) { cancelForm(); } else { resetForm(); showAdd = true; } }}>{showAdd ? "Cancel" : "+ Add"}</button>
   </header>
 
+  {#if tunnel}
+    <div class="tunnel-note">
+      These forwards run in this connection's tunnel ({tunnel.state === "connected" ? "up" : tunnel.state}), not in a terminal tab. Start and stop here act on the tunnel.
+    </div>
+  {/if}
+
   {#if err}
     <div class="err">
       {err}
@@ -645,11 +671,18 @@
                   class="iconlbl"><IconGlobe size={12} /> Open URL…</button>
               {/if}
             {:else}
+              {#if tunnelStopped}
+                <button class="primary" onclick={() => tunnels.start(connection.id)}
+                  title="Start this connection's tunnel. Auto-start forwards come up with it; start the others here once it is up.">
+                  Start tunnel
+                </button>
+              {:else}
               <button class="primary" onclick={() => startForward(spec)}
-                disabled={connecting}
-                title={activeSession ? "Start this forward" : "Connect to the server and start this forward"}>
+                disabled={connecting || reconnecting}
+                title={tunnelSessionId ? "Start this forward in the running tunnel" : activeSession ? "Start this forward" : "Connect to the server and start this forward"}>
                 {connecting ? "Connecting…" : activeSession ? "Start" : "Connect & start"}
               </button>
+              {/if}
             {/if}
             <button onclick={() => openEditForward(spec)} title="Edit this forward">Edit</button>
             <button class="danger" onclick={() => removeForward(spec.id)}>Delete</button>
@@ -703,11 +736,6 @@
     </ul>
   {/if}
 
-  {#if active.length > 0 && !activeSession}
-    <div class="empty">
-      Refresh to see live forwards (none from this connection are running).
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -743,6 +771,11 @@
     padding: 0.5rem 0.7rem; border-radius: 4px;
     border-left: 3px solid var(--red); font-size: 0.82rem;
     margin: 0.5rem 0;
+  }
+  .tunnel-note {
+    color: var(--subtext0);
+    font-size: 0.78rem;
+    margin: 0.2rem 0 0.5rem;
   }
   .empty {
     color: var(--overlay0); padding: 0.6rem 0;

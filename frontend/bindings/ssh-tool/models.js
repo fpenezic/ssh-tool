@@ -7366,6 +7366,229 @@ export class TotpCode {
 }
 
 /**
+ * TunnelForwardInfo is one saved forward of a tunnel, with its live state
+ * when the tunnel is up.
+ */
+export class TunnelForwardInfo {
+    /**
+     * Creates a new TunnelForwardInfo instance.
+     * @param {Partial<TunnelForwardInfo>} [$$source = {}] - The source object to create the TunnelForwardInfo.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("kind" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("local_addr" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["local_addr"] = "";
+        }
+        if (!("local_port" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["local_port"] = 0;
+        }
+        if (!("remote_host" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["remote_host"] = "";
+        }
+        if (!("remote_port" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["remote_port"] = 0;
+        }
+        if (!("description" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["description"] = "";
+        }
+        if (!("auto_start" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["auto_start"] = false;
+        }
+        if (!("state" in $$source)) {
+            /**
+             * State is the live listener state ("listening", "error", ...) or ""
+             * when the forward is not running.
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+        if (!("bytes_in" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["bytes_in"] = 0;
+        }
+        if (!("bytes_out" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["bytes_out"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TunnelForwardInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TunnelForwardInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new TunnelForwardInfo(/** @type {Partial<TunnelForwardInfo>} */($$parsedSource));
+    }
+}
+
+/**
+ * TunnelInfo is one row of the Tunnels panel.
+ */
+export class TunnelInfo {
+    /**
+     * Creates a new TunnelInfo instance.
+     * @param {Partial<TunnelInfo>} [$$source = {}] - The source object to create the TunnelInfo.
+     */
+    constructor($$source = {}) {
+        if (!("connection_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["connection_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("hostname" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hostname"] = "";
+        }
+        if (!("folder_path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["folder_path"] = "";
+        }
+        if (!("autostart" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["autostart"] = false;
+        }
+        if (!("state" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["session_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+        if (!("since" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["since"] = 0;
+        }
+        if (!("attempt" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["attempt"] = 0;
+        }
+        if (!("next_retry" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["next_retry"] = 0;
+        }
+        if (!("forwards" in $$source)) {
+            /**
+             * @member
+             * @type {TunnelForwardInfo[]}
+             */
+            this["forwards"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TunnelInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TunnelInfo}
+     */
+    static createFrom($$source = {}) {
+        const $$createField11_0 = $$createType45;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("forwards" in $$parsedSource) {
+            $$parsedSource["forwards"] = $$createField11_0($$parsedSource["forwards"]);
+        }
+        return new TunnelInfo(/** @type {Partial<TunnelInfo>} */($$parsedSource));
+    }
+}
+
+/**
  * UpdateCheckResult is what CheckForUpdate hands back to the frontend.
  * IsNewer signals "a strictly higher version than the running build is
  * available". Errors that aren't user-actionable (no network, server
@@ -7613,3 +7836,5 @@ const $$createType40 = $Create.Map($Create.Any, $Create.Any);
 const $$createType41 = $Create.Array($Create.Any);
 const $$createType42 = ssh$0.ParsedPacket.createFrom;
 const $$createType43 = $Create.Array($$createType42);
+const $$createType44 = TunnelForwardInfo.createFrom;
+const $$createType45 = $Create.Array($$createType44);

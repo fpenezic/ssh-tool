@@ -179,6 +179,12 @@ type App struct {
 	// the fresh session. Guarded by reconnectMu.
 	reconnectForwards map[string][]string
 
+	// tunnels is the tunnel manager's state: connection id -> running
+	// tunnel. See app_tunnels.go.
+	tunnelsMu          sync.Mutex
+	tunnels            map[string]*tunnelEntry
+	tunnelsAutostarted bool
+
 	// connectCancels maps a connect key (connectionID, or a dynamic
 	// entry key) to the in-flight connect's cancel handle. SshCancelConnect
 	// calls it to abort a connect that's hung on opkssh OIDC login (browser
@@ -371,6 +377,9 @@ type sessionMetaEntry struct {
 	connectionID string
 	name         string
 	hostname     string
+	// tunnel: a shell-less session owned by the tunnel manager. It has no
+	// tab, so the tab-recovery paths (SshActiveSessions) skip it.
+	tunnel bool
 }
 
 // wailsSink emits session events as Wails events. Implements
@@ -444,6 +453,7 @@ func (a *App) initialise() {
 	a.taskbar = newTaskbarTracker()
 	a.reconnects = make(map[string]chan struct{})
 	a.reconnectForwards = make(map[string][]string)
+	a.tunnels = make(map[string]*tunnelEntry)
 	a.connectCancels = make(map[string]*connectCancel)
 	a.debugBuf = make(map[string][]string)
 	a.mcp = newMcpState()
@@ -1240,6 +1250,10 @@ func (a *App) connectSynthetic(syntheticConn store.Connection, folders []store.F
 	deregister := a.registerConnectCancel(connectionID, cancel)
 	defer deregister()
 	defer cancel()
+	// Inventory hosts and quick connects always open a terminal: a folder's
+	// inherited tunnel_only must not turn this into a shell-less session
+	// behind a tab (the tunnel manager only runs saved connections).
+	settings.TunnelOnly = false
 	sess, err := sshlayer.Connect(ctx, a.db, a.vault, &settings, sink, a.makeHostKeyCallback(), a.makeAlgoLookup(), ct, progress)
 	if err != nil {
 		log.Printf("ssh connect %s %s (%s): %v", syntheticConn.ID, name, settings.Hostname, err)
@@ -3249,6 +3263,13 @@ func (a *App) SshCancelConnect(key string) bool {
 }
 
 func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUsername, overridePassword string) (*SshConnectResult, error) {
+	return a.sshConnectWith(connectionID, overrideCredentialID, overrideUsername, overridePassword, false)
+}
+
+// sshConnectWith is the saved-connection connect. tunnel opens the session
+// without a shell for the tunnel manager (app_tunnels.go); every other caller
+// wants a terminal, including one opened on a tunnel-only connection.
+func (a *App) sshConnectWith(connectionID, overrideCredentialID, overrideUsername, overridePassword string, tunnel bool) (*SshConnectResult, error) {
 	settings, err := resolver.ResolveConnection(a.db, connectionID)
 	if err != nil {
 		return nil, err
@@ -3256,6 +3277,9 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 	if settings.Hostname == "" {
 		return nil, fmt.Errorf("connection has no hostname")
 	}
+	// The resolved flag says what the connection IS; the SSH layer reads it
+	// as how THIS session runs.
+	settings.TunnelOnly = tunnel
 
 	// Per-attempt credential override. We swap settings.AuthRef
 	// before any of the downstream code reads it. The override
@@ -3334,7 +3358,13 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 	// a hang on opkssh OIDC login (closed browser / bad config). Keyed on
 	// connectionID. Deregistered when this connect returns.
 	ctx, cancel := context.WithCancel(context.Background())
-	deregister := a.registerConnectCancel(connectionID, cancel)
+	cancelKey := connectionID
+	if tunnel {
+		// A terminal and the tunnel of one connection can connect at the
+		// same time; neither may cancel the other.
+		cancelKey = tunnelCancelKey(connectionID)
+	}
+	deregister := a.registerConnectCancel(cancelKey, cancel)
 	defer deregister()
 	defer cancel()
 	sess, err := sshlayer.Connect(ctx, a.db, a.vault, settings, sink, a.makeHostKeyCallback(), a.makeAlgoLookup(), ct, progress)
@@ -3344,7 +3374,10 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 		// as a typed event so the frontend can pop VaultGate
 		// instead of leaving the user staring at "password missing"
 		// with no obvious next step.
-		if sshlayer.ContainsVaultLocked(err) {
+		// Not for a tunnel: a launch start with the vault skipped would pop
+		// the gate once per tunnel. The Tunnels panel shows the failure, and
+		// TunnelsAutostart retries these after the next unlock.
+		if sshlayer.ContainsVaultLocked(err) && !tunnel {
 			EventsEmit("vault_locked_during_connect", map[string]string{
 				"connection_id": connectionID,
 				"hostname":      settings.Hostname,
@@ -3355,21 +3388,23 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 		// SshGetConnectDebug to render the failure context.
 		return nil, err
 	}
-	a.pool.Add(sess)
-	a.syncForegroundService()
-	// Recents are machine-local state - a store.db write here dirtied
-	// the sync profile on every single connect.
-	a.touchRecent(connectionID)
-
-	// Stash meta for SshActiveSessions recovery.
+	// Stash meta for SshActiveSessions recovery. Before pool.Add: a window
+	// recovering tabs in between would otherwise see a tunnel session
+	// without its tunnel flag and build a tab with no shell behind it.
 	conn, _ := a.db.GetConnection(connectionID)
 	a.metaMu.Lock()
 	a.sessionMeta[sess.ID] = sessionMetaEntry{
 		connectionID: connectionID,
 		name:         conn.Name,
 		hostname:     settings.Hostname,
+		tunnel:       tunnel,
 	}
 	a.metaMu.Unlock()
+	a.pool.Add(sess)
+	a.syncForegroundService()
+	// Recents are machine-local state - a store.db write here dirtied
+	// the sync profile on every single connect.
+	a.touchRecent(connectionID)
 
 	// On session end (user disconnect OR server killed OR network drop):
 	// tear down any forwards we registered, drop the pool entry. If the
@@ -3386,7 +3421,9 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 		// running so a reconnect can restore ALL of them (not just the
 		// auto_start=1 subset forwardsAutoStartFor handles). Only when we
 		// will actually reconnect - a user-initiated disconnect keeps none.
-		if autoReconnect && !userInit {
+		// A tunnel always reconnects (until it is stopped), whatever
+		// auto_reconnect says.
+		if (autoReconnect || tunnel) && !userInit {
 			running := a.forwards.List(id)
 			if len(running) > 0 {
 				ids := make([]string, 0, len(running))
@@ -3420,13 +3457,19 @@ func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUse
 		a.evictFromBroadcastGroups(id)
 		log.Printf("session %s cleaned up (user_initiated=%v)", id, userInit)
 
-		if autoReconnect && !userInit {
+		if tunnel {
+			a.tunnelSessionClosed(connID, id, userInit)
+		} else if autoReconnect && !userInit {
 			a.spawnReconnect(id, connID)
 		}
 	})
 
 	// Auto-start any forwards marked auto_start=1 against this connection.
-	a.forwardsAutoStartFor(connectionID, sess.ID)
+	// Not when the connection's tunnel is already up: it holds those ports,
+	// and a terminal opened next to it would only log port-in-use errors.
+	if tunnel || !a.tunnelHoldsForwards(connectionID) {
+		a.forwardsAutoStartFor(connectionID, sess.ID)
+	}
 
 	user := ""
 	if settings.Username != nil {
@@ -5080,6 +5123,10 @@ func (a *App) SshActiveSessions() []ActiveSessionInfo {
 		}
 		info := ActiveSessionInfo{SessionID: sess.ID}
 		if meta, ok := a.sessionMeta[id]; ok {
+			if meta.tunnel {
+				// No tab to rebuild; the tunnel manager lists it.
+				continue
+			}
 			info.ConnectionID = meta.connectionID
 			info.Name = meta.name
 			info.Hostname = meta.hostname
@@ -5178,8 +5225,16 @@ func (a *App) forwardsAutoStartFor(connectionID, sessionID string) {
 	if !ok {
 		return
 	}
+	// The forward pool keys listeners by spec id, so a spec already running
+	// in another session of this connection (a terminal next to the tunnel,
+	// or two terminals) must not start twice: the second start replaces the
+	// first in the pool and orphans its listener.
+	running := map[string]bool{}
+	for _, st := range a.forwards.List("") {
+		running[st.ID] = true
+	}
 	for _, spec := range specs {
-		if !spec.AutoStart {
+		if !spec.AutoStart || running[spec.ID] {
 			continue
 		}
 		_, _ = a.startForwardFor(sess, &spec, true)
@@ -6517,9 +6572,10 @@ func (a *App) restoreForwardsOnReconnect(oldID, connID, newID string) {
 	if !ok {
 		return
 	}
-	// Already-running set on the new session (the auto_start forwards).
+	// Already running: the auto_start forwards on the new session, and any
+	// spec another session of the connection holds (see forwardsAutoStartFor).
 	already := map[string]struct{}{}
-	for _, f := range a.forwards.List(newID) {
+	for _, f := range a.forwards.List("") {
 		already[f.ID] = struct{}{}
 	}
 	// The spec ids that were running are keyed by connection; look them up

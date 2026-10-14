@@ -9,7 +9,7 @@
   import { computeIntent, isInvalidDrop, applyDrop, applyDropToRoot, applyMultiDrop, applyMultiDropToRoot, type DragKind } from "./treeDnd";
   import { setMultiDragImage } from "./dragImage";
   import QuickAccess from "./QuickAccess.svelte";
-  import { IconFolderPlus, IconPlus, IconRotateCw, IconHost, IconLoading, IconX, IconGlobe, IconExpandAll, IconCollapseAll,
+  import { IconFolderPlus, IconPlus, IconRotateCw, IconHost, IconTunnel, IconLoading, IconX, IconGlobe, IconExpandAll, IconCollapseAll,
     IconRefresh, IconPlay, IconExternalLink, IconStar, IconMoveToFolder, IconDownload, IconTrash, IconTerminal } from "./iconMap";
   import { expandedConnections } from "./treeState.svelte";
   import { probeState } from "./probeState.svelte";
@@ -20,6 +20,7 @@
   import { contextMenu } from "./contextMenu.svelte.ts";
   import { exportModal } from "./exportModal.svelte.ts";
   import { connectionActions } from "./connectionActions.svelte";
+  import { tunnels } from "./tunnels.svelte.ts";
   import { dynEditor } from "./dynEditor.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
 
@@ -58,12 +59,14 @@
     if (!selection.isConnectionSelected(conn.id)) selection.selectConnection(conn.id);
     const ids = selection.selectedConnectionIds();
     const allFav = ids.every((id) => tree.connectionById(id)?.favorite);
+    const allTunnels = ids.every((id) => tunnels.isTunnel(id));
     contextMenu.show(e, [
-      {
+      ...connectionActions.tunnelMenuItems(ids),
+      ...(allTunnels ? [] : [{
         label: ids.length > 1 ? `Connect all (${ids.length})` : "Connect",
         iconComponent: IconPlay,
         onSelect: () => connectionActions.connectMany(ids),
-      },
+      }]),
       ...(ids.length === 1 ? [{
         label: "Open in external terminal",
         iconComponent: IconExternalLink,
@@ -669,6 +672,10 @@
             {#if isConn}<IconLoading size={13} class="spin" />{:else}<IconHost size={13} />{/if}
           </span>
           <span class="name">{conn.name}</span>
+          {#if tunnels.byConnection(conn.id)}
+            {@const tun = tunnels.byConnection(conn.id)!}
+            <span class="tun-badge tun-{tun.state}" title="Tunnel: {tun.state}{tun.error ? ` - ${tun.error}` : ""}"><IconTunnel size={11} /></span>
+          {/if}
           <TreeBookmarkToggle connId={conn.id} />
           {#if isConn}
             <span class="conn-hint">connecting…</span>
@@ -781,6 +788,11 @@
   .chev.dot.probe-up { color: var(--green); }
   .chev.dot.probe-down { color: var(--red); }
   .conn-hint { color: var(--yellow); font-size: 0.72rem; margin-left: 0.3rem; }
+  /* Tunnel-only connection: state of its tunnel (app_tunnels.go). */
+  .tun-badge { display: inline-flex; align-items: center; margin-left: 0.3rem; color: var(--overlay0); flex-shrink: 0; }
+  .tun-badge.tun-connected { color: var(--green); }
+  .tun-badge.tun-connecting, .tun-badge.tun-reconnecting { color: var(--yellow); }
+  .tun-badge.tun-error { color: var(--red); }
 
   /* Empty state - shown when the tree finished loading with zero rows. */
   .empty {
