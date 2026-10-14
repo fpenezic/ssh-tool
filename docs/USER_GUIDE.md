@@ -1527,7 +1527,10 @@ is ever asked for.
   already up. Right-click offers **Start tunnel** / **Stop tunnel**,
   **Show in Tunnels panel** and **Open terminal**, for when you want a
   shell on the same host. Selecting several and picking Connect all
-  starts the tunnels among them.
+  starts the tunnels among them. In the connection editor the header
+  offers **Start tunnel** / **Stop tunnel** first and **Open terminal**
+  next to it; with **Use different credential...** set, the button is
+  a terminal connect as for any connection.
 - **Which forwards come up.** The ones marked auto-start. Start the
   others by hand in the Tunnels panel or in the connection's Port
   forwards section, which for a tunnel connection acts on the tunnel
@@ -1551,7 +1554,10 @@ is ever asked for.
 - **The Tunnels panel.** The status bar shows **Tunnels n/m** (up of
   all) whenever a tunnel connection exists - green while tunnels are
   up, yellow while one is connecting or reconnecting, red with a count
-  when one failed. Click it for the panel: tunnels grouped by folder,
+  when one failed. Its tooltip and the panel header also give the
+  number of listening port forwards in all sessions, which the separate
+  forwards segment shows when there are no tunnel connections. Click it
+  for the panel: tunnels grouped by folder,
   each with its state and uptime, the reconnect countdown, the last
   error, and Start / Stop; **Start all** / **Stop all** and a filter at
   the top. Click a tunnel to see its forwards (state, traffic, Start /
@@ -1588,7 +1594,9 @@ forwards** (the Tools menu in the SSH-only toolbar group):
 
 There's also a global indicator in the **status bar** (bottom): a
 green cable + count of all listening forwards across the app, no
-matter which window or pane they belong to. Hidden at zero.
+matter which window or pane they belong to. Hidden at zero. Once you
+have tunnel connections, the **Tunnels** segment takes its place and
+carries the same count in its tooltip and panel header.
 
 ### Give internet to an offline server
 
