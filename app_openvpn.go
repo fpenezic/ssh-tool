@@ -21,13 +21,10 @@ import (
 	"log"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 
 	"ssh-tool/internal/creds"
-	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/store"
-	"ssh-tool/internal/totp"
 	"ssh-tool/internal/tunnelhelper"
 )
 
@@ -335,7 +332,11 @@ func (a *App) ensureOpenVPNTunnel(row *store.NetworkProfile) (tunnelDialer, erro
 	if err != nil {
 		return nil, err
 	}
-	filler := &ovpnAuthFiller{a: a, row: row, cfg: &cfg}
+	host, port := ovpnHostPort(cfg.Server)
+	filler := &loginFiller{a: a, row: row, tag: kindOpenVPN, host: host, port: port, login: loginSources{
+		Username: cfg.Username, PasswordCredentialID: cfg.PasswordCredentialID,
+		SecondPassword: cfg.SecondPassword, SecondCredentialID: cfg.SecondCredentialID,
+	}}
 	connectStart := time.Now()
 	p, err := a.nbman.EnsureWith(row.ID, row.Name, exe, nil, []string{"SSHTOOL_OVPN_CONFIG=" + text}, tunnelhelper.Options{
 		ReadyTimeout: 6 * time.Minute, // typed one-time codes take a while
@@ -357,127 +358,6 @@ func (a *App) ensureOpenVPNTunnel(row *store.NetworkProfile) (tunnelDialer, erro
 	go a.presencePublish(row.ID, kindOpenVPN)
 	EventsEmit("network_tunnel_changed", row.ID)
 	return p, nil
-}
-
-// ovpnAuthFiller answers the plugin's login requests: username, password
-// and, with a challenge, the response (one-time code). Every stored
-// source is used once per login; a refused login (error set) is asked in
-// full, so a wrong stored value cannot lock the account through retries.
-type ovpnAuthFiller struct {
-	a   *App
-	row *store.NetworkProfile
-	cfg *OpenVPNConfig
-
-	mu       sync.Mutex
-	usedPass bool
-}
-
-func (f *ovpnAuthFiller) handle(p *tunnelhelper.Proc, ch tunnelhelper.AuthChallenge) {
-	values := map[string]string{}
-	var missing []int
-	f.mu.Lock()
-	for i, fl := range ch.Fields {
-		if ch.Error != "" && ch.Error != "reconnecting" {
-			missing = append(missing, i)
-			continue
-		}
-		switch fl.Name {
-		case "username":
-			if u := f.firstUser(); u != "" {
-				values[fl.Key] = u
-				continue
-			}
-		case "password":
-			if !f.usedPass && f.cfg.PasswordCredentialID != "" {
-				f.usedPass = true
-				if s, err := f.a.ocCredentialSecret(f.cfg.PasswordCredentialID); err == nil {
-					values[fl.Key] = s
-					continue
-				} else {
-					log.Printf("openvpn %s: password credential: %v", f.row.Name, err)
-				}
-			}
-		case "response":
-			if s := f.response(); s != "" {
-				values[fl.Key] = s
-				continue
-			}
-		}
-		missing = append(missing, i)
-	}
-	f.mu.Unlock()
-	log.Printf("openvpn %s: %s", f.row.Name, ocDescribeRound(ch, values, missing, nil))
-	if len(missing) > 0 {
-		if err := f.prompt(ch, values, missing); err != nil {
-			_ = p.Cancel(ch.ID)
-			return
-		}
-	}
-	if err := p.Answer(ch.ID, values); err != nil {
-		log.Printf("openvpn %s: answer: %v", f.row.Name, err)
-	}
-}
-
-func (f *ovpnAuthFiller) firstUser() string {
-	if f.cfg.Username != "" {
-		return f.cfg.Username
-	}
-	return f.a.ocCredentialUser(f.cfg.PasswordCredentialID)
-}
-
-// response is the one-time code / challenge answer from the configured
-// source; "" = ask.
-func (f *ovpnAuthFiller) response() string {
-	switch f.cfg.SecondPassword {
-	case ocSecondCredential:
-		s, err := f.a.ocCredentialSecret(f.cfg.SecondCredentialID)
-		if err != nil {
-			log.Printf("openvpn %s: challenge credential: %v", f.row.Name, err)
-		}
-		return s
-	case ocSecondTOTP:
-		cred, err := f.a.db.GetCredential(f.cfg.SecondCredentialID)
-		if err != nil || cred == nil {
-			return ""
-		}
-		sp, err := totp.Parse(f.a.externalTOTPSecret(cred))
-		if err != nil {
-			log.Printf("openvpn %s: one-time code: %v", f.row.Name, err)
-			return ""
-		}
-		return sp.Code(time.Now())
-	}
-	return ""
-}
-
-func (f *ovpnAuthFiller) prompt(ch tunnelhelper.AuthChallenge, values map[string]string, missing []int) error {
-	host, port := ovpnHostPort(f.cfg.Server)
-	qs := make([]sshlayer.InteractiveAuthPrompt, len(missing))
-	for j, i := range missing {
-		fl := ch.Fields[i]
-		text := fl.Label
-		if text == "" {
-			text = fl.Name + ":"
-		}
-		if fl.Name == "response" && !strings.HasSuffix(text, ":") {
-			text += ":"
-		}
-		qs[j] = sshlayer.InteractiveAuthPrompt{Echo: fl.Kind != "password", Text: text}
-	}
-	instruction := ch.Message
-	if ch.Error != "" {
-		instruction = ch.Error + "\n" + instruction
-	}
-	answers, err := f.a.promptInteractiveAuth(f.row.Name, host, port, f.firstUser(), "VPN login", instruction, qs)
-	if err != nil {
-		return err
-	}
-	for j, i := range missing {
-		if j < len(answers) {
-			values[ch.Fields[i].Key] = answers[j]
-		}
-	}
-	return nil
 }
 
 // ovpnHostPort splits the "host:port/proto" summary for the prompt.
