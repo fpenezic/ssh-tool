@@ -186,7 +186,7 @@
     {
       "icon": "forward",
       "title": "Port forwards + isolated browser",
-      "body": "Local, remote and dynamic SOCKS5 forwards. One click launches an isolated browser pinned to the SOCKS port. \"Give internet\" reverse-proxies an offline server's HTTP traffic out through your machine - no squid needed."
+      "body": "Local, remote and dynamic SOCKS5 forwards. One click launches an isolated browser pinned to the SOCKS port. Tunnel connections run without a shell or tab, start with the app, reconnect after a drop and sit in a Tunnels panel in the status bar. \"Give internet\" reverse-proxies an offline server's HTTP traffic out through your machine - no squid needed."
     },
     {
       "icon": "robot",

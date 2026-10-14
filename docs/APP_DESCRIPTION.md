@@ -192,6 +192,9 @@ archive bundle. Exports never include credential secrets by default.
 - **Port forwards** - local / remote / SOCKS5 dynamic with byte
   counters and an **isolated-browser launcher** (Chromium / Firefox
   families, temporary profile, your main browser stays clean).
+- **Tunnel connections** - connections that run without a shell or
+  tab (`ssh -N`), start with the app, reconnect after a drop and are
+  managed from a Tunnels panel in the status bar.
 
 ### Import / export
 
