@@ -575,10 +575,13 @@
       <label>Description
         <input bind:value={nDesc} placeholder="Postgres tunnel" />
       </label>
-      <label class="checkbox">
-        <input type="checkbox" bind:checked={nAutoStart} />
-        <span>Auto-start when this connection connects{#if tunnel} (a tunnel starts every forward anyway){/if}</span>
-      </label>
+      {#if !tunnel}
+        <!-- A tunnel starts every forward, so the flag means nothing there. -->
+        <label class="checkbox">
+          <input type="checkbox" bind:checked={nAutoStart} />
+          <span>Auto-start when this connection connects</span>
+        </label>
+      {/if}
       {#if editingForwardId !== null && (nKind === "local" || nKind === "dynamic")}
         <label>Bookmarks open in
           <select bind:value={nBrowserMode}>

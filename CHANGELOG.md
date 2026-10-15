@@ -7,18 +7,28 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased] - Tunnel manager
+## [Unreleased] - Tunnels, Check Point, and a new connection editor
 
-Connections that exist only for their port forwards can now run as tunnels: no shell and no tab, started with the app if you like, kept up through drops, and managed from one panel in the status bar. Check Point remote access VPNs join the network profiles as a new plugin. Thanks to @ivanpavlina for the tunnel manager and Check Point support (#3, #4).
+Connections that exist only for their port forwards can now run as tunnels: no shell and no tab, started with the app if you like, kept up through drops, and managed from one panel in the status bar. Check Point remote access VPNs join the network profiles as a new plugin, and the connection editor is regrouped into tabs.
+
+This is the first release with contributions from outside the project: @ivanpavlina wrote the tunnel manager, the Check Point support and the RSA host key fix (#2, #3, #4). Welcome, and thank you.
+
+### Connection editor
+
+- **Settings in tabs.** The connection editor is split into General, Connection, Terminal, Forwards, VNC and Advanced, and a folder's editor has the same tabs with the same settings in the same places. It reopens on the tab you used last.
+- **A header that says what is going on.** Next to the name: `user@host:port`, the folder path, and the connection's state (connected, or for a tunnel how many of its forwards listen). Save, Connect (or Start / Stop tunnel and Terminal) and VNC stay in the header; the different-credential panel and Delete moved to its **...** menu.
+- **Double-click opens** replaces the separate Tunnel only and "Open VNC on connect" settings: one choice of Terminal, Tunnel or VNC console, so the two can no longer both be on with one silently winning. Existing settings carry over; a connection that had both on opens as a tunnel, as before.
+- **The jump chain is drawn** as it is dialled, from this computer through each hop (with its connection's icon) to the host, with where the chain comes from under it. **Edit chain** opens the editor.
+- **Inherit options name what you get**, for example "(inherit: on, from CLOUD)" in a folder-inherited select.
 
 ### Tunnels
 
-- **Tunnel-only connections.** A new **Tunnel only** setting on a connection or a folder (inherited like the others) makes the connection a tunnel, the `ssh -N` case: it connects without a shell or a terminal and holds just its port forwards. Double-click or Enter starts the tunnel instead of opening a tab, and never stops one that is already up. Right-click offers Start / Stop tunnel, Show in Tunnels panel and **Open terminal** for when you do want a shell there, and the connection editor's header offers **Start tunnel** / **Stop tunnel** with **Open terminal** next to it. Accounts without a login shell work, since no shell is asked for.
-- **Start tunnels with the app.** **Start tunnel on app launch** (only offered while Tunnel only is on) brings the tunnel up once the vault gate is passed. A launch start keeps retrying while the network or the server is not there yet, so starting the app before Wi-Fi or a VPN is fine. After "Skip" at the vault gate, tunnels that need a vault credential wait in error and start on their own after the next unlock.
+- **Tunnel-only connections.** **Double-click opens: Tunnel** on a connection or a folder (inherited like the others) makes the connection a tunnel, the `ssh -N` case: it connects without a shell or a terminal and holds just its port forwards. Double-click or Enter starts the tunnel instead of opening a tab, and never stops one that is already up. Right-click offers Start / Stop tunnel, Show in Tunnels panel and **Open terminal** for when you do want a shell there, and the connection editor's header offers **Start tunnel** / **Stop tunnel** with **Terminal** next to it. Accounts without a login shell work, since no shell is asked for.
+- **Start tunnels with the app.** **Start with the app** (in the Forwards & tunnel tab) brings the tunnel up once the vault gate is passed. A launch start keeps retrying while the network or the server is not there yet, so starting the app before Wi-Fi or a VPN is fine. After "Skip" at the vault gate, tunnels that need a vault credential wait in error and start on their own after the next unlock.
 - **A tunnel starts all its forwards.** A tunnel connection exists for its forwards, so starting it brings up every saved forward, whatever its auto-start flag says. A forward you stop in the running tunnel stays stopped across a reconnect, and the next start brings it back. A start by hand ends in a notification with the result ("Tunnel X up, 3/3 forwards listening", or why it failed); a launch start or a reconnect only speaks up when it fails or comes up with a forward down.
 - **Tunnels panel.** A **Tunnels n/m** segment in the status bar (green, yellow while one reconnects or a connected tunnel has a forward that should listen and does not, red when one failed) opens a panel with every tunnel grouped by folder: state and uptime, the reconnect countdown, the last error, Start / Stop per tunnel and for all of them, a filter, and per tunnel its forwards with their state, traffic and a Start / Stop of their own. A failed tunnel offers **Try again** and **Clear error**. Tunnel connections also get a small cable icon in the tree, coloured by state. While there are tunnel connections this segment also carries the count of listening port forwards (tooltip and panel header) instead of a second cable icon next to it.
 - **Tunnels come back after a drop.** A tunnel that was up and lost its connection reconnects until it succeeds or you stop it, waiting 1, 2, 4 ... up to 60 seconds between tries, and brings every forward up again except the ones you stopped, so one that failed before gets another try. Only network failures are retried: a rejected host key or a failed login stops the tunnel in error instead of asking again every minute. A start by hand tries once and reports.
-- **Port forwards in the editor follow the tunnel.** For a tunnel connection the Port forwards section shows the tunnel's forwards with their live state, starts and stops them in the tunnel, and offers **Start tunnel** while it is down instead of opening a terminal tab.
+- **Port forwards in the editor follow the tunnel.** For a tunnel connection the Forwards & tunnel tab shows the tunnel's forwards with their live state, starts and stops them in the tunnel, and offers **Start tunnel** while it is down instead of opening a terminal tab.
 - **Deleting a connection stops its tunnel**, whether it was deleted here, by an MCP plan or by a sync pull, so no hidden session keeps its ports.
 
 ### Port forwards

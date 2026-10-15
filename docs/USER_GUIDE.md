@@ -465,43 +465,82 @@ shows you at a glance which hosts are up.
 
 ### Connection editor
 
-Two-column grid (auto-fit on narrow widths). Fields:
+The header shows the connection's name, `user@host:port` and folder
+path, and what is running for it: "connected" (or how many sessions are
+open), or for a tunnel connection its state ("tunnel up, 2/2
+listening", yellow while a forward that should listen does not). Next
+to it: the favourite toggle, **Save**, the main action (**Connect**, or
+**Start tunnel** / **Stop tunnel** and **Terminal** for a tunnel
+connection), **VNC** when the console is on, and **...** with **Use a
+different credential...** and **Delete connection**. The settings sit
+in tabs under the header; the editor reopens on the tab you used last.
 
-- **Name**, **Hostname**, **Username**, **Port**
+**General**
+
+- **Name**
+- **Double-click opens** - Terminal / Tunnel / VNC console / Inherit.
+  What a double-click or Enter does; the other actions stay in the
+  header and the right-click menu. **Tunnel** runs the connection
+  without a shell, see [Tunnel connections](#tunnel-connections).
+  **VNC console** is offered once VNC is on for the connection.
+  *Inherit* names the value it gets and the folder it comes from.
+- **Hostname / IP address** and **Port**, **Username**
 - **Credential** - pick from your credential list, or leave blank
   to inherit from a folder. **None** (first in the list) stops the
   folder's credential from being inherited: the connection's own
   password below is used, or the username and password are asked when
   you connect.
+- **One-time code from** - a Bitwarden or KeePass item whose TOTP
+  answers the server's verification-code question.
 - **Password** - per-connection override stored in the vault under
   `conn_pass:<connID>`. Set / Clear buttons; an inline hint shows
   when a password is stored. When the credential (own or inherited) is
   also a password, this one is tried first and the credential's only if
   it fails - the editor marks it as **Password overridden**.
-- **Jump host chain** - one row per hop, in connect order. A hop is
-  either **Manual** (hostname, port, user, credential) or a **Saved
-  connection**: any saved connection or any host of an inventory
-  folder. A saved-connection hop reads the bastion's address, user,
-  credential and its own jump chain at connect time, so changing the
-  bastion once changes every chain through it; an inventory host
+- **Color tag** - picker; resolves through folder ancestors if
+  unset on the connection.
+- **Icon** - Upload PNG/SVG/JPG/WebP/GIF (≤256 KB). Clears to the
+  default monitor icon.
+- **Tags** - chip editor with type-and-enter.
+- **Notes** - markdown textarea with an **Edit / Preview** toggle.
+  Supports headings (`#` through `######`), `**bold**`, `*italic*`,
+  `` `inline code` ``, fenced code blocks, `-`/`*`/`+` unordered
+  lists, `1.` ordered lists, `---` horizontal rules, and
+  `[link](https://…)` links. HTTP/HTTPS links open in the system
+  browser. Use it as a mini runbook per host: what it does, who
+  owns it, restart command, gotchas.
+- **Quick actions** - copy buttons for Host / User / Password /
+  ssh command, plus **Launch in system terminal** which opens the
+  OS terminal preloaded with the equivalent `ssh ...` invocation.
+  Password copy auto-clears the clipboard after 30 seconds. The
+  system-terminal launcher prefers Windows Terminal on Windows,
+  Terminal.app on macOS, and falls through gnome-terminal /
+  konsole / xfce4-terminal / xterm / alacritty on Linux.
+
+**Connection**
+
+- **Jump hosts** - the chain as it will be dialled: this computer,
+  each hop with its connection's icon, then this host. The line under
+  it says where the chain comes from (this connection, a folder, or
+  none). **Edit chain** opens the editor: one row per hop, in connect
+  order. A hop is either **Manual** (hostname, port, user, credential)
+  or a **Saved connection**: any saved connection or any host of an
+  inventory folder. A saved-connection hop reads the bastion's address,
+  user, credential and its own jump chain at connect time, so changing
+  the bastion once changes every chain through it; an inventory host
   follows its address from the last refresh. A bastion inside the
   folder it is the jump host for connects directly. If the bastion is
   deleted, or drops out of its inventory, the connect says so.
-- **Color tag** - picker; resolves through folder ancestors if
-  unset on the connection.
+- **Network** - route the first SSH hop through a network profile
+  (VPN), or Direct.
 - **Auto-reconnect** - On / Off / Inherit. When on, sessions that
   drop without a manual Disconnect retry with exponential backoff.
-- **Verbose connect log** - On / Off / Inherit. Emits TCP / handshake
-  / auth diagnostics to the Connect diagnostics block below the
-  header during connect.
-- **Tunnel only** - On / Off / Inherit. The connection runs as a
-  tunnel: no shell, no tab, just its port forwards. See
-  [Tunnel connections](#tunnel-connections).
-- **Start tunnel on app launch** - On / Off / Inherit. Shown only while
-  Tunnel only is on; starts the tunnel when the app starts.
-- **Keepalive interval (s)** - seconds between SSH keepalive global
+- **Keepalive / anti-idle (s)** - seconds between SSH keepalive global
   requests. Empty = inherit, 0 = off. Useful for connections behind
   NAT that drop idle TCP sessions after 1-5 minutes.
+
+**Terminal**
+
 - **Initial command** - a command run in the shell right after connect,
   e.g. `cd /var/www`, `tmux new -A -s main`, or
   `source venv/bin/activate`. Set it on a folder to give every
@@ -517,20 +556,30 @@ Two-column grid (auto-fit on narrow widths). Fields:
   on its way out instead of the one that just started. A few hundred
   milliseconds is normally enough. With a delay set, the terminal is
   usable immediately and the remaining lines land as they are sent.
-- **Tags** - chip editor with type-and-enter.
-- **Notes** - markdown textarea with an **Edit / Preview** toggle.
-  Supports headings (`#` through `######`), `**bold**`, `*italic*`,
-  `` `inline code` ``, fenced code blocks, `-`/`*`/`+` unordered
-  lists, `1.` ordered lists, `---` horizontal rules, and
-  `[link](https://…)` links. HTTP/HTTPS links open in the system
-  browser. Use it as a mini runbook per host: what it does, who
-  owns it, restart command, gotchas.
-- **Icon** - Upload PNG/SVG/JPG/WebP/GIF (≤256 KB). Clears to the
-  default monitor icon.
+- **Open in the background** - the session connects but its tab stays
+  out of the tab bar.
 
-The header carries: favourite toggle (★), Connect button, **Use
-different credential…** toggle, Resolved settings (collapsed; shows
-the merged settings JSON for debugging).
+**Forwards** (**Forwards & tunnel** for a tunnel connection) - the
+connection's [port forwards](#port-forwards). For a tunnel connection
+the tab starts with the tunnel itself: its state, **Start tunnel** /
+**Stop tunnel**, and **Start with the app**. The tab is marked **!**
+when the tunnel failed or a forward is not listening.
+
+**VNC** - the [VNC console](#generic-vnc-your-own-hosts) settings.
+
+**Advanced**
+
+- **Verbose connect log** - On / Off / Inherit. Emits TCP / handshake
+  / auth diagnostics to the Connect diagnostics block below the
+  header during connect.
+- **Jump host for** - the connections and folders that use this one
+  as a bastion.
+- **Resolved & inherited** - the merged settings with where each value
+  comes from (collapsed; for debugging).
+
+A folder's editor has the same tabs (General, Connection, Terminal,
+Tunnels, Advanced) with the settings its connections inherit, each in
+the same place as on a connection.
 
 ### Local-shell connections
 
@@ -572,8 +621,8 @@ scope them per-device.
 
 ### One-shot credential / username / password override
 
-The **Use different credential…** button next to Connect opens an
-override block with three independent fields:
+**Use a different credential...** in the editor header's **...** menu
+opens an override block with three independent fields:
 
 - *Credential* - drop-down of every credential in the vault; pick
   one to use instead of the connection's saved `auth_ref`.
@@ -594,17 +643,6 @@ credential for it, testing a credential rotation, connecting as
 root just this once to fix something, etc.
 
 A matching block exists on dynamic-inventory entries (see § 10b).
-
-Below the editor:
-
-- **Quick actions** - copy buttons for Host / User / Password /
-  ssh command, plus **Launch in system terminal** which opens the
-  OS terminal preloaded with the equivalent `ssh ...` invocation.
-  Password copy auto-clears the clipboard after 30 seconds. The
-  system-terminal launcher prefers Windows Terminal on Windows,
-  Terminal.app on macOS, and falls through gnome-terminal /
-  konsole / xfce4-terminal / xterm / alacritty on Linux.
-- **Port forwards** - see [Port forwards](#port-forwards).
 
 ### Empty state
 
@@ -1353,7 +1391,7 @@ QEMU VMs and LXC containers.
 ### Generic VNC (your own hosts)
 
 Any saved connection can open a VNC console. In the connection editor,
-the **VNC console** section has:
+the **VNC** tab has the on/off switch and:
 
 - **RFB port** - default 5900 (inheritable from the folder).
 - **Reach the port** - *Direct* dials `host:port`; *Through SSH* dials
@@ -1365,8 +1403,10 @@ the **VNC console** section has:
   server demands auth, noVNC prompts in the panel. Tunnelled
   localhost-bound servers often have no password.
 
-Open it from the editor's "Open console" button or the connection's
-right-click menu.
+Open it from the editor's **VNC** button or the connection's
+right-click menu. To open it on a double-click instead of a terminal
+(a host you only reach over VNC), set **Double-click opens** to **VNC
+console** in the General tab.
 
 ### How it works
 
@@ -1516,8 +1556,9 @@ a workaround.
 
 A connection that exists only for its forwards - a jump into a
 customer network that carries a Kafka broker, a database port and a
-SOCKS proxy for the web GUIs - does not need a terminal. Set **Tunnel
-only** on it, or on a whole folder of them, and it runs like `ssh -N`:
+SOCKS proxy for the web GUIs - does not need a terminal. Set **Double-click
+opens** to **Tunnel** on it, or on a whole folder of them, and it runs
+like `ssh -N`:
 the session connects without a shell or PTY, holds the forwards, and
 opens no tab. Accounts without a login shell work too, since no shell
 is ever asked for.
@@ -1528,8 +1569,8 @@ is ever asked for.
   **Show in Tunnels panel** and **Open terminal**, for when you want a
   shell on the same host. Selecting several and picking Connect all
   starts the tunnels among them. In the connection editor the header
-  offers **Start tunnel** / **Stop tunnel** first and **Open terminal**
-  next to it; with **Use different credential...** set, the button is
+  offers **Start tunnel** / **Stop tunnel** first and **Terminal**
+  next to it; with **Use a different credential...** set, the button is
   a terminal connect as for any connection.
 - **Which forwards come up.** All of them: a tunnel connection exists
   for its forwards, so starting the tunnel starts every saved forward,
@@ -1543,8 +1584,9 @@ is ever asked for.
   it from. A launch start or a reconnect stays quiet unless the tunnel
   fails or comes up with a forward down; several at once share one
   notification.
-- **On app launch.** **Start tunnel on app launch** (On / Off /
-  Inherit, offered only while Tunnel only is on) starts the tunnel once
+- **On app launch.** **Start with the app** (On / Off / Inherit, in
+  the editor's Forwards & tunnel tab, or the folder's Tunnels tab)
+  starts the tunnel once
   the vault gate is passed. A launch start keeps retrying while the
   network or the server is not there yet, so starting the app before
   Wi-Fi or a VPN is fine. If you choose **Skip** at the vault gate,

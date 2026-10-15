@@ -19,7 +19,10 @@
   import ColorPicker from "./ColorPicker.svelte";
   import IconPicker from "./IconPicker.svelte";
   import Icon from "./Icon.svelte";
-  import { IconFolder, IconHost, IconLock, IconUser, IconClipboardCopy, IconTerminal, IconMonitor, IconStar, IconGlobe } from "./iconMap";
+  import { IconFolder, IconHost, IconLock, IconUser, IconClipboardCopy, IconTerminal, IconMonitor, IconStar, IconGlobe, IconBastion, IconTrash, IconKey } from "./iconMap";
+  import { contextMenu, type MenuItem } from "./contextMenu.svelte.ts";
+  import appIcon from "../assets/images/app-icon-64.png";
+  import type { TunnelInfo } from "./api";
   import DeleteConfirm from "./DeleteConfirm.svelte";
   import { connectionActions } from "./connectionActions.svelte";
   import { explain as explainConnectError, unwrapRaw as unwrapConnectErr, errMsg } from "./connectErrors";
@@ -343,6 +346,7 @@
     initialCommandDelay: string;
     tunnelOnly: string;
     tunnelAutostart: string;
+    vncDefault: string;
   } | null>(null);
 
   // Same api_token exclusion as the connection picker, keyed on the folder's
@@ -359,6 +363,7 @@
     if (s === "off") return false;
     return undefined;
   }
+
 
   // network_profile_id tri-state for <select>: "" = inherit,
   // "__direct__" = explicit direct (stored as ""), else profile id.
@@ -397,6 +402,7 @@
             : "",
         tunnelOnly: encodeBool(folder.settings.tunnel_only),
         tunnelAutostart: encodeBool(folder.settings.tunnel_autostart),
+        vncDefault: encodeBool(folder.settings.vnc_default),
       };
     } else {
       editingFolder = null;
@@ -420,6 +426,7 @@
       editingFolder.probeLiveness !== encodeBool(s.probe_liveness) ||
       editingFolder.tunnelOnly !== encodeBool(s.tunnel_only) ||
       editingFolder.tunnelAutostart !== encodeBool(s.tunnel_autostart) ||
+      editingFolder.vncDefault !== encodeBool(s.vnc_default) ||
       numText(editingFolder.keepalive) !== (s.keepalive_interval !== undefined ? String(s.keepalive_interval) : "") ||
       editingFolder.networkProfile !== encodeNetProfile(s.network_profile_id) ||
       editingFolder.initialCommand !== (s.initial_command ?? "") ||
@@ -451,6 +458,7 @@
     settings.probe_liveness = decodeBool(editingFolder.probeLiveness);
     settings.tunnel_only = decodeBool(editingFolder.tunnelOnly);
     settings.tunnel_autostart = decodeBool(editingFolder.tunnelAutostart);
+    settings.vnc_default = decodeBool(editingFolder.vncDefault);
     {
       const k = numText(editingFolder.keepalive);
       if (k === "") {
@@ -504,17 +512,85 @@
   // header then offers Start / Stop tunnel ahead of Open terminal.
   const connTunnel = $derived(conn ? tunnels.byConnection(conn.id) : undefined);
 
-  // tunnel_only as the folder chain from folderId upwards sets it (the value
-  // an "(inherit)" choice would get). Walked live from the tree so the
-  // editor reacts to the select before anything is saved.
-  function inheritedTunnelOnly(folderId: string | null | undefined): boolean {
+  // A setting as the folder chain from folderId upwards sets it (the value
+  // an "(inherit)" choice gets), with the name of the folder that sets it.
+  // Walked live from the tree so the editor reacts to a select before
+  // anything is saved.
+  function inheritedSetting(folderId: string | null | undefined, key: string): { value: any; from: string | null } {
     for (let i = 0; i < 10000 && folderId; i++) {
       const f = tree.folderById(folderId);
       if (!f) break;
-      if (f.settings?.tunnel_only !== undefined && f.settings?.tunnel_only !== null) return !!f.settings.tunnel_only;
+      const v = (f.settings as any)?.[key];
+      if (v !== undefined && v !== null && v !== "") return { value: v, from: f.name };
       folderId = f.parent_id;
     }
-    return false;
+    return { value: undefined, from: null };
+  }
+  function inheritedTunnelOnly(folderId: string | null | undefined): boolean {
+    return !!inheritedSetting(folderId, "tunnel_only").value;
+  }
+
+  // ----- Editor tabs -----
+  // One set of tabs for the connection and the folder editor, so a setting
+  // sits in the same place in both. The last tab picked is kept (per
+  // viewer, browser storage); a tab the current item lacks falls back to
+  // General.
+  type EdTab = "general" | "connection" | "terminal" | "forwards" | "vnc" | "advanced";
+  const ED_TAB_KEY = "ssh-tool.editor.tab";
+  let edTabPref = $state<EdTab>((() => {
+    try { return (localStorage.getItem(ED_TAB_KEY) as EdTab) || "general"; } catch { return "general"; }
+  })());
+  function setEdTab(t: EdTab) {
+    edTabPref = t;
+    try { localStorage.setItem(ED_TAB_KEY, t); } catch { /* private window */ }
+  }
+
+  // "Double-click opens": one choice over two stored flags (tunnel_only,
+  // vnc_default), so the two can no longer both be on with one silently
+  // winning. The editor writes exactly one of them on; a row that has both
+  // on from before resolves Tunnel > VNC > Terminal, the order
+  // connectDefault checks them in.
+  type OpenAs = "" | "terminal" | "tunnel" | "vnc";
+  function openAsLabel(m: OpenAs): string {
+    return m === "tunnel" ? "Tunnel" : m === "vnc" ? "VNC console" : "Terminal";
+  }
+  function inheritedOpenAs(folderId: string | null | undefined): { mode: OpenAs; from: string | null } {
+    const t = inheritedSetting(folderId, "tunnel_only");
+    if (t.value) return { mode: "tunnel", from: t.from };
+    const v = inheritedSetting(folderId, "vnc_default");
+    const on = inheritedSetting(folderId, "vnc_enabled");
+    if (v.value && on.value) return { mode: "vnc", from: v.from };
+    return { mode: "terminal", from: t.from ?? v.from };
+  }
+  function openAsOf(tunnelOnly: string, vncDefault: string, inh: OpenAs, vncOn: boolean): OpenAs {
+    if (tunnelOnly === "" && vncDefault === "") return "";
+    const tunnel = tunnelOnly === "on" || (tunnelOnly === "" && inh === "tunnel");
+    if (tunnel) return "tunnel";
+    const vnc = vncDefault === "on" || (vncDefault === "" && inh === "vnc");
+    return vnc && vncOn ? "vnc" : "terminal";
+  }
+  function openAsFlags(m: OpenAs): { tunnelOnly: string; vncDefault: string } {
+    if (m === "tunnel") return { tunnelOnly: "on", vncDefault: "off" };
+    if (m === "vnc") return { tunnelOnly: "off", vncDefault: "on" };
+    if (m === "terminal") return { tunnelOnly: "off", vncDefault: "off" };
+    return { tunnelOnly: "", vncDefault: "" };
+  }
+
+  // Tunnel state words and colour, shared by the header pill and the
+  // Forwards tab.
+  function tunnelTone(t: TunnelInfo): string {
+    if (t.state === "error") return "bad";
+    if (t.state === "connected") return t.degraded ? "warn" : "ok";
+    if (t.state === "stopped") return "idle";
+    return "warn";
+  }
+  function tunnelText(t: TunnelInfo): string {
+    const fw = t.forwards ?? [];
+    const listening = fw.filter((f) => f.state === "listening").length;
+    if (t.state === "connected") return `tunnel up, ${listening}/${fw.length} listening`;
+    if (t.state === "error") return "tunnel failed";
+    if (t.state === "stopped") return "tunnel stopped";
+    return `tunnel ${t.state}`;
   }
   let resolveErr = $state<string | null>(null);
   let editing = $state<{
@@ -555,6 +631,150 @@
     !!editingFolder && (editingFolder.tunnelOnly === "on" ||
       (editingFolder.tunnelOnly === "" && inheritedTunnelOnly(folder?.parent_id)))
   );
+
+  // The tabs this kind of connection has: a web bookmark is one page, a
+  // local shell has no SSH settings.
+  type EdTabDef = { id: EdTab; label: string; warn?: string };
+  const edTabs = $derived.by((): EdTabDef[] => {
+    if (!conn) return [];
+    if (isWeb) return [{ id: "general", label: "General" }];
+    if (isLocal) return [{ id: "general", label: "General" }, { id: "terminal", label: "Terminal" }];
+    const t = connTunnel;
+    const warn = t?.state === "error" ? "The tunnel failed" : t?.degraded ? "A forward is not listening" : undefined;
+    const tabs: EdTabDef[] = [
+      { id: "general", label: "General" },
+      { id: "connection", label: "Connection" },
+      { id: "terminal", label: "Terminal" },
+      { id: "forwards", label: connTunnelOnly ? "Forwards & tunnel" : "Forwards", warn },
+    ];
+    if (!isMobile) tabs.push({ id: "vnc", label: "VNC" });
+    tabs.push({ id: "advanced", label: "Advanced" });
+    return tabs;
+  });
+  const edTab = $derived<EdTab>(edTabs.some((t) => t.id === edTabPref) ? edTabPref : "general");
+
+  function folderPathOf(folderId: string | null | undefined): string {
+    const names: string[] = [];
+    for (let i = 0; i < 10000 && folderId; i++) {
+      const f = tree.folderById(folderId);
+      if (!f) break;
+      names.unshift(f.name);
+      folderId = f.parent_id;
+    }
+    return names.join(" / ");
+  }
+
+  // Header: who and where, and what is running for this connection.
+  const headSub = $derived.by(() => {
+    if (!conn) return "";
+    const path = folderPathOf(conn.folder_id);
+    let target = "";
+    if (isLocal) target = "local shell";
+    else if (isWeb) target = conn.hostname;
+    else {
+      const user = resolved?.username ?? (editing?.username || "");
+      const port = resolved?.port ?? 22;
+      target = `${user ? user + "@" : ""}${conn.hostname}${port !== 22 ? ":" + port : ""}`;
+    }
+    return path ? `${target} - ${path}` : target;
+  });
+  const headPill = $derived.by((): { tone: string; text: string; title: string } | null => {
+    if (!conn || isWeb) return null;
+    if (connTunnel) return { tone: tunnelTone(connTunnel), text: tunnelText(connTunnel), title: connTunnel.error ?? "" };
+    const open = sessions.tabs.filter((t) => t.connectionId === conn.id && t.status === "connected").length;
+    if (open > 0) return { tone: "ok", text: open === 1 ? "connected" : `${open} sessions`, title: "Open terminal sessions on this connection" };
+    return null;
+  });
+
+  // "Double-click opens" for the connection being edited.
+  const connInhOpenAs = $derived(inheritedOpenAs(conn?.folder_id));
+  const connVncOn = $derived(
+    !!editing && (editing.vncEnabled === "on" ||
+      (editing.vncEnabled === "" && !!inheritedSetting(conn?.folder_id, "vnc_enabled").value))
+  );
+  const connOpenAs = $derived<OpenAs>(
+    editing ? openAsOf(editing.tunnelOnly, editing.vncDefault, connInhOpenAs.mode, connVncOn) : ""
+  );
+  function setConnOpenAs(m: OpenAs) {
+    if (!editing) return;
+    editing = { ...editing, ...openAsFlags(m) };
+  }
+  const connInhAutostart = $derived(inheritedSetting(conn?.folder_id, "tunnel_autostart"));
+
+  // Jump chain as cards: this computer, each hop with its connection's
+  // icon, then this host. The editor opens on demand.
+  let chainEditOpen = $state(false);
+  type ChainHop = { label: string; title: string; conn: ReturnType<typeof tree.connectionById> | null };
+  function chainHops(spec: any): ChainHop[] {
+    const out: ChainHop[] = [];
+    for (let cur = spec, i = 0; cur && i < 100; cur = cur.via, i++) {
+      if (cur.connection_id) {
+        const c = tree.connectionById(cur.connection_id) ?? null;
+        out.push({ label: tree.jumpRefLabel(cur.connection_id), title: c?.hostname ?? "", conn: c });
+      } else if (cur.hostname) {
+        out.push({ label: cur.hostname, title: `${cur.username ? cur.username + "@" : ""}${cur.hostname}${cur.port ? ":" + cur.port : ""}`, conn: null });
+      }
+    }
+    return out;
+  }
+  const connChainState = $derived.by((): { hops: ChainHop[]; note: string } => {
+    if (!conn || !editing) return { hops: [], note: "" };
+    const own = editing.jumpHost;
+    if (own) {
+      if (own.kind === "none") return { hops: [], note: "No jump host: the folder's chain is cleared for this connection." };
+      const hops = chainHops((own as any).chain);
+      return { hops, note: hops.length ? "Set on this connection." : "Direct, no jump host." };
+    }
+    const inh = tree.inheritedFieldForConnection(conn.id, "jump_host");
+    const v = inh.value as any;
+    if (inh.from && v?.kind === "chain") return { hops: chainHops(v.chain), note: `From ${inh.from.name}.` };
+    if (inh.from && v?.kind === "none") return { hops: [], note: `Direct: ${inh.from.name} clears the chain.` };
+    return { hops: [], note: "Direct, no jump host." };
+  });
+  const connChain = $derived(connChainState.hops);
+  const connChainNote = $derived(connChainState.note);
+
+  // The folder editor's tabs: no VNC (its settings live on connections).
+  const folderTabs: EdTabDef[] = [
+    { id: "general", label: "General" },
+    { id: "connection", label: "Connection" },
+    { id: "terminal", label: "Terminal" },
+    { id: "forwards", label: "Tunnels" },
+    { id: "advanced", label: "Advanced" },
+  ];
+  const folderTab = $derived<EdTab>(folderTabs.some((t) => t.id === edTabPref) ? edTabPref : "general");
+  const folderSub = $derived.by(() => {
+    if (!folder) return "";
+    const n = tree.connectionsIn(folder.id).length;
+    const path = folderPathOf(folder.parent_id);
+    const count = `${n} connection${n === 1 ? "" : "s"}`;
+    return path ? `${count} - in ${path}` : count;
+  });
+  const folderInhOpenAs = $derived(inheritedOpenAs(folder?.parent_id));
+  const folderVncOn = $derived(!!inheritedSetting(folder?.id, "vnc_enabled").value);
+  const folderOpenAs = $derived<OpenAs>(
+    editingFolder ? openAsOf(editingFolder.tunnelOnly, editingFolder.vncDefault, folderInhOpenAs.mode, folderVncOn) : ""
+  );
+  function setFolderOpenAs(m: OpenAs) {
+    if (!editingFolder) return;
+    editingFolder = { ...editingFolder, ...openAsFlags(m) };
+  }
+  const folderInhAutostart = $derived(inheritedSetting(folder?.parent_id, "tunnel_autostart"));
+
+  // Rare actions live behind the header's "..." button.
+  function openMoreMenu(e: MouseEvent) {
+    if (!conn) return;
+    const items: MenuItem[] = [];
+    if (!isLocal && !isWeb) {
+      items.push({
+        label: showOverride ? "Hide the different credential" : "Use a different credential...",
+        iconComponent: IconKey,
+        onSelect: () => (showOverride = !showOverride),
+      });
+    }
+    items.push({ label: "Delete connection", iconComponent: IconTrash, danger: true, onSelect: () => deleteConn() });
+    contextMenu.show(e, items);
+  }
 
   // SSH auth credentials for the connection picker. api_token is filtered out
   // (see sshCredOptions) but a value already stored on this connection is
@@ -622,6 +842,7 @@
     if (id !== lastOverrideConnId) {
       lastOverrideConnId = id;
       showOverride = false;
+      chainEditOpen = false;
       overrideCredId = "";
       overrideUsername = "";
       overridePassword = "";
@@ -1359,8 +1580,11 @@
       <p>Select a folder or connection on the left.</p>
     </div>
   {:else if folder && editingFolder}
-    <header>
-      <h1><IconFolder size={18} /> <input class="title-input" bind:value={editingFolder.name} /></h1>
+    <header class="ed-head">
+      <div class="ed-title">
+        <h1><IconFolder size={18} /> <input class="title-input" bind:value={editingFolder.name} /></h1>
+        {#if folderSub}<span class="ed-sub">{folderSub}</span>{/if}
+      </div>
       <div class="head-actions">
         <button class="primary save-btn" class:dirty={folderDirty} onclick={saveFolder}>
           {#if savedHint && !folderDirty}✓ Saved{:else if folderDirty}Save *{:else}Save{/if}
@@ -1369,14 +1593,27 @@
         <button onclick={addConnectionHere} title="New connection here">+ Connection</button>
         <button class="danger" onclick={deleteFolder}>Delete</button>
       </div>
+      <div class="ed-tabs" role="tablist" aria-label="Folder settings">
+        {#each folderTabs as t (t.id)}
+          <button role="tab" aria-selected={folderTab === t.id} class:active={folderTab === t.id} onclick={() => setEdTab(t.id)}>{t.label}</button>
+        {/each}
+      </div>
     </header>
 
     <FleetBar ids={folderFleetIds} label={folder.name} folderId={folder.id} />
+    {#if folderTab === "general"}
     <FleetCards folderId={folder.id} ids={folderFleetIds} label={folder.name} />
-
     <div class="form">
-      <p class="section-label span-2">Inherited settings - applied to all connections in this folder unless overridden</p>
-
+      <p class="section-label span-2">Inherited by the connections and subfolders in this folder unless they set their own value.</p>
+      <label title="What a double-click or Enter does on the connections in this folder.">
+        Double-click opens
+        <select value={folderOpenAs} onchange={(e) => setFolderOpenAs(e.currentTarget.value as OpenAs)}>
+          <option value="">(inherit: {openAsLabel(folderInhOpenAs.mode)}{folderInhOpenAs.from ? `, from ${folderInhOpenAs.from}` : ""})</option>
+          <option value="terminal">Terminal</option>
+          <option value="tunnel">Tunnel - no shell, only the forwards</option>
+          <option value="vnc" disabled={!folderVncOn}>VNC console{folderVncOn ? "" : " (VNC is not on for this folder)"}</option>
+        </select>
+      </label>
       <div class="row">
         <label class="grow">Default username
           <input bind:value={editingFolder.username} placeholder="(not set)" />
@@ -1385,7 +1622,6 @@
           <input type="number" bind:value={editingFolder.port} min="1" max="65535" placeholder="22" />
         </label>
       </div>
-
       <label>Credential
         <div class="cred-picker-row">
           <SearchableSelect
@@ -1442,18 +1678,11 @@
           <span class="inh-hint">Answers the server's verification-code question from this item's TOTP, next to the credential above.</span>
         </label>
       {/if}
-
-      <div class="span-2"><JumpChainEditor
-        value={editingFolder.jumpHost}
-        onChange={(v) => { if (editingFolder) editingFolder = { ...editingFolder, jumpHost: v }; }}
-      /></div>
-
       <div class="span-2"><ColorPicker
         value={editingFolder.colorTag}
         onChange={(v) => { if (editingFolder) editingFolder = { ...editingFolder, colorTag: v }; }}
         label="Color tag (inherited by children)"
       /></div>
-
       {#if folder}
         <div class="span-2"><IconPicker
           kind="folder"
@@ -1466,50 +1695,17 @@
           onNamedChange={() => tree.load()}
         /></div>
       {/if}
-
-      <label>Auto-reconnect
-        <select bind:value={editingFolder.autoReconnect}>
-          <option value="">(inherit from parent)</option>
-          <option value="on">On - retry with backoff after drop</option>
-          <option value="off">Off - drop = closed</option>
-        </select>
-      </label>
-
-      <label title="Connections in this folder run as tunnels: no shell and no tab, only their port forwards. Double-click starts the tunnel; the Tunnels panel in the status bar lists them.">Tunnel only
-        <select bind:value={editingFolder.tunnelOnly}>
-          <option value="">(inherit from parent)</option>
-          <option value="on">On - start as a tunnel, no terminal</option>
-          <option value="off">Off - open a terminal</option>
-        </select>
-      </label>
-
-      {#if folderTunnelOnly}
-      <label title="Start these tunnels when the app starts (once the vault is open). Only applies to tunnel-only connections.">Start tunnel on app launch
-        <select bind:value={editingFolder.tunnelAutostart}>
-          <option value="">(inherit from parent)</option>
-          <option value="on">On</option>
-          <option value="off">Off</option>
-        </select>
-      </label>
+      {#if savedHint}
+        <div class="span-2 save-row"><span class="saved-pill">✓ {savedHint}</span></div>
       {/if}
-
-      <label>Verbose connect log
-        <select bind:value={editingFolder.verbose}>
-          <option value="">(inherit from parent)</option>
-          <option value="on">On - show TCP / handshake / auth diagnostics</option>
-          <option value="off">Off</option>
-        </select>
-      </label>
-
-      <label title="Show a reachability dot (TCP connect to the SSH port) on connections in this folder while it is expanded. Needs the global liveness probe enabled in Settings.">
-        Liveness probe
-        <select bind:value={editingFolder.probeLiveness}>
-          <option value="">(inherit from parent)</option>
-          <option value="on">On - probe hosts in this folder</option>
-          <option value="off">Off - never probe this folder</option>
-        </select>
-      </label>
-
+    </div>
+    {:else if folderTab === "connection"}
+    <div class="form">
+      <p class="section-label span-2">Inherited by the connections and subfolders in this folder unless they set their own value.</p>
+      <div class="span-2"><JumpChainEditor
+        value={editingFolder.jumpHost}
+        onChange={(v) => { if (editingFolder) editingFolder = { ...editingFolder, jumpHost: v }; }}
+      /></div>
       <label title="Route the first SSH hop of every connection in this folder through a userspace VPN tunnel (WireGuard, NetBird, Tailscale, OpenConnect, OpenVPN or Check Point).">
         Network (inherited by children)
         <select bind:value={editingFolder.networkProfile}>
@@ -1525,7 +1721,13 @@
             Settings -&gt; Network profiles</button>.
         </span>
       </label>
-
+      <label>Auto-reconnect
+        <select bind:value={editingFolder.autoReconnect}>
+          <option value="">(inherit from parent)</option>
+          <option value="on">On - retry with backoff after drop</option>
+          <option value="off">Off - drop = closed</option>
+        </select>
+      </label>
       <label title="Anti-idle: send an SSH keepalive every N seconds so a bastion or firewall doesn't drop connections under this folder when they're quiet. Inherited by connections; blank inherits the parent folder, 0 sends nothing. A dead connection is still detected either way - with 0 it just takes up to a minute longer.">
         Keepalive / anti-idle (s)
         <input
@@ -1538,7 +1740,21 @@
         />
         <span class="field-note">Stops idle drops. Inherited by connections. Blank = inherit, 0 = send nothing (a dead link is still detected, just slower).</span>
       </label>
-
+      <label title="Show a reachability dot (TCP connect to the SSH port) on connections in this folder while it is expanded. Needs the global liveness probe enabled in Settings.">
+        Liveness probe
+        <select bind:value={editingFolder.probeLiveness}>
+          <option value="">(inherit from parent)</option>
+          <option value="on">On - probe hosts in this folder</option>
+          <option value="off">Off - never probe this folder</option>
+        </select>
+      </label>
+      {#if savedHint}
+        <div class="span-2 save-row"><span class="saved-pill">✓ {savedHint}</span></div>
+      {/if}
+    </div>
+    {:else if folderTab === "terminal"}
+    <div class="form">
+      <p class="section-label span-2">Inherited by the connections and subfolders in this folder unless they set their own value.</p>
       <label class="span-2" title="A command run in the shell right after connect - e.g. cd /var/www, tmux new -A -s main, source venv/bin/activate. Inherited by connections; blank inherits the parent folder.">
         Initial command
         <textarea
@@ -1549,7 +1765,6 @@
         ></textarea>
         <span class="field-note">Run in the shell on connect. Inherited by connections. Blank = inherit. One command per line.</span>
       </label>
-
       <label title="Wait this long between the lines of a multi-line command. Needed when a line replaces the shell that reads the next one.">
         Delay between lines (ms)
         <input
@@ -1561,25 +1776,64 @@
         />
         <span class="field-note">Blank = inherit, 0 = no pause. Raise it when a line starts a new shell (<code>sudo su - user</code>) and the lines after it get swallowed.</span>
       </label>
-
       {#if savedHint}
         <div class="span-2 save-row"><span class="saved-pill">✓ {savedHint}</span></div>
       {/if}
     </div>
+    {:else if folderTab === "forwards"}
+    <div class="form">
+      <p class="section-label span-2">Inherited by the connections and subfolders in this folder unless they set their own value.</p>
+      {#if folderTunnelOnly}
+      <label title="Start these tunnels when the app starts (once the vault is open). Only applies to tunnel-only connections.">Start with the app
+        <select bind:value={editingFolder.tunnelAutostart}>
+          <option value="">(inherit: {folderInhAutostart.value ? "on" : "off"}{folderInhAutostart.from ? `, from ${folderInhAutostart.from}` : ""})</option>
+          <option value="on">On</option>
+          <option value="off">Off</option>
+        </select>
+      </label>
+        <p class="span-2 field-note">Connections here open as tunnels: no shell and no tab, and starting one brings up every forward it has. Their forwards are set on each connection.</p>
+      {:else}
+        <p class="span-2 field-note">Connections here open as terminals. Pick <strong>Tunnel</strong> under General -&gt; Double-click opens to run them as tunnels.</p>
+      {/if}
+      {#if savedHint}
+        <div class="span-2 save-row"><span class="saved-pill">✓ {savedHint}</span></div>
+      {/if}
+    </div>
+    {:else if folderTab === "advanced"}
+    <div class="form">
+      <p class="section-label span-2">Inherited by the connections and subfolders in this folder unless they set their own value.</p>
+      <label>Verbose connect log
+        <select bind:value={editingFolder.verbose}>
+          <option value="">(inherit from parent)</option>
+          <option value="on">On - show TCP / handshake / auth diagnostics</option>
+          <option value="off">Off</option>
+        </select>
+      </label>
+      {#if savedHint}
+        <div class="span-2 save-row"><span class="saved-pill">✓ {savedHint}</span></div>
+      {/if}
+    </div>
+    {/if}
   {:else if conn && editing}
-    <header>
-      <h1>
-        <button
-          class="fav-toggle"
-          class:active={conn.favorite}
-          title={conn.favorite ? "Remove from favourites" : "Mark as favourite"}
-          onclick={toggleFavorite}
-        ><IconStar size={16} fill={conn.favorite ? "currentColor" : "none"} /></button>
-        <Icon imageId={conn.icon_image_id} iconName={conn.icon_name} iconColor={conn.icon_color} size={18}>
-          {#if isLocal}<IconTerminal size={18} />{:else if isWeb}<IconGlobe size={18} />{:else}<IconHost size={18} />{/if}
-        </Icon>
-        {conn.name}
-      </h1>
+    <header class="ed-head">
+      <div class="ed-title">
+        <h1>
+          <button
+            class="fav-toggle"
+            class:active={conn.favorite}
+            title={conn.favorite ? "Remove from favourites" : "Mark as favourite"}
+            onclick={toggleFavorite}
+          ><IconStar size={16} fill={conn.favorite ? "currentColor" : "none"} /></button>
+          <Icon imageId={conn.icon_image_id} iconName={conn.icon_name} iconColor={conn.icon_color} size={18}>
+            {#if isLocal}<IconTerminal size={18} />{:else if isWeb}<IconGlobe size={18} />{:else}<IconHost size={18} />{/if}
+          </Icon>
+          <span class="ed-name">{conn.name}</span>
+          {#if headPill}
+            <span class="ed-pill {headPill.tone}" title={headPill.title}><span class="ed-dot"></span>{headPill.text}</span>
+          {/if}
+        </h1>
+        {#if headSub}<span class="ed-sub" title={headSub}>{headSub}</span>{/if}
+      </div>
       <div class="head-actions">
         <button
           class="save-btn"
@@ -1607,7 +1861,7 @@
             </button>
           {/if}
           <button disabled={connecting} onclick={connect} title="Open a terminal on this host, next to the tunnel">
-            {connecting ? (connectStage ?? "Connecting…") : "Open terminal"}
+            {connecting ? (connectStage ?? "Connecting…") : "Terminal"}
           </button>
         {:else}
         <button class="primary" disabled={connecting} onclick={connect}>
@@ -1626,17 +1880,20 @@
             Cancel
           </button>
         {/if}
-        {#if !isLocal && !isWeb}
-          <button
-            class="ghost"
-            title="Use a different credential just for the next connect attempt"
-            onclick={() => (showOverride = !showOverride)}
-          >
-            {showOverride ? "✕" : "Use different credential…"}
-          </button>
+        {#if showOverride}
+          <button class="ghost" title="Close the different-credential panel" onclick={() => (showOverride = false)}>✕ Credential</button>
         {/if}
-        <button class="danger" onclick={deleteConn}>Delete</button>
+        <button class="ghost more-btn" aria-label="More actions" title="More actions" onclick={openMoreMenu}><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg></button>
       </div>
+      {#if edTabs.length > 1}
+        <div class="ed-tabs" role="tablist" aria-label="Connection settings">
+          {#each edTabs as t (t.id)}
+            <button role="tab" aria-selected={edTab === t.id} class:active={edTab === t.id} onclick={() => setEdTab(t.id)}>
+              {t.label}{#if t.warn}<span class="ed-warn" title={t.warn}>!</span>{/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
     </header>
     {#if showOverride}
       <div class="cred-override">
@@ -1699,8 +1956,20 @@
     {@const inhPort = tree.inheritedFieldForConnection(conn.id, "port")}
     {@const inhAuth = tree.inheritedFieldForConnection(conn.id, "auth_ref")}
     {@const inhJump = tree.inheritedFieldForConnection(conn.id, "jump_host")}
+    {#if edTab === "general"}
     <div class="form">
       <label title="A label for this connection in the tree - any text you like.">Name<input bind:value={editing.name} placeholder="My server" /></label>
+      {#if !isLocal && !isWeb}
+        <label title="What a double-click or Enter on this connection does. The other actions stay in the header and the right-click menu.">
+          Double-click opens
+          <select value={connOpenAs} onchange={(e) => setConnOpenAs(e.currentTarget.value as OpenAs)}>
+            <option value="">(inherit: {openAsLabel(connInhOpenAs.mode)}{connInhOpenAs.from ? `, from ${connInhOpenAs.from}` : ""})</option>
+            <option value="terminal">Terminal</option>
+            <option value="tunnel">Tunnel - no shell, only the forwards</option>
+            <option value="vnc" disabled={!connVncOn}>VNC console{connVncOn ? "" : " (turn VNC on first)"}</option>
+          </select>
+        </label>
+      {/if}
       {#if isLocal}
         <label class="span-2" title="Which local shell to launch. Auto picks a sensible default for this OS. The Initial command below runs inside it.">
           Shell
@@ -1718,21 +1987,24 @@
         </label>
       {:else if isWeb}
         <label class="span-2" title="The page to open. It goes through the network profile below (inherited from the folder) when there is one.">Address<input bind:value={editing.hostname} placeholder="https://grafana.customer.lan" /></label>
+      <label title={isWeb ? "Which VPN's browser opens this page. Direct = your normal browser." : "Route the first SSH hop through a userspace VPN tunnel (no TUN adapter, no admin rights)."}>
+        Network
+        <select bind:value={editing.networkProfile}>
+          <option value="">(inherit from folder)</option>
+          <option value="__direct__">Direct - no tunnel</option>
+          {#each networkProfiles.list as np (np.id)}
+            <option value={np.id}>via {np.name} ({profileKindTitle(np)})</option>
+          {/each}
+        </select>
+        <span class="field-note">
+          {networkProfiles.list.length === 0 ? "No network profiles yet - " : "Network profiles live in "}
+          <button class="linklike" onclick={(e) => { e.preventDefault(); view.setTabSettingsSection("network"); }}>
+            Settings -&gt; Network profiles</button>.
+        </span>
+      </label>
       {:else}
-        <label title="The address to connect to: a DNS hostname or an IP. This is what SSH dials, not the display name above.">Hostname / IP address<input bind:value={editing.hostname} placeholder="host.example.com or 10.0.0.5" /></label>
-      {/if}
-      {#if !isLocal && !isWeb}
       <div class="row">
-        <label class="grow">
-          Username
-          <input
-            bind:value={editing.username}
-            placeholder={inhUser.value ? String(inhUser.value) : "(no inherited value)"}
-          />
-          {#if inhUser.from && !editing.username}
-            <span class="inh-hint">inherited from <strong>{inhUser.from.name}</strong>: {inhUser.value}</span>
-          {/if}
-        </label>
+        <label class="grow" title="The address to connect to: a DNS hostname or an IP. This is what SSH dials, not the display name above.">Hostname / IP address<input bind:value={editing.hostname} placeholder="host.example.com or 10.0.0.5" /></label>
         <label class="port">
           Port
           <input
@@ -1743,10 +2015,20 @@
             placeholder={inhPort.value ? String(inhPort.value) : "22"}
           />
           {#if inhPort.from && !editing.port}
-            <span class="inh-hint">inherited from <strong>{inhPort.from.name}</strong>: {inhPort.value}</span>
+            <span class="inh-hint">from <strong>{inhPort.from.name}</strong>: {inhPort.value}</span>
           {/if}
         </label>
       </div>
+      <label>
+        Username
+        <input
+          bind:value={editing.username}
+          placeholder={inhUser.value ? String(inhUser.value) : "(no inherited value)"}
+        />
+        {#if inhUser.from && !editing.username}
+          <span class="inh-hint">inherited from <strong>{inhUser.from.name}</strong>: {inhUser.value}</span>
+        {/if}
+      </label>
       <label>Credential
         <div class="cred-picker-row">
           <SearchableSelect
@@ -1848,28 +2130,11 @@
           <span class="pass-hint">Password saved - will be used for auth</span>
         {/if}
       </label>
-      <div class="span-2">
-        <JumpChainEditor selfId={conn?.id} value={editing.jumpHost} onChange={(v) => { if (editing) editing = { ...editing, jumpHost: v }; }} />
-        {#if inhJump.from && !editing.jumpHost}
-          {@const inhChain = jumpChainNames((inhJump.value as any)?.chain)}
-          <span class="inh-hint">
-            inherited from <strong>{inhJump.from.name}</strong>:
-            {#if inhChain.length > 0}
-              via {inhChain.join(" → ")}
-            {:else if (inhJump.value as any)?.kind === "none"}
-              no jump (cleared)
-            {:else}
-              (empty)
-            {/if}
-          </span>
-        {/if}
-      </div>
       {/if}
       <div class="span-2"><ColorPicker
         value={editing.colorTag}
         onChange={(v) => { if (editing) editing = { ...editing, colorTag: v }; }}
       /></div>
-
       <div class="span-2"><IconPicker
         kind="connection"
         targetId={conn.id}
@@ -1880,179 +2145,6 @@
         onChange={() => tree.load()}
         onNamedChange={() => tree.load()}
       /></div>
-
-      {#if !isLocal}
-      {#if !isWeb}
-      <label>Auto-reconnect
-        <select bind:value={editing.autoReconnect}>
-          <option value="">(inherit from folder)</option>
-          <option value="on">On - retry with backoff after drop</option>
-          <option value="off">Off - drop = closed</option>
-        </select>
-      </label>
-      <label>Verbose connect log
-        <select bind:value={editing.verbose}>
-          <option value="">(inherit from folder)</option>
-          <option value="on">On - show TCP / handshake / auth diagnostics</option>
-          <option value="off">Off</option>
-        </select>
-      </label>
-      <label title="Run this connection as a tunnel: no shell and no tab, only its port forwards (like ssh -N). Double-click starts the tunnel; right-click still opens a terminal. The Tunnels panel in the status bar lists it.">Tunnel only
-        <select bind:value={editing.tunnelOnly}>
-          <option value="">(inherit from folder)</option>
-          <option value="on">On - start as a tunnel, no terminal</option>
-          <option value="off">Off - open a terminal</option>
-        </select>
-      </label>
-      {#if connTunnelOnly}
-      <label title="Start this tunnel when the app starts (once the vault is open). Only applies when Tunnel only is on.">Start tunnel on app launch
-        <select bind:value={editing.tunnelAutostart}>
-          <option value="">(inherit from folder)</option>
-          <option value="on">On</option>
-          <option value="off">Off</option>
-        </select>
-      </label>
-      {/if}
-      {/if}
-      <label title={isWeb ? "Which VPN's browser opens this page. Direct = your normal browser." : "Route the first SSH hop through a userspace VPN tunnel (no TUN adapter, no admin rights)."}>
-        Network
-        <select bind:value={editing.networkProfile}>
-          <option value="">(inherit from folder)</option>
-          <option value="__direct__">Direct - no tunnel</option>
-          {#each networkProfiles.list as np (np.id)}
-            <option value={np.id}>via {np.name} ({profileKindTitle(np)})</option>
-          {/each}
-        </select>
-        <span class="field-note">
-          {networkProfiles.list.length === 0 ? "No network profiles yet - " : "Network profiles live in "}
-          <button class="linklike" onclick={(e) => { e.preventDefault(); view.setTabSettingsSection("network"); }}>
-            Settings -&gt; Network profiles</button>.
-        </span>
-      </label>
-      {#if !isWeb}
-      <label title="Anti-idle: send an SSH keepalive every N seconds so a bastion or firewall doesn't drop the connection when it's quiet. Blank inherits the folder's value; 0 sends nothing. A dead connection is still detected either way - with 0 it just takes up to a minute longer.">
-        Keepalive / anti-idle (s)
-        <input
-          type="number"
-          min="0"
-          max="3600"
-          step="5"
-          bind:value={editing.keepalive}
-          placeholder="(inherit · 0 = off)"
-        />
-        <span class="field-note">Stops idle drops. Blank = inherit folder, 0 = send nothing (a dead link is still detected, just slower).</span>
-      </label>
-      {/if}
-      {/if}
-
-      {#if !isWeb}
-
-      <label class="span-2" title="A command run in the shell right after connect - e.g. cd /var/www, tmux new -A -s main, source venv/bin/activate. Blank inherits the folder's value.">
-        {isLocal ? "Command" : "Initial command"}
-        <textarea
-          class="cmd-input"
-          rows="2"
-          bind:value={editing.initialCommand}
-          placeholder={isLocal ? "e.g. telnet 10.0.0.5   ·   claude   ·   screen /dev/ttyUSB0" : "(inherit) e.g. cd /var/www"}
-        ></textarea>
-        <span class="field-note">
-          {#if isLocal}
-            The command this connection runs in the shell (the point of a local connection). Blank = just an interactive shell. One command per line.
-          {:else}
-            Run in the shell on connect. Blank = inherit folder. One command per line.
-          {/if}
-        </span>
-      </label>
-
-      <label title="Wait this long between the lines of a multi-line command. Needed when a line replaces the shell that reads the next one.">
-        Delay between lines (ms)
-        <input
-          type="number"
-          min="0"
-          max="60000"
-          bind:value={editing.initialCommandDelay}
-          placeholder={isLocal ? "0" : "(inherit)"}
-        />
-        <span class="field-note">{isLocal ? "0 = no pause." : "Blank = inherit folder, 0 = no pause."} Raise it when a line starts a new shell (<code>sudo su - user</code>) and the lines after it get swallowed.</span>
-      </label>
-      {/if}
-
-      {#if !isWeb}
-      <label class="span-2 inline-check" title="Connect as usual, but leave the tab out of the tab bar. For background helpers - a keepalive loop, a tail, a watcher - where the point is that it runs, not that you watch it.">
-        <input type="checkbox" bind:checked={editing.openHidden} />
-        <span class="inline-check-text">
-          Open in the background
-          <span class="field-note">
-            The session connects and keeps running; its tab is hidden. The tab
-            bar shows a count of hidden tabs, and Ctrl+K finds them.
-          </span>
-        </span>
-      </label>
-      {/if}
-
-      {#if !isMobile && !isLocal && !isWeb}
-      <div class="span-2 vnc-section" class:on={editing.vncEnabled === "on"}>
-        <div class="vnc-head">
-          <button type="button"
-            class="vnc-switch"
-            role="switch"
-            aria-label="Enable VNC console"
-            aria-checked={editing.vncEnabled === "on"}
-            onclick={() => { if (editing) editing = { ...editing, vncEnabled: editing.vncEnabled === "on" ? "off" : "on" }; }}
-          >
-            <span class="vnc-knob"></span>
-          </button>
-          <span class="vnc-title">VNC console</span>
-          <span class="vnc-spacer"></span>
-          {#if editing.vncEnabled === "on"}
-            <button type="button" class="vnc-open" onclick={openVncConsole}>Open console</button>
-          {/if}
-        </div>
-        {#if editing.vncEnabled === "on"}
-        <label class="vnc-default-check" title="When ticked, double-click / Enter on this connection opens the VNC console instead of an SSH terminal - for a host you only reach over VNC (a Windows box, a KVM-over-IP console). SSH stays available from the right-click menu.">
-          <input
-            type="checkbox"
-            checked={editing.vncDefault === "on"}
-            onchange={(e) => { if (editing) editing = { ...editing, vncDefault: e.currentTarget.checked ? "on" : "off" }; }}
-          />
-          <span>Open VNC on connect (double-click skips SSH)</span>
-        </label>
-        <div class="vnc-grid">
-          <label>RFB port
-            <input
-              type="number"
-              min="1"
-              max="65535"
-              bind:value={editing.vncPort}
-              placeholder="(inherit · 5900)"
-            />
-          </label>
-          <label>Reach the port
-            <select bind:value={editing.vncTunnel}>
-              <option value="">(inherit from folder)</option>
-              <option value="off">Direct - dial host:port</option>
-              <option value="on">Through SSH - dial 127.0.0.1:port on the remote</option>
-            </select>
-          </label>
-          <label class="span-2">VNC password
-            <div class="row pass-row">
-              <PasswordInput
-                bind:value={vncPasswordInput}
-                placeholder={vncPasswordHasValue ? "(saved - type to change)" : "(none - noVNC prompts if required)"}
-              />
-              <button type="button" disabled={!vncPasswordInput || vncPasswordSaving} onclick={saveVncPassword}>
-                {vncPasswordSaving ? "…" : "Set"}
-              </button>
-              {#if vncPasswordHasValue}
-                <button type="button" class="danger" onclick={clearVncPassword}>Clear</button>
-              {/if}
-            </div>
-          </label>
-        </div>
-        {/if}
-      </div>
-      {/if}
-
       <div class="tag-editor span-2">
         <span class="tag-label">Tags</span>
         <div class="tag-row">
@@ -2124,10 +2216,7 @@
         </div>
       {/if}
     </div>
-
     {#if !isLocal && !isWeb}
-    <div class="form-width"><PortForwards connection={conn} /></div>
-
     <div class="quick-actions">
       <h2>Quick actions</h2>
       <div class="actions-row">
@@ -2151,7 +2240,236 @@
       {#if copiedHint}<div class="ok-hint">{copiedHint}</div>{/if}
     </div>
     {/if}
-
+    {:else if edTab === "connection"}
+    <div class="form">
+      <div class="span-2 chain-field">
+        <span class="chain-label">Jump hosts</span>
+        <div class="chain-view">
+          <img class="chain-app" src={appIcon} alt="This computer" title="This computer (ssh-tool)" />
+          {#each connChain as hop, i (i)}
+            <svg class="chain-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+            <span class="chain-hop" title={hop.title}>
+              {#if hop.conn}
+                <Icon imageId={hop.conn.icon_image_id} iconName={hop.conn.icon_name} iconColor={hop.conn.icon_color} size={14}><IconBastion size={14} /></Icon>
+              {:else}
+                <IconBastion size={14} />
+              {/if}
+              <span>{hop.label}</span>
+            </span>
+          {/each}
+          <svg class="chain-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+          <span class="chain-hop self">
+            <Icon imageId={conn.icon_image_id} iconName={conn.icon_name} iconColor={conn.icon_color} size={14}><IconHost size={14} /></Icon>
+            <span>{conn.name}</span>
+          </span>
+          <span class="chain-spacer"></span>
+          <button type="button" class="chain-edit" onclick={() => (chainEditOpen = !chainEditOpen)}>{chainEditOpen ? "Done" : "Edit chain"}</button>
+        </div>
+        <span class="inh-hint">{connChainNote}</span>
+        {#if chainEditOpen}
+          <div class="chain-editor">
+            <JumpChainEditor selfId={conn?.id} value={editing.jumpHost} onChange={(v) => { if (editing) editing = { ...editing, jumpHost: v }; }} />
+          </div>
+        {/if}
+      </div>
+      <label title={isWeb ? "Which VPN's browser opens this page. Direct = your normal browser." : "Route the first SSH hop through a userspace VPN tunnel (no TUN adapter, no admin rights)."}>
+        Network
+        <select bind:value={editing.networkProfile}>
+          <option value="">(inherit from folder)</option>
+          <option value="__direct__">Direct - no tunnel</option>
+          {#each networkProfiles.list as np (np.id)}
+            <option value={np.id}>via {np.name} ({profileKindTitle(np)})</option>
+          {/each}
+        </select>
+        <span class="field-note">
+          {networkProfiles.list.length === 0 ? "No network profiles yet - " : "Network profiles live in "}
+          <button class="linklike" onclick={(e) => { e.preventDefault(); view.setTabSettingsSection("network"); }}>
+            Settings -&gt; Network profiles</button>.
+        </span>
+      </label>
+      <label>Auto-reconnect
+        <select bind:value={editing.autoReconnect}>
+          <option value="">(inherit from folder)</option>
+          <option value="on">On - retry with backoff after drop</option>
+          <option value="off">Off - drop = closed</option>
+        </select>
+      </label>
+      <label title="Anti-idle: send an SSH keepalive every N seconds so a bastion or firewall doesn't drop the connection when it's quiet. Blank inherits the folder's value; 0 sends nothing. A dead connection is still detected either way - with 0 it just takes up to a minute longer.">
+        Keepalive / anti-idle (s)
+        <input
+          type="number"
+          min="0"
+          max="3600"
+          step="5"
+          bind:value={editing.keepalive}
+          placeholder="(inherit · 0 = off)"
+        />
+        <span class="field-note">Stops idle drops. Blank = inherit folder, 0 = send nothing (a dead link is still detected, just slower).</span>
+      </label>
+      {#if dirty}
+        <div class="span-2 dirty-hint">
+          <span class="dirty-pill">Unsaved changes</span>
+          <button class="link-save" onclick={saveConn}>Save now</button>
+        </div>
+      {/if}
+    </div>
+    {:else if edTab === "terminal"}
+    <div class="form">
+      <label class="span-2" title="A command run in the shell right after connect - e.g. cd /var/www, tmux new -A -s main, source venv/bin/activate. Blank inherits the folder's value.">
+        {isLocal ? "Command" : "Initial command"}
+        <textarea
+          class="cmd-input"
+          rows="2"
+          bind:value={editing.initialCommand}
+          placeholder={isLocal ? "e.g. telnet 10.0.0.5   ·   claude   ·   screen /dev/ttyUSB0" : "(inherit) e.g. cd /var/www"}
+        ></textarea>
+        <span class="field-note">
+          {#if isLocal}
+            The command this connection runs in the shell (the point of a local connection). Blank = just an interactive shell. One command per line.
+          {:else}
+            Run in the shell on connect. Blank = inherit folder. One command per line.
+          {/if}
+        </span>
+      </label>
+      <label title="Wait this long between the lines of a multi-line command. Needed when a line replaces the shell that reads the next one.">
+        Delay between lines (ms)
+        <input
+          type="number"
+          min="0"
+          max="60000"
+          bind:value={editing.initialCommandDelay}
+          placeholder={isLocal ? "0" : "(inherit)"}
+        />
+        <span class="field-note">{isLocal ? "0 = no pause." : "Blank = inherit folder, 0 = no pause."} Raise it when a line starts a new shell (<code>sudo su - user</code>) and the lines after it get swallowed.</span>
+      </label>
+      <label class="span-2 inline-check" title="Connect as usual, but leave the tab out of the tab bar. For background helpers - a keepalive loop, a tail, a watcher - where the point is that it runs, not that you watch it.">
+        <input type="checkbox" bind:checked={editing.openHidden} />
+        <span class="inline-check-text">
+          Open in the background
+          <span class="field-note">
+            The session connects and keeps running; its tab is hidden. The tab
+            bar shows a count of hidden tabs, and Ctrl+K finds them.
+          </span>
+        </span>
+      </label>
+      {#if dirty}
+        <div class="span-2 dirty-hint">
+          <span class="dirty-pill">Unsaved changes</span>
+          <button class="link-save" onclick={saveConn}>Save now</button>
+        </div>
+      {/if}
+    </div>
+    {:else if edTab === "forwards"}
+    {#if connTunnelOnly}
+      <div class="form tunnel-card">
+        <div class="span-2 tunnel-state">
+          {#if connTunnel}
+            <span class="ed-pill {tunnelTone(connTunnel)}"><span class="ed-dot"></span>{tunnelText(connTunnel)}</span>
+          {/if}
+          <span class="field-note">A tunnel has no shell and no tab: starting it brings up every forward below.</span>
+          <span class="chain-spacer"></span>
+          {#if connTunnel && tunnels.running(connTunnel)}
+            <button onclick={() => tunnels.stop(conn!.id)}>Stop tunnel</button>
+          {:else}
+            <button class="primary" onclick={() => tunnels.start(conn!.id)}>{connTunnel?.state === "error" ? "Try again" : "Start tunnel"}</button>
+          {/if}
+        </div>
+        <label title="Start this tunnel when the app starts (once the vault is open).">Start with the app
+          <select bind:value={editing.tunnelAutostart}>
+            <option value="">(inherit: {connInhAutostart.value ? "on" : "off"}{connInhAutostart.from ? `, from ${connInhAutostart.from}` : ""})</option>
+            <option value="on">On</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
+      </div>
+    {/if}
+    <div class="form-width"><PortForwards connection={conn} /></div>
+    <div class="form">
+      {#if dirty}
+        <div class="span-2 dirty-hint">
+          <span class="dirty-pill">Unsaved changes</span>
+          <button class="link-save" onclick={saveConn}>Save now</button>
+        </div>
+      {/if}
+    </div>
+    {:else if edTab === "vnc"}
+    <div class="form">
+      <div class="span-2 vnc-section" class:on={editing.vncEnabled === "on"}>
+        <div class="vnc-head">
+          <button type="button"
+            class="vnc-switch"
+            role="switch"
+            aria-label="Enable VNC console"
+            aria-checked={editing.vncEnabled === "on"}
+            onclick={() => { if (editing) editing = { ...editing, vncEnabled: editing.vncEnabled === "on" ? "off" : "on" }; }}
+          >
+            <span class="vnc-knob"></span>
+          </button>
+          <span class="vnc-title">VNC console</span>
+          <span class="vnc-spacer"></span>
+          {#if editing.vncEnabled === "on"}
+            <button type="button" class="vnc-open" onclick={openVncConsole}>Open console</button>
+          {/if}
+        </div>
+        {#if editing.vncEnabled === "on"}
+        <div class="vnc-grid">
+          <label>RFB port
+            <input
+              type="number"
+              min="1"
+              max="65535"
+              bind:value={editing.vncPort}
+              placeholder="(inherit · 5900)"
+            />
+          </label>
+          <label>Reach the port
+            <select bind:value={editing.vncTunnel}>
+              <option value="">(inherit from folder)</option>
+              <option value="off">Direct - dial host:port</option>
+              <option value="on">Through SSH - dial 127.0.0.1:port on the remote</option>
+            </select>
+          </label>
+          <label class="span-2">VNC password
+            <div class="row pass-row">
+              <PasswordInput
+                bind:value={vncPasswordInput}
+                placeholder={vncPasswordHasValue ? "(saved - type to change)" : "(none - noVNC prompts if required)"}
+              />
+              <button type="button" disabled={!vncPasswordInput || vncPasswordSaving} onclick={saveVncPassword}>
+                {vncPasswordSaving ? "…" : "Set"}
+              </button>
+              {#if vncPasswordHasValue}
+                <button type="button" class="danger" onclick={clearVncPassword}>Clear</button>
+              {/if}
+            </div>
+          </label>
+        </div>
+        {/if}
+      </div>
+      <p class="span-2 field-note">To open VNC on a double-click instead of a terminal, pick <strong>VNC console</strong> under General -&gt; Double-click opens.</p>
+      {#if dirty}
+        <div class="span-2 dirty-hint">
+          <span class="dirty-pill">Unsaved changes</span>
+          <button class="link-save" onclick={saveConn}>Save now</button>
+        </div>
+      {/if}
+    </div>
+    {:else if edTab === "advanced"}
+    <div class="form">
+      <label>Verbose connect log
+        <select bind:value={editing.verbose}>
+          <option value="">(inherit from folder)</option>
+          <option value="on">On - show TCP / handshake / auth diagnostics</option>
+          <option value="off">Off</option>
+        </select>
+      </label>
+      {#if dirty}
+        <div class="span-2 dirty-hint">
+          <span class="dirty-pill">Unsaved changes</span>
+          <button class="link-save" onclick={saveConn}>Save now</button>
+        </div>
+      {/if}
+    </div>
     {@const jumpUsers = tree.bastionMap.get(conn.id) ?? []}
     {#if jumpUsers.length}
       <div class="jump-users">
@@ -2172,8 +2490,6 @@
         </ul>
       </div>
     {/if}
-
-    {#if !isLocal && !isWeb}
     <details class="resolved">
       <summary><h2>Resolved &amp; inherited</h2></summary>
       {#if resolveErr}
@@ -2376,7 +2692,77 @@
     flex-wrap: wrap;
     gap: 0.4rem 0.5rem;
   }
-  .head-actions { display: flex; gap: 0.5rem; }
+  .head-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  /* Editor header: title + who/where on the left, actions on the right,
+     the tab bar under both. The tabs sit in the sticky header so they stay
+     reachable while a long tab scrolls. */
+  header.ed-head { padding-bottom: 0; }
+  .ed-title { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+  .ed-title h1 { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .ed-name { overflow: hidden; text-overflow: ellipsis; }
+  .ed-sub {
+    font-size: 0.78rem; color: var(--subtext0);
+    font-family: ui-monospace, monospace;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ed-pill {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    font-size: 0.72rem; font-weight: 500;
+    padding: 0.1rem 0.55rem; border-radius: 999px;
+    border: 1px solid var(--surface1); color: var(--subtext0);
+  }
+  .ed-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .ed-pill.ok { color: var(--green); }
+  .ed-pill.warn { color: var(--yellow); }
+  .ed-pill.bad { color: var(--red); }
+  .ed-pill.idle { color: var(--overlay1); }
+  .more-btn { display: inline-flex; align-items: center; padding-inline: 0.45rem; }
+  .ed-tabs {
+    flex-basis: 100%;
+    display: flex; flex-wrap: wrap; gap: 0.1rem;
+    margin-top: 0.35rem;
+  }
+  .ed-tabs button {
+    background: transparent; border: 0; border-radius: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--subtext0);
+    padding: 0.45rem 0.75rem;
+    font: inherit; font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .ed-tabs button:hover { color: var(--text); }
+  .ed-tabs button.active { color: var(--text); border-bottom-color: var(--blue); font-weight: 600; }
+  .ed-warn {
+    margin-left: 0.35rem; font-size: 0.68rem; font-weight: 700;
+    color: var(--base); background: var(--yellow);
+    border-radius: 999px; padding: 0 0.4rem;
+  }
+  /* Jump chain as cards: this computer -> hops -> this host. */
+  .chain-field { display: flex; flex-direction: column; gap: 0.3rem; }
+  .chain-label { font-size: 0.8rem; color: var(--subtext0); }
+  .chain-view {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem;
+    background: var(--mantle); border: 1px solid var(--surface0);
+    border-radius: 6px; padding: 0.45rem 0.6rem;
+  }
+  .chain-app { width: 22px; height: 22px; display: block; }
+  .chain-arrow { color: var(--overlay1); flex: none; }
+  .chain-hop {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    background: var(--surface0); border-radius: 5px;
+    padding: 0.15rem 0.5rem 0.15rem 0.35rem;
+    font-size: 0.8rem; font-family: ui-monospace, monospace;
+  }
+  .chain-hop.self { outline: 1px solid var(--blue); }
+  .chain-spacer { flex: 1; }
+  .chain-edit { font-size: 0.78rem; padding: 0.2rem 0.6rem; }
+  .chain-editor { margin-top: 0.3rem; }
+  /* Forwards tab: the tunnel's own controls above the forward list. */
+  .tunnel-card {
+    background: var(--mantle); border: 1px solid var(--surface0);
+    border-radius: 8px; padding: 0.75rem 0.9rem; margin-bottom: 1rem;
+  }
+  .tunnel-state { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
   .fav-toggle {
     display: inline-flex;
     align-items: center;
@@ -2928,32 +3314,6 @@
   }
   .inline-check-text .field-note { font-size: 0.78rem; }
 
-  .vnc-section .vnc-default-check {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 0.45rem;
-    width: 100%;
-    margin: 0.55rem 0 0;
-    padding-top: 0.55rem;
-    border-top: 1px solid var(--border);
-    font-size: 0.82rem;
-    color: var(--subtext0);
-    cursor: pointer;
-    text-align: left;
-  }
-  .vnc-section .vnc-default-check input {
-    accent-color: var(--blue);
-    margin: 0;
-    width: auto;
-    flex: 0 0 auto;
-    /* Undo the global input box styling so the checkbox renders native. */
-    background: none;
-    border: 0;
-    border-radius: 0;
-    padding: 0;
-  }
   /* Toggle switch (matches a modern on/off control). */
   .vnc-switch {
     position: relative;
