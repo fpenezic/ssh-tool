@@ -206,11 +206,13 @@ plugin).
   server key, increasingly the Access Server default), PKCS#12 import
   inside the .ovpn, `fragment`. Tested only against the OpenVPN 2.6 lab server so
   far, not yet against a production Access Server / pfSense.
-- **Check Point** - candidate: snx-rs (Rust, AGPL-3.0, active). The TUN
-  device is a small seam (`tunnel/device.rs`; tunnels already take
-  `no_routing` / `no_dns`): replace it with a packet channel + smoltcp
-  SOCKS, map `SecurePrompt` onto auth events, cargo cross builds in the
-  plugins CI. Blocked on a gateway to test against.
+- **Check Point follow-ups** - the plugin (own Go client, not snx-rs)
+  does the SSL tunnel with username + password and further challenges.
+  Missing: certificate logins (`vpn_Personal_Certificate`, certificate +
+  password), browser (SAML / identity provider) logins, Mobile Access,
+  the IPsec transport (IKEv1 / IKEv2 + ESP in UDP or TCPT). Tested
+  against one production gateway (username + password realm) only, end
+  to end through the app (SSH and local forwards over the tunnel).
 - **OpenConnect SAML / browser login** - the helper reports such a
   gateway as unsupported today. Needs a webview or system-browser flow
   that hands the cookie back to the helper.

@@ -9,7 +9,7 @@ a prerelease upstream.
 
 ## [Unreleased] - Tunnel manager
 
-Connections that exist only for their port forwards can now run as tunnels: no shell and no tab, started with the app if you like, kept up through drops, and managed from one panel in the status bar.
+Connections that exist only for their port forwards can now run as tunnels: no shell and no tab, started with the app if you like, kept up through drops, and managed from one panel in the status bar. Check Point remote access VPNs join the network profiles as a new plugin.
 
 ### Tunnels
 
@@ -25,6 +25,11 @@ Connections that exist only for their port forwards can now run as tunnels: no s
 
 - **A forward no longer starts twice.** With two sessions on one connection (two terminals, or a terminal next to its tunnel), the second one started the auto-start forwards again: fixed ports failed with "port in use", and an auto-port or remote forward really started twice and left the first listener running with nothing to stop it. A forward that already runs in another session is now left alone, and the Port forwards section shows each forward's state whichever session holds it.
 - **The quit prompt counts tunnels separately**, so one open tab next to three tunnels no longer reads as "4 active SSH sessions" without explanation.
+
+### Network profiles
+
+- **Check Point VPN profiles.** A new **Check Point** profile type reaches hosts behind a Check Point remote access gateway (the one Endpoint Security VPN or `snx` would connect to) through the new optional Check Point plugin, in userspace like the other VPNs: no client install, no TUN adapter, no admin rights, next to other tunnels. The profile takes the gateway, a username, the password (typed, or a stored vault / Bitwarden / KeePass credential, or asked at login) and where a one-time code comes from when the gateway asks for one. The gateway's own-CA certificate is pinned on the first connect, a refused login is asked again in full (and the connect stops after three refusals, so a wrong stored password cannot lock the account), and **Details** shows the address, DNS and the networks the gateway routes, which the app proxy also follows. Certificate and browser (SAML) logins and the IPsec transport are not supported yet. Coming from `snx-rs`: its config keeps the password base64 encoded, decode it first.
+- **The Check Point plugin** is installed under Settings > Network profiles > General > Plugins like the others, once its first release (`checkpoint-v1`) is published in ssh-tool-plugins.
 
 ---
 
