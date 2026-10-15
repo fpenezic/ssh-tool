@@ -36,7 +36,7 @@ test status varies).
   confirmation, no cloud relay) or to an external LLM over MCP.
 - **Userspace VPN profiles** - WireGuard built in; NetBird,
   Tailscale, OpenConnect (Cisco AnyConnect, Fortinet, F5,
-  GlobalProtect, Pulse) and OpenVPN as optional plugins from
+  GlobalProtect, Pulse), OpenVPN and Check Point as optional plugins from
   [ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins). No
   TUN adapter or admin rights; several gateways at once.
 - **External secrets and one-time codes** - KeePass, Vaultwarden /
@@ -201,7 +201,7 @@ ssh-tool/
 │  ├─ exporter/       encrypted archive export / import
 │  ├─ importer/       RDM, ssh_config, MobaXterm, PuTTY, SuperPuTTY
 │  ├─ wg/             userspace WireGuard network profiles
-│  ├─ tunnelhelper/   VPN plugin manager (NetBird, Tailscale, OpenConnect, OpenVPN)
+│  ├─ tunnelhelper/   VPN plugin manager (NetBird, Tailscale, OpenConnect, OpenVPN, Check Point)
 │  ├─ totp/           RFC 6238 one-time codes
 │  ├─ keepass/        .kdbx credential backend
 │  ├─ bitwarden/      Bitwarden / Vaultwarden credential backend

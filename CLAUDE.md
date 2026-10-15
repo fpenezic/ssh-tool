@@ -12,9 +12,9 @@ for daily use. Tree of connections with folders + inheritance,
 encrypted credential vault, multi-tab terminal with split panes,
 port forwards (incl. SOCKS5 with isolated-browser launcher),
 userspace VPN profiles (WireGuard built in; NetBird, Tailscale,
-OpenConnect - AnyConnect, Fortinet, F5, GlobalProtect, Pulse - and
-OpenVPN as optional sidecar plugins from the separate ssh-tool-plugins
-repo),
+OpenConnect (AnyConnect, Fortinet, F5, GlobalProtect, Pulse), OpenVPN
+and Check Point as optional sidecar plugins from the separate
+ssh-tool-plugins repo),
 opkssh certificate auth, dynamic inventory from Proxmox, Hetzner,
 DigitalOcean, Linode, Vultr, Scaleway, AWS EC2, Ansible static
 inventory (`.ini` / `.yml`), userspace WireGuard network profiles
@@ -29,7 +29,7 @@ Author wants 300+ connections, daily-driver UX, full opkssh support
 
 ## Repo state
 
-- VPN plugins (NetBird, Tailscale, OpenConnect, OpenVPN) live in the sibling repo
+- VPN plugins (NetBird, Tailscale, OpenConnect, OpenVPN, Check Point) live in the sibling repo
   `git@github.com:fpenezic/ssh-tool-plugins.git`, one Go module + licence
   per plugin, released on `<plugin>-vN[.P]` tags (gotcha 40,
   `docs/helper-release-plan.md`). The protocol is its `PROTOCOL.md`.

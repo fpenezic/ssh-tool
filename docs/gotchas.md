@@ -598,7 +598,8 @@ everything mobile is behind a build tag or an `isMobile` check.
 40. **Plugins ship on their OWN releases, decoupled from the app version -
     and speak a versioned protocol.** Since v0.111.0 they live in the
     ssh-tool-plugins repository, one tag namespace per plugin
-    (`netbird-vN[.P]`, `tailscale-vN[.P]`, `openconnect-vN[.P]`); the
+    (`netbird-vN[.P]`, `tailscale-vN[.P]`, `openconnect-vN[.P]`,
+    `openvpn-vN[.P]`, `checkpoint-vN[.P]`); the
     `helper-vN` text below is the pre-move layout, kept in the app repo's
     releases for older app versions. `netbird/` (CGO, wireguard-go fork,
     needs Zig for the Windows cross-build), `tailscale/` (tsnet, pure Go)
@@ -1642,6 +1643,28 @@ everything mobile is behind a build tag or an `isMobile` check.
     - `TunnelsList` stops tunnels whose connection row is gone; the
       frontend lists on every tree reload, which covers deletes from the
       UI, MCP plans and sync pulls alike.
+
+110. **Check Point: the password is the answer to a challenge, and a
+    test harness must never retry a refused login.** The plugin's own
+    client (`ssh-tool-plugins/checkpoint/internal/snx`) logs in like the
+    Check Point clients do: `UserPass` with the username and an EMPTY
+    password, the gateway answers `continue` with a password prompt, and
+    the password goes in a `MultiChallange` (their spelling) on that auth
+    session; any further factor is the same loop and reaches the app as a
+    `response` field. Secrets in CCC messages are XOR-"obfuscated", not
+    encrypted. The routed ranges are usually NOT in the tunnel's
+    `hello_reply`: the plugin fetches them with `ClientSettings`, and they
+    matter beyond Details - `rememberRoutes` / the app proxy decide by
+    them which VPN a destination belongs to. The app side reuses
+    `loginFiller` (shared with OpenVPN: stored sources once, a refused
+    round asked in full, `error: "reconnecting"` refilled) and
+    `gatewayTrustPrompt` / `ocSavePins` (shared with OpenConnect). The
+    first live test fed an snx-rs config password as is (snx-rs keeps it
+    base64) and a driver that answered every refusal with the same values
+    sent ~150 wrong logins in 30 s against a production gateway; the
+    account survived by luck. Since then the plugin itself gives up after
+    three refusals, and any driver against a real gateway answers once and
+    sends `cancel` on an `auth` event with `error` set.
 
 ---
 

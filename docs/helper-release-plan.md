@@ -155,6 +155,11 @@ protocol 1: `auth` events with `username` / `password` / `response`
 fields, and a `--check` flag the app runs on import to validate a
 configuration.
 
+The Check Point plugin (`checkpoint/`, Apache-2.0, own client in
+`checkpoint/internal/snx`) followed on `checkpoint-vN[.P]` tags, protocol
+1 unchanged: the same `username` / `password` / `response` auth fields as
+OpenVPN and the `cert_pin` trust flow of OpenConnect.
+
 Protocol 1 grew additively for OpenConnect (still 1): `auth` events and
 `auth` / `cancel` commands for interactive login, `info` events with the
 tunnel details, and `cert_pin` / `cert_subject` / `cert_changed` on an

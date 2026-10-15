@@ -23,7 +23,7 @@ implemented.
 6. [SFTP file browser](#sftp-file-browser)
 6b. [VNC console](#vnc-console)
 7. [Port forwards](#port-forwards)
-7b. [Network profiles (WireGuard / NetBird / Tailscale / OpenConnect / OpenVPN)](#network-profiles)
+7b. [Network profiles (WireGuard / NetBird / Tailscale / OpenConnect / OpenVPN / Check Point)](#network-profiles)
 8. [Broadcast input (multi-session)](#broadcast-input)
 9. [Multi-window: detach + redock](#multi-window)
 10. [Workspaces](#workspaces)
@@ -1873,11 +1873,11 @@ SSH session and starts the tunnel if needed.
 ---
 
 <a id="network-profiles"></a>
-## 7b. Network profiles (WireGuard / NetBird / Tailscale / OpenConnect / OpenVPN)
+## 7b. Network profiles (WireGuard / NetBird / Tailscale / OpenConnect / OpenVPN / Check Point)
 
 A network profile routes a connection's **first SSH hop** through an
 overlay VPN, so you can reach hosts that only live on a private
-network (a client's WireGuard or OpenVPN, a Hetzner internal network, a
+network (a client's WireGuard, OpenVPN or Check Point VPN, a Hetzner internal network, a
 NetBird tailnet) without setting up a system-wide VPN. Everything runs in
 **userspace**: no TUN adapter, no admin rights, no system routes, and
 several profiles can be up at once toward different networks.
@@ -1923,7 +1923,7 @@ Each profile has a mode and a pause switch:
 
 ### Plugins
 
-NetBird, Tailscale, OpenConnect and OpenVPN run as optional **plugins**: small
+NetBird, Tailscale, OpenConnect, OpenVPN and Check Point run as optional **plugins**: small
 helper programs, one per profile, kept out of the app to keep it small
 (and, for OpenConnect, because its engine is GPL-licensed). Install them
 under **General -> Plugins** on this page: each is downloaded from the
@@ -2236,6 +2236,51 @@ applies as for OpenConnect.
 browser during the connect; the tunnel comes up once you are done there.
 A server that waits for an approval on your phone just holds the connect
 open until you approve.
+
+### Check Point profiles
+
+Check Point remote access gateways (the ones Endpoint Security VPN, the
+Check Point Mobile client or `snx` connect to) through the optional
+**Check Point plugin**, a client written for ssh-tool. It speaks the
+SSL Network Extender tunnel (TLS on the gateway's port, usually 443) in
+userspace: no TUN adapter, no admin rights, several gateways at once.
+Desktop only.
+
+A profile needs:
+
+- **Gateway** - the address you would give the Check Point client (host,
+  or host:port); a pasted portal URL is cut to its host.
+- **Username** and **Password** - typed (saved as a credential), a
+  stored password (vault, Bitwarden or KeePass), or blank to be asked.
+- **One-time code** - for a gateway that asks for a further factor after
+  the password: **Ask at login**, a **TOTP** from a Bitwarden / KeePass
+  item, or a **Stored password**.
+- **Login option** (optional) - the gateway's login option id when it
+  offers several; blank picks its username + password option
+  (`vpn_Username_Password`).
+
+A refused login is asked again in full (no stored value is retried), and
+after three refusals the connect stops, since gateways may lock the
+account. **Gateway certificate**: Check Point gateways usually present a
+certificate from their own internal CA, so the first connect asks to
+trust it (**Trust & remember** pins it on the profile), exactly as for
+OpenConnect.
+
+**Details** shows the office-mode address, the networks the gateway
+routes into the tunnel (also what the app proxy sends to this profile),
+the DNS servers and search domains, and when the session ends (the
+gateway disconnects then and asks for a new login). A dropped network
+reconnects on its own with the same session. The take-over prompt for a
+profile up on another synced machine applies as for OpenConnect.
+
+Coming from `snx-rs`: its configuration file keeps the password base64
+encoded (`password=` line). Decode it before typing or storing it here;
+the encoded text is refused like any wrong password and counts toward
+the gateway's lockout.
+
+Not supported yet: certificate logins, browser (SAML) logins, Mobile
+Access portals and the IPsec transport; the connect names the login
+option that needs one of them.
 
 ---
 

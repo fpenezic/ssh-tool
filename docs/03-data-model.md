@@ -198,7 +198,7 @@ CREATE TABLE pinned_dynamic_entries (
 ### `network_profiles` (v17)
 Userspace VPN profiles. `config_json` is polymorphic and carries a
 `kind` field (`wireguard` | `netbird` | `tailscale` | `openconnect` |
-`openvpn`) plus the fields that kind needs.
+`openvpn` | `checkpoint`) plus the fields that kind needs.
 
 ```sql
 CREATE TABLE network_profiles (
@@ -486,6 +486,10 @@ field inside `config_json` selects WireGuard vs NetBird.
   login sources as OpenConnect. The certificate + key become a
   `certificate` credential (`client_cert_credential_id`); the static
   key lives in the vault under `ovpn_static_key:<id>`.
+- **Check Point** (`kind: "checkpoint"`): `server` (host or host:port),
+  optional `login_option`, pinned gateway certificate (`pins`) and the
+  same login sources as OpenVPN (username, password credential, one-time
+  code source). No secret on the row and nothing in the vault of its own.
 
 Deleting a profile clears every `network_profile_id` that points at it
 (connections, folders, inventory folders; Bitwarden / Infisical servers
