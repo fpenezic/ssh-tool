@@ -3,6 +3,7 @@
   import { isMobile } from "./lib/platform";
   import { installMobileBackNav } from "./lib/mobileBackNav";
   import { installNavigationGuard } from "./lib/navigationGuard";
+  import { installMiddleClickGuard } from "./lib/middleClickGuard";
   import { api } from "./lib/api";
   import { errMsg as humanError } from "./lib/connectErrors";
   import { EventsOn } from "./lib/wailsRuntime";
@@ -422,6 +423,9 @@
   // to reach the real browser did exactly that. External URLs go to the
   // system browser instead. See navigationGuard.ts.
   $effect(() => installNavigationGuard((url) => api.openURL(url)));
+  // A middle click on chrome (closing a tab) must never paste into the
+  // terminal that grabs focus mid-click. See middleClickGuard.ts.
+  $effect(() => installMiddleClickGuard());
 
   let mobileBackTick: (() => void) | null = null;
   $effect(() => {

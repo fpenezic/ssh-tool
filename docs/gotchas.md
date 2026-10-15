@@ -1668,6 +1668,23 @@ everything mobile is behind a build tag or an `isMobile` check.
     three refusals, and any driver against a real gateway answers once and
     sends `cancel` on an `auth` event with `error` set.
 
+111. **WebKitGTK pastes the primary selection on EVERY middle-button
+    release, into the FOCUSED element - not the one under the pointer.**
+    `EventHandler::handleMouseReleaseEvent` runs `PasteGlobalSelection`
+    for the middle button unless `mouseup` was preventDefault-ed;
+    preventDefault on `mousedown` or `auxclick` does not stop it. On app
+    chrome that is normally harmless (a tab's button is not editable),
+    but `closeTab` awaits the SSH disconnect and then `focusActivePane()`
+    refocuses the surviving terminal: when a remote disconnect is slow
+    enough for that focus to land between the next tab's mousedown and
+    mouseup, the selection went straight into the shell (and ran, with a
+    trailing newline). Local shells disconnect too fast to show it.
+    `middleClickGuard.ts` prevents the default of every middle `mouseup`
+    outside a terminal (`.xterm`) or an editable field. The terminal's
+    own middle-click paste currently works through this same native
+    paste: `pasteFromClipboard`'s `navigator.clipboard.readText()` never
+    resolves on a middle mousedown there.
+
 ---
 
 # Archive
