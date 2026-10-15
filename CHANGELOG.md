@@ -7,7 +7,7 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.113.1] - Go security rebuild, terminal middle-click paste
 
 A security rebuild on the current Go release, with middle-click paste in the terminal fixed on Linux and closing tabs with a middle click no longer pasting into the terminal that stays open.
 
