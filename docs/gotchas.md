@@ -1615,6 +1615,21 @@ everything mobile is behind a build tag or an `isMobile` check.
       `SshActiveSessions`, which every window's tab recovery reads. The
       meta is written BEFORE `pool.Add`, else a window recovering at that
       moment builds a tab for it.
+    - A tunnel's session gets its forwards from the tunnel loop, not from
+      `sshConnectWith`: every spec, on a start and on a reconnect
+      (`forwardsAutoStartFor(..., all=true, skip)`), except the ones the
+      user stopped (`handStopped`, set in `ForwardsStop`), which stay
+      stopped and do not count as degraded. Forwards the loop starts land
+      after the connect returned, so a session that died meanwhile may
+      have missed its close hook's `StopAllForSession`: the loop's
+      not-ours-any-more return and `tunnelSessionClosed` both stop the
+      session's forwards again.
+      The loop sets `e.sessionID` before starting them (so `TunnelStop`
+      and the close hook see the session) but flips the state to
+      `connected` only after: a list taken in between would show a
+      connected tunnel with nothing listening. Degraded reads forward
+      state from every session (`forwards.List("")`), since a terminal
+      started before the tunnel may hold a spec.
     - A tunnel's close hook goes to `tunnelSessionClosed`, not
       `spawnReconnect`. The tunnel loop retries only `tunnelRetryable`
       (network) failures: a login or host-key failure retried every

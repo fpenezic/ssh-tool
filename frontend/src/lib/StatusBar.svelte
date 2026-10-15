@@ -644,10 +644,10 @@
       <button
         class="seg tunmgr"
         class:tun-err={tunnels.list.some((t) => t.state === "error")}
-        class:tun-wait={tunnels.list.some((t) => t.state === "reconnecting" || t.state === "connecting")}
+        class:tun-wait={tunnels.list.some((t) => t.state === "reconnecting" || t.state === "connecting" || t.degraded)}
         class:tun-up={tunnels.upCount > 0}
         onclick={() => (showTunnelsPanel = !showTunnelsPanel)}
-        title={`Tunnels: ${tunnels.upCount} up of ${tunnels.list.length}` + (tunnels.troubleCount > 0 ? ` - ${tunnels.troubleCount} failing or reconnecting` : "") + ` - ${tunnelCount} port forward${tunnelCount === 1 ? "" : "s"} listening in all sessions - click to manage`}
+        title={`Tunnels: ${tunnels.upCount} up of ${tunnels.list.length}` + (tunnels.troubleCount > 0 ? ` - ${tunnels.troubleCount} failing, reconnecting or with a forward down` : "") + ` - ${tunnelCount} port forward${tunnelCount === 1 ? "" : "s"} listening in all sessions - click to manage`}
       >
         <IconTunnel size={11} />
         <span class="seg-label">Tunnels</span>

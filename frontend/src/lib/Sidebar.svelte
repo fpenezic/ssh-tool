@@ -674,7 +674,7 @@
           <span class="name">{conn.name}</span>
           {#if tunnels.byConnection(conn.id)}
             {@const tun = tunnels.byConnection(conn.id)!}
-            <span class="tun-badge tun-{tun.state}" title="Tunnel: {tun.state}{tun.error ? ` - ${tun.error}` : ""}"><IconTunnel size={11} /></span>
+            <span class="tun-badge tun-{tun.state}" class:tun-degraded={tun.degraded} title="Tunnel: {tun.state}{tun.degraded ? " - a forward is not listening" : ""}{tun.error ? ` - ${tun.error}` : ""}"><IconTunnel size={11} /></span>
           {/if}
           <TreeBookmarkToggle connId={conn.id} />
           {#if isConn}
@@ -793,6 +793,7 @@
   .tun-badge.tun-connected { color: var(--green); }
   .tun-badge.tun-connecting, .tun-badge.tun-reconnecting { color: var(--yellow); }
   .tun-badge.tun-error { color: var(--red); }
+  .tun-badge.tun-connected.tun-degraded { color: var(--yellow); }
 
   /* Empty state - shown when the tree finished loading with zero rows. */
   .empty {

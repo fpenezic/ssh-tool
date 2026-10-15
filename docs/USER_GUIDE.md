@@ -1531,10 +1531,18 @@ is ever asked for.
   offers **Start tunnel** / **Stop tunnel** first and **Open terminal**
   next to it; with **Use different credential...** set, the button is
   a terminal connect as for any connection.
-- **Which forwards come up.** The ones marked auto-start. Start the
-  others by hand in the Tunnels panel or in the connection's Port
-  forwards section, which for a tunnel connection acts on the tunnel
-  (and offers **Start tunnel** while it is down).
+- **Which forwards come up.** All of them: a tunnel connection exists
+  for its forwards, so starting the tunnel starts every saved forward,
+  whatever its auto-start flag says. You can stop single forwards in
+  the Tunnels panel or in the connection's Port forwards section (which
+  for a tunnel connection acts on the tunnel, and offers **Start
+  tunnel** while it is down); one you stopped stays stopped across a
+  reconnect, and the next start of the tunnel brings it back.
+- **Feedback.** A start by hand ends in a notification: "Tunnel X up,
+  3/3 forwards listening", or why it failed, in the window you started
+  it from. A launch start or a reconnect stays quiet unless the tunnel
+  fails or comes up with a forward down; several at once share one
+  notification.
 - **On app launch.** **Start tunnel on app launch** (On / Off /
   Inherit, offered only while Tunnel only is on) starts the tunnel once
   the vault gate is passed. A launch start keeps retrying while the
@@ -1545,8 +1553,8 @@ is ever asked for.
   restarted by a UI reload.
 - **After a drop.** A tunnel that was up and lost its connection
   reconnects until it succeeds or you stop it, waiting 1, 2, 4 ... up
-  to 60 seconds between tries, and brings back every forward that was
-  running, the ones started by hand included. Only network failures
+  to 60 seconds between tries, and brings every forward up again except
+  the ones you stopped - a forward that failed before gets another try. Only network failures
   are retried: a rejected host key or a failed login stops the tunnel
   in error rather than asking again every minute. A start by hand
   tries once and reports what went wrong. Tunnels reconnect whatever
@@ -1554,7 +1562,11 @@ is ever asked for.
 - **The Tunnels panel.** The status bar shows **Tunnels n/m** (up of
   all) whenever a tunnel connection exists - green while tunnels are
   up, yellow while one is connecting or reconnecting, red with a count
-  when one failed. Its tooltip and the panel header also give the
+  when one failed. A connected tunnel with a forward that should be
+  listening and is not (it failed to start; one you stopped yourself
+  does not count) also shows yellow, in the bar, the panel and the
+  tree, and the panel says why on the forward's line. Its tooltip and
+  the panel header also give the
   number of listening port forwards in all sessions, which the separate
   forwards segment shows when there are no tunnel connections. Click it
   for the panel: tunnels grouped by folder,

@@ -52,6 +52,20 @@ type tunnelEntry struct {
 	// vaultLocked: the last failure was a locked vault, which an unlock
 	// fixes; TunnelsAutostart retries those after the gate.
 	vaultLocked bool
+	// handStopped: forwards the user stopped in this running tunnel
+	// (ForwardsStop). They are not faults, so they do not make the tunnel
+	// degraded; a reconnect keeps them stopped (only the running set is
+	// restored). A new start (a new entry) starts everything again.
+	handStopped map[string]bool
+	// fwdErr: why a forward did not come up when the tunnel started or
+	// reconnected, shown in the panel until it runs again.
+	fwdErr map[string]string
+	// gen numbers this start (App.tunnelGen), so the frontend can tell the
+	// outcome of the start it asked for from a list that predates it.
+	gen uint64
+	// byHand: started by the user (TunnelStart), whose window reports the
+	// outcome; false for a launch start and once the tunnel reconnects.
+	byHand bool
 	// stop is closed by TunnelStop. It ends a pending connect / reconnect
 	// loop; the entry is also removed from the map, which is how a loop
 	// that wakes up later learns it was stopped.
@@ -73,10 +87,13 @@ type TunnelForwardInfo struct {
 	AutoStart   bool   `json:"auto_start"`
 	// State is the live listener state ("listening", "error", ...) or ""
 	// when the forward is not running.
-	State    string `json:"state"`
-	Error    string `json:"error,omitempty"`
-	BytesIn  uint64 `json:"bytes_in"`
-	BytesOut uint64 `json:"bytes_out"`
+	State string `json:"state"`
+	// HandStopped: stopped by the user in the running tunnel, so not
+	// listening on purpose.
+	HandStopped bool   `json:"hand_stopped,omitempty"`
+	Error       string `json:"error,omitempty"`
+	BytesIn     uint64 `json:"bytes_in"`
+	BytesOut    uint64 `json:"bytes_out"`
 }
 
 // TunnelInfo is one row of the Tunnels panel.
@@ -93,6 +110,13 @@ type TunnelInfo struct {
 	Attempt      int                 `json:"attempt"`
 	NextRetry    int64               `json:"next_retry"`
 	Forwards     []TunnelForwardInfo `json:"forwards"`
+	// Degraded: connected, but a forward that should listen does not (it
+	// failed to start, or was stopped by something other than the user).
+	Degraded bool `json:"degraded"`
+	// Gen numbers the current start (0 = stopped); ByHand: that start was
+	// asked for by the user. See tunnelEntry.
+	Gen    uint64 `json:"gen"`
+	ByHand bool   `json:"by_hand"`
 }
 
 func (a *App) emitTunnelsChanged() {
@@ -134,9 +158,27 @@ func (a *App) TunnelsList() ([]TunnelInfo, error) {
 	a.tunnelsMu.Lock()
 	entries := make(map[string]tunnelEntry, len(a.tunnels))
 	for id, e := range a.tunnels {
-		entries[id] = *e
+		cp := *e
+		// The map is shared with the live entry; copy it under the lock.
+		cp.handStopped = make(map[string]bool, len(e.handStopped))
+		for k, v := range e.handStopped {
+			cp.handStopped[k] = v
+		}
+		cp.fwdErr = make(map[string]string, len(e.fwdErr))
+		for k, v := range e.fwdErr {
+			cp.fwdErr[k] = v
+		}
+		entries[id] = cp
 	}
 	a.tunnelsMu.Unlock()
+
+	// Live state by spec id from every session: a forward a terminal tab
+	// started before the tunnel came up runs there, not in the tunnel, and
+	// must not read as down (the pool keys specs by id, one session each).
+	live := map[string]sshlayer.ForwardStatus{}
+	for _, st := range a.forwards.List("") {
+		live[st.ID] = st
+	}
 
 	out := []TunnelInfo{}
 	seen := make(map[string]bool, len(conns))
@@ -167,12 +209,8 @@ func (a *App) TunnelsList() ([]TunnelInfo, error) {
 			info.Since = e.since
 			info.Attempt = e.attempt
 			info.NextRetry = e.nextRetry
-		}
-		live := map[string]sshlayer.ForwardStatus{}
-		if info.SessionID != "" {
-			for _, st := range a.forwards.List(info.SessionID) {
-				live[st.ID] = st
-			}
+			info.Gen = e.gen
+			info.ByHand = e.byHand
 		}
 		info.Forwards = []TunnelForwardInfo{}
 		for _, f := range specsByConn[c.ID] {
@@ -206,6 +244,13 @@ func (a *App) TunnelsList() ([]TunnelInfo, error) {
 				if st.LocalAddr != "" {
 					fi.LocalAddr = st.LocalAddr
 				}
+			}
+			fi.HandStopped = running && e.handStopped[f.ID] && fi.State != string(sshlayer.StateListening)
+			if fi.State == "" && fi.Error == "" && !fi.HandStopped && info.State == tunnelConnected {
+				fi.Error = e.fwdErr[f.ID]
+			}
+			if info.State == tunnelConnected && fi.State != string(sshlayer.StateListening) && !fi.HandStopped {
+				info.Degraded = true
 			}
 			info.Forwards = append(info.Forwards, fi)
 		}
@@ -258,7 +303,8 @@ func (a *App) tunnelStart(connectionID string, patient bool) error {
 		// A failed entry has no loop and no session left; replace it.
 		close(old.stop)
 	}
-	e := &tunnelEntry{state: tunnelConnecting, since: time.Now().Unix(), stop: make(chan struct{})}
+	a.tunnelGen++
+	e := &tunnelEntry{state: tunnelConnecting, since: time.Now().Unix(), stop: make(chan struct{}), gen: a.tunnelGen, byHand: !patient}
 	a.tunnels[connectionID] = e
 	a.tunnelsMu.Unlock()
 	a.emitTunnelsChanged()
@@ -426,17 +472,44 @@ func (a *App) tunnelConnectLoop(connectionID string, e *tunnelEntry, oldSessionI
 				a.emitTunnelsChanged()
 				continue
 			}
-			e.state = tunnelConnected
+			// The session id now, so TunnelStop and the close hook see this
+			// session while its forwards come up; the state stays connecting
+			// until they have, or a list taken in between would show a
+			// connected tunnel with nothing listening (degraded, and a
+			// misleading "only 0/N" toast for a start by hand).
 			e.sessionID = res.SessionID
+			skip := make(map[string]bool, len(e.handStopped))
+			for k := range e.handStopped {
+				skip[k] = true
+			}
+			a.tunnelsMu.Unlock()
+			// Every saved forward comes up (the connection exists for them,
+			// auto-start flag or not), on a start and on a reconnect alike -
+			// a forward that failed last time gets another try (a remote
+			// forward the server still held after the drop). Only forwards
+			// the user stopped in this tunnel stay stopped.
+			failed := a.forwardsAutoStartFor(connectionID, res.SessionID, true, skip)
+			a.tunnelsMu.Lock()
+			// Stopped meanwhile (TunnelStop disconnected the session), or the
+			// session dropped and tunnelSessionClosed took over: not ours to
+			// mark connected any more. The session's close hook stopped its
+			// forwards before we started ours, so stop what we started.
+			if !a.tunnelCurrent(connectionID, e) || e.sessionID != res.SessionID {
+				a.tunnelsMu.Unlock()
+				a.forwards.StopAllForSession(res.SessionID)
+				return
+			}
+			e.state = tunnelConnected
 			e.err = ""
 			e.vaultLocked = false
 			e.attempt = 0
 			e.nextRetry = 0
-			e.since = now
-			a.tunnelsMu.Unlock()
-			if oldSessionID != "" {
-				a.restoreForwardsOnReconnect(oldSessionID, connectionID, res.SessionID)
+			e.since = time.Now().Unix()
+			e.fwdErr = map[string]string{}
+			for id, ferr := range failed {
+				e.fwdErr[id] = ferr.Error()
 			}
+			a.tunnelsMu.Unlock()
 			a.emitTunnelsChanged()
 			return
 		}
@@ -473,6 +546,11 @@ func (a *App) forgetReconnectForwards(oldSessionID string) {
 // (user-initiated disconnect) has already removed the entry; any other end
 // is a drop, and the tunnel reconnects.
 func (a *App) tunnelSessionClosed(connectionID, sessionID string, userInitiated bool) {
+	// The close hook stopped the session's forwards already, but the tunnel
+	// loop may have started some on it since (it starts them after the
+	// connect returns). A listener on a dead session would hold its port and
+	// read as listening; stop again.
+	a.forwards.StopAllForSession(sessionID)
 	a.tunnelsMu.Lock()
 	e, ok := a.tunnels[connectionID]
 	if !ok || e.sessionID != sessionID {
@@ -491,10 +569,51 @@ func (a *App) tunnelSessionClosed(connectionID, sessionID string, userInitiated 
 	}
 	e.state = tunnelReconnecting
 	e.sessionID = ""
+	e.byHand = false // a reconnect is nobody's start by hand
 	e.err = "connection lost"
 	e.since = time.Now().Unix()
 	a.tunnelsMu.Unlock()
 	log.Printf("tunnels: %s dropped, reconnecting", connectionID)
 	a.emitTunnelsChanged()
 	go a.tunnelConnectLoop(connectionID, e, sessionID, true, true)
+}
+
+// tunnelForwardHandStopped records a forward started or stopped by the user
+// while the connection's tunnel runs (see tunnelEntry.handStopped). A no-op
+// when the connection has no tunnel.
+func (a *App) tunnelForwardHandStopped(connectionID, forwardID string, stopped bool) {
+	a.tunnelsMu.Lock()
+	e, ok := a.tunnels[connectionID]
+	if ok {
+		if stopped {
+			if e.handStopped == nil {
+				e.handStopped = map[string]bool{}
+			}
+			e.handStopped[forwardID] = true
+		} else {
+			delete(e.handStopped, forwardID)
+			delete(e.fwdErr, forwardID)
+		}
+	}
+	a.tunnelsMu.Unlock()
+	if ok {
+		a.emitTunnelsChanged()
+	}
+}
+
+// tunnelForwardFailed records why a forward started by hand in a running
+// tunnel did not come up, for the panel.
+func (a *App) tunnelForwardFailed(connectionID, forwardID string, err error) {
+	a.tunnelsMu.Lock()
+	e, ok := a.tunnels[connectionID]
+	if ok {
+		if e.fwdErr == nil {
+			e.fwdErr = map[string]string{}
+		}
+		e.fwdErr[forwardID] = err.Error()
+	}
+	a.tunnelsMu.Unlock()
+	if ok {
+		a.emitTunnelsChanged()
+	}
 }
