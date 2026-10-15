@@ -21,6 +21,8 @@ inventory (`.ini` / `.yml`), userspace WireGuard network profiles
 (in-process netstack, no TUN adapter; first SSH hop + provider APIs
 dial through them) plus the plugin-backed profiles (desktop-only).
 TOTP codes from Bitwarden / KeePass items answer SSH and VPN logins.
+A Kafka tab per connection (topics, consumer, produce, groups; franz-go
+in core) whose broker connections ride that connection's SSH session.
 Local audit log + sealed password / API-token
 history (last 5 rotations).
 
@@ -101,7 +103,8 @@ ssh-tool/
 │  │   ├─ sshconfig/       ~/.ssh/config importer
 │  │   ├─ mobaxterm/       MobaXterm .mxtsessions importer
 │  │   ├─ puttyreg/        PuTTY / KiTTY .reg importer
-│  │   └─ superputty/      SuperPuTTY Sessions.xml importer
+│  │   ├─ superputty/      SuperPuTTY Sessions.xml importer
+│  │   └─ kafkatool/       kafka-tool profiles.json importer
 │  ├─ syncer/              encrypted WebDAV profile sync (push/pull/live)
 │  ├─ recorder/            asciicast v2 session recording
 │  ├─ resolver/            inheritance: folder tree → ResolvedSettings
@@ -112,6 +115,7 @@ ssh-tool/
 │  ├─ tunnelhelper/        sidecar (plugin) process manager: spawn, login relay, SOCKS5 dialer
 │  ├─ totp/                RFC 6238 codes from otpauth URIs / KeePass fields
 │  ├─ inventory/           dynamic providers: Proxmox, Hetzner, DO, Linode, Vultr, Scaleway, AWS EC2, Ansible
+│  ├─ kafka/               Kafka tab: franz-go client dialing through the connection's SSH session (LazySSH)
 │  ├─ httpc/               HTTP/SOAP probe (used by HttpModal)
 │  ├─ local/               in-app local PTY (Win/Mac/Linux shells)
 │  ├─ keepass/             .kdbx credential backend
@@ -157,9 +161,9 @@ task linux:build                   # bin/ssh-tool
 Tests + checks:
 ```bash
 go build ./...
-go test ./...                      # 27 packages carry tests
+go test ./...                      # 29 packages carry tests
 cd frontend && npm run check       # svelte-check, 0 errors expected
-cd frontend && npm run test        # vitest, 28 files / 307 cases
+cd frontend && npm run test        # vitest, 30 files / 314 cases
 ```
 
 Narrower runs while iterating: `go test ./internal/resolver/`

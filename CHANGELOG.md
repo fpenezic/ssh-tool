@@ -7,6 +7,23 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased] - Kafka
+
+Kafka clusters open from the connection that reaches them: topics, a consumer, produce, topic admin and consumer groups in a tab, with every broker connection carried by the connection's SSH session.
+
+### Kafka
+
+- **Kafka on a connection.** A new **Kafka** tab in the connection and folder editors (inherited like the rest) turns a connection into a way into a cluster: bootstrap servers as seen from that host, through its SSH session (the default) or directly / from the jump host, read-only mode, TLS and SASL (PLAIN, SCRAM-SHA-256/512) with the login from a credential. **Open Kafka** sits next to Connect, in the connection's and the terminal tab's right-click menus, and **Double-click opens** gains a **Kafka** choice next to Terminal, Tunnel and VNC console.
+- **No local tunnels.** Every broker connection is a channel on one SSH session to the host, and the broker names the cluster advertises are resolved there, so a cluster that only exists behind a bastion works without loopback forwards, hosts-file entries or sshuttle. Host-key and password prompts, jump chains and network profiles work as for a terminal, and a dropped session reconnects on the next request.
+- **Topics.** List with partitions, message counts and under-replicated / offline flags; create, delete, truncate, add partitions, change the replication factor; partition details; config overrides edited as `key=value` lines; metrics (rate, throughput, size on disk) sampled every 15 s.
+- **Consumer.** From the last N records per partition, the beginning, new records only, an offset or a time; one partition or all; a record limit and stop-at-end. It never joins a group and never commits. JSON values are pretty-printed, binary ones shown as a hex dump; filter as you type and export to NDJSON.
+- **Produce** records with key, value and headers as text or base64, null keys and tombstones, a chosen partition or the key-hash default.
+- **Consumer groups** with state, members and lag per partition; offset reset (beginning, end, back N, offset, time) and delete for a stopped group. **Brokers** shows the advertised addresses and the controller.
+- **Guard rails.** Read-only connections refuse writes in the backend, not just in the UI. Delete and truncate confirm; on a connection marked sensitive you type the topic name. Topic and group changes, produce and every open go to the audit log.
+- **A tab like the others.** Kafka tabs detach and redock, come back with Reopen last session and workspaces, show up in the quick palette as `Kafka: connection / topic`, and a split next to one opens a terminal on the same host.
+- **LLM access.** A Kafka tab can be shared with an LLM over MCP, or opened by it with `open_kafka` after you approve: listing and describing topics and groups, reading records (capped, never committing) and, with read-run, producing records you approve. Topic and group administration stays with you.
+- **Import from kafka-tool.** **Settings -> Import -> kafka-tool** turns kafka-tool's `profiles.json` into connections with Kafka enabled, SSH passwords into the vault.
+
 ## [0.114.0] - Tray menu, smoother terminal, VPN in the connection path
 
 The tray icon gets a full menu (and Quit works again on Windows with close-to-tray on), the terminal types and switches tabs more smoothly, and the connection editor shows which VPN the first hop goes through. Also: credentials show everywhere they are used, quitting with a VPN up is fast again, and the last session reopens with every tab.

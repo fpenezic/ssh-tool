@@ -195,6 +195,11 @@ archive bundle. Exports never include credential secrets by default.
 - **Tunnel connections** - connections that run without a shell or
   tab (`ssh -N`), start with the app, reconnect after a drop and are
   managed from a Tunnels panel in the status bar.
+- **Kafka** - a connection with Kafka enabled opens a Kafka tab: topics,
+  a consumer that never commits, produce, topic config and metrics,
+  consumer groups with lag and offset reset. Broker connections ride the
+  connection's SSH session, so advertised broker names resolve on the far
+  side - no local tunnels, no hosts-file entries.
 
 ### Import / export
 
