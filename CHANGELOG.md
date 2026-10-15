@@ -7,6 +7,14 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+Closing tabs with a middle click no longer pastes into the terminal that stays open.
+
+### Terminal
+
+- **Middle-click closing tabs could paste into a terminal.** On Linux, closing a row of tabs with the middle button now and then pasted the primary selection into the terminal that took focus between clicks, and ran it if it ended in a newline. It showed up with remote sessions, whose slower disconnect let focus return mid-click. A middle click on tabs, buttons and the rest of the window no longer pastes; in a terminal or a text field it pastes as before.
+
 ## [0.113.0] - Tunnels, Check Point, and a new connection editor
 
 Connections that exist only for their port forwards can now run as tunnels: no shell and no tab, started with the app if you like, kept up through drops, and managed from one panel in the status bar. Check Point remote access VPNs join the network profiles as a new plugin, and the connection editor is regrouped into tabs.
