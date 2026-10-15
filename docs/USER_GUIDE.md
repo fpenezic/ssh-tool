@@ -1925,7 +1925,8 @@ Each profile has a mode and a pause switch:
 
 NetBird, Tailscale, OpenConnect, OpenVPN and Check Point run as optional **plugins**: small
 helper programs, one per profile, kept out of the app to keep it small
-(and, for OpenConnect, because its engine is GPL-licensed). Install them
+(and, for OpenConnect and Check Point, because their engines are GPL /
+AGPL licensed). Install them
 under **General -> Plugins** on this page: each is downloaded from the
 [ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins)
 releases and checked against its sha256 digest before install. The card
@@ -2241,7 +2242,8 @@ open until you approve.
 
 Check Point remote access gateways (the ones Endpoint Security VPN, the
 Check Point Mobile client or `snx` connect to) through the optional
-**Check Point plugin**, a client written for ssh-tool. It speaks the
+**Check Point plugin**, a Go client based on
+[snx-rs](https://github.com/ancwrd1/snx-rs) (AGPL-3.0). It speaks the
 SSL Network Extender tunnel (TLS on the gateway's port, usually 443) in
 userspace: no TUN adapter, no admin rights, several gateways at once.
 Desktop only.

@@ -2,7 +2,8 @@ package main
 
 // Check Point network profiles: a Check Point remote access gateway (the
 // SSL Network Extender tunnel that Endpoint Security VPN and snx use),
-// run by the ssh-tool-checkpoint plugin (separate repo, its own client)
+// run by the ssh-tool-checkpoint plugin (separate repo, AGPL-3.0: a Go
+// client based on snx-rs; the app talks to it only as a process)
 // in userspace and reached through its SOCKS5 proxy, like OpenConnect and
 // OpenVPN. The login is username + password and whatever further factor
 // the gateway asks (a one-time code), relayed as auth events and answered
