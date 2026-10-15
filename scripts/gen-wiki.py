@@ -21,7 +21,7 @@ GUIDE = Path(__file__).resolve().parent.parent / "docs" / "USER_GUIDE.md"
 PAGES = {
     "Getting-Started": ["1", "2"],
     "Connections-and-Credentials": ["3", "4", "16", "17"],
-    "Sessions-and-Transfer": ["5", "6", "6b", "8", "9", "10", "12", "15"],
+    "Sessions-and-Transfer": ["5", "6", "6b", "6c", "8", "9", "10", "12", "15"],
     "Networking-and-Tunnels": ["7", "7b", "13", "13a", "14"],
     "Dynamic-Inventory": ["10b"],
     "Quick-Access-and-Shortcuts": ["11", "21"],

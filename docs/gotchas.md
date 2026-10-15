@@ -1711,6 +1711,41 @@ everything mobile is behind a build tag or an `isMobile` check.
     stop it, so the handler preventDefaults the keydown before it pastes
     itself (without that the clipboard went in twice).
 
+112. **Kafka: every broker connection goes through `kafka.LazySSH`, and
+    its close hook must not call back synchronously.** The Kafka tab
+    (`app_kafka.go`, `internal/kafka`) hands franz-go a `kgo.Dialer`; in
+    tunnel mode that is `LazySSH.Dial`, a `direct-tcpip` channel on ONE
+    shell-less session the cluster handle owns (not in the pool, no tab,
+    like a VNC console). Rules that bit or nearly did:
+    - The session's `SetOnClose` hook calls `lazy.Invalidate` in a
+      goroutine. The hook runs inside the session's `closedOnce.Do`, and
+      `Invalidate` calls `Disconnect`, which enters the same `Once` - a
+      direct call deadlocks the close.
+    - `LazySSH.Connect` runs on its own context, not the dial's: kgo's dial
+      context (20 s) is far shorter than a host-key or password prompt, and
+      one dial giving up must not abort the handshake the others wait on.
+      A refused channel (`*ssh.OpenChannelError`) is the far side's answer
+      and is NOT retried; any other dial error drops the session and dials
+      once more on a fresh one - that is how a dropped tunnel heals.
+    - TLS is layered in our dialer (`Config.dialer`), never via
+      `kgo.DialTLSConfig`, which does not combine with a custom `Dialer`.
+      `ServerName` defaults to the ADVERTISED broker host, which is what
+      broker certificates carry.
+    - `app_kafka.go` is untagged, so it builds on android: it has its own
+      null sink (`kafkaNullSink`); the VNC one lives in a desktop-only file.
+    - Writes are refused in the backend (`kafkaWrite` checks the handle's
+      `ReadOnly`) - the UI hiding them is not the guard. MCP tools live in
+      `app_mcp_kafka.go`, which `app_mcp_instructions_test.go` parses next
+      to `app_mcp_desktop.go` (`mcpToolFiles`); a new tool file must be
+      added there or the prompt checks silently skip it.
+    - Svelte: KafkaPane's loaders read state they also write (`topics`,
+      `loading`). Called straight from an `$effect` they re-trigger it
+      forever - the first build flooded the backend with `KafkaTopics`
+      until the browser ran out of sockets and the host-key answer never
+      got through. Effects that call a loader wrap it in `untrack`.
+    - `kfake` (tests) keeps listing a topic that had a partition
+      reassignment after it is deleted, and reports log dirs with size 0.
+
 ---
 
 # Archive

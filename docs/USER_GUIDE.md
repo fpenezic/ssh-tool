@@ -22,6 +22,7 @@ implemented.
 5. [Terminal sessions](#terminal-sessions)
 6. [SFTP file browser](#sftp-file-browser)
 6b. [VNC console](#vnc-console)
+6c. [Kafka](#kafka)
 7. [Port forwards](#port-forwards)
 7b. [Network profiles (WireGuard / NetBird / Tailscale / OpenConnect / OpenVPN / Check Point)](#network-profiles)
 8. [Broadcast input (multi-session)](#broadcast-input)
@@ -478,11 +479,13 @@ in tabs under the header; the editor reopens on the tab you used last.
 **General**
 
 - **Name**
-- **Double-click opens** - Terminal / Tunnel / VNC console / Inherit.
+- **Double-click opens** - Terminal / Tunnel / VNC console / Kafka /
+  Inherit.
   What a double-click or Enter does; the other actions stay in the
   header and the right-click menu. **Tunnel** runs the connection
   without a shell, see [Tunnel connections](#tunnel-connections).
-  **VNC console** is offered once VNC is on for the connection.
+  **VNC console** is offered once VNC is on for the connection, **Kafka**
+  once [Kafka](#kafka) is.
   *Inherit* names the value it gets and the folder it comes from.
 - **Hostname / IP address** and **Port**, **Username**
 - **Credential** - pick from your credential list, or leave blank
@@ -572,6 +575,8 @@ when the tunnel failed or a forward is not listening.
 
 **VNC** - the [VNC console](#generic-vnc-your-own-hosts) settings.
 
+**Kafka** - the [Kafka](#kafka) settings.
+
 **Advanced**
 
 - **Verbose connect log** - On / Off / Inherit. Emits TCP / handshake
@@ -583,8 +588,8 @@ when the tunnel failed or a forward is not listening.
   comes from (collapsed; for debugging).
 
 A folder's editor has the same tabs (General, Connection, Terminal,
-Tunnels, Advanced) with the settings its connections inherit, each in
-the same place as on a connection.
+Tunnels, Kafka, Advanced) with the settings its connections inherit, each
+in the same place as on a connection.
 
 ### Local-shell connections
 
@@ -1432,6 +1437,114 @@ console tab to its own window and redocking works like any other tab.
 
 ---
 
+<a id="kafka"></a>
+## 6c. Kafka
+
+Browse and work with a Kafka cluster from the connection that reaches it.
+Kafka is a service on a connection, like the VNC console: you switch it on
+in the connection (or once on a folder of a cluster's hosts) and the
+connection opens a **Kafka tab** next to its terminals. No separate tool, no
+local port per broker, no `/etc/hosts` entries and no sshuttle.
+
+### Turning it on
+
+In the connection editor (or a folder's), the **Kafka** tab:
+
+- **Bootstrap servers** - the seed brokers, comma separated; a missing port
+  means 9092. Write them as they are seen from where the brokers are
+  dialed: from the SSH host when Kafka runs on it or behind it (often
+  `127.0.0.1:9092` on a broker host).
+- **Reach the brokers** - *Through SSH* (the default): one SSH session to
+  this host carries every broker connection, and the broker names the
+  cluster advertises are resolved on that host, so a cluster that only
+  exists on the far side works as is. *Direct / from the jump host*: the
+  brokers are dialed from the connection's last jump host, or from this
+  machine over its network profile - the host itself is not SSHed.
+- **Writes** - *Read-only* refuses every write (produce, topic and group
+  changes) in the app's backend, not only in the UI. Meant for production.
+- **TLS** (end to end, inside the tunnel), with an optional *skip
+  certificate check* for test clusters, and **SASL** (PLAIN, SCRAM-SHA-256,
+  SCRAM-SHA-512) with a **SASL credential** - a password credential whose
+  default username and password are the login, so vault, KeePass,
+  Bitwarden and Infisical credentials all work.
+
+To have double-click / Enter open the Kafka tab instead of a terminal (a
+connection that exists for its cluster), set **Double-click opens** to
+**Kafka** on the General tab.
+
+Every setting inherits through folders like the SSH ones; **Resolved &
+inherited** on the General tab shows what applies.
+
+### Opening it
+
+**Kafka** next to Connect in the connection header, **Open Kafka** in the
+connection's right-click menu, on a terminal tab's right-click menu (for a
+host with Kafka on), or the default action as above. A second open of the
+same connection brings its tab forward. The SSH session opens with the
+first request, with the usual host-key and password prompts; the tab says
+where it is waiting. If the session drops, the next request reconnects it.
+
+The Kafka tab is a normal tab: it detaches to its own window and back,
+splits (a split opens a terminal on the same host - watch a topic, tail the
+broker log), comes back with *Reopen last session* and with workspaces, and
+can be shared with an LLM.
+
+### Topics
+
+The left column lists the topics with their partitions and retained message
+count, flags under-replicated and offline partitions, and filters as you
+type (internal topics on request). **+** creates a topic (partitions,
+replication factor, config overrides). A topic opens on its own tabs:
+
+- **Messages** - the consumer, below.
+- **Produce** - key, value and headers as text or base64, null key / value
+  (a tombstone), a partition or the key-hash default, JSON formatting.
+- **Partitions** - leader, replicas, ISR and offsets per partition.
+- **Config** - the overrides set on the topic (or every value with the
+  broker defaults), edited as `key=value` lines.
+- **Metrics** - messages, rate, throughput, average stored size and size on
+  disk (leaders and all replicas), sampled every 15 s while open.
+- **Actions** - add partitions, change the replication factor (partitions
+  reassigned round robin, the brokers copy in the background), truncate
+  (delete every record, keep the topic) and delete. Delete and truncate ask
+  first; on a connection marked *sensitive* you type the topic name.
+
+### Consuming
+
+Pick where to start - the last N records of every partition, the
+beginning, new records only, an offset, or a time - a partition or all, an
+optional record limit, and whether to **stop at end** (the end offsets as
+they were when you started). The consumer never joins a consumer group and
+never commits an offset: reading a topic here cannot move anyone's real
+consumers.
+
+Records arrive in a list (partition, offset, time, key, value); a record
+opens below with its value pretty-printed when it is JSON, a hex dump when
+it is binary, its key and headers. The filter matches key, value and
+headers as you type; **export** saves the shown records as NDJSON. The app
+keeps the newest 10,000 records (64 MiB) of a consumer and says how many
+older ones it dropped.
+
+### Consumer groups and brokers
+
+**Groups** lists the consumer groups with state, members and total lag. A
+group shows its members and the committed offset, end offset and lag per
+partition; with the group stopped you can **reset its offsets** on a topic
+(to the beginning, the end, back N records, an offset or a time) or delete
+it. **Brokers** shows the cluster id, the controller and every broker's
+advertised address.
+
+### LLM access (MCP)
+
+Share a Kafka tab from its robot button like any session, or let the LLM
+open one with `open_kafka` (you approve). It can then list and describe
+topics and groups and read records - capped in count and bytes, never
+committing - and, with read-run, produce records you approve one by one.
+Topic and group administration is not available to it. See
+[Share a session with an LLM](#llm-mcp) for the bridge itself.
+
+---
+
 <a id="port-forwards"></a>
 ## 7. Port forwards
 
@@ -1691,6 +1804,7 @@ down automatically when the session disconnects. It is ad-hoc:
 nothing is persisted, so it's off until you click it again next
 time.
 
+<a id="llm-mcp"></a>
 ### Share a session with an LLM (MCP)
 
 You can attach an external LLM client (Claude Code, etc.) to a live
@@ -3335,6 +3449,17 @@ SuperPuTTY keeps its sessions in a `Sessions.xml` file (usually
 SuperPuTTY**. SSH sessions become connections and the SessionId folder
 tree is rebuilt; RDP / telnet / other protocols are counted and skipped.
 SuperPuTTY stores no passwords, so attach credentials afterwards.
+
+### kafka-tool import
+
+The kafka-tool Kafka GUI keeps its cluster profiles in
+`~/.config/kafka-tool/profiles.json`. Load it in **Settings → Import →
+kafka-tool**. Every profile becomes a connection with [Kafka](#kafka)
+enabled, in a `kafka-tool` folder: the SSH host (with its proxy jump) and
+the bootstrap as that host sees it when the profile used a tunnel, else the
+brokers directly with the Kafka tab as the default action. SSH passwords go
+to the vault (unlock it first); key files are not read, so attach a key
+credential afterwards - the import lists which connections need one.
 
 ### Export connections / archive
 
