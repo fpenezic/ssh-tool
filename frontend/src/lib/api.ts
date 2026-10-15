@@ -2649,6 +2649,8 @@ export interface TunnelForwardInfo {
   // Live listener state, "" while the forward is not running.
   state: "" | "listening" | "stopped" | "error";
   error?: string;
+  // Stopped by the user in the running tunnel: down on purpose.
+  hand_stopped?: boolean;
   bytes_in: number;
   bytes_out: number;
 }
@@ -2666,6 +2668,12 @@ export interface TunnelInfo {
   attempt: number;
   next_retry: number;
   forwards: TunnelForwardInfo[];
+  // Connected, but a forward that should listen does not.
+  degraded: boolean;
+  // Numbers the current start (0 = stopped); by_hand: the user asked for
+  // that start, so the window that asked reports its outcome.
+  gen: number;
+  by_hand: boolean;
 }
 
 export interface ForwardCreateInput {

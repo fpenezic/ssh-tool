@@ -7442,6 +7442,15 @@ export class TunnelForwardInfo {
         }
         if (/** @type {any} */(false)) {
             /**
+             * HandStopped: stopped by the user in the running tunnel, so not
+             * listening on purpose.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["hand_stopped"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * @member
              * @type {string | undefined}
              */
@@ -7568,6 +7577,31 @@ export class TunnelInfo {
              * @type {TunnelForwardInfo[]}
              */
             this["forwards"] = [];
+        }
+        if (!("degraded" in $$source)) {
+            /**
+             * Degraded: connected, but a forward that should listen does not (it
+             * failed to start, or was stopped by something other than the user).
+             * @member
+             * @type {boolean}
+             */
+            this["degraded"] = false;
+        }
+        if (!("gen" in $$source)) {
+            /**
+             * Gen numbers the current start (0 = stopped); ByHand: that start was
+             * asked for by the user. See tunnelEntry.
+             * @member
+             * @type {number}
+             */
+            this["gen"] = 0;
+        }
+        if (!("by_hand" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["by_hand"] = false;
         }
 
         Object.assign(this, $$source);

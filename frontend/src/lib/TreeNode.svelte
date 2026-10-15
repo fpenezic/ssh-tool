@@ -1209,7 +1209,7 @@
             <span class="name">{conn.name}</span>
             {#if tunnels.byConnection(conn.id)}
               {@const tun = tunnels.byConnection(conn.id)!}
-              <span class="tun-badge tun-{tun.state}" title="Tunnel: {tun.state}{tun.error ? ` - ${tun.error}` : ""}"><IconTunnel size={11} /></span>
+              <span class="tun-badge tun-{tun.state}" class:tun-degraded={tun.degraded} title="Tunnel: {tun.state}{tun.degraded ? " - a forward is not listening" : ""}{tun.error ? ` - ${tun.error}` : ""}"><IconTunnel size={11} /></span>
             {/if}
           {/if}
           {#if conn.favorite}<span class="fav" title="Favourite"><IconStar size={11} fill="var(--yellow)" /></span>{/if}
@@ -1413,6 +1413,7 @@
   .tun-badge.tun-connected { color: var(--green); }
   .tun-badge.tun-connecting, .tun-badge.tun-reconnecting { color: var(--yellow); }
   .tun-badge.tun-error { color: var(--red); }
+  .tun-badge.tun-connected.tun-degraded { color: var(--yellow); }
   .fav { color: var(--yellow); font-size: 0.78rem; margin-left: 0.25rem; }
   .conn-err  { color: var(--red); font-size: 0.78rem; margin-left: 0.3rem; cursor: help; }
 

@@ -104,7 +104,7 @@
   }
 
   function fwdBroken(t: TunnelInfo): boolean {
-    return t.state === "connected" && t.forwards.some((f) => f.state === "error" || (f.auto_start && f.state !== "listening"));
+    return t.degraded;
   }
 
   function fwdLabel(f: TunnelForwardInfo): string {
@@ -186,10 +186,10 @@
         <div class="tunnel" class:open>
           <div class="row">
             <button class="main" onclick={() => toggleExpand(t.connection_id)} title={open ? "Hide forwards" : "Show forwards"}>
-              <span class="dot st-{t.state}"></span>
+              <span class="dot st-{t.state}" class:degraded={t.degraded}></span>
               <span class="name">{t.name}</span>
               {#if t.autostart}<span class="chip" title="Starts when the app starts">auto</span>{/if}
-              <span class="state st-{t.state}">{stateText(t)}</span>
+              <span class="state st-{t.state}" class:degraded={t.degraded}>{stateText(t)}</span>
               <span class="fwd-sum" class:bad={fwdBroken(t)}>{fwdSummary(t)}</span>
             </button>
             {#if tunnels.running(t)}
@@ -218,10 +218,12 @@
                   {#if f.description}<span class="fdesc">{f.description}</span>{/if}
                   {#if f.state === "listening"}
                     <span class="traffic" title="Bytes in / out">{bytes(f.bytes_in)} / {bytes(f.bytes_out)}</span>
+                  {:else if f.hand_stopped}
+                    <span class="muted small" title="You stopped this forward; it stays stopped across a reconnect until you start it">stopped by you</span>
                   {:else if f.error}
                     <span class="ferr" title={f.error}>{f.error}</span>
-                  {:else if !f.auto_start}
-                    <span class="muted small" title="Not auto-start: starts only when you start it here">manual</span>
+                  {:else if t.state === "connected"}
+                    <span class="ferr" title="This forward should be listening but is not">not listening</span>
                   {/if}
                   {#if t.state === "connected"}
                     <button class="act small" onclick={() => fwdToggle(t, f)} title={f.state === "listening" ? "Stop this forward" : "Start this forward"}>
@@ -321,6 +323,7 @@
   .dot.st-connected { background: var(--green); }
   .dot.st-connecting, .dot.st-reconnecting { background: var(--yellow); animation: pulse 1.4s ease-in-out infinite; }
   .dot.st-error { background: var(--red); }
+  .dot.st-connected.degraded { background: var(--yellow); }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
   .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chip {
@@ -335,6 +338,7 @@
   .state.st-connected { color: var(--green); }
   .state.st-connecting, .state.st-reconnecting { color: var(--yellow); }
   .state.st-error { color: var(--red); }
+  .state.st-connected.degraded { color: var(--yellow); }
   .fwd-sum { color: var(--overlay1); white-space: nowrap; font-size: 0.7rem; min-width: 5.5rem; text-align: right; }
   .fwd-sum.bad { color: var(--peach); }
   .act { padding: 0.2rem 0.35rem; flex-shrink: 0; }

@@ -577,7 +577,7 @@
       </label>
       <label class="checkbox">
         <input type="checkbox" bind:checked={nAutoStart} />
-        <span>Auto-start when this connection connects</span>
+        <span>Auto-start when this connection connects{#if tunnel} (a tunnel starts every forward anyway){/if}</span>
       </label>
       {#if editingForwardId !== null && (nKind === "local" || nKind === "dynamic")}
         <label>Bookmarks open in
@@ -627,7 +627,7 @@
           <div class="head">
             <span class="kind kind-{spec.kind}">{spec.kind}</span>
             <span class="desc">{spec.description || "(no description)"}</span>
-            {#if spec.auto_start}<span class="badge">auto</span>{/if}
+            {#if spec.auto_start && !tunnel}<span class="badge">auto</span>{/if}
             {#if !running && reconnecting}
               <span class="dot" style="background: var(--yellow)"></span>
               <span class="status">reconnecting</span>
@@ -673,7 +673,7 @@
             {:else}
               {#if tunnelStopped}
                 <button class="primary" onclick={() => tunnels.start(connection.id)}
-                  title="Start this connection's tunnel. Auto-start forwards come up with it; start the others here once it is up.">
+                  title="Start this connection's tunnel. Every forward of the connection comes up with it.">
                   Start tunnel
                 </button>
               {:else}

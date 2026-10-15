@@ -184,6 +184,7 @@ type App struct {
 	tunnelsMu          sync.Mutex
 	tunnels            map[string]*tunnelEntry
 	tunnelsAutostarted bool
+	tunnelGen          uint64 // numbers each tunnel start (tunnelEntry.gen)
 
 	// connectCancels maps a connect key (connectionID, or a dynamic
 	// entry key) to the in-flight connect's cancel handle. SshCancelConnect
@@ -3467,8 +3468,10 @@ func (a *App) sshConnectWith(connectionID, overrideCredentialID, overrideUsernam
 	// Auto-start any forwards marked auto_start=1 against this connection.
 	// Not when the connection's tunnel is already up: it holds those ports,
 	// and a terminal opened next to it would only log port-in-use errors.
-	if tunnel || !a.tunnelHoldsForwards(connectionID) {
-		a.forwardsAutoStartFor(connectionID, sess.ID)
+	// A tunnel's own session gets its forwards from the tunnel loop (all of
+	// them on a start, the running set on a reconnect - tunnelConnectLoop).
+	if !tunnel && !a.tunnelHoldsForwards(connectionID) {
+		a.forwardsAutoStartFor(connectionID, sess.ID, false, nil)
 	}
 
 	user := ""
@@ -5146,11 +5149,24 @@ func (a *App) ForwardsStart(forwardID, sessionID string) (*sshlayer.ForwardStatu
 	if !ok {
 		return nil, fmt.Errorf("session not connected")
 	}
-	return a.startForwardFor(sess, spec, false)
+	st, err := a.startForwardFor(sess, spec, false)
+	// Started by hand: no longer "stopped by you" either way; a failure is
+	// a fault the panel shows (tunnelForwardHandStopped no-ops without a
+	// tunnel on the connection).
+	a.tunnelForwardHandStopped(spec.ConnectionID, forwardID, false)
+	if err != nil {
+		a.tunnelForwardFailed(spec.ConnectionID, forwardID, err)
+	}
+	return st, err
 }
 
 // ForwardsStop tears down a running forward by spec id.
 func (a *App) ForwardsStop(forwardID string) error {
+	if spec, err := a.db.GetPortForward(forwardID); err == nil {
+		// A forward the user stops in a running tunnel is not a fault: the
+		// tunnel must not read as degraded for it (TunnelsList).
+		a.tunnelForwardHandStopped(spec.ConnectionID, forwardID, true)
+	}
 	return a.forwards.Stop(forwardID)
 }
 
@@ -5214,17 +5230,21 @@ func giveInternetExportBlock(port uint16) string {
 
 // ForwardsAutoStartFor instantiates every spec with auto_start=1 that's
 // registered against the given connection. Called by SshConnect right after
-// the session lands.
-func (a *App) forwardsAutoStartFor(connectionID, sessionID string) {
+// the session lands. all=true starts every spec whatever its auto_start
+// flag: a tunnel-only connection exists for its forwards. Specs in skip are
+// left alone (forwards the user stopped in a tunnel, across a reconnect).
+// Returns the specs that failed to start, by id.
+func (a *App) forwardsAutoStartFor(connectionID, sessionID string, all bool, skip map[string]bool) map[string]error {
 	specs, err := a.db.ListPortForwards(connectionID)
 	if err != nil {
 		log.Printf("auto-start forwards: list: %v", err)
-		return
+		return nil
 	}
 	sess, ok := a.pool.Get(sessionID)
 	if !ok {
-		return
+		return nil
 	}
+	failed := map[string]error{}
 	// The forward pool keys listeners by spec id, so a spec already running
 	// in another session of this connection (a terminal next to the tunnel,
 	// or two terminals) must not start twice: the second start replaces the
@@ -5234,11 +5254,14 @@ func (a *App) forwardsAutoStartFor(connectionID, sessionID string) {
 		running[st.ID] = true
 	}
 	for _, spec := range specs {
-		if !spec.AutoStart || running[spec.ID] {
+		if (!all && !spec.AutoStart) || running[spec.ID] || skip[spec.ID] {
 			continue
 		}
-		_, _ = a.startForwardFor(sess, &spec, true)
+		if _, err := a.startForwardFor(sess, &spec, true); err != nil {
+			failed[spec.ID] = err
+		}
 	}
+	return failed
 }
 
 func startForward(pool *sshlayer.ForwardPool, sess *sshlayer.Session, spec *store.PortForward) (*sshlayer.ForwardStatus, error) {
@@ -6559,18 +6582,19 @@ func (a *App) runReconnect(oldID, connID string, cancel <-chan struct{}) {
 // already re-launched the auto_start=1 subset via forwardsAutoStartFor, so we
 // dedupe against whatever is already listening on the new session and only
 // start the manually-started remainder.
-func (a *App) restoreForwardsOnReconnect(oldID, connID, newID string) {
+// Returns the specs that failed to start again, by id.
+func (a *App) restoreForwardsOnReconnect(oldID, connID, newID string) map[string]error {
 	a.reconnectMu.Lock()
 	specIDs := a.reconnectForwards[oldID]
 	delete(a.reconnectForwards, oldID)
 	a.reconnectMu.Unlock()
 	if len(specIDs) == 0 {
-		return
+		return nil
 	}
 
 	sess, ok := a.pool.Get(newID)
 	if !ok {
-		return
+		return nil
 	}
 	// Already running: the auto_start forwards on the new session, and any
 	// spec another session of the connection holds (see forwardsAutoStartFor).
@@ -6583,12 +6607,13 @@ func (a *App) restoreForwardsOnReconnect(oldID, connID, newID string) {
 	specs, err := a.db.ListPortForwards(connID)
 	if err != nil {
 		log.Printf("reconnect forward restore: list specs: %v", err)
-		return
+		return nil
 	}
 	byID := map[string]store.PortForward{}
 	for _, s := range specs {
 		byID[s.ID] = s
 	}
+	failed := map[string]error{}
 	for _, id := range specIDs {
 		if _, dup := already[id]; dup {
 			continue
@@ -6597,8 +6622,11 @@ func (a *App) restoreForwardsOnReconnect(oldID, connID, newID string) {
 		if !ok {
 			continue // spec deleted since the drop
 		}
-		_, _ = a.startForwardFor(sess, &spec, true)
+		if _, err := a.startForwardFor(sess, &spec, true); err != nil {
+			failed[id] = err
+		}
 	}
+	return failed
 }
 
 // SshCancelReconnect aborts a pending retry loop. No-op if there isn't
