@@ -1645,8 +1645,10 @@ everything mobile is behind a build tag or an `isMobile` check.
       UI, MCP plans and sync pulls alike.
 
 110. **Check Point: the password is the answer to a challenge, and a
-    test harness must never retry a refused login.** The plugin's own
-    client (`ssh-tool-plugins/checkpoint/internal/snx`) logs in like the
+    test harness must never retry a refused login.** The plugin's Go
+    client (`ssh-tool-plugins/checkpoint/internal/snx`, based on snx-rs,
+    hence AGPL-3.0 like the plugin; the app stays Apache-2.0 across the
+    process boundary, as with OpenConnect's GPL) logs in like the
     Check Point clients do: `UserPass` with the username and an EMPTY
     password, the gateway answers `continue` with a password prompt, and
     the password goes in a `MultiChallange` (their spelling) on that auth

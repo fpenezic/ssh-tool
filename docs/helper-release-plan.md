@@ -155,8 +155,8 @@ protocol 1: `auth` events with `username` / `password` / `response`
 fields, and a `--check` flag the app runs on import to validate a
 configuration.
 
-The Check Point plugin (`checkpoint/`, Apache-2.0, own client in
-`checkpoint/internal/snx`) followed on `checkpoint-vN[.P]` tags, protocol
+The Check Point plugin (`checkpoint/`, AGPL-3.0: its Go client in
+`checkpoint/internal/snx` is based on snx-rs, which is AGPL) followed on `checkpoint-vN[.P]` tags, protocol
 1 unchanged: the same `username` / `password` / `response` auth fields as
 OpenVPN and the `cert_pin` trust flow of OpenConnect.
 

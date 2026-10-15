@@ -36,7 +36,7 @@ var knownPlugins = []string{"netbird", "tailscale", "openconnect", "openvpn", "c
 
 // pluginSource is where a plugin's releases live: the separate plugins
 // repository, one tag namespace per plugin (<name>-vN[.P]), each plugin
-// with its own licence (the OpenConnect one is GPL). App versions before
+// with its own licence (OpenConnect is GPL, Check Point AGPL). App versions before
 // the move fetched NetBird and Tailscale from this repository's helper-vN
 // releases; those stay published for them.
 type pluginSource struct {

@@ -206,7 +206,8 @@ plugin).
   server key, increasingly the Access Server default), PKCS#12 import
   inside the .ovpn, `fragment`. Tested only against the OpenVPN 2.6 lab server so
   far, not yet against a production Access Server / pfSense.
-- **Check Point follow-ups** - the plugin (own Go client, not snx-rs)
+- **Check Point follow-ups** - the plugin (a Go client based on snx-rs,
+  AGPL-3.0)
   does the SSL tunnel with username + password and further challenges.
   Missing: certificate logins (`vpn_Personal_Certificate`, certificate +
   password), browser (SAML / identity provider) logins, Mobile Access,
