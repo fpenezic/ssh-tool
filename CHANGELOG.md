@@ -7,7 +7,7 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased] - Tunnels, Check Point, and a new connection editor
+## [0.113.0] - Tunnels, Check Point, and a new connection editor
 
 Connections that exist only for their port forwards can now run as tunnels: no shell and no tab, started with the app if you like, kept up through drops, and managed from one panel in the status bar. Check Point remote access VPNs join the network profiles as a new plugin, and the connection editor is regrouped into tabs.
 
