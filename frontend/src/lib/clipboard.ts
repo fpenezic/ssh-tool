@@ -33,6 +33,25 @@ export async function writeClipboard(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
+// Read text from the clipboard. Native first, like writeClipboard: on
+// Linux WebKitGTK navigator.clipboard.readText() never settles (no value,
+// no error), which hung the terminal's paste and the password auto-clear.
+// The webview route stays as a fallback for a target without the native
+// binding, capped so a hang there cannot block the caller either.
+const READ_FALLBACK_MS = 1500;
+export async function readClipboard(): Promise<string> {
+  try {
+    return (await api.clipboardGetText()) ?? "";
+  } catch {
+    // Native path unavailable - fall through.
+  }
+  return await Promise.race([
+    navigator.clipboard.readText(),
+    new Promise<string>((_, reject) =>
+      setTimeout(() => reject(new Error("clipboard read timed out")), READ_FALLBACK_MS)),
+  ]);
+}
+
 // Most call sites want a confirmation toast (a button or menu action far
 // from where the user is looking). A few render their own inline hint
 // (PaneNode / DetailPane copy buttons) - those pass {toast:false} so the
@@ -56,7 +75,7 @@ export async function copySensitive(text: string, opts: CopyOpts = {}): Promise<
   if (opts.toast !== false) toast.ok(`${opts.label ?? "Password"} copied - clears in 30s`);
   setTimeout(async () => {
     try {
-      const cur = await navigator.clipboard.readText();
+      const cur = await readClipboard();
       if (cur === text) {
         await writeClipboard("");
       }

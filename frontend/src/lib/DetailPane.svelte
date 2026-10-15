@@ -4,7 +4,7 @@
   import { isMobile } from "./platform";
   import { toast } from "./toast.svelte";
   import { tunnels } from "./tunnels.svelte.ts";
-  import { writeClipboard } from "./clipboard";
+  import { writeClipboard, readClipboard } from "./clipboard";
   import PasswordInput from "./PasswordInput.svelte";
   import { effectiveAuthRef, isKeyAuthKind, isSelectableSSHCred } from "./authWarning";
   import { api, type ResolvedSettings, type JumpHostOverride } from "./api";
@@ -1385,7 +1385,7 @@
         // something else in between, leave it alone.
         setTimeout(async () => {
           try {
-            const cur = await navigator.clipboard.readText();
+            const cur = await readClipboard();
             if (cur === pw) await writeClipboard("");
           } catch { /* best-effort */ }
         }, 30_000);

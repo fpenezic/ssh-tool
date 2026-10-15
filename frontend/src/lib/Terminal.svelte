@@ -11,7 +11,7 @@
   import { DecrqmStripper, stripSnapshot } from "./decrqm";
   import { WebglAddon } from "@xterm/addon-webgl";
   import { CanvasAddon } from "@xterm/addon-canvas";
-  import { writeClipboard } from "./clipboard";
+  import { writeClipboard, readClipboard } from "./clipboard";
   import { SearchAddon } from "@xterm/addon-search";
   import { WebLinksAddon } from "@xterm/addon-web-links";
   import "@xterm/xterm/css/xterm.css";
@@ -496,7 +496,7 @@
 
   async function pasteFromClipboard() {
     try {
-      const text = await navigator.clipboard.readText();
+      const text = await readClipboard();
       if (!text) return;
       if (!sessionPasteOptOut && isMultilinePaste(text)) {
         pendingPasteText = text;
@@ -785,6 +785,17 @@
     if (copyPastePrefs.mode !== "linux") return;
     e.preventDefault();
     pasteFromClipboard();
+  }
+
+  // The terminal owns middle-click. WebKitGTK pastes the PRIMARY selection
+  // on every middle release into the focused element, and only a
+  // preventDefault on mouseup stops it: left alone it pasted a second time
+  // after our paste (or instead of it, while the clipboard read hung), and
+  // pasted another app's selection rather than what the terminal copied.
+  // In Linux mode onMouseDown pastes the clipboard (which selecting in the
+  // terminal fills); in the other modes a middle click pastes nothing.
+  function onMiddleMouseUp(e: MouseEvent) {
+    if (e.button === 1) e.preventDefault();
   }
 
   // Focus the terminal as soon as its host element is actually visible
@@ -1490,6 +1501,7 @@
     // contextmenu fires for right-click and we route by mode.
     host.addEventListener("contextmenu", onContextMenu, { capture: true });
     host.addEventListener("mousedown", onMouseDown, { capture: true });
+    host.addEventListener("mouseup", onMiddleMouseUp, { capture: true });
     term.onScroll(() => updateBlockUi());
     // Releases modifierClickPending after the link handler (which runs on
     // mouseup) has had its turn, so a Ctrl+click that hits no link does not
@@ -2160,6 +2172,7 @@
     host?.removeEventListener("wheel", onWheel, { capture: true } as any);
     host?.removeEventListener("contextmenu", onContextMenu, { capture: true } as any);
     host?.removeEventListener("mousedown", onMouseDown, { capture: true } as any);
+    host?.removeEventListener("mouseup", onMiddleMouseUp, { capture: true } as any);
     host?.removeEventListener("mouseup", onMouseUpReleaseModifier);
     host?.removeEventListener("pointerdown", onPointerDown, { capture: true } as any);
     host?.removeEventListener("pointermove", onPointerMove, { capture: true } as any);

@@ -1680,10 +1680,13 @@ everything mobile is behind a build tag or an `isMobile` check.
     mouseup, the selection went straight into the shell (and ran, with a
     trailing newline). Local shells disconnect too fast to show it.
     `middleClickGuard.ts` prevents the default of every middle `mouseup`
-    outside a terminal (`.xterm`) or an editable field. The terminal's
-    own middle-click paste currently works through this same native
-    paste: `pasteFromClipboard`'s `navigator.clipboard.readText()` never
-    resolves on a middle mousedown there.
+    outside a terminal (`.xterm`) or an editable field; a terminal
+    prevents its own (`onMiddleMouseUp` in Terminal.svelte) and pastes
+    the clipboard itself in Linux mode. Reading the clipboard goes
+    through `readClipboard()` (native `ClipboardGetText` first):
+    `navigator.clipboard.readText()` never settles on WebKitGTK - no
+    value, no error - which had hung the terminal paste (#6) and the
+    30 s password auto-clear. Never call it directly.
 
 ---
 
