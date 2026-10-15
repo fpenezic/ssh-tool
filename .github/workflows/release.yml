@@ -73,6 +73,14 @@ jobs:
       # packages don't compile without the NDK/Xcode.
       - name: Go tests
         run: go test ./internal/... .
+      # Release gate: no Go vulnerability the code reaches, the standard
+      # library included (a stale toolchain line in go.mod shows up here,
+      # which dependabot does not see). Stable tags only; one that cannot be
+      # fixed yet goes in .vulncheck-allow with the reason, and the
+      # repository variable SKIP_VULNCHECK=true bypasses it once.
+      - name: Vulnerability gate (govulncheck)
+        if: ${{ !contains(github.ref_name, '-') && vars.SKIP_VULNCHECK != 'true' }}
+        run: python3 scripts/vulncheck.py . . ./internal/...
 
   build:
     needs: test

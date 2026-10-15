@@ -9,11 +9,17 @@ a prerelease upstream.
 
 ## [Unreleased]
 
-Closing tabs with a middle click no longer pastes into the terminal that stays open.
+A security rebuild on the current Go release, with middle-click paste in the terminal fixed on Linux and closing tabs with a middle click no longer pasting into the terminal that stays open.
+
+### Security
+
+- **Built with Go 1.26.9.** v0.113.0 and earlier were built with Go 1.26.3, and the app reached `crypto/tls`, `net/http` and `golang.org/x/net` issues fixed since. This release also takes the current `x/net` and `x/crypto`. The VPN plugins are rebuilt the same way (NetBird 1.3, Tailscale 1.3 with Tailscale 1.104.1, OpenConnect 1.2, OpenVPN 1.1, Check Point 1.1); the plugin cards offer the update.
 
 ### Terminal
 
 - **Middle-click closing tabs could paste into a terminal.** On Linux, closing a row of tabs with the middle button now and then pasted the primary selection into the terminal that took focus between clicks, and ran it if it ended in a newline. It showed up with remote sessions, whose slower disconnect let focus return mid-click. A middle click on tabs, buttons and the rest of the window no longer pastes; in a terminal or a text field it pastes as before.
+- **Middle-click and right-click paste in the terminal read the right clipboard.** On Linux the terminal's own clipboard read never finished, so a middle click only pasted through the system's primary selection: another app's selection rather than what you last selected or copied in the terminal, and with a newer WebKitGTK it would have pasted twice. The terminal now reads the clipboard through the app and owns middle-click, so it pastes once, the text you selected (selecting copies in the Linux copy/paste mode). Thanks to @ivanpavlina for tracking it down (#6).
+- **The 30-second clear of a copied password** uses the same clipboard read, which on Linux could hang the same way; it now reads through the app too.
 
 ## [0.113.0] - Tunnels, Check Point, and a new connection editor
 

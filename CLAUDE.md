@@ -236,11 +236,20 @@ author asks to ship/promote/release:
    the in-app update dialog), and a line break inside `**bold**` or a
    link breaks the formatting there. Older blocks keep their wrapping.
 
-3. Commit changelog as final release commit: `chore(release): v0.X.Y`.
+3. Before a stable tag: Dependabot shows no open alert in this repo or
+   ssh-tool-plugins (or each is dismissed with its reason), and
+   `python3 scripts/vulncheck.py . . ./internal/...` reports nothing the
+   code reaches. Keep go.mod's `toolchain` line on the latest Go patch
+   release: dependabot does not see standard-library fixes. The release
+   workflow enforces the govulncheck part (stable tags only;
+   `.vulncheck-allow` for an ID with no fix yet, the repository variable
+   `SKIP_VULNCHECK=true` to bypass once).
 
-4. Tag annotated: `git tag -a v0.X.Y -m "v0.X.Y - one-line summary"`.
+4. Commit changelog as final release commit: `chore(release): v0.X.Y`.
 
-5. Push commits + tag. GitHub Actions builds every platform
+5. Tag annotated: `git tag -a v0.X.Y -m "v0.X.Y - one-line summary"`.
+
+6. Push commits + tag. GitHub Actions builds every platform
    (desktop x4 + the signed android APK) and publishes a GitHub
    Release with the tag's CHANGELOG block as notes. sshtool.app
    mirrors GitHub Releases (metadata sync + download redirect)
