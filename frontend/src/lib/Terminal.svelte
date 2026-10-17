@@ -667,9 +667,12 @@
       term.clearSelection();
       return false;
     }
-    // Ctrl+Shift+V - paste (Windows + Linux)
+    // Ctrl+Shift+V - paste (Windows + Linux). preventDefault: WebKitGTK
+    // binds Ctrl+Shift+V to its own paste into the focused textarea, and
+    // returning false does not stop it, so the clipboard went in twice.
     if ((mode === "windows" || mode === "linux") &&
         e.ctrlKey && e.shiftKey && (e.key === "V" || e.key === "v")) {
+      e.preventDefault();
       pasteFromClipboard();
       return false;
     }
