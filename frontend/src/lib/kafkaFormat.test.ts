@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { KafkaMessage } from "./api";
 import {
-  formatBytes, formatCount, hexDump, matches, parseConfigLines, pretty, preview, ratePerSec, toNDJSON,
+  formatBytes, formatCount, hexDump, matches, messageTextBytes, parseConfigLines, pretty, preview, ratePerSec,
 } from "./kafkaFormat";
 
 const msg = (over: Partial<KafkaMessage> = {}): KafkaMessage => ({
@@ -60,15 +60,9 @@ describe("kafkaFormat", () => {
     expect(matches(msg({ key: null, value: null, headers: [] }), "x")).toBe(false);
   });
 
-  it("exports NDJSON", () => {
-    const out = toNDJSON([msg(), msg({ offset: 8, value: { text: "/wA=", encoding: "base64", size: 2 } })], "orders");
-    const lines = out.trimEnd().split("\n").map((l) => JSON.parse(l));
-    expect(lines[0]).toEqual({
-      topic: "orders", partition: 0, offset: 7, timestamp: 1700000000000,
-      key: "order-1", value: '{"a":1,"b":[2]}', headers: { trace: "abc" },
-    });
-    expect(lines[1]._base64).toEqual(["value"]);
-    expect(toNDJSON([], "t")).toBe("");
+  it("counts a record's text", () => {
+    expect(messageTextBytes(msg())).toBe(7 + 15 + 5 + 3);
+    expect(messageTextBytes(msg({ key: null, value: null, headers: [] }))).toBe(0);
   });
 
   it("parses config lines", () => {

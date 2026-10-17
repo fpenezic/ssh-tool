@@ -3732,6 +3732,44 @@ export class KafkaCreateTopicInput {
 }
 
 /**
+ * KafkaExportResult is where an export went.
+ */
+export class KafkaExportResult {
+    /**
+     * Creates a new KafkaExportResult instance.
+     * @param {Partial<KafkaExportResult>} [$$source = {}] - The source object to create the KafkaExportResult.
+     */
+    constructor($$source = {}) {
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("records" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["records"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new KafkaExportResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {KafkaExportResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new KafkaExportResult(/** @type {Partial<KafkaExportResult>} */($$parsedSource));
+    }
+}
+
+/**
  * KeepassEnsureCredentialInput picks a KeePass entry+field straight from the
  * connection auth picker. The app finds an existing credential that already
  * references the exact same entry+field (so choosing it twice reuses one) or

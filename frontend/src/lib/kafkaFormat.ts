@@ -85,31 +85,12 @@ export function matches(m: KafkaMessage, q: string): boolean {
   return m.headers.some((h) => h.key.toLowerCase().includes(n) || has(h.value));
 }
 
-// NDJSON export: one JSON object a line. Text payloads stay text (parsed
-// JSON stays a string so the export round-trips the exact bytes); binary
-// ones are base64 with an "_encoding" marker.
-export function toNDJSON(msgs: KafkaMessage[], topic: string): string {
-  const enc = (p: KafkaPayload | null) => (p ? p.text : null);
-  return msgs
-    .map((m) => {
-      const o: Record<string, unknown> = {
-        topic,
-        partition: m.partition,
-        offset: m.offset,
-        timestamp: m.timestamp,
-        key: enc(m.key),
-        value: enc(m.value),
-        headers: Object.fromEntries(m.headers.map((h) => [h.key, h.value.text])),
-      };
-      const bin = [
-        m.key?.encoding === "base64" ? "key" : "",
-        m.value?.encoding === "base64" ? "value" : "",
-        ...m.headers.filter((h) => h.value.encoding === "base64").map((h) => "header:" + h.key),
-      ].filter(Boolean);
-      if (bin.length) o._base64 = bin;
-      return JSON.stringify(o);
-    })
-    .join("\n") + (msgs.length ? "\n" : "");
+// Text carried by a record (key, value, header names and values): what the
+// consumer mirror counts against its byte bound.
+export function messageTextBytes(m: KafkaMessage): number {
+  let n = (m.key?.text.length ?? 0) + (m.value?.text.length ?? 0);
+  for (const h of m.headers) n += h.key.length + h.value.text.length;
+  return n;
 }
 
 // Parses "key=value" lines (the config editor's text form). Blank lines and

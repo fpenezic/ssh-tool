@@ -2,9 +2,13 @@ package kafka
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/twmb/franz-go/pkg/kfake"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -168,7 +172,7 @@ func drain(t *testing.T, k *Consumer) ([]Message, ConsumeSnapshot) {
 	var all []Message
 	var after uint64
 	for {
-		s := k.Snapshot(after, 0)
+		s := k.Snapshot(after, SnapshotOptions{})
 		all = append(all, s.Messages...)
 		if n := len(s.Messages); n > 0 {
 			after = s.Messages[n-1].Seq
@@ -281,7 +285,7 @@ func TestConsumeLatestFollows(t *testing.T) {
 	produce(t, fc.ListenAddrs(), 2, 100)
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		s := k.Snapshot(0, 0)
+		s := k.Snapshot(0, SnapshotOptions{})
 		if s.Received == 6 {
 			for _, m := range s.Messages {
 				if m.Value.Text != "v100" && m.Value.Text != "v101" {
@@ -296,7 +300,7 @@ func TestConsumeLatestFollows(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	k.Stop()
-	if s := k.Snapshot(0, 0); s.State != ConsumeStopped {
+	if s := k.Snapshot(0, SnapshotOptions{}); s.State != ConsumeStopped {
 		t.Fatalf("after Stop: %s", s.State)
 	}
 }
@@ -314,17 +318,17 @@ func TestConsumeBufferAndPaging(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		t.Fatal("consumer did not finish")
 	}
-	s := k.Snapshot(0, 3)
+	s := k.Snapshot(0, SnapshotOptions{Max: 3})
 	if s.Received != 30 || s.Dropped != 22 || s.Buffered != 8 || len(s.Messages) != 3 {
 		t.Fatalf("snapshot = %+v", s)
 	}
 	if s.Messages[0].Seq != 23 {
 		t.Fatalf("oldest buffered seq = %d, want 23", s.Messages[0].Seq)
 	}
-	if s := k.Snapshot(28, 0); len(s.Messages) != 2 || s.Messages[0].Seq != 29 {
+	if s := k.Snapshot(28, SnapshotOptions{}); len(s.Messages) != 2 || s.Messages[0].Seq != 29 {
 		t.Fatalf("after 28: %+v", s.Messages)
 	}
-	if s := k.Snapshot(30, 0); len(s.Messages) != 0 {
+	if s := k.Snapshot(30, SnapshotOptions{}); len(s.Messages) != 0 {
 		t.Fatalf("after the last: %+v", s.Messages)
 	}
 }
@@ -356,7 +360,7 @@ func TestConsumeEmptyStopAtEnd(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("consumer of an empty topic did not finish")
 	}
-	if s := k.Snapshot(0, 0); s.State != ConsumeDone || s.Received != 0 {
+	if s := k.Snapshot(0, SnapshotOptions{}); s.State != ConsumeDone || s.Received != 0 {
 		t.Fatalf("snapshot = %+v", s)
 	}
 }
@@ -379,5 +383,120 @@ func TestCloseStopsConsumers(t *testing.T) {
 	}
 	if _, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "orders", Mode: FromLatest, Partition: -1}); err == nil {
 		t.Fatal("Consume after Close: want error")
+	}
+}
+
+// Large records: snapshot pages carry previews within a byte bound, the
+// full record comes from Message, and the buffer keeps its byte bound while
+// evicting without losing order.
+func TestConsumeLargeRecords(t *testing.T) {
+	fc, err := kfake.NewCluster(kfake.NumBrokers(1), kfake.SeedTopics(1, "big"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fc.Close()
+	cl, err := kgo.NewClient(kgo.SeedBrokers(fc.ListenAddrs()...), kgo.DefaultProduceTopic("big"),
+		kgo.ProducerBatchMaxBytes(4<<20))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := ctx10(t)
+	const n, size = 40, 300 << 10 // 40 records of 300 KiB = 12 MiB
+	for i := 0; i < n; i++ {
+		v := []byte(fmt.Sprintf("%04d:", i) + strings.Repeat("é", size/2))
+		if err := cl.ProduceSync(ctx, &kgo.Record{Value: v}).FirstErr(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cl.Close()
+
+	c := openFake(t, fc)
+	k, err := c.Consume(ctx, ConsumeRequest{Topic: "big", Mode: FromEarliest, Partition: -1, StopAtEnd: true, BufferBytes: 4 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer k.Stop()
+	select {
+	case <-k.Done():
+	case <-time.After(15 * time.Second):
+		t.Fatal("consumer did not finish")
+	}
+
+	full := k.Snapshot(0, SnapshotOptions{})
+	if full.Received != n || full.Buffered*(size+5) > 4<<20+size+5 || full.Dropped != uint64(n-full.Buffered) {
+		t.Fatalf("buffer: received %d buffered %d dropped %d", full.Received, full.Buffered, full.Dropped)
+	}
+	for i, m := range full.Messages {
+		if m.Seq != full.Messages[0].Seq+uint64(i) || m.Value.Truncated {
+			t.Fatalf("record %d: seq %d truncated %v", i, m.Seq, m.Value.Truncated)
+		}
+	}
+	last := full.Messages[len(full.Messages)-1]
+	if !strings.HasPrefix(last.Value.Text, fmt.Sprintf("%04d:", n-1)) {
+		t.Fatalf("newest record lost: %q", last.Value.Text[:5])
+	}
+
+	page := k.Snapshot(0, SnapshotOptions{Preview: 1001, MaxBytes: 3000})
+	if len(page.Messages) != 2 {
+		t.Fatalf("page of %d previews, want 2 (1001 bytes each within 3000)", len(page.Messages))
+	}
+	p := page.Messages[0].Value
+	if !p.Truncated || p.Size != size+5 || len(p.Text) != 1001 || !utf8.ValidString(p.Text) {
+		t.Fatalf("preview: truncated %v size %d len %d", p.Truncated, p.Size, len(p.Text))
+	}
+	// One byte less lands inside an "é": the cut steps back to its start.
+	if q := k.Snapshot(0, SnapshotOptions{Preview: 1002, Max: 1}).Messages[0].Value; len(q.Text) != 1001 {
+		t.Fatalf("rune boundary: len %d", len(q.Text))
+	}
+
+	m, ok := k.Message(page.Messages[1].Seq)
+	if !ok || len(m.Value.Text) != size+5 || m.Value.Truncated {
+		t.Fatalf("full record: ok %v len %d", ok, len(m.Value.Text))
+	}
+	if _, ok := k.Message(1); ok && full.Dropped > 0 {
+		t.Fatal("a dropped record is still served")
+	}
+	if _, ok := k.Message(n + 1); ok {
+		t.Fatal("a record past the end is served")
+	}
+}
+
+func TestCutBase64(t *testing.T) {
+	p := cut(&Payload{Text: "QUJDREVGR0hJSg==", Encoding: "base64", Size: 10}, 7)
+	if p.Text != "QUJD" || !p.Truncated {
+		t.Fatalf("cut = %+v", p)
+	}
+	if q := cut(&Payload{Text: "abc", Encoding: "utf8"}, 7); q.Truncated {
+		t.Fatal("short payload cut")
+	}
+	if cut(nil, 3) != nil {
+		t.Fatal("nil payload")
+	}
+}
+
+func TestWriteNDJSON(t *testing.T) {
+	fc := newFake(t, 2)
+	c := openFake(t, fc)
+	k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "orders", Mode: FromEarliest, Partition: -1, StopAtEnd: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer k.Stop()
+	drain(t, k)
+	var b strings.Builder
+	n, err := k.WriteNDJSON(&b, "orders", "K1-")
+	if err != nil || n != 2 {
+		t.Fatalf("n = %d, %v", n, err)
+	}
+	lines := strings.Split(strings.TrimSpace(b.String()), "\n")
+	var row map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &row); err != nil {
+		t.Fatal(err)
+	}
+	if row["topic"] != "orders" || !strings.HasPrefix(row["key"].(string), "k1-") || row["_base64"] == nil {
+		t.Fatalf("row = %v", row)
+	}
+	if n, _ := k.WriteNDJSON(io.Discard, "orders", ""); n != 6 {
+		t.Fatalf("unfiltered: %d", n)
 	}
 }

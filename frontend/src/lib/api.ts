@@ -257,7 +257,8 @@ export interface KafkaConsumeRequest {
   buffer_bytes?: number;
 }
 
-export interface KafkaPayload { text: string; encoding: "utf8" | "base64"; size: number }
+// truncated: text is a 2 KiB preview (snapshot pages); size is the full one.
+export interface KafkaPayload { text: string; encoding: "utf8" | "base64"; size: number; truncated?: boolean }
 
 export interface KafkaMessage {
   seq: number;
@@ -1674,6 +1675,12 @@ export const api = {
     nn(G.KafkaConsumeSnapshot(consumerId, after, max)) as Promise<KafkaConsumeSnapshot>,
   kafkaConsumeStop: (consumerId: string) =>
     G.KafkaConsumeStop(consumerId) as unknown as Promise<void>,
+  kafkaConsumeHalt: (consumerId: string) =>
+    G.KafkaConsumeHalt(consumerId) as unknown as Promise<void>,
+  kafkaConsumeMessage: (consumerId: string, seq: number) =>
+    nn(G.KafkaConsumeMessage(consumerId, seq)) as Promise<KafkaMessage>,
+  kafkaConsumeExport: (consumerId: string, topic: string, filter: string) =>
+    nn(G.KafkaConsumeExport(consumerId, topic, filter)) as Promise<{ path: string; records: number }>,
   kafkaProduce: (clusterId: string, req: KafkaProduceRequest) =>
     nn(G.KafkaProduce(clusterId, req as any)) as Promise<KafkaProduceResult>,
   kafkaCreateTopic: (clusterId: string, input: { name: string; partitions: number; replication_factor: number; configs: Record<string, string> }) =>

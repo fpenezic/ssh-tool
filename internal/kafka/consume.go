@@ -1,11 +1,15 @@
 package kafka
 
 import (
+	"bufio"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -37,6 +41,16 @@ const (
 	DefaultBufferMessages = 10_000
 	DefaultBufferBytes    = 64 << 20
 	maxSnapshot           = 1000
+)
+
+// Fetch bounds of a consumer's client. franz-go's defaults (50 MiB a fetch,
+// 1 MiB a partition, plus as many fetches buffered as brokers answer) let a
+// heavy topic hold hundreds of MiB in flight before the buffer evicts
+// anything. A record larger than the partition limit still comes through:
+// Kafka returns at least one record whatever the limit.
+const (
+	fetchMaxBytes          = 8 << 20
+	fetchMaxPartitionBytes = 1 << 20
 )
 
 // stopAtEndIdle ends a StopAtEnd consumer that has had no record for this
@@ -72,6 +86,9 @@ type Payload struct {
 	Text     string `json:"text"`
 	Encoding string `json:"encoding"` // "utf8" | "base64"
 	Size     int    `json:"size"`
+	// Truncated: Text is a preview (see SnapshotOptions.Preview); Size is
+	// still the full payload's.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // Header is one record header.
@@ -117,10 +134,14 @@ type Consumer struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 
-	mu         sync.Mutex
-	state      string
-	err        string
-	buf        []Message // oldest first
+	mu    sync.Mutex
+	state string
+	err   string
+	// buf[head:] is the buffer, oldest first. Evicting moves head; the dead
+	// prefix is compacted away once it is half the slice, so a full buffer
+	// does not copy itself on every record.
+	buf        []Message
+	head       int
 	bufBytes   int
 	received   uint64
 	dropped    uint64
@@ -154,6 +175,8 @@ func (c *Cluster) Consume(ctx context.Context, req ConsumeRequest) (*Consumer, e
 	cl, err := kgo.NewClient(clientOpts(c.cfg,
 		kgo.ConsumePartitions(map[string]map[int32]kgo.Offset{req.Topic: assign}),
 		kgo.FetchMaxWait(time.Second),
+		kgo.FetchMaxBytes(fetchMaxBytes),
+		kgo.FetchMaxPartitionBytes(fetchMaxPartitionBytes),
 	)...)
 	if err != nil {
 		return nil, err
@@ -335,14 +358,15 @@ func (k *Consumer) add(r *kgo.Record) bool {
 	m.Seq = k.received
 	k.buf = append(k.buf, m)
 	k.bufBytes += m.Size
-	evict := 0
-	for len(k.buf)-evict > k.req.BufferMessages || (k.bufBytes > k.req.BufferBytes && len(k.buf)-evict > 1) {
-		k.bufBytes -= k.buf[evict].Size
-		evict++
+	for n := len(k.buf) - k.head; n > k.req.BufferMessages || (k.bufBytes > k.req.BufferBytes && n > 1); n-- {
+		k.bufBytes -= k.buf[k.head].Size
+		k.buf[k.head] = Message{} // let the payload go
+		k.head++
+		k.dropped++
 	}
-	if evict > 0 {
-		k.dropped += uint64(evict)
-		k.buf = append(k.buf[:0:0], k.buf[evict:]...)
+	if k.head > 0 && k.head >= len(k.buf)/2 {
+		k.buf = append(k.buf[:0:0], k.buf[k.head:]...)
+		k.head = 0
 	}
 	return k.req.Limit > 0 && k.received >= uint64(k.req.Limit)
 }
@@ -386,37 +410,153 @@ func (k *Consumer) finish(state, errMsg string) {
 	k.parent.mu.Unlock()
 }
 
-// Snapshot returns the state and up to max buffered records with a sequence
-// number above after (max <= 0 or above the cap means the cap). Records the
-// buffer already dropped are skipped; Dropped tells the caller about them.
-func (k *Consumer) Snapshot(after uint64, max int) ConsumeSnapshot {
-	if max <= 0 || max > maxSnapshot {
-		max = maxSnapshot
+// SnapshotOptions bounds one page of a snapshot.
+type SnapshotOptions struct {
+	// Max is the record count; <= 0 or above the cap means the cap.
+	Max int
+	// MaxBytes stops the page once the records in it add up to this many
+	// payload bytes (the first record always fits); 0 = no byte bound.
+	MaxBytes int
+	// Preview cuts every key, value and header value to this many bytes
+	// (Truncated set); 0 = full payloads. The UI lists previews and asks
+	// for one full record with Message.
+	Preview int
+}
+
+// Snapshot returns the state and a page of buffered records with a sequence
+// number above after. Records the buffer already dropped are skipped;
+// Dropped tells the caller about them.
+func (k *Consumer) Snapshot(after uint64, o SnapshotOptions) ConsumeSnapshot {
+	if o.Max <= 0 || o.Max > maxSnapshot {
+		o.Max = maxSnapshot
 	}
 	k.mu.Lock()
 	defer k.mu.Unlock()
+	live := k.buf[k.head:]
 	s := ConsumeSnapshot{
 		State:      k.state,
 		Error:      k.err,
 		Received:   k.received,
 		Dropped:    k.dropped,
-		Buffered:   len(k.buf),
+		Buffered:   len(live),
 		Partitions: k.partitions,
 		Messages:   []Message{},
 	}
-	if len(k.buf) == 0 {
+	if len(live) == 0 {
 		return s
 	}
 	i := 0
-	if first := k.buf[0].Seq; after >= first {
+	if first := live[0].Seq; after >= first {
 		i = int(after - first + 1)
 	}
-	if i >= len(k.buf) {
-		return s
+	bytes := 0
+	for ; i < len(live) && len(s.Messages) < o.Max; i++ {
+		m := live[i]
+		if o.Preview > 0 {
+			m = previewOf(m, o.Preview)
+		}
+		// The bound is on what the page carries: previews, when cut.
+		n := textBytes(m)
+		if o.MaxBytes > 0 && len(s.Messages) > 0 && bytes+n > o.MaxBytes {
+			break
+		}
+		bytes += n
+		s.Messages = append(s.Messages, m)
 	}
-	end := min(i+max, len(k.buf))
-	s.Messages = append(s.Messages, k.buf[i:end]...)
 	return s
+}
+
+// Message returns one buffered record in full, false once the buffer has
+// dropped it.
+func (k *Consumer) Message(seq uint64) (Message, bool) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	live := k.buf[k.head:]
+	if len(live) == 0 || seq < live[0].Seq {
+		return Message{}, false
+	}
+	i := int(seq - live[0].Seq)
+	if i >= len(live) {
+		return Message{}, false
+	}
+	return live[i], true
+}
+
+// Each calls fn for every buffered record, oldest first, in full. The buffer
+// is copied first, so fn may be slow without holding up the consumer.
+func (k *Consumer) Each(fn func(Message)) {
+	k.mu.Lock()
+	live := append([]Message(nil), k.buf[k.head:]...)
+	k.mu.Unlock()
+	for _, m := range live {
+		fn(m)
+	}
+}
+
+func textBytes(m Message) int {
+	n := 0
+	if m.Key != nil {
+		n += len(m.Key.Text)
+	}
+	if m.Value != nil {
+		n += len(m.Value.Text)
+	}
+	for _, h := range m.Headers {
+		n += len(h.Key) + len(h.Value.Text)
+	}
+	return n
+}
+
+// Matches reports whether q (lower case) occurs in the key, the value, a
+// header name or a header value, ignoring case. Base64 payloads are matched
+// on their base64 text. Same rule as the Kafka tab's filter.
+func (m Message) Matches(q string) bool {
+	if q == "" {
+		return true
+	}
+	has := func(p *Payload) bool { return p != nil && strings.Contains(strings.ToLower(p.Text), q) }
+	if has(m.Key) || has(m.Value) {
+		return true
+	}
+	for _, h := range m.Headers {
+		if strings.Contains(strings.ToLower(h.Key), q) || has(&h.Value) {
+			return true
+		}
+	}
+	return false
+}
+
+func previewOf(m Message, n int) Message {
+	m.Key = cut(m.Key, n)
+	m.Value = cut(m.Value, n)
+	if len(m.Headers) > 0 {
+		hs := make([]Header, len(m.Headers))
+		for i, h := range m.Headers {
+			hs[i] = Header{Key: h.Key, Value: *cut(&h.Value, n)}
+		}
+		m.Headers = hs
+	}
+	return m
+}
+
+// cut shortens a payload's text to about n bytes: on a rune boundary for
+// text, on a 4-character boundary for base64 (so the preview still decodes).
+func cut(p *Payload, n int) *Payload {
+	if p == nil || len(p.Text) <= n {
+		return p
+	}
+	c := *p
+	end := n
+	if c.Encoding == "base64" {
+		end -= end % 4
+	} else {
+		for end > 0 && !utf8.RuneStart(c.Text[end]) {
+			end--
+		}
+	}
+	c.Text = c.Text[:end]
+	c.Truncated = true
+	return &c
 }
 
 // Stop ends the consumer and waits for it to let go of its connections.
@@ -428,3 +568,56 @@ func (k *Consumer) Stop() {
 
 // Done is closed when the consumer has stopped for any reason.
 func (k *Consumer) Done() <-chan struct{} { return k.done }
+
+// WriteNDJSON writes the buffered records matching filter (see Matches) as
+// one JSON object a line: topic, partition, offset, timestamp, key, value
+// and headers as text, with "_base64" naming the fields whose text is
+// base64. Full payloads, not previews. Returns the record count.
+func (k *Consumer) WriteNDJSON(w io.Writer, topic, filter string) (int, error) {
+	q := strings.ToLower(filter)
+	bw := bufio.NewWriter(w)
+	enc := json.NewEncoder(bw)
+	enc.SetEscapeHTML(false)
+	n := 0
+	var err error
+	text := func(p *Payload) *string {
+		if p == nil {
+			return nil
+		}
+		return &p.Text
+	}
+	k.Each(func(m Message) {
+		if err != nil || !m.Matches(q) {
+			return
+		}
+		row := struct {
+			Topic     string            `json:"topic"`
+			Partition int32             `json:"partition"`
+			Offset    int64             `json:"offset"`
+			Timestamp int64             `json:"timestamp"`
+			Key       *string           `json:"key"`
+			Value     *string           `json:"value"`
+			Headers   map[string]string `json:"headers"`
+			Base64    []string          `json:"_base64,omitempty"`
+		}{topic, m.Partition, m.Offset, m.Timestamp, text(m.Key), text(m.Value), map[string]string{}, nil}
+		if m.Key != nil && m.Key.Encoding == "base64" {
+			row.Base64 = append(row.Base64, "key")
+		}
+		if m.Value != nil && m.Value.Encoding == "base64" {
+			row.Base64 = append(row.Base64, "value")
+		}
+		for _, h := range m.Headers {
+			row.Headers[h.Key] = h.Value.Text
+			if h.Value.Encoding == "base64" {
+				row.Base64 = append(row.Base64, "header:"+h.Key)
+			}
+		}
+		if err = enc.Encode(row); err == nil {
+			n++
+		}
+	})
+	if err != nil {
+		return n, err
+	}
+	return n, bw.Flush()
+}

@@ -379,7 +379,7 @@ func (a *App) mcpKafkaConsume(ctx context.Context, in mcpKafkaConsumeArgs) (stri
 		deadline = time.Now().Add(wait)
 	}
 	for len(matched) < maxMsgs {
-		state = k.Snapshot(after, 0)
+		state = k.Snapshot(after, kafka.SnapshotOptions{MaxBytes: 4 << 20})
 		for _, m := range state.Messages {
 			after = m.Seq
 			if grep == "" || messageMatches(m, grep) {

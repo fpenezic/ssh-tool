@@ -993,6 +993,15 @@ export class Payload {
              */
             this["size"] = 0;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Truncated: Text is a preview (see SnapshotOptions.Preview); Size is
+             * still the full payload's.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["truncated"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

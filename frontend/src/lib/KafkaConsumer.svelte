@@ -1,11 +1,14 @@
 <script lang="ts">
   // Consumer view of one topic: start a backend consumer (assign-only, never
   // commits), page its buffer in, filter, inspect, export. The buffer lives
-  // in the backend; this view keeps a mirror of it capped at the same size.
+  // in the backend. This view mirrors it as PREVIEWS (every key / value /
+  // header cut to 2 KiB by the backend), bounded in records and bytes, and
+  // fetches the one full record the user opens. A heavy topic with large
+  // records would otherwise put gigabytes into the webview.
 
   import { onDestroy } from "svelte";
   import { api, type KafkaMessage, type KafkaStartMode, type KafkaConsumeSnapshot } from "./api";
-  import { formatTime, matches, preview, pretty, toNDJSON, formatCount } from "./kafkaFormat";
+  import { formatTime, matches, preview, pretty, formatCount, formatBytes, messageTextBytes } from "./kafkaFormat";
   import { copyText } from "./clipboard";
   import { toast } from "./toast.svelte.ts";
   import { errMsg } from "./connectErrors";
@@ -19,6 +22,11 @@
   let { clusterId, topic, partitions }: Props = $props();
 
   const MIRROR_CAP = 10_000;
+  // Bound on the mirror's preview text. Previews are at most ~2 KiB a field,
+  // so this only bites on records with many large headers.
+  const MIRROR_BYTES = 24 << 20;
+  // A detail view longer than this shows its head; Copy still copies all.
+  const DETAIL_SHOW = 1 << 20;
   const ROW_H = 22;
 
   let mode = $state<KafkaStartMode>("last");
@@ -31,12 +39,18 @@
 
   let consumerId = $state<string | null>(null);
   let snap = $state<Omit<KafkaConsumeSnapshot, "messages"> | null>(null);
-  let msgs = $state<KafkaMessage[]>([]);
+  // $state.raw: thousands of records must not become deep proxies. The array
+  // is replaced, never mutated, so reassignment is the only signal needed.
+  let msgs = $state.raw<KafkaMessage[]>([]);
+  let mirrorBytes = 0;
   let lastSeq = 0;
   let starting = $state(false);
   let filter = $state("");
   let follow = $state(true);
-  let selected = $state<KafkaMessage | null>(null);
+  // The row picked in the list (a preview) and, once fetched, its full record.
+  let selected = $state.raw<KafkaMessage | null>(null);
+  let full = $state.raw<KafkaMessage | null>(null);
+  let fullErr = $state<string | null>(null);
   let detailTab = $state<"value" | "key" | "headers">("value");
 
   const shown = $derived(filter ? msgs.filter((m) => matches(m, filter)) : msgs);
@@ -51,10 +65,11 @@
   let timer: ReturnType<typeof setInterval> | null = null;
 
   async function start() {
-    await stop();
+    await drop();
     msgs = [];
+    mirrorBytes = 0;
     lastSeq = 0;
-    selected = null;
+    select(null);
     snap = null;
     starting = true;
     try {
@@ -90,11 +105,19 @@
         if (messages.length) {
           lastSeq = messages[messages.length - 1].seq;
           let next = msgs.concat(messages);
-          if (next.length > MIRROR_CAP) next = next.slice(next.length - MIRROR_CAP);
+          for (const m of messages) mirrorBytes += messageTextBytes(m);
+          let cut = 0;
+          while (cut < next.length - 1 && (next.length - cut > MIRROR_CAP || mirrorBytes > MIRROR_BYTES)) {
+            mirrorBytes -= messageTextBytes(next[cut]);
+            cut++;
+          }
+          if (cut > 0) next = next.slice(cut);
           msgs = next;
           if (follow) queueMicrotask(scrollToEnd);
         }
-        if (messages.length < 1000) break;
+        // A short page means caught up: the backend also cuts pages at
+        // about 2 MiB, so compare with what was asked, not with 1000.
+        if (!messages.length || (s.buffered > 0 && messages[messages.length - 1].seq >= s.received)) break;
       }
       if (snap && snap.state !== "running" && timer) {
         clearInterval(timer);
@@ -109,22 +132,59 @@
     }
   }
 
+  // Stop fetching. The backend keeps the buffer, so records read so far can
+  // still be opened in full and exported.
   async function stop() {
     if (timer) clearInterval(timer);
     timer = null;
     const id = consumerId;
     if (!id) return;
-    // Keep what was read: take the last page before the buffer is dropped.
+    await api.kafkaConsumeHalt(id).catch(() => {});
     await poll();
-    consumerId = null;
     if (snap && snap.state === "running") snap = { ...snap, state: "stopped" };
-    await api.kafkaConsumeStop(id).catch(() => {});
+  }
+
+  // Stop and let the backend drop the buffer (new consume, clear, close).
+  async function drop() {
+    if (timer) clearInterval(timer);
+    timer = null;
+    const id = consumerId;
+    consumerId = null;
+    if (id) await api.kafkaConsumeStop(id).catch(() => {});
+  }
+
+  function clearAll() {
+    drop();
+    msgs = [];
+    mirrorBytes = 0;
+    select(null);
+    snap = null;
   }
 
   onDestroy(() => {
     if (timer) clearInterval(timer);
     if (consumerId) api.kafkaConsumeStop(consumerId).catch(() => {});
   });
+
+  // Open a record: show its preview at once, then the full record when any
+  // part of it was cut.
+  async function select(m: KafkaMessage | null) {
+    selected = m;
+    full = null;
+    fullErr = null;
+    if (!m || !consumerId) return;
+    const cut = m.key?.truncated || m.value?.truncated || m.headers.some((h) => h.value.truncated);
+    if (!cut) {
+      full = m;
+      return;
+    }
+    try {
+      const r = await api.kafkaConsumeMessage(consumerId, m.seq);
+      if (selected?.seq === m.seq) full = r;
+    } catch (e) {
+      if (selected?.seq === m.seq) fullErr = errMsg(e);
+    }
+  }
 
   // ----- virtual list -----
   let listEl = $state<HTMLDivElement | null>(null);
@@ -142,23 +202,42 @@
   function scrollToEnd() {
     if (listEl) listEl.scrollTop = listEl.scrollHeight;
   }
+  // When the list shrinks (a filter, a clear) the browser clamps scrollTop
+  // without a scroll event, and the window computed from the stale value
+  // renders no rows. Re-read it after every change of what is shown.
+  $effect(() => {
+    void shown.length;
+    queueMicrotask(() => {
+      if (!listEl) return;
+      if (follow) scrollToEnd();
+      scrollTop = listEl.scrollTop;
+    });
+  });
 
-  async function exportShown() {
-    if (!shown.length) return;
+  // The backend writes the file from its buffer: full payloads, the same
+  // filter applied to the full text.
+  async function exportBuffer() {
+    if (!consumerId) return;
     try {
-      const path = await api.saveTextFile(`${topic}.ndjson`, toNDJSON(shown, topic));
-      if (path) toast.ok(`Saved ${shown.length} records to ${path}`);
+      const r = await api.kafkaConsumeExport(consumerId, topic, filter);
+      if (r.path) toast.ok(`Saved ${r.records} records to ${r.path}`);
     } catch (e) {
       toast.err(`Export failed: ${errMsg(e)}`);
     }
   }
 
+  const shownRecord = $derived(full ?? selected);
   const detail = $derived.by(() => {
-    if (!selected) return null;
-    if (detailTab === "key") return pretty(selected.key);
-    if (detailTab === "value") return pretty(selected.value);
+    if (!shownRecord) return null;
+    if (detailTab === "key") return pretty(shownRecord.key);
+    if (detailTab === "value") return pretty(shownRecord.value);
     return null;
   });
+  const detailText = $derived(
+    detail && detail.text.length > DETAIL_SHOW
+      ? detail.text.slice(0, DETAIL_SHOW) + `\n\n... ${formatBytes(detail.text.length - DETAIL_SHOW)} more - Copy copies all of it`
+      : detail?.text ?? "",
+  );
 </script>
 
 <div class="consumer">
@@ -194,8 +273,8 @@
     {/if}
     <span class="spacer"></span>
     <input class="filter" placeholder="Filter key / value / headers" bind:value={filter} />
-    <button title="Export the shown records as NDJSON" disabled={!shown.length} onclick={exportShown}><IconDownload size={12} /></button>
-    <button title="Clear" disabled={!msgs.length || running} onclick={() => { msgs = []; selected = null; snap = null; }}><IconX size={12} /></button>
+    <button title="Export the buffered records matching the filter as NDJSON, full payloads" disabled={!consumerId || !msgs.length} onclick={exportBuffer}><IconDownload size={12} /></button>
+    <button title="Clear" disabled={!msgs.length || running} onclick={clearAll}><IconX size={12} /></button>
   </div>
 
   <div class="status">
@@ -218,7 +297,7 @@
             class="row"
             class:sel={selected?.seq === m.seq}
             style:top="{(first + i) * ROW_H}px"
-            onclick={() => (selected = m)}
+            onclick={() => select(m)}
           >
             <span class="c-p">{m.partition}</span>
             <span class="c-o">{m.offset}</span>
@@ -230,25 +309,27 @@
       </div>
     </div>
 
-    {#if selected}
+    {#if selected && shownRecord}
       <div class="detail">
         <div class="dbar">
-          <span>p{selected.partition} · offset {selected.offset} · {formatTime(selected.timestamp)} · {selected.size} B</span>
+          <span>p{selected.partition} · offset {selected.offset} · {formatTime(selected.timestamp)} · {formatBytes(selected.size)}</span>
+          {#if !full && !fullErr}<span class="hint">loading the full record...</span>{/if}
+          {#if fullErr}<span class="err" title={fullErr}>showing the 2 KiB preview: {fullErr}</span>{/if}
           <span class="spacer"></span>
           <button class:on={detailTab === "value"} onclick={() => (detailTab = "value")}>Value</button>
           <button class:on={detailTab === "key"} onclick={() => (detailTab = "key")}>Key</button>
-          <button class:on={detailTab === "headers"} onclick={() => (detailTab = "headers")}>Headers ({selected.headers.length})</button>
+          <button class:on={detailTab === "headers"} onclick={() => (detailTab = "headers")}>Headers ({shownRecord.headers.length})</button>
           {#if detail}
             <button title="Copy" onclick={() => copyText(detail.text)}><IconCopy size={12} /></button>
           {/if}
-          <button title="Close" onclick={() => (selected = null)}><IconX size={12} /></button>
+          <button title="Close" onclick={() => select(null)}><IconX size={12} /></button>
         </div>
         {#if detail}
-          <pre class="body selectable {detail.kind}">{detail.text}</pre>
+          <pre class="body selectable {detail.kind}">{detailText}</pre>
         {:else}
           <table class="headers selectable">
             <tbody>
-              {#each selected.headers as h, i (i)}
+              {#each shownRecord.headers as h, i (i)}
                 <tr><td>{h.key}</td><td>{h.value.encoding === "base64" ? `<${h.value.size} bytes binary> ${h.value.text}` : h.value.text}</td></tr>
               {:else}
                 <tr><td class="hint">no headers</td></tr>
