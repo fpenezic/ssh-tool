@@ -1232,13 +1232,17 @@
   // schedules a coalesced save. Gated inside the store until the
   // startup restore decision has been made. pagehide flushes any
   // pending write so quitting right after opening a tab keeps it.
+  // The snapshot itself is the dependency: serializing reads every tab,
+  // pane and session it saves, so the effect reruns on any change that
+  // alters what would be written. Reading only paneTabs.tabs and
+  // sessions.tabs tracked the array fields, not their contents - a tab
+  // added with push() never triggered a save, and the last session
+  // came back missing the tabs opened last.
   $effect(() => {
-    void paneTabs.tabs;
-    void sessions.tabs;
-    lastSession.schedule();
+    lastSession.schedule(lastSession.snapshot());
   });
   $effect(() => {
-    const flush = () => lastSession.flush();
+    const flush = () => lastSession.flush(true);
     window.addEventListener("pagehide", flush);
     return () => window.removeEventListener("pagehide", flush);
   });

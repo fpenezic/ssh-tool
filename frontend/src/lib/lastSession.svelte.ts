@@ -62,6 +62,9 @@ class LastSessionStore {
   // a 25-host restore hits each provider once instead of once per host.
   private inventoryPulled = new Set<string>();
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  // The JSON last written, so a rerun that changes nothing saved (focus,
+  // output, a status tick) does not write again.
+  private lastSaved = "";
 
   async load() {
     if (this.loaded) return;
@@ -76,6 +79,12 @@ class LastSessionStore {
     if (this.mode === v) return;
     this.mode = v;
     api.settingsSet(MODE_KEY, v).catch(console.warn);
+  }
+
+  // The serialized tab set as JSON. Called inside an $effect so every
+  // reactive value it reads becomes a dependency.
+  snapshot(): string {
+    return JSON.stringify(this.serialize());
   }
 
   private serialize(): TabSpec[] {
@@ -102,11 +111,12 @@ class LastSessionStore {
   // tab/session change. Persists even in "never" mode so switching
   // away from it later restores the genuinely-last session, not the
   // last one from before the mode flip.
-  schedule() {
+  schedule(snap?: string) {
     // No saves before the startup restore decision, and none during
     // the restore itself - a kill mid-restore must not overwrite the
     // saved set with a partially-rebuilt one.
     if (!this.restoreDone || this.restoring) return;
+    if (snap !== undefined && snap === this.lastSaved) return;
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
@@ -117,13 +127,16 @@ class LastSessionStore {
   // Write the snapshot now. Also wired to window pagehide from
   // App.svelte so a quit with a coalesce window still pending gets
   // its final state out (best effort - IPC is async).
-  flush() {
+  flush(onlyIfChanged = false) {
     if (!this.restoreDone || this.restoring) return;
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
-    api.settingsSet(TABS_KEY, JSON.stringify(this.serialize())).catch(console.warn);
+    const json = this.snapshot();
+    if (onlyIfChanged && json === this.lastSaved) return;
+    this.lastSaved = json;
+    api.settingsSet(TABS_KEY, json).catch(console.warn);
   }
 
   // Restore once after the first vault unlock. `recovered` = number of
