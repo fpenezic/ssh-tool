@@ -2,7 +2,8 @@
   import { credentials, selection, drag } from "./stores.svelte";
   import { expandedCredentials } from "./treeState.svelte";
   import { api, type CredentialRef } from "./api";
-  import { isInvalidCredDrop, applyCredDrop, type CredDragKind } from "./credentialDnd";
+  import { credRowDragOver, credRowDrop, credAreaDragOver, credAreaDragLeave, credAreaDrop } from "./credentialDnd";
+  import { setMultiDragImage } from "./dragImage";
   import CredFolderNode from "./CredFolderNode.svelte";
   import { expiryInfo } from "./credExpiry";
   import { credKindLabel } from "./credFilter";
@@ -92,43 +93,6 @@
     }
   }
 
-  // ---------- DnD: only the "drop to root" handlers stay here; per-
-  // folder drop is handled inside CredFolderNode. ----------
-
-  function currentSource(): { kind: CredDragKind; id: string } | null {
-    if (drag.credentialId) return { kind: "credential", id: drag.credentialId };
-    if (drag.credentialFolderId) return { kind: "credentialFolder", id: drag.credentialFolderId };
-    return null;
-  }
-
-  function onTreeDragOver(e: DragEvent) {
-    const src = currentSource();
-    if (!src) return;
-    if (isInvalidCredDrop(src.kind, src.id, null, drag.multiCredIds)) {
-      drag.hoverCredFolder(null);
-      return;
-    }
-    e.preventDefault();
-    e.dataTransfer!.dropEffect = "move";
-    drag.hoverCredFolder("ROOT");
-  }
-
-  function onTreeDragLeave(e: DragEvent) {
-    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
-    if (drag.overCredFolderId === "ROOT") drag.hoverCredFolder(null);
-  }
-
-  async function onTreeDrop(e: DragEvent) {
-    const src = currentSource();
-    if (!src) return;
-    e.preventDefault();
-    if (isInvalidCredDrop(src.kind, src.id, null, drag.multiCredIds)) return;
-    const alsoMoving = src.kind === "credential" ? [...drag.multiCredIds] : [];
-    drag.end();
-    try { await applyCredDrop(src.kind, src.id, null, alsoMoving); }
-    catch (err) { console.error("cred drop failed", err); }
-  }
-
 </script>
 
 <aside class="sidebar">
@@ -209,9 +173,9 @@
       role="tree"
       tabindex="-1"
       onkeydown={onCredTreeKey}
-      ondragover={onTreeDragOver}
-      ondragleave={onTreeDragLeave}
-      ondrop={onTreeDrop}
+      ondragover={credAreaDragOver}
+      ondragleave={credAreaDragLeave}
+      ondrop={credAreaDrop}
     >
       {#each rootFolders as f (f.id)}
         <CredFolderNode folder={f} depth={0} />
@@ -234,11 +198,15 @@
           onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectCred(c); } }}
           ondragstart={(e) => {
             const inMulti = selection.isCredentialSelected(c.id) && selection.credentialMultiCount() > 1;
-            drag.startCredential(c.id, inMulti ? selection.selectedCredentialIds() : []);
+            const ids = inMulti ? selection.selectedCredentialIds() : [];
+            drag.startCredential(c.id, ids);
+            setMultiDragImage(e.dataTransfer, ids.length, "credentials");
             e.dataTransfer!.effectAllowed = "move";
             e.stopPropagation();
           }}
           ondragend={() => drag.end()}
+          ondragover={(e) => credRowDragOver(e, { kind: "credential", id: c.id })}
+          ondrop={(e) => credRowDrop(e, { kind: "credential", id: c.id })}
         >
           <span class="chev"> </span>
           <span class="icon"><Icon imageId={c.icon_image_id} iconName={c.icon_name} iconColor={c.icon_color} size={14}>
@@ -374,6 +342,7 @@
   .cred-expiry.soon { background: var(--yellow); color: var(--on-accent); }
   .cred-expiry.expired { background: var(--red); color: var(--on-accent); }
   .tree.drop-root {
-    box-shadow: inset 0 0 0 2px var(--blue)55;
+    background: var(--blue)11;
+    box-shadow: inset 0 0 0 1px var(--blue)44;
   }
 </style>

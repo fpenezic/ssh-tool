@@ -562,10 +562,13 @@ export interface CredentialSecretHistoryEntry {
 }
 
 export interface UsageRef {
-  kind: "folder" | "connection";
+  kind: "folder" | "connection" | "network_profile" | "infisical" | "sync";
   id: string;
   name: string;
   hostname?: string;
+  // What the credential is for when it is not the login itself
+  // ("API token", "client cert", "setup key", ...).
+  role?: string;
 }
 
 export interface AuditEvent {

@@ -2539,8 +2539,10 @@ export const StorageMode = {
 };
 
 /**
- * UsageRef is a reverse-lookup hit: a folder or connection that references
- * the given credential anywhere in its settings (auth_ref or jump chain).
+ * UsageRef is a reverse-lookup hit: something that references the
+ * given credential - a folder or connection (auth_ref, OTP, jump
+ * chain), a dynamic folder's provider config, a network (VPN)
+ * profile, an Infisical server, or the sync target.
  */
 export class UsageRef {
     /**
@@ -2550,7 +2552,7 @@ export class UsageRef {
     constructor($$source = {}) {
         if (!("kind" in $$source)) {
             /**
-             * "folder" | "connection"
+             * "folder" | "connection" | "network_profile" | "infisical" | "sync"
              * @member
              * @type {string}
              */
@@ -2576,6 +2578,15 @@ export class UsageRef {
              * @type {string | undefined}
              */
             this["hostname"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Role says what the credential is for when that is not the
+             * login itself: "API token", "client cert", "setup key", ...
+             * @member
+             * @type {string | undefined}
+             */
+            this["role"] = undefined;
         }
 
         Object.assign(this, $$source);

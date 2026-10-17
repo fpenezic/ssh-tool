@@ -7,7 +7,7 @@
   import { expandedCredentials } from "./treeState.svelte";
   import { api, type UsageRef, type CredentialHistoryEntry, type OpksshCertStatus } from "./api";
   import { connectionActions } from "./connectionActions.svelte";
-  import { IconFolder, IconHost } from "./iconMap";
+  import { IconFolder, IconHost, IconSettings, IconVpn } from "./iconMap";
   import Icon from "./Icon.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
@@ -509,6 +509,13 @@
   }
 
   // ----- usage / history -----
+  // Tree items reveal in the connections tree; profiles, Infisical
+  // servers and the sync target open their Settings section.
+  function openUsage(u: UsageRef) {
+    if (u.kind === "folder" || u.kind === "connection") view.reveal(u.kind, u.id);
+    else if (u.kind === "network_profile") view.openNetworkProfile(u.id);
+    else view.setTabSettingsSection(u.kind);
+  }
   let usage = $state<UsageRef[]>([]);
   let history = $state<CredentialHistoryEntry[]>([]);
   let usageErr = $state<string | null>(null);
@@ -1140,18 +1147,24 @@
       <p class="muted">Not referenced anywhere yet.</p>
     {:else}
       <ul class="usage">
-        {#each usage as u (u.kind + u.id)}
+        {#each usage as u (u.kind + u.id + (u.role ?? ""))}
           <li>
             <button
               class="usage-link"
               type="button"
-              title={`Reveal ${u.name} in the connections tree`}
-              onclick={() => view.reveal(u.kind, u.id)}
+              title={u.kind === "folder" || u.kind === "connection"
+                ? `Reveal ${u.name} in the connections tree`
+                : `Open ${u.name} in Settings`}
+              onclick={() => openUsage(u)}
             >
               {#if u.kind === "folder"}
-                <IconFolder size={13} /> <strong>{u.name}</strong> <span class="muted">(folder)</span>
-              {:else}
+                <IconFolder size={13} /> <strong>{u.name}</strong> <span class="muted">(folder{u.role ? `, ${u.role}` : ""})</span>
+              {:else if u.kind === "connection"}
                 <IconHost size={13} /> <strong>{u.name}</strong> <span class="muted">- {u.hostname}</span>
+              {:else if u.kind === "network_profile"}
+                <IconVpn size={13} /> <strong>{u.name}</strong> <span class="muted">(network profile, {u.role})</span>
+              {:else}
+                <IconSettings size={13} /> <strong>{u.name}</strong> <span class="muted">({u.role})</span>
               {/if}
             </button>
           </li>

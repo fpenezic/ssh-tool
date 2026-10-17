@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -296,13 +297,18 @@ func (d *DB) DeleteCredential(id string) error {
 	return nil
 }
 
-// UsageRef is a reverse-lookup hit: a folder or connection that references
-// the given credential anywhere in its settings (auth_ref or jump chain).
+// UsageRef is a reverse-lookup hit: something that references the
+// given credential - a folder or connection (auth_ref, OTP, jump
+// chain), a dynamic folder's provider config, a network (VPN)
+// profile, an Infisical server, or the sync target.
 type UsageRef struct {
-	Kind     string `json:"kind"` // "folder" | "connection"
+	Kind     string `json:"kind"` // "folder" | "connection" | "network_profile" | "infisical" | "sync"
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	Hostname string `json:"hostname,omitempty"`
+	// Role says what the credential is for when that is not the
+	// login itself: "API token", "client cert", "setup key", ...
+	Role string `json:"role,omitempty"`
 }
 
 func (d *DB) CredentialUsage(credentialID string) ([]UsageRef, error) {
@@ -315,7 +321,9 @@ func (d *DB) CredentialUsage(credentialID string) ([]UsageRef, error) {
 		return nil, err
 	}
 	var out []UsageRef
+	folderName := make(map[string]string, len(folders))
 	for _, f := range folders {
+		folderName[f.ID] = f.Name
 		if settingsUsesCred(&f.Settings, credentialID) {
 			out = append(out, UsageRef{Kind: "folder", ID: f.ID, Name: f.Name})
 		}
@@ -327,7 +335,88 @@ func (d *DB) CredentialUsage(credentialID string) ([]UsageRef, error) {
 			})
 		}
 	}
+	dyn, err := d.ListDynamicFolders()
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range dyn {
+		for _, role := range configCredRoles(f.Config, credentialID) {
+			out = append(out, UsageRef{
+				Kind: "folder", ID: f.FolderID, Name: folderName[f.FolderID],
+				Role: role,
+			})
+		}
+	}
+	profiles, err := d.ListNetworkProfiles()
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range profiles {
+		var cfg map[string]any
+		if json.Unmarshal([]byte(p.ConfigJSON), &cfg) != nil {
+			continue
+		}
+		for _, role := range configCredRoles(cfg, credentialID) {
+			out = append(out, UsageRef{Kind: "network_profile", ID: p.ID, Name: p.Name, Role: role})
+		}
+	}
+	servers, err := d.ListInfisicalServers()
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range servers {
+		if s.APIKeyRef == credentialID {
+			out = append(out, UsageRef{Kind: "infisical", ID: s.ID, Name: s.Name, Role: "API key"})
+		}
+	}
+	if v, ok, _ := d.GetSetting("sync_sftp_cred_id"); ok && v == credentialID {
+		out = append(out, UsageRef{Kind: "sync", ID: "sync", Name: "Profile sync", Role: "SFTP login"})
+	}
 	return out, nil
+}
+
+// configCredRoles finds credential references in a provider or
+// network-profile config: every string value under a key named
+// credential_id, *_credential_id or *_cred_id that equals credID. The
+// role is the key's prefix ("api_token_credential_id" -> "API token"),
+// "" for a bare credential_id. Keyed by name rather than by struct so
+// a new provider or VPN kind is covered without touching this.
+func configCredRoles(cfg map[string]any, credID string) []string {
+	var roles []string
+	for k, v := range cfg {
+		s, ok := v.(string)
+		if !ok || s != credID {
+			continue
+		}
+		var prefix string
+		switch {
+		case k == "credential_id":
+		case strings.HasSuffix(k, "_credential_id"):
+			prefix = strings.TrimSuffix(k, "_credential_id")
+		case strings.HasSuffix(k, "_cred_id"):
+			prefix = strings.TrimSuffix(k, "_cred_id")
+		default:
+			continue
+		}
+		roles = append(roles, credRoleLabel(prefix))
+	}
+	sort.Strings(roles)
+	return roles
+}
+
+var credRoleWords = map[string]string{"api": "API", "vnc": "VNC", "second": "second password"}
+
+func credRoleLabel(prefix string) string {
+	if prefix == "" {
+		return "login"
+	}
+	words := strings.Split(prefix, "_")
+	for i, w := range words {
+		if u, ok := credRoleWords[w]; ok {
+			words[i] = u
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 func settingsUsesCred(s *InheritableSettings, credID string) bool {

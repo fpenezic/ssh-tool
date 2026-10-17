@@ -1003,6 +1003,9 @@ class ViewStore {
   // it up via $effect, applies it, then nulls it back out so the
   // next plain "open Settings" lands on the user's last section.
   pendingSettingsSection = $state<string | null>(null);
+  // Network profile to open once Settings shows the Network profiles
+  // section (a credential's "Used by" link). Consumed and cleared there.
+  pendingNetworkProfileId = $state<string | null>(null);
 
   // Set by reveal() to ask the connections Sidebar to scroll a row
   // into view once the tree has re-rendered with the ancestors
@@ -1088,6 +1091,12 @@ class ViewStore {
   setTabSettingsSection(section: string) {
     this.pendingSettingsSection = section;
     this.tab = "settings";
+  }
+
+  // Open one network profile, on its Settings tab, in Settings.
+  openNetworkProfile(id: string) {
+    this.pendingNetworkProfileId = id;
+    this.setTabSettingsSection("network");
   }
 }
 
@@ -2043,6 +2052,7 @@ class DragStore {
   // Same idea for the credentials tree: every selected credential id
   // the gesture should move. credentialId stays the grabbed row.
   multiCredIds   = $state<string[]>([]);
+  multiCredFolderIds = $state<string[]>([]);
 
   // Tree drop intent: while hovering over a tree row, where will the drop
   // land? 'before' / 'after' / 'inside' (folders only). Drives the row's
@@ -2051,9 +2061,9 @@ class DragStore {
   overTreeId     = $state<string | null>(null);
   overTreeIntent = $state<"before" | "after" | "inside" | null>(null);
 
-  // Credential-tree hover: which folder is highlighted as the drop target,
-  // or null for "root". Separate from overTreeKind/Id because credentials
-  // use simple drop-inside (no reorder).
+  // Credential-tree hover: the folder that receives the drop ("ROOT" for
+  // the top level, null for none). Separate from overTreeKind/Id because
+  // credentials sort by name: a drop picks a folder, never a slot.
   overCredFolderId = $state<string | null | "ROOT">(null);
 
   get active() {
@@ -2089,9 +2099,10 @@ class DragStore {
     this.credentialId = id;
     this.multiCredIds = alsoMoving;
   }
-  startCredentialFolder(id: string) {
+  startCredentialFolder(id: string, alsoMoving: string[] = []) {
     this.clearSources();
     this.credentialFolderId = id;
+    this.multiCredFolderIds = alsoMoving;
   }
   private clearSources() {
     this.connectionId = null;
@@ -2102,6 +2113,7 @@ class DragStore {
     this.multiConnIds = [];
     this.multiFolderIds = [];
     this.multiCredIds = [];
+    this.multiCredFolderIds = [];
   }
   hoverCredFolder(id: string | null | "ROOT") {
     this.overCredFolderId = id;

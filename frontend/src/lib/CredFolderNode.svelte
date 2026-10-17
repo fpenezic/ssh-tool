@@ -5,11 +5,8 @@
 
   import { credentials, selection, drag } from "./stores.svelte";
   import { expandedCredentials } from "./treeState.svelte";
-  import {
-    isInvalidCredDrop,
-    applyCredDrop,
-    type CredDragKind,
-  } from "./credentialDnd";
+  import { credRowDragOver, credRowDrop } from "./credentialDnd";
+  import { setMultiDragImage } from "./dragImage";
   import type { CredentialRef, CredentialFolder } from "./api";
   import { expiryInfo } from "./credExpiry";
   import { credKindLabel } from "./credFilter";
@@ -56,41 +53,6 @@
     selection.selectCredentialById(c.id);
   }
 
-
-  // ----- DnD wiring (mirrors what CredentialList already does) -----
-
-  function currentSource(): { kind: CredDragKind; id: string } | null {
-    if (drag.credentialId) return { kind: "credential", id: drag.credentialId };
-    if (drag.credentialFolderId) return { kind: "credentialFolder", id: drag.credentialFolderId };
-    return null;
-  }
-
-  function onDragOver(e: DragEvent) {
-    const src = currentSource();
-    if (!src) return;
-    if (isInvalidCredDrop(src.kind, src.id, folder.id, drag.multiCredIds)) {
-      drag.hoverCredFolder(null);
-      return;
-    }
-    e.preventDefault();
-    e.dataTransfer!.dropEffect = "move";
-    drag.hoverCredFolder(folder.id);
-  }
-  function onDragLeave(e: DragEvent) {
-    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
-    if (drag.overCredFolderId === folder.id) drag.hoverCredFolder(null);
-  }
-  async function onDrop(e: DragEvent) {
-    const src = currentSource();
-    if (!src) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (isInvalidCredDrop(src.kind, src.id, folder.id, drag.multiCredIds)) return;
-    const alsoMoving = src.kind === "credential" ? [...drag.multiCredIds] : [];
-    drag.end();
-    try { await applyCredDrop(src.kind, src.id, folder.id, alsoMoving); }
-    catch (err) { console.error("cred drop failed", err); }
-  }
 
   const dropHover = $derived(drag.overCredFolderId === folder.id);
 
@@ -185,14 +147,16 @@
   }}
   oncontextmenu={openContext}
   ondragstart={(e) => {
-    drag.startCredentialFolder(folder.id);
+    const inMulti = isSelected() && selection.credentialFolderMultiCount() > 1;
+    const ids = inMulti ? selection.selectedCredentialFolderIds() : [];
+    drag.startCredentialFolder(folder.id, ids);
+    setMultiDragImage(e.dataTransfer, ids.length, "folders");
     e.dataTransfer!.effectAllowed = "move";
     e.stopPropagation();
   }}
   ondragend={() => drag.end()}
-  ondragover={onDragOver}
-  ondragleave={onDragLeave}
-  ondrop={onDrop}
+  ondragover={(e) => credRowDragOver(e, { kind: "credentialFolder", id: folder.id })}
+  ondrop={(e) => credRowDrop(e, { kind: "credentialFolder", id: folder.id })}
 >
   <button
     class="chev"
@@ -228,11 +192,15 @@
       onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectCred(c); } }}
       ondragstart={(e) => {
         const inMulti = selection.isCredentialSelected(c.id) && selection.credentialMultiCount() > 1;
-        drag.startCredential(c.id, inMulti ? selection.selectedCredentialIds() : []);
+        const ids = inMulti ? selection.selectedCredentialIds() : [];
+        drag.startCredential(c.id, ids);
+        setMultiDragImage(e.dataTransfer, ids.length, "credentials");
         e.dataTransfer!.effectAllowed = "move";
         e.stopPropagation();
       }}
       ondragend={() => drag.end()}
+      ondragover={(e) => credRowDragOver(e, { kind: "credential", id: c.id })}
+      ondrop={(e) => credRowDrop(e, { kind: "credential", id: c.id })}
     >
       <span class="chev"> </span>
       <span class="icon"><Icon imageId={c.icon_image_id} iconName={c.icon_name} iconColor={c.icon_color} size={14}>
