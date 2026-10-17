@@ -114,11 +114,19 @@ func (m *Manager) startTimer(f store.DynamicFolder) {
 	go m.runTimer(ctx, f.FolderID, time.Duration(f.RefreshSeconds)*time.Second)
 }
 
+// failedRetryFirst is the first retry after a failed refresh; it doubles
+// on every further failure up to the folder's interval. A host-based VPN
+// (one the app does not run) coming up is invisible to the app, so
+// waiting the full interval left the folder's error mark standing for
+// minutes after the API had become reachable.
+const failedRetryFirst = 15 * time.Second
+
 func (m *Manager) runTimer(ctx context.Context, folderID string, interval time.Duration) {
 	// First tick after a short delay so the boot wave doesn't all
 	// hit proxmox at once.
 	t := time.NewTimer(2 * time.Second)
 	defer t.Stop()
+	retry := failedRetryFirst
 	for {
 		select {
 		case <-ctx.Done():
@@ -126,10 +134,24 @@ func (m *Manager) runTimer(ctx context.Context, folderID string, interval time.D
 		case <-t.C:
 			if err := m.Refresh(ctx, folderID, false); err != nil {
 				log.Printf("inventory: refresh %s: %v", folderID, err)
+				t.Reset(nextRetry(retry, interval))
+				if retry < interval {
+					retry *= 2 // stops growing at the interval, no overflow
+				}
+				continue
 			}
+			retry = failedRetryFirst
 			t.Reset(interval)
 		}
 	}
+}
+
+// nextRetry caps a failed-refresh retry delay at the regular interval.
+func nextRetry(retry, interval time.Duration) time.Duration {
+	if retry > interval {
+		return interval
+	}
+	return retry
 }
 
 // Refresh runs the provider fetch + filter pipeline once and writes
