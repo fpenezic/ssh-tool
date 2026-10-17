@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -401,18 +402,90 @@ func (a *App) KafkaConsumeStart(clusterID string, req kafka.ConsumeRequest) (str
 	return id, nil
 }
 
-// KafkaConsumeSnapshot returns a consumer's state and up to max records after
-// the sequence number after. The buffer stays until KafkaConsumeStop, also
-// after the consumer finished.
-func (a *App) KafkaConsumeSnapshot(consumerID string, after uint64, max int) (*kafka.ConsumeSnapshot, error) {
+// Page bounds of KafkaConsumeSnapshot. The UI lists previews: a heavy topic
+// with large records must not push hundreds of MiB through one IPC call or
+// keep them in the webview. The full record comes from KafkaConsumeMessage.
+const (
+	kafkaPreviewBytes = 2 << 10
+	kafkaPageBytes    = 2 << 20
+)
+
+func (a *App) kafkaConsumer(consumerID string) (*kafkaConsumer, error) {
 	a.kafkaMu.Lock()
+	defer a.kafkaMu.Unlock()
 	c, ok := a.kafkaConsumers[consumerID]
-	a.kafkaMu.Unlock()
 	if !ok {
 		return nil, fmt.Errorf("Kafka consumer %s is not running", consumerID)
 	}
-	s := c.consumer.Snapshot(after, max)
+	return c, nil
+}
+
+// KafkaConsumeSnapshot returns a consumer's state and a page of records after
+// the sequence number after: at most max records and about 2 MiB, every key,
+// value and header cut to a 2 KiB preview. The buffer stays until
+// KafkaConsumeStop, also after the consumer finished or was halted.
+func (a *App) KafkaConsumeSnapshot(consumerID string, after uint64, max int) (*kafka.ConsumeSnapshot, error) {
+	c, err := a.kafkaConsumer(consumerID)
+	if err != nil {
+		return nil, err
+	}
+	s := c.consumer.Snapshot(after, kafka.SnapshotOptions{Max: max, MaxBytes: kafkaPageBytes, Preview: kafkaPreviewBytes})
 	return &s, nil
+}
+
+// KafkaConsumeMessage returns one buffered record in full; an error once the
+// buffer has dropped it.
+func (a *App) KafkaConsumeMessage(consumerID string, seq uint64) (*kafka.Message, error) {
+	c, err := a.kafkaConsumer(consumerID)
+	if err != nil {
+		return nil, err
+	}
+	m, ok := c.consumer.Message(seq)
+	if !ok {
+		return nil, fmt.Errorf("record %d is no longer in the buffer", seq)
+	}
+	return &m, nil
+}
+
+// KafkaConsumeHalt stops fetching but keeps the buffer, so the records read
+// so far can still be opened and exported.
+func (a *App) KafkaConsumeHalt(consumerID string) {
+	c, err := a.kafkaConsumer(consumerID)
+	if err == nil {
+		go c.consumer.Stop()
+	}
+}
+
+// KafkaConsumeExport saves the buffered records matching filter as NDJSON,
+// full payloads, through a save dialog. Returns the path ("" = cancelled)
+// and the record count.
+func (a *App) KafkaConsumeExport(consumerID, topic, filter string) (*KafkaExportResult, error) {
+	c, err := a.kafkaConsumer(consumerID)
+	if err != nil {
+		return nil, err
+	}
+	path, err := SaveFileDialog(SaveFileDialogOptions{DefaultFilename: topic + ".ndjson", Title: "Export records"})
+	if err != nil || path == "" {
+		return &KafkaExportResult{}, err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	n, werr := c.consumer.WriteNDJSON(f, topic, filter)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		return nil, fmt.Errorf("export: %w", werr)
+	}
+	return &KafkaExportResult{Path: path, Records: n}, nil
+}
+
+// KafkaExportResult is where an export went.
+type KafkaExportResult struct {
+	Path    string `json:"path"`
+	Records int    `json:"records"`
 }
 
 // KafkaConsumeStop stops a consumer and drops its buffer. Unknown ids are

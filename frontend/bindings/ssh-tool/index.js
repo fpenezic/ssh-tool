@@ -64,6 +64,7 @@ export {
     IntegrationStatus,
     KafkaClusterInfo,
     KafkaCreateTopicInput,
+    KafkaExportResult,
     KeepassEnsureCredentialInput,
     KeepassSaveInput,
     LoadTextFileResult,
