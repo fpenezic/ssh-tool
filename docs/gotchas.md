@@ -1686,7 +1686,11 @@ everything mobile is behind a build tag or an `isMobile` check.
     through `readClipboard()` (native `ClipboardGetText` first):
     `navigator.clipboard.readText()` never settles on WebKitGTK - no
     value, no error - which had hung the terminal paste (#6) and the
-    30 s password auto-clear. Never call it directly.
+    30 s password auto-clear. Never call it directly. The same goes for
+    Ctrl+Shift+V: WebKitGTK binds it to a native paste into the focused
+    textarea, and xterm's custom key handler returning false does not
+    stop it, so the handler preventDefaults the keydown before it pastes
+    itself (without that the clipboard went in twice).
 
 ---
 
