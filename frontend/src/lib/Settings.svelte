@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ocFlavorTitle, pluginTitle } from "./networkKind";
+  import { ocFlavorTitle, pluginTitle, profileRunsHere, NOT_ON_MOBILE_TITLE } from "./networkKind";
   import { onMount, tick } from "svelte";
   import { EventsOn } from "./wailsRuntime";
   import { errMsg } from "./connectErrors";
@@ -2441,6 +2441,18 @@
     const np = networkProfiles.list.find((p) => p.id === id);
     if (np) npOpenTab(npTab, np);
   }
+  // Deep link to one profile. Waits for the profile list, which may still
+  // be loading when Settings mounts.
+  $effect(() => {
+    const id = view.pendingNetworkProfileId;
+    if (!id) return;
+    const np = networkProfiles.list.find((p) => p.id === id);
+    if (!np) return;
+    view.pendingNetworkProfileId = null;
+    npSel = id;
+    npCancelEdit();
+    npOpenTab("settings", np);
+  });
   function npOpenTab(t: NpTab, np: NetworkProfileInfo | null = npCur) {
     npTab = t;
     if (!np) return;
@@ -3030,9 +3042,12 @@
     api.settingsGet("settings_active_section").then((v) => {
       if (v?.startsWith("import-")) v = "import";
       const resolved = resolveSection(v);
-      if (resolved) activeSection = resolved;
+      // A deep link that landed while this read was in flight wins;
+      // restoring over it reopened the previous section.
+      if (resolved && !pinApplied) activeSection = resolved;
     }).catch(() => {});
   });
+  let pinApplied = false;
 
   // Deep-link from elsewhere in the UI (e.g. the status-bar version
   // pill → About). When a section is staged in view.pendingSettingsSection
@@ -3049,6 +3064,7 @@
     const [sec, anchor] = pin.split("#");
     const resolved = resolveSection(sec);
     if (resolved) {
+      pinApplied = true;
       activeSection = resolved;
       // Persist the concrete section id (keepass/bitwarden/infisical
       // resolve to "external"); restore re-derives the tab from it.
@@ -4414,6 +4430,7 @@
             <span class="np-dot" class:up={np.status.running && !np.paused} class:paused={np.paused} class:remote={!!npRemoteOwners[np.id]}></span>
             <span class="np-row-text"><strong>{np.name}</strong><small>{npKindLine(np)}</small></span>
             {#if np.local_proxy?.shared}<span class="np-badge" title="Reachable through the app proxy">via proxy</span>{/if}
+            {#if !profileRunsHere(np)}<span class="np-badge" title={NOT_ON_MOBILE_TITLE}>not on mobile</span>{/if}
           </button>
         {/each}
         {#if networkProfiles.list.length === 0 && !networkProfiles.loading}

@@ -159,4 +159,5 @@ func main() {
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
+	log.Printf("quit: run loop returned")
 }

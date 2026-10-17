@@ -593,7 +593,10 @@ everything mobile is behind a build tag or an `isMobile` check.
     mobile. NetBird needs the sidecar helper PROCESS, which android can't
     spawn - `PluginsStatus` reports `supported=false` off desktop and the
     UI hides / disables the NetBird path there. Tailscale (gotcha 40) is
-    the same: desktop-only sidecar.
+    the same: desktop-only sidecar, as are OpenConnect, OpenVPN and Check
+    Point. Profiles still sync to mobile, so `ensureTunnel` refuses a
+    plugin kind there (`pluginKindUnsupported`) and `wgDialerFor` turns
+    auto into a plain direct dial; the frontend asks `profileRunsHere`.
 
 40. **Plugins ship on their OWN releases, decoupled from the app version -
     and speak a versioned protocol.** Since v0.111.0 they live in the

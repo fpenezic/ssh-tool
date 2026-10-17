@@ -291,6 +291,8 @@ type App struct {
 	// the close and emits "quit_request" so the frontend can prompt
 	// the user. ConfirmQuit() flips it true and re-closes.
 	quitConfirmed atomic.Bool
+	// quitDone makes the quit teardown (quitSteps) run once.
+	quitDone atomic.Bool
 
 	// mainWindow is the primary application window. main.go writes
 	// it after construction so the tray + IPCs can address it.
@@ -436,7 +438,8 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 // ServiceShutdown is the v3 counterpart, called on app quit. Tear the share
 // server down so attached guests get a clean bye and no listener lingers.
 func (a *App) ServiceShutdown() error {
-	a.stopShareServer()
+	quitTimed("share server", a.stopShareServer)
+	log.Printf("quit: service shutdown done")
 	return nil
 }
 

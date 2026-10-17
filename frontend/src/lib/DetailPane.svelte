@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { profileKindTitle } from "./networkKind";
+  import { profileKindTitle, profileRunsHere, NOT_ON_MOBILE_TITLE } from "./networkKind";
   import { tree, credentials, selection, sessions, paneTabs, view, jumpChainHostnames } from "./stores.svelte";
   import { isMobile } from "./platform";
   import { toast } from "./toast.svelte";
@@ -19,10 +19,10 @@
   import ColorPicker from "./ColorPicker.svelte";
   import IconPicker from "./IconPicker.svelte";
   import Icon from "./Icon.svelte";
-  import { IconFolder, IconHost, IconLock, IconUser, IconClipboardCopy, IconTerminal, IconMonitor, IconStar, IconGlobe, IconBastion, IconTrash, IconKey } from "./iconMap";
+  import { IconFolder, IconHost, IconLock, IconUser, IconClipboardCopy, IconTerminal, IconMonitor, IconStar, IconGlobe, IconBastion, IconTrash, IconKey, IconVpn } from "./iconMap";
   import { contextMenu, type MenuItem } from "./contextMenu.svelte.ts";
   import appIcon from "../assets/images/app-icon-64.png";
-  import type { TunnelInfo } from "./api";
+  import type { TunnelInfo, NetworkProfileInfo } from "./api";
   import DeleteConfirm from "./DeleteConfirm.svelte";
   import { connectionActions } from "./connectionActions.svelte";
   import { explain as explainConnectError, unwrapRaw as unwrapConnectErr, errMsg } from "./connectErrors";
@@ -731,6 +731,65 @@
     if (inh.from && v?.kind === "none") return { hops: [], note: `Direct: ${inh.from.name} clears the chain.` };
     return { hops: [], note: "Direct, no jump host." };
   });
+  // The network profile the first hop dials through, drawn ahead of the
+  // chain. Mirrors the backend (resolver.ExpandJumpRefs): the connection's
+  // own value, else its folders' ("" = Direct, which stops the walk -
+  // inheritedFieldForConnection would skip over it), else, when none is
+  // set at all, the profile of the bastion that supplies the first hop.
+  function folderSetting(folderId: string | null, key: "network_profile_id" | "jump_host"): { v: any; from: string } | undefined {
+    let f = tree.folderById(folderId);
+    for (let i = 0; f && i < 10000; i++) {
+      const v = (f.settings as any)?.[key];
+      if (v !== undefined && v !== null) return { v, from: f.name };
+      f = tree.folderById(f.parent_id ?? null);
+    }
+    return undefined;
+  }
+  // The network a chain's first hop adopts from the connection (or
+  // inventory host) it references, recursing through that one's chain.
+  function bastionNet(spec: any, depth = 0): { id: string; from: string } | undefined {
+    const ref: string | undefined = spec?.connection_id;
+    if (!ref || depth > 16) return undefined;
+    const name = tree.jumpRefLabel(ref);
+    let own: any;
+    let folderId: string | null;
+    if (ref.startsWith("dyn:")) {
+      const rest = ref.slice(4);
+      folderId = rest.slice(0, rest.indexOf("/"));
+    } else {
+      const c = tree.connectionById(ref);
+      if (!c) return undefined;
+      own = c.overrides;
+      folderId = c.folder_id ?? null;
+    }
+    const net = own?.network_profile_id ?? folderSetting(folderId, "network_profile_id")?.v;
+    if (net !== undefined && net !== null) return { id: net, from: `bastion ${name}` };
+    const jh = own?.jump_host ?? folderSetting(folderId, "jump_host")?.v;
+    return jh?.kind === "chain" ? bastionNet(jh.chain, depth + 1) : undefined;
+  }
+  const connNet = $derived.by((): { np: NetworkProfileInfo | null; id: string; from: string } | null => {
+    if (!conn || !editing) return null;
+    let id: string | undefined;
+    let from = "";
+    if (editing.networkProfile === "__direct__") return null;
+    if (editing.networkProfile) id = editing.networkProfile;
+    else {
+      const inh = folderSetting(conn.folder_id ?? null, "network_profile_id");
+      if (inh) { id = inh.v; from = inh.from; }
+      else {
+        const jh = editing.jumpHost ?? folderSetting(conn.folder_id ?? null, "jump_host")?.v;
+        const b = jh?.kind === "chain" ? bastionNet((jh as any).chain) : undefined;
+        if (b) { id = b.id; from = b.from; }
+      }
+    }
+    if (!id) return null;
+    return { np: networkProfiles.list.find((p) => p.id === id) ?? null, id, from };
+  });
+  let netSelectEl = $state<HTMLSelectElement | null>(null);
+  function netState(np: NetworkProfileInfo): { text: string; tone: string } {
+    if (np.paused) return { text: "paused", tone: "warn" };
+    return np.status.running ? { text: "up", tone: "ok" } : { text: "down", tone: "off" };
+  }
   const connChain = $derived(connChainState.hops);
   const connChainNote = $derived(connChainState.note);
 
@@ -2243,9 +2302,36 @@
     {:else if edTab === "connection"}
     <div class="form">
       <div class="span-2 chain-field">
-        <span class="chain-label">Jump hosts</span>
+        <span class="chain-label">Path</span>
         <div class="chain-view">
           <img class="chain-app" src={appIcon} alt="This computer" title="This computer (ssh-tool)" />
+          {#if connNet}
+            {@const np = connNet.np}
+            <svg class="chain-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+            <button
+              type="button"
+              class="chain-hop chain-net"
+              class:missing={!np}
+              title={np
+                ? `The first hop dials through the ${profileKindTitle(np)} profile ${np.name}${np.mode === "auto" ? ", only when the host is not reachable directly" : ""}${connNet.from ? ` (from ${connNet.from})` : ""}. Click to change it.`
+                : "This network profile no longer exists. Click to pick another."}
+              onclick={() => { netSelectEl?.scrollIntoView({ block: "nearest" }); netSelectEl?.focus(); }}
+            >
+              <IconVpn size={14} />
+              {#if np}
+                <span>{np.name}</span>
+                <span class="net-meta">{profileKindTitle(np)}{np.mode === "auto" ? " - auto" : ""}</span>
+                {#if profileRunsHere(np)}
+                  {@const st = netState(np)}
+                  <span class="net-state {st.tone}">{st.text}</span>
+                {:else}
+                  <span class="net-state warn" title={NOT_ON_MOBILE_TITLE}>{np.mode === "auto" ? "direct on mobile" : "not on mobile"}</span>
+                {/if}
+              {:else}
+                <span>missing profile</span>
+              {/if}
+            </button>
+          {/if}
           {#each connChain as hop, i (i)}
             <svg class="chain-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
             <span class="chain-hop" title={hop.title}>
@@ -2265,7 +2351,7 @@
           <span class="chain-spacer"></span>
           <button type="button" class="chain-edit" onclick={() => (chainEditOpen = !chainEditOpen)}>{chainEditOpen ? "Done" : "Edit chain"}</button>
         </div>
-        <span class="inh-hint">{connChainNote}</span>
+        <span class="inh-hint">{connChainNote}{#if connNet?.from} Network from {connNet.from}.{/if}</span>
         {#if chainEditOpen}
           <div class="chain-editor">
             <JumpChainEditor selfId={conn?.id} value={editing.jumpHost} onChange={(v) => { if (editing) editing = { ...editing, jumpHost: v }; }} />
@@ -2274,7 +2360,7 @@
       </div>
       <label title={isWeb ? "Which VPN's browser opens this page. Direct = your normal browser." : "Route the first SSH hop through a userspace VPN tunnel (no TUN adapter, no admin rights)."}>
         Network
-        <select bind:value={editing.networkProfile}>
+        <select bind:this={netSelectEl} bind:value={editing.networkProfile}>
           <option value="">(inherit from folder)</option>
           <option value="__direct__">Direct - no tunnel</option>
           {#each networkProfiles.list as np (np.id)}
@@ -2754,6 +2840,19 @@
     font-size: 0.8rem; font-family: ui-monospace, monospace;
   }
   .chain-hop.self { outline: 1px solid var(--blue); }
+  /* The network profile: transport under the chain, not an SSH hop. */
+  .chain-net {
+    background: transparent; border: 1px dashed var(--mauve, #b675f0); color: var(--text);
+    cursor: pointer; font: inherit; font-size: 0.8rem; font-family: ui-monospace, monospace;
+  }
+  .chain-net :global(svg) { color: var(--mauve, #b675f0); }
+  .chain-net:hover { background: var(--surface0); }
+  .chain-net.missing { border-color: var(--red); color: var(--red); }
+  .net-meta { color: var(--overlay1); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.72rem; }
+  .net-state { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.68rem; font-weight: 600; }
+  .net-state.ok { color: var(--green); }
+  .net-state.warn { color: var(--yellow); }
+  .net-state.off { color: var(--overlay0); }
   .chain-spacer { flex: 1; }
   .chain-edit { font-size: 0.78rem; padding: 0.2rem 0.6rem; }
   .chain-editor { margin-top: 0.3rem; }

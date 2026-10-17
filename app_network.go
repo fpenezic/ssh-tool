@@ -18,6 +18,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -183,7 +184,11 @@ type tunnelDialer interface {
 // ensureTunnel starts (or reuses) the profile's tunnel regardless of
 // kind and leaves a wgTouch hold - see ensureWgTunnel for why.
 func (a *App) ensureTunnel(row *store.NetworkProfile) (tunnelDialer, error) {
-	switch parsePolicy(row.ConfigJSON).Kind {
+	kind := parsePolicy(row.ConfigJSON).Kind
+	if err := pluginKindUnsupported(kind); err != nil {
+		return nil, err
+	}
+	switch kind {
 	case kindNetbird:
 		return a.ensureNetbirdTunnel(row)
 	case kindTailscale:
@@ -197,6 +202,28 @@ func (a *App) ensureTunnel(row *store.NetworkProfile) (tunnelDialer, error) {
 	default:
 		return a.ensureWgTunnel(row.ID)
 	}
+}
+
+// pluginKindTitles names the profile kinds that run as a plugin process.
+var pluginKindTitles = map[string]string{
+	kindNetbird: "NetBird", kindTailscale: "Tailscale", kindOpenConnect: "OpenConnect",
+	kindOpenVPN: "OpenVPN", kindCheckpoint: "Check Point",
+}
+
+// pluginKindUnsupported is non-nil on android / iOS for a plugin-backed
+// kind: the OS cannot spawn the plugin process (gotcha 39), so a synced
+// profile of that kind can never bring its tunnel up there. Without
+// this the connect failed with "plugin is not installed - download it",
+// which mobile cannot do.
+func pluginKindUnsupported(kind string) error {
+	if runtime.GOOS != "android" && runtime.GOOS != "ios" {
+		return nil
+	}
+	t, ok := pluginKindTitles[kind]
+	if !ok {
+		return nil
+	}
+	return fmt.Errorf("%s profiles do not run on mobile: connect with the official VPN app as the system VPN and set the profile's mode to auto", t)
 }
 
 // tunnelStop stops whichever manager runs the profile's tunnel and
@@ -476,6 +503,18 @@ func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 		return direct, nil
 	}
 	if pol.Mode == wg.ModeAuto {
+		// On mobile a plugin kind has no tunnel to fall back to: dial
+		// directly (through the system VPN, if one is up) without the
+		// probe timeout, and say why it failed.
+		if uerr := pluginKindUnsupported(pol.Kind); uerr != nil {
+			return func(ctx context.Context, network, addr string) (net.Conn, error) {
+				c, err := direct(ctx, network, addr)
+				if err != nil {
+					return nil, fmt.Errorf("%w (%v)", uerr, err)
+				}
+				return c, nil
+			}, nil
+		}
 		return func(ctx context.Context, network, addr string) (net.Conn, error) {
 			pctx, cancel := context.WithTimeout(ctx, directProbeTimeout)
 			c, derr := direct(pctx, network, addr)
@@ -1331,6 +1370,33 @@ func (a *App) wgTrackSession(sess *sshlayer.Session, settings *store.ResolvedSet
 // processes are separate: closing them cleanly lets the peer
 // deregister and avoids orphaned children. Best-effort, bounded by
 // each manager's own stop timeouts.
+// presenceQuitWait caps how long quit waits to release presence.
+const presenceQuitWait = 2 * time.Second
+
+// quitSteps runs the work done on the way out, logging how long each
+// step took so a slow quit can be traced to the step that holds it.
+func (a *App) quitSteps() {
+	// ShouldQuit is asked again for every quit attempt Wails makes while
+	// shutting down; the teardown runs once (a second pass logged audit
+	// writes against the already closed store).
+	if !a.quitDone.CompareAndSwap(false, true) {
+		return
+	}
+	start := time.Now()
+	quitTimed("sync flush", a.syncFlushOnQuit)
+	quitTimed("tunnels", a.stopTunnelsOnQuit)
+	quitTimed("sessions + store", a.closeSessionsOnQuit)
+	log.Printf("quit: steps done in %s", time.Since(start).Round(time.Millisecond))
+}
+
+func quitTimed(step string, fn func()) {
+	t := time.Now()
+	fn()
+	if d := time.Since(t); d >= 50*time.Millisecond {
+		log.Printf("quit: %s took %s", step, d.Round(time.Millisecond))
+	}
+}
+
 func (a *App) stopTunnelsOnQuit() {
 	// Release presence for every owned profile first, so another
 	// machine sees them free promptly instead of waiting for the
@@ -1341,28 +1407,44 @@ func (a *App) stopTunnelsOnQuit() {
 		owned = append(owned, pid)
 	}
 	a.presence.mu.Unlock()
+	quitTimed("presence poll", a.stopPresencePoll)
 	if len(owned) > 0 {
-		self := a.machineID()
-		a.presenceLoadSave(func(f *presence.File) {
-			for _, pid := range owned {
-				f.ClearOwner(pid, self)
+		// A courtesy, not a requirement: records nobody refreshes go
+		// stale after presence.StaleAfter anyway. It is a round trip to
+		// the sync storage (took 11 s on a slow one, which was the whole
+		// quit), so give it presenceQuitWait and leave it to staleness
+		// beyond that.
+		quitTimed("presence release", func() {
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				self := a.machineID()
+				a.presenceLoadSave(func(f *presence.File) {
+					for _, pid := range owned {
+						f.ClearOwner(pid, self)
+					}
+				})
+			}()
+			select {
+			case <-done:
+			case <-time.After(presenceQuitWait):
+				log.Printf("quit: presence release still running after %s, leaving it to go stale", presenceQuitWait)
 			}
 		})
 	}
-	a.stopPresencePoll()
-	stopLocalProxies()
-	stopBrowserProxies()
+	quitTimed("local proxies", stopLocalProxies)
+	quitTimed("browser proxies", stopBrowserProxies)
 
 	// Shared bastions first: a prefix may itself ride a WG tunnel, so
 	// close the prefixes before tearing the tunnels down.
 	if a.jumpPool != nil {
-		a.jumpPool.stopAll()
+		quitTimed("shared bastions", a.jumpPool.stopAll)
 	}
 	if a.wgman != nil {
-		a.wgman.StopAll()
+		quitTimed("wireguard tunnels", a.wgman.StopAll)
 	}
 	if a.nbman != nil {
-		a.nbman.StopAll()
+		quitTimed("plugin tunnels", a.nbman.StopAll)
 	}
 }
 
