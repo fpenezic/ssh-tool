@@ -7,6 +7,37 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Dynamic inventory
+
+- **The error mark on an inventory folder clears soon after the API is reachable again.** A failed refresh (a Proxmox cluster behind a VPN you had not connected yet) waited the folder's full refresh interval before the next try, so the red `!` stayed for minutes after connecting. A failed refresh is now retried after 15 seconds, then 30, 60 and so on up to the folder's interval.
+
+### Credentials
+
+- **"Used by" lists every place a credential is used.** The list showed only folders and connections. It now also shows inventory folders that use the credential for their API token or VNC login, network profiles that use it for a password, client certificate, setup key or auth key, Infisical servers and the sync target. A click opens the folder in the tree, the network profile on its Settings tab, or the matching Settings section. Opening Settings through a link like this no longer lands on the section you had open last. Deleting a credential that one of these still uses is now refused, as it already was for connections, so a VPN profile or inventory folder can no longer end up pointing at a credential that no longer exists.
+- **Drag and drop in the credentials tree works like the connections tree.** Dropping onto a credential inside a folder moved it to the top level, and hovering a folder lit up the whole tree as the target. Every row is now a drop target: the middle of a folder row drops into that folder, its top or bottom edge next to it, and a credential row into that credential's folder. Only the empty area below the rows moves to the top level. The folder that receives the drop is highlighted, a drop that would do nothing shows the no-drop cursor, and several selected folders can be dragged together, with a count on the drag image as in the connections tree.
+
+### Connection editor
+
+- **The path on the Connection tab shows the VPN.** When the first hop dials through a network profile, the profile appears between this computer and the first jump host, drawn with a dashed border in the VPN colour because it carries the connection rather than being an SSH hop. It shows the profile kind, whether it is up, down or paused, "auto" when it is used only if the host is not reachable directly, and where it comes from: a folder, or the bastion that supplies the first hop when the connection sets no network itself (the bastion's profile is what the first hop uses then). A click jumps to the Network setting below. A profile that no longer exists is marked in red.
+
+### Android
+
+- **VPN profiles that need a plugin behave predictably on a phone.** NetBird, Tailscale, OpenConnect, OpenVPN and Check Point run as a plugin process, which Android cannot start, so a profile of that kind synced from a desktop never brings its tunnel up there. On auto such a profile now dials directly at once, without the three-second probe, which works when the official VPN app is connected as the system VPN. On always it refuses with a message saying so, instead of "plugin is not installed - download it", which a phone cannot do. The profile list and the connection path mark these profiles "not on mobile" or "direct on mobile". WireGuard profiles are built in and work on Android as before.
+
+### Tabs
+
+- **Reopening the last session brings back every tab.** The saved tab set was rewritten only when the list of tabs was replaced, not when a tab was added to it, so a connection opened shortly before quitting (one that took a moment to connect, through a VPN and a bastion, say) was often missing from the "Reopen last session?" prompt on the next start. The set is now saved whenever anything in it changes.
+
+### Quit
+
+- **Quitting with a VPN profile up no longer takes several seconds.** With profile sync on, quitting told the other machines that this one no longer uses its VPN profiles, a round trip to the sync storage that the quit waited for in full (over 10 seconds on a slow server). It now waits at most two seconds; past that, the other machines see the profiles free once the record goes stale, as they would after a crash.
+
+### Terminal
+
+- **Ctrl+Shift+V pastes once on Linux.** WebKitGTK has its own paste on that key, and since v0.113.1 fixed the clipboard read, both pasted. Thanks to @ivanpavlina for finding and fixing it.
+
 ## [0.113.1] - Go security rebuild, terminal middle-click paste
 
 A security rebuild on the current Go release, with middle-click paste in the terminal fixed on Linux and closing tabs with a middle click no longer pasting into the terminal that stays open.
