@@ -27,6 +27,7 @@
   import { appPrefs } from "./appPrefs.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { focusActivePane } from "./paneFocus";
+  import { reopenLocalShell } from "./sessionSpec";
   import { newTabActions } from "./newTabActions.svelte.ts";
   let broadcastManagerOpen = $state(false);
   let shareDialogOpen = $state(false);
@@ -934,30 +935,8 @@
       // Local shell: a saved local connection re-runs its command; an
       // ad-hoc shell (no connection) re-spawns the same shell kind.
       if (sess.kind === "local") {
-        const conn = sess.connectionId ? tree.connectionById(sess.connectionId) : null;
-        if (conn && conn.protocol === "local") {
-          const r = await api.localConnect(conn.id);
-          sessions.add({
-            sessionId: r.session_id, connectionId: conn.id,
-            name: conn.name, hostname: r.display || r.kind,
-            status: "connected", kind: "local",
-          });
-          paneTabs.addTab(r.session_id, conn.name);
-        } else {
-          // Ad-hoc local shell: hostname carries the resolved shell kind.
-          // Only pass it back through when it's a kind the spawner accepts
-          // as input; the auto-resolved "shell" (Linux/macOS $SHELL) is not,
-          // so fall back to "" (auto) and get the same default shell.
-          const spawnKinds = ["wsl", "powershell", "cmd", "bash", "zsh", "sh", "fish"];
-          const kind = spawnKinds.includes(sess.hostname) ? sess.hostname : "";
-          const r = await api.localShellOpen(kind, "", 120, 32);
-          sessions.add({
-            sessionId: r.session_id, connectionId: "",
-            name: r.display, hostname: r.kind,
-            status: "connected", kind: "local",
-          });
-          paneTabs.addTab(r.session_id, r.display);
-        }
+        const r = await reopenLocalShell(sess);
+        paneTabs.addTab(r.sessionId, r.name);
         return;
       }
       // SSH connection: re-dial the same connection.
