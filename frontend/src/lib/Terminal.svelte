@@ -1685,7 +1685,13 @@
         // written bytes separately.
         pending.push({ start: cum - data.length, end: cum, clean });
       }
-      if (!rafPending) rafPending = requestAnimationFrame(flushLive);
+      // Write at once unless a frame is already scheduled (a gap being
+      // waited out, or a flush already queued). Deferring every chunk to the
+      // next frame cost a keystroke echo up to a full frame on top of xterm's
+      // own render frame - the typing lag that made the terminal feel
+      // sluggish next to a native one. Bursts are already coalesced by the
+      // backend (internal/outbatch), so this is not one write per read.
+      if (!rafPending) flushLive();
     }
     function flushLive() {
       rafPending = 0;
