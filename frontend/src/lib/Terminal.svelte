@@ -866,6 +866,29 @@
   let cancelWait: (() => void) | null = null;
   onDestroy(() => { cancelWait?.(); cancelWait = null; });
 
+  // WebKitGTK composites a canvas that sits at a fractional position by
+  // spreading its edge pixels into the neighbouring device pixel, and does
+  // not repaint that pixel when the cell it came from changes. A block
+  // cursor that moved on left a 1px line ("_") under its old position, with
+  // either renderer, and fractional scaling makes the offsets worse. The
+  // layout above the terminal (rem paddings, line heights) routinely puts
+  // the screen at .5 / .34 px, so nudge it onto whole device pixels.
+  // Chromium snaps canvases by itself, which is why a plain xterm page never
+  // shows this.
+  function snapScreen() {
+    const el = host?.querySelector<HTMLElement>(".xterm-screen");
+    if (!el) return;
+    el.style.transform = "";
+    const r = el.getBoundingClientRect();
+    if (!r.width) return;
+    const dpr = window.devicePixelRatio || 1;
+    const dx = (Math.round(r.left * dpr) - r.left * dpr) / dpr;
+    const dy = (Math.round(r.top * dpr) - r.top * dpr) / dpr;
+    if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+    }
+  }
+
   async function notifyResize() {
     if (!term || !fit) return;
     // Two-pass fit. First call sizes the canvas; xterm then commits
@@ -1523,6 +1546,7 @@
     // the resize feel laggy.
     let resizePending: ReturnType<typeof setTimeout> | null = null;
     resizeObs = new ResizeObserver(() => {
+      snapScreen();
       if (!active) return;
       if (resizePending) clearTimeout(resizePending);
       resizePending = setTimeout(() => {
@@ -1930,7 +1954,7 @@
 
   $effect(() => {
     if (active && term && fit) {
-      requestAnimationFrame(() => { fit?.fit(); focusWhenVisible(); });
+      requestAnimationFrame(() => { fit?.fit(); snapScreen(); focusWhenVisible(); });
     }
   });
 
