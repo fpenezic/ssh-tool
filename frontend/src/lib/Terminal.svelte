@@ -18,7 +18,7 @@
   import { api } from "./api";
   import { sessions } from "./stores.svelte";
   import { terminalPrefs } from "./terminalPrefs.svelte";
-  import { DropScheduler } from "./bgScrollback";
+  import { DropScheduler, backgroundRenderers } from "./bgScrollback";
   import { resyncAnsi } from "./ansiResync";
   import { mayDropScrollback, mayReplayOnRestore, terminalHasScrollback } from "./bgScrollbackPolicy";
   import { copyPastePrefs } from "./copyPastePrefs.svelte";
@@ -943,6 +943,7 @@
   // position and incoming writes all continue as normal, so switching back is
   // seamless apart from reloading the atlas.
   let rendererSuspended = false;
+  const RENDERER_SUSPEND_DELAY_S = 15;
 
   // Attach the renderer addon. Extracted so resumeRenderer() reuses exactly
   // the mount-time selection logic instead of duplicating it.
@@ -1198,11 +1199,46 @@
   // a pane fires two callbacks a frame apart, and the effect tore the
   // renderer addon down and built it back up - including a full
   // term.refresh() - on each click. Cheap to get wrong, very visible.
+  //
+  // And not the moment the tab goes to the background: a resumed renderer
+  // starts from blank canvases, so the first frame after switching back
+  // showed an empty terminal - the blink on every tab switch. Flipping
+  // between a few tabs is the common case, so the renderer is only dropped
+  // after the tab has stayed in the background for a while.
+  const rendererScheduler = new DropScheduler(
+    () => { backgroundRenderers.remove(suspendNow); suspendRenderer(); },
+    () => RENDERER_SUSPEND_DELAY_S,
+  );
+  // Called by backgroundRenderers when too many background terminals keep
+  // a renderer: drop this one now instead of at the end of the grace period.
+  function suspendNow() {
+    rendererScheduler.cancel();
+    suspendRenderer();
+  }
+  onDestroy(() => {
+    rendererScheduler.cancel();
+    backgroundRenderers.remove(suspendNow);
+  });
   $effect(() => {
     const isActive = active;
     if (!term) return;
-    if (isActive) resumeRenderer();
-    else suspendRenderer();
+    if (isActive) {
+      rendererScheduler.restore();
+      backgroundRenderers.remove(suspendNow);
+      if (rendererSuspended) resumeRenderer();
+      // WebKitGTK shows a canvas that was under visibility:hidden blank for
+      // the first frame after it becomes visible again, unless something
+      // draws into it. A single pane gets that from the fit on activation;
+      // the panes of a split usually keep their size and showed one empty
+      // frame on every switch to the tab. Repaint before that frame.
+      else {
+        clearWebglAtlas();
+        term.refresh(0, term.rows - 1);
+      }
+    } else {
+      rendererScheduler.schedule();
+      if (!rendererSuspended) backgroundRenderers.add(suspendNow);
+    }
   });
 
   // Scrollback, by contrast, DOES need real visibility: a hidden split keeps

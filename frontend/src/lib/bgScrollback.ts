@@ -92,3 +92,31 @@ export class DropScheduler {
     this.onDrop();
   }
 }
+
+// Caps how many background terminals keep their renderer during the grace
+// period. Each one holds a WebGL context (when WebGL is on), and WebKit
+// allows only about 16 per page: Ctrl+Tab through a row of tabs inside the
+// grace period would otherwise lose the oldest contexts, and a terminal
+// whose context is lost falls back to the canvas renderer for good. Past
+// the cap the least recently hidden terminal is suspended at once.
+export class RendererKeep {
+  private kept: Array<() => void> = [];
+
+  constructor(private readonly max: number) {}
+
+  // A terminal went to the background still holding its renderer;
+  // `suspend` drops it.
+  add(suspend: () => void): void {
+    this.remove(suspend);
+    this.kept.push(suspend);
+    while (this.kept.length > this.max) this.kept.shift()!();
+  }
+
+  // The terminal came back, was suspended by its own timer, or is gone.
+  remove(suspend: () => void): void {
+    const i = this.kept.indexOf(suspend);
+    if (i >= 0) this.kept.splice(i, 1);
+  }
+}
+
+export const backgroundRenderers = new RendererKeep(6);
