@@ -182,7 +182,7 @@
     {
       "icon": "windows",
       "title": "Detach and redock windows",
-      "body": "Tear off panes to separate windows, then snap them back. Tray icon, minimise-to-tray, close-to-tray."
+      "body": "Tear off panes to separate windows, then snap them back. Tray icon, minimise-to-tray, close-to-tray; the tray menu starts and stops VPN profiles and tunnels, opens favorite and recent connections and locks the vault."
     },
     {
       "icon": "forward",

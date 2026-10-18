@@ -7,8 +7,8 @@ inherited tree, encrypted vault, multi-tab split-pane terminal,
 native multi-window, SOCKS5 forwards, batch exec, RDM import.
 
 Built on Wails v3 (beta) + Svelte 5 + Go. Single binary, cross-
-platform (Windows / Linux native; macOS scaffolding exists but
-test status varies).
+platform: Windows, Linux and Android releases; macOS runs from a
+build of your own (see below).
 
 > Looking for a longer pitch? See [`docs/APP_DESCRIPTION.md`](docs/APP_DESCRIPTION.md).
 
@@ -120,6 +120,22 @@ and 11. It offers the same thing on first run: a copy into
 `%LOCALAPPDATA%\Programs\ssh-tool` and a Start Menu shortcut, no
 administrator rights.
 
+### macOS
+
+No release build yet: a distributed macOS app needs an Apple Developer
+ID and notarisation, which the project does not have. It builds and
+runs from source - install the [build requirements](#requirements)
+plus the Xcode command line tools (`xcode-select --install`), then:
+
+```bash
+task darwin:build      # bin/ssh-tool
+task darwin:package    # bin/ssh-tool.app (and a .dmg)
+```
+
+The in-app updater and the VPN plugin downloads do not cover macOS; a
+plugin built from [ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins)
+and placed in the app's plugins folder is picked up.
+
 ### Updates
 
 ssh-tool updates itself: Help > Check for updates downloads the new
@@ -147,9 +163,9 @@ through the package manager instead.
 
 ### Requirements
 
-- Go 1.25+ (`go.mod` is the source of truth)
+- Go 1.26+ (`go.mod` is the source of truth)
 - Node 20+
-- [`wails3` CLI](https://wails.io) (beta) - `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8`
+- [`wails3` CLI](https://wails.io) (beta) - `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.31` (the version in `go.mod`)
 - [Task](https://taskfile.dev) - `go install github.com/go-task/task/v3/cmd/task@latest`
 
 ### Build for your platform
@@ -210,7 +226,7 @@ ssh-tool/
 │  ├─ backup/         encrypted store+vault snapshots, scheduler
 │  ├─ recorder/       asciicast v2 session recording
 │  ├─ share/          session sharing (browser guest, MCP)
-│  ├─ presence/       LAN presence for shared sessions
+│  ├─ presence/       network profile ownership across synced machines
 │  ├─ updater/        in-app update check + staged install
 │  └─ initcmd/        initial-command sequencing
 ├─ frontend/          Svelte 5 + xterm.js

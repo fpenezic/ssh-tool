@@ -30,13 +30,27 @@ a prerelease upstream.
 
 - **Reopening the last session brings back every tab.** The saved tab set was rewritten only when the list of tabs was replaced, not when a tab was added to it, so a connection opened shortly before quitting (one that took a moment to connect, through a VPN and a bastion, say) was often missing from the "Reopen last session?" prompt on the next start. The set is now saved whenever anything in it changes.
 
+### Tray
+
+- **Right-click on the tray icon opens its menu on Windows again, so the app can be quit with close-to-tray on.** The menu never opened there, which left no way to quit a window closed to the tray short of turning the setting off. Fixed by moving to Wails v3 beta.31.
+- **The tray menu does more.** VPN profiles and tunnels, each ticked while it runs, start or stop with a click without opening the window (a failure comes back as a notification); Favorites and Recent connect like a double-click in the tree; Lock vault locks it. Quit asks first when sessions are open, as closing the window does, instead of dropping them.
+
+### Network profiles
+
+- **Clearer actions on a profile.** Test is now Connect, and turns into Disconnect while the tunnel runs; Pause shows its state and turns yellow while paused, and Resume connects the tunnel again instead of leaving it down until the next connection; Browser sits behind a divider. Each button has an icon.
+
 ### Quit
 
 - **Quitting with a VPN profile up no longer takes several seconds.** With profile sync on, quitting told the other machines that this one no longer uses its VPN profiles, a round trip to the sync storage that the quit waited for in full (over 10 seconds on a slow server). It now waits at most two seconds; past that, the other machines see the profiles free once the record goes stale, as they would after a crash.
 
 ### Terminal
 
-- **Ctrl+Shift+V pastes once on Linux.** WebKitGTK has its own paste on that key, and since v0.113.1 fixed the clipboard read, both pasted. Thanks to @ivanpavlina for finding and fixing it.
+- **Typing feels immediate.** Output reached the terminal one frame late on top of its own render frame; a keystroke echo is now written as it arrives. Bursts are still batched, so fast output paints as quickly as before.
+- **No blink when switching tabs.** A tab's renderer is kept for 15 seconds in the background instead of being rebuilt from blank on every switch, and a split tab repaints before it shows.
+- **Back in a split tab, focus returns to the pane you were in**, not the first one.
+- **Linux: no stale line under the cursor, and Ctrl+Tab no longer needs a second press** before typing reaches the terminal (GTK used the key for its own focus moves).
+- **Splitting a local shell opens another local shell** instead of failing with "not found".
+- **Ctrl+Shift+V pastes once on Linux.** WebKitGTK has its own paste on that key, and since v0.113.1 fixed the clipboard read, both pasted. Thanks to @ivanpavlina for finding and fixing this and every terminal entry above.
 
 ## [0.113.1] - Go security rebuild, terminal middle-click paste
 

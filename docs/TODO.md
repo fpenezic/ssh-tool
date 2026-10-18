@@ -409,10 +409,10 @@ plugin).
   plugins for Linux (amd64/arm64) and Windows (amd64) only.
   A macOS helper needs a signed + notarised binary or Gatekeeper
   blocks the spawn - same signing story as the app. Add `darwin-amd64`
-  / `darwin-arm64` legs once macOS signing exists; `PluginsStatus`
-  already reports `supported=true` on darwin, so until then a mac user
-  sees the plugin as available but the download 404s. Consider gating
-  the darwin download until the asset ships.
+  / `darwin-arm64` legs once macOS signing exists. Until then
+  `PluginsStatus` reports `supported=false` on darwin (no download is
+  offered) and a mac user builds the plugin and drops it into the
+  plugins folder, which `pluginPath` finds.
 
 - **Windows 11 top-level context menu** - the classic registry verb
   lands under "Show more options" on Win11 by design. Appearing in

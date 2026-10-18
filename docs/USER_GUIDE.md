@@ -519,10 +519,15 @@ in tabs under the header; the editor reopens on the tab you used last.
 
 **Connection**
 
-- **Jump hosts** - the chain as it will be dialled: this computer,
-  each hop with its connection's icon, then this host. The line under
-  it says where the chain comes from (this connection, a folder, or
-  none). **Edit chain** opens the editor: one row per hop, in connect
+- **Path** - the route as it will be dialled: this computer, the
+  network profile the first hop goes through (a dashed card in the VPN
+  colour, with its kind, up / down / paused and "auto" when it is used
+  only if the host is not reachable directly), each jump hop with its
+  connection's icon, then this host. The line under it says where the
+  chain and the network come from: this connection, a folder, or - when
+  the connection sets no network itself - the bastion that supplies the
+  first hop, whose network profile the first hop then uses. Clicking
+  the network card jumps to the **Network** setting. **Edit chain** opens the editor: one row per hop, in connect
   order. A hop is either **Manual** (hostname, port, user, credential)
   or a **Saved connection**: any saved connection or any host of an
   inventory folder. A saved-connection hop reads the bastion's address,
@@ -711,8 +716,14 @@ Each credential has a **kind** that determines auth behaviour:
 
 ### Tree operations
 
-- Drag credentials between credential folders.
-- Drop on empty area below the tree = move to root.
+- **Drag and drop** works like the connections tree. Every row is a
+  drop target: the middle of a folder row drops into that folder, its
+  top or bottom edge next to it, and a credential row into that
+  credential's folder. Only the empty area below the rows moves to the
+  top level. The folder that receives the drop is highlighted; a drop
+  that would change nothing shows the no-drop cursor. A multi-selection
+  (credentials, or folders) moves as one. There is no manual order:
+  credentials and their folders sort by name.
 - Click a folder row to select it (chevron toggles expand).
   **Ctrl/Cmd+click** toggles folders in/out of a multi-selection,
   **Shift+click** ranges across the visible list - same gestures as
@@ -756,12 +767,15 @@ When a credential is selected:
   no manual `puttygen` step. A picked `.ppk` is absorbed into the vault
   rather than left as a file link, since the key is only usable once
   converted.
-- **Used by** - lists the folders / connections referencing this
-  credential. Each entry is a shortcut: click it to switch to the
-  Connections view, expand the ancestor folders, select the row and
-  scroll it into view.
-- **Delete** - confirm dialog with usage references so you see
-  which folders / connections still point at this credential.
+- **Used by** - every place that references this credential: folders
+  and connections (login, one-time code, jump hosts), inventory folders
+  (API token, VNC login), network profiles (password, client
+  certificate, setup key, auth key), Infisical servers and the sync
+  target, each with what it uses the credential for. Click a folder or
+  connection to reveal it in the Connections view; a network profile
+  opens on its Settings tab, the others open their Settings section.
+- **Delete** - refused while anything in **Used by** still points at
+  the credential, so nothing is left referencing a deleted one.
 - **History** - list of past rotations (timestamp / note /
   rotated_by). Metadata-only audit trail.
 - **Previous secrets** (passwords + API tokens) - collapsible
@@ -1930,8 +1944,12 @@ left holds **General** (plugins, defaults, the app proxy), your profiles
 through the app proxy) and **New profile**. A profile opens on four tabs:
 **Overview** (mode, idle stop, how many connections and web bookmarks use
 it, when the session ends), **Settings** (the profile itself, and Delete),
-**Proxy** and **Details**; **Test**, **Pause**, **Browser** and **Stop**
-sit above them. Assign a profile to a
+**Proxy** and **Details**. Above them: **Connect** brings the tunnel
+up now (it turns into **Disconnect** while the tunnel runs), **Pause** /
+**Resume** shows the pause switch's state (yellow while paused; Pause
+stops the tunnel, Resume connects it again), and
+**Browser**, after a divider, opens a browser through the
+profile. Assign a profile to a
 folder or a connection via its **Network** setting (in the detail
 pane); the setting inherits down the tree like the others, so a whole
 "client-X" folder can go through one tunnel. A pane whose first hop
@@ -1963,6 +1981,19 @@ Each profile has a mode and a pause switch:
   dials direct and the tunnel is stopped immediately. For "I'm on the
   network, leave the VPN alone."
 
+### Profiles on several machines
+
+With profile sync on, a profile's tunnel can only be up on one machine
+at a time: two machines with the same identity degrade a WireGuard
+tunnel on both, and most VPN gateways drop the older login. A running
+tunnel is recorded in the synced storage, and connecting through the
+same profile on another machine opens **Network profile in use**:
+**Take over** asks the other machine to disconnect and connects here
+once it has (a countdown shows the wait), **Connect anyway** ignores
+it, **Cancel** leaves both alone. Quitting the app releases its
+records (it waits two seconds at most); a machine that quit before
+that, or crashed, counts as gone after about 100 seconds.
+
 ### Plugins
 
 NetBird, Tailscale, OpenConnect, OpenVPN and Check Point run as optional **plugins**: small
@@ -1974,8 +2005,16 @@ under **General -> Plugins** on this page: each is downloaded from the
 releases and checked against its sha256 digest before install. The card
 shows the plugin release and the engine version inside it, and an
 update is offered there (and as a status bar pill) when a newer plugin
-release is out. Plugins are desktop only; Android cannot start helper
-processes.
+release is out. Downloads exist for Windows and Linux; on macOS build
+the plugin from the ssh-tool-plugins repository and put it in the
+plugins folder, where the app finds it.
+
+Plugins are desktop only: Android cannot start helper processes.
+Profiles still sync to the phone, and there a plugin profile is marked
+**not on mobile**. On **Auto** it dials directly (no probe), which
+works when the official VPN app is connected as the system VPN; on
+**Always** the connect is refused with that explanation. WireGuard
+profiles are built in and work on Android as on the desktop.
 
 ### Browser through a profile
 
@@ -2075,8 +2114,8 @@ from the matching release and checksum-verified). Until it's
 installed, the NetBird option points you at the download.
 
 > **Desktop only.** The NetBird plugin runs as a separate helper
-> process, which Android can't spawn - so NetBird profiles are
-> Windows / Linux / macOS only. WireGuard profiles, by contrast, are
+> process, which Android can't spawn - so NetBird profiles work on
+> the desktop only (see Plugins above for Android). WireGuard profiles, by contrast, are
 > built into the core and work on Android too.
 
 A NetBird profile needs three things:
@@ -3467,6 +3506,23 @@ Side-nav with grouped panels (last-opened section persists as
   and port forwards keep running while hidden. If a session is
   alive and you click × *without* close-to-tray on, you'll get a
   warn-before-quit confirm prompting you to disconnect.
+- **Tray icon** - a click shows or hides the window. The right-click
+  menu has **Show window**; **VPN profiles** and **Tunnels**, each
+  ticked while it runs, where a click starts or stops it without
+  opening the window (a failure comes back as a notification);
+  **Favorites** and **Recent** (the last 10 connected, favorites left
+  out - the same lists as Quick access above the tree), where a click
+  opens the window and connects like a double-click in the tree;
+  **Lock vault**; and **Quit**, which asks
+  first when sessions are open, the same as closing the window. Empty
+  submenus are left out.
+- **Startup → Reopen last session** - **Ask** (default) offers to
+  reconnect the tabs that were open at the last quit once the vault
+  unlocks, **Always** does it without asking, **Never** starts empty
+  (the last session is still remembered). SSH connections, inventory
+  hosts and local shells come back with their titles, tab groups and
+  split panes; quick connects and VNC consoles do not. A pane that
+  cannot reconnect is dropped and its split closed.
 
 ### Appearance → Terminal
 
