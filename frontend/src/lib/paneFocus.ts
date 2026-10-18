@@ -141,8 +141,11 @@ export function focusActivePane(): void {
       // Re-checked inside the frames, not before them: the user may have
       // clicked into a text field while we were waiting.
       if (userIsTypingElsewhere()) return;
-      const active = document.querySelector(".tab-content.active");
-      if (!active) return;
+      const tab = document.querySelector(".tab-content.active");
+      if (!tab) return;
+      // A split has one .term-wrap.active per pane; the tab's active pane is
+      // the one to focus, not simply the first in DOM order.
+      const active = tab.querySelector(".pane.active") ?? tab;
 
       const ta = active.querySelector(
         ".term-wrap.active .xterm-helper-textarea",

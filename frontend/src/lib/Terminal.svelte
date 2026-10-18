@@ -841,6 +841,13 @@
         // poll started: the user may have clicked into a text field
         // during those few hundred milliseconds.
         if (userIsTypingElsewhere(activeEl)) return;
+        // In a split every pane runs this when its tab comes forward. Only
+        // the tab's active pane may take the keyboard: otherwise each pane
+        // grabbed it in turn and focus bounced between them (cursors
+        // flipping between block and outline, read as a blink), ending on
+        // whichever pane polled last instead of the one the user was in.
+        const pane = host.closest(".pane");
+        if (pane && !pane.classList.contains("active")) return;
         if (activeEl && activeEl !== document.body && !host.contains(activeEl)) {
           activeEl.blur();
         }
