@@ -31,7 +31,7 @@
   import { probeState } from "./probeState.svelte";
   import { MCP_SYSTEM_PROMPT_HINT } from "./mcpSystemPrompt";
   import { copyText, writeClipboard } from "./clipboard";
-  import { IconCopy } from "./iconMap";
+  import { IconCopy, IconPlay, IconStop, IconPause, IconGlobe } from "./iconMap";
   import { localShellPrefs } from "./localShellPrefs.svelte.ts";
   import { recordingsModal } from "./recording.svelte";
   import { syncState } from "./syncState.svelte";
@@ -2344,6 +2344,19 @@
       await networkProfiles.load(true);
     } catch (e: any) { toast.err(errMsg(e)); }
   }
+  // Pause stops the tunnel; Resume brings it back up, so the button
+  // undoes what it did rather than leaving the profile down until the
+  // next connection (or a second click on Connect).
+  async function npTogglePause(np: NetworkProfileInfo) {
+    const mode = np.mode === "auto" ? "auto" : "always";
+    if (!np.paused) {
+      await npSetPolicy(np, mode, true);
+      return;
+    }
+    await npSetPolicy(np, mode, false);
+    const fresh = networkProfiles.list.find((p) => p.id === np.id);
+    if (fresh && !fresh.paused) await npTest(fresh);
+  }
   // Browser through a profile (web bookmarks live in the tree).
   async function npBrowser(np: NetworkProfileInfo, url: string) {
     try { await api.networkProfileOpenBrowser(np.id, url); } catch (e: any) { toast.err(errMsg(e)); }
@@ -3620,8 +3633,7 @@
     <p class="hint">
       Reopen the tabs that were open when the app last quit - SSH
       connections, dynamic-inventory hosts and local shells, with
-      titles and tab groups included. Pane splits inside a tab are
-      not restored yet.
+      titles, tab groups and split panes.
     </p>
     <fieldset class="modes">
       {#each [
@@ -4639,15 +4651,27 @@
           </div>
           <div class="np-meta">{npServerLine(np)}</div>
           <div class="np-actions">
-            <button onclick={() => npTest(np)} disabled={npTesting[np.id] || np.paused}>{npTesting[np.id] ? "Testing…" : "Test"}</button>
-            <button onclick={() => npSetPolicy(np, np.mode === "auto" ? "auto" : "always", !np.paused)}
-              title={np.paused ? "Use the tunnel again" : "Dial direct, never start the tunnel"}>
-              {np.paused ? "Resume" : "Pause"}
-            </button>
-            <button onclick={() => npBrowser(np, "")} title="An isolated browser through this VPN: the customer's networks go through the tunnel, the rest directly">Browser</button>
+            <!-- One state-driven primary action, Pause as a toggle that shows
+                 its state, then Browser behind a divider: it does not depend
+                 on the tunnel's state. -->
             {#if np.status.running}
-              <button onclick={() => api.networkProfileStop(np.id).catch((e) => toast.err(errMsg(e)))} title="Stop the running tunnel">Stop</button>
+              <button class="np-act danger" onclick={() => api.networkProfileStop(np.id).catch((e) => toast.err(errMsg(e)))} title="Stop the running tunnel; connections through it drop">
+                <IconStop size={13} /> Disconnect
+              </button>
+            {:else}
+              <button class="np-act primary" onclick={() => npTest(np)} disabled={npTesting[np.id] || np.paused}
+                title={np.paused ? "Paused: resume the profile to connect" : "Bring the tunnel up now"}>
+                <IconPlay size={13} /> {npTesting[np.id] ? "Connecting…" : "Connect"}
+              </button>
             {/if}
+            <button class="np-act" class:paused={np.paused} onclick={() => npTogglePause(np)}
+              title={np.paused ? "Paused: connections dial direct. Click to resume and connect" : "Dial direct and stop the tunnel"}>
+              {#if np.paused}<IconPlay size={13} /> Resume{:else}<IconPause size={13} /> Pause{/if}
+            </button>
+            <span class="np-sep" aria-hidden="true"></span>
+            <button class="np-act" onclick={() => npBrowser(np, "")} title="An isolated browser through this VPN: the customer's networks go through the tunnel, the rest directly">
+              <IconGlobe size={13} /> Browser
+            </button>
             {#if npRemoteOwners[np.id]}
               <button
                 onclick={() => npDisconnectRemote(np)}
@@ -7257,6 +7281,9 @@
 <style>
   /* Network profiles page: list beside the selected item. */
   .np-title { display: flex; align-items: baseline; gap: 0.8rem; }
+  /* The count's own vertical margin would grow the row and push the
+     heading down whenever a tunnel comes up. */
+  .np-title .hint { margin: 0; }
   .np-split {
     display: grid;
     grid-template-columns: 15rem minmax(0, 1fr);
@@ -7428,6 +7455,14 @@
     flex-wrap: wrap;
   }
   .np-actions button { padding: 0.3rem 0.6rem; }
+  .np-act { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .np-sep { align-self: stretch; width: 1px; margin: 0.15rem 0.3rem; background: var(--surface1); }
+  .np-act.danger { color: var(--red); border-color: var(--red); }
+  .np-act.paused {
+    color: var(--yellow);
+    border-color: var(--yellow);
+    background: color-mix(in srgb, var(--yellow) 14%, transparent);
+  }
   .np-spacer { flex: 1; }
   /* OpenConnect form: two fixed columns, one per field pair; the base
      label style (column, top margin) is reset so rows line up. */
