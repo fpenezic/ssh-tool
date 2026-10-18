@@ -142,6 +142,18 @@
   // Connections (e.g. Ctrl+1 picking a sidebar item). Ctrl+W / Ctrl+T
   // unshifted are reserved for the shell (readline delete-word /
   // transpose-chars) so we never grab those.
+  function cycleTabs(dir: 1 | -1) {
+    paneTabs.cycleActive(dir);
+    focusActivePane();
+  }
+  // On Linux (GTK4) Ctrl+Tab never reaches the page: GTK would use it to
+  // move keyboard focus off the WebView, so the backend takes it first and
+  // sends it here instead (tabkey_linux.go).
+  EventsOn("tab_cycle_key", (dir: any) => {
+    if (!vaultReady || view.tab !== "terminal") return;
+    cycleTabs(Number(dir) < 0 ? -1 : 1);
+  });
+
   function onGlobalKey(e: KeyboardEvent) {
     if (!vaultReady) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
@@ -170,8 +182,7 @@
     if (e.key === "Tab") {
       if (view.tab !== "terminal") return;
       e.preventDefault();
-      paneTabs.cycleActive(e.shiftKey ? -1 : 1);
-      focusActivePane();
+      cycleTabs(e.shiftKey ? -1 : 1);
       return;
     }
 
