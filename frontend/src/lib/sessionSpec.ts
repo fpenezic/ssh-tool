@@ -14,6 +14,38 @@ import { connectionActions, isTransientConnectError } from "./connectionActions.
 import { toast } from "./toast.svelte.ts";
 import type { SessionSpec } from "./paneSpec";
 
+// Opens another local shell like `sess`: a saved local connection re-runs
+// its command, an ad-hoc shell re-spawns the same shell kind. Registers the
+// new session and returns its id; the caller decides where it is shown (a
+// new tab for Duplicate, a pane for split). Throws on failure.
+export async function reopenLocalShell(
+  sess: { connectionId: string; hostname: string },
+): Promise<{ sessionId: string; name: string }> {
+  const conn = sess.connectionId ? tree.connectionById(sess.connectionId) : null;
+  if (conn && conn.protocol === "local") {
+    const r = await api.localConnect(conn.id);
+    sessions.add({
+      sessionId: r.session_id, connectionId: conn.id,
+      name: conn.name, hostname: r.display || r.kind,
+      status: "connected", kind: "local",
+    });
+    return { sessionId: r.session_id, name: conn.name };
+  }
+  // hostname carries the resolved shell kind. Only pass it back through
+  // when it's a kind the spawner accepts as input; the auto-resolved
+  // "shell" (Linux/macOS $SHELL) is not, so fall back to "" (auto) and get
+  // the same default shell.
+  const spawnKinds = ["wsl", "powershell", "cmd", "bash", "zsh", "sh", "fish"];
+  const kind = spawnKinds.includes(sess.hostname) ? sess.hostname : "";
+  const r = await api.localShellOpen(kind, "", 120, 32);
+  sessions.add({
+    sessionId: r.session_id, connectionId: "",
+    name: r.display, hostname: r.kind,
+    status: "connected", kind: "local",
+  });
+  return { sessionId: r.session_id, name: r.display };
+}
+
 // Dynamic folders already pulled during the CURRENT restore, so restoring 25
 // dynamic hosts hits each provider once rather than once per host. Reset by
 // beginRestore() at the start of each run.

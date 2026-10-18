@@ -30,6 +30,7 @@
   import { toast } from "./toast.svelte.ts";
   import { connectionActions } from "./connectionActions.svelte";
   import { unwrapRaw, errMsg } from "./connectErrors";
+  import { reopenLocalShell } from "./sessionSpec";
 
   interface Props {
     tabId: string;
@@ -97,6 +98,13 @@
     const existingSession = sessions.tabs.find((s) => s.sessionId === node.sessionId);
     if (!existingSession) return;
     try {
+      // A local shell has no connection to re-dial: open another shell
+      // like it instead (sshReopen("") failed with "not found").
+      if (existingSession.kind === "local") {
+        const r = await reopenLocalShell(existingSession);
+        paneTabs.splitPane(tabId, node.id, direction, r.sessionId);
+        return;
+      }
       const r = await api.sshReopen(existingSession.connectionId);
       sessions.add({
         sessionId: r.session_id,
