@@ -919,7 +919,14 @@ everything mobile is behind a build tag or an `isMobile` check.
        one tab switch fires two callbacks a frame apart; driving
        suspend/resumeRenderer off it tears the addon down and rebuilds it twice
        per click, which is a visible double blink. Renderer follows `active`,
-       scrollback follows visibility.
+       scrollback follows visibility. The suspend itself waits 15s in the
+       background (`RENDERER_SUSPEND_DELAY_S`): a resumed renderer starts from
+       blank canvases, and suspending at once blinked on every tab switch.
+       A kept renderer still has to repaint on activation (atlas cleared
+       first): WebKitGTK shows a canvas that sat under visibility:hidden
+       blank for one frame, and WebGL comes back with garbled glyphs from
+       the old atlas. A lone pane hid this because its fit re-renders it; the
+       panes of a split keep their size and blinked on every switch.
     3. **Unwire before rewiring.** Setting `wiredSid = null` alone leaves the
        old `pty_output` listeners live while the effect adds new ones: every
        chunk written twice, and a pane that later swaps session keeps the stale

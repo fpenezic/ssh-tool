@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { dropActionFor, shouldHoldScrollback, DropScheduler, BG_SCROLLBACK_OFF } from "./bgScrollback";
+import { dropActionFor, shouldHoldScrollback, DropScheduler, BG_SCROLLBACK_OFF, RendererKeep } from "./bgScrollback";
 
 describe("dropActionFor", () => {
   it("treats a negative delay as 'never release'", () => {
@@ -157,5 +157,44 @@ describe("DropScheduler timing", () => {
     expect(drops).toBe(1);
     vi.advanceTimersByTime(1_000);
     expect(drops).toBe(2);
+  });
+});
+
+describe("RendererKeep", () => {
+  it("suspends the least recently hidden renderer past the cap", () => {
+    const keep = new RendererKeep(2);
+    const dropped: string[] = [];
+    const a = () => dropped.push("a");
+    const b = () => dropped.push("b");
+    const c = () => dropped.push("c");
+    keep.add(a);
+    keep.add(b);
+    expect(dropped).toEqual([]);
+    keep.add(c);
+    expect(dropped).toEqual(["a"]);
+  });
+
+  it("does not suspend a terminal that came back", () => {
+    const keep = new RendererKeep(1);
+    const dropped: string[] = [];
+    const a = () => dropped.push("a");
+    const b = () => dropped.push("b");
+    keep.add(a);
+    keep.remove(a);
+    keep.add(b);
+    expect(dropped).toEqual([]);
+  });
+
+  it("counts a terminal hidden twice once, as the most recent", () => {
+    const keep = new RendererKeep(2);
+    const dropped: string[] = [];
+    const a = () => dropped.push("a");
+    const b = () => dropped.push("b");
+    const c = () => dropped.push("c");
+    keep.add(a);
+    keep.add(b);
+    keep.add(a);
+    keep.add(c);
+    expect(dropped).toEqual(["b"]);
   });
 });
