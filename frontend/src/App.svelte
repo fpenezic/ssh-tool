@@ -374,6 +374,20 @@
   // Tunnels have no tab, so say how many of the sessions the count holds
   // are tunnels - otherwise one open tab can read as "4 sessions".
   const quitTunnels = $derived(tunnels.list.filter((t) => t.session_id).length);
+  // Tray menu actions that need the frontend's flow: a favorite opens
+  // like a double-click in the tree, Lock vault locks like the status
+  // bar (forgetting the auto-unlock sidecar) so the unlock gate follows.
+  EventsOn("tray_connect", (id: any) => {
+    if (typeof id === "string" && id) void connectionActions.connectDefault(id);
+  });
+  EventsOn("tray_lock_vault", async () => {
+    try {
+      await api.vaultLock(true);
+      window.dispatchEvent(new CustomEvent("vault-lock-now"));
+      toast.ok("Vault locked");
+    } catch (e) { console.error("tray lock failed", e); }
+  });
+
   EventsOn("quit_request", (count: any) => {
     quitPromptCount = typeof count === "number" ? count : Number(count ?? 0);
     api.requestAttention().catch(() => {});

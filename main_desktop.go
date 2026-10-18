@@ -260,7 +260,7 @@ func configurePlatform(app *application.App, appInst *App) func() {
 
 	// System tray. Lets the user pick "close-to-tray" semantics
 	// without losing background sessions. Icon click toggles the
-	// main window; the right-click menu has Show / Quit.
+	// main window; the right-click menu is trayController's.
 	tray := app.SystemTray.New()
 	// Label and tooltip are different properties on Linux: the label
 	// feeds the StatusNotifierItem's Title and Id, which is what KDE
@@ -272,17 +272,7 @@ func configurePlatform(app *application.App, appInst *App) func() {
 	if len(trayIcon) > 0 {
 		tray.SetIcon(trayIcon)
 	}
-	trayMenu := app.Menu.New()
-	trayMenu.Add("Show window").OnClick(func(_ *application.Context) {
-		mainWindow.Show()
-		mainWindow.Focus()
-	})
-	trayMenu.AddSeparator()
-	trayMenu.Add("Quit").OnClick(func(_ *application.Context) {
-		appInst.quitConfirmed.Store(true)
-		app.Quit()
-	})
-	tray.SetMenu(trayMenu)
+	newTrayController(appInst, app, tray)
 	tray.OnClick(func() {
 		// Toggle: hide if visible, show otherwise. Best-effort -
 		// IsVisible isn't on every platform impl, so we re-show
