@@ -974,6 +974,15 @@ everything mobile is behind a build tag or an `isMobile` check.
        the `?1049h` scrolls out and the replay runs cursor positioning against
        the normal buffer.
 
+    7. **Snap the screen to device pixels (WebKitGTK).** A canvas at a
+       fractional position bleeds its edge into the neighbouring device
+       pixel, and WebKitGTK does not repaint that pixel when the cell it
+       came from changes: the block cursor left a 1px "_" under every spot
+       it moved away from, with both renderers. The layout puts
+       `.xterm-screen` at .5 / .34 px routinely; `snapScreen()` translates
+       it onto whole pixels on every resize and activation. Chromium snaps
+       canvases itself, so a plain xterm page never reproduces it.
+
     **Measure with the buffers FULL.** An idle measurement said scrollback was
     not the cost. It is, by a wide margin.
 
