@@ -1792,6 +1792,37 @@ everything mobile is behind a build tag or an `isMobile` check.
       catch-up test (`seq >= received`) relies on that.
     - `kfake` (tests) keeps listing a topic that had a partition
       reassignment after it is deleted, and reports log dirs with size 0.
+113. **A native tray checkbox flips its own tick on click.** The OS
+    toggles the item before our handler runs, so when the action fails
+    (a VPN login cancelled, a tunnel that will not start) the state we
+    read back is unchanged while the menu shows the opposite. A rebuild
+    gated on "did the state change" never fires and the wrong tick
+    stays. `trayController.begin` forces a rebuild before and after
+    every tray action. Rebuild by building a new `Menu` and calling
+    `SystemTray.SetMenu` - every platform implements that as a full
+    rebuild (Linux re-exports the dbusmenu tree); editing the live menu
+    in place is not reliably reflected. Before Wails beta.30 a
+    right-click on Windows never opened the tray menu at all
+    (`WM_CONTEXTMENU`), which with close-to-tray left no way to quit.
+
+114. **Wails calls `ShouldQuit` many times while it shuts down.** The
+    first call that returns true starts the shutdown, and later quit
+    attempts ask again. Teardown in there must run once (`quitDone` in
+    `quitSteps`): a second pass ran `closeSessionsOnQuit` against the
+    store it had already closed (`sql: database is closed` audit
+    errors). Anything on the quit path that talks to the network gets a
+    deadline - presence release waited 11 s for the sync storage and
+    was the whole slow quit; it now gives up after `presenceQuitWait`
+    and leaves the record to go stale.
+
+115. **A Svelte 5 `$effect` that reads an array field does not see
+    `push()`.** `void paneTabs.tabs` tracks the `tabs` property, not the
+    array's contents; tabs and sessions are added with `push`, so the
+    last-session snapshot was saved only when something later replaced
+    an array, and the newest tabs were missing on restore. Make the
+    effect depend on what it actually uses - here the serialized
+    snapshot itself (`lastSession.snapshot()`), compared against the
+    last write so an unchanged set is not written again.
 
 ---
 
