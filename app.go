@@ -7620,6 +7620,7 @@ func (a *App) WindowDetachTabAt(tabID string, screenX, screenY int, sessions str
 	}
 	w := a.app.Window.NewWithOptions(opts)
 	registerFileDropForwarding(w)
+	installTabKeyGuard(w)
 
 	// Wire close handler: disconnect every session this detached
 	// window owns so the main UI doesn't leave them dangling green

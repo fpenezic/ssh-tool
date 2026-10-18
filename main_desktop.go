@@ -251,6 +251,7 @@ func configurePlatform(app *application.App, appInst *App) func() {
 		DevToolsEnabled: true,
 	})
 	registerFileDropForwarding(mainWindow)
+	installTabKeyGuard(mainWindow)
 	appInst.mainWindow = mainWindow
 
 	// Persist + restore the window geometry (size, position, which

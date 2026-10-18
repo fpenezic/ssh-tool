@@ -2273,6 +2273,14 @@ terminal had focus. Terminal.svelte now explicitly returns false
 for `Ctrl+Tab`, `Ctrl+1..9`, and `Ctrl+Shift+W/T` so the global
 handler gets them.
 
+On Linux GTK4 also binds Ctrl+Tab / Ctrl+Shift+Tab on the window to
+focus navigation, and runs it even when the page handled the keydown:
+the tab switched, but GTK focus left the WebView and the next
+keystrokes were lost until a second Ctrl+Tab. `tabkey_linux.go` takes
+both combos in a capture-phase key controller on the GtkWindow and
+sends `tab_cycle_key` to that window instead; on Linux the page never
+sees the keydown.
+
 ### Tab switch leaves focus on the previous tab's xterm
 Activating a new tab via shortcut or click flips
 `.tab-content.active` in the DOM but doesn't move focus - the
