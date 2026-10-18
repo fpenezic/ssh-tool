@@ -25,7 +25,7 @@
   "dependencies": {
     "@lucide/svelte": "^1.52.0",
     "@novnc/novnc": "^1.7.0",
-    "@wailsio/runtime": "^3.0.0-beta.28",
+    "@wailsio/runtime": "^3.0.0-beta.31",
     "@xterm/addon-canvas": "^0.7.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",

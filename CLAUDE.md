@@ -45,7 +45,7 @@ Author wants 300+ connections, daily-driver UX, full opkssh support
 ## Tech stack
 
 Backend (Go 1.26):
-- Wails v3 beta.28 (`github.com/wailsapp/wails/v3`) - desktop shell + IPC.
+- Wails v3 beta.31 (`github.com/wailsapp/wails/v3`) - desktop shell + IPC.
   When bumping this in go.mod, bump `WAILS3_VERSION` in
   `.github/workflows/release.yml` to match: the release build regenerates
   `frontend/bindings/` with the CLI that env pins (`build:frontend` ->
@@ -157,9 +157,9 @@ task linux:build                   # bin/ssh-tool
 Tests + checks:
 ```bash
 go build ./...
-go test ./...                      # 24 packages carry tests
+go test ./...                      # 27 packages carry tests
 cd frontend && npm run check       # svelte-check, 0 errors expected
-cd frontend && npm run test        # vitest, 26 files / 298 cases
+cd frontend && npm run test        # vitest, 28 files / 304 cases
 ```
 
 Narrower runs while iterating: `go test ./internal/resolver/`
