@@ -31,6 +31,10 @@ PostgreSQL and MySQL / MariaDB open from the connection that reaches them: datab
 - **Detached windows.** Closing a detached window with its X now ends a Kafka tab or local shell inside it too. The Kafka connection used to stay open and reconnect every few minutes, keeping its connection green in the tree and the Terminal count one too high.
 - **Right-click menu.** Connections at the top level of the tree now offer Open VNC console and Open Kafka like the ones in folders.
 - **Log.** The tray no longer writes a line for every menu rebuild.
+- **Kafka.** Ctrl+A in a record's Value, Key or Headers view selects that view only, instead of the whole window.
+- **Export with credentials.** The login of a jump host (a bastion's credential, at any depth of the chain) now goes into the archive too; before, the bastion arrived on the other machine without a login. A dry-run import counts the port forwards of the connections it would create.
+- **Backups.** Encrypted pre-restore snapshots are pruned to the Keep last N backups setting, like auto backups; every restore used to leave one behind for good. A restore staged by a very old version and applied after the upgrade works again instead of failing on every start.
+- **Vault.** Locking the vault while a secret was being read or saved could leave that secret in memory, readable until the next lock or restart. A locked vault now holds no plaintext in that case either.
 
 ## [0.115.0] - Kafka on a connection
 
