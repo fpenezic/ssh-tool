@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"ssh-tool/internal/creds"
 	"ssh-tool/internal/dbx"
 	"ssh-tool/internal/resolver"
 	sshlayer "ssh-tool/internal/ssh"
@@ -36,8 +37,12 @@ const dbCallTimeout = 90 * time.Second
 type DbHandleInfo struct {
 	ID           string `json:"id"`
 	ConnectionID string `json:"connection_id"`
-	Name         string `json:"name"`
-	Engine       string `json:"engine"`
+	// TargetID / TargetName: the listed database this tab is on ("" = the
+	// connection's own).
+	TargetID   string `json:"target_id"`
+	TargetName string `json:"target_name"`
+	Name       string `json:"name"`
+	Engine     string `json:"engine"`
 	Addr         string `json:"addr"`
 	Database     string `json:"database"`
 	User         string `json:"user"`
@@ -64,15 +69,81 @@ type dbHandle struct {
 
 var errDbClosed = errors.New("database tab is not open")
 
-// DbOpen opens a database handle for a connection. No I/O beyond warming
+// errDbNeedsLogin: the database has no login set. The UI asks for one
+// (DbOpenWithLogin, DbSaveLogin); the text is what it matches on.
+var errDbNeedsLogin = errors.New("the database needs a login: pick a credential in the connection's Database section")
+
+// DbOpen opens a database handle for a connection: targetID picks one of
+// its listed databases ("" = the connection's own). No I/O beyond warming
 // the SSH session of a tunnel transport.
-func (a *App) DbOpen(connectionID string) (*DbHandleInfo, error) {
-	settings, err := resolver.ResolveConnection(a.db, connectionID)
+func (a *App) DbOpen(connectionID, targetID string) (*DbHandleInfo, error) {
+	return a.dbOpen(connectionID, targetID, nil)
+}
+
+// DbOpenWithLogin opens like DbOpen with a login typed for this tab only
+// (nothing is saved).
+func (a *App) DbOpenWithLogin(connectionID, targetID, user, password string) (*DbHandleInfo, error) {
+	if strings.TrimSpace(user) == "" {
+		return nil, fmt.Errorf("a username is needed")
+	}
+	return a.dbOpen(connectionID, targetID, &[2]string{strings.TrimSpace(user), password})
+}
+
+// dbTarget applies a listed database's own fields over the connection's
+// Db* settings. The name is "" for the connection's own database.
+func dbTarget(settings *store.ResolvedSettings, targetID string) (*store.ResolvedSettings, string, error) {
+	if targetID == "" {
+		return settings, "", nil
+	}
+	for _, t := range settings.DbTargets {
+		if t.ID != targetID {
+			continue
+		}
+		s := *settings
+		if t.Engine != nil && *t.Engine != "" {
+			s.DbEngine = *t.Engine
+		}
+		if t.Addr != nil && strings.TrimSpace(*t.Addr) != "" {
+			s.DbAddr = strings.TrimSpace(*t.Addr)
+		}
+		if t.Database != nil {
+			s.DbName = strings.TrimSpace(*t.Database)
+		}
+		if t.CredentialRef != nil {
+			s.DbCredentialRef = t.CredentialRef
+			if *t.CredentialRef == "" {
+				s.DbCredentialRef = nil
+			}
+		}
+		if t.ReadOnly != nil {
+			s.DbReadOnly = *t.ReadOnly
+		}
+		if t.TLS != nil && *t.TLS != "" {
+			s.DbTLS = *t.TLS
+		}
+		if t.UseTunnel != nil {
+			s.DbUseTunnel = *t.UseTunnel
+		}
+		name := t.Name
+		if name == "" {
+			name = s.DbName
+		}
+		return &s, name, nil
+	}
+	return nil, "", fmt.Errorf("that database is no longer listed on the connection")
+}
+
+func (a *App) dbOpen(connectionID, targetID string, login *[2]string) (*DbHandleInfo, error) {
+	resolved, err := resolver.ResolveConnection(a.db, connectionID)
 	if err != nil {
 		return nil, err
 	}
-	if !settings.DbEnabled {
+	if !resolved.DbEnabled {
 		return nil, fmt.Errorf("the database is not enabled on this connection")
+	}
+	settings, targetName, err := dbTarget(resolved, targetID)
+	if err != nil {
+		return nil, err
 	}
 	conn, err := a.db.GetConnection(connectionID)
 	if err != nil {
@@ -82,13 +153,17 @@ func (a *App) DbOpen(connectionID string) (*DbHandleInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	user, password, err := a.dbLogin(settings)
-	if err != nil {
+	var user, password string
+	if login != nil {
+		user, password = login[0], login[1]
+	} else if user, password, err = a.dbLogin(settings); err != nil {
 		return nil, err
 	}
 	dh := &dbHandle{info: DbHandleInfo{
 		ID:           "db:" + uuid.New().String(),
 		ConnectionID: connectionID,
+		TargetID:     targetID,
+		TargetName:   targetName,
 		Name:         conn.Name,
 		Engine:       settings.DbEngine,
 		Addr:         addr,
@@ -134,6 +209,7 @@ func (a *App) DbOpen(connectionID string) (*DbHandleInfo, error) {
 	}
 	a.recordAudit("db.open", connectionID, map[string]string{
 		"handle_id": dh.info.ID,
+		"target":    targetName,
 		"engine":    dh.info.Engine,
 		"addr":      addr,
 		"database":  settings.DbName,
@@ -151,7 +227,7 @@ func (a *App) DbOpen(connectionID string) (*DbHandleInfo, error) {
 // is a login for trust / peer authentication.
 func (a *App) dbLogin(settings *store.ResolvedSettings) (string, string, error) {
 	if settings.DbCredentialRef == nil {
-		return "", "", fmt.Errorf("the database needs a login: pick a credential in the connection's Database section")
+		return "", "", errDbNeedsLogin
 	}
 	cred, err := a.db.GetCredential(*settings.DbCredentialRef)
 	if err != nil {
@@ -443,4 +519,50 @@ func (a *App) DbGetTabState(id string) (string, error) {
 		return "", errDbClosed
 	}
 	return dh.tabState, nil
+}
+
+// DbSaveLogin stores a typed login as a vault password credential and sets
+// it as the login of the connection's database (targetID "") or of one of
+// its listed databases. Returns the credential id.
+func (a *App) DbSaveLogin(connectionID, targetID, name, user, password string) (string, error) {
+	user = strings.TrimSpace(user)
+	if user == "" {
+		return "", fmt.Errorf("a username is needed")
+	}
+	if a.credSvc == nil {
+		return "", fmt.Errorf("the vault is not open")
+	}
+	conn, err := a.db.GetConnection(connectionID)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(name) == "" {
+		name = conn.Name + " database"
+	}
+	res, err := a.credSvc.Create(creds.CreateInput{Kind: "password", Name: strings.TrimSpace(name), DefaultUsername: &user, Password: password})
+	if err != nil {
+		return "", err
+	}
+	id := res.Credential.ID
+	over := conn.Overrides
+	if targetID == "" {
+		over.DbCredentialRef = &id
+	} else {
+		found := false
+		targets := append([]store.DbTarget(nil), over.DbTargets...)
+		for i := range targets {
+			if targets[i].ID == targetID {
+				targets[i].CredentialRef = &id
+				found = true
+			}
+		}
+		if !found {
+			return "", fmt.Errorf("that database is no longer listed on the connection")
+		}
+		over.DbTargets = targets
+	}
+	if _, err := a.db.UpdateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over}); err != nil {
+		return "", err
+	}
+	return id, nil
 }

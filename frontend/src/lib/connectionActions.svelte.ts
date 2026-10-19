@@ -7,7 +7,8 @@ import { api, type Connection } from "./api";
 import { tree, sessions, paneTabs, view, selection, credentials, type PaneNode } from "./stores.svelte";
 import { vncSessions } from "./vncState.svelte.ts";
 import { kafkaTabs, kafkaEnabledFor } from "./kafkaState.svelte";
-import { dbTabs, dbEnabledFor } from "./dbState.svelte";
+import { dbTabs, dbEnabledFor, dbTabTitle } from "./dbState.svelte";
+import { askLogin } from "./loginModal.svelte.ts";
 import { showPrompt } from "./promptModal.svelte.ts";
 import { showConfirm } from "./confirmModal.svelte.ts";
 import { toast } from "./toast.svelte.ts";
@@ -383,7 +384,8 @@ class ConnectionActionsStore {
         return this.openKafka(id);
       }
       if (r?.db_enabled && r?.db_default) {
-        return this.openDb(id);
+        // A connection that lists databases opens the first of them.
+        return this.openDb(id, r.db_targets?.[0]?.id ?? "");
       }
     } catch {
       // resolve failed - fall through to a normal SSH connect
@@ -553,7 +555,13 @@ class ConnectionActionsStore {
     const c = tree.connectionById(id);
     const items: MenuItem[] = [];
     if (c?.overrides?.vnc_enabled) items.push({ label: "Open VNC console", iconComponent: IconMonitor, onSelect: () => this.openVncConnection(id) });
-    if (dbEnabledFor(c)) items.push({ label: "Open database", iconComponent: IconDb, onSelect: () => this.openDb(id) });
+    if (dbEnabledFor(c)) {
+      const targets = c?.overrides?.db_targets ?? [];
+      if (targets.length === 0) items.push({ label: "Open database", iconComponent: IconDb, onSelect: () => this.openDb(id) });
+      for (const t of targets) {
+        items.push({ label: `Open database ${t.name || t.database || ""}`.trim(), iconComponent: IconDb, onSelect: () => this.openDb(id, t.id) });
+      }
+    }
     if (kafkaEnabledFor(c)) items.push({ label: "Open Kafka", iconComponent: IconKafka, onSelect: () => this.openKafka(id) });
     return items;
   }
@@ -783,12 +791,16 @@ class ConnectionActionsStore {
     }
   }
 
-  // Open a Database tab for a connection with the database enabled. A tab
-  // already open on the same connection is brought forward instead.
-  async openDb(id: string): Promise<boolean> {
+  // Open a Database tab: the connection's own database (targetId "") or
+  // one listed under it. A tab already open on it is brought forward. With
+  // no login set, a login dialog asks for one (saved as a credential, or
+  // used once).
+  async openDb(id: string, targetId = ""): Promise<boolean> {
     const c = tree.connectionById(id);
     if (!c) return false;
-    const existing = sessions.tabs.find((s) => s.kind === "db" && s.connectionId === id);
+    const existing = sessions.tabs.find(
+      (s) => s.kind === "db" && s.connectionId === id && (dbTabs.get(s.sessionId)?.target_id ?? "") === targetId,
+    );
     if (existing) {
       const tab = paneTabs.tabs.find((t) => hasSession(t.root, existing.sessionId));
       if (tab) {
@@ -797,20 +809,43 @@ class ConnectionActionsStore {
         return true;
       }
     }
-    const sid = await this.openDbSessionOnly(id);
+    const sid = await this.openDbSessionOnly(id, targetId, true);
     if (!sid) return false;
-    paneTabs.addDbTab(sid, `${c.name} (Database)`);
+    paneTabs.addDbTab(sid, dbTabTitle(dbTabs.get(sid)));
     view.setTab("terminal");
     return true;
   }
 
   // The session half of openDb: opens the handle and registers the
-  // session, no tab. Used by workspace / last-session restore too.
-  async openDbSessionOnly(id: string): Promise<string | null> {
+  // session, no tab. Used by workspace / last-session restore too, which
+  // do not ask for a login (interactive false).
+  async openDbSessionOnly(id: string, targetId = "", interactive = false): Promise<string | null> {
     const c = tree.connectionById(id);
     if (!c) return null;
     try {
-      const info = await api.dbOpen(id);
+      let info: import("./api").DbHandleInfo;
+      try {
+        info = await api.dbOpen(id, targetId);
+      } catch (e) {
+        const msg = String((e as any)?.message ?? e);
+        if (!interactive || !/needs a login/.test(msg)) throw e;
+        const target = c.overrides?.db_targets?.find((t) => t.id === targetId);
+        const label = target ? `${c.name} / ${target.name || target.database || "database"}` : c.name;
+        const r = await askLogin({
+          title: `Log in to ${label}`,
+          message: "No database login is set for this connection.",
+          canSkipSave: true,
+          defaultName: `${label} database`,
+        });
+        if (!r) return null;
+        if (r.save) {
+          await api.dbSaveLogin(id, targetId, r.name, r.user, r.password);
+          await Promise.all([tree.load(), credentials.load()]);
+          info = await api.dbOpen(id, targetId);
+        } else {
+          info = await api.dbOpenWithLogin(id, targetId, r.user, r.password);
+        }
+      }
       this.addDbSession(info, c.hostname);
       return info.id;
     } catch (e) {
@@ -824,7 +859,7 @@ class ConnectionActionsStore {
     sessions.add({
       sessionId: info.id,
       connectionId: info.connection_id,
-      name: `${info.name} (Database)`,
+      name: dbTabTitle(info),
       hostname: hostname || info.addr,
       kind: "db",
       status: "connecting",

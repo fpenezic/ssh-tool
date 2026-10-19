@@ -31,7 +31,7 @@
   import { newTabActions } from "./newTabActions.svelte.ts";
   import { endSession, kafkaEnabledFor, kafkaListenSummary, kafkaTabs } from "./kafkaState.svelte";
   import { IconKafka, IconDb } from "./iconMap";
-  import { dbEnabledFor, dbTabs } from "./dbState.svelte";
+  import { dbEnabledFor, dbTabs, dbTabTitle } from "./dbState.svelte";
   let broadcastManagerOpen = $state(false);
   let shareDialogOpen = $state(false);
   // The ShareDialog defaults its tab selection to the ACTIVE tab, so switch to
@@ -851,7 +851,7 @@
         sessions.add({
           sessionId: d.id,
           connectionId: d.connection_id,
-          name: `${d.name} (Database)`,
+          name: dbTabTitle(d),
           hostname: d.addr,
           kind: "db",
           status: "connected",

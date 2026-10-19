@@ -99,6 +99,9 @@ export interface InheritableSettings {
   db_read_only?: boolean;
   db_tls?: string;
   db_credential_ref?: string;
+  // Databases listed under the connection; a field left out takes the db_*
+  // value above. Connection-only (not inherited).
+  db_targets?: DbTarget[];
 }
 
 export interface Folder {
@@ -184,6 +187,19 @@ export interface ResolvedSettings {
   db_read_only: boolean;
   db_tls: string;
   db_credential_ref: string | null;
+  db_targets: DbTarget[] | null;
+}
+
+export interface DbTarget {
+  id: string;
+  name: string;
+  engine?: string;
+  addr?: string;
+  database?: string;
+  credential_ref?: string;
+  read_only?: boolean;
+  tls?: string;
+  use_tunnel?: boolean;
 }
 
 // ----- Database (app_db.go / internal/dbx) -----
@@ -193,6 +209,10 @@ export type DbEngine = "postgres" | "mysql";
 export interface DbHandleInfo {
   id: string;
   connection_id: string;
+  // The database listed under the connection this tab is on ("" = the
+  // connection's own).
+  target_id: string;
+  target_name: string;
   name: string;
   engine: DbEngine;
   addr: string;
@@ -1759,7 +1779,11 @@ export const api = {
   // Database tab. dbOpen does no I/O; the tree calls may wait for the SSH
   // session (and its prompts) on a cold tab. dbRun is not bounded: dbCancel
   // stops it.
-  dbOpen: (connectionId: string) => nn(G.DbOpen(connectionId)) as Promise<DbHandleInfo>,
+  dbOpen: (connectionId: string, targetId: string) => nn(G.DbOpen(connectionId, targetId)) as Promise<DbHandleInfo>,
+  dbOpenWithLogin: (connectionId: string, targetId: string, user: string, password: string) =>
+    nn(G.DbOpenWithLogin(connectionId, targetId, user, password)) as Promise<DbHandleInfo>,
+  dbSaveLogin: (connectionId: string, targetId: string, name: string, user: string, password: string) =>
+    G.DbSaveLogin(connectionId, targetId, name, user, password) as unknown as Promise<string>,
   dbStatus: (id: string) => nn(G.DbStatus(id)) as Promise<DbHandleInfo>,
   dbClose: (id: string) => G.DbClose(id) as unknown as Promise<void>,
   dbList: () => G.DbList() as unknown as Promise<DbHandleInfo[] | null>,

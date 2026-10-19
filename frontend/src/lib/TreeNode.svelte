@@ -27,6 +27,7 @@
   import { toast } from "./toast.svelte.ts";
   import { isMobile } from "./platform";
   import TreeBookmarkRows from "./TreeBookmarkRows.svelte";
+  import TreeDbRows from "./TreeDbRows.svelte";
   import TreeBookmarkToggle from "./TreeBookmarkToggle.svelte";
   import { treeBookmarks } from "./treeBookmarks.svelte";
 
@@ -1234,6 +1235,7 @@
             <span class="host">{conn.hostname}</span>
           {/if}
         </div>
+        <TreeDbRows connId={conn.id} depth={depth + 2} />
         <TreeBookmarkRows connId={conn.id} depth={depth + 2} />
       {/each}
     </div>

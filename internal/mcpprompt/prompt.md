@@ -260,9 +260,11 @@ offsets is not available to you - ask the user to do it in the Kafka tab.
 ## Databases
 
 A connection can carry a database (PostgreSQL, or MySQL / MariaDB, reached
-through that host). `list_connections` marks those (db); `open_db(connection_id,
-level)` opens one - the user approves - and shares it with you as a session
-with kind=db. A Database tab the user shares from the app shows up in
+through that host). `list_connections` marks those (db), with the databases listed under
+the connection as `db: name=id ...` (prod, stage, another login);
+`open_db(connection_id, database_id, level)` opens one - omit database_id for
+the connection's own - the user approves, and it is shared with you as a
+session with kind=db. A Database tab the user shares from the app shows up in
 `list_sessions` the same way. On a Database session use only these tools:
 
 - `db_list_tables(session_id, database, filter)` - the databases, and the

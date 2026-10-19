@@ -355,7 +355,8 @@
   .obj.on { background: color-mix(in srgb, var(--blue) 18%, transparent); }
   .oname { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
-  .tabs { display: flex; align-items: stretch; gap: 1px; border-bottom: 1px solid var(--surface0); background: var(--mantle); overflow-x: auto; flex: 0 0 auto; }
+  /* Fixed height: with no tab left only the + button would set it. */
+  .tabs { display: flex; align-items: stretch; gap: 1px; height: 30px; border-bottom: 1px solid var(--surface0); background: var(--mantle); overflow-x: auto; overflow-y: hidden; flex: 0 0 auto; }
   .tab { display: flex; align-items: center; background: var(--surface0); border-bottom: 2px solid transparent; }
   .tab.on { background: var(--base); border-bottom-color: var(--blue); }
   .tab-btn { display: inline-flex; align-items: center; gap: 0.3rem; background: none; border: none; color: var(--text); cursor: pointer; padding: 0.3rem 0.2rem 0.3rem 0.55rem; font-size: 0.78rem; white-space: nowrap; }

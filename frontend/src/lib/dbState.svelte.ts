@@ -165,3 +165,10 @@ export function charIndex(s: string, bytes: number): number {
   }
   return lo;
 }
+
+// A Database tab's title: "conn (Database)", or "conn / stage (Database)"
+// for a database listed under the connection.
+export function dbTabTitle(info: DbHandleInfo | undefined): string {
+  if (!info) return "Database";
+  return info.target_name ? `${info.name} / ${info.target_name} (Database)` : `${info.name} (Database)`;
+}

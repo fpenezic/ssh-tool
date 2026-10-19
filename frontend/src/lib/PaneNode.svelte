@@ -116,7 +116,7 @@
         // A split beside a Kafka / Database tab is a terminal on the host:
         // not "name (Kafka)".
         name: existingSession.kind === "kafka" || existingSession.kind === "db"
-          ? existingSession.name.replace(/ \((Kafka|Database)\)$/, "")
+          ? (tree.connectionById(existingSession.connectionId)?.name ?? existingSession.name)
           : existingSession.name,
         hostname: existingSession.hostname,
         status: "connected",

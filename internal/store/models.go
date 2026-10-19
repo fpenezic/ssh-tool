@@ -224,6 +224,25 @@ type InheritableSettings struct {
 	// DbCredentialRef is the database login: the credential's default
 	// username and its password. An explicit "" stops an inherited one.
 	DbCredentialRef *string `json:"db_credential_ref,omitempty"`
+	// DbTargets are the databases listed under a connection (prod, stage,
+	// another engine on the same host), each opening its own tab. A field
+	// a target leaves nil takes the Db* value above. Set on connections;
+	// not inherited from folders (the Db* defaults are). Empty: the
+	// connection itself is the one database.
+	DbTargets []DbTarget `json:"db_targets,omitempty"`
+}
+
+// DbTarget is one database under a connection.
+type DbTarget struct {
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	Engine        *string `json:"engine,omitempty"`
+	Addr          *string `json:"addr,omitempty"`
+	Database      *string `json:"database,omitempty"`
+	CredentialRef *string `json:"credential_ref,omitempty"`
+	ReadOnly      *bool   `json:"read_only,omitempty"`
+	TLS           *string `json:"tls,omitempty"`
+	UseTunnel     *bool   `json:"use_tunnel,omitempty"`
 }
 
 // JumpHostOverride is tagged-union with two variants: "none" (explicit
@@ -353,15 +372,16 @@ type ResolvedSettings struct {
 	KafkaCredentialRef *string `json:"kafka_credential_ref"`
 	// Db*: see InheritableSettings. DbAddr and DbName are trimmed, ""
 	// when unset; DbUseTunnel defaults to true, DbTLS to "disable".
-	DbEnabled       bool    `json:"db_enabled"`
-	DbEngine        string  `json:"db_engine"`
-	DbAddr          string  `json:"db_addr"`
-	DbName          string  `json:"db_name"`
-	DbUseTunnel     bool    `json:"db_use_tunnel"`
-	DbDefault       bool    `json:"db_default"`
-	DbReadOnly      bool    `json:"db_read_only"`
-	DbTLS           string  `json:"db_tls"`
-	DbCredentialRef *string `json:"db_credential_ref"`
+	DbEnabled       bool       `json:"db_enabled"`
+	DbEngine        string     `json:"db_engine"`
+	DbAddr          string     `json:"db_addr"`
+	DbName          string     `json:"db_name"`
+	DbUseTunnel     bool       `json:"db_use_tunnel"`
+	DbDefault       bool       `json:"db_default"`
+	DbReadOnly      bool       `json:"db_read_only"`
+	DbTLS           string     `json:"db_tls"`
+	DbCredentialRef *string    `json:"db_credential_ref"`
+	DbTargets       []DbTarget `json:"db_targets"`
 	// PasswordOverride carries a per-connection plaintext password resolved
 	// from the vault by app.go before passing to the SSH layer. Never
 	// serialised to JSON (not shown in the resolved-settings preview).

@@ -916,6 +916,13 @@ func formatConnections(conns []mcpConnectionInfo) string {
 		}
 		if c.Db {
 			kind += "  (db)"
+			if len(c.DbTargets) > 0 {
+				parts := make([]string, len(c.DbTargets))
+				for i, t := range c.DbTargets {
+					parts[i] = t.Name + "=" + t.ID
+				}
+				kind += "  db: " + strings.Join(parts, " ")
+			}
 		}
 		b = append(b, []byte(fmt.Sprintf("- %s  [%s]%s  id=%s\n", c.Name, loc, kind, c.ConnectionID))...)
 	}

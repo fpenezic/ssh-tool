@@ -34,6 +34,7 @@ export interface SessionSpec {
   shellKind?: string;    // local (ad-hoc shells only)
   topics?: string[];     // kafka - topic tabs that were open (not consuming on restore)
   dbTabs?: string;       // db - the query / table tabs that were open (JSON, not re-run on restore)
+  dbTarget?: string;     // db - the database listed under the connection ("" / absent = its own)
 }
 
 export type SpecNode = SpecLeaf | SpecSplit;

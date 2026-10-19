@@ -5,6 +5,9 @@
 
   import { credentials } from "./stores.svelte";
   import { KAFKA_NONE, type KafkaDraft } from "./kafkaDraft";
+  import { createLoginCredential } from "./loginModal.svelte.ts";
+
+  const NEW_LOGIN = "__new_login__";
 
   interface Props {
     draft: KafkaDraft;
@@ -93,10 +96,17 @@
       </label>
       {#if draft.sasl !== "" && draft.sasl !== KAFKA_NONE || draft.cred !== ""}
         <label title="Its default username and its password are the SASL login.">SASL credential
-          <select bind:value={draft.cred}>
+          <select value={draft.cred} onchange={async (e) => {
+            const v = (e.currentTarget as HTMLSelectElement).value;
+            if (v !== NEW_LOGIN) { draft = { ...draft, cred: v }; return; }
+            (e.currentTarget as HTMLSelectElement).value = draft.cred;
+            const id = await createLoginCredential("Kafka SASL");
+            if (id) draft = { ...draft, cred: id };
+          }}>
             <option value="">{inheritLabel}</option>
             <option value={KAFKA_NONE}>None</option>
             {#each credOptions as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+            <option value={NEW_LOGIN}>+ New login...</option>
           </select>
         </label>
       {/if}

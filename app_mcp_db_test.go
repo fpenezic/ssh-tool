@@ -39,7 +39,7 @@ func mcpDbApp(t *testing.T, readOnly bool) (*App, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	info, err := a.DbOpen(c.ID)
+	info, err := a.DbOpen(c.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}

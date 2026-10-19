@@ -1098,6 +1098,93 @@ export class CredentialSecretHistoryEntry {
 }
 
 /**
+ * DbTarget is one database under a connection.
+ */
+export class DbTarget {
+    /**
+     * Creates a new DbTarget instance.
+     * @param {Partial<DbTarget>} [$$source = {}] - The source object to create the DbTarget.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["engine"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["addr"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["database"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["credential_ref"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["read_only"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["tls"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["use_tunnel"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DbTarget instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {DbTarget}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DbTarget(/** @type {Partial<DbTarget>} */($$parsedSource));
+    }
+}
+
+/**
  * DynamicEntry is a single cached child of a dynamic folder. Created
  * by the refresh path, never edited by the user.
  */
@@ -1909,6 +1996,18 @@ export class InheritableSettings {
              */
             this["db_credential_ref"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * DbTargets are the databases listed under a connection (prod, stage,
+             * another engine on the same host), each opening its own tab. A field
+             * a target leaves nil takes the Db* value above. Set on connections;
+             * not inherited from folders (the Db* defaults are). Empty: the
+             * connection itself is the one database.
+             * @member
+             * @type {DbTarget[] | undefined}
+             */
+            this["db_targets"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -1921,12 +2020,16 @@ export class InheritableSettings {
     static createFrom($$source = {}) {
         const $$createField5_0 = $$createType0;
         const $$createField6_0 = $$createType0;
+        const $$createField41_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ssh_options" in $$parsedSource) {
             $$parsedSource["ssh_options"] = $$createField5_0($$parsedSource["ssh_options"]);
         }
         if ("env_vars" in $$parsedSource) {
             $$parsedSource["env_vars"] = $$createField6_0($$parsedSource["env_vars"]);
+        }
+        if ("db_targets" in $$parsedSource) {
+            $$parsedSource["db_targets"] = $$createField41_0($$parsedSource["db_targets"]);
         }
         return new InheritableSettings(/** @type {Partial<InheritableSettings>} */($$parsedSource));
     }
@@ -2017,7 +2120,7 @@ export class JumpHostSpec {
      * @returns {JumpHostSpec}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType10;
+        const $$createField5_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("via" in $$parsedSource) {
             $$parsedSource["via"] = $$createField5_0($$parsedSource["via"]);
@@ -2264,7 +2367,7 @@ export class PortForward {
      * @returns {PortForward}
      */
     static createFrom($$source = {}) {
-        const $$createField9_0 = $$createType12;
+        const $$createField9_0 = $$createType14;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("bookmarks" in $$parsedSource) {
             $$parsedSource["bookmarks"] = $$createField9_0($$parsedSource["bookmarks"]);
@@ -2644,6 +2747,13 @@ export class ResolvedSettings {
              */
             this["db_credential_ref"] = null;
         }
+        if (!("db_targets" in $$source)) {
+            /**
+             * @member
+             * @type {DbTarget[]}
+             */
+            this["db_targets"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -2654,9 +2764,10 @@ export class ResolvedSettings {
      * @returns {ResolvedSettings}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType10;
+        const $$createField5_0 = $$createType12;
         const $$createField6_0 = $$createType0;
         const $$createField7_0 = $$createType0;
+        const $$createField42_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("jump_host" in $$parsedSource) {
             $$parsedSource["jump_host"] = $$createField5_0($$parsedSource["jump_host"]);
@@ -2666,6 +2777,9 @@ export class ResolvedSettings {
         }
         if ("env_vars" in $$parsedSource) {
             $$parsedSource["env_vars"] = $$createField7_0($$parsedSource["env_vars"]);
+        }
+        if ("db_targets" in $$parsedSource) {
+            $$parsedSource["db_targets"] = $$createField42_0($$parsedSource["db_targets"]);
         }
         return new ResolvedSettings(/** @type {Partial<ResolvedSettings>} */($$parsedSource));
     }
@@ -2978,7 +3092,9 @@ const $$createType5 = $Create.Array($Create.Any);
 const $$createType6 = InheritableSettings.createFrom;
 const $$createType7 = $Create.Array($Create.Any);
 const $$createType8 = $Create.Map($Create.Any, $Create.Any);
-const $$createType9 = JumpHostSpec.createFrom;
-const $$createType10 = $Create.Nullable($$createType9);
-const $$createType11 = ProxyBookmark.createFrom;
-const $$createType12 = $Create.Array($$createType11);
+const $$createType9 = DbTarget.createFrom;
+const $$createType10 = $Create.Array($$createType9);
+const $$createType11 = JumpHostSpec.createFrom;
+const $$createType12 = $Create.Nullable($$createType11);
+const $$createType13 = ProxyBookmark.createFrom;
+const $$createType14 = $Create.Array($$createType13);

@@ -564,6 +564,20 @@ don't.
 
 ---
 
+## Databases
+
+- **ClickHouse in the Database tab.** Asked for (2026-10-19): a third
+  engine next to PostgreSQL and MySQL. `clickhouse-go` v2 is pure Go and
+  speaks the native protocol (9000) and HTTP (8123); the native one fits
+  `sshchan` like the others. Open questions: ClickHouse has no
+  transactions, so read-only has to rest on the keyword check plus the
+  `readonly=1` session setting; its system tables and partitions want
+  their own tree entries; results can be very wide (arrays, maps, nested)
+  and the grid's text rendering needs a look.
+- **A list of databases inherited from a folder.** The listed databases
+  are per connection; a replicated cluster (the same prod / stage list on
+  every node) would want the list on the folder. Wait for the ask.
+
 ## Out of scope
 
 Decisions, not backlog. Recorded so the same proposals do not come

@@ -1467,7 +1467,8 @@ In the connection editor (or a folder's), the **Kafka** tab:
   certificate check* for test clusters, and **SASL** (PLAIN, SCRAM-SHA-256,
   SCRAM-SHA-512) with a **SASL credential** - a password credential whose
   default username and password are the login, so vault, KeePass,
-  Bitwarden and Infisical credentials all work.
+  Bitwarden and Infisical credentials all work. **+ New login...** in the
+  list creates one on the spot (saved in the vault).
 
 To have double-click / Enter open the Kafka tab instead of a terminal (a
 connection that exists for its cluster), set **Double-click opens** to
@@ -1600,7 +1601,11 @@ In the connection editor (or a folder's), the **Database** tab:
 - **Login** - a password credential whose default username and password are
   the database login, so vault, KeePass, Bitwarden and Infisical
   credentials all work. A credential without a password works for trust
-  authentication. **Credentials -> Used by** lists it as *Database login*.
+  authentication. **+ New login...** in the list asks for a username and
+  password and saves them as a vault credential on the spot. With no login
+  set (*None (ask)*), opening the database asks for one: saved as a
+  credential, or used for that tab only. **Credentials -> Used by** lists it
+  as *Database login*.
 - **Reach the database** - *Through SSH* (the default): one SSH session to
   this host carries every connection, and the address resolves there.
   *Direct / from the jump host*: dialed from the connection's last jump
@@ -1616,8 +1621,23 @@ In the connection editor (or a folder's), the **Database** tab:
   the tunnel.
 
 To have double-click / Enter open the Database tab instead of a terminal,
-set **Double-click opens** to **Database** on the General tab. Every
-setting inherits through folders.
+set **Double-click opens** to **Database** on the General tab (with
+databases listed, the first of them opens). Every setting above inherits
+through folders: N servers with the same DBA login set it once on their
+folder.
+
+### Several databases on one host
+
+One Database tab already shows every database of its server, and each
+query tab picks the one it runs on. When a host needs more than one
+login or server - *prod* and *stage* with different users, read-only for
+one of them, or PostgreSQL and MySQL side by side - list them under
+**Databases on this host** in the connection's Database tab: a name, and
+only what differs (database, login, writes, engine, address); empty
+fields take the values above. Each shows as a row under the connection in
+the tree, opens its own tab (`host / stage`) on double-click or Enter, and
+is in the right-click menu as **Open database stage**. The list belongs to
+the connection; folders hold the defaults.
 
 ### Opening it
 
