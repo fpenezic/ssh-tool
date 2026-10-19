@@ -8,6 +8,9 @@
   import { connectionActions } from "./connectionActions.svelte";
   import { dbTabs, dbTreeRows, dbTreeSelectedUnder, type DbTreeRow } from "./dbState.svelte";
   import { selection, tree, view } from "./stores.svelte";
+  import { api } from "./api";
+  import { toast } from "./toast.svelte.ts";
+  import { IconStar } from "./iconMap";
   import { treeBookmarks } from "./treeBookmarks.svelte";
   import { collapsedDbs } from "./treeState.svelte";
   import { contextMenu } from "./contextMenu.svelte.ts";
@@ -46,7 +49,17 @@
     select(r);
     contextMenu.show(e, [
       { label: "Open", iconComponent: IconDb, onSelect: () => void connectionActions.openDb(connId, r.id) },
+      ...(r.isDefault || rows.length < 2 ? [] : [{ label: "Set as default", iconComponent: IconStar, onSelect: () => void setDefault(r) }]),
     ]);
+  }
+  // The default opens on "Double-click opens: Database" and lists first.
+  async function setDefault(r: DbTreeRow) {
+    try {
+      await api.dbSetDefault(connId, r.id);
+      await tree.load();
+    } catch (e) {
+      toast.err(`Set as default: ${String((e as any)?.message ?? e)}`);
+    }
   }
 </script>
 
@@ -72,6 +85,7 @@
     <span class="chev"></span>
     <span class="icon"><IconDb size={12} /></span>
     <span class="name">{r.label}</span>
+    {#if r.isDefault && rows.length > 1}<span class="def" title="The default: Double-click opens -> Database opens it">default</span>{/if}
     <span class="host">{r.detail}</span>
   </div>
 {/each}
@@ -99,6 +113,7 @@
     .row { padding-top: 0.5rem; padding-bottom: 0.5rem; }
     .chev { width: 1.8rem; }
   }
+  .def { flex-shrink: 0; font-size: 0.62rem; color: var(--teal); border: 1px solid color-mix(in srgb, var(--teal) 45%, transparent); border-radius: 6px; padding: 0 0.3rem; }
   .host {
     color: var(--overlay1); font-size: 0.72rem; margin-left: 0.4rem;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%;

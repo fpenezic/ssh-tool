@@ -566,3 +566,28 @@ func (a *App) DbSaveLogin(connectionID, targetID, name, user, password string) (
 	}
 	return id, nil
 }
+
+// DbSetDefault marks one of a connection's databases as its default
+// (targetID "" = its own): "Double-click opens: Database" opens it and the
+// tree lists it first.
+func (a *App) DbSetDefault(connectionID, targetID string) error {
+	conn, err := a.db.GetConnection(connectionID)
+	if err != nil {
+		return err
+	}
+	over := conn.Overrides
+	if targetID == "" {
+		over.DbDefaultTarget = nil
+	} else {
+		found := false
+		for _, t := range over.DbTargets {
+			found = found || t.ID == targetID
+		}
+		if !found {
+			return fmt.Errorf("that database is no longer listed on the connection")
+		}
+		over.DbDefaultTarget = &targetID
+	}
+	_, err = a.db.UpdateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over})
+	return err
+}

@@ -1634,7 +1634,10 @@ terminal: double-click (or Enter) on the connection still opens the
 terminal, on the database row it opens the Database tab. **Name** in the
 Database settings names the row and the tab (default: the database name),
 and **Show in tree** takes a row out. The badge with the database icon on
-the connection row folds the rows away and back, like pinned bookmarks.
+the connection row folds the rows away and back, like pinned bookmarks. With more than one, one is the
+**default** - the connection's own unless you pick another (right-click ->
+**Set as default**, or **Default** in the settings): it is listed first and
+is what **Double-click opens -> Database** opens.
 
 ### Several databases on one host
 

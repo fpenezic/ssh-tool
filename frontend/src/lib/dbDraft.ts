@@ -20,6 +20,8 @@ export interface DbDraft {
   // The connection's own database in the tree (connections only).
   label: string;
   inTree: string;
+  // The default database: a target id, "" = the connection's own.
+  defaultTarget: string;
   // The databases listed under a connection (not on folders).
   targets: DbTarget[];
 }
@@ -43,6 +45,7 @@ export function dbDraftFrom(s: InheritableSettings | undefined | null): DbDraft 
     cred: encRef(o.db_credential_ref),
     label: o.db_label ?? "",
     inTree: enc(o.db_in_tree),
+    defaultTarget: o.db_default_target ?? "",
     targets: (o.db_targets ?? []).map((t) => ({ ...t })),
   };
 }
@@ -60,6 +63,7 @@ export function applyDbDraft<T extends InheritableSettings>(s: T, d: DbDraft): T
   s.db_credential_ref = decRef(d.cred);
   s.db_label = d.label.trim() || undefined;
   s.db_in_tree = dec(d.inTree);
+  s.db_default_target = d.targets.some((t) => t.id === d.defaultTarget) ? d.defaultTarget : undefined;
   const targets = cleanTargets(d.targets);
   s.db_targets = targets.length ? targets : undefined;
   return s;

@@ -100,10 +100,18 @@
         <label title="How this database shows under the connection in the tree and on its tab. Empty: its database name.">Name
           <input bind:value={draft.label} placeholder={draft.name || "database"} spellcheck="false" />
         </label>
-        <label class="check" title="A row under the connection in the tree that opens this database, next to the connection's terminal.">
-          <input type="checkbox" checked={draft.inTree !== "off"} onchange={(e) => (draft = { ...draft, inTree: (e.currentTarget as HTMLInputElement).checked ? "" : "off" })} />
-          Show in tree
-        </label>
+        <div class="checks">
+          <label class="check" title="A row under the connection in the tree that opens this database, next to the connection's terminal.">
+            <input type="checkbox" checked={draft.inTree !== "off"} onchange={(e) => (draft = { ...draft, inTree: (e.currentTarget as HTMLInputElement).checked ? "" : "off" })} />
+            Show in tree
+          </label>
+          {#if draft.targets.length > 0}
+            <label class="check" title="The default opens on Double-click opens -> Database and is listed first in the tree.">
+              <input type="radio" name="db-default" checked={draft.defaultTarget === ""} onchange={() => (draft = { ...draft, defaultTarget: "" })} />
+              Default
+            </label>
+          {/if}
+        </div>
       {/if}
       <label>Engine
         <select bind:value={draft.engine}>
@@ -194,6 +202,10 @@
                 <input type="checkbox" checked={t.in_tree !== false} onchange={(e) => updateTarget(i, { in_tree: (e.currentTarget as HTMLInputElement).checked ? undefined : false })} />
                 Show in tree
               </label>
+              <label class="check" title="The default opens on Double-click opens -> Database and is listed first in the tree.">
+                <input type="radio" name="db-default" checked={draft.defaultTarget === t.id} onchange={() => (draft = { ...draft, defaultTarget: t.id })} />
+                Default
+              </label>
               <span class="t-spacer"></span>
               {#if onOpenTarget}<button type="button" class="vnc-open" title="Open this database (saved settings)" onclick={() => onOpenTarget(t.id)}>Open</button>{/if}
               <button type="button" class="t-del" title="Remove from the list" onclick={() => removeTarget(i)}><IconTrash size={13} /></button>
@@ -244,6 +256,7 @@
   .inh { font-size: 0.7rem; color: var(--overlay1); }
   .targets { margin-top: 0.8rem; border-top: 1px solid var(--border); padding-top: 0.6rem; display: flex; flex-direction: column; gap: 0.5rem; }
   .vnc-grid label.check { padding-bottom: 0.35rem; }
+  .checks { display: flex; align-items: end; gap: 1rem; }
   .t-head { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
   .t-title { font-weight: 600; font-size: 0.82rem; color: var(--text1); }
   .t-hint { flex: 1 1 12rem; font-size: 0.72rem; color: var(--overlay1); }

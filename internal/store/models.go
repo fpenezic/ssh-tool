@@ -230,6 +230,10 @@ type InheritableSettings struct {
 	// DbInTree shows the connection's own database as a row under it in
 	// the tree (nil = shown). Connection-only.
 	DbInTree *bool `json:"db_in_tree,omitempty"`
+	// DbDefaultTarget is the database "Double-click opens: Database"
+	// opens and the tree lists first: a DbTargets id, "" / nil = the
+	// connection's own. Connection-only.
+	DbDefaultTarget *string `json:"db_default_target,omitempty"`
 	// DbTargets are the databases listed under a connection (prod, stage,
 	// another engine on the same host), each opening its own tab. A field
 	// a target leaves nil takes the Db* value above. Set on connections;
@@ -391,6 +395,7 @@ type ResolvedSettings struct {
 	DbCredentialRef *string    `json:"db_credential_ref"`
 	DbTargets       []DbTarget `json:"db_targets"`
 	DbLabel         string     `json:"db_label"`
+	DbDefaultTarget string     `json:"db_default_target"`
 	// PasswordOverride carries a per-connection plaintext password resolved
 	// from the vault by app.go before passing to the SSH layer. Never
 	// serialised to JSON (not shown in the resolved-settings preview).

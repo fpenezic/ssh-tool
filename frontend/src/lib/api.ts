@@ -106,6 +106,8 @@ export interface InheritableSettings {
   // whether it shows as a row under the connection (absent = shown).
   db_label?: string;
   db_in_tree?: boolean;
+  // The default database: a db_targets id, absent = the connection's own.
+  db_default_target?: string;
 }
 
 export interface Folder {
@@ -193,6 +195,7 @@ export interface ResolvedSettings {
   db_credential_ref: string | null;
   db_targets: DbTarget[] | null;
   db_label: string;
+  db_default_target: string;
 }
 
 export interface DbTarget {
@@ -1788,6 +1791,8 @@ export const api = {
   dbOpen: (connectionId: string, targetId: string) => nn(G.DbOpen(connectionId, targetId)) as Promise<DbHandleInfo>,
   dbOpenWithLogin: (connectionId: string, targetId: string, user: string, password: string) =>
     nn(G.DbOpenWithLogin(connectionId, targetId, user, password)) as Promise<DbHandleInfo>,
+  dbSetDefault: (connectionId: string, targetId: string) =>
+    G.DbSetDefault(connectionId, targetId) as unknown as Promise<void>,
   dbSaveLogin: (connectionId: string, targetId: string, name: string, user: string, password: string) =>
     G.DbSaveLogin(connectionId, targetId, name, user, password) as unknown as Promise<string>,
   dbStatus: (id: string) => nn(G.DbStatus(id)) as Promise<DbHandleInfo>,
