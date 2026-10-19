@@ -222,6 +222,9 @@ type Result struct {
 // RunOptions bound a run.
 type RunOptions struct {
 	MaxRows int `json:"max_rows"`
+	// ReadOnly applies the read-only guards to this run even on a writable
+	// handle (the LLM's queries).
+	ReadOnly bool `json:"read_only"`
 }
 
 func (o RunOptions) maxRows() int {
@@ -416,17 +419,18 @@ func (s *Session) Run(ctx context.Context, script string, opts RunOptions) []*Re
 		s.run.Unlock()
 	}()
 	engine := s.h.cfg.Engine
+	readOnly := s.h.cfg.ReadOnly || opts.ReadOnly
 	var out []*Result
 	for _, st := range Split(engine, script) {
 		var r *Result
-		if s.h.cfg.ReadOnly {
+		if readOnly {
 			if err := CheckReadOnly(engine, st.Text); err != nil {
 				r = &Result{Statement: st.Text, Error: err.Error(), RowsAffected: -1, Write: true}
 			}
 		}
 		if r == nil {
 			start := time.Now()
-			r = s.s.run(ctx, st.Text, s.h.cfg.ReadOnly, opts.maxRows())
+			r = s.s.run(ctx, st.Text, readOnly, opts.maxRows())
 			r.Statement = st.Text
 			r.DurationMs = time.Since(start).Milliseconds()
 			r.Write = !IsRead(engine, st.Text)

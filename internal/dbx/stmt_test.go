@@ -130,3 +130,14 @@ func TestRowReaderBounds(t *testing.T) {
 		t.Fatalf("cell not cut: %d cut, len %d", r2.CutCells, len(*r2.Rows[0][0]))
 	}
 }
+
+func TestIsTxControl(t *testing.T) {
+	for _, s := range []string{"BEGIN", "start transaction", "COMMIT;", "rollback to savepoint a", "-- x\nEND"} {
+		if !IsTxControl(EnginePostgres, s) {
+			t.Errorf("%q not transaction control", s)
+		}
+	}
+	if IsTxControl(EnginePostgres, "SELECT 'BEGIN'") || IsTxControl(EngineMySQL, "UPDATE t SET a = 1") {
+		t.Error("ordinary statement taken for transaction control")
+	}
+}

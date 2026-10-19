@@ -4880,8 +4880,9 @@ export class McpGrantInfo {
         }
         if (!("kind" in $$source)) {
             /**
-             * Kind is "ssh" or "kafka" (a shared Kafka tab; Hostname is then the
-             * bootstrap list).
+             * Kind is "ssh", "kafka" (a shared Kafka tab; Hostname is then the
+             * bootstrap list) or "db" (a shared Database tab; Hostname is the
+             * engine and address).
              * @member
              * @type {string}
              */

@@ -833,6 +833,7 @@ func (a *App) buildMcpServer() *mcp.Server {
 	a.registerFactsTools(server)
 	a.registerProvisioningTools(server)
 	a.registerKafkaTools(server)
+	a.registerDbTools(server)
 
 	return server
 }
@@ -913,6 +914,9 @@ func formatConnections(conns []mcpConnectionInfo) string {
 		if c.Kafka {
 			kind += "  (kafka)"
 		}
+		if c.Db {
+			kind += "  (db)"
+		}
 		b = append(b, []byte(fmt.Sprintf("- %s  [%s]%s  id=%s\n", c.Name, loc, kind, c.ConnectionID))...)
 	}
 	return string(b)
@@ -938,6 +942,11 @@ func formatSessions(sessions []mcpSessionInfo) string {
 	for _, s := range sessions {
 		if s.Kind == "kafka" {
 			b = append(b, []byte(fmt.Sprintf("- %s  (%s, brokers %s)  kind=kafka  level=%s\n",
+				s.SessionID, s.Name, s.Hostname, s.Level))...)
+			continue
+		}
+		if s.Kind == "db" {
+			b = append(b, []byte(fmt.Sprintf("- %s  (%s, %s)  kind=db  level=%s\n",
 				s.SessionID, s.Name, s.Hostname, s.Level))...)
 			continue
 		}
