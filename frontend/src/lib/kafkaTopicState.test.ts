@@ -66,4 +66,25 @@ describe("TopicState", () => {
     expect(kafkaTabs.openTopics["s1"]).toEqual(["a", "b", "c", "x"]);
     expect(topicState("s1", "c").consumerId).toBe("kc:c");
   });
+
+  it("two tabs on one topic keep their own consumers through adoption", async () => {
+    const a = topicState("s1", "orders");
+    const b = topicState("s1", "orders#2");
+    expect(a).not.toBe(b);
+    expect(b.topic).toBe("orders");
+    tabState = {
+      topics: ["orders", "orders#2"],
+      consumers: [
+        { id: "kc:1", request: req("orders", { tab: "orders", key_contains: "a" }) },
+        { id: "kc:2", request: req("orders", { tab: "orders#2", key_contains: "b" }) },
+      ],
+    };
+    kafkaTabs.forget("s1");
+    await adoptTabState("s1");
+    expect(kafkaTabs.openTopics["s1"]).toEqual(["orders", "orders#2"]);
+    expect(topicState("s1", "orders").consumerId).toBe("kc:1");
+    expect(topicState("s1", "orders#2").consumerId).toBe("kc:2");
+    expect(topicState("s1", "orders#2").keyHas).toBe("b");
+    expect(calls).not.toContain("stop kc:2");
+  });
 });

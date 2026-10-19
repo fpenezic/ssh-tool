@@ -228,6 +228,16 @@ export class ConsumeRequest {
              */
             this["header_contains"] = "";
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Tab names the UI topic tab that started the consumer (one topic can
+             * be open in several tabs), so another window adopting the consumers
+             * puts each back in its tab. Not read here.
+             * @member
+             * @type {string | undefined}
+             */
+            this["tab"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

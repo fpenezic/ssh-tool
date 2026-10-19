@@ -96,6 +96,10 @@ type ConsumeRequest struct {
 	KeyContains    string `json:"key_contains"`
 	ValueContains  string `json:"value_contains"`
 	HeaderContains string `json:"header_contains"`
+	// Tab names the UI topic tab that started the consumer (one topic can
+	// be open in several tabs), so another window adopting the consumers
+	// puts each back in its tab. Not read here.
+	Tab string `json:"tab,omitempty"`
 }
 
 // filter is a ConsumeRequest's match conditions, lower case.

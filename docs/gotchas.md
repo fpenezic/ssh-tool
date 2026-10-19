@@ -1760,6 +1760,15 @@ everything mobile is behind a build tag or an `isMobile` check.
       reload recovery and `reconstructTabFromPayload` add the Kafka
       sessions from `KafkaList` (they used to recover SSH and local shells
       only, leaving the handle and its consumers running with no tab).
+    - A topic can be open in several tabs, so tabs are keyed, not named
+      by topic: the topic for the first, `topic#2`, `topic#3`... for more
+      (`tabTopic`, `nextTabKey`; `#` is not legal in a topic name, so a
+      plain topic stays a valid key in saved sessions and the backend's
+      list). `TopicState`, `listening` and the badges go by key; the list
+      sums a topic's tabs. A consumer carries its key in
+      `ConsumeRequest.Tab` (not read by the consumer) so `adoptTabState`
+      puts it back in its own tab: by topic alone, the second consumer
+      would land in the first tab and be stopped as a duplicate.
     - A hidden list reports `clientHeight` 0 and loses its scroll
       position: `onScroll` ignores that, and an `$effect` on `active`
       restores `TopicState.scroll`.

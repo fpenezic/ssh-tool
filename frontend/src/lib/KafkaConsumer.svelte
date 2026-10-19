@@ -16,18 +16,20 @@
   interface Props {
     clusterId: string;
     topic: string;
+    // The topic tab's key (several tabs can show one topic); default topic.
+    tab?: string;
     partitions: number[];
     // The view is on screen. A topic tab that is not stays mounted (hidden);
     // its consumer polls slower meanwhile.
     active?: boolean;
   }
-  let { clusterId, topic, partitions, active = true }: Props = $props();
+  let { clusterId, topic, tab, partitions, active = true }: Props = $props();
 
   // A detail view longer than this shows its head; Copy still copies all.
   const DETAIL_SHOW = 1 << 20;
   const ROW_H = 22;
 
-  const c = $derived(topicState(clusterId, topic));
+  const c = $derived(topicState(clusterId, tab ?? topic));
   const shown = $derived(c.filter ? c.msgs.filter((m) => matches(m, c.filter)) : c.msgs);
 
   $effect(() => {

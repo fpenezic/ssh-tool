@@ -23,18 +23,19 @@ class KafkaStore {
   infos = $state<Record<string, KafkaClusterInfo>>({});
   // sessionId -> topic names last listed by that tab
   topics = $state<Record<string, string[]>>({});
-  // sessionId -> topic tabs open inside that Kafka tab, in order. Kept here
+  // sessionId -> topic tabs open inside that Kafka tab, in order, by tab key
+  // (tabTopic below: a topic can be open in several tabs). Kept here
   // (and mirrored to the backend) so a remount of the pane shows the same
   // tabs, and so the saved session can list them. Absent = this window has
   // not shown the tab yet: KafkaPane asks the backend (adoptTabState).
   openTopics = $state<Record<string, string[]>>({});
-  // sessionId -> the view in front: "groups" | "brokers" | "new" | "t:<topic>"
+  // sessionId -> the view in front: "groups" | "brokers" | "new" | "t:<tab key>"
   // | "" (the overview text).
   activeView = $state<Record<string, string>>({});
-  // sessionId + "\0" + topic -> TopicState (kafkaTopicState.svelte.ts): the
+  // sessionId + "\0" + tab key -> TopicState (kafkaTopicState.svelte.ts): the
   // consumer of a topic tab, outliving the components that show it.
   topicStates = new Map<string, { sessionId: string; dispose(stopBackend: boolean): void }>();
-  // sessionId -> topic -> state of that topic's consumer, for the badges.
+  // sessionId -> tab key -> state of that tab's consumer, for the badges.
   listening = $state<Record<string, Record<string, ListenState>>>({});
   // A request from the quick palette for a tab to select a topic; the tab
   // with that sessionId consumes it.
@@ -62,15 +63,15 @@ class KafkaStore {
   }
   // A consumer reports its state (null = it is gone). Only a change is
   // written, so a poll that learned nothing does not wake the badges.
-  setListening(sessionId: string, topic: string, s: ListenState | null) {
-    const cur = this.listening[sessionId]?.[topic];
+  setListening(sessionId: string, tab: string, s: ListenState | null) {
+    const cur = this.listening[sessionId]?.[tab];
     if (!s) {
       if (!cur) return;
-      delete this.listening[sessionId][topic];
+      delete this.listening[sessionId][tab];
       return;
     }
     if (cur && cur.state === s.state && cur.received === s.received && cur.scanned === s.scanned && cur.error === s.error) return;
-    (this.listening[sessionId] ??= {})[topic] = s;
+    (this.listening[sessionId] ??= {})[tab] = s;
   }
   setTopics(sessionId: string, names: string[]) {
     this.topics[sessionId] = names;
@@ -83,6 +84,30 @@ class KafkaStore {
 }
 
 export const kafkaTabs = new KafkaStore();
+
+// A topic tab is keyed by its topic, with "#2", "#3"... for further tabs on
+// the same topic (two consumers with different filters side by side). '#'
+// cannot occur in a Kafka topic name, and a plain topic stays a valid key, so
+// saved sessions and the backend's open-tab list need no change.
+export function tabTopic(key: string): string {
+  const i = key.indexOf("#");
+  return i < 0 ? key : key.slice(0, i);
+}
+
+export function tabLabel(key: string): string {
+  const i = key.indexOf("#");
+  return i < 0 ? key : `${key.slice(0, i)} (${key.slice(i + 1)})`;
+}
+
+// The key for another tab on topic: the topic itself while no tab uses it,
+// else the lowest free "#n".
+export function nextTabKey(open: string[], topic: string): string {
+  if (!open.includes(topic)) return topic;
+  for (let n = 2; ; n++) {
+    const k = `${topic}#${n}`;
+    if (!open.includes(k)) return k;
+  }
+}
 
 // Walks the folder chain the way the resolver does, so the tree's context
 // menu reflects a folder-level kafka_enabled without a resolve round trip.
@@ -158,7 +183,8 @@ export function kafkaListenSummary(sessionIds: string[]): { running: number; fai
   let failed = 0;
   const lines: string[] = [];
   for (const sid of sessionIds) {
-    for (const [topic, l] of Object.entries(kafkaTabs.listening[sid] ?? {})) {
+    for (const [tab, l] of Object.entries(kafkaTabs.listening[sid] ?? {})) {
+      const topic = tabLabel(tab);
       const bad = l.state === "error" || !!l.error;
       if (l.state !== "running" && !bad) continue;
       if (bad) failed++;

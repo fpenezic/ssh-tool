@@ -11,7 +11,7 @@
 // gigabytes into the webview.
 
 import { api, type KafkaMessage, type KafkaStartMode, type KafkaConsumeSnapshot, type KafkaConsumeRequest } from "./api";
-import { kafkaTabs } from "./kafkaState.svelte";
+import { kafkaTabs, tabTopic } from "./kafkaState.svelte";
 import { messageTextBytes } from "./kafkaFormat";
 import { toast } from "./toast.svelte.ts";
 import { errMsg } from "./connectErrors";
@@ -81,7 +81,13 @@ export class TopicState {
   private polling = false;
   private disposed = false;
 
-  constructor(readonly sessionId: string, readonly topic: string) {}
+  readonly topic: string;
+
+  // tab is the tab key (kafkaState tabTopic): one topic can be open in
+  // several tabs, each with its own consumer.
+  constructor(readonly sessionId: string, readonly tab: string) {
+    this.topic = tabTopic(tab);
+  }
 
   get running(): boolean {
     return !!this.consumerId && this.snap?.state === "running";
@@ -103,13 +109,14 @@ export class TopicState {
         key_contains: this.keyHas,
         value_contains: this.valueHas,
         header_contains: this.headerHas,
+        tab: this.tab,
       });
       // The tab was closed while the start offsets were listed.
       if (this.disposed) {
         api.kafkaConsumeStop(id).catch(() => {});
         return;
       }
-      // adoptTabState took over another consumer of this topic meanwhile:
+      // adoptTabState took over another consumer of this tab meanwhile:
       // the one just started wins.
       if (this.consumerId && this.consumerId !== id) {
         api.kafkaConsumeStop(this.consumerId).catch(() => {});
@@ -292,29 +299,29 @@ export class TopicState {
     const s = this.snap;
     kafkaTabs.setListening(
       this.sessionId,
-      this.topic,
+      this.tab,
       this.consumerId && s && !this.disposed ? { state: s.state, received: s.received, scanned: s.scanned, filtering: s.filtering, error: s.error } : null,
     );
   }
 }
 
-// The state of a topic tab, made on first use.
-export function topicState(sessionId: string, topic: string): TopicState {
-  const key = sessionId + "\u0000" + topic;
+// The state of a topic tab (by tab key), made on first use.
+export function topicState(sessionId: string, tab: string): TopicState {
+  const key = sessionId + "\u0000" + tab;
   let t = kafkaTabs.topicStates.get(key) as TopicState | undefined;
   if (!t) {
-    t = new TopicState(sessionId, topic);
+    t = new TopicState(sessionId, tab);
     kafkaTabs.topicStates.set(key, t);
   }
   return t;
 }
 
 // Closing a topic tab: its consumer ends and the backend drops the buffer.
-export function releaseTopic(sessionId: string, topic: string) {
-  const key = sessionId + "\u0000" + topic;
+export function releaseTopic(sessionId: string, tab: string) {
+  const key = sessionId + "\u0000" + tab;
   kafkaTabs.topicStates.get(key)?.dispose(true);
   kafkaTabs.topicStates.delete(key);
-  kafkaTabs.setListening(sessionId, topic, null);
+  kafkaTabs.setListening(sessionId, tab, null);
 }
 
 // A window that did not open this Kafka tab (detach, redock, reload) takes
@@ -329,9 +336,11 @@ export async function adoptTabState(sessionId: string) {
   }
   if (!st) return;
   const mine = kafkaTabs.openTopics[sessionId] ?? [];
+  // A consumer names its tab (an older one only its topic).
+  const tabOf = (r: KafkaConsumeRequest) => r.tab || r.topic;
   const names = [...st.topics];
-  for (const c of st.consumers) if (!names.includes(c.request.topic)) names.push(c.request.topic);
+  for (const c of st.consumers) if (!names.includes(tabOf(c.request))) names.push(tabOf(c.request));
   for (const t of mine) if (!names.includes(t)) names.push(t);
   kafkaTabs.openTopics[sessionId] = names;
-  for (const c of st.consumers) topicState(sessionId, c.request.topic).adopt(c.id, c.request as KafkaConsumeRequest);
+  for (const c of st.consumers) topicState(sessionId, tabOf(c.request)).adopt(c.id, c.request as KafkaConsumeRequest);
 }

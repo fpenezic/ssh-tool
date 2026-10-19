@@ -261,6 +261,9 @@ export interface KafkaConsumeRequest {
   key_contains?: string;
   value_contains?: string;
   header_contains?: string;
+  // The topic tab that started it (a topic can be open in several), so a
+  // window adopting the consumers puts each back in its own tab.
+  tab?: string;
 }
 
 // truncated: text is a 2 KiB preview (snapshot pages); size is the full one.
