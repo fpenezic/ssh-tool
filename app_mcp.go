@@ -263,8 +263,9 @@ type McpGrantInfo struct {
 	Name      string `json:"name"`
 	Hostname  string `json:"hostname"`
 	Level     string `json:"level"`
-	// Kind is "ssh" or "kafka" (a shared Kafka tab; Hostname is then the
-	// bootstrap list).
+	// Kind is "ssh", "kafka" (a shared Kafka tab; Hostname is then the
+	// bootstrap list) or "db" (a shared Database tab; Hostname is the
+	// engine and address).
 	Kind string `json:"kind"`
 }
 
@@ -275,6 +276,10 @@ func (a *App) McpShareSession(sessionID, level string) error {
 	if strings.HasPrefix(sessionID, "kafka:") {
 		if _, err := a.kafkaGet(sessionID); err != nil {
 			return fmt.Errorf("Kafka tab not open")
+		}
+	} else if strings.HasPrefix(sessionID, "db:") {
+		if _, err := a.dbGet(sessionID); err != nil {
+			return fmt.Errorf("Database tab not open")
 		}
 	} else if _, ok := a.pool.Get(sessionID); !ok {
 		return fmt.Errorf("session not connected")
@@ -319,6 +324,14 @@ func (a *App) McpListGrants() []McpGrantInfo {
 		}
 	}
 	a.kafkaMu.Unlock()
+	dbNames := map[string][2]string{}
+	a.dbMu.Lock()
+	for _, id := range ids {
+		if dh, ok := a.dbHandles[id]; ok {
+			dbNames[id] = [2]string{dh.info.Name + " (Database)", dh.info.Engine + " " + dh.info.Addr}
+		}
+	}
+	a.dbMu.Unlock()
 
 	out := []McpGrantInfo{}
 	a.metaMu.Lock()
@@ -330,6 +343,8 @@ func (a *App) McpListGrants() []McpGrantInfo {
 			info.Hostname = meta.hostname
 		} else if k, ok := kafkaNames[id]; ok {
 			info.Kind, info.Name, info.Hostname = "kafka", k[0], k[1]
+		} else if d, ok := dbNames[id]; ok {
+			info.Kind, info.Name, info.Hostname = "db", d[0], d[1]
 		}
 		out = append(out, info)
 	}
@@ -683,6 +698,8 @@ type mcpConnectionInfo struct {
 	Dynamic      bool   `json:"dynamic,omitempty"`
 	// Kafka: the connection has kafka_enabled, so open_kafka works on it.
 	Kafka bool `json:"kafka,omitempty"`
+	// Db: the connection has db_enabled, so open_db works on it.
+	Db bool `json:"db,omitempty"`
 }
 
 // mcpListConnections returns saved connections AND dynamic-inventory hosts
@@ -715,9 +732,10 @@ func (a *App) mcpListConnections(query string) ([]mcpConnectionInfo, error) {
 		if !matches(c.Name, folder) {
 			continue
 		}
+		r := resolver.ResolveWith(c, allFolders)
 		out = append(out, mcpConnectionInfo{
 			ConnectionID: c.ID, Name: c.Name, Folder: folder,
-			Kafka: resolver.ResolveWith(c, allFolders).KafkaEnabled,
+			Kafka: r.KafkaEnabled, Db: r.DbEnabled,
 		})
 	}
 

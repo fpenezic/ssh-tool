@@ -310,6 +310,12 @@ type DbRunResult struct {
 // DbRun runs a script on the query tab's session (opened on database,
 // reopened when the tab switches database). Writes are audited.
 func (a *App) DbRun(id, tabKey, database, script string, maxRows int) (*DbRunResult, error) {
+	return a.dbRun(id, tabKey, database, script, dbx.RunOptions{MaxRows: maxRows}, "")
+}
+
+// dbRun is DbRun with the run options and the audit source ("" = the user,
+// "mcp" = the LLM).
+func (a *App) dbRun(id, tabKey, database, script string, opts dbx.RunOptions, source string) (*DbRunResult, error) {
 	dh, err := a.dbGet(id)
 	if err != nil {
 		return nil, err
@@ -318,7 +324,7 @@ func (a *App) DbRun(id, tabKey, database, script string, maxRows int) (*DbRunRes
 	if err != nil {
 		return nil, err
 	}
-	results := sess.Run(context.Background(), script, dbx.RunOptions{MaxRows: maxRows})
+	results := sess.Run(context.Background(), script, opts)
 	for _, r := range results {
 		if !r.Write {
 			continue
@@ -327,6 +333,9 @@ func (a *App) DbRun(id, tabKey, database, script string, maxRows int) (*DbRunRes
 			"handle_id": id,
 			"database":  database,
 			"statement": clip(r.Statement, 300),
+		}
+		if source != "" {
+			meta["source"] = source
 		}
 		if r.Error != "" {
 			meta["error"] = clip(r.Error, 300)

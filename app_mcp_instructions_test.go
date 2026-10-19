@@ -174,7 +174,7 @@ func TestMcpToolsAreListable(t *testing.T) {
 
 // mcpToolFiles are the files that register MCP tools and declare their
 // argument structs.
-var mcpToolFiles = []string{"app_mcp_desktop.go", "app_mcp_kafka.go"}
+var mcpToolFiles = []string{"app_mcp_desktop.go", "app_mcp_kafka.go", "app_mcp_db.go"}
 
 // registeredMcpToolNames returns the Name of every mcp.AddTool registration,
 // read from the source so the list cannot drift from what is registered.

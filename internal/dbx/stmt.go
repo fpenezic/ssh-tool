@@ -239,3 +239,13 @@ func codeOnly(engine, s string) string {
 	}
 	return b.String()
 }
+
+// IsTxControl reports a statement that opens or ends a transaction
+// (BEGIN, START, COMMIT, END, ROLLBACK, SAVEPOINT, RELEASE, ABORT).
+func IsTxControl(engine, stmt string) bool {
+	switch leadKeyword(engine, stmt) {
+	case "BEGIN", "START", "COMMIT", "END", "ROLLBACK", "SAVEPOINT", "RELEASE", "ABORT":
+		return true
+	}
+	return false
+}
