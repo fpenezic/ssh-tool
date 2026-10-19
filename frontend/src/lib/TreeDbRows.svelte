@@ -6,8 +6,9 @@
   // badge on the connection row (TreeDbToggle).
   import { onMount } from "svelte";
   import { connectionActions } from "./connectionActions.svelte";
-  import { dbTreeRows, type DbTreeRow } from "./dbState.svelte";
-  import { selection, tree } from "./stores.svelte";
+  import { dbTabs, dbTreeRows, dbTreeSelectedUnder, type DbTreeRow } from "./dbState.svelte";
+  import { selection, tree, view } from "./stores.svelte";
+  import { treeBookmarks } from "./treeBookmarks.svelte";
   import { collapsedDbs } from "./treeState.svelte";
   import { contextMenu } from "./contextMenu.svelte.ts";
   import { IconDb } from "./iconMap";
@@ -20,8 +21,18 @@
   // fire reliably on touch WebViews.
   let lastId: string | null = null;
   let lastAt = 0;
-  function onClick(r: DbTreeRow) {
+  // A click selects the row and shows the connection's Database settings.
+  function select(r: DbTreeRow) {
     selection.selectConnection(connId);
+    treeBookmarks.selected = null;
+    dbTabs.treeSelected = { connId, id: r.id };
+    view.editorTabForce = "db";
+  }
+  function isSelected(r: DbTreeRow): boolean {
+    return dbTreeSelectedUnder(connId) && dbTabs.treeSelected?.id === r.id;
+  }
+  function onClick(r: DbTreeRow) {
+    select(r);
     const now = Date.now();
     if (r.id === lastId && now - lastAt < 400) {
       lastId = null;
@@ -32,7 +43,7 @@
     }
   }
   function openMenu(e: MouseEvent, r: DbTreeRow) {
-    selection.selectConnection(connId);
+    select(r);
     contextMenu.show(e, [
       { label: "Open", iconComponent: IconDb, onSelect: () => void connectionActions.openDb(connId, r.id) },
     ]);
@@ -42,10 +53,11 @@
 {#each rows as r (r.id)}
   <div
     class="row"
+    class:selected={isSelected(r)}
     style="--depth: {depth};"
     role="treeitem"
     tabindex="0"
-    aria-selected="false"
+    aria-selected={isSelected(r)}
     data-kind="database"
     title={`${r.label}${r.detail ? ` (${r.detail})` : ""}\nDouble-click to open the database`}
     onclick={() => onClick(r)}
@@ -75,6 +87,7 @@
     border-radius: 3px;
   }
   .row:hover { background: var(--surface0); }
+  .row.selected { background: var(--surface1); }
   .row:focus-visible { outline: 1px solid var(--blue); outline-offset: -1px; }
   .chev { width: 1rem; flex-shrink: 0; }
   .icon { width: 1.2rem; display: inline-flex; justify-content: center; flex-shrink: 0; color: var(--teal); }

@@ -1006,6 +1006,10 @@ class ViewStore {
   // Network profile to open once Settings shows the Network profiles
   // section (a credential's "Used by" link). Consumed and cleared there.
   pendingNetworkProfileId = $state<string | null>(null);
+  // An editor tab a tree row under a connection shows instead of the last
+  // one picked: "db" for a database row, "forwards" for a bookmark. Not
+  // remembered; a click on the connection row or on an editor tab clears it.
+  editorTabForce = $state<string | null>(null);
 
   // Set by reveal() to ask the connections Sidebar to scroll a row
   // into view once the tree has re-rendered with the ancestors
