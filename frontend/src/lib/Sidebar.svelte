@@ -72,6 +72,7 @@
         iconComponent: IconExternalLink,
         onSelect: () => connectionActions.launchExternal(ids[0]),
       }] : []),
+      ...connectionActions.serviceMenuItems(ids),
       {
         label: allFav
           ? (ids.length > 1 ? "Remove from favourites" : "Remove favourite")

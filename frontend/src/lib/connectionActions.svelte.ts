@@ -6,7 +6,8 @@
 import { api, type Connection } from "./api";
 import { tree, sessions, paneTabs, view, selection, credentials, type PaneNode } from "./stores.svelte";
 import { vncSessions } from "./vncState.svelte.ts";
-import { kafkaTabs } from "./kafkaState.svelte";
+import { kafkaTabs, kafkaEnabledFor } from "./kafkaState.svelte";
+import { dbTabs, dbEnabledFor } from "./dbState.svelte";
 import { showPrompt } from "./promptModal.svelte.ts";
 import { showConfirm } from "./confirmModal.svelte.ts";
 import { toast } from "./toast.svelte.ts";
@@ -16,7 +17,7 @@ import { EventsOn } from "./wailsRuntime";
 import { connectPrefs, BULK_CONCURRENT, BULK_STAGGER_MS, BULK_CONFIRM_ABOVE } from "./connectPrefs.svelte";
 import { tunnels } from "./tunnels.svelte.ts";
 import type { MenuItem } from "./contextMenu.svelte.ts";
-import { IconPlay, IconStop, IconTunnel, IconTerminal, IconX } from "./iconMap";
+import { IconPlay, IconStop, IconTunnel, IconTerminal, IconX, IconMonitor, IconDb, IconKafka } from "./iconMap";
 
 // Bulk connect limits come from Settings -> Connection (connectPrefs):
 // confirm above N hosts, at most N handshakes at once, a stagger between
@@ -381,6 +382,9 @@ class ConnectionActionsStore {
       if (r?.kafka_enabled && r?.kafka_default) {
         return this.openKafka(id);
       }
+      if (r?.db_enabled && r?.db_default) {
+        return this.openDb(id);
+      }
     } catch {
       // resolve failed - fall through to a normal SSH connect
     }
@@ -540,6 +544,20 @@ class ConnectionActionsStore {
   // Right-click entries for tunnel connections, shown above the usual ones.
   // Tunnels in the selection get start/stop; "Open terminal" opens a shell
   // on a single tunnel connection, which the default action no longer does.
+  // The services of one selected connection - VNC console, Database,
+  // Kafka - for the tree's context menu. One list for the root-level and
+  // the in-folder menus (Sidebar / TreeNode), which had drifted apart.
+  serviceMenuItems(ids: string[]): MenuItem[] {
+    if (ids.length !== 1) return [];
+    const id = ids[0];
+    const c = tree.connectionById(id);
+    const items: MenuItem[] = [];
+    if (c?.overrides?.vnc_enabled) items.push({ label: "Open VNC console", iconComponent: IconMonitor, onSelect: () => this.openVncConnection(id) });
+    if (dbEnabledFor(c)) items.push({ label: "Open database", iconComponent: IconDb, onSelect: () => this.openDb(id) });
+    if (kafkaEnabledFor(c)) items.push({ label: "Open Kafka", iconComponent: IconKafka, onSelect: () => this.openKafka(id) });
+    return items;
+  }
+
   tunnelMenuItems(ids: string[]): MenuItem[] {
     const tun = ids.map((id) => tunnels.byConnection(id)).filter((t) => !!t);
     if (tun.length === 0) return [];
@@ -763,6 +781,54 @@ class ConnectionActionsStore {
       toast.err(`VNC console failed: ${unwrapRaw(String((e as any)?.message ?? e))}`);
       return false;
     }
+  }
+
+  // Open a Database tab for a connection with the database enabled. A tab
+  // already open on the same connection is brought forward instead.
+  async openDb(id: string): Promise<boolean> {
+    const c = tree.connectionById(id);
+    if (!c) return false;
+    const existing = sessions.tabs.find((s) => s.kind === "db" && s.connectionId === id);
+    if (existing) {
+      const tab = paneTabs.tabs.find((t) => hasSession(t.root, existing.sessionId));
+      if (tab) {
+        paneTabs.activeTabId = tab.tabId;
+        view.setTab("terminal");
+        return true;
+      }
+    }
+    const sid = await this.openDbSessionOnly(id);
+    if (!sid) return false;
+    paneTabs.addDbTab(sid, `${c.name} (Database)`);
+    view.setTab("terminal");
+    return true;
+  }
+
+  // The session half of openDb: opens the handle and registers the
+  // session, no tab. Used by workspace / last-session restore too.
+  async openDbSessionOnly(id: string): Promise<string | null> {
+    const c = tree.connectionById(id);
+    if (!c) return null;
+    try {
+      const info = await api.dbOpen(id);
+      this.addDbSession(info, c.hostname);
+      return info.id;
+    } catch (e) {
+      toast.err(`Database: ${unwrapRaw(String((e as any)?.message ?? e))}`);
+      return null;
+    }
+  }
+
+  addDbSession(info: import("./api").DbHandleInfo, hostname: string) {
+    dbTabs.set(info);
+    sessions.add({
+      sessionId: info.id,
+      connectionId: info.connection_id,
+      name: `${info.name} (Database)`,
+      hostname: hostname || info.addr,
+      kind: "db",
+      status: "connecting",
+    });
   }
 
   // Open a Kafka tab for a connection with Kafka enabled. A tab already open

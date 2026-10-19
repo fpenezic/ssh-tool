@@ -65,6 +65,7 @@
   import { lastSession } from "./lib/lastSession.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
   import { endSession, kafkaPaletteActions, kafkaTabs } from "./lib/kafkaState.svelte";
+  import { dbTabs } from "./lib/dbState.svelte";
 
   // Arriving at the terminal view puts the cursor in it, whichever route
   // got here: the toolbar button, a keyboard shortcut, closing Settings,
@@ -244,7 +245,7 @@
     const reopenIds: string[] = [];
     for (const sid of sessionIds) {
       const s = sessions.tabs.find((x) => x.sessionId === sid);
-      if (s && s.kind !== "local" && s.kind !== "kafka" && s.connectionId) reopenIds.push(s.connectionId);
+      if (s && s.kind !== "local" && s.kind !== "kafka" && s.kind !== "db" && s.connectionId) reopenIds.push(s.connectionId);
     }
     if (reopenIds.length > 0) {
       closedTabs.push({
@@ -909,8 +910,18 @@
     for (const sid of ids ?? []) {
       if (paneTabs.countLeavesForSession(sid) > 0) continue;
       kafkaTabs.forget(sid);
+      dbTabs.forget(sid);
       sessions.remove(sid);
     }
+  });
+  // A Database tab the LLM opened with open_db.
+  EventsOn("mcp_db_opened", (info: any) => {
+    if (isDetached) return;
+    if (!info?.id || sessions.tabs.find((s) => s.sessionId === info.id)) return;
+    const conn = tree.connectionById(info.connection_id);
+    connectionActions.addDbSession(info, conn?.hostname ?? "");
+    paneTabs.addDbTab(info.id, `${info.name} (Database)`);
+    view.setTab("terminal");
   });
   EventsOn("mcp_kafka_opened", (info: any) => {
     if (isDetached) return;
@@ -1257,6 +1268,25 @@
       }
     } catch (e) {
       console.warn("kafka recovery failed", e);
+    }
+    // Database tabs the same way: the handle and its query sessions outlive
+    // the UI; the pane takes its tab list back from the backend.
+    try {
+      for (const d of await dbTabs.refresh()) {
+        if (sessions.tabs.find((t) => t.sessionId === d.id)) continue;
+        sessions.add({
+          sessionId: d.id,
+          connectionId: d.connection_id,
+          name: `${d.name} (Database)`,
+          hostname: d.addr,
+          kind: "db",
+          status: "connected",
+        });
+        paneTabs.addDbTab(d.id, `${d.name} (Database)`);
+        recovered++;
+      }
+    } catch (e) {
+      console.warn("db recovery failed", e);
     }
     // Reopen the tabs from the last quit (opt-in, cold start only -
     // if recovery brought anything back this was a UI reload and the

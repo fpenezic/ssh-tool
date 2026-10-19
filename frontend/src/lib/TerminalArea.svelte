@@ -30,7 +30,8 @@
   import { reopenLocalShell } from "./sessionSpec";
   import { newTabActions } from "./newTabActions.svelte.ts";
   import { endSession, kafkaEnabledFor, kafkaListenSummary, kafkaTabs } from "./kafkaState.svelte";
-  import { IconKafka } from "./iconMap";
+  import { IconKafka, IconDb } from "./iconMap";
+  import { dbEnabledFor, dbTabs } from "./dbState.svelte";
   let broadcastManagerOpen = $state(false);
   let shareDialogOpen = $state(false);
   // The ShareDialog defaults its tab selection to the ACTIVE tab, so switch to
@@ -243,7 +244,7 @@
       const sess = sessions.tabs.find((s) => s.sessionId === sid);
       // Quick connects are left out: they are deliberately not saved, and
       // reopen dials by saved connection id.
-      if (sess && sess.kind !== "local" && sess.kind !== "kafka" && sess.connectionId && !isQuickId(sess.connectionId)) {
+      if (sess && sess.kind !== "local" && sess.kind !== "kafka" && sess.kind !== "db" && sess.connectionId && !isQuickId(sess.connectionId)) {
         reopenIds.push(sess.connectionId);
       }
     }
@@ -741,6 +742,15 @@
     return kafkaEnabledFor(tree.connectionById(cid)) ? cid : null;
   }
 
+  // The same for the Database tab.
+  function tabDbConnId(tabId: string): string | null {
+    const cid = tabConnectionId(tabId);
+    if (!cid || cid.startsWith("dyn:")) return null;
+    const sid = tabPrimarySession(tabId)?.sessionId;
+    if (sessions.tabs.find((s) => s.sessionId === sid)?.kind === "db") return null;
+    return dbEnabledFor(tree.connectionById(cid)) ? cid : null;
+  }
+
   function tabVncConnId(tabId: string): string | null {
     const tab = paneTabs.tabs.find((t) => t.tabId === tabId);
     if (!tab || tab.locked) return null; // locked = already a VNC tab
@@ -834,6 +844,21 @@
       }
     } catch (e) {
       console.warn("kafka handles", e);
+    }
+    try {
+      for (const d of await dbTabs.refresh()) {
+        if (!sessionIds.includes(d.id) || sessions.tabs.find((t) => t.sessionId === d.id)) continue;
+        sessions.add({
+          sessionId: d.id,
+          connectionId: d.connection_id,
+          name: `${d.name} (Database)`,
+          hostname: d.addr,
+          kind: "db",
+          status: "connected",
+        });
+      }
+    } catch (e) {
+      console.warn("db handles", e);
     }
     const layout = decodePaneLayout(p.layout ?? "");
     if (layout) {
@@ -1657,6 +1682,11 @@
       <button onclick={() => { duplicateTab(ctxMenu!.tabId); closeCtxMenu(); }}>
         <IconCopy size={13} /> Duplicate tab
       </button>
+      {#if tabDbConnId(ctxMenu.tabId)}
+        <button onclick={() => { connectionActions.openDb(tabDbConnId(ctxMenu!.tabId)!); closeCtxMenu(); }}>
+          <IconDb size={13} /> Open database
+        </button>
+      {/if}
       {#if tabKafkaConnId(ctxMenu.tabId)}
         <button onclick={() => { connectionActions.openKafka(tabKafkaConnId(ctxMenu!.tabId)!); closeCtxMenu(); }}>
           <IconKafka size={13} /> Open Kafka

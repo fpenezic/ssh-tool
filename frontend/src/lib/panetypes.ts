@@ -22,7 +22,9 @@ export interface PaneLeaf {
   // "kafka" renders a Kafka cluster tab (KafkaPane); its sessionId is the
   // cluster handle ("kafka:..."), not an SSH session. It splits like a
   // terminal: a split next to it opens a terminal on the same host.
-  view?: "terminal" | "sftp" | "vnc" | "kafka" | "unavailable";
+  // "db" renders a Database tab (DbPane) the same way; its sessionId is the
+  // database handle ("db:...").
+  view?: "terminal" | "sftp" | "vnc" | "kafka" | "db" | "unavailable";
 }
 
 export interface PaneSplit {
