@@ -33,13 +33,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	gossh "golang.org/x/crypto/ssh"
 
 	"ssh-tool/internal/creds"
 	"ssh-tool/internal/importer/kafkatool"
 	"ssh-tool/internal/kafka"
 	"ssh-tool/internal/resolver"
 	sshlayer "ssh-tool/internal/ssh"
+	"ssh-tool/internal/sshchan"
 	"ssh-tool/internal/store"
 )
 
@@ -71,7 +71,7 @@ type KafkaClusterInfo struct {
 type kafkaCluster struct {
 	info    KafkaClusterInfo
 	cluster *kafka.Cluster
-	lazy    *kafka.LazySSH // nil unless Transport == "tunnel"
+	lazy    *sshchan.LazySSH // nil unless Transport == "tunnel"
 	// openTopics are the topic tabs the UI has open on this handle, so a
 	// window that did not open them (detach, redock, reload) shows the same
 	// tabs and adopts their consumers. Guarded by App.kafkaMu.
@@ -139,8 +139,8 @@ func (a *App) KafkaOpen(connectionID string) (*KafkaClusterInfo, error) {
 			return nil, fmt.Errorf("connection has no hostname")
 		}
 		kc.info.Transport = "tunnel"
-		kc.lazy = &kafka.LazySSH{}
-		kc.lazy.Connect = a.kafkaSSHConnect(connectionID, conn, settings, kc.lazy)
+		kc.lazy = &sshchan.LazySSH{}
+		kc.lazy.Connect = a.sshChanConnect("kafka", connectionID, conn, settings, kc.lazy)
 		dial = kc.lazy.Dial
 	} else {
 		kc.info.Transport = "direct"
@@ -212,54 +212,6 @@ func (a *App) kafkaSASL(settings *store.ResolvedSettings) (kafka.Mechanism, erro
 	}
 	return kafka.SASLMechanism(settings.KafkaSASL, user, m.Password)
 }
-
-// kafkaSSHConnect builds the LazySSH connect of a tunnel transport: a
-// tunnel-only session to the connection's host, with the credentials a
-// terminal connect would use.
-func (a *App) kafkaSSHConnect(connectionID string, conn *store.Connection, resolved *store.ResolvedSettings, lazy *kafka.LazySSH) func(context.Context) (*gossh.Client, func(), error) {
-	return func(ctx context.Context) (*gossh.Client, func(), error) {
-		settings := *resolved
-		settings.TunnelOnly = true
-		if conn.PasswordVaultKey != nil && a.vault.Status().Kind == creds.StatusUnlocked {
-			if p, ok, _ := a.vault.Get(*conn.PasswordVaultKey); ok && p != "" {
-				settings.PasswordOverride = &p
-			}
-		}
-		if settings.Username == nil && settings.AuthRef != nil {
-			if cred, e := a.db.GetCredential(*settings.AuthRef); e == nil && cred.DefaultUsername != nil {
-				settings.Username = cred.DefaultUsername
-			}
-		}
-		sess, err := sshlayer.Connect(ctx, a.db, a.vault, &settings, kafkaNullSink{},
-			a.makeHostKeyCallback(), a.makeAlgoLookup(), a.connectTimeout(), nil)
-		if err != nil {
-			return nil, nil, fmt.Errorf("kafka ssh connect: %w", err)
-		}
-		client := sess.TargetClient()
-		if client == nil {
-			sess.Disconnect()
-			return nil, nil, fmt.Errorf("kafka ssh connect: no live ssh client")
-		}
-		// A dropped session clears itself so the next broker dial connects
-		// again. In a goroutine: the close hook runs inside the session's
-		// close-once, and Invalidate's Disconnect enters it again.
-		sess.SetOnClose(func(string) { go lazy.Invalidate(client) })
-		a.recordAudit("kafka.ssh_connect", connectionID, map[string]string{
-			"host": settings.Hostname,
-		})
-		return client, sess.Disconnect, nil
-	}
-}
-
-// kafkaNullSink drops the session events: a Kafka session has no terminal to
-// render them. Its own type, not the VNC one - app_vnc.go is desktop-only and
-// this file builds on android too.
-type kafkaNullSink struct{}
-
-func (kafkaNullSink) EmitState(string, sshlayer.SessionState) {}
-func (kafkaNullSink) EmitOutput(string, []byte, uint64)       {}
-func (kafkaNullSink) EmitExitStatus(string, uint32)           {}
-func (kafkaNullSink) EmitDebug(string, string)                {}
 
 // kafkaDirectDial dials every broker connection the way DialVia does.
 func (a *App) kafkaDirectDial(settings *store.ResolvedSettings) kafka.DialFunc {

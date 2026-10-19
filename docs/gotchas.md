@@ -1711,10 +1711,11 @@ everything mobile is behind a build tag or an `isMobile` check.
     stop it, so the handler preventDefaults the keydown before it pastes
     itself (without that the clipboard went in twice).
 
-112. **Kafka: every broker connection goes through `kafka.LazySSH`, and
+112. **Kafka: every broker connection goes through `sshchan.LazySSH`, and
     its close hook must not call back synchronously.** The Kafka tab
     (`app_kafka.go`, `internal/kafka`) hands franz-go a `kgo.Dialer`; in
-    tunnel mode that is `LazySSH.Dial`, a `direct-tcpip` channel on ONE
+    tunnel mode that is `LazySSH.Dial` (`internal/sshchan`, shared with the
+    Database tab; the connect is `sshChanConnect` in `app_sshchan.go`), a `direct-tcpip` channel on ONE
     shell-less session the cluster handle owns (not in the pool, no tab,
     like a VNC console). Rules that bit or nearly did:
     - The session's `SetOnClose` hook calls `lazy.Invalidate` in a
@@ -1731,8 +1732,8 @@ everything mobile is behind a build tag or an `isMobile` check.
       `kgo.DialTLSConfig`, which does not combine with a custom `Dialer`.
       `ServerName` defaults to the ADVERTISED broker host, which is what
       broker certificates carry.
-    - `app_kafka.go` is untagged, so it builds on android: it has its own
-      null sink (`kafkaNullSink`); the VNC one lives in a desktop-only file.
+    - `app_sshchan.go` is untagged, so it builds on android: it has its own
+      null sink (`sshChanNullSink`); the VNC one lives in a desktop-only file.
     - Writes are refused in the backend (`kafkaWrite` checks the handle's
       `ReadOnly`) - the UI hiding them is not the guard. MCP tools live in
       `app_mcp_kafka.go`, which `app_mcp_instructions_test.go` parses next
