@@ -142,7 +142,7 @@ func (a *App) mcpDbActivity(dh *dbHandle, command, output string, err error, gat
 	}
 	a.recordActivity(McpActivity{
 		SessionID: dh.info.ID, Session: dh.info.Name + " (Database)", Kind: "db",
-		Command: dbx.RedactSecrets(command), Output: output, Exit: exit, Gate: gate,
+		Command: dbx.RedactSecrets(dh.info.Engine, command), Output: output, Exit: exit, Gate: gate,
 	})
 }
 

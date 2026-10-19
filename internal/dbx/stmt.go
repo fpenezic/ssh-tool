@@ -312,7 +312,30 @@ func IsTxControl(engine, stmt string) bool {
 var secretRE = regexp.MustCompile(`(?i)(\bPASSWORD\s+FOR\s+\S+?\s*=\s*|\bPASSWORD\s*(?:=\s*)?|\bIDENTIFIED\s+(?:WITH\s+\S+\s+)?BY\s+|\bREPLACE\s+)('(?:[^'\\]|\\.|'')*'|"(?:[^"\\]|\\.|"")*")`)
 
 // RedactSecrets hides quoted passwords in a statement before it is stored
-// (audit log, LLM activity).
-func RedactSecrets(stmt string) string {
-	return secretRE.ReplaceAllString(stmt, "${1}'***'")
+// (audit log, LLM activity). Comments go first - "IDENTIFIED /*x*/ BY
+// 'pw'" would otherwise slip past the patterns - and are worth nothing in
+// a stored statement anyway.
+func RedactSecrets(engine, stmt string) string {
+	return secretRE.ReplaceAllString(stripComments(engine, stmt), "${1}'***'")
+}
+
+// stripComments replaces each comment with one space, leaving strings and
+// quoted identifiers (and MySQL executable comments, which are code) as
+// they are.
+func stripComments(engine, s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if n := skipNonCode(engine, s, i); n > i {
+			if c := s[i]; c == '-' || c == '#' || c == '/' {
+				b.WriteByte(' ')
+			} else {
+				b.WriteString(s[i:n])
+			}
+			i = n
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
 }
