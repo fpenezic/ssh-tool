@@ -638,6 +638,10 @@ func TestJumpHopCredentialExported(t *testing.T) {
 	if got == nil || got.Name != "outer-hop" {
 		t.Fatalf("outer hop points at %+v", got)
 	}
+	got, _ = dst.GetCredential(*hop.AuthRef)
+	if got == nil || got.Name != "inner-hop" {
+		t.Fatalf("inner hop points at %+v", got)
+	}
 }
 
 // A dry run counts the forwards of the connections it would create, without
