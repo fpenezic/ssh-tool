@@ -1476,7 +1476,10 @@ func (a *App) savedConnAt(host string, port uint16) (id, name string) {
 	if err != nil {
 		return "", ""
 	}
-	folders, _ := a.db.ListFolders()
+	folders, err := a.db.ListFolders()
+	if err != nil {
+		return "", "" // cannot tell which are sensitive: no hint
+	}
 	for _, c := range conns {
 		if connSensitive(c, folders) || !strings.EqualFold(c.Hostname, host) {
 			continue

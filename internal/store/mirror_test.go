@@ -78,3 +78,33 @@ func TestMirrorFromReplacesProfile(t *testing.T) {
 	check("recent_connections_count", "7")    // preserved (NOT 20 from source)
 	check("default_terminal_type", "xterm")   // overwritten from source
 }
+
+// A sync pull from a version before schema 28 still marks a sensitive
+// connection in the old column; the mirror moves it into the overrides.
+func TestMirrorFromFoldsLegacySensitive(t *testing.T) {
+	dir := t.TempDir()
+	src, err := Open(filepath.Join(dir, "src.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, _ := src.CreateConnection(NewConnection{Name: "prod-db", Hostname: "db.example.com"})
+	if _, err := src.conn.Exec(`UPDATE connections SET sensitive = 1 WHERE id = ?`, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	_ = src.Close()
+	dst, err := Open(filepath.Join(dir, "dst.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dst.Close()
+	if err := dst.MirrorFrom(filepath.Join(dir, "src.db")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := dst.GetConnection(c.ID)
+	if err != nil || got == nil {
+		t.Fatalf("connection not mirrored: %v", err)
+	}
+	if got.Overrides.Sensitive == nil || !*got.Overrides.Sensitive {
+		t.Errorf("legacy sensitive lost in the mirror: %+v", got.Overrides)
+	}
+}

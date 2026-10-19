@@ -539,12 +539,7 @@ var migrations = []struct {
 		// so a folder can mark everything under it. A connection that had
 		// the old column set keeps it as its own override; the column stays
 		// (SQLite cannot drop it cheaply) and is written as 0 from now on.
-		`UPDATE connections
-		    SET overrides_json = CASE WHEN json_valid(overrides_json)
-		                              THEN json_set(overrides_json, '$.sensitive', json('true'))
-		                              ELSE '{"sensitive":true}' END,
-		        sensitive = 0
-		  WHERE sensitive != 0;`,
+		foldLegacySensitiveSQL,
 	},
 }
 
@@ -665,3 +660,16 @@ func runMigrations(db *sql.DB) error {
 	}
 	return nil
 }
+
+// foldLegacySensitiveSQL moves the old connections.sensitive column into
+// the connection's overrides (migration 28). MirrorFrom runs it again after
+// a sync pull, since a snapshot from an older version still carries the
+// column. Idempotent. An overrides_json that is not a JSON object (empty,
+// null, an array) is replaced, so the flag is never dropped.
+const foldLegacySensitiveSQL = `UPDATE connections
+    SET overrides_json = CASE WHEN NOT json_valid(overrides_json) THEN '{"sensitive":true}'
+                              WHEN json_type(overrides_json) = 'object'
+                              THEN json_set(overrides_json, '$.sensitive', json('true'))
+                              ELSE '{"sensitive":true}' END,
+        sensitive = 0
+  WHERE sensitive != 0;`
