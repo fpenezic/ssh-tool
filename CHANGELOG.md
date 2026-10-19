@@ -7,7 +7,7 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased] - Kafka
+## [0.115.0] - Kafka on a connection
 
 Kafka clusters open from the connection that reaches them: topics, a consumer, produce, topic admin and consumer groups in a tab, with every broker connection carried by the connection's SSH session.
 
