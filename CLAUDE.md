@@ -22,7 +22,9 @@ inventory (`.ini` / `.yml`), userspace WireGuard network profiles
 dial through them) plus the plugin-backed profiles (desktop-only).
 TOTP codes from Bitwarden / KeePass items answer SSH and VPN logins.
 A Kafka tab per connection (topics, consumer, produce, groups; franz-go
-in core) whose broker connections ride that connection's SSH session.
+in core) whose broker connections ride that connection's SSH session,
+and a Database tab the same way (PostgreSQL / MySQL via pgx and
+go-sql-driver, internal/dbx).
 Local audit log + sealed password / API-token
 history (last 5 rotations).
 
@@ -115,7 +117,9 @@ ssh-tool/
 │  ├─ tunnelhelper/        sidecar (plugin) process manager: spawn, login relay, SOCKS5 dialer
 │  ├─ totp/                RFC 6238 codes from otpauth URIs / KeePass fields
 │  ├─ inventory/           dynamic providers: Proxmox, Hetzner, DO, Linode, Vultr, Scaleway, AWS EC2, Ansible
-│  ├─ kafka/               Kafka tab: franz-go client dialing through the connection's SSH session (LazySSH)
+│  ├─ kafka/               Kafka tab: franz-go client dialing through the connection's SSH session
+│  ├─ dbx/                 Database tab: PostgreSQL / MySQL client, sessions, read-only guards
+│  ├─ sshchan/             LazySSH: a tab's TCP connections as direct-tcpip channels on one SSH session
 │  ├─ httpc/               HTTP/SOAP probe (used by HttpModal)
 │  ├─ local/               in-app local PTY (Win/Mac/Linux shells)
 │  ├─ keepass/             .kdbx credential backend
@@ -161,10 +165,14 @@ task linux:build                   # bin/ssh-tool
 Tests + checks:
 ```bash
 go build ./...
-go test ./...                      # 29 packages carry tests
+go test ./...                      # 31 packages carry tests
 cd frontend && npm run check       # svelte-check, 0 errors expected
-cd frontend && npm run test        # vitest, 32 files / 329 cases
+cd frontend && npm run test        # vitest, 33 files / 332 cases
 ```
+
+The Database tests that need a real server skip unless `DBTEST_PG` /
+`DBTEST_MYSQL` name one (URLs; docker one-liners in
+`internal/dbx/integration_test.go`).
 
 Narrower runs while iterating: `go test ./internal/resolver/`
 (inheritance), `./internal/creds/` (vault + machine sidecar),

@@ -23,6 +23,7 @@ implemented.
 6. [SFTP file browser](#sftp-file-browser)
 6b. [VNC console](#vnc-console)
 6c. [Kafka](#kafka)
+6d. [Databases](#databases)
 7. [Port forwards](#port-forwards)
 7b. [Network profiles (WireGuard / NetBird / Tailscale / OpenConnect / OpenVPN / Check Point)](#network-profiles)
 8. [Broadcast input (multi-session)](#broadcast-input)
@@ -1571,6 +1572,122 @@ open one with `open_kafka` (you approve). It can then list and describe
 topics and groups and read records - capped in count and bytes, never
 committing - and, with read-run, produce records you approve one by one.
 Topic and group administration is not available to it. See
+[Share a session with an LLM](#llm-mcp) for the bridge itself.
+
+---
+
+<a id="databases"></a>
+## 6d. Databases
+
+Browse and query a PostgreSQL or MySQL / MariaDB database from the
+connection that reaches it. Like Kafka, the database is a service on a
+connection: switch it on in the connection (or once on a folder of
+database hosts) and the connection opens a **Database tab** next to its
+terminals. Every database connection rides the connection's SSH session,
+so a server that only listens on the host's `127.0.0.1` works with no
+port forward.
+
+### Turning it on
+
+In the connection editor (or a folder's), the **Database** tab:
+
+- **Engine** - PostgreSQL, or MySQL / MariaDB.
+- **Address** - host and port as seen from where the database is dialed:
+  from the SSH host when it runs there or behind it. Empty means
+  `127.0.0.1` and the engine's port (5432 / 3306).
+- **Database** - the one the tab opens first; empty takes the server's
+  default for the login.
+- **Login** - a password credential whose default username and password are
+  the database login, so vault, KeePass, Bitwarden and Infisical
+  credentials all work. A credential without a password works for trust
+  authentication. **Credentials -> Used by** lists it as *Database login*.
+- **Reach the database** - *Through SSH* (the default): one SSH session to
+  this host carries every connection, and the address resolves there.
+  *Direct / from the jump host*: dialed from the connection's last jump
+  host, or from this machine over its network profile.
+- **Writes** - *Read-only*: every statement runs in a READ ONLY transaction
+  that is rolled back, and only `SELECT`, `WITH`, `SHOW`, `EXPLAIN`,
+  `VALUES`, `TABLE` and `DESCRIBE` are sent at all (on MySQL a DDL statement
+  would otherwise commit on its own and escape the transaction;
+  `SELECT ... INTO OUTFILE` is refused too). It is a strong guard, but the
+  real guarantee is a login with read-only grants - use one for production.
+- **TLS** - *Require* (encrypted, certificate not checked) or *Verify
+  certificate* (it must match the address's host name), end to end inside
+  the tunnel.
+
+To have double-click / Enter open the Database tab instead of a terminal,
+set **Double-click opens** to **Database** on the General tab. Every
+setting inherits through folders.
+
+### Opening it
+
+**Database** next to Connect in the connection header, **Open database** in
+the connection's right-click menu, on a terminal tab's right-click menu, or
+the default action as above. A second open of the same connection brings
+its tab forward. The SSH session opens with the first request, with the
+usual host-key and password prompts.
+
+The Database tab is a normal tab: it detaches to its own window and back,
+splits (a split opens a terminal on the same host), comes back with *Reopen
+last session* and with workspaces - with its query tabs and their SQL;
+nothing is run again - and can be shared with an LLM.
+
+### The tree
+
+The left column lists the databases (system ones behind the **system**
+box) with their size. Expanding one lists its tables and views - grouped by
+schema on PostgreSQL - with an estimated row count; the filter box narrows
+them. A click on a table opens it in a tab; the icon next to a database
+opens a new query tab on it.
+
+### Queries
+
+A query tab has an SQL editor with highlighting for the engine and
+completion of the table names listed so far.
+
+- **Ctrl+Enter** (or **Run**) runs the statement under the cursor - or the
+  selection - and **Ctrl+Shift+Enter** (**Run all**) the whole script,
+  statement by statement, stopping at the first error. Semicolons inside
+  strings, comments and PostgreSQL `$$` bodies do not split.
+- **Limit** caps the rows a statement brings back (500 by default, up to
+  100 000); a read cut at the limit is stopped on the server, so a `SELECT`
+  without `LIMIT` on a huge table is not read to the end.
+- **Stop** cancels the running statement on the server.
+- Each query tab has its own server session: `SET`, temporary tables and an
+  open transaction carry from one run to the next. On PostgreSQL the tab
+  shows **in transaction** with **Commit** and **Roll back** while one is
+  open, and closing the tab asks first (closing rolls it back).
+- With several statements, each result is a chip above the grid. Result
+  sets show in a grid that stays fast with many rows: click a cell and
+  **Ctrl+C** copies it, double-click (or Enter) opens the full value below -
+  JSON pretty-printed. **CSV** and **JSON** save the rows.
+- On a connection marked *sensitive*, statements that change data are
+  listed for confirmation before they run.
+
+Values are shown the way `psql` and the `mysql` client print them: numbers
+keep their precision, `NULL` is marked, binary columns show as hex.
+
+### Tables
+
+A table tab has three views: **Data** (200 rows at a time in primary-key
+order, **Prev** / **Next**), **Structure** (columns with type, nullability,
+default and key; indexes; foreign keys) and **DDL** (MySQL's own `SHOW
+CREATE`; on PostgreSQL rebuilt from the catalog, without partitioning,
+storage options, ownership and grants). **Query** opens a query tab on the
+table.
+
+Statements that change data are recorded in the audit log (the statement,
+cut to 300 characters, and the rows affected or the error).
+
+### LLM access
+
+A Database tab can be shared with an LLM over MCP like a terminal, or the
+LLM can open one with `open_db` (you approve). It can list databases and
+tables, describe a table and run read queries - always read-only, whatever
+the connection allows, capped in rows and bytes. With read-run it can also
+run statements that change data, each call approved by you, never on a
+read-only connection and without `BEGIN` / `COMMIT`. It works on its own
+session, never on your query tabs. See
 [Share a session with an LLM](#llm-mcp) for the bridge itself.
 
 ---

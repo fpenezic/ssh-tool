@@ -200,6 +200,12 @@ archive bundle. Exports never include credential secrets by default.
   consumer groups with lag and offset reset. Broker connections ride the
   connection's SSH session, so advertised broker names resolve on the far
   side - no local tunnels, no hosts-file entries.
+- **Databases** - a connection with the database enabled opens a
+  Database tab on PostgreSQL or MySQL / MariaDB: databases, tables and
+  their structure, query tabs with their own sessions, a fast results grid
+  and CSV / JSON export. Connections ride the connection's SSH session, so
+  a server on the host's loopback needs no port forward; read-only mode is
+  enforced in the backend.
 
 ### Import / export
 
