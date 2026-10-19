@@ -440,6 +440,16 @@ func Build(
 			if s.AuthRef != nil && *s.AuthRef != "" {
 				referenced[*s.AuthRef] = true
 			}
+			// A jump chain's hops carry their own logins; the importer
+			// remaps them (remapJumpChain), so they must be in the archive
+			// or the bastion loses its login on the other machine.
+			if s.JumpHost != nil {
+				for hop := s.JumpHost.Chain; hop != nil; hop = hop.Via {
+					if hop.AuthRef != nil && *hop.AuthRef != "" {
+						referenced[*hop.AuthRef] = true
+					}
+				}
+			}
 		}
 		for _, f := range arc.Folders {
 			collectAuthRef(f.Settings)
