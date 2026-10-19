@@ -29,7 +29,7 @@
   import { focusActivePane } from "./paneFocus";
   import { reopenLocalShell } from "./sessionSpec";
   import { newTabActions } from "./newTabActions.svelte.ts";
-  import { endSession, kafkaEnabledFor } from "./kafkaState.svelte";
+  import { endSession, kafkaEnabledFor, kafkaListenSummary, kafkaTabs } from "./kafkaState.svelte";
   import { IconKafka } from "./iconMap";
   let broadcastManagerOpen = $state(false);
   let shareDialogOpen = $state(false);
@@ -819,6 +819,22 @@
         });
       }
     }
+    // Kafka tabs travel too; their handle lives on the backend.
+    try {
+      for (const k of await kafkaTabs.refresh()) {
+        if (!sessionIds.includes(k.id) || sessions.tabs.find((t) => t.sessionId === k.id)) continue;
+        sessions.add({
+          sessionId: k.id,
+          connectionId: k.connection_id,
+          name: `${k.name} (Kafka)`,
+          hostname: k.bootstrap.join(","),
+          kind: "kafka",
+          status: "connected",
+        });
+      }
+    } catch (e) {
+      console.warn("kafka handles", e);
+    }
     const layout = decodePaneLayout(p.layout ?? "");
     if (layout) {
       paneTabs.addTabFromLayout(layout);
@@ -1037,6 +1053,21 @@
     if (ss.some((s) => s.status === "disconnected")) return { color: "var(--overlay0)", hint: "disconnected", isClosed: true };
     if (ss.some((s) => s.status === "connecting")) return { color: "var(--yellow)", hint: "connecting", isClosed: false };
     return { color: "var(--green)", hint: "connected", isClosed: false };
+  }
+
+  // The Kafka consumers running in a tab: how many topics it listens to, how
+  // many failed, and the tooltip listing them.
+  function tabKafkaListen(tabId: string) {
+    const tab = paneTabs.tabs.find((t) => t.tabId === tabId);
+    if (!tab) return null;
+    const ids: string[] = [];
+    function collect(node: PaneNodeType) {
+      if (node.kind === "pane") ids.push(node.sessionId);
+      else { collect(node.a); collect(node.b); }
+    }
+    collect(tab.root);
+    const sum = kafkaListenSummary(ids);
+    return sum.running + sum.failed > 0 ? sum : null;
   }
 
   // Resolved color tag for the tab. Picks the first pane's connection
@@ -1414,6 +1445,12 @@
               style:background={t.groupColor ?? "var(--surface1)"}
               title="Group: {t.groupName}"
             >{t.groupName}</span>
+          {/if}
+          {#if tabKafkaListen(t.tabId)}
+            {@const kl = tabKafkaListen(t.tabId)}
+            {#if kl}
+              <span class="kafka-listen" class:bad={kl.failed > 0} title={kl.tip}>{kl.failed > 0 ? "!" : ""}{kl.running + kl.failed}</span>
+            {/if}
           {/if}
           {#if tabRecordingCount(t.tabId) > 0}
             <span
@@ -2254,4 +2291,6 @@
     visibility: visible;
     pointer-events: auto;
   }
+  .kafka-listen { flex: none; min-width: 1.1em; padding: 0 0.3em; font-size: 0.62rem; line-height: 1.4; text-align: center; border-radius: 8px; background: color-mix(in srgb, var(--green) 28%, transparent); color: var(--green); }
+  .kafka-listen.bad { background: color-mix(in srgb, var(--red) 28%, transparent); color: var(--red); }
 </style>

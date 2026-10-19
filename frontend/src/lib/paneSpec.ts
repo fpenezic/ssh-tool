@@ -32,6 +32,7 @@ export interface SessionSpec {
   entryName?: string;    // dyn - label + name-match fallback
   hostname?: string;     // dyn - hostname-match fallback
   shellKind?: string;    // local (ad-hoc shells only)
+  topics?: string[];     // kafka - topic tabs that were open (not consuming on restore)
 }
 
 export type SpecNode = SpecLeaf | SpecSplit;

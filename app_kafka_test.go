@@ -140,7 +140,21 @@ func TestKafkaIPCDirect(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
+	// The tab state outlives the UI component: open topics and the finished
+	// consumer (still holding its buffer) come back to another window.
+	a.KafkaSetOpenTopics(info.ID, []string{"events", "other"})
+	st, err := a.KafkaGetTabState(info.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Topics) != 2 || st.Topics[0] != "events" || len(st.Consumers) != 1 || st.Consumers[0].ID != cid || st.Consumers[0].Request.Topic != "events" {
+		t.Fatalf("tab state = %+v", st)
+	}
+
 	a.KafkaClose(info.ID)
+	if _, err := a.KafkaGetTabState(info.ID); err == nil {
+		t.Fatal("tab state after close: want error")
+	}
 	if _, err := a.KafkaTopics(info.ID, false); err == nil {
 		t.Fatal("topics after close: want error")
 	}

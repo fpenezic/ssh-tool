@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -498,5 +499,151 @@ func TestWriteNDJSON(t *testing.T) {
 	}
 	if n, _ := k.WriteNDJSON(io.Discard, "orders", ""); n != 6 {
 		t.Fatalf("unfiltered: %d", n)
+	}
+}
+
+func TestConsumeFilter(t *testing.T) {
+	fc := newFake(t, 10)
+	c := openFake(t, fc)
+	run := func(req ConsumeRequest) ([]Message, ConsumeSnapshot) {
+		t.Helper()
+		req.Topic, req.Mode, req.Partition, req.StopAtEnd = "orders", FromEarliest, -1, true
+		k, err := c.Consume(ctx10(t), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer k.Stop()
+		return drain(t, k)
+	}
+
+	// Case-insensitive, over the key: partition 1 only.
+	msgs, s := run(ConsumeRequest{KeyContains: "K1-"})
+	if len(msgs) != 10 || s.Received != 10 || s.Scanned != 30 || !s.Filtering {
+		t.Fatalf("key filter: %d msgs, %+v", len(msgs), s)
+	}
+	for i, m := range msgs {
+		if m.Partition != 1 || m.Seq != uint64(i+1) {
+			t.Fatalf("record %d = p%d seq %d", i, m.Partition, m.Seq)
+		}
+	}
+
+	// Fields are ANDed.
+	msgs, s = run(ConsumeRequest{KeyContains: "k2-", ValueContains: "V3"})
+	if len(msgs) != 1 || msgs[0].Key.Text != "k2-3" || s.Scanned != 30 {
+		t.Fatalf("key+value: %+v %+v", msgs, s)
+	}
+
+	// A header matches by name or by value; binary values match as text.
+	if msgs, _ = run(ConsumeRequest{HeaderContains: "H"}); len(msgs) != 30 {
+		t.Fatalf("header name: %d", len(msgs))
+	}
+	if msgs, _ = run(ConsumeRequest{HeaderContains: "nope"}); len(msgs) != 0 {
+		t.Fatalf("header miss: %d", len(msgs))
+	}
+
+	// The limit counts matches: 1 stops at the first one.
+	msgs, s = run(ConsumeRequest{ValueContains: "v7", Limit: 1})
+	if len(msgs) != 1 || s.State != ConsumeDone || s.Scanned > 30 {
+		t.Fatalf("limit 1: %d, %+v", len(msgs), s)
+	}
+
+	// No filter: scanned equals received.
+	if _, s = run(ConsumeRequest{}); s.Received != 30 || s.Scanned != 30 || s.Filtering {
+		t.Fatalf("no filter: %+v", s)
+	}
+}
+
+func TestConsumeBudgetShared(t *testing.T) {
+	fc := newFake(t, 1)
+	c := openFake(t, fc)
+	start := func() *Consumer {
+		t.Helper()
+		k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "orders", Mode: FromLatest, Partition: -1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(k.Stop)
+		return k
+	}
+	a := start()
+	if s := a.Snapshot(0, SnapshotOptions{}); s.BufferBytes != ClusterBufferBudget || s.BufferMessages != DefaultBufferMessages {
+		t.Fatalf("alone: %+v", s)
+	}
+	b := start()
+	for _, k := range []*Consumer{a, b} {
+		if s := k.Snapshot(0, SnapshotOptions{}); s.BufferBytes != ClusterBufferBudget/2 || s.BufferMessages != DefaultBufferMessages/2 {
+			t.Fatalf("two: %+v", s)
+		}
+	}
+	// A finished consumer keeps its buffer, so it keeps its share.
+	b.Stop()
+	if s := a.Snapshot(0, SnapshotOptions{}); s.BufferBytes != ClusterBufferBudget/2 {
+		t.Fatalf("after Stop: %+v", s)
+	}
+	// Release drops the buffer and returns the share.
+	b.Release()
+	if s := a.Snapshot(0, SnapshotOptions{}); s.BufferBytes != ClusterBufferBudget {
+		t.Fatalf("after Release: %+v", s)
+	}
+	if s := b.Snapshot(0, SnapshotOptions{}); s.Buffered != 0 || s.State != ConsumeStopped {
+		t.Fatalf("released: %+v", s)
+	}
+	b.Release() // idempotent
+}
+
+func TestConsumeBudgetCountsFinished(t *testing.T) {
+	fc := newFake(t, 10)
+	c := openFake(t, fc)
+	var ks []*Consumer
+	for i := 0; i < 3; i++ {
+		k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "orders", Mode: FromEarliest, Partition: -1, StopAtEnd: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(k.Release)
+		drain(t, k)
+		ks = append(ks, k)
+	}
+	// Three finished consumers still hold buffers: each has a third.
+	for i, k := range ks {
+		if s := k.Snapshot(0, SnapshotOptions{}); s.State != ConsumeDone || s.BufferBytes != ClusterBufferBudget/3 || s.Buffered != 30 {
+			t.Fatalf("consumer %d: %+v", i, s)
+		}
+	}
+}
+
+func TestContainsFold(t *testing.T) {
+	for _, tc := range []struct {
+		b, q string
+		want bool
+	}{
+		{"Hello World", "world", true},
+		{"Hello World", "o w", true},
+		{"Hello", "hello!", false},
+		{"", "a", false},
+		{"abc", "", true},
+		{"xxABCxx", "abc", true},
+		{"aaab", "aab", true},
+		{"[1]", "[1]", true},
+		{"ŠIBENIK", "šib", true},
+		{"čaša", "ČAŠ", false}, // the needle is lower case by contract
+	} {
+		if got := containsFold(tc.b, tc.q); got != tc.want {
+			t.Errorf("containsFold(%q, %q) = %v", tc.b, tc.q, got)
+		}
+		if got := containsFold([]byte(tc.b), tc.q); got != tc.want {
+			t.Errorf("containsFold([]byte %q, %q) = %v", tc.b, tc.q, got)
+		}
+	}
+	// Binary: raw text inside it, and the base64 the UI shows.
+	bin := []byte{0xff, 0x00, 'O', 'r', 'd', 'e', 'r', '-', '7', 0xfe}
+	if !payloadHas(bin, "order-7") {
+		t.Error("raw text in binary")
+	}
+	if !payloadHas(bin, strings.ToLower(base64.StdEncoding.EncodeToString(bin)[:8])) {
+		t.Error("base64 of binary")
+	}
+	if payloadHas([]byte("plain"), "cgxhaw") { // base64 of "plain" is cGxhaW4=
+		t.Error("base64 matched on a text payload")
 	}
 }

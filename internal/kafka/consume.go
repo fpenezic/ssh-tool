@@ -43,6 +43,16 @@ const (
 	maxSnapshot           = 1000
 )
 
+// ClusterBufferBudget is the buffer memory of all consumers of one cluster
+// together: every consumer holding a buffer, running or finished, until
+// Release drops it. Each gets an equal share, so listening to more topics
+// keeps fewer records of each; a consumer started with its own smaller
+// BufferBytes keeps that bound.
+const ClusterBufferBudget = 256 << 20
+
+// minShareMessages is the lowest record bound a shared buffer is squeezed to.
+const minShareMessages = 1000
+
 // Fetch bounds of a consumer's client. franz-go's defaults (50 MiB a fetch,
 // 1 MiB a partition, plus as many fetches buffered as brokers answer) let a
 // heavy topic hold hundreds of MiB in flight before the buffer evicts
@@ -75,9 +85,99 @@ type ConsumeRequest struct {
 	// StopAtEnd stops once every partition reaches the end offset it had
 	// when the consumer started. Ignored for FromLatest.
 	StopAtEnd bool `json:"stop_at_end"`
-	// BufferMessages / BufferBytes bound the buffer; 0 = the defaults.
+	// BufferMessages / BufferBytes bound the buffer; 0 = the defaults, which
+	// shrink with the number of consumers holding a buffer on the cluster.
 	BufferMessages int `json:"buffer_messages"`
 	BufferBytes    int `json:"buffer_bytes"`
+	// KeyContains, ValueContains and HeaderContains keep only the records
+	// that match: a case-insensitive substring of the full key, of the full
+	// value, of a header name or value. Several set = all must match. The
+	// rest is counted (Scanned) but not buffered, and Limit counts matches.
+	KeyContains    string `json:"key_contains"`
+	ValueContains  string `json:"value_contains"`
+	HeaderContains string `json:"header_contains"`
+}
+
+// filter is a ConsumeRequest's match conditions, lower case.
+type filter struct{ key, value, header string }
+
+func (f filter) active() bool { return f.key != "" || f.value != "" || f.header != "" }
+
+func (f filter) match(r *kgo.Record) bool {
+	if f.key != "" && !payloadHas(r.Key, f.key) {
+		return false
+	}
+	if f.value != "" && !payloadHas(r.Value, f.value) {
+		return false
+	}
+	if f.header != "" {
+		hit := false
+		for _, h := range r.Headers {
+			if containsFold(h.Key, f.header) || payloadHas(h.Value, f.header) {
+				hit = true
+				break
+			}
+		}
+		if !hit {
+			return false
+		}
+	}
+	return true
+}
+
+// payloadHas reports whether lower occurs in b ignoring case. A binary
+// payload matches on its raw bytes (text inside protobuf or Avro) and on the
+// base64 text the UI shows for it.
+func payloadHas[T string | []byte](b T, lower string) bool {
+	if containsFold(b, lower) {
+		return true
+	}
+	if len(b) == 0 || utf8.Valid([]byte(b)) {
+		return false
+	}
+	return containsFold(base64.StdEncoding.EncodeToString([]byte(b)), lower)
+}
+
+// containsFold reports whether lower (already lower case) occurs in b,
+// ignoring case. An ASCII needle is searched without copying b, so a filter
+// on a heavy topic does not allocate a lower-case copy of every payload.
+func containsFold[T string | []byte](b T, lower string) bool {
+	if lower == "" {
+		return true
+	}
+	if len(b) < len(lower) {
+		return false
+	}
+	for i := 0; i < len(lower); i++ {
+		if lower[i] >= utf8.RuneSelf {
+			return strings.Contains(strings.ToLower(string(b)), lower)
+		}
+	}
+	first, firstUp := lower[0], upperASCII(lower[0])
+	last := len(b) - len(lower)
+	for i := 0; i <= last; i++ {
+		if c := b[i]; c != first && c != firstUp {
+			continue
+		}
+		j := 1
+		for ; j < len(lower); j++ {
+			c := b[i+j]
+			if c != lower[j] && c != upperASCII(lower[j]) {
+				break
+			}
+		}
+		if j == len(lower) {
+			return true
+		}
+	}
+	return false
+}
+
+func upperASCII(c byte) byte {
+	if 'a' <= c && c <= 'z' {
+		return c - 'a' + 'A'
+	}
+	return c
 }
 
 // Payload is a key, value or header value. Text holds the bytes as is when
@@ -118,11 +218,19 @@ type ConsumeSnapshot struct {
 	// keeps retrying a partition whose leader is unreachable.
 	Error    string    `json:"error,omitempty"`
 	Messages []Message `json:"messages"`
-	// Received counts every record so far, Dropped the ones the buffer
+	// Received counts the records kept so far (all of them without a
+	// filter), Scanned every record read, Dropped the kept ones the buffer
 	// evicted, Buffered what is in it now.
 	Received uint64 `json:"received"`
+	Scanned  uint64 `json:"scanned"`
 	Dropped  uint64 `json:"dropped"`
 	Buffered int    `json:"buffered"`
+	// BufferMessages / BufferBytes are the bounds the buffer holds now; they
+	// shrink while other consumers of the cluster hold buffers.
+	BufferMessages int `json:"buffer_messages"`
+	BufferBytes    int `json:"buffer_bytes"`
+	// Filtering: the request has a match condition.
+	Filtering bool `json:"filtering"`
 	// Partitions is the partition set being read.
 	Partitions []int32 `json:"partitions"`
 }
@@ -130,6 +238,7 @@ type ConsumeSnapshot struct {
 // Consumer reads one topic into a bounded buffer until stopped.
 type Consumer struct {
 	req    ConsumeRequest
+	filt   filter
 	parent *Cluster
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -143,6 +252,9 @@ type Consumer struct {
 	buf        []Message
 	head       int
 	bufBytes   int
+	maxMsgs    int // current bounds, see ClusterBufferBudget
+	maxBytes   int
+	scanned    uint64
 	received   uint64
 	dropped    uint64
 	partitions []int32
@@ -153,12 +265,6 @@ type Consumer struct {
 func (c *Cluster) Consume(ctx context.Context, req ConsumeRequest) (*Consumer, error) {
 	if req.Topic == "" {
 		return nil, errors.New("no topic")
-	}
-	if req.BufferMessages <= 0 {
-		req.BufferMessages = DefaultBufferMessages
-	}
-	if req.BufferBytes <= 0 {
-		req.BufferBytes = DefaultBufferBytes
 	}
 	starts, ends, err := c.startOffsets(ctx, req)
 	if err != nil {
@@ -185,6 +291,7 @@ func (c *Cluster) Consume(ctx context.Context, req ConsumeRequest) (*Consumer, e
 	runCtx, cancel := context.WithCancel(context.Background())
 	k := &Consumer{
 		req:        req,
+		filt:       filter{strings.ToLower(req.KeyContains), strings.ToLower(req.ValueContains), strings.ToLower(req.HeaderContains)},
 		parent:     c,
 		cancel:     cancel,
 		done:       make(chan struct{}),
@@ -199,6 +306,7 @@ func (c *Cluster) Consume(ctx context.Context, req ConsumeRequest) (*Consumer, e
 		return nil, errors.New("cluster closed")
 	}
 	c.consumers[k] = struct{}{}
+	c.rebalanceLocked()
 	c.mu.Unlock()
 
 	var until map[int32]int64
@@ -339,6 +447,12 @@ func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int6
 
 // add buffers one record and reports whether the limit is reached.
 func (k *Consumer) add(r *kgo.Record) bool {
+	if k.filt.active() && !k.filt.match(r) {
+		k.mu.Lock()
+		k.scanned++
+		k.mu.Unlock()
+		return false
+	}
 	m := Message{
 		Partition: r.Partition,
 		Offset:    r.Offset,
@@ -354,11 +468,18 @@ func (k *Consumer) add(r *kgo.Record) bool {
 	}
 	k.mu.Lock()
 	defer k.mu.Unlock()
+	k.scanned++
 	k.received++
 	m.Seq = k.received
 	k.buf = append(k.buf, m)
 	k.bufBytes += m.Size
-	for n := len(k.buf) - k.head; n > k.req.BufferMessages || (k.bufBytes > k.req.BufferBytes && n > 1); n-- {
+	k.trimLocked()
+	return k.req.Limit > 0 && k.received >= uint64(k.req.Limit)
+}
+
+// trimLocked drops the oldest records until the buffer is within its bounds.
+func (k *Consumer) trimLocked() {
+	for n := len(k.buf) - k.head; n > k.maxMsgs || (k.bufBytes > k.maxBytes && n > 1); n-- {
 		k.bufBytes -= k.buf[k.head].Size
 		k.buf[k.head] = Message{} // let the payload go
 		k.head++
@@ -368,7 +489,31 @@ func (k *Consumer) add(r *kgo.Record) bool {
 		k.buf = append(k.buf[:0:0], k.buf[k.head:]...)
 		k.head = 0
 	}
-	return k.req.Limit > 0 && k.received >= uint64(k.req.Limit)
+}
+
+// rebalanceLocked divides ClusterBufferBudget among the consumers holding a
+// buffer. The caller holds c.mu.
+func (c *Cluster) rebalanceLocked() {
+	n := len(c.consumers)
+	if n == 0 {
+		return
+	}
+	for k := range c.consumers {
+		msgs, bytes := DefaultBufferMessages, ClusterBufferBudget/n
+		if n > 1 {
+			msgs = max(minShareMessages, DefaultBufferMessages/n)
+		}
+		if k.req.BufferMessages > 0 {
+			msgs = k.req.BufferMessages
+		}
+		if k.req.BufferBytes > 0 {
+			bytes = min(bytes, k.req.BufferBytes)
+		}
+		k.mu.Lock()
+		k.maxMsgs, k.maxBytes = msgs, bytes
+		k.trimLocked()
+		k.mu.Unlock()
+	}
 }
 
 func payloadOf(b []byte) *Payload {
@@ -403,11 +548,6 @@ func (k *Consumer) finish(state, errMsg string) {
 		}
 	}
 	k.mu.Unlock()
-	k.parent.mu.Lock()
-	if k.parent.consumers != nil {
-		delete(k.parent.consumers, k)
-	}
-	k.parent.mu.Unlock()
 }
 
 // SnapshotOptions bounds one page of a snapshot.
@@ -437,10 +577,15 @@ func (k *Consumer) Snapshot(after uint64, o SnapshotOptions) ConsumeSnapshot {
 		State:      k.state,
 		Error:      k.err,
 		Received:   k.received,
+		Scanned:    k.scanned,
 		Dropped:    k.dropped,
 		Buffered:   len(live),
 		Partitions: k.partitions,
 		Messages:   []Message{},
+
+		BufferMessages: k.maxMsgs,
+		BufferBytes:    k.maxBytes,
+		Filtering:      k.filt.active(),
 	}
 	if len(live) == 0 {
 		return s
@@ -565,6 +710,25 @@ func (k *Consumer) Stop() {
 	k.cancel()
 	<-k.done
 }
+
+// Release stops the consumer, drops its buffer and gives its share of
+// ClusterBufferBudget back to the others. The consumer reads as stopped and
+// empty afterwards. Idempotent.
+func (k *Consumer) Release() {
+	k.Stop()
+	k.parent.mu.Lock()
+	if _, ok := k.parent.consumers[k]; ok {
+		delete(k.parent.consumers, k)
+		k.parent.rebalanceLocked()
+	}
+	k.parent.mu.Unlock()
+	k.mu.Lock()
+	k.buf, k.head, k.bufBytes = nil, 0, 0
+	k.mu.Unlock()
+}
+
+// Request is the request the consumer was started with.
+func (k *Consumer) Request() ConsumeRequest { return k.req }
 
 // Done is closed when the consumer has stopped for any reason.
 func (k *Consumer) Done() <-chan struct{} { return k.done }

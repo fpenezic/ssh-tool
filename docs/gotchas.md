@@ -1743,6 +1743,44 @@ everything mobile is behind a build tag or an `isMobile` check.
       forever - the first build flooded the backend with `KafkaTopics`
       until the browser ran out of sockets and the host-key answer never
       got through. Effects that call a loader wrap it in `untrack`.
+    - Topic tabs: a consumer must not live in a component. `PaneNode`
+      remounts `KafkaPane` on a split, a tab move, a detach and a reload,
+      so the consumer, its preview mirror, the form and the picked record
+      live in `TopicState` (`kafkaTopicState.svelte.ts`, registry
+      `kafkaTabs.topicStates`), which polls on its own timer (400 ms on
+      screen, 2 s hidden). Only `releaseTopic` (tab closed) stops the
+      backend consumer; `kafkaTabs.forget` (session ended, or the pane
+      left this window: `KafkaPane.onDestroy` checks 2 s later with
+      `findTabForSession`) only lets go locally. A window that did not
+      open the tab (detach, redock, reload - `openTopics[sid]` undefined)
+      calls `adoptTabState`: the backend keeps the open topic list
+      (`KafkaSetOpenTopics`) and its consumers with their requests
+      (`KafkaGetTabState`). The pane pushes its list only once it has one,
+      or an empty list would wipe the one being adopted. Main-window
+      reload recovery and `reconstructTabFromPayload` add the Kafka
+      sessions from `KafkaList` (they used to recover SSH and local shells
+      only, leaving the handle and its consumers running with no tab).
+    - A hidden list reports `clientHeight` 0 and loses its scroll
+      position: `onScroll` ignores that, and an `$effect` on `active`
+      restores `TopicState.scroll`.
+    - The topic list is always fetched with internal topics and filtered
+      in the UI, so a tab on `__consumer_offsets` does not look deleted
+      when the checkbox is off. A tab whose topic is gone closes only if
+      it has no consumer (deleted elsewhere while listening: keep what was
+      read).
+    - `Cluster.rebalanceLocked` divides `ClusterBufferBudget` among the
+      consumers in `c.consumers`: every consumer holding a buffer, running
+      or finished, until `Consumer.Release` (`KafkaConsumeStop`). Removing
+      a consumer when it merely finished let five sequential "from the
+      beginning" reads hold 256 MiB each. Lock order is `c.mu` then
+      `k.mu`; `finish` must never take them the other way round.
+    - The backend filter (`containsFold`) searches ASCII needles without
+      copying the payload; a lower-case copy of every record value on a
+      heavy topic was the cost. Non-ASCII needles fall back to
+      `strings.ToLower`.
+    - A backend filter makes `Received` mean "kept" and `Scanned` "read";
+      `Limit` and the sequence numbers follow `Received`. The UI's
+      catch-up test (`seq >= received`) relies on that.
     - `kfake` (tests) keeps listing a topic that had a partition
       reassignment after it is deleted, and reports log dirs with size 0.
 

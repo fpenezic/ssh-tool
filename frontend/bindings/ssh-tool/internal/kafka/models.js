@@ -189,7 +189,8 @@ export class ConsumeRequest {
         }
         if (!("buffer_messages" in $$source)) {
             /**
-             * BufferMessages / BufferBytes bound the buffer; 0 = the defaults.
+             * BufferMessages / BufferBytes bound the buffer; 0 = the defaults, which
+             * shrink with the number of consumers holding a buffer on the cluster.
              * @member
              * @type {number}
              */
@@ -201,6 +202,31 @@ export class ConsumeRequest {
              * @type {number}
              */
             this["buffer_bytes"] = 0;
+        }
+        if (!("key_contains" in $$source)) {
+            /**
+             * KeyContains, ValueContains and HeaderContains keep only the records
+             * that match: a case-insensitive substring of the full key, of the full
+             * value, of a header name or value. Several set = all must match. The
+             * rest is counted (Scanned) but not buffered, and Limit counts matches.
+             * @member
+             * @type {string}
+             */
+            this["key_contains"] = "";
+        }
+        if (!("value_contains" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["value_contains"] = "";
+        }
+        if (!("header_contains" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["header_contains"] = "";
         }
 
         Object.assign(this, $$source);
@@ -252,12 +278,20 @@ export class ConsumeSnapshot {
         }
         if (!("received" in $$source)) {
             /**
-             * Received counts every record so far, Dropped the ones the buffer
+             * Received counts the records kept so far (all of them without a
+             * filter), Scanned every record read, Dropped the kept ones the buffer
              * evicted, Buffered what is in it now.
              * @member
              * @type {number}
              */
             this["received"] = 0;
+        }
+        if (!("scanned" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["scanned"] = 0;
         }
         if (!("dropped" in $$source)) {
             /**
@@ -272,6 +306,30 @@ export class ConsumeSnapshot {
              * @type {number}
              */
             this["buffered"] = 0;
+        }
+        if (!("buffer_messages" in $$source)) {
+            /**
+             * BufferMessages / BufferBytes are the bounds the buffer holds now; they
+             * shrink while other consumers of the cluster hold buffers.
+             * @member
+             * @type {number}
+             */
+            this["buffer_messages"] = 0;
+        }
+        if (!("buffer_bytes" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["buffer_bytes"] = 0;
+        }
+        if (!("filtering" in $$source)) {
+            /**
+             * Filtering: the request has a match condition.
+             * @member
+             * @type {boolean}
+             */
+            this["filtering"] = false;
         }
         if (!("partitions" in $$source)) {
             /**
@@ -292,13 +350,13 @@ export class ConsumeSnapshot {
      */
     static createFrom($$source = {}) {
         const $$createField2_0 = $$createType1;
-        const $$createField6_0 = $$createType2;
+        const $$createField10_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("messages" in $$parsedSource) {
             $$parsedSource["messages"] = $$createField2_0($$parsedSource["messages"]);
         }
         if ("partitions" in $$parsedSource) {
-            $$parsedSource["partitions"] = $$createField6_0($$parsedSource["partitions"]);
+            $$parsedSource["partitions"] = $$createField10_0($$parsedSource["partitions"]);
         }
         return new ConsumeSnapshot(/** @type {Partial<ConsumeSnapshot>} */($$parsedSource));
     }
