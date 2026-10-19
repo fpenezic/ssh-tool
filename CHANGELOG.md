@@ -7,9 +7,9 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased] - Databases
+## [0.116.0] - Databases on a connection
 
-PostgreSQL and MySQL / MariaDB open from the connection that reaches them: databases, tables and their structure, and query tabs with their own sessions, with every database connection carried by the connection's SSH session by default.
+PostgreSQL and MySQL / MariaDB open from the connection that reaches them: databases, tables and their structure, and query tabs with their own sessions, with every database connection carried by the connection's SSH session by default. Hosts and whole folders can now be marked sensitive, and a round of fixes covers exports, backups and the vault.
 
 ### Databases
 
