@@ -32,6 +32,19 @@
   const c = $derived(topicState(clusterId, tab ?? topic));
   const shown = $derived(c.filter ? c.msgs.filter((m) => matches(m, c.filter)) : c.msgs);
 
+  // Ctrl/Cmd+A in the record view selects the record, not the whole app
+  // (which also picks up hidden views and xterm's injected styles).
+  function selectAllWithin(e: KeyboardEvent) {
+    if (!(e.ctrlKey || e.metaKey) || (e.key !== "a" && e.key !== "A")) return;
+    e.preventDefault();
+    const sel = window.getSelection();
+    if (!sel) return;
+    const range = document.createRange();
+    range.selectNodeContents(e.currentTarget as HTMLElement);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
   $effect(() => {
     const t = c;
     t.show(active);
@@ -194,9 +207,11 @@
           <button title="Close" onclick={() => c.select(null)}><IconX size={12} /></button>
         </div>
         {#if detail}
-          <pre class="body selectable {detail.kind}">{detailText}</pre>
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+          <pre class="body selectable {detail.kind}" tabindex="0" onkeydown={selectAllWithin}>{detailText}</pre>
         {:else}
-          <table class="headers selectable">
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+          <table class="headers selectable" tabindex="0" onkeydown={selectAllWithin}>
             <tbody>
               {#each shownRecord.headers as h, i (i)}
                 <tr><td>{h.key}</td><td>{h.value.encoding === "base64" ? `<${h.value.size} bytes binary> ${h.value.text}` : h.value.text}</td></tr>
@@ -251,6 +266,7 @@
   .body { flex: 1; overflow: auto; margin: 0; padding: 0.5rem 0.7rem; font-size: 0.74rem; white-space: pre-wrap; word-break: break-all; user-select: text; }
   .body.binary { white-space: pre; }
   .headers { font-size: 0.74rem; margin: 0.4rem 0.7rem; user-select: text; }
+  .body:focus, .headers:focus { outline: none; }
   .headers td { padding: 0.1rem 0.6rem 0.1rem 0; vertical-align: top; word-break: break-all; }
   .headers td:first-child { color: var(--mauve); white-space: nowrap; }
 </style>
