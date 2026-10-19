@@ -72,6 +72,10 @@ type kafkaCluster struct {
 	info    KafkaClusterInfo
 	cluster *kafka.Cluster
 	lazy    *kafka.LazySSH // nil unless Transport == "tunnel"
+	// openTopics are the topic tabs the UI has open on this handle, so a
+	// window that did not open them (detach, redock, reload) shows the same
+	// tabs and adopts their consumers. Guarded by App.kafkaMu.
+	openTopics []string
 }
 
 // errKafkaReadOnly refuses a write on a read-only cluster.
@@ -496,7 +500,48 @@ func (a *App) KafkaConsumeStop(consumerID string) {
 	delete(a.kafkaConsumers, consumerID)
 	a.kafkaMu.Unlock()
 	if ok {
-		go c.consumer.Stop()
+		go c.consumer.Release()
+	}
+}
+
+// KafkaTabState is what a Kafka tab shows on a handle, kept by the backend so
+// it outlives the webview component: the open topic tabs and the consumers
+// that still hold a buffer (running or finished, until KafkaConsumeStop).
+type KafkaTabState struct {
+	Topics    []string           `json:"topics"`
+	Consumers []KafkaConsumerRef `json:"consumers"`
+}
+
+// KafkaConsumerRef is one consumer of a handle and what started it.
+type KafkaConsumerRef struct {
+	ID      string               `json:"id"`
+	Request kafka.ConsumeRequest `json:"request"`
+}
+
+// KafkaGetTabState returns the open topic tabs and consumers of a handle.
+func (a *App) KafkaGetTabState(clusterID string) (*KafkaTabState, error) {
+	a.kafkaMu.Lock()
+	defer a.kafkaMu.Unlock()
+	kc, ok := a.kafkaClusters[clusterID]
+	if !ok {
+		return nil, fmt.Errorf("Kafka cluster %s is not open", clusterID)
+	}
+	st := &KafkaTabState{Topics: append([]string{}, kc.openTopics...), Consumers: []KafkaConsumerRef{}}
+	for id, c := range a.kafkaConsumers {
+		if c.clusterID == clusterID {
+			st.Consumers = append(st.Consumers, KafkaConsumerRef{ID: id, Request: c.consumer.Request()})
+		}
+	}
+	return st, nil
+}
+
+// KafkaSetOpenTopics records the topic tabs open on a handle. Unknown ids
+// are ignored.
+func (a *App) KafkaSetOpenTopics(clusterID string, topics []string) {
+	a.kafkaMu.Lock()
+	defer a.kafkaMu.Unlock()
+	if kc, ok := a.kafkaClusters[clusterID]; ok {
+		kc.openTopics = append([]string{}, topics...)
 	}
 }
 

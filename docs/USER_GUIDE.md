@@ -1494,7 +1494,20 @@ can be shared with an LLM.
 The left column lists the topics with their partitions and retained message
 count, flags under-replicated and offline partitions, and filters as you
 type (internal topics on request). **+** creates a topic (partitions,
-replication factor, config overrides). A topic opens on its own tabs:
+replication factor, config overrides).
+
+Clicking a topic opens it in a tab above the view, or switches to its tab if
+it is open already; **Groups** and **Brokers** are pinned at the start of the
+row. A topic tab stays alive while another is in front - its consumer keeps
+reading and its filters, selected record and subtab are where you left
+them - until you close it (the x, or middle-click), which ends the consumer
+and frees its buffer. Splitting or moving the Kafka tab, detaching it to
+another window or reloading the window keeps the topic tabs and their
+consumers too. A green dot with a count marks a topic that is being
+listened to, in the list, on its tab and, as a number, on the connection's
+tab at the top (the tooltip lists the topics); it turns red when a consumer
+fails. Reopen last session and workspaces bring the topic tabs back open,
+without starting their consumers. A topic opens on its own subtabs:
 
 - **Messages** - the consumer, below.
 - **Produce** - key, value and headers as text or base64, null key / value
@@ -1522,8 +1535,21 @@ Records arrive in a list (partition, offset, time, key, value); a record
 opens below with its value pretty-printed when it is JSON, a hex dump when
 it is binary, its key and headers. The filter matches key, value and
 headers as you type; **export** saves the shown records as NDJSON. The app
-keeps the newest 10,000 records (64 MiB) of a consumer and says how many
-older ones it dropped.
+keeps the newest records of a consumer and says how many older ones it
+dropped: up to 10,000, within a memory budget of 256 MiB per Kafka tab that
+its consumers share equally - running ones and finished ones that still
+hold records (Clear or closing the topic tab gives the share back), so
+listening to more topics keeps fewer records of each.
+
+**Keep only** (key contains / value contains / header contains) is a match
+done before storing: a record is kept only if it contains every filled text,
+ignoring case, anywhere in the full key, value or a header name or value.
+The rest are counted but not stored, so the status line reads "3 matched of
+48k read", and a limit counts matches (a limit of 1 stops at the first
+hit). It applies when Consume starts; the filter above the list still
+searches what is already buffered. Texts are plain substrings, no regex. A
+binary payload matches on the text inside it (strings in Protobuf or Avro)
+and on the base64 the list shows for it.
 
 ### Consumer groups and brokers
 

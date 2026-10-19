@@ -12,6 +12,7 @@ import { api } from "./api";
 import { sessions, tree } from "./stores.svelte";
 import { connectionActions, isTransientConnectError } from "./connectionActions.svelte";
 import { toast } from "./toast.svelte.ts";
+import { kafkaTabs } from "./kafkaState.svelte";
 import type { SessionSpec } from "./paneSpec";
 
 // Opens another local shell like `sess`: a saved local connection re-runs
@@ -93,7 +94,9 @@ export function specForSession(sessionId: string): SessionSpec | null {
   // A Kafka tab reopens from its connection: the handle is the backend's,
   // the settings that built it are the connection's.
   if (sess.kind === "kafka") {
-    return sess.connectionId ? { kind: "kafka", connectionId: sess.connectionId } : null;
+    if (!sess.connectionId) return null;
+    const topics = kafkaTabs.openTopics[sessionId];
+    return topics?.length ? { kind: "kafka", connectionId: sess.connectionId, topics: [...topics] } : { kind: "kafka", connectionId: sess.connectionId };
   }
 
   if (sess.kind === "local") {
@@ -143,7 +146,10 @@ export async function connectSpec(spec: SessionSpec): Promise<string | null> {
   }
 
   if (kind === "kafka" && spec.connectionId) {
-    return connectionActions.openKafkaSessionOnly(spec.connectionId);
+    const sid = await connectionActions.openKafkaSessionOnly(spec.connectionId);
+    // The topic tabs come back open; their consumers are not started.
+    if (sid && spec.topics?.length) kafkaTabs.openTopics[sid] = [...spec.topics];
+    return sid;
   }
 
   if (kind === "dyn" && (spec.externalId || spec.entryId)) {

@@ -1,14 +1,13 @@
 <script lang="ts">
   // Consumer view of one topic: start a backend consumer (assign-only, never
-  // commits), page its buffer in, filter, inspect, export. The buffer lives
-  // in the backend. This view mirrors it as PREVIEWS (every key / value /
-  // header cut to 2 KiB by the backend), bounded in records and bytes, and
-  // fetches the one full record the user opens. A heavy topic with large
-  // records would otherwise put gigabytes into the webview.
+  // commits), page its buffer in, filter, inspect, export. The consumer, its
+  // preview mirror and the form live in TopicState (kafkaTopicState), so this
+  // view can be unmounted and mounted again (pane split, tab moved, a hidden
+  // topic tab) without stopping it or losing the records.
 
-  import { onDestroy } from "svelte";
-  import { api, type KafkaMessage, type KafkaStartMode, type KafkaConsumeSnapshot } from "./api";
-  import { formatTime, matches, preview, pretty, formatCount, formatBytes, messageTextBytes } from "./kafkaFormat";
+  import { api } from "./api";
+  import { topicState, CLUSTER_BUDGET } from "./kafkaTopicState.svelte";
+  import { formatTime, matches, preview, pretty, formatCount, formatBytes } from "./kafkaFormat";
   import { copyText } from "./clipboard";
   import { toast } from "./toast.svelte.ts";
   import { errMsg } from "./connectErrors";
@@ -18,173 +17,24 @@
     clusterId: string;
     topic: string;
     partitions: number[];
+    // The view is on screen. A topic tab that is not stays mounted (hidden);
+    // its consumer polls slower meanwhile.
+    active?: boolean;
   }
-  let { clusterId, topic, partitions }: Props = $props();
+  let { clusterId, topic, partitions, active = true }: Props = $props();
 
-  const MIRROR_CAP = 10_000;
-  // Bound on the mirror's preview text. Previews are at most ~2 KiB a field,
-  // so this only bites on records with many large headers.
-  const MIRROR_BYTES = 24 << 20;
   // A detail view longer than this shows its head; Copy still copies all.
   const DETAIL_SHOW = 1 << 20;
   const ROW_H = 22;
 
-  let mode = $state<KafkaStartMode>("last");
-  let n = $state(20);
-  let offset = $state(0);
-  let when = $state(localNow(-3600_000));
-  let partition = $state(-1);
-  let limit = $state(0);
-  let stopAtEnd = $state(true);
+  const c = $derived(topicState(clusterId, topic));
+  const shown = $derived(c.filter ? c.msgs.filter((m) => matches(m, c.filter)) : c.msgs);
 
-  let consumerId = $state<string | null>(null);
-  let snap = $state<Omit<KafkaConsumeSnapshot, "messages"> | null>(null);
-  // $state.raw: thousands of records must not become deep proxies. The array
-  // is replaced, never mutated, so reassignment is the only signal needed.
-  let msgs = $state.raw<KafkaMessage[]>([]);
-  let mirrorBytes = 0;
-  let lastSeq = 0;
-  let starting = $state(false);
-  let filter = $state("");
-  let follow = $state(true);
-  // The row picked in the list (a preview) and, once fetched, its full record.
-  let selected = $state.raw<KafkaMessage | null>(null);
-  let full = $state.raw<KafkaMessage | null>(null);
-  let fullErr = $state<string | null>(null);
-  let detailTab = $state<"value" | "key" | "headers">("value");
-
-  const shown = $derived(filter ? msgs.filter((m) => matches(m, filter)) : msgs);
-  const running = $derived(!!consumerId && snap?.state === "running");
-
-  function localNow(deltaMs: number): string {
-    const d = new Date(Date.now() + deltaMs);
-    const p = (x: number) => String(x).padStart(2, "0");
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-  }
-
-  let timer: ReturnType<typeof setInterval> | null = null;
-
-  async function start() {
-    await drop();
-    msgs = [];
-    mirrorBytes = 0;
-    lastSeq = 0;
-    select(null);
-    snap = null;
-    starting = true;
-    try {
-      consumerId = await api.kafkaConsumeStart(clusterId, {
-        topic,
-        mode,
-        n: mode === "last" ? n : mode === "offset" ? offset : 0,
-        timestamp: mode === "timestamp" ? new Date(when).getTime() : 0,
-        partition,
-        limit: Math.max(0, limit | 0),
-        stop_at_end: mode !== "latest" && stopAtEnd,
-      });
-      timer = setInterval(poll, 400);
-      poll();
-    } catch (e) {
-      toast.err(`Consume: ${errMsg(e)}`);
-    } finally {
-      starting = false;
-    }
-  }
-
-  let polling = false;
-  async function poll() {
-    const id = consumerId;
-    if (!id || polling) return;
-    polling = true;
-    try {
-      for (let round = 0; round < 20; round++) {
-        const s = await api.kafkaConsumeSnapshot(id, lastSeq, 1000);
-        if (id !== consumerId) return;
-        const { messages, ...rest } = s;
-        snap = rest;
-        if (messages.length) {
-          lastSeq = messages[messages.length - 1].seq;
-          let next = msgs.concat(messages);
-          for (const m of messages) mirrorBytes += messageTextBytes(m);
-          let cut = 0;
-          while (cut < next.length - 1 && (next.length - cut > MIRROR_CAP || mirrorBytes > MIRROR_BYTES)) {
-            mirrorBytes -= messageTextBytes(next[cut]);
-            cut++;
-          }
-          if (cut > 0) next = next.slice(cut);
-          msgs = next;
-          if (follow) queueMicrotask(scrollToEnd);
-        }
-        // A short page means caught up: the backend also cuts pages at
-        // about 2 MiB, so compare with what was asked, not with 1000.
-        if (!messages.length || (s.buffered > 0 && messages[messages.length - 1].seq >= s.received)) break;
-      }
-      if (snap && snap.state !== "running" && timer) {
-        clearInterval(timer);
-        timer = null;
-      }
-    } catch {
-      // The consumer is gone (tab closed elsewhere); stop polling.
-      if (timer) clearInterval(timer);
-      timer = null;
-    } finally {
-      polling = false;
-    }
-  }
-
-  // Stop fetching. The backend keeps the buffer, so records read so far can
-  // still be opened in full and exported.
-  async function stop() {
-    if (timer) clearInterval(timer);
-    timer = null;
-    const id = consumerId;
-    if (!id) return;
-    await api.kafkaConsumeHalt(id).catch(() => {});
-    await poll();
-    if (snap && snap.state === "running") snap = { ...snap, state: "stopped" };
-  }
-
-  // Stop and let the backend drop the buffer (new consume, clear, close).
-  async function drop() {
-    if (timer) clearInterval(timer);
-    timer = null;
-    const id = consumerId;
-    consumerId = null;
-    if (id) await api.kafkaConsumeStop(id).catch(() => {});
-  }
-
-  function clearAll() {
-    drop();
-    msgs = [];
-    mirrorBytes = 0;
-    select(null);
-    snap = null;
-  }
-
-  onDestroy(() => {
-    if (timer) clearInterval(timer);
-    if (consumerId) api.kafkaConsumeStop(consumerId).catch(() => {});
+  $effect(() => {
+    const t = c;
+    t.show(active);
+    return () => t.show(false);
   });
-
-  // Open a record: show its preview at once, then the full record when any
-  // part of it was cut.
-  async function select(m: KafkaMessage | null) {
-    selected = m;
-    full = null;
-    fullErr = null;
-    if (!m || !consumerId) return;
-    const cut = m.key?.truncated || m.value?.truncated || m.headers.some((h) => h.value.truncated);
-    if (!cut) {
-      full = m;
-      return;
-    }
-    try {
-      const r = await api.kafkaConsumeMessage(consumerId, m.seq);
-      if (selected?.seq === m.seq) full = r;
-    } catch (e) {
-      if (selected?.seq === m.seq) fullErr = errMsg(e);
-    }
-  }
 
   // ----- virtual list -----
   let listEl = $state<HTMLDivElement | null>(null);
@@ -194,22 +44,28 @@
   const last = $derived(Math.min(shown.length, Math.ceil((scrollTop + viewH) / ROW_H) + 10));
 
   function onScroll() {
-    if (!listEl) return;
+    // A hidden list reports 0 and resets its scroll position; not the user.
+    if (!listEl || listEl.clientHeight === 0) return;
     scrollTop = listEl.scrollTop;
+    c.scroll = scrollTop;
     // Scrolling up stops following; back at the bottom resumes it.
-    follow = listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - ROW_H * 2;
+    c.follow = listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - ROW_H * 2;
   }
   function scrollToEnd() {
     if (listEl) listEl.scrollTop = listEl.scrollHeight;
   }
-  // When the list shrinks (a filter, a clear) the browser clamps scrollTop
-  // without a scroll event, and the window computed from the stale value
-  // renders no rows. Re-read it after every change of what is shown.
+  // When the list changes (new records, a filter, a clear) follow the tail,
+  // and re-read the position: the browser clamps scrollTop without a scroll
+  // event when the list shrinks, and the window computed from the stale value
+  // renders no rows. On coming back on screen (mounted again, or a hidden
+  // topic tab shown) restore where the user was: display:none drops it.
   $effect(() => {
-    void shown.length;
+    void shown;
+    if (!active) return;
     queueMicrotask(() => {
-      if (!listEl) return;
-      if (follow) scrollToEnd();
+      if (!listEl || listEl.clientHeight === 0) return;
+      if (c.follow) scrollToEnd();
+      else if (listEl.scrollTop !== c.scroll) listEl.scrollTop = c.scroll;
       scrollTop = listEl.scrollTop;
     });
   });
@@ -217,20 +73,20 @@
   // The backend writes the file from its buffer: full payloads, the same
   // filter applied to the full text.
   async function exportBuffer() {
-    if (!consumerId) return;
+    if (!c.consumerId) return;
     try {
-      const r = await api.kafkaConsumeExport(consumerId, topic, filter);
+      const r = await api.kafkaConsumeExport(c.consumerId, topic, c.filter);
       if (r.path) toast.ok(`Saved ${r.records} records to ${r.path}`);
     } catch (e) {
       toast.err(`Export failed: ${errMsg(e)}`);
     }
   }
 
-  const shownRecord = $derived(full ?? selected);
+  const shownRecord = $derived(c.full ?? c.selected);
   const detail = $derived.by(() => {
     if (!shownRecord) return null;
-    if (detailTab === "key") return pretty(shownRecord.key);
-    if (detailTab === "value") return pretty(shownRecord.value);
+    if (c.detailTab === "key") return pretty(shownRecord.key);
+    if (c.detailTab === "value") return pretty(shownRecord.value);
     return null;
   });
   const detailText = $derived(
@@ -242,48 +98,59 @@
 
 <div class="consumer">
   <div class="bar">
-    <select bind:value={mode} title="Where to start reading">
+    <select bind:value={c.mode} title="Where to start reading">
       <option value="last">Last N per partition</option>
       <option value="earliest">From the beginning</option>
       <option value="latest">New records only</option>
       <option value="offset">From offset</option>
       <option value="timestamp">From time</option>
     </select>
-    {#if mode === "last"}
-      <input class="num" type="number" min="1" bind:value={n} title="Records per partition" />
-    {:else if mode === "offset"}
-      <input class="num" type="number" min="0" bind:value={offset} title="Offset (in every partition read)" />
-    {:else if mode === "timestamp"}
-      <input type="datetime-local" bind:value={when} title="First record at or after this local time" />
+    {#if c.mode === "last"}
+      <input class="num" type="number" min="1" bind:value={c.n} title="Records per partition" />
+    {:else if c.mode === "offset"}
+      <input class="num" type="number" min="0" bind:value={c.offset} title="Offset (in every partition read)" />
+    {:else if c.mode === "timestamp"}
+      <input type="datetime-local" bind:value={c.when} title="First record at or after this local time" />
     {/if}
-    <select bind:value={partition} title="Partition">
+    <select bind:value={c.partition} title="Partition">
       <option value={-1}>All partitions</option>
       {#each partitions as p (p)}<option value={p}>Partition {p}</option>{/each}
     </select>
     <label class="lim" title="Stop after this many records (0 = no limit)">
-      max <input class="num" type="number" min="0" bind:value={limit} />
+      max <input class="num" type="number" min="0" bind:value={c.limit} />
     </label>
     <label class="chk" title="Stop once every partition reaches the end it had at start">
-      <input type="checkbox" bind:checked={stopAtEnd} disabled={mode === "latest"} /> stop at end
+      <input type="checkbox" bind:checked={c.stopAtEnd} disabled={c.mode === "latest"} /> stop at end
     </label>
-    {#if running}
-      <button class="stop" onclick={stop}><IconStop size={12} /> Stop</button>
+    {#if c.running}
+      <button class="stop" onclick={() => c.stop()}><IconStop size={12} /> Stop</button>
     {:else}
-      <button class="go" disabled={starting} onclick={start}><IconPlay size={12} /> {starting ? "Starting..." : "Consume"}</button>
+      <button class="go" disabled={c.starting} onclick={() => c.start()}><IconPlay size={12} /> {c.starting ? "Starting..." : "Consume"}</button>
     {/if}
     <span class="spacer"></span>
-    <input class="filter" placeholder="Filter key / value / headers" bind:value={filter} />
-    <button title="Export the buffered records matching the filter as NDJSON, full payloads" disabled={!consumerId || !msgs.length} onclick={exportBuffer}><IconDownload size={12} /></button>
-    <button title="Clear" disabled={!msgs.length || running} onclick={clearAll}><IconX size={12} /></button>
+    <input class="filter" placeholder="Filter key / value / headers" bind:value={c.filter} />
+    <button title="Export the buffered records matching the filter as NDJSON, full payloads" disabled={!c.consumerId || !c.msgs.length} onclick={exportBuffer}><IconDownload size={12} /></button>
+    <button title="Clear" disabled={!c.msgs.length || c.running} onclick={() => c.clear()}><IconX size={12} /></button>
+  </div>
+
+  <div class="bar match" title="Only records matching every filled field are kept; the rest are counted as read but not stored. Case-insensitive, over the full key / value / headers. Applies when Consume starts.">
+    <span class="lbl">Keep only</span>
+    <input class="mf" placeholder="key contains" bind:value={c.keyHas} disabled={c.running || c.starting} />
+    <input class="mf" placeholder="value contains" bind:value={c.valueHas} disabled={c.running || c.starting} />
+    <input class="mf" placeholder="header name / value contains" bind:value={c.headerHas} disabled={c.running || c.starting} />
   </div>
 
   <div class="status">
-    {#if snap}
-      <span class="st {snap.state}">{snap.state}</span>
-      <span>{formatCount(snap.received)} read</span>
-      {#if filter}<span>{shown.length} match</span>{/if}
-      {#if snap.dropped > 0}<span title="Older records left the buffer (10k records / 64 MiB)">{formatCount(snap.dropped)} dropped</span>{/if}
-      {#if snap.error}<span class="err" title={snap.error}>{snap.error}</span>{/if}
+    {#if c.snap}
+      <span class="st {c.snap.state}">{c.snap.state}</span>
+      {#if c.snap.filtering}
+        <span>{formatCount(c.snap.received)} matched of {formatCount(c.snap.scanned)} read</span>
+      {:else}
+        <span>{formatCount(c.snap.received)} read</span>
+      {/if}
+      {#if c.filter}<span>{shown.length} in view</span>{/if}
+      {#if c.snap.dropped > 0}<span title="Older records left the buffer ({formatCount(c.snap.buffer_messages)} records / {formatBytes(c.snap.buffer_bytes)} {c.snap.buffer_bytes < CLUSTER_BUDGET ? 'its share of the cluster budget, shared with the other topics that hold records' : 'the whole cluster budget'})">{formatCount(c.snap.dropped)} dropped</span>{/if}
+      {#if c.snap.error}<span class="err" title={c.snap.error}>{c.snap.error}</span>{/if}
     {:else}
       <span class="hint">Pick a start point and press Consume. Nothing is committed; the cluster's consumer groups are not touched.</span>
     {/if}
@@ -295,9 +162,9 @@
         {#each shown.slice(first, last) as m, i (m.seq)}
           <button
             class="row"
-            class:sel={selected?.seq === m.seq}
+            class:sel={c.selected?.seq === m.seq}
             style:top="{(first + i) * ROW_H}px"
-            onclick={() => select(m)}
+            onclick={() => c.select(m)}
           >
             <span class="c-p">{m.partition}</span>
             <span class="c-o">{m.offset}</span>
@@ -309,20 +176,20 @@
       </div>
     </div>
 
-    {#if selected && shownRecord}
+    {#if c.selected && shownRecord}
       <div class="detail">
         <div class="dbar">
-          <span>p{selected.partition} · offset {selected.offset} · {formatTime(selected.timestamp)} · {formatBytes(selected.size)}</span>
-          {#if !full && !fullErr}<span class="hint">loading the full record...</span>{/if}
-          {#if fullErr}<span class="err" title={fullErr}>showing the 2 KiB preview: {fullErr}</span>{/if}
+          <span>p{c.selected.partition} · offset {c.selected.offset} · {formatTime(c.selected.timestamp)} · {formatBytes(c.selected.size)}</span>
+          {#if !c.full && !c.fullErr}<span class="hint">loading the full record...</span>{/if}
+          {#if c.fullErr}<span class="err" title={c.fullErr}>showing the 2 KiB preview: {c.fullErr}</span>{/if}
           <span class="spacer"></span>
-          <button class:on={detailTab === "value"} onclick={() => (detailTab = "value")}>Value</button>
-          <button class:on={detailTab === "key"} onclick={() => (detailTab = "key")}>Key</button>
-          <button class:on={detailTab === "headers"} onclick={() => (detailTab = "headers")}>Headers ({shownRecord.headers.length})</button>
+          <button class:on={c.detailTab === "value"} onclick={() => (c.detailTab = "value")}>Value</button>
+          <button class:on={c.detailTab === "key"} onclick={() => (c.detailTab = "key")}>Key</button>
+          <button class:on={c.detailTab === "headers"} onclick={() => (c.detailTab = "headers")}>Headers ({shownRecord.headers.length})</button>
           {#if detail}
             <button title="Copy" onclick={() => copyText(detail.text)}><IconCopy size={12} /></button>
           {/if}
-          <button title="Close" onclick={() => select(null)}><IconX size={12} /></button>
+          <button title="Close" onclick={() => c.select(null)}><IconX size={12} /></button>
         </div>
         {#if detail}
           <pre class="body selectable {detail.kind}">{detailText}</pre>
@@ -348,6 +215,9 @@
   .bar select, .bar input { font-size: 0.75rem; }
   .num { width: 5.5rem; }
   .filter { width: 14rem; }
+  .match { padding-top: 0.2rem; padding-bottom: 0.2rem; }
+  .match .lbl { font-size: 0.7rem; color: var(--subtext0); }
+  .mf { width: 11rem; }
   .lim, .chk { display: flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; color: var(--subtext0); }
   .spacer { flex: 1; }
   .go { color: var(--green); }

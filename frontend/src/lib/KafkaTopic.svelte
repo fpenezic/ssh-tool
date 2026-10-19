@@ -6,6 +6,7 @@
   import { onDestroy, untrack } from "svelte";
   import { api, type KafkaTopicDetail, type KafkaTopicMetrics } from "./api";
   import KafkaConsumer from "./KafkaConsumer.svelte";
+  import { topicState } from "./kafkaTopicState.svelte";
   import KafkaProducer from "./KafkaProducer.svelte";
   import { formatBytes, formatCount, parseConfigLines, ratePerSec } from "./kafkaFormat";
   import { confirmKafkaDestructive } from "./kafkaConfirm";
@@ -21,11 +22,13 @@
     sensitive: boolean;
     onDeleted: () => void;
     onChanged: () => void;
+    // On screen; a topic tab that is not stays mounted.
+    active?: boolean;
   }
-  let { clusterId, topic, writable, sensitive, onDeleted, onChanged }: Props = $props();
+  let { clusterId, topic, writable, sensitive, onDeleted, onChanged, active = true }: Props = $props();
 
-  type Tab = "messages" | "produce" | "partitions" | "config" | "metrics";
-  let tab = $state<Tab>("messages");
+  // The subtab lives with the topic's consumer state, so a remount keeps it.
+  const ts = $derived(topicState(clusterId, topic));
   let detail = $state<KafkaTopicDetail | null>(null);
   let loadErr = $state<string | null>(null);
   let busy = $state(false);
@@ -149,7 +152,7 @@
     }
   }
   $effect(() => {
-    if (tab !== "metrics") return;
+    if (ts.subtab !== "metrics" || !active) return;
     untrack(() => sample());
     metricsTimer = setInterval(sample, 15_000);
     return () => {
@@ -174,11 +177,11 @@
     {/if}
     <span class="spacer"></span>
     <nav>
-      <button class:on={tab === "messages"} onclick={() => (tab = "messages")}>Messages</button>
-      {#if writable}<button class:on={tab === "produce"} onclick={() => (tab = "produce")}>Produce</button>{/if}
-      <button class:on={tab === "partitions"} onclick={() => (tab = "partitions")}>Partitions</button>
-      <button class:on={tab === "config"} onclick={() => (tab = "config")}>Config</button>
-      <button class:on={tab === "metrics"} onclick={() => (tab = "metrics")}>Metrics</button>
+      <button class:on={ts.subtab === "messages"} onclick={() => (ts.subtab = "messages")}>Messages</button>
+      {#if writable}<button class:on={ts.subtab === "produce"} onclick={() => (ts.subtab = "produce")}>Produce</button>{/if}
+      <button class:on={ts.subtab === "partitions"} onclick={() => (ts.subtab = "partitions")}>Partitions</button>
+      <button class:on={ts.subtab === "config"} onclick={() => (ts.subtab = "config")}>Config</button>
+      <button class:on={ts.subtab === "metrics"} onclick={() => (ts.subtab = "metrics")}>Metrics</button>
     </nav>
     <button title="Reload" onclick={load}><IconRefresh size={12} /></button>
     {#if writable}
@@ -199,11 +202,13 @@
   {/if}
 
   <div class="body">
-    {#if tab === "messages"}
-      {#key topic}<KafkaConsumer {clusterId} {topic} partitions={partitionIds} />{/key}
-    {:else if tab === "produce"}
+    <!-- Mounted whatever the subtab, so the list keeps its place. -->
+    <div class="msgs" class:off={ts.subtab !== "messages"}>
+      <KafkaConsumer {clusterId} {topic} partitions={partitionIds} active={active && ts.subtab === "messages"} />
+    </div>
+    {#if ts.subtab === "produce"}
       <KafkaProducer {clusterId} {topic} partitions={partitionIds} onSent={load} />
-    {:else if tab === "partitions" && detail}
+    {:else if ts.subtab === "partitions" && detail}
       <div class="scroll">
         <table class="selectable">
           <thead><tr><th>Partition</th><th>Leader</th><th>Replicas</th><th>ISR</th><th>Start</th><th>End</th><th>Messages</th></tr></thead>
@@ -222,7 +227,7 @@
           </tbody>
         </table>
       </div>
-    {:else if tab === "config" && detail}
+    {:else if ts.subtab === "config" && detail}
       <div class="scroll">
         {#if detail.config_error}
           <div class="error">Configs not readable: {detail.config_error}</div>
@@ -257,7 +262,7 @@
           </table>
         {/if}
       </div>
-    {:else if tab === "metrics"}
+    {:else if ts.subtab === "metrics"}
       <div class="scroll">
         {#if metricsErr}<div class="error">{metricsErr}</div>{/if}
         {#if cur}
@@ -294,6 +299,8 @@
   .danger { color: var(--red); }
   .error { color: var(--red); padding: 0.4rem 0.7rem; font-size: 0.75rem; }
   .body { flex: 1; min-height: 0; }
+  .msgs { height: 100%; }
+  .msgs.off { display: none; }
   .scroll { height: 100%; overflow: auto; padding: 0.5rem 0.7rem; box-sizing: border-box; }
   table { border-collapse: collapse; font-size: 0.74rem; width: 100%; user-select: text; }
   th { text-align: left; color: var(--subtext0); font-weight: 600; border-bottom: 1px solid var(--surface1); padding: 0.2rem 0.5rem; }

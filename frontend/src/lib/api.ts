@@ -255,6 +255,12 @@ export interface KafkaConsumeRequest {
   stop_at_end: boolean;
   buffer_messages?: number;
   buffer_bytes?: number;
+  // Keep only records matching (case-insensitive substrings of the full
+  // key / value / a header name or value, all set ones must match). The
+  // rest is counted as scanned, not buffered; limit counts matches.
+  key_contains?: string;
+  value_contains?: string;
+  header_contains?: string;
 }
 
 // truncated: text is a 2 KiB preview (snapshot pages); size is the full one.
@@ -275,9 +281,13 @@ export interface KafkaConsumeSnapshot {
   state: "running" | "done" | "stopped" | "error";
   error?: string;
   messages: KafkaMessage[];
-  received: number;
+  received: number; // records kept (all of them without a filter)
+  scanned: number; // records read
   dropped: number;
   buffered: number;
+  buffer_messages: number; // bounds the buffer holds now (shared per cluster)
+  buffer_bytes: number;
+  filtering: boolean;
   partitions: number[];
 }
 
@@ -1679,6 +1689,12 @@ export const api = {
     G.KafkaConsumeHalt(consumerId) as unknown as Promise<void>,
   kafkaConsumeMessage: (consumerId: string, seq: number) =>
     nn(G.KafkaConsumeMessage(consumerId, seq)) as Promise<KafkaMessage>,
+  // Topic tabs and consumers of a handle, kept by the backend for a window
+  // that did not open them (detach, redock, reload).
+  kafkaGetTabState: (clusterId: string) =>
+    nn(G.KafkaGetTabState(clusterId)) as Promise<{ topics: string[]; consumers: { id: string; request: KafkaConsumeRequest }[] }>,
+  kafkaSetOpenTopics: (clusterId: string, topics: string[]) =>
+    G.KafkaSetOpenTopics(clusterId, topics) as unknown as Promise<void>,
   kafkaConsumeExport: (consumerId: string, topic: string, filter: string) =>
     nn(G.KafkaConsumeExport(consumerId, topic, filter)) as Promise<{ path: string; records: number }>,
   kafkaProduce: (clusterId: string, req: KafkaProduceRequest) =>

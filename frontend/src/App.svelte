@@ -64,7 +64,7 @@
   import { vaultPrefs } from "./lib/vaultPrefs.svelte";
   import { lastSession } from "./lib/lastSession.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
-  import { endSession, kafkaPaletteActions } from "./lib/kafkaState.svelte";
+  import { endSession, kafkaPaletteActions, kafkaTabs } from "./lib/kafkaState.svelte";
 
   // Arriving at the terminal view puts the cursor in it, whichever route
   // got here: the toolbar button, a keyboard shortcut, closing Settings,
@@ -1227,6 +1227,25 @@
       }
     } catch (e) {
       console.warn("local shell recovery failed", e);
+    }
+    // And Kafka tabs: the cluster handle and its consumers outlive the UI;
+    // the pane takes its topic tabs and consumers back from the backend.
+    try {
+      for (const k of await kafkaTabs.refresh()) {
+        if (sessions.tabs.find((t) => t.sessionId === k.id)) continue;
+        sessions.add({
+          sessionId: k.id,
+          connectionId: k.connection_id,
+          name: `${k.name} (Kafka)`,
+          hostname: k.bootstrap.join(","),
+          kind: "kafka",
+          status: "connected",
+        });
+        paneTabs.addKafkaTab(k.id, `${k.name} (Kafka)`);
+        recovered++;
+      }
+    } catch (e) {
+      console.warn("kafka recovery failed", e);
     }
     // Reopen the tabs from the last quit (opt-in, cold start only -
     // if recovery brought anything back this was a UI reload and the
