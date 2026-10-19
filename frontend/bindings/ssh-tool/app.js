@@ -1234,6 +1234,22 @@ export function DbOpenWithLogin(connectionID, targetID, user, password) {
 }
 
 /**
+ * DbRemove takes one database off a connection (the tree's Remove / Delete
+ * on a database row), never the connection, and never the other databases.
+ * A listed database (targetID) leaves the list. The connection's own
+ * database (targetID "") holds the values the listed ones default to, so
+ * while any are listed it is only hidden from the tree; with none listed
+ * the Database tab is turned off on the connection. When the default goes,
+ * the first database still shown in the tree becomes the default.
+ * @param {string} connectionID
+ * @param {string} targetID
+ * @returns {$CancellablePromise<void>}
+ */
+export function DbRemove(connectionID, targetID) {
+    return $Call.ByID(367528215, connectionID, targetID);
+}
+
+/**
  * DbRun runs a script on the query tab's session (opened on database,
  * reopened when the tab switches database). Writes are audited.
  * @param {string} id

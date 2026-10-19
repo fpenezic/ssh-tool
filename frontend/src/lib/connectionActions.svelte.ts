@@ -8,7 +8,7 @@ import { splitHostInput, hostOverrides } from "./hostInput";
 import { tree, sessions, paneTabs, view, selection, credentials, type PaneNode } from "./stores.svelte";
 import { vncSessions } from "./vncState.svelte.ts";
 import { kafkaTabs, kafkaEnabledFor } from "./kafkaState.svelte";
-import { dbTabs, dbEnabledFor, dbTabTitle } from "./dbState.svelte";
+import { dbTabs, dbEnabledFor, dbTabTitle, dbTreeRows } from "./dbState.svelte";
 import { askLogin } from "./loginModal.svelte.ts";
 import { showPrompt } from "./promptModal.svelte.ts";
 import { showConfirm } from "./confirmModal.svelte.ts";
@@ -1043,6 +1043,34 @@ class ConnectionActionsStore {
       await tree.load();
       if (created?.id) selection.select({ kind: "folder", id: created.id });
     } catch (e) { console.error("create folder:", e); }
+  }
+
+  // Remove one database row from a connection (tree menu, Delete on the
+  // row): the connection and its other databases stay (App.DbRemove).
+  async removeDbRow(connId: string, targetId: string) {
+    const conn = tree.connectionById(connId);
+    if (!conn) return;
+    const rows = dbTreeRows(conn);
+    const row = rows.find((r) => r.id === targetId);
+    const label = row?.label ?? "database";
+    const listed = (conn.overrides?.db_targets ?? []).length;
+    let message: string;
+    if (targetId !== "") {
+      message = `"${label}" leaves the databases of ${conn.name}. The connection and its other databases stay.`;
+    } else if (listed > 0) {
+      message = `"${label}" is hidden from the tree. The other databases of ${conn.name} stay; they keep taking its settings as their defaults, and "Show in tree" in the Database tab brings it back.`;
+    } else {
+      message = `The Database tab is turned off on ${conn.name}. The connection stays, and so do its database settings.`;
+    }
+    const ok = await showConfirm({ title: `Remove database "${label}"?`, message, okLabel: "Remove", danger: true });
+    if (!ok) return;
+    try {
+      await api.dbRemove(connId, targetId);
+      if (dbTabs.treeSelected?.connId === connId && dbTabs.treeSelected.id === targetId) dbTabs.treeSelected = null;
+      await tree.load();
+    } catch (e: any) {
+      toast.err(`Remove database: ${e?.message ?? String(e)}`);
+    }
   }
 
   async addConnectionUnder(folderId: string | null) {

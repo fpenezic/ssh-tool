@@ -14,7 +14,7 @@
   import { treeBookmarks } from "./treeBookmarks.svelte";
   import { collapsedDbs } from "./treeState.svelte";
   import { contextMenu } from "./contextMenu.svelte.ts";
-  import { IconDb } from "./iconMap";
+  import { IconDb, IconTrash } from "./iconMap";
 
   let { connId, depth }: { connId: string; depth: number } = $props();
   onMount(() => void collapsedDbs.load());
@@ -54,6 +54,7 @@
     contextMenu.show(e, [
       { label: "Open", iconComponent: IconDb, onSelect: () => void connectionActions.openDb(connId, r.id) },
       ...(r.isDefault || rows.length < 2 ? [] : [{ label: "Set as default", iconComponent: IconStar, onSelect: () => void setDefault(r) }]),
+      { label: "Remove...", iconComponent: IconTrash, onSelect: () => void connectionActions.removeDbRow(connId, r.id) },
     ]);
   }
   // The default opens on "Double-click opens: Database" and lists first.

@@ -1793,6 +1793,8 @@ export const api = {
     nn(G.DbOpenWithLogin(connectionId, targetId, user, password)) as Promise<DbHandleInfo>,
   dbSetDefault: (connectionId: string, targetId: string) =>
     G.DbSetDefault(connectionId, targetId) as unknown as Promise<void>,
+  dbRemove: (connectionId: string, targetId: string) =>
+    G.DbRemove(connectionId, targetId) as unknown as Promise<void>,
   dbSaveLogin: (connectionId: string, targetId: string, name: string, user: string, password: string) =>
     G.DbSaveLogin(connectionId, targetId, name, user, password) as unknown as Promise<string>,
   dbStatus: (id: string) => nn(G.DbStatus(id)) as Promise<DbHandleInfo>,

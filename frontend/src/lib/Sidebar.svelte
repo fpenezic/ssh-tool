@@ -445,6 +445,17 @@
     if (e.key === "Delete" || (e.key === "Backspace" && e.metaKey)) {
       const conns = selection.selectedConnectionIds();
       const folders = selection.selectedFolderIds();
+      // A database or bookmark row under the connection holds the
+      // selection: Delete acts on that row, never the connection.
+      if (conns.length === 1 && dbTreeSelectedUnder(conns[0])) {
+        e.preventDefault();
+        void connectionActions.removeDbRow(conns[0], dbTabs.treeSelected!.id);
+        return;
+      }
+      if (conns.length === 1 && treeBookmarks.selectedUnder(conns[0])) {
+        e.preventDefault();
+        return;
+      }
       if (conns.length > 0) {
         e.preventDefault();
         connectionActions.openDeleteConnections(conns);

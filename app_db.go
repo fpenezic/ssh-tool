@@ -568,6 +568,82 @@ func (a *App) DbSaveLogin(connectionID, targetID, name, user, password string) (
 	return id, nil
 }
 
+// DbRemove takes one database off a connection (the tree's Remove / Delete
+// on a database row), never the connection, and never the other databases.
+// A listed database (targetID) leaves the list. The connection's own
+// database (targetID "") holds the values the listed ones default to, so
+// while any are listed it is only hidden from the tree; with none listed
+// the Database tab is turned off on the connection. When the default goes,
+// the first database still shown in the tree becomes the default.
+func (a *App) DbRemove(connectionID, targetID string) error {
+	conn, err := a.db.GetConnection(connectionID)
+	if err != nil {
+		return err
+	}
+	if conn == nil {
+		return fmt.Errorf("connection not found")
+	}
+	over := conn.Overrides
+	off := false
+	if targetID == "" {
+		if len(over.DbTargets) == 0 {
+			over.DbEnabled = &off
+			over.DbInTree = nil
+			over.DbDefaultTarget = nil
+			_, err = a.db.UpdateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over})
+			return err
+		}
+		over.DbInTree = &off
+	} else {
+		kept := over.DbTargets[:0:0]
+		for _, t := range over.DbTargets {
+			if t.ID != targetID {
+				kept = append(kept, t)
+			}
+		}
+		if len(kept) == len(over.DbTargets) {
+			return fmt.Errorf("that database is no longer listed on the connection")
+		}
+		over.DbTargets = kept
+	}
+	over.DbDefaultTarget = dbDefaultAfterRemove(over)
+	if over.DbInTree != nil && !*over.DbInTree && len(over.DbTargets) == 0 {
+		// The last listed one went while the own database was hidden:
+		// nothing is left, so the tab goes off rather than show nothing.
+		over.DbEnabled = &off
+		over.DbInTree = nil
+	}
+	_, err = a.db.UpdateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over})
+	return err
+}
+
+// dbDefaultAfterRemove keeps the default when it is still listed and
+// shown; otherwise it picks the own database when that is shown, else the
+// first listed database shown in the tree (nil = the own database).
+func dbDefaultAfterRemove(over store.InheritableSettings) *string {
+	shown := func(b *bool) bool { return b == nil || *b }
+	ownShown := shown(over.DbInTree)
+	if d := over.DbDefaultTarget; d != nil && *d != "" {
+		for _, t := range over.DbTargets {
+			if t.ID == *d && shown(t.InTree) {
+				return d
+			}
+		}
+	} else if ownShown {
+		return nil
+	}
+	if ownShown {
+		return nil
+	}
+	for _, t := range over.DbTargets {
+		if shown(t.InTree) {
+			id := t.ID
+			return &id
+		}
+	}
+	return nil
+}
+
 // DbSetDefault marks one of a connection's databases as its default
 // (targetID "" = its own): "Double-click opens: Database" opens it and the
 // tree lists it first.
