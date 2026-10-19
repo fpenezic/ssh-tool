@@ -43,9 +43,9 @@ type DbHandleInfo struct {
 	TargetName string `json:"target_name"`
 	Name       string `json:"name"`
 	Engine     string `json:"engine"`
-	Addr         string `json:"addr"`
-	Database     string `json:"database"`
-	User         string `json:"user"`
+	Addr       string `json:"addr"`
+	Database   string `json:"database"`
+	User       string `json:"user"`
 	// Transport is "tunnel", "jump:<bastion host>" or "direct".
 	Transport string `json:"transport"`
 	// State is the SSH session state of a tunnel transport
