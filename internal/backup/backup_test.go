@@ -2,6 +2,7 @@ package backup
 
 import (
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,11 +116,13 @@ func TestRestore_TamperRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw, _ := os.ReadFile(dest)
-	// Flip a byte inside the KDF param region (right after magic+salt-len byte+salt).
-	flipAt := len(magic) + 1 + saltLen + 1
+	// Flip a salt byte: the header still parses (a flipped KDF parameter
+	// was refused by the bounds check before decryption ran), so this
+	// reaches the AEAD and must fail there.
+	flipAt := len(magic) + 1 + 3
 	raw[flipAt] ^= 0xFF
 	_ = os.WriteFile(dest, raw, 0o600)
-	if err := Restore(dest, "pass", storePath, vaultPath); err == nil {
-		t.Fatal("tamper accepted, expected AEAD rejection")
+	if err := Restore(dest, "pass", storePath, vaultPath); !errors.Is(err, ErrWrongPassphrase) {
+		t.Fatalf("tampered backup: %v, want ErrWrongPassphrase", err)
 	}
 }
