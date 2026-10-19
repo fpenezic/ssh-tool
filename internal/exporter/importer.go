@@ -72,7 +72,7 @@ type ImportSummary struct {
 // Decode parses an archive from raw bytes. Format auto-detect: any input
 // whose first non-comment, non-whitespace character is `{` is JSON,
 // otherwise TOML. The catalog's bundle endpoint can prepend header
-// comments (`# catalog-bundle generated at …`) so we skip past those
+// comments (`# catalog-bundle generated at ...`) so we skip past those
 // before deciding.
 func Decode(text string) (*Archive, error) {
 	t := skipLeadingComments(text)
@@ -104,7 +104,7 @@ func isSpace(r rune) bool { return r == ' ' || r == '\t' || r == '\n' || r == '\
 // skipLeadingComments walks past any number of leading lines that
 // start with `#` (after whitespace), plus the whitespace itself.
 // Used so the JSON branch of Decode tolerates the catalog's
-// `# catalog-bundle …` headers.
+// `# catalog-bundle ...` headers.
 func skipLeadingComments(text string) string {
 	for {
 		text = strings.TrimLeftFunc(text, isSpace)
@@ -516,7 +516,7 @@ func Apply(
 	}
 
 	// ----- Connections -----
-	// connIDMap: archive id → DB id, used to attach forwards in the
+	// connIDMap: archive id -> DB id, used to attach forwards in the
 	// pass below. Existing connections (skip / overwrite paths) map
 	// to their already-present row; newly created ones to the freshly
 	// minted id.
@@ -575,6 +575,13 @@ func Apply(
 		}
 		sum.ConnsCreated = append(sum.ConnsCreated, c.Name)
 		connPassEligible[c.ID] = true
+		if opts.DryRun {
+			// Synthetic, as the folder and credential passes do, so the
+			// preview counts this connection's forwards instead of
+			// warning that their parent was not imported. The passes that
+			// would write through it skip a dry run.
+			connIDMap[c.ID] = c.ID
+		}
 		if !opts.DryRun {
 			newFolderID := remapFolderID(c.FolderID, folderIDMap)
 			if c.FolderID != nil && newFolderID == nil {

@@ -591,3 +591,88 @@ func TestJumpConnectionRefRoundTrip(t *testing.T) {
 		t.Errorf("folder ref not remapped: %+v", folders)
 	}
 }
+
+// A credential used only by a hop of a jump chain - the bastion's login,
+// several hops deep - goes into the archive and the imported chain points
+// at the imported copy.
+func TestJumpHopCredentialExported(t *testing.T) {
+	src := openTestDB(t)
+	inner, err := src.CreateCredential(store.NewCredential{Name: "inner-hop", Kind: store.CredPassword, StorageMode: store.StorageManaged})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outer, err := src.CreateCredential(store.NewCredential{Name: "outer-hop", Kind: store.CredPassword, StorageMode: store.StorageManaged})
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &store.JumpHostSpec{Hostname: "bastion2.example.com", AuthRef: &inner.ID,
+		Via: &store.JumpHostSpec{Hostname: "bastion1.example.com", AuthRef: &outer.ID}}
+	if _, err := src.CreateConnection(store.NewConnection{Name: "behind", Hostname: "h.example.com",
+		Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain", Chain: chain}}}); err != nil {
+		t.Fatal(err)
+	}
+	arc, err := Build(src, nil, nil, Options{IncludeCredentials: true, Passphrase: "pw"}, noSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, c := range arc.Credentials {
+		names[c.Name] = true
+	}
+	if !names["inner-hop"] || !names["outer-hop"] {
+		t.Fatalf("jump hop credentials not exported: %v", names)
+	}
+	dst := openTestDB(t)
+	if _, err := Apply(dst, arc, ImportOptions{}, rejectSecrets); err != nil {
+		t.Fatal(err)
+	}
+	conns, _ := dst.ListConnections(nil)
+	if len(conns) != 1 || conns[0].Overrides.JumpHost == nil {
+		t.Fatalf("connection or its chain missing: %+v", conns)
+	}
+	hop := conns[0].Overrides.JumpHost.Chain
+	if hop == nil || hop.AuthRef == nil || hop.Via == nil || hop.Via.AuthRef == nil {
+		t.Fatalf("a hop lost its login on import: %+v", hop)
+	}
+	got, _ := dst.GetCredential(*hop.Via.AuthRef)
+	if got == nil || got.Name != "outer-hop" {
+		t.Fatalf("outer hop points at %+v", got)
+	}
+}
+
+// A dry run counts the forwards of the connections it would create, without
+// warning that their parent was "not imported".
+func TestDryRunCountsForwardsOfNewConnections(t *testing.T) {
+	src := openTestDB(t)
+	c, err := src.CreateConnection(store.NewConnection{Name: "web", Hostname: "web.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, rport, host := uint16(8080), uint16(80), "127.0.0.1"
+	if _, err := src.CreatePortForward(store.NewPortForward{ConnectionID: c.ID, Kind: "local", LocalPort: &port, RemoteHost: &host, RemotePort: &rport}); err != nil {
+		t.Fatal(err)
+	}
+	arc, err := Build(src, nil, nil, Options{}, noSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(arc.Forwards) != 1 {
+		t.Fatalf("forwards in archive: %d", len(arc.Forwards))
+	}
+	dst := openTestDB(t)
+	sum, err := Apply(dst, arc, ImportOptions{DryRun: true}, rejectSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.ForwardsCreated != 1 {
+		t.Fatalf("dry run counted %d forwards, warnings %v", sum.ForwardsCreated, sum.Warnings)
+	}
+	for _, w := range sum.Warnings {
+		if strings.Contains(w, "not imported") {
+			t.Fatalf("dry run warned: %s", w)
+		}
+	}
+	if conns, _ := dst.ListConnections(nil); len(conns) != 0 {
+		t.Fatalf("dry run wrote %d connections", len(conns))
+	}
+}
