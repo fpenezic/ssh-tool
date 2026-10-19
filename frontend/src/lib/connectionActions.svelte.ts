@@ -556,9 +556,9 @@ class ConnectionActionsStore {
     const items: MenuItem[] = [];
     if (c?.overrides?.vnc_enabled) items.push({ label: "Open VNC console", iconComponent: IconMonitor, onSelect: () => this.openVncConnection(id) });
     if (dbEnabledFor(c)) {
-      const targets = c?.overrides?.db_targets ?? [];
-      if (targets.length === 0) items.push({ label: "Open database", iconComponent: IconDb, onSelect: () => this.openDb(id) });
-      for (const t of targets) {
+      const own = c?.overrides?.db_label || c?.overrides?.db_name || "";
+      items.push({ label: `Open database ${own}`.trim(), iconComponent: IconDb, onSelect: () => this.openDb(id) });
+      for (const t of c?.overrides?.db_targets ?? []) {
         items.push({ label: `Open database ${t.name || t.database || ""}`.trim(), iconComponent: IconDb, onSelect: () => this.openDb(id, t.id) });
       }
     }

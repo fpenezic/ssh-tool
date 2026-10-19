@@ -17,6 +17,9 @@ export interface DbDraft {
   readOnly: string;
   tls: string;
   cred: string;
+  // The connection's own database in the tree (connections only).
+  label: string;
+  inTree: string;
   // The databases listed under a connection (not on folders).
   targets: DbTarget[];
 }
@@ -38,6 +41,8 @@ export function dbDraftFrom(s: InheritableSettings | undefined | null): DbDraft 
     readOnly: enc(o.db_read_only),
     tls: o.db_tls ?? "",
     cred: encRef(o.db_credential_ref),
+    label: o.db_label ?? "",
+    inTree: enc(o.db_in_tree),
     targets: (o.db_targets ?? []).map((t) => ({ ...t })),
   };
 }
@@ -53,6 +58,8 @@ export function applyDbDraft<T extends InheritableSettings>(s: T, d: DbDraft): T
   s.db_read_only = dec(d.readOnly);
   s.db_tls = d.tls || undefined;
   s.db_credential_ref = decRef(d.cred);
+  s.db_label = d.label.trim() || undefined;
+  s.db_in_tree = dec(d.inTree);
   const targets = cleanTargets(d.targets);
   s.db_targets = targets.length ? targets : undefined;
   return s;
@@ -71,6 +78,7 @@ function cleanTargets(list: DbTarget[]): DbTarget[] {
     if (t.read_only !== undefined && t.read_only !== null) out.read_only = t.read_only;
     if (str(t.tls)) out.tls = str(t.tls);
     if (t.use_tunnel !== undefined && t.use_tunnel !== null) out.use_tunnel = t.use_tunnel;
+    if (t.in_tree === false) out.in_tree = false;
     return out;
   });
 }
@@ -83,6 +91,6 @@ export function dbDraftSame(d: DbDraft, s: InheritableSettings | undefined | nul
   const o = dbDraftFrom(s);
   return (Object.keys(o) as (keyof DbDraft)[]).every((k) => {
     if (k === "targets") return JSON.stringify(cleanTargets(d.targets)) === JSON.stringify(cleanTargets(o.targets));
-    return k === "addr" || k === "name" ? d[k].trim() === o[k].trim() : d[k] === o[k];
+    return k === "addr" || k === "name" || k === "label" ? d[k].trim() === o[k].trim() : d[k] === o[k];
   });
 }

@@ -4,6 +4,7 @@
   import TreeBookmarkRows from "./TreeBookmarkRows.svelte";
   import TreeDbRows from "./TreeDbRows.svelte";
   import TreeBookmarkToggle from "./TreeBookmarkToggle.svelte";
+  import TreeDbToggle from "./TreeDbToggle.svelte";
   import { treeBookmarks } from "./treeBookmarks.svelte";
   import { renameState } from "./renameState.svelte";
   import { api } from "./api";
@@ -678,6 +679,7 @@
             {@const tun = tunnels.byConnection(conn.id)!}
             <span class="tun-badge tun-{tun.state}" class:tun-degraded={tun.degraded} title="Tunnel: {tun.state}{tun.degraded ? " - a forward is not listening" : ""}{tun.error ? ` - ${tun.error}` : ""}"><IconTunnel size={11} /></span>
           {/if}
+          <TreeDbToggle connId={conn.id} />
           <TreeBookmarkToggle connId={conn.id} />
           {#if isConn}
             <span class="conn-hint">connecting…</span>

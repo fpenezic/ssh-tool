@@ -1,6 +1,5 @@
 <script lang="ts">
   import { loginModal } from "./loginModal.svelte.ts";
-  import { clickOutside } from "./clickOutside";
 
   let user = $state("");
   let password = $state("");
@@ -39,7 +38,11 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="overlay" onkeydown={onKey} role="dialog" aria-modal="true" tabindex="-1">
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div class="modal" role="document" use:clickOutside={{ onOutside: cancel }} onkeydown={(e) => { e.stopPropagation(); onKey(e); }}>
+  <!-- No close on an outside click: a select's "+ New login..." opens
+       this from its change event, and the click that picked the option
+       lands right after - outside - and closed it at once. Cancel and
+       Escape close it. -->
+  <div class="modal" role="document" onkeydown={(e) => { e.stopPropagation(); onKey(e); }}>
     <h3>{loginModal.pending.title}</h3>
     {#if loginModal.pending.message}<p class="msg">{loginModal.pending.message}</p>{/if}
     <label>Username

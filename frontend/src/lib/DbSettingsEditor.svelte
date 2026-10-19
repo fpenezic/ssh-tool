@@ -96,6 +96,15 @@
   </div>
   {#if effectiveOn}
     <div class="vnc-grid">
+      {#if showTargets}
+        <label title="How this database shows under the connection in the tree and on its tab. Empty: its database name.">Name
+          <input bind:value={draft.label} placeholder={draft.name || "database"} spellcheck="false" />
+        </label>
+        <label class="check" title="A row under the connection in the tree that opens this database, next to the connection's terminal.">
+          <input type="checkbox" checked={draft.inTree !== "off"} onchange={(e) => (draft = { ...draft, inTree: (e.currentTarget as HTMLInputElement).checked ? "" : "off" })} />
+          Show in tree
+        </label>
+      {/if}
       <label>Engine
         <select bind:value={draft.engine}>
           <option value="">{inheritLabel}{effectiveEngine ? ` · ${effectiveEngine === "mysql" ? "MySQL / MariaDB" : "PostgreSQL"}` : " · PostgreSQL"}</option>
@@ -181,6 +190,11 @@
               <input value={t.addr ?? ""} placeholder={draft.addr || "(as above)"} spellcheck="false" oninput={(e) => updateTarget(i, { addr: (e.currentTarget as HTMLInputElement).value })} />
             </label>
             <div class="t-actions">
+              <label class="check" title="A row under the connection in the tree that opens this database.">
+                <input type="checkbox" checked={t.in_tree !== false} onchange={(e) => updateTarget(i, { in_tree: (e.currentTarget as HTMLInputElement).checked ? undefined : false })} />
+                Show in tree
+              </label>
+              <span class="t-spacer"></span>
               {#if onOpenTarget}<button type="button" class="vnc-open" title="Open this database (saved settings)" onclick={() => onOpenTarget(t.id)}>Open</button>{/if}
               <button type="button" class="t-del" title="Remove from the list" onclick={() => removeTarget(i)}><IconTrash size={13} /></button>
             </div>
@@ -229,6 +243,7 @@
   .vnc-grid input:focus, .vnc-grid select:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
   .inh { font-size: 0.7rem; color: var(--overlay1); }
   .targets { margin-top: 0.8rem; border-top: 1px solid var(--border); padding-top: 0.6rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .vnc-grid label.check { padding-bottom: 0.35rem; }
   .t-head { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
   .t-title { font-weight: 600; font-size: 0.82rem; color: var(--text1); }
   .t-hint { flex: 1 1 12rem; font-size: 0.72rem; color: var(--overlay1); }
@@ -242,7 +257,9 @@
     background: var(--base); color: var(--text); border: 1px solid var(--surface0); border-radius: 3px;
     padding: 0.3rem 0.45rem; font: inherit; font-size: 0.8rem; min-width: 0;
   }
-  .t-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 0.4rem; }
+  .t-actions { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.4rem; }
+  .t-spacer { flex: 1 1 auto; }
+  label.check { flex-direction: row !important; align-items: center; gap: 0.35rem !important; color: var(--text1); align-self: end; }
   .t-del { background: none; border: none; color: var(--overlay1); cursor: pointer; padding: 0.2rem; display: inline-flex; }
   .t-del:hover { color: var(--red); }
   .link { background: none; border: none; color: var(--overlay1); font-size: 0.7rem; cursor: pointer; text-decoration: underline; }

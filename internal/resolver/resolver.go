@@ -131,6 +131,7 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		DbCredentialRef:    firstNonNil(over.DbCredentialRef, base.DbCredentialRef),
 		// The connection's own list (folders do not set one).
 		DbTargets:  over.DbTargets,
+		DbLabel:    over.DbLabel,
 		SSHOptions: mergeMap(base.SSHOptions, over.SSHOptions),
 		EnvVars:    mergeMap(base.EnvVars, over.EnvVars),
 	}
@@ -279,6 +280,7 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 		DbTLS:              dbTLS,
 		DbCredentialRef:    dbCred,
 		DbTargets:          s.DbTargets,
+		DbLabel:            strOr(s.DbLabel, ""),
 	}
 }
 

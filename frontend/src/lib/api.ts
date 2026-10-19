@@ -102,6 +102,10 @@ export interface InheritableSettings {
   // Databases listed under the connection; a field left out takes the db_*
   // value above. Connection-only (not inherited).
   db_targets?: DbTarget[];
+  // The connection's own database: its name in the tree / on its tab, and
+  // whether it shows as a row under the connection (absent = shown).
+  db_label?: string;
+  db_in_tree?: boolean;
 }
 
 export interface Folder {
@@ -188,6 +192,7 @@ export interface ResolvedSettings {
   db_tls: string;
   db_credential_ref: string | null;
   db_targets: DbTarget[] | null;
+  db_label: string;
 }
 
 export interface DbTarget {
@@ -200,6 +205,7 @@ export interface DbTarget {
   read_only?: boolean;
   tls?: string;
   use_tunnel?: boolean;
+  in_tree?: boolean; // absent = shown under the connection
 }
 
 // ----- Database (app_db.go / internal/dbx) -----
