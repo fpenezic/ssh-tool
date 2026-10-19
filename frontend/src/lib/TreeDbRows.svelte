@@ -1,53 +1,45 @@
 <script lang="ts">
-  // The databases listed under a connection (overrides.db_targets), one row
-  // each: double-click or Enter opens its Database tab, right-click for the
-  // menu. Shown only while the database is on for the connection.
+  // The databases under a connection in the tree (dbTreeRows): its own
+  // database and the listed ones, each unless "Show in tree" is off. A row
+  // opens its Database tab on double-click or Enter, next to whatever the
+  // connection itself opens (a terminal, usually). Folded away with the
+  // badge on the connection row (TreeDbToggle).
+  import { onMount } from "svelte";
   import { connectionActions } from "./connectionActions.svelte";
-  import { dbEnabledFor } from "./dbState.svelte";
+  import { dbTreeRows, type DbTreeRow } from "./dbState.svelte";
   import { selection, tree } from "./stores.svelte";
+  import { collapsedDbs } from "./treeState.svelte";
   import { contextMenu } from "./contextMenu.svelte.ts";
   import { IconDb } from "./iconMap";
-  import type { DbTarget } from "./api";
 
   let { connId, depth }: { connId: string; depth: number } = $props();
-  const conn = $derived(tree.connectionById(connId));
-  const rows = $derived(dbEnabledFor(conn) ? (conn?.overrides?.db_targets ?? []) : []);
-
-  function label(t: DbTarget): string {
-    return t.name || t.database || "database";
-  }
-  function detail(t: DbTarget): string {
-    const parts = [];
-    if (t.database && t.name) parts.push(t.database);
-    if (t.engine) parts.push(t.engine === "mysql" ? "MySQL" : "PostgreSQL");
-    if (t.read_only) parts.push("read-only");
-    return parts.join(" · ");
-  }
+  onMount(() => void collapsedDbs.load());
+  const rows = $derived(collapsedDbs.isExpanded(connId) ? [] : dbTreeRows(tree.connectionById(connId)));
 
   // Double-click by timing, like connection rows: native dblclick does not
   // fire reliably on touch WebViews.
-  let lastId = "";
+  let lastId: string | null = null;
   let lastAt = 0;
-  function onClick(t: DbTarget) {
+  function onClick(r: DbTreeRow) {
     selection.selectConnection(connId);
     const now = Date.now();
-    if (t.id === lastId && now - lastAt < 400) {
-      lastId = "";
-      void connectionActions.openDb(connId, t.id);
+    if (r.id === lastId && now - lastAt < 400) {
+      lastId = null;
+      void connectionActions.openDb(connId, r.id);
     } else {
-      lastId = t.id;
+      lastId = r.id;
       lastAt = now;
     }
   }
-  function openMenu(e: MouseEvent, t: DbTarget) {
+  function openMenu(e: MouseEvent, r: DbTreeRow) {
     selection.selectConnection(connId);
     contextMenu.show(e, [
-      { label: "Open", iconComponent: IconDb, onSelect: () => void connectionActions.openDb(connId, t.id) },
+      { label: "Open", iconComponent: IconDb, onSelect: () => void connectionActions.openDb(connId, r.id) },
     ]);
   }
 </script>
 
-{#each rows as t (t.id)}
+{#each rows as r (r.id)}
   <div
     class="row"
     style="--depth: {depth};"
@@ -55,20 +47,20 @@
     tabindex="0"
     aria-selected="false"
     data-kind="database"
-    title={`${label(t)}${detail(t) ? ` (${detail(t)})` : ""}\nDouble-click to open`}
-    onclick={() => onClick(t)}
-    oncontextmenu={(e) => openMenu(e, t)}
+    title={`${r.label}${r.detail ? ` (${r.detail})` : ""}\nDouble-click to open the database`}
+    onclick={() => onClick(r)}
+    oncontextmenu={(e) => openMenu(e, r)}
     onkeydown={(e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        void connectionActions.openDb(connId, t.id);
+        void connectionActions.openDb(connId, r.id);
       }
     }}
   >
     <span class="chev"></span>
     <span class="icon"><IconDb size={12} /></span>
-    <span class="name">{label(t)}</span>
-    <span class="host">{detail(t)}</span>
+    <span class="name">{r.label}</span>
+    <span class="host">{r.detail}</span>
   </div>
 {/each}
 

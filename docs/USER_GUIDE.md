@@ -1626,6 +1626,16 @@ databases listed, the first of them opens). Every setting above inherits
 through folders: N servers with the same DBA login set it once on their
 folder.
 
+### In the tree
+
+Each database shows as a row under its connection - the connection's own
+and any listed below - so the database browser is at hand next to the
+terminal: double-click (or Enter) on the connection still opens the
+terminal, on the database row it opens the Database tab. **Name** in the
+Database settings names the row and the tab (default: the database name),
+and **Show in tree** takes a row out. The badge with the database icon on
+the connection row folds the rows away and back, like pinned bookmarks.
+
 ### Several databases on one host
 
 One Database tab already shows every database of its server, and each
@@ -1634,9 +1644,10 @@ login or server - *prod* and *stage* with different users, read-only for
 one of them, or PostgreSQL and MySQL side by side - list them under
 **Databases on this host** in the connection's Database tab: a name, and
 only what differs (database, login, writes, engine, address); empty
-fields take the values above. Each shows as a row under the connection in
-the tree, opens its own tab (`host / stage`) on double-click or Enter, and
-is in the right-click menu as **Open database stage**. The list belongs to
+fields take the values above. Each is a row under the connection in the
+tree (unless its **Show in tree** is off), opens its own tab
+(`host / stage`) on double-click or Enter, and is in the right-click menu
+as **Open database stage**. The list belongs to
 the connection; folders hold the defaults.
 
 ### Opening it

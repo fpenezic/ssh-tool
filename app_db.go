@@ -93,7 +93,7 @@ func (a *App) DbOpenWithLogin(connectionID, targetID, user, password string) (*D
 // Db* settings. The name is "" for the connection's own database.
 func dbTarget(settings *store.ResolvedSettings, targetID string) (*store.ResolvedSettings, string, error) {
 	if targetID == "" {
-		return settings, "", nil
+		return settings, settings.DbLabel, nil
 	}
 	for _, t := range settings.DbTargets {
 		if t.ID != targetID {

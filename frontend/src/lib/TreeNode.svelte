@@ -29,6 +29,7 @@
   import TreeBookmarkRows from "./TreeBookmarkRows.svelte";
   import TreeDbRows from "./TreeDbRows.svelte";
   import TreeBookmarkToggle from "./TreeBookmarkToggle.svelte";
+  import TreeDbToggle from "./TreeDbToggle.svelte";
   import { treeBookmarks } from "./treeBookmarks.svelte";
 
   interface Props {
@@ -1217,6 +1218,7 @@
           {#if routedMark(conn)}
             <span class="jump-mark routed" title={routedMark(conn)}><IconRouted size={11} /></span>
           {/if}
+          <TreeDbToggle connId={conn.id} />
           <TreeBookmarkToggle connId={conn.id} />
           {#if certBadge(conn.id)}
             {@const b = certBadge(conn.id)!}

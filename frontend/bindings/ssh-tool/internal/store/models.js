@@ -1169,6 +1169,14 @@ export class DbTarget {
              */
             this["use_tunnel"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * InTree: a row under the connection in the tree (nil = shown).
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["in_tree"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -1998,6 +2006,24 @@ export class InheritableSettings {
         }
         if (/** @type {any} */(false)) {
             /**
+             * DbLabel names the connection's own database in the tree and on its
+             * tab ("" = its database name). Connection-only, like DbTargets.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["db_label"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * DbInTree shows the connection's own database as a row under it in
+             * the tree (nil = shown). Connection-only.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["db_in_tree"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * DbTargets are the databases listed under a connection (prod, stage,
              * another engine on the same host), each opening its own tab. A field
              * a target leaves nil takes the Db* value above. Set on connections;
@@ -2020,7 +2046,7 @@ export class InheritableSettings {
     static createFrom($$source = {}) {
         const $$createField5_0 = $$createType0;
         const $$createField6_0 = $$createType0;
-        const $$createField41_0 = $$createType10;
+        const $$createField43_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ssh_options" in $$parsedSource) {
             $$parsedSource["ssh_options"] = $$createField5_0($$parsedSource["ssh_options"]);
@@ -2029,7 +2055,7 @@ export class InheritableSettings {
             $$parsedSource["env_vars"] = $$createField6_0($$parsedSource["env_vars"]);
         }
         if ("db_targets" in $$parsedSource) {
-            $$parsedSource["db_targets"] = $$createField41_0($$parsedSource["db_targets"]);
+            $$parsedSource["db_targets"] = $$createField43_0($$parsedSource["db_targets"]);
         }
         return new InheritableSettings(/** @type {Partial<InheritableSettings>} */($$parsedSource));
     }
@@ -2753,6 +2779,13 @@ export class ResolvedSettings {
              * @type {DbTarget[]}
              */
             this["db_targets"] = [];
+        }
+        if (!("db_label" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["db_label"] = "";
         }
 
         Object.assign(this, $$source);

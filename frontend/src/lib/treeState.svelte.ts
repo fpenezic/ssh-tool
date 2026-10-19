@@ -101,3 +101,5 @@ export const expandedCredentials = new ExpandedSet(CRED_KEY);
 // above: bookmark rows show by default, so only the collapsed ones are
 // stored.
 export const collapsedBookmarks = new ExpandedSet("tree_collapsed_bookmarks");
+// Connections whose database rows are folded away, the same way.
+export const collapsedDbs = new ExpandedSet("tree_collapsed_dbs");

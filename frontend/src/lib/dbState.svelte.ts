@@ -172,3 +172,36 @@ export function dbTabTitle(info: DbHandleInfo | undefined): string {
   if (!info) return "Database";
   return info.target_name ? `${info.name} / ${info.target_name} (Database)` : `${info.name} (Database)`;
 }
+
+// A database row under a connection in the tree: its own database (id "")
+// and the listed ones, each unless switched off with "Show in tree".
+export interface DbTreeRow {
+  id: string;
+  label: string;
+  detail: string;
+}
+
+export function dbTreeRows(conn: Connection | null | undefined): DbTreeRow[] {
+  if (!conn || !dbEnabledFor(conn)) return [];
+  const o = conn.overrides ?? {};
+  const out: DbTreeRow[] = [];
+  if (o.db_in_tree !== false) {
+    const engine = o.db_engine ?? dbInheritedFrom(conn.folder_id, "db_engine");
+    out.push({
+      id: "",
+      label: o.db_label || o.db_name || "database",
+      detail: [o.db_label && o.db_name ? o.db_name : "", engine === "mysql" ? "MySQL" : engine === "postgres" ? "PostgreSQL" : "", o.db_read_only ? "read-only" : ""]
+        .filter(Boolean).join(" · "),
+    });
+  }
+  for (const t of o.db_targets ?? []) {
+    if (t.in_tree === false) continue;
+    out.push({
+      id: t.id,
+      label: t.name || t.database || "database",
+      detail: [t.name && t.database ? t.database : "", t.engine === "mysql" ? "MySQL" : t.engine === "postgres" ? "PostgreSQL" : "", t.read_only ? "read-only" : ""]
+        .filter(Boolean).join(" · "),
+    });
+  }
+  return out;
+}
