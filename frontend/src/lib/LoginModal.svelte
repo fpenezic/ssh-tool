@@ -1,5 +1,6 @@
 <script lang="ts">
   import { loginModal } from "./loginModal.svelte.ts";
+  import PasswordInput from "./PasswordInput.svelte";
 
   let user = $state("");
   let password = $state("");
@@ -49,7 +50,7 @@
       <input bind:this={userEl} bind:value={user} class="inp" autocomplete="off" spellcheck="false" />
     </label>
     <label>Password
-      <input bind:value={password} class="inp" type="password" autocomplete="new-password" />
+      <PasswordInput bind:value={password} autocomplete="new-password" />
     </label>
     {#if loginModal.pending.canSkipSave}
       <label class="check"><input type="checkbox" bind:checked={save} /> Save in the vault as a credential</label>

@@ -19,6 +19,10 @@
   let { connId, depth }: { connId: string; depth: number } = $props();
   onMount(() => void collapsedDbs.load());
   const rows = $derived(collapsedDbs.isExpanded(connId) ? [] : dbTreeRows(tree.connectionById(connId)));
+  // Databases with a tab open, drawn green like a connected connection.
+  const openIds = $derived(new Set(
+    Object.values(dbTabs.infos).filter((i) => i.connection_id === connId).map((i) => i.target_id ?? ""),
+  ));
 
   // Double-click by timing, like connection rows: native dblclick does not
   // fire reliably on touch WebViews.
@@ -67,12 +71,13 @@
   <div
     class="row"
     class:selected={isSelected(r)}
+    class:live={openIds.has(r.id)}
     style="--depth: {depth};"
     role="treeitem"
     tabindex="0"
     aria-selected={isSelected(r)}
     data-kind="database"
-    title={`${r.label}${r.detail ? ` (${r.detail})` : ""}\nDouble-click to open the database`}
+    title={`${r.label}${r.detail ? ` (${r.detail})` : ""}${openIds.has(r.id) ? " - open" : ""}\nDouble-click to open the database`}
     onclick={() => onClick(r)}
     oncontextmenu={(e) => openMenu(e, r)}
     onkeydown={(e) => {
@@ -102,6 +107,8 @@
   }
   .row:hover { background: var(--surface0); }
   .row.selected { background: var(--surface1); }
+  .row.live .name { font-weight: 600; color: var(--green); }
+  .row.live .icon { color: var(--green); }
   .row:focus-visible { outline: 1px solid var(--blue); outline-offset: -1px; }
   .chev { width: 1rem; flex-shrink: 0; }
   .icon { width: 1.2rem; display: inline-flex; justify-content: center; flex-shrink: 0; color: var(--teal); }
