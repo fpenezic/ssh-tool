@@ -34,6 +34,8 @@ func TestSplit(t *testing.T) {
 		{EngineMySQL, "# x; y\nSELECT 1", []string{"# x; y\nSELECT 1"}},
 		{EnginePostgres, " ; ;-- only a comment\n", nil},
 		{EnginePostgres, "SELECT 'unterminated; still one", []string{"SELECT 'unterminated; still one"}},
+		{EnginePostgres, "/* a /* b; */ c; */ SELECT 1; SELECT 2", []string{"/* a /* b; */ c; */ SELECT 1", "SELECT 2"}},
+		{EngineMySQL, "/* a /* b */ SELECT 1; SELECT 2", []string{"/* a /* b */ SELECT 1", "SELECT 2"}},
 	}
 	for _, c := range cases {
 		if got := texts(Split(c.engine, c.script)); !reflect.DeepEqual(got, c.want) && !(len(got) == 0 && len(c.want) == 0) {
@@ -203,6 +205,9 @@ func TestRedactSecretsAcrossComments(t *testing.T) {
 		{EngineMySQL, "CREATE USER u IDENTIFIED BY # x\n 'pw'", "CREATE USER u IDENTIFIED BY   '***'"},
 		{EnginePostgres, "ALTER ROLE r PASSWORD -- note\n 'pw'", "ALTER ROLE r PASSWORD   '***'"},
 		{EnginePostgres, "UPDATE t SET note = '-- not a comment'", "UPDATE t SET note = '-- not a comment'"},
+		// Postgres nests block comments; MySQL does not.
+		{EnginePostgres, "/* a /* b */ ' */ ALTER ROLE r PASSWORD 'pw'", "  ALTER ROLE r PASSWORD '***'"},
+		{EngineMySQL, "/* a /* b */ SET PASSWORD = 'pw'", "  SET PASSWORD = '***'"},
 	}
 	for _, c := range cases {
 		if got := RedactSecrets(c.engine, c.in); got != c.want {
