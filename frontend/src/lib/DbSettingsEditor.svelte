@@ -24,8 +24,14 @@
     showTargets?: boolean;
     connName?: string;
     onOpenTarget?: (id: string) => void;
+    // Whether a folder above makes it read-only (nothing set = writes
+    // allowed), so "inherit" can say what it gives.
+    inheritedReadOnly?: boolean;
   }
-  let { draft = $bindable(), inheritLabel, effectiveOn, effectiveEngine, onOpen, showTargets = false, connName = "", onOpenTarget }: Props = $props();
+  let { draft = $bindable(), inheritLabel, effectiveOn, effectiveEngine, onOpen, showTargets = false, connName = "", onOpenTarget, inheritedReadOnly = false }: Props = $props();
+  // Read-only once this level's own choice is applied: what a listed
+  // database left on "(as above)" gets.
+  const ownReadOnly = $derived(draft.readOnly === "on" || (draft.readOnly === "" && inheritedReadOnly));
 
   const NEW_LOGIN = "__new_login__";
   // "+ New login..." in a login select: ask, save as a credential, pick it.
@@ -143,7 +149,7 @@
       </label>
       <label title="Read-only: every statement runs in a READ ONLY transaction that is rolled back, and only SELECT / WITH / SHOW / EXPLAIN / VALUES / TABLE / DESCRIBE are sent. A login with read-only grants is the real guarantee.">Writes
         <select bind:value={draft.readOnly}>
-          <option value="">{inheritLabel}</option>
+          <option value="">{inheritLabel} · {inheritedReadOnly ? "read-only" : "allowed"}</option>
           <option value="off">Allowed</option>
           <option value="on">Read-only</option>
         </select>
@@ -182,7 +188,7 @@
             </label>
             <label>Writes
               <select value={targetRO(t)} onchange={(e) => { const v = (e.currentTarget as HTMLSelectElement).value; updateTarget(i, { read_only: v === "" ? undefined : v === "on" }); }}>
-                <option value="">(as above)</option>
+                <option value="">(as above) · {ownReadOnly ? "read-only" : "allowed"}</option>
                 <option value="off">Allowed</option>
                 <option value="on">Read-only</option>
               </select>

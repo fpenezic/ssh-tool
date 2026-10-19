@@ -18,8 +18,11 @@
     // for an inherited "on" too.
     effectiveOn: boolean;
     onOpen?: () => void;
+    // Whether a folder above makes it read-only (nothing set = writes
+    // allowed), so "inherit" can say what it gives.
+    inheritedReadOnly?: boolean;
   }
-  let { draft = $bindable(), inheritLabel, effectiveOn, onOpen }: Props = $props();
+  let { draft = $bindable(), inheritLabel, effectiveOn, onOpen, inheritedReadOnly = false }: Props = $props();
 
   // A SASL login is a username + password: password / vault credentials,
   // and ones backed by KeePass / Bitwarden / Infisical (also kind password).
@@ -64,7 +67,7 @@
       </label>
       <label title="Refuse every write - produce, topic and group changes - in the backend, not only in the UI.">Writes
         <select bind:value={draft.readOnly}>
-          <option value="">{inheritLabel}</option>
+          <option value="">{inheritLabel} · {inheritedReadOnly ? "read-only" : "allowed"}</option>
           <option value="off">Allowed</option>
           <option value="on">Read-only</option>
         </select>

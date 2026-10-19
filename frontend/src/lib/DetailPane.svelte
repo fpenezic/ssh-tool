@@ -1957,6 +1957,7 @@
         inheritLabel="(inherit from parent)"
         effectiveOn={editingFolder.db.enabled === "on" || (editingFolder.db.enabled === "" && dbInheritedFrom(folder?.parent_id, "db_enabled") === true)}
         effectiveEngine={dbInheritedFrom(folder?.parent_id, "db_engine") ?? ""}
+        inheritedReadOnly={dbInheritedFrom(folder?.parent_id, "db_read_only") === true}
       />
       <p class="span-2 field-note">To open the database on a double-click instead of a terminal, pick <strong>Database</strong> under General -&gt; Double-click opens.</p>
       {#if savedHint}
@@ -1970,6 +1971,7 @@
         bind:draft={editingFolder.kafka}
         inheritLabel="(inherit from parent)"
         effectiveOn={editingFolder.kafka.enabled === "on" || (editingFolder.kafka.enabled === "" && kafkaInheritedFrom(folder?.parent_id))}
+        inheritedReadOnly={dbInheritedFrom(folder?.parent_id, "kafka_read_only") === true}
       />
       <p class="span-2 field-note">To open Kafka on a double-click instead of a terminal, pick <strong>Kafka</strong> under General -&gt; Double-click opens.</p>
       {#if savedHint}
@@ -2677,6 +2679,7 @@
         inheritLabel="(inherit from folder)"
         effectiveOn={connDbOn}
         effectiveEngine={dbInheritedFrom(conn?.folder_id, "db_engine") ?? ""}
+        inheritedReadOnly={dbInheritedFrom(conn?.folder_id, "db_read_only") === true}
         onOpen={() => { if (conn) connectionActions.openDb(conn.id); }}
         showTargets
         connName={conn?.name ?? ""}
@@ -2696,6 +2699,7 @@
         bind:draft={editing.kafka}
         inheritLabel="(inherit from folder)"
         effectiveOn={editing.kafka.enabled === "on" || (editing.kafka.enabled === "" && kafkaInheritedFrom(conn?.folder_id))}
+        inheritedReadOnly={dbInheritedFrom(conn?.folder_id, "kafka_read_only") === true}
         onOpen={() => { if (conn) connectionActions.openKafka(conn.id); }}
       />
       <p class="span-2 field-note">To open Kafka on a double-click instead of a terminal, pick <strong>Kafka</strong> under General -&gt; Double-click opens.</p>
