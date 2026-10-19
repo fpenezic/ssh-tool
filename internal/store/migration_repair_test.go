@@ -157,7 +157,8 @@ func TestMigration28MovesSensitiveIntoOverrides(t *testing.T) {
 		CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 		INSERT INTO schema_meta (key, value) VALUES ('version', '27');
 		CREATE TABLE connections (id TEXT PRIMARY KEY, overrides_json TEXT NOT NULL DEFAULT '{}', sensitive INTEGER NOT NULL DEFAULT 0);
-		INSERT INTO connections VALUES ('a', '{"port":2222}', 1), ('b', '', 1), ('c', '{"port":22}', 0);`)
+		INSERT INTO connections VALUES ('a', '{"port":2222}', 1), ('b', '', 1), ('c', '{"port":22}', 0),
+		    ('d', 'null', 1), ('e', '[]', 1);`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,6 +169,8 @@ func TestMigration28MovesSensitiveIntoOverrides(t *testing.T) {
 		"a": `{"port":2222,"sensitive":true}`,
 		"b": `{"sensitive":true}`,
 		"c": `{"port":22}`,
+		"d": `{"sensitive":true}`,
+		"e": `{"sensitive":true}`,
 	}
 	rows, err := db.Query(`SELECT id, overrides_json, sensitive FROM connections`)
 	if err != nil {

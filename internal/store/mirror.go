@@ -95,6 +95,11 @@ func (d *DB) MirrorFrom(srcPath string) error {
 			return fmt.Errorf("mirror: copy %s: %w", t, err)
 		}
 	}
+	// A snapshot from a version before schema 28 marks sensitive
+	// connections in the old column, which nothing reads any more.
+	if _, err := tx.Exec(foldLegacySensitiveSQL); err != nil {
+		return fmt.Errorf("mirror: fold sensitive: %w", err)
+	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("mirror: commit: %w", err)
