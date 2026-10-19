@@ -199,6 +199,31 @@ type InheritableSettings struct {
 	// An explicit "" credential stops an inherited one.
 	KafkaSASL          *string `json:"kafka_sasl,omitempty"`
 	KafkaCredentialRef *string `json:"kafka_credential_ref,omitempty"`
+	// DbEnabled shows the "Open database" action and the editor's
+	// Database section. Opt-in like Kafka. Tri-state inheritance, so a
+	// folder of database hosts sets engine, port and login once.
+	DbEnabled *bool `json:"db_enabled,omitempty"`
+	// DbEngine is "postgres" or "mysql" (MySQL and MariaDB).
+	DbEngine *string `json:"db_engine,omitempty"`
+	// DbAddr is host[:port] as seen from wherever the database is dialed
+	// from: the connection's host when DbUseTunnel, else this machine or
+	// the last jump host. "" means 127.0.0.1 and the engine's port.
+	DbAddr *string `json:"db_addr,omitempty"`
+	// DbName is the database to open first ("" = the server's default).
+	DbName *string `json:"db_name,omitempty"`
+	// DbUseTunnel: database connections are channels on an SSH session to
+	// this connection's host. nil resolves to true.
+	DbUseTunnel *bool `json:"db_use_tunnel,omitempty"`
+	// DbDefault makes the Database tab the default connect action, like
+	// KafkaDefault. Only honoured when DbEnabled resolves true.
+	DbDefault *bool `json:"db_default,omitempty"`
+	// DbReadOnly refuses writes in the backend (see dbx.CheckReadOnly).
+	DbReadOnly *bool `json:"db_read_only,omitempty"`
+	// DbTLS is "disable" (nil), "require" or "verify-full".
+	DbTLS *string `json:"db_tls,omitempty"`
+	// DbCredentialRef is the database login: the credential's default
+	// username and its password. An explicit "" stops an inherited one.
+	DbCredentialRef *string `json:"db_credential_ref,omitempty"`
 }
 
 // JumpHostOverride is tagged-union with two variants: "none" (explicit
@@ -326,6 +351,17 @@ type ResolvedSettings struct {
 	KafkaTLSSkipVerify bool    `json:"kafka_tls_skip_verify"`
 	KafkaSASL          string  `json:"kafka_sasl"`
 	KafkaCredentialRef *string `json:"kafka_credential_ref"`
+	// Db*: see InheritableSettings. DbAddr and DbName are trimmed, ""
+	// when unset; DbUseTunnel defaults to true, DbTLS to "disable".
+	DbEnabled       bool    `json:"db_enabled"`
+	DbEngine        string  `json:"db_engine"`
+	DbAddr          string  `json:"db_addr"`
+	DbName          string  `json:"db_name"`
+	DbUseTunnel     bool    `json:"db_use_tunnel"`
+	DbDefault       bool    `json:"db_default"`
+	DbReadOnly      bool    `json:"db_read_only"`
+	DbTLS           string  `json:"db_tls"`
+	DbCredentialRef *string `json:"db_credential_ref"`
 	// PasswordOverride carries a per-connection plaintext password resolved
 	// from the vault by app.go before passing to the SSH layer. Never
 	// serialised to JSON (not shown in the resolved-settings preview).

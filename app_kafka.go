@@ -25,11 +25,9 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -147,7 +145,7 @@ func (a *App) KafkaOpen(connectionID string) (*KafkaClusterInfo, error) {
 		if settings.JumpHost != nil {
 			kc.info.Transport = "jump:" + settings.JumpHost.Hostname
 		}
-		dial = a.kafkaDirectDial(settings)
+		dial = a.viaDial(settings)
 	}
 
 	cfg.Dial = dial
@@ -211,32 +209,6 @@ func (a *App) kafkaSASL(settings *store.ResolvedSettings) (kafka.Mechanism, erro
 		return nil, fmt.Errorf("Kafka credential %q holds no password", cred.Name)
 	}
 	return kafka.SASLMechanism(settings.KafkaSASL, user, m.Password)
-}
-
-// kafkaDirectDial dials every broker connection the way DialVia does.
-func (a *App) kafkaDirectDial(settings *store.ResolvedSettings) kafka.DialFunc {
-	return func(ctx context.Context, _, addr string) (net.Conn, error) {
-		c, cleanup, err := sshlayer.DialVia(ctx, a.db, a.vault, settings, addr,
-			a.makeHostKeyCallback(), a.makeAlgoLookup(), a.connectTimeout())
-		if err != nil {
-			return nil, err
-		}
-		return &cleanupConn{Conn: c, cleanup: cleanup}, nil
-	}
-}
-
-// cleanupConn runs DialVia's cleanup (which releases a pooled bastion) when
-// the broker connection closes.
-type cleanupConn struct {
-	net.Conn
-	once    sync.Once
-	cleanup func()
-}
-
-func (c *cleanupConn) Close() error {
-	err := c.Conn.Close()
-	c.once.Do(c.cleanup)
-	return err
 }
 
 func (kc *kafkaCluster) status() KafkaClusterInfo {

@@ -405,3 +405,30 @@ func TestKafkaSettingsInherited(t *testing.T) {
 		t.Fatalf("explicit none should clear the credential: %v", *r.KafkaCredentialRef)
 	}
 }
+
+func TestDbSettingsInherited(t *testing.T) {
+	// A folder of MySQL hosts sets engine and login once.
+	f := folder("dbs", nil, store.InheritableSettings{
+		DbEnabled:       ptr(true),
+		DbEngine:        ptr("mysql"),
+		DbCredentialRef: ptr("cred-db"),
+		DbReadOnly:      ptr(true),
+	})
+	r := ResolveWith(conn("c1", ptr("dbs"), "h", store.InheritableSettings{}), []store.Folder{f})
+	if !r.DbEnabled || r.DbEngine != "mysql" || !r.DbUseTunnel || !r.DbReadOnly || r.DbCredentialRef == nil || *r.DbCredentialRef != "cred-db" {
+		t.Fatalf("child should inherit the database settings: %+v", r)
+	}
+	// One host has its own address and database, directly, and is writable.
+	r = ResolveWith(conn("c2", ptr("dbs"), "h", store.InheritableSettings{
+		DbAddr: ptr(" 10.0.0.5:3307 "), DbName: ptr("app"), DbUseTunnel: ptr(false), DbReadOnly: ptr(false),
+		DbCredentialRef: ptr(""),
+	}), []store.Folder{f})
+	if r.DbAddr != "10.0.0.5:3307" || r.DbName != "app" || r.DbUseTunnel || r.DbReadOnly || r.DbCredentialRef != nil {
+		t.Fatalf("overrides should win: %+v", r)
+	}
+	// Unset everywhere: off, Postgres, plaintext, through the tunnel.
+	r = ResolveWith(conn("c3", nil, "h", store.InheritableSettings{}), nil)
+	if r.DbEnabled || r.DbEngine != "postgres" || r.DbTLS != "disable" || !r.DbUseTunnel || r.DbAddr != "" {
+		t.Fatalf("defaults: %+v", r)
+	}
+}

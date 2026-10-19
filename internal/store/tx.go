@@ -336,7 +336,8 @@ func ValidOverrideField(name string) bool {
 		"vnc_default", "network_profile_id", "tunnel_only", "tunnel_autostart",
 		"kafka_enabled", "kafka_bootstrap", "kafka_use_tunnel", "kafka_default",
 		"kafka_read_only", "kafka_tls", "kafka_tls_skip_verify", "kafka_sasl",
-		"kafka_credential_ref":
+		"kafka_credential_ref", "db_enabled", "db_engine", "db_addr", "db_name",
+		"db_use_tunnel", "db_default", "db_read_only", "db_tls", "db_credential_ref":
 		return true
 	}
 	return false
