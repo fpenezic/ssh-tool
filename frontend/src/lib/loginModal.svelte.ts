@@ -28,6 +28,9 @@ class LoginModalStore {
   pending = $state<LoginState | null>(null);
 
   show(opts: { title: string; message?: string; canSkipSave?: boolean; defaultName?: string; defaultUser?: string }): Promise<LoginResult | null> {
+    // A second request (two rows opened at once) cancels the first, or its
+    // caller would wait forever.
+    this.pending?.resolve(null);
     return new Promise((resolve) => {
       this.pending = {
         title: opts.title,

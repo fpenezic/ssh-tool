@@ -2,6 +2,7 @@ package dbx
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 )
@@ -76,6 +77,10 @@ func skipNonCode(engine, s string, i int) int {
 		return lineEnd(s, i)
 	case c == '#' && engine == EngineMySQL:
 		return lineEnd(s, i)
+	case c == '/' && strings.HasPrefix(s[i:], "/*!") && engine == EngineMySQL:
+		// An executable comment is code to MySQL ("SELECT 1 /*!INTO
+		// OUTFILE ...*/"), so it is not skipped like a comment.
+		return i
 	case c == '/' && strings.HasPrefix(s[i:], "/*"):
 		if j := strings.Index(s[i+2:], "*/"); j >= 0 {
 			return i + 2 + j + 2
@@ -182,9 +187,51 @@ var readKeywords = map[string]bool{
 	"VALUES": true, "TABLE": true, "DESCRIBE": true, "DESC": true,
 }
 
-// IsRead reports whether a statement starts with a read-only keyword.
+// IsRead reports whether a statement only reads: it starts with a read
+// keyword and has none of the forms that write under one - a data-changing
+// CTE (WITH d AS (DELETE ...)), EXPLAIN ANALYZE (which runs the statement),
+// or SELECT ... INTO (a new table on Postgres, a file or variables on
+// MySQL).
 func IsRead(engine, stmt string) bool {
-	return readKeywords[leadKeyword(engine, stmt)]
+	lead := leadKeyword(engine, stmt)
+	if !readKeywords[lead] {
+		return false
+	}
+	words := codeWords(engine, stmt)
+	switch {
+	case words["INTO"]:
+		return false
+	case lead == "WITH" && (words["INSERT"] || words["UPDATE"] || words["DELETE"] || words["MERGE"]):
+		return false
+	case lead == "EXPLAIN" && words["ANALYZE"]:
+		return false
+	}
+	return true
+}
+
+// codeWords is the set of upper-cased words in a statement's code (strings,
+// quoted identifiers and comments left out). An identifier like
+// update_time is one word, not UPDATE.
+func codeWords(engine, stmt string) map[string]bool {
+	out := map[string]bool{}
+	code := strings.ToUpper(codeOnly(engine, stmt))
+	start := -1
+	for i, r := range code {
+		if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) {
+			if start < 0 {
+				start = i
+			}
+			continue
+		}
+		if start >= 0 {
+			out[code[start:i]] = true
+			start = -1
+		}
+	}
+	if start >= 0 {
+		out[code[start:]] = true
+	}
+	return out
 }
 
 // returnsRows: statements a MySQL session runs as a query (rows) rather
@@ -205,6 +252,9 @@ func CheckReadOnly(engine, stmt string) error {
 	k := leadKeyword(engine, stmt)
 	if !readKeywords[k] {
 		return fmt.Errorf("read-only connection: %s statements are not allowed", strings.ToLower(orWord(k)))
+	}
+	if !IsRead(engine, stmt) {
+		return fmt.Errorf("read-only connection: this %s writes (a data-changing WITH, EXPLAIN ANALYZE or SELECT ... INTO)", strings.ToLower(k))
 	}
 	if engine == EngineMySQL {
 		// SELECT ... INTO OUTFILE / DUMPFILE writes a file on the server,
@@ -248,4 +298,14 @@ func IsTxControl(engine, stmt string) bool {
 		return true
 	}
 	return false
+}
+
+// secretRE matches a quoted secret after PASSWORD (CREATE / ALTER ROLE,
+// SET PASSWORD) or IDENTIFIED [WITH plugin] BY (MySQL users).
+var secretRE = regexp.MustCompile(`(?i)(\bPASSWORD\s*(?:=\s*)?|\bIDENTIFIED\s+(?:WITH\s+\S+\s+)?BY\s+)('(?:[^']|'')*'|"(?:[^"]|"")*")`)
+
+// RedactSecrets hides quoted passwords in a statement before it is stored
+// (audit log, LLM activity).
+func RedactSecrets(stmt string) string {
+	return secretRE.ReplaceAllString(stmt, "${1}'***'")
 }

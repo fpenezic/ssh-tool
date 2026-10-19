@@ -3,6 +3,7 @@ package dbx
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io"
@@ -27,9 +28,10 @@ func init() {
 type myEngine struct {
 	cfg Config
 
-	once sync.Once
-	pool *sql.DB
-	err  error
+	once      sync.Once
+	connector driver.Connector
+	pool      *sql.DB
+	err       error
 }
 
 func newMy(cfg Config) *myEngine { return &myEngine{cfg: cfg} }
@@ -63,6 +65,7 @@ func (e *myEngine) db() (*sql.DB, error) {
 			e.err = err
 			return
 		}
+		e.connector = c
 		e.pool = sql.OpenDB(c)
 		e.pool.SetMaxOpenConns(3)
 		e.pool.SetMaxIdleConns(2)
@@ -316,30 +319,37 @@ func (e *myEngine) browse(ctx context.Context, database, _, name string, offset,
 	return r, nil
 }
 
+// session opens a query tab's connection outside the tree pool: the pool
+// is small, and a tab holds its connection for as long as it is open - a
+// few tabs would otherwise leave the tree, browsing and KILL QUERY (Stop)
+// waiting for a free connection.
 func (e *myEngine) session(ctx context.Context, database string) (session, error) {
-	db, err := e.db()
-	if err != nil {
+	if _, err := e.db(); err != nil {
 		return nil, err
 	}
-	conn, err := db.Conn(ctx)
+	own := sql.OpenDB(e.connector)
+	own.SetMaxOpenConns(1)
+	conn, err := own.Conn(ctx)
 	if err != nil {
+		_ = own.Close()
 		return nil, myErr(err)
 	}
-	s := &mySession{e: e, conn: conn}
-	if err := conn.QueryRowContext(ctx, `SELECT CONNECTION_ID()`).Scan(&s.id); err != nil {
-		_ = conn.Close()
+	s := &mySession{e: e, conn: conn, own: own}
+	fail := func(err error) (session, error) {
+		s.close()
 		return nil, myErr(err)
+	}
+	if err := conn.QueryRowContext(ctx, `SELECT CONNECTION_ID()`).Scan(&s.id); err != nil {
+		return fail(err)
 	}
 	if database != "" {
 		if _, err := conn.ExecContext(ctx, "USE "+myIdent(database)); err != nil {
-			_ = conn.Close()
-			return nil, myErr(err)
+			return fail(err)
 		}
 	}
 	if e.cfg.ReadOnly {
 		if _, err := conn.ExecContext(ctx, "SET SESSION TRANSACTION READ ONLY"); err != nil {
-			_ = conn.Close()
-			return nil, myErr(err)
+			return fail(err)
 		}
 	}
 	return s, nil
@@ -358,11 +368,16 @@ func (e *myEngine) close() {
 type mySession struct {
 	e    *myEngine
 	conn *sql.Conn
+	own  *sql.DB // the session's own one-connection pool
 	id   int64
 }
 
 func (s *mySession) run(ctx context.Context, stmt string, readOnly bool, maxRows int) *Result {
 	bg := context.WithoutCancel(ctx)
+	// The caller's context ending (an MCP call given up, a timeout) stops
+	// the statement the only way MySQL can without losing the session.
+	stop := context.AfterFunc(ctx, s.cancel)
+	defer stop()
 	if !readOnly {
 		return s.exec(bg, stmt, maxRows)
 	}
@@ -469,7 +484,10 @@ func (s *mySession) cancel() {
 
 func (s *mySession) inTx() bool { return false }
 
-func (s *mySession) close() { _ = s.conn.Close() }
+func (s *mySession) close() {
+	_ = s.conn.Close()
+	_ = s.own.Close()
+}
 
 // myErr formats a server error with its number and SQLSTATE.
 func myErr(err error) error {

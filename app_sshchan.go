@@ -28,7 +28,7 @@ func (a *App) sshChanConnect(kind, connectionID string, conn *store.Connection, 
 			}
 		}
 		if settings.Username == nil && settings.AuthRef != nil {
-			if cred, e := a.db.GetCredential(*settings.AuthRef); e == nil && cred.DefaultUsername != nil {
+			if cred, e := a.db.GetCredential(*settings.AuthRef); e == nil && cred != nil && cred.DefaultUsername != nil {
 				settings.Username = cred.DefaultUsername
 			}
 		}
