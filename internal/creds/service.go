@@ -754,7 +754,7 @@ func (s *Service) RotateKey(id string, generateNew bool, privateOpenSSH string, 
 // secretHistoryRetention is how many previous secrets we keep
 // sealed per credential. Older snapshots are dropped from both the
 // DB and the vault on every successful rotation. Five matches the
-// "Documents → Files older than 5 versions are deleted" pattern most
+// "Documents -> Files older than 5 versions are deleted" pattern most
 // users already understand from cloud sync tools; adjust here when
 // the configurable retention slider lands.
 const secretHistoryRetention = 5

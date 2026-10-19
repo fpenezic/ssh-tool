@@ -237,10 +237,14 @@ func (v *Vault) Put(account, secret string) error {
 		return err
 	}
 	v.mu.Lock()
-	if prev, ok := v.memory[account]; ok {
-		wipeBytes(prev)
+	// Locked (or relocked) while the file write ran: Lock wiped the
+	// mirror, and a locked vault must not hold plaintext.
+	if v.file == file {
+		if prev, ok := v.memory[account]; ok {
+			wipeBytes(prev)
+		}
+		v.memory[account] = []byte(secret)
 	}
-	v.memory[account] = []byte(secret)
 	v.mu.Unlock()
 	return nil
 }
@@ -293,7 +297,10 @@ func (v *Vault) Get(account string) (string, bool, error) {
 		return "", false, nil
 	}
 	v.mu.Lock()
-	v.memory[account] = []byte(s)
+	// The same check as Put: no caching into a vault locked meanwhile.
+	if v.file == file {
+		v.memory[account] = []byte(s)
+	}
 	v.mu.Unlock()
 	return s, true, nil
 }
