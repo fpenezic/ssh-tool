@@ -89,6 +89,8 @@ func TestCheckReadOnly(t *testing.T) {
 		"SELECT * FROM t INTO OUTFILE '/tmp/x'", "select 1 into dumpfile '/tmp/y'",
 		// Executable comments are code to MySQL.
 		"SELECT * FROM t /*!INTO OUTFILE '/tmp/x'*/", "/*!50000 DROP TABLE t */", "SELECT 1 INTO @v",
+		// "--" is a MySQL comment only before whitespace.
+		"SELECT 1 --1 INTO OUTFILE '/tmp/x'",
 	} {
 		if err := CheckReadOnly(EngineMySQL, s); err == nil {
 			t.Errorf("mysql %q allowed", s)
@@ -164,6 +166,9 @@ func TestIsReadWriteForms(t *testing.T) {
 	if IsRead(EngineMySQL, "SELECT 1 /*!INTO OUTFILE '/x'*/") {
 		t.Error("MySQL executable comment taken for a comment")
 	}
+	if IsRead(EngineMySQL, "SELECT 1 --1 INTO OUTFILE '/x'") || !IsRead(EngineMySQL, "SELECT 1 -- into later") {
+		t.Error("MySQL -- comment rule")
+	}
 	if !IsRead(EnginePostgres, "WITH x AS (SELECT 1) SELECT * FROM x -- delete later") || !IsRead(EngineMySQL, "SELECT '/*!' AS s") {
 		t.Error("plain reads taken for writes")
 	}
@@ -176,6 +181,10 @@ func TestRedactSecrets(t *testing.T) {
 		"create user 'u'@'%' identified by 'pw'":                       "create user 'u'@'%' identified by '***'",
 		"ALTER USER u IDENTIFIED WITH caching_sha2_password BY \"pw\"": "ALTER USER u IDENTIFIED WITH caching_sha2_password BY '***'",
 		"SET PASSWORD = 'pw'":                                          "SET PASSWORD = '***'",
+		"SET PASSWORD FOR 'u'@'%' = 'pw'":                              "SET PASSWORD FOR 'u'@'%' = '***'",
+		"ALTER USER u IDENTIFIED BY 'new' REPLACE 'old'":               "ALTER USER u IDENTIFIED BY '***' REPLACE '***'",
+		"ALTER USER u IDENTIFIED BY 'p\\'w' ACCOUNT LOCK":              "ALTER USER u IDENTIFIED BY '***' ACCOUNT LOCK",
+		"SELECT REPLACE(name, 'a', 'b') FROM t":                        "SELECT REPLACE(name, 'a', 'b') FROM t",
 		"SELECT password FROM users":                                   "SELECT password FROM users",
 	}
 	for in, want := range cases {
