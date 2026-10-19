@@ -1830,6 +1830,85 @@ export class InheritableSettings {
              */
             this["kafka_credential_ref"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * DbEnabled shows the "Open database" action and the editor's
+             * Database section. Opt-in like Kafka. Tri-state inheritance, so a
+             * folder of database hosts sets engine, port and login once.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["db_enabled"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * DbEngine is "postgres" or "mysql" (MySQL and MariaDB).
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["db_engine"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * DbAddr is host[:port] as seen from wherever the database is dialed
+             * from: the connection's host when DbUseTunnel, else this machine or
+             * the last jump host. "" means 127.0.0.1 and the engine's port.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["db_addr"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * DbName is the database to open first ("" = the server's default).
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["db_name"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * DbUseTunnel: database connections are channels on an SSH session to
+             * this connection's host. nil resolves to true.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["db_use_tunnel"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * DbDefault makes the Database tab the default connect action, like
+             * KafkaDefault. Only honoured when DbEnabled resolves true.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["db_default"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * DbReadOnly refuses writes in the backend (see dbx.CheckReadOnly).
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["db_read_only"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * DbTLS is "disable" (nil), "require" or "verify-full".
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["db_tls"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * DbCredentialRef is the database login: the credential's default
+             * username and its password. An explicit "" stops an inherited one.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["db_credential_ref"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -2499,6 +2578,71 @@ export class ResolvedSettings {
              * @type {string | null}
              */
             this["kafka_credential_ref"] = null;
+        }
+        if (!("db_enabled" in $$source)) {
+            /**
+             * Db*: see InheritableSettings. DbAddr and DbName are trimmed, ""
+             * when unset; DbUseTunnel defaults to true, DbTLS to "disable".
+             * @member
+             * @type {boolean}
+             */
+            this["db_enabled"] = false;
+        }
+        if (!("db_engine" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["db_engine"] = "";
+        }
+        if (!("db_addr" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["db_addr"] = "";
+        }
+        if (!("db_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["db_name"] = "";
+        }
+        if (!("db_use_tunnel" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["db_use_tunnel"] = false;
+        }
+        if (!("db_default" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["db_default"] = false;
+        }
+        if (!("db_read_only" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["db_read_only"] = false;
+        }
+        if (!("db_tls" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["db_tls"] = "";
+        }
+        if (!("db_credential_ref" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["db_credential_ref"] = null;
         }
 
         Object.assign(this, $$source);

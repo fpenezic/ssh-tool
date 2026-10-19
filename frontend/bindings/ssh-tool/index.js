@@ -36,6 +36,8 @@ export {
     CredentialsRotateAPITokenInput,
     CredentialsRotateKeyInput,
     CredentialsUpdateInput,
+    DbHandleInfo,
+    DbRunResult,
     DynamicFolderCreateInput,
     DynamicFolderUpdateInput,
     DynamicPreviewHost,

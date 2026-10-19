@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
+	"sync"
 
 	gossh "golang.org/x/crypto/ssh"
 
@@ -60,3 +62,32 @@ func (sshChanNullSink) EmitState(string, sshlayer.SessionState) {}
 func (sshChanNullSink) EmitOutput(string, []byte, uint64)       {}
 func (sshChanNullSink) EmitExitStatus(string, uint32)           {}
 func (sshChanNullSink) EmitDebug(string, string)                {}
+
+// viaDial dials each connection the way DialVia does: from the last jump
+// host through the shared bastion pool, else from here over the
+// connection's network profile. The direct transport of the Kafka and
+// Database tabs.
+func (a *App) viaDial(settings *store.ResolvedSettings) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return func(ctx context.Context, _, addr string) (net.Conn, error) {
+		c, cleanup, err := sshlayer.DialVia(ctx, a.db, a.vault, settings, addr,
+			a.makeHostKeyCallback(), a.makeAlgoLookup(), a.connectTimeout())
+		if err != nil {
+			return nil, err
+		}
+		return &cleanupConn{Conn: c, cleanup: cleanup}, nil
+	}
+}
+
+// cleanupConn runs DialVia's cleanup (which releases a pooled bastion) when
+// the broker connection closes.
+type cleanupConn struct {
+	net.Conn
+	once    sync.Once
+	cleanup func()
+}
+
+func (c *cleanupConn) Close() error {
+	err := c.Conn.Close()
+	c.once.Do(c.cleanup)
+	return err
+}

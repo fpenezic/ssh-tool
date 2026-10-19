@@ -329,6 +329,9 @@ type App struct {
 	kafkaMu        sync.Mutex
 	kafkaClusters  map[string]*kafkaCluster
 	kafkaConsumers map[string]*kafkaConsumer
+	// dbMu guards the open Database tab handles (app_db.go).
+	dbMu      sync.Mutex
+	dbHandles map[string]*dbHandle
 }
 
 // vncSessionMeta is one live VNC console. The upstream factory is
@@ -527,6 +530,7 @@ func (a *App) initialise() {
 	a.vncSessions = map[string]*vncSessionMeta{}
 	a.kafkaClusters = map[string]*kafkaCluster{}
 	a.kafkaConsumers = map[string]*kafkaConsumer{}
+	a.dbHandles = map[string]*dbHandle{}
 	a.recorder = recorder.NewManager()
 	a.termSizes = map[string][2]uint16{}
 	a.forwards = sshlayer.NewForwardPool()

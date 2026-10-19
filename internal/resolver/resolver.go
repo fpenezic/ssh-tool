@@ -120,6 +120,15 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		KafkaTLSSkipVerify: firstNonNilBool(over.KafkaTLSSkipVerify, base.KafkaTLSSkipVerify),
 		KafkaSASL:          firstNonNil(over.KafkaSASL, base.KafkaSASL),
 		KafkaCredentialRef: firstNonNil(over.KafkaCredentialRef, base.KafkaCredentialRef),
+		DbEnabled:          firstNonNilBool(over.DbEnabled, base.DbEnabled),
+		DbEngine:           firstNonNil(over.DbEngine, base.DbEngine),
+		DbAddr:             firstNonNil(over.DbAddr, base.DbAddr),
+		DbName:             firstNonNil(over.DbName, base.DbName),
+		DbUseTunnel:        firstNonNilBool(over.DbUseTunnel, base.DbUseTunnel),
+		DbDefault:          firstNonNilBool(over.DbDefault, base.DbDefault),
+		DbReadOnly:         firstNonNilBool(over.DbReadOnly, base.DbReadOnly),
+		DbTLS:              firstNonNil(over.DbTLS, base.DbTLS),
+		DbCredentialRef:    firstNonNil(over.DbCredentialRef, base.DbCredentialRef),
 		SSHOptions:         mergeMap(base.SSHOptions, over.SSHOptions),
 		EnvVars:            mergeMap(base.EnvVars, over.EnvVars),
 	}
@@ -213,6 +222,12 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 	if kafkaCred != nil && *kafkaCred == "" {
 		kafkaCred = nil
 	}
+	dbCred := s.DbCredentialRef
+	if dbCred != nil && *dbCred == "" {
+		dbCred = nil
+	}
+	dbEngine := strOr(s.DbEngine, "postgres")
+	dbTLS := strOr(s.DbTLS, "disable")
 	return store.ResolvedSettings{
 		// A pasted hostname can carry a newline or spaces; every dial and
 		// probe goes through here, so older rows work too.
@@ -252,6 +267,15 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 		KafkaTLSSkipVerify: s.KafkaTLSSkipVerify != nil && *s.KafkaTLSSkipVerify,
 		KafkaSASL:          kafkaSASL,
 		KafkaCredentialRef: kafkaCred,
+		DbEnabled:          s.DbEnabled != nil && *s.DbEnabled,
+		DbEngine:           dbEngine,
+		DbAddr:             strOr(s.DbAddr, ""),
+		DbName:             strOr(s.DbName, ""),
+		DbUseTunnel:        s.DbUseTunnel == nil || *s.DbUseTunnel,
+		DbDefault:          s.DbDefault != nil && *s.DbDefault,
+		DbReadOnly:         s.DbReadOnly != nil && *s.DbReadOnly,
+		DbTLS:              dbTLS,
+		DbCredentialRef:    dbCred,
 	}
 }
 
@@ -284,4 +308,16 @@ func firstNonNilBool(a, b *bool) *bool {
 		return a
 	}
 	return b
+}
+
+// strOr is the trimmed value of an optional string, def when unset or
+// blank.
+func strOr(p *string, def string) string {
+	if p == nil {
+		return def
+	}
+	if v := strings.TrimSpace(*p); v != "" {
+		return v
+	}
+	return def
 }

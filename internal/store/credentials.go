@@ -327,8 +327,8 @@ func (d *DB) CredentialUsage(credentialID string) ([]UsageRef, error) {
 		if settingsUsesCred(&f.Settings, credentialID) {
 			out = append(out, UsageRef{Kind: "folder", ID: f.ID, Name: f.Name})
 		}
-		if kafkaUsesCred(&f.Settings, credentialID) {
-			out = append(out, UsageRef{Kind: "folder", ID: f.ID, Name: f.Name, Role: kafkaCredRole})
+		for _, role := range serviceCredRoles(&f.Settings, credentialID) {
+			out = append(out, UsageRef{Kind: "folder", ID: f.ID, Name: f.Name, Role: role})
 		}
 	}
 	for _, c := range connections {
@@ -337,10 +337,10 @@ func (d *DB) CredentialUsage(credentialID string) ([]UsageRef, error) {
 				Kind: "connection", ID: c.ID, Name: c.Name, Hostname: c.Hostname,
 			})
 		}
-		if kafkaUsesCred(&c.Overrides, credentialID) {
+		for _, role := range serviceCredRoles(&c.Overrides, credentialID) {
 			out = append(out, UsageRef{
 				Kind: "connection", ID: c.ID, Name: c.Name, Hostname: c.Hostname,
-				Role: kafkaCredRole,
+				Role: role,
 			})
 		}
 	}
@@ -443,12 +443,18 @@ func settingsUsesCred(s *InheritableSettings, credID string) bool {
 	return false
 }
 
-// kafkaCredRole labels the Kafka SASL login in "Used by"; it is its own
-// entry so a credential used for both SSH and Kafka shows both roles.
-const kafkaCredRole = "Kafka SASL"
-
-func kafkaUsesCred(s *InheritableSettings, credID string) bool {
-	return s.KafkaCredentialRef != nil && *s.KafkaCredentialRef == credID
+// serviceCredRoles lists the logins of a connection's services (Kafka,
+// Database) that credID provides. Each is its own "Used by" entry, so a
+// credential used for both SSH and a service shows both roles.
+func serviceCredRoles(s *InheritableSettings, credID string) []string {
+	var roles []string
+	if s.KafkaCredentialRef != nil && *s.KafkaCredentialRef == credID {
+		roles = append(roles, "Kafka SASL")
+	}
+	if s.DbCredentialRef != nil && *s.DbCredentialRef == credID {
+		roles = append(roles, "Database login")
+	}
+	return roles
 }
 
 func jumpUsesCred(spec *JumpHostSpec, credID string) bool {
