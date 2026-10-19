@@ -1862,6 +1862,10 @@ everything mobile is behind a build tag or an `isMobile` check.
     - The tree's right-click menu exists twice: `TreeNode` for connections
       in folders, `Sidebar` for the root level. Service items come from
       `connectionActions.serviceMenuItems` so the two cannot drift again.
+    - A modal opened from a `<select>`'s change event ("+ New login...")
+      must not close on an outside click: the click that picked the option
+      lands right after the change, outside the modal, and cancels it
+      (`LoginModal` has no `clickOutside`).
 
 ---
 
