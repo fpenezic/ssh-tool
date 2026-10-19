@@ -49,7 +49,7 @@ func mcpDbApp(t *testing.T, readOnly bool) (*App, string) {
 
 func TestMcpDbNeedsShare(t *testing.T) {
 	a, sid := mcpDbApp(t, false)
-	if _, err := a.mcpDbQuery(mcpDbQueryArgs{SessionID: sid, SQL: "SELECT 1"}); err == nil {
+	if _, err := a.mcpDbQuery(context.Background(), mcpDbQueryArgs{SessionID: sid, SQL: "SELECT 1"}); err == nil {
 		t.Fatal("unshared Database session readable")
 	}
 	if err := a.McpShareSession(sid, "read"); err != nil {
@@ -72,7 +72,7 @@ func TestMcpDbQueryAndExecute(t *testing.T) {
 	if err := a.McpShareSession(sid, "read"); err != nil {
 		t.Fatal(err)
 	}
-	out, err := a.mcpDbQuery(mcpDbQueryArgs{SessionID: sid, SQL: "SELECT 1 AS one, NULL AS nothing, 'a\tb' AS tab; DELETE FROM pg_class"})
+	out, err := a.mcpDbQuery(context.Background(), mcpDbQueryArgs{SessionID: sid, SQL: "SELECT 1 AS one, NULL AS nothing, 'a\tb' AS tab; DELETE FROM pg_class"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,25 +80,25 @@ func TestMcpDbQueryAndExecute(t *testing.T) {
 		t.Fatalf("query output:\n%s", out)
 	}
 	// A write a keyword check cannot see is the server's to refuse.
-	out, _ = a.mcpDbQuery(mcpDbQueryArgs{SessionID: sid, SQL: "CREATE TEMP SEQUENCE s; SELECT nextval('s')"})
+	out, _ = a.mcpDbQuery(context.Background(), mcpDbQueryArgs{SessionID: sid, SQL: "CREATE TEMP SEQUENCE s; SELECT nextval('s')"})
 	if !strings.Contains(out, "read-only connection: create") {
 		t.Fatalf("create in db_query:\n%s", out)
 	}
-	if _, err := a.mcpDbExecute(mcpDbExecuteArgs{SessionID: sid, SQL: "CREATE TEMP TABLE t (a int)"}); err == nil || !strings.Contains(err.Error(), "read-run") {
+	if _, err := a.mcpDbExecute(context.Background(), mcpDbExecuteArgs{SessionID: sid, SQL: "CREATE TEMP TABLE t (a int)"}); err == nil || !strings.Contains(err.Error(), "read-run") {
 		t.Fatalf("execute on a read share: %v", err)
 	}
 	if err := a.McpShareSession(sid, "read-run-yolo"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.mcpDbExecute(mcpDbExecuteArgs{SessionID: sid, SQL: "BEGIN; CREATE TEMP TABLE t (a int)"}); err == nil || !strings.Contains(err.Error(), "transaction control") {
+	if _, err := a.mcpDbExecute(context.Background(), mcpDbExecuteArgs{SessionID: sid, SQL: "BEGIN; CREATE TEMP TABLE t (a int)"}); err == nil || !strings.Contains(err.Error(), "transaction control") {
 		t.Fatalf("BEGIN in db_execute: %v", err)
 	}
-	out, err = a.mcpDbExecute(mcpDbExecuteArgs{SessionID: sid, SQL: "CREATE TEMP TABLE mcp_t (a int); INSERT INTO mcp_t VALUES (1), (2)"})
+	out, err = a.mcpDbExecute(context.Background(), mcpDbExecuteArgs{SessionID: sid, SQL: "CREATE TEMP TABLE mcp_t (a int); INSERT INTO mcp_t VALUES (1), (2)"})
 	if err != nil || !strings.Contains(out, "INSERT 0 2") {
 		t.Fatalf("execute: %q %v", out, err)
 	}
 	// Same session: the temp table is there for the next query.
-	out, err = a.mcpDbQuery(mcpDbQueryArgs{SessionID: sid, SQL: "SELECT count(*) FROM mcp_t"})
+	out, err = a.mcpDbQuery(context.Background(), mcpDbQueryArgs{SessionID: sid, SQL: "SELECT count(*) FROM mcp_t"})
 	if err != nil || !strings.Contains(out, "count\n2\n") {
 		t.Fatalf("query after execute: %q %v", out, err)
 	}
@@ -109,7 +109,7 @@ func TestMcpDbExecuteReadOnlyConnection(t *testing.T) {
 	if err := a.McpShareSession(sid, "read-run-yolo"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.mcpDbExecute(mcpDbExecuteArgs{SessionID: sid, SQL: "CREATE TEMP TABLE t (a int)"}); err == nil || !strings.Contains(err.Error(), "read-only") {
+	if _, err := a.mcpDbExecute(context.Background(), mcpDbExecuteArgs{SessionID: sid, SQL: "CREATE TEMP TABLE t (a int)"}); err == nil || !strings.Contains(err.Error(), "read-only") {
 		t.Fatalf("execute on a read-only connection: %v", err)
 	}
 }

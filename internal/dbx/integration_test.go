@@ -264,6 +264,38 @@ func itEngine(t *testing.T, engine string) {
 	}
 	mustRun(t, sess, "SELECT 1")
 
+	// Query tabs hold their own connections: four more tabs open, and the
+	// tree and Stop still get through.
+	for i := 0; i < 4; i++ {
+		if _, err := h.OpenSession(ctx, fmt.Sprintf("extra%d", i), s.cfg.Database); err != nil {
+			t.Fatal(err)
+		}
+	}
+	quick, cancelQuick := context.WithTimeout(ctx, 5*time.Second)
+	if _, err := h.Databases(quick); err != nil {
+		t.Fatalf("tree with five tabs open: %v", err)
+	}
+	cancelQuick()
+	go func() { done <- sess.Run(context.Background(), sleep, dbx.RunOptions{}) }()
+	time.Sleep(500 * time.Millisecond)
+	start = time.Now()
+	sess.Cancel()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("cancel with five tabs open did not stop the statement")
+	}
+
+	// A caller's context ending stops the statement too (the LLM's calls).
+	short, cancelShort := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	start = time.Now()
+	sess.Run(short, sleep, dbx.RunOptions{})
+	cancelShort()
+	if time.Since(start) > 10*time.Second {
+		t.Fatal("an ended context did not stop the statement")
+	}
+	mustRun(t, sess, "SELECT 1")
+
 	// Read-only: refused before the server, and by the server.
 	ro := s.open(t, true)
 	rs, err := ro.OpenSession(ctx, "q", s.cfg.Database)
@@ -288,7 +320,7 @@ func itEngine(t *testing.T, engine string) {
 		t.Fatalf("server let %q through: %+v", sneaky, r[0])
 	}
 	if !pg {
-		if r := rs.Run(ctx, "SELECT * FROM "+table+" INTO OUTFILE '/tmp/x'", dbx.RunOptions{}); !strings.Contains(r[0].Error, "OUTFILE") {
+		if r := rs.Run(ctx, "SELECT * FROM "+table+" INTO OUTFILE '/tmp/x'", dbx.RunOptions{}); !strings.Contains(r[0].Error, "read-only") {
 			t.Fatalf("outfile: %+v", r[0])
 		}
 	}

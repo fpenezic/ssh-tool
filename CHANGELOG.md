@@ -9,22 +9,22 @@ a prerelease upstream.
 
 ## [Unreleased] - Databases
 
-PostgreSQL and MySQL / MariaDB open from the connection that reaches them: databases, tables and their structure, and query tabs with their own sessions, with every database connection carried by the connection's SSH session.
+PostgreSQL and MySQL / MariaDB open from the connection that reaches them: databases, tables and their structure, and query tabs with their own sessions, with every database connection carried by the connection's SSH session by default.
 
 ### Databases
 
 - **A database on a connection.** A new **Database** tab in the connection and folder editors (inherited like the rest) names the engine, the address as seen from the host (empty: `127.0.0.1` and the engine's port), the database, a login credential, TLS and read-only. **Open database** sits next to Connect, in the connection's and the terminal tab's right-click menus, and **Double-click opens** gains a **Database** choice.
-- **No port forward.** Every database connection is a channel on one SSH session to the host, so a server that only listens on its loopback works as is. Host-key and password prompts, jump chains and network profiles work as for a terminal.
+- **No port forward.** Through SSH (the default), every database connection is a channel on one SSH session to the host, so a server that only listens on its loopback works as is. Host-key and password prompts, jump chains and network profiles work as for a terminal.
 - **In the tree.** Each database is a row under its connection, so the browser is at hand next to the terminal: the connection still opens a terminal, the row opens the Database tab. Rows can be named, taken out with **Show in tree** and folded away with the badge on the connection, like pinned bookmarks. One database is the default (right-click -> **Set as default**): listed first, and what **Double-click opens -> Database** opens.
 - **Several databases per host.** **Databases on this host** lists prod, stage or another server under one connection, each with only what differs - its own login, read-only, engine or address. Each is a row under the connection in the tree and opens its own tab. Folders keep the defaults, so servers sharing a DBA login set it once.
 - **Logins on the spot.** With no login set, opening the database asks for one and saves it as a vault credential (or uses it once). **+ New login...** in the login lists of the Database and Kafka settings creates the credential without leaving the editor.
 - **Tree.** Databases with their size, tables and views grouped by schema with row estimates, a filter, system databases on request.
-- **Query tabs.** An SQL editor with highlighting and table-name completion. **Ctrl+Enter** runs the statement under the cursor or the selection, **Ctrl+Shift+Enter** the whole script; **Stop** cancels on the server, and a row limit stops a large read on the server instead of reading it to the end. Each tab has its own session, so `SET`, temporary tables and transactions carry across runs; PostgreSQL tabs show an open transaction with **Commit** / **Roll back** and ask before closing one.
+- **Query tabs.** An SQL editor with highlighting and table-name completion. **Ctrl+Enter** runs the statement under the cursor or the selection, **Ctrl+Shift+Enter** the whole script; **Stop** cancels on the server, and a row limit stops a large read on the server instead of reading it to the end (except inside your own PostgreSQL transaction, and for writes that return rows). Each tab has its own session, so `SET`, temporary tables and transactions carry across runs; PostgreSQL tabs show an open transaction with **Commit** / **Roll back** and ask before closing one.
 - **Results.** A grid that stays fast with 100 000 rows, cell copy, a value viewer with JSON pretty-printed, CSV and JSON export, one chip per statement of a script. Values print as `psql` and `mysql` print them: exact numbers, `NULL` marked, binary as hex.
 - **Tables.** Rows 200 at a time in key order, structure (columns, indexes, foreign keys) and DDL.
 - **Guard rails.** Read-only connections refuse writes in the backend: only read statements are sent, inside a READ ONLY transaction that is rolled back. On a connection marked sensitive, statements that change data are listed for confirmation. Every write goes to the audit log.
 - **A tab like the others.** Database tabs detach and redock, split into a terminal on the host, and come back with Reopen last session and workspaces with their SQL (nothing is re-run).
-- **LLM access.** A Database tab can be shared over MCP or opened with `open_db` after you approve: listing and describing tables and running queries - always read-only, capped - and, with read-run, statements you approve.
+- **LLM access.** A Database tab can be shared over MCP or opened with `open_db` after you approve: listing and describing tables and running queries - always read-only, capped - and, with read-run, statements you approve (unless the share is auto-run).
 
 ### Fixes
 

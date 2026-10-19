@@ -62,7 +62,7 @@ func TestCheckReadOnly(t *testing.T) {
 	allowed := []string{
 		"SELECT 1", "  (SELECT 1) UNION (SELECT 2)", "-- why\nselect * from t", "WITH x AS (SELECT 1) SELECT * FROM x",
 		"SHOW search_path", "EXPLAIN SELECT 1", "VALUES (1)", "TABLE t", "/* c */ DESCRIBE t",
-		"SELECT 'INTO OUTFILE' AS s",
+		"SELECT 'INTO OUTFILE' AS s", "SELECT update_time, delete_flag FROM t", "EXPLAIN SELECT 1",
 	}
 	for _, s := range allowed {
 		for _, e := range []string{EnginePostgres, EngineMySQL} {
@@ -75,13 +75,21 @@ func TestCheckReadOnly(t *testing.T) {
 		"DELETE FROM t", "update t set a=1", "DROP TABLE t", "CREATE TABLE x (a int)", "TRUNCATE t",
 		"SET transaction_read_only = off", "SET TRANSACTION READ WRITE", "BEGIN", "COMMIT", "CALL p()",
 		"DO $$ BEGIN END $$", "COPY t FROM STDIN", "GRANT ALL ON t TO x", "LOCK TABLE t", "", "-- only",
+		"WITH d AS (DELETE FROM t RETURNING id) SELECT count(*) FROM d",
+		"with u as (update t set a = 1 returning *) select * from u",
+		"EXPLAIN ANALYZE DELETE FROM t", "EXPLAIN (ANALYZE, BUFFERS) SELECT 1",
+		"SELECT * INTO t2 FROM t",
 	}
 	for _, s := range refused {
 		if err := CheckReadOnly(EnginePostgres, s); err == nil {
 			t.Errorf("%q allowed", s)
 		}
 	}
-	for _, s := range []string{"SELECT * FROM t INTO OUTFILE '/tmp/x'", "select 1 into dumpfile '/tmp/y'"} {
+	for _, s := range []string{
+		"SELECT * FROM t INTO OUTFILE '/tmp/x'", "select 1 into dumpfile '/tmp/y'",
+		// Executable comments are code to MySQL.
+		"SELECT * FROM t /*!INTO OUTFILE '/tmp/x'*/", "/*!50000 DROP TABLE t */", "SELECT 1 INTO @v",
+	} {
 		if err := CheckReadOnly(EngineMySQL, s); err == nil {
 			t.Errorf("mysql %q allowed", s)
 		}
@@ -139,5 +147,40 @@ func TestIsTxControl(t *testing.T) {
 	}
 	if IsTxControl(EnginePostgres, "SELECT 'BEGIN'") || IsTxControl(EngineMySQL, "UPDATE t SET a = 1") {
 		t.Error("ordinary statement taken for transaction control")
+	}
+}
+
+// The writes under a read keyword count as writes (audit, confirmation).
+func TestIsReadWriteForms(t *testing.T) {
+	for _, s := range []string{
+		"WITH d AS (DELETE FROM t RETURNING id) SELECT count(*) FROM d",
+		"EXPLAIN ANALYZE UPDATE t SET a = 1",
+		"SELECT * INTO new_t FROM t",
+	} {
+		if IsRead(EnginePostgres, s) {
+			t.Errorf("%q taken for a read", s)
+		}
+	}
+	if IsRead(EngineMySQL, "SELECT 1 /*!INTO OUTFILE '/x'*/") {
+		t.Error("MySQL executable comment taken for a comment")
+	}
+	if !IsRead(EnginePostgres, "WITH x AS (SELECT 1) SELECT * FROM x -- delete later") || !IsRead(EngineMySQL, "SELECT '/*!' AS s") {
+		t.Error("plain reads taken for writes")
+	}
+}
+
+func TestRedactSecrets(t *testing.T) {
+	cases := map[string]string{
+		"ALTER ROLE app PASSWORD 'se''cret'":                           "ALTER ROLE app PASSWORD '***'",
+		"CREATE USER u WITH ENCRYPTED PASSWORD 'x' VALID UNTIL 'y'":    "CREATE USER u WITH ENCRYPTED PASSWORD '***' VALID UNTIL 'y'",
+		"create user 'u'@'%' identified by 'pw'":                       "create user 'u'@'%' identified by '***'",
+		"ALTER USER u IDENTIFIED WITH caching_sha2_password BY \"pw\"": "ALTER USER u IDENTIFIED WITH caching_sha2_password BY '***'",
+		"SET PASSWORD = 'pw'":                                          "SET PASSWORD = '***'",
+		"SELECT password FROM users":                                   "SELECT password FROM users",
+	}
+	for in, want := range cases {
+		if got := RedactSecrets(in); got != want {
+			t.Errorf("%q -> %q, want %q", in, got, want)
+		}
 	}
 }

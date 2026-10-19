@@ -386,12 +386,13 @@ type DbRunResult struct {
 // DbRun runs a script on the query tab's session (opened on database,
 // reopened when the tab switches database). Writes are audited.
 func (a *App) DbRun(id, tabKey, database, script string, maxRows int) (*DbRunResult, error) {
-	return a.dbRun(id, tabKey, database, script, dbx.RunOptions{MaxRows: maxRows}, "")
+	// Not bounded: the user stops a run with DbCancel.
+	return a.dbRun(context.Background(), id, tabKey, database, script, dbx.RunOptions{MaxRows: maxRows}, "")
 }
 
-// dbRun is DbRun with the run options and the audit source ("" = the user,
-// "mcp" = the LLM).
-func (a *App) dbRun(id, tabKey, database, script string, opts dbx.RunOptions, source string) (*DbRunResult, error) {
+// dbRun is DbRun with a context that ends the run (the LLM's calls), the
+// run options and the audit source ("" = the user, "mcp" = the LLM).
+func (a *App) dbRun(ctx context.Context, id, tabKey, database, script string, opts dbx.RunOptions, source string) (*DbRunResult, error) {
 	dh, err := a.dbGet(id)
 	if err != nil {
 		return nil, err
@@ -400,7 +401,7 @@ func (a *App) dbRun(id, tabKey, database, script string, opts dbx.RunOptions, so
 	if err != nil {
 		return nil, err
 	}
-	results := sess.Run(context.Background(), script, opts)
+	results := sess.Run(ctx, script, opts)
 	for _, r := range results {
 		if !r.Write {
 			continue
@@ -408,7 +409,7 @@ func (a *App) dbRun(id, tabKey, database, script string, opts dbx.RunOptions, so
 		meta := map[string]string{
 			"handle_id": id,
 			"database":  database,
-			"statement": clip(r.Statement, 300),
+			"statement": clip(dbx.RedactSecrets(r.Statement), 300),
 		}
 		if source != "" {
 			meta["source"] = source

@@ -21,8 +21,9 @@ reviews:
     - path: "**/*"
       instructions: |
         House rules of this repo - flag a change that breaks one:
-        - ASCII punctuation only: no em-dashes or en-dashes anywhere (code,
-          comments, docs, UI strings, commit text); use " - ".
+        - No em-dashes or en-dashes anywhere (code, comments, docs, UI
+          strings, commit text); use " - ". The middle dot (" · ") is the
+          app's UI separator and is fine in UI strings.
         - No emojis in code, docs or UI; icons come from
           frontend/src/lib/iconMap.ts (lucide).
         - No sensitive data in repo files: real email addresses, internal

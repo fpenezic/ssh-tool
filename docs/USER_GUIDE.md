@@ -1584,9 +1584,9 @@ Browse and query a PostgreSQL or MySQL / MariaDB database from the
 connection that reaches it. Like Kafka, the database is a service on a
 connection: switch it on in the connection (or once on a folder of
 database hosts) and the connection opens a **Database tab** next to its
-terminals. Every database connection rides the connection's SSH session,
-so a server that only listens on the host's `127.0.0.1` works with no
-port forward.
+terminals. Through SSH (the default), every database connection rides the
+connection's SSH session, so a server that only listens on the host's
+`127.0.0.1` works with no port forward.
 
 ### Turning it on
 
@@ -1685,7 +1685,11 @@ completion of the table names listed so far.
   strings, comments and PostgreSQL `$$` bodies do not split.
 - **Limit** caps the rows a statement brings back (500 by default, up to
   100 000); a read cut at the limit is stopped on the server, so a `SELECT`
-  without `LIMIT` on a huge table is not read to the end.
+  without `LIMIT` on a huge table is not read to the end. Two exceptions:
+  inside a PostgreSQL transaction you opened (stopping the statement would
+  abort the transaction), and a statement that changes data while
+  returning rows (`DELETE ... RETURNING`) - those are read to the end and
+  only the limit is shown.
 - **Stop** cancels the running statement on the server.
 - Each query tab has its own server session: `SET`, temporary tables and an
   open transaction carry from one run to the next. On PostgreSQL the tab
@@ -1719,8 +1723,8 @@ A Database tab can be shared with an LLM over MCP like a terminal, or the
 LLM can open one with `open_db` (you approve). It can list databases and
 tables, describe a table and run read queries - always read-only, whatever
 the connection allows, capped in rows and bytes. With read-run it can also
-run statements that change data, each call approved by you, never on a
-read-only connection and without `BEGIN` / `COMMIT`. It works on its own
+run statements that change data - each call approved by you unless the
+share is auto-run - never on a read-only connection and without `BEGIN` / `COMMIT`. It works on its own
 session, never on your query tabs. See
 [Share a session with an LLM](#llm-mcp) for the bridge itself.
 
