@@ -7,6 +7,7 @@
   import { api, type DbResult } from "./api";
   import { toast } from "./toast.svelte.ts";
   import { IconDownload, IconX, IconCopy } from "./iconMap";
+  import { selectAllWithin } from "./selectWithin";
 
   interface Props {
     result: DbResult;
@@ -160,7 +161,8 @@
         <button title="Copy the value" onclick={() => api.clipboardSetText(openedValue ?? "").catch(() => {})}><IconCopy size={13} /></button>
         <button title="Close" onclick={() => (opened = null)}><IconX size={13} /></button>
       </div>
-      <pre class:null={openedValue === null}>{openedPretty ?? "NULL"}</pre>
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+      <pre class:null={openedValue === null} tabindex="0" onkeydown={selectAllWithin}>{openedPretty ?? "NULL"}</pre>
     </div>
   {/if}
   <div class="foot">
@@ -201,8 +203,9 @@
   .vp-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .vp-head button { background: none; border: none; color: var(--overlay1); cursor: pointer; padding: 0.15rem; display: inline-flex; }
   .vp-head button:hover { color: var(--text); }
-  pre { margin: 0; padding: 0.4rem 0.6rem; overflow: auto; font-size: 0.78rem; white-space: pre-wrap; word-break: break-all; color: var(--text); }
+  pre { margin: 0; padding: 0.4rem 0.6rem; overflow: auto; font-size: 0.78rem; white-space: pre-wrap; word-break: break-all; color: var(--text); user-select: text; }
   pre.null { color: var(--overlay0); font-style: italic; }
+  pre:focus { outline: none; }
   .foot { flex: 0 0 auto; display: flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0.5rem; font-size: 0.74rem; color: var(--subtext0); border-top: 1px solid var(--surface0); }
   .spacer { flex: 1 1 auto; }
   .foot button {
