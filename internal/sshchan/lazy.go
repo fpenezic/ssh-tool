@@ -1,4 +1,9 @@
-package kafka
+// Package sshchan carries a tab's TCP connections as direct-tcpip channels
+// on one SSH session to the connection's host, opened on first use and
+// reopened after it drops. The Kafka and Database tabs dial through it, so
+// a service that only listens on that host's loopback, or behind a bastion
+// under names only the far side resolves, works without local forwards.
+package sshchan
 
 import (
 	"context"
@@ -9,7 +14,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// Transport states of a LazySSH, as the Kafka tab shows them.
+// Transport states of a LazySSH, as the tabs show them.
 const (
 	TransportIdle       = "idle"
 	TransportConnecting = "connecting"
@@ -19,12 +24,12 @@ const (
 )
 
 // ErrTransportClosed is returned by a LazySSH after Close.
-var ErrTransportClosed = errors.New("kafka transport closed")
+var ErrTransportClosed = errors.New("ssh transport closed")
 
-// LazySSH holds the one SSH session a cluster's broker connections ride on.
+// LazySSH holds the one SSH session a tab's connections ride on.
 // It connects on first use, shares that connect between concurrent dials,
 // and connects again after the session dies (Invalidate), so a dropped
-// tunnel heals on the next broker dial instead of needing a reopened tab.
+// tunnel heals on the next dial instead of needing a reopened tab.
 type LazySSH struct {
 	// Connect opens the session and returns the client to open channels on
 	// plus a func that closes the session. It runs on a context Close
@@ -153,10 +158,11 @@ func (l *LazySSH) Close() {
 	}
 }
 
-// Dial opens a broker connection as a direct-tcpip channel. The address is
-// resolved by the SSH server, so advertised broker names that only exist on
-// the far side work. A refused channel (nothing listening, name unknown
-// there) is the broker's answer and returned as is; any other failure means
+// Dial opens a connection as a direct-tcpip channel. The address is
+// resolved by the SSH server, so names that only exist on the far side
+// (advertised broker names, a database's internal host) work. A refused
+// channel (nothing listening, name unknown there) is the far side's answer
+// and returned as is; any other failure means
 // the session is gone, so it is dropped and the dial tried once more on a
 // fresh one.
 func (l *LazySSH) Dial(ctx context.Context, _, addr string) (net.Conn, error) {

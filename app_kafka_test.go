@@ -21,6 +21,7 @@ import (
 
 	"ssh-tool/internal/creds"
 	"ssh-tool/internal/kafka"
+	"ssh-tool/internal/sshchan"
 	"ssh-tool/internal/store"
 )
 
@@ -395,7 +396,7 @@ func TestKafkaIPCTunnel(t *testing.T) {
 	if _, err := a.KafkaProduce(info.ID, kafka.ProduceRequest{Topic: "events", Partition: 1, Value: &kafka.PayloadInput{Text: "through ssh"}}); err != nil {
 		t.Fatal(err)
 	}
-	if st, _ := a.KafkaStatus(info.ID); st.State != kafka.TransportConnected {
+	if st, _ := a.KafkaStatus(info.ID); st.State != sshchan.TransportConnected {
 		t.Fatalf("state = %+v", st)
 	}
 	if n := lab.loginCount(); n != 1 {
