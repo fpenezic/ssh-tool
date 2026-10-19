@@ -1,0 +1,51 @@
+# CodeRabbit review settings. Reviews pull requests only (work on main is
+# reviewed by the maintainer). Kept quiet on purpose: findings, not prose.
+language: en-US
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  sequence_diagrams: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!frontend/bindings/**"
+    - "!**/go.sum"
+    - "!**/package-lock.json"
+    - "!frontend/dist/**"
+  path_instructions:
+    - path: "**/*"
+      instructions: |
+        House rules of this repo - flag a change that breaks one:
+        - ASCII punctuation only: no em-dashes or en-dashes anywhere (code,
+          comments, docs, UI strings, commit text); use " - ".
+        - No emojis in code, docs or UI; icons come from
+          frontend/src/lib/iconMap.ts (lucide).
+        - No sensitive data in repo files: real email addresses, internal
+          hostnames or IPs, customer names, tokens. Examples use
+          example.com.
+        - Read-only modes (Kafka, Database) and MCP permissions must be
+          enforced in the Go backend, not only hidden in the UI.
+        - Platform: the app runs natively on Windows; no WSL-specific paths.
+          Files without a build tag also build for android.
+    - path: "**/*.go"
+      instructions: |
+        Look for: goroutine leaks and missing context cancellation, locks
+        held across blocking calls or nested in the opposite order, errors
+        dropped silently, secrets reaching logs or the audit log.
+    - path: "frontend/src/**/*.svelte"
+      instructions: |
+        Svelte 5 runes. Look for: state mutated inside $derived or the
+        template (state_unsafe_mutation), $effect loops (an effect that
+        reads state it writes; loaders called from effects belong in
+        untrack), `a ??= {}` on a $state proxy (yields the raw object).
+    - path: "CHANGELOG.md"
+      instructions: |
+        Release blocks are not hard-wrapped: one line per paragraph and per
+        bullet.
+chat:
+  auto_reply: true
