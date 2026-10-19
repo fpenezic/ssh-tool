@@ -6,8 +6,8 @@ import (
 )
 
 // TestCredentialUsageConfigs: a credential referenced only from a
-// dynamic folder's provider config, a network profile or the sync
-// target still shows up in "Used by" (and so blocks Delete).
+// dynamic folder's provider config, a network profile, a Kafka login
+// or the sync target still shows up in "Used by" (and so blocks Delete).
 func TestCredentialUsageConfigs(t *testing.T) {
 	db := openTestDB(t)
 	const cred = "cred-1"
@@ -38,11 +38,21 @@ func TestCredentialUsageConfigs(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	kref := cred
+	c, err := db.CreateConnection(NewConnection{
+		Name: "broker-1", Hostname: "broker-1.example.com",
+		Overrides: InheritableSettings{KafkaCredentialRef: &kref},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	got, err := db.CredentialUsage(cred)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []UsageRef{
+		{Kind: "connection", ID: c.ID, Name: "broker-1", Hostname: "broker-1.example.com", Role: "Kafka SASL"},
 		{Kind: "folder", ID: f.ID, Name: "Cluster", Role: "API token"},
 		{Kind: "network_profile", ID: p.ID, Name: "Office VPN", Role: "client cert"},
 		{Kind: "network_profile", ID: p.ID, Name: "Office VPN", Role: "password"},

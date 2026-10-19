@@ -1160,7 +1160,7 @@
               {#if u.kind === "folder"}
                 <IconFolder size={13} /> <strong>{u.name}</strong> <span class="muted">(folder{u.role ? `, ${u.role}` : ""})</span>
               {:else if u.kind === "connection"}
-                <IconHost size={13} /> <strong>{u.name}</strong> <span class="muted">- {u.hostname}</span>
+                <IconHost size={13} /> <strong>{u.name}</strong> <span class="muted">- {u.hostname}{u.role ? ` (${u.role})` : ""}</span>
               {:else if u.kind === "network_profile"}
                 <IconVpn size={13} /> <strong>{u.name}</strong> <span class="muted">(network profile, {u.role})</span>
               {:else}

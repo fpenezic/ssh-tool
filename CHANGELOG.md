@@ -24,6 +24,7 @@ Kafka clusters open from the connection that reaches them: topics, a consumer, p
 - **A tab like the others.** Kafka tabs detach and redock, come back with Reopen last session and workspaces, show up in the quick palette as `Kafka: connection / topic`, and a split next to one opens a terminal on the same host.
 - **LLM access.** A Kafka tab can be shared with an LLM over MCP, or opened by it with `open_kafka` after you approve: listing and describing topics and groups, reading records (capped, never committing) and, with read-run, producing records you approve. Topic and group administration stays with you.
 - **Import from kafka-tool.** **Settings -> Import -> kafka-tool** turns kafka-tool's `profiles.json` into connections with Kafka enabled, SSH passwords into the vault.
+- **Used by.** A credential that holds a Kafka SASL login lists the connections and folders using it under **Used by** in Credentials, marked "Kafka SASL", so it no longer looks unused.
 
 ## [0.114.0] - Tray menu, smoother terminal, VPN in the connection path
 

@@ -327,11 +327,20 @@ func (d *DB) CredentialUsage(credentialID string) ([]UsageRef, error) {
 		if settingsUsesCred(&f.Settings, credentialID) {
 			out = append(out, UsageRef{Kind: "folder", ID: f.ID, Name: f.Name})
 		}
+		if kafkaUsesCred(&f.Settings, credentialID) {
+			out = append(out, UsageRef{Kind: "folder", ID: f.ID, Name: f.Name, Role: kafkaCredRole})
+		}
 	}
 	for _, c := range connections {
 		if settingsUsesCred(&c.Overrides, credentialID) {
 			out = append(out, UsageRef{
 				Kind: "connection", ID: c.ID, Name: c.Name, Hostname: c.Hostname,
+			})
+		}
+		if kafkaUsesCred(&c.Overrides, credentialID) {
+			out = append(out, UsageRef{
+				Kind: "connection", ID: c.ID, Name: c.Name, Hostname: c.Hostname,
+				Role: kafkaCredRole,
 			})
 		}
 	}
@@ -432,6 +441,14 @@ func settingsUsesCred(s *InheritableSettings, credID string) bool {
 		}
 	}
 	return false
+}
+
+// kafkaCredRole labels the Kafka SASL login in "Used by"; it is its own
+// entry so a credential used for both SSH and Kafka shows both roles.
+const kafkaCredRole = "Kafka SASL"
+
+func kafkaUsesCred(s *InheritableSettings, credID string) bool {
+	return s.KafkaCredentialRef != nil && *s.KafkaCredentialRef == credID
 }
 
 func jumpUsesCred(spec *JumpHostSpec, credID string) bool {
