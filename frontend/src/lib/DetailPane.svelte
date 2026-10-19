@@ -1,5 +1,6 @@
 <script lang="ts">
   import { profileKindTitle, profileRunsHere, NOT_ON_MOBILE_TITLE } from "./networkKind";
+  import { splitHostInput } from "./hostInput";
   import { tree, credentials, selection, sessions, paneTabs, view, jumpChainHostnames } from "./stores.svelte";
   import { isMobile } from "./platform";
   import { toast } from "./toast.svelte";
@@ -327,6 +328,17 @@
     } finally {
       infPickerTarget = null;
     }
+  }
+
+  // A pasted "host:port" or "user@host:port" in the Hostname field moves
+  // its port and user into their own fields.
+  function splitHostField() {
+    if (!editing) return;
+    const t = splitHostInput(editing.hostname);
+    if (t.port === undefined && t.user === undefined) return;
+    editing.hostname = t.host;
+    if (t.port !== undefined) editing.port = String(t.port);
+    if (t.user !== undefined) editing.username = t.user;
   }
 
   // ----- Folder editing -----
@@ -2181,7 +2193,7 @@
       </label>
       {:else}
       <div class="row">
-        <label class="grow" title="The address to connect to: a DNS hostname or an IP. This is what SSH dials, not the display name above.">Hostname / IP address<input bind:value={editing.hostname} placeholder="host.example.com or 10.0.0.5" /></label>
+        <label class="grow" title="The address to connect to: a DNS hostname or an IP. This is what SSH dials, not the display name above.">Hostname / IP address<input bind:value={editing.hostname} placeholder="host.example.com or 10.0.0.5" onblur={splitHostField} /></label>
         <label class="port">
           Port
           <input

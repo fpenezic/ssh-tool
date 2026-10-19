@@ -4,6 +4,7 @@
 // modal to render; the modals close themselves through these same flags.
 
 import { api, type Connection } from "./api";
+import { splitHostInput, hostOverrides } from "./hostInput";
 import { tree, sessions, paneTabs, view, selection, credentials, type PaneNode } from "./stores.svelte";
 import { vncSessions } from "./vncState.svelte.ts";
 import { kafkaTabs, kafkaEnabledFor } from "./kafkaState.svelte";
@@ -1047,12 +1048,13 @@ class ConnectionActionsStore {
   async addConnectionUnder(folderId: string | null) {
     const name = await showPrompt("Connection name?");
     if (!name?.trim()) return;
-    const hostname = (await showPrompt("Hostname?")) ?? "";
+    const target = splitHostInput((await showPrompt("Hostname? (host, host:port or user@host:port)")) ?? "");
     try {
       const conn: any = await api.connectionsCreate({
         folderId: folderId ?? undefined,
         name: name.trim(),
-        hostname,
+        hostname: target.host,
+        overrides: hostOverrides(target),
       });
       await tree.load();
       if (conn?.id) selection.select({ kind: "connection", id: conn.id });

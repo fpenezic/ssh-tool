@@ -31,6 +31,7 @@ PostgreSQL and MySQL / MariaDB open from the connection that reaches them: datab
 - **Detached windows.** Closing a detached window with its X now ends a Kafka tab or local shell inside it too. The Kafka connection used to stay open and reconnect every few minutes, keeping its connection green in the tree and the Terminal count one too high.
 - **Right-click menu.** Connections at the top level of the tree now offer Open VNC console and Open Kafka like the ones in folders.
 - **Log.** The tray no longer writes a line for every menu rebuild.
+- **New connection.** The hostname you type can carry the port and user: `db.example.com:2222`, `deploy@10.0.0.5:2200` or `[2001:db8::1]:2222` fill Hostname, Port and Username, at creation and when pasted into the Hostname field. A port in the hostname used to make the connection fail.
 - **Kafka.** Ctrl+A in a record's Value, Key or Headers view selects that view only, instead of the whole window.
 - **Export with credentials.** The login of a jump host (a bastion's credential, at any depth of the chain) now goes into the archive too; before, the bastion arrived on the other machine without a login. A dry-run import counts the port forwards of the connections it would create.
 - **Backups.** Encrypted pre-restore snapshots are pruned to the Keep last N backups setting, like auto backups; every restore used to leave one behind for good. A restore staged by a very old version and applied after the upgrade works again instead of failing on every start.

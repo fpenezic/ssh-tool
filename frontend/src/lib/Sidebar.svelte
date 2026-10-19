@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tree, selection, drag, sessions, paneTabs, view } from "./stores.svelte";
+  import { splitHostInput, hostOverrides } from "./hostInput";
   import TreeNode from "./TreeNode.svelte";
   import TreeBookmarkRows from "./TreeBookmarkRows.svelte";
   import TreeDbRows from "./TreeDbRows.svelte";
@@ -254,11 +255,12 @@
     const folderId = targetFolderId();
     const name = await showPrompt(`Connection name? (${targetLabel(folderId)})`);
     if (!name) return;
-    const hostname = await showPrompt("Hostname?") ?? "";
+    const target = splitHostInput(await showPrompt("Hostname? (host, host:port or user@host:port)") ?? "");
     const conn = await api.connectionsCreate({
       folderId,
       name,
-      hostname,
+      hostname: target.host,
+      overrides: hostOverrides(target),
     });
     await tree.load();
     selection.select({ kind: "connection", id: conn.id });
