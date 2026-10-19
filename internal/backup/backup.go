@@ -390,19 +390,10 @@ func ApplyPending(storeDBPath, vaultEncPath string) (bool, error) {
 	stagedStore := filepath.Join(pending, "store.db.enc")
 	stagedVault := filepath.Join(pending, "vault.enc.enc")
 
-	storeBlob, err := os.ReadFile(stagedStore)
-	if err != nil {
-		return false, fmt.Errorf("backup: staged store missing: %w", err)
-	}
-	vaultBlob, err := os.ReadFile(stagedVault)
-	if err != nil {
-		return false, fmt.Errorf("backup: staged vault missing: %w", err)
-	}
-
 	// READY is JSON now: {sealed_passphrase, source, staged_at}.
 	// Tolerate the legacy plaintext-info READY shape (no sealed
 	// passphrase, staged files at the old names) just long enough
-	// that a v0.24 → v0.25 upgrade with a pending restore in
+	// that a v0.24 -> v0.25 upgrade with a pending restore in
 	// flight still applies - fall back to reading store.db /
 	// vault.enc as raw bytes.
 	sealed, sourceMissing := parseReadyFlag(readyBytes)
@@ -423,6 +414,16 @@ func ApplyPending(storeDBPath, vaultEncPath string) (bool, error) {
 		_ = os.Remove(legacyStore)
 		_ = os.Remove(legacyVault)
 	} else {
+		// The encrypted staged files are the v2 shape's; a legacy READY
+		// has none, so they are read only here.
+		storeBlob, err := os.ReadFile(stagedStore)
+		if err != nil {
+			return false, fmt.Errorf("backup: staged store missing: %w", err)
+		}
+		vaultBlob, err := os.ReadFile(stagedVault)
+		if err != nil {
+			return false, fmt.Errorf("backup: staged vault missing: %w", err)
+		}
 		passBytes, err := creds.OpenForMachine(sealed)
 		if err != nil {
 			return false, fmt.Errorf("backup: unseal pending passphrase (different machine?): %w", err)

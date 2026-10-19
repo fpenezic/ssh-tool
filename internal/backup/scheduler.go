@@ -180,6 +180,12 @@ func pruneOld(bDir string, keep int) error {
 	if err := pruneFiles(bDir, autoBackupPrefix, backupExt, keep); err != nil {
 		return err
 	}
+	// Pre-restore snapshots are encrypted files now
+	// (pre-restore-<ts>.sshtool-backup); the directory pass is for the
+	// plaintext ones older versions left.
+	if err := pruneFiles(bDir, snapshotDir+"-", backupExt, keep); err != nil {
+		return err
+	}
 	return prunePreRestoreDirs(bDir, keep)
 }
 

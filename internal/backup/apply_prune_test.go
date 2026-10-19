@@ -202,3 +202,59 @@ func TestLastAutoBackupAt(t *testing.T) {
 		t.Fatalf("lastAutoBackupAt: got %v, want ~%v (newest)", got, newT)
 	}
 }
+
+// Pre-restore snapshots are files now and are kept to `keep` like the auto
+// backups (they used to pile up: only the old directory form was pruned).
+func TestPrunePreRestoreFiles(t *testing.T) {
+	bDir := t.TempDir()
+	base := time.Now().Add(-10 * time.Hour)
+	var names []string
+	for i := 0; i < 3; i++ {
+		name := snapshotDir + "-2026010" + string(rune('1'+i)) + "-000000" + backupExt
+		names = append(names, name)
+		p := filepath.Join(bDir, name)
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		mt := base.Add(time.Duration(i) * time.Hour)
+		_ = os.Chtimes(p, mt, mt)
+	}
+	if err := pruneOld(bDir, 1); err != nil {
+		t.Fatal(err)
+	}
+	for i, name := range names {
+		_, err := os.Stat(filepath.Join(bDir, name))
+		if exists, want := err == nil, i == 2; exists != want {
+			t.Errorf("snapshot %d exists=%v, want %v", i, exists, want)
+		}
+	}
+}
+
+// A legacy READY (plain text, files staged unencrypted under their old
+// names) still applies: the v2 .enc files are not required for it.
+func TestApplyPendingLegacyReady(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "store.db")
+	vaultPath := filepath.Join(dir, "vault.enc")
+	seedStoreVal(t, storePath, "live")
+	_ = os.WriteFile(vaultPath, []byte("live-vault"), 0o600)
+
+	pending := filepath.Join(dir, PendingDir)
+	if err := os.MkdirAll(pending, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	seedStoreVal(t, filepath.Join(pending, "store.db"), "staged")
+	_ = os.WriteFile(filepath.Join(pending, "vault.enc"), []byte("staged-vault"), 0o600)
+	_ = os.WriteFile(filepath.Join(pending, "READY"), []byte("source=old.sshtool-backup"), 0o600)
+
+	applied, err := ApplyPending(storePath, vaultPath)
+	if err != nil || !applied {
+		t.Fatalf("legacy ApplyPending: applied=%v err=%v", applied, err)
+	}
+	if got := markerOf(t, storePath); got != "staged" {
+		t.Fatalf("store after legacy apply: %q", got)
+	}
+	if v, _ := os.ReadFile(vaultPath); string(v) != "staged-vault" {
+		t.Fatalf("vault after legacy apply: %q", v)
+	}
+}
