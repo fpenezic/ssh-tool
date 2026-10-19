@@ -1265,6 +1265,18 @@ export function DbSaveLogin(connectionID, targetID, name, user, password) {
 }
 
 /**
+ * DbSetDefault marks one of a connection's databases as its default
+ * (targetID "" = its own): "Double-click opens: Database" opens it and the
+ * tree lists it first.
+ * @param {string} connectionID
+ * @param {string} targetID
+ * @returns {$CancellablePromise<void>}
+ */
+export function DbSetDefault(connectionID, targetID) {
+    return $Call.ByID(1385145322, connectionID, targetID);
+}
+
+/**
  * DbSetTabState stores the UI's tab list of a handle. Unknown ids are
  * ignored.
  * @param {string} id

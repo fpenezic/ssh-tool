@@ -182,17 +182,20 @@ export interface DbTreeRow {
   id: string;
   label: string;
   detail: string;
+  isDefault: boolean;
 }
 
 export function dbTreeRows(conn: Connection | null | undefined): DbTreeRow[] {
   if (!conn || !dbEnabledFor(conn)) return [];
   const o = conn.overrides ?? {};
   const out: DbTreeRow[] = [];
+  const def = (o.db_targets ?? []).some((t) => t.id === o.db_default_target) ? o.db_default_target! : "";
   if (o.db_in_tree !== false) {
     const engine = o.db_engine ?? dbInheritedFrom(conn.folder_id, "db_engine");
     out.push({
       id: "",
       label: o.db_label || o.db_name || "database",
+      isDefault: def === "",
       detail: [o.db_label && o.db_name ? o.db_name : "", engine === "mysql" ? "MySQL" : engine === "postgres" ? "PostgreSQL" : "", o.db_read_only ? "read-only" : ""]
         .filter(Boolean).join(" · "),
     });
@@ -202,10 +205,13 @@ export function dbTreeRows(conn: Connection | null | undefined): DbTreeRow[] {
     out.push({
       id: t.id,
       label: t.name || t.database || "database",
+      isDefault: def === t.id,
       detail: [t.name && t.database ? t.database : "", t.engine === "mysql" ? "MySQL" : t.engine === "postgres" ? "PostgreSQL" : "", t.read_only ? "read-only" : ""]
         .filter(Boolean).join(" · "),
     });
   }
+  // The default first; it is what "Double-click opens: Database" opens.
+  out.sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
   return out;
 }
 

@@ -2024,6 +2024,16 @@ export class InheritableSettings {
         }
         if (/** @type {any} */(false)) {
             /**
+             * DbDefaultTarget is the database "Double-click opens: Database"
+             * opens and the tree lists first: a DbTargets id, "" / nil = the
+             * connection's own. Connection-only.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["db_default_target"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * DbTargets are the databases listed under a connection (prod, stage,
              * another engine on the same host), each opening its own tab. A field
              * a target leaves nil takes the Db* value above. Set on connections;
@@ -2046,7 +2056,7 @@ export class InheritableSettings {
     static createFrom($$source = {}) {
         const $$createField5_0 = $$createType0;
         const $$createField6_0 = $$createType0;
-        const $$createField43_0 = $$createType10;
+        const $$createField44_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ssh_options" in $$parsedSource) {
             $$parsedSource["ssh_options"] = $$createField5_0($$parsedSource["ssh_options"]);
@@ -2055,7 +2065,7 @@ export class InheritableSettings {
             $$parsedSource["env_vars"] = $$createField6_0($$parsedSource["env_vars"]);
         }
         if ("db_targets" in $$parsedSource) {
-            $$parsedSource["db_targets"] = $$createField43_0($$parsedSource["db_targets"]);
+            $$parsedSource["db_targets"] = $$createField44_0($$parsedSource["db_targets"]);
         }
         return new InheritableSettings(/** @type {Partial<InheritableSettings>} */($$parsedSource));
     }
@@ -2786,6 +2796,13 @@ export class ResolvedSettings {
              * @type {string}
              */
             this["db_label"] = "";
+        }
+        if (!("db_default_target" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["db_default_target"] = "";
         }
 
         Object.assign(this, $$source);

@@ -130,10 +130,13 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		DbTLS:              firstNonNil(over.DbTLS, base.DbTLS),
 		DbCredentialRef:    firstNonNil(over.DbCredentialRef, base.DbCredentialRef),
 		// The connection's own list (folders do not set one).
-		DbTargets:  over.DbTargets,
-		DbLabel:    over.DbLabel,
-		SSHOptions: mergeMap(base.SSHOptions, over.SSHOptions),
-		EnvVars:    mergeMap(base.EnvVars, over.EnvVars),
+		DbTargets: over.DbTargets,
+		DbLabel:   over.DbLabel,
+		// The default among them; a target since removed falls back to
+		// the connection's own.
+		DbDefaultTarget: over.DbDefaultTarget,
+		SSHOptions:      mergeMap(base.SSHOptions, over.SSHOptions),
+		EnvVars:         mergeMap(base.EnvVars, over.EnvVars),
 	}
 	return out
 }
@@ -281,6 +284,7 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 		DbCredentialRef:    dbCred,
 		DbTargets:          s.DbTargets,
 		DbLabel:            strOr(s.DbLabel, ""),
+		DbDefaultTarget:    dbDefaultTarget(s),
 	}
 }
 
@@ -325,4 +329,18 @@ func strOr(p *string, def string) string {
 		return v
 	}
 	return def
+}
+
+// dbDefaultTarget is the listed database marked default, "" for the
+// connection's own (also when the marked one is no longer listed).
+func dbDefaultTarget(s store.InheritableSettings) string {
+	if s.DbDefaultTarget == nil || *s.DbDefaultTarget == "" {
+		return ""
+	}
+	for _, t := range s.DbTargets {
+		if t.ID == *s.DbDefaultTarget {
+			return t.ID
+		}
+	}
+	return ""
 }

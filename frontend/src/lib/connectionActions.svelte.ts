@@ -384,8 +384,9 @@ class ConnectionActionsStore {
         return this.openKafka(id);
       }
       if (r?.db_enabled && r?.db_default) {
-        // A connection that lists databases opens the first of them.
-        return this.openDb(id, r.db_targets?.[0]?.id ?? "");
+        // The default database: the connection's own unless one of the
+        // listed ones is marked default.
+        return this.openDb(id, r.db_default_target ?? "");
       }
     } catch {
       // resolve failed - fall through to a normal SSH connect

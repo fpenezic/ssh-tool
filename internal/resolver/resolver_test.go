@@ -432,3 +432,17 @@ func TestDbSettingsInherited(t *testing.T) {
 		t.Fatalf("defaults: %+v", r)
 	}
 }
+
+func TestDbDefaultTarget(t *testing.T) {
+	stage, gone := "t1", "t9"
+	on := true
+	targets := []store.DbTarget{{ID: "t1", Name: "stage"}}
+	r := ResolveWith(conn("c1", nil, "h", store.InheritableSettings{DbEnabled: &on, DbTargets: targets, DbDefaultTarget: &stage}), nil)
+	if r.DbDefaultTarget != "t1" {
+		t.Fatalf("default = %q", r.DbDefaultTarget)
+	}
+	r = ResolveWith(conn("c2", nil, "h", store.InheritableSettings{DbEnabled: &on, DbTargets: targets, DbDefaultTarget: &gone}), nil)
+	if r.DbDefaultTarget != "" {
+		t.Fatalf("a removed target should fall back to the connection's own: %q", r.DbDefaultTarget)
+	}
+}
