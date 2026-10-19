@@ -901,6 +901,17 @@
   });
 
   // Same for a Kafka tab the LLM opened with open_kafka.
+  // A detached window was closed with its X: the backend ended its
+  // sessions. Drop the ones this window still lists without showing them
+  // (a Kafka handle sends no state event; its entry kept the connection
+  // green and the tab count one too high).
+  EventsOn("detached_sessions_closed", (ids: string[] | null) => {
+    for (const sid of ids ?? []) {
+      if (paneTabs.countLeavesForSession(sid) > 0) continue;
+      kafkaTabs.forget(sid);
+      sessions.remove(sid);
+    }
+  });
   EventsOn("mcp_kafka_opened", (info: any) => {
     if (isDetached) return;
     if (!info?.id || sessions.tabs.find((s) => s.sessionId === info.id)) return;

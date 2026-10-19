@@ -7664,16 +7664,42 @@ func (a *App) WindowDetachTabAt(tabID string, screenX, screenY int, sessions str
 			delete(a.detachedSessions, name)
 			a.detachedMu.Unlock()
 			for _, sid := range ids {
-				// SshDisconnect cleans up forwards + emits state events
-				// + evicts from broadcast group via the OnClose hook
-				// already wired in connectAndStart.
-				if err := a.SshDisconnect(sid); err != nil {
-					log.Printf("detached window %s: disconnect %s: %v", name, sid, err)
-				}
+				a.endDetachedSession(name, sid)
+			}
+			// The main window still lists them (status, tree dot, tab
+			// count); a Kafka or Database handle sends no state event of
+			// its own to tell it.
+			if len(ids) > 0 {
+				EventsEmit("detached_sessions_closed", ids)
 			}
 		})
 	}()
 	return name, nil
+}
+
+// endDetachedSession ends one session of a detached window closed with
+// its X, whatever kind it is. Not every id is an SSH session: a Kafka or
+// Database tab's id is its handle, a local shell lives in its own pool -
+// SshDisconnect does nothing for those, which left the handle (and its
+// SSH session, reconnecting on every metadata refresh) running.
+func (a *App) endDetachedSession(window, sid string) {
+	switch {
+	case strings.HasPrefix(sid, "kafka:"):
+		a.KafkaClose(sid)
+	case strings.HasPrefix(sid, "db:"):
+		a.DbClose(sid)
+	default:
+		if _, ok := a.localPool.Get(sid); ok {
+			_ = a.LocalShellDisconnect(sid)
+			return
+		}
+		// SshDisconnect cleans up forwards + emits state events + evicts
+		// from broadcast group via the OnClose hook wired in
+		// connectAndStart.
+		if err := a.SshDisconnect(sid); err != nil {
+			log.Printf("detached window %s: disconnect %s: %v", window, sid, err)
+		}
+	}
 }
 
 func parseCSVList(s string) []string {
