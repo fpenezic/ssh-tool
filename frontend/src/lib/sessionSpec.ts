@@ -13,6 +13,7 @@ import { sessions, tree } from "./stores.svelte";
 import { connectionActions, isTransientConnectError } from "./connectionActions.svelte";
 import { toast } from "./toast.svelte.ts";
 import { kafkaTabs } from "./kafkaState.svelte";
+import { dbTabs } from "./dbState.svelte";
 import type { SessionSpec } from "./paneSpec";
 
 // Opens another local shell like `sess`: a saved local connection re-runs
@@ -99,6 +100,13 @@ export function specForSession(sessionId: string): SessionSpec | null {
     return topics?.length ? { kind: "kafka", connectionId: sess.connectionId, topics: [...topics] } : { kind: "kafka", connectionId: sess.connectionId };
   }
 
+  // A Database tab likewise, with its tab list (SQL included, results not).
+  if (sess.kind === "db") {
+    if (!sess.connectionId) return null;
+    const t = dbTabs.tabs[sessionId];
+    return t ? { kind: "db", connectionId: sess.connectionId, dbTabs: JSON.stringify(t) } : { kind: "db", connectionId: sess.connectionId };
+  }
+
   if (sess.kind === "local") {
     // A saved local-shell connection (connectionId set, non-dyn) must
     // restore via LocalConnect so its InitialCommand re-runs (e.g. a
@@ -149,6 +157,13 @@ export async function connectSpec(spec: SessionSpec): Promise<string | null> {
     const sid = await connectionActions.openKafkaSessionOnly(spec.connectionId);
     // The topic tabs come back open; their consumers are not started.
     if (sid && spec.topics?.length) kafkaTabs.openTopics[sid] = [...spec.topics];
+    return sid;
+  }
+
+  if (kind === "db" && spec.connectionId) {
+    const sid = await connectionActions.openDbSessionOnly(spec.connectionId);
+    // The tabs come back with their SQL; nothing is run.
+    if (sid && spec.dbTabs) dbTabs.adopt(sid, spec.dbTabs, dbTabs.get(sid)?.database ?? "");
     return sid;
   }
 

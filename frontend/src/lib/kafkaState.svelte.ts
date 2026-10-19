@@ -9,6 +9,7 @@
 import { api, type Connection, type KafkaClusterInfo } from "./api";
 import { tree, paneTabs, view } from "./stores.svelte";
 import { formatCount } from "./kafkaFormat";
+import { dbTabs } from "./dbState.svelte";
 
 export interface ListenState {
   state: string; // running | done | stopped | error
@@ -136,6 +137,10 @@ export async function endSession(sessionId: string, kind: string | undefined) {
   if (kind === "kafka") {
     kafkaTabs.forget(sessionId);
     return api.kafkaClose(sessionId);
+  }
+  if (kind === "db") {
+    dbTabs.forget(sessionId);
+    return api.dbClose(sessionId);
   }
   return api.sshDisconnect(sessionId);
 }

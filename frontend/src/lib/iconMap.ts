@@ -214,3 +214,9 @@ export {
 import Workflow from "@lucide/svelte/icons/workflow";
 import Send from "@lucide/svelte/icons/send";
 export { Workflow as IconKafka, Send as IconSend };
+
+// Database tab.
+import DatabaseZap from "@lucide/svelte/icons/database-zap";
+import ScrollText from "@lucide/svelte/icons/scroll-text";
+import Eye2 from "@lucide/svelte/icons/scan-eye";
+export { DatabaseZap as IconDb, ScrollText as IconSql, Eye2 as IconView };

@@ -88,6 +88,17 @@ export interface InheritableSettings {
   kafka_tls_skip_verify?: boolean;
   kafka_sasl?: string;
   kafka_credential_ref?: string;
+  // Database tab (internal/dbx). db_use_tunnel absent resolves to true;
+  // db_credential_ref "" stops an inherited one.
+  db_enabled?: boolean;
+  db_engine?: string;
+  db_addr?: string;
+  db_name?: string;
+  db_use_tunnel?: boolean;
+  db_default?: boolean;
+  db_read_only?: boolean;
+  db_tls?: string;
+  db_credential_ref?: string;
 }
 
 export interface Folder {
@@ -164,7 +175,86 @@ export interface ResolvedSettings {
   kafka_tls_skip_verify: boolean;
   kafka_sasl: string;
   kafka_credential_ref: string | null;
+  db_enabled: boolean;
+  db_engine: string;
+  db_addr: string;
+  db_name: string;
+  db_use_tunnel: boolean;
+  db_default: boolean;
+  db_read_only: boolean;
+  db_tls: string;
+  db_credential_ref: string | null;
 }
+
+// ----- Database (app_db.go / internal/dbx) -----
+
+export type DbEngine = "postgres" | "mysql";
+
+export interface DbHandleInfo {
+  id: string;
+  connection_id: string;
+  name: string;
+  engine: DbEngine;
+  addr: string;
+  database: string;
+  user: string;
+  // "tunnel" | "jump:<host>" | "direct"
+  transport: string;
+  // SSH session state of a tunnel transport (see KafkaClusterInfo).
+  state: string;
+  error?: string;
+  read_only: boolean;
+  sensitive: boolean;
+  tls: string;
+}
+
+export interface DbServerInfo { engine: DbEngine; version: string; user: string; database: string }
+export interface DbDatabase { name: string; size_bytes: number; system: boolean }
+export type DbObjectKind = "table" | "view" | "matview" | "foreign" | "sequence";
+export interface DbObject {
+  schema: string;
+  name: string;
+  kind: DbObjectKind;
+  rows: number;
+  size_bytes: number;
+  system: boolean;
+  comment?: string;
+}
+export interface DbColumn {
+  name: string;
+  type: string;
+  nullable: boolean;
+  default: string | null;
+  key?: string;
+  extra?: string;
+  comment?: string;
+}
+export interface DbIndex { name: string; columns: string[]; unique: boolean; primary: boolean; def?: string }
+export interface DbTableDetail {
+  schema: string;
+  name: string;
+  kind: DbObjectKind;
+  columns: DbColumn[] | null;
+  indexes: DbIndex[] | null;
+  foreign_keys: { name: string; def: string }[] | null;
+  ddl: string;
+  ddl_note?: string;
+}
+export interface DbResult {
+  statement: string;
+  columns: { name: string; type: string }[] | null;
+  rows: (string | null)[][] | null;
+  has_rows: boolean;
+  rows_affected: number;
+  command?: string;
+  truncated: boolean;
+  cut_cells: number;
+  duration_ms: number;
+  error?: string;
+  write: boolean;
+}
+export interface DbRunResult { results: DbResult[] | null; in_tx: boolean; database: string }
+export interface DbStmt { text: string; start: number; end: number }
 
 // ----- Kafka (app_kafka.go / internal/kafka) -----
 
@@ -1665,6 +1755,33 @@ export const api = {
     G.ClearConnectionVncPassword(connectionId),
   getConnectionHasVncPassword: (connectionId: string) =>
     G.GetConnectionHasVncPassword(connectionId) as unknown as Promise<boolean>,
+
+  // Database tab. dbOpen does no I/O; the tree calls may wait for the SSH
+  // session (and its prompts) on a cold tab. dbRun is not bounded: dbCancel
+  // stops it.
+  dbOpen: (connectionId: string) => nn(G.DbOpen(connectionId)) as Promise<DbHandleInfo>,
+  dbStatus: (id: string) => nn(G.DbStatus(id)) as Promise<DbHandleInfo>,
+  dbClose: (id: string) => G.DbClose(id) as unknown as Promise<void>,
+  dbList: () => G.DbList() as unknown as Promise<DbHandleInfo[] | null>,
+  dbInfo: (id: string) => nn(G.DbInfo(id)) as Promise<DbServerInfo>,
+  dbDatabases: (id: string) => G.DbDatabases(id) as unknown as Promise<DbDatabase[] | null>,
+  dbObjects: (id: string, database: string, system: boolean) =>
+    G.DbObjects(id, database, system) as unknown as Promise<DbObject[] | null>,
+  dbDescribe: (id: string, database: string, schema: string, name: string) =>
+    nn(G.DbDescribe(id, database, schema, name)) as Promise<DbTableDetail>,
+  dbBrowse: (id: string, database: string, schema: string, name: string, offset: number, limit: number) =>
+    nn(G.DbBrowse(id, database, schema, name, offset, limit)) as Promise<DbResult>,
+  dbRun: (id: string, tabKey: string, database: string, script: string, maxRows: number) =>
+    nn(G.DbRun(id, tabKey, database, script, maxRows)) as Promise<DbRunResult>,
+  dbCancel: (id: string, tabKey: string) => G.DbCancel(id, tabKey) as unknown as Promise<void>,
+  dbCloseTab: (id: string, tabKey: string) => G.DbCloseTab(id, tabKey) as unknown as Promise<void>,
+  dbTabInTx: (id: string, tabKey: string) => G.DbTabInTx(id, tabKey) as unknown as Promise<boolean>,
+  dbStatementAt: (engine: string, script: string, offset: number) =>
+    G.DbStatementAt(engine, script, offset) as unknown as Promise<DbStmt | null>,
+  dbIsWrite: (engine: string, script: string) =>
+    G.DbIsWrite(engine, script) as unknown as Promise<string[] | null>,
+  dbSetTabState: (id: string, state: string) => G.DbSetTabState(id, state) as unknown as Promise<void>,
+  dbGetTabState: (id: string) => G.DbGetTabState(id) as unknown as Promise<string>,
 
   // Kafka tab. kafkaOpen does no I/O; the data calls may wait for the SSH
   // session (and its prompts) on a cold tab.

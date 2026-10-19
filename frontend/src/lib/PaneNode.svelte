@@ -33,6 +33,8 @@
   import { reopenLocalShell } from "./sessionSpec";
   import { endSession, kafkaTabs } from "./kafkaState.svelte";
   import KafkaPane from "./KafkaPane.svelte";
+  import DbPane from "./DbPane.svelte";
+  import { dbTabs } from "./dbState.svelte";
 
   interface Props {
     tabId: string;
@@ -111,7 +113,11 @@
       sessions.add({
         sessionId: r.session_id,
         connectionId: existingSession.connectionId,
-        name: existingSession.name,
+        // A split beside a Kafka / Database tab is a terminal on the host:
+        // not "name (Kafka)".
+        name: existingSession.kind === "kafka" || existingSession.kind === "db"
+          ? existingSession.name.replace(/ \((Kafka|Database)\)$/, "")
+          : existingSession.name,
         hostname: existingSession.hostname,
         status: "connected",
       });
@@ -239,8 +245,13 @@
   // host is reached over SSH (a split opens a terminal on that host).
   const isKafkaPane = $derived(node.kind === "pane" && node.view === "kafka");
   const kafkaInfo = $derived(isKafkaPane && node.kind === "pane" ? kafkaTabs.get(node.sessionId) : undefined);
-  const noSshPane = $derived(isLocalPane || isVncPane || isKafkaPane);
-  const canSplit = $derived(!isVncPane && (!isKafkaPane || kafkaInfo?.transport === "tunnel"));
+  // A Database tab: the same rules as a Kafka tab.
+  const isDbPane = $derived(node.kind === "pane" && node.view === "db");
+  const dbInfo = $derived(isDbPane && node.kind === "pane" ? dbTabs.get(node.sessionId) : undefined);
+  const noSshPane = $derived(isLocalPane || isVncPane || isKafkaPane || isDbPane);
+  const canSplit = $derived(
+    !isVncPane && (!isKafkaPane || kafkaInfo?.transport === "tunnel") && (!isDbPane || dbInfo?.transport === "tunnel"),
+  );
 
   // VNC console state surfaced from VncPane via $bindable + an onControls
   // callback, so the pane header can render the status pill + control
@@ -784,13 +795,23 @@
         {/if}
 
         <!-- Kafka group: transport + security badges, LLM share, edit. -->
-        {#if isKafkaPane && kafkaInfo}
+        {#if (isKafkaPane && kafkaInfo) || (isDbPane && dbInfo)}
+          {#if kafkaInfo}
           <span class="kafka-badge" title="Brokers: {kafkaInfo.bootstrap.join(', ')}">
             {kafkaInfo.transport === "tunnel" ? "via SSH" : kafkaInfo.transport.startsWith("jump:") ? `via ${kafkaInfo.transport.slice(5)}` : "direct"}
             {#if kafkaInfo.security !== "plaintext"} · {kafkaInfo.security}{/if}
           </span>
           {#if kafkaInfo.read_only}
             <span class="kafka-badge ro" title="Writes are refused on this connection (Kafka read-only)">read-only</span>
+          {/if}
+          {:else if dbInfo}
+          <span class="kafka-badge" title="{dbInfo.engine === 'mysql' ? 'MySQL' : 'PostgreSQL'} at {dbInfo.addr} as {dbInfo.user}">
+            {dbInfo.transport === "tunnel" ? "via SSH" : dbInfo.transport.startsWith("jump:") ? `via ${dbInfo.transport.slice(5)}` : "direct"}
+            {#if dbInfo.tls !== "disable"} · TLS{/if}
+          </span>
+          {#if dbInfo.read_only}
+            <span class="kafka-badge ro" title="Writes are refused on this connection (database read-only)">read-only</span>
+          {/if}
           {/if}
           <div class="action-group">
             <div class="tunnel-anchor">
@@ -854,6 +875,8 @@
         <SftpPane sessionId={node.sessionId} />
       {:else if node.view === "kafka"}
         <KafkaPane sessionId={node.sessionId} />
+      {:else if node.view === "db"}
+        <DbPane sessionId={node.sessionId} />
       {:else if node.view === "vnc"}
         <VncPane
           sessionId={node.sessionId}

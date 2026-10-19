@@ -19,7 +19,7 @@
   import ColorPicker from "./ColorPicker.svelte";
   import IconPicker from "./IconPicker.svelte";
   import Icon from "./Icon.svelte";
-  import { IconFolder, IconHost, IconLock, IconUser, IconClipboardCopy, IconTerminal, IconMonitor, IconStar, IconGlobe, IconBastion, IconTrash, IconKey, IconVpn, IconKafka } from "./iconMap";
+  import { IconFolder, IconHost, IconLock, IconUser, IconClipboardCopy, IconTerminal, IconMonitor, IconStar, IconGlobe, IconBastion, IconTrash, IconKey, IconVpn, IconKafka, IconDb } from "./iconMap";
   import { contextMenu, type MenuItem } from "./contextMenu.svelte.ts";
   import appIcon from "../assets/images/app-icon-64.png";
   import type { TunnelInfo, NetworkProfileInfo } from "./api";
@@ -38,6 +38,9 @@
   import KafkaSettingsEditor from "./KafkaSettingsEditor.svelte";
   import { applyKafkaDraft, kafkaDraftFrom, kafkaDraftSame, type KafkaDraft } from "./kafkaDraft";
   import { kafkaEnabledFor, kafkaInheritedFrom } from "./kafkaState.svelte";
+  import DbSettingsEditor from "./DbSettingsEditor.svelte";
+  import { applyDbDraft, dbDraftFrom, dbDraftSame, type DbDraft } from "./dbDraft";
+  import { dbEnabledFor, dbInheritedFrom } from "./dbState.svelte";
 
   // Populate the Network dropdowns; cached after the first load and
   // refreshed via the network_tunnel_changed event inside the store.
@@ -351,6 +354,7 @@
     tunnelAutostart: string;
     vncDefault: string;
     kafka: KafkaDraft;
+    db: DbDraft;
   } | null>(null);
 
   // Same api_token exclusion as the connection picker, keyed on the folder's
@@ -408,6 +412,7 @@
         tunnelAutostart: encodeBool(folder.settings.tunnel_autostart),
         vncDefault: encodeBool(folder.settings.vnc_default),
         kafka: kafkaDraftFrom(folder.settings),
+        db: dbDraftFrom(folder.settings),
       };
     } else {
       editingFolder = null;
@@ -433,6 +438,7 @@
       editingFolder.tunnelAutostart !== encodeBool(s.tunnel_autostart) ||
       editingFolder.vncDefault !== encodeBool(s.vnc_default) ||
       !kafkaDraftSame(editingFolder.kafka, s) ||
+      !dbDraftSame(editingFolder.db, s) ||
       numText(editingFolder.keepalive) !== (s.keepalive_interval !== undefined ? String(s.keepalive_interval) : "") ||
       editingFolder.networkProfile !== encodeNetProfile(s.network_profile_id) ||
       editingFolder.initialCommand !== (s.initial_command ?? "") ||
@@ -466,6 +472,7 @@
     settings.tunnel_autostart = decodeBool(editingFolder.tunnelAutostart);
     settings.vnc_default = decodeBool(editingFolder.vncDefault);
     applyKafkaDraft(settings, editingFolder.kafka);
+    applyDbDraft(settings, editingFolder.db);
     {
       const k = numText(editingFolder.keepalive);
       if (k === "") {
@@ -542,7 +549,7 @@
   // sits in the same place in both. The last tab picked is kept (per
   // viewer, browser storage); a tab the current item lacks falls back to
   // General.
-  type EdTab = "general" | "connection" | "terminal" | "forwards" | "vnc" | "kafka" | "advanced";
+  type EdTab = "general" | "connection" | "terminal" | "forwards" | "vnc" | "kafka" | "db" | "advanced";
   const ED_TAB_KEY = "ssh-tool.editor.tab";
   let edTabPref = $state<EdTab>((() => {
     try { return (localStorage.getItem(ED_TAB_KEY) as EdTab) || "general"; } catch { return "general"; }
@@ -552,14 +559,14 @@
     try { localStorage.setItem(ED_TAB_KEY, t); } catch { /* private window */ }
   }
 
-  // "Double-click opens": one choice over three stored flags (tunnel_only,
-  // vnc_default, kafka_default), so they can no longer be on together with
-  // one silently winning. The editor writes exactly one of them on; a row
-  // that has several on from before resolves Tunnel > VNC > Kafka >
-  // Terminal, the order connectDefault checks them in.
-  type OpenAs = "" | "terminal" | "tunnel" | "vnc" | "kafka";
+  // "Double-click opens": one choice over four stored flags (tunnel_only,
+  // vnc_default, kafka_default, db_default), so they can no longer be on
+  // together with one silently winning. The editor writes exactly one of
+  // them on; a row that has several on from before resolves Tunnel > VNC >
+  // Kafka > Database > Terminal, the order connectDefault checks them in.
+  type OpenAs = "" | "terminal" | "tunnel" | "vnc" | "kafka" | "db";
   function openAsLabel(m: OpenAs): string {
-    return m === "tunnel" ? "Tunnel" : m === "vnc" ? "VNC console" : m === "kafka" ? "Kafka" : "Terminal";
+    return m === "tunnel" ? "Tunnel" : m === "vnc" ? "VNC console" : m === "kafka" ? "Kafka" : m === "db" ? "Database" : "Terminal";
   }
   function inheritedOpenAs(folderId: string | null | undefined): { mode: OpenAs; from: string | null } {
     const t = inheritedSetting(folderId, "tunnel_only");
@@ -570,23 +577,33 @@
     const k = inheritedSetting(folderId, "kafka_default");
     const kOn = inheritedSetting(folderId, "kafka_enabled");
     if (k.value && kOn.value) return { mode: "kafka", from: k.from };
-    return { mode: "terminal", from: t.from ?? v.from ?? k.from };
+    const d = inheritedSetting(folderId, "db_default");
+    const dOn = inheritedSetting(folderId, "db_enabled");
+    if (d.value && dOn.value) return { mode: "db", from: d.from };
+    return { mode: "terminal", from: t.from ?? v.from ?? k.from ?? d.from };
   }
-  function openAsOf(tunnelOnly: string, vncDefault: string, kafkaDefault: string, inh: OpenAs, vncOn: boolean, kafkaOn: boolean): OpenAs {
-    if (tunnelOnly === "" && vncDefault === "" && kafkaDefault === "") return "";
+  function openAsOf(
+    tunnelOnly: string, vncDefault: string, kafkaDefault: string, dbDefault: string,
+    inh: OpenAs, vncOn: boolean, kafkaOn: boolean, dbOn: boolean,
+  ): OpenAs {
+    if (tunnelOnly === "" && vncDefault === "" && kafkaDefault === "" && dbDefault === "") return "";
     const tunnel = tunnelOnly === "on" || (tunnelOnly === "" && inh === "tunnel");
     if (tunnel) return "tunnel";
     const vnc = vncDefault === "on" || (vncDefault === "" && inh === "vnc");
     if (vnc && vncOn) return "vnc";
     const kafka = kafkaDefault === "on" || (kafkaDefault === "" && inh === "kafka");
-    return kafka && kafkaOn ? "kafka" : "terminal";
+    if (kafka && kafkaOn) return "kafka";
+    const db = dbDefault === "on" || (dbDefault === "" && inh === "db");
+    return db && dbOn ? "db" : "terminal";
   }
-  function openAsFlags(m: OpenAs): { tunnelOnly: string; vncDefault: string; kafkaDefault: string } {
-    if (m === "tunnel") return { tunnelOnly: "on", vncDefault: "off", kafkaDefault: "off" };
-    if (m === "vnc") return { tunnelOnly: "off", vncDefault: "on", kafkaDefault: "off" };
-    if (m === "kafka") return { tunnelOnly: "off", vncDefault: "off", kafkaDefault: "on" };
-    if (m === "terminal") return { tunnelOnly: "off", vncDefault: "off", kafkaDefault: "off" };
-    return { tunnelOnly: "", vncDefault: "", kafkaDefault: "" };
+  function openAsFlags(m: OpenAs): { tunnelOnly: string; vncDefault: string; kafkaDefault: string; dbDefault: string } {
+    const off = { tunnelOnly: "off", vncDefault: "off", kafkaDefault: "off", dbDefault: "off" };
+    if (m === "tunnel") return { ...off, tunnelOnly: "on" };
+    if (m === "vnc") return { ...off, vncDefault: "on" };
+    if (m === "kafka") return { ...off, kafkaDefault: "on" };
+    if (m === "db") return { ...off, dbDefault: "on" };
+    if (m === "terminal") return off;
+    return { tunnelOnly: "", vncDefault: "", kafkaDefault: "", dbDefault: "" };
   }
 
   // Tunnel state words and colour, shared by the header pill and the
@@ -629,6 +646,7 @@
     tunnelOnly: string;
     tunnelAutostart: string;
     kafka: KafkaDraft;
+    db: DbDraft;
     localShellKind: string;
     localShellDir: string;
     openHidden: boolean;
@@ -662,6 +680,7 @@
       { id: "forwards", label: connTunnelOnly ? "Forwards & tunnel" : "Forwards", warn },
     ];
     if (!isMobile) tabs.push({ id: "vnc", label: "VNC" });
+    tabs.push({ id: "db", label: "Database" });
     tabs.push({ id: "kafka", label: "Kafka" });
     tabs.push({ id: "advanced", label: "Advanced" });
     return tabs;
@@ -711,13 +730,17 @@
     !!editing && (editing.vncEnabled === "on" ||
       (editing.vncEnabled === "" && !!inheritedSetting(conn?.folder_id, "vnc_enabled").value))
   );
+  const connDbOn = $derived(
+    !!editing && (editing.db.enabled === "on" ||
+      (editing.db.enabled === "" && dbInheritedFrom(conn?.folder_id, "db_enabled") === true))
+  );
   const connOpenAs = $derived<OpenAs>(
-    editing ? openAsOf(editing.tunnelOnly, editing.vncDefault, editing.kafka.def, connInhOpenAs.mode, connVncOn, connKafkaOn) : ""
+    editing ? openAsOf(editing.tunnelOnly, editing.vncDefault, editing.kafka.def, editing.db.def, connInhOpenAs.mode, connVncOn, connKafkaOn, connDbOn) : ""
   );
   function setConnOpenAs(m: OpenAs) {
     if (!editing) return;
-    const { kafkaDefault, ...flags } = openAsFlags(m);
-    editing = { ...editing, ...flags, kafka: { ...editing.kafka, def: kafkaDefault } };
+    const { kafkaDefault, dbDefault, ...flags } = openAsFlags(m);
+    editing = { ...editing, ...flags, kafka: { ...editing.kafka, def: kafkaDefault }, db: { ...editing.db, def: dbDefault } };
   }
   const connInhAutostart = $derived(inheritedSetting(conn?.folder_id, "tunnel_autostart"));
 
@@ -820,6 +843,7 @@
     { id: "connection", label: "Connection" },
     { id: "terminal", label: "Terminal" },
     { id: "forwards", label: "Tunnels" },
+    { id: "db", label: "Database" },
     { id: "kafka", label: "Kafka" },
     { id: "advanced", label: "Advanced" },
   ];
@@ -837,13 +861,17 @@
     !!editingFolder && (editingFolder.kafka.enabled === "on" ||
       (editingFolder.kafka.enabled === "" && kafkaInheritedFrom(folder?.parent_id)))
   );
+  const folderDbOn = $derived(
+    !!editingFolder && (editingFolder.db.enabled === "on" ||
+      (editingFolder.db.enabled === "" && dbInheritedFrom(folder?.parent_id, "db_enabled") === true))
+  );
   const folderOpenAs = $derived<OpenAs>(
-    editingFolder ? openAsOf(editingFolder.tunnelOnly, editingFolder.vncDefault, editingFolder.kafka.def, folderInhOpenAs.mode, folderVncOn, folderKafkaOn) : ""
+    editingFolder ? openAsOf(editingFolder.tunnelOnly, editingFolder.vncDefault, editingFolder.kafka.def, editingFolder.db.def, folderInhOpenAs.mode, folderVncOn, folderKafkaOn, folderDbOn) : ""
   );
   function setFolderOpenAs(m: OpenAs) {
     if (!editingFolder) return;
-    const { kafkaDefault, ...flags } = openAsFlags(m);
-    editingFolder = { ...editingFolder, ...flags, kafka: { ...editingFolder.kafka, def: kafkaDefault } };
+    const { kafkaDefault, dbDefault, ...flags } = openAsFlags(m);
+    editingFolder = { ...editingFolder, ...flags, kafka: { ...editingFolder.kafka, def: kafkaDefault }, db: { ...editingFolder.db, def: dbDefault } };
   }
   const folderInhAutostart = $derived(inheritedSetting(folder?.parent_id, "tunnel_autostart"));
 
@@ -970,6 +998,7 @@
         tunnelOnly: encodeBool(conn.overrides?.tunnel_only),
         tunnelAutostart: encodeBool(conn.overrides?.tunnel_autostart),
         kafka: kafkaDraftFrom(conn.overrides),
+        db: dbDraftFrom(conn.overrides),
         openHidden: !!conn.open_hidden,
         localShellKind: conn.local_shell_kind ?? "",
         localShellDir: conn.local_shell_dir ?? "",
@@ -1010,6 +1039,7 @@
       editing.tunnelOnly !== encodeBool(o.tunnel_only) ||
       editing.tunnelAutostart !== encodeBool(o.tunnel_autostart) ||
       !kafkaDraftSame(editing.kafka, o) ||
+      !dbDraftSame(editing.db, o) ||
       editing.networkProfile !== encodeNetProfile(o.network_profile_id) ||
       editing.initialCommand !== (o.initial_command ?? "") ||
       numText(editing.initialCommandDelay) !==
@@ -1118,6 +1148,7 @@
     overrides.tunnel_only = decodeBool(editing.tunnelOnly);
     overrides.tunnel_autostart = decodeBool(editing.tunnelAutostart);
     applyKafkaDraft(overrides, editing.kafka);
+    applyDbDraft(overrides, editing.db);
     overrides.network_profile_id = decodeNetProfile(editing.networkProfile);
     overrides.initial_command = editing.initialCommand.trim() || undefined;
     overrides.initial_command_line_delay_ms = parseDelayMs(editing.initialCommandDelay);
@@ -1702,6 +1733,7 @@
           <option value="tunnel">Tunnel - no shell, only the forwards</option>
           <option value="vnc" disabled={!folderVncOn}>VNC console{folderVncOn ? "" : " (VNC is not on for this folder)"}</option>
           <option value="kafka" disabled={!folderKafkaOn}>Kafka{folderKafkaOn ? "" : " (Kafka is not on for this folder)"}</option>
+          <option value="db" disabled={!folderDbOn}>Database{folderDbOn ? "" : " (the database is not on for this folder)"}</option>
         </select>
       </label>
       <div class="row">
@@ -1889,6 +1921,20 @@
         <div class="span-2 save-row"><span class="saved-pill">✓ {savedHint}</span></div>
       {/if}
     </div>
+    {:else if folderTab === "db"}
+    <div class="form">
+      <p class="section-label span-2">Inherited by the connections and subfolders in this folder unless they set their own value.</p>
+      <DbSettingsEditor
+        bind:draft={editingFolder.db}
+        inheritLabel="(inherit from parent)"
+        effectiveOn={editingFolder.db.enabled === "on" || (editingFolder.db.enabled === "" && dbInheritedFrom(folder?.parent_id, "db_enabled") === true)}
+        effectiveEngine={dbInheritedFrom(folder?.parent_id, "db_engine") ?? ""}
+      />
+      <p class="span-2 field-note">To open the database on a double-click instead of a terminal, pick <strong>Database</strong> under General -&gt; Double-click opens.</p>
+      {#if savedHint}
+        <div class="span-2 save-row"><span class="saved-pill">✓ {savedHint}</span></div>
+      {/if}
+    </div>
     {:else if folderTab === "kafka"}
     <div class="form">
       <p class="section-label span-2">Inherited by the connections and subfolders in this folder unless they set their own value.</p>
@@ -1974,6 +2020,11 @@
         {#if conn.overrides?.vnc_enabled}
           <button class="vnc-btn" title="Open the VNC console for this host" onclick={openVncConsole}>
             <IconMonitor size={13} /> VNC
+          </button>
+        {/if}
+        {#if dbEnabledFor(conn)}
+          <button class="vnc-btn" title="Open the Database tab of this connection" onclick={() => connectionActions.openDb(conn!.id)}>
+            <IconDb size={13} /> Database
           </button>
         {/if}
         {#if kafkaEnabledFor(conn)}
@@ -2076,6 +2127,7 @@
             <option value="tunnel">Tunnel - no shell, only the forwards</option>
             <option value="vnc" disabled={!connVncOn}>VNC console{connVncOn ? "" : " (turn VNC on first)"}</option>
             <option value="kafka" disabled={!connKafkaOn}>Kafka{connKafkaOn ? "" : " (turn Kafka on first)"}</option>
+            <option value="db" disabled={!connDbOn}>Database{connDbOn ? "" : " (turn the database on first)"}</option>
           </select>
         </label>
       {/if}
@@ -2590,6 +2642,23 @@
         </div>
       {/if}
     </div>
+    {:else if edTab === "db"}
+    <div class="form">
+      <DbSettingsEditor
+        bind:draft={editing.db}
+        inheritLabel="(inherit from folder)"
+        effectiveOn={connDbOn}
+        effectiveEngine={dbInheritedFrom(conn?.folder_id, "db_engine") ?? ""}
+        onOpen={() => { if (conn) connectionActions.openDb(conn.id); }}
+      />
+      <p class="span-2 field-note">To open the database on a double-click instead of a terminal, pick <strong>Database</strong> under General -&gt; Double-click opens. Changes apply to the next Database tab you open.</p>
+      {#if dirty}
+        <div class="span-2 dirty-hint">
+          <span class="dirty-pill">Unsaved changes</span>
+          <button class="link-save" onclick={saveConn}>Save now</button>
+        </div>
+      {/if}
+    </div>
     {:else if edTab === "kafka"}
     <div class="form">
       <KafkaSettingsEditor
@@ -2698,6 +2767,11 @@
               <td>tunnel only</td>
               <td>{resolved.tunnel_only ? (resolved.tunnel_autostart ? "on, starts on launch" : "on") : "off"}</td>
               <td>{ovr.tunnel_only !== undefined || ovr.tunnel_autostart !== undefined ? "override" : "inherited"}</td>
+            </tr>
+            <tr>
+              <td>database</td>
+              <td>{resolved.db_enabled ? `${resolved.db_engine === "mysql" ? "MySQL" : "PostgreSQL"} ${resolved.db_addr || "127.0.0.1"}${resolved.db_name ? "/" + resolved.db_name : ""} · ${resolved.db_use_tunnel ? "through SSH" : "direct"}${resolved.db_read_only ? " · read-only" : ""}${resolved.db_tls !== "disable" ? ` · TLS ${resolved.db_tls}` : ""}${resolved.db_credential_ref ? "" : " · no login"}` : "off"}</td>
+              <td>{Object.keys(ovr).some((k) => k.startsWith("db_")) ? "override" : "inherited"}</td>
             </tr>
             <tr>
               <td>kafka</td>

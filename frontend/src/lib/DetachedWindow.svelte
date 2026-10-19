@@ -16,6 +16,7 @@
   import { sessions, paneTabs, view, tree, decodePaneLayout, encodePaneLayouts } from "./stores.svelte";
   import { vncSessions } from "./vncState.svelte.ts";
   import { kafkaTabs } from "./kafkaState.svelte";
+  import { dbTabs } from "./dbState.svelte";
   import TerminalArea from "./TerminalArea.svelte";
   import { broadcast } from "./broadcast.svelte";
   import { recording } from "./recording.svelte";
@@ -127,6 +128,22 @@
         });
       }
 
+      // Database tabs: the handle and its query sessions live on the
+      // backend; DbPane adopts the tab list.
+      const dbs = await dbTabs.refresh();
+      for (const d of dbs) {
+        if (allowedIds && !allowedIds.has(d.id)) continue;
+        if (sessions.tabs.find((t) => t.sessionId === d.id)) continue;
+        sessions.add({
+          sessionId: d.id,
+          connectionId: d.connection_id,
+          name: `${d.name} (Database)`,
+          hostname: d.addr,
+          status: "connected",
+          kind: "db",
+        });
+      }
+
       // Restore the pane tree from the serialized layout so splits and
       // group metadata survive the detach. If the main window didn't
       // ship a layout (legacy / direct open), fall back to one tab
@@ -149,6 +166,10 @@
         for (const k of kafkas) {
           if (allowedIds && !allowedIds.has(k.id)) continue;
           paneTabs.addKafkaTab(k.id, `${k.name} (Kafka)`);
+        }
+        for (const d of dbs) {
+          if (allowedIds && !allowedIds.has(d.id)) continue;
+          paneTabs.addDbTab(d.id, `${d.name} (Database)`);
         }
       }
     } catch (e: any) {

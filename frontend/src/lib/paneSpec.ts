@@ -24,8 +24,8 @@ export const PANE_SPEC_VERSION = 2;
 /** How a single session gets re-established. Mirrors the flat SavedTab that
  *  lastSession has always written, so one restore path serves both. */
 export interface SessionSpec {
-  kind: "ssh" | "dyn" | "local" | "kafka";
-  connectionId?: string; // ssh, kafka, and saved local connections
+  kind: "ssh" | "dyn" | "local" | "kafka" | "db";
+  connectionId?: string; // ssh, kafka, db, and saved local connections
   folderId?: string;     // dyn
   entryId?: string;      // dyn - row id, regenerates on every provider refresh
   externalId?: string;   // dyn - provider-stable id, the real restore key
@@ -33,6 +33,7 @@ export interface SessionSpec {
   hostname?: string;     // dyn - hostname-match fallback
   shellKind?: string;    // local (ad-hoc shells only)
   topics?: string[];     // kafka - topic tabs that were open (not consuming on restore)
+  dbTabs?: string;       // db - the query / table tabs that were open (JSON, not re-run on restore)
 }
 
 export type SpecNode = SpecLeaf | SpecSplit;
@@ -42,7 +43,7 @@ export interface SpecLeaf {
   /** Index into the tab's `sessions` array. Two leaves sharing a session
    *  (terminal + SFTP on one client) carry the same ref. */
   ref: number;
-  view?: "terminal" | "sftp" | "kafka";
+  view?: "terminal" | "sftp" | "kafka" | "db";
 }
 
 export interface SpecSplit {
@@ -103,7 +104,7 @@ export function serializePaneSpec(root: PaneNode, specOf: SpecOfSession): {
         refs.set(n.sessionId, ref);
       }
       const leaf: SpecLeaf = { kind: "pane", ref };
-      if (n.view === "sftp" || n.view === "kafka") leaf.view = n.view;
+      if (n.view === "sftp" || n.view === "kafka" || n.view === "db") leaf.view = n.view;
       return leaf;
     }
     const a = walk(n.a);
@@ -158,7 +159,7 @@ export async function restorePaneSpec(
       const sid = ids[node.ref];
       if (!sid) return null;
       const leaf: PaneLeaf = { kind: "pane", id: genId("pane"), sessionId: sid };
-      if (node.view === "sftp" || node.view === "kafka") leaf.view = node.view;
+      if (node.view === "sftp" || node.view === "kafka" || node.view === "db") leaf.view = node.view;
       return leaf;
     }
     const a = walk(node.a);
