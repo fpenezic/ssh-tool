@@ -1862,6 +1862,16 @@ everything mobile is behind a build tag or an `isMobile` check.
     - The tree's right-click menu exists twice: `TreeNode` for connections
       in folders, `Sidebar` for the root level. Service items come from
       `connectionActions.serviceMenuItems` so the two cannot drift again.
+    - MySQL comment rules differ: `--` is a comment only before
+      whitespace (`--1` is minus minus one) and `/*! ... */` is executable
+      code. The splitter / `codeOnly` follow them; treating either as a
+      comment hid `INTO OUTFILE` from the read-only check.
+    - A MySQL query tab holds its connection for its whole life, so it
+      gets its own one-connection `sql.DB` from the connector: on the
+      tree's small pool a few tabs starved the tree, browsing and the
+      `KILL QUERY` that Stop sends. A run whose context ended before it
+      started returns at once, and a kill in flight is awaited before the
+      connection is reused, or it stops the next statement.
     - A modal opened from a `<select>`'s change event ("+ New login...")
       must not close on an outside click: the click that picked the option
       lands right after the change, outside the modal, and cancels it
