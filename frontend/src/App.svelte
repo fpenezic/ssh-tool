@@ -47,6 +47,7 @@
   import FolderPicker from "./lib/FolderPicker.svelte";
   import DeleteConfirm from "./lib/DeleteConfirm.svelte";
   import PromptModal from "./lib/PromptModal.svelte";
+  import LoginModal from "./lib/LoginModal.svelte";
   import QuickConnectModal from "./lib/QuickConnectModal.svelte";
   import ConfirmModal from "./lib/ConfirmModal.svelte";
   import PresenceTakeoverModal from "./lib/PresenceTakeoverModal.svelte";
@@ -65,7 +66,7 @@
   import { lastSession } from "./lib/lastSession.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
   import { endSession, kafkaPaletteActions, kafkaTabs } from "./lib/kafkaState.svelte";
-  import { dbTabs } from "./lib/dbState.svelte";
+  import { dbTabs, dbTabTitle } from "./lib/dbState.svelte";
 
   // Arriving at the terminal view puts the cursor in it, whichever route
   // got here: the toolbar button, a keyboard shortcut, closing Settings,
@@ -920,7 +921,7 @@
     if (!info?.id || sessions.tabs.find((s) => s.sessionId === info.id)) return;
     const conn = tree.connectionById(info.connection_id);
     connectionActions.addDbSession(info, conn?.hostname ?? "");
-    paneTabs.addDbTab(info.id, `${info.name} (Database)`);
+    paneTabs.addDbTab(info.id, dbTabTitle(info));
     view.setTab("terminal");
   });
   EventsOn("mcp_kafka_opened", (info: any) => {
@@ -1277,12 +1278,12 @@
         sessions.add({
           sessionId: d.id,
           connectionId: d.connection_id,
-          name: `${d.name} (Database)`,
+          name: dbTabTitle(d),
           hostname: d.addr,
           kind: "db",
           status: "connected",
         });
-        paneTabs.addDbTab(d.id, `${d.name} (Database)`);
+        paneTabs.addDbTab(d.id, dbTabTitle(d));
         recovered++;
       }
     } catch (e) {
@@ -1723,6 +1724,7 @@
   {/if}
   <RecordingsModal />
   <PromptModal />
+  <LoginModal />
   <QuickConnectModal />
   <ConfirmModal />
   <PresenceTakeoverModal />

@@ -129,8 +129,10 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		DbReadOnly:         firstNonNilBool(over.DbReadOnly, base.DbReadOnly),
 		DbTLS:              firstNonNil(over.DbTLS, base.DbTLS),
 		DbCredentialRef:    firstNonNil(over.DbCredentialRef, base.DbCredentialRef),
-		SSHOptions:         mergeMap(base.SSHOptions, over.SSHOptions),
-		EnvVars:            mergeMap(base.EnvVars, over.EnvVars),
+		// The connection's own list (folders do not set one).
+		DbTargets:  over.DbTargets,
+		SSHOptions: mergeMap(base.SSHOptions, over.SSHOptions),
+		EnvVars:    mergeMap(base.EnvVars, over.EnvVars),
 	}
 	return out
 }
@@ -276,6 +278,7 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 		DbReadOnly:         s.DbReadOnly != nil && *s.DbReadOnly,
 		DbTLS:              dbTLS,
 		DbCredentialRef:    dbCred,
+		DbTargets:          s.DbTargets,
 	}
 }
 

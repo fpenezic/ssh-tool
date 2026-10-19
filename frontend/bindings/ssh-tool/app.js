@@ -1205,13 +1205,30 @@ export function DbObjects(id, database, system) {
 }
 
 /**
- * DbOpen opens a database handle for a connection. No I/O beyond warming
+ * DbOpen opens a database handle for a connection: targetID picks one of
+ * its listed databases ("" = the connection's own). No I/O beyond warming
  * the SSH session of a tunnel transport.
  * @param {string} connectionID
+ * @param {string} targetID
  * @returns {$CancellablePromise<$models.DbHandleInfo | null>}
  */
-export function DbOpen(connectionID) {
-    return $Call.ByID(416315063, connectionID).then(/** @type {($result: any) => any} */(($result) => {
+export function DbOpen(connectionID, targetID) {
+    return $Call.ByID(416315063, connectionID, targetID).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType67($result);
+    }));
+}
+
+/**
+ * DbOpenWithLogin opens like DbOpen with a login typed for this tab only
+ * (nothing is saved).
+ * @param {string} connectionID
+ * @param {string} targetID
+ * @param {string} user
+ * @param {string} password
+ * @returns {$CancellablePromise<$models.DbHandleInfo | null>}
+ */
+export function DbOpenWithLogin(connectionID, targetID, user, password) {
+    return $Call.ByID(2505625044, connectionID, targetID, user, password).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType67($result);
     }));
 }
@@ -1230,6 +1247,21 @@ export function DbRun(id, tabKey, database, script, maxRows) {
     return $Call.ByID(2011778860, id, tabKey, database, script, maxRows).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType69($result);
     }));
+}
+
+/**
+ * DbSaveLogin stores a typed login as a vault password credential and sets
+ * it as the login of the connection's database (targetID "") or of one of
+ * its listed databases. Returns the credential id.
+ * @param {string} connectionID
+ * @param {string} targetID
+ * @param {string} name
+ * @param {string} user
+ * @param {string} password
+ * @returns {$CancellablePromise<string>}
+ */
+export function DbSaveLogin(connectionID, targetID, name, user, password) {
+    return $Call.ByID(534320899, connectionID, targetID, name, user, password);
 }
 
 /**

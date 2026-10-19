@@ -14,6 +14,7 @@ export {
     CredentialKind,
     CredentialRef,
     CredentialSecretHistoryEntry,
+    DbTarget,
     DynamicEntry,
     DynamicFolder,
     Folder,

@@ -104,7 +104,11 @@ export function specForSession(sessionId: string): SessionSpec | null {
   if (sess.kind === "db") {
     if (!sess.connectionId) return null;
     const t = dbTabs.tabs[sessionId];
-    return t ? { kind: "db", connectionId: sess.connectionId, dbTabs: JSON.stringify(t) } : { kind: "db", connectionId: sess.connectionId };
+    const spec: SessionSpec = { kind: "db", connectionId: sess.connectionId };
+    const target = dbTabs.get(sessionId)?.target_id;
+    if (target) spec.dbTarget = target;
+    if (t) spec.dbTabs = JSON.stringify(t);
+    return spec;
   }
 
   if (sess.kind === "local") {
@@ -161,7 +165,7 @@ export async function connectSpec(spec: SessionSpec): Promise<string | null> {
   }
 
   if (kind === "db" && spec.connectionId) {
-    const sid = await connectionActions.openDbSessionOnly(spec.connectionId);
+    const sid = await connectionActions.openDbSessionOnly(spec.connectionId, spec.dbTarget ?? "");
     // The tabs come back with their SQL; nothing is run.
     if (sid && spec.dbTabs) dbTabs.adopt(sid, spec.dbTabs, dbTabs.get(sid)?.database ?? "");
     return sid;

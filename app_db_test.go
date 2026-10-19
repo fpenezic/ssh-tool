@@ -62,7 +62,7 @@ func TestDbOpenRefuses(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = a.DbOpen(c.ID)
+			_, err = a.DbOpen(c.ID, "")
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("err = %v, want %q", err, tc.want)
 			}
@@ -119,7 +119,7 @@ func dbIPCTunnel(t *testing.T, engine, env string) {
 		return c.ID
 	}
 
-	info, err := a.DbOpen(newConn("rw", false))
+	info, err := a.DbOpen(newConn("rw", false), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func dbIPCTunnel(t *testing.T, engine, env string) {
 	}
 
 	// Read-only connection: refused in the backend.
-	roInfo, err := a.DbOpen(newConn("ro", true))
+	roInfo, err := a.DbOpen(newConn("ro", true), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,5 +217,67 @@ func dbIPCTunnel(t *testing.T, engine, env string) {
 	if lab.loginCount() != 2 {
 		// One SSH login per handle, however many sessions and pools.
 		t.Fatalf("%d ssh logins, want 2", lab.loginCount())
+	}
+}
+
+// A database listed under the connection takes its own fields over the
+// connection's defaults; an unknown one is refused.
+func TestDbTargetOverrides(t *testing.T) {
+	pg, mysql, ro, cred, empty := "postgres", "mysql", true, "c-stage", ""
+	appdb, stage := "app", "app_stage"
+	r := &store.ResolvedSettings{
+		DbEnabled: true, DbEngine: pg, DbAddr: "", DbName: appdb, DbTLS: "disable", DbUseTunnel: true,
+		DbCredentialRef: &cred,
+		DbTargets: []store.DbTarget{
+			{ID: "t1", Name: "stage", Database: &stage, ReadOnly: &ro, CredentialRef: &empty},
+			{ID: "t2", Engine: &mysql, Database: &appdb},
+		},
+	}
+	s, name, err := dbTarget(r, "t1")
+	if err != nil || name != "stage" || s.DbName != "app_stage" || !s.DbReadOnly || s.DbCredentialRef != nil || s.DbEngine != "postgres" {
+		t.Fatalf("t1: %v %q %+v", err, name, s)
+	}
+	if r.DbName != "app" || r.DbReadOnly {
+		t.Fatal("the connection's settings were changed")
+	}
+	if s, name, _ = dbTarget(r, "t2"); name != "app" || s.DbEngine != "mysql" || *s.DbCredentialRef != "c-stage" {
+		t.Fatalf("t2: %q %+v", name, s)
+	}
+	if _, _, err := dbTarget(r, "gone"); err == nil {
+		t.Fatal("unknown target accepted")
+	}
+}
+
+// DbSaveLogin stores the login in the vault and points the database at it.
+func TestDbSaveLogin(t *testing.T) {
+	a := newDbTestApp(t)
+	on := true
+	c, err := a.db.CreateConnection(store.NewConnection{Name: "db1", Hostname: "db1.example.com", Overrides: store.InheritableSettings{
+		DbEnabled: &on, DbTargets: []store.DbTarget{{ID: "t1", Name: "stage"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.DbOpen(c.ID, "t1"); err == nil || !strings.Contains(err.Error(), "needs a login") {
+		t.Fatalf("open without a login: %v", err)
+	}
+	id, err := a.DbSaveLogin(c.ID, "t1", "", "stage_user", "pw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := a.db.GetConnection(c.ID)
+	if tg := got.Overrides.DbTargets[0]; tg.CredentialRef == nil || *tg.CredentialRef != id || got.Overrides.DbCredentialRef != nil {
+		t.Fatalf("target login not set: %+v", got.Overrides)
+	}
+	cred, _ := a.db.GetCredential(id)
+	if cred == nil || cred.Name != "db1 database" || *cred.DefaultUsername != "stage_user" {
+		t.Fatalf("credential %+v", cred)
+	}
+	if _, err := a.DbSaveLogin(c.ID, "", "own", "u", "p"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = a.db.GetConnection(c.ID)
+	if got.Overrides.DbCredentialRef == nil {
+		t.Fatal("the connection's own login not set")
 	}
 }

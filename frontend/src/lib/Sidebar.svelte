@@ -2,6 +2,7 @@
   import { tree, selection, drag, sessions, paneTabs, view } from "./stores.svelte";
   import TreeNode from "./TreeNode.svelte";
   import TreeBookmarkRows from "./TreeBookmarkRows.svelte";
+  import TreeDbRows from "./TreeDbRows.svelte";
   import TreeBookmarkToggle from "./TreeBookmarkToggle.svelte";
   import { treeBookmarks } from "./treeBookmarks.svelte";
   import { renameState } from "./renameState.svelte";
@@ -684,6 +685,7 @@
             <span class="conn-err" title={connectErr ?? ""}><IconX size={12} /></span>
           {/if}
         </div>
+        <TreeDbRows connId={conn.id} depth={1} />
         <TreeBookmarkRows connId={conn.id} depth={1} />
       {/each}
     </div>

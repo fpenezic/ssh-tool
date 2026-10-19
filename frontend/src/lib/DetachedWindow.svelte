@@ -16,7 +16,7 @@
   import { sessions, paneTabs, view, tree, decodePaneLayout, encodePaneLayouts } from "./stores.svelte";
   import { vncSessions } from "./vncState.svelte.ts";
   import { kafkaTabs } from "./kafkaState.svelte";
-  import { dbTabs } from "./dbState.svelte";
+  import { dbTabs, dbTabTitle } from "./dbState.svelte";
   import TerminalArea from "./TerminalArea.svelte";
   import { broadcast } from "./broadcast.svelte";
   import { recording } from "./recording.svelte";
@@ -137,7 +137,7 @@
         sessions.add({
           sessionId: d.id,
           connectionId: d.connection_id,
-          name: `${d.name} (Database)`,
+          name: dbTabTitle(d),
           hostname: d.addr,
           status: "connected",
           kind: "db",
@@ -169,7 +169,7 @@
         }
         for (const d of dbs) {
           if (allowedIds && !allowedIds.has(d.id)) continue;
-          paneTabs.addDbTab(d.id, `${d.name} (Database)`);
+          paneTabs.addDbTab(d.id, dbTabTitle(d));
         }
       }
     } catch (e: any) {

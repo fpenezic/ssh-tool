@@ -698,8 +698,10 @@ type mcpConnectionInfo struct {
 	Dynamic      bool   `json:"dynamic,omitempty"`
 	// Kafka: the connection has kafka_enabled, so open_kafka works on it.
 	Kafka bool `json:"kafka,omitempty"`
-	// Db: the connection has db_enabled, so open_db works on it.
-	Db bool `json:"db,omitempty"`
+	// Db: the connection has db_enabled, so open_db works on it;
+	// DbTargets are its listed databases (open_db's database_id).
+	Db        bool               `json:"db,omitempty"`
+	DbTargets []mcpDbTargetBrief `json:"db_targets,omitempty"`
 }
 
 // mcpListConnections returns saved connections AND dynamic-inventory hosts
@@ -735,7 +737,7 @@ func (a *App) mcpListConnections(query string) ([]mcpConnectionInfo, error) {
 		r := resolver.ResolveWith(c, allFolders)
 		out = append(out, mcpConnectionInfo{
 			ConnectionID: c.ID, Name: c.Name, Folder: folder,
-			Kafka: r.KafkaEnabled, Db: r.DbEnabled,
+			Kafka: r.KafkaEnabled, Db: r.DbEnabled, DbTargets: mcpDbTargets(r),
 		})
 	}
 
@@ -963,4 +965,25 @@ func (a *App) mcpConnect(connectionID, level string) (string, error) {
 
 	return fmt.Sprintf("connected: session_id=%s (%s), shared at level=%s",
 		res.SessionID, label, lvl), nil
+}
+
+// mcpDbTargetBrief names one database listed under a connection.
+type mcpDbTargetBrief struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func mcpDbTargets(r store.ResolvedSettings) []mcpDbTargetBrief {
+	if !r.DbEnabled {
+		return nil
+	}
+	var out []mcpDbTargetBrief
+	for _, t := range r.DbTargets {
+		name := t.Name
+		if name == "" && t.Database != nil {
+			name = *t.Database
+		}
+		out = append(out, mcpDbTargetBrief{ID: t.ID, Name: name})
+	}
+	return out
 }

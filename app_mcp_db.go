@@ -23,6 +23,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"ssh-tool/internal/dbx"
+	"ssh-tool/internal/resolver"
 )
 
 // Caps of db_query. Rows can carry personal data, so the defaults are small
@@ -70,6 +71,7 @@ type mcpDbExecuteArgs struct {
 
 type mcpOpenDbArgs struct {
 	ConnectionID string `json:"connection_id" jsonschema:"a connection marked (db) in list_connections"`
+	DatabaseID   string `json:"database_id,omitempty" jsonschema:"one of the databases listed under the connection (db: name=id ...); omit for the connection's own"`
 	Level        string `json:"level,omitempty" jsonschema:"access to grant once open: read or read-run (default read)"`
 }
 
@@ -79,7 +81,7 @@ func (a *App) registerDbTools(server *mcp.Server) {
 		Description: "Open the Database tab of a connection marked (db) in list_connections and " +
 			"share it with you. The user is asked to approve. Returns the session_id for the db_* tools.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpOpenDbArgs) (*mcp.CallToolResult, any, error) {
-		return mcpText(a.mcpOpenDb(in.ConnectionID, in.Level))
+		return mcpText(a.mcpOpenDb(in.ConnectionID, in.DatabaseID, in.Level))
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
@@ -141,7 +143,7 @@ func (a *App) mcpDbActivity(dh *dbHandle, command, output string, err error, gat
 	})
 }
 
-func (a *App) mcpOpenDb(connectionID, level string) (string, error) {
+func (a *App) mcpOpenDb(connectionID, targetID, level string) (string, error) {
 	lvl := mcpGrantReadOnly
 	if mcpGrantLevel(level) == mcpGrantReadRun {
 		lvl = mcpGrantReadRun
@@ -162,12 +164,23 @@ func (a *App) mcpOpenDb(connectionID, level string) (string, error) {
 			label = p + "/" + conn.Name
 		}
 	}
+	if targetID != "" {
+		r, err := resolver.ResolveConnection(a.db, connectionID)
+		if err != nil {
+			return "", err
+		}
+		_, name, err := dbTarget(r, targetID)
+		if err != nil {
+			return "", err
+		}
+		label += " / " + name
+	}
 	label += " (Database)"
 	if a.requestApproval("", label, "connect", string(lvl)) != mcpDecisionRun {
 		a.recordActivity(McpActivity{Kind: "connect", Session: label, Command: label, Gate: "denied"})
 		return "", fmt.Errorf("open denied by user")
 	}
-	info, err := a.DbOpen(connectionID)
+	info, err := a.DbOpen(connectionID, targetID)
 	if err != nil {
 		a.recordActivity(McpActivity{Kind: "connect", Session: label, Command: label, Gate: "approved", Exit: "error", Output: err.Error()})
 		return "", err

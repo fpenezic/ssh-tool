@@ -41,7 +41,8 @@ func TestCredentialUsageConfigs(t *testing.T) {
 	kref := cred
 	c, err := db.CreateConnection(NewConnection{
 		Name: "broker-1", Hostname: "broker-1.example.com",
-		Overrides: InheritableSettings{KafkaCredentialRef: &kref, DbCredentialRef: &kref},
+		Overrides: InheritableSettings{KafkaCredentialRef: &kref, DbCredentialRef: &kref,
+			DbTargets: []DbTarget{{ID: "t1", Name: "stage", CredentialRef: &kref}, {ID: "t2", Name: "prod"}}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -54,6 +55,7 @@ func TestCredentialUsageConfigs(t *testing.T) {
 	want := []UsageRef{
 		{Kind: "connection", ID: c.ID, Name: "broker-1", Hostname: "broker-1.example.com", Role: "Kafka SASL"},
 		{Kind: "connection", ID: c.ID, Name: "broker-1", Hostname: "broker-1.example.com", Role: "Database login"},
+		{Kind: "connection", ID: c.ID, Name: "broker-1", Hostname: "broker-1.example.com", Role: "Database login (stage)"},
 		{Kind: "folder", ID: f.ID, Name: "Cluster", Role: "API token"},
 		{Kind: "network_profile", ID: p.ID, Name: "Office VPN", Role: "client cert"},
 		{Kind: "network_profile", ID: p.ID, Name: "Office VPN", Role: "password"},

@@ -1855,6 +1855,22 @@ export class DbHandleInfo {
              */
             this["connection_id"] = "";
         }
+        if (!("target_id" in $$source)) {
+            /**
+             * TargetID / TargetName: the listed database this tab is on ("" = the
+             * connection's own).
+             * @member
+             * @type {string}
+             */
+            this["target_id"] = "";
+        }
+        if (!("target_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["target_name"] = "";
+        }
         if (!("name" in $$source)) {
             /**
              * @member

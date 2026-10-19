@@ -454,6 +454,15 @@ func serviceCredRoles(s *InheritableSettings, credID string) []string {
 	if s.DbCredentialRef != nil && *s.DbCredentialRef == credID {
 		roles = append(roles, "Database login")
 	}
+	for _, t := range s.DbTargets {
+		if t.CredentialRef != nil && *t.CredentialRef == credID {
+			name := t.Name
+			if name == "" && t.Database != nil {
+				name = *t.Database
+			}
+			roles = append(roles, "Database login ("+name+")")
+		}
+	}
 	return roles
 }
 

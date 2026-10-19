@@ -2650,6 +2650,9 @@
         effectiveOn={connDbOn}
         effectiveEngine={dbInheritedFrom(conn?.folder_id, "db_engine") ?? ""}
         onOpen={() => { if (conn) connectionActions.openDb(conn.id); }}
+        showTargets
+        connName={conn?.name ?? ""}
+        onOpenTarget={(id) => { if (conn) connectionActions.openDb(conn.id, id); }}
       />
       <p class="span-2 field-note">To open the database on a double-click instead of a terminal, pick <strong>Database</strong> under General -&gt; Double-click opens. Changes apply to the next Database tab you open.</p>
       {#if dirty}
