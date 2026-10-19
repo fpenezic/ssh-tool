@@ -74,6 +74,11 @@ func skipNonCode(engine, s string, i int) int {
 	c := s[i]
 	switch {
 	case c == '-' && strings.HasPrefix(s[i:], "--"):
+		// MySQL takes "--" as a comment only before whitespace: "--1" is
+		// minus minus one, and what follows is code.
+		if engine == EngineMySQL && i+2 < len(s) && !unicode.IsSpace(rune(s[i+2])) {
+			return i
+		}
 		return lineEnd(s, i)
 	case c == '#' && engine == EngineMySQL:
 		return lineEnd(s, i)
@@ -301,8 +306,10 @@ func IsTxControl(engine, stmt string) bool {
 }
 
 // secretRE matches a quoted secret after PASSWORD (CREATE / ALTER ROLE,
-// SET PASSWORD) or IDENTIFIED [WITH plugin] BY (MySQL users).
-var secretRE = regexp.MustCompile(`(?i)(\bPASSWORD\s*(?:=\s*)?|\bIDENTIFIED\s+(?:WITH\s+\S+\s+)?BY\s+)('(?:[^']|'')*'|"(?:[^"]|"")*")`)
+// SET PASSWORD [FOR user] =), IDENTIFIED [WITH plugin] BY and REPLACE (the
+// old password of a MySQL ALTER USER). Quotes may be doubled or, on MySQL,
+// backslash-escaped.
+var secretRE = regexp.MustCompile(`(?i)(\bPASSWORD\s+FOR\s+\S+?\s*=\s*|\bPASSWORD\s*(?:=\s*)?|\bIDENTIFIED\s+(?:WITH\s+\S+\s+)?BY\s+|\bREPLACE\s+)('(?:[^'\\]|\\.|'')*'|"(?:[^"\\]|\\.|"")*")`)
 
 // RedactSecrets hides quoted passwords in a statement before it is stored
 // (audit log, LLM activity).

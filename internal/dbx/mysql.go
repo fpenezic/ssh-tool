@@ -374,10 +374,23 @@ type mySession struct {
 
 func (s *mySession) run(ctx context.Context, stmt string, readOnly bool, maxRows int) *Result {
 	bg := context.WithoutCancel(ctx)
+	if err := ctx.Err(); err != nil {
+		// Ended while waiting for the session (behind another run): a
+		// kill sent now would land before the statement and not stop it.
+		return errResult(err)
+	}
 	// The caller's context ending (an MCP call given up, a timeout) stops
-	// the statement the only way MySQL can without losing the session.
-	stop := context.AfterFunc(ctx, s.cancel)
-	defer stop()
+	// the statement the only way MySQL can without losing the session. A
+	// kill already under way is waited for (this defer runs after the
+	// ROLLBACK below), so it cannot hit the next statement on the
+	// connection.
+	killed := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() { defer close(killed); s.cancel() })
+	defer func() {
+		if !stop() {
+			<-killed
+		}
+	}()
 	if !readOnly {
 		return s.exec(bg, stmt, maxRows)
 	}
