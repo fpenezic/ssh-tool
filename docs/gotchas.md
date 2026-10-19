@@ -1825,6 +1825,44 @@ everything mobile is behind a build tag or an `isMobile` check.
     snapshot itself (`lastSession.snapshot()`), compared against the
     last write so an unchanged set is not written again.
 
+116. **Database tab: the traps of running SQL through an SSH channel.**
+    The tab (`app_db.go`, `internal/dbx`) dials every connection through
+    `Config.Dial` (`sshchan.LazySSH` or `viaDial`). Things that bit:
+    - pgx sends a cancel request to the connection's `RemoteAddr()`. An
+      SSH channel reports `0.0.0.0:0` there, so Stop silently did nothing
+      until the dialed conn was wrapped (`addrConn`) to report the address
+      it was opened to. pgconn's `LookupFunc` is a pass-through: the host
+      name must reach the far side unresolved.
+    - pgx's default context handling closes the connection on a cancelled
+      context; `CancelRequestContextWatcherHandler` keeps the session (its
+      temp tables, its transaction). go-sql-driver/mysql has no such mode -
+      a cancelled context drops the connection - so MySQL runs are not
+      tied to the caller's context and Stop sends `KILL QUERY <id>` from
+      the pool.
+    - A read cut at the row limit is stopped on the server (cancel / KILL
+      QUERY), but not a write that returns rows (`DELETE ... RETURNING`
+      would roll back), and on Postgres not a read inside the user's own
+      transaction (a cancelled statement aborts it): those are drained.
+    - Postgres sessions run with `QueryExecModeExec`: text results (exact
+      numerics), one statement per call, and no statement cache that DDL
+      in the same session would invalidate.
+    - Read-only cannot rest on the transaction alone: MySQL DDL commits
+      implicitly and leaves a READ ONLY transaction. `CheckReadOnly`
+      allows only read keywords, plus a refusal of `INTO OUTFILE`. The
+      LLM's `db_query` forces these guards on a writable handle
+      (`RunOptions.ReadOnly`), and `db_execute` refuses transaction
+      control - its session is shared with the read-only runs, which
+      would end a transaction left open there.
+    - Svelte: a query tab's run state (`dbTabs.runs`) must not be created
+      inside a `$derived` or template (`state_unsafe_mutation`) - read it
+      with `peek`, create it with `run` from a handler. And
+      `this.runs[k] ??= {...}` yields the raw object, not the state proxy
+      the store keeps: writes to it never show (a finished run stayed
+      "Running..."). Assign, then read back through the store.
+    - The tree's right-click menu exists twice: `TreeNode` for connections
+      in folders, `Sidebar` for the root level. Service items come from
+      `connectionActions.serviceMenuItems` so the two cannot drift again.
+
 ---
 
 # Archive

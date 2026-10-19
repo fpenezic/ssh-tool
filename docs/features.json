@@ -255,6 +255,11 @@
       "body": "Turn on Kafka on a connection and get a Kafka tab: topics, a consumer that never commits, produce, config, metrics, consumer groups with lag and offset reset. Broker connections ride the connection's SSH session, so advertised broker names resolve on the far side - no local tunnels, no hosts entries. Read-only mode for production, TLS and SASL, LLM access over MCP."
     },
     {
+      "icon": "database",
+      "title": "PostgreSQL and MySQL, through the SSH host",
+      "body": "Turn on the database on a connection and get a Database tab: databases, tables with structure and DDL, query tabs with their own sessions and transactions, Ctrl+Enter on the statement under the cursor, a results grid that stays fast at 100k rows, CSV and JSON export. Connections ride the connection's SSH session - a server on the host's loopback needs no port forward. Read-only mode enforced in the backend, LLM access over MCP (queries always read-only)."
+    },
+    {
       "icon": "globe",
       "title": "Encrypted sync - your server or your cloud",
       "body": "Sync the whole profile - connections, credentials, vault, icons, settings - between machines over a WebDAV or SSH/SFTP server you control, or your own Dropbox, OneDrive or Google Drive account. Sealed with argon2id + XChaCha20-Poly1305 before upload; the store only ever holds ciphertext. Cloud backends sign in with OAuth + PKCE using your own app credentials, so there is no shared app or rate limit. SFTP auth reuses a vault credential or a key/password you type in, so a fresh machine can bootstrap. Auto-sync pushes on change; incoming changes apply live with no restart and, optionally, in the background while you work."
