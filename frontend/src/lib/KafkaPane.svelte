@@ -8,7 +8,7 @@
   import { api, type KafkaClusterInfo, type KafkaOverview, type KafkaTopicSummary } from "./api";
   import KafkaTopic from "./KafkaTopic.svelte";
   import KafkaGroups from "./KafkaGroups.svelte";
-  import { kafkaTabs } from "./kafkaState.svelte";
+  import { kafkaTabs, tabTopic, tabLabel, nextTabKey, type ListenState } from "./kafkaState.svelte";
   import { releaseTopic, adoptTabState } from "./kafkaTopicState.svelte";
   import { sessions, paneTabs } from "./stores.svelte";
   import { formatCount, parseConfigLines } from "./kafkaFormat";
@@ -35,14 +35,16 @@
   let loading = $state(false);
   let includeInternal = $state(false);
   let filter = $state("");
-  // Topic tabs: one per opened topic. The consumer of each lives in its
-  // TopicState (kafkaTopicState), not in a component, so this pane can be
-  // unmounted and mounted again (split, tab moved, another window) without
-  // stopping it; closing a topic tab ends it. Groups and Brokers are pinned
-  // ahead of them. The list and the tab in front live in kafkaTabs and the
-  // list also on the backend, which hands both to a window that did not open
-  // them (adoptTabState). A saved session brings the tabs back without
-  // consumers.
+  // Topic tabs, by tab key (kafkaState tabTopic): a topic opens in one tab,
+  // and "+ Tab" or a middle-click in the list opens it in another, so two
+  // consumers with different filters can read one topic. The consumer of
+  // each lives in its TopicState (kafkaTopicState), not in a component, so
+  // this pane can be unmounted and mounted again (split, tab moved, another
+  // window) without stopping it; closing a topic tab ends it. Groups and
+  // Brokers are pinned ahead of them. The list and the tab in front live in
+  // kafkaTabs and the list also on the backend, which hands both to a window
+  // that did not open them (adoptTabState). A saved session brings the tabs
+  // back without consumers.
   $effect(() => {
     const sid = sessionId;
     untrack(() => {
@@ -50,7 +52,7 @@
     });
   });
   const openTopics = $derived(kafkaTabs.openTopics[sessionId] ?? []);
-  // "groups" | "brokers" | "new" | "t:<topic>" | "" (the overview text)
+  // "groups" | "brokers" | "new" | "t:<tab key>" | "" (the overview text)
   const active = $derived(kafkaTabs.activeView[sessionId] ?? (openTopics.length ? "t:" + openTopics[0] : ""));
   function show(view: string) {
     kafkaTabs.activeView[sessionId] = view;
@@ -69,10 +71,23 @@
     if (names) untrack(() => api.kafkaSetOpenTopics(sessionId, [...names]).catch(() => {}));
   });
 
+  // A topic picked in the list: its tab in front (the one already in front,
+  // else the first), or a new tab when it has none.
   function openTopic(name: string) {
     const cur = kafkaTabs.openTopics[sessionId] ?? [];
-    if (!cur.includes(name)) kafkaTabs.openTopics[sessionId] = [...cur, name];
-    show("t:" + name);
+    const mine = cur.filter((k) => tabTopic(k) === name);
+    if (!mine.length) kafkaTabs.openTopics[sessionId] = [...cur, name];
+    if (mine.some((k) => active === "t:" + k)) return;
+    show("t:" + (mine[0] ?? name));
+  }
+  // Another tab on the topic, after its last one.
+  function openNewTab(name: string) {
+    const cur = kafkaTabs.openTopics[sessionId] ?? [];
+    const key = nextTabKey(cur, name);
+    let at = cur.length;
+    for (let i = 0; i < cur.length; i++) if (tabTopic(cur[i]) === name) at = i + 1;
+    kafkaTabs.openTopics[sessionId] = [...cur.slice(0, at), key, ...cur.slice(at)];
+    show("t:" + key);
   }
   function closeTopic(name: string) {
     const cur = kafkaTabs.openTopics[sessionId] ?? [];
@@ -86,9 +101,25 @@
       show(next ? "t:" + next : "");
     }
   }
-  function listening(name: string) {
-    return kafkaTabs.listening[sessionId]?.[name];
+  function listening(key: string) {
+    return kafkaTabs.listening[sessionId]?.[key];
   }
+  // A topic in the list: what its tabs' consumers do together (failed wins,
+  // then running; records summed).
+  function topicListening(name: string): ListenState | undefined {
+    let out: ListenState | undefined;
+    for (const [k, l] of Object.entries(kafkaTabs.listening[sessionId] ?? {})) {
+      if (tabTopic(k) !== name) continue;
+      if (!out) out = { ...l };
+      else {
+        out.received += l.received;
+        if (l.state === "error" || l.error) { out.state = "error"; out.error = l.error ?? out.error; }
+        else if (l.state === "running" && out.state !== "error") out.state = "running";
+      }
+    }
+    return out;
+  }
+  const activeTopic = $derived(active.startsWith("t:") ? tabTopic(active.slice(2)) : null);
 
   function setTabStatus(s: "connecting" | "connected" | "error", hint?: string) {
     sessions.setStatus(sessionId, s, hint);
@@ -123,8 +154,8 @@
       setTabStatus("connected");
       // A tab whose topic is gone closes, unless its consumer still holds
       // records (deleted elsewhere while it listened: keep what it read).
-      for (const name of [...openTopics]) {
-        if (!listed.some((t) => t.name === name) && !listening(name)) closeTopic(name);
+      for (const key of [...openTopics]) {
+        if (!listed.some((t) => t.name === tabTopic(key)) && !listening(key)) closeTopic(key);
       }
     } catch (e) {
       loadErr = errMsg(e);
@@ -229,8 +260,15 @@
       <label class="chk"><input type="checkbox" bind:checked={includeInternal} /> internal topics</label>
       <div class="list">
         {#each shown as t (t.name)}
-          {@const l = listening(t.name)}
-          <button class="item" class:sel={active === "t:" + t.name} class:open={openTopics.includes(t.name)} onclick={() => openTopic(t.name)} title={t.name}>
+          {@const l = topicListening(t.name)}
+          <button
+            class="item"
+            class:sel={activeTopic === t.name}
+            class:open={openTopics.some((k) => tabTopic(k) === t.name)}
+            onclick={() => openTopic(t.name)}
+            onauxclick={(e) => { if (e.button === 1) { e.preventDefault(); openNewTab(t.name); } }}
+            title="{t.name} - middle-click opens it in another tab"
+          >
             <span class="tname">
               {#if l && (l.state === "error" || l.error)}<span class="ldot bad" title={l.error ?? "consumer failed"}></span>
               {:else if l?.state === "running"}<span class="ldot" title="listening: {formatCount(l.received)} records"></span>{/if}
@@ -256,24 +294,25 @@
         <button class="tab pin" class:on={active === "brokers"} onclick={() => show("brokers")}>Brokers</button>
         {#each openTopics as name (name)}
           {@const l = listening(name)}
+          {@const label = tabLabel(name)}
           <div
             class="tab"
             class:on={active === "t:" + name}
             role="tab"
             tabindex="0"
             aria-selected={active === "t:" + name}
-            title={l?.error ? `${name}: ${l.error}` : name}
+            title={l?.error ? `${label}: ${l.error}` : label}
             onclick={() => show("t:" + name)}
             onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); show("t:" + name); } }}
             onauxclick={(e) => { if (e.button === 1) { e.preventDefault(); closeTopic(name); } }}
           >
             {#if l && (l.state === "error" || l.error)}<span class="ldot bad"></span>
             {:else if l?.state === "running"}<span class="ldot"></span>{/if}
-            <span class="tlabel">{name}</span>
+            <span class="tlabel">{label}</span>
             {#if l?.state === "running" || l?.error}
               <span class="cnt">{l.filtering ? `${formatCount(l.received)}/${formatCount(l.scanned)}` : formatCount(l.received)}</span>
             {/if}
-            <button class="x" title="Close (ends its consumer)" aria-label="Close {name}" onclick={(e) => { e.stopPropagation(); closeTopic(name); }}><IconX size={10} /></button>
+            <button class="x" title="Close (ends its consumer)" aria-label="Close {label}" onclick={(e) => { e.stopPropagation(); closeTopic(name); }}><IconX size={10} /></button>
           </div>
         {/each}
       </div>
@@ -296,17 +335,20 @@
           <div class="view" class:off={active !== "t:" + name}>
             <KafkaTopic
               clusterId={sessionId}
-              topic={name}
+              topic={tabTopic(name)}
+              tab={name}
               active={active === "t:" + name}
               {writable}
               sensitive={!!info?.sensitive}
               onDeleted={() => {
-                deletedAt.set(name, Date.now());
-                listed = (listed ?? []).filter((t) => t.name !== name);
-                closeTopic(name);
+                const topic = tabTopic(name);
+                deletedAt.set(topic, Date.now());
+                listed = (listed ?? []).filter((t) => t.name !== topic);
+                for (const k of openTopics.filter((k) => tabTopic(k) === topic)) closeTopic(k);
                 setTimeout(loadTopics, 1500);
               }}
               onChanged={loadTopics}
+              onNewTab={() => openNewTab(tabTopic(name))}
             />
           </div>
         {/each}
@@ -351,7 +393,7 @@
             <p class="hint">
               {topics.length} topics on {info?.bootstrap.join(", ")}.
               {info?.read_only ? "This connection is read-only." : ""}
-              Pick a topic to read its records; each one opens in its own tab and keeps listening until the tab is closed.
+              Pick a topic to read its records; each one opens in its own tab and keeps listening until the tab is closed. Middle-click a topic (or use + Tab) to read it in a second tab with other filters.
             </p>
           </div>
         {/if}

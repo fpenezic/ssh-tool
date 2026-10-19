@@ -13,22 +13,26 @@
   import { showPrompt } from "./promptModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
   import { errMsg } from "./connectErrors";
-  import { IconRefresh, IconTrash } from "./iconMap";
+  import { IconRefresh, IconTrash, IconPlus } from "./iconMap";
 
   interface Props {
     clusterId: string;
     topic: string;
+    // The topic tab's key (several tabs can show one topic); default topic.
+    tab?: string;
     writable: boolean;
     sensitive: boolean;
     onDeleted: () => void;
     onChanged: () => void;
+    // Opens another tab on this topic, with a consumer of its own.
+    onNewTab?: () => void;
     // On screen; a topic tab that is not stays mounted.
     active?: boolean;
   }
-  let { clusterId, topic, writable, sensitive, onDeleted, onChanged, active = true }: Props = $props();
+  let { clusterId, topic, tab, writable, sensitive, onDeleted, onChanged, onNewTab, active = true }: Props = $props();
 
   // The subtab lives with the topic's consumer state, so a remount keeps it.
-  const ts = $derived(topicState(clusterId, topic));
+  const ts = $derived(topicState(clusterId, tab ?? topic));
   let detail = $state<KafkaTopicDetail | null>(null);
   let loadErr = $state<string | null>(null);
   let busy = $state(false);
@@ -184,6 +188,7 @@
       <button class:on={ts.subtab === "metrics"} onclick={() => (ts.subtab = "metrics")}>Metrics</button>
     </nav>
     <button title="Reload" onclick={load}><IconRefresh size={12} /></button>
+    {#if onNewTab}<button title="Open this topic in another tab, with a consumer of its own" onclick={onNewTab}><IconPlus size={12} /> Tab</button>{/if}
     {#if writable}
       <details class="actions">
         <summary title="Topic actions">Actions</summary>
@@ -204,7 +209,7 @@
   <div class="body">
     <!-- Mounted whatever the subtab, so the list keeps its place. -->
     <div class="msgs" class:off={ts.subtab !== "messages"}>
-      <KafkaConsumer {clusterId} {topic} partitions={partitionIds} active={active && ts.subtab === "messages"} />
+      <KafkaConsumer {clusterId} {topic} {tab} partitions={partitionIds} active={active && ts.subtab === "messages"} />
     </div>
     {#if ts.subtab === "produce"}
       <KafkaProducer {clusterId} {topic} partitions={partitionIds} onSent={load} />

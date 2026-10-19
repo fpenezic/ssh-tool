@@ -1501,7 +1501,11 @@ it is open already; **Groups** and **Brokers** are pinned at the start of the
 row. A topic tab stays alive while another is in front - its consumer keeps
 reading and its filters, selected record and subtab are where you left
 them - until you close it (the x, or middle-click), which ends the consumer
-and frees its buffer. Splitting or moving the Kafka tab, detaching it to
+and frees its buffer. To read one topic twice - say a key filter for one
+value in one tab and for another in the next - middle-click the topic in
+the list or use **+ Tab** in the topic's header: the second tab is named
+`topic (2)` and has its own consumer, filters and buffer share.
+Splitting or moving the Kafka tab, detaching it to
 another window or reloading the window keeps the topic tabs and their
 consumers too. A green dot with a count marks a topic that is being
 listened to, in the list, on its tab and, as a number, on the connection's

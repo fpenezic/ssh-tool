@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { kafkaTabs, kafkaListenSummary } from "./kafkaState.svelte";
+import { kafkaTabs, kafkaListenSummary, tabTopic, tabLabel, nextTabKey } from "./kafkaState.svelte";
 
 describe("kafkaListenSummary", () => {
   beforeEach(() => {
@@ -30,9 +30,34 @@ describe("kafkaListenSummary", () => {
     expect(s.tip).toContain("a: failed - leader unreachable");
   });
 
+  it("names a second tab on a topic by its number", () => {
+    kafkaTabs.setListening("s1", "orders", { state: "running", received: 1, scanned: 1, filtering: false });
+    kafkaTabs.setListening("s1", "orders#2", { state: "running", received: 2, scanned: 9, filtering: true });
+    const s = kafkaListenSummary(["s1"]);
+    expect(s.running).toBe(2);
+    expect(s.tip).toBe("listening: orders (1), orders (2) (2 of 9)");
+  });
+
   it("forgets a consumer that is gone", () => {
     kafkaTabs.setListening("s1", "a", { state: "running", received: 1, scanned: 1, filtering: false });
     kafkaTabs.setListening("s1", "a", null);
     expect(kafkaListenSummary(["s1"]).running).toBe(0);
+  });
+});
+
+describe("topic tab keys", () => {
+  it("map a key to its topic and label", () => {
+    expect(tabTopic("orders.v1")).toBe("orders.v1");
+    expect(tabTopic("orders.v1#3")).toBe("orders.v1");
+    expect(tabLabel("orders.v1")).toBe("orders.v1");
+    expect(tabLabel("orders.v1#3")).toBe("orders.v1 (3)");
+  });
+
+  it("pick the plain topic first, then the lowest free number", () => {
+    expect(nextTabKey([], "a")).toBe("a");
+    expect(nextTabKey(["a"], "a")).toBe("a#2");
+    expect(nextTabKey(["a", "a#2", "b"], "a")).toBe("a#3");
+    expect(nextTabKey(["a#2"], "a")).toBe("a");
+    expect(nextTabKey(["a", "a#3"], "a")).toBe("a#2");
   });
 });

@@ -118,7 +118,7 @@ func TestKafkaIPCDirect(t *testing.T) {
 		t.Fatalf("detail = %+v, %v", d, err)
 	}
 
-	cid, err := a.KafkaConsumeStart(info.ID, kafka.ConsumeRequest{Topic: "events", Mode: kafka.FromEarliest, Partition: -1, StopAtEnd: true})
+	cid, err := a.KafkaConsumeStart(info.ID, kafka.ConsumeRequest{Topic: "events", Mode: kafka.FromEarliest, Partition: -1, StopAtEnd: true, Tab: "events#2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,13 +141,14 @@ func TestKafkaIPCDirect(t *testing.T) {
 	}
 
 	// The tab state outlives the UI component: open topics and the finished
-	// consumer (still holding its buffer) come back to another window.
-	a.KafkaSetOpenTopics(info.ID, []string{"events", "other"})
+	// consumer (still holding its buffer) come back to another window, the
+	// consumer with the tab it belongs to (a second tab on its topic here).
+	a.KafkaSetOpenTopics(info.ID, []string{"events", "events#2"})
 	st, err := a.KafkaGetTabState(info.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(st.Topics) != 2 || st.Topics[0] != "events" || len(st.Consumers) != 1 || st.Consumers[0].ID != cid || st.Consumers[0].Request.Topic != "events" {
+	if len(st.Topics) != 2 || st.Topics[0] != "events" || len(st.Consumers) != 1 || st.Consumers[0].ID != cid || st.Consumers[0].Request.Topic != "events" || st.Consumers[0].Request.Tab != "events#2" {
 		t.Fatalf("tab state = %+v", st)
 	}
 

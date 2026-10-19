@@ -163,7 +163,7 @@ Tests + checks:
 go build ./...
 go test ./...                      # 29 packages carry tests
 cd frontend && npm run check       # svelte-check, 0 errors expected
-cd frontend && npm run test        # vitest, 32 files / 325 cases
+cd frontend && npm run test        # vitest, 32 files / 329 cases
 ```
 
 Narrower runs while iterating: `go test ./internal/resolver/`
