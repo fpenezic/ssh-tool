@@ -409,7 +409,7 @@ func (a *App) dbRun(ctx context.Context, id, tabKey, database, script string, op
 		meta := map[string]string{
 			"handle_id": id,
 			"database":  database,
-			"statement": clip(dbx.RedactSecrets(r.Statement), 300),
+			"statement": clip(dbx.RedactSecrets(dh.info.Engine, r.Statement), 300),
 		}
 		if source != "" {
 			meta["source"] = source

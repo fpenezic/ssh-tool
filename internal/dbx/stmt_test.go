@@ -188,8 +188,25 @@ func TestRedactSecrets(t *testing.T) {
 		"SELECT password FROM users":                                   "SELECT password FROM users",
 	}
 	for in, want := range cases {
-		if got := RedactSecrets(in); got != want {
+		if got := RedactSecrets(EngineMySQL, in); got != want {
 			t.Errorf("%q -> %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Comments between the tokens do not hide a password.
+func TestRedactSecretsAcrossComments(t *testing.T) {
+	cases := []struct{ engine, in, want string }{
+		{EngineMySQL, "SET PASSWORD FOR 'u'@'%' /* note */ = 'pw'", "SET PASSWORD FOR 'u'@'%'   = '***'"},
+		{EngineMySQL, "ALTER USER u IDENTIFIED /*x*/ BY 'pw'", "ALTER USER u IDENTIFIED   BY '***'"},
+		{EnginePostgres, "ALTER ROLE r PASSWORD /*x*/ 'pw'", "ALTER ROLE r PASSWORD   '***'"},
+		{EngineMySQL, "CREATE USER u IDENTIFIED BY # x\n 'pw'", "CREATE USER u IDENTIFIED BY   '***'"},
+		{EnginePostgres, "ALTER ROLE r PASSWORD -- note\n 'pw'", "ALTER ROLE r PASSWORD   '***'"},
+		{EnginePostgres, "UPDATE t SET note = '-- not a comment'", "UPDATE t SET note = '-- not a comment'"},
+	}
+	for _, c := range cases {
+		if got := RedactSecrets(c.engine, c.in); got != c.want {
+			t.Errorf("%q -> %q, want %q", c.in, got, c.want)
 		}
 	}
 }
