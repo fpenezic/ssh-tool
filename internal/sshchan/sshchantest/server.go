@@ -25,6 +25,7 @@ import (
 type Server struct {
 	Addr  string
 	hosts map[string]string // name -> address to dial
+	key   ssh.PublicKey     // the host key clients pin
 
 	mu    sync.Mutex
 	conns []net.Conn
@@ -67,7 +68,7 @@ func Start(t *testing.T, hosts map[string]string) *Server {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = ln.Close() })
-	srv := &Server{Addr: ln.Addr().String(), hosts: hosts}
+	srv := &Server{Addr: ln.Addr().String(), hosts: hosts, key: signer.PublicKey()}
 	t.Cleanup(srv.DropAll)
 	go func() {
 		for {
@@ -133,7 +134,7 @@ func (s *Server) Lazy(connects *atomic.Int32) *sshchan.LazySSH {
 		}
 		cc, chans, reqs, err := ssh.NewClientConn(raw, s.Addr, &ssh.ClientConfig{
 			User:            "test",
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			HostKeyCallback: ssh.FixedHostKey(s.key),
 		})
 		if err != nil {
 			_ = raw.Close()
