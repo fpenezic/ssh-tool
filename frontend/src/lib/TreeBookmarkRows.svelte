@@ -5,7 +5,8 @@
   // first, when it is not up), right-click for the menu.
   import { treeBookmarks, openBookmark, type TreeBookmark } from "./treeBookmarks.svelte";
   import { collapsedBookmarks } from "./treeState.svelte";
-  import { selection } from "./stores.svelte";
+  import { selection, view } from "./stores.svelte";
+  import { dbTabs } from "./dbState.svelte";
   import { contextMenu } from "./contextMenu.svelte.ts";
   import { IconBookmark, IconExternalLink, IconX } from "./iconMap";
 
@@ -38,6 +39,9 @@
   function select(b: TreeBookmark) {
     selection.selectConnection(b.spec.connection_id);
     treeBookmarks.selected = { key: b.key, connId: b.spec.connection_id };
+    dbTabs.treeSelected = null;
+    // The editor shows the connection's forwards, where the bookmark lives.
+    view.editorTabForce = "forwards";
   }
 
   function openMenu(e: MouseEvent, b: TreeBookmark) {

@@ -5,6 +5,7 @@
   import TreeDbRows from "./TreeDbRows.svelte";
   import TreeBookmarkToggle from "./TreeBookmarkToggle.svelte";
   import TreeDbToggle from "./TreeDbToggle.svelte";
+  import { dbTabs, dbTreeSelectedUnder } from "./dbState.svelte";
   import { treeBookmarks } from "./treeBookmarks.svelte";
   import { renameState } from "./renameState.svelte";
   import { api } from "./api";
@@ -149,6 +150,8 @@
     const shift = e.shiftKey || lastMouseMods.shift;
     lastMouseMods = { ctrl: false, meta: false, shift: false };
     treeBookmarks.selected = null;
+    dbTabs.treeSelected = null;
+    view.editorTabForce = null;
 
     if (shift) {
       selection.rangeConnection(connId, tree.flatVisibleConnectionIds());
@@ -620,7 +623,7 @@
         {@const probe = isLive ? null : probeState.stateOf(conn.id)}
         <div
           class="row conn {indicatorClass(conn.id)}"
-          class:selected={sel && !treeBookmarks.selectedUnder(conn.id)}
+          class:selected={sel && !treeBookmarks.selectedUnder(conn.id) && !dbTreeSelectedUnder(conn.id)}
           class:connecting={isConn}
           class:live={isLive}
           role="treeitem"

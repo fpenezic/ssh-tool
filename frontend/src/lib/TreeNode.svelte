@@ -30,6 +30,7 @@
   import TreeDbRows from "./TreeDbRows.svelte";
   import TreeBookmarkToggle from "./TreeBookmarkToggle.svelte";
   import TreeDbToggle from "./TreeDbToggle.svelte";
+  import { dbTabs, dbTreeSelectedUnder } from "./dbState.svelte";
   import { treeBookmarks } from "./treeBookmarks.svelte";
 
   interface Props {
@@ -148,6 +149,8 @@
     const shift = e.shiftKey || lastMouseMods.shift;
     lastMouseMods = { ctrl: false, meta: false, shift: false };
     treeBookmarks.selected = null;
+    dbTabs.treeSelected = null;
+    view.editorTabForce = null;
 
     console.debug("[tree] conn click", {
       ctrl, meta, shift,
@@ -1114,7 +1117,7 @@
           : conn.hostname}
         <div
           class="row conn {indicatorClass('connection', conn.id)}"
-          class:selected={selConn && !treeBookmarks.selectedUnder(conn.id)}
+          class:selected={selConn && !treeBookmarks.selectedUnder(conn.id) && !dbTreeSelectedUnder(conn.id)}
           class:anchor={isAnchor && selConn}
           class:connecting={isConn}
           class:live={isLive}

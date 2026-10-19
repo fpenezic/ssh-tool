@@ -9,7 +9,7 @@
 // window that ran them.
 
 import { api, type Connection, type DbHandleInfo, type DbResult } from "./api";
-import { tree } from "./stores.svelte";
+import { tree, selection } from "./stores.svelte";
 
 export type DbTabKind = "query" | "table";
 export type DbTableView = "data" | "structure" | "ddl";
@@ -54,6 +54,9 @@ class DbStore {
   // A request from elsewhere (the tree's "Query" on a table) for a tab to
   // open; the pane with that sessionId consumes it.
   pending = $state<{ sessionId: string; tab: Omit<DbTab, "key"> } | null>(null);
+  // The database row last clicked in the tree; drawn as selected while its
+  // connection is.
+  treeSelected = $state<{ connId: string; id: string } | null>(null);
 
   set(info: DbHandleInfo) {
     this.infos[info.id] = info;
@@ -204,4 +207,11 @@ export function dbTreeRows(conn: Connection | null | undefined): DbTreeRow[] {
     });
   }
   return out;
+}
+
+// A database row under connId holds the selection, so the connection row
+// itself should not look selected.
+export function dbTreeSelectedUnder(connId: string): boolean {
+  return dbTabs.treeSelected?.connId === connId
+    && selection.current.kind === "connection" && selection.current.id === connId;
 }

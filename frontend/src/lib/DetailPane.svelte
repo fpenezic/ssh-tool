@@ -555,6 +555,7 @@
     try { return (localStorage.getItem(ED_TAB_KEY) as EdTab) || "general"; } catch { return "general"; }
   })());
   function setEdTab(t: EdTab) {
+    view.editorTabForce = null;
     edTabPref = t;
     try { localStorage.setItem(ED_TAB_KEY, t); } catch { /* private window */ }
   }
@@ -567,6 +568,17 @@
   type OpenAs = "" | "terminal" | "tunnel" | "vnc" | "kafka" | "db";
   function openAsLabel(m: OpenAs): string {
     return m === "tunnel" ? "Tunnel" : m === "vnc" ? "VNC console" : m === "kafka" ? "Kafka" : m === "db" ? "Database" : "Terminal";
+  }
+  // The service choices of "Double-click opens", the ones that are on
+  // first: the switched-off (greyed) ones sink to the bottom.
+  function openAsServices(on: { vnc: boolean; kafka: boolean; db: boolean }, scope: "conn" | "folder") {
+    const off = (what: string) => (scope === "conn" ? `turn ${what} on first` : `${what} is not on for this folder`);
+    const list = [
+      { value: "vnc", label: "VNC console", on: on.vnc, off: off("VNC") },
+      { value: "kafka", label: "Kafka", on: on.kafka, off: off("Kafka") },
+      { value: "db", label: "Database", on: on.db, off: off("the database") },
+    ];
+    return [...list.filter((o) => o.on), ...list.filter((o) => !o.on)];
   }
   function inheritedOpenAs(folderId: string | null | undefined): { mode: OpenAs; from: string | null } {
     const t = inheritedSetting(folderId, "tunnel_only");
@@ -685,7 +697,11 @@
     tabs.push({ id: "advanced", label: "Advanced" });
     return tabs;
   });
-  const edTab = $derived<EdTab>(edTabs.some((t) => t.id === edTabPref) ? edTabPref : "general");
+  const edTab = $derived.by<EdTab>(() => {
+    const forced = view.editorTabForce as EdTab | null;
+    if (forced && edTabs.some((t) => t.id === forced)) return forced;
+    return edTabs.some((t) => t.id === edTabPref) ? edTabPref : "general";
+  });
 
   function folderPathOf(folderId: string | null | undefined): string {
     const names: string[] = [];
@@ -1731,9 +1747,9 @@
           <option value="">(inherit: {openAsLabel(folderInhOpenAs.mode)}{folderInhOpenAs.from ? `, from ${folderInhOpenAs.from}` : ""})</option>
           <option value="terminal">Terminal</option>
           <option value="tunnel">Tunnel - no shell, only the forwards</option>
-          <option value="vnc" disabled={!folderVncOn}>VNC console{folderVncOn ? "" : " (VNC is not on for this folder)"}</option>
-          <option value="kafka" disabled={!folderKafkaOn}>Kafka{folderKafkaOn ? "" : " (Kafka is not on for this folder)"}</option>
-          <option value="db" disabled={!folderDbOn}>Database{folderDbOn ? "" : " (the database is not on for this folder)"}</option>
+          {#each openAsServices({ vnc: folderVncOn, kafka: folderKafkaOn, db: folderDbOn }, "folder") as o (o.value)}
+            <option value={o.value} disabled={!o.on}>{o.label}{o.on ? "" : ` (${o.off})`}</option>
+          {/each}
         </select>
       </label>
       <div class="row">
@@ -2125,9 +2141,9 @@
             <option value="">(inherit: {openAsLabel(connInhOpenAs.mode)}{connInhOpenAs.from ? `, from ${connInhOpenAs.from}` : ""})</option>
             <option value="terminal">Terminal</option>
             <option value="tunnel">Tunnel - no shell, only the forwards</option>
-            <option value="vnc" disabled={!connVncOn}>VNC console{connVncOn ? "" : " (turn VNC on first)"}</option>
-            <option value="kafka" disabled={!connKafkaOn}>Kafka{connKafkaOn ? "" : " (turn Kafka on first)"}</option>
-            <option value="db" disabled={!connDbOn}>Database{connDbOn ? "" : " (turn the database on first)"}</option>
+            {#each openAsServices({ vnc: connVncOn, kafka: connKafkaOn, db: connDbOn }, "conn") as o (o.value)}
+              <option value={o.value} disabled={!o.on}>{o.label}{o.on ? "" : ` (${o.off})`}</option>
+            {/each}
           </select>
         </label>
       {/if}
