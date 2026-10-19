@@ -8,6 +8,7 @@
   import DbResultGrid from "./DbResultGrid.svelte";
   import { errMsg } from "./connectErrors";
   import { IconRefresh, IconSql, IconCopy } from "./iconMap";
+  import { selectAllWithin } from "./selectWithin";
 
   interface Props {
     sessionId: string;
@@ -143,7 +144,8 @@
           <span class="spacer"></span>
           <button title="Copy the DDL" onclick={() => api.clipboardSetText(detail?.ddl ?? "").catch(() => {})}><IconCopy size={13} /> Copy</button>
         </div>
-        <pre class="ddl">{detail.ddl}</pre>
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+        <pre class="ddl" tabindex="0" onkeydown={selectAllWithin}>{detail.ddl}</pre>
       </div>
     {/if}
   </div>
@@ -174,7 +176,8 @@
   .mono, pre { font-family: var(--mono-font, ui-monospace, monospace); }
   h4 { margin: 0.4rem 0 0.3rem; font-size: 0.8rem; color: var(--subtext0); }
   .ddl-head { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; }
-  pre.ddl { margin: 0; font-size: 0.78rem; white-space: pre-wrap; color: var(--text); }
+  pre.ddl { margin: 0; font-size: 0.78rem; white-space: pre-wrap; color: var(--text); user-select: text; }
+  pre.ddl:focus { outline: none; }
   pre.err { margin: 0.5rem 0.75rem; color: var(--red); white-space: pre-wrap; font-size: 0.78rem; }
   .muted { margin: 0.6rem 0.75rem; font-size: 0.8rem; color: var(--subtext0); }
   .muted.small { margin: 0; font-size: 0.72rem; }
