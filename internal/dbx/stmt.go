@@ -87,8 +87,20 @@ func skipNonCode(engine, s string, i int) int {
 		// OUTFILE ...*/"), so it is not skipped like a comment.
 		return i
 	case c == '/' && strings.HasPrefix(s[i:], "/*"):
-		if j := strings.Index(s[i+2:], "*/"); j >= 0 {
-			return i + 2 + j + 2
+		// Postgres nests block comments: "/* a /* b */ c */" is one
+		// comment, and ending it at the first "*/" would read c as code.
+		depth := 1
+		for j := i + 2; j+1 < len(s); j++ {
+			switch {
+			case s[j] == '*' && s[j+1] == '/':
+				if depth--; depth == 0 {
+					return j + 2
+				}
+				j++
+			case s[j] == '/' && s[j+1] == '*' && engine == EnginePostgres:
+				depth++
+				j++
+			}
 		}
 		return len(s)
 	case c == '\'':
