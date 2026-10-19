@@ -26,6 +26,10 @@ PostgreSQL and MySQL / MariaDB open from the connection that reaches them: datab
 - **A tab like the others.** Database tabs detach and redock, split into a terminal on the host, and come back with Reopen last session and workspaces with their SQL (nothing is re-run).
 - **LLM access.** A Database tab can be shared over MCP or opened with `open_db` after you approve: listing and describing tables and running queries - always read-only, capped - and, with read-run, statements you approve (unless the share is auto-run).
 
+### Sensitive connections
+
+- **Mark a host or a whole folder sensitive.** **Sensitive** (General tab of the connection and folder editors) marks production or otherwise critical hosts: the LLM cannot list, open, change or route through them, the Database tab asks before statements that change data, and Kafka asks for the name before a delete. It is inherited like the other settings, so marking a customer or prod folder covers everything in it; **No** on a connection opts it out. The LLM can no longer change a folder that is sensitive or holds a sensitive connection. The flag existed before but had no control in the app.
+
 ### Fixes
 
 - **Detached windows.** Closing a detached window with its X now ends a Kafka tab or local shell inside it too. The Kafka connection used to stay open and reconnect every few minutes, keeping its connection green in the tree and the Terminal count one too high.

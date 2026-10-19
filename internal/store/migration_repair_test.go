@@ -40,7 +40,7 @@ func TestMigration21AddsBitwardenNetworkProfileID(t *testing.T) {
 		-- Later migrations (v22) touch connections/folders/credential_refs/
 		-- credential_folders; a real DB at v20 always has them. Minimal stubs
 		-- so those ALTERs have a target.
-		CREATE TABLE connections (id TEXT PRIMARY KEY);
+		CREATE TABLE connections (id TEXT PRIMARY KEY, overrides_json TEXT NOT NULL DEFAULT '{}', sensitive INTEGER NOT NULL DEFAULT 0);
 		CREATE TABLE folders (id TEXT PRIMARY KEY);
 		CREATE TABLE credential_refs (id TEXT PRIMARY KEY);
 		CREATE TABLE credential_folders (id TEXT PRIMARY KEY);
@@ -115,7 +115,7 @@ func TestMigration23RepairsCredentialIconColumns(t *testing.T) {
 	_, err = db.Exec(`
 		CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 		INSERT INTO schema_meta (key, value) VALUES ('version', '22');
-		CREATE TABLE connections (id TEXT PRIMARY KEY, icon_name TEXT, icon_color TEXT);
+		CREATE TABLE connections (id TEXT PRIMARY KEY, icon_name TEXT, icon_color TEXT, overrides_json TEXT NOT NULL DEFAULT '{}', sensitive INTEGER NOT NULL DEFAULT 0);
 		CREATE TABLE folders (id TEXT PRIMARY KEY, icon_name TEXT, icon_color TEXT);
 		CREATE TABLE credential_refs (id TEXT PRIMARY KEY);
 		CREATE TABLE credential_folders (id TEXT PRIMARY KEY);
@@ -142,5 +142,46 @@ func TestMigration23RepairsCredentialIconColumns(t *testing.T) {
 	// aborted the migration).
 	if _, err := db.Query(`SELECT icon_name FROM connections`); err != nil {
 		t.Fatalf("connections icon_name lost: %v", err)
+	}
+}
+
+// Migration 28 moves the old connections.sensitive column into the
+// inheritable overrides, keeping the other overrides, and clears the column.
+func TestMigration28MovesSensitiveIntoOverrides(t *testing.T) {
+	db, err := sql.Open("sqlite", t.TempDir()+"/v27.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	_, err = db.Exec(`
+		CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+		INSERT INTO schema_meta (key, value) VALUES ('version', '27');
+		CREATE TABLE connections (id TEXT PRIMARY KEY, overrides_json TEXT NOT NULL DEFAULT '{}', sensitive INTEGER NOT NULL DEFAULT 0);
+		INSERT INTO connections VALUES ('a', '{"port":2222}', 1), ('b', '', 1), ('c', '{"port":22}', 0);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runMigrations(db); err != nil {
+		t.Fatalf("runMigrations: %v", err)
+	}
+	want := map[string]string{
+		"a": `{"port":2222,"sensitive":true}`,
+		"b": `{"sensitive":true}`,
+		"c": `{"port":22}`,
+	}
+	rows, err := db.Query(`SELECT id, overrides_json, sensitive FROM connections`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, ov string
+		var sens int
+		if err := rows.Scan(&id, &ov, &sens); err != nil {
+			t.Fatal(err)
+		}
+		if ov != want[id] || sens != 0 {
+			t.Errorf("%s: overrides %s, column %d; want %s, 0", id, ov, sens, want[id])
+		}
 	}
 }

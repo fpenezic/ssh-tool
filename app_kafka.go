@@ -112,7 +112,7 @@ func (a *App) KafkaOpen(connectionID string) (*KafkaClusterInfo, error) {
 		Name:         conn.Name,
 		Bootstrap:    bootstrap,
 		ReadOnly:     settings.KafkaReadOnly,
-		Sensitive:    conn.Sensitive,
+		Sensitive:    settings.Sensitive,
 		Security:     "plaintext",
 	}}
 	cfg := kafka.Config{Bootstrap: bootstrap, ClientID: "ssh-tool"}

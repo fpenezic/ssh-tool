@@ -533,6 +533,19 @@ var migrations = []struct {
 		// cleared by DeleteImage like the other three references.
 		`ALTER TABLE credential_folders ADD COLUMN icon_image_id TEXT REFERENCES images(id);`,
 	},
+	{
+		28,
+		// "Sensitive" becomes an inheritable setting inside overrides_json,
+		// so a folder can mark everything under it. A connection that had
+		// the old column set keeps it as its own override; the column stays
+		// (SQLite cannot drop it cheaply) and is written as 0 from now on.
+		`UPDATE connections
+		    SET overrides_json = CASE WHEN json_valid(overrides_json)
+		                              THEN json_set(overrides_json, '$.sensitive', json('true'))
+		                              ELSE '{"sensitive":true}' END,
+		        sensitive = 0
+		  WHERE sensitive != 0;`,
+	},
 }
 
 // LatestSchemaVersion is the version a freshly-migrated DB lands on.

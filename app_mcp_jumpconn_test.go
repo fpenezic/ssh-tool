@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -105,12 +106,10 @@ func TestPlanRefusesSensitiveConnection(t *testing.T) {
 	a.mcp = newMcpState()
 	a.mcp.manageStore = true
 
-	c, err := a.db.CreateConnection(store.NewConnection{Name: "vault-db", Hostname: "db.example.com"})
-	if err != nil {
-		t.Fatal(err)
-	}
 	yes := true
-	if _, err := a.db.UpdateConnection(store.UpdateConnection{ID: c.ID, Sensitive: &yes}); err != nil {
+	c, err := a.db.CreateConnection(store.NewConnection{Name: "vault-db", Hostname: "db.example.com",
+		Overrides: store.InheritableSettings{Sensitive: &yes}})
+	if err != nil {
 		t.Fatal(err)
 	}
 	host := "evil.example.com"
@@ -130,11 +129,9 @@ func TestPlanRefusesSensitiveConnection(t *testing.T) {
 
 func TestJumpsThroughSensitive(t *testing.T) {
 	a := newResolveTestApp(t)
-	bastion, _ := a.db.CreateConnection(store.NewConnection{Name: "bastion", Hostname: "bastion.example.com"})
 	yes := true
-	if _, err := a.db.UpdateConnection(store.UpdateConnection{ID: bastion.ID, Sensitive: &yes}); err != nil {
-		t.Fatal(err)
-	}
+	bastion, _ := a.db.CreateConnection(store.NewConnection{Name: "bastion", Hostname: "bastion.example.com",
+		Overrides: store.InheritableSettings{Sensitive: &yes}})
 	mid, _ := a.db.CreateConnection(store.NewConnection{Name: "mid", Hostname: "mid.example.com",
 		Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain",
 			Chain: &store.JumpHostSpec{ConnectionID: &bastion.ID}}}})
@@ -151,5 +148,93 @@ func TestJumpsThroughSensitive(t *testing.T) {
 	}
 	if a.jumpsThroughSensitive(plain.ID) {
 		t.Error("plain connection flagged")
+	}
+}
+
+// A folder marked sensitive covers what is under it, subfolders included;
+// a connection can opt out. The LLM cannot list, open or route through the
+// covered hosts, and cannot change the folder or a folder above it.
+func TestSensitiveInheritedFromFolder(t *testing.T) {
+	a := newResolveTestApp(t)
+	a.mcp = newMcpState()
+	a.mcp.manageStore = true
+	yes, no := true, false
+
+	top, _ := a.db.CreateFolder(store.NewFolder{Name: "customers"})
+	prod, _ := a.db.CreateFolder(store.NewFolder{Name: "prod", ParentID: &top.ID,
+		Settings: store.InheritableSettings{Sensitive: &yes}})
+	sub, _ := a.db.CreateFolder(store.NewFolder{Name: "db", ParentID: &prod.ID})
+	lab, _ := a.db.CreateFolder(store.NewFolder{Name: "lab"})
+	deep, _ := a.db.CreateConnection(store.NewConnection{Name: "pg-prod", Hostname: "pg.example.com", FolderID: &sub.ID})
+	optOut, _ := a.db.CreateConnection(store.NewConnection{Name: "docs", Hostname: "docs.example.com", FolderID: &prod.ID,
+		Overrides: store.InheritableSettings{Sensitive: &no}})
+	behind, _ := a.db.CreateConnection(store.NewConnection{Name: "behind", Hostname: "behind.example.com", FolderID: &lab.ID,
+		Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain",
+			Chain: &store.JumpHostSpec{ConnectionID: &deep.ID}}}})
+
+	if err := a.llmSensitiveRefusal(deep.ID); err != errSensitiveTarget {
+		t.Errorf("inherited from a folder two levels up: err = %v", err)
+	}
+	if err := a.llmSensitiveRefusal(optOut.ID); err != nil {
+		t.Errorf("opted-out connection refused: %v", err)
+	}
+	if err := a.llmSensitiveRefusal(behind.ID); err != errSensitiveChain {
+		t.Errorf("hop through an inherited-sensitive bastion: err = %v", err)
+	}
+	list, err := a.mcpListConnections("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range list {
+		if c.ConnectionID == deep.ID {
+			t.Error("inherited-sensitive connection listed")
+		}
+	}
+	host := "evil.example.com"
+	if err := a.planEditConnection(editConnInput{ConnID: deep.ID, Host: &host}); err != errSensitiveConn {
+		t.Errorf("edit: err = %v", err)
+	}
+	for _, f := range []string{prod.ID, sub.ID, top.ID} {
+		if err := a.planSetFolderSettings(f, folderSettingsInput{ColorTag: "red"}); err != errSensitiveFolder {
+			t.Errorf("settings on folder %s: err = %v", f, err)
+		}
+		if err := a.planRenameFolder(f, "renamed"); err != errSensitiveFolder {
+			t.Errorf("rename folder %s: err = %v", f, err)
+		}
+	}
+	if err := a.planSetFolderSettings(lab.ID, folderSettingsInput{ColorTag: "red"}); err != nil {
+		t.Errorf("plain folder refused: %v", err)
+	}
+}
+
+// Inventory hosts of a sensitive folder stay out of the LLM listing and of
+// every facts path, like saved connections.
+func TestSensitiveDynamicFolder(t *testing.T) {
+	a := newResolveTestApp(t)
+	a.mcp = newMcpState()
+	yes := true
+	parent, _ := a.db.CreateFolder(store.NewFolder{Name: "customer", Settings: store.InheritableSettings{Sensitive: &yes}})
+	inv, _ := a.db.CreateFolder(store.NewFolder{Name: "proxmox", ParentID: &parent.ID})
+	if err := a.db.CreateDynamicFolder(store.DynamicFolder{FolderID: inv.ID, Provider: "proxmox", Config: map[string]any{}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.db.ReplaceDynamicEntries(inv.ID, []store.DynamicEntry{{ID: "entry-1", FolderID: inv.ID,
+		ExternalID: "vm/100", Name: "web-01", Hostname: "10.0.0.5", Kind: "guest_vm", Raw: json.RawMessage(`{}`)}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.llmSensitiveRefusal("dyn:entry-1"); err != errSensitiveTarget {
+		t.Errorf("open: err = %v", err)
+	}
+	list, _ := a.mcpListConnections("")
+	for _, c := range list {
+		if c.Dynamic {
+			t.Errorf("sensitive inventory host listed: %s", c.Name)
+		}
+	}
+	if hosts, _, _ := a.folderFactHosts(parent.ID); len(hosts) != 0 {
+		t.Errorf("folder facts took %v", hosts)
+	}
+	if hosts, _ := a.idFactHosts([]string{"dyn:" + inv.ID + ":entry-1"}); len(hosts) != 0 {
+		t.Errorf("id facts took %v", hosts)
 	}
 }

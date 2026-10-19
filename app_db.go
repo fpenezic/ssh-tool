@@ -170,7 +170,7 @@ func (a *App) dbOpen(connectionID, targetID string, login *[2]string) (*DbHandle
 		Database:     settings.DbName,
 		User:         user,
 		ReadOnly:     settings.DbReadOnly,
-		Sensitive:    conn.Sensitive,
+		Sensitive:    settings.Sensitive,
 		TLS:          settings.DbTLS,
 	}}
 	cfg := dbx.Config{

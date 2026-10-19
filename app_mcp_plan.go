@@ -250,6 +250,9 @@ func (a *App) planSetFolderSettings(folder string, s folderSettingsInput) error 
 		return err
 	}
 	s.JumpConnection = jc
+	if ref.Existing != "" && a.folderTouchesSensitive(ref.Existing) {
+		return errSensitiveFolder
+	}
 	s.ColorTag = strings.TrimSpace(s.ColorTag)
 	if !validColorTag(s.ColorTag) {
 		return fmt.Errorf("unknown color_tag %q: use red, orange, yellow, green, teal, blue, mauve, pink or #rrggbb", s.ColorTag)
@@ -400,7 +403,7 @@ func (a *App) normalizeJumpConnection(raw string) (string, error) {
 	}
 	if c, err := a.db.GetConnection(raw); err != nil || c == nil {
 		return "", fmt.Errorf("no connection with id %q for jump_connection", raw)
-	} else if c.Sensitive {
+	} else if a.isSensitive(c) {
 		// A hop spends the bastion's credentials just as connecting to it
 		// does, and connect refuses a sensitive connection.
 		return "", errSensitiveConn
@@ -579,7 +582,7 @@ func (a *App) planAddForward(connection, kind, localAddr string, localPort uint1
 		return "", fmt.Errorf("connection ref required")
 	}
 	if ref.Existing != "" {
-		if c, err := a.db.GetConnection(ref.Existing); err == nil && c != nil && c.Sensitive {
+		if c, err := a.db.GetConnection(ref.Existing); err == nil && c != nil && a.isSensitive(c) {
 			return "", errSensitiveConn
 		}
 	}
@@ -658,7 +661,7 @@ func (a *App) planEditConnection(in editConnInput) error {
 	// and reporting that now beats a confusing failure at commit time.
 	if c, err := a.db.GetConnection(in.ConnID); err != nil || c == nil {
 		return fmt.Errorf("no connection with id %q", in.ConnID)
-	} else if c.Sensitive {
+	} else if a.isSensitive(c) {
 		return errSensitiveConn
 	}
 
@@ -834,6 +837,9 @@ func (a *App) planRenameFolder(folderID, name string) error {
 	if _, err := a.db.GetFolder(folderID); err != nil {
 		return fmt.Errorf("no folder with id %q", folderID)
 	}
+	if a.folderTouchesSensitive(folderID) {
+		return errSensitiveFolder
+	}
 	a.mcp.planMu.Lock()
 	defer a.mcp.planMu.Unlock()
 	p := a.getOrInitPlan()
@@ -857,6 +863,10 @@ func (a *App) planDiscard() {
 // errSensitiveConn: the user marked the connection sensitive, so the LLM
 // may not open it, edit it, add forwards to it or route through it.
 var errSensitiveConn = fmt.Errorf("that connection is marked sensitive; the LLM cannot open, change or route through it")
+
+// errSensitiveFolder: the folder is sensitive or holds something that is,
+// and its settings and name flow down to those hosts.
+var errSensitiveFolder = fmt.Errorf("that folder is marked sensitive or holds a sensitive connection; the LLM cannot change it")
 
 var errManageOff = fmt.Errorf("the manage grant is off; the user must enable \"Allow manage\" in the LLM Share popover before you can create connections")
 
@@ -1468,7 +1478,7 @@ func (a *App) savedConnAt(host string, port uint16) (id, name string) {
 	}
 	folders, _ := a.db.ListFolders()
 	for _, c := range conns {
-		if c.Sensitive || !strings.EqualFold(c.Hostname, host) {
+		if connSensitive(c, folders) || !strings.EqualFold(c.Hostname, host) {
 			continue
 		}
 		if resolver.ResolveWith(c, folders).Port == port {
@@ -1806,7 +1816,7 @@ func (a *App) validatePlanRefs(p *mcpPlan) error {
 		if fw.Conn.Existing != "" {
 			if c, err := a.db.GetConnection(fw.Conn.Existing); err != nil || c == nil {
 				return fmt.Errorf("a %s forward references unknown connection id %q", fw.Kind, fw.Conn.Existing)
-			} else if c.Sensitive {
+			} else if a.isSensitive(c) {
 				return errSensitiveConn
 			}
 		}
@@ -1833,6 +1843,23 @@ func (a *App) writePlan(p *mcpPlan) (string, error) {
 	// transaction: the store runs on one connection, so a read inside the
 	// transaction would wait forever for the connection the tx holds.
 	mergedFolderSettings := map[string]store.InheritableSettings{}
+	// Re-checked at commit: the user may have marked something sensitive
+	// since the change was staged.
+	for _, fs := range p.folderSettings {
+		if a.folderTouchesSensitive(fs.FolderID) {
+			return "", errSensitiveFolder
+		}
+	}
+	for _, ef := range p.editFolders {
+		if a.folderTouchesSensitive(ef.FolderID) {
+			return "", errSensitiveFolder
+		}
+	}
+	for _, e := range p.editConns {
+		if c, err := a.db.GetConnection(e.ConnID); err == nil && c != nil && a.isSensitive(c) {
+			return "", errSensitiveConn
+		}
+	}
 	for _, fs := range p.folderSettings {
 		merged, err := a.mergeFolderSettings(fs.FolderID, fs.Settings.toInheritable())
 		if err != nil {
