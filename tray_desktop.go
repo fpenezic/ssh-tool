@@ -175,14 +175,6 @@ func (t *trayController) refresh(force bool) {
 		return
 	}
 	t.sig = sig
-	up := 0
-	for _, p := range st.profiles {
-		if p.running {
-			up++
-		}
-	}
-	log.Printf("tray: menu rebuilt (profiles %d, up %d, tunnels %d, favorites %d, recent %d, locked %v)",
-		len(st.profiles), up, len(st.tunnels), len(st.favorites), len(st.recent), st.locked)
 	old := t.menu
 	t.menu = t.build(st)
 	t.tray.SetMenu(t.menu)
