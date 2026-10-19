@@ -721,10 +721,13 @@ func (a *App) mcpListConnections(query string) ([]mcpConnectionInfo, error) {
 			strings.Contains(strings.ToLower(name), q) ||
 			strings.Contains(strings.ToLower(folder), q)
 	}
-	allFolders, _ := a.db.ListFolders()
+	allFolders, err := a.db.ListFolders()
+	if err != nil {
+		return nil, err // cannot tell which connections are sensitive
+	}
 	out := []mcpConnectionInfo{}
 	for _, c := range conns {
-		if c.Sensitive {
+		if connSensitive(c, allFolders) {
 			continue // never expose sensitive connections to the LLM
 		}
 		folder := ""
@@ -750,6 +753,9 @@ func (a *App) mcpListConnections(query string) ([]mcpConnectionInfo, error) {
 	if ferr == nil {
 		for _, df := range folders {
 			folder := paths[df.FolderID]
+			if folderSensitive(df.FolderID, allFolders) {
+				continue
+			}
 			entries, eerr := a.db.ListDynamicEntries(df.FolderID)
 			if eerr != nil {
 				continue
@@ -811,51 +817,134 @@ func (a *App) folderPathIndex() map[string]string {
 	return cache
 }
 
-// mcpConnect opens a session for connectionID after the user approves, then
-// auto-shares that session with the LLM at the given level so the LLM can
-// immediately work on it. Requires the bridge enabled; the approval prompt is
-// the gate (opening a session spends credentials and may trigger a host-key
-// prompt). A Sensitive connection is refused.
-//
-// jumpsThroughSensitive reports whether opening connectionID (a saved id or
-// "dyn:<entryID>") would hop through a connection the user marked
-// sensitive. A hop spends that bastion's credentials, so it is the same as
-// opening it. The chain is expanded the way a connect expands it
-// (resolver.ExpandJumpRefs, which follows each referenced bastion's own
-// chain) with a lookup that notes every connection it reads: the expanded
-// hops no longer say which connection they came from.
+// errSensitiveTarget / errSensitiveChain: the LLM may not open a
+// connection that resolves sensitive (set on it or on a folder above it),
+// nor one whose jump chain goes through such a connection.
+var (
+	errSensitiveTarget = fmt.Errorf("connection is marked sensitive and cannot be opened by the LLM")
+	errSensitiveChain  = fmt.Errorf("this connection's jump chain goes through a connection marked sensitive, which the LLM cannot use")
+)
+
+// llmSensitiveRefusal is the gate before the LLM opens connectionID (a
+// saved id or "dyn:<entryID>"): nil when neither it nor a hop of its chain
+// is sensitive.
+func (a *App) llmSensitiveRefusal(connectionID string) error {
+	target, chain, err := a.sensitiveState(connectionID)
+	switch {
+	case err != nil:
+		return fmt.Errorf("cannot tell whether the connection is sensitive: %w", err)
+	case target:
+		return errSensitiveTarget
+	case chain:
+		return errSensitiveChain
+	}
+	return nil
+}
+
+// jumpsThroughSensitive reports whether opening connectionID would hop
+// through a connection that resolves sensitive.
 func (a *App) jumpsThroughSensitive(connectionID string) bool {
+	_, chain, err := a.sensitiveState(connectionID)
+	return chain || err != nil
+}
+
+// sensitiveState reports whether connectionID (a saved id or
+// "dyn:<entryID>") resolves sensitive itself, and whether it would hop
+// through a connection that does. A hop spends that bastion's credentials,
+// so it is the same as opening it. The chain is expanded the way a connect
+// expands it (resolver.ExpandJumpRefs, which follows each referenced
+// bastion's own chain) with a lookup that notes every connection it reads:
+// the expanded hops no longer say which connection they came from. An id
+// that cannot be read reports false (connect reports the real error); the
+// folders failing to read is an error, since inherited sensitivity is then
+// unknown.
+func (a *App) sensitiveState(connectionID string) (target, chain bool, err error) {
 	folders, err := a.db.ListFolders()
 	if err != nil {
-		return false // connect reports the real error
+		return false, false, err
 	}
 	var conn store.Connection
 	if entryID, ok := strings.CutPrefix(connectionID, "dyn:"); ok {
 		entry, err := a.db.GetDynamicEntry(entryID)
 		if err != nil || entry == nil {
-			return false
+			return false, false, nil
 		}
 		conn = a.dynamicConnectionFor(entry, "")
 		conn.ID = connectionID
 	} else {
 		c, err := a.db.GetConnection(connectionID)
 		if err != nil || c == nil {
-			return false
+			return false, false, nil
 		}
 		conn = *c
 	}
-	sensitive := false
 	base := resolver.DBLookup(a.db)
 	lookup := func(id string) (*store.Connection, error) {
 		c, err := base(id)
-		if err == nil && c != nil && c.Sensitive {
-			sensitive = true
+		if err == nil && c != nil && connSensitive(*c, folders) {
+			chain = true
 		}
 		return c, err
 	}
 	rs := resolver.ResolveWith(conn, folders)
 	_ = resolver.ExpandJumpRefs(&rs, conn.ID, folders, lookup)
-	return sensitive
+	return rs.Sensitive, chain, nil
+}
+
+// connSensitive reports whether c resolves sensitive: set on it, or on a
+// folder above it and not turned off on the connection.
+func connSensitive(c store.Connection, folders []store.Folder) bool {
+	return resolver.ResolveWith(c, folders).Sensitive
+}
+
+// folderSensitive reports whether folderID resolves sensitive.
+func folderSensitive(folderID string, folders []store.Folder) bool {
+	return connSensitive(store.Connection{FolderID: &folderID}, folders)
+}
+
+// isSensitive is connSensitive with the folders read here.
+func (a *App) isSensitive(c *store.Connection) bool {
+	folders, err := a.db.ListFolders()
+	if err != nil {
+		return true // cannot tell: treat it as sensitive
+	}
+	return connSensitive(*c, folders)
+}
+
+// folderTouchesSensitive reports whether changing folderID's settings or
+// name would reach something sensitive: the folder itself, a folder under
+// it, or a connection under it that resolves sensitive. The LLM may not
+// change such a folder, since its settings flow down to those hosts.
+func (a *App) folderTouchesSensitive(folderID string) bool {
+	folders, err := a.db.ListFolders()
+	if err != nil {
+		return true
+	}
+	under := map[string]bool{folderID: true}
+	for grew := true; grew; {
+		grew = false
+		for _, f := range folders {
+			if !under[f.ID] && f.ParentID != nil && under[*f.ParentID] {
+				under[f.ID] = true
+				grew = true
+			}
+		}
+	}
+	for id := range under {
+		if folderSensitive(id, folders) {
+			return true
+		}
+	}
+	conns, err := a.db.ListConnections(nil)
+	if err != nil {
+		return true
+	}
+	for _, c := range conns {
+		if c.FolderID != nil && under[*c.FolderID] && connSensitive(c, folders) {
+			return true
+		}
+	}
+	return false
 }
 
 // mcpConnectGrant is the access an LLM-opened session gets: read or
@@ -869,6 +958,12 @@ func mcpConnectGrant(level string) mcpGrantLevel {
 	return mcpGrantReadRun
 }
 
+// mcpConnect opens a session for connectionID after the user approves, then
+// auto-shares that session with the LLM at the given level so the LLM can
+// immediately work on it. Requires the bridge enabled; the approval prompt is
+// the gate (opening a session spends credentials and may trigger a host-key
+// prompt). A sensitive connection is refused (llmSensitiveRefusal).
+//
 // connectionID is either a saved-connection id, or "dyn:<folderID>:<entryID>"
 // for a dynamic-inventory host (as returned by list_connections). The two are
 // resolved to a common (name, hostname, folder, connect-func) shape and share
@@ -909,9 +1004,6 @@ func (a *App) mcpConnect(connectionID, level string) (string, error) {
 		if err != nil || conn == nil {
 			return "", fmt.Errorf("connection not found")
 		}
-		if conn.Sensitive {
-			return "", fmt.Errorf("connection is marked sensitive and cannot be opened by the LLM")
-		}
 		name, hostname = conn.Name, conn.Hostname
 		if conn.FolderID != nil {
 			folder = a.folderPathIndex()[*conn.FolderID]
@@ -919,8 +1011,8 @@ func (a *App) mcpConnect(connectionID, level string) (string, error) {
 		connect = func() (*SshConnectResult, error) { return a.SshConnect(connectionID) }
 	}
 
-	if a.jumpsThroughSensitive(uiConnectionID) {
-		return "", fmt.Errorf("this connection's jump chain goes through a connection marked sensitive, which the LLM cannot use")
+	if err := a.llmSensitiveRefusal(uiConnectionID); err != nil {
+		return "", err
 	}
 
 	label := name

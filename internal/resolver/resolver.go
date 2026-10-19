@@ -129,6 +129,7 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		DbReadOnly:         firstNonNilBool(over.DbReadOnly, base.DbReadOnly),
 		DbTLS:              firstNonNil(over.DbTLS, base.DbTLS),
 		DbCredentialRef:    firstNonNil(over.DbCredentialRef, base.DbCredentialRef),
+		Sensitive:          firstNonNilBool(over.Sensitive, base.Sensitive),
 		// The connection's own list (folders do not set one).
 		DbTargets: over.DbTargets,
 		DbLabel:   over.DbLabel,
@@ -285,6 +286,7 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 		DbTargets:          s.DbTargets,
 		DbLabel:            strOr(s.DbLabel, ""),
 		DbDefaultTarget:    dbDefaultTarget(s),
+		Sensitive:          s.Sensitive != nil && *s.Sensitive,
 	}
 }
 

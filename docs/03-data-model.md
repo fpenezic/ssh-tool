@@ -2,7 +2,7 @@
 
 The DB lives at `DataDir/store.db` (SQLite via `modernc.org/sqlite`,
 WAL mode, foreign keys on). Schema is versioned in `schema_meta.value`
-and migrated in order on every startup. Current head: **v27**. The audit log lives in a separate audit.db (machine-local, not in this schema).
+and migrated in order on every startup. Current head: **v28**. The audit log lives in a separate audit.db (machine-local, not in this schema).
 
 The canonical migration source is `internal/store/migrations.go`. This
 doc summarises the current shape and lists each migration's purpose.
@@ -248,6 +248,10 @@ the network profile to dial the server through, empty meaning direct.
 - v27: `credential_folders.icon_image_id` - uploaded icon, like the
   other three tree kinds; cleared by `DeleteImage`, counted by
   `ListImageIDs`, kept by `DeleteUnusedImages`.
+- v28: `sensitive` moves into the inheritable settings (overrides_json
+  of connections and folders); a connection that had the old
+  `connections.sensitive` column set gets it as its own override. The
+  column stays and is written as 0.
 
 ### `audit_events` (v13, separate DB)
 Lives in `audit.db`, not `store.db` - it is machine-local and

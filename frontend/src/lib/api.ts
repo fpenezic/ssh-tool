@@ -108,6 +108,9 @@ export interface InheritableSettings {
   db_in_tree?: boolean;
   // The default database: a db_targets id, absent = the connection's own.
   db_default_target?: string;
+  // Production or otherwise critical: off limits to the LLM, writes and
+  // deletes confirmed. Inherited; false on a connection opts it out.
+  sensitive?: boolean;
 }
 
 export interface Folder {
@@ -141,7 +144,6 @@ export interface Connection {
   notes: string;
   open_hidden?: boolean;
   favorite: boolean;
-  sensitive: boolean;
   icon_image_id: string | null;
   icon_name: string | null;
   icon_color: string | null;
@@ -196,6 +198,7 @@ export interface ResolvedSettings {
   db_targets: DbTarget[] | null;
   db_label: string;
   db_default_target: string;
+  sensitive: boolean;
 }
 
 export interface DbTarget {
@@ -1165,7 +1168,6 @@ export const api = {
     tags?: string[];
     notes?: string;
     favorite?: boolean;
-    sensitive?: boolean;
     protocol?: string;
     localShellKind?: string | null;
     clearLocalShellKind?: boolean;
@@ -1184,7 +1186,6 @@ export const api = {
       tags: input.tags,
       notes: input.notes,
       favorite: input.favorite,
-      sensitive: input.sensitive,
       protocol: input.protocol,
       local_shell_kind: input.localShellKind,
       clear_local_shell_kind: input.clearLocalShellKind ?? false,

@@ -1877,6 +1877,19 @@ everything mobile is behind a build tag or an `isMobile` check.
       lands right after the change, outside the modal, and cancels it
       (`LoginModal` has no `clickOutside`).
 
+117. **"Sensitive" is an inherited setting - never read it off the row.**
+   Since schema v28 it lives in `overrides_json` / folder settings and
+   resolves like the rest (`resolver.ResolveWith(...).Sensitive`;
+   `connSensitive`, `folderSensitive`, `a.isSensitive` in app_mcp.go). The
+   old `connections.sensitive` column is dead (always 0) and is no longer
+   on `store.Connection`, so a check that reads the row misses every host
+   covered by a folder. Two consequences for LLM (MCP) code: a dynamic
+   inventory host is sensitive when its folder is (the listing and
+   `sensitiveState` resolve the synthetic connection), and changing a
+   folder's settings or name reaches every host under it, so the plan tools
+   refuse a folder that is sensitive or holds anything sensitive
+   (`folderTouchesSensitive`), at staging and again at commit.
+
 ---
 
 # Archive

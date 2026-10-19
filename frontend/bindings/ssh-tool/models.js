@@ -1323,13 +1323,6 @@ export class ConnectionsUpdateInput {
              */
             this["favorite"] = null;
         }
-        if (!("sensitive" in $$source)) {
-            /**
-             * @member
-             * @type {boolean | null}
-             */
-            this["sensitive"] = null;
-        }
         if (!("open_hidden" in $$source)) {
             /**
              * @member

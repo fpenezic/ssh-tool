@@ -328,6 +328,24 @@ class TreeStore {
     return { value: undefined, from: null };
   }
 
+  // inheritedFieldForConnection for a folder: the value its ancestors
+  // pass down (the folder's own setting not counted).
+  inheritedFieldForFolder<K extends keyof InheritableSettings>(
+    folderID: string,
+    field: K,
+  ): { value: InheritableSettings[K] | undefined; from: Folder | null } {
+    let cur = this.folderById(this.folderById(folderID)?.parent_id ?? null);
+    let guard = 0;
+    while (cur && guard++ < 10000) {
+      const v = cur.settings?.[field];
+      if (v !== undefined && v !== null && v !== "") {
+        return { value: v as InheritableSettings[K], from: cur };
+      }
+      cur = this.folderById(cur.parent_id ?? null);
+    }
+    return { value: undefined, from: null };
+  }
+
   resolveJumpChainForConnection(id: string): string[] {
     const c = this.connectionById(id);
     if (!c) return [];

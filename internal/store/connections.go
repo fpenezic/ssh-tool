@@ -117,7 +117,6 @@ type UpdateConnection struct {
 	Tags        *[]string
 	Notes       *string
 	Favorite    *bool
-	Sensitive   *bool
 	OpenHidden  *bool
 	// Protocol: nil = leave as-is; else "ssh"/"local". LocalShellKind
 	// pointer-to-pointer semantics kept simple: nil = leave as-is, a
@@ -172,10 +171,6 @@ func (d *DB) UpdateConnection(in UpdateConnection) (*Connection, error) {
 	if in.Favorite != nil {
 		newFav = *in.Favorite
 	}
-	newSens := existing.Sensitive
-	if in.Sensitive != nil {
-		newSens = *in.Sensitive
-	}
 	newHidden := existing.OpenHidden
 	if in.OpenHidden != nil {
 		newHidden = *in.OpenHidden
@@ -217,7 +212,7 @@ func (d *DB) UpdateConnection(in UpdateConnection) (*Connection, error) {
 		   notes=?, favorite=?, sensitive=?, open_hidden=?, protocol=?, local_shell_kind=?, local_shell_dir=?, updated_at=?
 		 WHERE id=?`,
 		newFolder, newName, newHost, newSort, string(overridesJSON), string(tagsJSON),
-		newNotes, boolToInt(newFav), boolToInt(newSens), boolToInt(newHidden), newProto, newLocalKind, newLocalDir, now(), in.ID,
+		newNotes, boolToInt(newFav), 0, boolToInt(newHidden), newProto, newLocalKind, newLocalDir, now(), in.ID,
 	)
 	if err != nil {
 		return nil, err
@@ -494,7 +489,8 @@ func scanConnection(s scanner) (*Connection, error) {
 		overridesRaw string
 		tagsRaw      string
 		notes        string
-		fav, sens    int64
+		fav          int64
+		sens         int64 // legacy column, moved into overrides (v28)
 		openHidden   int64
 		iconID       sql.NullString
 		iconName     sql.NullString
@@ -554,7 +550,6 @@ func scanConnection(s scanner) (*Connection, error) {
 	}
 	c.Notes = notes
 	c.Favorite = fav != 0
-	c.Sensitive = sens != 0
 	c.OpenHidden = openHidden != 0
 	if lastUsed.Valid {
 		v := lastUsed.Int64

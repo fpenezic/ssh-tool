@@ -571,13 +571,6 @@ export class Connection {
              */
             this["open_hidden"] = false;
         }
-        if (!("sensitive" in $$source)) {
-            /**
-             * @member
-             * @type {boolean}
-             */
-            this["sensitive"] = false;
-        }
         if (!("icon_image_id" in $$source)) {
             /**
              * @member
@@ -2044,6 +2037,18 @@ export class InheritableSettings {
              */
             this["db_targets"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Sensitive marks production or otherwise critical hosts: the LLM
+             * (MCP) cannot list, open, change or route through them, a Database
+             * tab confirms statements that change data and Kafka asks for the
+             * topic or group name before deleting it. Set on a folder it covers
+             * everything under it; false on a connection opts it out.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["sensitive"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -2803,6 +2808,14 @@ export class ResolvedSettings {
              * @type {string}
              */
             this["db_default_target"] = "";
+        }
+        if (!("sensitive" in $$source)) {
+            /**
+             * Sensitive: see InheritableSettings. Defaults to false.
+             * @member
+             * @type {boolean}
+             */
+            this["sensitive"] = false;
         }
 
         Object.assign(this, $$source);

@@ -155,11 +155,8 @@ func (a *App) mcpOpenDb(connectionID, targetID, level string) (string, error) {
 	if err != nil || conn == nil {
 		return "", fmt.Errorf("connection not found")
 	}
-	if conn.Sensitive {
-		return "", fmt.Errorf("connection is marked sensitive and cannot be opened by the LLM")
-	}
-	if a.jumpsThroughSensitive(connectionID) {
-		return "", fmt.Errorf("this connection's jump chain goes through a connection marked sensitive, which the LLM cannot use")
+	if err := a.llmSensitiveRefusal(connectionID); err != nil {
+		return "", err
 	}
 	label := conn.Name
 	if conn.FolderID != nil {

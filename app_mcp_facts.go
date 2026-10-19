@@ -153,8 +153,8 @@ func (a *App) folderFactHosts(folderID string) ([]FactsApprovalHost, []string, e
 		if p := c.Protocol; p != "" && p != "ssh" {
 			continue
 		}
-		if c.Sensitive {
-			skipped = append(skipped, c.Name+": marked sensitive")
+		if why := a.factsSensitiveSkip(c.ID); why != "" {
+			skipped = append(skipped, c.Name+why)
 			continue
 		}
 		hosts = append(hosts, FactsApprovalHost{ID: c.ID, Name: c.Name, Folder: paths[*c.FolderID]})
@@ -162,6 +162,10 @@ func (a *App) folderFactHosts(folderID string) ([]FactsApprovalHost, []string, e
 	if dfs, err := a.db.ListDynamicFolders(); err == nil {
 		for _, df := range dfs {
 			if !under[df.FolderID] {
+				continue
+			}
+			if folderSensitive(df.FolderID, folders) {
+				skipped = append(skipped, paths[df.FolderID]+": marked sensitive")
 				continue
 			}
 			entries, err := a.db.ListDynamicEntries(df.FolderID)
@@ -172,11 +176,31 @@ func (a *App) folderFactHosts(folderID string) ([]FactsApprovalHost, []string, e
 				if e.Status == "stopped" {
 					continue
 				}
+				if why := a.factsSensitiveSkip("dyn:" + e.ID); why != "" {
+					skipped = append(skipped, e.Name+why)
+					continue
+				}
 				hosts = append(hosts, FactsApprovalHost{ID: "dyn:" + e.ID, Name: e.Name, Folder: paths[df.FolderID]})
 			}
 		}
 	}
 	return hosts, skipped, nil
+}
+
+// factsSensitiveSkip is the reason a host (a saved id or "dyn:<entryID>")
+// stays out of LLM facts, "" when it may be gathered: facts connect to the
+// host, so the rule is the one for opening it (llmSensitiveRefusal).
+func (a *App) factsSensitiveSkip(id string) string {
+	switch err := a.llmSensitiveRefusal(id); err {
+	case nil:
+		return ""
+	case errSensitiveTarget:
+		return ": marked sensitive"
+	case errSensitiveChain:
+		return ": its jump chain goes through a sensitive connection"
+	default:
+		return ": cannot tell whether it is sensitive"
+	}
 }
 
 // idFactHosts resolves list_connections ids ("dyn:<folder>:<entry>" for
@@ -197,6 +221,10 @@ func (a *App) idFactHosts(ids []string) ([]FactsApprovalHost, []string) {
 				skipped = append(skipped, id+": not found")
 				continue
 			}
+			if why := a.factsSensitiveSkip("dyn:" + e.ID); why != "" {
+				skipped = append(skipped, e.Name+why)
+				continue
+			}
 			if !seen["dyn:"+e.ID] {
 				seen["dyn:"+e.ID] = true
 				hosts = append(hosts, FactsApprovalHost{ID: "dyn:" + e.ID, Name: e.Name, Folder: paths[e.FolderID]})
@@ -208,8 +236,8 @@ func (a *App) idFactHosts(ids []string) ([]FactsApprovalHost, []string) {
 			skipped = append(skipped, id+": not found")
 			continue
 		}
-		if c.Sensitive {
-			skipped = append(skipped, c.Name+": marked sensitive")
+		if why := a.factsSensitiveSkip(c.ID); why != "" {
+			skipped = append(skipped, c.Name+why)
 			continue
 		}
 		if p := c.Protocol; p != "" && p != "ssh" {
@@ -494,10 +522,8 @@ func (a *App) mcpFactsSnapshot(folder, at string) (string, error) {
 	}
 	kept := run.Results[:0:0]
 	for _, r := range run.Results {
-		if !strings.HasPrefix(r.ConnectionID, "dyn:") {
-			if c, err := a.db.GetConnection(r.ConnectionID); err == nil && c != nil && c.Sensitive {
-				continue
-			}
+		if a.factsSensitiveSkip(r.ConnectionID) != "" {
+			continue
 		}
 		kept = append(kept, r)
 	}

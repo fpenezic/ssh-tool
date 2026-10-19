@@ -356,6 +356,7 @@
     jumpHost: JumpHostOverride | undefined;
     colorTag: string;
     autoReconnect: string;
+    sensitive: string;
     verbose: string;
     probeLiveness: string;
     keepalive: string;
@@ -409,6 +410,7 @@
         jumpHost: folder.settings.jump_host,
         colorTag: folder.settings.color_tag ?? "",
         autoReconnect: encodeBool(folder.settings.auto_reconnect),
+        sensitive: encodeBool(folder.settings.sensitive),
         verbose: encodeBool(folder.settings.verbose),
         probeLiveness: encodeBool(folder.settings.probe_liveness),
         keepalive: folder.settings.keepalive_interval !== undefined
@@ -444,6 +446,7 @@
       editingFolder.otpRef !== (s.otp_ref ?? "") ||
       editingFolder.colorTag !== (s.color_tag ?? "") ||
       editingFolder.autoReconnect !== encodeBool(s.auto_reconnect) ||
+      editingFolder.sensitive !== encodeBool(s.sensitive) ||
       editingFolder.verbose !== encodeBool(s.verbose) ||
       editingFolder.probeLiveness !== encodeBool(s.probe_liveness) ||
       editingFolder.tunnelOnly !== encodeBool(s.tunnel_only) ||
@@ -478,6 +481,7 @@
     settings.jump_host = editingFolder.jumpHost;
     settings.color_tag = editingFolder.colorTag || undefined;
     settings.auto_reconnect = decodeBool(editingFolder.autoReconnect);
+    settings.sensitive = decodeBool(editingFolder.sensitive);
     settings.verbose = decodeBool(editingFolder.verbose);
     settings.probe_liveness = decodeBool(editingFolder.probeLiveness);
     settings.tunnel_only = decodeBool(editingFolder.tunnelOnly);
@@ -658,6 +662,7 @@
     jumpHost: JumpHostOverride | undefined;
     colorTag: string;
     autoReconnect: string;
+    sensitive: string;
     verbose: string;
     keepalive: string;
     vncEnabled: string;
@@ -1007,6 +1012,7 @@
         jumpHost: conn.overrides?.jump_host,
         colorTag: conn.overrides?.color_tag ?? "",
         autoReconnect: encodeBool(conn.overrides?.auto_reconnect),
+        sensitive: encodeBool(conn.overrides?.sensitive),
         verbose: encodeBool(conn.overrides?.verbose),
         keepalive: conn.overrides?.keepalive_interval !== undefined
           ? String(conn.overrides.keepalive_interval)
@@ -1058,6 +1064,7 @@
       editing.otpRef !== encodeAuthRef(o.otp_ref) ||
       editing.colorTag !== (o.color_tag ?? "") ||
       editing.autoReconnect !== encodeBool(o.auto_reconnect) ||
+      editing.sensitive !== encodeBool(o.sensitive) ||
       editing.verbose !== encodeBool(o.verbose) ||
       numText(editing.keepalive) !== (o.keepalive_interval !== undefined ? String(o.keepalive_interval) : "") ||
       editing.vncEnabled !== encodeBool(o.vnc_enabled) ||
@@ -1151,6 +1158,7 @@
     overrides.jump_host = editing.jumpHost;
     overrides.color_tag = editing.colorTag || undefined;
     overrides.auto_reconnect = decodeBool(editing.autoReconnect);
+    overrides.sensitive = decodeBool(editing.sensitive);
     overrides.verbose = decodeBool(editing.verbose);
     {
       const k = numText(editing.keepalive);
@@ -1750,6 +1758,7 @@
 
     <FleetBar ids={folderFleetIds} label={folder.name} folderId={folder.id} />
     {#if folderTab === "general"}
+    {@const inhSens = tree.inheritedFieldForFolder(folder.id, "sensitive")}
     <FleetCards folderId={folder.id} ids={folderFleetIds} label={folder.name} />
     <div class="form">
       <p class="section-label span-2">Inherited by the connections and subfolders in this folder unless they set their own value.</p>
@@ -1762,6 +1771,14 @@
           {#each openAsServices({ vnc: folderVncOn, kafka: folderKafkaOn, db: folderDbOn }, "folder") as o (o.value)}
             <option value={o.value} disabled={!o.on}>{o.label}{o.on ? "" : ` (${o.off})`}</option>
           {/each}
+        </select>
+      </label>
+      <label title="Production or otherwise critical. The LLM (MCP) cannot list, open, change or route through it; a Database tab asks before statements that change data; Kafka asks for the name before a delete. Covers every connection and subfolder here; one can opt out.">
+        Sensitive
+        <select bind:value={editingFolder.sensitive}>
+          <option value="">(inherit: {inhSens.value ? "yes" : "no"}{inhSens.from ? `, from ${inhSens.from.name}` : ""})</option>
+          <option value="on">Yes - off limits to the LLM, writes and deletes confirmed</option>
+          <option value="off">No</option>
         </select>
       </label>
       <div class="row">
@@ -2158,6 +2175,15 @@
             {#each openAsServices({ vnc: connVncOn, kafka: connKafkaOn, db: connDbOn }, "conn") as o (o.value)}
               <option value={o.value} disabled={!o.on}>{o.label}{o.on ? "" : ` (${o.off})`}</option>
             {/each}
+          </select>
+        </label>
+        {@const inhSens = tree.inheritedFieldForConnection(conn.id, "sensitive")}
+        <label title="Production or otherwise critical. The LLM (MCP) cannot list, open, change or route through it; a Database tab asks before statements that change data; Kafka asks for the name before a delete.">
+          Sensitive
+          <select bind:value={editing.sensitive}>
+            <option value="">(inherit: {inhSens.value ? "yes" : "no"}{inhSens.from ? `, from ${inhSens.from.name}` : ""})</option>
+            <option value="on">Yes - off limits to the LLM, writes and deletes confirmed</option>
+            <option value="off">No</option>
           </select>
         </label>
       {/if}

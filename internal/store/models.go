@@ -54,7 +54,6 @@ type Connection struct {
 	// normally, it just stays out of the tab bar. For background helpers
 	// whose output nobody watches.
 	OpenHidden  bool    `json:"open_hidden"`
-	Sensitive   bool    `json:"sensitive"`
 	IconImageID *string `json:"icon_image_id"`
 	// IconName / IconColor: built-in lucide icon + palette colour, same
 	// semantics as on Folder. Mutually exclusive with IconImageID.
@@ -240,6 +239,12 @@ type InheritableSettings struct {
 	// not inherited from folders (the Db* defaults are). Empty: the
 	// connection itself is the one database.
 	DbTargets []DbTarget `json:"db_targets,omitempty"`
+	// Sensitive marks production or otherwise critical hosts: the LLM
+	// (MCP) cannot list, open, change or route through them, a Database
+	// tab confirms statements that change data and Kafka asks for the
+	// topic or group name before deleting it. Set on a folder it covers
+	// everything under it; false on a connection opts it out.
+	Sensitive *bool `json:"sensitive,omitempty"`
 }
 
 // DbTarget is one database under a connection.
@@ -396,6 +401,8 @@ type ResolvedSettings struct {
 	DbTargets       []DbTarget `json:"db_targets"`
 	DbLabel         string     `json:"db_label"`
 	DbDefaultTarget string     `json:"db_default_target"`
+	// Sensitive: see InheritableSettings. Defaults to false.
+	Sensitive bool `json:"sensitive"`
 	// PasswordOverride carries a per-connection plaintext password resolved
 	// from the vault by app.go before passing to the SSH layer. Never
 	// serialised to JSON (not shown in the resolved-settings preview).

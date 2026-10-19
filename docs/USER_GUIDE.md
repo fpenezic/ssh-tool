@@ -186,7 +186,7 @@ seconds.
 - Folders form a tree. Each folder has **inheritable settings**:
   default username, default port, default credential, jump host
   chain, color tag, auto-reconnect, verbose connect log, initial
-  command.
+  command, sensitive.
 - Connections live under a folder (or at root). They override any
   inherited setting per-connection.
 
@@ -488,6 +488,13 @@ in tabs under the header; the editor reopens on the tab you used last.
   **VNC console** is offered once VNC is on for the connection, **Kafka**
   once [Kafka](#kafka) is.
   *Inherit* names the value it gets and the folder it comes from.
+- **Sensitive** - Yes / No / Inherit. Marks production or otherwise
+  critical hosts. The LLM (MCP) cannot list, open, change or route
+  through them; a Database tab lists the statements that change data
+  and asks before running them; Kafka asks for the topic or group name
+  before a delete. Set it on a folder (customer, prod) and it covers
+  every connection and subfolder there; **No** on a connection opts it
+  out.
 - **Hostname / IP address** and **Port**, **Username**
 - **Credential** - pick from your credential list, or leave blank
   to inherit from a folder. **None** (first in the list) stops the
@@ -1996,6 +2003,12 @@ You can attach an external LLM client (Claude Code, etc.) to a live
 SSH session so it can help you debug - read what's on screen, pull
 logs, propose and run commands. It is **off by default** and
 desktop-only.
+
+Connections marked **Sensitive** (on them or on a folder above them,
+see [Connection editor](#connection-editor)) are off limits in every
+LLM tool: not listed, not opened, not changed, not used as a jump host.
+The LLM cannot change a folder that is sensitive or holds a sensitive
+connection either, since its settings flow down to those hosts.
 
 Setup, once:
 

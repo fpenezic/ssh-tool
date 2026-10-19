@@ -1442,7 +1442,6 @@ type ConnectionsUpdateInput struct {
 	Tags        *[]string                  `json:"tags"`
 	Notes       *string                    `json:"notes"`
 	Favorite    *bool                      `json:"favorite"`
-	Sensitive   *bool                      `json:"sensitive"`
 	OpenHidden  *bool                      `json:"open_hidden"`
 	Protocol    *string                    `json:"protocol"`
 	// LocalShellKind: non-nil replaces the shell kind. ClearLocalShellKind
@@ -1465,7 +1464,6 @@ func (a *App) ConnectionsUpdate(in ConnectionsUpdateInput) (*store.Connection, e
 		Tags:                in.Tags,
 		Notes:               in.Notes,
 		Favorite:            in.Favorite,
-		Sensitive:           in.Sensitive,
 		OpenHidden:          in.OpenHidden,
 		Protocol:            in.Protocol,
 		LocalShellKind:      in.LocalShellKind,
