@@ -2085,7 +2085,7 @@
               {#if dbEnabledFor(conn)}<IconDb size={13} />{:else}<IconKafka size={13} />{/if} Open
             </button>
             {#if openItems.length > 1}
-              <button class="vnc-btn open-more" aria-label="Open a service" title="Every database and Kafka of this connection" onclick={(e) => contextMenu.show(e, openItems)}>
+              <button class="vnc-btn open-more" aria-label="Open a service" aria-haspopup="menu" title="Every database and Kafka of this connection" onclick={(e) => contextMenu.show(e, openItems)}>
                 <IconChevronDown size={13} />
               </button>
             {/if}
