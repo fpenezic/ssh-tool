@@ -172,7 +172,12 @@ func (a *App) ShareApprovalRespond(approvalID, decision string) error {
 	if !ok {
 		return fmt.Errorf("no pending share approval %s", approvalID)
 	}
-	ch <- decision == "allow"
+	// The first answer counts; a later one (double click, two windows, after
+	// a timeout) must not block on the full one-slot channel.
+	select {
+	case ch <- decision == "allow":
+	default:
+	}
 	return nil
 }
 

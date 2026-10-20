@@ -324,9 +324,15 @@ func (s *Server) ensureListening(ip string, preferredPort uint16, cert *Cert) er
 	if err != nil {
 		return err
 	}
+	// The certificate is read per handshake, so Regenerate takes effect on
+	// the running listener and the words a guest compares match it.
 	tlsCfg := &tls.Config{
-		Certificates: []tls.Certificate{cert.TLS},
-		MinVersion:   tls.VersionTLS12,
+		MinVersion: tls.VersionTLS12,
+		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			return &s.cert.TLS, nil
+		},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/s/", s.handleGuest)
@@ -334,7 +340,10 @@ func (s *Server) ensureListening(ip string, preferredPort uint16, cert *Cert) er
 	// files - no token, no session state - so serving them openly is fine; the
 	// bundle does nothing until it opens an approved, token-gated websocket.
 	mux.Handle("/assets/", http.FileServerFS(s.guestFS))
-	srv := &http.Server{Handler: mux, TLSConfig: tlsCfg}
+	// The listener faces the LAN with no token needed to connect: bound the
+	// time a client may take over its request headers. Hijacked websockets
+	// are not affected.
+	srv := &http.Server{Handler: mux, TLSConfig: tlsCfg, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
 	s.srv = srv
 	s.ln = ln
 	s.bind = ln.Addr().String() // the ACTUAL bind, in case we fell back
@@ -487,7 +496,11 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, share *shareSe
 	}
 
 	share.markUsed()
-	s.attachConn(share, gc)
+	if !s.attachConn(share, gc) {
+		// The share stopped while the host was deciding.
+		gc.kill(ByeShareStopped)
+		return
+	}
 	if s.audit.Attach != nil {
 		s.audit.Attach(share.info(), remoteIP)
 	}
@@ -668,10 +681,17 @@ func (s *Server) StopAll() {
 	}
 }
 
-func (s *Server) attachConn(share *shareSession, c *guestConn) {
+// attachConn adds an approved guest to its share; false when the share is
+// no longer running, so a stop during the approval wait cannot leave a guest
+// attached that the host neither sees nor can kick.
+func (s *Server) attachConn(share *shareSession, c *guestConn) bool {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.byID[share.id] != share {
+		return false
+	}
 	s.conns[share.id] = append(s.conns[share.id], c)
-	s.mu.Unlock()
+	return true
 }
 
 func (s *Server) detachConn(share *shareSession, c *guestConn) {
