@@ -234,17 +234,24 @@ func (a *App) ensureOpenConnectTunnel(row *store.NetworkProfile) (tunnelDialer, 
 	if err != nil {
 		return nil, err
 	}
-	gws := ocConnectOrder(row.ID, cfg.gateways())
+	return ocTryGateways(row.Name, ocConnectOrder(row.ID, cfg.gateways()), func(gw OpenConnectGateway) (tunnelDialer, error) {
+		return a.ocConnect(row, &cfg, exe, env, gw)
+	})
+}
+
+// ocTryGateways connects to each gateway in turn until one is not
+// unreachable: its result, success or any other error, is the answer.
+func ocTryGateways(name string, gws []OpenConnectGateway, connect func(OpenConnectGateway) (tunnelDialer, error)) (tunnelDialer, error) {
 	for i, gw := range gws {
-		p, err := a.ocConnect(row, &cfg, exe, env, gw)
+		p, err := connect(gw)
 		var ue *tunnelhelper.UnreachableError
 		if errors.As(err, &ue) && i+1 < len(gws) {
-			log.Printf("openconnect %s: %s does not answer, trying %s", row.Name, gw.Server, gws[i+1].Server)
+			log.Printf("openconnect %s: %s does not answer, trying %s", name, gw.Server, gws[i+1].Server)
 			continue
 		}
 		return p, err
 	}
-	return nil, fmt.Errorf("profile %s: no gateway", row.Name)
+	return nil, fmt.Errorf("profile %s: no gateway", name)
 }
 
 // ocConnectOrder puts the gateway holding the profile's detached session

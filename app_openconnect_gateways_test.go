@@ -2,11 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"reflect"
 	"testing"
 
 	"ssh-tool/internal/store"
+	"ssh-tool/internal/tunnelhelper"
 )
 
 func TestOCNormalizeBackups(t *testing.T) {
@@ -99,5 +101,30 @@ func TestOCSavePinsPerGateway(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.Pins, []string{"pin-a"}) || len(got.Backups) != 1 || !reflect.DeepEqual(got.Backups[0].Pins, []string{"pin-b"}) || got.Flavor != "fortinet" {
 		t.Fatalf("stored config: %+v", got)
+	}
+}
+
+// Only an unreachable gateway moves on; any other failure ends the connect.
+func TestOCTryGateways(t *testing.T) {
+	gws := []OpenConnectGateway{{Server: "a"}, {Server: "b"}, {Server: "c"}}
+	run := func(fail map[string]error) ([]string, error) {
+		var tried []string
+		_, err := ocTryGateways("p", gws, func(gw OpenConnectGateway) (tunnelDialer, error) {
+			tried = append(tried, gw.Server)
+			return nil, fail[gw.Server]
+		})
+		return tried, err
+	}
+	down := &tunnelhelper.UnreachableError{Msg: "down"}
+	if tried, err := run(map[string]error{"a": down}); err != nil || !reflect.DeepEqual(tried, []string{"a", "b"}) {
+		t.Fatalf("failover: tried %v, err %v", tried, err)
+	}
+	login := errors.New("login failed")
+	if tried, err := run(map[string]error{"a": login}); !errors.Is(err, login) || !reflect.DeepEqual(tried, []string{"a"}) {
+		t.Fatalf("rejected login moved on: tried %v, err %v", tried, err)
+	}
+	var ue *tunnelhelper.UnreachableError
+	if tried, err := run(map[string]error{"a": down, "b": down, "c": down}); !errors.As(err, &ue) || len(tried) != 3 {
+		t.Fatalf("all down: tried %v, err %v", tried, err)
 	}
 }
