@@ -7,6 +7,13 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Connections
+
+- The Database and Kafka cards of the **Services** tab fold: a click on the arrow or the title hides the card and leaves a summary (engine and number of databases, Kafka's brokers), so Kafka stays in reach under a host with many databases. The folded state is remembered.
+- Esc closes a right-click menu (and the Open button's menu) again, and focus goes back to where it was.
+
 ## [0.117.0] - ClickHouse, OpenSearch and Redis in the Database tab
 
 The Database tab now opens ClickHouse, OpenSearch / Elasticsearch and Redis next to PostgreSQL and MySQL, all through the connection's SSH session. Results can be sorted and searched, and a connection's database and Kafka settings share one Services tab with one Open button.

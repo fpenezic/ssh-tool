@@ -15,12 +15,18 @@
   // window's right/bottom edge for a click near the corner. Flip
   // around the anchor in those cases so the entire menu stays
   // visible without scrollbars.
+  // The menu takes focus while open, so Esc (handled on the menu) works
+  // whatever opened it; focus goes back to where it was (a terminal, an
+  // editor) when it closes.
+  let returnFocus: HTMLElement | null = null;
   $effect(() => {
     if (!contextMenu.open) return;
     posX = contextMenu.x;
     posY = contextMenu.y;
+    returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     queueMicrotask(() => {
       if (!menuEl) return;
+      menuEl.focus({ preventScroll: true });
       const rect = menuEl.getBoundingClientRect();
       const margin = 4;
       const vw = window.innerWidth;
@@ -32,6 +38,13 @@
         posY = Math.max(margin, contextMenu.y - rect.height);
       }
     });
+    return () => {
+      // A pick that moved focus on purpose (a dialog, a new tab) keeps it.
+      if (returnFocus?.isConnected && (!document.activeElement || document.activeElement === document.body || menuEl?.contains(document.activeElement))) {
+        returnFocus.focus({ preventScroll: true });
+      }
+      returnFocus = null;
+    };
   });
 </script>
 

@@ -6,7 +6,8 @@
   import { credentials } from "./stores.svelte";
   import { DB_NONE, newTargetId, type DbDraft } from "./dbDraft";
   import { createLoginCredential } from "./loginModal.svelte.ts";
-  import { IconPlus, IconTrash } from "./iconMap";
+  import { IconPlus, IconTrash, IconChevronRight } from "./iconMap";
+  import { serviceCards, toggleCard } from "./serviceCards.svelte.ts";
   import { DB_ENGINES, dbEngineInfo, type DbTarget } from "./api";
 
   interface Props {
@@ -83,15 +84,26 @@
   function cycle() {
     draft = { ...draft, enabled: draft.enabled === "on" ? "off" : "on" };
   }
+
+  const folded = $derived(serviceCards.folded.includes("db"));
+  // What a folded card says: the engine and how many databases.
+  const summary = $derived.by(() => {
+    const n = 1 + (showTargets ? draft.targets.length : 0);
+    return `${dbEngineInfo(engine).short} · ${n} database${n === 1 ? "" : "s"}`;
+  });
 </script>
 
 <div class="db-section" class:on={effectiveOn}>
   <div class="vnc-head">
+    <button type="button" class="card-fold" class:open={!folded} aria-expanded={!folded} title={folded ? "Show the database settings" : "Fold the database settings"} onclick={() => toggleCard("db")}>
+      <IconChevronRight size={13} />
+    </button>
     <button type="button" class="vnc-switch" role="switch" aria-label="Enable the database" aria-checked={draft.enabled === "on" || (draft.enabled === "" && effectiveOn)} onclick={cycle}>
       <span class="vnc-knob"></span>
     </button>
-    <span class="vnc-title">Database</span>
+    <button type="button" class="card-fold vnc-title" onclick={() => toggleCard("db")}>Database</button>
     {#if draft.enabled === ""}<span class="inh">{effectiveOn ? "on, inherited" : "inherited"}</span>{/if}
+    {#if folded && effectiveOn}<span class="card-sum">{summary}</span>{/if}
     <span class="vnc-spacer"></span>
     {#if draft.enabled !== ""}
       <button type="button" class="link" title="Inherit the database on/off again" onclick={() => (draft = { ...draft, enabled: "" })}>inherit</button>
@@ -100,7 +112,7 @@
       <button type="button" class="vnc-open" onclick={onOpen}>Open database</button>
     {/if}
   </div>
-  {#if effectiveOn}
+  {#if effectiveOn && !folded}
     <div class="vnc-grid">
       {#if showTargets}
         <label title="How this database shows under the connection in the tree and on its tab. Empty: its database name.">Name
@@ -236,6 +248,10 @@
 </div>
 
 <style>
+  .card-fold { display: inline-flex; align-items: center; gap: 0.3rem; background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
+  .card-fold :global(svg) { color: var(--overlay1); transition: transform 0.12s; }
+  .card-fold.open :global(svg) { transform: rotate(90deg); }
+  .card-sum { font-size: 0.72rem; color: var(--overlay1); }
   /* Same look as the Kafka section; repeated because those rules are
      scoped to KafkaSettingsEditor. */
   .db-section {

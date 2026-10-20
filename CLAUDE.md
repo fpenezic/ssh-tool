@@ -183,6 +183,17 @@ the main package included (gotcha 100 has the NDK command; the CI
 android job is the only other place an untagged file meets android):
 `GOOS=android GOARCH=arm64 go build -tags android ./internal/ssh/`.
 
+End-to-end testing in a browser: server mode serves the same frontend
+over HTTP, so a UI change can be clicked through without a desktop
+build, by hand or with a browser-automation tool such as Claude in
+Chrome. Point the XDG dirs at a scratch directory so it gets its own
+store:
+```bash
+task build:server
+XDG_DATA_HOME=/tmp/rig/data XDG_CONFIG_HOME=/tmp/rig/config HOME=/tmp/rig \
+  bin/ssh-tool-server              # http://localhost:8080
+```
+
 Regenerate bindings after IPC changes:
 ```bash
 wails3 generate bindings ./...     # rewrites frontend/bindings/

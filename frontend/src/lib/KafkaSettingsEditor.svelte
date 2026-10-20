@@ -6,6 +6,8 @@
   import { credentials } from "./stores.svelte";
   import { KAFKA_NONE, type KafkaDraft } from "./kafkaDraft";
   import { createLoginCredential } from "./loginModal.svelte.ts";
+  import { IconChevronRight } from "./iconMap";
+  import { serviceCards, toggleCard } from "./serviceCards.svelte.ts";
 
   const NEW_LOGIN = "__new_login__";
 
@@ -36,15 +38,21 @@
   function cycle() {
     draft = { ...draft, enabled: draft.enabled === "on" ? "off" : "on" };
   }
+
+  const folded = $derived(serviceCards.folded.includes("kafka"));
 </script>
 
 <div class="kafka-section" class:on={effectiveOn}>
   <div class="vnc-head">
+    <button type="button" class="card-fold" class:open={!folded} aria-expanded={!folded} title={folded ? "Show the Kafka settings" : "Fold the Kafka settings"} onclick={() => toggleCard("kafka")}>
+      <IconChevronRight size={13} />
+    </button>
     <button type="button" class="vnc-switch" role="switch" aria-label="Enable Kafka" aria-checked={draft.enabled === "on" || (draft.enabled === "" && effectiveOn)} onclick={cycle}>
       <span class="vnc-knob"></span>
     </button>
-    <span class="vnc-title">Kafka</span>
+    <button type="button" class="card-fold vnc-title" onclick={() => toggleCard("kafka")}>Kafka</button>
     {#if draft.enabled === ""}<span class="inh">{effectiveOn ? "on, inherited" : "inherited"}</span>{/if}
+    {#if folded && effectiveOn && draft.bootstrap}<span class="card-sum">{draft.bootstrap}</span>{/if}
     <span class="vnc-spacer"></span>
     {#if draft.enabled !== ""}
       <button type="button" class="link" title="Inherit Kafka on/off again" onclick={() => (draft = { ...draft, enabled: "" })}>inherit</button>
@@ -53,7 +61,7 @@
       <button type="button" class="vnc-open" onclick={onOpen}>Open Kafka</button>
     {/if}
   </div>
-  {#if effectiveOn}
+  {#if effectiveOn && !folded}
     <div class="vnc-grid">
       <label class="span-2" title="Seed brokers, comma separated; a missing port means 9092. Written as the brokers are seen from where they are dialed: the SSH host when reached through SSH (often 127.0.0.1:9092 on a broker host).">Bootstrap servers
         <input bind:value={draft.bootstrap} placeholder={inheritLabel === "(inherit from folder)" ? "(inherit) e.g. 127.0.0.1:9092" : "e.g. broker1:9092,broker2:9092"} spellcheck="false" />
@@ -118,6 +126,10 @@
 </div>
 
 <style>
+  .card-fold { display: inline-flex; align-items: center; gap: 0.3rem; background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
+  .card-fold :global(svg) { color: var(--overlay1); transition: transform 0.12s; }
+  .card-fold.open :global(svg) { transform: rotate(90deg); }
+  .card-sum { font-size: 0.72rem; color: var(--overlay1); }
   /* Same look as DetailPane's VNC section; repeated here because those rules
      are scoped to DetailPane. */
   .kafka-section {
