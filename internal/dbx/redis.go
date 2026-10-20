@@ -121,10 +121,12 @@ func (e *rdEngine) info(ctx context.Context) (*ServerInfo, error) {
 		if err != nil {
 			return err
 		}
-		if err := rdOK(rs[0]); err != nil {
-			return err
+		// An ACL user limited to +@read may not run INFO (it is not in
+		// @read): the tab works, without a version.
+		fields := map[string]string{}
+		if rdOK(rs[0]) == nil {
+			fields = rdInfo(rs[0].text())
 		}
-		fields := rdInfo(rs[0].text())
 		name := "Redis"
 		if fields["valkey_version"] != "" {
 			name = "Valkey"
@@ -133,7 +135,7 @@ func (e *rdEngine) info(ctx context.Context) (*ServerInfo, error) {
 		if v == "" {
 			v = fields["redis_version"]
 		}
-		si.Version = name + " " + v
+		si.Version = strings.TrimSpace(name + " " + v)
 		if fields["redis_mode"] == "cluster" {
 			si.Version += " (cluster)"
 		}
@@ -176,10 +178,13 @@ func (e *rdEngine) databases(ctx context.Context) ([]Database, error) {
 		if err != nil {
 			return err
 		}
-		if err := rdOK(rs[0]); err != nil {
-			return err
+		// INFO and CONFIG GET may both be refused (an ACL user limited to
+		// reads): the configured database is listed then.
+		info := map[string]string{}
+		if rdOK(rs[0]) == nil {
+			info = rdInfo(rs[0].text())
 		}
-		for k, v := range rdInfo(rs[0].text()) {
+		for k, v := range info {
 			n, err := strconv.Atoi(strings.TrimPrefix(k, "db"))
 			if err != nil || !strings.HasPrefix(k, "db") {
 				continue
@@ -582,10 +587,14 @@ func rdPreviewText(typ string, r *rdReply, size int64) string {
 	return s
 }
 
-// rdCell is a value as cell text: bytes that are not UTF-8 as 0x hex.
+// rdCell is a value as cell text: bytes that are not UTF-8 as 0x hex, only
+// as much of them as a cell shows.
 func rdCell(b []byte) []byte {
 	if utf8.Valid(b) {
 		return b
+	}
+	if len(b) > MaxCellBytes/2 {
+		return []byte("0x" + hexString(b[:MaxCellBytes/2]) + "...")
 	}
 	return []byte("0x" + hexString(b))
 }

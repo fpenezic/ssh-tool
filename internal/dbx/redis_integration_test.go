@@ -174,8 +174,8 @@ EXPIRE %[1]s:l 600
 	}
 }
 
-// An ACL user limited to reads: the tree and reads work, writes come back
-// as the server's NOPERM.
+// An ACL user limited to reads (+@read +@connection, which leaves out INFO
+// and CONFIG): the tree and reads work, writes come back as NOPERM.
 func TestIntegrationRedisReader(t *testing.T) {
 	s := itSetupEnv(t, dbx.EngineRedis, "DBTEST_REDIS_READER")
 	h := s.open(t, false)
@@ -183,8 +183,9 @@ func TestIntegrationRedisReader(t *testing.T) {
 	if _, err := h.Info(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.Databases(ctx); err != nil {
-		t.Fatal(err)
+	// Such a user may be refused INFO and CONFIG GET: db0 is still listed.
+	if dbs, err := h.Databases(ctx); err != nil || len(dbs) == 0 || dbs[0].Name != "db0" {
+		t.Fatalf("databases %+v %v", dbs, err)
 	}
 	if _, err := h.Objects(ctx, "db0", false); err != nil {
 		t.Fatal(err)
