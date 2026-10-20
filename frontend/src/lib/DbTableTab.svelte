@@ -88,7 +88,9 @@
       <button disabled={loading || !page || (page.rows ?? []).length < PAGE} onclick={() => go(PAGE)}>Next</button>
     {/if}
     <span class="spacer"></span>
-    <button title="Open a query tab on this table" onclick={() => onQuery(`SELECT *\nFROM ${qname}\nLIMIT 100;`)}><IconSql size={13} /> Query</button>
+    <button title="Open a query tab on this table" onclick={() => onQuery(info.engine === "opensearch"
+      ? `GET /${tab.name ?? ""}/_search\n{\n  "query": { "match_all": {} },\n  "size": 100\n}`
+      : `SELECT *\nFROM ${qname}\nLIMIT 100;`)}><IconSql size={13} /> Query</button>
     <button title="Reload" onclick={refresh}><IconRefresh size={13} /></button>
   </div>
   <div class="body">

@@ -129,9 +129,9 @@
         <input bind:value={draft.addr} placeholder={engine === "clickhouse" ? "127.0.0.1:8123 (8443 with TLS)" : `127.0.0.1:${port}`} spellcheck="false" />
       </label>
       <label title="The database the tab opens first. Empty: the server's default for the login.">Database
-        <input bind:value={draft.name} placeholder={inheritLabel === "(inherit from folder)" ? "(inherit) e.g. app" : "e.g. app"} spellcheck="false" />
+        <input bind:value={draft.name} placeholder={engine === "opensearch" ? "(not used - the cluster)" : inheritLabel === "(inherit from folder)" ? "(inherit) e.g. app" : "e.g. app"} spellcheck="false" />
       </label>
-      <label title="Its default username and its password are the database login. A credential without a password works for trust authentication. None: you are asked when the tab opens.">Login
+      <label title="Its default username and its password are the database login. A credential without a password works for trust authentication. OpenSearch / Elasticsearch: a password with no username is sent as an API key. None: you are asked when the tab opens.">Login
         <select value={draft.cred} onchange={(e) => pickLogin(e.currentTarget as HTMLSelectElement, draft.cred, (v) => (draft = { ...draft, cred: v }), connName || "New")}>
           <option value="">{inheritLabel}</option>
           <option value={DB_NONE}>None (ask)</option>
@@ -148,6 +148,8 @@
       </label>
       <label title={engine === "clickhouse"
         ? "Read-only: only SELECT / WITH / SHOW / EXPLAIN / DESCRIBE / EXISTS are sent, each with the server's readonly setting (ClickHouse has no transactions). A login with read-only grants is the real guarantee."
+        : engine === "opensearch"
+        ? "Read-only: only GET and HEAD requests, POST to search endpoints (_search, _count, _msearch, ...) and SQL SELECT / SHOW / DESCRIBE are sent. The cluster has no read-only session: a login with a read-only role is the real guarantee."
         : "Read-only: every statement runs in a READ ONLY transaction that is rolled back, and only SELECT / WITH / SHOW / EXPLAIN / VALUES / TABLE / DESCRIBE are sent. A login with read-only grants is the real guarantee."}>Writes
         <select bind:value={draft.readOnly}>
           <option value="">{inheritLabel} · {inheritedReadOnly ? "read-only" : "allowed"}</option>
@@ -202,6 +204,14 @@
             </label>
             <label>Address
               <input value={t.addr ?? ""} placeholder={draft.addr || "(as above)"} spellcheck="false" oninput={(e) => updateTarget(i, { addr: (e.currentTarget as HTMLInputElement).value })} />
+            </label>
+            <label title="TLS runs end to end, inside the tunnel. Require: encrypted, certificate not checked. Verify: the certificate must match the address's host name.">TLS
+              <select value={t.tls ?? ""} onchange={(e) => updateTarget(i, { tls: (e.currentTarget as HTMLSelectElement).value || undefined })}>
+                <option value="">(as above)</option>
+                <option value="disable">Off</option>
+                <option value="require">Require (no certificate check)</option>
+                <option value="verify-full">Verify certificate</option>
+              </select>
             </label>
             <div class="t-actions">
               <label class="check" title="A row under the connection in the tree that opens this database.">
@@ -276,7 +286,7 @@
     background: var(--base); color: var(--text); border: 1px solid var(--surface0); border-radius: 3px;
     padding: 0.3rem 0.45rem; font: inherit; font-size: 0.8rem; min-width: 0;
   }
-  .t-actions { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.4rem; }
+  .t-actions { grid-column: 2 / -1; display: flex; align-items: center; gap: 0.4rem; }
   .t-spacer { flex: 1 1 auto; }
   label.check { flex-direction: row !important; align-items: center; gap: 0.35rem !important; color: var(--text1); align-self: end; }
   .t-del { background: none; border: none; color: var(--overlay1); cursor: pointer; padding: 0.2rem; display: inline-flex; }

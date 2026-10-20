@@ -25,6 +25,9 @@
 
   const ROW_H = 24;
   const cols = $derived(result.columns ?? []);
+  // Output shown a line per row (pretty JSON, a ClickHouse FORMAT) keeps its
+  // indentation.
+  const lines = $derived(cols.length === 1 && cols[0].name === "output");
   const base = $derived(result.rows ?? []);
 
   // Header click: ascending, descending, off.
@@ -222,6 +225,7 @@
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <div
                 class="cell"
+                class:lines
                 class:null={v === null}
                 class:hit={needle !== "" && v !== null && v.toLowerCase().includes(needle)}
                 class:sel={sel?.r === ri && sel?.c === ci}
@@ -273,6 +277,7 @@
         · {sort ? `sorted by ${cols[sort.c]?.name}` : "filtered"} here{paged ? " (this page only)" : result.truncated ? " (fetched rows only)" : ""}
       {/if}
       {#if result.cut_cells > 0} · {result.cut_cells} long value{result.cut_cells === 1 ? "" : "s"} cut{/if}
+      {#if result.note} · {result.note}{/if}
       · {result.duration_ms} ms
     </span>
     <span class="spacer"></span>
@@ -299,6 +304,7 @@
     padding: 0 0.45rem; line-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     border-right: 1px solid color-mix(in srgb, var(--surface1) 60%, transparent); color: var(--text); cursor: default;
   }
+  .cell.lines { white-space: pre; }
   .head .cell { display: flex; gap: 0.35rem; align-items: baseline; font-weight: 600; }
   .cname { overflow: hidden; text-overflow: ellipsis; }
   .ctype { font-weight: 400; font-size: 0.68rem; color: var(--overlay1); }

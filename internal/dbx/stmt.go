@@ -23,6 +23,9 @@ type Stmt struct {
 // DELIMITER client command is not supported: a stored routine body has to
 // go in as one statement on its own.
 func Split(engine, script string) []Stmt {
+	if engine == EngineOpenSearch {
+		return osSplit(script)
+	}
 	var out []Stmt
 	start := 0
 	emit := func(end int) {
@@ -80,7 +83,9 @@ func skipNonCode(engine, s string, i int) int {
 			return i
 		}
 		return lineEnd(s, i)
-	case c == '#' && (engine == EngineMySQL || engine == EngineClickHouse):
+	case c == '#' && (engine == EngineMySQL || engine == EngineClickHouse || engine == EngineOpenSearch):
+		return lineEnd(s, i)
+	case c == '/' && strings.HasPrefix(s[i:], "//") && engine == EngineOpenSearch:
 		return lineEnd(s, i)
 	case c == '/' && strings.HasPrefix(s[i:], "/*!") && engine == EngineMySQL:
 		// An executable comment is code to MySQL ("SELECT 1 /*!INTO
@@ -111,7 +116,7 @@ func skipNonCode(engine, s string, i int) int {
 		return quoted(s, i, '\'', backslash)
 	case c == '"':
 		return quoted(s, i, '"', engine == EngineMySQL || engine == EngineClickHouse)
-	case c == '`' && (engine == EngineMySQL || engine == EngineClickHouse):
+	case c == '`' && (engine == EngineMySQL || engine == EngineClickHouse || engine == EngineOpenSearch):
 		return quoted(s, i, '`', engine == EngineClickHouse)
 	case c == '$' && (engine == EnginePostgres || engine == EngineClickHouse):
 		// Postgres dollar quotes; ClickHouse heredocs ($$...$$, $tag$...$tag$).
@@ -217,8 +222,16 @@ func readLead(engine, k string) bool {
 // keyword and has none of the forms that write under one - a data-changing
 // CTE (WITH d AS (DELETE ...)), EXPLAIN ANALYZE (which runs the statement),
 // or SELECT ... INTO (a new table on Postgres, a file or variables on
-// MySQL).
+// MySQL). On OpenSearch a console block reads when its method and endpoint
+// do (osRESTRead).
 func IsRead(engine, stmt string) bool {
+	if engine == EngineOpenSearch {
+		return osIsRead(stmt)
+	}
+	return sqlIsRead(engine, stmt)
+}
+
+func sqlIsRead(engine, stmt string) bool {
 	lead := leadKeyword(engine, stmt)
 	if !readLead(engine, lead) {
 		return false
@@ -273,13 +286,21 @@ func returnsRows(engine, stmt string) bool {
 // of three guards: the session is also opened read-only and every
 // statement runs in a READ ONLY transaction that is rolled back. The
 // keyword check is what stops MySQL DDL, which commits implicitly and so
-// escapes the transaction.
+// escapes the transaction. OpenSearch has neither session nor
+// transaction: this check is all there is.
 func CheckReadOnly(engine, stmt string) error {
+	if engine == EngineOpenSearch {
+		return osCheckReadOnly(stmt)
+	}
+	return sqlCheckReadOnly(engine, stmt)
+}
+
+func sqlCheckReadOnly(engine, stmt string) error {
 	k := leadKeyword(engine, stmt)
 	if !readLead(engine, k) {
 		return fmt.Errorf("read-only connection: %s statements are not allowed", strings.ToLower(orWord(k)))
 	}
-	if !IsRead(engine, stmt) {
+	if !sqlIsRead(engine, stmt) {
 		return fmt.Errorf("read-only connection: this %s writes (a data-changing WITH, EXPLAIN ANALYZE or SELECT ... INTO)", strings.ToLower(k))
 	}
 	if engine == EngineMySQL {
@@ -337,6 +358,9 @@ var secretRE = regexp.MustCompile(`(?i)(\bPASSWORD\s+FOR\s+\S+?\s*=\s*|\bPASSWOR
 // 'pw'" would otherwise slip past the patterns - and are worth nothing in
 // a stored statement anyway.
 func RedactSecrets(engine, stmt string) string {
+	if engine == EngineOpenSearch {
+		return osRedact(stmt)
+	}
 	return secretRE.ReplaceAllString(stripComments(engine, stmt), "${1}'***'")
 }
 
