@@ -37,8 +37,11 @@ const bastionLingerDefault = 10 * time.Second
 type jumpEntry struct {
 	// ready is closed once the build is done: client set, or err (or
 	// neither: the chain needs no jump after all).
-	ready      chan struct{}
-	err        error
+	ready chan struct{}
+	err   error
+	// cancelled: the build ended only because its caller cancelled; the
+	// waiters, whose contexts are live, build anew instead of failing.
+	cancelled  bool
 	client     *ssh.Client // the bastion the target dials through
 	cleanup    func()      // closes the whole prefix chain
 	networkVia string      // first hop transport, propagated to riders
@@ -122,6 +125,7 @@ func (p *jumpPool) acquire(
 				// client == nil: the chain resolved to no jump after
 				// all; let Connect handle it.
 				e.err = err
+				e.cancelled = err != nil && ctx.Err() != nil
 				delete(p.entries, key)
 				close(e.ready)
 				p.mu.Unlock()
@@ -150,6 +154,9 @@ func (p *jumpPool) acquire(
 		p.mu.Lock()
 		if e.client == nil {
 			p.mu.Unlock()
+			if e.cancelled {
+				continue // the builder gave up, not us: build again
+			}
 			return nil, nil, "", e.err
 		}
 		if p.entries[key] != e {

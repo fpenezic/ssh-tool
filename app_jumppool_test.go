@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -308,4 +309,54 @@ func TestJumpPoolSlowBuildDoesNotBlockOthers(t *testing.T) {
 	if got[0] == nil || got[0] != got[1] {
 		t.Fatal("waiters for one bastion got different clients")
 	}
+}
+
+// Cancelling the connect that builds a bastion does not fail the others
+// waiting for it: one of them builds it again.
+func TestJumpPoolBuilderCancelRetries(t *testing.T) {
+	p, built, _ := newTestPool()
+	inner := p.build
+	gate := make(chan struct{})
+	var first int32
+	p.build = func(ctx context.Context, s *store.ResolvedSettings, d sshlayer.JumpPrefixDeps) (*ssh.Client, func(), string, error) {
+		if atomic.CompareAndSwapInt32(&first, 0, 1) {
+			<-gate
+			return nil, nil, "", ctx.Err()
+		}
+		return inner(ctx, s, d)
+	}
+	deps := sshlayer.JumpPrefixDeps{}
+	ctx, cancel := context.WithCancel(context.Background())
+	builderErr := make(chan error, 1)
+	go func() {
+		_, _, _, err := p.acquire(ctx, jumpSettings("bastion", "a"), deps)
+		builderErr <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	waiter := make(chan error, 1)
+	go func() {
+		c, r, _, err := p.acquire(context.Background(), jumpSettings("bastion", "b"), deps)
+		if err == nil {
+			if c == nil {
+				err = errors.New("no client")
+			}
+			r()
+		}
+		waiter <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	close(gate)
+	if err := <-builderErr; err == nil {
+		t.Fatal("the cancelled builder succeeded")
+	}
+	select {
+	case err := <-waiter:
+		if err != nil {
+			t.Fatalf("waiter failed with the builder's cancel: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("waiter stuck")
+	}
+	_ = built
 }
