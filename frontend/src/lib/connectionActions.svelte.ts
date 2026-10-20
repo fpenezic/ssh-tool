@@ -557,6 +557,14 @@ class ConnectionActionsStore {
     const c = tree.connectionById(id);
     const items: MenuItem[] = [];
     if (c?.overrides?.vnc_enabled) items.push({ label: "Open VNC console", iconComponent: IconMonitor, onSelect: () => this.openVncConnection(id) });
+    return [...items, ...this.openMenuItems(id)];
+  }
+
+  // A connection's databases and Kafka, for the context menu and the
+  // editor header's Open button.
+  openMenuItems(id: string): MenuItem[] {
+    const c = tree.connectionById(id);
+    const items: MenuItem[] = [];
     if (dbEnabledFor(c)) {
       const own = c?.overrides?.db_label || c?.overrides?.db_name || "";
       items.push({ label: `Open database ${own}`.trim(), iconComponent: IconDb, onSelect: () => this.openDb(id) });

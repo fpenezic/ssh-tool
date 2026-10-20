@@ -1456,7 +1456,8 @@ local port per broker, no `/etc/hosts` entries and no sshuttle.
 
 ### Turning it on
 
-In the connection editor (or a folder's), the **Kafka** tab:
+In the connection editor (or a folder's), the **Services** tab, below the
+database:
 
 - **Bootstrap servers** - the seed brokers, comma separated; a missing port
   means 9092. Write them as they are seen from where the brokers are
@@ -1486,7 +1487,8 @@ inherited** on the General tab shows what applies.
 
 ### Opening it
 
-**Kafka** next to Connect in the connection header, **Open Kafka** in the
+**Open** next to Connect in the connection header (Kafka when the host has
+no database, else under its arrow), **Open Kafka** in the
 connection's right-click menu, on a terminal tab's right-click menu (for a
 host with Kafka on), or the default action as above. A second open of the
 same connection brings its tab forward. The SSH session opens with the
@@ -1598,7 +1600,8 @@ connection's SSH session, so a server that only listens on the host's
 
 ### Turning it on
 
-In the connection editor (or a folder's), the **Database** tab:
+In the connection editor (or a folder's), the **Services** tab, which holds
+the database and Kafka:
 
 - **Engine** - PostgreSQL, MySQL / MariaDB, ClickHouse (over its HTTP
   interface, see [ClickHouse](#clickhouse) below), OpenSearch /
@@ -1657,7 +1660,7 @@ One Database tab already shows every database of its server, and each
 query tab picks the one it runs on. When a host needs more than one
 login or server - *prod* and *stage* with different users, read-only for
 one of them, or PostgreSQL and MySQL side by side - list them under
-**Databases on this host** in the connection's Database tab: a name, and
+**Databases on this host** in the connection's Services tab: a name, and
 only what differs (database, login, writes, engine, address); empty
 fields take the values above. Each is a row under the connection in the
 tree (unless its **Show in tree** is off), opens its own tab
@@ -1667,7 +1670,8 @@ the connection; folders hold the defaults.
 
 ### Opening it
 
-**Database** next to Connect in the connection header, **Open database** in
+**Open** next to Connect in the connection header (the default database;
+its arrow lists every database and Kafka), **Open database** in
 the connection's right-click menu, on a terminal tab's right-click menu, or
 the default action as above. A second open of the same connection brings
 its tab forward. The SSH session opens with the first request, with the
