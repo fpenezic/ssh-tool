@@ -377,7 +377,16 @@ func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host
 	go func() { _, _ = io.Copy(up, c); closeWrite(up); done <- struct{}{} }()
 	go func() { _, _ = io.Copy(c, up); closeWrite(c); done <- struct{}{} }()
 	<-done
-	<-done
+	// A tunnel conn may have no half-close, so the other side never sees
+	// EOF and its copy (with the profile hold) would last until the far
+	// end gives up. After a grace period both ends are closed.
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		_ = c.Close()
+		_ = up.Close()
+		<-done
+	}
 }
 
 // readSOCKSAuth reads the RFC 1929 username / password request.

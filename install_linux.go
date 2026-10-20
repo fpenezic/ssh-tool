@@ -283,6 +283,11 @@ func installFrom(exePath string) (string, error) {
 	if st.Kind == "package" {
 		return "", fmt.Errorf("this build was installed by your package manager; nothing to do")
 	}
+	// Only replacing is refused; a dev build may still create an entry
+	// when nothing is installed (see installStateFor).
+	if st.Replaces && isDevBuild() {
+		return "", fmt.Errorf("this is a development build (%s); it will not replace the installed copy", appVersion)
+	}
 
 	binDir := userBinDir()
 	dataDir := userDataDir()

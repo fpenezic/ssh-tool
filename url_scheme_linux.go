@@ -35,11 +35,12 @@ func registerURLScheme() error {
 // handler has to point at the new location, not at the copy that
 // happens to be executing the install.
 func registerURLSchemeAt(exe string) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("home dir: %w", err)
+	// The same data directory as the launcher entry (XDG_DATA_HOME).
+	data := userDataDir()
+	if data == "" {
+		return fmt.Errorf("cannot locate your home directory")
 	}
-	dir := filepath.Join(home, ".local", "share", "applications")
+	dir := filepath.Join(data, "applications")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("mkdir applications dir: %w", err)
 	}
@@ -88,13 +89,13 @@ func urlSchemeTarget() string {
 	if name == "" {
 		return ""
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
+	data := userDataDir()
+	if data == "" {
 		return ""
 	}
 	// Search the user directory first, then the system ones, in the
 	// order XDG resolves them.
-	dirs := []string{filepath.Join(home, ".local", "share", "applications")}
+	dirs := []string{filepath.Join(data, "applications")}
 	if xdg := os.Getenv("XDG_DATA_DIRS"); xdg != "" {
 		for _, d := range strings.Split(xdg, ":") {
 			if d != "" {

@@ -173,13 +173,14 @@ func (a *App) VncOpenPinnedProxmox(connectionID string) (*VncSession, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve proxmox config: %w", err)
 	}
-	node, err := sshlayer.ProxmoxNodeForVMID(
-		cfg["base_url"].(string),
-		cfg["api_token_id"].(string),
-		cfg["api_token_secret"].(string),
-		vmid,
-		boolOf(cfg["insecure_skip_verify"]),
-	)
+	baseURL, _ := cfg["base_url"].(string)
+	tokenID, _ := cfg["api_token_id"].(string)
+	tokenSecret, _ := cfg["api_token_secret"].(string)
+	if baseURL == "" || tokenID == "" || tokenSecret == "" {
+		return nil, fmt.Errorf("proxmox folder is missing its URL or API token")
+	}
+	node, err := sshlayer.ProxmoxNodeForVMID(baseURL, tokenID, tokenSecret, vmid,
+		boolOf(cfg["insecure_skip_verify"]))
 	if err != nil {
 		return nil, err
 	}
@@ -258,10 +259,11 @@ func (a *App) VncOpenConnection(connectionID string) (*VncSession, error) {
 	// on a its own goroutine when the webview actually connects. The owned
 	// session / chain cleanup is recorded so VncClose tears it down.
 	var open func(ctx context.Context) (sshlayer.VncUpstream, error)
-	// ownedRef lets the lazy factory hand its session/cleanup back to the
-	// session meta for teardown, since the sessionID is minted only after
-	// `open` is built. Guarded by vncMu via setVncOwned.
+	// The console's id is minted first, so the lazy factory hands its
+	// session / cleanup to THIS console (setVncOwned) - not to whichever
+	// console of the same connection a map walk finds first.
 	connID := connectionID
+	sessionID := "vnc:" + uuid.New().String()
 
 	if settings.VncUseTunnel {
 		// Dial the RFB port on the remote's loopback through SSH. Open a
@@ -292,24 +294,25 @@ func (a *App) VncOpenConnection(connectionID string) (*VncSession, error) {
 		settings.TunnelOnly = false
 		open = func(ctx context.Context) (sshlayer.VncUpstream, error) {
 			sink := vncNullSink{}
-			sess, e := sshlayer.Connect(context.Background(), a.db, a.vault, settings, sink, a.makeHostKeyCallback(), a.makeAlgoLookup(), 0, nil)
+			// ctx: a websocket that goes away cancels a pending connect.
+			sess, e := sshlayer.Connect(ctx, a.db, a.vault, settings, sink, a.makeHostKeyCallback(), a.makeAlgoLookup(), 0, nil)
 			if e != nil {
 				err := fmt.Errorf("vnc ssh tunnel connect: %w", e)
-				a.setVncError(connID, err)
+				a.setVncError(sessionID, err)
 				return nil, err
 			}
 			client := sess.TargetClient()
 			if client == nil {
 				sess.Disconnect()
 				err := fmt.Errorf("vnc tunnel: no live ssh client")
-				a.setVncError(connID, err)
+				a.setVncError(sessionID, err)
 				return nil, err
 			}
-			a.setVncOwned(connID, sess, nil)
+			a.setVncOwned(sessionID, sess, nil)
 			up, derr := sshlayer.NewSSHClientUpstream(client, addr)(ctx)
 			if derr != nil {
 				sess.Disconnect()
-				a.setVncError(connID, fmt.Errorf("vnc tunnel dial %s: %w", addr, derr))
+				a.setVncError(sessionID, fmt.Errorf("vnc tunnel dial %s: %w", addr, derr))
 				return nil, derr
 			}
 			return up, nil
@@ -327,7 +330,7 @@ func (a *App) VncOpenConnection(connectionID string) (*VncSession, error) {
 				a.db, a.vault, settings, a.makeHostKeyCallback(), a.makeAlgoLookup(), 0)
 			if jerr != nil {
 				e := fmt.Errorf("vnc jump connect: %w", jerr)
-				a.setVncError(connID, e)
+				a.setVncError(sessionID, e)
 				return nil, e
 			}
 			if jumpClient == nil {
@@ -336,15 +339,15 @@ func (a *App) VncOpenConnection(connectionID string) (*VncSession, error) {
 				// tunnel is dialed through it (a plain net.Dial ignored WG).
 				up, derr := sshlayer.NewProfileTCPUpstream(settings, addr)(ctx)
 				if derr != nil {
-					a.setVncError(connID, fmt.Errorf("vnc direct dial %s: %w", addr, derr))
+					a.setVncError(sessionID, fmt.Errorf("vnc direct dial %s: %w", addr, derr))
 				}
 				return up, derr
 			}
-			a.setVncOwned(connID, nil, jumpCleanup)
+			a.setVncOwned(sessionID, nil, jumpCleanup)
 			up, derr := sshlayer.NewSSHClientUpstream(jumpClient, addr)(ctx)
 			if derr != nil {
 				jumpCleanup()
-				a.setVncError(connID, fmt.Errorf("vnc dial %s via jump: %w", addr, derr))
+				a.setVncError(sessionID, fmt.Errorf("vnc dial %s via jump: %w", addr, derr))
 				return nil, derr
 			}
 			return up, nil
@@ -365,7 +368,7 @@ func (a *App) VncOpenConnection(connectionID string) (*VncSession, error) {
 	if settings.NetworkProfileID != nil {
 		wgProfileID = *settings.NetworkProfileID
 	}
-	return a.registerVncFor(connID, open, username, password, title, transport, wgProfileID)
+	return a.registerVncFor(sessionID, connID, open, username, password, title, transport, wgProfileID)
 }
 
 // setVncOwned records the SSH session / chain-cleanup a lazy VNC upstream
@@ -378,17 +381,14 @@ func (a *App) VncOpenConnection(connectionID string) (*VncSession, error) {
 // console of a connection, so VncLastError can surface it to the frontend
 // (noVNC only delivers a bare close, not the reason). Keyed by connectionID
 // like setVncOwned, since the sessionID is minted after the open factory.
-func (a *App) setVncError(connectionID string, err error) {
+func (a *App) setVncError(sessionID string, err error) {
 	if err == nil {
 		return
 	}
 	a.vncMu.Lock()
 	defer a.vncMu.Unlock()
-	for _, m := range a.vncSessions {
-		if m.connectionID == connectionID {
-			m.lastErr = err.Error()
-			return
-		}
+	if m := a.vncSessions[sessionID]; m != nil {
+		m.lastErr = err.Error()
 	}
 }
 
@@ -408,27 +408,32 @@ func (a *App) VncLastError(sessionID string) string {
 	return e
 }
 
-func (a *App) setVncOwned(connectionID string, sess *sshlayer.Session, cleanup func()) {
+func (a *App) setVncOwned(sessionID string, sess *sshlayer.Session, cleanup func()) {
 	a.vncMu.Lock()
-	for _, m := range a.vncSessions {
-		if m.connectionID == connectionID {
-			if sess != nil {
-				m.ownedSession = sess
-			}
-			if cleanup != nil {
-				m.ownedCleanup = cleanup
-			}
-			a.vncMu.Unlock()
-			return
+	m := a.vncSessions[sessionID]
+	var oldSess *sshlayer.Session
+	var oldCleanup func()
+	if m != nil {
+		// A reconnect of the same console (websocket again, tab tear-off)
+		// runs open again: what the previous run opened is closed, not
+		// leaked until the app quits.
+		if sess != nil {
+			oldSess, m.ownedSession = m.ownedSession, sess
+		}
+		if cleanup != nil {
+			oldCleanup, m.ownedCleanup = m.ownedCleanup, cleanup
 		}
 	}
 	a.vncMu.Unlock()
-	// No live console for this connection (already closed) - don't leak.
-	if sess != nil {
-		sess.Disconnect()
+	if m == nil {
+		// The console is already closed - don't leak.
+		oldSess, oldCleanup = sess, cleanup
 	}
-	if cleanup != nil {
-		cleanup()
+	if oldSess != nil && oldSess != sess {
+		oldSess.Disconnect()
+	}
+	if oldCleanup != nil {
+		oldCleanup()
 	}
 }
 
@@ -438,15 +443,14 @@ func (a *App) registerVnc(open func(ctx context.Context) (sshlayer.VncUpstream, 
 	// Proxmox consoles reach the API (and its VNC websocket) through the
 	// inventory tunnel path, which holds its own WG claim - no per-console
 	// hold here.
-	return a.registerVncFor("", open, username, password, title, "proxmox", "")
+	return a.registerVncFor("vnc:"+uuid.New().String(), "", open, username, password, title, "proxmox", "")
 }
 
 // registerVncFor is registerVnc with the owning connectionID, used by the
 // generic-connection path so its lazy upstream factory can attach the
 // session / cleanup it creates (see setVncOwned). Proxmox goes through
 // registerVnc with an empty id.
-func (a *App) registerVncFor(connectionID string, open func(ctx context.Context) (sshlayer.VncUpstream, error), username, password, title, transport, wgProfileID string) (*VncSession, error) {
-	sessionID := "vnc:" + uuid.New().String()
+func (a *App) registerVncFor(sessionID, connectionID string, open func(ctx context.Context) (sshlayer.VncUpstream, error), username, password, title, transport, wgProfileID string) (*VncSession, error) {
 	wsURL, err := a.vncBridge.Mint(open)
 	if err != nil {
 		return nil, err
