@@ -1890,6 +1890,17 @@ everything mobile is behind a build tag or an `isMobile` check.
    refuse a folder that is sensitive or holds anything sensitive
    (`folderTouchesSensitive`), at staging and again at commit.
 
+118. **Rows under a connection (databases, bookmarks) select the connection.**
+   A click on a database or bookmark row calls `selection.selectConnection`
+   and records the row separately (`dbTabs.treeSelected`,
+   `treeBookmarks.selected`); the connection row is only drawn unselected.
+   Anything keyed off the selection - Delete, F2, bulk actions - therefore
+   sees the connection and must first check `dbTreeSelectedUnder(connId)` /
+   `treeBookmarks.selectedUnder(connId)`, or it acts on the whole host (Delete
+   offered to delete the connection). Removing the connection's own database
+   is `App.DbRemove(conn, "")`: it only hides it while listed databases take
+   their defaults from it.
+
 ---
 
 # Archive
