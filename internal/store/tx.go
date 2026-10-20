@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // execer is the subset of *sql.DB / *sql.Tx the create helpers need, so the
@@ -87,12 +88,14 @@ func insertConnection(x execer, in NewConnection) (string, error) {
 	if protocol == "" {
 		protocol = "ssh"
 	}
+	// Same columns and normalisation as CreateConnection (a plan commit
+	// used to drop the local shell's directory and keep stray spaces).
 	_, err = x.Exec(
 		`INSERT INTO connections
-		 (id, folder_id, name, hostname, sort_order, overrides_json, tags_json, notes, favorite, sensitive, protocol, local_shell_kind, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`,
-		id, in.FolderID, in.Name, in.Hostname, in.SortOrder,
-		string(overrides), string(tagsJSON), in.Notes, protocol, in.LocalShellKind, ts, ts,
+		 (id, folder_id, name, hostname, sort_order, overrides_json, tags_json, notes, favorite, sensitive, open_hidden, protocol, local_shell_kind, local_shell_dir, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?)`,
+		id, in.FolderID, in.Name, strings.TrimSpace(in.Hostname), in.SortOrder,
+		string(overrides), string(tagsJSON), in.Notes, protocol, in.LocalShellKind, in.LocalShellDir, ts, ts,
 	)
 	if err != nil {
 		return "", err

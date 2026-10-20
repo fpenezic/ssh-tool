@@ -93,7 +93,7 @@ func TestFolderConnIconsUnanimous(t *testing.T) {
 		}
 	}
 
-	got, err := db.FolderConnIcons(6)
+	got, err := db.FolderConnIcons(6, nil)
 	if err != nil {
 		t.Fatalf("conn icons: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestFolderConnIconsVaryByRole(t *testing.T) {
 		}
 	}
 
-	got, err := db.FolderConnIcons(6)
+	got, err := db.FolderConnIcons(6, nil)
 	if err != nil {
 		t.Fatalf("conn icons: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestFolderConnIconsPartialIsNotUnanimous(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := db.FolderConnIcons(6)
+	got, err := db.FolderConnIcons(6, nil)
 	if err != nil {
 		t.Fatalf("conn icons: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestFolderConnIconsSkipsIconlessFolders(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := db.FolderConnIcons(6)
+	got, err := db.FolderConnIcons(6, nil)
 	if err != nil {
 		t.Fatalf("conn icons: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestFolderConnIconsCarryColour(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got, err := db.FolderConnIcons(6)
+	got, err := db.FolderConnIcons(6, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

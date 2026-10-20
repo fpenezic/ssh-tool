@@ -464,7 +464,10 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 				}
 			}
 		}
-		connIcons, _ := a.db.FolderConnIcons(6)
+		var connIcons map[string]store.ConnIconUsage
+		if hidden, err := a.mcpSensitiveIDs(); err == nil {
+			connIcons, _ = a.db.FolderConnIcons(6, hidden)
+		}
 		ids := make([]string, 0, len(paths))
 		for id := range paths {
 			ids = append(ids, id)
@@ -559,7 +562,11 @@ func (a *App) registerProvisioningTools(server *mcp.Server) {
 		// Uploaded icons have no name of their own, so list them by what
 		// already wears them - that is how the user refers to them too
 		// ("the icon the web servers have").
-		imgs, err := a.db.ListImageUsage(3)
+		hidden, err := a.mcpSensitiveIDs()
+		var imgs []store.ImageUsage
+		if err == nil {
+			imgs, err = a.db.ListImageUsage(3, hidden)
+		}
 		if err == nil && len(imgs) > 0 {
 			b.WriteString("\nUploaded icons (pass as icon_image):\n")
 			for _, im := range imgs {
