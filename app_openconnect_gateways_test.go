@@ -45,6 +45,30 @@ func TestOCSessionPerGateway(t *testing.T) {
 	}
 }
 
+// A detached session resumes on the backup that holds it, before the main
+// gateway.
+func TestOCConnectOrder(t *testing.T) {
+	gws := []OpenConnectGateway{{Server: "a"}, {Server: "b"}, {Server: "c"}}
+	names := func(g []OpenConnectGateway) []string {
+		out := []string{}
+		for _, x := range g {
+			out = append(out, x.Server)
+		}
+		return out
+	}
+	if got := names(ocConnectOrder("p2", gws)); !reflect.DeepEqual(got, []string{"a", "b", "c"}) {
+		t.Fatalf("no session: %v", got)
+	}
+	ocSessionSet("p2", "c", "cookie")
+	defer ocSessionSet("p2", "", "")
+	if got := names(ocConnectOrder("p2", gws)); !reflect.DeepEqual(got, []string{"c", "a", "b"}) {
+		t.Fatalf("session on c: %v", got)
+	}
+	if got := names(gws); !reflect.DeepEqual(got, []string{"a", "b", "c"}) {
+		t.Fatalf("the profile's list changed: %v", got)
+	}
+}
+
 func TestOCSavePinsPerGateway(t *testing.T) {
 	db, err := store.Open(filepath.Join(t.TempDir(), "store.db"))
 	if err != nil {
