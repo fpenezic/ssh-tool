@@ -570,6 +570,10 @@ don't.
   `system.parts` per table) in the tree; the native protocol (9000) for a
   server whose HTTP interface is closed - wait for the ask; a structured
   view of Array / Map / Tuple cells (today ClickHouse's own text).
+- **OpenSearch, what the first cut left out.** PPL and ES|QL as their own
+  statements (today a `POST _plugins/_ppl` / `POST _query` request);
+  `search_after` paging past the 10 000 window in Data; a JSON tree view of
+  aggregation results; the Kibana console's `${var}` variables.
 - **Redis tab.** Asked for with ClickHouse (2026-10-20), parked: no
   tables or SQL, so not the Database tab - a key browser (`SCAN` by
   pattern, grouped on `:`), a viewer per type (string, hash, list, set,
