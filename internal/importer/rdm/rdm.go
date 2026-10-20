@@ -369,8 +369,9 @@ func (im *Importer) ensureCredentialFolderPath(rdmPath string) (*string, error) 
 		}
 		f, err := im.db.CreateCredentialFolder(seg, parentID)
 		if err != nil {
-			// Already exists or other transient issue - try to continue.
-			continue
+			// Going on would file the rest of the path under the wrong
+			// parent; the caller warns and uses the root instead.
+			return nil, fmt.Errorf("create credential folder %q: %w", key, err)
 		}
 		im.credFolderIDs[key] = f.ID
 		parentID = &f.ID
@@ -612,7 +613,13 @@ func connectableFromEntry(e Entry, credByRdmID, credByPath map[string]string) *C
 }
 
 func (im *Importer) createConnection(e Entry) error {
-	folderID, _ := im.folderIDs[e.Group]
+	// Through ensureFolderPath, so an empty Group lands under the chosen
+	// root folder (not the DB root) and an untrimmed or credential-entry
+	// Group still finds or creates its folder.
+	folderID, err := im.ensureFolderPath(e.Group)
+	if err != nil {
+		return err
+	}
 	host := ""
 	port := 0
 	username := ""
@@ -623,7 +630,10 @@ func (im *Importer) createConnection(e Entry) error {
 	}
 
 	overrides := store.InheritableSettings{}
-	if port > 0 && port != 22 {
+	if port > 65535 {
+		im.summary.Warnings = append(im.summary.Warnings,
+			fmt.Sprintf("%s: port %d out of range, left at the default", e.Name, port))
+	} else if port > 0 && port != 22 {
 		p := uint16(port)
 		overrides.Port = &p
 	}
@@ -722,7 +732,7 @@ func (im *Importer) resolveJump(e Entry) *store.JumpHostOverride {
 			spec := &store.JumpHostSpec{
 				Hostname: gw.Host,
 			}
-			if gw.HostPort > 0 && gw.HostPort != 22 {
+			if gw.HostPort > 0 && gw.HostPort != 22 && gw.HostPort <= 65535 {
 				p := uint16(gw.HostPort)
 				spec.Port = &p
 			}
@@ -749,7 +759,7 @@ func (im *Importer) resolveJump(e Entry) *store.JumpHostOverride {
 			return nil
 		}
 		spec := &store.JumpHostSpec{Hostname: gw.Hostname}
-		if gw.Port > 0 && gw.Port != 22 {
+		if gw.Port > 0 && gw.Port != 22 && gw.Port <= 65535 {
 			p := uint16(gw.Port)
 			spec.Port = &p
 		}
