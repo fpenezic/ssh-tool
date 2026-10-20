@@ -280,7 +280,12 @@ func (g *GoogleDrive) Move(from, to string) error {
 		return fmt.Errorf("gdrive move: source %s not found", from)
 	}
 	// Drop any existing destination so the rename doesn't create a duplicate name.
-	if toID, err := g.resolveID(to); err == nil && toID != "" {
+	toID, err := g.resolveID(to)
+	if err != nil {
+		// Renaming anyway would leave two files of that name.
+		return fmt.Errorf("gdrive move resolve dest %s: %w", to, err)
+	}
+	if toID != "" {
 		if derr := g.deleteID(toID); derr != nil {
 			return fmt.Errorf("gdrive move clear dest %s: %w", to, derr)
 		}

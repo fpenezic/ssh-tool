@@ -69,11 +69,15 @@ func (s *SFTP) connect() (*sftp.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sftp sync: dial %s: %w", addr, err)
 	}
+	// cfg.Timeout only covers ssh.Dial: bound the handshake on our own
+	// conn, so a server that accepts and stalls cannot hang the sync.
+	_ = conn.SetDeadline(time.Now().Add(s.timeout()))
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
 	if err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("sftp sync: ssh handshake: %w", err)
 	}
+	_ = conn.SetDeadline(time.Time{})
 	cli := ssh.NewClient(sshConn, chans, reqs)
 	sc, err := sftp.NewClient(cli)
 	if err != nil {
