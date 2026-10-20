@@ -218,7 +218,7 @@ func (a *App) ensureCheckpointTunnel(row *store.NetworkProfile) (tunnelDialer, e
 			}
 			pins = []string{ce.Pin}
 			if remember {
-				if err := a.ocSavePins(row.ID, pins); err != nil {
+				if err := a.ocSavePins(row.ID, "", pins); err != nil {
 					log.Printf("checkpoint: save pin for %s: %v", row.Name, err)
 				}
 			}

@@ -537,6 +537,8 @@ export interface OpenConnectConfig {
   flavor: "anyconnect" | "fortinet" | "f5" | "gp" | "pulse" | "nc";
   auth_group?: string;
   pins?: string[];
+  /** Further gateways, tried in order when the one before does not answer. */
+  backups?: { server: string; pins?: string[] }[];
   mtu?: number;
   base_mtu?: number;
   no_udp?: boolean;

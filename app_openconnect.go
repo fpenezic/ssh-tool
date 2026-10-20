@@ -46,10 +46,14 @@ type OpenConnectConfig struct {
 	AuthGroup string `json:"auth_group,omitempty"`
 	// Pins are the trusted gateway certificates (pin-sha256:...), set by the
 	// trust-on-first-use prompt. Empty = the system trust store decides.
-	Pins    []string `json:"pins,omitempty"`
-	MTU     int      `json:"mtu,omitempty"`
-	BaseMTU int      `json:"base_mtu,omitempty"`
-	NoUDP   bool     `json:"no_udp,omitempty"`
+	Pins []string `json:"pins,omitempty"`
+	// Backups are further gateways of the same VPN, tried in order when
+	// the one before does not answer at all. A rejected login is not
+	// retried elsewhere. Each keeps its own trusted certificate.
+	Backups []OpenConnectGateway `json:"backups,omitempty"`
+	MTU     int                  `json:"mtu,omitempty"`
+	BaseMTU int                  `json:"base_mtu,omitempty"`
+	NoUDP   bool                 `json:"no_udp,omitempty"`
 
 	// First login: Username ("" = the credential's default username, else
 	// asked) and PasswordCredentialID ("" = asked).
@@ -76,29 +80,55 @@ type OpenConnectConfig struct {
 	Paused bool   `json:"paused,omitempty"`
 }
 
+// OpenConnectGateway is one gateway address with its trusted certificates.
+type OpenConnectGateway struct {
+	Server string   `json:"server"`
+	Pins   []string `json:"pins,omitempty"`
+}
+
+// gateways lists the main gateway, then the backups, in connect order.
+func (c *OpenConnectConfig) gateways() []OpenConnectGateway {
+	return append([]OpenConnectGateway{{Server: c.Server, Pins: c.Pins}}, c.Backups...)
+}
+
 // ocSessions holds the AnyConnect session cookie of each profile whose
 // tunnel is up or was detached by the idle stop: memory only (never the
 // vault, the store or sync), so it dies with the app. A cookie is a
 // bearer credential for the session, as good as a completed login.
+// The gateway that issued the cookie is kept with it: another gateway of
+// the profile does not know the session.
 var ocSessions = struct {
 	sync.Mutex
-	m map[string]string
-}{m: map[string]string{}}
+	m map[string]ocSession
+}{m: map[string]ocSession{}}
+
+type ocSession struct{ server, cookie string }
 
 func ocSessionGet(profileID string) string {
 	ocSessions.Lock()
 	defer ocSessions.Unlock()
-	return ocSessions.m[profileID]
+	return ocSessions.m[profileID].cookie
 }
 
-func ocSessionSet(profileID, cookie string) {
+// ocSessionFor is the profile's cookie when server issued it.
+func ocSessionFor(profileID, server string) string {
+	ocSessions.Lock()
+	defer ocSessions.Unlock()
+	if s := ocSessions.m[profileID]; s.server == server {
+		return s.cookie
+	}
+	return ""
+}
+
+// ocSessionSet saves the cookie server issued; an empty cookie forgets it.
+func ocSessionSet(profileID, server, cookie string) {
 	ocSessions.Lock()
 	defer ocSessions.Unlock()
 	if cookie == "" {
 		delete(ocSessions.m, profileID)
 		return
 	}
-	ocSessions.m[profileID] = cookie
+	ocSessions.m[profileID] = ocSession{server, cookie}
 }
 
 // idleStopTunnel is the idle stop: an OpenConnect tunnel with a session
@@ -126,12 +156,25 @@ func (c *OpenConnectConfig) normalize() error {
 	if c.Server == "" {
 		return fmt.Errorf("gateway address is required")
 	}
-	if !strings.Contains(c.Server, "://") {
-		c.Server = "https://" + c.Server
+	var err error
+	if c.Server, err = ocGatewayURL(c.Server); err != nil {
+		return err
 	}
-	if u, err := url.Parse(c.Server); err != nil || u.Hostname() == "" {
-		return fmt.Errorf("gateway address %q is not a valid URL", c.Server)
+	seen := map[string]bool{c.Server: true}
+	var backups []OpenConnectGateway
+	for _, b := range c.Backups {
+		if strings.TrimSpace(b.Server) == "" {
+			continue
+		}
+		if b.Server, err = ocGatewayURL(strings.TrimSpace(b.Server)); err != nil {
+			return err
+		}
+		if !seen[b.Server] {
+			seen[b.Server] = true
+			backups = append(backups, b)
+		}
 	}
+	c.Backups = backups
 	if c.Flavor == "" {
 		c.Flavor = "anyconnect"
 	}
@@ -152,6 +195,17 @@ func (c *OpenConnectConfig) normalize() error {
 		return fmt.Errorf("MTU out of range")
 	}
 	return nil
+}
+
+// ocGatewayURL is a gateway address as a URL, https:// when it has no scheme.
+func ocGatewayURL(s string) (string, error) {
+	if !strings.Contains(s, "://") {
+		s = "https://" + s
+	}
+	if u, err := url.Parse(s); err != nil || u.Hostname() == "" {
+		return "", fmt.Errorf("gateway address %q is not a valid URL", s)
+	}
+	return s, nil
 }
 
 // ensureOpenConnectTunnel spawns (or reuses) the OpenConnect helper for the
@@ -180,17 +234,34 @@ func (a *App) ensureOpenConnectTunnel(row *store.NetworkProfile) (tunnelDialer, 
 	if err != nil {
 		return nil, err
 	}
-	pins := cfg.Pins
+	gws := cfg.gateways()
+	for i, gw := range gws {
+		p, err := a.ocConnect(row, &cfg, exe, env, gw)
+		var ue *tunnelhelper.UnreachableError
+		if errors.As(err, &ue) && i+1 < len(gws) {
+			log.Printf("openconnect %s: %s does not answer, trying %s", row.Name, gw.Server, gws[i+1].Server)
+			continue
+		}
+		return p, err
+	}
+	return nil, fmt.Errorf("profile %s: no gateway", row.Name)
+}
+
+// ocConnect runs the helper against one gateway of the profile. An
+// untrusted or changed certificate asks the user once and, when accepted,
+// retries with that certificate pinned.
+func (a *App) ocConnect(row *store.NetworkProfile, cfg *OpenConnectConfig, exe string, env []string, gw OpenConnectGateway) (tunnelDialer, error) {
+	pins := gw.Pins
 	for attempt := 0; ; attempt++ {
-		args := ocArgs(&cfg, pins)
-		filler := &ocAuthFiller{a: a, row: row, cfg: &cfg}
+		args := ocArgs(cfg, gw.Server, pins)
+		filler := &ocAuthFiller{a: a, row: row, cfg: cfg, server: gw.Server}
 		runEnv := env
 		if cfg.Flavor == "anyconnect" {
 			// Ask for the session cookie, and resume a detached session
 			// with the one from the last run. A helper that predates
 			// this ignores both variables and logs in as before.
 			runEnv = append(append([]string{}, env...), "SSHTOOL_OC_SESSION=1")
-			if c := ocSessionGet(row.ID); c != "" {
+			if c := ocSessionFor(row.ID, gw.Server); c != "" {
 				runEnv = append(runEnv, "SSHTOOL_OC_COOKIE="+c)
 				filler.resuming = true
 				log.Printf("openconnect %s: resuming the gateway session", row.Name)
@@ -204,34 +275,34 @@ func (a *App) ensureOpenConnectTunnel(row *store.NetworkProfile) (tunnelDialer, 
 				a.rememberRoutes(row.ID, p.Info())
 				EventsEmit("network_tunnel_changed", row.ID)
 			},
-			OnSession: func(c string) { ocSessionSet(row.ID, c) },
+			OnSession: func(c string) { ocSessionSet(row.ID, gw.Server, c) },
 		})
 		var ce *tunnelhelper.CertUntrustedError
 		if errors.As(err, &ce) && attempt == 0 {
-			accepted, remember := a.ocTrustPrompt(&cfg, ce)
+			accepted, remember := a.ocTrustPrompt(gw, ce)
 			if !accepted {
 				return nil, fmt.Errorf("profile %s: gateway certificate not trusted", row.Name)
 			}
 			pins = []string{ce.Pin}
 			if remember {
-				if err := a.ocSavePins(row.ID, pins); err != nil {
+				if err := a.ocSavePins(row.ID, gw.Server, pins); err != nil {
 					log.Printf("openconnect: save pin for %s: %v", row.Name, err)
 				}
 			}
 			continue
 		}
 		if err != nil {
-			ocSessionSet(row.ID, "")
-			log.Printf("openconnect %s: connect to %s failed: %v", row.Name, cfg.Server, err)
+			ocSessionSet(row.ID, "", "")
+			log.Printf("openconnect %s: connect to %s failed: %v", row.Name, gw.Server, err)
 			if filler.changeSent() {
 				log.Printf("openconnect %s: a password change was sent before the failure - the gateway may already use the new password; the stored credential was not updated", row.Name)
 			}
 			return nil, fmt.Errorf("profile %s: %w", row.Name, err)
 		}
 		if filler.wasResumed() {
-			log.Printf("openconnect %s: connected to %s in %s (session resumed, no login)", row.Name, cfg.Server, time.Since(connectStart).Round(10*time.Millisecond))
+			log.Printf("openconnect %s: connected to %s in %s (session resumed, no login)", row.Name, gw.Server, time.Since(connectStart).Round(10*time.Millisecond))
 		} else {
-			log.Printf("openconnect %s: connected to %s in %s", row.Name, cfg.Server, time.Since(connectStart).Round(10*time.Millisecond))
+			log.Printf("openconnect %s: connected to %s in %s", row.Name, gw.Server, time.Since(connectStart).Round(10*time.Millisecond))
 		}
 		filler.commitChange()
 		a.wgTouch(row.ID)
@@ -243,8 +314,8 @@ func (a *App) ensureOpenConnectTunnel(row *store.NetworkProfile) (tunnelDialer, 
 	}
 }
 
-func ocArgs(cfg *OpenConnectConfig, pins []string) []string {
-	args := []string{"--server", cfg.Server, "--flavor", cfg.Flavor}
+func ocArgs(cfg *OpenConnectConfig, server string, pins []string) []string {
+	args := []string{"--server", server, "--flavor", cfg.Flavor}
 	if cfg.AuthGroup != "" {
 		args = append(args, "--authgroup", cfg.AuthGroup)
 	}
@@ -311,13 +382,13 @@ func (a *App) ocCredentialUser(credID string) string {
 
 // ocTrustPrompt asks about an untrusted / changed OpenConnect gateway
 // certificate. Returns (accepted, remember).
-func (a *App) ocTrustPrompt(cfg *OpenConnectConfig, ce *tunnelhelper.CertUntrustedError) (bool, bool) {
-	u, _ := url.Parse(cfg.Server)
+func (a *App) ocTrustPrompt(gw OpenConnectGateway, ce *tunnelhelper.CertUntrustedError) (bool, bool) {
+	u, _ := url.Parse(gw.Server)
 	host, port := u.Hostname(), 443
 	if p := u.Port(); p != "" {
 		fmt.Sscan(p, &port)
 	}
-	return a.gatewayTrustPrompt(host, port, cfg.Pins, ce)
+	return a.gatewayTrustPrompt(host, port, gw.Pins, ce)
 }
 
 // gatewayTrustPrompt asks about an untrusted / changed VPN gateway
@@ -386,7 +457,10 @@ func respondTrustChallenge(id string, accept, remember bool) bool {
 	return ok
 }
 
-func (a *App) ocSavePins(profileID string, pins []string) error {
+// ocSavePins trusts pins for the profile's gateway server: the main one
+// ("" too, for the profile kinds with one gateway) or a backup. The rest
+// of the stored config stays as it is.
+func (a *App) ocSavePins(profileID, server string, pins []string) error {
 	row, err := a.db.GetNetworkProfile(profileID)
 	if err != nil {
 		return err
@@ -395,8 +469,26 @@ func (a *App) ocSavePins(profileID string, pins []string) error {
 	if err := json.Unmarshal([]byte(row.ConfigJSON), &m); err != nil {
 		return err
 	}
-	b, _ := json.Marshal(pins)
-	m["pins"] = b
+	var main string
+	_ = json.Unmarshal(m["server"], &main)
+	if server == "" || server == main {
+		b, _ := json.Marshal(pins)
+		m["pins"] = b
+	} else {
+		var backups []OpenConnectGateway
+		_ = json.Unmarshal(m["backups"], &backups)
+		found := false
+		for i := range backups {
+			if backups[i].Server == server {
+				backups[i].Pins, found = pins, true
+			}
+		}
+		if !found {
+			return fmt.Errorf("gateway %s is no longer in the profile", server)
+		}
+		b, _ := json.Marshal(backups)
+		m["backups"] = b
+	}
 	out, err := json.Marshal(m)
 	if err != nil {
 		return err
@@ -415,6 +507,8 @@ type ocAuthFiller struct {
 	a   *App
 	row *store.NetworkProfile
 	cfg *OpenConnectConfig
+	// server is the gateway this login goes to.
+	server string
 
 	mu                         sync.Mutex
 	resuming                   bool // a saved session cookie is being tried
@@ -508,7 +602,7 @@ func (f *ocAuthFiller) handle(p *tunnelhelper.Proc, ch tunnelhelper.AuthChalleng
 		// A login form while resuming: the gateway no longer knows the
 		// session (expired, or ended elsewhere). Normal login from here.
 		f.resuming = false
-		ocSessionSet(f.row.ID, "")
+		ocSessionSet(f.row.ID, "", "")
 		log.Printf("openconnect %s: the saved gateway session has expired, logging in", f.row.Name)
 	}
 	f.mu.Unlock()
@@ -846,7 +940,7 @@ func pickOption(fl tunnelhelper.AuthField, want string) string {
 // prompt asks the user for the fields fill left, with the gateway's own
 // message, through the SSH keyboard-interactive dialog.
 func (f *ocAuthFiller) prompt(ch tunnelhelper.AuthChallenge, values map[string]string, missing []int) error {
-	u, _ := url.Parse(f.cfg.Server)
+	u, _ := url.Parse(f.server)
 	qs := make([]sshlayer.InteractiveAuthPrompt, len(missing))
 	for j, i := range missing {
 		fl := ch.Fields[i]
@@ -905,6 +999,9 @@ func (a *App) NetworkProfileCreateOpenConnect(in OpenConnectProfileInput) (*Netw
 	if err := cfg.normalize(); err != nil {
 		return nil, err
 	}
+	for i := range cfg.Backups {
+		cfg.Backups[i].Pins = nil
+	}
 	b, err := json.Marshal(cfg)
 	if err != nil {
 		return nil, err
@@ -935,9 +1032,14 @@ func (a *App) NetworkProfileUpdateOpenConnect(id string, in OpenConnectProfileIn
 	if err := cfg.normalize(); err != nil {
 		return nil, err
 	}
-	cfg.Pins = old.Pins
-	if cfg.Server != old.Server {
-		cfg.Pins = nil
+	// Trusted certificates stay with their gateway address.
+	trusted := map[string][]string{}
+	for _, gw := range old.gateways() {
+		trusted[gw.Server] = gw.Pins
+	}
+	cfg.Pins = trusted[cfg.Server]
+	for i := range cfg.Backups {
+		cfg.Backups[i].Pins = trusted[cfg.Backups[i].Server]
 	}
 	b, err := json.Marshal(cfg)
 	if err != nil {

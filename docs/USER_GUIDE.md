@@ -2646,6 +2646,12 @@ A profile needs:
 - **VPN type** and **Gateway** - the address or URL, with the group path
   if the gateway uses one (`vpn.example.com/staff`). **Group** picks a
   login group when the gateway offers several.
+- **Backup gateways** (optional) - further gateways of the same VPN, one
+  per line, as FortiClient's list of remote gateways. Connect tries the
+  gateway, then each backup in order, moving on only when one does not
+  answer at all (no TLS handshake within 10 seconds). A gateway that
+  answers and rejects the login is not retried on the next one, so a
+  wrong password is sent once. Needs OpenConnect plugin v1.3 or newer.
 - **Username** and **Password** - type the password on the form (it is
   saved in the vault as a credential named after the profile), pick a
   stored password (vault, Bitwarden or KeePass), or leave it blank to be
@@ -2692,7 +2698,8 @@ reconnects on its own with the same session either way.
 Otherwise (self-signed, private CA) the first connect shows **Untrusted
 VPN gateway certificate** with its subject and fingerprint; **Trust &
 remember** pins it on the profile. A changed certificate asks again.
-Changing the gateway address forgets the pin.
+Each gateway keeps its own pin, by address: changing an address forgets
+its pin, reordering the gateways keeps them.
 
 **Details.** A running profile's **Details** tab shows the tunnel address,
 gateway, transport (DTLS or TLS), MTU, routes, DNS servers and search

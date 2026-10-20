@@ -5259,6 +5259,16 @@ export class OpenConnectConfig {
         }
         if (/** @type {any} */(false)) {
             /**
+             * Backups are further gateways of the same VPN, tried in order when
+             * the one before does not answer at all. A rejected login is not
+             * retried elsewhere. Each keeps its own trusted certificate.
+             * @member
+             * @type {OpenConnectGateway[] | undefined}
+             */
+            this["backups"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * @member
              * @type {number | undefined}
              */
@@ -5363,11 +5373,57 @@ export class OpenConnectConfig {
      */
     static createFrom($$source = {}) {
         const $$createField4_0 = $$createType4;
+        const $$createField5_0 = $$createType43;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("pins" in $$parsedSource) {
             $$parsedSource["pins"] = $$createField4_0($$parsedSource["pins"]);
         }
+        if ("backups" in $$parsedSource) {
+            $$parsedSource["backups"] = $$createField5_0($$parsedSource["backups"]);
+        }
         return new OpenConnectConfig(/** @type {Partial<OpenConnectConfig>} */($$parsedSource));
+    }
+}
+
+/**
+ * OpenConnectGateway is one gateway address with its trusted certificates.
+ */
+export class OpenConnectGateway {
+    /**
+     * Creates a new OpenConnectGateway instance.
+     * @param {Partial<OpenConnectGateway>} [$$source = {}] - The source object to create the OpenConnectGateway.
+     */
+    constructor($$source = {}) {
+        if (!("server" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["server"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["pins"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new OpenConnectGateway instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {OpenConnectGateway}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("pins" in $$parsedSource) {
+            $$parsedSource["pins"] = $$createField1_0($$parsedSource["pins"]);
+        }
+        return new OpenConnectGateway(/** @type {Partial<OpenConnectGateway>} */($$parsedSource));
     }
 }
 
@@ -6420,7 +6476,7 @@ export class ScrollbackSnapshot {
      * @returns {ScrollbackSnapshot}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType43;
+        const $$createField3_0 = $$createType45;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("marks" in $$parsedSource) {
             $$parsedSource["marks"] = $$createField3_0($$parsedSource["marks"]);
@@ -6473,7 +6529,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType45;
+        const $$createField1_0 = $$createType47;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -6657,7 +6713,7 @@ export class ShareStartInput {
      * @returns {ShareStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType47;
+        const $$createField6_0 = $$createType49;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField6_0($$parsedSource["sessions"]);
@@ -6792,7 +6848,7 @@ export class SharedProxyDetails {
      */
     static createFrom($$source = {}) {
         const $$createField1_0 = $$createType4;
-        const $$createField2_0 = $$createType48;
+        const $$createField2_0 = $$createType50;
         const $$createField3_0 = $$createType4;
         const $$createField6_0 = $$createType23;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
@@ -7483,7 +7539,7 @@ export class TLSInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType49;
+        const $$createField1_0 = $$createType51;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("connection_ids" in $$parsedSource) {
             $$parsedSource["connection_ids"] = $$createField0_0($$parsedSource["connection_ids"]);
@@ -7837,7 +7893,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType51;
+        const $$createField0_0 = $$createType53;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -8259,7 +8315,7 @@ export class TunnelInfo {
      * @returns {TunnelInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField11_0 = $$createType53;
+        const $$createField11_0 = $$createType55;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("forwards" in $$parsedSource) {
             $$parsedSource["forwards"] = $$createField11_0($$parsedSource["forwards"]);
@@ -8514,15 +8570,17 @@ const $$createType38 = OpenVPNConfig.createFrom;
 const $$createType39 = $Create.Nullable($$createType38);
 const $$createType40 = $Create.Nullable($$createType5);
 const $$createType41 = wg$0.Status.createFrom;
-const $$createType42 = cmdmarks$0.Mark.createFrom;
+const $$createType42 = OpenConnectGateway.createFrom;
 const $$createType43 = $Create.Array($$createType42);
-const $$createType44 = ssh$0.SftpEntry.createFrom;
+const $$createType44 = cmdmarks$0.Mark.createFrom;
 const $$createType45 = $Create.Array($$createType44);
-const $$createType46 = ShareSessionInput.createFrom;
+const $$createType46 = ssh$0.SftpEntry.createFrom;
 const $$createType47 = $Create.Array($$createType46);
-const $$createType48 = $Create.Map($Create.Any, $Create.Any);
-const $$createType49 = $Create.Array($Create.Any);
-const $$createType50 = ssh$0.ParsedPacket.createFrom;
-const $$createType51 = $Create.Array($$createType50);
-const $$createType52 = TunnelForwardInfo.createFrom;
+const $$createType48 = ShareSessionInput.createFrom;
+const $$createType49 = $Create.Array($$createType48);
+const $$createType50 = $Create.Map($Create.Any, $Create.Any);
+const $$createType51 = $Create.Array($Create.Any);
+const $$createType52 = ssh$0.ParsedPacket.createFrom;
 const $$createType53 = $Create.Array($$createType52);
+const $$createType54 = TunnelForwardInfo.createFrom;
+const $$createType55 = $Create.Array($$createType54);

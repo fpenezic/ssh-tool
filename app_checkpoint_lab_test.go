@@ -73,7 +73,7 @@ func TestCheckpointLab(t *testing.T) {
 	}
 	if pin != "" {
 		// What "Trust & remember" stores; the dialog itself needs the UI.
-		if err := a.ocSavePins(info.ID, []string{pin}); err != nil {
+		if err := a.ocSavePins(info.ID, "", []string{pin}); err != nil {
 			t.Fatal(err)
 		}
 	}

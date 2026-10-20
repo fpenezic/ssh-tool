@@ -96,6 +96,12 @@ type CertUntrustedError struct {
 
 func (e *CertUntrustedError) Error() string { return e.Msg }
 
+// UnreachableError is a helper that found nothing answering at the
+// gateway, so another gateway of the profile may be tried.
+type UnreachableError struct{ Msg string }
+
+func (e *UnreachableError) Error() string { return e.Msg }
+
 // Options tunes one spawn. Zero value = the plain NetBird / Tailscale
 // contract.
 type Options struct {
@@ -168,6 +174,8 @@ type helperEvent struct {
 	CertPin     string `json:"cert_pin"`
 	CertSubject string `json:"cert_subject"`
 	CertChanged bool   `json:"cert_changed"`
+	// error: the gateway did not answer at all (openconnect).
+	Unreachable bool `json:"unreachable"`
 	// auth
 	ID      string      `json:"id"`
 	Message string      `json:"message"`
@@ -483,6 +491,10 @@ func spawn(profileID, name, exePath string, args, env []string, opts Options) (*
 					got = true
 					if ev.CertPin != "" {
 						readyCh <- &CertUntrustedError{Msg: ev.Error, Pin: ev.CertPin, Subject: ev.CertSubject, Changed: ev.CertChanged}
+						break
+					}
+					if ev.Unreachable {
+						readyCh <- &UnreachableError{Msg: ev.Error}
 						break
 					}
 					readyCh <- fmt.Errorf("%s", ev.Error)

@@ -85,6 +85,7 @@ export {
     NetworkProfileInfo,
     NetworkProfileUsage,
     OpenConnectConfig,
+    OpenConnectGateway,
     OpenConnectProfileInput,
     OpenVPNConfig,
     OpenVPNProfileInput,
