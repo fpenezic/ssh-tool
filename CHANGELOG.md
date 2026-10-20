@@ -7,6 +7,14 @@ a prerelease upstream.
 
 ---
 
+## [0.116.1] - Sharp terminal text on Windows
+
+A fix for terminal text that could look soft on Windows since v0.114.0.
+
+### Terminal
+
+- Terminal text on Windows is sharp again. Since v0.114.0 a pixel alignment meant for Linux could switch off ClearType for the terminal, depending on the window layout, so the same monitor and scaling looked crisp on one machine and blurry on another.
+
 ## [0.116.0] - Databases on a connection
 
 PostgreSQL and MySQL / MariaDB open from the connection that reaches them: databases, tables and their structure, and query tabs with their own sessions, with every database connection carried by the connection's SSH session by default. Hosts and whole folders can now be marked sensitive, and a round of fixes covers exports, backups and the vault.
