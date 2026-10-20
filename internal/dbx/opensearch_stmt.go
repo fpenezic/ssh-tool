@@ -175,25 +175,25 @@ var osReadEndpoints = map[string]bool{
 
 // osRESTRead reports a block that only reads, or why it does not.
 func osRESTRead(req osREST) (bool, string) {
+	ep, next := req.endpoint()
+	sql := ep == "_sql" || ep == "_ppl" || (ep == "_plugins" || ep == "_opendistro") && (next == "_sql" || next == "_ppl")
 	switch req.method {
 	case "GET", "HEAD":
-		return true, ""
+		if !sql || strings.TrimSpace(req.body) == "" {
+			return true, ""
+		}
+		// Elasticsearch takes SQL on GET too: the body is checked the same.
 	case "POST":
 	default:
 		return false, req.method + " requests"
 	}
-	ep, next := req.endpoint()
-	sql := ep == "_sql" || ep == "_ppl" || (ep == "_plugins" || ep == "_opendistro") && (next == "_sql" || next == "_ppl")
 	if sql {
 		if next == "close" || next == "translate" || strings.HasSuffix(strings.SplitN(req.path, "?", 2)[0], "/close") ||
 			strings.HasSuffix(strings.SplitN(req.path, "?", 2)[0], "/_explain") {
 			return true, ""
 		}
-		var v struct {
-			Query  string `json:"query"`
-			Cursor string `json:"cursor"`
-		}
-		if json.Unmarshal([]byte(req.body), &v) != nil {
+		v, ok := osSQLBody(req.body)
+		if !ok {
 			return false, "a SQL request it cannot read"
 		}
 		if v.Query == "" && v.Cursor != "" {
@@ -215,6 +215,45 @@ func osRESTRead(req osREST) (bool, string) {
 		return false, "POST " + req.path
 	}
 	return false, "POST " + ep
+}
+
+// osSQLBody reads the query and cursor of a SQL request the way the server
+// does. Keys match exactly (encoding/json would take "QUERY" for "query"
+// and let a second key overwrite the one checked), and a key given twice,
+// in any case, is refused.
+func osSQLBody(body string) (struct{ Query, Cursor string }, bool) {
+	var v struct{ Query, Cursor string }
+	var fields map[string]json.RawMessage
+	if json.Unmarshal([]byte(body), &fields) != nil {
+		return v, false
+	}
+	dec := json.NewDecoder(strings.NewReader(body))
+	if _, err := dec.Token(); err != nil {
+		return v, false
+	}
+	seen := map[string]bool{}
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			return v, false
+		}
+		k := strings.ToLower(tok.(string))
+		if seen[k] {
+			return v, false
+		}
+		seen[k] = true
+		var skip json.RawMessage
+		if dec.Decode(&skip) != nil {
+			return v, false
+		}
+	}
+	if raw, ok := fields["query"]; ok && json.Unmarshal(raw, &v.Query) != nil {
+		return v, false
+	}
+	if raw, ok := fields["cursor"]; ok && json.Unmarshal(raw, &v.Cursor) != nil {
+		return v, false
+	}
+	return v, true
 }
 
 // osIsRead reports whether a block or SQL statement only reads.
