@@ -134,6 +134,10 @@ func (a *App) acceptMcpTCP(ln net.Listener) {
 		}
 		go func(c net.Conn) {
 			defer c.Close()
+			if !a.mcpTrack(true, ln, c, true) {
+				return
+			}
+			defer a.mcpTrack(true, ln, c, false)
 			br := bufio.NewReader(c)
 			if !a.checkMcpTCPToken(c, br) {
 				return
@@ -146,6 +150,38 @@ func (a *App) acceptMcpTCP(ln net.Listener) {
 				log.Printf("mcp bridge (tcp): session ended: %v", err)
 			}
 		}(conn)
+	}
+}
+
+// mcpTrack adds c to (on) or removes it from the connections of one leg,
+// the TCP one or the local socket. Adding fails once that leg's listener is
+// no longer ln (stopped while c was being accepted).
+func (a *App) mcpTrack(tcp bool, ln net.Listener, c net.Conn, on bool) bool {
+	a.mcpListenerMu.Lock()
+	defer a.mcpListenerMu.Unlock()
+	set, cur := &a.mcpConns, a.mcpListener
+	if tcp {
+		set, cur = &a.mcpTCPConns, a.mcpTCPListener
+	}
+	if !on {
+		delete(*set, c)
+		return true
+	}
+	if cur != ln {
+		return false
+	}
+	if *set == nil {
+		*set = map[net.Conn]bool{}
+	}
+	(*set)[c] = true
+	return true
+}
+
+// closeMcpConns ends the sessions of a stopped leg: their reads fail and
+// server.Run returns. Caller holds mcpListenerMu.
+func closeMcpConns(set map[net.Conn]bool) {
+	for c := range set {
+		_ = c.Close()
 	}
 }
 
@@ -180,6 +216,8 @@ func (a *App) stopMcpListener() {
 		_ = a.mcpListener.Close()
 		a.mcpListener = nil
 		a.mcpLocalToken = ""
+		closeMcpConns(a.mcpConns)
+		a.mcpConns = nil
 		_ = os.Remove(mcpLocalTokenPath())
 		log.Printf("mcp bridge: stopped")
 	}
@@ -192,6 +230,8 @@ func (a *App) stopMcpTCPLocked() {
 		_ = a.mcpTCPListener.Close()
 		a.mcpTCPListener = nil
 		a.mcpTCPToken = ""
+		closeMcpConns(a.mcpTCPConns)
+		a.mcpTCPConns = nil
 		_ = os.Remove(mcpTCPPath())
 		log.Printf("mcp bridge: tcp stopped")
 	}
@@ -217,7 +257,7 @@ func (a *App) acceptMcp(ln net.Listener) {
 		if err != nil {
 			return // listener closed
 		}
-		go a.serveMcpConn(conn)
+		go a.serveMcpConn(ln, conn)
 	}
 }
 
@@ -225,8 +265,12 @@ func (a *App) acceptMcp(ln net.Listener) {
 // client (bridge subprocess) gets its own server + session; tools are scoped
 // to the user's current grants at call time. The connection must present the
 // local token as its first line before any MCP traffic.
-func (a *App) serveMcpConn(conn net.Conn) {
+func (a *App) serveMcpConn(ln net.Listener, conn net.Conn) {
 	defer conn.Close()
+	if !a.mcpTrack(false, ln, conn, true) {
+		return
+	}
+	defer a.mcpTrack(false, ln, conn, false)
 	br := bufio.NewReader(conn)
 	a.mcpListenerMu.Lock()
 	want := a.mcpLocalToken

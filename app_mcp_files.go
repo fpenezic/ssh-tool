@@ -265,9 +265,9 @@ func (a *App) mcpReadFile(sessionID, remotePath string, maxBytes int) (string, e
 			mcpHumanBytes(int64(len(data))))
 	}
 	b.WriteString(")\n")
-	if utf8.Valid(data) {
+	if text, ok := mcpTextPrefix(data, int64(len(data)) < st.Size); ok {
 		b.WriteString("--- BEGIN UNTRUSTED FILE CONTENT ---\n")
-		b.Write(data)
+		b.Write(text)
 		b.WriteString("\n--- END UNTRUSTED FILE CONTENT ---")
 	} else {
 		b.WriteString("binary content, base64:\n")
@@ -279,6 +279,24 @@ func (a *App) mcpReadFile(sessionID, remotePath string, maxBytes int) (string, e
 		Command: cmd, Output: out, Exit: "ok", Gate: "auto",
 	})
 	return out, nil
+}
+
+// mcpTextPrefix reports data as text when it is UTF-8. A capped read can
+// end inside a multi-byte character: that partial tail (3 bytes at most)
+// is dropped rather than turning the whole text into base64.
+func mcpTextPrefix(data []byte, truncated bool) ([]byte, bool) {
+	if utf8.Valid(data) {
+		return data, true
+	}
+	if !truncated {
+		return nil, false
+	}
+	for cut := 1; cut <= 3 && cut <= len(data); cut++ {
+		if utf8.Valid(data[:len(data)-cut]) {
+			return data[:len(data)-cut], true
+		}
+	}
+	return nil, false
 }
 
 // mcpDownloadFile streams a remote file into the download sandbox and returns
