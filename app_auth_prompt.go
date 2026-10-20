@@ -148,6 +148,13 @@ func (a *App) SshRespondAuthPrompt(promptID string, answers []string, cancel boo
 	if !ok {
 		return fmt.Errorf("unknown prompt %s", promptID)
 	}
-	ch <- authPromptReply{answers: answers, cancelled: cancel}
-	return nil
+	// The first reply counts; a second one (double click, cancel right
+	// after submit, a reply racing the timeout) must not block on the full
+	// one-slot channel for good.
+	select {
+	case ch <- authPromptReply{answers: answers, cancelled: cancel}:
+		return nil
+	default:
+		return fmt.Errorf("prompt %s already answered", promptID)
+	}
 }

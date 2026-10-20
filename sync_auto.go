@@ -205,15 +205,18 @@ func (a *App) autoSyncReady() bool {
 	if a == nil || a.db == nil || !a.syncAutoEnabled() {
 		return false
 	}
-	// Transport must be configured: a WebDAV URL, or an SFTP host. The full
-	// validity (credential, dir, ...) is checked when syncClient builds the
-	// transport; this is just the "is anything set up" gate.
+	// Transport must be configured: a WebDAV URL, an SFTP host, or one of
+	// the OAuth drives (their account is checked when syncClient builds
+	// the transport; they have no URL, and asking for one kept auto-sync
+	// off for them). This is just the "is anything set up" gate.
 	transport, _, _ := a.db.GetSetting("sync_transport")
-	if transport == "sftp" {
+	switch transport {
+	case "sftp":
 		if v, ok, _ := a.db.GetSetting("sync_sftp_host"); !ok || v == "" {
 			return false
 		}
-	} else {
+	case "dropbox", "onedrive", "gdrive":
+	default:
 		if v, ok, _ := a.db.GetSetting("sync_webdav_url"); !ok || v == "" {
 			return false
 		}

@@ -57,6 +57,11 @@ func (a *App) NetworkProfileOpenBrowser(id, url string) (*BrowserLaunchResult, e
 	if url != "" && !strings.Contains(url, "://") {
 		url = "http://" + url
 	}
+	// The URL becomes a browser argument: only http(s), never something a
+	// browser would read as a switch.
+	if url != "" && !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		return nil, fmt.Errorf("only http and https addresses can be opened")
+	}
 	port, err := a.ensureBrowserProxy(row)
 	if err != nil {
 		return nil, err
