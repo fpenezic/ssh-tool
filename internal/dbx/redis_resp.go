@@ -162,6 +162,9 @@ func (rc *rdConn) read(depth int) (*rdReply, error) {
 	body := line[1:]
 	switch r.kind {
 	case '+', '-':
+		if rc.budget -= len(body); rc.budget < 0 {
+			return nil, errReplyTooBig
+		}
 		r.str = append([]byte(nil), body...)
 	case ':':
 		if r.num, err = strconv.ParseInt(string(body), 10, 64); err != nil {
@@ -176,9 +179,10 @@ func (rc *rdConn) read(depth int) (*rdReply, error) {
 			r.null = true
 			return r, nil
 		}
-		if rc.budget -= n; rc.budget < 0 {
+		if n > rc.budget {
 			return nil, errReplyTooBig
 		}
+		rc.budget -= n
 		r.str = make([]byte, n+2)
 		if _, err := io.ReadFull(rc.br, r.str); err != nil {
 			return nil, err
@@ -194,9 +198,10 @@ func (rc *rdConn) read(depth int) (*rdReply, error) {
 			return r, nil
 		}
 		// Each element costs its struct even when empty.
-		if rc.budget -= n * 64; rc.budget < 0 {
+		if n > rc.budget/64 {
 			return nil, errReplyTooBig
 		}
+		rc.budget -= n * 64
 		r.elems = make([]*rdReply, 0, min(n, 1024))
 		for i := 0; i < n; i++ {
 			e, err := rc.read(depth + 1)
