@@ -1652,6 +1652,9 @@
   const ocEmpty = (): import("./api").OpenConnectConfig => ({ server: "", flavor: "anyconnect", second_password: "prompt", password_credential_id: "", second_credential_id: "", client_cert_credential_id: "" });
   let oc = $state<import("./api").OpenConnectConfig>(ocEmpty());
   let ocMtu = $state("");
+  // Backup gateways, one per line; their trusted certificates stay in the
+  // backend, which carries them over by address.
+  let ocBackups = $state("");
   // Inline secrets typed on the profile form: stored as credentials in the
   // vault when the profile is added / saved, then referenced by id.
   let ocNewPassword = $state("");
@@ -1901,7 +1904,8 @@
 
   function ocConfigFromForm(): import("./api").OpenConnectConfig {
     const n = parseInt(ocMtu, 10);
-    return { ...oc, server: oc.server.trim(), mtu: isNaN(n) ? 0 : n };
+    const backups = ocBackups.split("\n").map((l) => l.trim()).filter(Boolean).map((server) => ({ server }));
+    return { ...oc, server: oc.server.trim(), backups, mtu: isNaN(n) ? 0 : n };
   }
   async function npCreateOpenConnect() {
     npBusy = true;
@@ -2281,6 +2285,7 @@
       oc = { ...ocEmpty(), ...(np.openconnect ?? {}) };
       ocResetInline();
       ocMtu = np.openconnect?.mtu ? String(np.openconnect.mtu) : "";
+      ocBackups = (np.openconnect?.backups ?? []).map((b) => b.server).join("\n");
       return;
     }
     if (np.kind === "tailscale") {
@@ -2304,7 +2309,7 @@
     nbManagement = ""; nbDevice = ""; nbCredId = "";
     tsControl = ""; tsHostname = ""; tsCredId = "";
     tsNewKeyOpen = false; tsNewKeyName = ""; tsNewKeySecret = "";
-    oc = ocEmpty(); ocMtu = "";
+    oc = ocEmpty(); ocMtu = ""; ocBackups = "";
     ocResetInline();
     ov = ovEmpty();
     ovResetInline();
@@ -2538,7 +2543,10 @@
       case "netbird": return [kindTitle(np.kind), np.netbird?.device_name || "ssh-tool", np.netbird?.management_url].filter(Boolean).join(" - ");
       case "tailscale": return [kindTitle(np.kind), np.tailscale?.hostname || "ssh-tool", np.tailscale?.control_url].filter(Boolean).join(" - ");
       case "openvpn": return [kindTitle(np.kind), np.openvpn?.server, np.openvpn?.static_key].filter(Boolean).join(" - ");
-      case "openconnect": return [npKindLine(np), np.openconnect?.server].filter(Boolean).join(" - ");
+      case "openconnect": {
+        const n = np.openconnect?.backups?.length ?? 0;
+        return [npKindLine(np), np.openconnect?.server, n && `+${n} backup`].filter(Boolean).join(" - ");
+      }
       case "checkpoint": return [kindTitle(np.kind), np.checkpoint?.server, np.checkpoint?.login_option].filter(Boolean).join(" - ");
       default: return [kindTitle(np.kind), np.profile.peers?.[0]?.endpoint].filter(Boolean).join(" - ");
     }
@@ -4111,6 +4119,10 @@
         <label class="oc-field" title="Address or URL, with the group path if the gateway uses one">
           <span>Gateway</span>
           <input bind:value={oc.server} placeholder="vpn.example.com/group" />
+        </label>
+        <label class="oc-field oc-span" title="Further gateways of the same VPN, tried in order when the one before does not answer at all. A rejected login is not tried elsewhere.">
+          <span>Backup gateways <span class="hint inline">(one per line, optional)</span></span>
+          <textarea rows="2" class="mono" bind:value={ocBackups} placeholder="vpn2.example.com/group"></textarea>
         </label>
 
         <label class="oc-field" title="Blank = the password credential's username, else asked at login">

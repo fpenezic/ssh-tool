@@ -231,7 +231,7 @@ func pluginKindUnsupported(kind string) error {
 func (a *App) tunnelStop(profileID string) {
 	a.wgman.Stop(profileID)
 	a.nbman.Stop(profileID) // ends an OpenConnect session at the gateway too
-	ocSessionSet(profileID, "")
+	ocSessionSet(profileID, "", "")
 	go a.presenceClear(profileID)
 }
 

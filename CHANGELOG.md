@@ -14,6 +14,10 @@ a prerelease upstream.
 - The Database and Kafka cards of the **Services** tab fold: a click on the arrow or the title hides the card and leaves a summary (engine and number of databases, Kafka's brokers), so Kafka stays in reach under a host with many databases. The folded state is remembered.
 - Esc closes a right-click menu (and the Open button's menu) again, and focus goes back to where it was.
 
+### Network profiles
+
+- **Backup gateways for OpenConnect profiles.** A profile can list further gateways of the same VPN (FortiClient's remote gateway list, also for the other OpenConnect types). Connect moves to the next one only when a gateway does not answer at all; a rejected login is not tried on the others. Each gateway keeps its own trusted certificate. Needs OpenConnect plugin v1.3.
+
 ## [0.117.0] - ClickHouse, OpenSearch and Redis in the Database tab
 
 The Database tab now opens ClickHouse, OpenSearch / Elasticsearch and Redis next to PostgreSQL and MySQL, all through the connection's SSH session. Results can be sorted and searched, and a connection's database and Kafka settings share one Services tab with one Open button.
