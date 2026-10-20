@@ -202,7 +202,7 @@ type InheritableSettings struct {
 	// Database section. Opt-in like Kafka. Tri-state inheritance, so a
 	// folder of database hosts sets engine, port and login once.
 	DbEnabled *bool `json:"db_enabled,omitempty"`
-	// DbEngine is "postgres" or "mysql" (MySQL and MariaDB).
+	// DbEngine is "postgres", "mysql" (MySQL and MariaDB) or "clickhouse".
 	DbEngine *string `json:"db_engine,omitempty"`
 	// DbAddr is host[:port] as seen from wherever the database is dialed
 	// from: the connection's host when DbUseTunnel, else this machine or

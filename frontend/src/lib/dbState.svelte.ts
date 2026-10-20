@@ -8,7 +8,7 @@
 // that did not open the tab shows the same tabs. Results stay in the
 // window that ran them.
 
-import { api, type Connection, type DbHandleInfo, type DbResult } from "./api";
+import { api, dbEngineInfo, type Connection, type DbHandleInfo, type DbResult } from "./api";
 import { tree, selection } from "./stores.svelte";
 
 export type DbTabKind = "query" | "table";
@@ -196,7 +196,7 @@ export function dbTreeRows(conn: Connection | null | undefined): DbTreeRow[] {
       id: "",
       label: o.db_label || o.db_name || "database",
       isDefault: def === "",
-      detail: [o.db_label && o.db_name ? o.db_name : "", engine === "mysql" ? "MySQL" : engine === "postgres" ? "PostgreSQL" : "", o.db_read_only ? "read-only" : ""]
+      detail: [o.db_label && o.db_name ? o.db_name : "", engine ? dbEngineInfo(engine).short : "", o.db_read_only ? "read-only" : ""]
         .filter(Boolean).join(" · "),
     });
   }
@@ -206,7 +206,7 @@ export function dbTreeRows(conn: Connection | null | undefined): DbTreeRow[] {
       id: t.id,
       label: t.name || t.database || "database",
       isDefault: def === t.id,
-      detail: [t.name && t.database ? t.database : "", t.engine === "mysql" ? "MySQL" : t.engine === "postgres" ? "PostgreSQL" : "", t.read_only ? "read-only" : ""]
+      detail: [t.name && t.database ? t.database : "", t.engine ? dbEngineInfo(t.engine).short : "", t.read_only ? "read-only" : ""]
         .filter(Boolean).join(" · "),
     });
   }

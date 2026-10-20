@@ -1,6 +1,6 @@
 // Package dbx is the SQL client behind a connection's Database tab:
 // databases, tables and their structure, browsing rows, and query sessions
-// for PostgreSQL and MySQL / MariaDB.
+// for PostgreSQL, MySQL / MariaDB and ClickHouse.
 //
 // Every database connection is opened by Config.Dial. The app hands in a
 // dialer that opens a direct-tcpip channel on the connection's SSH session
@@ -31,14 +31,18 @@ import (
 
 // Engines, as stored in the db_engine setting.
 const (
-	EnginePostgres = "postgres"
-	EngineMySQL    = "mysql"
+	EnginePostgres   = "postgres"
+	EngineMySQL      = "mysql"
+	EngineClickHouse = "clickhouse"
 )
 
 // DefaultPort is the port an address without one gets.
 func DefaultPort(engine string) int {
-	if engine == EngineMySQL {
+	switch engine {
+	case EngineMySQL:
 		return 3306
+	case EngineClickHouse:
+		return 8123 // the HTTP interface
 	}
 	return 5432
 }
@@ -286,6 +290,8 @@ func Open(cfg Config) (*Handle, error) {
 		h.eng = newPG(cfg)
 	case EngineMySQL:
 		h.eng = newMy(cfg)
+	case EngineClickHouse:
+		h.eng = newCH(cfg)
 	default:
 		return nil, fmt.Errorf("unknown database engine %q", cfg.Engine)
 	}

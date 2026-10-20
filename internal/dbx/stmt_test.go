@@ -36,6 +36,13 @@ func TestSplit(t *testing.T) {
 		{EnginePostgres, "SELECT 'unterminated; still one", []string{"SELECT 'unterminated; still one"}},
 		{EnginePostgres, "/* a /* b; */ c; */ SELECT 1; SELECT 2", []string{"/* a /* b; */ c; */ SELECT 1", "SELECT 2"}},
 		{EngineMySQL, "/* a /* b */ SELECT 1; SELECT 2", []string{"/* a /* b */ SELECT 1", "SELECT 2"}},
+		// ClickHouse: backslash escapes in every quote, # comments, nested
+		// block comments, heredocs, and "--1" is a comment as on Postgres.
+		{EngineClickHouse, "SELECT 'a\\';b', `c\\`;d`, \"e\\\";f\"; SELECT 2", []string{"SELECT 'a\\';b', `c\\`;d`, \"e\\\";f\"", "SELECT 2"}},
+		{EngineClickHouse, "# x; y\nSELECT 1", []string{"# x; y\nSELECT 1"}},
+		{EngineClickHouse, "/* a /* b; */ c; */ SELECT 1; SELECT 2", []string{"/* a /* b; */ c; */ SELECT 1", "SELECT 2"}},
+		{EngineClickHouse, "SELECT $$x;y$$; SELECT $t$a;b$t$", []string{"SELECT $$x;y$$", "SELECT $t$a;b$t$"}},
+		{EngineClickHouse, "SELECT 3 --1; DROP TABLE t\nSELECT 4", []string{"SELECT 3 --1; DROP TABLE t\nSELECT 4"}},
 	}
 	for _, c := range cases {
 		if got := texts(Split(c.engine, c.script)); !reflect.DeepEqual(got, c.want) && !(len(got) == 0 && len(c.want) == 0) {
@@ -213,5 +220,28 @@ func TestRedactSecretsAcrossComments(t *testing.T) {
 		if got := RedactSecrets(c.engine, c.in); got != c.want {
 			t.Errorf("%q -> %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestCheckReadOnlyClickHouse(t *testing.T) {
+	for _, s := range []string{
+		"SELECT 1", "EXISTS TABLE t", "SHOW TABLES", "DESCRIBE TABLE t", "EXPLAIN SELECT 1",
+		"WITH 1 AS x SELECT x", "SELECT 1 FORMAT JSONEachRow", "SELECT 'INSERT' # INSERT\n",
+	} {
+		if err := CheckReadOnly(EngineClickHouse, s); err != nil {
+			t.Errorf("%q refused: %v", s, err)
+		}
+	}
+	for _, s := range []string{
+		"INSERT INTO t VALUES (1)", "ALTER TABLE t DELETE WHERE 1", "OPTIMIZE TABLE t FINAL", "SYSTEM FLUSH LOGS",
+		"SET readonly = 0", "KILL QUERY WHERE 1", "SELECT * FROM t INTO OUTFILE 'x'", "TRUNCATE t", "USE db",
+		"/* c */ DROP TABLE t", "RENAME TABLE a TO b", "EXCHANGE TABLES a AND b",
+	} {
+		if err := CheckReadOnly(EngineClickHouse, s); err == nil {
+			t.Errorf("%q allowed", s)
+		}
+	}
+	if CheckReadOnly(EnginePostgres, "EXISTS TABLE t") == nil {
+		t.Error("EXISTS is a read only on ClickHouse")
 	}
 }

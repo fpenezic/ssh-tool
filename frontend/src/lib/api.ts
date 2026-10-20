@@ -216,7 +216,18 @@ export interface DbTarget {
 
 // ----- Database (app_db.go / internal/dbx) -----
 
-export type DbEngine = "postgres" | "mysql";
+export type DbEngine = "postgres" | "mysql" | "clickhouse";
+
+// Engine names and default ports, as the settings and badges show them.
+export const DB_ENGINES: { value: DbEngine; label: string; short: string; port: number }[] = [
+  { value: "postgres", label: "PostgreSQL", short: "PostgreSQL", port: 5432 },
+  { value: "mysql", label: "MySQL / MariaDB", short: "MySQL", port: 3306 },
+  { value: "clickhouse", label: "ClickHouse (HTTP)", short: "ClickHouse", port: 8123 },
+];
+
+export function dbEngineInfo(engine: string | null | undefined) {
+  return DB_ENGINES.find((e) => e.value === engine) ?? DB_ENGINES[0];
+}
 
 export interface DbHandleInfo {
   id: string;

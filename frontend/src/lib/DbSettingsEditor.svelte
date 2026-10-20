@@ -7,7 +7,7 @@
   import { DB_NONE, newTargetId, type DbDraft } from "./dbDraft";
   import { createLoginCredential } from "./loginModal.svelte.ts";
   import { IconPlus, IconTrash } from "./iconMap";
-  import type { DbTarget } from "./api";
+  import { DB_ENGINES, dbEngineInfo, type DbTarget } from "./api";
 
   interface Props {
     draft: DbDraft;
@@ -78,7 +78,7 @@
       .map((g) => ({ value: g.cred.id, label: g.label })),
   );
   const engine = $derived(draft.engine || effectiveEngine || "postgres");
-  const port = $derived(engine === "mysql" ? 3306 : 5432);
+  const port = $derived(dbEngineInfo(engine).port);
 
   function cycle() {
     draft = { ...draft, enabled: draft.enabled === "on" ? "off" : "on" };
@@ -121,13 +121,12 @@
       {/if}
       <label>Engine
         <select bind:value={draft.engine}>
-          <option value="">{inheritLabel}{effectiveEngine ? ` · ${effectiveEngine === "mysql" ? "MySQL / MariaDB" : "PostgreSQL"}` : " · PostgreSQL"}</option>
-          <option value="postgres">PostgreSQL</option>
-          <option value="mysql">MySQL / MariaDB</option>
+          <option value="">{inheritLabel} · {dbEngineInfo(effectiveEngine).label}</option>
+          {#each DB_ENGINES as e (e.value)}<option value={e.value}>{e.label}</option>{/each}
         </select>
       </label>
       <label title="Host and port as seen from where the database is dialed: the SSH host when reached through SSH (usually 127.0.0.1 on the database host itself). Empty: 127.0.0.1 and the engine's port.">Address
-        <input bind:value={draft.addr} placeholder={`127.0.0.1:${port}`} spellcheck="false" />
+        <input bind:value={draft.addr} placeholder={engine === "clickhouse" ? `127.0.0.1:${port} (8443 with TLS)` : `127.0.0.1:${port}`} spellcheck="false" />
       </label>
       <label title="The database the tab opens first. Empty: the server's default for the login.">Database
         <input bind:value={draft.name} placeholder={inheritLabel === "(inherit from folder)" ? "(inherit) e.g. app" : "e.g. app"} spellcheck="false" />
@@ -196,8 +195,7 @@
             <label>Engine
               <select value={t.engine ?? ""} onchange={(e) => updateTarget(i, { engine: (e.currentTarget as HTMLSelectElement).value || undefined })}>
                 <option value="">(as above)</option>
-                <option value="postgres">PostgreSQL</option>
-                <option value="mysql">MySQL / MariaDB</option>
+                {#each DB_ENGINES as e (e.value)}<option value={e.value}>{e.label}</option>{/each}
               </select>
             </label>
             <label>Address

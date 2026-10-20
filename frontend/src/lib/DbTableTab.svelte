@@ -28,7 +28,7 @@
   let loading = $state(false);
 
   const qname = $derived(
-    info.engine === "mysql"
+    info.engine === "mysql" || info.engine === "clickhouse"
       ? "`" + (tab.name ?? "").replace(/`/g, "``") + "`"
       : (tab.schema && tab.schema !== "public" ? `"${tab.schema.replace(/"/g, '""')}".` : "") + `"${(tab.name ?? "").replace(/"/g, '""')}"`,
   );
