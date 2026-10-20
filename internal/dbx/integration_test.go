@@ -11,6 +11,9 @@ package dbx_test
 //	  a login whose profile has readonly = 1)
 //	DBTEST_OS=opensearch://admin:secret@127.0.0.1:9200?tls=require
 //	DBTEST_ES=opensearch://elastic:secret@127.0.0.1:9201 (Elasticsearch)
+//	DBTEST_REDIS=redis://app:secret@127.0.0.1:6379 (uses db3 and db4, flushed)
+//	DBTEST_REDIS_READER=redis://reader:secret@127.0.0.1:6379 (optional: an ACL
+//	  user limited to reads)
 //
 // e.g. with docker:
 //
@@ -19,6 +22,7 @@ package dbx_test
 //	docker run -d -e CLICKHOUSE_USER=app -e CLICKHOUSE_PASSWORD=secret -e CLICKHOUSE_DB=appdb -p 127.0.0.1:8123:8123 clickhouse/clickhouse-server:25.8
 //	docker run -d -e discovery.type=single-node -e OPENSEARCH_INITIAL_ADMIN_PASSWORD=<strong> -p 127.0.0.1:9200:9200 opensearchproject/opensearch:2.19.3
 //	docker run -d -e discovery.type=single-node -e ELASTIC_PASSWORD=secret -e xpack.security.http.ssl.enabled=false -p 127.0.0.1:9201:9200 docker.elastic.co/elasticsearch/elasticsearch:8.19.4
+//	docker run -d -p 127.0.0.1:6379:6379 redis:7.4 redis-server --user default off --user app on '>secret' '~*' '&*' '+@all' --user reader on '>secret' '~*' '+@read' '+@connection' '-@dangerous'
 //
 // Each run creates and drops its own tables (dbx_it_*; indices on
 // OpenSearch).

@@ -216,7 +216,7 @@ export interface DbTarget {
 
 // ----- Database (app_db.go / internal/dbx) -----
 
-export type DbEngine = "postgres" | "mysql" | "clickhouse" | "opensearch";
+export type DbEngine = "postgres" | "mysql" | "clickhouse" | "opensearch" | "redis";
 
 // Engine names and default ports, as the settings and badges show them.
 export const DB_ENGINES: { value: DbEngine; label: string; short: string; port: number }[] = [
@@ -224,6 +224,7 @@ export const DB_ENGINES: { value: DbEngine; label: string; short: string; port: 
   { value: "mysql", label: "MySQL / MariaDB", short: "MySQL", port: 3306 },
   { value: "clickhouse", label: "ClickHouse (HTTP)", short: "ClickHouse", port: 8123 },
   { value: "opensearch", label: "OpenSearch / Elasticsearch", short: "OpenSearch", port: 9200 },
+  { value: "redis", label: "Redis / Valkey", short: "Redis", port: 6379 },
 ];
 
 export function dbEngineInfo(engine: string | null | undefined) {

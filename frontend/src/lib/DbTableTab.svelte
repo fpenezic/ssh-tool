@@ -33,6 +33,17 @@
       : (tab.schema && tab.schema !== "public" ? `"${tab.schema.replace(/"/g, '""')}".` : "") + `"${(tab.name ?? "").replace(/"/g, '""')}"`,
   );
 
+  // The query a "Query" click starts with, in the engine's language.
+  function queryText(): string {
+    const name = tab.name ?? "";
+    if (info.engine === "opensearch") return `GET /${name}/_search\n{\n  "query": { "match_all": {} },\n  "size": 100\n}`;
+    if (info.engine === "redis") {
+      const glob = name.endsWith(":*") ? name.slice(0, -1).replace(/[*?[\]\\]/g, "\\$&") + "*" : "*";
+      return `SCAN 0 MATCH "${glob.replace(/["\\]/g, "\\$&")}" COUNT 1000`;
+    }
+    return `SELECT *\nFROM ${qname}\nLIMIT 100;`;
+  }
+
   async function loadPage() {
     loading = true;
     err = null;
@@ -88,9 +99,7 @@
       <button disabled={loading || !page || (page.rows ?? []).length < PAGE} onclick={() => go(PAGE)}>Next</button>
     {/if}
     <span class="spacer"></span>
-    <button title="Open a query tab on this table" onclick={() => onQuery(info.engine === "opensearch"
-      ? `GET /${tab.name ?? ""}/_search\n{\n  "query": { "match_all": {} },\n  "size": 100\n}`
-      : `SELECT *\nFROM ${qname}\nLIMIT 100;`)}><IconSql size={13} /> Query</button>
+    <button title="Open a query tab on this table" onclick={() => onQuery(queryText())}><IconSql size={13} /> Query</button>
     <button title="Reload" onclick={refresh}><IconRefresh size={13} /></button>
   </div>
   <div class="body">

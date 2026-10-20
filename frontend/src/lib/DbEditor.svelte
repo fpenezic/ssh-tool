@@ -59,6 +59,10 @@
     // console requests and SQL: MySQL's double-quoted strings colour the
     // JSON bodies too.
     const dialect = eng === "postgres" ? PostgreSQL : MySQL;
+    if (eng === "redis") {
+      // Commands, not SQL: no highlighting to get wrong.
+      return cmPlaceholder("One command per line: GET key, HGETALL key, SCAN 0 MATCH user:*   Ctrl+Enter runs the line under the cursor, Ctrl+Shift+Enter all of them");
+    }
     const hint = eng === "opensearch"
       ? "GET /index/_search with the JSON body below it, or SELECT ...   Ctrl+Enter runs the request or statement under the cursor, Ctrl+Shift+Enter the whole script"
       : "SELECT ...   Ctrl+Enter runs the statement under the cursor, Ctrl+Shift+Enter the whole script";
