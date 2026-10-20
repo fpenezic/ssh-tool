@@ -1604,7 +1604,7 @@ In the connection editor (or a folder's), the **Database** tab:
 - **Address** - host and port as seen from where the database is dialed:
   from the SSH host when it runs there or behind it. Empty means
   `127.0.0.1` and the engine's port (5432 / 3306 / 8123; ClickHouse with
-  TLS listens on 8443, so give that port).
+  TLS on takes 8443).
 - **Database** - the one the tab opens first; empty takes the server's
   default for the login.
 - **Login** - a password credential whose default username and password are

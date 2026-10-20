@@ -36,12 +36,16 @@ const (
 	EngineClickHouse = "clickhouse"
 )
 
-// DefaultPort is the port an address without one gets.
-func DefaultPort(engine string) int {
+// DefaultPort is the port an address without one gets. tls matters to
+// ClickHouse only, whose HTTPS interface has a port of its own.
+func DefaultPort(engine, tls string) int {
 	switch engine {
 	case EngineMySQL:
 		return 3306
 	case EngineClickHouse:
+		if tls == TLSRequire || tls == TLSVerifyFull {
+			return 8443
+		}
 		return 8123 // the HTTP interface
 	}
 	return 5432
@@ -86,8 +90,9 @@ type Config struct {
 	AppName string
 }
 
-// ParseAddr fills in the engine's default port; "" means localhost.
-func ParseAddr(engine, s string) (string, error) {
+// ParseAddr fills in the engine's default port (see DefaultPort); "" means
+// localhost.
+func ParseAddr(engine, tls, s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		s = "127.0.0.1"
@@ -95,7 +100,7 @@ func ParseAddr(engine, s string) (string, error) {
 	host, port, err := net.SplitHostPort(s)
 	if err != nil {
 		if strings.Contains(err.Error(), "missing port") {
-			return net.JoinHostPort(strings.Trim(s, "[]"), strconv.Itoa(DefaultPort(engine))), nil
+			return net.JoinHostPort(strings.Trim(s, "[]"), strconv.Itoa(DefaultPort(engine, tls))), nil
 		}
 		return "", fmt.Errorf("database address %q: %w", s, err)
 	}
@@ -276,7 +281,7 @@ var ErrClosed = errors.New("database handle closed")
 
 // Open prepares a handle. No I/O: the first call connects.
 func Open(cfg Config) (*Handle, error) {
-	addr, err := ParseAddr(cfg.Engine, cfg.Addr)
+	addr, err := ParseAddr(cfg.Engine, cfg.TLS, cfg.Addr)
 	if err != nil {
 		return nil, err
 	}

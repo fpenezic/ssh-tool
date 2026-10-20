@@ -126,7 +126,7 @@
         </select>
       </label>
       <label title="Host and port as seen from where the database is dialed: the SSH host when reached through SSH (usually 127.0.0.1 on the database host itself). Empty: 127.0.0.1 and the engine's port.">Address
-        <input bind:value={draft.addr} placeholder={engine === "clickhouse" ? `127.0.0.1:${port} (8443 with TLS)` : `127.0.0.1:${port}`} spellcheck="false" />
+        <input bind:value={draft.addr} placeholder={engine === "clickhouse" ? "127.0.0.1:8123 (8443 with TLS)" : `127.0.0.1:${port}`} spellcheck="false" />
       </label>
       <label title="The database the tab opens first. Empty: the server's default for the login.">Database
         <input bind:value={draft.name} placeholder={inheritLabel === "(inherit from folder)" ? "(inherit) e.g. app" : "e.g. app"} spellcheck="false" />
@@ -146,7 +146,9 @@
           <option value="off">Direct / from the jump host</option>
         </select>
       </label>
-      <label title="Read-only: every statement runs in a READ ONLY transaction that is rolled back, and only SELECT / WITH / SHOW / EXPLAIN / VALUES / TABLE / DESCRIBE are sent. A login with read-only grants is the real guarantee.">Writes
+      <label title={engine === "clickhouse"
+        ? "Read-only: only SELECT / WITH / SHOW / EXPLAIN / DESCRIBE / EXISTS are sent, each with the server's readonly setting (ClickHouse has no transactions). A login with read-only grants is the real guarantee."
+        : "Read-only: every statement runs in a READ ONLY transaction that is rolled back, and only SELECT / WITH / SHOW / EXPLAIN / VALUES / TABLE / DESCRIBE are sent. A login with read-only grants is the real guarantee."}>Writes
         <select bind:value={draft.readOnly}>
           <option value="">{inheritLabel} · {inheritedReadOnly ? "read-only" : "allowed"}</option>
           <option value="off">Allowed</option>
