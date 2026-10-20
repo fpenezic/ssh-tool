@@ -6,11 +6,15 @@ package dbx_test
 //
 //	DBTEST_PG=postgres://postgres:secret@127.0.0.1:5432/appdb
 //	DBTEST_MYSQL=mysql://root:secret@127.0.0.1:3306/appdb
+//	DBTEST_CH=clickhouse://app:secret@127.0.0.1:8123/appdb
+//	DBTEST_CH_READER=clickhouse://reader:secret@127.0.0.1:8123/appdb (optional:
+//	  a login whose profile has readonly = 1)
 //
 // e.g. with docker:
 //
 //	docker run -d -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=appdb -p 127.0.0.1:5432:5432 postgres:17
 //	docker run -d -e MYSQL_ROOT_PASSWORD=secret -e MYSQL_DATABASE=appdb -p 127.0.0.1:3306:3306 mysql:8.4
+//	docker run -d -e CLICKHOUSE_USER=app -e CLICKHOUSE_PASSWORD=secret -e CLICKHOUSE_DB=appdb -p 127.0.0.1:8123:8123 clickhouse/clickhouse-server:25.8
 //
 // Each run creates and drops its own tables (dbx_it_*).
 
@@ -37,7 +41,11 @@ type itServer struct {
 }
 
 func itSetup(t *testing.T, engine string) *itServer {
-	env := map[string]string{dbx.EnginePostgres: "DBTEST_PG", dbx.EngineMySQL: "DBTEST_MYSQL"}[engine]
+	env := map[string]string{dbx.EnginePostgres: "DBTEST_PG", dbx.EngineMySQL: "DBTEST_MYSQL", dbx.EngineClickHouse: "DBTEST_CH"}[engine]
+	return itSetupEnv(t, engine, env)
+}
+
+func itSetupEnv(t *testing.T, engine, env string) *itServer {
 	raw := os.Getenv(env)
 	if raw == "" {
 		t.Skipf("%s not set", env)

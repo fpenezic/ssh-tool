@@ -54,7 +54,7 @@ type mcpDbTablesArgs struct {
 type mcpDbTableArgs struct {
 	SessionID string `json:"session_id" jsonschema:"the id of a shared Database session"`
 	Database  string `json:"database,omitempty" jsonschema:"the database (default: the one the connection opens)"`
-	Schema    string `json:"schema,omitempty" jsonschema:"the schema (PostgreSQL; default public). Empty on MySQL"`
+	Schema    string `json:"schema,omitempty" jsonschema:"the schema (PostgreSQL; default public). Empty on MySQL and ClickHouse"`
 	Table     string `json:"table" jsonschema:"the table or view name"`
 }
 

@@ -8,7 +8,7 @@
   import PaneNodeSelf from "./PaneNode.svelte";
   import { paneTabs, sessions, drag, tree, view, mcpShared, mcpBridge, type PaneNode } from "./stores.svelte";
   import { fleet, TLS_WARN_DAYS } from "./fleetStore.svelte";
-  import { api } from "./api";
+  import { api, dbEngineInfo } from "./api";
   import { copyText, copySensitive } from "./clipboard";
   import {
     IconHost, IconUser, IconLock, IconClipboardCopy, IconFolder,
@@ -805,7 +805,7 @@
             <span class="kafka-badge ro" title="Writes are refused on this connection (Kafka read-only)">read-only</span>
           {/if}
           {:else if dbInfo}
-          <span class="kafka-badge" title="{dbInfo.engine === 'mysql' ? 'MySQL' : 'PostgreSQL'} at {dbInfo.addr} as {dbInfo.user}">
+          <span class="kafka-badge" title="{dbEngineInfo(dbInfo.engine).short} at {dbInfo.addr} as {dbInfo.user}">
             {dbInfo.transport === "tunnel" ? "via SSH" : dbInfo.transport.startsWith("jump:") ? `via ${dbInfo.transport.slice(5)}` : "direct"}
             {#if dbInfo.tls !== "disable"} · TLS{/if}
           </span>

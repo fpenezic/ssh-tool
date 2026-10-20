@@ -54,7 +54,10 @@
   function sqlFor(eng: string, names: string[]) {
     const schema: Record<string, string[]> = {};
     for (const n of names) schema[n] = [];
-    return sql({ dialect: eng === "mysql" ? MySQL : PostgreSQL, schema, upperCaseKeywords: true });
+    // ClickHouse has no dialect of its own here; MySQL's quoting (backticks,
+    // backslash escapes, # comments) is the closest.
+    const dialect = eng === "mysql" || eng === "clickhouse" ? MySQL : PostgreSQL;
+    return sql({ dialect, schema, upperCaseKeywords: true });
   }
 
   onMount(() => {

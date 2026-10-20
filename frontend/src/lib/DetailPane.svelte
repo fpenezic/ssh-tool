@@ -8,7 +8,7 @@
   import { writeClipboard, readClipboard } from "./clipboard";
   import PasswordInput from "./PasswordInput.svelte";
   import { effectiveAuthRef, isKeyAuthKind, isSelectableSSHCred } from "./authWarning";
-  import { api, type ResolvedSettings, type JumpHostOverride } from "./api";
+  import { api, dbEngineInfo, type ResolvedSettings, type JumpHostOverride } from "./api";
   import { showPrompt } from "./promptModal.svelte.ts";
   import JumpChainEditor from "./JumpChainEditor.svelte";
   import PortForwards from "./PortForwards.svelte";
@@ -2831,7 +2831,7 @@
             </tr>
             <tr>
               <td>database</td>
-              <td>{resolved.db_enabled ? `${resolved.db_engine === "mysql" ? "MySQL" : "PostgreSQL"} ${resolved.db_addr || "127.0.0.1"}${resolved.db_name ? "/" + resolved.db_name : ""} · ${resolved.db_use_tunnel ? "through SSH" : "direct"}${resolved.db_read_only ? " · read-only" : ""}${resolved.db_tls !== "disable" ? ` · TLS ${resolved.db_tls}` : ""}${resolved.db_credential_ref ? "" : " · no login"}` : "off"}</td>
+              <td>{resolved.db_enabled ? `${dbEngineInfo(resolved.db_engine).short} ${resolved.db_addr || "127.0.0.1"}${resolved.db_name ? "/" + resolved.db_name : ""} · ${resolved.db_use_tunnel ? "through SSH" : "direct"}${resolved.db_read_only ? " · read-only" : ""}${resolved.db_tls !== "disable" ? ` · TLS ${resolved.db_tls}` : ""}${resolved.db_credential_ref ? "" : " · no login"}` : "off"}</td>
               <td>{Object.keys(ovr).some((k) => k.startsWith("db_")) ? "override" : "inherited"}</td>
             </tr>
             <tr>

@@ -80,15 +80,16 @@ func skipNonCode(engine, s string, i int) int {
 			return i
 		}
 		return lineEnd(s, i)
-	case c == '#' && engine == EngineMySQL:
+	case c == '#' && (engine == EngineMySQL || engine == EngineClickHouse):
 		return lineEnd(s, i)
 	case c == '/' && strings.HasPrefix(s[i:], "/*!") && engine == EngineMySQL:
 		// An executable comment is code to MySQL ("SELECT 1 /*!INTO
 		// OUTFILE ...*/"), so it is not skipped like a comment.
 		return i
 	case c == '/' && strings.HasPrefix(s[i:], "/*"):
-		// Postgres nests block comments: "/* a /* b */ c */" is one
-		// comment, and ending it at the first "*/" would read c as code.
+		// Postgres and ClickHouse nest block comments: "/* a /* b */ c */"
+		// is one comment, and ending it at the first "*/" would read c as
+		// code.
 		depth := 1
 		for j := i + 2; j+1 < len(s); j++ {
 			switch {
@@ -97,21 +98,23 @@ func skipNonCode(engine, s string, i int) int {
 					return j + 2
 				}
 				j++
-			case s[j] == '/' && s[j+1] == '*' && engine == EnginePostgres:
+			case s[j] == '/' && s[j+1] == '*' && (engine == EnginePostgres || engine == EngineClickHouse):
 				depth++
 				j++
 			}
 		}
 		return len(s)
 	case c == '\'':
-		// MySQL strings take backslash escapes; Postgres only in E'...'.
-		backslash := engine == EngineMySQL || (i > 0 && (s[i-1] == 'E' || s[i-1] == 'e'))
+		// MySQL and ClickHouse strings take backslash escapes; Postgres
+		// only in E'...'.
+		backslash := engine == EngineMySQL || engine == EngineClickHouse || (i > 0 && (s[i-1] == 'E' || s[i-1] == 'e'))
 		return quoted(s, i, '\'', backslash)
 	case c == '"':
-		return quoted(s, i, '"', engine == EngineMySQL)
-	case c == '`' && engine == EngineMySQL:
-		return quoted(s, i, '`', false)
-	case c == '$' && engine == EnginePostgres:
+		return quoted(s, i, '"', engine == EngineMySQL || engine == EngineClickHouse)
+	case c == '`' && (engine == EngineMySQL || engine == EngineClickHouse):
+		return quoted(s, i, '`', engine == EngineClickHouse)
+	case c == '$' && (engine == EnginePostgres || engine == EngineClickHouse):
+		// Postgres dollar quotes; ClickHouse heredocs ($$...$$, $tag$...$tag$).
 		if tag, ok := dollarTag(s, i); ok {
 			if j := strings.Index(s[i+len(tag):], tag); j >= 0 {
 				return i + len(tag) + j + len(tag)
@@ -204,6 +207,12 @@ var readKeywords = map[string]bool{
 	"VALUES": true, "TABLE": true, "DESCRIBE": true, "DESC": true,
 }
 
+// readLead reports a read keyword for engine: ClickHouse adds EXISTS
+// (EXISTS TABLE t).
+func readLead(engine, k string) bool {
+	return readKeywords[k] || (engine == EngineClickHouse && k == "EXISTS")
+}
+
 // IsRead reports whether a statement only reads: it starts with a read
 // keyword and has none of the forms that write under one - a data-changing
 // CTE (WITH d AS (DELETE ...)), EXPLAIN ANALYZE (which runs the statement),
@@ -211,7 +220,7 @@ var readKeywords = map[string]bool{
 // MySQL).
 func IsRead(engine, stmt string) bool {
 	lead := leadKeyword(engine, stmt)
-	if !readKeywords[lead] {
+	if !readLead(engine, lead) {
 		return false
 	}
 	words := codeWords(engine, stmt)
@@ -256,7 +265,7 @@ func codeWords(engine, stmt string) map[string]bool {
 // is lost, which is what the mysql CLI shows for it too.
 func returnsRows(engine, stmt string) bool {
 	k := leadKeyword(engine, stmt)
-	return readKeywords[k] || k == "CALL" || k == "CHECK" || k == "ANALYZE" ||
+	return readLead(engine, k) || k == "CALL" || k == "CHECK" || k == "ANALYZE" ||
 		k == "OPTIMIZE" || k == "REPAIR" || k == "HELP"
 }
 
@@ -267,7 +276,7 @@ func returnsRows(engine, stmt string) bool {
 // escapes the transaction.
 func CheckReadOnly(engine, stmt string) error {
 	k := leadKeyword(engine, stmt)
-	if !readKeywords[k] {
+	if !readLead(engine, k) {
 		return fmt.Errorf("read-only connection: %s statements are not allowed", strings.ToLower(orWord(k)))
 	}
 	if !IsRead(engine, stmt) {

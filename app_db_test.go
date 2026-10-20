@@ -75,6 +75,9 @@ func TestDbOpenRefuses(t *testing.T) {
 
 func TestDbIPCTunnelPostgres(t *testing.T) { dbIPCTunnel(t, dbx.EnginePostgres, "DBTEST_PG") }
 func TestDbIPCTunnelMySQL(t *testing.T)    { dbIPCTunnel(t, dbx.EngineMySQL, "DBTEST_MYSQL") }
+func TestDbIPCTunnelClickHouse(t *testing.T) {
+	dbIPCTunnel(t, dbx.EngineClickHouse, "DBTEST_CH")
+}
 
 // The default transport end to end against a real server (see
 // internal/dbx/integration_test.go for the DBTEST_* variables): DbOpen on
@@ -148,7 +151,11 @@ func dbIPCTunnel(t *testing.T, engine, env string) {
 		}
 		return r
 	}
-	r := run(info.ID, "q1", "DROP TABLE IF EXISTS "+table+"; CREATE TABLE "+table+" (id int PRIMARY KEY, v text); INSERT INTO "+table+" VALUES (1, 'a'), (2, NULL)")
+	ddl := "CREATE TABLE " + table + " (id int PRIMARY KEY, v text)"
+	if engine == dbx.EngineClickHouse {
+		ddl = "CREATE TABLE " + table + " (id Int32, v Nullable(String)) ENGINE = MergeTree ORDER BY id"
+	}
+	r := run(info.ID, "q1", "DROP TABLE IF EXISTS "+table+"; "+ddl+"; INSERT INTO "+table+" VALUES (1, 'a'), (2, NULL)")
 	for _, res := range r.Results {
 		if res.Error != "" {
 			t.Fatalf("%s: %s", res.Statement, res.Error)
