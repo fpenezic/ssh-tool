@@ -85,8 +85,9 @@ type Manager struct {
 	lookup  CredentialLookup
 	// newClient builds a Client for a server, optionally tunnelled through its
 	// network profile. The app supplies a factory that routes through WireGuard;
-	// tests point it at an httptest server.
-	newClient func(srv store.InfisicalServer) *Client
+	// tests point it at an httptest server. An error (the profile cannot
+	// be brought up) fails the call: never a direct dial instead.
+	newClient func(srv store.InfisicalServer) (*Client, error)
 	cacheDir  string
 
 	mu     sync.Mutex
@@ -96,15 +97,15 @@ type Manager struct {
 // NewManager wires the manager with a direct-dial client factory. cacheDir holds
 // the sealed last-known-value blobs.
 func NewManager(db *store.DB, secrets SecretReader, sealer Sealer, lookup CredentialLookup, cacheDir string) *Manager {
-	return NewManagerWithClient(db, secrets, sealer, lookup, func(srv store.InfisicalServer) *Client {
-		return NewClient(srv.ServerURL)
+	return NewManagerWithClient(db, secrets, sealer, lookup, func(srv store.InfisicalServer) (*Client, error) {
+		return NewClient(srv.ServerURL), nil
 	}, cacheDir)
 }
 
 // NewManagerWithClient is NewManager with a caller-supplied client factory, so
 // the app can route traffic through a server's WireGuard profile (and tests can
 // point at an httptest server).
-func NewManagerWithClient(db *store.DB, secrets SecretReader, sealer Sealer, lookup CredentialLookup, newClient func(srv store.InfisicalServer) *Client, cacheDir string) *Manager {
+func NewManagerWithClient(db *store.DB, secrets SecretReader, sealer Sealer, lookup CredentialLookup, newClient func(srv store.InfisicalServer) (*Client, error), cacheDir string) *Manager {
 	return &Manager{
 		store:     db,
 		secrets:   secrets,
@@ -183,7 +184,10 @@ func (m *Manager) Browse(serverID string) ([]GroupInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	cl := m.newClient(*srv)
+	cl, err := m.newClient(*srv)
+	if err != nil {
+		return nil, err
+	}
 	projects, err := m.listProjectsRetry(cl, *srv, token)
 	if err != nil {
 		return nil, err
@@ -235,7 +239,10 @@ func (m *Manager) fetchSecret(srv store.InfisicalServer, projectID, env, path, k
 	if err != nil {
 		return "", err
 	}
-	cl := m.newClient(srv)
+	cl, err := m.newClient(srv)
+	if err != nil {
+		return "", err
+	}
 	val, err := cl.ReadSecret(token, projectID, env, path, key)
 	if errors.Is(err, errUnauthorized) {
 		if token, err = m.relogin(srv); err != nil {
@@ -287,7 +294,11 @@ func (m *Manager) relogin(srv store.InfisicalServer) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tok, expiresIn, err := m.newClient(srv).Login(creds)
+	cl, err := m.newClient(srv)
+	if err != nil {
+		return "", err
+	}
+	tok, expiresIn, err := cl.Login(creds)
 	if err != nil {
 		return "", err
 	}

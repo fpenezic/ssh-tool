@@ -100,6 +100,26 @@ type Manager struct {
 
 	mu   sync.Mutex
 	open map[string]*openState // serverID -> decrypted state
+	// opening serialises the open of one server (sync, KDF) without m.mu,
+	// so other servers and Forget never wait on the network. gen counts
+	// Forgets: an open that started before one is not stored.
+	opening map[string]*sync.Mutex
+	gen     uint64
+}
+
+// serverLock is the open lock of one server.
+func (m *Manager) serverLock(id string) *sync.Mutex {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.opening == nil {
+		m.opening = map[string]*sync.Mutex{}
+	}
+	l := m.opening[id]
+	if l == nil {
+		l = &sync.Mutex{}
+		m.opening[id] = l
+	}
+	return l
 }
 
 // NewManager wires the manager with a direct-dial HTTP syncer. cacheDir holds
@@ -135,6 +155,7 @@ func (m *Manager) Forget() {
 		st.vault.Forget()
 	}
 	m.open = make(map[string]*openState)
+	m.gen++
 	m.mu.Unlock()
 }
 
@@ -200,32 +221,49 @@ func (m *Manager) DeleteCache(serverID string) {
 		st.vault.Forget()
 		delete(m.open, serverID)
 	}
+	m.gen++
 	m.mu.Unlock()
 }
 
 // ensureOpen returns a decrypted vault, syncing per the freshness policy.
 // force=true always re-syncs (manual sync).
 func (m *Manager) ensureOpen(srv store.BitwardenServer, force bool) (*openState, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	// The sync (HTTP, maybe through a tunnel) and the KDF run under this
+	// server's lock only; m.mu is taken for the map.
+	lk := m.serverLock(srv.ID)
+	lk.Lock()
+	defer lk.Unlock()
 
+	m.mu.Lock()
 	cur, have := m.open[srv.ID]
+	gen := m.gen
 	if have && !force && time.Since(cur.openedAt) < staleAfter {
 		cur.fresh = FreshCached
+		m.mu.Unlock()
 		return cur, nil
 	}
+	m.mu.Unlock()
 
 	raw, fresh, err := m.loadSync(srv)
 	if err != nil {
 		// Re-sync failed but we still hold a decrypted copy: keep serving it
 		// marked stale rather than breaking an in-flight connect.
 		if have {
-			cur.fresh = FreshStale
-			return cur, nil
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			if m.gen == gen {
+				cur.fresh = FreshStale
+				return cur, nil
+			}
+			return nil, ErrVaultLocked
 		}
 		return nil, err
 	}
 
+	if srv.MasterRef == "" {
+		// Unlocking would not help: there is nothing to unlock with.
+		return nil, fmt.Errorf("bitwarden: no master password saved for %s", srv.Name)
+	}
 	master, ok, err := m.secrets.Get(srv.MasterRef)
 	if err != nil {
 		return nil, fmt.Errorf("bitwarden: read master from vault: %w", err)
@@ -238,8 +276,16 @@ func (m *Manager) ensureOpen(srv store.BitwardenServer, force bool) (*openState,
 	if err != nil {
 		return nil, err
 	}
-	if have {
-		cur.vault.Forget()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.gen != gen {
+		// The vault was locked (or the cache deleted) meanwhile: do not
+		// bring the keys back.
+		v.Forget()
+		return nil, ErrVaultLocked
+	}
+	if old, ok := m.open[srv.ID]; ok {
+		old.vault.Forget()
 	}
 	st := &openState{vault: v, openedAt: time.Now(), fresh: fresh}
 	m.open[srv.ID] = st

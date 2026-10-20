@@ -77,6 +77,27 @@ type Manager struct {
 
 	mu   sync.Mutex
 	open map[string]*openState // dbID -> decrypted state
+	// opening serialises the open of one database (fetch, KDF) without
+	// m.mu, so other databases and Forget never wait on a WebDAV / SFTP
+	// fetch or a host-key prompt. gen counts Forgets: an open that started
+	// before one is not stored.
+	opening map[string]*sync.Mutex
+	gen     uint64
+}
+
+// dbLock is the open lock of one database.
+func (m *Manager) dbLock(id string) *sync.Mutex {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.opening == nil {
+		m.opening = map[string]*sync.Mutex{}
+	}
+	l := m.opening[id]
+	if l == nil {
+		l = &sync.Mutex{}
+		m.opening[id] = l
+	}
+	return l
 }
 
 // NewManager wires the manager. cacheDir is where remote .kdbx bytes are cached
@@ -96,6 +117,7 @@ func NewManager(db *store.DB, secrets SecretReader, fetcher Fetcher, cacheDir st
 func (m *Manager) Forget() {
 	m.mu.Lock()
 	m.open = make(map[string]*openState)
+	m.gen++
 	m.mu.Unlock()
 }
 
@@ -161,28 +183,41 @@ var ErrVaultLocked = errors.New("keepass: vault is locked")
 // ensureOpen returns a decrypted database, fetching/re-opening per the
 // freshness policy. force=true always re-fetches (manual refresh).
 func (m *Manager) ensureOpen(kdb store.KeepassDatabase, force bool) (*openState, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	// The fetch and the KDF run under this database's lock only; m.mu is
+	// taken for the map.
+	lk := m.dbLock(kdb.ID)
+	lk.Lock()
+	defer lk.Unlock()
 
+	m.mu.Lock()
 	cur, have := m.open[kdb.ID]
+	gen := m.gen
 	if have && !force {
 		if kdb.Source == store.KeepassLocal {
+			m.mu.Unlock()
 			return cur, nil // local file: opened == current
 		}
 		if time.Since(cur.openedAt) < staleAfter {
 			cur.fresh = FreshCached
+			m.mu.Unlock()
 			return cur, nil
 		}
 		// Stale: fall through to a freshness re-check.
 	}
+	m.mu.Unlock()
 
 	raw, fresh, err := m.loadBytes(kdb, force || have)
 	if err != nil {
 		// If a re-check failed but we still hold a decrypted copy, keep serving
 		// it and mark it stale rather than breaking an in-flight connect.
 		if have {
-			cur.fresh = FreshStale
-			return cur, nil
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			if m.gen == gen {
+				cur.fresh = FreshStale
+				return cur, nil
+			}
+			return nil, ErrVaultLocked
 		}
 		return nil, err
 	}
@@ -194,6 +229,11 @@ func (m *Manager) ensureOpen(kdb store.KeepassDatabase, force bool) (*openState,
 	db, err := Open(raw, keyFile, master)
 	if err != nil {
 		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.gen != gen {
+		return nil, ErrVaultLocked // locked meanwhile: do not store it
 	}
 	st := &openState{db: db, openedAt: time.Now(), fresh: fresh}
 	m.open[kdb.ID] = st
@@ -289,5 +329,6 @@ func (m *Manager) DeleteCache(dbID string) {
 	_ = os.Remove(m.cachePath(dbID))
 	m.mu.Lock()
 	delete(m.open, dbID)
+	m.gen++
 	m.mu.Unlock()
 }

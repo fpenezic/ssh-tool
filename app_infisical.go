@@ -39,18 +39,18 @@ func (s infisicalSealer) Open(sealed []byte) ([]byte, error)    { return s.a.vau
 // server's WireGuard profile when one is set. Netbird / Tailscale profiles are
 // sidecar-SOCKS only and are not applied to this HTTP path (a direct dial is
 // used); the settings UI therefore only offers WireGuard profiles - same
-// constraint as Bitwarden.
-func (a *App) infisicalClientFor(srv store.InfisicalServer) *infisical.Client {
+// constraint as Bitwarden. A profile that cannot be built fails the call,
+// as for Bitwarden: the client secret and tokens never go out on the
+// default route instead.
+func (a *App) infisicalClientFor(srv store.InfisicalServer) (*infisical.Client, error) {
 	if srv.NetworkProfileID == "" {
-		return infisical.NewClient(srv.ServerURL)
+		return infisical.NewClient(srv.ServerURL), nil
 	}
 	d, err := a.wgDialerFor(srv.NetworkProfileID)
 	if err != nil {
-		// Fall back to a direct dial; the read will surface the real error if the
-		// server is genuinely only reachable through the tunnel.
-		return infisical.NewClient(srv.ServerURL)
+		return nil, fmt.Errorf("infisical: network profile %s: %w", srv.NetworkProfileID, err)
 	}
-	return infisical.NewClientWithDialer(srv.ServerURL, infisical.DialContext(d))
+	return infisical.NewClientWithDialer(srv.ServerURL, infisical.DialContext(d)), nil
 }
 
 // initInfisical builds the manager. Called from initialise() after db + vault
