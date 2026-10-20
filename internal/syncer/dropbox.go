@@ -242,7 +242,7 @@ func (d *Dropbox) Move(from, to string) error {
 	raw, _ := io.ReadAll(resp.Body)
 	// Destination exists: Dropbox refuses to overwrite on move. Fall back to a
 	// read + overwrite-Put on the destination, then delete the source.
-	if resp.StatusCode == http.StatusConflict && bytes.Contains(raw, []byte("to")) {
+	if resp.StatusCode == http.StatusConflict && bytes.Contains(raw, []byte("to/conflict")) {
 		data, gerr := d.Get(from)
 		if gerr != nil {
 			return fmt.Errorf("dropbox move fallback read %s: %w", from, gerr)

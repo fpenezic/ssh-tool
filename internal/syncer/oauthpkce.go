@@ -121,28 +121,37 @@ func Authorize(ctx context.Context, ep OAuthEndpoints, clientID, clientSecret st
 		err  error
 	}
 	result := make(chan callback, 1)
+	// deliver hands over the first result; a later callback (a reloaded
+	// tab) finds the slot taken and must not block its handler for good.
+	deliver := func(cb callback) {
+		select {
+		case result <- cb:
+		default:
+		}
+	}
 	srv := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			q := r.URL.Query()
-			if e := q.Get("error"); e != "" {
-				writeClosePage(w, "Authorization failed. You can close this tab.")
-				result <- callback{err: fmt.Errorf("authorization denied: %s", e)}
+			// State first, errors included: any page in the browser can
+			// request this fixed port, and only our redirect carries state.
+			// A mismatch delivers nothing; the real redirect may still come.
+			if q.Get("state") != state {
+				http.Error(w, "state mismatch", http.StatusBadRequest)
 				return
 			}
-			if q.Get("state") != state {
-				// Do not deliver a result: a mismatched state is a stray/hostile
-				// request, not our redirect. The real one may still arrive.
-				http.Error(w, "state mismatch", http.StatusBadRequest)
+			if e := q.Get("error"); e != "" {
+				writeClosePage(w, "Authorization failed. You can close this tab.")
+				deliver(callback{err: fmt.Errorf("authorization denied: %s", e)})
 				return
 			}
 			code := q.Get("code")
 			if code == "" {
 				writeClosePage(w, "No authorization code returned. You can close this tab.")
-				result <- callback{err: fmt.Errorf("no authorization code in redirect")}
+				deliver(callback{err: fmt.Errorf("no authorization code in redirect")})
 				return
 			}
 			writeClosePage(w, "Connected. You can close this tab and return to ssh-tool.")
-			result <- callback{code: code}
+			deliver(callback{code: code})
 		}),
 	}
 	go srv.Serve(ln)
