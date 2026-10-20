@@ -280,7 +280,8 @@ type Session struct {
 
 	// sftp holds a lazily-created SFTP client. nil until first SFTP use.
 	// Closed by CloseSFTP from the session-close path.
-	sftp *sftpHolder
+	sftp     *sftpHolder
+	sftpOnce sync.Once
 
 	// idNames caches this host's uid/gid -> name maps for the SFTP browser.
 	// Read once per session over SFTP; see idnames.go.

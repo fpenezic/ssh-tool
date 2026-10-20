@@ -139,7 +139,7 @@
   // (PVE's vncshell rejects API tokens - it needs a real realm login
   // ticket). Empty = node consoles unavailable; guest consoles still
   // work via the API token. A password-kind credential whose name is
-  // the PVE username (e.g. "fpenezic@ldap").
+  // the PVE username (e.g. "alice@ldap").
   let vncCredentialId = $state<string>("");
 
   const passwordCreds = $derived(

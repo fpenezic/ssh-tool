@@ -10,7 +10,7 @@ import (
 func TestScanRemoteGlobDirAndCompressed(t *testing.T) {
 	cli, _ := sftpOverLatency(t, 0).SFTPClient()
 	root := filepath.ToSlash(t.TempDir())
-	for _, f := range []string{"access.log", "error.log", "access.log.1.gz", "notes.txt", "app/a.log", "app/sub/b.log"} {
+	for _, f := range []string{"access.log", "error.log", "access.log.1.gz", "notes.txt", "app/a.log", "app/sub/b.log", "nginx/access.log", "apache2/access.log"} {
 		p := filepath.Join(root, filepath.FromSlash(f))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
@@ -47,6 +47,9 @@ func TestScanRemoteGlobDirAndCompressed(t *testing.T) {
 	eq(rels(root+"/*.log*", true), "access.log", "error.log")
 	eq(rels(root+"/app", false), "app/a.log", "app/sub/b.log")
 	eq(rels(root+"/notes.txt", false), "notes.txt")
+	// Same base name under different matched directories: both kept.
+	eq(rels(root+"/*/access.log", false), "apache2/access.log", "nginx/access.log")
+	eq(rels(root+"/ngin*", false), "nginx/access.log")
 	if _, _, err := scanRemote(cli, root+"/*.nope", false); err == nil {
 		t.Error("a glob with no match must fail the host")
 	}

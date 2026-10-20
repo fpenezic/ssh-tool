@@ -28,13 +28,13 @@ import (
 // sftp.FileInfo just enough to render a row.
 type SftpEntry struct {
 	Name    string `json:"name"`
-	Path    string `json:"path"`         // absolute path on the remote
+	Path    string `json:"path"` // absolute path on the remote
 	IsDir   bool   `json:"is_dir"`
 	IsLink  bool   `json:"is_link"`
 	Size    int64  `json:"size"`
-	Mode    uint32 `json:"mode"`         // unix-style permission bits
-	ModeStr string `json:"mode_str"`     // e.g. "-rw-r--r--"
-	ModTime int64  `json:"mod_time"`     // unix seconds
+	Mode    uint32 `json:"mode"`             // unix-style permission bits
+	ModeStr string `json:"mode_str"`         // e.g. "-rw-r--r--"
+	ModTime int64  `json:"mod_time"`         // unix seconds
 	Target  string `json:"target,omitempty"` // symlink target if IsLink
 	// UID/GID come from the raw SFTP attrs. Protocol v3 carries numbers
 	// only - there is no name lookup over SFTP - so the UI shows the ids.
@@ -61,13 +61,11 @@ type sftpHolder struct {
 // goroutine in session.go calls CloseSFTP via the onClose hook installed
 // by app startup; see app.go).
 func (s *Session) SFTPClient() (*sftp.Client, error) {
-	if s.sftp == nil {
-		s.sftp = &sftpHolder{}
-	}
-	s.sftp.mu.Lock()
-	defer s.sftp.mu.Unlock()
-	if s.sftp.client != nil {
-		return s.sftp.client, nil
+	h := s.sftpH()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.client != nil {
+		return h.client, nil
 	}
 	tgt := s.TargetClient()
 	if tgt == nil {
@@ -77,7 +75,7 @@ func (s *Session) SFTPClient() (*sftp.Client, error) {
 	if err != nil {
 		return nil, explainSFTPOpenError(err)
 	}
-	s.sftp.client = cli
+	h.client = cli
 	return cli, nil
 }
 
@@ -111,15 +109,25 @@ func explainSFTPOpenError(err error) error {
 // CloseSFTP releases the cached SFTP client if one exists. Safe to call
 // multiple times. Called from the session-close path.
 func (s *Session) CloseSFTP() {
-	if s.sftp == nil {
-		return
+	h := s.sftpH()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.client != nil {
+		_ = h.client.Close()
+		h.client = nil
 	}
-	s.sftp.mu.Lock()
-	defer s.sftp.mu.Unlock()
-	if s.sftp.client != nil {
-		_ = s.sftp.client.Close()
-		s.sftp.client = nil
-	}
+}
+
+// sftpH is the session's one SFTP holder, created once: two first callers
+// (the SFTP browser and a fleet transfer) used to make one each and leak
+// the client of the holder that lost.
+func (s *Session) sftpH() *sftpHolder {
+	s.sftpOnce.Do(func() {
+		if s.sftp == nil { // tests hand in a ready holder
+			s.sftp = &sftpHolder{}
+		}
+	})
+	return s.sftp
 }
 
 // SftpList returns the directory at remotePath. If remotePath is empty,
@@ -314,11 +322,11 @@ func (s *Session) SftpWriteFile(remotePath string, data []byte, expectedModTime 
 
 // TransferProgress is a chunk of progress info emitted during up/down.
 type TransferProgress struct {
-	TransferID  string `json:"transfer_id"`
-	Bytes       int64  `json:"bytes"`
-	Total       int64  `json:"total"`
-	Done        bool   `json:"done"`
-	Err         string `json:"err,omitempty"`
+	TransferID string `json:"transfer_id"`
+	Bytes      int64  `json:"bytes"`
+	Total      int64  `json:"total"`
+	Done       bool   `json:"done"`
+	Err        string `json:"err,omitempty"`
 	// Recursive transfer fields (zero for single-file transfers).
 	FilesDone   int    `json:"files_done,omitempty"`
 	FilesTotal  int    `json:"files_total,omitempty"`
