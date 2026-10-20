@@ -44,14 +44,14 @@ func TestRDSplit(t *testing.T) {
 
 func TestRDRead(t *testing.T) {
 	for _, s := range []string{"GET k", "hgetall h", "SCAN 0 MATCH a:*", "CONFIG GET maxmemory", "CLIENT LIST",
-		"INFO", "XINFO STREAM s", "EVAL_RO \"return 1\" 0", "SELECT 2", "MEMORY USAGE k", "JSON.GET j $"} {
+		"INFO", "XINFO STREAM s", "EVAL_RO \"return 1\" 0", "SELECT 2", "MEMORY USAGE k", "JSON.GET j $", "ACL LOG 10"} {
 		if !IsRead(EngineRedis, s) || CheckReadOnly(EngineRedis, s) != nil {
 			t.Errorf("not read: %q", s)
 		}
 	}
 	for _, s := range []string{"SET k v", "DEL k", "CONFIG SET maxmemory 1", "CONFIG", "CLIENT KILL ID 1",
 		"EVAL \"return 1\" 0", "FLUSHALL", "XREADGROUP GROUP g c STREAMS s >", "SORT k", "OBJECT", "MULTI",
-		"ACL SETUSER x on", "SCRIPT FLUSH", "GET \"unterminated"} {
+		"ACL SETUSER x on", "ACL LOG RESET", "SCRIPT FLUSH", "GET \"unterminated"} {
 		if IsRead(EngineRedis, s) || CheckReadOnly(EngineRedis, s) == nil {
 			t.Errorf("read: %q", s)
 		}
@@ -88,7 +88,7 @@ func TestRDRedact(t *testing.T) {
 
 func rdParse(t *testing.T, raw string) *rdReply {
 	t.Helper()
-	rc := &rdConn{br: bufio.NewReader(strings.NewReader(raw))}
+	rc := &rdConn{br: bufio.NewReader(strings.NewReader(raw)), budget: MaxResultBytes}
 	r, err := rc.read(0)
 	if err != nil {
 		t.Fatal(err)
@@ -125,6 +125,14 @@ func TestRDResult(t *testing.T) {
 	}
 	if r = rdResult([]string{"SET", "k"}, rdParse(t, "-WRONGTYPE no\r\n"), 10); r.Error != "WRONGTYPE no" {
 		t.Fatalf("%+v", r)
+	}
+}
+
+// A reply past the budget is refused while it arrives.
+func TestRDBudget(t *testing.T) {
+	rc := &rdConn{br: bufio.NewReader(strings.NewReader("*2000000\r\n:1\r\n")), budget: 1 << 20}
+	if _, err := rc.read(0); err != errReplyTooBig {
+		t.Fatal(err)
 	}
 }
 

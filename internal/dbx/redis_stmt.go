@@ -201,7 +201,9 @@ func rdReadArgs(args []string) (bool, string) {
 		return true, ""
 	}
 	if subs, ok := rdReadSubs[cmd]; ok {
-		if len(args) > 1 && subs[strings.ToUpper(args[1])] {
+		// ACL LOG [count] reads; ACL LOG RESET clears the log.
+		reset := cmd == "ACL" && len(args) > 2 && strings.EqualFold(args[1], "LOG") && strings.EqualFold(args[2], "RESET")
+		if len(args) > 1 && subs[strings.ToUpper(args[1])] && !reset {
 			return true, ""
 		}
 		sub := ""
