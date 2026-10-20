@@ -4,7 +4,7 @@
   // the choice is Type-into-terminal (inject the text at the prompt with NO
   // Enter, so the user reviews and submits) or Deny. A "file" request is
   // download_file wanting to write a remote file to the local disk.
-  import { IconBot } from "./iconMap";
+  import { IconBot, IconInfo } from "./iconMap";
   import type { McpDecision } from "./api";
 
   interface Props {
@@ -76,7 +76,7 @@
 
     {#if queueLength > 0}
       <p class="queue-hint">
-        ⓘ <strong>{queueLength}</strong> more request{queueLength === 1 ? "" : "s"} waiting after this one.
+        <IconInfo size={13} /> <strong>{queueLength}</strong> more request{queueLength === 1 ? "" : "s"} waiting after this one.
       </p>
     {/if}
 
@@ -129,6 +129,9 @@
     word-break: break-all;
     max-height: 30vh;
     overflow-y: auto;
+  }
+  .queue-hint :global(svg) {
+    vertical-align: -2px;
   }
   .queue-hint {
     background: var(--crust);

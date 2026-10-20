@@ -86,6 +86,10 @@
         ? "LLM wants to create and change connections"
         : "LLM wants to create connections",
   );
+  // The button names what approving does, like the title.
+  const approveLabel = $derived(
+    creates === 0 && c.edits > 0 ? "Approve changes" : c.edits > 0 ? "Approve, create and change" : "Approve and create",
+  );
 </script>
 
 <div class="overlay" role="dialog" aria-modal="true">
@@ -182,7 +186,7 @@
 
     <div class="row">
       <button onclick={() => onRespond("deny")}>Reject</button>
-      <button class="primary" onclick={() => onRespond("run")}>Approve and create</button>
+      <button class="primary" onclick={() => onRespond("run")}>{approveLabel}</button>
     </div>
   </div>
 </div>

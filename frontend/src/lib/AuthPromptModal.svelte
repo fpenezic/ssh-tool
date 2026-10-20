@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconKeyRound } from "./iconMap";
+  import { IconInfo, IconKeyRound } from "./iconMap";
   import type { AuthPromptQuestion } from "./stores.svelte";
   import { claimKeyboard } from "./paneFocus";
 
@@ -102,7 +102,7 @@
 
     {#if queueLength > 0}
       <p class="queue-hint">
-        ⓘ <strong>{queueLength}</strong> more prompt{queueLength === 1 ? "" : "s"} waiting after this one.
+        <IconInfo size={13} /> <strong>{queueLength}</strong> more prompt{queueLength === 1 ? "" : "s"} waiting after this one.
       </p>
     {/if}
 
@@ -144,6 +144,9 @@
     background: var(--crust); color: var(--text);
     border: 1px solid var(--surface0); border-radius: 3px;
     padding: 0.4rem 0.55rem; font: inherit; width: 100%; box-sizing: border-box;
+  }
+  .queue-hint :global(svg) {
+    vertical-align: -2px;
   }
   .queue-hint {
     background: var(--crust);
