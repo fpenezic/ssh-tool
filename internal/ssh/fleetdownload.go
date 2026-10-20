@@ -64,7 +64,19 @@ func scanRemote(cli *sftp.Client, remotePath string, skipCompressed bool) ([]rem
 	}
 	glob := strings.ContainsAny(full, "*?[")
 	roots := []string{full}
+	// rootRel names a root in the host folder: its base name, or for a
+	// glob its path below the pattern's fixed directory, so that
+	// /var/log/*/access.log gives nginx/access.log and apache2/access.log
+	// instead of two access.log, the second overwriting the first.
+	rootRel := path.Base
 	if glob {
+		prefix := globPrefix(full)
+		rootRel = func(root string) string {
+			if rel := strings.TrimPrefix(root, prefix); rel != root && strings.Trim(rel, "/") != "" {
+				return strings.Trim(rel, "/")
+			}
+			return path.Base(root)
+		}
 		if roots, err = cli.Glob(full); err != nil {
 			return nil, 0, fmt.Errorf("match %s: %w", full, err)
 		}
@@ -93,7 +105,7 @@ func scanRemote(cli *sftp.Client, remotePath string, skipCompressed bool) ([]rem
 		}
 		if !st.IsDir() {
 			if st.Mode().IsRegular() {
-				add(root, path.Base(root), st.Size())
+				add(root, rootRel(root), st.Size())
 			}
 			continue
 		}
@@ -108,10 +120,22 @@ func scanRemote(cli *sftp.Client, remotePath string, skipCompressed bool) ([]rem
 				continue // dirs, and symlinks are not followed inside a tree
 			}
 			inner := strings.TrimPrefix(strings.TrimPrefix(w.Path(), root), "/")
-			add(w.Path(), path.Join(path.Base(root), inner), fi.Size())
+			add(w.Path(), path.Join(rootRel(root), inner), fi.Size())
 		}
 	}
 	return items, unreadable, nil
+}
+
+// globPrefix is the directory part of a pattern before its first
+// wildcard segment, with a trailing slash ("/var/log/" for
+// /var/log/*/access.log).
+func globPrefix(pattern string) string {
+	segs := strings.Split(pattern, "/")
+	i := 0
+	for i < len(segs) && !strings.ContainsAny(segs[i], "*?[") {
+		i++
+	}
+	return strings.Join(segs[:i], "/") + "/"
 }
 
 // FleetDownloadScan reports per host how many files a download would

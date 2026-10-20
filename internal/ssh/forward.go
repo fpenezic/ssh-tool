@@ -8,6 +8,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -391,7 +392,7 @@ func (p *ForwardPool) acceptRemote(af *activeForward) {
 		default:
 		}
 		go func(remote net.Conn) {
-			localAddr := fmt.Sprintf("%s:%d", af.remoteHost, af.remotePort)
+			localAddr := net.JoinHostPort(af.remoteHost, strconv.Itoa(int(af.remotePort)))
 			local, err := net.DialTimeout("tcp", localAddr, 10*time.Second)
 			if err != nil {
 				log.Printf("forward %s: local dial %s: %v", af.id, localAddr, err)
@@ -635,15 +636,12 @@ type closeWriter interface {
 	CloseWrite() error
 }
 
-type atomicCounter struct{ v uint64 }
+// atomicCounter is shared by every connection of a forward and read by
+// snapshot, so it has to be atomic.
+type atomicCounter struct{ v atomic.Uint64 }
 
-func (c *atomicCounter) add(n int) {
-	// We don't actually need atomicity for this - counters are read by
-	// the snapshot goroutine and exact accounting isn't critical. A
-	// future cleanup could swap in sync/atomic.Uint64.
-	c.v += uint64(n)
-}
-func (c *atomicCounter) load() uint64 { return c.v }
+func (c *atomicCounter) add(n int)    { c.v.Add(uint64(n)) }
+func (c *atomicCounter) load() uint64 { return c.v.Load() }
 
 type countingReader struct {
 	r io.Reader

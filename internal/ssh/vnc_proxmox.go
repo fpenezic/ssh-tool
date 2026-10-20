@@ -46,7 +46,7 @@ type ProxmoxVncTarget struct {
 	// rejects API tokens at a username-format check, so it needs a real
 	// realm ticket from POST /access/ticket. Guest consoles ignore these
 	// and use the token. Empty Username => node consoles unavailable.
-	Username string // user@realm (e.g. fpenezic@ldap)
+	Username string // user@realm (e.g. alice@ldap)
 	Password string
 }
 
