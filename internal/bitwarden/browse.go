@@ -161,7 +161,10 @@ func (v *Vault) cipherInfo(c *cipherItem) CipherInfo {
 		}
 	}
 	for _, a := range c.Attachments {
-		info.Attachments = append(info.Attachments, a.FileName)
+		// The name is encrypted with the cipher key like a field name.
+		if n, e := decStr(a.FileName, key); e == nil && n != "" {
+			info.Attachments = append(info.Attachments, n)
+		}
 	}
 	return info
 }
