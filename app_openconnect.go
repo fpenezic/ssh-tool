@@ -386,6 +386,7 @@ func (a *App) ocCredentialSecret(credID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	m.Close()
 	if m.Password == "" {
 		return "", fmt.Errorf("credential %s holds no password", cred.Name)
 	}

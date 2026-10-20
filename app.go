@@ -2644,6 +2644,9 @@ func (a *App) syncClient() (syncer.Transport, string, error) {
 // the connection layer's known-hosts callback + algo pinning so a sync host
 // is trusted exactly like any other host in the tree.
 func (a *App) sftpSyncTransport(cfg SyncConfig) (*syncer.SFTP, error) {
+	// release ends what the credential holds open (an agent connection)
+	// when the transport closes.
+	var release func()
 	if cfg.SftpHost == "" {
 		return nil, fmt.Errorf("SFTP host is not configured")
 	}
@@ -2678,6 +2681,7 @@ func (a *App) sftpSyncTransport(cfg SyncConfig) (*syncer.SFTP, error) {
 		if err != nil {
 			return nil, fmt.Errorf("SFTP credential: %w", err)
 		}
+		release = auth.Close
 		methods = auth.ToAuthMethods()
 		if len(methods) == 0 {
 			return nil, fmt.Errorf("SFTP credential has no usable auth method")
@@ -2700,6 +2704,7 @@ func (a *App) sftpSyncTransport(cfg SyncConfig) (*syncer.SFTP, error) {
 		HostKey:           a.makeHostKeyCallback(),
 		HostKeyAlgorithms: algos,
 		Timeout:           a.connectTimeout(),
+		Release:           release,
 	}, nil
 }
 

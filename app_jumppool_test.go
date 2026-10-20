@@ -37,6 +37,7 @@ func newTestPool() (*jumpPool, *int32, *int32) {
 			atomic.AddInt32(&built, 1)
 			return &ssh.Client{}, func() { atomic.AddInt32(&cleaned, 1) }, "tunnel", nil
 		},
+		wait: func(*ssh.Client) error { select {} }, // fake clients never end
 	}
 	return p, &built, &cleaned
 }
@@ -208,5 +209,103 @@ func TestJumpPoolPeek(t *testing.T) {
 	release()
 	if p.entries[key] == nil {
 		t.Fatalf("prefix removed immediately after single release; peek likely bumped refs")
+	}
+}
+
+// A bastion whose connection ends is dropped, and the next acquire builds
+// a new one instead of getting the dead client back.
+func TestJumpPoolDeadBastionRebuilt(t *testing.T) {
+	var built, cleaned int32
+	var ends sync.Map // *ssh.Client -> chan struct{}
+	p := &jumpPool{
+		entries: map[string]*jumpEntry{},
+		build: func(ctx context.Context, s *store.ResolvedSettings, d sshlayer.JumpPrefixDeps) (*ssh.Client, func(), string, error) {
+			atomic.AddInt32(&built, 1)
+			c := &ssh.Client{}
+			ends.Store(c, make(chan struct{}))
+			return c, func() { atomic.AddInt32(&cleaned, 1) }, "", nil
+		},
+		wait: func(c *ssh.Client) error {
+			ch, _ := ends.Load(c)
+			<-ch.(chan struct{})
+			return nil
+		},
+	}
+	deps := sshlayer.JumpPrefixDeps{}
+	c1, r1, _, err := p.acquire(context.Background(), jumpSettings("bastion", "10.0.0.1"), deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch, _ := ends.Load(c1)
+	close(ch.(chan struct{})) // the bastion drops
+	deadline := time.Now().Add(2 * time.Second)
+	for atomic.LoadInt32(&cleaned) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if atomic.LoadInt32(&cleaned) != 1 {
+		t.Fatal("dead bastion not cleaned up")
+	}
+	r1()
+	c2, r2, _, err := p.acquire(context.Background(), jumpSettings("bastion", "10.0.0.2"), deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r2()
+	if c2 == c1 || atomic.LoadInt32(&built) != 2 {
+		t.Fatalf("dead bastion handed out again (built %d)", atomic.LoadInt32(&built))
+	}
+	if atomic.LoadInt32(&cleaned) != 1 {
+		t.Fatal("the dead bastion was cleaned up twice")
+	}
+}
+
+// A slow build of one bastion does not hold up another bastion, and
+// waiters for the slow one get its client.
+func TestJumpPoolSlowBuildDoesNotBlockOthers(t *testing.T) {
+	p, _, _ := newTestPool()
+	gate := make(chan struct{})
+	inner := p.build
+	p.build = func(ctx context.Context, s *store.ResolvedSettings, d sshlayer.JumpPrefixDeps) (*ssh.Client, func(), string, error) {
+		if s.JumpHost.Hostname == "slow" {
+			<-gate
+		}
+		return inner(ctx, s, d)
+	}
+	deps := sshlayer.JumpPrefixDeps{}
+	var wg sync.WaitGroup
+	got := make([]*ssh.Client, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			c, r, _, err := p.acquire(context.Background(), jumpSettings("slow", "t"), deps)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer r()
+			got[i] = c
+		}(i)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, r, _, err := p.acquire(context.Background(), jumpSettings("fast", "t"), deps)
+		if err == nil {
+			r()
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a slow bastion build blocked another bastion")
+	}
+	close(gate)
+	wg.Wait()
+	if got[0] == nil || got[0] != got[1] {
+		t.Fatal("waiters for one bastion got different clients")
 	}
 }

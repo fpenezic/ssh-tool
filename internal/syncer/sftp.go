@@ -38,6 +38,9 @@ type SFTP struct {
 	// key isn't met with an rsa offer.
 	HostKeyAlgorithms []string
 	Timeout           time.Duration
+	// Release, when set, frees what the auth methods hold (an agent
+	// connection); Close calls it once.
+	Release func()
 
 	client *sftp.Client
 	ssh    *ssh.Client
@@ -102,6 +105,10 @@ func (s *SFTP) connect() (*sftp.Client, error) {
 
 // Close releases the SSH + SFTP connection. Safe to call more than once.
 func (s *SFTP) Close() {
+	if s.Release != nil {
+		s.Release()
+		s.Release = nil
+	}
 	if s.client != nil {
 		_ = s.client.Close()
 		s.client = nil
