@@ -61,8 +61,12 @@ func TestCHException(t *testing.T) {
 func TestCHReadLines(t *testing.T) {
 	// A logged error as data is a line, not the statement's error.
 	logged := "Code: 60. DB::Exception: Table x does not exist. (UNKNOWN_TABLE)\n"
-	if r := chReadLines(strings.NewReader(logged), 10, nil); r.Error != "" || len(r.Rows) != 1 {
+	if r := chReadLines(strings.NewReader(logged+"next\n"), 10, nil); r.Error != "" || len(r.Rows) != 2 {
 		t.Fatalf("logged error: %+v", r)
+	}
+	// The same line last in the body is an old server's error.
+	if r := chReadLines(strings.NewReader("a\n"+logged), 10, nil); !strings.Contains(r.Error, "UNKNOWN_TABLE") {
+		t.Fatalf("trailing error: %+v", r)
 	}
 	r := chReadLines(strings.NewReader(`{"a":1}`+"\n"+`{"a":2}`+"\n"), 10, nil)
 	if !r.HasRows || r.Columns[0].Name != "output" || len(r.Rows) != 2 || *r.Rows[1][0] != `{"a":2}` {
