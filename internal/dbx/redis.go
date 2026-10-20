@@ -681,7 +681,7 @@ func (s *rdSession) run(ctx context.Context, stmt string, _ bool, maxRows int) *
 		c.close()
 	} else {
 		s.c = c
-		if strings.EqualFold(args[0], "SELECT") && r.kind == '+' && len(args) == 2 {
+		if strings.EqualFold(args[0], "SELECT") && r.kind == '+' && r.text() == "OK" && len(args) == 2 {
 			s.db, _ = strconv.Atoi(args[1])
 			c.db = s.db
 		}

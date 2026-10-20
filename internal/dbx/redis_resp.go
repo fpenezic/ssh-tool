@@ -35,11 +35,11 @@ type rdConn struct {
 	br *bufio.Reader
 	bw *bufio.Writer
 	db int
+	// budget is what is left of MaxResultBytes for the replies of one do():
+	// an array of millions of elements (KEYS *, HGETALL on a big hash) is
+	// refused while it arrives, not after it is all in memory.
+	budget int
 }
-
-// rdMaxBulk bounds one bulk string; a value past it is an error rather than
-// a 512 MB allocation.
-const rdMaxBulk = MaxResultBytes
 
 func rdDial(ctx context.Context, cfg Config, db int) (*rdConn, error) {
 	c, err := cfg.dialer()(ctx, "tcp", cfg.Addr)
@@ -120,6 +120,7 @@ func (rc *rdConn) do(ctx context.Context, cmds ...[]string) ([]*rdReply, error) 
 		return nil, rdCtxErr(ctx, err)
 	}
 	out := make([]*rdReply, 0, len(cmds))
+	rc.budget = MaxResultBytes
 	for range cmds {
 		r, err := rc.read(0)
 		if err != nil {
@@ -175,8 +176,8 @@ func (rc *rdConn) read(depth int) (*rdReply, error) {
 			r.null = true
 			return r, nil
 		}
-		if n > rdMaxBulk {
-			return nil, fmt.Errorf("a value is over %d MB", rdMaxBulk>>20)
+		if rc.budget -= n; rc.budget < 0 {
+			return nil, errReplyTooBig
 		}
 		r.str = make([]byte, n+2)
 		if _, err := io.ReadFull(rc.br, r.str); err != nil {
@@ -192,6 +193,10 @@ func (rc *rdConn) read(depth int) (*rdReply, error) {
 			r.null = true
 			return r, nil
 		}
+		// Each element costs its struct even when empty.
+		if rc.budget -= n * 64; rc.budget < 0 {
+			return nil, errReplyTooBig
+		}
 		r.elems = make([]*rdReply, 0, min(n, 1024))
 		for i := 0; i < n; i++ {
 			e, err := rc.read(depth + 1)
@@ -205,6 +210,8 @@ func (rc *rdConn) read(depth int) (*rdReply, error) {
 	}
 	return r, nil
 }
+
+var errReplyTooBig = fmt.Errorf("the reply is over %d MB: narrow it (SCAN, LRANGE with a range, HSCAN)", MaxResultBytes>>20)
 
 func (rc *rdConn) line() ([]byte, error) {
 	var buf []byte
