@@ -2545,7 +2545,7 @@
       case "openvpn": return [kindTitle(np.kind), np.openvpn?.server, np.openvpn?.static_key].filter(Boolean).join(" - ");
       case "openconnect": {
         const n = np.openconnect?.backups?.length ?? 0;
-        return [npKindLine(np), np.openconnect?.server, n && `+${n} backup`].filter(Boolean).join(" - ");
+        return [npKindLine(np), np.openconnect?.server, n && `+${n} ${n === 1 ? "backup" : "backups"}`].filter(Boolean).join(" - ");
       }
       case "checkpoint": return [kindTitle(np.kind), np.checkpoint?.server, np.checkpoint?.login_option].filter(Boolean).join(" - ");
       default: return [kindTitle(np.kind), np.profile.peers?.[0]?.endpoint].filter(Boolean).join(" - ");

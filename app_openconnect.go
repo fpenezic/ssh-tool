@@ -292,7 +292,12 @@ func (a *App) ocConnect(row *store.NetworkProfile, cfg *OpenConnectConfig, exe s
 			continue
 		}
 		if err != nil {
-			ocSessionSet(row.ID, "", "")
+			// An unreachable gateway keeps the cookie: it may belong to
+			// the backup tried next.
+			var ue *tunnelhelper.UnreachableError
+			if !errors.As(err, &ue) {
+				ocSessionSet(row.ID, "", "")
+			}
 			log.Printf("openconnect %s: connect to %s failed: %v", row.Name, gw.Server, err)
 			if filler.changeSent() {
 				log.Printf("openconnect %s: a password change was sent before the failure - the gateway may already use the new password; the stored credential was not updated", row.Name)
