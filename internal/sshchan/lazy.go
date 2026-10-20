@@ -91,17 +91,21 @@ func (l *LazySSH) Client(ctx context.Context) (*ssh.Client, error) {
 
 func (l *LazySSH) connect(ctx context.Context, done chan struct{}) {
 	c, closeFn, err := l.Connect(ctx)
+	var discard func() // run unlocked: closing a session can block on the network
 	l.mu.Lock()
 	l.inflight = nil
 	switch {
 	case err != nil:
 		l.lastErr = err
 	case l.closed:
-		closeFn()
+		discard = closeFn
 	default:
 		l.client, l.closeFn, l.lastErr = c, closeFn, nil
 	}
 	l.mu.Unlock()
+	if discard != nil {
+		discard()
+	}
 	close(done)
 }
 

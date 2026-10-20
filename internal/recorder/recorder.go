@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,7 +144,11 @@ func (m *Manager) Stop(sessionID string) (path string, ok bool) {
 	if !ok {
 		return "", false
 	}
-	rec.close()
+	// The last buffered events reach the file only here: a failed flush
+	// (disk full) leaves a truncated recording, which the log should say.
+	if err := rec.close(); err != nil {
+		log.Printf("recorder: finalise %s: %v", rec.path, err)
+	}
 	return rec.path, true
 }
 
