@@ -1955,6 +1955,14 @@ everything mobile is behind a build tag or an `isMobile` check.
    `write` flag, so the allowlist (`rdReadArgs`) names subcommands. The
    test DB numbers (3, 4) are flushed by the integration test.
 
+123. **A popover's key handler needs focus.** (`ContextMenu.svelte`) An
+   `onkeydown` on an element that never gets focus never fires: the
+   context menu's Esc did nothing for a long time, because focus stayed on
+   the button or terminal that opened it. The menu focuses itself on open
+   and hands focus back on close, unless the picked item moved it (a
+   dialog, a new tab). A global window listener would also catch Esc meant
+   for a terminal.
+
 ---
 
 # Archive
