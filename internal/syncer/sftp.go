@@ -74,10 +74,13 @@ func (s *SFTP) connect() (*sftp.Client, error) {
 	_ = conn.SetDeadline(time.Now().Add(s.timeout()))
 	if hk := cfg.HostKeyCallback; hk != nil {
 		// The host-key callback may wait for the user (trust dialog):
-		// the server has answered by then, so the clock stops there.
+		// the clock pauses there and restarts for the rest of the
+		// handshake (sync auth asks nothing, so it stays bounded).
 		cfg.HostKeyCallback = func(host string, remote net.Addr, key ssh.PublicKey) error {
 			_ = conn.SetDeadline(time.Time{})
-			return hk(host, remote, key)
+			err := hk(host, remote, key)
+			_ = conn.SetDeadline(time.Now().Add(s.timeout()))
+			return err
 		}
 	}
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
