@@ -649,16 +649,24 @@ func chReadLines(body io.Reader, maxRows int, onCut func()) *Result {
 // already started: a "__exception__" line followed by the message (24.x
 // and later), or, on older servers, a "Code: N. DB::Exception" line where a
 // row of ncols fields was due. The rest of the body is the message. With
-// ncols < 0 (output lines, our own reads) only the marker counts: a log
-// message column holds such lines as data.
+// ncols < 0 (output lines, our own reads) the width says nothing, and a
+// log's exception column holds such lines as data: there the bare line
+// counts only as the last one of the body, where an old server leaves it.
 func chException(br *bufio.Reader, line []byte, ncols int) (string, bool) {
 	s := string(line)
 	if s == "__exception__" {
 		rest, _ := io.ReadAll(io.LimitReader(br, 64<<10))
 		return chErr(strings.TrimSpace(string(rest))).Error(), true
 	}
-	if ncols >= 0 && strings.HasPrefix(s, "Code: ") && strings.Contains(s, "DB::Exception") &&
-		len(chFields(line)) != ncols {
+	if !strings.HasPrefix(s, "Code: ") || !strings.Contains(s, "DB::Exception") {
+		return "", false
+	}
+	last := false
+	if ncols < 0 {
+		_, err := br.Peek(1)
+		last = err != nil
+	}
+	if (ncols >= 0 && len(chFields(line)) != ncols) || last {
 		rest, _ := io.ReadAll(io.LimitReader(br, 64<<10))
 		return chErr(strings.TrimSpace(s + "\n" + string(rest))).Error(), true
 	}
