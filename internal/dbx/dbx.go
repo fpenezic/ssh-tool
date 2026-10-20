@@ -541,8 +541,14 @@ func (rr *rowReader) add(raw [][]byte) bool {
 	return true
 }
 
+// hexString writes b as hex. Callers pass a cell's value; past
+// MaxResultBytes it is cut (a result is cut there anyway), which also keeps
+// the doubled length clear of overflow.
 func hexString(b []byte) string {
 	const digits = "0123456789abcdef"
+	if len(b) > MaxResultBytes {
+		b = b[:MaxResultBytes]
+	}
 	out := make([]byte, len(b)*2)
 	for i, c := range b {
 		out[i*2] = digits[c>>4]
