@@ -57,6 +57,8 @@ func TestValidateOpksshRedirect(t *testing.T) {
 		{"localhost no port", "http://localhost/cb", ""},
 		{"attacker", "http://attacker.example.com/callback", "loopback"},
 		{"plain ip non-loopback", "http://10.0.0.5:11110/cb", "loopback"},
+		{"dns name starting 127.", "http://127.attacker.example/cb", "loopback"},
+		{"dns name 127.0.0.1.", "http://127.0.0.1.attacker.example/cb", "loopback"},
 		{"ftp", "ftp://localhost/cb", "scheme must be"},
 		{"javascript", "javascript:alert(1)", "scheme must be"},
 	}

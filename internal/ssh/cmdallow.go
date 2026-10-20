@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"path"
 	"regexp"
 	"strings"
 )
@@ -126,10 +127,24 @@ var subArgsReadOnly = map[string]map[string]func(args []string) bool{
 			return onlyFlags(a, "-a", "-r", "-l", "-v", "-vv", "--all", "--remotes", "--list", "--show-current")
 		},
 		"tag": func(a []string) bool { return onlyFlags(a, "-l", "--list", "-n") },
+		// The diff-producing verbs take --output (writes a file) and
+		// --ext-diff (runs the configured external diff program).
+		"diff":     gitDiffArgsReadOnly,
+		"log":      gitDiffArgsReadOnly,
+		"show":     gitDiffArgsReadOnly,
+		"shortlog": gitDiffArgsReadOnly,
+		// git reflog is "show" by default; expire and delete rewrite it.
+		"reflog": func(a []string) bool {
+			return gitDiffArgsReadOnly(a) && (len(a) == 0 || strings.HasPrefix(a[0], "-") || a[0] == "show" || a[0] == "exists")
+		},
 		"remote": func(a []string) bool {
 			return len(a) == 0 || onlyFlags(a, "-v", "--verbose") || (len(a) >= 1 && (a[0] == "show" || a[0] == "get-url"))
 		},
 	},
+}
+
+func gitDiffArgsReadOnly(a []string) bool {
+	return !anyArgPrefix(a, "--output", "--ext-diff")
 }
 
 func anyArg(args []string, want ...string) bool {
@@ -227,7 +242,9 @@ func IsReadOnly(command string, extra []string) bool {
 	// Structural rejections: any output redirection, command substitution,
 	// backgrounding, or process substitution makes intent opaque -> prompt.
 	// (`<` input redirection is fine for reads, but `>`/`>>` write files.)
-	for _, bad := range []string{">", ">>", "$(", "`", "&", "<(", ">("} {
+	// "${" too: ${VAR:=value} assigns in the shared shell (PS0 or
+	// PROMPT_COMMAND set that way runs code before every later command).
+	for _, bad := range []string{">", ">>", "$(", "${", "`", "&", "<(", ">("} {
 		if strings.Contains(command, bad) {
 			return false
 		}
@@ -482,59 +499,78 @@ func IsDangerous(command string) bool {
 		}
 		cmd := stripEnvAssignments(fields)
 		cmd = stripPrivilegePrefix(cmd)
-		if len(cmd) == 0 {
-			continue
+		for i, tok := range cmd {
+			cmd[i] = dangerToken(tok)
 		}
-		lead := cmd[0]
-		args := cmd[1:]
+		// Every position may start the command: wrappers (command, env,
+		// nice, timeout, xargs, nohup...) put it later in the line, and a
+		// false positive only costs a prompt.
+		for i := range cmd {
+			if dangerousCommand(path.Base(cmd[i]), cmd[i+1:]) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
-		switch {
-		case lead == "rm":
-			// Recursive/forced delete of a root-ish or wildcard target.
-			if hasRecursiveFlag(args) {
-				for _, t := range nonFlagArgs(args) {
-					if rootishTarget(t) {
-						return true
-					}
-				}
-			}
-		case lead == "chmod" || lead == "chown" || lead == "chgrp":
-			// Mass recursive permission/ownership change on a root-ish path,
-			// or the notorious `chmod -R 000`.
-			if hasRecursiveFlag(args) {
-				for _, t := range nonFlagArgs(args) {
-					if rootishTarget(t) {
-						return true
-					}
-				}
-			}
-			for _, a := range args {
-				if a == "000" {
-					if hasRecursiveFlag(args) {
-						return true
-					}
-				}
-			}
-		case strings.HasPrefix(lead, "mkfs"):
-			return true
-		case lead == "wipefs" || lead == "blkdiscard" || lead == "fdisk" ||
-			lead == "parted" || lead == "sgdisk" || lead == "shred" ||
-			lead == "mkswap":
-			return true
-		case lead == "swapoff":
-			for _, a := range args {
-				if a == "-a" || a == "--all" {
+// dangerToken undoes the quoting a shell would: "$HOME", '/' and \rm are
+// $HOME, / and rm to the classifier.
+func dangerToken(tok string) string {
+	if len(tok) >= 2 && (tok[0] == '"' || tok[0] == '\'') && tok[len(tok)-1] == tok[0] {
+		tok = tok[1 : len(tok)-1]
+	}
+	return strings.TrimPrefix(tok, `\`)
+}
+
+// dangerousCommand reports a catastrophic lead with its args.
+func dangerousCommand(lead string, args []string) bool {
+	switch {
+	case lead == "rm":
+		// Recursive/forced delete of a root-ish or wildcard target.
+		if hasRecursiveFlag(args) {
+			for _, t := range nonFlagArgs(args) {
+				if rootishTarget(t) {
 					return true
 				}
 			}
-		case lead == "shutdown" || lead == "reboot" || lead == "halt" ||
-			lead == "poweroff":
-			return true
-		case lead == "init" || lead == "telinit":
-			for _, a := range args {
-				if a == "0" || a == "6" {
+		}
+	case lead == "chmod" || lead == "chown" || lead == "chgrp":
+		// Mass recursive permission/ownership change on a root-ish path,
+		// or the notorious `chmod -R 000`.
+		if hasRecursiveFlag(args) {
+			for _, t := range nonFlagArgs(args) {
+				if rootishTarget(t) {
 					return true
 				}
+			}
+		}
+		for _, a := range args {
+			if a == "000" {
+				if hasRecursiveFlag(args) {
+					return true
+				}
+			}
+		}
+	case strings.HasPrefix(lead, "mkfs"):
+		return true
+	case lead == "wipefs" || lead == "blkdiscard" || lead == "fdisk" ||
+		lead == "parted" || lead == "sgdisk" || lead == "shred" ||
+		lead == "mkswap":
+		return true
+	case lead == "swapoff":
+		for _, a := range args {
+			if a == "-a" || a == "--all" {
+				return true
+			}
+		}
+	case lead == "shutdown" || lead == "reboot" || lead == "halt" ||
+		lead == "poweroff":
+		return true
+	case lead == "init" || lead == "telinit":
+		for _, a := range args {
+			if a == "0" || a == "6" {
+				return true
 			}
 		}
 	}
