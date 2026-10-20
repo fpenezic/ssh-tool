@@ -511,8 +511,14 @@ func (a *App) McpApprovalRespond(approvalID, decision string) error {
 	if d != mcpDecisionRun && d != mcpDecisionType && d != mcpDecisionDeny {
 		d = mcpDecisionDeny
 	}
-	ch <- d
-	return nil
+	// One answer per approval: a second (double click, two windows) would
+	// block on the full buffer for good.
+	select {
+	case ch <- d:
+		return nil
+	default:
+		return fmt.Errorf("approval %s already answered", approvalID)
+	}
 }
 
 // ----- Tool handlers (called by the MCP server per accepted connection) -----

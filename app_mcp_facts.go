@@ -300,12 +300,16 @@ func (a *App) McpFactsApprovalRespond(approvalID string, approve bool, hostIDs [
 	if !ok {
 		return fmt.Errorf("no pending approval %s", approvalID)
 	}
+	d := mcpDecisionDeny
 	if approve && len(hostIDs) > 0 {
-		ch <- mcpDecisionRun
-	} else {
-		ch <- mcpDecisionDeny
+		d = mcpDecisionRun
 	}
-	return nil
+	select {
+	case ch <- d:
+		return nil
+	default:
+		return fmt.Errorf("approval %s already answered", approvalID)
+	}
 }
 
 // factsGatherRequest is gather_facts' input. It mirrors mcpFactsArgs, which

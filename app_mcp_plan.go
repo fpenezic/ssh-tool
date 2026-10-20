@@ -1235,8 +1235,17 @@ func (a *App) buildPlanPreview(p *mcpPlan) McpPlanPreview {
 				credLabel(*e.SetSettings.AuthRef, "edit of "+cur.Name)))
 		}
 		if e.SetSettings.NetworkProfileID != nil {
+			// Named like the create path, so the user approves a profile,
+			// not an id.
+			to := nameOrInherited(profNames, e.SetSettings.NetworkProfileID)
+			if id := *e.SetSettings.NetworkProfileID; id != "" {
+				if _, ok := profNames[id]; !ok {
+					warn("edit of " + cur.Name + " references unknown network profile id " + id)
+					to = "UNKNOWN (" + id + ")"
+				}
+			}
 			ch = append(ch, fmt.Sprintf("network profile: %s -> %s",
-				nameOrInherited(profNames, cur.Overrides.NetworkProfileID), *e.SetSettings.NetworkProfileID))
+				nameOrInherited(profNames, cur.Overrides.NetworkProfileID), to))
 		}
 		if e.SetSettings.InitialCommand != nil {
 			ch = append(ch, fmt.Sprintf("initial command: %q -> %q",

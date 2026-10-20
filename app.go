@@ -129,6 +129,10 @@ type App struct {
 	mcpLocalToken  string
 	mcpTCPListener net.Listener
 	mcpTCPToken    string
+	// mcpConns / mcpTCPConns are each leg's accepted connections, closed
+	// when that leg stops so disabling the bridge ends running sessions.
+	mcpConns    map[net.Conn]bool
+	mcpTCPConns map[net.Conn]bool
 
 	// share is the browser session-share server (internal/share). Nil until
 	// the share_enabled setting is on. Desktop only; mobile has no server.
