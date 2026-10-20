@@ -574,11 +574,9 @@ don't.
   statements (today a `POST _plugins/_ppl` / `POST _query` request);
   `search_after` paging past the 10 000 window in Data; a JSON tree view of
   aggregation results; the Kibana console's `${var}` variables.
-- **Redis tab.** Asked for with ClickHouse (2026-10-20), parked: no
-  tables or SQL, so not the Database tab - a key browser (`SCAN` by
-  pattern, grouped on `:`), a viewer per type (string, hash, list, set,
-  zset, stream) with TTL, a command console, read-only as an allowlist of
-  commands. `go-redis` is pure Go and dials through `sshchan` like Kafka.
+- **Redis, what the first cut left out.** Cluster mode (MOVED / ASK
+  redirects; today one node), Sentinel, RESP3; a value editor per type;
+  grouping on a second `:` level; key order past the 10 000-key sample.
 - **A list of databases inherited from a folder.** The listed databases
   are per connection; a replicated cluster (the same prod / stage list on
   every node) would want the list on the folder. Wait for the ask.

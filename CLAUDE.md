@@ -25,7 +25,8 @@ A Kafka tab per connection (topics, consumer, produce, groups; franz-go
 in core) whose broker connections ride that connection's SSH session,
 and a Database tab the same way (PostgreSQL / MySQL via pgx and
 go-sql-driver, ClickHouse over its HTTP interface and OpenSearch /
-Elasticsearch over REST with net/http, internal/dbx).
+Elasticsearch over REST with net/http, Redis with its own RESP2 client,
+internal/dbx).
 Local audit log + sealed password / API-token
 history (last 5 rotations).
 
@@ -119,7 +120,7 @@ ssh-tool/
 │  ├─ totp/                RFC 6238 codes from otpauth URIs / KeePass fields
 │  ├─ inventory/           dynamic providers: Proxmox, Hetzner, DO, Linode, Vultr, Scaleway, AWS EC2, Ansible
 │  ├─ kafka/               Kafka tab: franz-go client dialing through the connection's SSH session
-│  ├─ dbx/                 Database tab: PostgreSQL / MySQL / ClickHouse / OpenSearch, sessions, read-only guards
+│  ├─ dbx/                 Database tab: PostgreSQL / MySQL / ClickHouse / OpenSearch / Redis, sessions, read-only guards
 │  ├─ sshchan/             LazySSH: a tab's TCP connections as direct-tcpip channels on one SSH session
 │  ├─ httpc/               HTTP/SOAP probe (used by HttpModal)
 │  ├─ local/               in-app local PTY (Win/Mac/Linux shells)
@@ -172,7 +173,7 @@ cd frontend && npm run test        # vitest, 33 files / 332 cases
 ```
 
 The Database tests that need a real server skip unless `DBTEST_PG` /
-`DBTEST_MYSQL` / `DBTEST_CH` / `DBTEST_OS` / `DBTEST_ES` name one (URLs; docker one-liners in
+`DBTEST_MYSQL` / `DBTEST_CH` / `DBTEST_OS` / `DBTEST_ES` / `DBTEST_REDIS` name one (URLs; docker one-liners in
 `internal/dbx/integration_test.go`).
 
 Narrower runs while iterating: `go test ./internal/resolver/`

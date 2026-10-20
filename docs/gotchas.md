@@ -1944,6 +1944,17 @@ everything mobile is behind a build tag or an `isMobile` check.
    has one database, the cluster; a database name inherited from a folder
    is dropped for this engine (`app_db.go`).
 
+122. **Redis: our own RESP2 client, and Stop must close.**
+   (`internal/dbx/redis*.go`) An SSH channel (`sshchan`) ignores
+   `SetDeadline`, so breaking off a read (Stop on `BLPOP`, a caller's
+   context) closes the connection; a session then dials again on its next
+   run and re-sends AUTH and the `SELECT` it had. Never send `HELLO 3`:
+   the reader is RESP2 only, and `MONITOR` / `SUBSCRIBE` / `CLIENT REPLY`
+   would leave a tab reading replies that never match its commands
+   (`rdRefuse`). Command flags cannot drive read-only: `CONFIG|SET` has no
+   `write` flag, so the allowlist (`rdReadArgs`) names subcommands. The
+   test DB numbers (3, 4) are flushed by the integration test.
+
 ---
 
 # Archive

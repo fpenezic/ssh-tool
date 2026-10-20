@@ -1587,8 +1587,9 @@ Topic and group administration is not available to it. See
 <a id="databases"></a>
 ## 6d. Databases
 
-Browse and query a PostgreSQL, MySQL / MariaDB or ClickHouse database, or an
-OpenSearch / Elasticsearch cluster, from the connection that reaches it. Like Kafka, the database is a service on a
+Browse and query a PostgreSQL, MySQL / MariaDB or ClickHouse database, an
+OpenSearch / Elasticsearch cluster or a Redis server from the connection
+that reaches it. Like Kafka, the database is a service on a
 connection: switch it on in the connection (or once on a folder of
 database hosts) and the connection opens a **Database tab** next to its
 terminals. Through SSH (the default), every database connection rides the
@@ -1600,12 +1601,13 @@ connection's SSH session, so a server that only listens on the host's
 In the connection editor (or a folder's), the **Database** tab:
 
 - **Engine** - PostgreSQL, MySQL / MariaDB, ClickHouse (over its HTTP
-  interface, see [ClickHouse](#clickhouse) below) or OpenSearch /
-  Elasticsearch (see [OpenSearch / Elasticsearch](#opensearch)).
+  interface, see [ClickHouse](#clickhouse) below), OpenSearch /
+  Elasticsearch (see [OpenSearch / Elasticsearch](#opensearch)) or Redis /
+  Valkey (see [Redis](#redis)).
 - **Address** - host and port as seen from where the database is dialed:
   from the SSH host when it runs there or behind it. Empty means
-  `127.0.0.1` and the engine's port (5432 / 3306 / 8123 / 9200; ClickHouse
-  with TLS on takes 8443).
+  `127.0.0.1` and the engine's port (5432 / 3306 / 8123 / 9200 / 6379;
+  ClickHouse with TLS on takes 8443).
 - **Database** - the one the tab opens first; empty takes the server's
   default for the login.
 - **Login** - a password credential whose default username and password are
@@ -1800,6 +1802,40 @@ cluster as the one database.
   all the tab can do: a login with a read-only role is the real guard.
 - **Stop** closes the request; the cluster cancels a search whose client
   went away. There are no sessions or transactions.
+
+<a id="redis"></a>
+### Redis
+
+Redis and the servers that speak its protocol (Valkey, KeyDB), port 6379,
+TLS as for the others. The login is an ACL user and password; a password
+with no username is the `requirepass` password. **Database** is the
+database number (`3` or `db3`; empty is 0).
+
+- **The tree** lists the numbered databases (all of them when the login
+  may read `CONFIG GET databases`, else the ones with keys) and, in each,
+  the keys grouped by the part before their first `:` (`user:*`,
+  `session:*`; keys without one under *(no prefix)*). Groups come from a
+  `SCAN` of up to 10 000 keys; on a bigger keyspace the counts say they
+  are from a sample.
+- **Data** lists a group's keys, sorted, with type, TTL (`-1`: none),
+  size (bytes of a string, elements of a collection) and the value: a
+  string's start, a collection's first 20 elements as JSON. **DDL** shows
+  the pattern and the types seen.
+- **Query tabs** run one command per line, quoted as in `redis-cli`
+  (`SET k "two words"`, `"\x00"` escapes); `#` and `//` lines are comments.
+  `HGETALL`, `CONFIG GET` and `... WITHSCORES` come back as two columns,
+  `INFO` as section / name / value, `SCAN` as its keys with the next cursor
+  below the grid, other arrays a row per element; `OK` and integer replies
+  show as the result's message. `SELECT` carries to the next run.
+  `MONITOR`, `SUBSCRIBE`, `SYNC`, `HELLO`, `RESET`, `QUIT` and
+  `CLIENT REPLY` are refused: they would take the connection over.
+- **Stop** closes the tab's connection, which also breaks off a blocking
+  command (`BLPOP`, `XREAD BLOCK`); the next run connects again on the
+  same database.
+- **Read-only** sends only read commands (an allowlist that checks
+  subcommands: `CONFIG GET` reads, `CONFIG SET` does not; `EVAL_RO` and
+  `FCALL_RO` read, `EVAL` does not). Redis has no read-only session, so an
+  ACL user limited to `+@read` is the real guard.
 
 ### Tables
 
