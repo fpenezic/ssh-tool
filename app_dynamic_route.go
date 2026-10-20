@@ -102,6 +102,12 @@ func (a *App) applyBastion(c *store.Connection, entry *store.DynamicEntry, df *s
 		if bastionCred != "" {
 			cred := bastionCred
 			c.Overrides.AuthRef = &cred
+			// The same login as the bastion has as a jump hop below, not
+			// the folder's user with the bastion's key.
+			if cr, err := a.db.GetCredential(bastionCred); err == nil && cr != nil && cr.DefaultUsername != nil {
+				u := *cr.DefaultUsername
+				c.Overrides.Username = &u
+			}
 		}
 		return
 	}

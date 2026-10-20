@@ -94,7 +94,13 @@ func (l *localState) flushLocked() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(l.path, b, 0o600)
+	// Through a temp file and a rename: a crash mid-write must not leave
+	// a truncated file that loads as empty (tabs, windows, recents gone).
+	tmp := l.path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, l.path)
 }
 
 // localSettingGet reads a routed key: local file first, then a

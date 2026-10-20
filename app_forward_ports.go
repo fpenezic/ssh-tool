@@ -101,7 +101,9 @@ func (a *App) ForwardsPortCheck(addr string, port uint16, excludeID string) Port
 		return out
 	}
 	probe := a.forwards.CheckLocalPort(addr, port)
-	if probe.HolderID != excludeID {
+	// Skip only the forward being edited holding its own port; a port held
+	// by another program (no holder id) always warns, new forwards too.
+	if probe.HolderID == "" || probe.HolderID != excludeID {
 		out.InUse, out.Reserved = probe.InUse, probe.Reserved
 		if probe.HolderID != "" {
 			out.Holder = a.forwardLabel(probe.HolderID)
