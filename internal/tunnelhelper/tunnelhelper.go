@@ -120,6 +120,10 @@ type Options struct {
 	// ReadyTimeout overrides readyTimeout (a login with a typed one-time
 	// code takes longer than a NetBird registration).
 	ReadyTimeout time.Duration
+
+	// started receives the process as soon as it runs, before it is
+	// ready (the manager's handle to stop a login in progress).
+	started func(p *Proc)
 }
 
 // Answer submits values (field key -> value) for an auth challenge.
@@ -219,13 +223,34 @@ func MaxProtocol() int { return maxProtocol }
 type Manager struct {
 	mu    sync.Mutex
 	procs map[string]*Proc
+	// starting holds the helpers between spawn and ready (a login can
+	// take minutes); the lock is not held meanwhile.
+	starting map[string]*pendingSpawn
 	// onExit, when set, is called (own goroutine) after a helper
 	// process dies for any reason, so the app can update UI state.
 	onExit func(profileID string)
 }
 
 func NewManager(onExit func(profileID string)) *Manager {
-	return &Manager{procs: map[string]*Proc{}, onExit: onExit}
+	return &Manager{procs: map[string]*Proc{}, starting: map[string]*pendingSpawn{}, onExit: onExit}
+}
+
+// pendingSpawn is a helper on its way up. done is closed when spawn
+// returned; err is its error.
+type pendingSpawn struct {
+	done    chan struct{}
+	err     error
+	proc    *Proc // set once the process runs
+	stopped bool  // Stop / StopAll came first
+}
+
+// abort ends a helper still starting (no session to close yet). Caller
+// holds m.mu.
+func (ps *pendingSpawn) abort() {
+	ps.stopped = true
+	if ps.proc != nil && ps.proc.cmd.Process != nil {
+		_ = ps.proc.cmd.Process.Kill()
+	}
 }
 
 // Ensure returns the running helper for the profile, spawning it if
@@ -237,28 +262,69 @@ func (m *Manager) Ensure(profileID, name, exePath string, args, env []string) (*
 }
 
 // EnsureWith is Ensure with spawn options (auth relay, ready timeout).
-// The manager lock is held across the spawn, so a second connect through
-// the same profile waits for the first login instead of starting another.
+// A second connect through a profile whose helper is starting waits for
+// that one (and gets its error) instead of starting another. The manager
+// lock is not held during the start, so other profiles, status reads and
+// Stop go on while a login waits for a one-time code.
 func (m *Manager) EnsureWith(profileID, name, exePath string, args, env []string, opts Options) (*Proc, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if p, ok := m.procs[profileID]; ok {
-		p.mu.Lock()
-		alive := !p.exited
-		p.mu.Unlock()
-		if alive {
-			return p, nil
+	for {
+		m.mu.Lock()
+		if p, ok := m.procs[profileID]; ok {
+			p.mu.Lock()
+			alive := !p.exited
+			p.mu.Unlock()
+			if alive {
+				m.mu.Unlock()
+				return p, nil
+			}
+			delete(m.procs, profileID)
 		}
-		delete(m.procs, profileID)
+		if ps := m.starting[profileID]; ps != nil {
+			m.mu.Unlock()
+			<-ps.done
+			if ps.err != nil {
+				return nil, ps.err
+			}
+			continue
+		}
+		ps := &pendingSpawn{done: make(chan struct{})}
+		if m.starting == nil {
+			m.starting = map[string]*pendingSpawn{}
+		}
+		m.starting[profileID] = ps
+		m.mu.Unlock()
+
+		opts.started = func(p *Proc) {
+			m.mu.Lock()
+			ps.proc = p
+			if ps.stopped {
+				ps.abort()
+			}
+			m.mu.Unlock()
+		}
+		p, err := spawn(profileID, name, exePath, args, env, opts)
+
+		m.mu.Lock()
+		delete(m.starting, profileID)
+		if err == nil && ps.stopped {
+			m.mu.Unlock()
+			stopProc(p)
+			err = fmt.Errorf("%s: stopped while starting", name)
+			m.mu.Lock()
+		}
+		if err == nil {
+			m.procs[profileID] = p
+			go m.reap(p)
+		}
+		ps.err = err
+		close(ps.done)
+		m.mu.Unlock()
+		if err != nil {
+			return nil, err
+		}
+		log.Printf("tunnelhelper: %s up (socks %s)", name, p.socksAddr)
+		return p, nil
 	}
-	p, err := spawn(profileID, name, exePath, args, env, opts)
-	if err != nil {
-		return nil, err
-	}
-	m.procs[profileID] = p
-	go m.reap(p)
-	log.Printf("tunnelhelper: %s up (socks %s)", name, p.socksAddr)
-	return p, nil
 }
 
 // Get returns a running helper or nil.
@@ -282,6 +348,9 @@ func (m *Manager) Get(profileID string) *Proc {
 // signal), give it 10s, then kill.
 func (m *Manager) Stop(profileID string) {
 	m.mu.Lock()
+	if ps := m.starting[profileID]; ps != nil {
+		ps.abort()
+	}
 	p, ok := m.procs[profileID]
 	if ok {
 		delete(m.procs, profileID)
@@ -327,6 +396,9 @@ func (m *Manager) Detach(profileID string) {
 // StopAll tears down everything (app shutdown).
 func (m *Manager) StopAll() {
 	m.mu.Lock()
+	for _, st := range m.starting {
+		st.abort()
+	}
 	ps := m.procs
 	m.procs = map[string]*Proc{}
 	m.mu.Unlock()
@@ -409,6 +481,11 @@ func checkProtocol(v int) error {
 	return nil
 }
 
+// maxLine bounds one protocol or log line of a helper. An info event with a
+// big route list or a long login banner is well past bufio's 64 KiB
+// default, which used to stop the reader mid-session.
+const maxLine = 4 << 20
+
 func spawn(profileID, name, exePath string, args, env []string, opts Options) (*Proc, error) {
 	cmd := exec.Command(exePath, args...)
 	cmd.Env = append(cmd.Environ(), env...)
@@ -432,17 +509,25 @@ func spawn(profileID, name, exePath string, args, env []string, opts Options) (*
 	}
 	go func() {
 		sc := bufio.NewScanner(stderr)
+		sc.Buffer(make([]byte, 0, 64*1024), maxLine)
 		for sc.Scan() {
 			log.Printf("helper[%s]: %s", name, sc.Text())
 		}
+		// A line past maxLine stops the scanner; keep draining so the
+		// helper never blocks on a full pipe.
+		_, _ = io.Copy(io.Discard, stderr)
 	}()
 
 	p := &Proc{ProfileID: profileID, Name: name, cmd: cmd, stdin: stdin, startedAt: time.Now()}
+	if opts.started != nil {
+		opts.started(p)
+	}
 
 	// Read protocol lines; the first must be ready or error.
 	readyCh := make(chan error, 1)
 	go func() {
 		sc := bufio.NewScanner(stdout)
+		sc.Buffer(make([]byte, 0, 64*1024), maxLine)
 		got := false
 		for sc.Scan() {
 			var ev helperEvent
@@ -506,6 +591,7 @@ func spawn(profileID, name, exePath string, args, env []string, opts Options) (*
 		if !got {
 			readyCh <- fmt.Errorf("helper exited before ready")
 		}
+		_, _ = io.Copy(io.Discard, stdout) // see the stderr reader
 	}()
 
 	timeout := readyTimeout

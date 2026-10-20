@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,6 +42,19 @@ func fakeHelper(mode string) {
 			}
 		}
 		_ = os.WriteFile(os.Getenv("TUNNELHELPER_MARK"), []byte("eof"), 0o600)
+	case "hang": // a login nobody answers
+		out(map[string]any{"event": "auth", "id": "1", "message": "OTP?",
+			"fields": []map[string]string{{"key": "otp", "name": "otp", "label": "OTP:", "kind": "password"}}})
+		sc := bufio.NewScanner(os.Stdin)
+		for sc.Scan() {
+		}
+	case "bigline": // an info event past bufio's default 64 KiB line
+		ln, _ := net.Listen("tcp", "127.0.0.1:0")
+		out(map[string]any{"event": "info", "info": map[string]any{"banner": strings.Repeat("x", 300<<10)}})
+		out(map[string]any{"event": "ready", "socks": ln.Addr().String(), "protocol": 1})
+		sc := bufio.NewScanner(os.Stdin)
+		for sc.Scan() {
+		}
 	case "auth":
 		out(map[string]any{"event": "auth", "id": "1", "message": "Please enter your OTP password.",
 			"fields": []map[string]string{{"key": "main:password:1", "name": "password", "label": "Password:", "kind": "password"}}})
