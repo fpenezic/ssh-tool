@@ -20,7 +20,7 @@
   import ColorPicker from "./ColorPicker.svelte";
   import IconPicker from "./IconPicker.svelte";
   import Icon from "./Icon.svelte";
-  import { IconFolder, IconHost, IconLock, IconUser, IconClipboardCopy, IconTerminal, IconMonitor, IconStar, IconGlobe, IconBastion, IconTrash, IconKey, IconVpn, IconKafka, IconDb } from "./iconMap";
+  import { IconFolder, IconHost, IconLock, IconUser, IconClipboardCopy, IconTerminal, IconMonitor, IconStar, IconGlobe, IconBastion, IconTrash, IconKey, IconVpn, IconKafka, IconDb, IconChevronDown } from "./iconMap";
   import { contextMenu, type MenuItem } from "./contextMenu.svelte.ts";
   import appIcon from "../assets/images/app-icon-64.png";
   import type { TunnelInfo, NetworkProfileInfo } from "./api";
@@ -565,10 +565,16 @@
   // sits in the same place in both. The last tab picked is kept (per
   // viewer, browser storage); a tab the current item lacks falls back to
   // General.
-  type EdTab = "general" | "connection" | "terminal" | "forwards" | "vnc" | "kafka" | "db" | "advanced";
+  // Database and Kafka share one Services tab; "db" / "kafka" (a stored
+  // pick, a tree row asking for its settings) land there.
+  type EdTab = "general" | "connection" | "terminal" | "forwards" | "vnc" | "services" | "advanced";
   const ED_TAB_KEY = "ssh-tool.editor.tab";
+  function edTabOf(t: string | null | undefined): EdTab | null {
+    if (!t) return null;
+    return (t === "db" || t === "kafka" ? "services" : t) as EdTab;
+  }
   let edTabPref = $state<EdTab>((() => {
-    try { return (localStorage.getItem(ED_TAB_KEY) as EdTab) || "general"; } catch { return "general"; }
+    try { return edTabOf(localStorage.getItem(ED_TAB_KEY)) || "general"; } catch { return "general"; }
   })());
   function setEdTab(t: EdTab) {
     view.editorTabForce = null;
@@ -709,13 +715,12 @@
       { id: "forwards", label: connTunnelOnly ? "Forwards & tunnel" : "Forwards", warn },
     ];
     if (!isMobile) tabs.push({ id: "vnc", label: "VNC" });
-    tabs.push({ id: "db", label: "Database" });
-    tabs.push({ id: "kafka", label: "Kafka" });
+    tabs.push({ id: "services", label: "Services" });
     tabs.push({ id: "advanced", label: "Advanced" });
     return tabs;
   });
   const edTab = $derived.by<EdTab>(() => {
-    const forced = view.editorTabForce as EdTab | null;
+    const forced = edTabOf(view.editorTabForce);
     if (forced && edTabs.some((t) => t.id === forced)) return forced;
     return edTabs.some((t) => t.id === edTabPref) ? edTabPref : "general";
   });
@@ -876,8 +881,7 @@
     { id: "connection", label: "Connection" },
     { id: "terminal", label: "Terminal" },
     { id: "forwards", label: "Tunnels" },
-    { id: "db", label: "Database" },
-    { id: "kafka", label: "Kafka" },
+    { id: "services", label: "Services" },
     { id: "advanced", label: "Advanced" },
   ];
   const folderTab = $derived<EdTab>(folderTabs.some((t) => t.id === edTabPref) ? edTabPref : "general");
@@ -909,6 +913,20 @@
   const folderInhAutostart = $derived(inheritedSetting(folder?.parent_id, "tunnel_autostart"));
 
   // Rare actions live behind the header's "..." button.
+  // The header's Open button: the default database (or Kafka when there is
+  // no database); its arrow lists every database and Kafka.
+  const openItems = $derived(conn ? connectionActions.openMenuItems(conn.id) : []);
+  function openDefaultService() {
+    if (!conn) return;
+    if (dbEnabledFor(conn)) {
+      const o = conn.overrides ?? {};
+      const def = (o.db_targets ?? []).some((t) => t.id === o.db_default_target) ? o.db_default_target! : "";
+      connectionActions.openDb(conn.id, def);
+    } else {
+      connectionActions.openKafka(conn.id);
+    }
+  }
+
   function openMoreMenu(e: MouseEvent) {
     if (!conn) return;
     const items: MenuItem[] = [];
@@ -1966,7 +1984,7 @@
         <div class="span-2 save-row"><span class="saved-pill">✓ {savedHint}</span></div>
       {/if}
     </div>
-    {:else if folderTab === "db"}
+    {:else if folderTab === "services"}
     <div class="form">
       <p class="section-label span-2">Inherited by the connections and subfolders in this folder unless they set their own value.</p>
       <DbSettingsEditor
@@ -1976,21 +1994,13 @@
         effectiveEngine={dbInheritedFrom(folder?.parent_id, "db_engine") ?? ""}
         inheritedReadOnly={dbInheritedFrom(folder?.parent_id, "db_read_only") === true}
       />
-      <p class="span-2 field-note">To open the database on a double-click instead of a terminal, pick <strong>Database</strong> under General -&gt; Double-click opens.</p>
-      {#if savedHint}
-        <div class="span-2 save-row"><span class="saved-pill">✓ {savedHint}</span></div>
-      {/if}
-    </div>
-    {:else if folderTab === "kafka"}
-    <div class="form">
-      <p class="section-label span-2">Inherited by the connections and subfolders in this folder unless they set their own value.</p>
       <KafkaSettingsEditor
         bind:draft={editingFolder.kafka}
         inheritLabel="(inherit from parent)"
         effectiveOn={editingFolder.kafka.enabled === "on" || (editingFolder.kafka.enabled === "" && kafkaInheritedFrom(folder?.parent_id))}
         inheritedReadOnly={dbInheritedFrom(folder?.parent_id, "kafka_read_only") === true}
       />
-      <p class="span-2 field-note">To open Kafka on a double-click instead of a terminal, pick <strong>Kafka</strong> under General -&gt; Double-click opens.</p>
+      <p class="span-2 field-note">To open the database or Kafka on a double-click instead of a terminal, pick it under General -&gt; Double-click opens.</p>
       {#if savedHint}
         <div class="span-2 save-row"><span class="saved-pill">✓ {savedHint}</span></div>
       {/if}
@@ -2069,15 +2079,17 @@
             <IconMonitor size={13} /> VNC
           </button>
         {/if}
-        {#if dbEnabledFor(conn)}
-          <button class="vnc-btn" title="Open the Database tab of this connection" onclick={() => connectionActions.openDb(conn!.id)}>
-            <IconDb size={13} /> Database
-          </button>
-        {/if}
-        {#if kafkaEnabledFor(conn)}
-          <button class="vnc-btn" title="Open the Kafka tab of this connection" onclick={() => connectionActions.openKafka(conn!.id)}>
-            <IconKafka size={13} /> Kafka
-          </button>
+        {#if openItems.length > 0}
+          <span class="open-split">
+            <button class="vnc-btn" title={dbEnabledFor(conn) ? "Open the default database of this connection" : "Open the Kafka tab of this connection"} onclick={openDefaultService}>
+              {#if dbEnabledFor(conn)}<IconDb size={13} />{:else}<IconKafka size={13} />{/if} Open
+            </button>
+            {#if openItems.length > 1}
+              <button class="vnc-btn open-more" aria-label="Open a service" title="Every database and Kafka of this connection" onclick={(e) => contextMenu.show(e, openItems)}>
+                <IconChevronDown size={13} />
+              </button>
+            {/if}
+          </span>
         {/if}
         {#if connecting}
           <!-- Abort a connect stuck on opkssh OIDC login (closed browser /
@@ -2698,7 +2710,7 @@
         </div>
       {/if}
     </div>
-    {:else if edTab === "db"}
+    {:else if edTab === "services"}
     <div class="form">
       <DbSettingsEditor
         bind:draft={editing.db}
@@ -2711,16 +2723,6 @@
         connName={conn?.name ?? ""}
         onOpenTarget={(id) => { if (conn) connectionActions.openDb(conn.id, id); }}
       />
-      <p class="span-2 field-note">To open the database on a double-click instead of a terminal, pick <strong>Database</strong> under General -&gt; Double-click opens. Changes apply to the next Database tab you open.</p>
-      {#if dirty}
-        <div class="span-2 dirty-hint">
-          <span class="dirty-pill">Unsaved changes</span>
-          <button class="link-save" onclick={saveConn}>Save now</button>
-        </div>
-      {/if}
-    </div>
-    {:else if edTab === "kafka"}
-    <div class="form">
       <KafkaSettingsEditor
         bind:draft={editing.kafka}
         inheritLabel="(inherit from folder)"
@@ -2728,7 +2730,7 @@
         inheritedReadOnly={dbInheritedFrom(conn?.folder_id, "kafka_read_only") === true}
         onOpen={() => { if (conn) connectionActions.openKafka(conn.id); }}
       />
-      <p class="span-2 field-note">To open Kafka on a double-click instead of a terminal, pick <strong>Kafka</strong> under General -&gt; Double-click opens.</p>
+      <p class="span-2 field-note">To open the database or Kafka on a double-click instead of a terminal, pick it under General -&gt; Double-click opens. Changes apply to the next tab you open.</p>
       {#if dirty}
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
@@ -3674,6 +3676,9 @@
     cursor: pointer;
   }
   .vnc-btn:hover { background: var(--surface2); border-color: var(--overlay0); }
+  .open-split { display: inline-flex; }
+  .open-split .vnc-btn:has(+ .open-more) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .open-split .open-more { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none; padding-left: 0.3rem; padding-right: 0.3rem; }
   .vnc-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
