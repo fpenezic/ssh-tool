@@ -7,7 +7,9 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.117.0] - ClickHouse, OpenSearch and Redis in the Database tab
+
+The Database tab now opens ClickHouse, OpenSearch / Elasticsearch and Redis next to PostgreSQL and MySQL, all through the connection's SSH session. Results can be sorted and searched, and a connection's database and Kafka settings share one Services tab with one Open button.
 
 ### Databases
 
