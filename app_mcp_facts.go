@@ -291,21 +291,24 @@ func (a *App) requestFactsApproval(req McpFactsApprovalRequest) []string {
 // McpFactsApprovalRespond answers the facts modal: approve with the host
 // ids the user kept (only ids that were offered count), or deny.
 func (a *App) McpFactsApprovalRespond(approvalID string, approve bool, hostIDs []string) error {
-	a.mcp.approvalsMu.Lock()
-	ch, ok := a.mcp.approvals[approvalID]
-	if ok && approve {
-		a.mcp.factsPicks[approvalID] = hostIDs
-	}
-	a.mcp.approvalsMu.Unlock()
-	if !ok {
-		return fmt.Errorf("no pending approval %s", approvalID)
-	}
 	d := mcpDecisionDeny
 	if approve && len(hostIDs) > 0 {
 		d = mcpDecisionRun
 	}
+	// The picks are stored with the answer that counts, in one critical
+	// section: a late second answer must not replace the hosts the first
+	// one approved. The send cannot block (one-slot channel, default).
+	a.mcp.approvalsMu.Lock()
+	defer a.mcp.approvalsMu.Unlock()
+	ch, ok := a.mcp.approvals[approvalID]
+	if !ok {
+		return fmt.Errorf("no pending approval %s", approvalID)
+	}
 	select {
 	case ch <- d:
+		if d == mcpDecisionRun {
+			a.mcp.factsPicks[approvalID] = hostIDs
+		}
 		return nil
 	default:
 		return fmt.Errorf("approval %s already answered", approvalID)

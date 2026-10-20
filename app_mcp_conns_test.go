@@ -83,3 +83,21 @@ func TestMcpApprovalAnsweredTwice(t *testing.T) {
 		t.Fatal("second answer blocked")
 	}
 }
+
+// A late second answer to a facts approval neither blocks nor replaces
+// the hosts the first answer picked.
+func TestMcpFactsSecondAnswerKeepsPicks(t *testing.T) {
+	a := &App{mcp: &mcpState{
+		approvals:  map[string]chan mcpDecision{"f": make(chan mcpDecision, 1)},
+		factsPicks: map[string][]string{},
+	}}
+	if err := a.McpFactsApprovalRespond("f", true, []string{"a", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.McpFactsApprovalRespond("f", true, []string{"c"}); err == nil {
+		t.Fatal("second answer accepted")
+	}
+	if got := a.mcp.factsPicks["f"]; len(got) != 2 || got[0] != "a" {
+		t.Fatalf("picks = %v", got)
+	}
+}
