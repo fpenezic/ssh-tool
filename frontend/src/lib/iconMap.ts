@@ -15,6 +15,7 @@ import Layers from "@lucide/svelte/icons/layers";
 import FolderPlus from "@lucide/svelte/icons/folder-plus";
 import Server from "@lucide/svelte/icons/server";
 import Info from "@lucide/svelte/icons/info";
+import WrapText from "@lucide/svelte/icons/wrap-text";
 import Monitor from "@lucide/svelte/icons/monitor";
 import Key from "@lucide/svelte/icons/key";
 import KeyRound from "@lucide/svelte/icons/key-round";
@@ -56,6 +57,7 @@ export {
   FolderPlus as IconFolderPlus,
   Server as IconHost,
   Info as IconInfo,
+  WrapText as IconWrap,
   Monitor as IconMonitor,
   Key as IconKey,
   KeyRound as IconKeyRound,

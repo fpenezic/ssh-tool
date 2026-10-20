@@ -19,6 +19,7 @@
   // download instead - decoding a few MB of ELF into a <pre> would only
   // produce replacement characters and a janky scroll.
   import { onMount } from "svelte";
+  import { IconWrap } from "./iconMap";
   import { api } from "./api";
   import { errMsg } from "./connectErrors";
   import {
@@ -399,7 +400,7 @@
               title="Pretty-print this JSON document"
             >{"{ }"} Format</button>
           {/if}
-          <button class:active={wrap} onclick={() => (wrap = !wrap)} title="Toggle line wrap">↩ Wrap</button>
+          <button class:active={wrap} onclick={() => (wrap = !wrap)} title="Toggle line wrap"><IconWrap size={13} /> Wrap</button>
           <button onclick={copyAll} title="Copy contents">Copy</button>
           <!-- Truncated files cannot be edited: saving back would write
                only the part we read and silently drop the rest. -->
@@ -445,8 +446,6 @@
       <div class="msg">
         Binary file ({fmtSize(size)}). Download it instead - previewing it here would only show garbage.
       </div>
-    {:else if !content}
-      <div class="msg">Empty file.</div>
     {:else if editing}
       <div class="edit-stack">
         <!-- Painted underlay: same font metrics as the textarea above it,
@@ -467,6 +466,8 @@
           disabled={saving}
         ></textarea>
       </div>
+    {:else if !content}
+      <div class="msg">Empty file.</div>
     {:else}
       <!-- `selectable` opts back in to text selection: #app sets
            user-select:none for app chrome (see style.css), and this is

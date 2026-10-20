@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconKeyRound } from "./iconMap";
+  import { IconInfo, IconKeyRound } from "./iconMap";
 
   interface Props {
     challengeId: string;
@@ -61,7 +61,7 @@
 
     {#if queueLength > 0}
       <p class="queue-hint">
-        ⓘ <strong>{queueLength}</strong> more host{queueLength === 1 ? "" : "s"} waiting after this one.
+        <IconInfo size={13} /> <strong>{queueLength}</strong> more host{queueLength === 1 ? "" : "s"} waiting after this one.
       </p>
     {/if}
 
@@ -110,6 +110,9 @@
   p { margin: 0.5rem 0; font-size: 0.875rem; line-height: 1.5; }
   .warn-text { color: var(--red); font-size: 0.875rem; }
   .hint { color: var(--overlay0); font-size: 0.8rem; }
+  .queue-hint :global(svg) {
+    vertical-align: -2px;
+  }
   .queue-hint {
     background: var(--crust);
     border-left: 3px solid var(--blue);

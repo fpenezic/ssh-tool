@@ -74,7 +74,17 @@ export class GuestClient {
   // onActiveTab fires when the host switches tabs, so a following guest can too.
   onActiveTab: (index: number) => void = () => {};
 
+  // ended is set by the first terminal phase (error, denied, closed): the
+  // close event that always follows must not overwrite it.
+  private ended = false;
+
   constructor(private url: string) {}
+
+  private finish(p: Phase) {
+    if (this.ended) return;
+    this.ended = true;
+    this.onPhase(p);
+  }
 
   connect() {
     this.onPhase({ kind: "connecting" });
@@ -82,17 +92,17 @@ export class GuestClient {
     try {
       ws = new WebSocket(this.url);
     } catch (e) {
-      this.onPhase({ kind: "error", message: String(e) });
+      this.finish({ kind: "error", message: String(e) });
       return;
     }
     ws.binaryType = "arraybuffer";
     this.ws = ws;
 
     ws.onmessage = (ev) => this.onMessage(ev);
-    ws.onerror = () => this.onPhase({ kind: "error", message: "connection error" });
+    ws.onerror = () => this.finish({ kind: "error", message: "connection error" });
     ws.onclose = (ev) => {
-      // If the phase already moved to denied/closed via a bye frame, keep it.
-      this.onPhase({ kind: "closed", reason: ev.reason || closeCodeReason(ev.code) });
+      // A bye frame or an error already set the phase: keep it.
+      this.finish({ kind: "closed", reason: ev.reason || closeCodeReason(ev.code) });
     };
   }
 
@@ -211,11 +221,7 @@ export class GuestClient {
   }
 
   private onBye(reason: string) {
-    if (reason === "denied") {
-      this.onPhase({ kind: "denied" });
-    } else {
-      this.onPhase({ kind: "closed", reason });
-    }
+    this.finish(reason === "denied" ? { kind: "denied" } : { kind: "closed", reason });
     this.ws?.close();
   }
 }
