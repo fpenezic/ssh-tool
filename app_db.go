@@ -149,7 +149,7 @@ func (a *App) dbOpen(connectionID, targetID string, login *[2]string) (*DbHandle
 	if err != nil {
 		return nil, err
 	}
-	addr, err := dbx.ParseAddr(settings.DbEngine, settings.DbAddr)
+	addr, err := dbx.ParseAddr(settings.DbEngine, settings.DbTLS, settings.DbAddr)
 	if err != nil {
 		return nil, err
 	}

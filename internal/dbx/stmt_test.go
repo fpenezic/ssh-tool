@@ -116,15 +116,15 @@ func TestParseAddr(t *testing.T) {
 		" 10.0.0.5:15 ": "10.0.0.5:15",
 	}
 	for in, want := range cases {
-		got, err := ParseAddr(EnginePostgres, in)
+		got, err := ParseAddr(EnginePostgres, "", in)
 		if err != nil || got != want {
 			t.Errorf("%q -> %q, %v; want %q", in, got, err, want)
 		}
 	}
-	if got, _ := ParseAddr(EngineMySQL, "db"); got != "db:3306" {
+	if got, _ := ParseAddr(EngineMySQL, "", "db"); got != "db:3306" {
 		t.Errorf("mysql default port: %q", got)
 	}
-	if _, err := ParseAddr(EnginePostgres, "db:x"); err == nil {
+	if _, err := ParseAddr(EnginePostgres, "", "db:x"); err == nil {
 		t.Error("bad port accepted")
 	}
 }

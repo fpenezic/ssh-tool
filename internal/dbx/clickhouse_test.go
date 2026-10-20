@@ -59,6 +59,11 @@ func TestCHException(t *testing.T) {
 }
 
 func TestCHReadLines(t *testing.T) {
+	// A logged error as data is a line, not the statement's error.
+	logged := "Code: 60. DB::Exception: Table x does not exist. (UNKNOWN_TABLE)\n"
+	if r := chReadLines(strings.NewReader(logged), 10, nil); r.Error != "" || len(r.Rows) != 1 {
+		t.Fatalf("logged error: %+v", r)
+	}
 	r := chReadLines(strings.NewReader(`{"a":1}`+"\n"+`{"a":2}`+"\n"), 10, nil)
 	if !r.HasRows || r.Columns[0].Name != "output" || len(r.Rows) != 2 || *r.Rows[1][0] != `{"a":2}` {
 		t.Fatalf("%+v", r)
@@ -78,8 +83,14 @@ func TestCHHelpers(t *testing.T) {
 	if chWritten(`{"read_rows":"7","written_rows":"7"}`) != 7 || chWritten("") != -1 {
 		t.Fatal("written_rows")
 	}
-	if DefaultPort(EngineClickHouse) != 8123 {
+	if DefaultPort(EngineClickHouse, TLSDisable) != 8123 || DefaultPort(EngineClickHouse, TLSRequire) != 8443 || DefaultPort(EngineMySQL, TLSRequire) != 3306 {
 		t.Fatal("port")
+	}
+	if a, _ := ParseAddr(EngineClickHouse, TLSVerifyFull, "ch"); a != "ch:8443" {
+		t.Fatalf("tls addr %q", a)
+	}
+	if a, _ := ParseAddr(EngineClickHouse, TLSVerifyFull, "ch:9443"); a != "ch:9443" {
+		t.Fatalf("explicit port %q", a)
 	}
 }
 
