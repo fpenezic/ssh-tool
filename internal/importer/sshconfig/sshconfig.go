@@ -21,6 +21,7 @@ package sshconfig
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 
@@ -48,7 +49,12 @@ func Parse(text string) ([]Entry, error) {
 	scanner.Buffer(make([]byte, 1024), 1024*1024)
 
 	var entries []Entry
-	var cur *Entry
+	// cur is the entries the current block applies to: every alias of
+	// its Host line (a repeated alias layers onto its first entry). A
+	// wildcard-only Host or a Match block applies to none of them; their
+	// directives used to land on the host above.
+	var cur []int
+	byAlias := map[string]int{}
 
 	for scanner.Scan() {
 		raw := scanner.Text()
@@ -60,55 +66,87 @@ func Parse(text string) ([]Entry, error) {
 		if key == "" {
 			continue
 		}
+		if strings.EqualFold(key, "Match") {
+			cur = nil // conditional block: not imported
+			continue
+		}
 		if strings.EqualFold(key, "Host") {
 			// One Host directive can name multiple aliases; we emit
 			// one Entry per alias so each becomes its own connection.
-			// Wildcard-only aliases are dropped entirely.
-			aliases := strings.Fields(val)
-			for _, a := range aliases {
+			// Wildcard aliases are dropped.
+			cur = nil
+			for _, a := range strings.Fields(val) {
 				if strings.ContainsAny(a, "*?!") {
 					continue
 				}
-				e := Entry{Alias: a}
-				entries = append(entries, e)
-			}
-			if len(entries) == 0 {
-				cur = nil
-				continue
-			}
-			cur = &entries[len(entries)-1]
-			continue
-		}
-		if cur == nil {
-			// Directive before any Host - global default. Ignore for now.
-			continue
-		}
-		switch strings.ToLower(key) {
-		case "hostname":
-			cur.HostName = val
-		case "user":
-			cur.User = val
-		case "port":
-			if n, err := strconv.Atoi(val); err == nil && n > 0 && n <= 65535 {
-				cur.Port = n
-			}
-		case "proxyjump":
-			for _, hop := range strings.Split(val, ",") {
-				hop = strings.TrimSpace(hop)
-				if hop != "" && !strings.EqualFold(hop, "none") {
-					cur.ProxyJump = append(cur.ProxyJump, hop)
+				i, ok := byAlias[a]
+				if !ok {
+					entries = append(entries, Entry{Alias: a})
+					i = len(entries) - 1
+					byAlias[a] = i
 				}
+				cur = append(cur, i)
 			}
-		case "identityfile":
-			cur.IdentFile = append(cur.IdentFile, val)
-		default:
-			cur.OtherLines = append(cur.OtherLines, raw)
+			continue
+		}
+		// Before any Host (global defaults) cur is empty: ignored for now.
+		for _, i := range cur {
+			applyDirective(&entries[i], key, val, raw)
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
 	return entries, nil
+}
+
+// applyDirective sets one directive on an entry. As in OpenSSH the first
+// value read wins for single-valued keys; IdentityFile accumulates.
+func applyDirective(e *Entry, key, val, raw string) {
+	switch strings.ToLower(key) {
+	case "hostname":
+		if e.HostName == "" {
+			e.HostName = val
+		}
+	case "user":
+		if e.User == "" {
+			e.User = val
+		}
+	case "port":
+		if n, err := strconv.Atoi(val); err == nil && n > 0 && n <= 65535 && e.Port == 0 {
+			e.Port = n
+		}
+	case "proxyjump":
+		if len(e.ProxyJump) > 0 {
+			return
+		}
+		for _, hop := range strings.Split(val, ",") {
+			hop = strings.TrimSpace(hop)
+			if hop != "" && !strings.EqualFold(hop, "none") {
+				e.ProxyJump = append(e.ProxyJump, hop)
+			}
+		}
+	case "identityfile":
+		e.IdentFile = append(e.IdentFile, val)
+	default:
+		e.OtherLines = append(e.OtherLines, raw)
+	}
+}
+
+// splitHop reads a ProxyJump hop, [user@]host[:port] (host may be a
+// bracketed IPv6 address).
+func splitHop(hop string) (user, host string, port uint16) {
+	host = hop
+	if i := strings.LastIndex(host, "@"); i > 0 {
+		user, host = host[:i], host[i+1:]
+	}
+	if h, p, err := net.SplitHostPort(host); err == nil {
+		if n, err := strconv.Atoi(p); err == nil && n > 0 && n <= 65535 {
+			return user, h, uint16(n)
+		}
+		return user, h, 0
+	}
+	return user, strings.Trim(host, "[]"), 0
 }
 
 // splitKV understands both "Key Value" and "Key = Value".
@@ -187,9 +225,16 @@ func Apply(db *store.DB, entries []Entry, rootFolderID string) (*Summary, error)
 			}
 		} else {
 			sum.JumpUnresolved = append(sum.JumpUnresolved, head)
-			// Treat the hop as a raw hostname so we don't silently
-			// drop it - better wrong port than no chain at all.
-			spec.Hostname = head
+			// Not an alias: take it as ProxyJump's [user@]host[:port]
+			// rather than drop the hop.
+			user, host, port := splitHop(head)
+			spec.Hostname = host
+			if user != "" {
+				spec.Username = strPtr(user)
+			}
+			if port > 0 {
+				spec.Port = &port
+			}
 		}
 		spec.Via = buildChain(tail)
 		return spec
