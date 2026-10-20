@@ -96,7 +96,7 @@
       <pre class="err">{err}</pre>
     {:else if viewName === "data"}
       {#if page}
-        <div class="gridbox"><DbResultGrid result={page} exportName={`${tab.name}-${offset + 1}`} /></div>
+        <div class="gridbox"><DbResultGrid result={page} exportName={`${tab.name}-${offset + 1}`} paged /></div>
       {:else}
         <p class="muted">Loading...</p>
       {/if}

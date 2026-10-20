@@ -2,23 +2,71 @@
   // A result set as a grid: only the rows in view are in the DOM, so the
   // 100k-row ceiling stays smooth. Click picks a cell (Ctrl+C copies it),
   // double-click opens the value in full below the grid (JSON
-  // pretty-printed). Export writes the rows as CSV or JSON.
+  // pretty-printed). A header click sorts and Ctrl+F filters the rows that
+  // were fetched, here in the window; # keeps the server's row number.
+  // Export writes the rows as shown.
 
+  import { untrack } from "svelte";
   import { api, type DbResult } from "./api";
   import { toast } from "./toast.svelte.ts";
-  import { IconDownload, IconX, IconCopy } from "./iconMap";
+  import { IconDownload, IconX, IconCopy, IconArrowUp, IconArrowDown, IconSearch } from "./iconMap";
   import { selectAllWithin } from "./selectWithin";
+  import { sortedOrder } from "./dbSort";
 
   interface Props {
     result: DbResult;
     // File name stem for exports.
     exportName: string;
+    // The rows are one page of more (a table's Data view): sorting and
+    // filtering say they cover this page only.
+    paged?: boolean;
   }
-  let { result, exportName }: Props = $props();
+  let { result, exportName, paged = false }: Props = $props();
 
   const ROW_H = 24;
   const cols = $derived(result.columns ?? []);
-  const rows = $derived(result.rows ?? []);
+  const base = $derived(result.rows ?? []);
+
+  // Header click: ascending, descending, off.
+  let sort = $state<{ c: number; name: string; desc: boolean } | null>(null);
+  function toggleSort(c: number) {
+    const name = cols[c]?.name ?? "";
+    if (sort?.c !== c) sort = { c, name, desc: false };
+    else if (!sort.desc) sort = { c, name, desc: true };
+    else sort = null;
+  }
+  const order = $derived(sort && cols[sort.c] ? sortedOrder(base, sort.c, cols[sort.c].type, sort.desc) : null);
+
+  let findOpen = $state(false);
+  let findText = $state("");
+  let needle = $state("");
+  let findInput = $state<HTMLInputElement | null>(null);
+  let findTimer: ReturnType<typeof setTimeout> | undefined;
+  // Typing re-filters a beat later: 100k rows per keystroke is felt.
+  $effect(() => {
+    const t = findText;
+    clearTimeout(findTimer);
+    findTimer = setTimeout(() => (needle = t.trim().toLowerCase()), t ? 150 : 0);
+    return () => clearTimeout(findTimer);
+  });
+  function openFind() {
+    findOpen = true;
+    queueMicrotask(() => findInput?.select());
+  }
+  function closeFind() {
+    findOpen = false;
+    findText = "";
+    needle = "";
+    scroller?.focus();
+  }
+
+  // The server's row index of each row shown, in display order.
+  const view = $derived.by(() => {
+    const idx = order ?? base.map((_, i) => i);
+    if (!needle) return idx;
+    return idx.filter((i) => base[i].some((v) => v !== null && v.toLowerCase().includes(needle)));
+  });
+  const rows = $derived(view.map((i) => base[i]));
 
   // Column widths from the header and a sample of values.
   const widths = $derived.by(() => {
@@ -34,7 +82,7 @@
       return Math.max(70, Math.min(360, Math.round(n * 7.4 + 18)));
     });
   });
-  const numW = $derived(Math.max(36, String(rows.length).length * 8 + 14));
+  const numW = $derived(Math.max(36, String(base.length).length * 8 + 14));
   const template = $derived(`${numW}px ${widths.map((w) => w + "px").join(" ")}`);
   const totalW = $derived(numW + widths.reduce((a, b) => a + b, 0));
 
@@ -47,12 +95,23 @@
 
   let sel = $state<{ r: number; c: number } | null>(null);
   let opened = $state<{ r: number; c: number } | null>(null);
-  // A new result: back to the top, nothing picked.
+  // A new result: back to the top, nothing picked. The filter stays (it is
+  // what you are looking for), and so does the sort while the column is
+  // still there by name - Next on a table keeps its order.
   $effect(() => {
-    void result;
+    const cs = result.columns ?? [];
+    untrack(() => {
+      if (sort && cs[sort.c]?.name !== sort.name) sort = null;
+    });
     sel = null;
     opened = null;
     if (scroller) scroller.scrollTop = 0;
+  });
+  // A new order or filter: what was picked points at another row.
+  $effect(() => {
+    void view;
+    sel = null;
+    opened = null;
   });
 
   const openedValue = $derived(opened ? rows[opened.r]?.[opened.c] ?? null : null);
@@ -71,6 +130,16 @@
   });
 
   function onKey(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      e.stopPropagation();
+      openFind();
+      return;
+    }
+    if (e.key === "Escape" && findOpen) {
+      closeFind();
+      return;
+    }
     if (!sel) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
       const v = rows[sel.r]?.[sel.c];
@@ -106,7 +175,7 @@
     }
     try {
       const path = await api.saveTextFile(`${exportName}.${kind}`, text);
-      if (path) toast.ok(`Exported ${rows.length} row${rows.length === 1 ? "" : "s"} to ${path}`);
+      if (path) toast.ok(`Exported ${rows.length} row${rows.length === 1 ? "" : "s"}${rows.length !== base.length ? " (filtered)" : ""} to ${path}`);
     } catch (e) {
       toast.err(`Export: ${String((e as any)?.message ?? e)}`);
     }
@@ -129,19 +198,32 @@
       <div class="row head" style:grid-template-columns={template}>
         <div class="cell num">#</div>
         {#each cols as c, i (i)}
-          <div class="cell" title="{c.name} ({c.type})"><span class="cname">{c.name}</span><span class="ctype">{c.type}</span></div>
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <div
+            class="cell sortable"
+            class:sorted={sort?.c === i}
+            role="columnheader"
+            tabindex="-1"
+            aria-sort={sort?.c === i ? (sort.desc ? "descending" : "ascending") : "none"}
+            title="{c.name} ({c.type}) - click to sort the rows shown"
+            onclick={() => toggleSort(i)}
+          >
+            <span class="cname">{c.name}</span><span class="ctype">{c.type}</span>
+            {#if sort?.c === i}<span class="sort-ic">{#if sort.desc}<IconArrowDown size={11} />{:else}<IconArrowUp size={11} />{/if}</span>{/if}
+          </div>
         {/each}
       </div>
       <div class="body" style:height="{rows.length * ROW_H}px">
         {#each visible as r, k (first + k)}
           {@const ri = first + k}
           <div class="row" class:odd={ri % 2 === 1} style:grid-template-columns={template} style:top="{ri * ROW_H}px">
-            <div class="cell num">{ri + 1}</div>
+            <div class="cell num">{view[ri] + 1}</div>
             {#each r as v, ci (ci)}
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <div
                 class="cell"
                 class:null={v === null}
+                class:hit={needle !== "" && v !== null && v.toLowerCase().includes(needle)}
                 class:sel={sel?.r === ri && sel?.c === ci}
                 role="gridcell"
                 tabindex="-1"
@@ -157,7 +239,7 @@
   {#if opened}
     <div class="value-pane">
       <div class="vp-head">
-        <span class="vp-title">{cols[opened.c]?.name} · row {opened.r + 1}{openedValue !== null ? ` · ${openedValue.length} chars` : ""}</span>
+        <span class="vp-title">{cols[opened.c]?.name} · row {view[opened.r] + 1}{openedValue !== null ? ` · ${openedValue.length} chars` : ""}</span>
         <button title="Copy the value" onclick={() => api.clipboardSetText(openedValue ?? "").catch(() => {})}><IconCopy size={13} /></button>
         <button title="Close" onclick={() => (opened = null)}><IconX size={13} /></button>
       </div>
@@ -165,13 +247,38 @@
       <pre class:null={openedValue === null} tabindex="0" onkeydown={selectAllWithin}>{openedPretty ?? "NULL"}</pre>
     </div>
   {/if}
+  {#if findOpen}
+    <div class="find">
+      <IconSearch size={12} />
+      <input
+        bind:this={findInput}
+        bind:value={findText}
+        placeholder="Find in these rows"
+        spellcheck="false"
+        onkeydown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            closeFind();
+          }
+        }}
+      />
+      <span class="find-count">{needle ? `${rows.length} of ${base.length} rows` : ""}</span>
+      <button title="Close (Esc)" onclick={closeFind}><IconX size={12} /></button>
+    </div>
+  {/if}
   <div class="foot">
     <span>
-      {rows.length} row{rows.length === 1 ? "" : "s"}{result.truncated ? " (limit reached - more rows exist)" : ""}
+      {#if needle}{rows.length} of {base.length} rows match{:else}{rows.length} row{rows.length === 1 ? "" : "s"}{/if}{result.truncated ? " (limit reached - more rows exist)" : ""}
+      {#if sort || needle}
+        · {sort ? `sorted by ${cols[sort.c]?.name}` : "filtered"} here{paged ? " (this page only)" : result.truncated ? " (fetched rows only)" : ""}
+      {/if}
       {#if result.cut_cells > 0} · {result.cut_cells} long value{result.cut_cells === 1 ? "" : "s"} cut{/if}
       · {result.duration_ms} ms
     </span>
     <span class="spacer"></span>
+    {#if base.length > 0 && !findOpen}
+      <button onclick={openFind} title="Find in these rows (Ctrl+F)"><IconSearch size={12} /></button>
+    {/if}
     {#if rows.length > 0}
       <button onclick={() => exportAs("csv")} title="Save these rows as CSV"><IconDownload size={12} /> CSV</button>
       <button onclick={() => exportAs("json")} title="Save these rows as JSON"><IconDownload size={12} /> JSON</button>
@@ -197,6 +304,17 @@
   .ctype { font-weight: 400; font-size: 0.68rem; color: var(--overlay1); }
   .cell.num { color: var(--overlay1); text-align: right; background: color-mix(in srgb, var(--surface0) 55%, transparent); }
   .cell.null { color: var(--overlay0); font-style: italic; }
+  .head .sortable { cursor: pointer; }
+  .head .sortable:hover { background: var(--surface1); }
+  .head .sorted .cname { color: var(--blue); }
+  .sort-ic { display: inline-flex; align-self: center; color: var(--blue); margin-left: auto; flex: 0 0 auto; }
+  .cell.hit { background: color-mix(in srgb, var(--yellow) 22%, transparent); }
+  .find { flex: 0 0 auto; display: flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.5rem; border-top: 1px solid var(--surface0); color: var(--overlay1); }
+  .find input { flex: 0 1 22rem; min-width: 8rem; font-size: 0.76rem; padding: 0.15rem 0.4rem; background: var(--base); color: var(--text); border: 1px solid var(--surface1); border-radius: 3px; outline: none; }
+  .find input:focus { border-color: var(--blue); }
+  .find-count { font-size: 0.72rem; color: var(--subtext0); }
+  .find button { background: none; border: none; color: var(--overlay1); cursor: pointer; padding: 0.15rem; display: inline-flex; }
+  .find button:hover { color: var(--text); }
   .cell.sel { outline: 1px solid var(--blue); outline-offset: -1px; background: color-mix(in srgb, var(--blue) 14%, transparent); }
   .value-pane { flex: 0 0 auto; max-height: 40%; display: flex; flex-direction: column; border-top: 1px solid var(--surface1); background: var(--mantle); }
   .vp-head { display: flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.5rem; font-size: 0.75rem; color: var(--subtext0); }

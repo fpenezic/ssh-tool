@@ -1707,7 +1707,13 @@ completion of the table names listed so far.
 - With several statements, each result is a chip above the grid. Result
   sets show in a grid that stays fast with many rows: click a cell and
   **Ctrl+C** copies it, double-click (or Enter) opens the full value below -
-  JSON pretty-printed. **CSV** and **JSON** save the rows.
+  JSON pretty-printed. A click on a column header sorts the rows (again for
+  descending, a third time back to the server's order): numbers as
+  numbers, `NULL` last. **Ctrl+F** (or the magnifier under the grid) keeps
+  only the rows with the text in any column and marks the cells; **Esc**
+  closes it. Both work on the rows already fetched - on a table's Data
+  view that is the page shown - and `#` keeps each row's number from the
+  server. **CSV** and **JSON** save the rows as shown.
 - On a connection marked *sensitive*, statements that change data are
   listed for confirmation before they run.
 

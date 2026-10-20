@@ -11,6 +11,7 @@ a prerelease upstream.
 
 ### Databases
 
+- **Sort and find in results.** A click on a column header sorts the result grid (ascending, descending, back to the server's order; numbers as numbers, NULL last), and Ctrl+F keeps only the rows containing the text, with the matching cells marked. Both work on the rows already fetched - on a table's Data view the page shown - and CSV / JSON export what is shown.
 - **ClickHouse** joins PostgreSQL and MySQL / MariaDB in the Database tab, over its HTTP interface (8123, 8443 with TLS) and through the connection's SSH session like the others. Databases with their size, tables, views and materialized views; Data in the table's ORDER BY key, Structure with the primary and sorting keys and the data-skipping indexes, the server's own DDL. Each query tab is a ClickHouse session, so SET and USE carry between runs; Stop kills the query on the server. Read-only tabs run every statement with readonly = 2, which ClickHouse enforces itself. A statement with its own FORMAT comes back as lines, and INSERT reports the rows written.
 
 ## [0.116.1] - Sharp terminal text on Windows
