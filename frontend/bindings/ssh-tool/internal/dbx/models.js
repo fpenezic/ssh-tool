@@ -357,6 +357,14 @@ export class Result {
              */
             this["command"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Note is shown beside a result set (a search's total hits).
+             * @member
+             * @type {string | undefined}
+             */
+            this["note"] = undefined;
+        }
         if (!("truncated" in $$source)) {
             /**
              * @member

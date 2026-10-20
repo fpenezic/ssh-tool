@@ -9,14 +9,19 @@ package dbx_test
 //	DBTEST_CH=clickhouse://app:secret@127.0.0.1:8123/appdb
 //	DBTEST_CH_READER=clickhouse://reader:secret@127.0.0.1:8123/appdb (optional:
 //	  a login whose profile has readonly = 1)
+//	DBTEST_OS=opensearch://admin:secret@127.0.0.1:9200?tls=require
+//	DBTEST_ES=opensearch://elastic:secret@127.0.0.1:9201 (Elasticsearch)
 //
 // e.g. with docker:
 //
 //	docker run -d -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=appdb -p 127.0.0.1:5432:5432 postgres:17
 //	docker run -d -e MYSQL_ROOT_PASSWORD=secret -e MYSQL_DATABASE=appdb -p 127.0.0.1:3306:3306 mysql:8.4
 //	docker run -d -e CLICKHOUSE_USER=app -e CLICKHOUSE_PASSWORD=secret -e CLICKHOUSE_DB=appdb -p 127.0.0.1:8123:8123 clickhouse/clickhouse-server:25.8
+//	docker run -d -e discovery.type=single-node -e OPENSEARCH_INITIAL_ADMIN_PASSWORD=<strong> -p 127.0.0.1:9200:9200 opensearchproject/opensearch:2.19.3
+//	docker run -d -e discovery.type=single-node -e ELASTIC_PASSWORD=secret -e xpack.security.http.ssl.enabled=false -p 127.0.0.1:9201:9200 docker.elastic.co/elasticsearch/elasticsearch:8.19.4
 //
-// Each run creates and drops its own tables (dbx_it_*).
+// Each run creates and drops its own tables (dbx_it_*; indices on
+// OpenSearch).
 
 import (
 	"context"
@@ -65,7 +70,7 @@ func itSetupEnv(t *testing.T, engine, env string) *itServer {
 		engine: engine, srv: srv, port: port,
 		cfg: dbx.Config{
 			Engine: engine, Addr: "db.internal:" + port, Database: strings.TrimPrefix(u.Path, "/"),
-			User: u.User.Username(), Password: pw, Dial: lazy.Dial,
+			User: u.User.Username(), Password: pw, Dial: lazy.Dial, TLS: u.Query().Get("tls"),
 		},
 	}
 }

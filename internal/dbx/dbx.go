@@ -1,6 +1,7 @@
 // Package dbx is the SQL client behind a connection's Database tab:
 // databases, tables and their structure, browsing rows, and query sessions
-// for PostgreSQL, MySQL / MariaDB and ClickHouse.
+// for PostgreSQL, MySQL / MariaDB and ClickHouse, and indices and queries
+// for OpenSearch / Elasticsearch.
 //
 // Every database connection is opened by Config.Dial. The app hands in a
 // dialer that opens a direct-tcpip channel on the connection's SSH session
@@ -34,6 +35,9 @@ const (
 	EnginePostgres   = "postgres"
 	EngineMySQL      = "mysql"
 	EngineClickHouse = "clickhouse"
+	// EngineOpenSearch is OpenSearch or Elasticsearch (the flavor is read
+	// from the server).
+	EngineOpenSearch = "opensearch"
 )
 
 // DefaultPort is the port an address without one gets. tls matters to
@@ -47,6 +51,8 @@ func DefaultPort(engine, tls string) int {
 			return 8443
 		}
 		return 8123 // the HTTP interface
+	case EngineOpenSearch:
+		return 9200
 	}
 	return 5432
 }
@@ -221,11 +227,13 @@ type Result struct {
 	HasRows      bool   `json:"has_rows"`
 	RowsAffected int64  `json:"rows_affected"` // -1 not reported
 	Command      string `json:"command,omitempty"`
-	Truncated    bool   `json:"truncated"`
-	CutCells     int    `json:"cut_cells"` // cells cut at MaxCellBytes
-	DurationMs   int64  `json:"duration_ms"`
-	Error        string `json:"error,omitempty"`
-	Write        bool   `json:"write"` // not a read statement (see IsRead)
+	// Note is shown beside a result set (a search's total hits).
+	Note       string `json:"note,omitempty"`
+	Truncated  bool   `json:"truncated"`
+	CutCells   int    `json:"cut_cells"` // cells cut at MaxCellBytes
+	DurationMs int64  `json:"duration_ms"`
+	Error      string `json:"error,omitempty"`
+	Write      bool   `json:"write"` // not a read statement (see IsRead)
 }
 
 // RunOptions bound a run.
@@ -297,6 +305,8 @@ func Open(cfg Config) (*Handle, error) {
 		h.eng = newMy(cfg)
 	case EngineClickHouse:
 		h.eng = newCH(cfg)
+	case EngineOpenSearch:
+		h.eng = newOS(cfg)
 	default:
 		return nil, fmt.Errorf("unknown database engine %q", cfg.Engine)
 	}

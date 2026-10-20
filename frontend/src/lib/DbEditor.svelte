@@ -55,9 +55,14 @@
     const schema: Record<string, string[]> = {};
     for (const n of names) schema[n] = [];
     // ClickHouse has no dialect of its own here; MySQL's quoting (backticks,
-    // backslash escapes, # comments) is the closest.
-    const dialect = eng === "mysql" || eng === "clickhouse" ? MySQL : PostgreSQL;
-    return sql({ dialect, schema, upperCaseKeywords: true });
+    // backslash escapes, # comments) is the closest. OpenSearch scripts mix
+    // console requests and SQL: MySQL's double-quoted strings colour the
+    // JSON bodies too.
+    const dialect = eng === "postgres" ? PostgreSQL : MySQL;
+    const hint = eng === "opensearch"
+      ? "GET /index/_search with the JSON body below it, or SELECT ...   Ctrl+Enter runs the request or statement under the cursor, Ctrl+Shift+Enter the whole script"
+      : "SELECT ...   Ctrl+Enter runs the statement under the cursor, Ctrl+Shift+Enter the whole script";
+    return [sql({ dialect, schema, upperCaseKeywords: true }), cmPlaceholder(hint)];
   }
 
   onMount(() => {
@@ -75,7 +80,6 @@
           autocompletion(),
           syntaxHighlighting(highlight),
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-          cmPlaceholder("SELECT ...   Ctrl+Enter runs the statement under the cursor, Ctrl+Shift+Enter the whole script"),
           lang.of(sqlFor(engine, tables)),
           keymap.of([
             { key: "Mod-Enter", run: () => { onRun("statement"); return true; } },

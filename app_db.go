@@ -149,6 +149,11 @@ func (a *App) dbOpen(connectionID, targetID string, login *[2]string) (*DbHandle
 	if err != nil {
 		return nil, err
 	}
+	if settings.DbEngine == dbx.EngineOpenSearch {
+		// The cluster is the one database; a name inherited from a folder
+		// of SQL servers means nothing to it.
+		settings.DbName = ""
+	}
 	addr, err := dbx.ParseAddr(settings.DbEngine, settings.DbTLS, settings.DbAddr)
 	if err != nil {
 		return nil, err

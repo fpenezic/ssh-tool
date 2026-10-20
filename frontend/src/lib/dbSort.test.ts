@@ -3,10 +3,10 @@ import { compareNumbers, isNumericType, sortedOrder } from "./dbSort";
 
 describe("dbSort", () => {
   it("knows numeric types", () => {
-    for (const t of ["int4", "bigint", "numeric(10,2)", "UInt64", "Nullable(Decimal(10, 2))", "double precision", "Float64", "int unsigned"]) {
+    for (const t of ["int4", "bigint", "numeric(10,2)", "UInt64", "Nullable(Decimal(10, 2))", "double precision", "Float64", "int unsigned", "long", "half_float", "number"]) {
       expect(isNumericType(t), t).toBe(true);
     }
-    for (const t of ["text", "varchar(20)", "String", "DateTime", "interval", "Array(UInt8)", "json"]) {
+    for (const t of ["text", "varchar(20)", "String", "DateTime", "interval", "Array(UInt8)", "json", "keyword", "bytea"]) {
       expect(isNumericType(t), t).toBe(false);
     }
   });
