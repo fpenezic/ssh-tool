@@ -1587,8 +1587,8 @@ Topic and group administration is not available to it. See
 <a id="databases"></a>
 ## 6d. Databases
 
-Browse and query a PostgreSQL, MySQL / MariaDB or ClickHouse database from
-the connection that reaches it. Like Kafka, the database is a service on a
+Browse and query a PostgreSQL, MySQL / MariaDB or ClickHouse database, or an
+OpenSearch / Elasticsearch cluster, from the connection that reaches it. Like Kafka, the database is a service on a
 connection: switch it on in the connection (or once on a folder of
 database hosts) and the connection opens a **Database tab** next to its
 terminals. Through SSH (the default), every database connection rides the
@@ -1599,12 +1599,13 @@ connection's SSH session, so a server that only listens on the host's
 
 In the connection editor (or a folder's), the **Database** tab:
 
-- **Engine** - PostgreSQL, MySQL / MariaDB, or ClickHouse (over its HTTP
-  interface, see [ClickHouse](#clickhouse) below).
+- **Engine** - PostgreSQL, MySQL / MariaDB, ClickHouse (over its HTTP
+  interface, see [ClickHouse](#clickhouse) below) or OpenSearch /
+  Elasticsearch (see [OpenSearch / Elasticsearch](#opensearch)).
 - **Address** - host and port as seen from where the database is dialed:
   from the SSH host when it runs there or behind it. Empty means
-  `127.0.0.1` and the engine's port (5432 / 3306 / 8123; ClickHouse with
-  TLS on takes 8443).
+  `127.0.0.1` and the engine's port (5432 / 3306 / 8123 / 9200; ClickHouse
+  with TLS on takes 8443).
 - **Database** - the one the tab opens first; empty takes the server's
   default for the login.
 - **Login** - a password credential whose default username and password are
@@ -1751,6 +1752,54 @@ through the SSH session like the others. What differs:
   `ORDER BY` key, **Structure** shows the primary key, the sorting key and
   the data-skipping indexes, and **DDL** is the server's own
   `CREATE TABLE`.
+
+<a id="opensearch"></a>
+### OpenSearch / Elasticsearch
+
+One engine covers both (and forks such as the Wazuh indexer); which one
+answers is read from the server. Port 9200; a cluster with its security
+plugin on usually wants TLS **Require** (its certificate is self-signed).
+The login is a user and password; a password with no username is sent as
+an Elasticsearch API key. **Database** is not used: the tree shows the
+cluster as the one database.
+
+- **The tree** lists indices with their document count and size, aliases
+  (as views, with the indices behind them) and data streams. Indices
+  starting with a dot show with **system**. **Data** reads 200 documents at
+  a time (`_search` with `from` / `size`, up to the index's 10 000 window),
+  one column per field with nested objects flattened (`meta.color`) and
+  arrays as JSON. **Structure** is the mapping, multi-fields included, and
+  **DDL** is `GET /index`: settings, mappings and aliases.
+- **Query tabs** take Kibana console requests and SQL, mixed in one
+  script. A request is a line with the method and path, its JSON body on
+  the lines below; `#` and `//` lines are comments, and `"""` strings
+  hold raw text (a SQL query, a script). `_bulk` and `_msearch` bodies may
+  be pretty-printed: they are sent one document per line.
+
+  ```
+  GET /logs-*/_search
+  {
+    "query": { "match": { "message": "timeout" } },
+    "size": 50
+  }
+
+  SELECT host, count(*) FROM logs GROUP BY host;
+  ```
+
+  **Ctrl+Enter** runs the request or statement under the cursor.
+- **Results.** Search hits come back as a grid (`_index`, `_id`, `_score`,
+  then the document's fields) with the total hit count below it; `_cat`
+  requests as a grid too (sent with `format=json` unless you ask for
+  another); SQL as a grid, paged through the cursor up to the row limit.
+  Anything else, aggregations included, is the response's JSON,
+  pretty-printed a line per row. An error shows the cluster's type and reason.
+- **Read-only** sends only GET and HEAD requests, POST to the search
+  endpoints (`_search`, `_count`, `_msearch`, `_mget`, `_field_caps`,
+  `_validate`, `_explain`, `_analyze`, `_termvectors`, `_rank_eval`) and
+  SQL that reads. The cluster has no read-only session, so this check is
+  all the tab can do: a login with a read-only role is the real guard.
+- **Stop** closes the request; the cluster cancels a search whose client
+  went away. There are no sessions or transactions.
 
 ### Tables
 

@@ -1927,6 +1927,23 @@ everything mobile is behind a build tag or an `isMobile` check.
    not retried by net/http, so the idle timeout stays under the server's
    10 s keep-alive.
 
+121. **OpenSearch / Elasticsearch: scripts, SQL paging and read-only.**
+   (`internal/dbx/opensearch.go`, `opensearch_stmt.go`) A script mixes
+   console blocks and SQL, so `Split` cannot cut on semicolons: a block
+   starts at a line that is a method and exactly one path (`DELETE FROM t`
+   is SQL), and ends at the next such line or at a line starting with a
+   word a JSON body cannot hold. `"""` strings span lines; a JSON string
+   never does. OpenSearch's SQL plugin pages (`fetch_size` + cursor) only
+   simple SELECTs: an aggregation asked for a page fails with a 500
+   ("invalid value operation on MISSING_VALUE"), so a failed paged SELECT
+   is asked again without `fetch_size`, and an unpaged answer is capped by
+   `plugins.query.size_limit` (200), reported as truncated when `total` is
+   larger. Elasticsearch pages everything. Neither has a read-only session:
+   `osRESTRead` (GET / HEAD, POST only to search endpoints, the body's SQL
+   checked) is the only guard, so a cluster role is the real one. The tree
+   has one database, the cluster; a database name inherited from a folder
+   is dropped for this engine (`app_db.go`).
+
 ---
 
 # Archive
