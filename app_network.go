@@ -493,12 +493,21 @@ func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 	// skips our WireGuard tunnel. Binding the probe to the real NIC makes
 	// "reachable directly" mean "reachable over my own network", matching the
 	// tunnel's own source-bind.
-	directLocalAddr := a.physicalDialLocalAddr()
-	direct := func(ctx context.Context, network, addr string) (net.Conn, error) {
-		report(ctx, "direct")
-		d := net.Dialer{LocalAddr: directLocalAddr}
-		return d.DialContext(ctx, network, addr)
+	// Only the probe is bound: a paused profile and the mobile path dial
+	// as the OS routes (a system VPN included), and a bound IPv4 source
+	// would also rule out IPv6 destinations.
+	dialFrom := func(local *net.TCPAddr) sshlayer.ContextDialer {
+		return func(ctx context.Context, network, addr string) (net.Conn, error) {
+			report(ctx, "direct")
+			var d net.Dialer
+			if local != nil {
+				d.LocalAddr = local // never a typed nil in the interface
+			}
+			return d.DialContext(ctx, network, addr)
+		}
 	}
+	direct := dialFrom(nil)
+	probe := dialFrom(a.physicalDialLocalAddr())
 	if pol.Paused {
 		return direct, nil
 	}
@@ -517,7 +526,7 @@ func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 		}
 		return func(ctx context.Context, network, addr string) (net.Conn, error) {
 			pctx, cancel := context.WithTimeout(ctx, directProbeTimeout)
-			c, derr := direct(pctx, network, addr)
+			c, derr := probe(pctx, network, addr)
 			cancel()
 			if derr == nil {
 				log.Printf("net: %s reachable directly, skipping tunnel %s", addr, row.Name)

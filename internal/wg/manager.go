@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/netip"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -279,7 +280,11 @@ func resolveEndpoint(ep string) (string, error) {
 		return "", err
 	}
 	if a, err := netip.ParseAddr(host); err == nil {
-		return netip.AddrPortFrom(a, mustPort(port)).String(), nil
+		pn, err := parsePort(port)
+		if err != nil {
+			return "", err
+		}
+		return netip.AddrPortFrom(a, pn).String(), nil
 	}
 	ips, err := net.LookupIP(host)
 	if err != nil {
@@ -302,11 +307,19 @@ func resolveEndpoint(ep string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("bad resolved address %v", pick)
 	}
-	return netip.AddrPortFrom(a.Unmap(), mustPort(port)).String(), nil
+	pn, err := parsePort(port)
+	if err != nil {
+		return "", err
+	}
+	return netip.AddrPortFrom(a.Unmap(), pn).String(), nil
 }
 
-func mustPort(s string) uint16 {
-	var n int
-	fmt.Sscanf(s, "%d", &n)
-	return uint16(n)
+// parsePort is an endpoint port: 1-65535, never a silent 0 or a wrapped
+// value (:70000 used to become 4464).
+func parsePort(s string) (uint16, error) {
+	n, err := strconv.ParseUint(s, 10, 16)
+	if err != nil || n == 0 {
+		return 0, fmt.Errorf("bad endpoint port %q", s)
+	}
+	return uint16(n), nil
 }
