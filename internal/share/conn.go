@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -54,6 +55,8 @@ type guestConn struct {
 	ready   map[string]bool
 
 	killOnce sync.Once
+	// slow is set once an overflow has scheduled the slow-kill.
+	slow atomic.Bool
 
 	// auditInput / auditViolation are supplied by the App so the share package
 	// doesn't import the audit store. May be nil in tests.
@@ -84,7 +87,17 @@ func (c *guestConn) sendBinary(frame []byte) {
 	select {
 	case c.out <- outMsg{binary: frame}:
 	default:
-		c.kill(ByeSlow)
+		c.slowKill()
+	}
+}
+
+// slowKill drops a guest that cannot keep up. kill writes a bye and waits
+// for the close handshake, seconds against a stalled guest, so it runs off
+// the caller: Publish is on the PTY pump and must not block.
+func (c *guestConn) slowKill() {
+	if c.slow.CompareAndSwap(false, true) {
+		c.cancel()
+		go c.kill(ByeSlow)
 	}
 }
 
@@ -93,7 +106,7 @@ func (c *guestConn) sendJSON(f Frame) {
 	select {
 	case c.out <- outMsg{json: &f}:
 	default:
-		c.kill(ByeSlow)
+		c.slowKill()
 	}
 }
 
