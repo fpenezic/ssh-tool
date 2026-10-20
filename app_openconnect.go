@@ -234,7 +234,7 @@ func (a *App) ensureOpenConnectTunnel(row *store.NetworkProfile) (tunnelDialer, 
 	if err != nil {
 		return nil, err
 	}
-	gws := cfg.gateways()
+	gws := ocConnectOrder(row.ID, cfg.gateways())
 	for i, gw := range gws {
 		p, err := a.ocConnect(row, &cfg, exe, env, gw)
 		var ue *tunnelhelper.UnreachableError
@@ -245,6 +245,17 @@ func (a *App) ensureOpenConnectTunnel(row *store.NetworkProfile) (tunnelDialer, 
 		return p, err
 	}
 	return nil, fmt.Errorf("profile %s: no gateway", row.Name)
+}
+
+// ocConnectOrder puts the gateway holding the profile's detached session
+// first, so it resumes there; the rest keep the profile's order.
+func ocConnectOrder(profileID string, gws []OpenConnectGateway) []OpenConnectGateway {
+	for i, gw := range gws {
+		if i > 0 && ocSessionFor(profileID, gw.Server) != "" {
+			return append([]OpenConnectGateway{gw}, append(gws[:i:i], gws[i+1:]...)...)
+		}
+	}
+	return gws
 }
 
 // ocConnect runs the helper against one gateway of the profile. An

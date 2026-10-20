@@ -2651,7 +2651,9 @@ A profile needs:
   gateway, then each backup in order, moving on only when one does not
   answer at all (no TLS handshake within 10 seconds). A gateway that
   answers and rejects the login is not retried on the next one, so a
-  wrong password is sent once. Needs OpenConnect plugin v1.3 or newer.
+  wrong password is sent once. A session kept open by the idle stop
+  resumes on the gateway that holds it, tried first. Needs OpenConnect
+  plugin v1.3 or newer.
 - **Username** and **Password** - type the password on the form (it is
   saved in the vault as a credential named after the profile), pick a
   stored password (vault, Bitwarden or KeePass), or leave it blank to be
