@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 
@@ -123,14 +124,11 @@ func validateOpksshRedirect(raw string) error {
 // hosts file, Linux via NSS, macOS via DNS; in every case it goes to
 // 127.0.0.1 / ::1. Anything else is potentially attacker-controlled.
 func isLoopbackHost(host string) bool {
-	switch strings.ToLower(host) {
-	case "localhost", "127.0.0.1", "::1", "[::1]":
+	if strings.EqualFold(host, "localhost") {
 		return true
 	}
-	// 127.0.0.0/8 - accept any 127.x.y.z literal, matches Go stdlib's
-	// net.IP.IsLoopback for IPv4.
-	if strings.HasPrefix(host, "127.") {
-		return true
-	}
-	return false
+	// Literal loopback addresses only (127.0.0.0/8, ::1). A prefix test
+	// would take 127.attacker.example, a public DNS name.
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }

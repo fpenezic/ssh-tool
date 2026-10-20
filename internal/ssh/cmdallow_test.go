@@ -269,3 +269,51 @@ func TestIsDangerousSeesPastNewline(t *testing.T) {
 		}
 	}
 }
+
+// Forms that used to auto-run or slip past the YOLO net.
+func TestClassifierAuditCases(t *testing.T) {
+	readOnly := []struct {
+		cmd  string
+		want bool
+	}{
+		{`true ${PS0:=\$\(id\)}`, false},
+		{"echo ${HOME}", false},
+		{"git diff --output=/tmp/x", false},
+		{"git log -p --ext-diff", false},
+		{"git show --output /tmp/x HEAD", false},
+		{"git reflog expire --expire=now --all", false},
+		{"git reflog delete HEAD@{1}", false},
+		{"git reflog", true},
+		{"git reflog show main", true},
+		{"git log --oneline -5", true},
+		{"git diff HEAD~1", true},
+	}
+	for _, c := range readOnly {
+		if got := IsReadOnly(c.cmd, nil); got != c.want {
+			t.Errorf("IsReadOnly(%q) = %v, want %v", c.cmd, got, c.want)
+		}
+	}
+	dangerous := []string{
+		`rm -rf "$HOME"`,
+		`rm -rf "/"`,
+		`rm -rf '/etc'`,
+		`/bin/rm -rf /`,
+		`\rm -rf /`,
+		`command rm -rf /`,
+		`env rm -rf /`,
+		`nice -n 10 rm -rf /`,
+		`timeout 5 rm -rf /`,
+		`find / -print0 | xargs -0 rm -rf /`,
+		`sudo /usr/sbin/mkfs.ext4 /dev/sdb`,
+	}
+	for _, c := range dangerous {
+		if !IsDangerous(c) {
+			t.Errorf("IsDangerous(%q) = false", c)
+		}
+	}
+	for _, c := range []string{"rm -rf ./build", "rm file.txt", "ls -la /", "git status"} {
+		if IsDangerous(c) {
+			t.Errorf("IsDangerous(%q) = true", c)
+		}
+	}
+}
