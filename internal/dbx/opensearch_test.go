@@ -1,6 +1,9 @@
 package dbx
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -192,5 +195,23 @@ func TestOSProps(t *testing.T) {
 	want := "blob:object(not indexed) items:nested* items.a:long meta:object meta.color:keyword* name:text* name.raw:keyword(multi-field of name) ts:date*(format epoch_millis)"
 	if strings.Join(got, " ") != want {
 		t.Fatal(strings.Join(got, " "))
+	}
+}
+
+// A redirect is shown, not followed: it could send the request (and its
+// credentials) elsewhere, past the read-only check.
+func TestOSNoRedirect(t *testing.T) {
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("followed to %s %s", r.Method, r.URL)
+	}))
+	defer other.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+"/idx/_doc", http.StatusTemporaryRedirect)
+	}))
+	defer srv.Close()
+	e := newOS(Config{Addr: strings.TrimPrefix(srv.URL, "http://"), User: "u", Password: "p"})
+	r, err := e.do(context.Background(), http.MethodPost, "/idx/_search", []byte("{}"), "")
+	if err != nil || r.status != http.StatusTemporaryRedirect {
+		t.Fatalf("%v %+v", err, r)
 	}
 }

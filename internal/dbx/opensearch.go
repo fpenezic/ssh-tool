@@ -59,9 +59,14 @@ func newOS(cfg Config) *osEngine {
 	return &osEngine{
 		cfg:    cfg,
 		base:   &url.URL{Scheme: scheme, Host: cfg.Addr},
-		client: &http.Client{Transport: tr},
+		client: &http.Client{Transport: tr, CheckRedirect: noRedirect},
 	}
 }
+
+// noRedirect returns a 3xx as it is: every request goes to cfg.Addr only,
+// the read-only check saw this method and path, and credentials stay with
+// the server they were meant for.
+func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 // osResp is a response read whole (up to MaxResultBytes).
 type osResp struct {
