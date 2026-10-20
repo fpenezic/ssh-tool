@@ -159,7 +159,9 @@ func TestIntegrationClickHouse(t *testing.T) {
 	// Cancel stops a long query and keeps the session.
 	done := make(chan []*dbx.Result)
 	start = time.Now()
-	go func() { done <- sess.Run(context.Background(), "SELECT count() FROM numbers_mt(1e13)", dbx.RunOptions{}) }()
+	go func() {
+		done <- sess.Run(context.Background(), "SELECT count() FROM numbers_mt(1e13)", dbx.RunOptions{})
+	}()
 	time.Sleep(500 * time.Millisecond)
 	sess.Cancel()
 	select {
