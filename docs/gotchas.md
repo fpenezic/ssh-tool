@@ -1901,6 +1901,15 @@ everything mobile is behind a build tag or an `isMobile` check.
    is `App.DbRemove(conn, "")`: it only hides it while listed databases take
    their defaults from it.
 
+119. **Never transform the terminal screen on Chromium.** `snapScreen()` in
+   `Terminal.svelte` nudges `.xterm-screen` onto whole device pixels with a
+   `transform: translate(...)`, which WebKitGTK needs (stale cursor line at
+   fractional positions). On WebView2 the transform puts the screen on its
+   own compositing layer, Chromium drops ClearType there and the DOM
+   renderer's text turns soft. Whether it happens depends on the layout
+   above the terminal, so two machines with the same monitor and scaling
+   can differ. The snap is skipped when the user agent has `Chrome/`.
+
 ---
 
 # Archive

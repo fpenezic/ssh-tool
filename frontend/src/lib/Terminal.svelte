@@ -874,8 +874,12 @@
   // layout above the terminal (rem paddings, line heights) routinely puts
   // the screen at .5 / .34 px, so nudge it onto whole device pixels.
   // Chromium snaps canvases by itself, which is why a plain xterm page never
-  // shows this.
+  // shows this. Skipped on Chromium (WebView2, Android): there the transform
+  // puts the screen on its own compositing layer, which drops ClearType and
+  // leaves the DOM renderer's text visibly soft.
+  const snapNeeded = !/Chrome\//.test(navigator.userAgent);
   function snapScreen() {
+    if (!snapNeeded) return;
     const el = host?.querySelector<HTMLElement>(".xterm-screen");
     if (!el) return;
     el.style.transform = "";
