@@ -1,7 +1,7 @@
 // Package dbx is the SQL client behind a connection's Database tab:
 // databases, tables and their structure, browsing rows, and query sessions
 // for PostgreSQL, MySQL / MariaDB and ClickHouse, and indices and queries
-// for OpenSearch / Elasticsearch.
+// for OpenSearch / Elasticsearch, keys and commands for Redis.
 //
 // Every database connection is opened by Config.Dial. The app hands in a
 // dialer that opens a direct-tcpip channel on the connection's SSH session
@@ -38,6 +38,8 @@ const (
 	// EngineOpenSearch is OpenSearch or Elasticsearch (the flavor is read
 	// from the server).
 	EngineOpenSearch = "opensearch"
+	// EngineRedis is Redis or a protocol-compatible server (Valkey, KeyDB).
+	EngineRedis = "redis"
 )
 
 // DefaultPort is the port an address without one gets. tls matters to
@@ -53,6 +55,8 @@ func DefaultPort(engine, tls string) int {
 		return 8123 // the HTTP interface
 	case EngineOpenSearch:
 		return 9200
+	case EngineRedis:
+		return 6379
 	}
 	return 5432
 }
@@ -307,6 +311,8 @@ func Open(cfg Config) (*Handle, error) {
 		h.eng = newCH(cfg)
 	case EngineOpenSearch:
 		h.eng = newOS(cfg)
+	case EngineRedis:
+		h.eng = newRD(cfg)
 	default:
 		return nil, fmt.Errorf("unknown database engine %q", cfg.Engine)
 	}

@@ -23,8 +23,11 @@ type Stmt struct {
 // DELIMITER client command is not supported: a stored routine body has to
 // go in as one statement on its own.
 func Split(engine, script string) []Stmt {
-	if engine == EngineOpenSearch {
+	switch engine {
+	case EngineOpenSearch:
 		return osSplit(script)
+	case EngineRedis:
+		return rdSplit(script)
 	}
 	var out []Stmt
 	start := 0
@@ -225,8 +228,11 @@ func readLead(engine, k string) bool {
 // MySQL). On OpenSearch a console block reads when its method and endpoint
 // do (osRESTRead).
 func IsRead(engine, stmt string) bool {
-	if engine == EngineOpenSearch {
+	switch engine {
+	case EngineOpenSearch:
 		return osIsRead(stmt)
+	case EngineRedis:
+		return rdIsRead(stmt)
 	}
 	return sqlIsRead(engine, stmt)
 }
@@ -289,8 +295,11 @@ func returnsRows(engine, stmt string) bool {
 // escapes the transaction. OpenSearch has neither session nor
 // transaction: this check is all there is.
 func CheckReadOnly(engine, stmt string) error {
-	if engine == EngineOpenSearch {
+	switch engine {
+	case EngineOpenSearch:
 		return osCheckReadOnly(stmt)
+	case EngineRedis:
+		return rdCheckReadOnly(stmt)
 	}
 	return sqlCheckReadOnly(engine, stmt)
 }
@@ -358,8 +367,11 @@ var secretRE = regexp.MustCompile(`(?i)(\bPASSWORD\s+FOR\s+\S+?\s*=\s*|\bPASSWOR
 // 'pw'" would otherwise slip past the patterns - and are worth nothing in
 // a stored statement anyway.
 func RedactSecrets(engine, stmt string) string {
-	if engine == EngineOpenSearch {
+	switch engine {
+	case EngineOpenSearch:
 		return osRedact(stmt)
+	case EngineRedis:
+		return rdRedact(stmt)
 	}
 	return secretRE.ReplaceAllString(stripComments(engine, stmt), "${1}'***'")
 }

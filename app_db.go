@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -149,10 +150,20 @@ func (a *App) dbOpen(connectionID, targetID string, login *[2]string) (*DbHandle
 	if err != nil {
 		return nil, err
 	}
-	if settings.DbEngine == dbx.EngineOpenSearch {
+	switch settings.DbEngine {
+	case dbx.EngineOpenSearch:
 		// The cluster is the one database; a name inherited from a folder
 		// of SQL servers means nothing to it.
 		settings.DbName = ""
+	case dbx.EngineRedis:
+		// Redis databases are numbers (3 or db3); anything else is a name
+		// inherited from SQL servers.
+		// The tree names them db0, db1, ...
+		if n, err := strconv.Atoi(strings.TrimPrefix(strings.ToLower(strings.TrimSpace(settings.DbName)), "db")); err != nil || n < 0 {
+			settings.DbName = ""
+		} else {
+			settings.DbName = "db" + strconv.Itoa(n)
+		}
 	}
 	addr, err := dbx.ParseAddr(settings.DbEngine, settings.DbTLS, settings.DbAddr)
 	if err != nil {
