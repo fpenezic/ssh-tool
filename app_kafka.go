@@ -205,6 +205,7 @@ func (a *App) kafkaSASL(settings *store.ResolvedSettings) (kafka.Mechanism, erro
 	if err != nil {
 		return nil, fmt.Errorf("Kafka credential %q: %w", cred.Name, err)
 	}
+	m.Close()
 	if m.Password == "" {
 		return nil, fmt.Errorf("Kafka credential %q holds no password", cred.Name)
 	}

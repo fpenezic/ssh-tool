@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
-	"net"
 	"os"
 	"regexp"
 	"slices"
@@ -111,6 +111,17 @@ type AuthMaterial struct {
 	// external item the credential points at, "" when it has none. Used to
 	// answer a keyboard-interactive verification-code question.
 	TOTP string
+	// agentConn is the agent connection behind Agent; Close releases it.
+	agentConn io.Closer
+}
+
+// Close releases what the material holds open (an agent connection) once
+// the handshakes that use it are done. Nil-safe; the material is unusable
+// for new handshakes after it.
+func (m *AuthMaterial) Close() {
+	if m != nil && m.agentConn != nil {
+		_ = m.agentConn.Close()
+	}
 }
 
 // ToAuthMethods turns the resolved material into the slice of AuthMethods
@@ -623,10 +634,8 @@ func resolveKey(cred *store.CredentialRef, vault *creds.Vault) (*AuthMaterial, e
 }
 
 func resolveAgent(cred *store.CredentialRef) (*AuthMaterial, error) {
-	sockPath, _ := cred.Config["socket_path"].(string)
-	if sockPath == "" {
-		sockPath = os.Getenv("SSH_AUTH_SOCK")
-	}
+	configured, _ := cred.Config["socket_path"].(string)
+	sockPath := agentPath(configured)
 	if sockPath == "" {
 		return nil, fmt.Errorf("SSH_AUTH_SOCK not set and no socket_path configured")
 	}
@@ -637,11 +646,11 @@ func resolveAgent(cred *store.CredentialRef) (*AuthMaterial, error) {
 	if err := validateAgentSocket(sockPath); err != nil {
 		return nil, fmt.Errorf("agent socket rejected: %w", err)
 	}
-	conn, err := net.Dial("unix", sockPath)
+	conn, err := dialAgent(sockPath)
 	if err != nil {
 		return nil, fmt.Errorf("agent dial %s: %w", sockPath, err)
 	}
-	return &AuthMaterial{Agent: agent.NewClient(conn)}, nil
+	return &AuthMaterial{Agent: agent.NewClient(conn), agentConn: conn}, nil
 }
 
 func resolveOpkssh(ctx context.Context, cred *store.CredentialRef, vault *creds.Vault, progress func(string)) (*AuthMaterial, error) {

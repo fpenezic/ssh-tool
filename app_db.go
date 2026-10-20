@@ -265,6 +265,7 @@ func (a *App) dbLogin(settings *store.ResolvedSettings) (string, string, error) 
 	if err != nil {
 		return "", "", fmt.Errorf("database credential %q: %w", cred.Name, err)
 	}
+	m.Close()
 	return user, m.Password, nil
 }
 

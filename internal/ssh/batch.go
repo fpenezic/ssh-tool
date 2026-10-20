@@ -391,6 +391,8 @@ func dialChainFrom(
 					return nil, func() {}, "", fmt.Errorf("%s: %w", h.Label, err)
 				}
 			} else {
+				// The agent connection is only needed for the handshakes.
+				defer auth.Close()
 				material = auth
 				methods = auth.ToAuthMethods()
 			}

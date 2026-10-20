@@ -493,8 +493,9 @@ func buildHopChain(s *store.ResolvedSettings) []hop {
 // The returned Session is registered in the pool by the caller before any
 // reads happen so the event sink can find it.
 //
-// connectTimeout applies to both the TCP dial and the SSH handshake for
-// each hop. Pass 0 to use the default (20s).
+// connectTimeout applies to the TCP dial and to the SSH handshake up to
+// the host-key check, for each hop (see clientHandshake). Pass 0 to use
+// the default (20s).
 //
 // progress (if non-nil) receives short status strings ("dial bastion1",
 // "handshake target", "opening shell") so the caller can render a
@@ -641,6 +642,8 @@ func Connect(
 					return nil, fmt.Errorf("%s: %w", h.Label, err)
 				}
 			} else {
+				// The agent connection is only needed for the handshakes.
+				defer auth.Close()
 				material = auth
 				methods = auth.ToAuthMethods()
 				var algos []string
@@ -755,7 +758,7 @@ func Connect(
 			debug("%s: TCP up in %s, starting SSH handshake", h.Label, time.Since(t0).Round(time.Millisecond))
 			progress("SSH handshake " + h.Label)
 			t0 = time.Now()
-			sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
+			sshConn, chans, reqs, err := clientHandshake(ctx, conn, addr, cfg, connectTimeout)
 			if err != nil {
 				debug("%s: SSH handshake failed after %s: %v", h.Label, time.Since(t0).Round(time.Millisecond), err)
 				_ = conn.Close()
@@ -785,7 +788,7 @@ func Connect(
 			debug("%s: tunnel up in %s, starting SSH handshake", h.Label, time.Since(t0).Round(time.Millisecond))
 			progress("SSH handshake " + h.Label)
 			t0 = time.Now()
-			sshConn, chans, reqs, err := ssh.NewClientConn(netConn, addr, cfg)
+			sshConn, chans, reqs, err := clientHandshake(ctx, netConn, addr, cfg, connectTimeout)
 			if err != nil {
 				debug("%s: SSH handshake failed after %s: %v", h.Label, time.Since(t0).Round(time.Millisecond), err)
 				_ = netConn.Close()
@@ -963,9 +966,13 @@ func Connect(
 			close(s.closed)
 			s.CloseSFTP()
 			// Tear down listeners owned by this session so we don't leak
-			// local ports when the remote dies on its own.
-			if s.onClose != nil {
-				s.onClose(sessionID)
+			// local ports when the remote dies on its own. Read under mu:
+			// SetOnClose may run after this goroutine starts.
+			s.mu.Lock()
+			onClose := s.onClose
+			s.mu.Unlock()
+			if onClose != nil {
+				onClose(sessionID)
 			}
 		})
 		sink.EmitState(sessionID, SessionState{State: "disconnected", Reason: reason, Clean: clean})
@@ -1396,4 +1403,34 @@ func derefStr[T ~string](p *T) string {
 		return "(empty)"
 	}
 	return string(*p)
+}
+
+// clientHandshake runs ssh.NewClientConn, whose ClientConfig.Timeout only
+// covers ssh.Dial. Cancel (ctx) closes the connection, and a server gets
+// timeout to reach the host-key check: one that accepts TCP and then
+// stalls fails instead of hanging the connect. The clock stops at the
+// host-key callback, since the trust dialog and the login prompts after it
+// wait for the user. A jump hop's channel takes no deadline; ctx still
+// ends it.
+func clientHandshake(ctx context.Context, conn net.Conn, addr string, cfg *ssh.ClientConfig, timeout time.Duration) (ssh.Conn, <-chan ssh.NewChannel, <-chan *ssh.Request, error) {
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+	c := *cfg
+	if timeout > 0 && cfg.HostKeyCallback != nil {
+		_ = conn.SetDeadline(time.Now().Add(timeout))
+		hostKey := cfg.HostKeyCallback
+		c.HostKeyCallback = func(host string, remote net.Addr, key ssh.PublicKey) error {
+			_ = conn.SetDeadline(time.Time{})
+			return hostKey(host, remote, key)
+		}
+	}
+	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, &c)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, nil, nil, ctx.Err()
+		}
+		return nil, nil, nil, err
+	}
+	_ = conn.SetDeadline(time.Time{})
+	return sshConn, chans, reqs, nil
 }

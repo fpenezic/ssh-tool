@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -34,11 +35,26 @@ const bastionLingerDefault = 10 * time.Second
 
 // jumpEntry is one shared jump-prefix connection.
 type jumpEntry struct {
+	// ready is closed once the build is done: client set, or err (or
+	// neither: the chain needs no jump after all).
+	ready      chan struct{}
+	err        error
 	client     *ssh.Client // the bastion the target dials through
 	cleanup    func()      // closes the whole prefix chain
 	networkVia string      // first hop transport, propagated to riders
 	refs       int         // live target sessions using this prefix
 	stopTimer  *time.Timer // idle linger, armed when refs hits 0
+	closeOnce  sync.Once
+}
+
+// close runs cleanup once, whoever gets there first (linger, the bastion
+// dying, stopAll).
+func (e *jumpEntry) close() {
+	e.closeOnce.Do(func() {
+		if e.cleanup != nil {
+			e.cleanup()
+		}
+	})
 }
 
 // jumpPool owns the shared prefixes, keyed by ssh.JumpPrefixKey.
@@ -50,6 +66,9 @@ type jumpPool struct {
 	build func(ctx context.Context, settings *store.ResolvedSettings, deps sshlayer.JumpPrefixDeps) (*ssh.Client, func(), string, error)
 	// linger returns the current idle linger; nil means the default.
 	linger func() time.Duration
+	// wait blocks until a bastion connection ends; nil means
+	// client.Wait. A field so tests can run with fake clients.
+	wait func(*ssh.Client) error
 }
 
 func (p *jumpPool) lingerFor() time.Duration {
@@ -75,10 +94,10 @@ func newJumpPool() *jumpPool {
 // (nil, nil, "", nil) when the connection has no jump prefix (nothing to
 // share) so Connect falls back to building its own chain.
 //
-// The pool lock is held across the build: the bastion handshake is short
-// and the batch is staggered, so serialising the first acquirer of a key
-// (and making everyone after it wait for that one bastion to come up) is
-// exactly the behaviour we want - no thundering herd on the bastion.
+// The first acquirer of a key builds it without holding the pool lock;
+// later acquirers of that key wait for that build (no thundering herd on
+// the bastion), while other keys, releases and peeks go on. A failed build
+// fails its waiters with the same error rather than each retrying.
 func (p *jumpPool) acquire(
 	ctx context.Context,
 	settings *store.ResolvedSettings,
@@ -89,27 +108,63 @@ func (p *jumpPool) acquire(
 		return nil, nil, "", nil // no jump prefix; not pooled
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	e := p.entries[key]
-	if e == nil {
-		client, cleanup, via, err := p.build(ctx, settings, deps)
-		if err != nil {
-			return nil, nil, "", err
+	var e *jumpEntry
+	for {
+		p.mu.Lock()
+		e = p.entries[key]
+		if e == nil {
+			e = &jumpEntry{ready: make(chan struct{})}
+			p.entries[key] = e
+			p.mu.Unlock()
+			client, cleanup, via, err := p.build(ctx, settings, deps)
+			p.mu.Lock()
+			if err != nil || client == nil {
+				// client == nil: the chain resolved to no jump after
+				// all; let Connect handle it.
+				e.err = err
+				delete(p.entries, key)
+				close(e.ready)
+				p.mu.Unlock()
+				return nil, nil, "", err
+			}
+			if p.entries[key] != e {
+				// stopAll ran during the build (shutdown).
+				e.err = errors.New("jump pool: shutting down")
+				close(e.ready)
+				p.mu.Unlock()
+				cleanup()
+				return nil, nil, "", e.err
+			}
+			e.client, e.cleanup, e.networkVia = client, cleanup, via
+			close(e.ready)
+			go p.watch(key, e)
+			log.Printf("jump pool: opened shared bastion for key %q", key)
+			break
 		}
-		if client == nil {
-			// Chain resolved to no jump after all; let Connect handle it.
-			return nil, nil, "", nil
+		p.mu.Unlock()
+		select {
+		case <-e.ready:
+		case <-ctx.Done():
+			return nil, nil, "", ctx.Err()
 		}
-		e = &jumpEntry{client: client, cleanup: cleanup, networkVia: via}
-		p.entries[key] = e
-		log.Printf("jump pool: opened shared bastion for key %q", key)
-	} else if e.stopTimer != nil {
-		e.stopTimer.Stop()
-		e.stopTimer = nil
+		p.mu.Lock()
+		if e.client == nil {
+			p.mu.Unlock()
+			return nil, nil, "", e.err
+		}
+		if p.entries[key] != e {
+			// It ended between the build and now: build anew.
+			p.mu.Unlock()
+			continue
+		}
+		if e.stopTimer != nil {
+			e.stopTimer.Stop()
+			e.stopTimer = nil
+		}
+		break
 	}
 	e.refs++
+	p.mu.Unlock()
 
 	var released bool
 	release := func() {
@@ -120,8 +175,8 @@ func (p *jumpPool) acquire(
 		}
 		released = true
 		e.refs--
-		if e.refs > 0 {
-			return
+		if e.refs > 0 || p.entries[key] != e {
+			return // riders left, or the bastion already ended
 		}
 		// Last rider gone: arm the idle linger. If nobody re-acquires the
 		// key within the linger, close the prefix and drop the entry.
@@ -139,10 +194,32 @@ func (p *jumpPool) acquire(
 			delete(p.entries, key)
 			p.mu.Unlock()
 			log.Printf("jump pool: shared bastion for key %q idle %s, closing", key, linger)
-			e.cleanup()
+			e.close()
 		})
 	}
 	return e.client, release, e.networkVia, nil
+}
+
+// watch drops a shared bastion whose connection ended (restart, network
+// loss), so the next acquire builds a new one instead of being handed the
+// dead client for as long as reconnects keep re-arming the linger.
+func (p *jumpPool) watch(key string, e *jumpEntry) {
+	wait := p.wait
+	if wait == nil {
+		wait = (*ssh.Client).Wait
+	}
+	_ = wait(e.client)
+	p.mu.Lock()
+	if p.entries[key] == e {
+		delete(p.entries, key)
+		if e.stopTimer != nil {
+			e.stopTimer.Stop()
+			e.stopTimer = nil
+		}
+		log.Printf("jump pool: shared bastion for key %q ended", key)
+	}
+	p.mu.Unlock()
+	e.close()
 }
 
 // peek returns the shared bastion client for a key IF one is already live,
@@ -156,7 +233,7 @@ func (p *jumpPool) peek(key string) *ssh.Client {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if e := p.entries[key]; e != nil {
-		return e.client
+		return e.client // nil while the first build runs
 	}
 	return nil
 }
@@ -172,6 +249,6 @@ func (p *jumpPool) stopAll() {
 		if e.stopTimer != nil {
 			e.stopTimer.Stop()
 		}
-		e.cleanup()
+		e.close()
 	}
 }
