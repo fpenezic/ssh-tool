@@ -4,6 +4,7 @@
 package store
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"os"
@@ -114,23 +115,36 @@ func migrateAuditRows(main, audit *sql.DB) {
 		return // table absent - nothing to migrate
 	}
 	defer rows.Close()
+	// All or nothing: the main rows are deleted only once every one of
+	// them is in the side file, and a run cut short rolls back, so the
+	// next start (side file still empty) tries again.
+	atx, err := audit.Begin()
+	if err != nil {
+		return
+	}
+	defer atx.Rollback()
 	moved := 0
 	for rows.Next() {
 		var ts int64
 		var action, target, meta string
 		if rows.Scan(&ts, &action, &target, &meta) != nil {
-			continue
+			return
 		}
-		if _, err := audit.Exec(
+		if _, err := atx.Exec(
 			`INSERT INTO audit_events (ts, action, target, metadata_json) VALUES (?, ?, ?, ?)`,
-			ts, action, target, meta); err == nil {
-			moved++
+			ts, action, target, meta); err != nil {
+			return
 		}
+		moved++
+	}
+	if rows.Err() != nil {
+		return
 	}
 	_ = rows.Close()
-	if moved > 0 {
-		_, _ = main.Exec(`DELETE FROM audit_events`)
+	if moved == 0 || atx.Commit() != nil {
+		return
 	}
+	_, _ = main.Exec(`DELETE FROM audit_events`)
 }
 
 // Close releases the underlying connections, truncating each WAL on
@@ -229,7 +243,8 @@ func (d *DB) ContentFingerprint() string {
 		{"folders", "updated_at"},
 		{"connections", "updated_at"},
 		{"credential_refs", "updated_at"},
-		{"credential_folders", ""},
+		// Every writer (rename, move, icon) sets updated_at.
+		{"credential_folders", "updated_at"},
 		{"port_forwards", ""},
 		{"snippets", "updated_at"},
 		{"workspaces", "updated_at"},
@@ -296,6 +311,27 @@ func (d *DB) ContentFingerprint() string {
 		}
 		rows.Close()
 		b.WriteByte(';')
+	}
+	// port_forwards has no updated_at either: an edit (ports, bookmarks,
+	// browser mode) keeps the count, so its content is signed too, or the
+	// edit never pushes and a pull later overwrites it.
+	if rows, err := d.conn.Query(
+		`SELECT id, connection_id, kind, IFNULL(local_addr, ''), IFNULL(local_port, 0),
+		        IFNULL(remote_host, ''), IFNULL(remote_port, 0), auto_start, description,
+		        bookmarks, browser_mode
+		   FROM port_forwards ORDER BY id`); err == nil {
+		h := sha256.New()
+		for rows.Next() {
+			var id, conn, kind, laddr, rhost, desc, bm, browser string
+			var lport, rport, auto int64
+			if err := rows.Scan(&id, &conn, &kind, &laddr, &lport, &rhost, &rport, &auto, &desc, &bm, &browser); err != nil {
+				continue
+			}
+			fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%d\x00%s\x00%d\x00%d\x00%s\x00%s\x00%s\n",
+				id, conn, kind, laddr, lport, rhost, rport, auto, desc, bm, browser)
+		}
+		rows.Close()
+		fmt.Fprintf(&b, "fwdcfg=%x;", h.Sum(nil))
 	}
 	return b.String()
 }

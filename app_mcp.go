@@ -908,6 +908,32 @@ func folderSensitive(folderID string, folders []store.Folder) bool {
 	return connSensitive(store.Connection{FolderID: &folderID}, folders)
 }
 
+// mcpSensitiveIDs is the set of connection and folder ids that resolve
+// sensitive (set on them or inherited), for listings the LLM must not see
+// them in. On an error the caller names nothing.
+func (a *App) mcpSensitiveIDs() (map[string]bool, error) {
+	folders, err := a.db.ListFolders()
+	if err != nil {
+		return nil, err
+	}
+	conns, err := a.db.ListConnections(nil)
+	if err != nil {
+		return nil, err
+	}
+	hidden := map[string]bool{}
+	for _, f := range folders {
+		if folderSensitive(f.ID, folders) {
+			hidden[f.ID] = true
+		}
+	}
+	for _, c := range conns {
+		if connSensitive(c, folders) {
+			hidden[c.ID] = true
+		}
+	}
+	return hidden, nil
+}
+
 // isSensitive is connSensitive with the folders read here.
 func (a *App) isSensitive(c *store.Connection) bool {
 	folders, err := a.db.ListFolders()
