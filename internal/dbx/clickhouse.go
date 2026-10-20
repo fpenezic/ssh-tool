@@ -69,7 +69,7 @@ func newCH(cfg Config) *chEngine {
 	return &chEngine{
 		cfg:      cfg,
 		base:     scheme + "://" + cfg.Addr + "/",
-		client:   &http.Client{Transport: tr},
+		client:   &http.Client{Transport: tr, CheckRedirect: noRedirect},
 		serverRO: -1,
 	}
 }
