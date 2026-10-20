@@ -79,6 +79,7 @@ func TestOSRead(t *testing.T) {
 		"POST /_sql?format=txt\n{\"query\": \"\"\"\nSHOW TABLES\n\"\"\"}",
 		"POST /_sql\n{\"cursor\": \"abc\"}",
 		"POST /_plugins/_sql/close\n{\"cursor\": \"abc\"}",
+		"GET /_plugins/_sql/stats",
 		"POST /_plugins/_ppl\n{\"query\": \"source=logs | head 5\"}",
 		"SELECT * FROM logs",
 		"SHOW TABLES LIKE %",
@@ -104,6 +105,10 @@ func TestOSRead(t *testing.T) {
 		"POST /_plugins/_sql\n{\"query\": \"SELECT 1\"",
 		"POST /_sql\n{}",
 		"POST /",
+		"POST /_plugins/_sql\n{\"query\": \"DELETE FROM logs\", \"QUERY\": \"SELECT 1\"}",
+		"POST /_plugins/_sql\n{\"query\": \"DELETE FROM logs\", \"query\": \"SELECT 1\"}",
+		"POST /_plugins/_sql\n{\"Query\": \"DELETE FROM logs\"}",
+		"GET /_sql\n{\"query\": \"DELETE FROM logs\"}",
 		"DELETE FROM logs WHERE a = 1",
 		"SELECT * INTO x FROM logs",
 	}
