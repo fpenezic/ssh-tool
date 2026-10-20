@@ -21,6 +21,7 @@ package dbx
 import (
 	"context"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -542,19 +543,12 @@ func (rr *rowReader) add(raw [][]byte) bool {
 }
 
 // hexString writes b as hex. Callers pass a cell's value; past
-// MaxResultBytes it is cut (a result is cut there anyway), which also keeps
-// the doubled length clear of overflow.
+// MaxResultBytes it is cut (a result is cut there anyway).
 func hexString(b []byte) string {
-	const digits = "0123456789abcdef"
 	if len(b) > MaxResultBytes {
 		b = b[:MaxResultBytes]
 	}
-	out := make([]byte, len(b)*2)
-	for i, c := range b {
-		out[i*2] = digits[c>>4]
-		out[i*2+1] = digits[c&0xf]
-	}
-	return string(out)
+	return hex.EncodeToString(b)
 }
 
 func truncUTF8(s string, n int) string {
