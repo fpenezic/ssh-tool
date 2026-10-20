@@ -1910,6 +1910,23 @@ everything mobile is behind a build tag or an `isMobile` check.
    above the terminal, so two machines with the same monitor and scaling
    can differ. The snap is skipped when the user agent has `Chrome/`.
 
+120. **ClickHouse over HTTP: settings, sessions and stopping a query.**
+   (`internal/dbx/clickhouse.go`) A login whose profile has `readonly = 1`
+   refuses every setting in the request, `readonly` itself included ("Cannot
+   modify ... in readonly mode"), so the engine learns the login's level once
+   (`getSetting('readonly')`) and sends `readonly=2` only when it is 0. URL
+   settings do not persist in an HTTP session; `USE` does, but the
+   `database` parameter overrides it per request, so the session follows a
+   `USE` by reading `currentDatabase()` back. Closing the request does not
+   stop a query that has not sent rows yet (an aggregation), and that query
+   keeps the session locked (`SESSION_IS_LOCKED`) until it ends: Stop, a
+   caller's context ending and the row bound all send `KILL QUERY` by
+   `query_id`, and the next run waits out a lock for a few seconds. An error
+   after the result started arrives in the body after a `__exception__`
+   line (older servers: a bare `Code: N. DB::Exception` line). POSTs are
+   not retried by net/http, so the idle timeout stays under the server's
+   10 s keep-alive.
+
 ---
 
 # Archive

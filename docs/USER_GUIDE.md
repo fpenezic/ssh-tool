@@ -1587,8 +1587,8 @@ Topic and group administration is not available to it. See
 <a id="databases"></a>
 ## 6d. Databases
 
-Browse and query a PostgreSQL or MySQL / MariaDB database from the
-connection that reaches it. Like Kafka, the database is a service on a
+Browse and query a PostgreSQL, MySQL / MariaDB or ClickHouse database from
+the connection that reaches it. Like Kafka, the database is a service on a
 connection: switch it on in the connection (or once on a folder of
 database hosts) and the connection opens a **Database tab** next to its
 terminals. Through SSH (the default), every database connection rides the
@@ -1599,10 +1599,12 @@ connection's SSH session, so a server that only listens on the host's
 
 In the connection editor (or a folder's), the **Database** tab:
 
-- **Engine** - PostgreSQL, or MySQL / MariaDB.
+- **Engine** - PostgreSQL, MySQL / MariaDB, or ClickHouse (over its HTTP
+  interface, see [ClickHouse](#clickhouse) below).
 - **Address** - host and port as seen from where the database is dialed:
   from the SSH host when it runs there or behind it. Empty means
-  `127.0.0.1` and the engine's port (5432 / 3306).
+  `127.0.0.1` and the engine's port (5432 / 3306 / 8123; ClickHouse with
+  TLS listens on 8443, so give that port).
 - **Database** - the one the tab opens first; empty takes the server's
   default for the login.
 - **Login** - a password credential whose default username and password are
@@ -1709,8 +1711,40 @@ completion of the table names listed so far.
 - On a connection marked *sensitive*, statements that change data are
   listed for confirmation before they run.
 
-Values are shown the way `psql` and the `mysql` client print them: numbers
-keep their precision, `NULL` is marked, binary columns show as hex.
+Values are shown the way `psql`, the `mysql` client and `clickhouse-client`
+print them: numbers keep their precision, `NULL` is marked, binary columns
+show as hex.
+
+<a id="clickhouse"></a>
+### ClickHouse
+
+ClickHouse is reached over its HTTP interface (port 8123, 8443 with TLS),
+through the SSH session like the others. What differs:
+
+- **No transactions.** Commit and Roll back never show. Read-only rests on
+  the statement check (`SELECT`, `WITH`, `SHOW`, `EXPLAIN`, `DESCRIBE`,
+  `EXISTS`) and on the server: every statement of a read-only tab runs with
+  `readonly = 2`, which ClickHouse itself enforces - a query cannot lift it
+  with its own `SETTINGS`. A login whose profile is already read-only is
+  left as it is.
+- **Sessions.** Each query tab is a ClickHouse session: `SET` and `USE`
+  carry from one run to the next. The server ends a session idle for an
+  hour (its `max_session_timeout`); the next run starts a fresh one with
+  the defaults.
+- **Stop** closes the request and sends `KILL QUERY`. A login without the
+  right to kill queries only gets the close: a query that has not started
+  returning rows (a long aggregation) then runs on until it finishes, and
+  the tab waits for it.
+- **Results.** Arrays, maps and tuples show as ClickHouse prints them
+  (`['a','b']`, `{'k':'v'}`). A statement with its own `FORMAT` clause
+  (`FORMAT JSONEachRow`) comes back as one **output** column, a row per
+  line. `INSERT` reports the rows written.
+- **The tree** lists databases with their size on disk (from
+  `system.parts`, when the login may read it), tables with their engine's
+  row count, views and materialized views. **Data** reads in the table's
+  `ORDER BY` key, **Structure** shows the primary key, the sorting key and
+  the data-skipping indexes, and **DDL** is the server's own
+  `CREATE TABLE`.
 
 ### Tables
 
