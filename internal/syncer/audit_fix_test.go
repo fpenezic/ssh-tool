@@ -2,6 +2,9 @@ package syncer
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"net"
 	"net/http"
 	"net/url"
@@ -87,4 +90,61 @@ func TestSFTPHandshakeTimeout(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("handshake hung past the timeout")
 	}
+}
+
+// The trust dialog may outlast the handshake timeout: the clock stops at
+// the host-key callback.
+func TestSFTPHostKeyPromptOutlastsTimeout(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	key, err := ssh.ParsePrivateKey(testHostKeyPEM(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srvCfg := &ssh.ServerConfig{PasswordCallback: func(ssh.ConnMetadata, []byte) (*ssh.Permissions, error) { return nil, nil }}
+	srvCfg.AddHostKey(key)
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		_, chans, reqs, err := ssh.NewServerConn(c, srvCfg)
+		if err != nil {
+			return
+		}
+		go ssh.DiscardRequests(reqs)
+		for ch := range chans {
+			_ = ch.Reject(ssh.Prohibited, "no")
+		}
+	}()
+	s := &SFTP{Host: "127.0.0.1", Port: ln.Addr().(*net.TCPAddr).Port, User: "u",
+		Auth: []ssh.AuthMethod{ssh.Password("x")},
+		HostKey: func(string, net.Addr, ssh.PublicKey) error {
+			time.Sleep(800 * time.Millisecond) // the user reading the fingerprint
+			return nil
+		},
+		Timeout: 300 * time.Millisecond}
+	_, err = s.connect()
+	// The SFTP subsystem is refused by this server; what matters is that
+	// the handshake got past the slow host-key check.
+	if err != nil && strings.Contains(err.Error(), "handshake") {
+		t.Fatalf("handshake cut off by the timeout: %v", err)
+	}
+}
+
+func testHostKeyPEM(t *testing.T) []byte {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := ssh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pem.EncodeToMemory(b)
 }
