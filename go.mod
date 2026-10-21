@@ -13,8 +13,8 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/kayrus/putty v1.0.5
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/openpubkey/openpubkey v0.25.0
-	github.com/openpubkey/opkssh v0.16.0
+	github.com/openpubkey/openpubkey v0.29.0
+	github.com/openpubkey/opkssh v0.19.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pkg/sftp v1.13.11
 	github.com/tobischo/gokeepasslib/v3 v3.7.0
@@ -22,7 +22,7 @@ require (
 	github.com/twmb/franz-go/pkg/kadm v1.19.0
 	github.com/twmb/franz-go/pkg/kfake v0.0.0-20261013022759-7b6cac30a57a
 	github.com/twmb/franz-go/pkg/kmsg v1.15.0
-	github.com/wailsapp/wails/v3 v3.0.0-beta.33
+	github.com/wailsapp/wails/v3 v3.0.0-beta.34
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.58.0
 	golang.org/x/net v0.61.0
