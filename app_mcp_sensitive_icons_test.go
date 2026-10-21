@@ -51,6 +51,9 @@ func TestMcpIconListingsHideSensitive(t *testing.T) {
 	var names []string
 	for _, u := range usage {
 		names = append(names, u.Examples...)
+		if u.UseCount != 1 {
+			t.Fatalf("use count %d counts the hidden connection", u.UseCount)
+		}
 	}
 	if got := strings.Join(names, ","); strings.Contains(got, "hidden-db") || !strings.Contains(got, "web-01") {
 		t.Fatalf("image examples: %s", got)
