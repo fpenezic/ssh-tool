@@ -88,6 +88,25 @@ func (a *App) FactsHistory(folderID string) ([]FactsRun, error) {
 	return hist, nil
 }
 
+// FactsLatest returns the latest stored run of every scope that has one,
+// keyed by folder id (or "_" for hand-picked hosts). The home pane reads
+// it in one call instead of one per folder; a run that does not parse is
+// left out.
+func (a *App) FactsLatest() (map[string]FactsRun, error) {
+	raw, err := a.db.SettingsWithPrefix(factsLastKey(""))
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]FactsRun, len(raw))
+	for id, v := range raw {
+		var run FactsRun
+		if json.Unmarshal([]byte(v), &run) == nil && run.At > 0 {
+			out[id] = run
+		}
+	}
+	return out, nil
+}
+
 // FactsSaveRun appends a run to the folder's history (keeping the last
 // FactsHistoryMax) and makes it the folder's latest report.
 func (a *App) FactsSaveRun(folderID string, run FactsRun) error {

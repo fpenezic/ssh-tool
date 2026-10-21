@@ -34,3 +34,23 @@ func (d *DB) DeleteSetting(key string) error {
 	_, err := d.conn.Exec("DELETE FROM app_settings WHERE key = ?", key)
 	return err
 }
+
+// SettingsWithPrefix returns every setting whose key starts with prefix,
+// keyed by the rest of the key. Compared with substr rather than LIKE: a
+// prefix such as "fleet_facts:" holds "_", which LIKE treats as a wildcard.
+func (d *DB) SettingsWithPrefix(prefix string) (map[string]string, error) {
+	rows, err := d.conn.Query("SELECT key, value FROM app_settings WHERE substr(key, 1, ?) = ?", len(prefix), prefix)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
+		out[k[len(prefix):]] = v
+	}
+	return out, rows.Err()
+}

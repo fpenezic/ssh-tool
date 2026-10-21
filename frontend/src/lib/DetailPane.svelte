@@ -1,6 +1,7 @@
 <script lang="ts">
   import { profileKindTitle, profileRunsHere, NOT_ON_MOBILE_TITLE } from "./networkKind";
   import { splitHostInput } from "./hostInput";
+  import HomePane from "./HomePane.svelte";
   import { tree, credentials, selection, sessions, paneTabs, view, jumpChainHostnames } from "./stores.svelte";
   import { isMobile } from "./platform";
   import { toast } from "./toast.svelte";
@@ -1747,9 +1748,7 @@
       entryId={selection.current.entryId}
     />
   {:else if !folder && !conn}
-    <div class="empty">
-      <p>Select a folder or connection on the left.</p>
-    </div>
+    <HomePane />
   {:else if folder && editingFolder}
     <header class="ed-head">
       <div class="ed-title">
@@ -2960,7 +2959,6 @@
     margin: 0 0 0.5rem;
     line-height: 1.4;
   }
-  .empty { color: var(--overlay0); margin-top: 4rem; text-align: center; }
   .muted { color: var(--overlay0); }
   header {
     display: flex; align-items: center; justify-content: space-between;
