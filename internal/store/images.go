@@ -194,7 +194,11 @@ func (d *DB) ListImageUsage(limit int, hidden map[string]bool) ([]ImageUsage, er
 				rows.Close()
 				return nil, err
 			}
-			if !hidden[id] && len(u.Examples) < limit {
+			if hidden[id] {
+				u.UseCount-- // a "+N more" must not count it either
+				continue
+			}
+			if len(u.Examples) < limit {
 				u.Examples = append(u.Examples, n)
 			}
 		}
