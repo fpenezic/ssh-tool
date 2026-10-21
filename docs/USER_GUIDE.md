@@ -2449,7 +2449,8 @@ shows the plugin release and the engine version inside it, and an
 update is offered there (and as a status bar pill) when a newer plugin
 release is out. Downloads exist for Windows and Linux; on macOS build
 the plugin from the ssh-tool-plugins repository and put it in the
-plugins folder, where the app finds it.
+plugins folder (`~/Library/Application Support/ssh-tool/plugins`), where
+the app finds it - see [docs/macos.md](https://github.com/fpenezic/ssh-tool/blob/main/docs/macos.md) for the steps.
 
 Plugins are desktop only: Android cannot start helper processes.
 Profiles still sync to the phone, and there a plugin profile is marked
