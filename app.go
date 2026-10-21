@@ -1397,6 +1397,13 @@ func (a *App) ConnectionsRecent() ([]store.Connection, error) {
 	return recent, nil
 }
 
+// ConnectionsRecentTimes returns when each connection was last connected
+// on this machine (unix seconds). The frontend's recents read this: the
+// connections' own last_used_at column is legacy and no longer written.
+func (a *App) ConnectionsRecentTimes() map[string]int64 {
+	return a.recentTimes()
+}
+
 // ConnectionsFavorites returns every connection flagged favorite.
 func (a *App) ConnectionsFavorites() ([]store.Connection, error) {
 	return a.db.FavoriteConnections()

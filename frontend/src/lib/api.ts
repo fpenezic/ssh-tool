@@ -1214,6 +1214,8 @@ export const api = {
   connectionsDelete: (id: string) => G.ConnectionsDelete(id),
   connectionsClone: (id: string) => G.ConnectionsClone(id) as Promise<Connection | null>,
   connectionsRecent: () => G.ConnectionsRecent() as Promise<Connection[]>,
+  connectionsRecentTimes: () =>
+    G.ConnectionsRecentTimes() as unknown as Promise<Record<string, number> | null>,
   connectionsFavorites: () => G.ConnectionsFavorites() as Promise<Connection[]>,
   connectionsSetFavorite: (id: string, fav: boolean) => G.ConnectionsSetFavorite(id, fav),
   broadcastList: () => G.BroadcastList() as unknown as Promise<string[]>,

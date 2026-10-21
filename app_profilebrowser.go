@@ -236,7 +236,7 @@ func (a *App) ConnectionOpenWeb(id string) error {
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		return errors.New("only http(s) addresses")
 	}
-	_ = a.db.TouchLastUsed(id)
+	a.touchRecent(id)
 	folders, _ := a.db.ListFolders()
 	rs := resolver.ResolveWith(*c, folders)
 	if rs.NetworkProfileID != nil && *rs.NetworkProfileID != "" {

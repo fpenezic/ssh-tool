@@ -37,6 +37,7 @@ a prerelease upstream.
 
 ### Fixes
 
+- Quick access lists the connections you opened recently again: since recency became per machine it read an old field that was no longer written. Opening the profile browser no longer counts as a profile change for sync.
 - Auto-sync works for Dropbox, OneDrive and Google Drive (it never ran for them), and renaming a credential folder or editing a port forward is pushed by auto-sync.
 - Launch in system terminal and Copy ssh command use the jump host's user the app logs in with (also when it comes from the credential), instead of the local user.
 - An SSH host or jump host that accepts the connection and then hangs no longer freezes the connect, and Cancel stops it. The host key dialog and login prompts still wait for you.
