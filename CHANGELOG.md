@@ -13,6 +13,8 @@ a prerelease upstream.
 
 - The Database and Kafka cards of the **Services** tab fold: a click on the arrow or the title hides the card and leaves a summary (engine and number of databases, Kafka's brokers), so Kafka stays in reach under a host with many databases. The folded state is remembered.
 - Esc closes a right-click menu (and the Open button's menu) again, and focus goes back to where it was.
+- **Connect shows what it is doing.** A connect started from the tree (double-click, Enter, several hosts at once) now also shows on the Connect button, with its current step and Cancel. The steps now include the network profile ("Checking if the host is reachable directly", "Not reachable directly - starting VPN ...") and a shared bastion. Cancel also stops a connect stuck dialing an address that never answers.
+- **MTU problems are recognised.** When the server answers but the key exchange then stalls, the usual sign of an MTU problem on the path, the connect error says so and names what to change: the MTU of the WireGuard or OpenConnect profile it went through, or the jump host's network when it stalled behind one. A hop behind a jump host no longer hangs when that happens, and a shared bastion fails at the connect timeout instead of after 90 seconds.
 
 ### Network profiles
 
@@ -33,6 +35,7 @@ a prerelease upstream.
 ### Fixes
 
 - Auto-sync works for Dropbox, OneDrive and Google Drive (it never ran for them), and renaming a credential folder or editing a port forward is pushed by auto-sync.
+- Launch in system terminal and Copy ssh command use the jump host's user the app logs in with (also when it comes from the credential), instead of the local user.
 - An SSH host or jump host that accepts the connection and then hangs no longer freezes the connect, and Cancel stops it. The host key dialog and login prompts still wait for you.
 - An agent credential works with the stock Windows OpenSSH agent (no SSH_AUTH_SOCK needed), and agent connections are no longer left open.
 - Several tabs connecting through one bastion: a slow bastion no longer holds up the others, a dropped bastion is reconnected instead of reused, and cancelling one tab no longer fails the rest.

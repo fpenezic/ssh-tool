@@ -63,6 +63,20 @@ const RULES: Rule[] = [
     },
   },
   {
+    // Before "i/o timeout": the server answered, then the key exchange
+    // stalled - the backend flags this as a likely MTU problem and appends
+    // what to change (the network profile's MTU, or where else to look).
+    match: "key exchange stalled",
+    to: (raw) => {
+      const m = /likely an MTU problem on the path\.\s*(.+)$/is.exec(raw);
+      return {
+        summary: "Key exchange stalled - likely an MTU problem",
+        hint: "The server answered, but the larger packets of the key exchange never arrived." +
+          (m ? " " + m[1] : ""),
+      };
+    },
+  },
+  {
     match: "i/o timeout",
     to: {
       summary: "Connection timed out",

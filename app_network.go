@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -1499,4 +1500,32 @@ func (a *App) NetworkProfileTest(id string) (*wg.Status, error) {
 	}
 	st := a.tunnelStatus(id)
 	return &st, nil
+}
+
+// withMTUAdvice adds what to change to a handshake that stalled the way an
+// MTU problem does (see sshlayer.HandshakeStallError): the MTU field of the
+// network profile the first hop went through, when that kind has one, or
+// where else to look.
+func (a *App) withMTUAdvice(err error, s *store.ResolvedSettings) error {
+	var se *sshlayer.HandshakeStallError
+	if !errors.As(err, &se) {
+		return err
+	}
+	advice := "If the host is reached over a VPN, lower that VPN's MTU (e.g. 1280); otherwise a firewall that drops ICMP \"fragmentation needed\" on the way is the usual cause."
+	switch {
+	case !se.FirstHop:
+		advice = "It stalled behind the jump host, so the MTU problem is on the jump host's network to the target, not on this machine."
+	case se.Via == "tunnel" && s.NetworkProfileID != nil:
+		if row, rerr := a.db.GetNetworkProfile(*s.NetworkProfileID); rerr == nil && row != nil {
+			switch parsePolicy(row.ConfigJSON).Kind {
+			case kindWireguard:
+				advice = fmt.Sprintf("Lower the MTU of network profile %q (MTU = 1280 in its WireGuard config), then restart the tunnel.", row.Name)
+			case kindOpenConnect:
+				advice = fmt.Sprintf("Set a lower MTU on network profile %q (e.g. 1280), then restart the tunnel.", row.Name)
+			default:
+				advice = fmt.Sprintf("The path runs through network profile %q, whose MTU the VPN server sets: ask its admin for a lower one, or check the network in between.", row.Name)
+			}
+		}
+	}
+	return fmt.Errorf("%w. %s", err, advice)
 }

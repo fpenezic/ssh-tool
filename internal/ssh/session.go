@@ -9,8 +9,10 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -769,6 +771,7 @@ func Connect(
 			t0 = time.Now()
 			sshConn, chans, reqs, err := clientHandshake(ctx, conn, addr, cfg, connectTimeout)
 			if err != nil {
+				markStall(err, dialPath, true)
 				debug("%s: SSH handshake failed after %s: %v", h.Label, time.Since(t0).Round(time.Millisecond), err)
 				_ = conn.Close()
 				cleanup(clients)
@@ -799,6 +802,7 @@ func Connect(
 			t0 = time.Now()
 			sshConn, chans, reqs, err := clientHandshake(ctx, netConn, addr, cfg, connectTimeout)
 			if err != nil {
+				markStall(err, networkVia, false)
 				debug("%s: SSH handshake failed after %s: %v", h.Label, time.Since(t0).Round(time.Millisecond), err)
 				_ = netConn.Close()
 				cleanup(clients)
@@ -1419,27 +1423,125 @@ func derefStr[T ~string](p *T) string {
 // timeout to reach the host-key check: one that accepts TCP and then
 // stalls fails instead of hanging the connect. The clock stops at the
 // host-key callback, since the trust dialog and the login prompts after it
-// wait for the user. A jump hop's channel takes no deadline; ctx still
-// ends it.
+// wait for the user.
+//
+// The clock is a timer that closes the connection, not a read deadline: a
+// jump hop's conn is an SSH channel, which has no deadlines, and the
+// bastion-to-target leg is where an MTU problem stalls most often.
+//
+// A stall after the server already answered (its version line got through)
+// is reported as a HandshakeStallError: small packets pass, the first large
+// one of the key exchange does not, the usual sign of an MTU problem.
 func clientHandshake(ctx context.Context, conn net.Conn, addr string, cfg *ssh.ClientConfig, timeout time.Duration) (ssh.Conn, <-chan ssh.NewChannel, <-chan *ssh.Request, error) {
+	return boundedHandshake(ctx, conn, addr, cfg, timeout, 0)
+}
+
+// boundedHandshake is clientHandshake with an optional budget for the part
+// after the host-key check (afterKey, 0 = none). The non-interactive paths
+// use it: nothing there waits on the user, so authentication is bounded
+// too, by its own budget (see quietAuthBudget).
+func boundedHandshake(ctx context.Context, conn net.Conn, addr string, cfg *ssh.ClientConfig, timeout, afterKey time.Duration) (ssh.Conn, <-chan ssh.NewChannel, <-chan *ssh.Request, error) {
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
+	cc := &countingConn{Conn: conn}
 	c := *cfg
-	if timeout > 0 && cfg.HostKeyCallback != nil {
-		_ = conn.SetDeadline(time.Now().Add(timeout))
+	var (
+		mu       sync.Mutex
+		keySeen  bool
+		timedOut bool
+		timer    *time.Timer
+	)
+	expire := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		timedOut = true
+		_ = conn.Close()
+	}
+	if timeout > 0 {
+		timer = time.AfterFunc(timeout, expire)
+		defer func() {
+			mu.Lock()
+			timer.Stop()
+			mu.Unlock()
+		}()
+	}
+	if cfg.HostKeyCallback != nil {
 		hostKey := cfg.HostKeyCallback
 		c.HostKeyCallback = func(host string, remote net.Addr, key ssh.PublicKey) error {
-			_ = conn.SetDeadline(time.Time{})
+			mu.Lock()
+			if !timedOut {
+				keySeen = true
+				if timer != nil {
+					timer.Stop()
+					if afterKey > 0 {
+						timer = time.AfterFunc(afterKey, expire)
+					}
+				}
+			}
+			mu.Unlock()
 			return hostKey(host, remote, key)
 		}
 	}
-	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, &c)
+	sshConn, chans, reqs, err := ssh.NewClientConn(cc, addr, &c)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, nil, nil, ctx.Err()
 		}
-		return nil, nil, nil, err
+		mu.Lock()
+		expired, afterHostKey := timedOut, keySeen
+		mu.Unlock()
+		switch {
+		case !expired:
+			return nil, nil, nil, err
+		case afterHostKey:
+			return nil, nil, nil, fmt.Errorf("authentication took longer than %s: %w", afterKey, os.ErrDeadlineExceeded)
+		case cc.n.Load() > 0:
+			return nil, nil, nil, &HandshakeStallError{Received: cc.n.Load(), Timeout: timeout}
+		default:
+			return nil, nil, nil, fmt.Errorf("no SSH answer within %s: %w", timeout, os.ErrDeadlineExceeded)
+		}
 	}
-	_ = conn.SetDeadline(time.Time{})
 	return sshConn, chans, reqs, nil
 }
+
+// markStall records where a HandshakeStallError happened: on the first hop
+// (dialled from this machine, via is its transport) or behind a jump host.
+func markStall(err error, via string, firstHop bool) {
+	var se *HandshakeStallError
+	if errors.As(err, &se) {
+		se.Via = via
+		se.FirstHop = firstHop
+	}
+}
+
+// countingConn counts the bytes read, so a handshake that stalls can tell
+// "the server never spoke" from "the server spoke, then went quiet".
+type countingConn struct {
+	net.Conn
+	n atomic.Int64
+}
+
+func (c *countingConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	c.n.Add(int64(n))
+	return n, err
+}
+
+// HandshakeStallError is a handshake that timed out after the server had
+// already sent data: likely an MTU problem on the path. Via is the first
+// hop's transport ("tunnel" when it went through a network profile) and
+// FirstHop says the stalled hop was dialled from this machine; behind a
+// jump host the path in question is the bastion's. The app uses both to
+// point at the right MTU setting.
+type HandshakeStallError struct {
+	Received int64
+	Timeout  time.Duration
+	Via      string
+	FirstHop bool
+}
+
+func (e *HandshakeStallError) Error() string {
+	return fmt.Sprintf("key exchange stalled after the server answered (%d bytes received, nothing more in %s) - likely an MTU problem on the path", e.Received, e.Timeout)
+}
+
+func (e *HandshakeStallError) Unwrap() error { return os.ErrDeadlineExceeded }

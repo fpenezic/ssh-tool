@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { errMsg, unwrapRaw } from "./connectErrors";
+import { errMsg, explain, unwrapRaw } from "./connectErrors";
 
 // Wails v3 rejects an IPC call with an Error whose .message is itself a
 // JSON envelope: {"message":"...","cause":{},"kind":"RuntimeError"}. Any
@@ -57,5 +57,16 @@ describe("unwrapRaw", () => {
   it("peels the envelope for the substring rules downstream", () => {
     const raw = JSON.stringify({ message: "dial tcp: i/o timeout", cause: {}, kind: "RuntimeError" });
     expect(unwrapRaw(raw)).toBe("dial tcp: i/o timeout");
+  });
+});
+
+describe("explain: stalled key exchange", () => {
+  const raw = 'target app.example.com: ssh handshake: key exchange stalled after the server answered (1043 bytes received, nothing more in 20s) - likely an MTU problem on the path. Lower the MTU of network profile "corp" (MTU = 1280 in its WireGuard config), then restart the tunnel.';
+
+  it("names MTU and carries the backend's advice, not the generic timeout", () => {
+    const f = explain(raw);
+    expect(f.summary).toContain("MTU");
+    expect(f.summary).toContain("target host");
+    expect(f.hint).toContain('network profile "corp"');
   });
 });

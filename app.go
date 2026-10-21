@@ -1281,6 +1281,7 @@ func (a *App) connectSynthetic(syntheticConn store.Connection, folders []store.F
 	settings.TunnelOnly = false
 	sess, err := sshlayer.Connect(ctx, a.db, a.vault, &settings, sink, a.makeHostKeyCallback(), a.makeAlgoLookup(), ct, progress)
 	if err != nil {
+		err = a.withMTUAdvice(err, &settings)
 		log.Printf("ssh connect %s %s (%s): %v", syntheticConn.ID, name, settings.Hostname, err)
 		return nil, err
 	}
@@ -3397,6 +3398,7 @@ func (a *App) sshConnectWith(connectionID, overrideCredentialID, overrideUsernam
 	defer cancel()
 	sess, err := sshlayer.Connect(ctx, a.db, a.vault, settings, sink, a.makeHostKeyCallback(), a.makeAlgoLookup(), ct, progress)
 	if err != nil {
+		err = a.withMTUAdvice(err, settings)
 		log.Printf("ssh connect %s (%s): %v", connectionID, settings.Hostname, err)
 		// Vault-locked is a recoverable failure class: surface it
 		// as a typed event so the frontend can pop VaultGate
