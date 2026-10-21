@@ -110,16 +110,20 @@ class WorkspaceStore {
     return paneTabs.tabs.some((t) => t.workspaceId === id);
   }
 
+  // Loads can overlap (the home pane's first load and a profile pull);
+  // only the newest request may write the list.
+  private loadSeq = 0;
   async load() {
+    const seq = ++this.loadSeq;
     this.loading = true;
     this.error = null;
     try {
       const rows = await api.workspacesList();
-      this.list = rows ?? [];
+      if (seq === this.loadSeq) this.list = rows ?? [];
     } catch (e: any) {
-      this.error = e?.message ?? String(e);
+      if (seq === this.loadSeq) this.error = e?.message ?? String(e);
     } finally {
-      this.loading = false;
+      if (seq === this.loadSeq) this.loading = false;
     }
   }
 

@@ -54,16 +54,18 @@ class TreeStore {
   private recentSeq = 0;
 
   async loadRecent() {
+    // Listen before the first read, so a connect that lands while it is
+    // in flight is not missed.
+    if (!this.recentsWired) {
+      this.recentsWired = true;
+      EventsOn("recents_changed", () => { void this.loadRecent(); });
+    }
     const seq = ++this.recentSeq;
     try {
       const times = (await api.connectionsRecentTimes()) ?? {};
       if (seq === this.recentSeq) this.recentTimes = times;
     } catch (e) {
       console.warn("recents load:", e);
-    }
-    if (!this.recentsWired) {
-      this.recentsWired = true;
-      EventsOn("recents_changed", () => { void this.loadRecent(); });
     }
   }
 
