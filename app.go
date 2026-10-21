@@ -6718,13 +6718,55 @@ func (a *App) sshSystemArgv(connectionID string) ([]string, error) {
 		argv = append(argv, "-p", strconv.Itoa(int(s.Port)))
 	}
 
+	// Same user fallback as the in-app connect (buildHopChain + dialChain):
+	// the hop's own user, else the target's, else the default username of
+	// the hop's credential. Without it ssh -J falls back to the local OS
+	// user, not the one the app logs in with.
+	// checkExternalSSHTarget only saw the users in the settings; one taken
+	// from a credential is checked here.
+	var badUser error
+	credUser := func(ref *string) string {
+		if ref == nil {
+			return ""
+		}
+		cred, err := a.db.GetCredential(*ref)
+		if err != nil || cred == nil || cred.DefaultUsername == nil {
+			return ""
+		}
+		if err := checkExtUser(*cred.DefaultUsername); err != nil && badUser == nil {
+			badUser = err
+		}
+		return *cred.DefaultUsername
+	}
+	targetUser := ""
+	if s.Username != nil {
+		targetUser = *s.Username
+	}
+	if targetUser == "" {
+		targetUser = credUser(s.AuthRef)
+	}
+
 	if s.JumpHost != nil {
 		var hops []string
 		cur := s.JumpHost
 		for cur != nil {
 			hop := cur.Hostname
-			if cur.Username != nil && *cur.Username != "" {
-				hop = *cur.Username + "@" + hop
+			user := ""
+			if cur.Username != nil {
+				user = *cur.Username
+			}
+			if user == "" && s.Username != nil {
+				user = *s.Username
+			}
+			if user == "" {
+				ref := s.AuthRef
+				if cur.AuthRef != nil {
+					ref = cur.AuthRef
+				}
+				user = credUser(ref)
+			}
+			if user != "" {
+				hop = user + "@" + hop
 			}
 			if cur.Port != nil && *cur.Port != 0 && *cur.Port != 22 {
 				hop = hop + ":" + strconv.Itoa(int(*cur.Port))
@@ -6737,9 +6779,13 @@ func (a *App) sshSystemArgv(connectionID string) ([]string, error) {
 		}
 	}
 
+	if badUser != nil {
+		return nil, badUser
+	}
+
 	target := s.Hostname
-	if s.Username != nil && *s.Username != "" {
-		target = *s.Username + "@" + target
+	if targetUser != "" {
+		target = targetUser + "@" + target
 	}
 	argv = append(argv, target)
 	return argv, nil
