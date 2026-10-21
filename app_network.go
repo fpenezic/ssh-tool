@@ -534,6 +534,40 @@ func (a *App) wgDialerForCtx(hookCtx context.Context, profileID string) (sshlaye
 			}, nil
 		}
 		return func(ctx context.Context, network, addr string) (net.Conn, error) {
+			// The tunnel is already up: try it first, without the direct
+			// probe. Someone is working through it, so this machine is most
+			// likely away from the network the host sits on, and the probe
+			// would only add its timeout to every connect. When the tunnel
+			// cannot reach the host (back on-site with the VPN left up),
+			// the direct dial still gets its turn, with directProbeTimeout
+			// kept free for it out of the connect deadline.
+			if a.tunnelStatus(row.ID).Running {
+				if t, terr := a.ensureTunnel(row); terr == nil {
+					sshlayer.ReportProgress(ctx, "Connecting to "+addr+" via VPN "+row.Name+" (already up)")
+					tctx, tcancel := ctx, context.CancelFunc(func() {})
+					if dl, ok := ctx.Deadline(); ok && time.Until(dl) > 2*directProbeTimeout {
+						tctx, tcancel = context.WithDeadline(ctx, dl.Add(-directProbeTimeout))
+					}
+					c, err := t.DialContext(tctx, network, addr)
+					tcancel()
+					if err == nil {
+						report(ctx, "tunnel")
+						return c, nil
+					}
+					if ctx.Err() != nil {
+						return nil, err
+					}
+					sshlayer.ReportProgress(ctx, "Not reachable via VPN "+row.Name+" - trying "+addr+" directly")
+					pctx, cancel := context.WithTimeout(ctx, directProbeTimeout)
+					dc, derr := probe(pctx, network, addr)
+					cancel()
+					if derr != nil {
+						return nil, fmt.Errorf("via tunnel %s: %w (direct dial failed too: %v)", row.Name, err, derr)
+					}
+					log.Printf("net: %s not reachable via running tunnel %s, reached directly", addr, row.Name)
+					return dc, nil
+				}
+			}
 			sshlayer.ReportProgress(ctx, "Checking if "+addr+" is reachable directly")
 			pctx, cancel := context.WithTimeout(ctx, directProbeTimeout)
 			c, derr := probe(pctx, network, addr)

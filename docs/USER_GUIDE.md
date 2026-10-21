@@ -2417,7 +2417,8 @@ Each profile has a mode and a pause switch:
 - **Auto** - probe a direct dial first (short timeout); only if that
   fails bring the tunnel up. Good for a host reachable directly when
   you're on-site and only via VPN from elsewhere. On-site connects
-  show no VPN badge because they really went direct.
+  show no VPN badge because they really went direct. While the tunnel
+  is up, connects use it straight away without the probe.
 - **Pause** - a per-profile kill switch: every connection using it
   dials direct and the tunnel is stopped immediately. For "I'm on the
   network, leave the VPN alone."

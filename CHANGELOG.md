@@ -21,6 +21,7 @@ a prerelease upstream.
 - **Backup gateways for OpenConnect profiles.** A profile can list further gateways of the same VPN (FortiClient's remote gateway list, also for the other OpenConnect types). Connect moves to the next one only when a gateway does not answer at all; a rejected login is not tried on the others. Each gateway keeps its own trusted certificate. Needs OpenConnect plugin v1.3.
 - A WireGuard profile with "bind to the physical network" keeps working after the network changes (new DHCP lease, Wi-Fi to Ethernet); it used to stay on the old address until stopped by hand.
 - A VPN plugin waiting for a one-time code no longer holds up every other profile, status reads, Stop and quit.
+- An auto-mode profile whose VPN is already up connects through it straight away, without first spending up to 3 seconds trying the host directly.
 - A paused profile dials as the system routes again (a system VPN and IPv6 included); only the auto-mode probe uses the physical network.
 
 ### Security

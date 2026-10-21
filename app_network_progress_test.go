@@ -17,7 +17,8 @@ import (
 
 // An auto-mode profile reports each step of the first-hop dial, so the
 // Connect button can say it is checking the direct route or bringing the
-// VPN up instead of only "Connecting".
+// VPN up instead of only "Connecting". (A tunnel already up skips the
+// probe; that needs a running plugin and is checked on the rig.)
 func TestAutoProfileReportsDialSteps(t *testing.T) {
 	db, err := store.Open(filepath.Join(t.TempDir(), "store.db"))
 	if err != nil {
