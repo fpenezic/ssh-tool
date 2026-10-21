@@ -5918,10 +5918,21 @@ export class PluginInfo {
              */
             this["update_available"] = false;
         }
+        if (!("beside_app" in $$source)) {
+            /**
+             * BesideApp is true when the plugin was found next to the app's
+             * executable rather than in the plugins dir: Remove only deletes the
+             * plugins dir copy, so the UI does not offer it for this one.
+             * @member
+             * @type {boolean}
+             */
+            this["beside_app"] = false;
+        }
         if (!("supported" in $$source)) {
             /**
-             * Supported=false when this platform has no helper build
-             * (android/ios - helpers are desktop-only).
+             * Supported=false when this platform has no helper build to
+             * download (android/ios, where helpers cannot run, and macOS, where
+             * a helper built by hand and put in the plugins dir does run).
              * @member
              * @type {boolean}
              */
