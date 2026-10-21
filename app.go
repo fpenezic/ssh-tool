@@ -566,13 +566,13 @@ func (a *App) initialise() {
 	// userspace tunnel, hand its netstack DialContext to the SSH layer.
 	// Errors abort the connect - a profile-pinned connection must never
 	// fall back to a direct dial.
-	sshlayer.FirstHopDialerHook = func(s *store.ResolvedSettings) (sshlayer.ContextDialer, error) {
+	sshlayer.FirstHopDialerHook = func(ctx context.Context, s *store.ResolvedSettings) (sshlayer.ContextDialer, error) {
 		if s.NetworkProfileID == nil {
 			return nil, fmt.Errorf("no network profile on settings")
 		}
-		// wgDialerFor applies the profile's connect policy (always /
+		// wgDialerForCtx applies the profile's connect policy (always /
 		// auto-with-direct-probe / paused). See app_network.go.
-		return a.wgDialerFor(*s.NetworkProfileID)
+		return a.wgDialerForCtx(ctx, *s.NetworkProfileID)
 	}
 	// Shared bastion multiplexing: when several connections sit behind the
 	// same jump prefix, dial that prefix once and reuse it. See

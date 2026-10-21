@@ -631,7 +631,8 @@
       {/each}
       {#each rootConns as conn (conn.id)}
         {@const sel = selection.isConnectionSelected(conn.id)}
-        {@const isConn = connectingId === conn.id}
+        {@const connStage = connectionActions.connectStage[conn.id]}
+        {@const isConn = connectingId === conn.id || connStage !== undefined}
         {@const isLive = liveConnIds.has(conn.id)}
         {@const probe = isLive ? null : probeState.stateOf(conn.id)}
         <div
@@ -698,7 +699,7 @@
           <TreeDbToggle connId={conn.id} />
           <TreeBookmarkToggle connId={conn.id} />
           {#if isConn}
-            <span class="conn-hint">connecting…</span>
+            <span class="conn-hint" title={connStage || "Connecting..."}>{connStage === "Queued" ? "queued" : "connecting…"}</span>
           {:else if connectErrId === conn.id}
             <span class="conn-err" title={connectErr ?? ""}><IconX size={12} /></span>
           {/if}

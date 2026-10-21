@@ -38,7 +38,10 @@ type ContextDialer func(ctx context.Context, network, addr string) (net.Conn, er
 // pinned to a network profile must never silently fall back to a
 // direct dial. Hops after the first ride the previous hop's SSH
 // channel and never consult this.
-var FirstHopDialerHook func(settings *store.ResolvedSettings) (ContextDialer, error)
+//
+// ctx carries the connect's progress callback (ReportProgress), so the
+// hook can say when it checks the direct route or starts a tunnel.
+var FirstHopDialerHook func(ctx context.Context, settings *store.ResolvedSettings) (ContextDialer, error)
 
 // JumpPrefixHook, when non-nil, is consulted by Connect for a chain that
 // has jump hops. It returns a SHARED *ssh.Client for the jump prefix
@@ -90,7 +93,7 @@ func firstHopDial(ctx context.Context, settings *store.ResolvedSettings, addr st
 		if FirstHopDialerHook == nil {
 			return nil, "", fmt.Errorf("network profile set but no tunnel support wired")
 		}
-		d, err := FirstHopDialerHook(settings)
+		d, err := FirstHopDialerHook(ctx, settings)
 		if err != nil {
 			return nil, "", fmt.Errorf("network profile: %w", err)
 		}
@@ -101,7 +104,10 @@ func firstHopDial(ctx context.Context, settings *store.ResolvedSettings, addr st
 		conn, err := d(dctx, "tcp", addr)
 		return conn, path, err
 	}
-	conn, err := net.DialTimeout("tcp", addr, timeout)
+	// DialContext, not DialTimeout: Cancel on a connect stuck dialing an
+	// address that never answers has to abort it, not wait out the timeout.
+	d := net.Dialer{Timeout: timeout}
+	conn, err := d.DialContext(ctx, "tcp", addr)
 	return conn, "", err
 }
 
@@ -530,6 +536,7 @@ func Connect(
 	if progress == nil {
 		progress = func(string) {}
 	}
+	ctx = WithProgress(ctx, progress)
 	chain := buildHopChain(settings)
 	if len(chain) == 0 {
 		return nil, fmt.Errorf("empty chain")
@@ -579,6 +586,7 @@ func Connect(
 	// before.
 	startHop := 0
 	if len(chain) > 1 && JumpPrefixHook != nil {
+		progress("Connecting to " + chain[len(chain)-2].Label)
 		shared, release, via, err := JumpPrefixHook(ctx, settings, JumpPrefixDeps{
 			DB: db, Vault: vault, HostKeyCB: hostKeyCB,
 			AlgoLookup: algoLookup, ConnectTimeout: connectTimeout,
