@@ -80,7 +80,15 @@
     if (!vaultState.loading && vaultState.status === "unlocked" && view.tab === "connections") void loadState();
   });
   onMount(() => {
-    const offs = ["sync_auto_pushed", "profile_reloaded"].map((ev) => EventsOn(ev, () => { void loadState(); }));
+    const offs = [
+      EventsOn("sync_auto_pushed", () => { void loadState(); }),
+      // A pull replaces the stored facts runs and report settings too.
+      EventsOn("profile_reloaded", () => {
+        void loadState();
+        reportSettings = {};
+        void loadFacts();
+      }),
+    ];
     return () => offs.forEach((off) => off());
   });
   onMount(() => {
@@ -159,15 +167,21 @@
   let factsRuns = $state<Record<string, FactsSnapshot>>({});
   let reportSettings = $state<Record<string, ReportSettings>>({});
   let factsLoaded = $state(false);
+  // A save, a profile pull and the first load can overlap; only the newest
+  // answer is kept.
+  let factsSeq = 0;
   async function loadFacts() {
+    const seq = ++factsSeq;
     try {
       const runs = ((await api.factsLatest()) ?? {}) as Record<string, FactsSnapshot>;
+      if (seq !== factsSeq) return;
       factsRuns = runs;
       for (const id of Object.keys(runs)) {
         // Not filtered by folder here: the tree may still be loading.
         if (reportSettings[id]) continue;
-        fleet.loadReportSettings(id)
-          .then((rs) => (reportSettings = { ...reportSettings, [id]: rs }))
+        // Straight from Go, not fleet's cache, which a pull leaves stale.
+        api.factsReportSettingsGet(id)
+          .then((rs) => { if (seq === factsSeq) reportSettings = { ...reportSettings, [id]: rs }; })
           .catch(() => {});
       }
     } catch { /* no facts gathered yet */ }
