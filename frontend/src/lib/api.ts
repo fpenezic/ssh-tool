@@ -1394,6 +1394,8 @@ export const api = {
   // The fact catalog, presets and report defaults (one source, in Go), and
   // a folder's stored runs.
   factsCatalog: () => G.FactsCatalog() as unknown as Promise<FactsCatalog>,
+  factsLatest: () =>
+    G.FactsLatest() as unknown as Promise<Record<string, FactsRunStored> | null>,
   factsHistory: (folderId: string) =>
     G.FactsHistory(folderId) as unknown as Promise<FactsRunStored[] | null>,
   factsSaveRun: (folderId: string, run: FactsRunStored) =>

@@ -84,7 +84,8 @@ tree is re-protected.
 The main window has a top tab bar with four sections:
 
 - **Connections** - folder tree on the left, connection editor on the
-  right.
+  right. With nothing selected the right side shows the home pane
+  (see §3, Home pane).
 - **Credentials** - credential folder tree on the left, credential
   editor on the right.
 - **Settings** - side-nav with grouped settings panels.
@@ -195,10 +196,41 @@ seconds.
 A pinned **Quick access** panel above the tree lists:
 
 - **Favourites** (any connection flagged with the star)
-- **Recent** - last 10 connections you connected to (`last_used_at`).
+- **Recent** - last 10 connections you connected to on this machine.
   Excludes anything already in favourites.
 
 Collapsible; collapsed state persists.
+
+### Home pane
+
+With nothing selected in the tree, the right side shows an overview
+built from what the app already keeps. Nothing is fetched from a server
+and no host is contacted for it, except the liveness probe below.
+
+- **State line** - vault locked or unlocked, sync (with the time of the
+  last push or pull, `(auto)` when auto sync is on), backup (the newest
+  backup; amber when auto backup is on but the newest is older than 3
+  days, "Auto backup off" otherwise) and an available update. Each
+  opens its place in Settings.
+- **Issues** - the same list as the status bar's issue counter, each
+  with its fix button.
+- **Quick connect** - type `user@host:port` and press Enter; the quick
+  connect dialog opens with it filled in.
+- **Recent** - the last connections you opened on this machine, with
+  their folder path and how long ago. Click selects, double-click or
+  Connect connects. With the liveness probe on, a dot on the icon
+  shows reachable (green), unreachable (red) or connected (blue);
+  these rows are probed like the rows of an open folder.
+- **Workspaces** - one click opens a saved workspace.
+- **Network profiles** - each profile's kind, mode and state, with
+  Connect / Disconnect; the name opens it in Settings.
+- **Fleet** - one line per folder that has a facts run: how many hosts
+  need attention and how many did not answer, the first finding, the
+  age of the run and a Report button. The same rules as the health
+  report (thresholds, grace days, expected units). TLS certificates
+  checked with the TLS tool and about to expire are listed under it.
+
+An empty card says how to fill it.
 
 ### Name filter
 

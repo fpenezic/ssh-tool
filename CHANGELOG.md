@@ -11,6 +11,7 @@ a prerelease upstream.
 
 ### Connections
 
+- **Home pane.** With nothing selected, the right side now shows an overview instead of an empty page: vault, sync, backup and update state, the open issues with their fix, quick connect, recent connections (with the liveness dot when probing is on), workspaces, network profiles with Connect / Disconnect, and per folder what the last facts run found, judged like the health report. Nothing is fetched for it; an empty card says how to fill it.
 - The Database and Kafka cards of the **Services** tab fold: a click on the arrow or the title hides the card and leaves a summary (engine and number of databases, Kafka's brokers), so Kafka stays in reach under a host with many databases. The folded state is remembered.
 - Esc closes a right-click menu (and the Open button's menu) again, and focus goes back to where it was.
 - **Connect shows what it is doing.** A connect started from the tree (double-click, Enter, several hosts at once) now also shows on the Connect button, with its current step and Cancel. The steps now include the network profile ("Checking if the host is reachable directly", "Not reachable directly - starting VPN ...") and a shared bastion. Cancel also stops a connect stuck dialing an address that never answers.
