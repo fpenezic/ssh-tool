@@ -1972,8 +1972,10 @@ everything mobile is behind a build tag or an `isMobile` check.
    and the bastion-to-target leg is where an MTU problem stalls. It stops
    at the host-key callback (trust dialog and login prompts wait for the
    user); the non-interactive paths (`dialChain`, sync) switch to an
-   auth budget there instead. Bytes read before the stall tell an MTU
-   black hole (`HandshakeStallError`) from a server that never spoke.
+   auth budget there instead. Bytes read before the stall separate a
+   handshake that stalled midway (`HandshakeStallError`, which may be an
+   MTU black hole and is reported as a hint, not a verdict) from a server
+   that never spoke.
 
 125. **One-slot reply channels need a non-blocking send.** (approvals,
    auth / host-key prompts, share approvals, plugin stdin readers) The
