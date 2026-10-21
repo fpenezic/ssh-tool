@@ -585,7 +585,9 @@ func addUnique(slice *[]string, s string) {
 var (
 	// The value may itself be quoted: ProxyCommand="ssh -W %h:%p bastion".
 	reProxyJump    = regexp.MustCompile(`(?i)\bProxyJump\s*=\s*["']?([^\s"']+)`)
-	reProxyCommand = regexp.MustCompile(`(?i)\bProxyCommand\s*=\s*["']?(.+?)(?:"|'|$)`)
+	// A quoted value ends at its own closing quote, so the other kind of
+	// quote may appear inside: ProxyCommand="ssh -o 'X=y' -W %h:%p b".
+	reProxyCommand = regexp.MustCompile(`(?i)\bProxyCommand\s*=\s*(?:"([^"]+)"|'([^']+)'|(.+?)(?:"|'|$))`)
 	// -J is the short form of -o ProxyJump=. Ansible inventories
 	// often use the shorter spelling (`-J root@bastion`); the
 	// regex above only matches the long form.
@@ -608,8 +610,8 @@ func AnsibleParseJumpHosts(args string) []string {
 	// because Ansible always wraps the -o value in matching quotes
 	// when the ProxyCommand contains spaces, so the closing quote
 	// reliably delimits the command.
-	if m := reProxyCommand.FindStringSubmatch(args); len(m) >= 2 {
-		cmd := strings.TrimSpace(m[1])
+	if m := reProxyCommand.FindStringSubmatch(args); len(m) >= 4 {
+		cmd := strings.TrimSpace(m[1] + m[2] + m[3]) // one group matched
 		if hop, ok := parseProxyCommandSSH(cmd); ok {
 			return []string{hop}
 		}
