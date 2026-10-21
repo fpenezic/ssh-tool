@@ -17,6 +17,31 @@ a prerelease upstream.
 ### Network profiles
 
 - **Backup gateways for OpenConnect profiles.** A profile can list further gateways of the same VPN (FortiClient's remote gateway list, also for the other OpenConnect types). Connect moves to the next one only when a gateway does not answer at all; a rejected login is not tried on the others. Each gateway keeps its own trusted certificate. Needs OpenConnect plugin v1.3.
+- A WireGuard profile with "bind to the physical network" keeps working after the network changes (new DHCP lease, Wi-Fi to Ethernet); it used to stay on the old address until stopped by hand.
+- A VPN plugin waiting for a one-time code no longer holds up every other profile, status reads, Stop and quit.
+- A paused profile dials as the system routes again (a system VPN and IPv6 included); only the auto-mode probe uses the physical network.
+
+### Security
+
+- **LLM (MCP) access.** Commands that only look read-only no longer run without approval: `${VAR:=...}` (which can make the shell run code before every later command), `git diff/log/show --output` and `--ext-diff`, `git reflog expire/delete`. The YOLO safety net now also catches quoted or wrapped forms such as `rm -rf "$HOME"`, `/bin/rm -rf /` and `command rm -rf /`.
+- **LLM (MCP) access.** A sensitive connection's name (sensitive on the connection or through its folder) no longer shows up in the icon hints the LLM gets. Turning the bridge (or its TCP leg) off now also ends sessions already connected.
+- **Session sharing.** A guest approved after the share was stopped can no longer attach. Regenerating the certificate takes effect on the running share, and a guest that cannot keep up no longer stalls the host's terminal.
+- **opkssh.** The loopback check for the redirect URI and a plain-http issuer accepts only real loopback addresses (a name like `127.example.com` used to pass).
+- **Infisical** and **dynamic folder** API calls fail instead of going out directly when their network profile cannot be used.
+- Sync sign-in to Dropbox, OneDrive and Google Drive can no longer be aborted by another web page, and "remember" in the host key dialog pins exactly the key the server presented.
+
+### Fixes
+
+- Auto-sync works for Dropbox, OneDrive and Google Drive (it never ran for them), and renaming a credential folder or editing a port forward is pushed by auto-sync.
+- An SSH host or jump host that accepts the connection and then hangs no longer freezes the connect, and Cancel stops it. The host key dialog and login prompts still wait for you.
+- An agent credential works with the stock Windows OpenSSH agent (no SSH_AUTH_SOCK needed), and agent connections are no longer left open.
+- Several tabs connecting through one bastion: a slow bastion no longer holds up the others, a dropped bastion is reconnected instead of reused, and cancelling one tab no longer fails the rest.
+- Bitwarden and KeePass: one slow sync no longer blocks the others or the vault lock; a server saved without a master password says so; attachment names show decrypted.
+- Imports: an ssh config `Host *` or `Match` block no longer overwrites the host above it, `Host a b` fills both, and an unresolved `ProxyJump user@host:port` is split properly. RDM: connections without a group land in the chosen folder and out-of-range ports are refused.
+- Fleet download with a pattern like `/var/log/*/access.log` keeps every file instead of overwriting same-named ones.
+- VNC: two consoles on one host no longer share or leak their SSH tunnels.
+- A new tunnel on a port another program holds shows "in use" again; an empty remote file can be edited in the SFTP view; the share guest page shows "Access denied" again when refused.
+- A rare crash when a tcpdump or log tail started while another session connected is fixed.
 
 ## [0.117.0] - ClickHouse, OpenSearch and Redis in the Database tab
 
