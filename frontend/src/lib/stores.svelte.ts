@@ -44,8 +44,30 @@ class TreeStore {
   // dependency. Belt-and-braces over the implicit $state array deps,
   // since class-method-wrapped reads sometimes get optimised away.
   version = $state(0);
+  // When each connection was last connected on this machine (unix
+  // seconds). Recency is machine-local state in the backend; the
+  // connections' last_used_at column is legacy and only a fallback.
+  recentTimes = $state<Record<string, number>>({});
+  private recentsWired = false;
+
+  async loadRecent() {
+    try {
+      this.recentTimes = (await api.connectionsRecentTimes()) ?? {};
+    } catch (e) {
+      console.warn("recents load:", e);
+    }
+    if (!this.recentsWired) {
+      this.recentsWired = true;
+      EventsOn("recents_changed", () => { void this.loadRecent(); });
+    }
+  }
+
+  lastUsed(c: Connection): number | null {
+    return this.recentTimes[c.id] ?? c.last_used_at ?? null;
+  }
 
   async load() {
+    void this.loadRecent();
     this.loading = true;
     this.error = null;
     try {
@@ -213,15 +235,15 @@ class TreeStore {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  // Top N most-recently used connections (by last_used_at desc, ties by
-  // name). Skips connections without a last_used_at so the panel
+  // Top N most-recently used connections (by last use on this machine,
+  // ties by name). Skips connections never connected so the panel
   // doesn't show "never-touched" entries.
   recent(limit: number): Connection[] {
     return this.connections
-      .filter((c) => c.last_used_at != null)
+      .filter((c) => this.lastUsed(c) != null)
       .sort((a, b) => {
-        const at = a.last_used_at ?? 0;
-        const bt = b.last_used_at ?? 0;
+        const at = this.lastUsed(a) ?? 0;
+        const bt = this.lastUsed(b) ?? 0;
         if (at !== bt) return bt - at;
         return a.name.localeCompare(b.name);
       })

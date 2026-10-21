@@ -162,6 +162,8 @@ func (a *App) touchRecent(connectionID string) {
 	if b, err := json.Marshal(m); err == nil {
 		_ = localStateStore.set(recentsKey, string(b))
 	}
+	// Quick access and the home pane list recents; tell them to re-read.
+	EventsEmit("recents_changed", connectionID)
 }
 
 // recentTimes merges local recents with the legacy column values
