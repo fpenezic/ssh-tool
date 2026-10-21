@@ -1107,7 +1107,8 @@
         {@const isAnchor =
           selection.current.kind === "connection" &&
           selection.current.id === conn.id}
-        {@const isConn = connectingId === conn.id}
+        {@const connStage = connectionActions.connectStage[conn.id]}
+        {@const isConn = connectingId === conn.id || connStage !== undefined}
         {@const isLive = liveConnIds.has(conn.id)}
         {@const probe = isLive ? null : probeState.stateOf(conn.id)}
         {@const connColor = tree.resolveColorForConnection(conn.id)}
@@ -1228,7 +1229,7 @@
             <span class="cert-badge" class:bad={b.bad} title={b.title}>{b.text}</span>
           {/if}
           {#if isConn}
-            <span class="conn-hint">connecting…</span>
+            <span class="conn-hint" title={connStage || "Connecting..."}>{connStage === "Queued" ? "queued" : "connecting…"}</span>
           {:else if connectErrId === conn.id}
             <span class="conn-err" title={connectErr ?? ""}><IconX size={12} /></span>
           {:else if conn.protocol === "local"}

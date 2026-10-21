@@ -1462,8 +1462,13 @@
     if (conn) connectionActions.openVncConnection(conn.id);
   }
 
-  let connecting = $state(false);
-  let connectStage = $state<string | null>(null);
+  // In flight from anywhere: this pane's button, a tree double-click,
+  // Enter, a multi-select connect. The store tracks every attempt with the
+  // stage the backend last reported ("" = no stage yet).
+  let connectingHere = $state(false);
+  const storeStage = $derived(conn ? connectionActions.connectStage[conn.id] : undefined);
+  const connecting = $derived(connectingHere || storeStage !== undefined);
+  const connectStage = $derived(storeStage || null);
   let copiedHint = $state<string | null>(null);
   let connectErrEl = $state<HTMLElement | null>(null);
 
@@ -1499,19 +1504,6 @@
   $effect(() => {
     void conn?.id;
     notesMode = "edit";
-  });
-
-  // Subscribe to live connect-progress events while a connect is
-  // in flight. Backend emits `connect_progress:<connectionID>` with
-  // short stage strings ("TCP dial bastion1", "SSH handshake target",
-  // "Opening shell") so the spinner can say what it's currently
-  // stuck on. Cleanup on conn change or once connecting ends.
-  $effect(() => {
-    if (!connecting || !conn) { connectStage = null; return; }
-    const un = EventsOn(`connect_progress:${conn.id}`, (stage: string) => {
-      connectStage = stage;
-    });
-    return () => { un(); connectStage = null; };
   });
 
   async function toggleFavorite() {
@@ -1644,6 +1636,8 @@
     // Abort the in-flight connect on the backend (e.g. hung on opkssh
     // OIDC login). The awaited connect() then rejects and its finally
     // clears `connecting`; we don't flip it here to avoid a double-path.
+    // Still queued behind a bulk connect: nothing reached the backend yet.
+    if (connectionActions.cancelQueued(conn.id)) return;
     try { await api.sshCancelConnect(conn.id); } catch (e) { console.warn(e); }
   }
 
@@ -1657,8 +1651,8 @@
   }
 
   async function connect() {
-    if (!conn) return;
-    connecting = true;
+    if (!conn || connecting) return;
+    connectingHere = true;
     const cid = overrideCredId;
     const ouser = overrideUsername;
     const opass = overridePassword;
@@ -1674,6 +1668,7 @@
         // IPC so all three knobs ride through. Failure flow
         // mirrors connectOne so the inline-error block keeps
         // working.
+        const untrack = connectionActions.trackConnect(conn.id);
         try {
           const r = await api.sshConnectAdvanced(conn.id, cid, ouser, opass);
           sessions.add({
@@ -1689,6 +1684,8 @@
         } catch (e) {
           connectionActions.recordConnectError(conn.id, e);
           notifyConnectFailure(e);
+        } finally {
+          untrack();
         }
       } else {
         // connectOne swallows the error (records the inline banner, returns
@@ -1699,7 +1696,7 @@
       }
       await tree.load();
     } finally {
-      connecting = false;
+      connectingHere = false;
     }
   }
 </script>
@@ -2066,11 +2063,11 @@
               {connTunnel.state === "error" ? "Try again" : "Start tunnel"}
             </button>
           {/if}
-          <button disabled={connecting} onclick={connect} title="Open a terminal on this host, next to the tunnel">
+          <button class="connect-btn" disabled={connecting} onclick={connect} title={connecting ? (connectStage ?? "Connecting...") : "Open a terminal on this host, next to the tunnel"}>
             {connecting ? (connectStage ?? "Connecting…") : "Terminal"}
           </button>
         {:else}
-        <button class="primary" disabled={connecting} onclick={connect}>
+        <button class="primary connect-btn" disabled={connecting} onclick={connect} title={connecting ? (connectStage ?? "Connecting...") : undefined}>
           {connecting ? (connectStage ?? "Connecting…") : (overrideCredId ? "Connect (override)" : "Connect")}
         </button>
         {/if}
@@ -3011,6 +3008,9 @@
   .ed-pill.bad { color: var(--red); }
   .ed-pill.idle { color: var(--overlay1); }
   .more-btn { display: inline-flex; align-items: center; padding-inline: 0.45rem; }
+  /* The stage text ("Not reachable directly - starting VPN ...") can be
+     long; the full text is in the tooltip. */
+  .connect-btn { max-width: 24rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ed-tabs {
     flex-basis: 100%;
     display: flex; flex-wrap: wrap; gap: 0.1rem;

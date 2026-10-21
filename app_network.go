@@ -472,6 +472,14 @@ func (a *App) physicalDialLocalAddr() *net.TCPAddr {
 }
 
 func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
+	return a.wgDialerForCtx(context.Background(), profileID)
+}
+
+// wgDialerForCtx is wgDialerFor for an SSH connect: hookCtx carries the
+// connect's progress callback, and each step that can take a while (the
+// direct probe, starting the tunnel) is reported through it, so the
+// Connect button says what it waits on instead of only "Connecting".
+func (a *App) wgDialerForCtx(hookCtx context.Context, profileID string) (sshlayer.ContextDialer, error) {
 	row, err := a.db.GetNetworkProfile(profileID)
 	if err != nil {
 		return nil, err
@@ -525,6 +533,7 @@ func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 			}, nil
 		}
 		return func(ctx context.Context, network, addr string) (net.Conn, error) {
+			sshlayer.ReportProgress(ctx, "Checking if "+addr+" is reachable directly")
 			pctx, cancel := context.WithTimeout(ctx, directProbeTimeout)
 			c, derr := probe(pctx, network, addr)
 			cancel()
@@ -532,23 +541,41 @@ func (a *App) wgDialerFor(profileID string) (sshlayer.ContextDialer, error) {
 				log.Printf("net: %s reachable directly, skipping tunnel %s", addr, row.Name)
 				return c, nil
 			}
+			a.reportTunnelStep(ctx, row, "Not reachable directly - ")
 			t, terr := a.ensureTunnel(row)
 			if terr != nil {
 				return nil, fmt.Errorf("direct dial failed (%v) and tunnel failed: %w", derr, terr)
 			}
 			log.Printf("net: %s not reachable directly, dialing via tunnel %s", addr, row.Name)
 			report(ctx, "tunnel")
+			sshlayer.ReportProgress(ctx, "Connecting to "+addr+" via VPN "+row.Name)
 			return t.DialContext(ctx, network, addr)
 		}, nil
 	}
+	a.reportTunnelStep(hookCtx, row, "")
 	t, err := a.ensureTunnel(row)
 	if err != nil {
 		return nil, err
 	}
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		report(ctx, "tunnel")
+		sshlayer.ReportProgress(ctx, "Connecting to "+addr+" via VPN "+row.Name)
 		return t.DialContext(ctx, network, addr)
 	}, nil
+}
+
+// reportTunnelStep says whether the connect starts the profile's tunnel
+// (which can take seconds and may ask for a login) or rides one that is
+// already up.
+func (a *App) reportTunnelStep(ctx context.Context, row *store.NetworkProfile, prefix string) {
+	verb := "Starting"
+	if a.tunnelStatus(row.ID).Running {
+		verb = "Using"
+	}
+	if prefix != "" {
+		verb = strings.ToLower(verb)
+	}
+	sshlayer.ReportProgress(ctx, prefix+verb+" VPN "+row.Name)
 }
 
 // wgBackgroundDialerFor is the timer-refresh variant: it NEVER starts

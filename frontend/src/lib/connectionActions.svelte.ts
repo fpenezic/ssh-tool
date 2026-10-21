@@ -419,6 +419,9 @@ class ConnectionActionsStore {
     const attempt = async () => override
       ? api.sshConnectWithOverride(c.id, override)
       : api.sshConnect(c.id);
+    // In the store, so the detail pane's Connect button and the tree row
+    // show the attempt and its stage whichever gesture started it.
+    const untrack = this.trackConnect(c.id);
     try {
       // A synced WG profile up on another machine offers a take-over
       // (withTakeover); a transient failure gets one silent retry.
@@ -452,6 +455,8 @@ class ConnectionActionsStore {
     } catch (e) {
       this.recordFailure(c.id, e);
       return false;
+    } finally {
+      untrack();
     }
   }
 
@@ -660,7 +665,13 @@ class ConnectionActionsStore {
         if (c.protocol === "web") return; // a bookmark, not a session
         // Same take-over offer as connectOne (the singleton dialog
         // serialises if several share a busy profile).
-        const res = await withTakeover(() => api.sshConnect(c.id));
+        const untrack = this.trackConnect(c.id);
+        let res;
+        try {
+          res = await withTakeover(() => api.sshConnect(c.id));
+        } finally {
+          untrack();
+        }
         if (!res.ok && res.cancelled) return; // user declined - quiet skip
         if (!res.ok) {
           this.recordFailure(c.id, res.error);

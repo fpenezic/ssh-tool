@@ -370,6 +370,7 @@ func dialChainFrom(
 
 	for i, h := range chain {
 		isLastHop := i == len(chain)-1
+		ReportProgress(ctx, "Connecting to "+h.Label)
 		var methods []ssh.AuthMethod
 		var material *AuthMaterial
 		if h.AuthRef != nil {
