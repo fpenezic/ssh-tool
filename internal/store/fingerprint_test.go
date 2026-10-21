@@ -3,7 +3,6 @@ package store
 import (
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 // Edits that keep the row count still move the sync fingerprint.
@@ -36,12 +35,20 @@ func TestFingerprintSeesInPlaceEdits(t *testing.T) {
 	if afterFwd == before {
 		t.Fatal("a forward edit did not move the fingerprint")
 	}
-	time.Sleep(1100 * time.Millisecond) // updated_at has second resolution
+	// Two renames in the same second each move it.
 	name := "Ops"
 	if _, err := db.UpdateCredentialFolder(f.ID, &name, nil, false); err != nil {
 		t.Fatal(err)
 	}
-	if db.ContentFingerprint() == afterFwd {
+	afterOne := db.ContentFingerprint()
+	if afterOne == afterFwd {
 		t.Fatal("a credential folder rename did not move the fingerprint")
+	}
+	name = "Ops2"
+	if _, err := db.UpdateCredentialFolder(f.ID, &name, nil, false); err != nil {
+		t.Fatal(err)
+	}
+	if db.ContentFingerprint() == afterOne {
+		t.Fatal("a second rename in the same second did not move the fingerprint")
 	}
 }

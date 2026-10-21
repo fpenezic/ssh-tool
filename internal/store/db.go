@@ -243,8 +243,9 @@ func (d *DB) ContentFingerprint() string {
 		{"folders", "updated_at"},
 		{"connections", "updated_at"},
 		{"credential_refs", "updated_at"},
-		// Every writer (rename, move, icon) sets updated_at.
-		{"credential_folders", "updated_at"},
+		// credential_folders: content signed below (updated_at has second
+		// resolution; two edits in one second would look like one).
+		{"credential_folders", ""},
 		{"port_forwards", ""},
 		{"snippets", "updated_at"},
 		{"workspaces", "updated_at"},
@@ -311,6 +312,22 @@ func (d *DB) ContentFingerprint() string {
 		}
 		rows.Close()
 		b.WriteByte(';')
+	}
+	if rows, err := d.conn.Query(
+		`SELECT id, IFNULL(parent_id, ''), name, sort_order, IFNULL(icon_name, ''),
+		        IFNULL(icon_color, ''), IFNULL(icon_image_id, '')
+		   FROM credential_folders ORDER BY id`); err == nil {
+		h := sha256.New()
+		for rows.Next() {
+			var id, parent, name, iname, icolor, image string
+			var order int64
+			if err := rows.Scan(&id, &parent, &name, &order, &iname, &icolor, &image); err != nil {
+				continue
+			}
+			fmt.Fprintf(h, "%s\x00%s\x00%s\x00%d\x00%s\x00%s\x00%s\n", id, parent, name, order, iname, icolor, image)
+		}
+		rows.Close()
+		fmt.Fprintf(&b, "credfcfg=%x;", h.Sum(nil))
 	}
 	// port_forwards has no updated_at either: an edit (ports, bookmarks,
 	// browser mode) keeps the count, so its content is signed too, or the
