@@ -127,14 +127,25 @@ if yes_no "Install ssh-tool.app into /Applications?" y; then
   fi
   # Copy next to the installed app first and swap only once the copy is
   # complete: a failed copy leaves the working install in place.
-  rm -rf "$APP_DEST/.ssh-tool.app.new" "$APP_DEST/.ssh-tool.app.old"
+  rm -rf "$APP_DEST/.ssh-tool.app.new"
+  # A .old left by an interrupted run is the only copy when no app is
+  # installed; keep it then.
+  if [ -e "$APP_DEST/ssh-tool.app" ]; then rm -rf "$APP_DEST/.ssh-tool.app.old"; fi
   cp -R "$APP_BUNDLE" "$APP_DEST/.ssh-tool.app.new" || die "copying the app failed; the installed app is unchanged"
-  [ -e "$APP_DEST/ssh-tool.app" ] && mv "$APP_DEST/ssh-tool.app" "$APP_DEST/.ssh-tool.app.old"
+  if [ -e "$APP_DEST/ssh-tool.app" ] && ! mv "$APP_DEST/ssh-tool.app" "$APP_DEST/.ssh-tool.app.old"; then
+    rm -rf "$APP_DEST/.ssh-tool.app.new"
+    die "could not move the installed app aside; it is unchanged"
+  fi
   if mv "$APP_DEST/.ssh-tool.app.new" "$APP_DEST/ssh-tool.app"; then
     rm -rf "$APP_DEST/.ssh-tool.app.old"
   else
-    [ -e "$APP_DEST/.ssh-tool.app.old" ] && mv "$APP_DEST/.ssh-tool.app.old" "$APP_DEST/ssh-tool.app"
-    die "installing the app failed; the previous app was put back"
+    if [ ! -e "$APP_DEST/.ssh-tool.app.old" ]; then
+      die "installing the app failed"
+    elif mv "$APP_DEST/.ssh-tool.app.old" "$APP_DEST/ssh-tool.app"; then
+      die "installing the app failed; the previous app was put back"
+    else
+      die "installing the app failed and the previous app could not be put back: it is at $APP_DEST/.ssh-tool.app.old"
+    fi
   fi
   info "Installed $APP_DEST/ssh-tool.app"
 else
