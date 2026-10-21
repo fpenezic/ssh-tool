@@ -14,8 +14,9 @@ func TestValidateProxmoxBaseURLAcceptsNormalForms(t *testing.T) {
 		{"https://pve.example.com:8006", "pve.example.com", "8006"},
 		{"https://pve.example.com:8006/", "pve.example.com", "8006"},
 		{"https://10.0.0.5:8006", "10.0.0.5", "8006"},
-		// No port: Proxmox's own default is reported for display.
-		{"https://pve.example.com", "pve.example.com", "8006"},
+		// No port: the scheme default net/http dials.
+		{"https://pve.example.com", "pve.example.com", "443"},
+		{"http://pve.example.com", "pve.example.com", "80"},
 		// Behind a reverse proxy on 443 with a subpath.
 		{"https://proxy.example.com:443/pve", "proxy.example.com", "443"},
 	}

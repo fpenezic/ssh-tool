@@ -127,7 +127,8 @@
     }
     return {
       host: u.hostname,
-      port: u.port || "8006",
+      // No port: the scheme default is dialled (no 8006 is added).
+      port: u.port || (u.protocol === "http:" ? "80" : "443"),
       insecure: u.protocol === "http:",
     };
   });
