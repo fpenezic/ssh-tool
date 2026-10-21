@@ -7,7 +7,9 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.118.0] - Home pane, connect stages and MTU hints
+
+With nothing selected, the Connections view now opens on an overview: recent connections, workspaces, network profiles, fleet findings and the state of vault, sync and backup. A connect shows each step it takes, recognises a stalled key exchange as a likely MTU problem, and a security audit tightened the LLM (MCP) bridge, session sharing and opkssh. macOS gets a build script for the app and the VPN plugins.
 
 ### Connections
 
@@ -19,7 +21,7 @@ a prerelease upstream.
 
 ### Network profiles
 
-- **Backup gateways for OpenConnect profiles.** A profile can list further gateways of the same VPN (FortiClient's remote gateway list, also for the other OpenConnect types). Connect moves to the next one only when a gateway does not answer at all; a rejected login is not tried on the others. Each gateway keeps its own trusted certificate. Needs OpenConnect plugin v1.3.
+- **Backup gateways for OpenConnect profiles.** A profile can list further gateways of the same VPN (FortiClient's remote gateway list, also for the other OpenConnect types). Connect moves to the next one only when a gateway does not answer at all; a rejected login is not tried on the others. Each gateway keeps its own trusted certificate. Needs OpenConnect plugin v1.3 or newer.
 - A WireGuard profile with "bind to the physical network" keeps working after the network changes (new DHCP lease, Wi-Fi to Ethernet); it used to stay on the old address until stopped by hand.
 - A VPN plugin waiting for a one-time code no longer holds up every other profile, status reads, Stop and quit.
 - An auto-mode profile whose VPN is already up connects through it straight away, without first spending up to 3 seconds trying the host directly.
