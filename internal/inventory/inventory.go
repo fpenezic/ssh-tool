@@ -55,7 +55,13 @@ const networkDirectSentinel = "__direct__"
 // tunnel (e.g. a Proxmox host that is only reachable over VPN).
 // insecure skips TLS verification (self-signed Proxmox certs).
 func httpClient(cfg map[string]any, timeout time.Duration, insecure bool) (*http.Client, error) {
-	tr := &http.Transport{}
+	// The default transport's settings (proxy from the environment, TLS
+	// handshake timeout) with idle connections bounded: a fresh zero-value
+	// transport per fetch kept every keep-alive open for good, tunnel
+	// flows included.
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.IdleConnTimeout = 30 * time.Second
+	tr.MaxIdleConnsPerHost = 2
 	if insecure {
 		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}

@@ -209,12 +209,17 @@ func (m *Manager) Refresh(ctx context.Context, folderID string, force bool) erro
 	// an inherited profile here.
 	switch cfg["network_profile_id"] {
 	case nil, "":
-		if folders, ferr := m.db.ListFolders(); ferr == nil {
-			fid := folderID
-			rs := resolver.ResolveWith(store.Connection{FolderID: &fid}, folders)
-			if rs.NetworkProfileID != nil {
-				cfg["network_profile_id"] = *rs.NetworkProfileID
-			}
+		// Unknown folder network: fail rather than send the API token
+		// out directly when the folder may go through a VPN.
+		folders, ferr := m.db.ListFolders()
+		if ferr != nil {
+			setError("resolve folder network: " + ferr.Error())
+			return fmt.Errorf("resolve folder network: %w", ferr)
+		}
+		fid := folderID
+		rs := resolver.ResolveWith(store.Connection{FolderID: &fid}, folders)
+		if rs.NetworkProfileID != nil {
+			cfg["network_profile_id"] = *rs.NetworkProfileID
 		}
 	case networkDirectSentinel:
 		cfg["network_profile_id"] = ""

@@ -24,8 +24,8 @@ import (
 type ProxmoxURLInfo struct {
 	// Host is the hostname or IP, without the port.
 	Host string `json:"host"`
-	// Port is the explicit port, or the scheme default (8006 is Proxmox's
-	// own, but only when the user wrote no port and no scheme default fits).
+	// Port is the explicit port, or the scheme default net/http dials
+	// (443, or 80 for http) - the provider adds no 8006 of its own.
 	Port string `json:"port"`
 	// Insecure is true when the URL is plain http, meaning the API token
 	// crosses the network in clear text.
@@ -81,10 +81,12 @@ func ValidateProxmoxBaseURL(raw string) (*ProxmoxURLInfo, error) {
 
 	port := u.Port()
 	if port == "" {
-		// Proxmox's own default. Reported for display only - the provider
-		// leaves the URL alone and lets net/http apply the scheme default,
-		// so a deployment behind a 443 reverse proxy keeps working.
-		port = "8006"
+		// The provider leaves the URL alone and net/http applies the
+		// scheme default; show where the token actually goes.
+		port = "443"
+		if u.Scheme == "http" {
+			port = "80"
+		}
 	}
 
 	return &ProxmoxURLInfo{

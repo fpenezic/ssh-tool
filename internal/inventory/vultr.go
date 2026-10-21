@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	neturl "net/url"
 	"time"
 )
 
@@ -77,7 +78,9 @@ func (Vultr) Fetch(ctx context.Context, cfg map[string]any) ([]Entry, error) {
 		if next == "" {
 			break
 		}
-		url = "https://api.vultr.com/v2/instances?per_page=500&cursor=" + next
+		// The cursor is opaque base64-ish: escape it, or a "+" arrives as a
+		// space and the next page fails.
+		url = "https://api.vultr.com/v2/instances?per_page=500&cursor=" + neturl.QueryEscape(next)
 	}
 	return out, nil
 }

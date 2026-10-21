@@ -412,7 +412,15 @@ func materialiseAnsibleHosts(groups map[string]*groupBlob) []ansibleHost {
 			expand(child, chain, depth+1)
 		}
 	}
+	// Sorted: a host in two groups setting the same var must get the same
+	// value every refresh (random map order made ansible_host flip, which
+	// rewrote the cache and pushed sync each cycle).
+	names := make([]string, 0, len(groups))
 	for name := range groups {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
 		expand(name, nil, 0)
 	}
 
@@ -455,8 +463,8 @@ func parseAnsibleYAML(data []byte) ([]ansibleHost, error) {
 		return nil, err
 	}
 	hosts := map[string]*ansibleHost{}
-	for groupName, raw := range root {
-		walkYAMLGroup(groupName, raw, []string{}, map[string]string{}, hosts, 0)
+	for _, groupName := range sortedKeys(root) {
+		walkYAMLGroup(groupName, root[groupName], []string{}, map[string]string{}, hosts, 0)
 	}
 	out := make([]ansibleHost, 0, len(hosts))
 	for _, h := range hosts {
@@ -464,6 +472,16 @@ func parseAnsibleYAML(data []byte) ([]ansibleHost, error) {
 		out = append(out, *h)
 	}
 	return out, nil
+}
+
+// sortedKeys is a map's keys in order, so group walks are deterministic.
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func walkYAMLGroup(name string, raw any, ancestors []string, inheritedVars map[string]string, hosts map[string]*ansibleHost, depth int) {
@@ -488,8 +506,8 @@ func walkYAMLGroup(name string, raw any, ancestors []string, inheritedVars map[s
 	}
 
 	if children, ok := body["children"].(map[string]any); ok {
-		for childName, childRaw := range children {
-			walkYAMLGroup(childName, childRaw, chain, merged, hosts, depth+1)
+		for _, childName := range sortedKeys(children) {
+			walkYAMLGroup(childName, children[childName], chain, merged, hosts, depth+1)
 		}
 	}
 
@@ -565,8 +583,9 @@ func addUnique(slice *[]string, s string) {
 // fold into ResolvedSettings overrides.
 
 var (
-	reProxyJump    = regexp.MustCompile(`(?i)\bProxyJump\s*=\s*([^\s"']+)`)
-	reProxyCommand = regexp.MustCompile(`(?i)\bProxyCommand\s*=\s*(.+?)(?:"|'|$)`)
+	// The value may itself be quoted: ProxyCommand="ssh -W %h:%p bastion".
+	reProxyJump    = regexp.MustCompile(`(?i)\bProxyJump\s*=\s*["']?([^\s"']+)`)
+	reProxyCommand = regexp.MustCompile(`(?i)\bProxyCommand\s*=\s*["']?(.+?)(?:"|'|$)`)
 	// -J is the short form of -o ProxyJump=. Ansible inventories
 	// often use the shorter spelling (`-J root@bastion`); the
 	// regex above only matches the long form.
