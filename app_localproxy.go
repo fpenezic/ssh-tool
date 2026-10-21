@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"ssh-tool/internal/resolver"
@@ -373,24 +374,52 @@ func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host
 	defer up.Close()
 	reply(0)
 	_ = c.SetDeadline(time.Time{})
-	// Each copy reports whether it could pass the EOF on (half-close).
+	// Each copy reports whether it could pass the EOF on (half-close);
+	// last is when either direction last moved bytes.
+	var last atomic.Int64
+	last.Store(time.Now().UnixNano())
 	done := make(chan bool, 2)
-	go func() { _, _ = io.Copy(up, c); done <- closeWrite(up) }()
-	go func() { _, _ = io.Copy(c, up); done <- closeWrite(c) }()
+	go func() { _, _ = io.Copy(up, activityReader{c, &last}); done <- closeWrite(up) }()
+	go func() { _, _ = io.Copy(c, activityReader{up, &last}); done <- closeWrite(c) }()
 	if <-done {
 		<-done // the far side saw EOF and finishes in its own time
 		return
 	}
-	// A tunnel conn may have no half-close, so the other side never sees
-	// EOF and its copy (with the profile hold) would last until the far
-	// end gives up. After a grace period both ends are closed.
-	select {
-	case <-done:
-	case <-time.After(30 * time.Second):
-		_ = c.Close()
-		_ = up.Close()
-		<-done
+	// A tunnel conn may have no half-close (the SOCKS wrapper of a plugin
+	// tunnel hides it), so the other side never sees EOF and its copy
+	// (with the profile hold) would last until the far end gives up. Both
+	// ends close once the remaining direction has been idle for 30 s; a
+	// response still streaming keeps it alive.
+	const idle = 30 * time.Second
+	tick := time.NewTicker(5 * time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-tick.C:
+			if time.Since(time.Unix(0, last.Load())) > idle {
+				_ = c.Close()
+				_ = up.Close()
+				<-done
+				return
+			}
+		}
 	}
+}
+
+// activityReader stamps last on every read that moved bytes.
+type activityReader struct {
+	r    io.Reader
+	last *atomic.Int64
+}
+
+func (a activityReader) Read(p []byte) (int, error) {
+	n, err := a.r.Read(p)
+	if n > 0 {
+		a.last.Store(time.Now().UnixNano())
+	}
+	return n, err
 }
 
 // readSOCKSAuth reads the RFC 1929 username / password request.

@@ -283,11 +283,6 @@ func installFrom(exePath string) (string, error) {
 	if st.Kind == "package" {
 		return "", fmt.Errorf("this build was installed by your package manager; nothing to do")
 	}
-	// Only replacing is refused; a dev build may still create an entry
-	// when nothing is installed (see installStateFor).
-	if st.Replaces && isDevBuild() {
-		return "", fmt.Errorf("this is a development build (%s); it will not replace the installed copy", appVersion)
-	}
 
 	binDir := userBinDir()
 	dataDir := userDataDir()
@@ -308,6 +303,15 @@ func installFrom(exePath string) (string, error) {
 	}
 
 	target := filepath.Join(binDir, "ssh-tool")
+	// Only replacing is refused; a dev build may still create an entry
+	// when nothing is installed. Decided on the real target, not on
+	// st.Replaces: a dev build named ssh-tool-dev in the same directory
+	// is in the "user" state but would still overwrite ssh-tool.
+	if st.ExePath != target && isDevBuild() {
+		if fi, err := os.Stat(target); err == nil && !fi.IsDir() {
+			return "", fmt.Errorf("this is a development build (%s); it will not replace the installed copy", appVersion)
+		}
+	}
 
 	// Copy unless we are already the file in question (the "user" state,
 	// where only the desktop entry is missing).
