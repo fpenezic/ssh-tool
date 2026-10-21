@@ -373,10 +373,14 @@ func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host
 	defer up.Close()
 	reply(0)
 	_ = c.SetDeadline(time.Time{})
-	done := make(chan struct{}, 2)
-	go func() { _, _ = io.Copy(up, c); closeWrite(up); done <- struct{}{} }()
-	go func() { _, _ = io.Copy(c, up); closeWrite(c); done <- struct{}{} }()
-	<-done
+	// Each copy reports whether it could pass the EOF on (half-close).
+	done := make(chan bool, 2)
+	go func() { _, _ = io.Copy(up, c); done <- closeWrite(up) }()
+	go func() { _, _ = io.Copy(c, up); done <- closeWrite(c) }()
+	if <-done {
+		<-done // the far side saw EOF and finishes in its own time
+		return
+	}
 	// A tunnel conn may have no half-close, so the other side never sees
 	// EOF and its copy (with the profile hold) would last until the far
 	// end gives up. After a grace period both ends are closed.
@@ -410,10 +414,13 @@ func readSOCKSAuth(c net.Conn) (user, pass string, ok bool) {
 	return string(u), string(p), true
 }
 
-func closeWrite(c net.Conn) {
+// closeWrite half-closes c; false when it cannot (no half-close, or it
+// failed).
+func closeWrite(c net.Conn) bool {
 	if cw, ok := c.(interface{ CloseWrite() error }); ok {
-		_ = cw.CloseWrite()
+		return cw.CloseWrite() == nil
 	}
+	return false
 }
 
 func subtleEqual(a, b string) bool {
