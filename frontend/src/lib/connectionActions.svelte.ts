@@ -92,6 +92,13 @@ type TakeoverOutcome<T> =
   | { ok: false; cancelled: true }
   | { ok: false; cancelled: false; error: unknown };
 
+// One bulk connect's hosts still waiting for a pool slot, and the ones the
+// user cancelled while they waited (see cancelQueued).
+interface QueuedBatch {
+  queued: Set<string>;
+  cancelled: Set<string>;
+}
+
 export async function withTakeover<T>(attempt: () => Promise<T>): Promise<TakeoverOutcome<T>> {
   try {
     return { ok: true, value: await attempt() };
@@ -288,12 +295,21 @@ class ConnectionActionsStore {
   // no visible state at all - the case that made a queued opkssh sign-in
   // look like nothing was happening.
   connectStage = $state<Record<string, string>>({});
+  // Attempts in flight per id: two can overlap (the detail pane's
+  // override connect and a terminal from the tunnels panel), and the entry
+  // stays until the last of them settles.
+  private connectRefs = new Map<string, number>();
 
   // Mark a connect as in flight and subscribe to its progress events. The
   // returned function must be called when the attempt settles; it
-  // unsubscribes and clears the entry.
+  // unsubscribes and clears the entry once no other attempt for the same
+  // id is still running.
   trackConnect(connectionID: string, initialStage = ""): () => void {
-    this.connectStage = { ...this.connectStage, [connectionID]: initialStage };
+    const refs = this.connectRefs.get(connectionID) ?? 0;
+    this.connectRefs.set(connectionID, refs + 1);
+    if (refs === 0 || !(connectionID in this.connectStage)) {
+      this.connectStage = { ...this.connectStage, [connectionID]: initialStage };
+    }
     const un = EventsOn(`connect_progress:${connectionID}`, (stage: string) => {
       // Ignore a late event that arrives after the attempt settled, which
       // would otherwise resurrect a finished connect as in-flight.
@@ -305,6 +321,12 @@ class ConnectionActionsStore {
       if (done) return;
       done = true;
       un();
+      const left = (this.connectRefs.get(connectionID) ?? 1) - 1;
+      if (left > 0) {
+        this.connectRefs.set(connectionID, left);
+        return;
+      }
+      this.connectRefs.delete(connectionID);
       const next = { ...this.connectStage };
       delete next[connectionID];
       this.connectStage = next;
@@ -318,35 +340,60 @@ class ConnectionActionsStore {
     this.connectStage = { ...this.connectStage, [connectionID]: stage };
   }
 
-  // Connects the user cancelled while they were still queued behind the
-  // bulk-connect throttle. They have not called the backend yet, so
-  // SshCancelConnect has nothing to abort - there is no in-flight attempt.
-  // The pool checks this set before starting each host instead.
-  private cancelledQueued = new Set<string>();
+  // Bulk connects with hosts still queued behind the throttle. Those have
+  // not called the backend yet, so SshCancelConnect has nothing to abort -
+  // there is no in-flight attempt; each batch checks its own cancelled set
+  // before starting a host instead. Per batch, not one shared set by id:
+  // a new batch for the same host must neither clear an earlier batch's
+  // cancel nor be cancelled by it.
+  private queuedBatches = new Set<QueuedBatch>();
+
+  private openBatch(ids: string[]): QueuedBatch {
+    const b: QueuedBatch = { queued: new Set(ids), cancelled: new Set() };
+    this.queuedBatches.add(b);
+    return b;
+  }
+
+  // Called when a batch's worker picks a host up: true if the user
+  // cancelled it while it waited, and it must not reach the backend.
+  private leaveQueue(b: QueuedBatch, id: string): boolean {
+    b.queued.delete(id);
+    return b.cancelled.has(id);
+  }
 
   // Cancel a connect that is still queued, and with it every other host
-  // still waiting in the same batch. Returns true if this was a queued one
-  // (handled entirely frontend-side, no backend call).
+  // still waiting in the same batch. Returns true when that was all there
+  // was to cancel (handled frontend-side, no backend call); false when the
+  // id was not queued, or also has an attempt in flight that the caller
+  // still has to cancel on the backend.
   //
-  // Cancelling the whole queue rather than one host: a bulk connect is one
+  // Cancelling the whole batch rather than one host: a bulk connect is one
   // action, so cancelling it should be one action too - 16 clicks to undo
   // one click is not a cancel. Hosts already in flight keep going; they have
-  // reached the backend and have their own Cancel.
+  // reached the backend and have their own Cancel. Other batches are left
+  // alone.
   cancelQueued(connectionID: string): boolean {
-    if (this.connectStage[connectionID] !== "Queued") return false;
+    const hit = [...this.queuedBatches].filter((b) => b.queued.has(connectionID));
+    if (hit.length === 0) return false;
     const next = { ...this.connectStage };
-    for (const [id, stage] of Object.entries(this.connectStage)) {
-      if (stage !== "Queued") continue;
-      this.cancelledQueued.add(id);
-      delete next[id];
+    for (const b of hit) {
+      for (const id of b.queued) {
+        b.cancelled.add(id);
+        if (!this.hasActiveAttempt(id)) delete next[id];
+      }
     }
     this.connectStage = next;
-    return true;
+    return !this.hasActiveAttempt(connectionID);
   }
 
-  private takeQueuedCancel(connectionID: string): boolean {
-    return this.cancelledQueued.delete(connectionID);
+  // True when id has an attempt in flight besides the ones still waiting
+  // in a batch queue (each queued one holds a tracking reference too).
+  private hasActiveAttempt(id: string): boolean {
+    let waiting = 0;
+    for (const b of this.queuedBatches) if (b.queued.has(id)) waiting++;
+    return (this.connectRefs.get(id) ?? 0) > waiting;
   }
+
 
   clearConnectError(connectionID: string) {
     if (!(connectionID in this.lastConnectError)) return;
@@ -629,7 +676,8 @@ class ConnectionActionsStore {
         2500, openTunnelsPanel,
       );
     }
-    const conns = ids
+    // Deduplicated: one attempt per host, and one tracking entry each.
+    const conns = [...new Set(ids)]
       .filter((id) => !tunnels.isTunnel(id))
       .map((id) => tree.connectionById(id))
       .filter((c): c is Connection => !!c);
@@ -650,7 +698,16 @@ class ConnectionActionsStore {
     if (conns.length > 1) {
       toast.info(`Connecting to ${conns.length} connections in the background...`);
     }
-    const results = await runPooled(
+    // Mark the SSH ones pending before the pool gates them, as
+    // connectDynamicMany does: hosts waiting their turn show "Queued" and
+    // can be cancelled before they reach the backend.
+    const untrackers = new Map<string, () => void>();
+    const ssh = conns.filter((c) => c.protocol !== "local" && c.protocol !== "web");
+    const batch = this.openBatch(ssh.map((c) => c.id));
+    for (const c of ssh) untrackers.set(c.id, this.trackConnect(c.id, "Queued"));
+    let results: PromiseSettledResult<void>[];
+    try {
+      results = await runPooled(
       conns,
       connectPrefs.get(BULK_CONCURRENT),
       connectPrefs.get(BULK_STAGGER_MS),
@@ -665,7 +722,14 @@ class ConnectionActionsStore {
         if (c.protocol === "web") return; // a bookmark, not a session
         // Same take-over offer as connectOne (the singleton dialog
         // serialises if several share a busy profile).
-        const untrack = this.trackConnect(c.id);
+        const untrack = untrackers.get(c.id) ?? this.trackConnect(c.id);
+        untrackers.delete(c.id);
+        // Cancelled while it sat in the queue: never call the backend at all.
+        if (this.leaveQueue(batch, c.id)) {
+          untrack();
+          return;
+        }
+        this.setConnectStage(c.id, "");
         let res;
         try {
           res = await withTakeover(() => api.sshConnect(c.id));
@@ -688,7 +752,11 @@ class ConnectionActionsStore {
         paneTabs.addTab(r.session_id, c.name);
         this.clearConnectError(c.id);
       },
-    );
+      );
+    } finally {
+      this.queuedBatches.delete(batch);
+      for (const un of untrackers.values()) un();
+    }
     if (results.some((r) => r.status === "fulfilled")) view.setTab("terminal");
   }
 
@@ -697,6 +765,8 @@ class ConnectionActionsStore {
   // Promise.allSettled shape as connectMany so partial failures
   // don't block the rest.
   async connectDynamicMany(targets: Array<{ folderId: string; entryId: string }>) {
+    // Deduplicated: one attempt per host, and one tracking entry each.
+    targets = targets.filter((t, i) => targets.findIndex((u) => u.entryId === t.entryId) === i);
     if (targets.length === 0) return;
     await connectPrefs.load();
     if (targets.length > connectPrefs.get(BULK_CONFIRM_ABOVE)) {
@@ -718,7 +788,7 @@ class ConnectionActionsStore {
     const untrackers = new Map<string, () => void>();
     // A cancel from an earlier batch must not silently skip a host the user
     // has just asked for again.
-    for (const t of targets) this.cancelledQueued.delete("dyn:" + t.entryId);
+    const batch = this.openBatch(targets.map((t) => "dyn:" + t.entryId));
     for (const t of targets) {
       untrackers.set(t.entryId, this.trackConnect("dyn:" + t.entryId, "Queued"));
     }
@@ -746,7 +816,7 @@ class ConnectionActionsStore {
         const untrack = untrackers.get(t.entryId) ?? this.trackConnect(key);
         untrackers.delete(t.entryId);
         // Cancelled while it sat in the queue: never call the backend at all.
-        if (this.takeQueuedCancel(key)) {
+        if (this.leaveQueue(batch, key)) {
           untrack();
           return;
         }
@@ -775,6 +845,7 @@ class ConnectionActionsStore {
     } finally {
       // Anything still queued when the pool unwinds (an early failure, or the
       // user cancelling the batch) must not be left marked in flight.
+      this.queuedBatches.delete(batch);
       releaseAll();
     }
     if (results.some((r) => r.status === "fulfilled")) view.setTab("terminal");
