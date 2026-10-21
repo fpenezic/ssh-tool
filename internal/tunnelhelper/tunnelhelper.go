@@ -308,6 +308,14 @@ func (m *Manager) EnsureWith(profileID, name, exePath string, args, env []string
 		delete(m.starting, profileID)
 		if err == nil && ps.stopped {
 			m.mu.Unlock()
+			// Not registered, so no reap: wait for it here, or stopProc
+			// polls its full 10 s and the child stays a zombie.
+			go func() {
+				_ = p.cmd.Wait()
+				p.mu.Lock()
+				p.exited = true
+				p.mu.Unlock()
+			}()
 			stopProc(p)
 			err = fmt.Errorf("%s: stopped while starting", name)
 			m.mu.Lock()

@@ -83,6 +83,15 @@ type Manager struct {
 	// before one is not stored.
 	opening map[string]*sync.Mutex
 	gen     uint64
+	// dbGen counts DeleteCache per database, so dropping one database's
+	// cache does not cancel another's open.
+	dbGen map[string]uint64
+}
+
+// current reports that neither a Forget nor this database's DeleteCache
+// ran since gen / dgen were read. Caller holds m.mu.
+func (m *Manager) current(id string, gen, dgen uint64) bool {
+	return m.gen == gen && m.dbGen[id] == dgen
 }
 
 // dbLock is the open lock of one database.
@@ -191,7 +200,7 @@ func (m *Manager) ensureOpen(kdb store.KeepassDatabase, force bool) (*openState,
 
 	m.mu.Lock()
 	cur, have := m.open[kdb.ID]
-	gen := m.gen
+	gen, dgen := m.gen, m.dbGen[kdb.ID]
 	if have && !force {
 		if kdb.Source == store.KeepassLocal {
 			m.mu.Unlock()
@@ -213,7 +222,7 @@ func (m *Manager) ensureOpen(kdb store.KeepassDatabase, force bool) (*openState,
 		if have {
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			if m.gen == gen {
+			if m.current(kdb.ID, gen, dgen) {
 				cur.fresh = FreshStale
 				return cur, nil
 			}
@@ -232,7 +241,7 @@ func (m *Manager) ensureOpen(kdb store.KeepassDatabase, force bool) (*openState,
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.gen != gen {
+	if !m.current(kdb.ID, gen, dgen) {
 		return nil, ErrVaultLocked // locked meanwhile: do not store it
 	}
 	st := &openState{db: db, openedAt: time.Now(), fresh: fresh}
@@ -329,6 +338,9 @@ func (m *Manager) DeleteCache(dbID string) {
 	_ = os.Remove(m.cachePath(dbID))
 	m.mu.Lock()
 	delete(m.open, dbID)
-	m.gen++
+	if m.dbGen == nil {
+		m.dbGen = map[string]uint64{}
+	}
+	m.dbGen[dbID]++
 	m.mu.Unlock()
 }
