@@ -105,6 +105,15 @@ type Manager struct {
 	// Forgets: an open that started before one is not stored.
 	opening map[string]*sync.Mutex
 	gen     uint64
+	// srvGen counts DeleteCache per server, so dropping one server's
+	// cache does not cancel another server's open.
+	srvGen map[string]uint64
+}
+
+// current reports that neither a Forget nor this server's DeleteCache
+// ran since gen / sgen were read. Caller holds m.mu.
+func (m *Manager) current(id string, gen, sgen uint64) bool {
+	return m.gen == gen && m.srvGen[id] == sgen
 }
 
 // serverLock is the open lock of one server.
@@ -221,7 +230,10 @@ func (m *Manager) DeleteCache(serverID string) {
 		st.vault.Forget()
 		delete(m.open, serverID)
 	}
-	m.gen++
+	if m.srvGen == nil {
+		m.srvGen = map[string]uint64{}
+	}
+	m.srvGen[serverID]++
 	m.mu.Unlock()
 }
 
@@ -236,7 +248,7 @@ func (m *Manager) ensureOpen(srv store.BitwardenServer, force bool) (*openState,
 
 	m.mu.Lock()
 	cur, have := m.open[srv.ID]
-	gen := m.gen
+	gen, sgen := m.gen, m.srvGen[srv.ID]
 	if have && !force && time.Since(cur.openedAt) < staleAfter {
 		cur.fresh = FreshCached
 		m.mu.Unlock()
@@ -251,7 +263,7 @@ func (m *Manager) ensureOpen(srv store.BitwardenServer, force bool) (*openState,
 		if have {
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			if m.gen == gen {
+			if m.current(srv.ID, gen, sgen) {
 				cur.fresh = FreshStale
 				return cur, nil
 			}
@@ -278,7 +290,7 @@ func (m *Manager) ensureOpen(srv store.BitwardenServer, force bool) (*openState,
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.gen != gen {
+	if !m.current(srv.ID, gen, sgen) {
 		// The vault was locked (or the cache deleted) meanwhile: do not
 		// bring the keys back.
 		v.Forget()
