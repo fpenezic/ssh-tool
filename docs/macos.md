@@ -8,6 +8,34 @@ building both and where the plugins go.
 The in-app updater and the plugin downloads in Settings do not cover
 macOS: an update is a rebuild, and a plugin is built and copied by hand.
 
+## The quick way: the build script
+
+`scripts/macos-build.sh` does everything below after asking a few
+questions, with a default for each (Enter takes it):
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/fpenezic/ssh-tool/main/scripts/macos-build.sh
+bash macos-build.sh
+```
+
+It:
+
+1. checks the Xcode command line tools, Go and Node, and offers to
+   install a missing Go or Node with Homebrew;
+2. asks where to keep the source (`~/ssh-tool-src`) and which version to
+   build - the latest release by default, or `main`;
+3. clones the repository (or updates the existing clone), installs the
+   `wails3` CLI at the version in `go.mod` and Task, and builds the app;
+4. offers to install `ssh-tool.app` into `/Applications` (into
+   `~/Applications` when `/Applications` is not writable for you);
+5. asks for each VPN plugin whether to build it - plugins already in the
+   plugins folder default to yes - builds each from its newest release
+   tag and copies it into the plugins folder.
+
+To update, run it again: it reuses the source folder and offers the
+plugins you already have. The sections below are the same steps by
+hand.
+
 ## Requirements
 
 - Xcode command line tools: `xcode-select --install` (the app needs CGO

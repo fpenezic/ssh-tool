@@ -27,6 +27,10 @@ a prerelease upstream.
 - macOS: Settings - Plugins shows a plugin you built and placed in the plugins folder as installed (with its version and Remove) instead of "not on this platform", and says where to put one. There is still no macOS download. Building the app and the plugins on a Mac, and where the plugins go, is written up in docs/macos.md.
 - A paused profile dials as the system routes again (a system VPN and IPv6 included); only the auto-mode probe uses the physical network.
 
+### macOS
+
+- **Build script.** `scripts/macos-build.sh` asks a few questions, then checks the tools, clones and builds the app (the latest release or `main`), installs it into Applications and builds and copies the VPN plugins you pick. Run it again to update. See docs/macos.md.
+
 ### Security
 
 - **LLM (MCP) access.** Commands that only look read-only no longer run without approval: `${VAR:=...}` (which can make the shell run code before every later command), `git diff/log/show --output` and `--ext-diff`, `git reflog expire/delete`. The YOLO safety net now also catches quoted or wrapped forms such as `rm -rf "$HOME"`, `/bin/rm -rf /` and `command rm -rf /`.
