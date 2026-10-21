@@ -128,13 +128,14 @@ runs from source - install the [build requirements](#requirements)
 plus the Xcode command line tools (`xcode-select --install`), then:
 
 ```bash
-task darwin:build      # bin/ssh-tool
-task darwin:package    # bin/ssh-tool.app (and a .dmg)
+task darwin:build      # bin/ssh-tool.app
+task darwin:package    # bin/ssh-tool.dmg
 ```
 
 The in-app updater and the VPN plugin downloads do not cover macOS; a
 plugin built from [ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins)
-and placed in the app's plugins folder is picked up.
+and placed in the app's plugins folder is picked up. Step by step, plugins
+and where they go included: [docs/macos.md](docs/macos.md).
 
 ### Updates
 
