@@ -158,6 +158,10 @@ type App struct {
 
 	pendingHostKeysMu sync.Mutex
 	pendingHostKeys   map[string]chan bool
+	// pendingHostKeyIDs is the key each challenge asked about: "remember"
+	// pins this, never what the frontend sends back. Under
+	// pendingHostKeysMu.
+	pendingHostKeyIDs map[string]knownHostEntry
 
 	// Interactive auth prompts (username + keyboard-interactive/password
 	// fallback) use the same register-channel / emit-event / block-on-channel
@@ -465,6 +469,7 @@ func (a *App) initialise() {
 	updater.CleanupOldBinary()
 
 	a.pendingHostKeys = make(map[string]chan bool)
+	a.pendingHostKeyIDs = make(map[string]knownHostEntry)
 	a.pendingAuthPrompts = make(map[string]chan authPromptReply)
 	a.transfers = make(map[string]chan struct{})
 	a.taskbar = newTaskbarTracker()
@@ -3592,6 +3597,7 @@ func (a *App) makeHostKeyCallback() gossh.HostKeyCallback {
 		ch := make(chan bool, 1)
 		a.pendingHostKeysMu.Lock()
 		a.pendingHostKeys[challengeID] = ch
+		a.pendingHostKeyIDs[challengeID] = knownHostEntry{host: host, port: port, keyType: keyType, keyB64: keyB64, fp: fp}
 		a.pendingHostKeysMu.Unlock()
 
 		EventsEmit("host_key_challenge", HostKeyChallengeEvent{
@@ -3626,6 +3632,7 @@ func (a *App) makeHostKeyCallback() gossh.HostKeyCallback {
 
 		a.pendingHostKeysMu.Lock()
 		delete(a.pendingHostKeys, challengeID)
+		delete(a.pendingHostKeyIDs, challengeID)
 		a.pendingHostKeysMu.Unlock()
 
 		if !accepted {
@@ -3643,21 +3650,39 @@ func (a *App) SshRespondHostKey(challengeID string, accept bool, remember bool, 
 	if respondTrustChallenge(challengeID, accept, remember) {
 		return nil
 	}
+	// hostname, port, keyType, keyB64 and fingerprint are what the dialog
+	// showed; the key pinned is the one the challenge asked about, so a
+	// reply cannot pin a different key.
 	a.pendingHostKeysMu.Lock()
 	ch, ok := a.pendingHostKeys[challengeID]
+	asked := a.pendingHostKeyIDs[challengeID]
 	a.pendingHostKeysMu.Unlock()
 	if !ok {
 		return fmt.Errorf("unknown challenge %s", challengeID)
 	}
+	if asked.keyB64 != keyB64 || asked.keyType != keyType {
+		log.Printf("host key reply for %s names a different key than asked; using the asked one", challengeID)
+	}
 
+	select {
+	case ch <- accept:
+	default:
+		return fmt.Errorf("challenge %s already answered", challengeID)
+	}
 	if accept && remember {
-		if err := a.db.UpsertKnownHost(hostname, port, keyType, keyB64, fingerprint); err != nil {
+		if err := a.db.UpsertKnownHost(asked.host, asked.port, asked.keyType, asked.keyB64, asked.fp); err != nil {
 			log.Printf("known_hosts upsert failed: %v", err)
 		}
 	}
-
-	ch <- accept
 	return nil
+}
+
+// knownHostEntry is a host key a challenge asked the user about.
+type knownHostEntry struct {
+	host            string
+	port            int
+	keyType, keyB64 string
+	fp              string
 }
 
 // SshWriteCommand is SshWrite for input that runs a command: it also
@@ -8169,7 +8194,11 @@ type TcpdumpProbeResult struct {
 // first, then the resolved password-kind credential. Returns "" if
 // neither is set.
 func (a *App) resolveSudoCandidate(sessionID string) string {
+	// Under metaMu like every other reader: connects and closes write the
+	// map, and an unlocked read racing them is a fatal runtime error.
+	a.metaMu.Lock()
 	meta, ok := a.sessionMeta[sessionID]
+	a.metaMu.Unlock()
 	if !ok || meta.connectionID == "" {
 		return ""
 	}
@@ -8392,6 +8421,7 @@ func (a *App) TcpdumpStart(in TcpdumpStartInput) (string, error) {
 	}
 	h, err := sshlayer.StartTcpdump(target, in.RootUser, in.SudoNoPwd, opts, onLine, onLifecycle, onInsight)
 	if err != nil {
+		stopBatch() // no lifecycle event will come to stop the flusher
 		return "", err
 	}
 	h.ID = dumpID
