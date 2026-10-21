@@ -541,11 +541,16 @@ func (a *App) wgDialerForCtx(hookCtx context.Context, profileID string) (sshlaye
 			// cannot reach the host (back on-site with the VPN left up),
 			// the direct dial still gets its turn, with directProbeTimeout
 			// kept free for it out of the connect deadline.
-			if a.tunnelStatus(row.ID).Running {
+			// With directProbeTimeout or less left there is no room for both,
+			// and the probe path below still reaches the tunnel if the
+			// direct dial fails.
+			dl, hasDL := ctx.Deadline()
+			roomForBoth := !hasDL || time.Until(dl) > directProbeTimeout
+			if roomForBoth && a.tunnelStatus(row.ID).Running {
 				if t, terr := a.ensureTunnel(row); terr == nil {
 					sshlayer.ReportProgress(ctx, "Connecting to "+addr+" via VPN "+row.Name+" (already up)")
 					tctx, tcancel := ctx, context.CancelFunc(func() {})
-					if dl, ok := ctx.Deadline(); ok && time.Until(dl) > 2*directProbeTimeout {
+					if hasDL {
 						tctx, tcancel = context.WithDeadline(ctx, dl.Add(-directProbeTimeout))
 					}
 					c, err := t.DialContext(tctx, network, addr)
