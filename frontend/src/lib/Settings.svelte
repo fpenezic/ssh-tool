@@ -4502,8 +4502,8 @@
             <div class="np-card">
               <div class="np-head">
                 <strong>{pluginTitle(pl.name)}</strong>
-                {#if !pl.supported}
-                  <span class="np-pill">not on this platform</span>
+                {#if !pl.supported && !pl.installed}
+                  <span class="np-pill">no download for this platform</span>
                 {:else if pl.installed && pl.update_available}
                   <span class="np-pill paused">update available</span>
                 {:else if pl.installed}
@@ -4514,7 +4514,24 @@
                 {#if pl.installed && pl.engine_version}<span class="np-kind">{engineLabel(pl.name)} {pl.engine_version}</span>{/if}
                 {#if pl.installed}<span class="np-meta">{pl.path}</span>{/if}
               </div>
-              {#if pl.supported}
+              {#if !pl.supported}
+                <!-- No release build for this OS (macOS): a plugin built by
+                     hand and put in the plugins dir still runs, so say where,
+                     and allow removing one that is there. -->
+                {#if pl.installed}
+                  <div class="np-actions">
+                    <button class="danger" onclick={() => pluginRemove(pl.name)} disabled={pluginBusy}>Remove</button>
+                  </div>
+                {:else}
+                  <p class="hint" style="margin:0.2rem 0">
+                    {#if isMobile}
+                      Plugins do not run on mobile.
+                    {:else}
+                      No release build for this platform. Build it from ssh-tool-plugins and place it as <code>{pl.path}</code>.
+                    {/if}
+                  </p>
+                {/if}
+              {:else}
                 {#if pluginProgress[pl.name]}
                   {@const pp = pluginProgress[pl.name]}
                   <div class="plugin-progress">

@@ -22,6 +22,7 @@ a prerelease upstream.
 - A WireGuard profile with "bind to the physical network" keeps working after the network changes (new DHCP lease, Wi-Fi to Ethernet); it used to stay on the old address until stopped by hand.
 - A VPN plugin waiting for a one-time code no longer holds up every other profile, status reads, Stop and quit.
 - An auto-mode profile whose VPN is already up connects through it straight away, without first spending up to 3 seconds trying the host directly.
+- macOS: Settings - Plugins shows a plugin you built and placed in the plugins folder as installed (with its version and Remove) instead of "not on this platform", and says where to put one. There is still no macOS download.
 - A paused profile dials as the system routes again (a system VPN and IPv6 included); only the auto-mode probe uses the physical network.
 
 ### Security

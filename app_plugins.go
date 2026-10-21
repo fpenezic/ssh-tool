@@ -108,8 +108,9 @@ type PluginInfo struct {
 	// helper is a version behind and should be re-downloaded. Helper
 	// and app share the release tag, so equality means up to date.
 	UpdateAvailable bool `json:"update_available"`
-	// Supported=false when this platform has no helper build
-	// (android/ios - helpers are desktop-only).
+	// Supported=false when this platform has no helper build to
+	// download (android/ios, where helpers cannot run, and macOS, where
+	// a helper built by hand and put in the plugins dir does run).
 	Supported bool `json:"supported"`
 }
 
