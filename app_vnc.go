@@ -426,8 +426,15 @@ func (a *App) setVncOwned(sessionID string, sess *sshlayer.Session, cleanup func
 	}
 	a.vncMu.Unlock()
 	if m == nil {
-		// The console is already closed - don't leak.
-		oldSess, oldCleanup = sess, cleanup
+		// The console is already closed (closed while connecting): what
+		// the factory just opened has no owner - close it.
+		if sess != nil {
+			sess.Disconnect()
+		}
+		if cleanup != nil {
+			cleanup()
+		}
+		return
 	}
 	if oldSess != nil && oldSess != sess {
 		oldSess.Disconnect()
