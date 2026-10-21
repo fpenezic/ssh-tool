@@ -46,6 +46,7 @@ a prerelease upstream.
 - VNC: two consoles on one host no longer share or leak their SSH tunnels.
 - A new tunnel on a port another program holds shows "in use" again; an empty remote file can be edited in the SFTP view; the share guest page shows "Access denied" again when refused.
 - A rare crash when a tcpdump or log tail started while another session connected is fixed.
+- Windows: the app window gets keyboard focus back when it is activated again, and Tab no longer gets stuck inside the window (Wails v3 beta.34). opkssh libraries updated to v0.19.0.
 
 ## [0.117.0] - ClickHouse, OpenSearch and Redis in the Database tab
 
