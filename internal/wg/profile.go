@@ -23,7 +23,8 @@ const (
 	// ModeAuto: probe a direct TCP dial first (short timeout); only
 	// when that fails bring the tunnel up and dial through it. For
 	// hosts that are reachable directly when on-site and need the
-	// tunnel from everywhere else.
+	// tunnel from everywhere else. A tunnel that is already up is
+	// used without the probe.
 	ModeAuto = "auto"
 )
 
