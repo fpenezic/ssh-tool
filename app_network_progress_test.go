@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"path/filepath"
 	"strings"
@@ -63,3 +65,35 @@ func TestAutoProfileReportsDialSteps(t *testing.T) {
 	}
 }
 
+// A stalled key exchange names the MTU setting that applies: the network
+// profile's when the first hop went through it, the jump host's network
+// when it stalled behind one.
+func TestMTUAdvice(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "store.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	row, err := db.CreateNetworkProfile("corp", `{"mode":"always"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &App{db: db}
+	s := &store.ResolvedSettings{NetworkProfileID: &row.ID}
+	advice := func(se *sshlayer.HandshakeStallError) string {
+		return a.withMTUAdvice(fmt.Errorf("target h: ssh handshake: %w", se), s).Error()
+	}
+	if got := advice(&sshlayer.HandshakeStallError{Received: 900, Via: "tunnel", FirstHop: true}); !strings.Contains(got, `MTU of network profile "corp"`) {
+		t.Fatalf("wireguard advice: %s", got)
+	}
+	if got := advice(&sshlayer.HandshakeStallError{Received: 900, Via: "tunnel"}); !strings.Contains(got, "behind the jump host") {
+		t.Fatalf("jump advice: %s", got)
+	}
+	if got := advice(&sshlayer.HandshakeStallError{Received: 900, Via: "direct", FirstHop: true}); !strings.Contains(got, "over a VPN") {
+		t.Fatalf("direct advice: %s", got)
+	}
+	plain := errors.New("connection refused")
+	if a.withMTUAdvice(plain, s) != plain {
+		t.Fatal("advice added to an unrelated error")
+	}
+}
