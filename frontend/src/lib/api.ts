@@ -676,6 +676,8 @@ export interface PluginInfo {
   latest: string;
   update_available: boolean;
   supported: boolean;
+  /** Found next to the app's executable, not in the plugins folder: Remove would not touch it. */
+  beside_app: boolean;
 }
 
 /** plugin_download_progress event payload. */

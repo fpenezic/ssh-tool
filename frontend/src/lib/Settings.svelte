@@ -4518,7 +4518,9 @@
                 <!-- No release build for this OS (macOS): a plugin built by
                      hand and put in the plugins dir still runs, so say where,
                      and allow removing one that is there. -->
-                {#if pl.installed}
+                {#if pl.installed && pl.beside_app}
+                  <p class="hint" style="margin:0.2rem 0">Found next to the app; remove it there.</p>
+                {:else if pl.installed}
                   <div class="np-actions">
                     <button class="danger" onclick={() => pluginRemove(pl.name)} disabled={pluginBusy}>Remove</button>
                   </div>
@@ -4559,7 +4561,9 @@
                     <button class:primary={pl.update_available} onclick={() => pluginDownload(pl.name)} disabled={pluginBusy}>
                       {pl.update_available ? "Update" : "Reinstall"}
                     </button>
-                    <button class="danger" onclick={() => pluginRemove(pl.name)} disabled={pluginBusy}>Remove</button>
+                    {#if !pl.beside_app}
+                      <button class="danger" onclick={() => pluginRemove(pl.name)} disabled={pluginBusy}>Remove</button>
+                    {/if}
                   {:else}
                     <button class="primary" onclick={() => pluginDownload(pl.name)} disabled={pluginBusy}>Download</button>
                   {/if}

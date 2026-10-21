@@ -108,6 +108,10 @@ type PluginInfo struct {
 	// helper is a version behind and should be re-downloaded. Helper
 	// and app share the release tag, so equality means up to date.
 	UpdateAvailable bool `json:"update_available"`
+	// BesideApp is true when the plugin was found next to the app's
+	// executable rather than in the plugins dir: Remove only deletes the
+	// plugins dir copy, so the UI does not offer it for this one.
+	BesideApp bool `json:"beside_app"`
 	// Supported=false when this platform has no helper build to
 	// download (android/ios, where helpers cannot run, and macOS, where
 	// a helper built by hand and put in the plugins dir does run).
@@ -197,6 +201,7 @@ func (a *App) PluginsStatus() []PluginInfo {
 			defer wg.Done()
 			p, ok := pluginPath(name)
 			info := PluginInfo{Name: name, Installed: ok, Path: p, Supported: supported, Latest: latest[name]}
+			info.BesideApp = ok && p != filepath.Join(pluginsDir(), pluginBinaryName(name))
 			if ok {
 				info.Version = pluginVersion(p)
 				info.EngineVersion = pluginEngineVersion(name, p)
