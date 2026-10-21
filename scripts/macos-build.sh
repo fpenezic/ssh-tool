@@ -63,7 +63,9 @@ node_major="$(node -v | sed 's/^v//; s/\..*//')"
 [ "$node_major" -ge 20 ] || die "Node.js 20 or newer is required (found $(node -v))"
 info "Go $(go env GOVERSION), Node $(node -v): ok"
 
-GOBIN_DIR="$(go env GOPATH)/bin"
+# go install puts tools in GOBIN when it is set, else GOPATH/bin.
+GOBIN_DIR="$(go env GOBIN)"
+[ -n "$GOBIN_DIR" ] || GOBIN_DIR="$(go env GOPATH)/bin"
 case ":$PATH:" in *":$GOBIN_DIR:"*) ;; *) export PATH="$GOBIN_DIR:$PATH" ;; esac
 
 # ---------------------------------------------------------------- source
@@ -123,8 +125,17 @@ if yes_no "Install ssh-tool.app into /Applications?" y; then
   if pgrep -xq ssh-tool; then
     yes_no "ssh-tool is running. Quit it first, then answer y to replace it" y || die "stopped before replacing the app"
   fi
-  rm -rf "$APP_DEST/ssh-tool.app"
-  cp -R "$APP_BUNDLE" "$APP_DEST/"
+  # Copy next to the installed app first and swap only once the copy is
+  # complete: a failed copy leaves the working install in place.
+  rm -rf "$APP_DEST/.ssh-tool.app.new" "$APP_DEST/.ssh-tool.app.old"
+  cp -R "$APP_BUNDLE" "$APP_DEST/.ssh-tool.app.new" || die "copying the app failed; the installed app is unchanged"
+  [ -e "$APP_DEST/ssh-tool.app" ] && mv "$APP_DEST/ssh-tool.app" "$APP_DEST/.ssh-tool.app.old"
+  if mv "$APP_DEST/.ssh-tool.app.new" "$APP_DEST/ssh-tool.app"; then
+    rm -rf "$APP_DEST/.ssh-tool.app.old"
+  else
+    [ -e "$APP_DEST/.ssh-tool.app.old" ] && mv "$APP_DEST/.ssh-tool.app.old" "$APP_DEST/ssh-tool.app"
+    die "installing the app failed; the previous app was put back"
+  fi
   info "Installed $APP_DEST/ssh-tool.app"
 else
   info "Left at $APP_BUNDLE"
@@ -171,8 +182,16 @@ if [ -n "$CHOSEN" ]; then
       fi
       go build -trimpath -ldflags="-w -s -X main.version=$tag $extra" -o "ssh-tool-$p" .
     ) || { info "$p: the build failed, skipped"; continue; }
-    mv -f "$PLUGIN_SRC/$p/ssh-tool-$p" "$PLUGIN_DIR/ssh-tool-$p"
-    chmod +x "$PLUGIN_DIR/ssh-tool-$p"
+    # Stage inside the plugins folder, then rename: the rename is atomic
+    # there, so a failed copy never leaves the plugin missing.
+    staged="$PLUGIN_DIR/.ssh-tool-$p.new"
+    if ! { cp "$PLUGIN_SRC/$p/ssh-tool-$p" "$staged" && chmod +x "$staged"; }; then
+      rm -f "$staged"
+      info "$p: copying into the plugins folder failed, the installed one is unchanged"
+      continue
+    fi
+    mv -f "$staged" "$PLUGIN_DIR/ssh-tool-$p"
+    rm -f "$PLUGIN_SRC/$p/ssh-tool-$p"
     BUILT="$BUILT $p"
   done
 fi

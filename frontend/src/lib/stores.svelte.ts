@@ -49,10 +49,15 @@ class TreeStore {
   // connections' last_used_at column is legacy and only a fallback.
   recentTimes = $state<Record<string, number>>({});
   private recentsWired = false;
+  // A tree reload and a recents_changed event can overlap; only the newest
+  // request may write, so an older answer arriving last cannot win.
+  private recentSeq = 0;
 
   async loadRecent() {
+    const seq = ++this.recentSeq;
     try {
-      this.recentTimes = (await api.connectionsRecentTimes()) ?? {};
+      const times = (await api.connectionsRecentTimes()) ?? {};
+      if (seq === this.recentSeq) this.recentTimes = times;
     } catch (e) {
       console.warn("recents load:", e);
     }
