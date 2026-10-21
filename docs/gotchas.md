@@ -1964,13 +1964,16 @@ everything mobile is behind a build tag or an `isMobile` check.
    for a terminal.
 
 124. **`ClientConfig.Timeout` does not cover `ssh.NewClientConn`.**
-   (`internal/ssh/session.go` `clientHandshake`, `internal/syncer/sftp.go`)
+   (`internal/ssh/session.go` `boundedHandshake`, `internal/syncer/sftp.go`)
    The timeout only bounds the dial inside `ssh.Dial`; a handshake on our
    own conn has no limit, so a host that accepts TCP and stalls hangs the
-   connect. Set a conn deadline, but clear it when the host-key callback
-   runs: the trust dialog and the login prompts after it wait for the
-   user. Non-interactive paths (sync) re-arm it after the callback. A jump
-   hop's channel conn has no deadlines; close it on ctx instead.
+   connect. The bound is a timer that closes the conn, not a read
+   deadline: a jump hop's conn is an SSH channel, which has no deadlines,
+   and the bastion-to-target leg is where an MTU problem stalls. It stops
+   at the host-key callback (trust dialog and login prompts wait for the
+   user); the non-interactive paths (`dialChain`, sync) switch to an
+   auth budget there instead. Bytes read before the stall tell an MTU
+   black hole (`HandshakeStallError`) from a server that never spoke.
 
 125. **One-slot reply channels need a non-blocking send.** (approvals,
    auth / host-key prompts, share approvals, plugin stdin readers) The
@@ -1995,6 +1998,25 @@ everything mobile is behind a build tag or an `isMobile` check.
    or a per-id mutex) and count invalidations (a Forget, a deleted cache)
    with a generation, global for Forget and per id for one cache, so a
    result that straddled one is thrown away instead of stored.
+
+128. **A connect's in-flight state lives in `connectionActions`, not in a
+   component.** (`connectionActions.svelte.ts` `trackConnect`) Connects
+   start from the tree, Enter, bulk connect, the detail pane and the
+   tunnels panel, while one detail pane is mounted. Any new connect path
+   has to call `trackConnect` (and the returned release in a `finally`),
+   or the Connect button and tree row show nothing. Entries are counted
+   per id (two attempts can overlap), and queued bulk hosts are cancelled
+   per batch by queue membership, never through a shared set keyed by id.
+   Backend stages reach code below `Connect` through the context
+   (`sshlayer.WithProgress` / `ReportProgress`), which is why
+   `FirstHopDialerHook` takes the connect's ctx.
+
+129. **A store loaded once must also reload on `profile_reloaded`.**
+   (`App.svelte`) A live sync pull rewrites the database under a running
+   app and emits `profile_reloaded`; only the stores listed there
+   refresh. The network profiles store was missing, so pulled profiles
+   stayed hidden until a restart. A new store that caches a table loads
+   it there too.
 
 ---
 
