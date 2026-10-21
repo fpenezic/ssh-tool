@@ -59,6 +59,10 @@
   import type { FactsHostResult } from "./api";
   import { failedIgnore } from "./failedIgnore.svelte";
   import { fleet, containerIssues, containerProblem, type FactsSnapshot, type ReportSettings } from "./fleetStore.svelte";
+  import {
+    hostIssues, fsUse, needsReboot, rebootSince, unexpectedUnits as unexpectedUnitsOf, failedCount as failedCountOf,
+    patchDays as patchDaysOf, rebootDays as rebootDaysOf, rebootFlagged as rebootFlaggedOf,
+  } from "./factsIssues";
 
   interface Props {
     label: string;
@@ -87,8 +91,8 @@
   // Expected: on the report's own list, or ignored for this host or a
   // folder above it (the status bar's failed-units ignore).
   const isExpected = (r: FactsHostResult, u: string) => expected.has(u) || failedIgnore.isIgnored(r.connection_id, u);
-  const unexpectedUnits = (r: FactsHostResult) => (r.facts.failed_units ?? []).filter((u) => !isExpected(r, u));
-  const failedCount = (r: FactsHostResult) => r.facts.failed_units ? unexpectedUnits(r).length : Math.max(r.facts.failed, 0);
+  const unexpectedUnits = (r: FactsHostResult) => unexpectedUnitsOf(r, isExpected);
+  const failedCount = (r: FactsHostResult) => failedCountOf(r, isExpected);
   const DAY = 86400;
 
   // The run to compare with: the latest earlier one by default.
@@ -106,56 +110,12 @@
 
   const fmtDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
   const fmtDateTime = (ms: number) => new Date(ms).toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  const patchDays = (r: FactsHostResult) => {
-    const t = r.facts.last_patch ?? 0;
-    return t > 0 ? Math.floor((snap.at / 1000 - t) / DAY) : null;
-  };
-  const needsReboot = (r: FactsHostResult) => r.facts.reboot === "yes" || r.facts.kernel_pending === "yes";
-  // Since when a reboot has been waiting: the newest kernel's install
-  // time, else (a library update, no kernel) the last upgrade.
-  const rebootSince = (r: FactsHostResult): number | null => {
-    if (!needsReboot(r)) return null;
-    if (r.facts.kernel_pending === "yes" && (r.facts.kernel_latest_at ?? 0) > 0) return r.facts.kernel_latest_at!;
-    return (r.facts.last_patch ?? 0) > 0 ? r.facts.last_patch! : null;
-  };
-  const rebootDays = (r: FactsHostResult) => {
-    const t = rebootSince(r);
-    return t === null ? null : Math.max(0, Math.floor((snap.at / 1000 - t) / DAY));
-  };
-  const rebootFlagged = (r: FactsHostResult) => {
-    if (!needsReboot(r)) return false;
-    const d = rebootDays(r);
-    return d === null || d >= rs.rebootGraceDays;
-  };
-  const fsUse = (r: FactsHostResult) => [
-    ...(r.facts.disks ?? []).filter((d) => d.used_pct !== undefined).map((d) => ({ mount: d.mount, pct: d.used_pct!, kind: d.network ? "space (network share)" : "space" })),
-    ...(r.facts.inodes ?? []).map((d) => ({ mount: d.mount, pct: d.pct, kind: "inodes" })),
-  ];
+  const patchDays = (r: FactsHostResult) => patchDaysOf(r, snap.at);
+  const rebootDays = (r: FactsHostResult) => rebootDaysOf(r, snap.at);
+  const rebootFlagged = (r: FactsHostResult) => rebootFlaggedOf(r, snap.at, rs);
 
   // ---- per-host status ----
-  function issues(r: FactsHostResult): { level: "red" | "yellow"; text: string }[] {
-    const out: { level: "red" | "yellow"; text: string }[] = [];
-    const f = r.facts;
-    const ct = containerIssues(f, rs, snap.at);
-    if (ct.problems.length) out.push({ level: "red", text: ct.problems.map((c) => `${c.name} ${containerProblem(c)}`).join(", ") });
-    if (ct.restarted.length) out.push({ level: "yellow", text: `${ct.restarted.map((c) => c.name).join(", ")} restarted by the engine` });
-    const nf = failedCount(r);
-    if (has(snap, "failed") && nf > 0) out.push({ level: "red", text: `${nf} failed unit${nf === 1 ? "" : "s"}` });
-    for (const u of fsUse(r)) {
-      if (u.pct >= DISK_BAD) out.push({ level: "red", text: `${u.mount} ${u.pct}%` });
-      else if (u.pct >= DISK_WARN) out.push({ level: "yellow", text: `${u.mount} ${u.pct}%` });
-    }
-    const pd = patchDays(r);
-    if (has(snap, "updates") && f.security > 0 && (pd === null || pd >= rs.securityGraceDays)) {
-      out.push({ level: "yellow", text: `${f.security} security updates${pd !== null ? `, last update ${pd} days ago` : ""}` });
-    }
-    if (rebootFlagged(r)) {
-      const d = rebootDays(r);
-      out.push({ level: "yellow", text: d === null ? "reboot pending" : `reboot pending for ${d} days` });
-    }
-    if (pd !== null && pd >= PATCH_OLD_DAYS) out.push({ level: "yellow", text: `not updated for ${pd} days` });
-    return out;
-  }
+  const issues = (r: FactsHostResult) => hostIssues(r, snap, rs, isExpected);
   const hostStatus = $derived(ok.map((r) => {
     const is = issues(r);
     return { r, is, level: is.some((i) => i.level === "red") ? "red" : is.length ? "yellow" : "green" };
