@@ -1963,6 +1963,39 @@ everything mobile is behind a build tag or an `isMobile` check.
    dialog, a new tab). A global window listener would also catch Esc meant
    for a terminal.
 
+124. **`ClientConfig.Timeout` does not cover `ssh.NewClientConn`.**
+   (`internal/ssh/session.go` `clientHandshake`, `internal/syncer/sftp.go`)
+   The timeout only bounds the dial inside `ssh.Dial`; a handshake on our
+   own conn has no limit, so a host that accepts TCP and stalls hangs the
+   connect. Set a conn deadline, but clear it when the host-key callback
+   runs: the trust dialog and the login prompts after it wait for the
+   user. Non-interactive paths (sync) re-arm it after the callback. A jump
+   hop's channel conn has no deadlines; close it on ctx instead.
+
+125. **One-slot reply channels need a non-blocking send.** (approvals,
+   auth / host-key prompts, share approvals, plugin stdin readers) The
+   waiter reads once; a second answer (double click, two windows, a reply
+   racing the timeout) blocks its sender for good, an IPC goroutine or a
+   plugin's stdin reader. Send with `select { case ch <- v: default: }`
+   and store any side data (facts host picks) in the same critical
+   section, only when the send wins.
+
+126. **Sensitivity lives in the overrides, not in `connections.sensitive`.**
+   (`internal/store`, MCP) Since migration 28 the column is always 0; the
+   flag is `overrides_json.sensitive` and can come from a folder. Anything
+   that hides sensitive rows from the LLM has to resolve it
+   (`resolver.ResolveWith`, `App.mcpSensitiveIDs`), and fail closed when
+   it cannot.
+
+127. **Never hold a manager's global lock across a network call or KDF.**
+   (tunnelhelper, Bitwarden, KeePass, jump pool) A spawn that waits for a
+   typed one-time code, a sync, a WebDAV / SFTP fetch or a bastion
+   handshake held the one lock and stalled every other profile, status
+   read, Stop and the vault lock. Serialise per key (an in-flight entry
+   or a per-id mutex) and count invalidations (a Forget, a deleted cache)
+   with a generation, global for Forget and per id for one cache, so a
+   result that straddled one is thrown away instead of stored.
+
 ---
 
 # Archive
