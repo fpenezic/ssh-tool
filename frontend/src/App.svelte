@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tree, credentials, view, sessions, paneTabs, hostKeyStore, authPromptStore, mcpApprovalStore, mcpShared, mcpBridge, shareApprovalStore, shareShared, shareBridge, decodePaneLayoutsMulti, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
+  import { networkProfiles } from "./lib/networkProfiles.svelte";
   import { isMobile } from "./lib/platform";
   import { installMobileBackNav } from "./lib/mobileBackNav";
   import { installNavigationGuard } from "./lib/navigationGuard";
@@ -731,7 +732,10 @@
   // Live pull applied the other machine's profile into the running DB.
   // Reload every store that reads from it; SSH sessions are untouched.
   EventsOn("profile_reloaded", async () => {
-    await Promise.all([tree.load(), credentials.load()]);
+    // Network profiles too: their store loads once and otherwise only
+    // refreshes on a tunnel change, so profiles pulled from another
+    // machine stayed hidden until a restart.
+    await Promise.all([tree.load(), credentials.load(), networkProfiles.load(true)]);
   });
 
   // Listen for host key challenges emitted by the Go backend during SSH connect.
