@@ -49,6 +49,11 @@ implemented.
 <a id="first-launch"></a>
 ## 1. First launch - vault setup
 
+Windows, Linux and Android have release downloads. macOS has none (it
+would need an Apple Developer ID): there `scripts/macos-build.sh` builds
+and installs the app and the VPN plugins you pick after a few
+questions - see [docs/macos.md](https://github.com/fpenezic/ssh-tool/blob/main/docs/macos.md).
+
 On first launch the app shows a **vault gate**. The vault stores
 credential secrets (passwords, private keys, opkssh material)
 encrypted on disk with:
@@ -2482,7 +2487,8 @@ update is offered there (and as a status bar pill) when a newer plugin
 release is out. Downloads exist for Windows and Linux; on macOS build
 the plugin from the ssh-tool-plugins repository and put it in the
 plugins folder (`~/Library/Application Support/ssh-tool/plugins`), where
-the app finds it - see [docs/macos.md](https://github.com/fpenezic/ssh-tool/blob/main/docs/macos.md) for the steps.
+the app finds it. The macOS build script (`scripts/macos-build.sh`)
+builds and copies the plugins you pick - see [docs/macos.md](https://github.com/fpenezic/ssh-tool/blob/main/docs/macos.md) for it and for the steps by hand.
 
 Plugins are desktop only: Android cannot start helper processes.
 Profiles still sync to the phone, and there a plugin profile is marked

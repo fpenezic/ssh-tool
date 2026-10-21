@@ -124,8 +124,17 @@ administrator rights.
 
 No release build yet: a distributed macOS app needs an Apple Developer
 ID and notarisation, which the project does not have. It builds and
-runs from source - install the [build requirements](#requirements)
-plus the Xcode command line tools (`xcode-select --install`), then:
+runs from source. The quickest way is the build script, which asks a
+few questions, then clones, builds and installs the app and the VPN
+plugins you pick:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/fpenezic/ssh-tool/main/scripts/macos-build.sh
+bash macos-build.sh
+```
+
+By hand: install the [build requirements](#requirements) plus the Xcode
+command line tools (`xcode-select --install`), then:
 
 ```bash
 task darwin:build      # bin/ssh-tool.app
