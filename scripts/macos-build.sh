@@ -48,8 +48,43 @@ xcode-select -p >/dev/null 2>&1 || {
 info "Xcode command line tools: ok"
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+# shellcheck disable=SC2016 # printed for the user, not run here
+BREW_INSTALL_CMD='/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+
+# Homebrew installed but not on PATH (a fresh install only adds it to new
+# shells): /opt/homebrew on Apple Silicon, /usr/local on Intel.
+load_brew() {
+  local b
+  for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+    if [ -x "$b" ]; then eval "$("$b" shellenv)"; return 0; fi
+  done
+  return 1
+}
+
+# Go and Node come from Homebrew; without it, offer the official installer
+# or say how to get the tools by hand.
+ensure_brew() { # ensure_brew <what is missing>
+  have brew && return 0
+  load_brew && return 0
+  info "$1 is missing, and Homebrew (which installs it) is not installed."
+  if yes_no "Install Homebrew now? It runs the official installer and asks for your password" y; then
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/tty \
+      || die "the Homebrew installer failed"
+    load_brew || die "Homebrew was installed but brew was not found; open a new terminal and run this script again"
+    return 0
+  fi
+  printf '\nInstall the tools one of these ways, then run this script again:\n' >&2
+  printf '  - Homebrew:  %s\n' "$BREW_INSTALL_CMD" >&2
+  printf '               then: brew install go node\n' >&2
+  printf '  - by hand:   Go from https://go.dev/dl/ and Node.js LTS from https://nodejs.org/\n' >&2
+  printf '               (the macOS .pkg installers; open a new terminal afterwards)\n' >&2
+  exit 1
+}
+
 brew_install() { # brew_install <formula> <what>
-  if have brew && yes_no "$2 is missing. Install it with Homebrew (brew install $1)?" y; then
+  ensure_brew "$2"
+  if yes_no "$2 is missing. Install it with Homebrew (brew install $1)?" y; then
     brew install "$1"
   else
     die "$2 is required - install it and run this script again"

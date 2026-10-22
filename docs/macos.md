@@ -21,7 +21,9 @@ bash macos-build.sh
 It:
 
 1. checks the Xcode command line tools, Go and Node, and offers to
-   install a missing Go or Node with Homebrew;
+   install a missing Go or Node with Homebrew (and Homebrew itself
+   with its official installer when it is not there; say no and it
+   prints how to install the tools by hand);
 2. asks where to keep the source (`~/ssh-tool-src`) and which version to
    build - the latest release by default, or `main`;
 3. clones the repository (or updates the existing clone), installs the
