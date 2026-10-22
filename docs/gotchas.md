@@ -2018,7 +2018,28 @@ everything mobile is behind a build tag or an `isMobile` check.
    app and emits `profile_reloaded`; only the stores listed there
    refresh. The network profiles store was missing, so pulled profiles
    stayed hidden until a restart. A new store that caches a table loads
-   it there too.
+   it there too. A component that keeps its own copy (the home pane's
+   facts runs and report settings) listens for the event itself, and
+   reads around a store cache the pull leaves stale (`fleet`'s report
+   settings).
+
+130. **Recency is machine-local; `connections.last_used_at` is dead.**
+   (`local_state.go`, `stores.svelte.ts`) Since recents moved to
+   `touchRecent` (a write to store.db dirtied sync on every connect), the
+   column is never written; it is only merged in for pre-split data.
+   Read recency through `ConnectionsRecentTimes` / `tree.lastUsed()`, and
+   record a connect with `touchRecent`, never `TouchLastUsed`. The
+   frontend sorted on the column for months and Quick access went empty.
+
+131. **The home pane stays mounted, and vault state starts "unlocked".**
+   (`HomePane.svelte`, `vaultState.svelte.ts`) The detail pane is not
+   unmounted while Settings is open, so state read once at mount (sync,
+   backup) goes stale after a change there. `vaultState.status` is
+   "unlocked" until the first poll (`loading` true), so reading a secret's
+   presence then (the sync passphrase is in the vault) can see none and
+   never retry. Gate on `!vaultState.loading`, and re-read when
+   `view.tab` comes back to the view. Overlapping loads (mount, events,
+   pulls) keep only the newest answer: a sequence number per loader.
 
 ---
 
