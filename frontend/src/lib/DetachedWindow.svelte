@@ -225,8 +225,25 @@
   // for a few hundred ms would be lost and an older snapshot restored. The
   // JSON comparison keeps unchanged reruns off the wire.
   let lastSaved = "";
-  // Each save waits for the one before it, so the newest lands last.
-  let saving: Promise<void> = Promise.resolve();
+  // One save in flight at a time, and only the newest snapshot waits
+  // behind it: saves cannot land out of order, and a burst of changes
+  // does not queue stale snapshots ahead of the last one.
+  let pending: string | null = null;
+  let inFlight = false;
+  async function pumpSaves() {
+    if (inFlight) return;
+    inFlight = true;
+    while (pending !== null) {
+      const json = pending;
+      pending = null;
+      try {
+        await api.detachedSessionSave(windowName, json);
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+    inFlight = false;
+  }
   $effect(() => {
     if (recovering) return;
     // Read the snapshot here so every tab, pane and session it covers is
@@ -234,7 +251,8 @@
     const json = JSON.stringify(serializeOpenTabs());
     if (json === lastSaved) return;
     lastSaved = json;
-    saving = saving.then(() => api.detachedSessionSave(windowName, json)).catch(console.warn);
+    pending = json;
+    void pumpSaves();
   });
 
   async function redock() {
