@@ -1838,6 +1838,8 @@ Microsoft SQL Server and Azure SQL. What differs:
 - **The address names the port.** Named instances are not looked up (the
   SQL Browser service is UDP, which no tunnel carries): give the
   instance's port.
+- **Azure SQL Database** reaches only the database you log in to (no `USE`
+  of another), so that is the one the tree lists: put it in **Database**.
 - **GO ends a batch.** A line holding only `GO` separates statements like
   `;` does. A `DECLARE` (its variables last the batch), a `BEGIN ... END`
   block, an `IF` / `WHILE` and a `CREATE PROCEDURE / FUNCTION / TRIGGER` run
