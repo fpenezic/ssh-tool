@@ -79,8 +79,9 @@ func Split(engine, script string) []Stmt {
 }
 
 // maxGoCount bounds GO's repeat count: the batch is copied that many
-// times into the statement list.
-const maxGoCount = 1000
+// times into the statement list. A larger count is not cut short: the
+// line is then no separator, and the server refuses the GO in the batch.
+const maxGoCount = 100000
 
 // terminatorLine reports a line at i that ends a statement or batch: "/"
 // on Oracle, GO on SQL Server, which may carry a repeat count (count, at
@@ -104,10 +105,10 @@ func terminatorLine(engine, s string, i int) (n, count int, ok bool) {
 	count = 1
 	if len(f) == 2 {
 		c, err := strconv.Atoi(f[1])
-		if err != nil || c < 1 {
+		if err != nil || c < 1 || c > maxGoCount {
 			return n, 0, false
 		}
-		count = min(c, maxGoCount)
+		count = c
 	}
 	return n, count, true
 }
