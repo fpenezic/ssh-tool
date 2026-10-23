@@ -18,6 +18,11 @@ The Database tab now speaks Oracle and SQL Server, both with pure-Go drivers: no
 - Both run through the connection's SSH session like the other engines, Stop cancels a running statement and keeps the session, and the LLM bridge (MCP) reaches them the same way.
 - What a statement prints (`DBMS_OUTPUT`, `PRINT`) now shows under a result without rows too.
 
+### Network profiles
+
+- The "plugin is not installed" note on a new NetBird, Tailscale, OpenConnect, OpenVPN or Check Point profile now has an **Install it** link that opens the plugin list and flashes that plugin. The list's first row, which held the plugins and the app proxy as **General**, is now **Plugins & proxy**.
+- The OpenConnect plugin card showed its engine as `(devel)`; it now reads `0.1.0 (patched)`, the upstream version our patched copy is based on.
+
 ---
 
 ## [0.118.0] - Home pane, connect stages and MTU hints
