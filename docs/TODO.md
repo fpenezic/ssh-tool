@@ -264,8 +264,8 @@ plugin).
   local users read them (`ps`), nor into a file anyone else can read:
   hand them over through the OS's own store (the Windows phonebook
   credentials via the RAS API, the macOS keychain item of the VPN
-  service), or on stdin (`nmcli --ask` / a `passwd-file` that is a pipe
-  or a 0600 file removed right after). `rasdial user pass` and `scutil
+  service), and on Linux a `passwd-file` that is a pipe (`/dev/fd/N`) or
+  a 0600 file removed right after, or NetworkManager's secret-agent API. `rasdial user pass` and `scutil
   --password / --secret` are exactly what not to do. Not
   every Linux has NetworkManager - Ubuntu Server (netplan +
   systemd-networkd), minimal installs, connman / iwd setups - so the kind
