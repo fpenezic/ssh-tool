@@ -220,31 +220,19 @@
   // This window's share of the last session: its open tabs, handed to the
   // backend on every change. The backend keeps them only if the app quits
   // with this window open (a close by hand or a redock forgets them).
-  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  // Sent at once, not debounced: once the quit has begun the backend takes
+  // no more saves (the tabs are being torn down then), so a save held back
+  // for a few hundred ms would be lost and an older snapshot restored. The
+  // JSON comparison keeps unchanged reruns off the wire.
   let lastSaved = "";
-  function saveTabs() {
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-    }
-    const json = JSON.stringify(serializeOpenTabs());
-    if (json === lastSaved) return;
-    lastSaved = json;
-    api.detachedSessionSave(windowName, json).catch(console.warn);
-  }
   $effect(() => {
     if (recovering) return;
     // Read the snapshot here so every tab, pane and session it covers is
     // a dependency of this effect.
     const json = JSON.stringify(serializeOpenTabs());
     if (json === lastSaved) return;
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(saveTabs, 300);
-  });
-  onMount(() => {
-    const flush = () => saveTabs();
-    window.addEventListener("pagehide", flush);
-    return () => window.removeEventListener("pagehide", flush);
+    lastSaved = json;
+    api.detachedSessionSave(windowName, json).catch(console.warn);
   });
 
   async function redock() {

@@ -253,7 +253,14 @@ class WorkspaceStore {
     if (this.opening.has(id)) return; // a second click while it connects
     const already = this.tabsOf(id);
     if (already.length && opts.newWindow) {
-      await detachTabsToWindow(already);
+      // Held while the window opens: a second click must not move the
+      // same tabs twice.
+      this.opening.add(id);
+      try {
+        await detachTabsToWindow(already);
+      } finally {
+        this.opening.delete(id);
+      }
       if (this.activeId === id) this.activeId = null;
       return;
     }
@@ -284,25 +291,27 @@ class WorkspaceStore {
     // so one dead host costs a pane rather than the whole tab.
     beginRestore();
     this.opening.add(id);
-    let built: PaneTab[] = [];
     try {
       // Bound for a new window: built hidden here, so they do not show up
       // in this window on the way.
-      built = await this.restoreTabs(id, tabs, !!opts.newWindow);
+      const built = await this.restoreTabs(id, tabs, !!opts.newWindow);
+      if (opts.newWindow && built.length) {
+        try {
+          await detachTabsToWindow(built);
+        } catch (e) {
+          // The window did not open: the tabs stay here, shown and
+          // focused, as a plain open.
+          for (const t of built) paneTabs.setHidden(t.tabId, false);
+          paneTabs.activateTab(built[0].tabId);
+          this.activeId = id;
+          view.setTab("terminal");
+          throw e;
+        }
+      } else this.activeId = id;
     } finally {
+      // Held until the tabs have reached their window.
       this.opening.delete(id);
     }
-    if (opts.newWindow && built.length) {
-      try {
-        await detachTabsToWindow(built);
-      } catch (e) {
-        // The window did not open: the tabs stay here, shown, as a plain open.
-        for (const t of built) paneTabs.setHidden(t.tabId, false);
-        this.activeId = id;
-        view.setTab("terminal");
-        throw e;
-      }
-    } else this.activeId = id;
     try { await api.workspaceTouchLastOpened(id); } catch { /* ignore */ }
     await this.load();
   }
