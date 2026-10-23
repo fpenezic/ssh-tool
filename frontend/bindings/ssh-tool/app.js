@@ -1352,6 +1352,29 @@ export function DbTabInTx(id, tabKey) {
 }
 
 /**
+ * DetachedSessionSave records a detached window's open tabs (the same
+ * JSON tab specs the main window saves); an empty list forgets it.
+ * @param {string} window
+ * @param {string} tabs
+ * @returns {$CancellablePromise<void>}
+ */
+export function DetachedSessionSave(window, tabs) {
+    return $Call.ByID(3296684392, window, tabs);
+}
+
+/**
+ * DetachedSessionTake returns the windows the last session left open, one
+ * JSON tab-spec list each, and forgets them: the restore opens them under
+ * new names, and those save themselves again.
+ * @returns {$CancellablePromise<string[]>}
+ */
+export function DetachedSessionTake() {
+    return $Call.ByID(70116470).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType1($result);
+    }));
+}
+
+/**
  * DownloadUpdate re-resolves the newest release at download time and streams
  * its asset into a staging slot next to the running binary, verifying its
  * sha256 against the manifest value before any swap. It deliberately takes no
@@ -3852,9 +3875,10 @@ export function RequestAttention() {
 }
 
 /**
- * RevealInMainWindow brings the main window forward and has it select a
- * connection or folder in its tree ("reveal_in_tree"): a detached window
- * has no tree of its own, so its "edit this connection" button asks here.
+ * RevealInMainWindow brings the main window forward and has it show what a
+ * detached window asked for ("reveal_in_tree"): a connection or folder in
+ * the tree, a Settings section, a network profile. A detached window has
+ * no tree and no Settings of its own.
  * @param {string} kind
  * @param {string} id
  * @returns {$CancellablePromise<void>}

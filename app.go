@@ -251,6 +251,8 @@ type App struct {
 	// slot before close so the disconnect is a no-op there.
 	detachedMu       sync.Mutex
 	detachedSessions map[string][]string
+	// detachedGone: detached windows closed for good (detached_session.go).
+	detachedGone map[string]bool
 
 	// Auto-sync loop state (sync_auto.go). lastRemoteCheck paces the
 	// periodic "is the remote ahead" poll; notifiedGen dedupes the
@@ -301,6 +303,10 @@ type App struct {
 	quitConfirmed atomic.Bool
 	// quitDone makes the quit teardown (quitSteps) run once.
 	quitDone atomic.Bool
+	// appClosing is set once the app is on its way out (the main window
+	// closes or a quit is let through): a detached window closing after
+	// that keeps its share of the last session (detached_session.go).
+	appClosing atomic.Bool
 
 	// mainWindow is the primary application window. main.go writes
 	// it after construction so the tray + IPCs can address it.
@@ -5103,9 +5109,10 @@ func (a *App) HideToTray() {
 	a.windowHidden.Store(true)
 }
 
-// RevealInMainWindow brings the main window forward and has it select a
-// connection or folder in its tree ("reveal_in_tree"): a detached window
-// has no tree of its own, so its "edit this connection" button asks here.
+// RevealInMainWindow brings the main window forward and has it show what a
+// detached window asked for ("reveal_in_tree"): a connection or folder in
+// the tree, a Settings section, a network profile. A detached window has
+// no tree and no Settings of its own.
 func (a *App) RevealInMainWindow(kind, id string) {
 	a.ShowAndFocusMainWindow()
 	EventsEmit("reveal_in_tree", map[string]string{"kind": kind, "id": id})
@@ -7765,6 +7772,11 @@ func (a *App) WindowDetachTabAt(tabID string, screenX, screenY int, sessions str
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		w.OnWindowEvent(events.Common.WindowClosing, func(_ *application.WindowEvent) {
+			// Closed by hand: its tabs are not part of the next start.
+			// Closed by the quit: they are.
+			if !a.quitting() {
+				a.detachedSessionDrop(name)
+			}
 			a.detachedMu.Lock()
 			ids := a.detachedSessions[name]
 			delete(a.detachedSessions, name)
@@ -7853,6 +7865,8 @@ func (a *App) WindowCloseSelf(windowName string) {
 	a.detachedMu.Lock()
 	delete(a.detachedSessions, windowName)
 	a.detachedMu.Unlock()
+	// Redocked or emptied: nothing of it to bring back at the next start.
+	a.detachedSessionDrop(windowName)
 	if w, ok := a.app.Window.GetByName(windowName); ok {
 		w.Close()
 	}

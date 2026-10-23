@@ -32,10 +32,11 @@ import (
 // match is exact, so bumping v1 to v2 in the frontend silently moved the
 // open-tab snapshot back into the synced store until v2 was added here.
 var localStateKeys = map[string]bool{
-	"last_session_tabs_v1":    true, // open-tab snapshot (pre-splits format)
-	"last_session_tabs_v2":    true, // open-tab snapshot, written on every tab change
-	"window_state_v1":         true, // window geometry, written on move/resize
-	"settings_active_section": true, // last viewed Settings section
+	"last_session_tabs_v1":     true, // open-tab snapshot (pre-splits format)
+	"last_session_tabs_v2":     true, // open-tab snapshot, written on every tab change
+	"last_session_detached_v1": true, // detached windows' open tabs (detached_session.go)
+	"window_state_v1":          true, // window geometry, written on move/resize
+	"settings_active_section":  true, // last viewed Settings section
 	// The local shell and where it starts name paths and shells of THIS
 	// machine: a WSL path or pwsh means nothing on the Mac that pulls it.
 	"local_shell_dir":  true,

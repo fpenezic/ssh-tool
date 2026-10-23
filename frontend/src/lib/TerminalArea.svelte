@@ -22,6 +22,7 @@
   import Icon from "./Icon.svelte";
   import BroadcastManager from "./BroadcastManager.svelte";
   import { setTabDetachDragImage } from "./dragImage";
+  import { detachTabsToWindow } from "./detachTabs";
   import { onMount, onDestroy } from "svelte";
   import { EventsOn } from "./wailsRuntime";
   import { appPrefs } from "./appPrefs.svelte";
@@ -410,7 +411,18 @@
     if (before && ids.includes(before)) return;
     for (const id of ids) paneTabs.moveTabBefore(id, before);
   }
-  function endWsDrag() {
+  // A workspace label dropped outside the window takes the whole
+  // workspace to a new window, the way a tab is torn off.
+  function endWsDrag(e?: DragEvent) {
+    const ws = draggingWs;
+    if (e && ws && !isDetachedWindow) {
+      const outside = e.clientX < 0 || e.clientX > window.innerWidth || e.clientY < 0 || e.clientY > window.innerHeight;
+      if (outside) {
+        const tabs = paneTabs.tabs.filter((t) => t.workspaceId === ws);
+        if (workspaces.activeId === ws) workspaces.activeId = null;
+        void detachTabsToWindow(tabs, e.screenX, e.screenY).catch(console.error);
+      }
+    }
     draggingWs = null;
     tabReorderIndicator = null;
     wsLabelEdge = null;
@@ -799,12 +811,15 @@
     return tab ? encodePaneLayout(tab) : "";
   }
 
-  async function detachTab(tabId: string) {
-    const sessions = tabSessionIds(tabId);
-    const layout = tabLayoutBlob(tabId);
-    paneTabs.removeTab(tabId);
+  // Detach a tab, or the whole multi-selection it is part of, into one new
+  // window (at the drag's end point when given).
+  async function detachTab(tabId: string, screenX = 0, screenY = 0) {
+    const tabs = ctxTargets(tabId)
+      .map((id) => paneTabs.tabs.find((t) => t.tabId === id))
+      .filter((t): t is NonNullable<typeof t> => !!t);
+    tabSelection.clear();
     try {
-      await api.windowDetachTab(tabId, sessions, layout);
+      await detachTabsToWindow(tabs, screenX, screenY);
     } catch (e) {
       console.error("detach failed", e);
     }
@@ -1202,7 +1217,7 @@
               if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
             } catch { /* ignore */ }
           }}
-          ondragend={endWsDrag}
+          ondragend={(e: DragEvent) => endWsDrag(e)}
           ondragover={(e: DragEvent) => {
             if (draggingWs) {
               if (draggingWs === ws) return;
@@ -1387,7 +1402,8 @@
           // ghost image with a pill that reads "Detach: <name>".
           // Pairs with effectAllowed='move' so the cursor reads as
           // a copy/move hint instead of a forbidden one.
-          setTabDetachDragImage(e.dataTransfer, t.title || t.tabId.slice(0, 6));
+          const dragN = isDetachedWindow ? 1 : ctxTargets(t.tabId).length;
+          setTabDetachDragImage(e.dataTransfer, dragN > 1 ? `${dragN} tabs` : t.title || t.tabId.slice(0, 6));
           // Custom MIME so other apps don't interpret the drag as
           // something they can accept (Chrome would treat text/plain
           // as "open as new tab" and show a green plus over its
@@ -1423,12 +1439,7 @@
           } else {
             const outside = e.clientX < 0 || e.clientX > window.innerWidth ||
                             e.clientY < 0 || e.clientY > window.innerHeight;
-            if (tabId && outside) {
-              const sids = tabSessionIds(tabId);
-              const layout = tabLayoutBlob(tabId);
-              paneTabs.removeTab(tabId);
-              api.windowDetachTabAt(tabId, e.screenX, e.screenY, sids, layout).catch(console.error);
-            }
+            if (tabId && outside) void detachTab(tabId, e.screenX, e.screenY);
           }
         }}
         oncontextmenu={(e) => openCtxMenu(e, t.tabId)}
@@ -1738,7 +1749,7 @@
       {/if}
       <div class="ctx-sep"></div>
       <button onclick={() => { detachTab(ctxMenu!.tabId); closeCtxMenu(); }}>
-        <IconPopOut size={13} /> Detach to new window
+        <IconPopOut size={13} /> {ctxTargets(ctxMenu.tabId).length > 1 ? `Detach ${ctxTargets(ctxMenu.tabId).length} tabs to a new window` : "Detach to new window"}
       </button>
       {#if shareBridge.enabled}
         <button onclick={() => { openShareDialog(ctxMenu!.tabId); closeCtxMenu(); }}>
