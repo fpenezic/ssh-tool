@@ -5103,6 +5103,14 @@ func (a *App) HideToTray() {
 	a.windowHidden.Store(true)
 }
 
+// RevealInMainWindow brings the main window forward and has it select a
+// connection or folder in its tree ("reveal_in_tree"): a detached window
+// has no tree of its own, so its "edit this connection" button asks here.
+func (a *App) RevealInMainWindow(kind, id string) {
+	a.ShowAndFocusMainWindow()
+	EventsEmit("reveal_in_tree", map[string]string{"kind": kind, "id": id})
+}
+
 // ShowAndFocusMainWindow raises the main window to the foreground: un-hides
 // it from the tray, restores it if minimised, and gives it focus. This is
 // what a clicked OS notification calls so the prompt (or update dialog) the

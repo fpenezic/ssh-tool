@@ -23,6 +23,10 @@ The Database tab now speaks Oracle and SQL Server, both with pure-Go drivers: no
 - The "plugin is not installed" note on a new NetBird, Tailscale, OpenConnect, OpenVPN or Check Point profile now has an **Install it** link that opens the plugin list and flashes that plugin. The list's first row, which held the plugins and the app proxy as **General**, is now **Plugins & proxy**.
 - The OpenConnect plugin card showed its engine as `(devel)`; it now reads `0.1.0 (patched)`, the upstream version our patched copy is based on.
 
+### Fixes
+
+- **Edit this connection** (the settings button in a pane's header) did nothing in a detached window, which has no connection tree. It now brings the main window forward with that connection selected and its settings open.
+
 ---
 
 ## [0.118.0] - Home pane, connect stages and MTU hints

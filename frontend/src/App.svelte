@@ -306,6 +306,12 @@
   // already exists here too (via sshActiveSessions); the redock signal
   // is mostly cosmetic for now but the hook is wired for future
   // session-routing finesse.
+  // A detached window's "edit this connection" (RevealInMainWindow): the
+  // main window has the tree, so it selects the connection there.
+  if (!isDetached) {
+    EventsOn<{ kind: "folder" | "connection"; id: string }>("reveal_in_tree", ({ kind, id }) => view.reveal(kind, id));
+  }
+
   if (!isDetached) {
     EventsOn<{ tabId: string; sessions: string; layout: string }>("window_redock", async ({ sessions: sids, layout: layoutBlob }) => {
       const sessionIds = sids ? sids.split(",") : [];
