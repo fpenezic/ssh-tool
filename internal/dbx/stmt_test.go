@@ -264,6 +264,9 @@ func TestSplitOracle(t *testing.T) {
 		// q-quotes, and no backslash escape.
 		{"SELECT q'[a;'b]' FROM DUAL; SELECT Nq'{;}' FROM DUAL; SELECT 'a\\'; SELECT 2 FROM DUAL",
 			[]string{"SELECT q'[a;'b]' FROM DUAL", "SELECT Nq'{;}' FROM DUAL", "SELECT 'a\\'", "SELECT 2 FROM DUAL"}},
+		// WITH FUNCTION carries PL/SQL: a block to the "/" line.
+		{"WITH FUNCTION f RETURN NUMBER IS BEGIN RETURN 1; END;\nSELECT f FROM DUAL\n/\nSELECT 2 FROM DUAL",
+			[]string{"WITH FUNCTION f RETURN NUMBER IS BEGIN RETURN 1; END;\nSELECT f FROM DUAL", "SELECT 2 FROM DUAL"}},
 		// A "/" in an expression is division.
 		{"SELECT 4\n/ 2 FROM DUAL", []string{"SELECT 4\n/ 2 FROM DUAL"}},
 	}
@@ -349,6 +352,12 @@ func TestIsTxControlOracleMSSQL(t *testing.T) {
 		{EngineMSSQL, "SAVE TRAN a", true},
 		{EngineMSSQL, "BEGIN SELECT 1 END", false},
 		{EngineMSSQL, "ROLLBACK", true},
+		// A batch that opens one half way; a string or a routine body does not.
+		{EngineMSSQL, "DECLARE @x int; BEGIN TRAN; UPDATE t SET a = 1", true},
+		{EngineMSSQL, "IF 1 = 1 BEGIN COMMIT END", true},
+		{EngineMSSQL, "DECLARE @s nvarchar(20) = 'BEGIN TRAN'; SELECT @s", false},
+		{EngineMSSQL, "CREATE OR ALTER PROC p AS BEGIN BEGIN TRAN; COMMIT; END", false},
+		{EngineMSSQL, "UPDATE t SET note = 'rollback'", false},
 	}
 	for _, c := range cases {
 		if got := IsTxControl(c.engine, c.stmt); got != c.want {

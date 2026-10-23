@@ -191,6 +191,11 @@ func TestIntegrationOracle(t *testing.T) {
 
 	// A break reaches the server in band (no TCP urgent data through a
 	// tunnel): a running query stops, DBMS_SESSION.SLEEP would not.
+	// WITH FUNCTION: a block too, its semicolons stay inside.
+	if r := mustRun(t, sess, "WITH FUNCTION f RETURN NUMBER IS BEGIN RETURN 7; END;\nSELECT f FROM DUAL\n/"); *r[0].Rows[0][0] != "7" {
+		t.Fatalf("with function: %+v", r[0])
+	}
+
 	itCancel(t, sess, "SELECT COUNT(*) FROM ALL_OBJECTS a, ALL_OBJECTS b, ALL_OBJECTS c", "SELECT 1 FROM DUAL")
 
 	ro := s.open(t, true)

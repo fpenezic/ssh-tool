@@ -106,10 +106,17 @@ func (e *msEngine) databases(ctx context.Context) ([]Database, error) {
 		return nil, err
 	}
 	// Sizes from sys.master_files need VIEW ANY DEFINITION; a login
-	// without it sees -1. Databases the login cannot enter are left out.
+	// without it sees -1. Azure SQL Database (engine edition 5) has no
+	// sys.master_files at all: the query would not compile there. Databases
+	// the login cannot enter are left out.
+	var edition int64
+	_ = db.QueryRowContext(ctx, `SELECT CAST(SERVERPROPERTY('EngineEdition') AS int)`).Scan(&edition)
+	size := `COALESCE((SELECT SUM(CAST(f.size AS bigint)) * 8192 FROM sys.master_files f WHERE f.database_id = d.database_id), -1)`
+	if edition == 5 {
+		size = `CAST(-1 AS bigint)`
+	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT d.name, d.database_id,
-		       COALESCE((SELECT SUM(CAST(f.size AS bigint)) * 8192 FROM sys.master_files f WHERE f.database_id = d.database_id), -1)
+		SELECT d.name, d.database_id, `+size+`
 		FROM sys.databases d
 		WHERE HAS_DBACCESS(d.name) = 1 AND d.state = 0
 		ORDER BY d.name`)
