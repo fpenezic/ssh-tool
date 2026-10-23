@@ -85,7 +85,7 @@ func Split(engine, script string) []Stmt {
 const maxGoStatements = 100000
 
 func goFits(stmts, count int) bool {
-	return count <= 1 || stmts*count <= maxGoStatements
+	return count <= 1 || stmts <= maxGoStatements/count // no overflow on 32-bit
 }
 
 // pending is 1 when text still holds a statement to emit.
