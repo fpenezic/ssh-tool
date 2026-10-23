@@ -156,6 +156,13 @@ func blockStmt(engine, stmt string) bool {
 	return false
 }
 
+// msVarSigil: on SQL Server a word may start with @ (a variable, @@ a
+// function) or # (a temp table); it stays on the word, so @rollback is not
+// ROLLBACK.
+func msVarSigil(engine string, r rune) bool {
+	return engine == EngineMSSQL && (r == '@' || r == '#')
+}
+
 // msRoutine reports a CREATE / ALTER of a procedure, function or trigger:
 // its body is stored, not run.
 func msRoutine(engine, stmt string) bool {
@@ -181,7 +188,7 @@ func leadWords(engine, stmt string, n int) []string {
 	code := codeOnly(engine, stmt)
 	start := -1
 	for i := 0; i <= len(code) && (n < 0 || len(out) < n); i++ {
-		if i < len(code) && (code[i] == '_' || unicode.IsLetter(rune(code[i])) || unicode.IsDigit(rune(code[i]))) {
+		if i < len(code) && (code[i] == '_' || unicode.IsLetter(rune(code[i])) || unicode.IsDigit(rune(code[i])) || (start < 0 && msVarSigil(engine, rune(code[i])))) {
 			if start < 0 {
 				start = i
 			}
@@ -480,7 +487,7 @@ func codeWords(engine, stmt string) map[string]bool {
 	code := strings.ToUpper(codeOnly(engine, stmt))
 	start := -1
 	for i, r := range code {
-		if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) {
+		if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) || (start < 0 && msVarSigil(engine, r)) {
 			if start < 0 {
 				start = i
 			}

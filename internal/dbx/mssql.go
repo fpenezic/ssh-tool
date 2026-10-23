@@ -106,20 +106,22 @@ func (e *msEngine) databases(ctx context.Context) ([]Database, error) {
 		return nil, err
 	}
 	// Sizes from sys.master_files need VIEW ANY DEFINITION; a login
-	// without it sees -1. Azure SQL Database (engine edition 5) has no
-	// sys.master_files at all: the query would not compile there. Databases
-	// the login cannot enter are left out.
-	var edition int64
-	_ = db.QueryRowContext(ctx, `SELECT CAST(SERVERPROPERTY('EngineEdition') AS int)`).Scan(&edition)
-	size := `COALESCE((SELECT SUM(CAST(f.size AS bigint)) * 8192 FROM sys.master_files f WHERE f.database_id = d.database_id), -1)`
-	if edition == 5 {
-		size = `CAST(-1 AS bigint)`
-	}
-	rows, err := db.QueryContext(ctx, `
-		SELECT d.name, d.database_id, `+size+`
+	// without it sees -1. Databases the login cannot enter are left out.
+	q := `
+		SELECT d.name, d.database_id,
+		       COALESCE((SELECT SUM(CAST(f.size AS bigint)) * 8192 FROM sys.master_files f WHERE f.database_id = d.database_id), -1)
 		FROM sys.databases d
 		WHERE HAS_DBACCESS(d.name) = 1 AND d.state = 0
-		ORDER BY d.name`)
+		ORDER BY d.name`
+	var edition int64
+	_ = db.QueryRowContext(ctx, `SELECT CAST(SERVERPROPERTY('EngineEdition') AS int)`).Scan(&edition)
+	if edition == 5 {
+		// Azure SQL Database: a connection reaches its own database only
+		// (no USE, no three-part names to another), and HAS_DBACCESS is
+		// not there either.
+		q = `SELECT DB_NAME(), DB_ID(), CAST(-1 AS bigint)`
+	}
+	rows, err := db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, msErr(err)
 	}

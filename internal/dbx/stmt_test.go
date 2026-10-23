@@ -305,7 +305,7 @@ func TestCheckReadOnlyOracleMSSQL(t *testing.T) {
 	ok := map[string][]string{
 		EngineOracle: {"SELECT * FROM t", "WITH x AS (SELECT 1 a FROM DUAL) SELECT a FROM x", "SELECT 'delete' FROM DUAL"},
 		EngineMSSQL: {"SELECT * FROM t", "SELECT [update], 'drop' FROM t", "WITH x AS (SELECT 1 AS a) SELECT a FROM x",
-			"SELECT update_time FROM t"},
+			"SELECT update_time FROM t", "SELECT @@ROWCOUNT, @delete FROM #exec"},
 	}
 	bad := map[string][]string{
 		EngineOracle: {"DELETE FROM t", "BEGIN NULL; END;", "DECLARE x NUMBER; BEGIN NULL; END;", "EXPLAIN PLAN FOR SELECT 1 FROM DUAL",
@@ -358,6 +358,7 @@ func TestIsTxControlOracleMSSQL(t *testing.T) {
 		{EngineMSSQL, "DECLARE @s nvarchar(20) = 'BEGIN TRAN'; SELECT @s", false},
 		{EngineMSSQL, "CREATE OR ALTER PROC p AS BEGIN BEGIN TRAN; COMMIT; END", false},
 		{EngineMSSQL, "UPDATE t SET note = 'rollback'", false},
+		{EngineMSSQL, "DECLARE @x int; SELECT @rollback", false},
 	}
 	for _, c := range cases {
 		if got := IsTxControl(c.engine, c.stmt); got != c.want {
