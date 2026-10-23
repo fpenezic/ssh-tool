@@ -2417,7 +2417,7 @@ NetBird tailnet) without setting up a system-wide VPN. Everything runs in
 several profiles can be up at once toward different networks.
 
 Manage profiles in **Settings -> Network profiles**: the list on the
-left holds **General** (plugins, defaults, the app proxy), your profiles
+left holds **Plugins & proxy** (plugins, defaults, the app proxy), your profiles
 (a green dot when the tunnel is up, **via proxy** when it is reachable
 through the app proxy) and **New profile**. A profile opens on four tabs:
 **Overview** (mode, idle stop, how many connections and web bookmarks use
@@ -2479,7 +2479,7 @@ NetBird, Tailscale, OpenConnect, OpenVPN and Check Point run as optional **plugi
 helper programs, one per profile, kept out of the app to keep it small
 (and, for OpenConnect and Check Point, because their engines are GPL /
 AGPL licensed). Install them
-under **General -> Plugins** on this page: each is downloaded from the
+under **Plugins & proxy** on this page: each is downloaded from the
 [ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins)
 releases and checked against its sha256 digest before install. The card
 shows the plugin release and the engine version inside it, and an
@@ -2519,7 +2519,7 @@ SOCKS credentials, the same as the SSH dynamic forwards); it closes after
 
 ### App proxy (programs and a CI runner through the VPNs)
 
-The **app proxy** (General -> App proxy) is one SOCKS5 proxy for things
+The **app proxy** (Plugins & proxy -> App proxy) is one SOCKS5 proxy for things
 outside the app - a CI runner, `curl`, a script, a database tool - that
 reaches every profile you mark **Reachable through the app proxy** (a
 profile's Proxy tab). Each address goes through the VPN whose networks

@@ -2480,6 +2480,12 @@
   function npLoadUsage() {
     api.networkProfilesUsage().then((u) => (npUsage = u ?? {})).catch(() => {});
   }
+  // From a "plugin not installed" note: the plugin list, with that
+  // plugin's card scrolled to and flashed.
+  function showPlugin(name: string) {
+    npSelect("general");
+    void flashSetting(`plugin-${name}`);
+  }
   function npSelect(id: string) {
     npSel = id;
     npCancelEdit();
@@ -4036,6 +4042,14 @@
   </div>
 
   {:else if activeSection === "network"}
+  {#snippet missingPlugin(title: string, name: string)}
+    <p class="hint warn-note">
+      The {title} plugin is not installed.
+      <button type="button" class="link-btn" onclick={() => showPlugin(name)}>Install it</button>
+      first (Plugins &amp; proxy, at the top of the list), then create the profile.
+    </p>
+  {/snippet}
+
   {#snippet npForm()}
     <label>
       <span>Name</span>
@@ -4044,10 +4058,7 @@
 
     {#if (npEditingId ? npEditKind : npKind) === "netbird"}
       {#if !nbInstalled}
-        <p class="hint warn-note">
-          The NetBird plugin is not installed. Install it under General > Plugins
-          before creating a NetBird profile.
-        </p>
+        {@render missingPlugin("NetBird", "netbird")}
       {/if}
       <label>
         <span>Management URL <span class="hint inline">(blank = netbird.io cloud)</span></span>
@@ -4104,10 +4115,7 @@
       </div>
     {:else if (npEditingId ? npEditKind : npKind) === "openconnect"}
       {#if !ocInstalled}
-        <p class="hint warn-note">
-          The OpenConnect plugin is not installed. Install it under General > Plugins
-          before creating an OpenConnect profile.
-        </p>
+        {@render missingPlugin("OpenConnect", "openconnect")}
       {/if}
       <div class="oc-form">
         <label class="oc-field">
@@ -4234,10 +4242,7 @@
       </div>
     {:else if (npEditingId ? npEditKind : npKind) === "openvpn"}
       {#if !ovInstalled}
-        <p class="hint warn-note">
-          The OpenVPN plugin is not installed. Install it under General > Plugins
-          before creating an OpenVPN profile.
-        </p>
+        {@render missingPlugin("OpenVPN", "openvpn")}
       {/if}
       <div class="oc-form">
         <div class="oc-field oc-span">
@@ -4304,10 +4309,7 @@
       </div>
     {:else if (npEditingId ? npEditKind : npKind) === "checkpoint"}
       {#if !cpInstalled}
-        <p class="hint warn-note">
-          The Check Point plugin is not installed. Install it under General > Plugins
-          before creating a Check Point profile.
-        </p>
+        {@render missingPlugin("Check Point", "checkpoint")}
       {/if}
       <div class="oc-form">
         <label class="oc-field oc-span" title="The gateway's address, as in Endpoint Security VPN or snx (host, or host:port)">
@@ -4365,10 +4367,7 @@
       </div>
     {:else if (npEditingId ? npEditKind : npKind) === "tailscale"}
       {#if !tsInstalled}
-        <p class="hint warn-note">
-          The Tailscale plugin is not installed. Install it under General > Plugins
-          before creating a Tailscale profile.
-        </p>
+        {@render missingPlugin("Tailscale", "tailscale")}
       {/if}
       <label>
         <span>Control URL <span class="hint inline">(blank = Tailscale's own; set for self-hosted Headscale)</span></span>
@@ -4473,7 +4472,7 @@
     <div class="np-split">
       <nav class="np-list" aria-label="Network profiles">
         <button class="np-row" class:sel={npSel === "general"} onclick={() => npSelect("general")}>
-          <span class="np-row-text"><strong>General</strong><small>plugins, app proxy</small></span>
+          <span class="np-row-text"><strong>Plugins &amp; proxy</strong><small>VPN plugins, app proxy</small></span>
         </button>
         <div class="np-list-sep"></div>
         {#each networkProfiles.list as np (np.id)}
@@ -4499,7 +4498,7 @@
             checksum before install. WireGuard is built in.
           </p>
           {#each plugins as pl (pl.name)}
-            <div class="np-card">
+            <div class="np-card" data-setting={`plugin-${pl.name}`}>
               <div class="np-head">
                 <strong>{pluginTitle(pl.name)}</strong>
                 {#if !pl.supported && !pl.installed}
@@ -4798,7 +4797,7 @@
               <div class="oc-form np-sp-form">
                 <label class="oc-choice oc-span">
                   <input type="checkbox" bind:checked={lp.shared} /> Reachable through the app proxy
-                  <button class="link-btn" onclick={() => npSelect("general")}>(General &gt; App proxy)</button>
+                  <button class="link-btn" onclick={() => npSelect("general")}>(Plugins &amp; proxy &gt; App proxy)</button>
                 </label>
                 <label class="oc-choice oc-span" title="A SOCKS5 proxy for this VPN alone, with its own password; the tunnel comes up on the first connection">
                   <input type="checkbox" bind:checked={lp.enabled} /> Separate proxy for this VPN only
