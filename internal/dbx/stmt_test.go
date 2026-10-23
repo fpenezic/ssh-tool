@@ -283,7 +283,11 @@ func TestSplitMSSQL(t *testing.T) {
 		want   []string
 	}{
 		{"SELECT 1; SELECT [a;b] FROM t; SELECT N'it''s;'", []string{"SELECT 1", "SELECT [a;b] FROM t", "SELECT N'it''s;'"}},
-		{"SELECT 1\nGO\nSELECT 2\n  go 3\nSELECT 3", []string{"SELECT 1", "SELECT 2", "SELECT 3"}},
+		{"SELECT 1\nGO\nSELECT 2\n  go\nSELECT 3", []string{"SELECT 1", "SELECT 2", "SELECT 3"}},
+		// GO n repeats the batch; GO takes a trailing comment.
+		{"SELECT 0\nGO\nINSERT t VALUES (1); SELECT 1\nGO 3 -- three rows\nSELECT 2", []string{"SELECT 0", "INSERT t VALUES (1)", "SELECT 1", "INSERT t VALUES (1)", "SELECT 1", "INSERT t VALUES (1)", "SELECT 1", "SELECT 2"}},
+		{"SELECT 1\nGO -- done\nSELECT 2", []string{"SELECT 1", "SELECT 2"}},
+		{"SELECT 1\nGO x\nSELECT 2", []string{"SELECT 1\nGO x\nSELECT 2"}},
 		// A DECLARE batch, a routine and a BEGIN block run to GO.
 		{"DECLARE @x int; SET @x = 1; SELECT @x\nGO\nSELECT 2", []string{"DECLARE @x int; SET @x = 1; SELECT @x", "SELECT 2"}},
 		{"CREATE OR ALTER PROC p AS BEGIN SELECT 1; SELECT 2; END\nGO", []string{"CREATE OR ALTER PROC p AS BEGIN SELECT 1; SELECT 2; END"}},
@@ -305,16 +309,19 @@ func TestCheckReadOnlyOracleMSSQL(t *testing.T) {
 	ok := map[string][]string{
 		EngineOracle: {"SELECT * FROM t", "WITH x AS (SELECT 1 a FROM DUAL) SELECT a FROM x", "SELECT 'delete' FROM DUAL"},
 		EngineMSSQL: {"SELECT * FROM t", "SELECT [update], 'drop' FROM t", "WITH x AS (SELECT 1 AS a) SELECT a FROM x",
-			"SELECT update_time FROM t", "SELECT @@ROWCOUNT, @delete FROM #exec"},
+			"SELECT update_time FROM t", "SELECT @@ROWCOUNT, @delete FROM #exec",
+			"SELECT a FROM t ORDER BY a OFFSET 10 ROWS FETCH NEXT 5 ROWS ONLY"},
 	}
 	bad := map[string][]string{
 		EngineOracle: {"DELETE FROM t", "BEGIN NULL; END;", "DECLARE x NUMBER; BEGIN NULL; END;", "EXPLAIN PLAN FOR SELECT 1 FROM DUAL",
 			"SELECT * INTO x FROM t", "WITH FUNCTION f RETURN NUMBER IS BEGIN RETURN 1; END; SELECT f FROM DUAL",
-			"WITH d AS (SELECT 1 FROM DUAL) DELETE FROM t", "CALL p()", "LOCK TABLE t IN EXCLUSIVE MODE"},
+			"WITH d AS (SELECT 1 FROM DUAL) DELETE FROM t", "CALL p()", "LOCK TABLE t IN EXCLUSIVE MODE",
+			"SELECT s.NEXTVAL FROM DUAL"},
 		EngineMSSQL: {"DELETE FROM t", "EXEC sp_who", "sp_who", "SELECT 1 DELETE FROM t", "SELECT * INTO #x FROM t",
 			"SELECT 1 EXEC('DROP TABLE t')", "SELECT * FROM OPENQUERY(srv, 'DELETE x')", "SELECT 1 COMMIT",
 			"SELECT * FROM OPENROWSET(BULK 'x', SINGLE_CLOB) b", "WITH x AS (SELECT 1 AS a) MERGE t USING x ON 1=1 WHEN MATCHED THEN DELETE;",
-			"DECLARE @x int", "SHOWPLAN_ALL ON", "SELECT 1 USE master", "SELECT 1 SET IMPLICIT_TRANSACTIONS ON"},
+			"DECLARE @x int", "SHOWPLAN_ALL ON", "SELECT 1 USE master", "SELECT 1 SET IMPLICIT_TRANSACTIONS ON",
+			"SELECT NEXT VALUE FOR dbo.s"},
 	}
 	for eng, list := range ok {
 		for _, s := range list {

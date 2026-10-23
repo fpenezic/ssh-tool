@@ -3,6 +3,7 @@ package dbx
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -44,11 +45,17 @@ func Split(engine, script string) []Stmt {
 		}
 	}
 	blockFrom, block := -1, false
+	batch := 0 // where the statements since the last GO start in out
 	for i := 0; i < len(script); {
 		if i == 0 || script[i-1] == '\n' {
-			if n, ok := terminatorLine(engine, script, i); ok {
+			if n, count, ok := terminatorLine(engine, script, i); ok {
 				emit(i)
-				start, i = n, n
+				// GO n runs the batch n times, as sqlcmd does.
+				one := out[batch:]
+				for k := 1; k < count; k++ {
+					out = append(out, one...)
+				}
+				start, i, batch = n, n, len(out)
 				continue
 			}
 		}
@@ -71,30 +78,38 @@ func Split(engine, script string) []Stmt {
 	return out
 }
 
+// maxGoCount bounds GO's repeat count: the batch is copied that many
+// times into the statement list.
+const maxGoCount = 1000
+
 // terminatorLine reports a line at i that ends a statement or batch: "/"
-// on Oracle, GO (with an optional repeat count, which is ignored) on SQL
-// Server. n is where the next line starts.
-func terminatorLine(engine, s string, i int) (n int, ok bool) {
+// on Oracle, GO on SQL Server, which may carry a repeat count (count, at
+// least 1) and a -- comment. n is where the next line starts.
+func terminatorLine(engine, s string, i int) (n, count int, ok bool) {
 	if engine != EngineOracle && engine != EngineMSSQL {
-		return i, false
+		return i, 0, false
 	}
 	n = lineEnd(s, i)
 	line := strings.TrimSpace(s[i:n])
 	if engine == EngineOracle {
-		return n, line == "/"
+		return n, 1, line == "/"
+	}
+	if j := strings.Index(line, "--"); j >= 0 {
+		line = line[:j]
 	}
 	f := strings.Fields(line)
 	if len(f) == 0 || len(f) > 2 || !strings.EqualFold(f[0], "GO") {
-		return n, false
+		return n, 0, false
 	}
+	count = 1
 	if len(f) == 2 {
-		for _, c := range f[1] {
-			if c < '0' || c > '9' {
-				return n, false
-			}
+		c, err := strconv.Atoi(f[1])
+		if err != nil || c < 1 {
+			return n, 0, false
 		}
+		count = min(c, maxGoCount)
 	}
-	return n, true
+	return n, count, true
 }
 
 // blockStmt reports a statement whose own semicolons do not end it: a
@@ -475,6 +490,10 @@ func sqlIsRead(engine, stmt string) bool {
 		return false
 	case engine == EngineMSSQL && msWriteWord(words) != "":
 		return false
+	case engine == EngineMSSQL && words["NEXT"] && words["VALUE"],
+		engine == EngineOracle && words["NEXTVAL"]:
+		// A sequence moves on in a read, and no rollback takes it back.
+		return false
 	}
 	return true
 }
@@ -538,6 +557,9 @@ func sqlCheckReadOnly(engine, stmt string) error {
 		if w := msWriteWord(codeWords(engine, stmt)); w != "" {
 			return fmt.Errorf("read-only connection: %s is not allowed (T-SQL runs a second statement without a semicolon)", w)
 		}
+	}
+	if w := codeWords(engine, stmt); (engine == EngineMSSQL && w["NEXT"] && w["VALUE"]) || (engine == EngineOracle && w["NEXTVAL"]) {
+		return fmt.Errorf("read-only connection: taking a sequence's next value is a write no rollback undoes")
 	}
 	if engine == EngineOracle && k == "WITH" && !sqlIsRead(engine, stmt) {
 		if w := codeWords(engine, stmt); w["FUNCTION"] || w["PROCEDURE"] {
