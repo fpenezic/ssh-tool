@@ -225,6 +225,8 @@
   // for a few hundred ms would be lost and an older snapshot restored. The
   // JSON comparison keeps unchanged reruns off the wire.
   let lastSaved = "";
+  // Each save waits for the one before it, so the newest lands last.
+  let saving: Promise<void> = Promise.resolve();
   $effect(() => {
     if (recovering) return;
     // Read the snapshot here so every tab, pane and session it covers is
@@ -232,7 +234,7 @@
     const json = JSON.stringify(serializeOpenTabs());
     if (json === lastSaved) return;
     lastSaved = json;
-    api.detachedSessionSave(windowName, json).catch(console.warn);
+    saving = saving.then(() => api.detachedSessionSave(windowName, json)).catch(console.warn);
   });
 
   async function redock() {
