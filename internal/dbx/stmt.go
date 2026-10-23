@@ -98,7 +98,7 @@ func terminatorLine(engine, s string, i int) (n int, ok bool) {
 }
 
 // blockStmt reports a statement whose own semicolons do not end it: a
-// PL/SQL block or stored unit on Oracle; on SQL Server a routine or
+// PL/SQL block, stored unit or WITH FUNCTION query on Oracle; on SQL Server a routine or
 // trigger body, a BEGIN ... END block, an IF / WHILE, and a DECLARE (its
 // variables live as long as the batch, so what follows has to go with
 // it). stmt is the statement so far, from its start.
@@ -115,6 +115,10 @@ func blockStmt(engine, stmt string) bool {
 		switch at(0) {
 		case "DECLARE", "BEGIN":
 			return true
+		case "WITH":
+			// WITH FUNCTION / PROCEDURE: PL/SQL in a query, ended by "/"
+			// like any block (SQL*Plus does the same).
+			return at(1) == "FUNCTION" || at(1) == "PROCEDURE"
 		case "CREATE":
 			i := 1
 			if at(i) == "OR" && at(i+1) == "REPLACE" {
@@ -152,12 +156,31 @@ func blockStmt(engine, stmt string) bool {
 	return false
 }
 
-// leadWords is a statement's first n words of code, upper-cased.
+// msRoutine reports a CREATE / ALTER of a procedure, function or trigger:
+// its body is stored, not run.
+func msRoutine(engine, stmt string) bool {
+	w := leadWords(engine, stmt, 4)
+	if len(w) < 2 || (w[0] != "CREATE" && w[0] != "ALTER") {
+		return false
+	}
+	i := 1
+	if w[0] == "CREATE" && len(w) > 3 && w[1] == "OR" && w[2] == "ALTER" {
+		i = 3
+	}
+	switch w[i] {
+	case "PROCEDURE", "PROC", "FUNCTION", "TRIGGER":
+		return true
+	}
+	return false
+}
+
+// leadWords is a statement's first n words of code, upper-cased; n < 0
+// takes them all.
 func leadWords(engine, stmt string, n int) []string {
 	var out []string
 	code := codeOnly(engine, stmt)
 	start := -1
-	for i := 0; i <= len(code) && len(out) < n; i++ {
+	for i := 0; i <= len(code) && (n < 0 || len(out) < n); i++ {
 		if i < len(code) && (code[i] == '_' || unicode.IsLetter(rune(code[i])) || unicode.IsDigit(rune(code[i]))) {
 			if start < 0 {
 				start = i
@@ -553,8 +576,9 @@ func codeOnly(engine, s string) string {
 
 // IsTxControl reports a statement that opens or ends a transaction
 // (BEGIN, START, COMMIT, END, ROLLBACK, SAVEPOINT, RELEASE, ABORT). On
-// Oracle BEGIN opens a PL/SQL block and on SQL Server only BEGIN TRAN
-// counts.
+// Oracle BEGIN opens a PL/SQL block. On SQL Server only BEGIN TRAN
+// counts, and anywhere in the statement: a DECLARE batch runs as one and
+// can open a transaction half way (a routine's body only defines one).
 func IsTxControl(engine, stmt string) bool {
 	w := leadWords(engine, stmt, 2)
 	second := ""
@@ -571,11 +595,22 @@ func IsTxControl(engine, stmt string) bool {
 		}
 		return false
 	case EngineMSSQL:
-		switch leadKeyword(engine, stmt) {
-		case "COMMIT", "ROLLBACK", "SAVE":
-			return true
-		case "BEGIN":
-			return second == "TRAN" || second == "TRANSACTION" || second == "DISTRIBUTED"
+		words := w
+		if blockStmt(engine, stmt) && !msRoutine(engine, stmt) {
+			words = leadWords(engine, stmt, -1)
+		}
+		for i, k := range words {
+			switch k {
+			case "COMMIT", "ROLLBACK", "SAVE":
+				return true
+			case "BEGIN":
+				if i+1 < len(words) {
+					switch words[i+1] {
+					case "TRAN", "TRANSACTION", "DISTRIBUTED":
+						return true
+					}
+				}
+			}
 		}
 		return false
 	}
