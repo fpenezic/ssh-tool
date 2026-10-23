@@ -5153,6 +5153,17 @@ func (a *App) SetWindowTitle(title string) {
 	a.mainWindow.SetTitle(title)
 }
 
+// SetDetachedWindowTitle is SetWindowTitle for a detached window, found by
+// its name ("detached-<tab>"): the taskbar shows the tab it holds.
+func (a *App) SetDetachedWindowTitle(name, title string) {
+	if a.app == nil || title == "" || !strings.HasPrefix(name, "detached-") {
+		return
+	}
+	if w, ok := a.app.Window.GetByName(name); ok {
+		w.SetTitle(title)
+	}
+}
+
 // ShowFromTray restores the main window.
 func (a *App) ShowFromTray() {
 	if a.mainWindow == nil {

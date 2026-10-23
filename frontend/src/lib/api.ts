@@ -1735,6 +1735,7 @@ export const api = {
     G.WindowAcceptTabDrag() as unknown as Promise<{ tab_id: string; sessions: string; layout: string } | null>,
   windowCancelTabDrag: () => G.WindowCancelTabDrag(),
   revealInMainWindow: (kind: "folder" | "connection", id: string) => G.RevealInMainWindow(kind, id),
+  setDetachedWindowTitle: (name: string, title: string) => G.SetDetachedWindowTitle(name, title),
   windowListTargets: (callerName: string) =>
     G.WindowListTargets(callerName) as unknown as Promise<{ name: string; label: string }[]>,
   windowSendTab: (callerName: string, targetName: string, tabId: string, sessions: string, layout: string) =>
