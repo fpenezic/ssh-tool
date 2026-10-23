@@ -1841,7 +1841,7 @@ Microsoft SQL Server and Azure SQL. What differs:
 - **Azure SQL Database** reaches only the database you log in to (no `USE`
   of another), so that is the one the tree lists: put it in **Database**.
 - **GO ends a batch.** A line holding only `GO` separates statements like
-  `;` does; `GO 5` runs the batch five times, as sqlcmd does. A `DECLARE` (its variables last the batch), a `BEGIN ... END`
+  `;` does; `GO 5` runs the batch five times, as sqlcmd does (up to 100000). A `DECLARE` (its variables last the batch), a `BEGIN ... END`
   block, an `IF` / `WHILE` and a `CREATE PROCEDURE / FUNCTION / TRIGGER` run
   to the next `GO` as one batch. A batch with several result sets shows the
   first and counts the rest; `PRINT` output shows under the result.
