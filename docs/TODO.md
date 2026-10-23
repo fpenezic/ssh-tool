@@ -227,6 +227,27 @@ plugin).
 - **Fortinet, F5, GlobalProtect, Pulse** - supported by the engine and
   selectable, but only AnyConnect / ocserv has been tested against real
   gateways.
+- **OS VPN profile** - a network profile kind that brings up a VPN the
+  operating system already knows (L2TP/IPsec, SSTP, IKEv2, PPTP, a
+  NetworkManager VPN plugin) instead of running one of our own. L2TP/IPsec
+  is the reason: there is no userspace IKEv1 client to build a plugin on,
+  and writing IKEv1 + ESP + L2TP + PPP is a lot of crypto code for a
+  protocol on its way out. The profile picks a connection from the OS's
+  list and does connect / disconnect / status, with the password (and an
+  L2TP pre-shared key) from the vault, so idle stop, "used by" and
+  connect-before-SSH work as for the other kinds.
+  Per platform: Windows `rasdial` (list via `Get-VpnConnection`), macOS
+  `scutil --nc list / start --user --password --secret / stop / status`,
+  Linux `nmcli` (`con show`, `con up ... passwd-file`, `con down`). Not
+  every Linux has NetworkManager - Ubuntu Server (netplan +
+  systemd-networkd), minimal installs, connman / iwd setups - so the kind
+  is offered only where `nmcli` answers, with a **custom commands**
+  variant (up / down / status command lines) for the rest, e.g. a
+  strongSwan + xl2tpd setup. Not on Android / iOS (apps cannot drive the
+  system's VPN profiles).
+  Differs from the other kinds and must say so on the profile: routes
+  are system-wide, so the whole machine's traffic follows them, and the
+  OS may need admin rights the first time the connection is set up.
 
 ---
 
