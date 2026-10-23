@@ -95,11 +95,16 @@ For what's already shipped, see `CHANGELOG.md`.
   that has to raise a VPN (or anything else) before the target is
   reachable. A connection / folder setting, e.g. `sudo
   /usr/local/bin/vpn-up office`, run on the jump host's SSH session
-  (exec channel) before the next hop is dialed; a non-zero exit stops
-  the connect and shows the command's output. The command must be
-  idempotent (exit 0 when the VPN is already up), since others may
-  connect through the same bastion at the same time; `sudo` needs a
-  NOPASSWD rule for that one script.
+  (exec channel) once per bastion connection: when the shared bastion
+  client comes up, before its first target dial; later dials over the
+  same client wait for that run rather than starting their own. It runs
+  under the connect's context with a timeout of its own (a stuck script
+  must not hold the connect forever), its output capped. A non-zero exit
+  stops the connect and shows that output. The command must be
+  idempotent (exit 0 when the VPN is already up) and take a lock of its
+  own (`flock`), since other people may connect through the same bastion
+  at the same time; `sudo` needs a NOPASSWD rule for that one script, and
+  runs non-interactively (`sudo -n`).
   No disconnect hook, on purpose: the app only knows its own sessions,
   and taking the VPN down on a shared bastion would cut everyone else's.
   Stopping belongs on the bastion - a systemd timer that brings the VPN
@@ -244,7 +249,7 @@ plugin).
   selectable, but only AnyConnect / ocserv has been tested against real
   gateways.
 - **OS VPN profile** - a network profile kind that brings up a VPN the
-  operating system already knows (L2TP/IPsec, SSTP, IKEv2, PPTP, a
+  operating system already knows (L2TP/IPsec, SSTP, IKEv2, a
   NetworkManager VPN plugin) instead of running one of our own. L2TP/IPsec
   is the reason: there is no userspace IKEv1 client to build a plugin on,
   and writing IKEv1 + ESP + L2TP + PPP is a lot of crypto code for a
@@ -253,8 +258,14 @@ plugin).
   L2TP pre-shared key) from the vault, so idle stop, "used by" and
   connect-before-SSH work as for the other kinds.
   Per platform: Windows `rasdial` (list via `Get-VpnConnection`), macOS
-  `scutil --nc list / start --user --password --secret / stop / status`,
-  Linux `nmcli` (`con show`, `con up ... passwd-file`, `con down`). Not
+  `scutil --nc list / start / stop / status`, Linux `nmcli` (`con show`,
+  `con up`, `con down`). Secrets never go on a command line, where other
+  local users read them (`ps`), nor into a file anyone else can read:
+  hand them over through the OS's own store (the Windows phonebook
+  credentials via the RAS API, the macOS keychain item of the VPN
+  service), or on stdin (`nmcli --ask` / a `passwd-file` that is a pipe
+  or a 0600 file removed right after). `rasdial user pass` and `scutil
+  --password / --secret` are exactly what not to do. Not
   every Linux has NetworkManager - Ubuntu Server (netplan +
   systemd-networkd), minimal installs, connman / iwd setups - so the kind
   is offered only where `nmcli` answers, with a **custom commands**

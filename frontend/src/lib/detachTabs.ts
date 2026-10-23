@@ -22,7 +22,9 @@ export async function detachTabsToWindow(tabs: PaneTab[], screenX = 0, screenY =
   const sids = [...new Set(tabs.flatMap((t) => paneSessionIds(t.root)))].join(",");
   // A single tab keeps the single-tab blob older windows understand.
   const layout = tabs.length === 1 ? encodePaneLayout(tabs[0]) : encodePaneLayouts(tabs);
-  for (const t of tabs) paneTabs.removeTab(t.tabId);
+  // The tabs leave this window only once the new one is open: a failed
+  // open must not lose them while their sessions run on.
   if (screenX !== 0 || screenY !== 0) await api.windowDetachTabAt(tabs[0].tabId, screenX, screenY, sids, layout);
   else await api.windowDetachTab(tabs[0].tabId, sids, layout);
+  for (const t of tabs) paneTabs.removeTab(t.tabId);
 }

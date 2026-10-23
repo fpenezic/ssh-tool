@@ -12,7 +12,7 @@ import { takeNetworkVia } from "./networkVia";
 // A detached window shows terminals only: no tree, no Settings. What it
 // is asked to reveal or open there goes to the main window instead
 // (RevealInMainWindow -> reveal_in_tree, handled in App.svelte).
-const inDetachedWindow = typeof window !== "undefined" &&
+export const inDetachedWindow = typeof window !== "undefined" &&
   (new URLSearchParams(window.location.search).has("detached") || /[#&?]detached=/.test(window.location.hash));
 import { loudestMcpLevel } from "./mcpLevel";
 

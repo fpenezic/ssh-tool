@@ -11,7 +11,7 @@
   // broadcast manager). Kept lean - full controls remain in their
   // existing pane toolbars.
 
-  import { sessions, paneTabs, view, tree, mcpShared, shareShared } from "./stores.svelte";
+  import { sessions, paneTabs, view, tree, mcpShared, shareShared, inDetachedWindow } from "./stores.svelte";
   import { issues } from "./issues.svelte";
   import IssuesPanel from "./IssuesPanel.svelte";
   import SharePanel from "./SharePanel.svelte";
@@ -143,7 +143,6 @@
 
   // The main window's status bar offers a workspace in a window of its
   // own; a detached window's has no tabs to move out.
-  const inDetachedWindow = new URLSearchParams(window.location.search).has("detached");
 
   async function openWorkspace(id: string, newWindow = false) {
     wsErr = null;
