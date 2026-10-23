@@ -245,3 +245,132 @@ func TestCheckReadOnlyClickHouse(t *testing.T) {
 		t.Error("EXISTS is a read only on ClickHouse")
 	}
 }
+
+func TestSplitOracle(t *testing.T) {
+	cases := []struct {
+		script string
+		want   []string
+	}{
+		{"SELECT 1 FROM DUAL; SELECT 2 FROM DUAL;", []string{"SELECT 1 FROM DUAL", "SELECT 2 FROM DUAL"}},
+		// SQL*Plus "/" ends a statement too.
+		{"SELECT 1 FROM DUAL\n/\nSELECT 2 FROM DUAL", []string{"SELECT 1 FROM DUAL", "SELECT 2 FROM DUAL"}},
+		// A block keeps its semicolons (END; included) up to the "/" line.
+		{"BEGIN\n  x;\n  y;\nEND;\n/\nSELECT 1 FROM DUAL", []string{"BEGIN\n  x;\n  y;\nEND;", "SELECT 1 FROM DUAL"}},
+		{"DECLARE n NUMBER; BEGIN n := 1; END;", []string{"DECLARE n NUMBER; BEGIN n := 1; END;"}},
+		{"CREATE OR REPLACE EDITIONABLE PROCEDURE p IS BEGIN NULL; END;\n  /  \nSELECT 1 FROM DUAL",
+			[]string{"CREATE OR REPLACE EDITIONABLE PROCEDURE p IS BEGIN NULL; END;", "SELECT 1 FROM DUAL"}},
+		// Plain DDL is no block.
+		{"CREATE TABLE t (a NUMBER); CREATE OR REPLACE VIEW v AS SELECT 1 x FROM DUAL;", []string{"CREATE TABLE t (a NUMBER)", "CREATE OR REPLACE VIEW v AS SELECT 1 x FROM DUAL"}},
+		// q-quotes, and no backslash escape.
+		{"SELECT q'[a;'b]' FROM DUAL; SELECT Nq'{;}' FROM DUAL; SELECT 'a\\'; SELECT 2 FROM DUAL",
+			[]string{"SELECT q'[a;'b]' FROM DUAL", "SELECT Nq'{;}' FROM DUAL", "SELECT 'a\\'", "SELECT 2 FROM DUAL"}},
+		// A "/" in an expression is division.
+		{"SELECT 4\n/ 2 FROM DUAL", []string{"SELECT 4\n/ 2 FROM DUAL"}},
+	}
+	for _, c := range cases {
+		if got := texts(Split(EngineOracle, c.script)); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%q:\n got %q\nwant %q", c.script, got, c.want)
+		}
+	}
+}
+
+func TestSplitMSSQL(t *testing.T) {
+	cases := []struct {
+		script string
+		want   []string
+	}{
+		{"SELECT 1; SELECT [a;b] FROM t; SELECT N'it''s;'", []string{"SELECT 1", "SELECT [a;b] FROM t", "SELECT N'it''s;'"}},
+		{"SELECT 1\nGO\nSELECT 2\n  go 3\nSELECT 3", []string{"SELECT 1", "SELECT 2", "SELECT 3"}},
+		// A DECLARE batch, a routine and a BEGIN block run to GO.
+		{"DECLARE @x int; SET @x = 1; SELECT @x\nGO\nSELECT 2", []string{"DECLARE @x int; SET @x = 1; SELECT @x", "SELECT 2"}},
+		{"CREATE OR ALTER PROC p AS BEGIN SELECT 1; SELECT 2; END\nGO", []string{"CREATE OR ALTER PROC p AS BEGIN SELECT 1; SELECT 2; END"}},
+		{"BEGIN TRY SELECT 1; END TRY BEGIN CATCH SELECT 2; END CATCH", []string{"BEGIN TRY SELECT 1; END TRY BEGIN CATCH SELECT 2; END CATCH"}},
+		// BEGIN TRAN is a statement of its own.
+		{"BEGIN TRAN; DELETE FROM t; COMMIT", []string{"BEGIN TRAN", "DELETE FROM t", "COMMIT"}},
+		// GO inside a string or a name is not a separator.
+		{"SELECT '\nGO\n'; SELECT 2", []string{"SELECT '\nGO\n'", "SELECT 2"}},
+		{"/* a /* b; */ c; */ SELECT 1; SELECT 2", []string{"/* a /* b; */ c; */ SELECT 1", "SELECT 2"}},
+	}
+	for _, c := range cases {
+		if got := texts(Split(EngineMSSQL, c.script)); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%q:\n got %q\nwant %q", c.script, got, c.want)
+		}
+	}
+}
+
+func TestCheckReadOnlyOracleMSSQL(t *testing.T) {
+	ok := map[string][]string{
+		EngineOracle: {"SELECT * FROM t", "WITH x AS (SELECT 1 a FROM DUAL) SELECT a FROM x", "SELECT 'delete' FROM DUAL"},
+		EngineMSSQL: {"SELECT * FROM t", "SELECT [update], 'drop' FROM t", "WITH x AS (SELECT 1 AS a) SELECT a FROM x",
+			"SELECT update_time FROM t"},
+	}
+	bad := map[string][]string{
+		EngineOracle: {"DELETE FROM t", "BEGIN NULL; END;", "DECLARE x NUMBER; BEGIN NULL; END;", "EXPLAIN PLAN FOR SELECT 1 FROM DUAL",
+			"SELECT * INTO x FROM t", "WITH FUNCTION f RETURN NUMBER IS BEGIN RETURN 1; END; SELECT f FROM DUAL",
+			"WITH d AS (SELECT 1 FROM DUAL) DELETE FROM t", "CALL p()", "LOCK TABLE t IN EXCLUSIVE MODE"},
+		EngineMSSQL: {"DELETE FROM t", "EXEC sp_who", "sp_who", "SELECT 1 DELETE FROM t", "SELECT * INTO #x FROM t",
+			"SELECT 1 EXEC('DROP TABLE t')", "SELECT * FROM OPENQUERY(srv, 'DELETE x')", "SELECT 1 COMMIT",
+			"SELECT * FROM OPENROWSET(BULK 'x', SINGLE_CLOB) b", "WITH x AS (SELECT 1 AS a) MERGE t USING x ON 1=1 WHEN MATCHED THEN DELETE;",
+			"DECLARE @x int", "SHOWPLAN_ALL ON", "SELECT 1 USE master", "SELECT 1 SET IMPLICIT_TRANSACTIONS ON"},
+	}
+	for eng, list := range ok {
+		for _, s := range list {
+			if err := CheckReadOnly(eng, s); err != nil {
+				t.Errorf("%s %q refused: %v", eng, s, err)
+			}
+			if !IsRead(eng, s) {
+				t.Errorf("%s %q not a read", eng, s)
+			}
+		}
+	}
+	for eng, list := range bad {
+		for _, s := range list {
+			if err := CheckReadOnly(eng, s); err == nil {
+				t.Errorf("%s %q allowed", eng, s)
+			}
+			if IsRead(eng, s) {
+				t.Errorf("%s %q a read", eng, s)
+			}
+		}
+	}
+}
+
+func TestIsTxControlOracleMSSQL(t *testing.T) {
+	cases := []struct {
+		engine, stmt string
+		want         bool
+	}{
+		{EngineOracle, "COMMIT", true},
+		{EngineOracle, "SAVEPOINT a", true},
+		{EngineOracle, "SET TRANSACTION READ ONLY", true},
+		{EngineOracle, "BEGIN NULL; END;", false},
+		{EngineMSSQL, "BEGIN TRAN", true},
+		{EngineMSSQL, "begin transaction x", true},
+		{EngineMSSQL, "SAVE TRAN a", true},
+		{EngineMSSQL, "BEGIN SELECT 1 END", false},
+		{EngineMSSQL, "ROLLBACK", true},
+	}
+	for _, c := range cases {
+		if got := IsTxControl(c.engine, c.stmt); got != c.want {
+			t.Errorf("%s %q = %v", c.engine, c.stmt, got)
+		}
+	}
+}
+
+func TestRedactSecretsOracleMSSQL(t *testing.T) {
+	cases := []struct {
+		engine, in, want string
+	}{
+		{EngineOracle, "CREATE USER app IDENTIFIED BY s3cret DEFAULT TABLESPACE users", "CREATE USER app IDENTIFIED BY '***' DEFAULT TABLESPACE users"},
+		{EngineOracle, `ALTER USER app IDENTIFIED BY "n#w" REPLACE old1`, `ALTER USER app IDENTIFIED BY '***' REPLACE '***'`},
+		{EngineOracle, "ALTER USER app IDENTIFIED BY VALUES 'S:ABC'", "ALTER USER app IDENTIFIED BY VALUES '***'"},
+		{EngineOracle, "CREATE OR REPLACE VIEW v AS SELECT 1 x FROM DUAL", "CREATE OR REPLACE VIEW v AS SELECT 1 x FROM DUAL"},
+		{EngineMSSQL, "CREATE LOGIN app WITH PASSWORD = N'pa''ss', CHECK_POLICY = OFF", "CREATE LOGIN app WITH PASSWORD = '***', CHECK_POLICY = OFF"},
+		{EngineMSSQL, "ALTER LOGIN app WITH PASSWORD = 'new' OLD_PASSWORD = 'old'", "ALTER LOGIN app WITH PASSWORD = '***' OLD_PASSWORD = '***'"},
+	}
+	for _, c := range cases {
+		if got := RedactSecrets(c.engine, c.in); got != c.want {
+			t.Errorf("%s %q:\n got %q\nwant %q", c.engine, c.in, got, c.want)
+		}
+	}
+}

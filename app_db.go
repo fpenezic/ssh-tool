@@ -208,6 +208,11 @@ func (a *App) dbOpen(connectionID, targetID string, login *[2]string) (*DbHandle
 		}
 		cfg.Dial = a.viaDial(settings)
 	}
+	if settings.DbEngine == dbx.EngineOracle {
+		// Oracle's Database setting is the service to log in to, not a
+		// schema: the tabs start on the login's own schema.
+		dh.info.Database = ""
+	}
 	h, err := dbx.Open(cfg)
 	if err != nil {
 		if dh.lazy != nil {

@@ -256,8 +256,8 @@
     },
     {
       "icon": "database",
-      "title": "PostgreSQL, MySQL, ClickHouse, OpenSearch and Redis, through the SSH host",
-      "body": "Turn on the database on a connection and get a Database tab for PostgreSQL, MySQL / MariaDB, ClickHouse, OpenSearch / Elasticsearch (Kibana console requests and SQL) or Redis (keys by prefix, redis-cli commands): databases, tables with structure and DDL, query tabs with their own sessions (and transactions on PostgreSQL and MySQL), Ctrl+Enter on the statement under the cursor, a results grid that stays fast at 100k rows, CSV and JSON export. Through SSH, connections ride the connection's SSH session - a server on the host's loopback needs no port forward. Read-only mode enforced in the backend, LLM access over MCP (queries always read-only)."
+      "title": "PostgreSQL, MySQL, Oracle, SQL Server, ClickHouse, OpenSearch and Redis, through the SSH host",
+      "body": "Turn on the database on a connection and get a Database tab for PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, ClickHouse, OpenSearch / Elasticsearch (Kibana console requests and SQL) or Redis (keys by prefix, redis-cli commands): databases, tables with structure and DDL, query tabs with their own sessions (and transactions on PostgreSQL, MySQL and SQL Server; PL/SQL blocks and GO batches), Ctrl+Enter on the statement under the cursor, a results grid that stays fast at 100k rows, CSV and JSON export. Through SSH, connections ride the connection's SSH session - a server on the host's loopback needs no port forward. Read-only mode enforced in the backend, LLM access over MCP (queries always read-only)."
     },
     {
       "icon": "globe",

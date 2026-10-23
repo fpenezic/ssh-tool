@@ -1930,7 +1930,8 @@ export class InheritableSettings {
         }
         if (/** @type {any} */(false)) {
             /**
-             * DbEngine is "postgres", "mysql" (MySQL and MariaDB) or "clickhouse".
+             * DbEngine is "postgres", "mysql" (MySQL and MariaDB), "clickhouse",
+             * "opensearch", "redis", "oracle" or "mssql" (dbx.Engine*).
              * @member
              * @type {string | null | undefined}
              */

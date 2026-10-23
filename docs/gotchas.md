@@ -2041,6 +2041,27 @@ everything mobile is behind a build tag or an `isMobile` check.
    `view.tab` comes back to the view. Overlapping loads (mount, events,
    pulls) keep only the newest answer: a sequence number per loader.
 
+132. **go-ora over an SSH channel: deadlines, breaks, OUT strings.**
+   (`internal/dbx/oracle.go`) go-ora gives up a connection whose
+   `SetDeadline` fails, and an SSH channel refuses every deadline: the
+   dialed conn is wrapped (`noDeadlineConn`) to ignore them. Cancel is a
+   break sent in band (no TCP urgent data through a tunnel): a query
+   stops, a `DBMS_SESSION.SLEEP` runs to its end - test Stop with a heavy
+   query, not a sleep. An OUT string bind needs `go_ora.Out{Size: n}`;
+   `sql.Out` binds it zero-sized and `DBMS_OUTPUT.GET_LINE` fails
+   silently. Sessions autocommit (go-ora commits DML outside a `Tx`), so a
+   read-only run goes through `BeginTx` + `SET TRANSACTION READ ONLY`.
+
+133. **SQL Server: `encrypt=false` still checks the certificate, and T-SQL
+   needs no semicolon.** (`internal/dbx/mssql.go`, `stmt.go`) go-mssqldb
+   encrypts the login under `encrypt=false` and verifies the server
+   certificate for it: without `TrustServerCertificate=true` a
+   self-signed server fails with "certificate is not valid for any
+   names". T-SQL runs `SELECT 1 DELETE FROM t` as two statements, so the
+   lead keyword says nothing: read-only refuses any of `msWriteWords` in
+   the code, and there is no read-only transaction behind it. A cancelled
+   batch ends without an error of its own - `msRead` reports the context's.
+
 ---
 
 # Archive

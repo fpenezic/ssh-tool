@@ -1,6 +1,7 @@
 // Package dbx is the SQL client behind a connection's Database tab:
 // databases, tables and their structure, browsing rows, and query sessions
-// for PostgreSQL, MySQL / MariaDB and ClickHouse, and indices and queries
+// for PostgreSQL, MySQL / MariaDB, ClickHouse, Oracle and SQL Server, and
+// indices and queries
 // for OpenSearch / Elasticsearch, keys and commands for Redis.
 //
 // Every database connection is opened by Config.Dial. The app hands in a
@@ -41,6 +42,11 @@ const (
 	EngineOpenSearch = "opensearch"
 	// EngineRedis is Redis or a protocol-compatible server (Valkey, KeyDB).
 	EngineRedis = "redis"
+	// EngineOracle is Oracle Database; Config.Database is the service name
+	// and the tree's databases are its schemas.
+	EngineOracle = "oracle"
+	// EngineMSSQL is Microsoft SQL Server (and Azure SQL).
+	EngineMSSQL = "mssql"
 )
 
 // DefaultPort is the port an address without one gets. tls matters to
@@ -58,6 +64,10 @@ func DefaultPort(engine, tls string) int {
 		return 9200
 	case EngineRedis:
 		return 6379
+	case EngineOracle:
+		return 1521
+	case EngineMSSQL:
+		return 1433
 	}
 	return 5432
 }
@@ -314,6 +324,10 @@ func Open(cfg Config) (*Handle, error) {
 		h.eng = newOS(cfg)
 	case EngineRedis:
 		h.eng = newRD(cfg)
+	case EngineOracle:
+		h.eng = newOra(cfg)
+	case EngineMSSQL:
+		h.eng = newMS(cfg)
 	default:
 		return nil, fmt.Errorf("unknown database engine %q", cfg.Engine)
 	}
@@ -482,7 +496,7 @@ func (s *Session) Cancel() {
 }
 
 // InTx reports whether the session holds an open transaction (Postgres
-// only; MySQL does not report it).
+// and SQL Server; MySQL does not report it, Oracle sessions autocommit).
 func (s *Session) InTx() bool { return s.s.inTx() }
 
 // Close closes every session and the pool.

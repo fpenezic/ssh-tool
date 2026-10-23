@@ -1626,8 +1626,9 @@ Topic and group administration is not available to it. See
 <a id="databases"></a>
 ## 6d. Databases
 
-Browse and query a PostgreSQL, MySQL / MariaDB or ClickHouse database, an
-OpenSearch / Elasticsearch cluster or a Redis server from the connection
+Browse and query a PostgreSQL, MySQL / MariaDB, Oracle, SQL Server or
+ClickHouse database, an OpenSearch / Elasticsearch cluster or a Redis
+server from the connection
 that reaches it. Like Kafka, the database is a service on a
 connection: switch it on in the connection (or once on a folder of
 database hosts) and the connection opens a **Database tab** next to its
@@ -1640,16 +1641,18 @@ connection's SSH session, so a server that only listens on the host's
 In the connection editor (or a folder's), the **Services** tab, which holds
 the database and Kafka:
 
-- **Engine** - PostgreSQL, MySQL / MariaDB, ClickHouse (over its HTTP
+- **Engine** - PostgreSQL, MySQL / MariaDB, Oracle (see [Oracle](#oracle)),
+  SQL Server (see [SQL Server](#mssql)), ClickHouse (over its HTTP
   interface, see [ClickHouse](#clickhouse) below), OpenSearch /
   Elasticsearch (see [OpenSearch / Elasticsearch](#opensearch)) or Redis /
   Valkey (see [Redis](#redis)).
 - **Address** - host and port as seen from where the database is dialed:
   from the SSH host when it runs there or behind it. Empty means
-  `127.0.0.1` and the engine's port (5432 / 3306 / 8123 / 9200 / 6379;
-  ClickHouse with TLS on takes 8443).
+  `127.0.0.1` and the engine's port (5432 / 3306 / 1521 / 1433 / 8123 /
+  9200 / 6379; ClickHouse with TLS on takes 8443).
 - **Database** - the one the tab opens first; empty takes the server's
-  default for the login.
+  default for the login. On Oracle the field is **Service**: the service
+  name to log in to.
 - **Login** - a password credential whose default username and password are
   the database login, so vault, KeePass, Bitwarden and Infisical
   credentials all work. A credential without a password works for trust
@@ -1668,6 +1671,7 @@ the database and Kafka:
   would otherwise commit on its own and escape the transaction;
   `SELECT ... INTO OUTFILE` is refused too). It is a strong guard, but the
   real guarantee is a login with read-only grants - use one for production.
+  Oracle and SQL Server differ, see their sections.
 - **TLS** - *Require* (encrypted, certificate not checked) or *Verify
   certificate* (it must match the address's host name), end to end inside
   the tunnel.
@@ -1795,6 +1799,63 @@ through the SSH session like the others. What differs:
   `ORDER BY` key, **Structure** shows the primary key, the sorting key and
   the data-skipping indexes, and **DDL** is the server's own
   `CREATE TABLE`.
+
+<a id="oracle"></a>
+### Oracle
+
+Oracle Database 12c and newer, with a pure-Go driver: no Oracle client or
+Instant Client to install. What differs:
+
+- **Service, then schemas.** The **Service** field is the service name to
+  log in to (`ORCLPDB1`, `FREEPDB1`), or `sid:NAME` for an old-style SID.
+  The tree lists the schemas that own tables or views, and the login's own;
+  Oracle's own schemas (`SYS`, `SYSTEM`, ...) show with **system**. The tab
+  starts on the login's schema, and a query tab on another one runs with
+  `ALTER SESSION SET CURRENT_SCHEMA`.
+- **Statements commit on their own.** Oracle has no `BEGIN` statement: put
+  what has to commit together in a PL/SQL block.
+- **PL/SQL blocks** (`BEGIN`, `DECLARE`, `CREATE PROCEDURE / FUNCTION /
+  PACKAGE / TRIGGER / TYPE`) keep their semicolons and end at a line holding
+  only `/`, as in SQL*Plus and SQL Developer; a `/` line also ends a plain
+  statement. What a block prints with `DBMS_OUTPUT.PUT_LINE` shows under its
+  result.
+- **Read-only** sends only `SELECT` and `WITH`, each in a `SET TRANSACTION
+  READ ONLY` that is rolled back; PL/SQL and `WITH FUNCTION` are refused. A
+  function that runs as an autonomous transaction can still write - a
+  login with read-only grants is the real guarantee.
+- **Stop** sends a break in band (no TCP urgent data through a tunnel): a
+  running query stops, a `DBMS_SESSION.SLEEP` runs to its end.
+- **The tree and tables.** Row counts are the optimizer's statistics.
+  **DDL** comes from `DBMS_METADATA`; for another schema's table that needs
+  `SELECT_CATALOG_ROLE`, and without it the DDL is rebuilt from the columns.
+  Dates show as `2006-01-02 15:04:05`, whatever the session's NLS settings.
+
+<a id="mssql"></a>
+### SQL Server
+
+Microsoft SQL Server and Azure SQL. What differs:
+
+- **The address names the port.** Named instances are not looked up (the
+  SQL Browser service is UDP, which no tunnel carries): give the
+  instance's port.
+- **GO ends a batch.** A line holding only `GO` separates statements like
+  `;` does. A `DECLARE` (its variables last the batch), a `BEGIN ... END`
+  block, an `IF` / `WHILE` and a `CREATE PROCEDURE / FUNCTION / TRIGGER` run
+  to the next `GO` as one batch. A batch with several result sets shows the
+  first and counts the rest; `PRINT` output shows under the result.
+- **Transactions** work as on PostgreSQL: `BEGIN TRAN` holds one across
+  runs, the tab shows it, and closing the tab rolls it back.
+- **Read-only.** SQL Server has no read-only transaction, and T-SQL needs
+  no semicolon between two statements (`SELECT 1 DELETE FROM t` is two), so
+  a read-only tab sends a plain `SELECT` or `WITH` only: no `EXEC`, `INTO`,
+  `OPENQUERY` / `OPENROWSET` or a second statement's keyword, inside a
+  transaction that is rolled back. A login with only `db_datareader` is the
+  real guarantee.
+- **TLS** *Off* still encrypts the login (the password), as SSMS does,
+  without checking the certificate.
+- **The tree** groups tables by schema; row counts and sizes come from the
+  partition statistics. SQL Server has no `SHOW CREATE TABLE`: **DDL** is
+  rebuilt from the catalog (views show their own definition).
 
 <a id="opensearch"></a>
 ### OpenSearch / Elasticsearch

@@ -2,9 +2,9 @@
 // sorts what was fetched, nothing is sent to the server.
 
 // Column types whose values compare as numbers (Postgres, MySQL,
-// ClickHouse and OpenSearch spellings; "number" is a JSON number in a
-// search hit).
-const NUMERIC = /^(nullable\()?(u?int\d*|tinyint|smallint|mediumint|bigint|integer|int|serial\d*|bigserial|smallserial|numeric|decimal|float\d*|double|double precision|real|money|oid|long|short|byte|half_float|scaled_float|unsigned_long|number)\b/i;
+// ClickHouse, Oracle, SQL Server and OpenSearch spellings; "number" is
+// Oracle's NUMBER and a JSON number in a search hit).
+const NUMERIC = /^(nullable\()?(u?int\d*|tinyint|smallint|mediumint|bigint|integer|int|serial\d*|bigserial|smallserial|numeric|decimal|float\d*|double|double precision|real|money|smallmoney|binary_float|binary_double|oid|long|short|byte|half_float|scaled_float|unsigned_long|number)\b/i;
 
 export function isNumericType(type: string): boolean {
   return NUMERIC.test(type.trim());
