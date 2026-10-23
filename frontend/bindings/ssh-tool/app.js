@@ -3928,6 +3928,17 @@ export function SetConnectionVncPassword(connectionID, password) {
 }
 
 /**
+ * SetDetachedWindowTitle is SetWindowTitle for a detached window, found by
+ * its name ("detached-<tab>"): the taskbar shows the tab it holds.
+ * @param {string} name
+ * @param {string} title
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetDetachedWindowTitle(name, title) {
+    return $Call.ByID(1199763633, name, title);
+}
+
+/**
  * SetWindowTitle updates the OS window (and taskbar) title. The
  * frontend calls this to reflect the active connection/section; Wails
  * v3 alpha doesn't propagate document.title to the native title on its

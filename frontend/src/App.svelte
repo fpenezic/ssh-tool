@@ -1181,10 +1181,19 @@
   // Reflect the active connection in the OS window / taskbar title.
   // Wails v3 alpha doesn't propagate document.title to the native title,
   // so we push it through SetWindowTitle. Shows the active tab's title
-  // on the terminal view; falls back to the section name elsewhere.
+  // on the terminal view; falls back to the section name elsewhere. A
+  // detached window titles itself after its tab, and leaves the main
+  // window's title alone.
   $effect(() => {
     const base = "ssh-tool";
     let t = base;
+    if (isDetached) {
+      const active = paneTabs.activeTitle();
+      if (active) t = `${active} - ${base}`;
+      document.title = t;
+      api.setDetachedWindowTitle(detachedWindowName, t).catch(() => {});
+      return;
+    }
     if (view.tab === "terminal") {
       const active = paneTabs.activeTitle();
       if (active) t = `${active} - ${base}`;
