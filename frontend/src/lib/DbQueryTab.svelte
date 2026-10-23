@@ -192,6 +192,8 @@
           <p class="done">
             {shownResult.command || "Done"}{shownResult.rows_affected >= 0 && !shownResult.command ? ` - ${shownResult.rows_affected} row${shownResult.rows_affected === 1 ? "" : "s"} affected` : ""} · {shownResult.duration_ms} ms
           </p>
+          <!-- What the statement printed: DBMS_OUTPUT (Oracle), PRINT (SQL Server). -->
+          {#if shownResult.note}<pre class="out">{shownResult.note}</pre>{/if}
         {/if}
       {/if}
     {/if}
@@ -227,4 +229,5 @@
   pre { margin: 0.5rem 0.75rem; white-space: pre-wrap; font-size: 0.78rem; }
   pre.err { color: var(--red); }
   pre.stmt { color: var(--overlay1); }
+  pre.out { color: var(--subtext1); overflow: auto; min-height: 0; }
 </style>

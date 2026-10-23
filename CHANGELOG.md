@@ -7,6 +7,19 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+The Database tab now speaks Oracle and SQL Server, both with pure-Go drivers: nothing to install next to the app.
+
+### Databases
+
+- **Oracle** (12c and newer): log in to a service name (or `sid:NAME`), browse its schemas, tables, views and materialized views with structure and DDL, and query. PL/SQL blocks keep their semicolons and end at a `/` line as in SQL*Plus; `DBMS_OUTPUT` shows under the block's result. Read-only tabs send `SELECT` / `WITH` only, inside a `SET TRANSACTION READ ONLY` that is rolled back.
+- **SQL Server** (and Azure SQL): databases, schemas, tables and views with row counts, structure and a rebuilt DDL; `GO` ends a batch, `PRINT` output and extra result sets are shown, `BEGIN TRAN` holds a transaction across runs with the usual "in transaction" badge. Read-only tabs send a plain `SELECT` / `WITH` only, since SQL Server has no read-only transaction and T-SQL needs no semicolon between statements.
+- Both run through the connection's SSH session like the other engines, Stop cancels a running statement and keeps the session, and the LLM bridge (MCP) reaches them the same way.
+- What a statement prints (`DBMS_OUTPUT`, `PRINT`) now shows under a result without rows too.
+
+---
+
 ## [0.118.0] - Home pane, connect stages and MTU hints
 
 With nothing selected, the Connections view now opens on an overview: recent connections, workspaces, network profiles, fleet findings and the state of vault, sync and backup. A connect shows each step it takes, recognises a stalled key exchange as a likely MTU problem, and a security audit tightened the LLM (MCP) bridge, session sharing and opkssh. macOS gets a build script for the app and the VPN plugins.

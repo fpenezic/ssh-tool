@@ -140,8 +140,10 @@
       <label title="Host and port as seen from where the database is dialed: the SSH host when reached through SSH (usually 127.0.0.1 on the database host itself). Empty: 127.0.0.1 and the engine's port.">Address
         <input bind:value={draft.addr} placeholder={engine === "clickhouse" ? "127.0.0.1:8123 (8443 with TLS)" : `127.0.0.1:${port}`} spellcheck="false" />
       </label>
-      <label title="The database the tab opens first. Empty: the server's default for the login.">Database
-        <input bind:value={draft.name} placeholder={engine === "opensearch" ? "(not used - the cluster)" : engine === "redis" ? "0 (the database number)" : inheritLabel === "(inherit from folder)" ? "(inherit) e.g. app" : "e.g. app"} spellcheck="false" />
+      <label title={engine === "oracle"
+        ? "The service name to log in to (FREEPDB1, ORCLPDB1, ...), or sid:NAME for a SID. The tab lists the schemas in it and starts on the login's own."
+        : "The database the tab opens first. Empty: the server's default for the login."}>{engine === "oracle" ? "Service" : "Database"}
+        <input bind:value={draft.name} placeholder={engine === "opensearch" ? "(not used - the cluster)" : engine === "redis" ? "0 (the database number)" : engine === "oracle" ? "e.g. ORCLPDB1 or sid:ORCL" : inheritLabel === "(inherit from folder)" ? "(inherit) e.g. app" : "e.g. app"} spellcheck="false" />
       </label>
       <label title="Its default username and its password are the database login. A credential without a password works for trust authentication. OpenSearch / Elasticsearch: a password with no username is sent as an API key. Redis: a password with no username is the requirepass password. None: you are asked when the tab opens.">Login
         <select value={draft.cred} onchange={(e) => pickLogin(e.currentTarget as HTMLSelectElement, draft.cred, (v) => (draft = { ...draft, cred: v }), connName || "New")}>
@@ -164,6 +166,10 @@
         ? "Read-only: only read commands (GET, HGETALL, SCAN, INFO, CONFIG GET, ...) are sent. Redis has no read-only session: an ACL user limited to reads is the real guarantee."
         : engine === "opensearch"
         ? "Read-only: only GET and HEAD requests, POST to search endpoints (_search, _count, _msearch, ...) and SQL SELECT / SHOW / DESCRIBE are sent. The cluster has no read-only session: a login with a read-only role is the real guarantee."
+        : engine === "oracle"
+        ? "Read-only: only SELECT / WITH are sent, each in a READ ONLY transaction that is rolled back; PL/SQL blocks and WITH FUNCTION are refused. A login with read-only grants is the real guarantee."
+        : engine === "mssql"
+        ? "Read-only: only a plain SELECT / WITH is sent - no EXEC, INTO, OPENQUERY / OPENROWSET or second statement - inside a transaction that is rolled back. SQL Server has no read-only transaction: a login with read-only grants (db_datareader) is the real guarantee."
         : "Read-only: every statement runs in a READ ONLY transaction that is rolled back, and only SELECT / WITH / SHOW / EXPLAIN / VALUES / TABLE / DESCRIBE are sent. A login with read-only grants is the real guarantee."}>Writes
         <select bind:value={draft.readOnly}>
           <option value="">{inheritLabel} · {inheritedReadOnly ? "read-only" : "allowed"}</option>

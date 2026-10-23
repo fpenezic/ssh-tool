@@ -22,6 +22,11 @@ type Stmt struct {
 // split. Empty statements (only whitespace / comments) are dropped. MySQL's
 // DELIMITER client command is not supported: a stored routine body has to
 // go in as one statement on its own.
+//
+// Oracle and SQL Server also end a statement at a line holding only "/"
+// (SQL*Plus) or GO (sqlcmd), and a block - PL/SQL, a stored routine, a
+// T-SQL DECLARE / BEGIN / IF batch - runs to that line or the end of the
+// script, semicolons and all (see blockStmt).
 func Split(engine, script string) []Stmt {
 	switch engine {
 	case EngineOpenSearch:
@@ -38,18 +43,132 @@ func Split(engine, script string) []Stmt {
 			out = append(out, Stmt{Text: text, Start: off, End: off + len(text)})
 		}
 	}
+	blockFrom, block := -1, false
 	for i := 0; i < len(script); {
+		if i == 0 || script[i-1] == '\n' {
+			if n, ok := terminatorLine(engine, script, i); ok {
+				emit(i)
+				start, i = n, n
+				continue
+			}
+		}
 		if n := skipNonCode(engine, script, i); n > i {
 			i = n
 			continue
 		}
 		if script[i] == ';' {
-			emit(i)
-			start = i + 1
+			if blockFrom != start {
+				blockFrom, block = start, blockStmt(engine, script[start:i])
+			}
+			if !block {
+				emit(i)
+				start = i + 1
+			}
 		}
 		i++
 	}
 	emit(len(script))
+	return out
+}
+
+// terminatorLine reports a line at i that ends a statement or batch: "/"
+// on Oracle, GO (with an optional repeat count, which is ignored) on SQL
+// Server. n is where the next line starts.
+func terminatorLine(engine, s string, i int) (n int, ok bool) {
+	if engine != EngineOracle && engine != EngineMSSQL {
+		return i, false
+	}
+	n = lineEnd(s, i)
+	line := strings.TrimSpace(s[i:n])
+	if engine == EngineOracle {
+		return n, line == "/"
+	}
+	f := strings.Fields(line)
+	if len(f) == 0 || len(f) > 2 || !strings.EqualFold(f[0], "GO") {
+		return n, false
+	}
+	if len(f) == 2 {
+		for _, c := range f[1] {
+			if c < '0' || c > '9' {
+				return n, false
+			}
+		}
+	}
+	return n, true
+}
+
+// blockStmt reports a statement whose own semicolons do not end it: a
+// PL/SQL block or stored unit on Oracle; on SQL Server a routine or
+// trigger body, a BEGIN ... END block, an IF / WHILE, and a DECLARE (its
+// variables live as long as the batch, so what follows has to go with
+// it). stmt is the statement so far, from its start.
+func blockStmt(engine, stmt string) bool {
+	w := leadWords(engine, stmt, 5)
+	at := func(i int) string {
+		if i < len(w) {
+			return w[i]
+		}
+		return ""
+	}
+	switch engine {
+	case EngineOracle:
+		switch at(0) {
+		case "DECLARE", "BEGIN":
+			return true
+		case "CREATE":
+			i := 1
+			if at(i) == "OR" && at(i+1) == "REPLACE" {
+				i += 2
+			}
+			if at(i) == "EDITIONABLE" || at(i) == "NONEDITIONABLE" {
+				i++
+			}
+			switch at(i) {
+			case "PROCEDURE", "FUNCTION", "PACKAGE", "TRIGGER", "TYPE":
+				return true
+			}
+		}
+	case EngineMSSQL:
+		switch at(0) {
+		case "DECLARE", "IF", "WHILE":
+			return true
+		case "BEGIN":
+			switch at(1) {
+			case "TRAN", "TRANSACTION", "DISTRIBUTED":
+				return false
+			}
+			return true
+		case "CREATE", "ALTER":
+			i := 1
+			if at(0) == "CREATE" && at(i) == "OR" && at(i+1) == "ALTER" {
+				i += 2
+			}
+			switch at(i) {
+			case "PROCEDURE", "PROC", "FUNCTION", "TRIGGER":
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// leadWords is a statement's first n words of code, upper-cased.
+func leadWords(engine, stmt string, n int) []string {
+	var out []string
+	code := codeOnly(engine, stmt)
+	start := -1
+	for i := 0; i <= len(code) && len(out) < n; i++ {
+		if i < len(code) && (code[i] == '_' || unicode.IsLetter(rune(code[i])) || unicode.IsDigit(rune(code[i]))) {
+			if start < 0 {
+				start = i
+			}
+			continue
+		}
+		if start >= 0 {
+			out = append(out, strings.ToUpper(code[start:i]))
+			start = -1
+		}
+	}
 	return out
 }
 
@@ -95,9 +214,9 @@ func skipNonCode(engine, s string, i int) int {
 		// OUTFILE ...*/"), so it is not skipped like a comment.
 		return i
 	case c == '/' && strings.HasPrefix(s[i:], "/*"):
-		// Postgres and ClickHouse nest block comments: "/* a /* b */ c */"
-		// is one comment, and ending it at the first "*/" would read c as
-		// code.
+		// Postgres, ClickHouse and SQL Server nest block comments: "/* a /*
+		// b */ c */" is one comment, and ending it at the first "*/" would
+		// read c as code.
 		depth := 1
 		for j := i + 2; j+1 < len(s); j++ {
 			switch {
@@ -106,17 +225,25 @@ func skipNonCode(engine, s string, i int) int {
 					return j + 2
 				}
 				j++
-			case s[j] == '/' && s[j+1] == '*' && (engine == EnginePostgres || engine == EngineClickHouse):
+			case s[j] == '/' && s[j+1] == '*' && (engine == EnginePostgres || engine == EngineClickHouse || engine == EngineMSSQL):
 				depth++
 				j++
 			}
 		}
 		return len(s)
 	case c == '\'':
+		if engine == EngineOracle {
+			if n, ok := oraQQuote(s, i); ok {
+				return n
+			}
+		}
 		// MySQL and ClickHouse strings take backslash escapes; Postgres
-		// only in E'...'.
-		backslash := engine == EngineMySQL || engine == EngineClickHouse || (i > 0 && (s[i-1] == 'E' || s[i-1] == 'e'))
+		// only in E'...'. Oracle and SQL Server never.
+		sqlStd := engine == EngineOracle || engine == EngineMSSQL
+		backslash := engine == EngineMySQL || engine == EngineClickHouse || (!sqlStd && i > 0 && (s[i-1] == 'E' || s[i-1] == 'e'))
 		return quoted(s, i, '\'', backslash)
+	case c == '[' && engine == EngineMSSQL:
+		return quoted(s, i, ']', false)
 	case c == '"':
 		return quoted(s, i, '"', engine == EngineMySQL || engine == EngineClickHouse)
 	case c == '`' && (engine == EngineMySQL || engine == EngineClickHouse || engine == EngineOpenSearch):
@@ -131,6 +258,39 @@ func skipNonCode(engine, s string, i int) int {
 		}
 	}
 	return i
+}
+
+// oraQQuote reads Oracle's alternative quoting at the quote i: q'[...]',
+// q'{...}', q'<...>', q'(...)' or q'X...X' for another character, also
+// after N (nq'...'). n is the index after the closing quote.
+func oraQQuote(s string, i int) (n int, ok bool) {
+	if i == 0 || (s[i-1] != 'q' && s[i-1] != 'Q') || i+1 >= len(s) {
+		return i, false
+	}
+	p := i - 2 // what is before the q
+	if p >= 0 && (s[p] == 'n' || s[p] == 'N') {
+		p--
+	}
+	if p >= 0 && isIdent(rune(s[p])) {
+		return i, false
+	}
+	closer := s[i+1]
+	switch closer {
+	case '[':
+		closer = ']'
+	case '{':
+		closer = '}'
+	case '<':
+		closer = '>'
+	case '(':
+		closer = ')'
+	case ' ', '\t', '\n', '\r':
+		return i, false
+	}
+	if j := strings.Index(s[i+2:], string(closer)+"'"); j >= 0 {
+		return i + 2 + j + 2, true
+	}
+	return len(s), true
 }
 
 func lineEnd(s string, i int) int {
@@ -216,9 +376,38 @@ var readKeywords = map[string]bool{
 }
 
 // readLead reports a read keyword for engine: ClickHouse adds EXISTS
-// (EXISTS TABLE t).
+// (EXISTS TABLE t). Oracle and SQL Server read with SELECT and WITH only
+// (their EXPLAIN PLAN / SHOWPLAN forms write a plan table or change the
+// session).
 func readLead(engine, k string) bool {
+	if engine == EngineOracle || engine == EngineMSSQL {
+		return k == "SELECT" || k == "WITH"
+	}
 	return readKeywords[k] || (engine == EngineClickHouse && k == "EXISTS")
+}
+
+// msWriteWords can not appear in a read on SQL Server. T-SQL needs no
+// semicolon between statements, so "SELECT 1 DELETE FROM t" is two
+// statements in one; the transaction a read-only run is rolled back in
+// does not stop EXEC of a procedure that commits, or OPENQUERY running on
+// a linked server.
+var msWriteWords = []string{
+	"INSERT", "UPDATE", "DELETE", "MERGE", "TRUNCATE", "DROP", "CREATE", "ALTER",
+	"EXEC", "EXECUTE", "GRANT", "REVOKE", "DENY", "BACKUP", "RESTORE", "DBCC",
+	"KILL", "SHUTDOWN", "RECONFIGURE", "BULK", "INTO", "OPENQUERY", "OPENROWSET",
+	"OPENDATASOURCE", "WRITETEXT", "UPDATETEXT", "BEGIN", "COMMIT", "ROLLBACK",
+	"SAVE", "USE", "SET",
+}
+
+// msWriteWord is the first of msWriteWords in a SQL Server statement's
+// code, or "".
+func msWriteWord(words map[string]bool) string {
+	for _, w := range msWriteWords {
+		if words[w] {
+			return w
+		}
+	}
+	return ""
 }
 
 // IsRead reports whether a statement only reads: it starts with a read
@@ -249,6 +438,12 @@ func sqlIsRead(engine, stmt string) bool {
 	case lead == "WITH" && (words["INSERT"] || words["UPDATE"] || words["DELETE"] || words["MERGE"]):
 		return false
 	case lead == "EXPLAIN" && words["ANALYZE"]:
+		return false
+	case engine == EngineOracle && lead == "WITH" && (words["FUNCTION"] || words["PROCEDURE"]):
+		// WITH FUNCTION: PL/SQL in the query, which may be an autonomous
+		// transaction.
+		return false
+	case engine == EngineMSSQL && msWriteWord(words) != "":
 		return false
 	}
 	return true
@@ -309,6 +504,16 @@ func sqlCheckReadOnly(engine, stmt string) error {
 	if !readLead(engine, k) {
 		return fmt.Errorf("read-only connection: %s statements are not allowed", strings.ToLower(orWord(k)))
 	}
+	if engine == EngineMSSQL {
+		if w := msWriteWord(codeWords(engine, stmt)); w != "" {
+			return fmt.Errorf("read-only connection: %s is not allowed (T-SQL runs a second statement without a semicolon)", w)
+		}
+	}
+	if engine == EngineOracle && k == "WITH" && !sqlIsRead(engine, stmt) {
+		if w := codeWords(engine, stmt); w["FUNCTION"] || w["PROCEDURE"] {
+			return fmt.Errorf("read-only connection: WITH FUNCTION / PROCEDURE (PL/SQL in a query) is not allowed")
+		}
+	}
 	if !sqlIsRead(engine, stmt) {
 		return fmt.Errorf("read-only connection: this %s writes (a data-changing WITH, EXPLAIN ANALYZE or SELECT ... INTO)", strings.ToLower(k))
 	}
@@ -347,8 +552,33 @@ func codeOnly(engine, s string) string {
 }
 
 // IsTxControl reports a statement that opens or ends a transaction
-// (BEGIN, START, COMMIT, END, ROLLBACK, SAVEPOINT, RELEASE, ABORT).
+// (BEGIN, START, COMMIT, END, ROLLBACK, SAVEPOINT, RELEASE, ABORT). On
+// Oracle BEGIN opens a PL/SQL block and on SQL Server only BEGIN TRAN
+// counts.
 func IsTxControl(engine, stmt string) bool {
+	w := leadWords(engine, stmt, 2)
+	second := ""
+	if len(w) > 1 {
+		second = w[1]
+	}
+	switch engine {
+	case EngineOracle:
+		switch leadKeyword(engine, stmt) {
+		case "COMMIT", "ROLLBACK", "SAVEPOINT":
+			return true
+		case "SET":
+			return second == "TRANSACTION"
+		}
+		return false
+	case EngineMSSQL:
+		switch leadKeyword(engine, stmt) {
+		case "COMMIT", "ROLLBACK", "SAVE":
+			return true
+		case "BEGIN":
+			return second == "TRAN" || second == "TRANSACTION" || second == "DISTRIBUTED"
+		}
+		return false
+	}
 	switch leadKeyword(engine, stmt) {
 	case "BEGIN", "START", "COMMIT", "END", "ROLLBACK", "SAVEPOINT", "RELEASE", "ABORT":
 		return true
@@ -360,7 +590,14 @@ func IsTxControl(engine, stmt string) bool {
 // SET PASSWORD [FOR user] =), IDENTIFIED [WITH plugin] BY and REPLACE (the
 // old password of a MySQL ALTER USER). Quotes may be doubled or, on MySQL,
 // backslash-escaped.
-var secretRE = regexp.MustCompile(`(?i)(\bPASSWORD\s+FOR\s+\S+?\s*=\s*|\bPASSWORD\s*(?:=\s*)?|\bIDENTIFIED\s+(?:WITH\s+\S+\s+)?BY\s+|\bREPLACE\s+)('(?:[^'\\]|\\.|'')*'|"(?:[^"\\]|\\.|"")*")`)
+var secretRE = regexp.MustCompile(`(?i)(\bPASSWORD\s+FOR\s+\S+?\s*=\s*|\b(?:OLD_)?PASSWORD\s*(?:=\s*)?|\bIDENTIFIED\s+(?:WITH\s+\S+\s+)?BY\s+|\bREPLACE\s+)(N?'(?:[^'\\]|\\.|'')*'|"(?:[^"\\]|\\.|"")*")`)
+
+// Oracle passwords are usually unquoted: IDENTIFIED BY secret [REPLACE
+// old], IDENTIFIED BY VALUES 'hash'.
+var (
+	oraSecretRE  = regexp.MustCompile(`(?i)(\bIDENTIFIED\s+BY\s+(?:VALUES\s+)?)('(?:[^']|'')*'|"(?:[^"]|"")*"|[^\s;'"]+)`)
+	oraReplaceRE = regexp.MustCompile(`(?i)(\bIDENTIFIED\s+BY\s+(?:VALUES\s+)?'\*\*\*'\s+REPLACE\s+)('(?:[^']|'')*'|"(?:[^"]|"")*"|[^\s;'"]+)`)
+)
 
 // RedactSecrets hides quoted passwords in a statement before it is stored
 // (audit log, LLM activity). Comments go first - "IDENTIFIED /*x*/ BY
@@ -373,7 +610,12 @@ func RedactSecrets(engine, stmt string) string {
 	case EngineRedis:
 		return rdRedact(stmt)
 	}
-	return secretRE.ReplaceAllString(stripComments(engine, stmt), "${1}'***'")
+	out := secretRE.ReplaceAllString(stripComments(engine, stmt), "${1}'***'")
+	if engine == EngineOracle {
+		out = oraSecretRE.ReplaceAllString(out, "${1}'***'")
+		out = oraReplaceRE.ReplaceAllString(out, "${1}'***'")
+	}
+	return out
 }
 
 // stripComments replaces each comment with one space, leaving strings and
