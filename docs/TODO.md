@@ -91,6 +91,22 @@ For what's already shipped, see `CHANGELOG.md`.
   remote opkssh-verifier is rotated, current cached cert becomes
   invalid until next interactive login. A "regenerate now" button
   in the credential editor would let the user pre-empt.
+- **Run a command on the jump host before connecting** - for a bastion
+  that has to raise a VPN (or anything else) before the target is
+  reachable. A connection / folder setting, e.g. `sudo
+  /usr/local/bin/vpn-up office`, run on the jump host's SSH session
+  (exec channel) before the next hop is dialed; a non-zero exit stops
+  the connect and shows the command's output. The command must be
+  idempotent (exit 0 when the VPN is already up), since others may
+  connect through the same bastion at the same time; `sudo` needs a
+  NOPASSWD rule for that one script.
+  No disconnect hook, on purpose: the app only knows its own sessions,
+  and taking the VPN down on a shared bastion would cut everyone else's.
+  Stopping belongs on the bastion - a systemd timer that brings the VPN
+  down after N idle minutes covers app and manual users alike. Ship an
+  example up script and timer in the docs. A lease-based "after the last
+  session" hook only if someone asks: it misses manual users and needs
+  stale-lease cleanup.
 
 ---
 
