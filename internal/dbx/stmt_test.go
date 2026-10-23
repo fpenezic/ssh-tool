@@ -402,6 +402,10 @@ func TestSplitMSSQLGoBound(t *testing.T) {
 	if n := len(Split(EngineMSSQL, big)); n > maxGoStatements+1000 {
 		t.Fatalf("GO expanded to %d statements", n)
 	}
+	// The statement before the GO line counts: 99999 + 2 would be one over.
+	if n := len(Split(EngineMSSQL, "SELECT 1\nGO 99999\nSELECT 2\nGO 2\n")); n != 100000 {
+		t.Fatalf("GO 99999 then GO 2: %d statements", n)
+	}
 	if n := len(Split(EngineMSSQL, strings.Repeat("SELECT 1\nGO 3\n", 10))); n != 30 {
 		t.Fatalf("10 x GO 3: %d statements", n)
 	}

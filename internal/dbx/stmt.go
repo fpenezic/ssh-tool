@@ -48,7 +48,7 @@ func Split(engine, script string) []Stmt {
 	batch := 0 // where the statements since the last GO start in out
 	for i := 0; i < len(script); {
 		if i == 0 || script[i-1] == '\n' {
-			if n, count, ok := terminatorLine(engine, script, i); ok && goFits(len(out), len(out)-batch+pending(engine, script[start:i]), count) {
+			if n, count, ok := terminatorLine(engine, script, i); ok && goFits(len(out)+pending(engine, script[start:i]), len(out)-batch+pending(engine, script[start:i]), count) {
 				emit(i)
 				// GO n runs the batch n times, as sqlcmd does.
 				one := out[batch:]
@@ -84,8 +84,9 @@ func Split(engine, script string) []Stmt {
 // separator, and the server refuses the GO in the batch.
 const maxGoStatements = 100000
 
-// goFits: the list holds total statements, the last batch of them before
-// the GO line; repeating it count times stays within the bound. Divided,
+// goFits: the list holds total statements once the one before the GO line
+// is in, the last batch of them; repeating it count times stays within the
+// bound. Divided,
 // not multiplied, so nothing overflows on 32-bit.
 func goFits(total, batch, count int) bool {
 	if count <= 1 || batch == 0 {
