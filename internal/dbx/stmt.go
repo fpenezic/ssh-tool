@@ -48,7 +48,7 @@ func Split(engine, script string) []Stmt {
 	batch := 0 // where the statements since the last GO start in out
 	for i := 0; i < len(script); {
 		if i == 0 || script[i-1] == '\n' {
-			if n, count, ok := terminatorLine(engine, script, i); ok {
+			if n, count, ok := terminatorLine(engine, script, i); ok && goFits(len(out)-batch+pending(engine, script[start:i]), count) {
 				emit(i)
 				// GO n runs the batch n times, as sqlcmd does.
 				one := out[batch:]
@@ -78,10 +78,23 @@ func Split(engine, script string) []Stmt {
 	return out
 }
 
-// maxGoCount bounds GO's repeat count: the batch is copied that many
-// times into the statement list. A larger count is not cut short: the
-// line is then no separator, and the server refuses the GO in the batch.
-const maxGoCount = 100000
+// maxGoStatements bounds what GO's repeat count expands to: the batch is
+// copied that many times into the statement list. A larger count is not
+// cut short: the line is then no separator, and the server refuses the GO
+// in the batch.
+const maxGoStatements = 100000
+
+func goFits(stmts, count int) bool {
+	return count <= 1 || stmts*count <= maxGoStatements
+}
+
+// pending is 1 when text still holds a statement to emit.
+func pending(engine, text string) int {
+	if t := strings.TrimSpace(text); t != "" && leadKeyword(engine, t) != "" {
+		return 1
+	}
+	return 0
+}
 
 // terminatorLine reports a line at i that ends a statement or batch: "/"
 // on Oracle, GO on SQL Server, which may carry a repeat count (count, at
@@ -105,7 +118,7 @@ func terminatorLine(engine, s string, i int) (n, count int, ok bool) {
 	count = 1
 	if len(f) == 2 {
 		c, err := strconv.Atoi(f[1])
-		if err != nil || c < 1 || c > maxGoCount {
+		if err != nil || c < 1 || c > maxGoStatements {
 			return n, 0, false
 		}
 		count = c

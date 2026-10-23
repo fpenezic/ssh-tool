@@ -289,6 +289,8 @@ func TestSplitMSSQL(t *testing.T) {
 		{"SELECT 1\nGO -- done\nSELECT 2", []string{"SELECT 1", "SELECT 2"}},
 		{"SELECT 1\nGO x\nSELECT 2", []string{"SELECT 1\nGO x\nSELECT 2"}},
 		{"SELECT 1\nGO 100001\nSELECT 2", []string{"SELECT 1\nGO 100001\nSELECT 2"}},
+		// The bound is on what the batch expands to.
+		{"SELECT 1; SELECT 2\nGO 50001\nSELECT 3", []string{"SELECT 1", "SELECT 2\nGO 50001\nSELECT 3"}},
 		// A DECLARE batch, a routine and a BEGIN block run to GO.
 		{"DECLARE @x int; SET @x = 1; SELECT @x\nGO\nSELECT 2", []string{"DECLARE @x int; SET @x = 1; SELECT @x", "SELECT 2"}},
 		{"CREATE OR ALTER PROC p AS BEGIN SELECT 1; SELECT 2; END\nGO", []string{"CREATE OR ALTER PROC p AS BEGIN SELECT 1; SELECT 2; END"}},
