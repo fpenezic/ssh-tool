@@ -3852,6 +3852,18 @@ export function RequestAttention() {
 }
 
 /**
+ * RevealInMainWindow brings the main window forward and has it select a
+ * connection or folder in its tree ("reveal_in_tree"): a detached window
+ * has no tree of its own, so its "edit this connection" button asks here.
+ * @param {string} kind
+ * @param {string} id
+ * @returns {$CancellablePromise<void>}
+ */
+export function RevealInMainWindow(kind, id) {
+    return $Call.ByID(1777951194, kind, id);
+}
+
+/**
  * SaveTextFile pops a native Save dialog and writes content there.
  * Used by the connection-export flow so the user can drop a TOML
  * archive on disk without leaving the app. Empty path returned =
