@@ -95,9 +95,10 @@ For what's already shipped, see `CHANGELOG.md`.
   that has to raise a VPN (or anything else) before the target is
   reachable. A connection / folder setting, e.g. `sudo
   /usr/local/bin/vpn-up office`, run on the jump host's SSH session
-  (exec channel) once per bastion connection: when the shared bastion
-  client comes up, before its first target dial; later dials over the
-  same client wait for that run rather than starting their own. It runs
+  (exec channel) once per bastion connection and command: before the
+  first target dial that asks for it; later dials over the same client
+  with the same command wait for that run rather than starting their
+  own, and a target with a different command runs its own. It runs
   under the connect's context with a timeout of its own (a stuck script
   must not hold the connect forever), its output capped. A non-zero exit
   stops the connect and shows that output. The command must be
