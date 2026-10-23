@@ -292,8 +292,17 @@ class WorkspaceStore {
     } finally {
       this.opening.delete(id);
     }
-    if (opts.newWindow && built.length) await detachTabsToWindow(built);
-    else this.activeId = id;
+    if (opts.newWindow && built.length) {
+      try {
+        await detachTabsToWindow(built);
+      } catch (e) {
+        // The window did not open: the tabs stay here, shown, as a plain open.
+        for (const t of built) paneTabs.setHidden(t.tabId, false);
+        this.activeId = id;
+        view.setTab("terminal");
+        throw e;
+      }
+    } else this.activeId = id;
     try { await api.workspaceTouchLastOpened(id); } catch { /* ignore */ }
     await this.load();
   }
