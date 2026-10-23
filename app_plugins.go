@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -153,16 +154,30 @@ func pluginEngineVersion(name, exe string) string {
 		return ""
 	}
 	for _, d := range bi.Deps {
-		if d.Path != mod {
-			continue
+		if d.Path == mod {
+			return engineDepVersion(d)
 		}
-		v := d.Version
-		if d.Replace != nil && d.Replace.Version != "" {
-			v = d.Replace.Version
-		}
-		return strings.TrimPrefix(v, "v")
 	}
 	return ""
+}
+
+// engineDepVersion is a dependency's version as the plugin card shows it.
+// A replace by another module version reads as that version. A replace by
+// a local directory (OpenConnect's patched copy in third_party) carries
+// no version - build info says "(devel)" - so it reads as the version it
+// replaces, marked patched.
+func engineDepVersion(d *debug.Module) string {
+	v := strings.TrimPrefix(d.Version, "v")
+	if d.Replace == nil {
+		return v
+	}
+	if rv := d.Replace.Version; rv != "" && rv != "(devel)" {
+		return strings.TrimPrefix(rv, "v")
+	}
+	if v == "" || v == "(devel)" {
+		return "patched"
+	}
+	return v + " (patched)"
 }
 
 // PluginDownloadProgress is the plugin_download_progress event: which
