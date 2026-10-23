@@ -114,6 +114,7 @@ var machineLocalSettings = []string{
 	"window_state_v1",
 	"last_session_tabs_v1",
 	"last_session_tabs_v2",
+	"last_session_detached_v1",
 	"settings_active_section",
 	"recent_connections_count",
 	"keyring_legacy_purged_v1",

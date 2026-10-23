@@ -42,15 +42,6 @@
   }
   let { tabId, node }: Props = $props();
 
-  // "Edit this connection": the tree lives in the main window. A detached
-  // window has none, so it asks the backend to raise the main window and
-  // reveal the connection there (reveal_in_tree, App.svelte).
-  const inDetachedWindow = new URLSearchParams(window.location.search).has("detached") || /[#&?]detached=/.test(window.location.hash);
-  function revealConnection(id: string) {
-    if (inDetachedWindow) api.revealInMainWindow("connection", id).catch(console.error);
-    else view.reveal("connection", id);
-  }
-
   const activePaneId = $derived(
     paneTabs.tabs.find((t) => t.tabId === tabId)?.activePaneId ?? ""
   );
@@ -701,7 +692,7 @@
               title="Edit this connection (jump to its settings in the tree)"
               onclick={(e) => {
                 e.stopPropagation();
-                if (paneSession?.connectionId) revealConnection(paneSession.connectionId);
+                if (paneSession?.connectionId) view.reveal("connection", paneSession.connectionId);
               }}
             ><IconSettings size={13} /></button>
           </div>
@@ -852,7 +843,7 @@
               title="Edit this connection (jump to its settings in the tree)"
               onclick={(e) => {
                 e.stopPropagation();
-                if (paneSession?.connectionId) revealConnection(paneSession.connectionId);
+                if (paneSession?.connectionId) view.reveal("connection", paneSession.connectionId);
               }}
             ><IconSettings size={13} /></button>
           </div>

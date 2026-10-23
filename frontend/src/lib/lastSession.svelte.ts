@@ -17,7 +17,8 @@
 // after opening a tab doesn't lose it.
 
 import { api } from "./api";
-import { paneTabs, sessions, tree, view } from "./stores.svelte";
+import { paneTabs, sessions, tree, view, type PaneTab } from "./stores.svelte";
+import { detachTabsToWindow } from "./detachTabs";
 import { connectionActions, isTransientConnectError } from "./connectionActions.svelte";
 import { showConfirm } from "./confirmModal.svelte.ts";
 import {
@@ -35,6 +36,39 @@ const TABS_KEY = "last_session_tabs_v2";
 // Read-only fallback: a v1 blob (one session per tab, no pane tree) is still
 // restored on the first launch after the upgrade, then rewritten as v2.
 const LEGACY_TABS_KEY = "last_session_tabs_v1";
+
+// The open tabs of THIS window as restorable specs. The main window saves
+// them under TABS_KEY; a detached window hands them to the backend
+// (DetachedSessionSave), which keeps them only when the app quits with
+// the window open.
+export function serializeOpenTabs(): TabSpec[] {
+  const out: TabSpec[] = [];
+  for (const t of paneTabs.tabs) {
+    const spec = serializePaneSpec(t.root, (sid) => specForSession(sid));
+    // Every pane was unrestorable (a lone VNC console, say) - skip the tab
+    // rather than writing an empty one.
+    if (!spec) continue;
+    out.push({
+      title: t.title,
+      titleCustom: t.titleCustom,
+      groupName: t.groupName,
+      groupColor: t.groupColor,
+      workspaceId: t.workspaceId,
+      sessions: spec.sessions,
+      root: spec.root,
+    });
+  }
+  return out;
+}
+
+function parseSpecs(raw: string): TabSpec[] {
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
 
 export type ReopenMode = "ask" | "always" | "never";
 
@@ -84,27 +118,7 @@ class LastSessionStore {
   // The serialized tab set as JSON. Called inside an $effect so every
   // reactive value it reads becomes a dependency.
   snapshot(): string {
-    return JSON.stringify(this.serialize());
-  }
-
-  private serialize(): TabSpec[] {
-    const out: TabSpec[] = [];
-    for (const t of paneTabs.tabs) {
-      const spec = serializePaneSpec(t.root, (sid) => specForSession(sid));
-      // Every pane was unrestorable (a lone VNC console, say) - skip the tab
-      // rather than writing an empty one.
-      if (!spec) continue;
-      out.push({
-        title: t.title,
-        titleCustom: t.titleCustom,
-        groupName: t.groupName,
-        groupColor: t.groupColor,
-        workspaceId: t.workspaceId,
-        sessions: spec.sessions,
-        root: spec.root,
-      });
-    }
-    return out;
+    return JSON.stringify(serializeOpenTabs());
   }
 
   // Coalesced snapshot - called from an $effect in App.svelte on every
@@ -146,7 +160,14 @@ class LastSessionStore {
   async restoreOnStartup(recovered: number) {
     if (this.restoreDone) return;
     this.restoreDone = true;
-    if (recovered > 0 || this.mode === "never") return;
+    // A UI reload: the detached windows are still open and saving.
+    if (recovered > 0) return;
+    // The windows detached when the app last quit, one tab list each.
+    // Taken (and so forgotten) even in "never" mode, or they would pile up.
+    const windows = ((await api.detachedSessionTake().catch(() => [])) ?? [])
+      .map(parseSpecs)
+      .filter((w) => w.length > 0);
+    if (this.mode === "never") return;
 
     let saved: TabSpec[] = [];
     try {
@@ -160,13 +181,16 @@ class LastSessionStore {
         if (legacy) saved = upgradeLegacyTabs(JSON.parse(legacy));
       }
     } catch { /* missing or corrupt - nothing to restore */ }
-    if (!Array.isArray(saved) || saved.length === 0) return;
+    if (!Array.isArray(saved)) saved = [];
+    const inWindows = windows.reduce((n, w) => n + w.length, 0);
+    if (saved.length === 0 && inWindows === 0) return;
 
     if (this.mode === "ask") {
-      const n = saved.length;
+      const n = saved.length + inWindows;
+      const where = inWindows > 0 ? ` (${inWindows} in ${windows.length === 1 ? "a separate window" : `${windows.length} separate windows`})` : "";
       const ok = await showConfirm({
         title: "Reopen last session?",
-        message: `Reconnect ${n} tab${n === 1 ? "" : "s"} from the last session? You can change this behaviour in Settings - Window - Startup.`,
+        message: `Reconnect ${n} tab${n === 1 ? "" : "s"}${where} from the last session? You can change this behaviour in Settings - Window - Startup.`,
         okLabel: "Reopen",
       });
       // Declining keeps the snapshot intact: schedule() won't fire
@@ -181,7 +205,8 @@ class LastSessionStore {
     // blocks until auth+PTY, so a slow host opens its tab visibly
     // late. The toasts attribute those stragglers - without them a
     // terminal popping up 30s after launch looks like a ghost.
-    toast.ok(`Reopening ${saved.length} tab${saved.length === 1 ? "" : "s"} from the last session…`);
+    const total = saved.length + inWindows;
+    toast.ok(`Reopening ${total} tab${total === 1 ? "" : "s"} from the last session…`);
     let opened = 0;
     try {
       for (const spec of saved) {
@@ -192,10 +217,26 @@ class LastSessionStore {
           toast.err(`Reopen failed: ${e?.message ?? String(e)}`);
         }
       }
+      // Each detached window: its tabs are rebuilt here, then moved out
+      // into a window of their own the way a tab is detached by hand.
+      for (const specs of windows) {
+        const built: PaneTab[] = [];
+        for (const spec of specs) {
+          try {
+            built.push(await this.restoreOne(spec));
+            opened++;
+          } catch (e: any) {
+            toast.err(`Reopen failed: ${e?.message ?? String(e)}`);
+          }
+        }
+        await detachTabsToWindow(built).catch((e) => {
+          toast.err(`Reopening a detached window failed: ${e?.message ?? String(e)}`);
+        });
+      }
     } finally {
       this.restoring = false;
-      if (opened < saved.length) {
-        toast.ok(`Reopened ${opened} of ${saved.length} tabs`);
+      if (opened < total) {
+        toast.ok(`Reopened ${opened} of ${total} tabs`);
       }
       // Persist the rebuilt state once - failed entries drop out so
       // they don't error again on every start.
@@ -203,8 +244,8 @@ class LastSessionStore {
     }
   }
 
-  private async restoreOne(spec: TabSpec) {
-    if (!spec?.root) return;
+  private async restoreOne(spec: TabSpec): Promise<PaneTab> {
+    if (!spec?.root) throw new Error(`${spec?.title || "tab"}: nothing saved`);
     const built = await restorePaneSpec(spec, (one) => connectSpec(one));
     if (!built) throw new Error(`${spec.title || "tab"}: nothing could be reconnected`);
     const tab = paneTabs.addTabFromLayout({
@@ -222,6 +263,7 @@ class LastSessionStore {
       if (first) paneTabs.setTitle(tab.tabId, first.name);
     }
     view.setTab("terminal");
+    return tab;
   }
 
 }

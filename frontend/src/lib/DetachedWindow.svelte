@@ -13,7 +13,10 @@
   import { onMount } from "svelte";
   import { errMsg } from "./connectErrors";
   import { api } from "./api";
-  import { sessions, paneTabs, view, tree, decodePaneLayout, encodePaneLayouts } from "./stores.svelte";
+  import { sessions, paneTabs, view, tree, decodePaneLayoutsMulti, encodePaneLayouts } from "./stores.svelte";
+  import { serializeOpenTabs } from "./lastSession.svelte";
+  import { workspaces } from "./workspaces.svelte";
+  import StatusBar from "./StatusBar.svelte";
   import { vncSessions } from "./vncState.svelte.ts";
   import { kafkaTabs } from "./kafkaState.svelte";
   import { dbTabs, dbTabTitle } from "./dbState.svelte";
@@ -50,6 +53,10 @@
     // this window showed the default glyph. Not awaited: an icon arriving
     // a moment late beats holding back the terminals.
     void tree.load().catch(console.warn);
+    // Workspace frames need the list to name them (a tab carries only the
+    // id); without it a workspace moved here lost its frame, and with it
+    // save and close.
+    void workspaces.load().catch(console.warn);
     try {
       // Parse the comma-separated session IDs passed by the main window.
       // Fall back to all active sessions if none were specified (legacy/manual open).
@@ -57,7 +64,8 @@
       const sessionParam = params.get("sessions");
       const layoutParam = params.get("layout") ?? "";
       const allowedIds = sessionParam ? new Set(sessionParam.split(",")) : null;
-      const layout = decodePaneLayout(layoutParam);
+      // One tab from a drag-out, a whole window's worth from a restore.
+      const layouts = decodePaneLayoutsMulti(layoutParam);
 
       // SSH sessions. Hydrate SessionStore for every session this
       // window owns; layout restore (below) maps leaves onto these
@@ -148,8 +156,12 @@
       // group metadata survive the detach. If the main window didn't
       // ship a layout (legacy / direct open), fall back to one tab
       // per recovered session.
-      if (layout) {
-        paneTabs.addTabFromLayout(layout);
+      if (layouts.length > 0) {
+        for (const layout of layouts) paneTabs.addTabFromLayout(layout);
+        // A whole workspace moved here is this window's active one, so the
+        // status bar offers saving it.
+        const ws = layouts.find((l) => l.workspaceId)?.workspaceId;
+        if (ws) workspaces.activeId = ws;
       } else {
         for (const s of live) {
           if (allowedIds && !allowedIds.has(s.session_id)) continue;
@@ -205,6 +217,36 @@
     }
   });
 
+  // This window's share of the last session: its open tabs, handed to the
+  // backend on every change. The backend keeps them only if the app quits
+  // with this window open (a close by hand or a redock forgets them).
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastSaved = "";
+  function saveTabs() {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    const json = JSON.stringify(serializeOpenTabs());
+    if (json === lastSaved) return;
+    lastSaved = json;
+    api.detachedSessionSave(windowName, json).catch(console.warn);
+  }
+  $effect(() => {
+    if (recovering) return;
+    // Read the snapshot here so every tab, pane and session it covers is
+    // a dependency of this effect.
+    const json = JSON.stringify(serializeOpenTabs());
+    if (json === lastSaved) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveTabs, 300);
+  });
+  onMount(() => {
+    const flush = () => saveTabs();
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  });
+
   async function redock() {
     // Ship the layout of EVERY tab in this window back so the main window
     // rebuilds them all (splits / group meta intact) instead of losing all
@@ -239,12 +281,13 @@
   {:else}
     <TerminalArea />
   {/if}
+  <StatusBar />
 </div>
 
 <style>
   .detached {
     display: grid;
-    grid-template-rows: 32px 1fr;
+    grid-template-rows: 32px 1fr auto;
     height: 100vh;
     background: var(--base);
     color: var(--text);

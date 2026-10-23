@@ -23,9 +23,17 @@ The Database tab now speaks Oracle and SQL Server, both with pure-Go drivers: no
 - The "plugin is not installed" note on a new NetBird, Tailscale, OpenConnect, OpenVPN or Check Point profile now has an **Install it** link that opens the plugin list and flashes that plugin. The list's first row, which held the plugins and the app proxy as **General**, is now **Plugins & proxy**.
 - The OpenConnect plugin card showed its engine as `(devel)`; it now reads `0.1.0 (patched)`, the upstream version our patched copy is based on.
 
+### Windows
+
+- **Detached windows come back.** Quitting with tabs in separate windows used to reopen only the main window's tabs; each detached window now reopens as its own window with all its tabs. A window closed by hand or redocked before the quit stays closed.
+- **Several tabs to a new window.** With tabs selected (Ctrl / Shift click), **Detach N tabs to a new window** in the tab menu, or dragging them out, takes them all into one window, splits included.
+- **Workspaces in their own window.** A workspace's label can be dragged out of the window, and the Workspaces menu has **Open in a new window** for each one; the workspace keeps its frame there and can be saved from it.
+- **Detached windows have a status bar** like the main window. Its links to Settings, and a pane's **Edit this connection**, bring the main window forward and open what was asked for there.
+
 ### Fixes
 
 - **Edit this connection** (the settings button in a pane's header) did nothing in a detached window, which has no connection tree. It now brings the main window forward with that connection selected and its settings open.
+- A detached window's taskbar entry read "ssh-tool"; it now names the window's active tab.
 
 ---
 

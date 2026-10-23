@@ -306,10 +306,14 @@
   // already exists here too (via sshActiveSessions); the redock signal
   // is mostly cosmetic for now but the hook is wired for future
   // session-routing finesse.
-  // A detached window's "edit this connection" (RevealInMainWindow): the
-  // main window has the tree, so it selects the connection there.
+  // A detached window has no tree and no Settings: what it reveals or
+  // opens comes here (RevealInMainWindow), with the main window raised.
   if (!isDetached) {
-    EventsOn<{ kind: "folder" | "connection"; id: string }>("reveal_in_tree", ({ kind, id }) => view.reveal(kind, id));
+    EventsOn<{ kind: string; id: string }>("reveal_in_tree", ({ kind, id }) => {
+      if (kind === "settings") view.setTabSettingsSection(id);
+      else if (kind === "network-profile") view.openNetworkProfile(id);
+      else if (kind === "folder" || kind === "connection") view.reveal(kind, id);
+    });
   }
 
   if (!isDetached) {

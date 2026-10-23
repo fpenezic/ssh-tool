@@ -22,7 +22,7 @@
   import { tcpdump } from "./tcpdumpStore.svelte";
   import { logtail } from "./logtailStore.svelte";
   import { fleet } from "./fleetStore.svelte";
-  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot, IconSave, IconUpload, IconDownload, IconFile } from "./iconMap";
+  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot, IconSave, IconUpload, IconDownload, IconFile, IconPopOut } from "./iconMap";
   import McpActivityPanel from "./McpActivityPanel.svelte";
   import { mcpCounterTitle } from "./mcpLevel";
   import { networkProfiles } from "./networkProfiles.svelte";
@@ -141,11 +141,15 @@
   let wsBusy = $state(false);
   let wsErr = $state<string | null>(null);
 
-  async function openWorkspace(id: string) {
+  // The main window's status bar offers a workspace in a window of its
+  // own; a detached window's has no tabs to move out.
+  const inDetachedWindow = new URLSearchParams(window.location.search).has("detached");
+
+  async function openWorkspace(id: string, newWindow = false) {
     wsErr = null;
     wsBusy = true;
     try {
-      await workspaces.open(id);
+      await workspaces.open(id, { newWindow });
       wsMenuOpen = false;
     } catch (e: any) {
       wsErr = errMsg(e);
@@ -594,6 +598,15 @@
                   <span class="ws-meta">{new Date(w.last_opened_at * 1000).toLocaleDateString()}</span>
                 {/if}
               </button>
+              {#if !inDetachedWindow}
+                <button
+                  class="ws-save"
+                  disabled={wsBusy}
+                  onclick={() => openWorkspace(w.id, true)}
+                  title={workspaces.isOpen(w.id) ? "Move this workspace's tabs to a new window" : "Open in a new window"}
+                  aria-label="Open {w.name} in a new window"
+                ><IconPopOut size={11} /></button>
+              {/if}
               <button
                 class="ws-save"
                 disabled={wsBusy || paneTabs.tabs.length === 0}

@@ -21,6 +21,7 @@
 
 import { api, type Workspace } from "./api";
 import { paneTabs, sessions, view, type PaneTab } from "./stores.svelte";
+import { detachTabsToWindow } from "./detachTabs";
 import {
   serializePaneSpec,
   restorePaneSpec,
@@ -244,11 +245,18 @@ class WorkspaceStore {
 
   // Restore a workspace next to the open tabs, pane trees included. Already
   // open: focus its frame instead of connecting everything a second time.
-  async open(id: string) {
+  // newWindow: its tabs go to a window of their own (already open here:
+  // they move there).
+  async open(id: string, opts: { newWindow?: boolean } = {}) {
     const ws = this.list.find((w) => w.id === id);
     if (!ws) throw new Error("workspace not found");
     if (this.opening.has(id)) return; // a second click while it connects
     const already = this.tabsOf(id);
+    if (already.length && opts.newWindow) {
+      await detachTabsToWindow(already);
+      if (this.activeId === id) this.activeId = null;
+      return;
+    }
     if (already.length) {
       const first = already.find((t) => !t.hidden) ?? already[0];
       if (first.hidden) paneTabs.setHidden(first.tabId, false);
@@ -276,20 +284,24 @@ class WorkspaceStore {
     // so one dead host costs a pane rather than the whole tab.
     beginRestore();
     this.opening.add(id);
+    let built: PaneTab[] = [];
     try {
-      await this.restoreTabs(id, tabs);
+      // Bound for a new window: built hidden here, so they do not show up
+      // in this window on the way.
+      built = await this.restoreTabs(id, tabs, !!opts.newWindow);
     } finally {
       this.opening.delete(id);
     }
-    this.activeId = id;
+    if (opts.newWindow && built.length) await detachTabsToWindow(built);
+    else this.activeId = id;
     try { await api.workspaceTouchLastOpened(id); } catch { /* ignore */ }
     await this.load();
   }
 
   private opening = new Set<string>();
 
-  private async restoreTabs(id: string, tabs: TabSpec[]) {
-    let opened = 0;
+  private async restoreTabs(id: string, tabs: TabSpec[], hidden = false): Promise<PaneTab[]> {
+    const out: PaneTab[] = [];
     for (const spec of tabs) {
       const built = await restorePaneSpec(spec, (one) => connectSpec(one));
       if (!built) {
@@ -303,14 +315,16 @@ class WorkspaceStore {
         groupColor: spec.groupColor,
         workspaceId: id,
       });
+      if (hidden) paneTabs.setHidden(tab.tabId, true);
       if (spec.titleCustom && spec.title) paneTabs.setTitle(tab.tabId, spec.title, true);
       if (!spec.title) {
         const first = sessions.tabs.find((x) => x.sessionId === built.sessionIds[0]);
         if (first) paneTabs.setTitle(tab.tabId, first.name);
       }
-      opened++;
+      out.push(tab);
     }
-    if (opened > 0) view.setTab("terminal");
+    if (out.length > 0 && !hidden) view.setTab("terminal");
+    return out;
   }
 }
 

@@ -171,10 +171,12 @@ func buildApp(appInst *App) *application.App {
 		// re-quits, which passes straight through here.
 		ShouldQuit: func() bool {
 			if appInst.quitConfirmed.Load() {
+				appInst.appClosing.Store(true)
 				appInst.quitSteps()
 				return true
 			}
 			if appInst.SshActiveSessionCount() == 0 {
+				appInst.appClosing.Store(true)
 				// Auto-sync: push a dirty profile on the way out,
 				// capped at 10s so a dead network can't block quit.
 				appInst.quitSteps()
@@ -342,6 +344,7 @@ func configurePlatform(app *application.App, appInst *App) func() {
 
 	mainWindow.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
 		if appInst.quitConfirmed.Load() {
+			appInst.appClosing.Store(true)
 			return
 		}
 		if appInst.shouldCloseToTray() {
@@ -350,6 +353,7 @@ func configurePlatform(app *application.App, appInst *App) func() {
 			return
 		}
 		if len(appInst.pool.IDs()) == 0 {
+			appInst.appClosing.Store(true)
 			return
 		}
 		event.Cancel()

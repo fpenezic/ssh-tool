@@ -8,6 +8,12 @@ import { resolveColorTag } from "./palette";
 import { terminalPrefs } from "./terminalPrefs.svelte.ts";
 import { focusActivePane } from "./paneFocus";
 import { takeNetworkVia } from "./networkVia";
+
+// A detached window shows terminals only: no tree, no Settings. What it
+// is asked to reveal or open there goes to the main window instead
+// (RevealInMainWindow -> reveal_in_tree, handled in App.svelte).
+const inDetachedWindow = typeof window !== "undefined" &&
+  (new URLSearchParams(window.location.search).has("detached") || /[#&?]detached=/.test(window.location.hash));
 import { loudestMcpLevel } from "./mcpLevel";
 
 class TreeStore {
@@ -1069,6 +1075,10 @@ class ViewStore {
   // it, and queue a scroll-into-view. Lazy imports avoid a circular
   // module ref at the top of the file.
   reveal(kind: "folder" | "connection", id: string) {
+    if (inDetachedWindow) {
+      api.revealInMainWindow(kind, id).catch(console.error);
+      return;
+    }
     if (kind === "connection" && id.startsWith("dyn:")) {
       void this.revealDynamic(id.slice(4));
       return;
@@ -1140,12 +1150,20 @@ class ViewStore {
   // on its own mount; this stays valid through subsequent re-mounts
   // because we also persist the pin to that setting.
   setTabSettingsSection(section: string) {
+    if (inDetachedWindow) {
+      api.revealInMainWindow("settings", section).catch(console.error);
+      return;
+    }
     this.pendingSettingsSection = section;
     this.tab = "settings";
   }
 
   // Open one network profile, on its Settings tab, in Settings.
   openNetworkProfile(id: string) {
+    if (inDetachedWindow) {
+      api.revealInMainWindow("network-profile", id).catch(console.error);
+      return;
+    }
     this.pendingNetworkProfileId = id;
     this.setTabSettingsSection("network");
   }
