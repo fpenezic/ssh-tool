@@ -394,3 +394,15 @@ func TestRedactSecretsOracleMSSQL(t *testing.T) {
 		}
 	}
 }
+
+// The GO bound holds for the whole script, not each batch: past it a GO
+// line is no separator, so 1000 batches under GO 100000 expand once.
+func TestSplitMSSQLGoBound(t *testing.T) {
+	big := strings.Repeat("SELECT 1\nGO 100000\n", 1000)
+	if n := len(Split(EngineMSSQL, big)); n > maxGoStatements+1000 {
+		t.Fatalf("GO expanded to %d statements", n)
+	}
+	if n := len(Split(EngineMSSQL, strings.Repeat("SELECT 1\nGO 3\n", 10))); n != 30 {
+		t.Fatalf("10 x GO 3: %d statements", n)
+	}
+}

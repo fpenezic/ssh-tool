@@ -48,7 +48,7 @@ func Split(engine, script string) []Stmt {
 	batch := 0 // where the statements since the last GO start in out
 	for i := 0; i < len(script); {
 		if i == 0 || script[i-1] == '\n' {
-			if n, count, ok := terminatorLine(engine, script, i); ok && goFits(len(out)-batch+pending(engine, script[start:i]), count) {
+			if n, count, ok := terminatorLine(engine, script, i); ok && goFits(len(out), len(out)-batch+pending(engine, script[start:i]), count) {
 				emit(i)
 				// GO n runs the batch n times, as sqlcmd does.
 				one := out[batch:]
@@ -78,14 +78,20 @@ func Split(engine, script string) []Stmt {
 	return out
 }
 
-// maxGoStatements bounds what GO's repeat count expands to: the batch is
-// copied that many times into the statement list. A larger count is not
-// cut short: the line is then no separator, and the server refuses the GO
-// in the batch.
+// maxGoStatements bounds the whole script once GO's repeat counts are
+// expanded: each batch is copied that many times into the statement list.
+// A count that would go past it is not cut short: the line is then no
+// separator, and the server refuses the GO in the batch.
 const maxGoStatements = 100000
 
-func goFits(stmts, count int) bool {
-	return count <= 1 || stmts <= maxGoStatements/count // no overflow on 32-bit
+// goFits: the list holds total statements, the last batch of them before
+// the GO line; repeating it count times stays within the bound. Divided,
+// not multiplied, so nothing overflows on 32-bit.
+func goFits(total, batch, count int) bool {
+	if count <= 1 || batch == 0 {
+		return true
+	}
+	return total <= maxGoStatements && batch <= (maxGoStatements-total)/(count-1)
 }
 
 // pending is 1 when text still holds a statement to emit.
