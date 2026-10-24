@@ -2087,6 +2087,33 @@ everything mobile is behind a build tag or an `isMobile` check.
    `detachTabsToWindow` removes the source tabs only after the new window
    opened.
 
+136. **A GitLab runner's jobs cannot join the gateway's network.**
+   (`app_cirunner.go`) `network_mode = "container:<gateway>"` fails every
+   job with "conflicting options: hostname and the network mode": the
+   docker executor always sets a hostname (`Docker.Hostname`, else the
+   project's unique name), and Docker refuses one on a container that
+   joins another's network. So the jobs get their own network
+   (`sshtool-ci`, created with `com.docker.network.bridge.inhibit_ipv4`,
+   so the host bridge takes no address) and the gateway takes the
+   network's gateway address on top of its own (the subnet's last
+   address), with `ip_forward` and a MASQUERADE for what is not for the
+   VPNs. A job's default route then leads to the gateway; extra_hosts and
+   services work as on any network. The plain "Copy gateway command"
+   recipe (`--network container:sshtool-gw`) still suits other
+   containers, not a runner. A job-like `docker run` is not a test of
+   this: only a real pipeline creates the containers the way the runner
+   does.
+
+137. **The jobs' network cannot reach a port published on the same
+   Docker host.** With `bridge-nf-call-iptables=1` the frames a job sends
+   to its gateway pass the host's iptables while being bridged, and
+   Docker's port-mapping DNAT (and its raw-table guard for container
+   addresses) takes a packet for `<bridge ip>:<published port>` or a
+   container's own address. Nothing arrives at the gateway; the job times
+   out. A GitLab or cache elsewhere (LAN, internet) goes through the
+   gateway's MASQUERADE and works. A lab GitLab in a container on the same
+   host needs `GIT_STRATEGY: none` or a second network for the test.
+
 ---
 
 # Archive
