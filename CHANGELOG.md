@@ -9,7 +9,7 @@ a prerelease upstream.
 
 ## [Unreleased]
 
-The Database tab now speaks Oracle and SQL Server, both with pure-Go drivers: nothing to install next to the app.
+The Database tab now speaks Oracle and Microsoft SQL Server (MSSQL), both with pure-Go drivers: nothing to install next to the app.
 
 ### Databases
 

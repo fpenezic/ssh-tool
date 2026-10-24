@@ -223,7 +223,7 @@ export const DB_ENGINES: { value: DbEngine; label: string; short: string; port: 
   { value: "postgres", label: "PostgreSQL", short: "PostgreSQL", port: 5432 },
   { value: "mysql", label: "MySQL / MariaDB", short: "MySQL", port: 3306 },
   { value: "oracle", label: "Oracle", short: "Oracle", port: 1521 },
-  { value: "mssql", label: "SQL Server", short: "SQL Server", port: 1433 },
+  { value: "mssql", label: "SQL Server (MSSQL)", short: "SQL Server", port: 1433 },
   { value: "clickhouse", label: "ClickHouse (HTTP)", short: "ClickHouse", port: 8123 },
   { value: "opensearch", label: "OpenSearch / Elasticsearch", short: "OpenSearch", port: 9200 },
   { value: "redis", label: "Redis / Valkey", short: "Redis", port: 6379 },

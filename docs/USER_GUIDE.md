@@ -1833,7 +1833,7 @@ Instant Client to install. What differs:
 <a id="mssql"></a>
 ### SQL Server
 
-Microsoft SQL Server and Azure SQL. What differs:
+Microsoft SQL Server (MSSQL) and Azure SQL. What differs:
 
 - **The address names the port.** Named instances are not looked up (the
   SQL Browser service is UDP, which no tunnel carries): give the
