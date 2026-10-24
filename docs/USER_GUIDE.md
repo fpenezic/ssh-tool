@@ -2640,7 +2640,10 @@ long as no customer's networks contain their addresses. The runner URL
 and an S3 cache address are kept off even then; anything else in such a
 range (a registry, say) needs an entry under **Never through a VPN**.
 Images the runner pulls for a job come through Docker itself and never
-go through the gateway.
+go through the gateway. The exclusions are addresses, looked up at
+Start: a GitLab or cache name that does not resolve then is not excluded
+(the log says so), and one that later resolves to a new address needs a
+Stop and Start.
 **Extra hosts** (`name:ip`) are names the jobs must resolve that only the
 customer's DNS knows - a job resolves names with your normal DNS.
 **Stop**, or quitting ssh-tool, removes all three: without the app there

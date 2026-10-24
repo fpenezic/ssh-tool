@@ -2407,19 +2407,25 @@
       spDetails = sp.enabled ? await api.networkSharedProxyDetails() : null;
     } catch { /* shown on save */ }
   }
-  // Saves run one after another, each with the form as it is when its
-  // turn comes, and the reload waits for the last one: quick priority
-  // clicks must end in the order the user made last.
+  // Saves run one after another, each with the values from the moment it
+  // was asked for, and only a reload with no newer save queued behind it
+  // updates the form: quick priority clicks end in the order clicked last.
   let spQueue: Promise<void> = Promise.resolve();
   let spPending = 0;
   function spSave(): Promise<void> {
+    const req = { enabled: sp.enabled, bind: sp.bind.trim(), port: Number(sp.port), priority: $state.snapshot(sp.priority) };
     spPending++;
     spQueue = spQueue.then(async () => {
       try {
-        await api.networkSharedProxySet({ enabled: sp.enabled, bind: sp.bind.trim(), port: Number(sp.port), priority: $state.snapshot(sp.priority) });
+        await api.networkSharedProxySet(req);
         if (spPending === 1) {
-          await spLoad();
-          toast.ok(sp.enabled ? `App proxy on ${sp.bind}:${sp.port}` : "App proxy off");
+          const r = await api.networkSharedProxyGet();
+          const d = r.config.enabled ? await api.networkSharedProxyDetails() : null;
+          if (spPending === 1) {
+            sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], listening: r.listening };
+            spDetails = d;
+          }
+          toast.ok(req.enabled ? `App proxy on ${req.bind}:${req.port}` : "App proxy off");
         }
       } catch (e: any) { toast.err(errMsg(e)); } finally { spPending--; }
     });
