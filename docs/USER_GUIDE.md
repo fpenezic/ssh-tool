@@ -2634,10 +2634,13 @@ container, never written to your disk.
 **Start** creates three things: a docker network for the jobs
 (`sshtool-ci`), a gateway container (`sshtool-ci-gw`) that is that
 network's router, and the runner (`sshtool-ci-runner`). The gateway sends
-the VPNs' networks into the app proxy and everything else out as usual,
-so the clone, the cache, registries and the internet do not touch a VPN.
-The runner URL and an S3 cache address are kept off the VPNs even when a
-customer's networks contain them; **Never through a VPN** adds more.
+the VPNs' networks into the app proxy and everything else out as usual:
+the clone, the cache, registries and the internet stay off the VPNs as
+long as no customer's networks contain their addresses. The runner URL
+and an S3 cache address are kept off even then; anything else in such a
+range (a registry, say) needs an entry under **Never through a VPN**.
+Images the runner pulls for a job come through Docker itself and never
+go through the gateway.
 **Extra hosts** (`name:ip`) are names the jobs must resolve that only the
 customer's DNS knows - a job resolves names with your normal DNS.
 **Stop**, or quitting ssh-tool, removes all three: without the app there

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ocFlavorTitle, pluginTitle, profileRunsHere, NOT_ON_MOBILE_TITLE } from "./networkKind";
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { EventsOn } from "./wailsRuntime";
   import { errMsg } from "./connectErrors";
   import { desktopAlerts } from "./desktopAlerts.svelte";
@@ -1795,7 +1795,7 @@
       refreshPlugins();
       api.wgBindPhysicalGet().then((v) => (wgBindPhysical = v)).catch(() => {});
       spLoad();
-      if (!isMobile) ciLoad();
+      if (!isMobile) untrack(() => ciLoad());
       npLoadUsage();
       api.settingsGet(IDLE_STOP_KEY).then((v) => {
         const n = parseInt(v, 10);
@@ -2407,12 +2407,23 @@
       spDetails = sp.enabled ? await api.networkSharedProxyDetails() : null;
     } catch { /* shown on save */ }
   }
-  async function spSave() {
-    try {
-      await api.networkSharedProxySet({ enabled: sp.enabled, bind: sp.bind.trim(), port: Number(sp.port), priority: sp.priority });
-      await spLoad();
-      toast.ok(sp.enabled ? `App proxy on ${sp.bind}:${sp.port}` : "App proxy off");
-    } catch (e: any) { toast.err(errMsg(e)); }
+  // Saves run one after another, each with the form as it is when its
+  // turn comes, and the reload waits for the last one: quick priority
+  // clicks must end in the order the user made last.
+  let spQueue: Promise<void> = Promise.resolve();
+  let spPending = 0;
+  function spSave(): Promise<void> {
+    spPending++;
+    spQueue = spQueue.then(async () => {
+      try {
+        await api.networkSharedProxySet({ enabled: sp.enabled, bind: sp.bind.trim(), port: Number(sp.port), priority: $state.snapshot(sp.priority) });
+        if (spPending === 1) {
+          await spLoad();
+          toast.ok(sp.enabled ? `App proxy on ${sp.bind}:${sp.port}` : "App proxy off");
+        }
+      } catch (e: any) { toast.err(errMsg(e)); } finally { spPending--; }
+    });
+    return spQueue;
   }
   // Priority for overlapping networks: listed profiles first, in order;
   // the rest (by route) after them.
