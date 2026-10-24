@@ -170,23 +170,26 @@ func TestCILastAddr(t *testing.T) {
 }
 
 // Once quit has begun no start begins, and quit waits for the operation
-// in flight before it cleans up.
+// in flight (cancelling it) before it cleans up. The docker CLI is
+// swapped for a missing one: the cleanup must not touch a real daemon.
 func TestCIQuitWaitsAndBlocksStarts(t *testing.T) {
+	realBin := dockerBin
+	dockerBin = func() string { return "/nonexistent/docker-for-test" }
+	defer func() { dockerBin = realBin }()
 	a := &App{}
 	if !ciBegin() {
 		t.Fatal("begin refused")
 	}
 	cancelled := make(chan struct{})
+	ended := make(chan struct{})
 	ciState.Lock()
 	ciState.cancel = func() { close(cancelled) }
 	ciState.Unlock()
 	go func() {
 		<-cancelled
 		ciEnd(nil, false)
+		close(ended)
 	}()
-	ciState.Lock()
-	ciState.started = false
-	ciState.Unlock()
 	finished := make(chan struct{})
 	go func() {
 		a.ciRunnerStopOnQuit()
@@ -194,8 +197,13 @@ func TestCIQuitWaitsAndBlocksStarts(t *testing.T) {
 	}()
 	select {
 	case <-finished:
-	case <-time.After(15 * time.Second):
-		t.Fatal("quit did not return")
+	case <-time.After(5 * time.Second):
+		t.Fatal("quit did not return before its 10 s fallback")
+	}
+	select {
+	case <-ended:
+	default:
+		t.Fatal("quit returned before the start in flight ended")
 	}
 	if ciBegin() {
 		t.Fatal("a start began after quit")
