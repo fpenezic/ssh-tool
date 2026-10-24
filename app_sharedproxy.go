@@ -70,8 +70,14 @@ func (a *App) NetworkSharedProxyGet() (SharedProxyConfig, bool) {
 	return a.sharedProxyConfig(), sharedProxy.ln != nil
 }
 
+// sharedProxySetMu serializes NetworkSharedProxySet: stop, start and the
+// settings write of two calls must not interleave (the last call wins).
+var sharedProxySetMu sync.Mutex
+
 // NetworkSharedProxySet saves the shared proxy setting and (re)starts it.
 func (a *App) NetworkSharedProxySet(c SharedProxyConfig) error {
+	sharedProxySetMu.Lock()
+	defer sharedProxySetMu.Unlock()
 	c.Bind = strings.TrimSpace(c.Bind)
 	if c.Bind == "" {
 		c.Bind = "127.0.0.1"

@@ -294,9 +294,14 @@ func (a *App) ciStart(c CIRunnerConfig) (err error) {
 	if !ciBegin() {
 		return errors.New("the CI runner is starting or stopping")
 	}
-	started := false
+	// A start that fails before the old containers are gone leaves them
+	// running: keep "started by us" so quit still removes them.
+	ciState.Lock()
+	wasStarted := ciState.started
+	ciState.Unlock()
+	started, tornDown := false, false
 	defer func() {
-		ciEnd(err, started)
+		ciEnd(err, started || (wasStarted && !tornDown))
 		EventsEmit("ci_runner_changed", nil)
 	}()
 
@@ -340,6 +345,7 @@ func (a *App) ciStart(c CIRunnerConfig) (err error) {
 	if err := ciRemoveAll(); err != nil {
 		return err
 	}
+	tornDown = true
 	subnet, gwAddr, err := ciNetwork(ctx)
 	if err != nil {
 		return err
@@ -362,14 +368,17 @@ func (a *App) ciStart(c CIRunnerConfig) (err error) {
 		"--cap-add", "NET_ADMIN", "--device", "/dev/net/tun",
 		"--sysctl", "net.ipv4.ip_forward=1",
 		"--add-host", "host.docker.internal:host-gateway",
-		"-e", fmt.Sprintf("PROXY=socks5://%s:%s@host.docker.internal:%d", localProxyUser, pw, sp.Port),
+		// The value comes from the CLI's environment, not argv: argv is
+		// readable by every local user (ps, /proc) while docker runs.
+		"-e", "PROXY",
 		"-e", "TUN_INCLUDED_ROUTES=" + strings.Join(details.Routes, ","),
 		"-e", "EXTRA_COMMANDS=" + extra}
 	if len(direct) > 0 {
 		gw = append(gw, "-e", "TUN_EXCLUDED_ROUTES="+strings.Join(direct, ","))
 	}
 	gw = append(gw, tun2socksImage)
-	if _, err := docker(ctx, nil, gw...); err != nil {
+	proxyEnv := fmt.Sprintf("PROXY=socks5://%s:%s@host.docker.internal:%d", localProxyUser, pw, sp.Port)
+	if _, err := dockerEnv(ctx, nil, []string{proxyEnv}, gw...); err != nil {
 		_ = ciRemoveAll()
 		return fmt.Errorf("gateway: %w", err)
 	}
@@ -797,7 +806,19 @@ func dockerCommand(ctx context.Context, args ...string) *exec.Cmd {
 // docker runs the docker CLI and returns its trimmed stdout; on failure
 // the error carries stderr.
 func docker(ctx context.Context, stdin *bytes.Reader, args ...string) (string, error) {
+	return dockerEnv(ctx, stdin, nil, args...)
+}
+
+// dockerEnv is docker with extra environment for the CLI (values passed
+// with a bare "-e NAME").
+func dockerEnv(ctx context.Context, stdin *bytes.Reader, env []string, args ...string) (string, error) {
 	cmd := dockerCommand(ctx, args...)
+	if len(env) > 0 {
+		if cmd.Env == nil {
+			cmd.Env = os.Environ()
+		}
+		cmd.Env = append(cmd.Env, env...)
+	}
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}
