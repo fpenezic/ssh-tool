@@ -102,6 +102,11 @@ var ciState struct {
 	lastErr   string
 	startedAt time.Time
 	started   bool // started by this process: stopped on quit
+	// closing: quit has begun, nothing new starts. done closes when the
+	// operation in flight ends; cancel aborts a start.
+	closing bool
+	done    chan struct{}
+	cancel  context.CancelFunc
 }
 
 func (a *App) ciRunnerConfig() CIRunnerConfig {
@@ -264,16 +269,22 @@ var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 func ciBegin() bool {
 	ciState.Lock()
 	defer ciState.Unlock()
-	if ciState.busy {
+	if ciState.busy || ciState.closing {
 		return false
 	}
 	ciState.busy = true
+	ciState.done = make(chan struct{})
 	return true
 }
 
 func ciEnd(err error, started bool) {
 	ciState.Lock()
 	ciState.busy = false
+	ciState.cancel = nil
+	if ciState.done != nil {
+		close(ciState.done)
+		ciState.done = nil
+	}
 	ciState.lastErr = ""
 	if err != nil {
 		ciState.lastErr = err.Error()
@@ -322,6 +333,9 @@ func (a *App) ciStart(c CIRunnerConfig) (err error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	ciState.Lock()
+	ciState.cancel = cancel
+	ciState.Unlock()
 	if _, err := docker(ctx, nil, "version", "--format", "{{.Server.Version}}"); err != nil {
 		return fmt.Errorf("docker: %w", err)
 	}
@@ -443,8 +457,24 @@ func (a *App) ciRunnerAutoStart() {
 // jobs it cannot finish.
 func (a *App) ciRunnerStopOnQuit() {
 	ciState.Lock()
-	started := ciState.started
+	ciState.closing = true
+	started, busy, done, cancel := ciState.started, ciState.busy, ciState.done, ciState.cancel
 	ciState.Unlock()
+	if busy {
+		// A start (an auto start after unlock, say) may be half way:
+		// abort it, give it a moment to return, and clean up whatever
+		// it created.
+		if cancel != nil {
+			cancel()
+		}
+		if done != nil {
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+			}
+		}
+		started = true
+	}
 	if !started {
 		return
 	}
