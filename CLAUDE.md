@@ -80,7 +80,7 @@ Mobile (Android, v0.36.0+):
 
 Frontend (Node 20):
 - Svelte 5 (runes: $state, $derived, $effect, $props).
-- Vite 5.
+- Vite 6.
 - xterm.js 6 + addon-fit + addon-webgl.
 - Wails autogenerates TS bindings into `frontend/bindings/`. Our
   facade in `frontend/src/lib/api.ts` wraps those with plain-object
@@ -170,7 +170,7 @@ Tests + checks:
 go build ./...
 go test ./...                      # 31 packages carry tests
 cd frontend && npm run check       # svelte-check, 0 errors expected
-cd frontend && npm run test        # vitest, 33 files / 332 cases
+cd frontend && npm run test        # vitest, 36 files / 346 cases
 ```
 
 The Database tests that need a real server skip unless `DBTEST_PG` /
