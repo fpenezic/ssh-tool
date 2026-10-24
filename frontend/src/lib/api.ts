@@ -603,8 +603,42 @@ export interface SharedProxyConfig {
   enabled: boolean;
   bind?: string;
   port: number;
-  /** Manual override: this profile takes everything its networks contain. "" = by route. */
+  /** Profile ids in order: the first one whose networks contain a destination takes it. Pinned addresses still win. */
+  priority?: string[];
+  /** Older single override, read by the backend as priority = [use]. */
   use?: string;
+}
+
+export interface SharedProxyWhich {
+  profile: string;
+  why: string;
+}
+
+export interface CIRunnerConfig {
+  url?: string;
+  name?: string;
+  image?: string;
+  /** Imported config.toml, tokens moved to the vault. */
+  config_toml?: string;
+  /** "name:ip" entries, placed on the gateway. */
+  extra_hosts?: string[];
+  /** Destinations that never go through a VPN. */
+  direct?: string[];
+  auto_start?: boolean;
+}
+
+export interface CIRunnerStatus {
+  docker: string;
+  docker_err?: string;
+  desktop: boolean;
+  gateway: string;
+  runner: string;
+  running: boolean;
+  tokens: number;
+  runners: number;
+  last_err?: string;
+  started_at?: number;
+  busy: boolean;
 }
 
 export interface SharedProxyDetails {
@@ -1577,6 +1611,16 @@ export const api = {
   },
   networkSharedProxySet: (cfg: SharedProxyConfig) => G.NetworkSharedProxySet(cfg as any) as unknown as Promise<void>,
   networkSharedProxyDetails: () => G.NetworkSharedProxyDetails() as unknown as Promise<SharedProxyDetails>,
+  networkSharedProxyWhich: (host: string) => G.NetworkSharedProxyWhich(host) as unknown as Promise<SharedProxyWhich>,
+  ciRunnerGet: async (): Promise<{ config: CIRunnerConfig; status: CIRunnerStatus }> => {
+    const r = (await G.CIRunnerGet()) as unknown as [CIRunnerConfig, CIRunnerStatus];
+    return { config: r[0], status: r[1] };
+  },
+  /** token "" keeps the saved one; an imported config.toml brings its own. */
+  ciRunnerSet: (cfg: CIRunnerConfig, token: string) => G.CIRunnerSet(cfg as any, token) as unknown as Promise<CIRunnerConfig>,
+  ciRunnerStart: () => G.CIRunnerStart() as unknown as Promise<CIRunnerStatus>,
+  ciRunnerStop: () => G.CIRunnerStop() as unknown as Promise<CIRunnerStatus>,
+  ciRunnerLogs: () => G.CIRunnerLogs() as unknown as Promise<string>,
   networkProfileLocalProxyDetails: (id: string) =>
     G.NetworkProfileLocalProxyDetails(id) as unknown as Promise<LocalProxyDetails>,
   /** Connections and web bookmarks resolving to each profile, by profile id. */

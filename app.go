@@ -462,6 +462,7 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 // server down so attached guests get a clean bye and no listener lingers.
 func (a *App) ServiceShutdown() error {
 	quitTimed("share server", a.stopShareServer)
+	quitTimed("ci runner", a.ciRunnerStopOnQuit)
 	log.Printf("quit: service shutdown done")
 	return nil
 }
@@ -2053,6 +2054,7 @@ func (a *App) VaultUnlock(passphrase string, rememberOnMachine bool) error {
 	}
 	a.recordAudit("vault.unlock", "", map[string]string{"sidecar": boolStr(rememberOnMachine)})
 	a.inventory.VaultUnlocked()
+	a.ciRunnerAutoStart()
 	return nil
 }
 
@@ -2065,6 +2067,7 @@ func (a *App) VaultAutoUnlock() (bool, error) {
 	if ok {
 		a.recordAudit("vault.auto_unlock", "", nil)
 		a.inventory.VaultUnlocked()
+		a.ciRunnerAutoStart()
 	}
 	return ok, nil
 }

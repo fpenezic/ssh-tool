@@ -15,7 +15,7 @@
   import { networkProfiles } from "./networkProfiles.svelte";
   import { tree, credentials, paneTabs, view, sessions } from "./stores.svelte";
   import FolderPicker from "./FolderPicker.svelte";
-  import type { Folder, ClaudeDesktopInfo } from "./api";
+  import type { Folder, ClaudeDesktopInfo, CIRunnerConfig, CIRunnerStatus } from "./api";
   import { copyPastePrefs, type CopyPasteMode } from "./copyPastePrefs.svelte";
   import { SETTINGS_SECTIONS, EXTERNAL_TABS, isExternalTab, type SectionId, type SectionDef, type ExternalTabId } from "./settingsSections";
   import { terminalPrefs, DEFAULT_FONT_FAMILY, DEFAULT_SCROLLBACK, DEFAULT_BG_SCROLLBACK_DELAY } from "./terminalPrefs.svelte";
@@ -31,7 +31,7 @@
   import { probeState } from "./probeState.svelte";
   import { MCP_SYSTEM_PROMPT_HINT } from "./mcpSystemPrompt";
   import { copyText, writeClipboard } from "./clipboard";
-  import { IconCopy, IconPlay, IconStop, IconPause, IconGlobe } from "./iconMap";
+  import { IconCopy, IconPlay, IconStop, IconPause, IconGlobe, IconArrowUp, IconArrowDown, IconRefresh } from "./iconMap";
   import { localShellPrefs } from "./localShellPrefs.svelte.ts";
   import { recordingsModal } from "./recording.svelte";
   import { syncState } from "./syncState.svelte";
@@ -1795,6 +1795,7 @@
       refreshPlugins();
       api.wgBindPhysicalGet().then((v) => (wgBindPhysical = v)).catch(() => {});
       spLoad();
+      if (!isMobile) ciLoad();
       npLoadUsage();
       api.settingsGet(IDLE_STOP_KEY).then((v) => {
         const n = parseInt(v, 10);
@@ -1882,7 +1883,8 @@
       await refreshPlugins();
       try { aboutInfo = await api.appAbout(); } catch { /* ignore */ }
     });
-    return () => { offProgress(); offChanged(); };
+    const offCi = EventsOn("ci_runner_changed", () => { if (!isMobile) void ciLoad(); });
+    return () => { offProgress(); offChanged(); offCi(); };
   });
   function fmtMB(n: number): string {
     return (n / 1048576).toFixed(1);
@@ -2395,22 +2397,50 @@
   }
   // App proxy (the "shared" proxy in code): one SOCKS for every profile
   // marked shared, picking the profile by destination.
-  let sp = $state<{ enabled: boolean; bind: string; port: number; use: string; listening: boolean }>({ enabled: false, bind: "127.0.0.1", port: 1080, use: "", listening: false });
+  let sp = $state<{ enabled: boolean; bind: string; port: number; priority: string[]; listening: boolean }>({ enabled: false, bind: "127.0.0.1", port: 1080, priority: [], listening: false });
   const spProfiles = $derived(networkProfiles.list.filter((p) => p.local_proxy?.shared));
   let spDetails = $state<import("./api").SharedProxyDetails | null>(null);
   async function spLoad() {
     try {
       const r = await api.networkSharedProxyGet();
-      sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, use: r.config.use || "", listening: r.listening };
+      sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], listening: r.listening };
       spDetails = sp.enabled ? await api.networkSharedProxyDetails() : null;
     } catch { /* shown on save */ }
   }
   async function spSave() {
     try {
-      await api.networkSharedProxySet({ enabled: sp.enabled, bind: sp.bind.trim(), port: Number(sp.port), use: sp.use });
+      await api.networkSharedProxySet({ enabled: sp.enabled, bind: sp.bind.trim(), port: Number(sp.port), priority: sp.priority });
       await spLoad();
       toast.ok(sp.enabled ? `App proxy on ${sp.bind}:${sp.port}` : "App proxy off");
     } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  // Priority for overlapping networks: listed profiles first, in order;
+  // the rest (by route) after them.
+  const spPrioList = $derived([
+    ...sp.priority.map((id) => spProfiles.find((p) => p.id === id)).filter((p): p is NetworkProfileInfo => !!p),
+    ...spProfiles.filter((p) => !sp.priority.includes(p.id)),
+  ]);
+  function spPrioMove(id: string, dir: -1 | 1 | 0) {
+    // dir 0 toggles "listed"; -1 / 1 moves a listed profile.
+    const list = sp.priority.filter((p) => spProfiles.some((x) => x.id === p));
+    const i = list.indexOf(id);
+    if (dir === 0) {
+      if (i >= 0) list.splice(i, 1); else list.push(id);
+    } else if (i >= 0) {
+      const j = i + dir;
+      if (j < 0 || j >= list.length) return;
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    sp.priority = list;
+    void spSave();
+  }
+  let spWhich = $state("");
+  let spWhichOut = $state<{ ok: boolean; text: string } | null>(null);
+  async function spWhichRun() {
+    try {
+      const r = await api.networkSharedProxyWhich(spWhich);
+      spWhichOut = { ok: true, text: `${r.profile} - ${r.why}` };
+    } catch (e: any) { spWhichOut = { ok: false, text: errMsg(e) }; }
   }
   async function spCopy(what: "url" | "gateway" | "routes") {
     try {
@@ -2418,6 +2448,70 @@
       spDetails = d;
       copyText(what === "url" ? d.url : what === "gateway" ? d.gateway : d.routes.join(","), { label: what === "url" ? "Proxy URL" : what === "gateway" ? "Gateway command" : "Routes" });
     } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  // CI runner (app_cirunner.go): a GitLab runner in Docker whose jobs
+  // reach the VPNs through the app proxy's gateway.
+  let ci = $state<{ config: CIRunnerConfig; status: CIRunnerStatus } | null>(null);
+  type CiForm = { mode: "form" | "import"; url: string; name: string; image: string; token: string; toml: string; hostsText: string; directText: string; autoStart: boolean };
+  let ciForm = $state<CiForm>({ mode: "form", url: "", name: "", image: "", token: "", toml: "", hostsText: "", directText: "", autoStart: false });
+  let ciBusy = $state<"" | "start" | "stop">("");
+  let ciLogs = $state<string | null>(null);
+  async function ciLoad(fill = !ci) {
+    try {
+      ci = await api.ciRunnerGet();
+      if (fill) {
+        const c = ci.config;
+        ciForm = {
+          mode: c.config_toml ? "import" : "form", url: c.url ?? "", name: c.name ?? "", image: c.image ?? "", token: "",
+          toml: c.config_toml ?? "", hostsText: (c.extra_hosts ?? []).join("\n"), directText: (c.direct ?? []).join("\n"), autoStart: !!c.auto_start,
+        };
+      }
+    } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  async function ciSave(quiet = false): Promise<boolean> {
+    const f = ciForm;
+    const lines = (t: string) => t.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
+    try {
+      await api.ciRunnerSet({
+        url: f.mode === "form" ? f.url.trim() : "", name: f.name.trim(), image: f.image.trim(),
+        config_toml: f.mode === "import" ? f.toml : "",
+        extra_hosts: lines(f.hostsText), direct: lines(f.directText), auto_start: f.autoStart,
+      }, f.mode === "form" ? f.token.trim() : "");
+      await ciLoad(true);
+      if (!quiet) toast.ok("CI runner saved");
+      return true;
+    } catch (e: any) { toast.err(errMsg(e)); return false; }
+  }
+  async function ciStart() {
+    if (!(await ciSave(true))) return;
+    ciBusy = "start";
+    try {
+      const st = await api.ciRunnerStart();
+      if (ci) ci.status = st;
+      toast.ok("CI runner started");
+    } catch (e: any) { toast.err(errMsg(e)); await ciLoad(false); } finally { ciBusy = ""; }
+  }
+  async function ciStop() {
+    ciBusy = "stop";
+    try {
+      const st = await api.ciRunnerStop();
+      if (ci) ci.status = st;
+      toast.ok("CI runner stopped");
+    } catch (e: any) { toast.err(errMsg(e)); } finally { ciBusy = ""; }
+  }
+  async function ciShowLogs() {
+    try { ciLogs = await api.ciRunnerLogs(); } catch (e: any) { toast.err(errMsg(e)); }
+  }
+  async function ciPickFile(e: Event) {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    ciForm.toml = await file.text();
+    ciForm.mode = "import";
+  }
+  function ciSince(unix?: number): string {
+    if (!unix) return "";
+    const m = Math.max(0, Math.round((Date.now() / 1000 - unix) / 60));
+    return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
   }
   // Local proxy panel per profile (form state while open).
   type LpForm = { enabled: boolean; shared: boolean; bind: string; port: number; networksText: string; details?: import("./api").LocalProxyDetails };
@@ -2497,6 +2591,12 @@
   $effect(() => {
     const id = view.pendingNetworkProfileId;
     if (!id) return;
+    if (id === "ci") {
+      view.pendingNetworkProfileId = null;
+      npSelect("ci");
+      void ciLoad(true);
+      return;
+    }
     const np = networkProfiles.list.find((p) => p.id === id);
     if (!np) return;
     view.pendingNetworkProfileId = null;
@@ -4050,6 +4150,98 @@
     </p>
   {/snippet}
 
+  {#snippet ciPage()}
+    {@const st = ci?.status}
+    <div class="np-h3 np-sp-head">
+      <h3>CI runner</h3>
+      {#if st}
+        <span class="hint inline" class:warn={!!st.last_err && !st.running}>
+          {st.busy ? "working..." : st.running ? `running${st.started_at ? " " + ciSince(st.started_at) : ""}` : st.gateway || st.runner ? `gateway ${st.gateway || "-"}, runner ${st.runner || "-"}` : "stopped"}
+        </span>
+      {/if}
+      <span class="np-spacer"></span>
+      {#if st?.running}
+        <button onclick={ciStop} disabled={!!ciBusy}><IconStop size={13} /> Stop</button>
+      {:else}
+        <button onclick={ciStart} disabled={!!ciBusy || !st?.docker}><IconPlay size={13} /> {ciBusy === "start" ? "Starting..." : ciBusy === "stop" ? "Stopping..." : "Start"}</button>
+      {/if}
+      <button onclick={ciShowLogs} disabled={!st?.runner}>Logs</button>
+    </div>
+    <p class="hint">
+      A GitLab runner in Docker whose jobs reach your customers through the
+      VPNs marked <span class="np-badge">via proxy</span>, several at once:
+      each address goes through the VPN whose networks contain it (App proxy,
+      under Plugins &amp; proxy). The runner's own traffic, the clone and the
+      cache stay on your network. Stops when ssh-tool quits.
+    </p>
+    {#if st}
+      {#if !st.docker}
+        <p class="hint warn-note">Docker is not reachable: {st.docker_err || "not installed"}. Install Docker Desktop (Windows, macOS) or Docker Engine and start it.</p>
+      {:else}
+        <p class="hint inline">Docker {st.docker}{st.desktop ? " (Docker Desktop)" : ""}.
+          {#if !sp.enabled}<strong>Turn the App proxy on first</strong> (Plugins &amp; proxy).{:else if spDetails && Object.keys(spDetails.profiles).length}Through it: {Object.entries(spDetails.profiles).map(([n, c]) => `${n} (${c})`).join(", ")}.{:else}No VPN is marked via proxy yet.{/if}
+        </p>
+      {/if}
+      {#if st.last_err && !st.running}<p class="hint inline warn">{st.last_err}</p>{/if}
+    {/if}
+    {#if ciLogs !== null}
+      <div class="row" style="gap:0.5rem; align-items:center"><strong>Runner log</strong><span class="np-spacer"></span><button onclick={ciShowLogs}><IconRefresh size={13} /> Refresh</button><button onclick={() => (ciLogs = null)}>Close</button></div>
+      <pre class="np-info ci-log">{ciLogs || "empty"}</pre>
+    {/if}
+
+    <div class="row" style="gap:1rem; margin-top:0.6rem">
+      <label class="oc-choice"><input type="radio" bind:group={ciForm.mode} value="form" /> Set up here</label>
+      <label class="oc-choice"><input type="radio" bind:group={ciForm.mode} value="import" /> Import config.toml</label>
+    </div>
+    {#if ciForm.mode === "form"}
+      <div class="oc-form">
+        <label class="oc-field" title="Your GitLab, as the runner reaches it.">
+          <span>GitLab URL</span>
+          <input bind:value={ciForm.url} placeholder="https://gitlab.example.com" />
+        </label>
+        <label class="oc-field" title="Create a runner in GitLab (project or group > Settings > CI/CD > Runners > New runner) and paste its token (glrt-...). Kept in the vault.">
+          <span>Runner token</span>
+          <input type="password" bind:value={ciForm.token} placeholder={st?.tokens ? "saved in the vault - paste to replace" : "glrt-..."} autocomplete="off" />
+        </label>
+        <label class="oc-field">
+          <span>Job image</span>
+          <input bind:value={ciForm.image} placeholder="alpine:3.22" />
+        </label>
+        <label class="oc-field">
+          <span>Runner name</span>
+          <input bind:value={ciForm.name} placeholder="ssh-tool" />
+        </label>
+      </div>
+    {:else}
+      <p class="hint">
+        Your existing runner's config.toml: cache, image, volumes, extra_hosts
+        and the rest are used as written. Tokens move to the vault; the app
+        puts the jobs on its own network (network_mode). Only the docker
+        executor is supported.
+        {#if st && ciForm.toml}{st.runners} {st.runners === 1 ? "runner" : "runners"}, {st.tokens} {st.tokens === 1 ? "token" : "tokens"} in the vault.{/if}
+      </p>
+      <input type="file" accept=".toml,text/plain" onchange={ciPickFile} />
+      <textarea class="ci-toml" bind:value={ciForm.toml} rows="10" spellcheck="false" placeholder={"concurrent = 1\n\n[[runners]]\n  url = \"https://gitlab.example.com\"\n  token = \"glrt-...\"\n  executor = \"docker\"\n  ..."}></textarea>
+    {/if}
+
+    <div class="np-use">
+      <label class="oc-field" title="Names the jobs must resolve, one name:ip per line - customer hosts their VPN's DNS would answer.">
+        <span>Extra hosts (name:ip)</span>
+        <textarea bind:value={ciForm.hostsText} rows="4" spellcheck="false" placeholder="app01.customer.example:10.1.2.3"></textarea>
+      </label>
+      <label class="oc-field" title="Addresses, networks or names that never go through a VPN, even when a customer's networks contain them. The GitLab host and the S3 cache are added on their own.">
+        <span>Never through a VPN</span>
+        <textarea bind:value={ciForm.directText} rows="4" spellcheck="false" placeholder="192.0.2.0/24"></textarea>
+      </label>
+    </div>
+    <div class="row" style="gap:0.5rem; align-items:center; margin-top:0.5rem">
+      <label class="oc-choice"><input type="checkbox" bind:checked={ciForm.autoStart} /> Start with the app (once the vault is open)</label>
+      <span class="np-spacer"></span>
+      <button onclick={() => ciSave()}>Save</button>
+    </div>
+    {#if st?.running}<p class="hint inline">Saved changes apply on the next Start.</p>{/if}
+  {/snippet}
+
   {#snippet npForm()}
     <label>
       <span>Name</span>
@@ -4474,6 +4666,12 @@
         <button class="np-row" class:sel={npSel === "general"} onclick={() => npSelect("general")}>
           <span class="np-row-text"><strong>Plugins &amp; proxy</strong><small>VPN plugins, app proxy</small></span>
         </button>
+        {#if !isMobile}
+          <button class="np-row" class:sel={npSel === "ci"} onclick={() => { npSelect("ci"); void ciLoad(true); }}>
+            <span class="np-dot" class:up={ci?.status.running}></span>
+            <span class="np-row-text"><strong>CI runner</strong><small>{ci?.status.running ? "running" : "jobs through the VPNs"}</small></span>
+          </button>
+        {/if}
         <div class="np-list-sep"></div>
         {#each networkProfiles.list as np (np.id)}
           <button class="np-row" class:sel={npSel === np.id} onclick={() => npSelect(np.id)}>
@@ -4629,14 +4827,39 @@
                   <button onclick={spSave}>Save</button>
                 </div>
               </label>
-              <label class="oc-field oc-span" title="When two VPNs carry the same network: by default the most specific network wins, then the VPN that is up. A VPN picked here takes every address its networks contain.">
-                <span>When networks overlap, use</span>
-                <select bind:value={sp.use} onchange={spSave} style="max-width:20rem">
-                  <option value="">The VPN that is up</option>
-                  {#each spProfiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-                </select>
-              </label>
             </div>
+            {#if spProfiles.length > 1}
+              <div class="np-prio">
+                <strong>When networks overlap</strong>
+                <p class="hint">
+                  A ticked VPN takes every address its networks contain, the
+                  higher one first. The rest go by the most specific network,
+                  then the VPN that is up. Addresses added by hand on a
+                  profile's Proxy tab, and the addresses of its connections,
+                  always go through that profile.
+                </p>
+                {#each spPrioList as p (p.id)}
+                  {@const at = sp.priority.indexOf(p.id)}
+                  <div class="np-prio-row">
+                    <label class="oc-choice"><input type="checkbox" checked={at >= 0} onchange={() => spPrioMove(p.id, 0)} /> {p.name}</label>
+                    {#if at >= 0}
+                      <span class="hint inline">priority {at + 1}</span>
+                      <button class="np-prio-btn" title="Higher" disabled={at === 0} onclick={() => spPrioMove(p.id, -1)}><IconArrowUp size={13} /></button>
+                      <button class="np-prio-btn" title="Lower" disabled={at === sp.priority.length - 1} onclick={() => spPrioMove(p.id, 1)}><IconArrowDown size={13} /></button>
+                    {:else}
+                      <span class="hint inline">by route</span>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+            <div class="row np-which">
+              <input bind:value={spWhich} placeholder="Which VPN for... (address or name)" onkeydown={(e) => { if (e.key === "Enter") void spWhichRun(); }} />
+              <button onclick={spWhichRun} disabled={!spWhich.trim()}>Check</button>
+            </div>
+            {#if spWhichOut}
+              <p class="hint inline" class:warn={!spWhichOut.ok}>{spWhichOut.text}</p>
+            {/if}
             {#if spDetails}
               <p class="hint">
                 {#if Object.keys(spDetails.profiles).length}
@@ -4657,13 +4880,13 @@
                   <div class="row" style="gap:0.5rem"><button onclick={() => spCopy("url")}>Copy proxy address</button></div>
                 </div>
                 <div class="np-use-card">
-                  <strong>A CI runner in Docker</strong>
+                  <strong>A container</strong>
                   <p class="hint">
-                    Jobs cannot use a proxy by themselves. A small gateway
-                    container sends only these networks into the proxy; the
-                    runner joins its network with
-                    <code>network_mode = "container:sshtool-gw"</code>, and its
-                    other traffic stays local.
+                    For a GitLab runner use
+                    <button class="link-btn" onclick={() => { npSelect("ci"); void ciLoad(true); }}>CI runner</button>.
+                    Another container that cannot use a proxy: a small gateway
+                    sends only these networks into the proxy; run the container
+                    with <code>--network container:sshtool-gw</code>.
                   </p>
                   <div class="row" style="gap:0.5rem">
                     <button onclick={() => spCopy("gateway")}>Copy gateway command</button>
@@ -4677,6 +4900,9 @@
               </div>
             {/if}
           {/if}
+
+        {:else if npSel === "ci" && !isMobile}
+          {@render ciPage()}
 
         {:else if npSel === "new"}
           <h3>New profile</h3>
@@ -7452,6 +7678,15 @@
   .np-sp-head { display: flex; align-items: center; gap: 0.8rem; }
   .np-sp-head h3 { margin: 0; }
   .np-sp-form { margin-top: 0.4rem; }
+  .np-prio { margin-top: 0.6rem; }
+  .np-prio .hint { margin: 0.2rem 0 0.4rem; }
+  .np-prio-row { display: flex; align-items: center; gap: 0.4rem; min-height: 1.8rem; }
+  .np-prio-row .oc-choice { min-width: 12rem; }
+  .np-prio-btn { padding: 0.1rem 0.35rem; line-height: 1; }
+  .np-which { gap: 0.5rem; margin-top: 0.6rem; max-width: 30rem; }
+  .np-which input { flex: 1; }
+  .ci-toml { width: 100%; font-family: var(--mono, monospace); font-size: 0.8rem; margin-top: 0.4rem; }
+  .ci-log { max-height: 16rem; overflow: auto; }
   .np-field {
     display: flex;
     flex-direction: column;
