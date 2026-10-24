@@ -459,9 +459,27 @@ func (a *App) ciRunnerStopOnQuit() {
 		}
 	}
 	if ids, err := docker(ctx, nil, "network", "ls", "-q", "--filter", "label="+ciLabel); err == nil && ids != "" {
-		if _, err := docker(ctx, nil, append([]string{"network", "rm"}, strings.Fields(ids)...)...); err != nil {
-			log.Printf("ci runner: stop on quit: %v", err)
+		rm := append([]string{"network", "rm"}, strings.Fields(ids)...)
+		if _, err := docker(ctx, nil, rm...); err != nil {
+			// A job still running holds the network (job containers carry
+			// the runner's labels, not ours): cut it off and try again.
+			ciDisconnectJobs(ctx)
+			if _, err := docker(ctx, nil, rm...); err != nil {
+				log.Printf("ci runner: stop on quit: %v", err)
+			}
 		}
+	}
+}
+
+// ciDisconnectJobs cuts every container off the jobs' network (its runner
+// is gone, a job cannot finish anyway).
+func ciDisconnectJobs(ctx context.Context) {
+	out, err := docker(ctx, nil, "network", "inspect", ciNetworkName, "--format", "{{range .Containers}}{{.Name}} {{end}}")
+	if err != nil {
+		return
+	}
+	for _, name := range strings.Fields(out) {
+		_, _ = docker(ctx, nil, "network", "disconnect", "-f", ciNetworkName, name)
 	}
 }
 
@@ -754,13 +772,8 @@ func ciRemoveAll() error {
 	if label == "" || label == "<no value>" {
 		return fmt.Errorf("a docker network named %s exists that ssh-tool did not create", ciNetworkName)
 	}
-	// A job still running holds the network: cut it off (its runner is
-	// gone, it cannot finish anyway).
-	if out, err := docker(ctx, nil, "network", "inspect", ciNetworkName, "--format", "{{range .Containers}}{{.Name}} {{end}}"); err == nil {
-		for _, name := range strings.Fields(out) {
-			_, _ = docker(ctx, nil, "network", "disconnect", "-f", ciNetworkName, name)
-		}
-	}
+	// A job still running holds the network.
+	ciDisconnectJobs(ctx)
 	if _, err := docker(ctx, nil, "network", "rm", ciNetworkName); err != nil {
 		return fmt.Errorf("remove %s: %w", ciNetworkName, err)
 	}
