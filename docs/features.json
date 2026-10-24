@@ -217,7 +217,7 @@
     {
       "icon": "shield",
       "title": "CI jobs through your VPNs",
-      "body": "Run a GitLab runner from Settings whose jobs reach several customers' VPNs at once, each address through the VPN that carries it, with no change to .gitlab-ci.yml. Import your existing config.toml or set it up with a URL and a token; tokens stay in the vault. Your GitLab and its cache stay off the VPNs even inside a customer range, and overlapping customer ranges go where you pin them."
+      "body": "Run a GitLab runner from Settings whose jobs reach several customers' VPNs at once, each address through the VPN that carries it, with no change to .gitlab-ci.yml. Import your existing config.toml or set it up with a URL and a token; tokens stay in the vault. Your GitLab and its S3 cache stay off the VPNs even inside a customer range, and overlapping customer ranges go where you pin them."
     },
     {
       "icon": "shield",

@@ -448,15 +448,20 @@ func (a *App) ciRunnerStopOnQuit() {
 	if !started {
 		return
 	}
-	// This process created them, so no label checks: two docker calls
-	// instead of seven keep quit short.
+	// Only what carries our label, found by the label rather than the
+	// name (a same-named container is not ours): four docker calls keep
+	// quit short.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if _, err := docker(ctx, nil, "rm", "-f", "-v", ciRunnerName, ciGatewayName); err != nil {
-		log.Printf("ci runner: stop on quit: %v", err)
+	if ids, err := docker(ctx, nil, "ps", "-aq", "--filter", "label="+ciLabel); err == nil && ids != "" {
+		if _, err := docker(ctx, nil, append([]string{"rm", "-f", "-v"}, strings.Fields(ids)...)...); err != nil {
+			log.Printf("ci runner: stop on quit: %v", err)
+		}
 	}
-	if _, err := docker(ctx, nil, "network", "rm", ciNetworkName); err != nil {
-		log.Printf("ci runner: stop on quit: %v", err)
+	if ids, err := docker(ctx, nil, "network", "ls", "-q", "--filter", "label="+ciLabel); err == nil && ids != "" {
+		if _, err := docker(ctx, nil, append([]string{"network", "rm"}, strings.Fields(ids)...)...); err != nil {
+			log.Printf("ci runner: stop on quit: %v", err)
+		}
 	}
 }
 
