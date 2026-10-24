@@ -311,7 +311,14 @@ func (a *App) ciStart(c CIRunnerConfig) (err error) {
 	wasStarted := ciState.started
 	ciState.Unlock()
 	started, tornDown := false, false
+	// Cancellable from the first moment: a quit while this runs aborts
+	// every docker call it has left.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ciState.Lock()
+	ciState.cancel = cancel
+	ciState.Unlock()
 	defer func() {
+		cancel()
 		ciEnd(err, started || (wasStarted && !tornDown))
 		EventsEmit("ci_runner_changed", nil)
 	}()
@@ -331,11 +338,6 @@ func (a *App) ciStart(c CIRunnerConfig) (err error) {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-	ciState.Lock()
-	ciState.cancel = cancel
-	ciState.Unlock()
 	if _, err := docker(ctx, nil, "version", "--format", "{{.Server.Version}}"); err != nil {
 		return fmt.Errorf("docker: %w", err)
 	}
