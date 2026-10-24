@@ -2062,6 +2062,31 @@ everything mobile is behind a build tag or an `isMobile` check.
    the code, and there is no read-only transaction behind it. A cancelled
    batch ends without an error of its own - `msRead` reports the context's.
 
+134. **App.svelte runs in every window; a detached window has no tree and
+   no Settings.** (`App.svelte`, `stores.svelte.ts`, `DetachedWindow.svelte`)
+   Top-level effects in App.svelte run in detached windows too:
+   `SetWindowTitle` always targets the MAIN window, so a detached window
+   titled the main one until it got `SetDetachedWindowTitle`. View
+   requests that need the main window (`view.reveal`,
+   `setTabSettingsSection`, `openNetworkProfile`) are routed in the store
+   (`inDetachedWindow` -> `RevealInMainWindow` -> `reveal_in_tree`) -
+   call the store, not a window-specific API, from components. Detect a
+   detached window from the query AND the hash (WebView2 may keep only
+   the hash). A detached window loads its own stores: the tree, and the
+   workspace list (a tab carries only `workspaceId`; without the list the
+   frame and its save / close vanish).
+
+135. **Detached windows' share of the last session ends at quit.**
+   (`detached_session.go`, `DetachedWindow.svelte`, `detachTabs.ts`) Each
+   detached window saves its tabs on every change (no debounce, one save
+   in flight, newest wins); the backend drops a window closed by hand,
+   redocked or emptied, and keeps it when `appClosing` / `quitConfirmed` /
+   `quitDone` is set - after which it ignores saves, because by then they
+   describe tabs being torn down. A new quit path must set `appClosing`
+   before windows close, or detached windows are forgotten.
+   `detachTabsToWindow` removes the source tabs only after the new window
+   opened.
+
 ---
 
 # Archive
