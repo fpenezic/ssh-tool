@@ -745,6 +745,211 @@ export class BrowserLaunchResult {
 }
 
 /**
+ * CIRunnerConfig is the app setting ciRunnerKey.
+ */
+export class CIRunnerConfig {
+    /**
+     * Creates a new CIRunnerConfig instance.
+     * @param {Partial<CIRunnerConfig>} [$$source = {}] - The source object to create the CIRunnerConfig.
+     */
+    constructor($$source = {}) {
+        if (/** @type {any} */(false)) {
+            /**
+             * URL and Image build a one-runner config.toml when ConfigTOML is
+             * empty (URL + the token from the form).
+             * @member
+             * @type {string | undefined}
+             */
+            this["url"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["name"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["image"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * ConfigTOML is an imported config.toml, its tokens moved to the
+             * vault. The app sets network_mode at start; everything else is used
+             * as written.
+             * @member
+             * @type {string | undefined}
+             */
+            this["config_toml"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * ExtraHosts are "name:ip" entries the jobs resolve (customer names
+             * the VPN's DNS would answer), added to every runner's extra_hosts.
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["extra_hosts"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Direct are destinations that never go through a VPN, even when a
+             * customer's networks contain them (a cache or GitLab on the LAN).
+             * The runner URL and the S3 cache address are added automatically.
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["direct"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["auto_start"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CIRunnerConfig instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CIRunnerConfig}
+     */
+    static createFrom($$source = {}) {
+        const $$createField4_0 = $$createType4;
+        const $$createField5_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("extra_hosts" in $$parsedSource) {
+            $$parsedSource["extra_hosts"] = $$createField4_0($$parsedSource["extra_hosts"]);
+        }
+        if ("direct" in $$parsedSource) {
+            $$parsedSource["direct"] = $$createField5_0($$parsedSource["direct"]);
+        }
+        return new CIRunnerConfig(/** @type {Partial<CIRunnerConfig>} */($$parsedSource));
+    }
+}
+
+/**
+ * CIRunnerStatus is what the Settings card shows.
+ */
+export class CIRunnerStatus {
+    /**
+     * Creates a new CIRunnerStatus instance.
+     * @param {Partial<CIRunnerStatus>} [$$source = {}] - The source object to create the CIRunnerStatus.
+     */
+    constructor($$source = {}) {
+        if (!("docker" in $$source)) {
+            /**
+             * server version, "" = not reachable
+             * @member
+             * @type {string}
+             */
+            this["docker"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["docker_err"] = undefined;
+        }
+        if (!("desktop" in $$source)) {
+            /**
+             * Docker Desktop (host.docker.internal reaches loopback)
+             * @member
+             * @type {boolean}
+             */
+            this["desktop"] = false;
+        }
+        if (!("gateway" in $$source)) {
+            /**
+             * container state, "" = none
+             * @member
+             * @type {string}
+             */
+            this["gateway"] = "";
+        }
+        if (!("runner" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["runner"] = "";
+        }
+        if (!("running" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["running"] = false;
+        }
+        if (!("tokens" in $$source)) {
+            /**
+             * runners with a token in the vault
+             * @member
+             * @type {number}
+             */
+            this["tokens"] = 0;
+        }
+        if (!("runners" in $$source)) {
+            /**
+             * runners in the config
+             * @member
+             * @type {number}
+             */
+            this["runners"] = 0;
+        }
+        if (!("routes" in $$source)) {
+            /**
+             * networks the gateway sends into the VPNs
+             * @member
+             * @type {number}
+             */
+            this["routes"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["last_err"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["started_at"] = undefined;
+        }
+        if (!("busy" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["busy"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CIRunnerStatus instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CIRunnerStatus}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CIRunnerStatus(/** @type {Partial<CIRunnerStatus>} */($$parsedSource));
+    }
+}
+
+/**
  * CheckpointConfig is the stored (secretless) Check Point profile.
  */
 export class CheckpointConfig {
@@ -6765,9 +6970,19 @@ export class SharedProxyConfig {
         }
         if (/** @type {any} */(false)) {
             /**
-             * Use is a manual override: this profile takes every destination its
-             * networks contain, whatever another profile also covers. "" = by
-             * route (most specific wins).
+             * Priority orders profiles for overlapping networks: the first one
+             * listed whose networks contain a destination takes it, however
+             * specific another profile's route is. Profiles not listed fall back
+             * to the most specific route. Addresses pinned to a profile (added by
+             * hand, or a connection's address) win over both.
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["priority"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Use is the older single override, read as Priority = [Use].
              * @member
              * @type {string | undefined}
              */
@@ -6783,7 +6998,11 @@ export class SharedProxyConfig {
      * @returns {SharedProxyConfig}
      */
     static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("priority" in $$parsedSource) {
+            $$parsedSource["priority"] = $$createField3_0($$parsedSource["priority"]);
+        }
         return new SharedProxyConfig(/** @type {Partial<SharedProxyConfig>} */($$parsedSource));
     }
 }
@@ -6876,6 +7095,44 @@ export class SharedProxyDetails {
             $$parsedSource["hosts"] = $$createField6_0($$parsedSource["hosts"]);
         }
         return new SharedProxyDetails(/** @type {Partial<SharedProxyDetails>} */($$parsedSource));
+    }
+}
+
+/**
+ * SharedProxyWhich answers "which VPN does this address go through".
+ */
+export class SharedProxyWhich {
+    /**
+     * Creates a new SharedProxyWhich instance.
+     * @param {Partial<SharedProxyWhich>} [$$source = {}] - The source object to create the SharedProxyWhich.
+     */
+    constructor($$source = {}) {
+        if (!("profile" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["profile"] = "";
+        }
+        if (!("why" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["why"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SharedProxyWhich instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {SharedProxyWhich}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new SharedProxyWhich(/** @type {Partial<SharedProxyWhich>} */($$parsedSource));
     }
 }
 

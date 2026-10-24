@@ -216,6 +216,11 @@
     },
     {
       "icon": "shield",
+      "title": "CI jobs through your VPNs",
+      "body": "Run a GitLab runner from Settings whose jobs reach several customers' VPNs at once, each address through the VPN that carries it, with no change to .gitlab-ci.yml. Import your existing config.toml or set it up with a URL and a token; tokens stay in the vault. Clone, cache and registry traffic never touch a VPN, and overlapping customer ranges go where you pin them."
+    },
+    {
+      "icon": "shield",
       "title": "AnyConnect, Fortinet, F5 - in userspace",
       "body": "Connect to Cisco AnyConnect / ocserv, Fortinet, F5 BIG-IP, GlobalProtect and Pulse gateways without the vendor client: two gateways at once, even with overlapping subnets. Password, second login or one-time code (asked, stored, or a TOTP from Bitwarden / KeePass), and client certificates imported from .pfx or PEM into the vault - expiry tracked, renewals one click. Self-signed gateways are pinned on first use; a Details view shows routes, DNS and MTU."
     },

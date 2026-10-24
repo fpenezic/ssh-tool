@@ -9,7 +9,19 @@ a prerelease upstream.
 
 ## [Unreleased]
 
-The Database tab now speaks Oracle and Microsoft SQL Server (MSSQL), both with pure-Go drivers: nothing to install next to the app.
+The Database tab now speaks Oracle and Microsoft SQL Server (MSSQL), both with pure-Go drivers: nothing to install next to the app. A GitLab runner can send its jobs through your VPNs, several customers at once, set up from Settings.
+
+### CI runner
+
+- **GitLab jobs through the VPNs.** Settings -> Network profiles -> **CI runner** runs a GitLab runner in Docker whose jobs reach every VPN marked Reachable through the app proxy, each address through the VPN that carries it, without touching `.gitlab-ci.yml`. Set it up with the GitLab URL and a runner token, or import your existing `config.toml` (cache, image, volumes and extra_hosts are kept; only the docker executor is supported). Tokens go to the vault, and the config is copied into the runner container, never written to disk.
+- The jobs get their own docker network whose router is the gateway: the VPNs' networks go into the app proxy, everything else (clone, cache, registry, internet) goes out as usual. The GitLab host and an S3 cache stay off the VPNs even when a customer's networks contain them; **Never through a VPN** adds more, **Extra hosts** adds names only a customer's DNS knows.
+- Start and Stop on its page, **Start with the app** once the vault is open, **Logs** for the runner's log, and a status bar segment while it runs. Quitting ssh-tool stops it.
+- The earlier recipe, `network_mode = "container:sshtool-gw"` in the runner's own config, never worked for real jobs: the runner gives every job a hostname, which Docker refuses in that mode. Use the CI runner page instead; Copy gateway command stays for other containers.
+
+### App proxy
+
+- **Overlapping networks, decided by you.** When several VPNs carry the same range (two customers with `10.0.0.0/8`), tick the ones that should win under **When networks overlap** and order them; a ticked VPN takes every address its networks contain. An address added by hand on a profile's Proxy tab, or a connection's address, always goes through that profile. This replaces the single "When networks overlap, use" choice, which carries over as the first in the order.
+- **Which VPN for...** tells which VPN an address or name would go through, and why.
 
 ### Databases
 

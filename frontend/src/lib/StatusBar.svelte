@@ -36,6 +36,7 @@
   import { toast } from "./toast.svelte.ts";
   import { onMount, onDestroy } from "svelte";
   import { api } from "./api";
+  import { isMobile } from "./platform";
   import { vaultState } from "./vaultState.svelte";
   import { EventsOn } from "./wailsRuntime";
   import UpdateModal from "./UpdateModal.svelte";
@@ -66,6 +67,17 @@
     if (vaultState.status === "unlocked") void issues.refreshOpkssh();
   });
   let showSharePanel = $state(false);
+
+  // CI runner (Settings > Network profiles > CI runner): a segment while
+  // it runs, so a runner taking jobs in the background is never invisible.
+  let ciRunning = $state(false);
+  onMount(() => {
+    if (isMobile || inDetachedWindow) return;
+    const load = () => api.ciRunnerGet().then((r) => (ciRunning = r.status.running)).catch(() => {});
+    load();
+    const off = EventsOn("ci_runner_changed", load);
+    return () => off();
+  });
 
   // Tunnel manager segment + panel. The store reloads on tunnels_changed;
   // a tree reload means a connection or folder edit may have turned
@@ -692,6 +704,13 @@
     >
       <IconVpn size={11} />
       <span>{runningVpns.length === 1 ? runningVpns[0].name : runningVpns.length}</span>
+    </button>
+  {/if}
+
+  {#if ciRunning}
+    <button class="seg vpn" onclick={() => view.openNetworkProfile("ci")} title="CI runner running: its jobs reach the VPNs marked via proxy - click to manage">
+      <IconTunnel size={11} />
+      <span>CI runner</span>
     </button>
   {/if}
 

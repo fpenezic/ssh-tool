@@ -2598,37 +2598,85 @@ A profile's networks are the routes the server pushed (from the last
 connect; a full-tunnel default route is left out), the addresses of
 connections in the tree that use it, and any **Extra networks** on its
 Proxy tab, which lists them all. Host names of those connections go to
-their profile as well and are resolved inside the VPN. When two profiles
-carry the same network, the more specific one wins, then the one that is
-up; **When networks overlap, use** picks one profile to take every
-address its networks contain. The summary under it names each overlap
-and which profile wins it.
+their profile as well and are resolved inside the VPN.
 
-For a **GitLab runner in Docker**, without touching `.gitlab-ci.yml`:
+When two profiles carry the same network (two customers that both push
+`10.0.0.0/8`, say):
 
-1. Turn the app proxy on. **Copy gateway command** (the "A CI runner in
-   Docker" card) gives a `docker run` for a small gateway container
-   (tun2socks) that sends only the marked profiles' networks into the
-   proxy (**Show networks** lists them). Everything else - your GitLab,
-   cache, registry - stays on the normal network. After adding a profile
-   or a network, recreate the gateway with a freshly copied command.
-2. In the runner's `config.toml`, under `[runners.docker]`:
-   `network_mode = "container:sshtool-gw"`. Every job container then
-   shares the gateway's network. Docker refuses `extra_hosts` together
-   with this mode; move those entries to the gateway (`--add-host` on
-   its `docker run`), the jobs see its hosts file.
+- An address **pinned** to a profile - added by hand under its **Extra
+  networks**, or the address of a connection that uses it - always goes
+  through that profile.
+- Otherwise a profile ticked under **When networks overlap** takes every
+  address its networks contain, the higher one first (arrows to reorder),
+  however specific another profile's route is.
+- Otherwise the most specific network wins, then the profile that is up.
+
+The summary names each overlap and which profile wins it, and **Which VPN
+for...** answers for one address or name, with the reason ("pinned to
+it", "priority 1", "most specific network").
+
+### CI runner (GitLab jobs through the VPNs)
+
+**CI runner** (in the Network profiles list, under Plugins & proxy) runs a
+GitLab runner in Docker whose jobs reach your customers through the app
+proxy - several customers at once, each address through the VPN whose
+networks contain it - without touching `.gitlab-ci.yml`. It needs Docker
+(Docker Desktop on Windows and macOS) and the app proxy turned on with at
+least one profile marked **Reachable through the app proxy**.
+
+Either **Set up here** (GitLab URL, the runner token from GitLab's *New
+runner* page, a job image) or **Import config.toml** - your existing
+runner's file, used as written (cache, image, volumes, extra_hosts); only
+the docker executor is supported. Tokens move to the vault; the
+config.toml is put together at start and copied into the runner
+container, never written to your disk.
+
+**Start** creates three things: a docker network for the jobs
+(`sshtool-ci`), a gateway container (`sshtool-ci-gw`) that is that
+network's router, and the runner (`sshtool-ci-runner`). The gateway sends
+the VPNs' networks into the app proxy and everything else out as usual,
+so the clone, the cache, registries and the internet do not touch a VPN.
+The runner URL and an S3 cache address are kept off the VPNs even when a
+customer's networks contain them; **Never through a VPN** adds more.
+**Extra hosts** (`name:ip`) are names the jobs must resolve that only the
+customer's DNS knows - a job resolves names with your normal DNS.
+**Stop**, or quitting ssh-tool, removes all three: without the app there
+is no proxy. **Start with the app** starts it again once the vault is
+open. **Logs** shows the runner's log.
+
+Notes:
+
+- The app's VPNs do not touch your system DNS or routes, so your own
+  GitLab stays reachable by name while any number of them are up.
+- A Linux Docker host (not Docker Desktop) cannot reach a proxy on
+  `127.0.0.1`: set the app proxy's listen address to the docker bridge
+  address (`172.17.0.1`) or `0.0.0.0`, firewalled. Start says so.
+- Only TCP goes through the VPNs (SSH, HTTPS, databases).
+- A GitLab running in Docker on the same machine and reached through a
+  published port is not reachable from the jobs' network (Docker's port
+  mapping only answers from its own bridge); a GitLab elsewhere is fine.
+
+### Proxy for other programs and containers
+
+**Copy proxy address** (the "A program on this machine" card) is for
+`curl`, a script or a database tool. For a container that cannot use a
+proxy, **Copy gateway command** gives a `docker run` for a gateway
+(`sshtool-gw`, tun2socks) that sends only the marked profiles' networks
+into the proxy (**Show networks** lists them); run your container with
+`--network container:sshtool-gw`. After adding a profile or a network,
+recreate the gateway with a freshly copied command. A GitLab runner cannot
+use this mode (it gives every job a hostname, which Docker refuses there):
+use **CI runner** above.
 
 A profile can also have a **Separate proxy for this VPN only** (its Proxy
 tab): its own port and password and its own gateway command
-(`sshtool-gw-<profile>`), for one runner per customer that must stay
-apart from the others, overlapping address ranges included.
+(`sshtool-gw-<profile>`), for a container that must stay apart from the
+other customers, overlapping address ranges included.
 
 Docker Desktop reaches a proxy on `127.0.0.1` through
 `host.docker.internal`; a Linux Docker host needs the proxy on the
-docker bridge address (or `0.0.0.0`, firewalled). Only TCP goes through
-(SSH, HTTPS, registries); a job resolves names with its own DNS, so a
-name only the customer's DNS knows needs an address (or an `--add-host`
-on the gateway).
+docker bridge address (or `0.0.0.0`, firewalled). A name only the
+customer's DNS knows needs an address, or an `--add-host` on the gateway.
 
 ### WireGuard profiles
 
