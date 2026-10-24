@@ -316,6 +316,10 @@ func (a *App) ciStart(c CIRunnerConfig) (err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	ciState.Lock()
 	ciState.cancel = cancel
+	if ciState.closing {
+		// Quit came between ciBegin and here and saw no cancel to call.
+		cancel()
+	}
 	ciState.Unlock()
 	defer func() {
 		cancel()

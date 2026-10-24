@@ -200,11 +200,13 @@ func TestCIQuitWaitsAndBlocksStarts(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("quit did not return before its 10 s fallback")
 	}
-	select {
-	case <-ended:
-	default:
+	ciState.Lock()
+	stillBusy := ciState.busy
+	ciState.Unlock()
+	if stillBusy {
 		t.Fatal("quit returned before the start in flight ended")
 	}
+	<-ended
 	if ciBegin() {
 		t.Fatal("a start began after quit")
 	}
