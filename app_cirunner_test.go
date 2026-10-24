@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 )
 
 const ciTestTOML = `concurrent = 1
@@ -166,4 +167,40 @@ func TestCILastAddr(t *testing.T) {
 	if _, err := ciLastAddr(netip.MustParsePrefix("192.0.2.1/32")); err == nil {
 		t.Error("/32 accepted")
 	}
+}
+
+// Once quit has begun no start begins, and quit waits for the operation
+// in flight before it cleans up.
+func TestCIQuitWaitsAndBlocksStarts(t *testing.T) {
+	a := &App{}
+	if !ciBegin() {
+		t.Fatal("begin refused")
+	}
+	cancelled := make(chan struct{})
+	ciState.Lock()
+	ciState.cancel = func() { close(cancelled) }
+	ciState.Unlock()
+	go func() {
+		<-cancelled
+		ciEnd(nil, false)
+	}()
+	ciState.Lock()
+	ciState.started = false
+	ciState.Unlock()
+	finished := make(chan struct{})
+	go func() {
+		a.ciRunnerStopOnQuit()
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(15 * time.Second):
+		t.Fatal("quit did not return")
+	}
+	if ciBegin() {
+		t.Fatal("a start began after quit")
+	}
+	ciState.Lock()
+	ciState.closing, ciState.started = false, false
+	ciState.Unlock()
 }
