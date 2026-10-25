@@ -336,7 +336,7 @@ func (a *App) ciStart(c CIRunnerConfig) (err error) {
 		return err
 	}
 	if len(details.Routes) == 0 {
-		return errors.New("no VPN is marked Reachable through the app proxy")
+		return errors.New("no VPN or bastion goes through the app proxy")
 	}
 	pw, err := a.sharedProxyPassword()
 	if err != nil {

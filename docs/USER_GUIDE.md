@@ -2615,12 +2615,26 @@ The summary names each overlap and which profile wins it, and **Which VPN
 for...** answers for one address or name, with the reason ("pinned to
 it", "priority 1", "most specific network").
 
+**Through a bastion** (under the app proxy) adds networks that are not
+behind a VPN but behind an SSH host: pick a connection from the tree and
+list the networks behind it (`10.20.0.0/16, 10.30.1.5`). An address in
+them is opened from that host, like `ssh -J`: the app connects to it with
+the connection's own credentials, jump hosts and network profile, so a
+bastion behind a VPN or behind another jump host works, and the client
+(a CI job, `curl`) never sees a key or a password. One SSH session per
+bastion carries every connection and closes after 2 minutes unused. The
+bastion must allow TCP forwarding (`AllowTcpForwarding`); the first
+connect asks for its host key and, without a saved password or key, for a
+login, in the app, while the client waits. A bastion's networks are set
+by hand, so they always go through it, as a pinned address does. Only TCP
+goes through.
+
 ### CI runner (GitLab jobs through the VPNs)
 
 **CI runner** (in the Network profiles list, under Plugins & proxy) runs a
 GitLab runner in Docker whose jobs reach your customers through the app
-proxy - several customers at once, each address through the VPN whose
-networks contain it - without touching `.gitlab-ci.yml`. It needs Docker
+proxy - several customers at once, each address through the VPN (or
+bastion) whose networks contain it - without touching `.gitlab-ci.yml`. It needs Docker
 (Docker Desktop on Windows and macOS) and the app proxy turned on with at
 least one profile marked **Reachable through the app proxy**.
 
