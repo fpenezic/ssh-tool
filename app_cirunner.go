@@ -121,30 +121,31 @@ func ciNewID() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// ciMoveSecrets moves runner from's token and cache secrets to runner to.
-func (a *App) ciMoveSecrets(from, to string) error {
+// ciCopySecrets copies runner from's token and cache secrets to runner to
+// and returns the keys copied from, for the caller to delete once its
+// save went through.
+func (a *App) ciCopySecrets(from, to string) ([]string, error) {
 	keys := [][2]string{{ciTokenKey(from), ciTokenKey(to)}}
 	for section, names := range ciCacheSecrets {
 		for _, name := range names {
 			keys = append(keys, [2]string{ciSecretKey(from, section, name), ciSecretKey(to, section, name)})
 		}
 	}
+	var copied []string
 	for _, k := range keys {
 		v, ok, err := a.vault.Get(k[0])
 		if err != nil {
-			return fmt.Errorf("runner secrets: %w", err)
+			return nil, fmt.Errorf("runner secrets: %w", err)
 		}
 		if !ok {
 			continue
 		}
 		if err := a.vault.Put(k[1], v); err != nil {
-			return fmt.Errorf("runner secrets: %w", err)
+			return nil, fmt.Errorf("runner secrets: %w", err)
 		}
-		if err := a.vault.Delete(k[0]); err != nil {
-			return fmt.Errorf("runner secrets: %w", err)
-		}
+		copied = append(copied, k[0])
 	}
-	return nil
+	return copied, nil
 }
 
 // ciInVault stands in a stored config.toml for a secret kept in the vault:
@@ -174,9 +175,11 @@ func (a *App) ciVaultHas(key string) (bool, error) {
 	return ok && v != "", nil
 }
 
-// ciStashCacheSecrets moves runner i's cache secrets to the vault and
-// leaves the marker in their place.
-func (a *App) ciStashCacheSecrets(id string, r map[string]any) error {
+// ciStashCacheSecrets moves a runner's cache secrets to the vault and
+// leaves the marker in their place. It returns the keys of emptied
+// secrets, which the caller deletes once its save went through.
+func (a *App) ciStashCacheSecrets(id string, r map[string]any) ([]string, error) {
+	var removed []string
 	cache, _ := r["cache"].(map[string]any)
 	for section, names := range ciCacheSecrets {
 		sec, _ := cache[section].(map[string]any)
@@ -187,7 +190,7 @@ func (a *App) ciStashCacheSecrets(id string, r map[string]any) error {
 			case ciInVault:
 				has, err := a.ciVaultHas(key)
 				if err != nil {
-					return err
+					return nil, err
 				}
 				if !has {
 					sec[name] = ""
@@ -195,22 +198,37 @@ func (a *App) ciStashCacheSecrets(id string, r map[string]any) error {
 			case "":
 				has, err := a.ciVaultHas(key)
 				if err != nil {
-					return err
+					return nil, err
 				}
 				if has {
-					if err := a.vault.Delete(key); err != nil {
-						return fmt.Errorf("runner cache secret: %w", err)
-					}
+					removed = append(removed, key)
 				}
 			default:
 				if err := a.vault.Put(key, v); err != nil {
-					return fmt.Errorf("runner cache secret: %w", err)
+					return nil, fmt.Errorf("runner cache secret: %w", err)
 				}
 				sec[name] = ciInVault
 			}
 		}
 	}
-	return nil
+	return removed, nil
+}
+
+// ciClearMarkers empties a runner's vault markers (its token and cache
+// keys), for a block that is not the runner they were stored for.
+func ciClearMarkers(r map[string]any) {
+	if t, _ := r["token"].(string); t == ciInVault {
+		delete(r, "token")
+	}
+	cache, _ := r["cache"].(map[string]any)
+	for section, names := range ciCacheSecrets {
+		sec, _ := cache[section].(map[string]any)
+		for _, name := range names {
+			if v, _ := sec[name].(string); v == ciInVault {
+				sec[name] = ""
+			}
+		}
+	}
 }
 
 // ciFillCacheSecrets puts runner i's cache secrets back from the vault.
@@ -326,6 +344,9 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (CIRunnerConfig, error
 	}
 	c.Direct = direct
 	var tokens map[string]string
+	// legacy: index keys copied to runner ids; removed: tokens emptied in
+	// the form. Both are deleted from the vault after the save.
+	var legacy, removed []string
 	if c.ConfigTOML != "" {
 		m, err := ciParseTOML(c.ConfigTOML)
 		if err != nil {
@@ -339,19 +360,33 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (CIRunnerConfig, error
 			return c, fmt.Errorf("config.toml has %d runners; at most %d", len(rs), ciMaxRunners)
 		}
 		tokens = map[string]string{}
+		seen := map[string]bool{}
 		for i, r := range rs {
 			id, _ := r[ciIDField].(string)
+			if seen[id] {
+				// A block copied from another runner, id and all: it is a
+				// runner of its own, and the copied markers point at nothing.
+				id = ""
+				ciClearMarkers(r)
+			}
 			if id == "" {
-				// First save with ids: take over what the index held.
 				if id, err = ciNewID(); err != nil {
 					return c, err
 				}
-				if err := a.ciMoveSecrets(strconv.Itoa(i), id); err != nil {
-					return c, err
+				if _, had := r[ciIDField]; !had {
+					// First save with ids: take over what the index held,
+					// and let the old keys go once the save is through.
+					copied, err := a.ciCopySecrets(strconv.Itoa(i), id)
+					if err != nil {
+						return c, err
+					}
+					legacy = append(legacy, copied...)
 				}
 				r[ciIDField] = id
 			}
-			t, _ := r["token"].(string)
+			seen[id] = true
+			raw, present := r["token"]
+			t, _ := raw.(string)
 			has, err := a.ciVaultHas(ciTokenKey(id))
 			if err != nil {
 				return c, err
@@ -360,16 +395,22 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (CIRunnerConfig, error
 			case t != "" && t != ciInVault:
 				tokens[id] = t
 				r["token"] = ciInVault
+			case present && t == "":
+				// Emptied: the token goes.
+				removed = append(removed, ciTokenKey(id))
+				delete(r, "token")
 			case has:
-				// The marker, or no token in an older import: the vault
-				// keeps it.
+				// The marker, or no token line in an older stored config:
+				// the vault keeps it.
 				r["token"] = ciInVault
 			default:
 				delete(r, "token")
 			}
-			if err := a.ciStashCacheSecrets(id, r); err != nil {
+			gone, err := a.ciStashCacheSecrets(id, r)
+			if err != nil {
 				return c, err
 			}
+			removed = append(removed, gone...)
 		}
 		b, err := toml.Marshal(m)
 		if err != nil {
@@ -395,6 +436,11 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (CIRunnerConfig, error
 	b, _ := json.Marshal(c)
 	if err := a.db.SetSetting(ciRunnerKey, string(b)); err != nil {
 		return c, err
+	}
+	for _, k := range append(legacy, removed...) {
+		if err := a.vault.Delete(k); err != nil {
+			log.Printf("ci runner: vault cleanup %s: %v", k, err)
+		}
 	}
 	a.recordAudit("ci_runner.set", "", map[string]string{
 		"imported": strconv.FormatBool(c.ConfigTOML != ""), "tokens": strconv.Itoa(len(tokens)),
