@@ -73,7 +73,13 @@
   let bastionSessions = $state<import("./api").BastionSession[]>([]);
   onMount(() => {
     if (isMobile || inDetachedWindow) return;
-    const load = () => api.bastionSessions().then((r) => (bastionSessions = r ?? [])).catch(() => {});
+    // Only the newest load lands: an older answer arriving late would
+    // bring back a session that has closed since.
+    let gen = 0;
+    const load = () => {
+      const mine = ++gen;
+      api.bastionSessions().then((r) => { if (mine === gen) bastionSessions = r ?? []; }).catch(() => {});
+    };
     load();
     const off = EventsOn("bastion_sessions_changed", load);
     return () => off();
