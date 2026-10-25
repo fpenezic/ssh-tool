@@ -735,7 +735,7 @@
   {/if}
 
   {#if ciRunning}
-    <button class="seg vpn" onclick={() => view.openNetworkProfile("ci")} title="CI runner running: its jobs reach the VPNs marked via proxy and the connections behind jump hosts - click to manage">
+    <button class="seg ci" onclick={() => view.openNetworkProfile("ci")} title="CI runner running: its jobs reach the VPNs marked via proxy and the connections behind jump hosts - click to manage">
       <IconContainer size={11} />
       <span>CI runner</span>
     </button>
@@ -1101,6 +1101,8 @@
   .seg.stats .stat.lvl-warn { color: var(--yellow); }
   .seg.stats .stat.lvl-crit { color: var(--red); }
   .seg.tunnels { color: var(--green); }
+  /* A process in the background, not a path: apart from the lilac VPNs and bastions. */
+  .seg.ci { color: var(--teal); }
   .seg.mcp { color: var(--blue); }
   /* The counter stands for every shared session at once, so it takes the
      loudest grant among them - same colours as the pane header and tab
