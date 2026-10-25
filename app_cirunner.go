@@ -625,6 +625,29 @@ func (a *App) ciBuildTOML(c CIRunnerConfig) (text string, autoDirect []string, e
 	return string(b), autoDirect, nil
 }
 
+// ciExtraHosts are the runner's "name:ip" entries: the form's and those
+// of an imported config.toml.
+func (a *App) ciExtraHosts() []string {
+	c := a.ciRunnerConfig()
+	out := append([]string{}, c.ExtraHosts...)
+	if c.ConfigTOML != "" {
+		if m, err := ciParseTOML(c.ConfigTOML); err == nil {
+			for _, r := range ciRunners(m) {
+				if d, ok := r["docker"].(map[string]any); ok {
+					if eh, ok := d["extra_hosts"].([]any); ok {
+						for _, h := range eh {
+							if s, ok := h.(string); ok {
+								out = append(out, s)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
 func ciParseTOML(s string) (map[string]any, error) {
 	var m map[string]any
 	if err := toml.Unmarshal([]byte(s), &m); err != nil {

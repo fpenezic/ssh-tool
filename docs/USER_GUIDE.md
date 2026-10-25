@@ -2626,7 +2626,8 @@ password. An address is pinned to that path, even when the connection
 also has a network profile (the profile only reaches the first hop); a
 name is sent to the last hop to resolve when the client passes names
 (`socks5h://`), while a CI job resolves names itself and needs **Extra
-hosts** for them. The first connect may ask for a host key or a login in
+hosts** for them; the address given there then follows the
+connection's path too. The first connect may ask for a host key or a login in
 the app while the client waits.
 
 **Networks behind a bastion** adds whole networks behind an SSH host,
