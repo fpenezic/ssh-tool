@@ -809,19 +809,24 @@ func (a *App) ciSyncRoutes(gen int, jobs netip.Prefix, applied []string) {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		failed, err := ciApplyRoutes(ctx, add, del)
+		failedAdd, failedDel, err := ciApplyRoutes(ctx, add, del)
 		cancel()
 		if err != nil {
 			log.Printf("ci runner: gateway routes: %v", err)
 			continue
 		}
-		// A route whose rule could not be added stays out of have, so the
-		// next sync tries it again.
+		// A route whose rule could not be added stays out of have, one whose
+		// rule could not be removed stays in it: the next sync tries both
+		// again.
 		have = want
-		for _, r := range failed {
+		for _, r := range failedAdd {
 			delete(have, r)
 		}
-		log.Printf("ci runner: gateway routes updated, %d added, %d removed, %d failed", len(add)-len(failed), len(del), len(failed))
+		for _, r := range failedDel {
+			have[r] = true
+		}
+		log.Printf("ci runner: gateway routes updated, %d added, %d removed, %d failed",
+			len(add)-len(failedAdd), len(del)-len(failedDel), len(failedAdd)+len(failedDel))
 	}
 }
 
@@ -843,17 +848,19 @@ func ciRouteDiff(have, want map[string]bool) (add, del []string) {
 }
 
 // ciApplyRoutes changes the gateway's policy rules in one docker exec and
-// returns the added routes whose rule failed. Added routes get priority
-// 32765: after the direct (excluded) rules the gateway started with, which
-// have smaller numbers and so win, and before the main table's catch-all
-// at 32766. A rule that is already gone counts as removed.
-func ciApplyRoutes(ctx context.Context, add, del []string) ([]string, error) {
+// returns the routes whose rule could not be added or removed. Added
+// routes get priority 32765: after the direct (excluded) rules the gateway
+// started with, which have smaller numbers and so win, and before the main
+// table's catch-all at 32766. A rule that is already gone ("No such file")
+// counts as removed; any other failure to remove one is reported.
+func ciApplyRoutes(ctx context.Context, add, del []string) (failedAdd, failedDel []string, err error) {
 	var cmds []string
 	for _, r := range del {
 		if _, err := netip.ParsePrefix(r); err != nil {
 			continue
 		}
-		cmds = append(cmds, "ip rule del to "+r+" table 0x22b 2>/dev/null")
+		// r is a parsed prefix: no shell metacharacters.
+		cmds = append(cmds, `e=$(ip rule del to `+r+` table 0x22b 2>&1) || case "$e" in *"No such"*) ;; *) echo "DELFAILED `+r+`";; esac`)
 	}
 	for _, r := range add {
 		if _, err := netip.ParsePrefix(r); err != nil {
@@ -862,20 +869,22 @@ func ciApplyRoutes(ctx context.Context, add, del []string) ([]string, error) {
 		cmds = append(cmds, "ip rule add to "+r+" table 0x22b pref 32765 || echo FAILED "+r)
 	}
 	if len(cmds) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
-	// One shell, every command attempted; each failed add is reported.
+	// One shell, every command attempted; each failure is reported.
 	out, err := docker(ctx, nil, "exec", ciGatewayName, "sh", "-c", strings.Join(cmds, "; ")+"; true")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var failed []string
 	for _, line := range strings.Split(out, "\n") {
-		if r, ok := strings.CutPrefix(strings.TrimSpace(line), "FAILED "); ok {
-			failed = append(failed, r)
+		line = strings.TrimSpace(line)
+		if r, ok := strings.CutPrefix(line, "DELFAILED "); ok {
+			failedDel = append(failedDel, r)
+		} else if r, ok := strings.CutPrefix(line, "FAILED "); ok {
+			failedAdd = append(failedAdd, r)
 		}
 	}
-	return failed, nil
+	return failedAdd, failedDel, nil
 }
 
 // ciRunnerAutoStart starts the runner when it is set to start with the
