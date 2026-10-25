@@ -2397,13 +2397,13 @@
   }
   // App proxy (the "shared" proxy in code): one SOCKS for every profile
   // marked shared, picking the profile by destination.
-  let sp = $state<{ enabled: boolean; bind: string; port: number; priority: string[]; jumps: boolean; listening: boolean }>({ enabled: false, bind: "127.0.0.1", port: 1080, priority: [], jumps: true, listening: false });
+  let sp = $state<{ enabled: boolean; bind: string; port: number; priority: string[]; jumps: boolean; listening: boolean }>({ enabled: false, bind: "127.0.0.1", port: 1080, priority: [], jumps: false, listening: false });
   const spProfiles = $derived(networkProfiles.list.filter((p) => p.local_proxy?.shared));
   let spDetails = $state<import("./api").SharedProxyDetails | null>(null);
   async function spLoad() {
     try {
       const r = await api.networkSharedProxyGet();
-      sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], jumps: !r.config.no_jump_connections, listening: r.listening };
+      sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], jumps: !!r.config.jump_connections, listening: r.listening };
       spDetails = sp.enabled ? await api.networkSharedProxyDetails() : null;
     } catch { /* shown on save */ }
   }
@@ -2415,7 +2415,7 @@
   function spSave(): Promise<void> {
     const req = {
       enabled: sp.enabled, bind: sp.bind.trim(), port: Number(sp.port), priority: $state.snapshot(sp.priority),
-      no_jump_connections: !sp.jumps,
+      jump_connections: sp.jumps,
     };
     spPending++;
     spQueue = spQueue.then(async () => {
@@ -2425,7 +2425,7 @@
           const r = await api.networkSharedProxyGet();
           const d = r.config.enabled ? await api.networkSharedProxyDetails() : null;
           if (spPending === 1) {
-            sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], jumps: !r.config.no_jump_connections, listening: r.listening };
+            sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], jumps: !!r.config.jump_connections, listening: r.listening };
             spDetails = d;
           }
           toast.ok(req.enabled ? `App proxy on ${req.bind}:${req.port}` : "App proxy off");

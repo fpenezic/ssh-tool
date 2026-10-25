@@ -86,8 +86,18 @@ func (l *localState) set(key, value string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.load()
+	prev, had := l.data[key]
 	l.data[key] = value
-	return l.flushLocked()
+	if err := l.flushLocked(); err != nil {
+		// Not on disk: the map must not claim otherwise.
+		if had {
+			l.data[key] = prev
+		} else {
+			delete(l.data, key)
+		}
+		return err
+	}
+	return nil
 }
 
 func (l *localState) delete(key string) error {

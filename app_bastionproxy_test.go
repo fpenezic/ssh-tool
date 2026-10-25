@@ -36,7 +36,7 @@ func TestJumpConnections(t *testing.T) {
 		}
 		ids[c.Name] = got.ID
 	}
-	if err := a.db.SetSetting(sharedProxyKey, `{"port":1080}`); err != nil {
+	if err := a.db.SetSetting(sharedProxyKey, `{"port":1080,"jump_connections":true}`); err != nil {
 		t.Fatal(err)
 	}
 	sharedRoutesInvalidate()
@@ -64,12 +64,12 @@ func TestJumpConnections(t *testing.T) {
 		t.Errorf("extra host address: %q, %v", id, err)
 	}
 
-	if err := a.db.SetSetting(sharedProxyKey, `{"port":1080,"no_jump_connections":true}`); err != nil {
+	if err := a.db.SetSetting(sharedProxyKey, `{"port":1080}`); err != nil {
 		t.Fatal(err)
 	}
 	sharedRoutesInvalidate()
 	if _, _, err := a.sharedPickWith("10.40.1.5", nil); err == nil {
-		t.Error("jump connections still routed with no_jump_connections")
+		t.Error("jump connections routed without jump_connections")
 	}
 }
 

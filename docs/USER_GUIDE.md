@@ -2615,7 +2615,8 @@ The summary names each overlap and which profile wins it, and **Which VPN
 for...** answers for one address or name, with the reason ("pinned to
 it", "priority 1", "most specific network").
 
-**Connections with a jump host** (under the app proxy, on by default):
+**Connections with a jump host** (under the app proxy, off until you tick
+it, as it opens every such connection to the proxy's clients):
 a connection in the tree that has a jump host - set on it or on a
 folder, a connection from the tree or a host typed - is reached through
 the app proxy the way its terminal connects. Its network profile comes

@@ -476,6 +476,10 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (_ CIRunnerConfig, err
 		}
 	}
 	c.Direct = direct
+	// Index keys are taken over only from an imported config stored
+	// before ids: a form-mode token ("0") is another runner, maybe on
+	// another GitLab, and stays out of a newly imported one.
+	prevImported := a.ciRunnerConfig().ConfigTOML != ""
 	var tokens map[string]string
 	// legacy: index keys copied to runner ids; removed: tokens emptied in
 	// the form. Both are deleted from the vault after the save.
@@ -506,7 +510,7 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (_ CIRunnerConfig, err
 				if id, err = ciNewID(); err != nil {
 					return c, err
 				}
-				if _, had := r[ciIDField]; !had {
+				if _, had := r[ciIDField]; !had && prevImported {
 					// First save with ids: take over what the index held,
 					// and let the old keys go once the save is through.
 					copied, err := a.ciCopySecrets(j, strconv.Itoa(i), id)
