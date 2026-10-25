@@ -68,50 +68,72 @@ func TestBastionSetting(t *testing.T) {
 	}
 }
 
-// Connections that jump through a bastion go to it without a network
-// typed: by the jump's connection reference or by the same host and port
-// typed by hand; an address is pinned, a name joins the names map.
-func TestBastionJumpConnections(t *testing.T) {
+// Every tree connection with a jump host (a connection from the tree or a
+// host typed, set on it or a folder) is routed to its own path: an address
+// pinned, a name in the names map; NoJumpConnections leaves them out.
+func TestJumpConnections(t *testing.T) {
 	a := newDbTestApp(t)
 	jump, err := a.db.CreateConnection(store.NewConnection{Name: "jump", Hostname: "jump.example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	viaRef := &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{Hostname: "jump.example.com", ConnectionID: &jump.ID}}
-	viaTyped := &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{Hostname: "JUMP.example.com"}}
-	elsewhere := &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{Hostname: "other.example.com"}}
+	typed := &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{Hostname: "other.example.com"}}
+	folder, err := a.db.CreateFolder(store.NewFolder{Name: "behind", Settings: store.InheritableSettings{JumpHost: typed}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]string{}
 	for _, c := range []store.NewConnection{
 		{Name: "a", Hostname: "10.40.1.5", Overrides: store.InheritableSettings{JumpHost: viaRef}},
-		{Name: "b", Hostname: "app.internal.example", Overrides: store.InheritableSettings{JumpHost: viaTyped}},
-		{Name: "c", Hostname: "10.40.1.6", Overrides: store.InheritableSettings{JumpHost: elsewhere}},
+		{Name: "b", Hostname: "app.internal.example", FolderID: &folder.ID},
+		{Name: "direct", Hostname: "10.40.1.7"},
 	} {
-		if _, err := a.db.CreateConnection(c); err != nil {
+		got, err := a.db.CreateConnection(c)
+		if err != nil {
 			t.Fatal(err)
 		}
+		ids[c.Name] = got.ID
 	}
-	if err := a.db.SetSetting(sharedProxyKey, `{"port":1080,"bastions":[{"connection_id":"`+jump.ID+`","networks":["192.0.2.0/24"]}]}`); err != nil {
+	if err := a.db.SetSetting(sharedProxyKey, `{"port":1080}`); err != nil {
 		t.Fatal(err)
 	}
 	sharedRoutesInvalidate()
 	defer sharedRoutesInvalidate()
-	if id, _, err := a.sharedPickWith("10.40.1.5", nil); err != nil || bastionOf(id) != jump.ID {
-		t.Errorf("connection address: %q, %v", id, err)
+	if id, why, err := a.sharedPickWith("10.40.1.5", nil); err != nil || jumpConnOf(id) != ids["a"] || !strings.Contains(why, "pinned") {
+		t.Errorf("address: %q %q %v", id, why, err)
 	}
-	if id, _, err := a.sharedPickWith("APP.internal.example", nil); err != nil || bastionOf(id) != jump.ID {
-		t.Errorf("connection name: %q, %v", id, err)
+	if id, _, err := a.sharedPickWith("APP.internal.example", nil); err != nil || jumpConnOf(id) != ids["b"] {
+		t.Errorf("name through a folder's typed jump host: %q, %v", id, err)
 	}
-	if _, _, err := a.sharedPickWith("10.40.1.6", nil); err == nil {
-		t.Error("a connection jumping elsewhere was routed to the bastion")
+	if _, _, err := a.sharedPickWith("10.40.1.7", nil); err == nil {
+		t.Error("a connection without a jump host was routed")
+	}
+	if w, err := a.NetworkSharedProxyWhich("10.40.1.5"); err != nil || w.Profile != "a (its jump host)" {
+		t.Errorf("which = %+v, %v", w, err)
+	}
+
+	if err := a.db.SetSetting(sharedProxyKey, `{"port":1080,"no_jump_connections":true}`); err != nil {
+		t.Fatal(err)
+	}
+	sharedRoutesInvalidate()
+	if _, _, err := a.sharedPickWith("10.40.1.5", nil); err == nil {
+		t.Error("jump connections still routed with no_jump_connections")
 	}
 }
 
-// With the same pinned address on a bastion and a profile, the bastion
-// takes it.
-func TestBastionBeatsProfileOnTie(t *testing.T) {
+// The same address pinned by a profile and by a connection's jump path
+// goes the connection's way; a bastion's typed network has no such
+// preference over a profile pin.
+func TestJumpBeatsProfileOnTie(t *testing.T) {
 	a := &App{}
 	r := func(cidr, id string) sharedRoute { return sharedRoute{netip.MustParsePrefix(cidr), id, id, true} }
-	got := a.mostSpecific([]sharedRoute{r("10.40.1.5/32", "profile"), r("10.40.1.5/32", bastionRouteID("x"))}, map[string]int{"profile": 0})
-	if bastionOf(got.profileID) != "x" {
-		t.Fatalf("got %q", got.profileID)
+	got := a.mostSpecific([]sharedRoute{r("10.40.1.5/32", "profile"), r("10.40.1.5/32", jumpRouteID("x"))}, map[string]int{"profile": 0})
+	if jumpConnOf(got.profileID) != "x" {
+		t.Fatalf("jump vs profile: %q", got.profileID)
+	}
+	got = a.mostSpecific([]sharedRoute{r("10.40.1.5/32", bastionRouteID("b")), r("10.40.1.5/32", "profile")}, map[string]int{"profile": 0})
+	if got.profileID != "profile" {
+		t.Fatalf("bastion network vs ranked profile: %q", got.profileID)
 	}
 }

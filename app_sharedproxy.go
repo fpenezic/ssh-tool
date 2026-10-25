@@ -38,6 +38,9 @@ type SharedProxyConfig struct {
 	// Bastions: networks reached through an SSH connection from the tree
 	// (app_bastionproxy.go).
 	Bastions []ProxyBastion `json:"bastions,omitempty"`
+	// NoJumpConnections leaves the tree's connections with a jump host out
+	// of the proxy (they are in by default: reached as a terminal would).
+	NoJumpConnections bool `json:"no_jump_connections,omitempty"`
 }
 
 const (
@@ -260,10 +263,12 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 	routes = append(routes, a.bastionRoutes()...)
 	if conns, err := a.db.ListConnections(nil); err == nil {
 		folders, _ := a.db.ListFolders()
-		jr, jh := a.bastionJumpRoutes(conns, folders)
-		routes = append(routes, jr...)
-		for name, id := range jh {
-			hosts[name] = id
+		if !a.sharedProxyConfig().NoJumpConnections {
+			jr, jh := jumpConnRoutes(conns, folders)
+			routes = append(routes, jr...)
+			for name, id := range jh {
+				hosts[name] = id
+			}
 		}
 	}
 	sharedTable.at, sharedTable.routes, sharedTable.hosts = time.Now(), routes, hosts
@@ -356,12 +361,12 @@ func (a *App) mostSpecific(rs []sharedRoute, rank map[string]int) sharedRoute {
 	}
 	if len(pick) > 1 {
 		sort.SliceStable(pick, func(i, j int) bool {
-			// A bastion before a profile with the same route: a connection
-			// that jumps through a bastion is opened from there, even when
-			// it also has a network profile (which reaches the bastion).
-			bi, bj := bastionOf(pick[i].profileID) != "", bastionOf(pick[j].profileID) != ""
-			if bi != bj {
-				return bi
+			// A connection's own path (its jump chain) before a profile pin
+			// of the same address: the profile only takes it to the first
+			// hop, the address is opened from the last.
+			ji, jj := jumpConnOf(pick[i].profileID) != "", jumpConnOf(pick[j].profileID) != ""
+			if ji != jj {
+				return ji
 			}
 			ri, iok := rank[pick[i].profileID]
 			rj, jok := rank[pick[j].profileID]
@@ -400,7 +405,11 @@ func (a *App) NetworkSharedProxyWhich(host string) (*SharedProxyWhich, error) {
 		return nil, err
 	}
 	name := id
-	if c := bastionOf(id); c != "" {
+	if c := jumpConnOf(id); c != "" {
+		if conn, err := a.db.GetConnection(c); err == nil && conn != nil {
+			name = conn.Name + " (its jump host)"
+		}
+	} else if c := bastionOf(id); c != "" {
 		if conn, err := a.db.GetConnection(c); err == nil && conn != nil {
 			name = conn.Name + " (bastion)"
 		}

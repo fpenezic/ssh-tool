@@ -27,6 +27,7 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 
 	"ssh-tool/internal/resolver"
+	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/sshchan"
 	"ssh-tool/internal/store"
 )
@@ -124,64 +125,64 @@ func (a *App) bastionRoutes() []sharedRoute {
 	return routes
 }
 
-// bastionJumpRoutes routes the connections of the tree that jump through
-// a bastion (their last hop is that connection, or the same host and
-// port typed by hand) to it: an address becomes a pinned /32, a name goes
-// to the names map, where a SOCKS client that sends names (socks5h) has
-// it resolved on the bastion. It wins over the same connection's network
-// profile: the bastion is the hop the connection is opened from.
-func (a *App) bastionJumpRoutes(conns []store.Connection, folders []store.Folder) ([]sharedRoute, map[string]string) {
-	type hostPort struct {
-		host string
-		port uint16
+// Connections of the tree that have a jump host (a connection from the
+// tree or a host typed, on the connection or a folder) are reached
+// through the proxy the way a terminal reaches them: DialVia brings the
+// first hop up over the connection's network profile (a VPN comes up as
+// its mode says), walks the jump chain through the shared bastion pool,
+// and opens the address from the last hop. Route id "jump:<connection
+// id>"; the address is pinned, a name joins the names map (a socks5h
+// client has it resolved on the last hop; a CI job resolves names itself
+// and needs extra hosts for them).
+const jumpRoutePrefix = "jump:"
+
+func jumpRouteID(connectionID string) string { return jumpRoutePrefix + connectionID }
+
+// jumpConnOf returns the connection id of a jump route id, else "".
+func jumpConnOf(id string) string {
+	if c, ok := strings.CutPrefix(id, jumpRoutePrefix); ok {
+		return c
 	}
-	byID := map[string]string{}     // bastion connection id -> route id
-	byAddr := map[hostPort]string{} // bastion host:port -> route id
-	names := map[string]string{}    // route id -> display name
-	for _, b := range a.sharedProxyConfig().Bastions {
-		for _, c := range conns {
-			if c.ID != b.ConnectionID {
-				continue
-			}
-			rs := resolver.ResolveWith(c, folders)
-			id := bastionRouteID(c.ID)
-			byID[c.ID] = id
-			byAddr[hostPort{strings.ToLower(rs.Hostname), rs.Port}] = id
-			names[id] = c.Name + " (bastion)"
-		}
-	}
-	if len(byID) == 0 {
-		return nil, nil
-	}
+	return ""
+}
+
+// jumpRouteName is what the summary counts the jump connections under:
+// one line, however many connections.
+const jumpRouteName = "connections with a jump host"
+
+func jumpConnRoutes(conns []store.Connection, folders []store.Folder) ([]sharedRoute, map[string]string) {
 	var routes []sharedRoute
 	hosts := map[string]string{}
 	for _, c := range conns {
 		rs := resolver.ResolveWith(c, folders)
-		j := rs.JumpHost
-		if j == nil || rs.Hostname == "" {
+		if rs.JumpHost == nil || rs.Hostname == "" {
 			continue
 		}
-		id := ""
-		if j.ConnectionID != nil {
-			id = byID[*j.ConnectionID]
-		}
-		if id == "" {
-			port := uint16(22)
-			if j.Port != nil {
-				port = *j.Port
-			}
-			id = byAddr[hostPort{strings.ToLower(j.Hostname), port}]
-		}
-		if id == "" {
-			continue
-		}
+		id := jumpRouteID(c.ID)
 		if ip, err := netip.ParseAddr(rs.Hostname); err == nil {
-			routes = append(routes, sharedRoute{netip.PrefixFrom(ip, ip.BitLen()), id, names[id], true})
+			ip = ip.Unmap()
+			routes = append(routes, sharedRoute{netip.PrefixFrom(ip, ip.BitLen()), id, jumpRouteName, true})
 		} else {
 			hosts[strings.ToLower(rs.Hostname)] = id
 		}
 	}
 	return routes, hosts
+}
+
+// jumpDial opens addr the way a connect to the connection would reach its
+// host. The returned release closes the connection's share of the chain.
+func (a *App) jumpDial(ctx context.Context, connectionID, addr string) (net.Conn, func(), error) {
+	settings, err := resolver.ResolveConnection(a.db, connectionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	c, cleanup, err := sshlayer.DialVia(ctx, a.db, a.vault, settings, addr,
+		a.makeHostKeyCallback(), a.makeAlgoLookup(), a.connectTimeout())
+	if err != nil {
+		return nil, nil, err
+	}
+	a.recordAudit("proxy.jump_dial", connectionID, map[string]string{"addr": addr})
+	return c, cleanup, nil
 }
 
 // bastionDialers holds one SSH session per bastion while the proxy uses

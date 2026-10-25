@@ -2398,14 +2398,14 @@
   // App proxy (the "shared" proxy in code): one SOCKS for every profile
   // marked shared, picking the profile by destination.
   type SpBastion = { connection_id: string; networksText: string };
-  let sp = $state<{ enabled: boolean; bind: string; port: number; priority: string[]; bastions: SpBastion[]; listening: boolean }>({ enabled: false, bind: "127.0.0.1", port: 1080, priority: [], bastions: [], listening: false });
+  let sp = $state<{ enabled: boolean; bind: string; port: number; priority: string[]; bastions: SpBastion[]; jumps: boolean; listening: boolean }>({ enabled: false, bind: "127.0.0.1", port: 1080, priority: [], bastions: [], jumps: true, listening: false });
   const spBastionsOf = (list?: import("./api").ProxyBastion[]): SpBastion[] => (list ?? []).map((b) => ({ connection_id: b.connection_id, networksText: b.networks.join(", ") }));
   const spProfiles = $derived(networkProfiles.list.filter((p) => p.local_proxy?.shared));
   let spDetails = $state<import("./api").SharedProxyDetails | null>(null);
   async function spLoad() {
     try {
       const r = await api.networkSharedProxyGet();
-      sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], bastions: spBastionsOf(r.config.bastions), listening: r.listening };
+      sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], bastions: spBastionsOf(r.config.bastions), jumps: !r.config.no_jump_connections, listening: r.listening };
       spDetails = sp.enabled ? await api.networkSharedProxyDetails() : null;
     } catch { /* shown on save */ }
   }
@@ -2422,6 +2422,7 @@
       bastions: sp.bastions
         .map((b) => ({ connection_id: b.connection_id, networks: b.networksText.split(/[\s,]+/).filter(Boolean) }))
         .filter((b) => b.networks.length > 0),
+      no_jump_connections: !sp.jumps,
     };
     const sentNets = new Map(sp.bastions.map((b) => [b.connection_id, spNets(b.networksText)]));
     spPending++;
@@ -2444,7 +2445,7 @@
               if (back) return [unchanged ? back : b];
               return unchanged && spNets(b.networksText) !== "" ? [] : [b];
             });
-            sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], bastions, listening: r.listening };
+            sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], bastions, jumps: !r.config.no_jump_connections, listening: r.listening };
             spDetails = d;
           }
           toast.ok(req.enabled ? `App proxy on ${req.bind}:${req.port}` : "App proxy off");
@@ -4914,15 +4915,23 @@
               </div>
             {/if}
             <div class="np-prio">
-              <strong>Through a bastion</strong>
+              <label class="oc-choice"><input type="checkbox" checked={sp.jumps} onchange={(e) => { sp.jumps = (e.target as HTMLInputElement).checked; void spSave(); }} /> <strong>Connections with a jump host</strong></label>
               <p class="hint">
-                Networks reached through an SSH connection from the tree
-                instead of a VPN: the app connects to it with its own
-                credentials (jump hosts and network profile included) and
-                opens each connection from there. The client never sees a key
-                or a password. The bastion must allow TCP forwarding. Its
-                networks always go through it, and so do the connections in
-                the tree that use it as their jump host.
+                A connection in the tree with a jump host (on it or its folder,
+                a connection or a host typed) is reached the way its terminal
+                connects: its VPN comes up as its mode says, then the jump
+                chain, and the address is opened from the last hop.
+              </p>
+            </div>
+            <div class="np-prio">
+              <strong>Networks behind a bastion</strong>
+              <p class="hint">
+                Whole networks behind an SSH host, beyond the connections in
+                the tree: pick the host's connection and list the networks.
+                The app connects to it with its own credentials (jump hosts
+                and network profile included) and opens each connection from
+                there. The bastion must allow TCP forwarding; its networks
+                always go through it.
               </p>
               {#each sp.bastions as b (b.connection_id)}
                 <div class="np-bastion-row">

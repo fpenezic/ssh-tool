@@ -609,6 +609,8 @@ export interface SharedProxyConfig {
   use?: string;
   /** Networks reached through an SSH connection from the tree. */
   bastions?: ProxyBastion[];
+  /** Leave the tree's connections with a jump host out (in by default). */
+  no_jump_connections?: boolean;
 }
 
 export interface BastionSession {

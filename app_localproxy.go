@@ -345,6 +345,22 @@ func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host
 	}
 	var d tunnelDialer = &net.Dialer{}
 	name := "direct"
+	if conn := jumpConnOf(id); conn != "" {
+		// A tree connection with a jump host: opened from its last hop,
+		// the way its terminal connects (VPN, chain, prompts included).
+		_ = c.SetDeadline(time.Now().Add(6 * time.Minute))
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		up, release, err := a.jumpDial(ctx, conn, target)
+		cancel()
+		if err != nil {
+			log.Printf("network: local proxy (%s): jump host of %s: dial %s: %v", what, conn, target, err)
+			reply(5)
+			return
+		}
+		defer release()
+		a.relaySOCKS(c, up, reply)
+		return
+	}
 	if conn := bastionOf(id); conn != "" {
 		// Through a bastion: a direct-tcpip channel on its SSH session.
 		// A first connect can ask for a host key or a login.
