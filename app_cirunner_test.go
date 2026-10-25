@@ -370,3 +370,47 @@ func TestCIRunnerLegacyIndexKeys(t *testing.T) {
 		t.Error("legacy index key left behind")
 	}
 }
+
+// A [[runners]] block copied from another, id included, becomes a runner
+// of its own; emptying a token deletes it.
+func TestCIRunnerCopiedBlockAndEmptiedToken(t *testing.T) {
+	a := newDbTestApp(t)
+	if _, err := a.CIRunnerSet(CIRunnerConfig{ConfigTOML: ciTestTOML}, ""); err != nil {
+		t.Fatal(err)
+	}
+	m, _ := ciParseTOML(a.ciRunnerConfig().ConfigTOML)
+	rs := m["runners"].([]any)
+	dup, _ := ciParseTOML(a.ciRunnerConfig().ConfigTOML)
+	copyBlock := ciRunners(dup)[0]
+	copyBlock["name"] = "copy"
+	copyBlock["token"] = "glrt-copy"
+	m["runners"] = append(rs, copyBlock)
+	text, _ := toml.Marshal(m)
+	if _, err := a.CIRunnerSet(CIRunnerConfig{ConfigTOML: string(text)}, ""); err != nil {
+		t.Fatal(err)
+	}
+	first, second := ciStoredID(t, a, 0), ciStoredID(t, a, 1)
+	if first == second {
+		t.Fatal("copied block kept the same id")
+	}
+	if tok, _, _ := a.vault.Get(ciTokenKey(first)); tok != "glrt-secret-one" {
+		t.Fatalf("first token = %q", tok)
+	}
+	if tok, _, _ := a.vault.Get(ciTokenKey(second)); tok != "glrt-copy" {
+		t.Fatalf("copy token = %q", tok)
+	}
+	if has, _ := a.ciVaultHas(ciSecretKey(second, "s3", "SecretKey")); has {
+		t.Error("copy got the first runner's cache secret")
+	}
+
+	// Empty the first runner's token.
+	m, _ = ciParseTOML(a.ciRunnerConfig().ConfigTOML)
+	ciRunners(m)[0]["token"] = ""
+	text, _ = toml.Marshal(m)
+	if _, err := a.CIRunnerSet(CIRunnerConfig{ConfigTOML: string(text)}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if has, _ := a.ciVaultHas(ciTokenKey(first)); has {
+		t.Error("emptied token still in the vault")
+	}
+}
