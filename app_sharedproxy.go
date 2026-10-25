@@ -271,8 +271,36 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 			}
 		}
 	}
+	// The CI runner's extra hosts: a job resolves a name itself and sends
+	// the address, so a name the tree routes (a connection behind a jump
+	// host or a VPN) pins the address it is given there to the same path.
+	for _, h := range a.ciExtraHosts() {
+		name, addr, _ := strings.Cut(h, ":")
+		id, ok := hosts[strings.ToLower(name)]
+		if !ok {
+			continue
+		}
+		if ip, err := netip.ParseAddr(strings.Trim(addr, "[]")); err == nil {
+			ip = ip.Unmap()
+			routes = append(routes, sharedRoute{netip.PrefixFrom(ip, ip.BitLen()), id, routeName(routes, id), true})
+		}
+	}
 	sharedTable.at, sharedTable.routes, sharedTable.hosts = time.Now(), routes, hosts
 	return routes, hosts
+}
+
+// routeName is the summary name of route id among routes (a jump route
+// counts under one line, a profile under its name).
+func routeName(routes []sharedRoute, id string) string {
+	if jumpConnOf(id) != "" {
+		return jumpRouteName
+	}
+	for _, r := range routes {
+		if r.profileID == id {
+			return r.name
+		}
+	}
+	return id
 }
 
 type sharedPins struct{ set map[netip.Prefix]bool }
