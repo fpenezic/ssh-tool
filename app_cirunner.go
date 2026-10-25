@@ -902,11 +902,12 @@ func (a *App) ciRunnerStopOnLock() {
 		for attempt := 0; attempt < 3; attempt++ {
 			if attempt > 0 {
 				time.Sleep(5 * time.Second)
-				// Unlocked again meanwhile: the runner (maybe started anew
-				// by the unlock) stays.
-				if a.vault.Status().Kind == creds.StatusUnlocked {
-					return
-				}
+			}
+			// Unlocked again meanwhile (while a start or docker was waited
+			// for, or between attempts): the runner, maybe started anew by
+			// the unlock, stays.
+			if a.vault.Status().Kind == creds.StatusUnlocked {
+				return
 			}
 			if _, err = a.CIRunnerStop(); err == nil {
 				log.Printf("ci runner: stopped, the vault locked")
