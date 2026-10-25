@@ -366,7 +366,7 @@ func (a *App) ciStart(c CIRunnerConfig) (err error) {
 		return err
 	}
 	tornDown = true
-	subnet, gwAddr, err := ciNetwork(ctx)
+	subnet, gwAddr, err := ciNetwork(ctx, append(append([]string{}, details.Routes...), direct...))
 	if err != nil {
 		return err
 	}
@@ -745,23 +745,60 @@ func ciContainer(ctx context.Context, name string) (state, label string, err err
 
 // ciNetwork creates the jobs' network and returns its subnet and gateway
 // address. inhibit_ipv4 keeps the address off the host bridge, so the
-// gateway container can take it.
-func ciNetwork(ctx context.Context) (netip.Prefix, netip.Addr, error) {
-	if _, err := docker(ctx, nil, "network", "create", "-d", "bridge", "--label", ciLabel+"=network",
-		"-o", "com.docker.network.bridge.inhibit_ipv4=true", ciNetworkName); err != nil {
-		return netip.Prefix{}, netip.Addr{}, fmt.Errorf("jobs network: %w", err)
+// gateway container can take it. The subnet is chosen here, not left to
+// Docker: Docker Desktop allows a fixed container address (the gateway's)
+// only on a network with a user-configured subnet. The first /24 of
+// ciSubnetPool that no VPN route or direct destination overlaps and that
+// Docker accepts (it refuses one another network uses) is taken.
+func ciNetwork(ctx context.Context, avoid []string) (netip.Prefix, netip.Addr, error) {
+	var avoidP []netip.Prefix
+	for _, a := range avoid {
+		if p, err := parseRoute(a); err == nil {
+			avoidP = append(avoidP, p)
+		}
 	}
-	out, err := docker(ctx, nil, "network", "inspect", ciNetworkName, "--format", "{{(index .IPAM.Config 0).Subnet}}|{{(index .IPAM.Config 0).Gateway}}")
-	if err != nil {
-		return netip.Prefix{}, netip.Addr{}, fmt.Errorf("jobs network: %w", err)
+	var lastErr error
+	for _, subnet := range ciSubnets() {
+		if slices.ContainsFunc(avoidP, subnet.Overlaps) {
+			continue
+		}
+		gw := subnet.Addr().Next()
+		_, err := docker(ctx, nil, "network", "create", "-d", "bridge", "--label", ciLabel+"=network",
+			"--subnet", subnet.String(), "--gateway", gw.String(),
+			"-o", "com.docker.network.bridge.inhibit_ipv4=true", ciNetworkName)
+		if err == nil {
+			return subnet, gw, nil
+		}
+		lastErr = err
+		if !strings.Contains(strings.ToLower(err.Error()), "overlap") {
+			break
+		}
+		if ctx.Err() != nil {
+			break
+		}
 	}
-	sn, gw, _ := strings.Cut(out, "|")
-	subnet, err1 := netip.ParsePrefix(sn)
-	addr, err2 := netip.ParseAddr(gw)
-	if err1 != nil || err2 != nil || !addr.Is4() {
-		return netip.Prefix{}, netip.Addr{}, fmt.Errorf("jobs network: unexpected subnet %q / gateway %q", sn, gw)
+	if lastErr == nil {
+		lastErr = fmt.Errorf("every subnet in %s overlaps a VPN network", ciSubnetPool)
 	}
-	return subnet.Masked(), addr, nil
+	return netip.Prefix{}, netip.Addr{}, fmt.Errorf("jobs network: %w", lastErr)
+}
+
+// ciSubnetPool is where the jobs' network takes its /24 from: the top of
+// the private 172.16.0.0/12, away from Docker's own defaults (172.17-
+// 172.29 and 192.168.x for user networks).
+var ciSubnetPool = netip.MustParsePrefix("172.30.0.0/15")
+
+// ciSubnets lists the /24s of ciSubnetPool, from the top down.
+func ciSubnets() []netip.Prefix {
+	b := ciSubnetPool.Addr().As4()
+	base := uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8
+	n := 1 << (24 - ciSubnetPool.Bits())
+	out := make([]netip.Prefix, 0, n)
+	for i := n - 1; i >= 0; i-- {
+		v := base + uint32(i)<<8
+		out = append(out, netip.PrefixFrom(netip.AddrFrom4([4]byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), 0}), 24))
+	}
+	return out
 }
 
 // ciLastAddr is the last usable IPv4 address of a subnet (before the

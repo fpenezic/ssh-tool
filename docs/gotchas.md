@@ -2098,7 +2098,12 @@ everything mobile is behind a build tag or an `isMobile` check.
    network's gateway address on top of its own (the subnet's last
    address), with `ip_forward` and a MASQUERADE for what is not for the
    VPNs. A job's default route then leads to the gateway; extra_hosts and
-   services work as on any network. The plain "Copy gateway command"
+   services work as on any network. The subnet must be given explicitly
+   (`--subnet`, picked from 172.30.0.0/15 clear of the VPN routes):
+   Docker Desktop refuses a fixed container address (`network connect
+   --ip`) on a network whose subnet Docker chose ("user specified IP
+   address is supported only when connecting to networks with user
+   configured subnets"), while Docker Engine 29 on Linux allowed it. The plain "Copy gateway command"
    recipe (`--network container:sshtool-gw`) still suits other
    containers, not a runner. A job-like `docker run` is not a test of
    this: only a real pipeline creates the containers the way the runner
