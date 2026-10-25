@@ -608,3 +608,21 @@ func TestCIRunnerLegacyReorderDoesNotInherit(t *testing.T) {
 }
 
 func mustJSON(v any) string { b, _ := json.Marshal(v); return string(b) }
+
+// An array-valued url or name in both the saved and the submitted config
+// is no match, not a panic.
+func TestCIRunnerLegacyArrayFieldsNoPanic(t *testing.T) {
+	a := newDbTestApp(t)
+	odd := `
+[[runners]]
+  name = ["a", "b"]
+  url = ["https://gitlab.example.com"]
+  executor = "docker"
+`
+	if err := localStateStore.set(ciRunnerKey, mustJSON(CIRunnerConfig{ConfigTOML: odd})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.CIRunnerSet(CIRunnerConfig{ConfigTOML: odd}, ""); err != nil {
+		t.Fatalf("CIRunnerSet: %v", err)
+	}
+}
