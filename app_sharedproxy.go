@@ -322,6 +322,9 @@ func (a *App) sharedPick(host string) (string, error) {
 func (a *App) sharedPickWith(host string, priority []string) (id, why string, err error) {
 	routes, hosts := a.sharedRoutes()
 	if id, ok := hosts[strings.ToLower(host)]; ok {
+		if jumpConnOf(id) != "" {
+			return id, "through its jump host, as its terminal connects", nil
+		}
 		return id, "a connection in the tree uses this name", nil
 	}
 	ip, err := netip.ParseAddr(host)
@@ -358,6 +361,9 @@ func (a *App) sharedPickWith(host string, priority []string) (id, why string, er
 	}
 	if len(pins) > 0 {
 		r := a.mostSpecific(pins, rank)
+		if jumpConnOf(r.profileID) != "" {
+			return r.profileID, resolved + "through its jump host, as its terminal connects", nil
+		}
 		return r.profileID, resolved + "pinned to it (" + r.prefix.String() + ")", nil
 	}
 	best := -1
@@ -435,7 +441,7 @@ func (a *App) NetworkSharedProxyWhich(host string) (*SharedProxyWhich, error) {
 	name := id
 	if c := jumpConnOf(id); c != "" {
 		if conn, err := a.db.GetConnection(c); err == nil && conn != nil {
-			name = conn.Name + " (its jump host)"
+			name = conn.Name
 		}
 	} else if c := bastionOf(id); c != "" {
 		if conn, err := a.db.GetConnection(c); err == nil && conn != nil {

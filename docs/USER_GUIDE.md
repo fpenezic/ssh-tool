@@ -2657,6 +2657,10 @@ the docker executor is supported. Tokens move to the vault; the
 config.toml is put together at start and copied into the runner
 container, never written to your disk.
 
+While the runner runs, the gateway follows the app proxy: a VPN, a
+network or a connection with a jump host added later is in its routes
+within 20 seconds, without a restart and without cutting running jobs.
+
 **Start** creates three things: a docker network for the jobs
 (`sshtool-ci`), a gateway container (`sshtool-ci-gw`) that is that
 network's router, and the runner (`sshtool-ci-runner`). The gateway sends

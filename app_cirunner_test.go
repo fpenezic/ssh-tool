@@ -226,3 +226,12 @@ func TestCISubnets(t *testing.T) {
 		}
 	}
 }
+
+func TestCIRouteDiff(t *testing.T) {
+	have := map[string]bool{"10.0.0.0/8": true, "192.0.2.0/24": true}
+	want := map[string]bool{"10.0.0.0/8": true, "10.239.248.54/32": true}
+	add, del := ciRouteDiff(have, want)
+	if strings.Join(add, ",") != "10.239.248.54/32" || strings.Join(del, ",") != "192.0.2.0/24" {
+		t.Fatalf("add %v del %v", add, del)
+	}
+}
