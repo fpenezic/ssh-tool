@@ -107,6 +107,9 @@ var ciState struct {
 	closing bool
 	done    chan struct{}
 	cancel  context.CancelFunc
+	// gen counts successful starts: a route sync of an earlier run sees a
+	// newer gen and stops instead of touching the new gateway.
+	gen int
 }
 
 func (a *App) ciRunnerConfig() CIRunnerConfig {
@@ -430,7 +433,11 @@ func (a *App) ciStart(c CIRunnerConfig) (err error) {
 	}
 	started = true
 	log.Printf("ci runner: started, %d routes, %d direct, jobs on %s", len(details.Routes), len(direct), subnet)
-	go a.ciSyncRoutes(details.Routes)
+	ciState.Lock()
+	ciState.gen++
+	gen := ciState.gen
+	ciState.Unlock()
+	go a.ciSyncRoutes(gen, subnet, details.Routes)
 	a.recordAudit("ci_runner.start", "", map[string]string{
 		"routes": strconv.Itoa(len(details.Routes)), "direct": strconv.Itoa(len(direct)),
 	})
@@ -447,19 +454,24 @@ const ciRouteSyncEvery = 20 * time.Second
 // another VPN on the machine may even accept it and never answer). The
 // difference is applied to the live gateway with ip rule, so running jobs
 // are not cut. It stops when the runner is no longer ours.
-func (a *App) ciSyncRoutes(applied []string) {
+func (a *App) ciSyncRoutes(gen int, jobs netip.Prefix, applied []string) {
 	have := map[string]bool{}
 	for _, r := range applied {
 		have[r] = true
 	}
+	warned := map[string]bool{}
 	t := time.NewTicker(ciRouteSyncEvery)
 	defer t.Stop()
 	for range t.C {
 		ciState.Lock()
-		ours := ciState.started && !ciState.busy && !ciState.closing
+		current := ciState.gen == gen && ciState.started && !ciState.closing
+		busy := ciState.busy
 		ciState.Unlock()
-		if !ours {
+		if !current {
 			return
+		}
+		if busy {
+			continue
 		}
 		d, err := a.NetworkSharedProxyDetails()
 		if err != nil {
@@ -467,6 +479,16 @@ func (a *App) ciSyncRoutes(applied []string) {
 		}
 		want := map[string]bool{}
 		for _, r := range d.Routes {
+			// A route over the jobs' own subnet cannot work: a job takes
+			// those addresses for its own network. The subnet was chosen
+			// clear of the routes at Start; a later one needs a restart.
+			if p, err := netip.ParsePrefix(r); err == nil && p.Overlaps(jobs) {
+				if !warned[r] {
+					warned[r] = true
+					log.Printf("ci runner: route %s overlaps the jobs' network %s; Stop and Start the runner to move it", r, jobs)
+				}
+				continue
+			}
 			want[r] = true
 		}
 		add, del := ciRouteDiff(have, want)
@@ -474,14 +496,19 @@ func (a *App) ciSyncRoutes(applied []string) {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := ciApplyRoutes(ctx, add, del); err != nil {
+		failed, err := ciApplyRoutes(ctx, add, del)
+		cancel()
+		if err != nil {
 			log.Printf("ci runner: gateway routes: %v", err)
-			cancel()
 			continue
 		}
-		cancel()
+		// A route whose rule could not be added stays out of have, so the
+		// next sync tries it again.
 		have = want
-		log.Printf("ci runner: gateway routes updated, %d added, %d removed", len(add), len(del))
+		for _, r := range failed {
+			delete(have, r)
+		}
+		log.Printf("ci runner: gateway routes updated, %d added, %d removed, %d failed", len(add)-len(failed), len(del), len(failed))
 	}
 }
 
@@ -502,31 +529,40 @@ func ciRouteDiff(have, want map[string]bool) (add, del []string) {
 	return add, del
 }
 
-// ciApplyRoutes changes the gateway's policy rules in one docker exec.
-// Added routes get priority 32765: after the direct (excluded) rules the
-// gateway started with, which have smaller numbers and so win, and before
-// the main table's catch-all at 32766.
-func ciApplyRoutes(ctx context.Context, add, del []string) error {
+// ciApplyRoutes changes the gateway's policy rules in one docker exec and
+// returns the added routes whose rule failed. Added routes get priority
+// 32765: after the direct (excluded) rules the gateway started with, which
+// have smaller numbers and so win, and before the main table's catch-all
+// at 32766. A rule that is already gone counts as removed.
+func ciApplyRoutes(ctx context.Context, add, del []string) ([]string, error) {
 	var cmds []string
 	for _, r := range del {
 		if _, err := netip.ParsePrefix(r); err != nil {
 			continue
 		}
-		cmds = append(cmds, "ip rule del to "+r+" table 0x22b")
+		cmds = append(cmds, "ip rule del to "+r+" table 0x22b 2>/dev/null")
 	}
 	for _, r := range add {
 		if _, err := netip.ParsePrefix(r); err != nil {
 			continue
 		}
-		cmds = append(cmds, "ip rule add to "+r+" table 0x22b pref 32765")
+		cmds = append(cmds, "ip rule add to "+r+" table 0x22b pref 32765 || echo FAILED "+r)
 	}
 	if len(cmds) == 0 {
-		return nil
+		return nil, nil
 	}
-	// One shell, every command attempted: a rule already gone (or there)
-	// must not stop the rest.
-	_, err := docker(ctx, nil, "exec", ciGatewayName, "sh", "-c", strings.Join(cmds, "; ")+"; true")
-	return err
+	// One shell, every command attempted; each failed add is reported.
+	out, err := docker(ctx, nil, "exec", ciGatewayName, "sh", "-c", strings.Join(cmds, "; ")+"; true")
+	if err != nil {
+		return nil, err
+	}
+	var failed []string
+	for _, line := range strings.Split(out, "\n") {
+		if r, ok := strings.CutPrefix(strings.TrimSpace(line), "FAILED "); ok {
+			failed = append(failed, r)
+		}
+	}
+	return failed, nil
 }
 
 // ciRunnerAutoStart starts the runner when it is set to start with the
