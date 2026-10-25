@@ -1477,6 +1477,12 @@ type ConnectionsUpdateInput struct {
 }
 
 func (a *App) ConnectionsUpdate(in ConnectionsUpdateInput) (*store.Connection, error) {
+	// An app proxy bastion's session was built from the old settings; a
+	// change that does not touch how it connects (a favourite, the sort
+	// order, notes) leaves it, and the jobs on it, alone.
+	if in.Hostname != nil || in.Overrides != nil || in.FolderID != nil || in.ClearFolder {
+		defer closeBastionDialer(in.ID)
+	}
 	return a.db.UpdateConnection(store.UpdateConnection{
 		ID:                  in.ID,
 		FolderID:            in.FolderID,
@@ -1498,6 +1504,7 @@ func (a *App) ConnectionsUpdate(in ConnectionsUpdateInput) (*store.Connection, e
 }
 
 func (a *App) ConnectionsDelete(id string) error {
+	closeBastionDialer(id)
 	return a.db.DeleteConnection(id)
 }
 

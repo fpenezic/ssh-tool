@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	gossh "golang.org/x/crypto/ssh"
+
 	"ssh-tool/internal/resolver"
 	"ssh-tool/internal/sshchan"
 )
@@ -45,8 +47,15 @@ func bastionOf(id string) string {
 }
 
 // normalizeBastions checks the bastions of a setting: the connection
-// exists, the networks parse, one entry per connection.
+// exists, the networks parse, one entry per connection. A bastion whose
+// connection was deleted since it was saved is dropped quietly (the tree
+// has many ways to delete one: a folder, a sync pull, an import); an
+// unknown connection that was not saved before is an error.
 func (a *App) normalizeBastions(in []ProxyBastion) ([]ProxyBastion, error) {
+	saved := map[string]bool{}
+	for _, b := range a.sharedProxyConfig().Bastions {
+		saved[b.ConnectionID] = true
+	}
 	seen := map[string]bool{}
 	var out []ProxyBastion
 	for _, b := range in {
@@ -56,6 +65,9 @@ func (a *App) normalizeBastions(in []ProxyBastion) ([]ProxyBastion, error) {
 		}
 		conn, err := a.db.GetConnection(b.ConnectionID)
 		if err != nil || conn == nil {
+			if saved[b.ConnectionID] {
+				continue
+			}
 			return nil, fmt.Errorf("bastion: connection %s not found", b.ConnectionID)
 		}
 		if seen[b.ConnectionID] {
@@ -123,22 +135,24 @@ func (a *App) bastionDial(ctx context.Context, connectionID, addr string) (net.C
 	bastionDialers.Lock()
 	d := bastionDialers.m[connectionID]
 	if d == nil {
-		resolved, err := resolver.ResolveConnection(a.db, connectionID)
-		if err != nil {
-			bastionDialers.Unlock()
-			return nil, nil, err
-		}
-		conn, err := a.db.GetConnection(connectionID)
-		if err != nil || conn == nil {
-			bastionDialers.Unlock()
-			return nil, nil, errors.New("bastion connection not found")
-		}
-		if resolved.Hostname == "" {
-			bastionDialers.Unlock()
-			return nil, nil, fmt.Errorf("bastion %q has no hostname", conn.Name)
-		}
 		d = &bastionDialer{lazy: &sshchan.LazySSH{}}
-		d.lazy.Connect = a.sshChanConnect("proxy", connectionID, conn, resolved, d.lazy)
+		lazy := d.lazy
+		// Resolved on every connect, not once: a reconnect after the
+		// connection or its folders changed uses the new settings.
+		lazy.Connect = func(ctx context.Context) (*gossh.Client, func(), error) {
+			resolved, err := resolver.ResolveConnection(a.db, connectionID)
+			if err != nil {
+				return nil, nil, err
+			}
+			conn, err := a.db.GetConnection(connectionID)
+			if err != nil || conn == nil {
+				return nil, nil, errors.New("bastion connection not found")
+			}
+			if resolved.Hostname == "" {
+				return nil, nil, fmt.Errorf("bastion %q has no hostname", conn.Name)
+			}
+			return a.sshChanConnect("proxy", connectionID, conn, resolved, lazy)(ctx)
+		}
 		bastionDialers.m[connectionID] = d
 	}
 	d.conns++
@@ -173,6 +187,21 @@ func (a *App) bastionDial(ctx context.Context, connectionID, addr string) (net.C
 		return nil, nil, err
 	}
 	return c, release, nil
+}
+
+// closeBastionDialer ends one bastion's session (its connection changed
+// or was deleted); the next dial connects with the current settings.
+func closeBastionDialer(connectionID string) {
+	bastionDialers.Lock()
+	d := bastionDialers.m[connectionID]
+	delete(bastionDialers.m, connectionID)
+	bastionDialers.Unlock()
+	if d != nil {
+		if d.idle != nil {
+			d.idle.Stop()
+		}
+		d.lazy.Close()
+	}
 }
 
 // closeBastionDialers ends the sessions of bastions not in keep (taken

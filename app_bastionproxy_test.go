@@ -34,6 +34,21 @@ func TestBastionSetting(t *testing.T) {
 		}
 	}
 
+	// A saved bastion whose connection is gone is dropped, not an error.
+	gone, err := a.db.CreateConnection(store.NewConnection{Name: "gone", Hostname: "gone.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.db.SetSetting(sharedProxyKey, `{"port":1080,"bastions":[{"connection_id":"`+gone.ID+`","networks":["10.9.0.0/16"]}]}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.db.DeleteConnection(gone.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := a.normalizeBastions([]ProxyBastion{{ConnectionID: gone.ID, Networks: []string{"10.9.0.0/16"}}}); err != nil || len(got) != 0 {
+		t.Fatalf("deleted bastion: %+v, %v", got, err)
+	}
+
 	if err := a.db.SetSetting(sharedProxyKey, `{"enabled":false,"port":1080,"bastions":[{"connection_id":"`+c.ID+`","networks":["10.20.0.0/16"]}]}`); err != nil {
 		t.Fatal(err)
 	}
