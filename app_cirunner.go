@@ -110,7 +110,78 @@ const (
 // next save.
 const ciIDField = "ssh_tool_key"
 
-func ciTokenKey(id string) string { return "ci_runner:token:" + id }
+// The vault keys carry this machine's id: the vault is part of the synced
+// profile, and another machine's runner (its own token, maybe the same
+// form-mode id "0") must neither run here nor overwrite this one.
+func ciTokenKey(id string) string { return ciVaultPrefix() + "token:" + id }
+
+// ciMachineKey holds this machine's id in local state.
+const ciMachineKey = "ci_runner_machine"
+
+var ciMachine struct {
+	sync.Mutex
+	id string
+}
+
+// ciVaultPrefix is "ci_runner:<machine id>:", the id made on first use.
+func ciVaultPrefix() string {
+	ciMachine.Lock()
+	defer ciMachine.Unlock()
+	if ciMachine.id == "" {
+		if v, ok := localStateStore.get(ciMachineKey); ok && v != "" {
+			ciMachine.id = v
+		} else if id, err := ciNewID(); err == nil {
+			if localStateStore.set(ciMachineKey, id) == nil {
+				ciMachine.id = id
+			}
+		}
+	}
+	if ciMachine.id == "" {
+		return "ci_runner:local:"
+	}
+	return "ci_runner:" + ciMachine.id + ":"
+}
+
+// ciAdoptLegacyVaultKeys moves the runner secrets stored before the keys
+// carried a machine id ("ci_runner:token:<id>", "ci_runner:secret:...")
+// to this machine's keys, for the runners in this machine's config.
+func (a *App) ciAdoptLegacyVaultKeys() {
+	c := a.ciRunnerConfig()
+	ids := []string{"0"}
+	if c.ConfigTOML != "" {
+		if m, err := ciParseTOML(c.ConfigTOML); err == nil {
+			ids = nil
+			for i, r := range ciRunners(m) {
+				ids = append(ids, ciRunnerID(r, i))
+			}
+		}
+	}
+	moved := 0
+	for _, id := range ids {
+		pairs := [][2]string{{"ci_runner:token:" + id, ciTokenKey(id)}}
+		for section, names := range ciCacheSecrets {
+			for _, name := range names {
+				pairs = append(pairs, [2]string{"ci_runner:secret:" + id + ":" + section + "." + name, ciSecretKey(id, section, name)})
+			}
+		}
+		for _, p := range pairs {
+			v, ok, err := a.vault.Get(p[0])
+			if err != nil || !ok {
+				continue
+			}
+			if has, err := a.ciVaultHas(p[1]); err != nil || has {
+				continue
+			}
+			if a.vault.Put(p[1], v) == nil {
+				_ = a.vault.Delete(p[0])
+				moved++
+			}
+		}
+	}
+	if moved > 0 {
+		log.Printf("ci runner: %d secrets moved to this machine's vault keys", moved)
+	}
+}
 
 func ciRunnerID(r map[string]any, i int) string {
 	if id, _ := r[ciIDField].(string); id != "" {
@@ -168,7 +239,7 @@ var ciCacheSecrets = map[string][]string{
 }
 
 func ciSecretKey(id, section, name string) string {
-	return "ci_runner:secret:" + id + ":" + section + "." + name
+	return ciVaultPrefix() + "secret:" + id + ":" + section + "." + name
 }
 
 // ciVaultHas reports whether the vault holds a value under key; a failed
@@ -277,7 +348,7 @@ var ciState struct {
 
 func (a *App) ciRunnerConfig() CIRunnerConfig {
 	var c CIRunnerConfig
-	if v, ok, _ := a.db.GetSetting(ciRunnerKey); ok {
+	if v, ok := a.localSettingGet(ciRunnerKey); ok {
 		_ = json.Unmarshal([]byte(v), &c)
 	}
 	return c
@@ -440,7 +511,7 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (CIRunnerConfig, error
 		}
 	}
 	b, _ := json.Marshal(c)
-	if err := a.db.SetSetting(ciRunnerKey, string(b)); err != nil {
+	if err := a.localSettingSet(ciRunnerKey, string(b)); err != nil {
 		return c, err
 	}
 	for _, k := range append(legacy, removed...) {
@@ -810,6 +881,7 @@ func ciApplyRoutes(ctx context.Context, add, del []string) ([]string, error) {
 // app and is not up yet. Called once the vault opens: the tokens and
 // the proxy password live there.
 func (a *App) ciRunnerAutoStart() {
+	a.ciAdoptLegacyVaultKeys()
 	a.ciStashStoredSecrets()
 	c := a.ciRunnerConfig()
 	if !c.AutoStart {

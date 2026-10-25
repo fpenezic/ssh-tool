@@ -2654,6 +2654,14 @@ self-hosted GitLab and gitlab.com, say) share the runner container and
 its gateway. The config.toml is put together at start and copied into
 the runner container, never written to your disk.
 
+The CI runner belongs to the machine it runs on: its settings, tokens and
+cache keys are not part of the synced profile (the vault keys carry this
+machine's id), so a second machine neither starts the same runner nor
+overwrites its token. Set it up on each machine with that machine's own
+runner. The same goes for whether the app proxy listens and on which
+address and port; which VPNs go through it, their order and the jump-host
+switch do sync.
+
 While the runner runs, the gateway follows the app proxy: a VPN, a
 network or a connection with a jump host added later is in its routes
 within 20 seconds, without a restart and without cutting running jobs.

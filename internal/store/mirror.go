@@ -121,6 +121,9 @@ var machineLocalSettings = []string{
 	"app_log_tail_enabled",
 	"local_shell_dir",
 	"local_shell_kind",
+	"ci_runner",
+	"ci_runner_machine",
+	"network_shared_proxy_listen",
 }
 
 func machineLocalSettingsPlaceholders() string {
