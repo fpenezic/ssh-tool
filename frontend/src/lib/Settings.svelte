@@ -2423,6 +2423,7 @@
         .map((b) => ({ connection_id: b.connection_id, networks: b.networksText.split(/[\s,]+/).filter(Boolean) }))
         .filter((b) => b.networks.length > 0),
     };
+    const sentNets = new Map(sp.bastions.map((b) => [b.connection_id, spNets(b.networksText)]));
     spPending++;
     spQueue = spQueue.then(async () => {
       try {
@@ -2431,11 +2432,15 @@
           const r = await api.networkSharedProxyGet();
           const d = r.config.enabled ? await api.networkSharedProxyDetails() : null;
           if (spPending === 1) {
+            // A row still as it was sent takes the backend's form of it
+            // (normalised networks); one added or edited while this save
+            // ran stays as the user has it, for the save that follows.
             const saved = spBastionsOf(r.config.bastions);
-            // Rows the backend does not have yet (added, maybe being typed
-            // into while this save ran) stay as they are.
-            const unsaved = sp.bastions.filter((b) => !saved.some((x) => x.connection_id === b.connection_id));
-            sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], bastions: [...saved, ...unsaved], listening: r.listening };
+            const bastions = sp.bastions.map((b) => {
+              const back = saved.find((x) => x.connection_id === b.connection_id);
+              return back && spNets(b.networksText) === sentNets.get(b.connection_id) ? back : b;
+            });
+            sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], bastions, listening: r.listening };
             spDetails = d;
           }
           toast.ok(req.enabled ? `App proxy on ${req.bind}:${req.port}` : "App proxy off");
@@ -2464,6 +2469,9 @@
     sp.priority = list;
     void spSave();
   }
+  // A bastion row's networks as a comparable key (the backend trims and
+  // reorders them).
+  const spNets = (t: string) => t.split(/[\s,]+/).filter(Boolean).sort().join(",");
   // Bastions: a connection from the tree and the networks behind it.
   let spBastionPick = $state("");
   const spConnLabel = (id: string) => {
