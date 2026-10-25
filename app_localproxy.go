@@ -345,6 +345,22 @@ func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host
 	}
 	var d tunnelDialer = &net.Dialer{}
 	name := "direct"
+	if conn := bastionOf(id); conn != "" {
+		// Through a bastion: a direct-tcpip channel on its SSH session.
+		// A first connect can ask for a host key or a login.
+		_ = c.SetDeadline(time.Now().Add(6 * time.Minute))
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		up, release, err := a.bastionDial(ctx, conn, target)
+		cancel()
+		if err != nil {
+			log.Printf("network: local proxy (%s): bastion %s: dial %s: %v", what, conn, target, err)
+			reply(5)
+			return
+		}
+		defer release()
+		a.relaySOCKS(c, up, reply)
+		return
+	}
 	if id != "" {
 		row, err := a.db.GetNetworkProfile(id)
 		if err != nil || row == nil {
@@ -371,6 +387,12 @@ func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host
 		reply(5)
 		return
 	}
+	a.relaySOCKS(c, up, reply)
+}
+
+// relaySOCKS answers the client's CONNECT and copies both ways until the
+// connection ends; it closes up.
+func (a *App) relaySOCKS(c, up net.Conn, reply func(byte)) {
 	defer up.Close()
 	reply(0)
 	_ = c.SetDeadline(time.Time{})

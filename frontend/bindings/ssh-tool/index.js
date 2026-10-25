@@ -98,6 +98,7 @@ export {
     PortCheckResult,
     ProbeResult,
     ProfileStats,
+    ProxyBastion,
     QuickConnectInput,
     QuickConnectResult,
     RecordingState,

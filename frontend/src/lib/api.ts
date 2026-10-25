@@ -607,6 +607,13 @@ export interface SharedProxyConfig {
   priority?: string[];
   /** Older single override, read by the backend as priority = [use]. */
   use?: string;
+  /** Networks reached through an SSH connection from the tree. */
+  bastions?: ProxyBastion[];
+}
+
+export interface ProxyBastion {
+  connection_id: string;
+  networks: string[];
 }
 
 export interface SharedProxyWhich {
