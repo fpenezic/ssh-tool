@@ -2626,7 +2626,14 @@ bastion carries every connection and closes after 2 minutes unused. The
 bastion must allow TCP forwarding (`AllowTcpForwarding`); the first
 connect asks for its host key and, without a saved password or key, for a
 login, in the app, while the client waits. A bastion's networks are set
-by hand, so they always go through it, as a pinned address does. Only TCP
+by hand, so they always go through it, as a pinned address does.
+Connections in the tree whose jump host is the bastion (picked from the
+tree, or the same host and port typed) go through it without being
+listed: an address is pinned to it, and a name is sent to the bastion to
+resolve when the client passes names (`socks5h://`; a CI job resolves
+names itself, so it needs **Extra hosts** for them). Such a connection
+goes through the bastion even when it also has a network profile, which
+only takes it to the bastion. Only TCP
 goes through. While a bastion session is open the status bar shows it (its name, or
 how many); the tooltip says how many connections each carries, or that
 it is idle and closes soon.
