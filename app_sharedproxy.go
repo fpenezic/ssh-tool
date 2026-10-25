@@ -35,9 +35,6 @@ type SharedProxyConfig struct {
 	Priority []string `json:"priority,omitempty"`
 	// Use is the older single override, read as Priority = [Use].
 	Use string `json:"use,omitempty"`
-	// Bastions: networks reached through an SSH connection from the tree
-	// (app_bastionproxy.go).
-	Bastions []ProxyBastion `json:"bastions,omitempty"`
 	// NoJumpConnections leaves the tree's connections with a jump host out
 	// of the proxy (they are in by default: reached as a terminal would).
 	NoJumpConnections bool `json:"no_jump_connections,omitempty"`
@@ -92,11 +89,6 @@ func (a *App) NetworkSharedProxySet(c SharedProxyConfig) error {
 		c.Priority = []string{c.Use}
 	}
 	c.Use = ""
-	bastions, err := a.normalizeBastions(c.Bastions)
-	if err != nil {
-		return err
-	}
-	c.Bastions = bastions
 	if c.Enabled {
 		if _, err := netip.ParseAddr(c.Bind); err != nil {
 			return fmt.Errorf("listen address %q is not an IP address", c.Bind)
@@ -120,17 +112,8 @@ func (a *App) NetworkSharedProxySet(c SharedProxyConfig) error {
 		return err
 	}
 	sharedRoutesInvalidate()
-	keep := map[string]bool{}
-	for _, b := range c.Bastions {
-		keep[b.ConnectionID] = true
-	}
-	if !c.Enabled {
-		keep = nil
-	}
-	closeBastionDialers(keep)
 	a.recordAudit("network.shared_proxy", "", map[string]string{
 		"enabled": strconv.FormatBool(c.Enabled), "listen": net.JoinHostPort(c.Bind, strconv.Itoa(c.Port)),
-		"bastions": strconv.Itoa(len(c.Bastions)),
 	})
 	return nil
 }
@@ -260,7 +243,6 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 			}
 		}
 	}
-	routes = append(routes, a.bastionRoutes()...)
 	if conns, err := a.db.ListConnections(nil); err == nil {
 		folders, _ := a.db.ListFolders()
 		if !a.sharedProxyConfig().NoJumpConnections {
@@ -442,10 +424,6 @@ func (a *App) NetworkSharedProxyWhich(host string) (*SharedProxyWhich, error) {
 	if c := jumpConnOf(id); c != "" {
 		if conn, err := a.db.GetConnection(c); err == nil && conn != nil {
 			name = conn.Name
-		}
-	} else if c := bastionOf(id); c != "" {
-		if conn, err := a.db.GetConnection(c); err == nil && conn != nil {
-			name = conn.Name + " (bastion)"
 		}
 	} else if row, err := a.db.GetNetworkProfile(id); err == nil {
 		name = row.Name

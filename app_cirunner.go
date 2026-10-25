@@ -460,6 +460,7 @@ func (a *App) ciSyncRoutes(gen int, jobs netip.Prefix, applied []string) {
 		have[r] = true
 	}
 	warned := map[string]bool{}
+	lastErr := ""
 	t := time.NewTicker(ciRouteSyncEvery)
 	defer t.Stop()
 	for range t.C {
@@ -475,14 +476,33 @@ func (a *App) ciSyncRoutes(gen int, jobs netip.Prefix, applied []string) {
 		}
 		d, err := a.NetworkSharedProxyDetails()
 		if err != nil {
+			// The proxy off, the vault locked: the gateway keeps what it
+			// has. Said once per new reason, not every 20 s.
+			if err.Error() != lastErr {
+				lastErr = err.Error()
+				log.Printf("ci runner: gateway routes not updated: %v", err)
+			}
 			continue
 		}
+		lastErr = ""
 		want := map[string]bool{}
 		for _, r := range d.Routes {
 			// A route over the jobs' own subnet cannot work: a job takes
 			// those addresses for its own network. The subnet was chosen
 			// clear of the routes at Start; a later one needs a restart.
-			if p, err := netip.ParsePrefix(r); err == nil && p.Overlaps(jobs) {
+			p, err := netip.ParsePrefix(r)
+			if err != nil {
+				continue
+			}
+			// The jobs' network and the gateway's tunnel are IPv4 only.
+			if !p.Addr().Is4() {
+				if !warned[r] {
+					warned[r] = true
+					log.Printf("ci runner: route %s is IPv6; the jobs' network is IPv4 only, left out", r)
+				}
+				continue
+			}
+			if p.Overlaps(jobs) {
 				if !warned[r] {
 					warned[r] = true
 					log.Printf("ci runner: route %s overlaps the jobs' network %s; Stop and Start the runner to move it", r, jobs)

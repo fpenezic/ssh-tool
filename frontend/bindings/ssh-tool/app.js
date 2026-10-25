@@ -295,8 +295,7 @@ export function BackupsRestore($in) {
 }
 
 /**
- * BastionSessions lists the app proxy's bastion sessions (open, or idle
- * and closing after bastionIdle).
+ * BastionSessions lists the jump pool's open shared bastions.
  * @returns {$CancellablePromise<$models.BastionSession[]>}
  */
 export function BastionSessions() {

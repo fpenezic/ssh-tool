@@ -538,6 +538,7 @@ func (a *App) initialise() {
 	a.initAuthPrompts()
 	a.pool = sshlayer.NewPool()
 	a.jumpPool = newJumpPool()
+	a.jumpPool.onChange = bastionSessionsChanged
 	a.jumpPool.linger = func() time.Duration {
 		return time.Duration(a.intSetting("bastion_linger_seconds", int(bastionLingerDefault/time.Second), 0, 3600)) * time.Second
 	}
@@ -1477,7 +1478,7 @@ type ConnectionsUpdateInput struct {
 }
 
 func (a *App) ConnectionsUpdate(in ConnectionsUpdateInput) (*store.Connection, error) {
-	c, err := a.db.UpdateConnection(store.UpdateConnection{
+	return a.db.UpdateConnection(store.UpdateConnection{
 		ID:                  in.ID,
 		FolderID:            in.FolderID,
 		ClearFolder:         in.ClearFolder,
@@ -1495,22 +1496,10 @@ func (a *App) ConnectionsUpdate(in ConnectionsUpdateInput) (*store.Connection, e
 		LocalShellDir:       in.LocalShellDir,
 		ClearLocalShellDir:  in.ClearLocalShellDir,
 	})
-	// An app proxy bastion's session was built from the old settings; a
-	// change that does not touch how it connects (a favourite, the sort
-	// order, notes) leaves it, and the jobs on it, alone. Only a saved
-	// change closes it.
-	if err == nil && (in.Hostname != nil || in.Overrides != nil || in.FolderID != nil || in.ClearFolder) {
-		closeBastionDialer(in.ID)
-	}
-	return c, err
 }
 
 func (a *App) ConnectionsDelete(id string) error {
-	if err := a.db.DeleteConnection(id); err != nil {
-		return err
-	}
-	closeBastionDialer(id)
-	return nil
+	return a.db.DeleteConnection(id)
 }
 
 func (a *App) ConnectionsClone(id string) (*store.Connection, error) {

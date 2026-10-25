@@ -68,8 +68,8 @@
   });
   let showSharePanel = $state(false);
 
-  // App proxy bastions: a segment while any SSH session to a bastion is
-  // open, with what it carries; it updates on bastion_sessions_changed.
+  // Shared bastions (the jump pool: terminals, the app proxy, CI jobs): a
+  // segment while one is open; it updates on bastion_sessions_changed.
   let bastionSessions = $state<import("./api").BastionSession[]>([]);
   onMount(() => {
     if (isMobile || inDetachedWindow) return;
@@ -85,11 +85,9 @@
     return () => off();
   });
   const bastionTitle = $derived(
-    "App proxy bastions:\n" +
-      bastionSessions.map((b) => `${b.name}: ${b.conns > 0 ? `${b.conns} connection${b.conns === 1 ? "" : "s"}` : "idle, closes after 2 min"}`).join("\n") +
-      "\nClick to manage",
+    "Open bastions:\n" +
+      bastionSessions.map((b) => `${b.label}: ${b.refs > 0 ? `${b.refs} in use` : "idle, closing"}${b.via === "tunnel" ? " (through a VPN)" : ""}`).join("\n"),
   );
-
   // CI runner (Settings > Network profiles > CI runner): a segment while
   // it runs, so a runner taking jobs in the background is never invisible.
   let ciRunning = $state(false);
@@ -730,10 +728,10 @@
   {/if}
 
   {#if bastionSessions.length > 0}
-    <button class="seg vpn" onclick={() => view.setTabSettingsSection("network")} title={bastionTitle}>
+    <span class="seg vpn" title={bastionTitle}>
       <IconBastion size={11} />
-      <span>{bastionSessions.length === 1 ? bastionSessions[0].name : bastionSessions.length}</span>
-    </button>
+      <span>{bastionSessions.length === 1 ? bastionSessions[0].label : bastionSessions.length}</span>
+    </span>
   {/if}
 
   {#if ciRunning}
