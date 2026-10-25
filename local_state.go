@@ -41,6 +41,14 @@ var localStateKeys = map[string]bool{
 	// machine: a WSL path or pwsh means nothing on the Mac that pulls it.
 	"local_shell_dir":  true,
 	"local_shell_kind": true,
+	// The CI runner runs on THIS machine with this machine's Docker; two
+	// machines with one runner token would split its jobs. Its vault keys
+	// carry this machine's id (ci_runner_machine) for the same reason.
+	"ci_runner":         true,
+	"ci_runner_machine": true,
+	// Whether the app proxy listens, and where: a Docker Desktop machine
+	// wants 127.0.0.1, a Linux docker host the bridge address.
+	"network_shared_proxy_listen": true,
 }
 
 type localState struct {

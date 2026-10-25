@@ -50,10 +50,28 @@ var sharedProxy struct {
 	ln net.Listener
 }
 
+// sharedProxyListen is the machine-local part of the shared proxy
+// setting: whether it listens and where (local state, not synced).
+type sharedProxyListen struct {
+	Enabled bool   `json:"enabled"`
+	Bind    string `json:"bind,omitempty"`
+	Port    int    `json:"port"`
+}
+
+const sharedProxyListenKey = "network_shared_proxy_listen"
+
 func (a *App) sharedProxyConfig() SharedProxyConfig {
 	var c SharedProxyConfig
 	if v, ok, _ := a.db.GetSetting(sharedProxyKey); ok {
 		_ = json.Unmarshal([]byte(v), &c)
+	}
+	// Listening and the address are this machine's; a profile synced from
+	// before the split still brings them, until this machine saves.
+	if v, ok := localStateStore.get(sharedProxyListenKey); ok {
+		var l sharedProxyListen
+		if json.Unmarshal([]byte(v), &l) == nil {
+			c.Enabled, c.Bind, c.Port = l.Enabled, l.Bind, l.Port
+		}
 	}
 	if c.Bind == "" {
 		c.Bind = "127.0.0.1"
@@ -106,7 +124,16 @@ func (a *App) NetworkSharedProxySet(c SharedProxyConfig) error {
 			return err
 		}
 	}
-	b, _ := json.Marshal(c)
+	lb, _ := json.Marshal(sharedProxyListen{Enabled: c.Enabled, Bind: c.Bind, Port: c.Port})
+	if err := localStateStore.set(sharedProxyListenKey, string(lb)); err != nil {
+		stopSharedProxy()
+		return err
+	}
+	// The synced part: the order of the profiles and the jump-host switch;
+	// listening is left off for a machine that pulls it.
+	synced := c
+	synced.Enabled, synced.Bind, synced.Port = false, "", 0
+	b, _ := json.Marshal(synced)
 	if err := a.db.SetSetting(sharedProxyKey, string(b)); err != nil {
 		stopSharedProxy()
 		return err

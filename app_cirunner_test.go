@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/netip"
 	"strings"
 	"testing"
@@ -413,4 +414,65 @@ func TestCIRunnerCopiedBlockAndEmptiedToken(t *testing.T) {
 	if has, _ := a.ciVaultHas(ciTokenKey(first)); has {
 		t.Error("emptied token still in the vault")
 	}
+}
+
+// The CI runner is this machine's: its setting stays out of the synced
+// store, its vault keys carry this machine's id, and secrets stored under
+// the old keys are taken over.
+func TestCIRunnerIsMachineLocal(t *testing.T) {
+	a := newDbTestApp(t)
+	if err := a.vault.Put("ci_runner:token:0", "glrt-legacy"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.CIRunnerSet(CIRunnerConfig{URL: "https://gitlab.example.com"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := a.db.GetSetting(ciRunnerKey); ok {
+		t.Fatal("the CI runner setting is in the synced store")
+	}
+	if _, ok := localStateStore.get(ciRunnerKey); !ok {
+		t.Fatal("the CI runner setting is not in local state")
+	}
+	if !strings.HasPrefix(ciTokenKey("0"), "ci_runner:") || ciTokenKey("0") == "ci_runner:token:0" {
+		t.Fatalf("vault key without a machine id: %s", ciTokenKey("0"))
+	}
+	a.ciAdoptLegacyVaultKeys()
+	if tok, _, _ := a.vault.Get(ciTokenKey("0")); tok != "glrt-legacy" {
+		t.Fatalf("adopted token = %q", tok)
+	}
+	if _, ok, _ := a.vault.Get("ci_runner:token:0"); ok {
+		t.Error("legacy key left behind")
+	}
+}
+
+// Whether the app proxy listens, and where, is this machine's; the order
+// of the profiles syncs, with listening off for a machine that pulls it.
+func TestSharedProxyListenIsMachineLocal(t *testing.T) {
+	a := newDbTestApp(t)
+	if err := a.NetworkSharedProxySet(SharedProxyConfig{Enabled: true, Bind: "127.0.0.1", Port: freePort(t), Priority: []string{"p1"}}); err != nil {
+		t.Fatal(err)
+	}
+	defer stopSharedProxy()
+	v, ok, _ := a.db.GetSetting(sharedProxyKey)
+	if !ok {
+		t.Fatal("no synced app proxy setting")
+	}
+	var synced SharedProxyConfig
+	_ = json.Unmarshal([]byte(v), &synced)
+	if synced.Enabled || synced.Bind != "" || synced.Port != 0 || len(synced.Priority) != 1 {
+		t.Fatalf("synced part = %+v", synced)
+	}
+	if c := a.sharedProxyConfig(); !c.Enabled || c.Bind != "127.0.0.1" || c.Port == 0 {
+		t.Fatalf("this machine's config = %+v", c)
+	}
+}
+
+func freePort(t *testing.T) int {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
 }

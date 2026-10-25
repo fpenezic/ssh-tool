@@ -18,6 +18,14 @@ import (
 
 func newDbTestApp(t *testing.T) *App {
 	t.Helper()
+	// Machine-local settings (the CI runner, the app proxy's listen
+	// address) go to a scratch local-state file, never the real one.
+	savedLocal := localStateStore
+	localStateStore = &localState{path: filepath.Join(t.TempDir(), "local-state.json")}
+	t.Cleanup(func() { localStateStore = savedLocal })
+	ciMachine.Lock()
+	ciMachine.id = ""
+	ciMachine.Unlock()
 	db, err := store.Open(filepath.Join(t.TempDir(), "store.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
