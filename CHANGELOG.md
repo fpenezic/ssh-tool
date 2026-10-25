@@ -7,7 +7,7 @@ a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [0.119.0] - Oracle and SQL Server, CI runner through VPNs and jump hosts, detached windows
 
 The Database tab now speaks Oracle and Microsoft SQL Server (MSSQL), both with pure-Go drivers: nothing to install next to the app. A GitLab runner can send its jobs through your VPNs and bastions, several customers at once, set up from Settings.
 
