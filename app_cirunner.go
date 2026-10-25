@@ -202,7 +202,7 @@ func ciNewID() (string, error) {
 // ciCopySecrets copies runner from's token and cache secrets to runner to
 // and returns the keys copied from, for the caller to delete once its
 // save went through.
-func (a *App) ciCopySecrets(from, to string) ([]string, error) {
+func (a *App) ciCopySecrets(j *ciVaultJournal, from, to string) ([]string, error) {
 	keys := [][2]string{{ciTokenKey(from), ciTokenKey(to)}}
 	for section, names := range ciCacheSecrets {
 		for _, name := range names {
@@ -218,12 +218,52 @@ func (a *App) ciCopySecrets(from, to string) ([]string, error) {
 		if !ok {
 			continue
 		}
-		if err := a.vault.Put(k[1], v); err != nil {
+		if err := j.put(k[1], v); err != nil {
 			return nil, fmt.Errorf("runner secrets: %w", err)
 		}
 		copied = append(copied, k[0])
 	}
 	return copied, nil
+}
+
+// ciVaultJournal records what a settings save overwrote in the vault, so
+// a save that fails anywhere - a later vault write, the settings write -
+// puts every value back and the old config keeps its old secrets.
+type ciVaultJournal struct {
+	a    *App
+	prev map[string]*string // key -> earlier value, nil = there was none
+}
+
+func (j *ciVaultJournal) put(key, value string) error {
+	if j.prev == nil {
+		j.prev = map[string]*string{}
+	}
+	if _, seen := j.prev[key]; !seen {
+		v, ok, err := j.a.vault.Get(key)
+		if err != nil {
+			return fmt.Errorf("vault: %w", err)
+		}
+		if ok {
+			j.prev[key] = &v
+		} else {
+			j.prev[key] = nil
+		}
+	}
+	return j.a.vault.Put(key, value)
+}
+
+func (j *ciVaultJournal) rollback() {
+	for key, v := range j.prev {
+		var err error
+		if v == nil {
+			err = j.a.vault.Delete(key)
+		} else {
+			err = j.a.vault.Put(key, *v)
+		}
+		if err != nil {
+			log.Printf("ci runner: restoring %s after a failed save: %v", key, err)
+		}
+	}
 }
 
 // ciInVault stands in a stored config.toml for a secret kept in the vault:
@@ -256,7 +296,7 @@ func (a *App) ciVaultHas(key string) (bool, error) {
 // ciStashCacheSecrets moves a runner's cache secrets to the vault and
 // leaves the marker in their place. It returns the keys of emptied
 // secrets, which the caller deletes once its save went through.
-func (a *App) ciStashCacheSecrets(id string, r map[string]any) ([]string, error) {
+func (a *App) ciStashCacheSecrets(j *ciVaultJournal, id string, r map[string]any) ([]string, error) {
 	var removed []string
 	cache, _ := r["cache"].(map[string]any)
 	for section, names := range ciCacheSecrets {
@@ -282,7 +322,7 @@ func (a *App) ciStashCacheSecrets(id string, r map[string]any) ([]string, error)
 					removed = append(removed, key)
 				}
 			default:
-				if err := a.vault.Put(key, v); err != nil {
+				if err := j.put(key, v); err != nil {
 					return nil, fmt.Errorf("runner cache secret: %w", err)
 				}
 				sec[name] = ciInVault
@@ -404,7 +444,15 @@ func (a *App) ciStatus(c CIRunnerConfig) CIRunnerStatus {
 // CIRunnerSet saves the setting. token, when not empty, is the runner
 // token for a config built from the form; an imported config.toml
 // brings its own, which move to the vault here.
-func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (CIRunnerConfig, error) {
+func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (_ CIRunnerConfig, err error) {
+	// Every vault write of this save is journalled and undone if the save
+	// fails later on: the stored config and its secrets move together.
+	j := &ciVaultJournal{a: a}
+	defer func() {
+		if err != nil {
+			j.rollback()
+		}
+	}()
 	c.URL = strings.TrimSpace(c.URL)
 	c.Name = strings.TrimSpace(c.Name)
 	c.Image = strings.TrimSpace(c.Image)
@@ -454,7 +502,7 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (CIRunnerConfig, error
 				if _, had := r[ciIDField]; !had {
 					// First save with ids: take over what the index held,
 					// and let the old keys go once the save is through.
-					copied, err := a.ciCopySecrets(strconv.Itoa(i), id)
+					copied, err := a.ciCopySecrets(j, strconv.Itoa(i), id)
 					if err != nil {
 						return c, err
 					}
@@ -484,7 +532,7 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (CIRunnerConfig, error
 			default:
 				delete(r, "token")
 			}
-			gone, err := a.ciStashCacheSecrets(id, r)
+			gone, err := a.ciStashCacheSecrets(j, id, r)
 			if err != nil {
 				return c, err
 			}
@@ -507,7 +555,7 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (CIRunnerConfig, error
 		}
 	}
 	for id, t := range tokens {
-		if err := a.vault.Put(ciTokenKey(id), t); err != nil {
+		if err := j.put(ciTokenKey(id), t); err != nil {
 			return c, fmt.Errorf("runner token: %w", err)
 		}
 	}
