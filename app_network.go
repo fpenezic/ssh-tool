@@ -36,6 +36,26 @@ import (
 // before deciding the host is only reachable through the tunnel.
 const directProbeTimeout = 3 * time.Second
 
+// tunnelDialFloor is the least time a dial through a tunnel that was just
+// started gets, whatever the connect deadline has left.
+const tunnelDialFloor = 10 * time.Second
+
+// withDialFloor returns ctx with at least floor left before its deadline.
+// A ctx with less gets a deadline floor from now; an explicit cancel of
+// ctx (Cancel on a connect) still ends it.
+func withDialFloor(ctx context.Context, floor time.Duration) (context.Context, context.CancelFunc) {
+	if dl, ok := ctx.Deadline(); !ok || time.Until(dl) >= floor {
+		return ctx, func() {}
+	}
+	c, cancel := context.WithTimeout(context.WithoutCancel(ctx), floor)
+	stop := context.AfterFunc(ctx, func() {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			cancel()
+		}
+	})
+	return c, func() { stop(); cancel() }
+}
+
 // Profile kinds. The stored config JSON carries "kind"; absent means
 // wireguard (pre-netbird profiles have no field).
 const (
@@ -589,7 +609,13 @@ func (a *App) wgDialerForCtx(hookCtx context.Context, profileID string) (sshlaye
 			log.Printf("net: %s not reachable directly, dialing via tunnel %s", addr, row.Name)
 			report(ctx, "tunnel")
 			sshlayer.ReportProgress(ctx, "Connecting to "+addr+" via VPN "+row.Name)
-			return t.DialContext(ctx, network, addr)
+			// The probe and the tunnel start came out of the connect
+			// deadline; the dial through the fresh tunnel (a DNS lookup
+			// inside it first, for a name) gets a budget of its own, or a
+			// short connect timeout leaves it nothing and it fails at once.
+			tctx, tcancel := withDialFloor(ctx, tunnelDialFloor)
+			defer tcancel()
+			return t.DialContext(tctx, network, addr)
 		}, nil
 	}
 	a.reportTunnelStep(hookCtx, row, "")

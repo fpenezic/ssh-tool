@@ -493,3 +493,35 @@ func TestCIRunnerSettingMovesOutOfTheStore(t *testing.T) {
 		t.Errorf("config = %+v", c)
 	}
 }
+
+// A dial through a just-started tunnel gets at least the floor, even when
+// the connect deadline is almost spent; an explicit cancel still ends it.
+func TestWithDialFloor(t *testing.T) {
+	parent, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	c, done := withDialFloor(parent, time.Second)
+	defer done()
+	time.Sleep(30 * time.Millisecond)
+	if c.Err() != nil {
+		t.Fatal("floor context ended with the parent's deadline")
+	}
+	parent2, cancel2 := context.WithTimeout(context.Background(), time.Minute)
+	c2, done2 := withDialFloor(parent2, time.Second)
+	defer done2()
+	cancel2()
+	select {
+	case <-c2.Done():
+	case <-time.After(time.Second):
+		t.Fatal("cancel of the parent did not reach the dial")
+	}
+	parent3, cancel3 := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel3()
+	c3, done3 := withDialFloor(parent3, time.Second)
+	defer done3()
+	time.Sleep(20 * time.Millisecond) // the deadline passes first
+	cancel3()
+	time.Sleep(20 * time.Millisecond)
+	if c3.Err() != nil {
+		t.Error("a parent cancelled after its deadline passed ended the floor")
+	}
+}
