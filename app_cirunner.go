@@ -886,7 +886,12 @@ func (a *App) ciRunnerAutoStart() {
 	// it becomes this machine's now, and the store row goes, so it stops
 	// travelling to machines that pull the profile later.
 	if _, ok := localStateStore.get(ciRunnerKey); !ok {
-		if v, ok, _ := a.db.GetSetting(ciRunnerKey); ok {
+		v, ok, err := a.db.GetSetting(ciRunnerKey)
+		switch {
+		case err != nil:
+			// Tried again at the next unlock.
+			log.Printf("ci runner: reading the setting to move it to this machine: %v", err)
+		case ok:
 			if err := a.localSettingSet(ciRunnerKey, v); err != nil {
 				log.Printf("ci runner: moving the setting to this machine: %v", err)
 			}
