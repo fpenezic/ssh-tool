@@ -636,6 +636,8 @@ export interface CIRunnerConfig {
   /** Destinations that never go through a VPN. */
   direct?: string[];
   auto_start?: boolean;
+  /** Keep running when the vault locks (it stops by default). */
+  keep_on_lock?: boolean;
 }
 
 export interface CIRunnerStatus {

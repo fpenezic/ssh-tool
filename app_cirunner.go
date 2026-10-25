@@ -67,6 +67,10 @@ type CIRunnerConfig struct {
 	// The runner URL and the S3 cache address are added automatically.
 	Direct    []string `json:"direct,omitempty"`
 	AutoStart bool     `json:"auto_start,omitempty"`
+	// KeepOnLock leaves the runner running when the vault locks. Off by
+	// default: a running runner holds its tokens and cache keys in its
+	// container, which a locked vault should not leave out.
+	KeepOnLock bool `json:"keep_on_lock,omitempty"`
 }
 
 // CIRunnerStatus is what the Settings card shows.
@@ -855,6 +859,29 @@ func (a *App) ciStashStoredSecrets() {
 		return
 	}
 	log.Printf("ci runner: cache secrets moved from the settings to the vault")
+}
+
+// ciRunnerStopOnLock stops the runner when the vault locks, unless it is
+// set to keep running: its container holds the tokens and cache keys.
+// "Start with the app" brings it back at the next unlock.
+func (a *App) ciRunnerStopOnLock() {
+	if a.ciRunnerConfig().KeepOnLock {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		gw, _, _ := ciContainer(ctx, ciGatewayName)
+		rn, _, _ := ciContainer(ctx, ciRunnerName)
+		cancel()
+		if gw == "" && rn == "" {
+			return
+		}
+		if _, err := a.CIRunnerStop(); err != nil {
+			log.Printf("ci runner: stop on vault lock: %v", err)
+			return
+		}
+		log.Printf("ci runner: stopped, the vault locked")
+	}()
 }
 
 // ciRunnerStopOnQuit removes the containers this process started: with
