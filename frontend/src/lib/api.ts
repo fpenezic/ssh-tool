@@ -607,23 +607,17 @@ export interface SharedProxyConfig {
   priority?: string[];
   /** Older single override, read by the backend as priority = [use]. */
   use?: string;
-  /** Networks reached through an SSH connection from the tree. */
-  bastions?: ProxyBastion[];
   /** Leave the tree's connections with a jump host out (in by default). */
   no_jump_connections?: boolean;
 }
 
 export interface BastionSession {
-  connection_id: string;
-  name: string;
-  /** Proxied connections open on it now (0 = idle, closing after 2 min). */
-  conns: number;
-  state: string;
-}
-
-export interface ProxyBastion {
-  connection_id: string;
-  networks: string[];
+  /** The hops to the bastion, "a > b". */
+  label: string;
+  /** Users on it now (0 = idle, closing soon). */
+  refs: number;
+  /** First hop: "" plain, "tunnel" through a VPN profile, "direct" outside it. */
+  via: string;
 }
 
 export interface SharedProxyWhich {

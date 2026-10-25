@@ -2397,15 +2397,13 @@
   }
   // App proxy (the "shared" proxy in code): one SOCKS for every profile
   // marked shared, picking the profile by destination.
-  type SpBastion = { connection_id: string; networksText: string };
-  let sp = $state<{ enabled: boolean; bind: string; port: number; priority: string[]; bastions: SpBastion[]; jumps: boolean; listening: boolean }>({ enabled: false, bind: "127.0.0.1", port: 1080, priority: [], bastions: [], jumps: true, listening: false });
-  const spBastionsOf = (list?: import("./api").ProxyBastion[]): SpBastion[] => (list ?? []).map((b) => ({ connection_id: b.connection_id, networksText: b.networks.join(", ") }));
+  let sp = $state<{ enabled: boolean; bind: string; port: number; priority: string[]; jumps: boolean; listening: boolean }>({ enabled: false, bind: "127.0.0.1", port: 1080, priority: [], jumps: true, listening: false });
   const spProfiles = $derived(networkProfiles.list.filter((p) => p.local_proxy?.shared));
   let spDetails = $state<import("./api").SharedProxyDetails | null>(null);
   async function spLoad() {
     try {
       const r = await api.networkSharedProxyGet();
-      sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], bastions: spBastionsOf(r.config.bastions), jumps: !r.config.no_jump_connections, listening: r.listening };
+      sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], jumps: !r.config.no_jump_connections, listening: r.listening };
       spDetails = sp.enabled ? await api.networkSharedProxyDetails() : null;
     } catch { /* shown on save */ }
   }
@@ -2417,14 +2415,8 @@
   function spSave(): Promise<void> {
     const req = {
       enabled: sp.enabled, bind: sp.bind.trim(), port: Number(sp.port), priority: $state.snapshot(sp.priority),
-      // A row just added has no networks yet: it stays in the form and is
-      // saved once it has some.
-      bastions: sp.bastions
-        .map((b) => ({ connection_id: b.connection_id, networks: b.networksText.split(/[\s,]+/).filter(Boolean) }))
-        .filter((b) => b.networks.length > 0),
       no_jump_connections: !sp.jumps,
     };
-    const sentNets = new Map(sp.bastions.map((b) => [b.connection_id, spNets(b.networksText)]));
     spPending++;
     spQueue = spQueue.then(async () => {
       try {
@@ -2433,19 +2425,7 @@
           const r = await api.networkSharedProxyGet();
           const d = r.config.enabled ? await api.networkSharedProxyDetails() : null;
           if (spPending === 1) {
-            // A row still as it was sent takes the backend's form of it
-            // (normalised networks); one added or edited while this save
-            // ran stays as the user has it, for the save that follows.
-            const saved = spBastionsOf(r.config.bastions);
-            // A row sent unchanged that the backend no longer has (its
-            // connection was deleted) goes.
-            const bastions = sp.bastions.flatMap((b) => {
-              const back = saved.find((x) => x.connection_id === b.connection_id);
-              const unchanged = spNets(b.networksText) === sentNets.get(b.connection_id);
-              if (back) return [unchanged ? back : b];
-              return unchanged && spNets(b.networksText) !== "" ? [] : [b];
-            });
-            sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], bastions, jumps: !r.config.no_jump_connections, listening: r.listening };
+            sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], jumps: !r.config.no_jump_connections, listening: r.listening };
             spDetails = d;
           }
           toast.ok(req.enabled ? `App proxy on ${req.bind}:${req.port}` : "App proxy off");
@@ -2472,27 +2452,6 @@
       [list[i], list[j]] = [list[j], list[i]];
     }
     sp.priority = list;
-    void spSave();
-  }
-  // A bastion row's networks as a comparable key (the backend trims and
-  // reorders them).
-  const spNets = (t: string) => t.split(/[\s,]+/).filter(Boolean).sort().join(",");
-  // Bastions: a connection from the tree and the networks behind it.
-  let spBastionPick = $state("");
-  const spConnLabel = (id: string) => {
-    const c = tree.connections.find((x) => x.id === id);
-    return c ? `${c.name}${c.hostname ? ` (${c.hostname})` : ""}` : "deleted connection";
-  };
-  function spBastionAdd() {
-    const want = spBastionPick.trim();
-    const c = tree.connections.find((x) => spConnLabel(x.id) === want) ?? tree.connections.find((x) => x.name === want);
-    if (!c) { toast.err("Pick a connection from the list"); return; }
-    if (sp.bastions.some((b) => b.connection_id === c.id)) { toast.err(`${c.name} is already a bastion`); return; }
-    sp.bastions = [...sp.bastions, { connection_id: c.id, networksText: "" }];
-    spBastionPick = "";
-  }
-  function spBastionRemove(id: string) {
-    sp.bastions = sp.bastions.filter((b) => b.connection_id !== id);
     void spSave();
   }
   let spWhich = $state("");
@@ -4922,31 +4881,6 @@
                 connects: its VPN comes up as its mode says, then the jump
                 chain, and the address is opened from the last hop.
               </p>
-            </div>
-            <div class="np-prio">
-              <strong>Networks behind a bastion</strong>
-              <p class="hint">
-                Whole networks behind an SSH host, beyond the connections in
-                the tree: pick the host's connection and list the networks.
-                The app connects to it with its own credentials (jump hosts
-                and network profile included) and opens each connection from
-                there. The bastion must allow TCP forwarding; its networks
-                always go through it.
-              </p>
-              {#each sp.bastions as b (b.connection_id)}
-                <div class="np-bastion-row">
-                  <span class="np-bastion-name">{spConnLabel(b.connection_id)}</span>
-                  <input bind:value={b.networksText} placeholder="10.20.0.0/16, 10.30.1.5" onchange={() => void spSave()} />
-                  <button class="np-prio-btn" title="Remove" onclick={() => spBastionRemove(b.connection_id)}>Remove</button>
-                </div>
-              {/each}
-              <div class="row np-which" style="margin-top:0.3rem">
-                <input list="sp-bastion-conns" bind:value={spBastionPick} placeholder="Add a bastion: connection name" onkeydown={(e) => { if (e.key === "Enter") spBastionAdd(); }} />
-                <datalist id="sp-bastion-conns">
-                  {#each tree.connections as c (c.id)}<option value={spConnLabel(c.id)}></option>{/each}
-                </datalist>
-                <button onclick={spBastionAdd} disabled={!spBastionPick.trim()}>Add</button>
-              </div>
             </div>
             <div class="row np-which">
               <input bind:value={spWhich} placeholder="Which VPN for... (address or name)" onkeydown={(e) => { if (e.key === "Enter") void spWhichRun(); }} />
@@ -7778,9 +7712,6 @@
   .np-prio-row { display: flex; align-items: center; gap: 0.4rem; min-height: 1.8rem; }
   .np-prio-row .oc-choice { min-width: 12rem; }
   .np-prio-btn { padding: 0.1rem 0.35rem; line-height: 1; }
-  .np-bastion-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0; max-width: 46rem; }
-  .np-bastion-name { min-width: 14rem; }
-  .np-bastion-row input { flex: 1; }
   .np-which { gap: 0.5rem; margin-top: 0.6rem; max-width: 30rem; }
   .np-which input { flex: 1; }
   .ci-toml { width: 100%; font-family: var(--mono, monospace); font-size: 0.8rem; margin-top: 0.4rem; }

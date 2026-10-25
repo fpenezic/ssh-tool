@@ -510,7 +510,8 @@ export class BackupRestoreInput {
 }
 
 /**
- * BastionSession is one app proxy bastion session, for the status bar.
+ * BastionSession is one shared bastion of the jump pool, for the status
+ * bar: terminals, the app proxy and the other jump users ride it.
  */
 export class BastionSession {
     /**
@@ -518,35 +519,29 @@ export class BastionSession {
      * @param {Partial<BastionSession>} [$$source = {}] - The source object to create the BastionSession.
      */
     constructor($$source = {}) {
-        if (!("connection_id" in $$source)) {
+        if (!("label" in $$source)) {
             /**
+             * the hops to the bastion, "a > b"
              * @member
              * @type {string}
              */
-            this["connection_id"] = "";
+            this["label"] = "";
         }
-        if (!("name" in $$source)) {
+        if (!("refs" in $$source)) {
             /**
-             * @member
-             * @type {string}
-             */
-            this["name"] = "";
-        }
-        if (!("conns" in $$source)) {
-            /**
-             * proxied connections open on it now
+             * users on it now (0 = idle, closing soon)
              * @member
              * @type {number}
              */
-            this["conns"] = 0;
+            this["refs"] = 0;
         }
-        if (!("state" in $$source)) {
+        if (!("via" in $$source)) {
             /**
-             * sshchan transport state
+             * how its first hop is reached
              * @member
              * @type {string}
              */
-            this["state"] = "";
+            this["via"] = "";
         }
 
         Object.assign(this, $$source);
@@ -6414,48 +6409,6 @@ export class ProfileStats {
 }
 
 /**
- * ProxyBastion is one bastion of the app proxy.
- */
-export class ProxyBastion {
-    /**
-     * Creates a new ProxyBastion instance.
-     * @param {Partial<ProxyBastion>} [$$source = {}] - The source object to create the ProxyBastion.
-     */
-    constructor($$source = {}) {
-        if (!("connection_id" in $$source)) {
-            /**
-             * @member
-             * @type {string}
-             */
-            this["connection_id"] = "";
-        }
-        if (!("networks" in $$source)) {
-            /**
-             * @member
-             * @type {string[]}
-             */
-            this["networks"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ProxyBastion instance from a string or object.
-     * @param {any} [$$source = {}]
-     * @returns {ProxyBastion}
-     */
-    static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType4;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("networks" in $$parsedSource) {
-            $$parsedSource["networks"] = $$createField1_0($$parsedSource["networks"]);
-        }
-        return new ProxyBastion(/** @type {Partial<ProxyBastion>} */($$parsedSource));
-    }
-}
-
-/**
  * QuickConnectInput is what the quick connect dialog sends.
  */
 export class QuickConnectInput {
@@ -7086,15 +7039,6 @@ export class SharedProxyConfig {
         }
         if (/** @type {any} */(false)) {
             /**
-             * Bastions: networks reached through an SSH connection from the tree
-             * (app_bastionproxy.go).
-             * @member
-             * @type {ProxyBastion[] | undefined}
-             */
-            this["bastions"] = undefined;
-        }
-        if (/** @type {any} */(false)) {
-            /**
              * NoJumpConnections leaves the tree's connections with a jump host out
              * of the proxy (they are in by default: reached as a terminal would).
              * @member
@@ -7113,13 +7057,9 @@ export class SharedProxyConfig {
      */
     static createFrom($$source = {}) {
         const $$createField3_0 = $$createType4;
-        const $$createField5_0 = $$createType51;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("priority" in $$parsedSource) {
             $$parsedSource["priority"] = $$createField3_0($$parsedSource["priority"]);
-        }
-        if ("bastions" in $$parsedSource) {
-            $$parsedSource["bastions"] = $$createField5_0($$parsedSource["bastions"]);
         }
         return new SharedProxyConfig(/** @type {Partial<SharedProxyConfig>} */($$parsedSource));
     }
@@ -7196,7 +7136,7 @@ export class SharedProxyDetails {
      */
     static createFrom($$source = {}) {
         const $$createField1_0 = $$createType4;
-        const $$createField2_0 = $$createType52;
+        const $$createField2_0 = $$createType50;
         const $$createField3_0 = $$createType4;
         const $$createField6_0 = $$createType23;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
@@ -7925,7 +7865,7 @@ export class TLSInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType53;
+        const $$createField1_0 = $$createType51;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("connection_ids" in $$parsedSource) {
             $$parsedSource["connection_ids"] = $$createField0_0($$parsedSource["connection_ids"]);
@@ -8279,7 +8219,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType55;
+        const $$createField0_0 = $$createType53;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -8701,7 +8641,7 @@ export class TunnelInfo {
      * @returns {TunnelInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField11_0 = $$createType57;
+        const $$createField11_0 = $$createType55;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("forwards" in $$parsedSource) {
             $$parsedSource["forwards"] = $$createField11_0($$parsedSource["forwards"]);
@@ -8964,11 +8904,9 @@ const $$createType46 = ssh$0.SftpEntry.createFrom;
 const $$createType47 = $Create.Array($$createType46);
 const $$createType48 = ShareSessionInput.createFrom;
 const $$createType49 = $Create.Array($$createType48);
-const $$createType50 = ProxyBastion.createFrom;
-const $$createType51 = $Create.Array($$createType50);
-const $$createType52 = $Create.Map($Create.Any, $Create.Any);
-const $$createType53 = $Create.Array($Create.Any);
-const $$createType54 = ssh$0.ParsedPacket.createFrom;
+const $$createType50 = $Create.Map($Create.Any, $Create.Any);
+const $$createType51 = $Create.Array($Create.Any);
+const $$createType52 = ssh$0.ParsedPacket.createFrom;
+const $$createType53 = $Create.Array($$createType52);
+const $$createType54 = TunnelForwardInfo.createFrom;
 const $$createType55 = $Create.Array($$createType54);
-const $$createType56 = TunnelForwardInfo.createFrom;
-const $$createType57 = $Create.Array($$createType56);

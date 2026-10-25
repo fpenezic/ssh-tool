@@ -72,6 +72,29 @@ type jumpPool struct {
 	// wait blocks until a bastion connection ends; nil means
 	// client.Wait. A field so tests can run with fake clients.
 	wait func(*ssh.Client) error
+	// onChange, when set, hears that a bastion opened, closed, or went
+	// between idle and in use (the status bar). Called without p.mu.
+	onChange func()
+}
+
+func (p *jumpPool) changed() {
+	if p.onChange != nil {
+		go p.onChange()
+	}
+}
+
+// sessions lists the open shared bastions.
+func (p *jumpPool) sessions() []BastionSession {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]BastionSession, 0, len(p.entries))
+	for key, e := range p.entries {
+		if e.client == nil {
+			continue // still being built
+		}
+		out = append(out, BastionSession{Label: jumpKeyLabel(key), Refs: e.refs, Via: e.networkVia})
+	}
+	return out
 }
 
 func (p *jumpPool) lingerFor() time.Duration {
@@ -143,6 +166,7 @@ func (p *jumpPool) acquire(
 			close(e.ready)
 			go p.watch(key, e)
 			log.Printf("jump pool: opened shared bastion for key %q", key)
+			p.changed()
 			break
 		}
 		p.mu.Unlock()
@@ -171,7 +195,11 @@ func (p *jumpPool) acquire(
 		break
 	}
 	e.refs++
+	first := e.refs == 1
 	p.mu.Unlock()
+	if first {
+		p.changed()
+	}
 
 	var released bool
 	release := func() {
@@ -185,6 +213,7 @@ func (p *jumpPool) acquire(
 		if e.refs > 0 || p.entries[key] != e {
 			return // riders left, or the bastion already ended
 		}
+		defer p.changed()
 		// Last rider gone: arm the idle linger. If nobody re-acquires the
 		// key within the linger, close the prefix and drop the entry.
 		if e.stopTimer != nil {
@@ -202,6 +231,7 @@ func (p *jumpPool) acquire(
 			p.mu.Unlock()
 			log.Printf("jump pool: shared bastion for key %q idle %s, closing", key, linger)
 			e.close()
+			p.changed()
 		})
 	}
 	return e.client, release, e.networkVia, nil
@@ -227,6 +257,7 @@ func (p *jumpPool) watch(key string, e *jumpEntry) {
 	}
 	p.mu.Unlock()
 	e.close()
+	p.changed()
 }
 
 // peek returns the shared bastion client for a key IF one is already live,

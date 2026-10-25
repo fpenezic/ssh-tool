@@ -2630,23 +2630,16 @@ hosts** for them; the address given there then follows the
 connection's path too. The first connect may ask for a host key or a login in
 the app while the client waits.
 
-**Networks behind a bastion** adds whole networks behind an SSH host,
-beyond the connections in the tree: pick the host's connection and list
-the networks (`10.20.0.0/16, 10.30.1.5`). An address in them is opened
-from that host, like `ssh -J`, with the connection's own credentials,
-jump hosts and network profile. One SSH session per bastion carries
-every connection and closes after 2 minutes unused; while it is open the
-status bar shows it (its name, or how many), the tooltip how many
-connections each carries or that it is idle. The bastion must allow TCP
-forwarding (`AllowTcpForwarding`). Its networks are set by hand, so they
-always go through it, as a pinned address does. Only TCP goes through.
+While a shared bastion is open - for terminals, the app proxy or CI jobs
+alike - the status bar shows it (its host, or how many); the tooltip
+lists each with how many users it has, or that it is idle and closing.
 
 ### CI runner (GitLab jobs through the VPNs)
 
 **CI runner** (in the Network profiles list, under Plugins & proxy) runs a
 GitLab runner in Docker whose jobs reach your customers through the app
-proxy - several customers at once, each address through the VPN (or
-bastion) whose networks contain it - without touching `.gitlab-ci.yml`. It needs Docker
+proxy - several customers at once, each address through the VPN whose
+networks contain it or the jump host of the connection it belongs to - without touching `.gitlab-ci.yml`. It needs Docker
 (Docker Desktop on Windows and macOS) and the app proxy turned on with at
 least one profile marked **Reachable through the app proxy**.
 
