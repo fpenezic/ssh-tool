@@ -430,10 +430,103 @@ func (a *App) ciStart(c CIRunnerConfig) (err error) {
 	}
 	started = true
 	log.Printf("ci runner: started, %d routes, %d direct, jobs on %s", len(details.Routes), len(direct), subnet)
+	go a.ciSyncRoutes(details.Routes)
 	a.recordAudit("ci_runner.start", "", map[string]string{
 		"routes": strconv.Itoa(len(details.Routes)), "direct": strconv.Itoa(len(direct)),
 	})
 	return nil
+}
+
+// ciRouteSyncEvery is how often a running gateway is brought up to date
+// with the app proxy's routes.
+const ciRouteSyncEvery = 20 * time.Second
+
+// ciSyncRoutes keeps the running gateway's routes in step with the app
+// proxy: a VPN or a jump-host connection added, or a network changed,
+// after Start would otherwise go past the gateway (straight out, where
+// another VPN on the machine may even accept it and never answer). The
+// difference is applied to the live gateway with ip rule, so running jobs
+// are not cut. It stops when the runner is no longer ours.
+func (a *App) ciSyncRoutes(applied []string) {
+	have := map[string]bool{}
+	for _, r := range applied {
+		have[r] = true
+	}
+	t := time.NewTicker(ciRouteSyncEvery)
+	defer t.Stop()
+	for range t.C {
+		ciState.Lock()
+		ours := ciState.started && !ciState.busy && !ciState.closing
+		ciState.Unlock()
+		if !ours {
+			return
+		}
+		d, err := a.NetworkSharedProxyDetails()
+		if err != nil {
+			continue
+		}
+		want := map[string]bool{}
+		for _, r := range d.Routes {
+			want[r] = true
+		}
+		add, del := ciRouteDiff(have, want)
+		if len(add) == 0 && len(del) == 0 {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := ciApplyRoutes(ctx, add, del); err != nil {
+			log.Printf("ci runner: gateway routes: %v", err)
+			cancel()
+			continue
+		}
+		cancel()
+		have = want
+		log.Printf("ci runner: gateway routes updated, %d added, %d removed", len(add), len(del))
+	}
+}
+
+// ciRouteDiff is what to add to and remove from have to get want, sorted.
+func ciRouteDiff(have, want map[string]bool) (add, del []string) {
+	for r := range want {
+		if !have[r] {
+			add = append(add, r)
+		}
+	}
+	for r := range have {
+		if !want[r] {
+			del = append(del, r)
+		}
+	}
+	sort.Strings(add)
+	sort.Strings(del)
+	return add, del
+}
+
+// ciApplyRoutes changes the gateway's policy rules in one docker exec.
+// Added routes get priority 32765: after the direct (excluded) rules the
+// gateway started with, which have smaller numbers and so win, and before
+// the main table's catch-all at 32766.
+func ciApplyRoutes(ctx context.Context, add, del []string) error {
+	var cmds []string
+	for _, r := range del {
+		if _, err := netip.ParsePrefix(r); err != nil {
+			continue
+		}
+		cmds = append(cmds, "ip rule del to "+r+" table 0x22b")
+	}
+	for _, r := range add {
+		if _, err := netip.ParsePrefix(r); err != nil {
+			continue
+		}
+		cmds = append(cmds, "ip rule add to "+r+" table 0x22b pref 32765")
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	// One shell, every command attempted: a rule already gone (or there)
+	// must not stop the rest.
+	_, err := docker(ctx, nil, "exec", ciGatewayName, "sh", "-c", strings.Join(cmds, "; ")+"; true")
+	return err
 }
 
 // ciRunnerAutoStart starts the runner when it is set to start with the

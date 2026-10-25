@@ -100,7 +100,7 @@ func TestJumpConnections(t *testing.T) {
 	}
 	sharedRoutesInvalidate()
 	defer sharedRoutesInvalidate()
-	if id, why, err := a.sharedPickWith("10.40.1.5", nil); err != nil || jumpConnOf(id) != ids["a"] || !strings.Contains(why, "pinned") {
+	if id, why, err := a.sharedPickWith("10.40.1.5", nil); err != nil || jumpConnOf(id) != ids["a"] || !strings.Contains(why, "jump host") {
 		t.Errorf("address: %q %q %v", id, why, err)
 	}
 	if id, _, err := a.sharedPickWith("APP.internal.example", nil); err != nil || jumpConnOf(id) != ids["b"] {
@@ -109,7 +109,7 @@ func TestJumpConnections(t *testing.T) {
 	if _, _, err := a.sharedPickWith("10.40.1.7", nil); err == nil {
 		t.Error("a connection without a jump host was routed")
 	}
-	if w, err := a.NetworkSharedProxyWhich("10.40.1.5"); err != nil || w.Profile != "a (its jump host)" {
+	if w, err := a.NetworkSharedProxyWhich("10.40.1.5"); err != nil || w.Profile != "a" {
 		t.Errorf("which = %+v, %v", w, err)
 	}
 
