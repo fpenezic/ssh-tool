@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
+
+	sshlayer "ssh-tool/internal/ssh"
 )
 
 const ciTestTOML = `concurrent = 1
@@ -523,5 +525,25 @@ func TestWithDialFloor(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	if c3.Err() != nil {
 		t.Error("a parent cancelled after its deadline passed ended the floor")
+	}
+}
+
+// The connect's own context, handed down by firstHopDial, reaches the
+// floored dial even after the hop deadline has passed.
+func TestWithDialFloorWatchesTheConnect(t *testing.T) {
+	outer, cancelOuter := context.WithCancel(context.Background())
+	hop, cancelHop := context.WithTimeout(context.WithValue(outer, sshlayer.ConnectCtxKey{}, outer), 10*time.Millisecond)
+	defer cancelHop()
+	c, done := withDialFloor(hop, time.Second)
+	defer done()
+	time.Sleep(20 * time.Millisecond) // the hop deadline passes
+	if c.Err() != nil {
+		t.Fatal("the floor ended with the hop deadline")
+	}
+	cancelOuter()
+	select {
+	case <-c.Done():
+	case <-time.After(time.Second):
+		t.Fatal("a cancel of the connect after the hop deadline did not reach the dial")
 	}
 }

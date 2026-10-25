@@ -86,6 +86,11 @@ type JumpPrefixDeps struct {
 // skipped the tunnel). Lets the UI show a truthful VPN indicator.
 type DialPathKey struct{}
 
+// ConnectCtxKey holds, in the context a first-hop dialer gets, the connect's
+// own context from before the per-hop timeout: a dialer that outlives the
+// hop deadline (a fresh tunnel's dial) watches it for a cancel.
+type ConnectCtxKey struct{}
+
 // firstHopDial dials the first hop of a chain: through the network
 // profile's tunnel when one is resolved, plain TCP otherwise. The
 // second return is the transport actually used: "" (no profile),
@@ -101,7 +106,7 @@ func firstHopDial(ctx context.Context, settings *store.ResolvedSettings, addr st
 		}
 		path := "tunnel" // default when the dialer doesn't report
 		dctx, cancel := context.WithTimeout(
-			context.WithValue(ctx, DialPathKey{}, &path), timeout)
+			context.WithValue(context.WithValue(ctx, DialPathKey{}, &path), ConnectCtxKey{}, ctx), timeout)
 		defer cancel()
 		conn, err := d(dctx, "tcp", addr)
 		return conn, path, err

@@ -41,18 +41,26 @@ const directProbeTimeout = 3 * time.Second
 const tunnelDialFloor = 10 * time.Second
 
 // withDialFloor returns ctx with at least floor left before its deadline.
-// A ctx with less gets a deadline floor from now; an explicit cancel of
-// ctx (Cancel on a connect) still ends it.
+// A ctx with less gets a deadline floor from now. The connect itself can
+// still end it: the connect's context from before the hop timeout
+// (sshlayer.ConnectCtxKey) is watched when there is one, so a Cancel
+// arriving after the hop deadline passed still stops the dial; without it
+// an explicit cancel of ctx does.
 func withDialFloor(ctx context.Context, floor time.Duration) (context.Context, context.CancelFunc) {
 	if dl, ok := ctx.Deadline(); !ok || time.Until(dl) >= floor {
 		return ctx, func() {}
 	}
 	c, cancel := context.WithTimeout(context.WithoutCancel(ctx), floor)
-	stop := context.AfterFunc(ctx, func() {
-		if errors.Is(ctx.Err(), context.Canceled) {
-			cancel()
-		}
-	})
+	var stop func() bool
+	if outer, ok := ctx.Value(sshlayer.ConnectCtxKey{}).(context.Context); ok && outer != nil {
+		stop = context.AfterFunc(outer, cancel)
+	} else {
+		stop = context.AfterFunc(ctx, func() {
+			if errors.Is(ctx.Err(), context.Canceled) {
+				cancel()
+			}
+		})
+	}
 	return c, func() { stop(); cancel() }
 }
 
