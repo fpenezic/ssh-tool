@@ -245,13 +245,13 @@ func TestOpenVPNLabSharedProxy(t *testing.T) {
 	if err := a.NetworkSharedProxySet(SharedProxyConfig{Enabled: true, Bind: "0.0.0.0", Port: 11081}); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := a.sharedPick("172.31.88.10"); got != idB {
+	if got, _, _ := a.sharedPick("172.31.88.10"); got != idB {
 		t.Fatalf("most specific: got %s, want lab-b", got)
 	}
 	if err := a.NetworkSharedProxySet(SharedProxyConfig{Enabled: true, Bind: "0.0.0.0", Port: 11081, Use: idA}); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := a.sharedPick("172.31.88.10"); got != idA {
+	if got, _, _ := a.sharedPick("172.31.88.10"); got != idA {
 		t.Fatalf("override: got %s, want lab", got)
 	}
 	d, err := a.NetworkSharedProxyDetails()

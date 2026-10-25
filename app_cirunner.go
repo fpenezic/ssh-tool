@@ -226,6 +226,9 @@ func (a *App) ciCopySecrets(j *ciVaultJournal, from, to string) ([]string, error
 	return copied, nil
 }
 
+// ciRunnerSaveMu serializes CIRunnerSet.
+var ciRunnerSaveMu sync.Mutex
+
 // ciVaultJournal records what a settings save overwrote in the vault, so
 // a save that fails anywhere - a later vault write, the settings write -
 // puts every value back and the old config keeps its old secrets.
@@ -445,6 +448,10 @@ func (a *App) ciStatus(c CIRunnerConfig) CIRunnerStatus {
 // token for a config built from the form; an imported config.toml
 // brings its own, which move to the vault here.
 func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (_ CIRunnerConfig, err error) {
+	// One save at a time, rollback included: two at once could undo each
+	// other's vault writes.
+	ciRunnerSaveMu.Lock()
+	defer ciRunnerSaveMu.Unlock()
 	// Every vault write of this save is journalled and undone if the save
 	// fails later on: the stored config and its secrets move together.
 	j := &ciVaultJournal{a: a}
