@@ -2417,7 +2417,11 @@
   function spSave(): Promise<void> {
     const req = {
       enabled: sp.enabled, bind: sp.bind.trim(), port: Number(sp.port), priority: $state.snapshot(sp.priority),
-      bastions: sp.bastions.map((b) => ({ connection_id: b.connection_id, networks: b.networksText.split(/[\s,]+/).filter(Boolean) })),
+      // A row just added has no networks yet: it stays in the form and is
+      // saved once it has some.
+      bastions: sp.bastions
+        .map((b) => ({ connection_id: b.connection_id, networks: b.networksText.split(/[\s,]+/).filter(Boolean) }))
+        .filter((b) => b.networks.length > 0),
     };
     spPending++;
     spQueue = spQueue.then(async () => {
@@ -2427,7 +2431,9 @@
           const r = await api.networkSharedProxyGet();
           const d = r.config.enabled ? await api.networkSharedProxyDetails() : null;
           if (spPending === 1) {
-            sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], bastions: spBastionsOf(r.config.bastions), listening: r.listening };
+            const saved = spBastionsOf(r.config.bastions);
+            const unsaved = sp.bastions.filter((b) => !b.networksText.trim() && !saved.some((x) => x.connection_id === b.connection_id));
+            sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], bastions: [...saved, ...unsaved], listening: r.listening };
             spDetails = d;
           }
           toast.ok(req.enabled ? `App proxy on ${req.bind}:${req.port}` : "App proxy off");
