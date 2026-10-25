@@ -510,6 +510,60 @@ export class BackupRestoreInput {
 }
 
 /**
+ * BastionSession is one app proxy bastion session, for the status bar.
+ */
+export class BastionSession {
+    /**
+     * Creates a new BastionSession instance.
+     * @param {Partial<BastionSession>} [$$source = {}] - The source object to create the BastionSession.
+     */
+    constructor($$source = {}) {
+        if (!("connection_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["connection_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("conns" in $$source)) {
+            /**
+             * proxied connections open on it now
+             * @member
+             * @type {number}
+             */
+            this["conns"] = 0;
+        }
+        if (!("state" in $$source)) {
+            /**
+             * sshchan transport state
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new BastionSession instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {BastionSession}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new BastionSession(/** @type {Partial<BastionSession>} */($$parsedSource));
+    }
+}
+
+/**
  * BatchExecInput is the IPC payload the multi-select panel sends.
  */
 export class BatchExecInput {

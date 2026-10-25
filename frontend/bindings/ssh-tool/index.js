@@ -18,6 +18,7 @@ export {
     BackupCreateInput,
     BackupCreateResult,
     BackupRestoreInput,
+    BastionSession,
     BatchExecInput,
     BitwardenEnsureCredentialInput,
     BitwardenSaveInput,

@@ -22,7 +22,7 @@ The Database tab now speaks Oracle and Microsoft SQL Server (MSSQL), both with p
 
 - **Overlapping networks, decided by you.** When several VPNs carry the same range (two customers with `10.0.0.0/8`), tick the ones that should win under **When networks overlap** and order them; a ticked VPN takes every address its networks contain. An address added by hand on a profile's Proxy tab, or a connection's address, always goes through that profile. This replaces the single "When networks overlap, use" choice, which carries over as the first in the order.
 - **Which VPN for...** tells which VPN an address or name would go through, and why.
-- **Bastions too.** Under App proxy -> **Through a bastion**, pick a connection from the tree and list the networks behind it; those addresses are opened from that host like `ssh -J`, with the connection's own credentials, jump hosts and network profile. A CI job or `curl` reaches hosts behind your bastions without ever seeing a key or a password. One SSH session per bastion, closed after 2 minutes unused; the bastion must allow TCP forwarding.
+- **Bastions too.** Under App proxy -> **Through a bastion**, pick a connection from the tree and list the networks behind it; those addresses are opened from that host like `ssh -J`, with the connection's own credentials, jump hosts and network profile. A CI job or `curl` reaches hosts behind your bastions without ever seeing a key or a password. One SSH session per bastion, closed after 2 minutes unused and shown in the status bar while open; the bastion must allow TCP forwarding.
 
 ### Databases
 

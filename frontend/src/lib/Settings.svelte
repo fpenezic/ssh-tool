@@ -2436,9 +2436,13 @@
             // (normalised networks); one added or edited while this save
             // ran stays as the user has it, for the save that follows.
             const saved = spBastionsOf(r.config.bastions);
-            const bastions = sp.bastions.map((b) => {
+            // A row sent unchanged that the backend no longer has (its
+            // connection was deleted) goes.
+            const bastions = sp.bastions.flatMap((b) => {
               const back = saved.find((x) => x.connection_id === b.connection_id);
-              return back && spNets(b.networksText) === sentNets.get(b.connection_id) ? back : b;
+              const unchanged = spNets(b.networksText) === sentNets.get(b.connection_id);
+              if (back) return [unchanged ? back : b];
+              return unchanged && spNets(b.networksText) !== "" ? [] : [b];
             });
             sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], bastions, listening: r.listening };
             spDetails = d;

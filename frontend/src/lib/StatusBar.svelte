@@ -22,7 +22,7 @@
   import { tcpdump } from "./tcpdumpStore.svelte";
   import { logtail } from "./logtailStore.svelte";
   import { fleet } from "./fleetStore.svelte";
-  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot, IconSave, IconUpload, IconDownload, IconFile, IconPopOut } from "./iconMap";
+  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot, IconSave, IconUpload, IconDownload, IconFile, IconPopOut, IconBastion } from "./iconMap";
   import McpActivityPanel from "./McpActivityPanel.svelte";
   import { mcpCounterTitle } from "./mcpLevel";
   import { networkProfiles } from "./networkProfiles.svelte";
@@ -67,6 +67,22 @@
     if (vaultState.status === "unlocked") void issues.refreshOpkssh();
   });
   let showSharePanel = $state(false);
+
+  // App proxy bastions: a segment while any SSH session to a bastion is
+  // open, with what it carries; it updates on bastion_sessions_changed.
+  let bastionSessions = $state<import("./api").BastionSession[]>([]);
+  onMount(() => {
+    if (isMobile || inDetachedWindow) return;
+    const load = () => api.bastionSessions().then((r) => (bastionSessions = r ?? [])).catch(() => {});
+    load();
+    const off = EventsOn("bastion_sessions_changed", load);
+    return () => off();
+  });
+  const bastionTitle = $derived(
+    "App proxy bastions:\n" +
+      bastionSessions.map((b) => `${b.name}: ${b.conns > 0 ? `${b.conns} connection${b.conns === 1 ? "" : "s"}` : "idle, closes after 2 min"}`).join("\n") +
+      "\nClick to manage",
+  );
 
   // CI runner (Settings > Network profiles > CI runner): a segment while
   // it runs, so a runner taking jobs in the background is never invisible.
@@ -704,6 +720,13 @@
     >
       <IconVpn size={11} />
       <span>{runningVpns.length === 1 ? runningVpns[0].name : runningVpns.length}</span>
+    </button>
+  {/if}
+
+  {#if bastionSessions.length > 0}
+    <button class="seg vpn" onclick={() => view.setTabSettingsSection("network")} title={bastionTitle}>
+      <IconBastion size={11} />
+      <span>{bastionSessions.length === 1 ? bastionSessions[0].name : bastionSessions.length}</span>
     </button>
   {/if}
 

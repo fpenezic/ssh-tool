@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -156,6 +157,9 @@ func (a *App) bastionDial(ctx context.Context, connectionID, addr string) (net.C
 		bastionDialers.m[connectionID] = d
 	}
 	d.conns++
+	if d.conns == 1 {
+		defer bastionSessionsChanged()
+	}
 	if d.idle != nil {
 		d.idle.Stop()
 		d.idle = nil
@@ -169,6 +173,7 @@ func (a *App) bastionDial(ctx context.Context, connectionID, addr string) (net.C
 		if d.conns > 0 || bastionDialers.m[connectionID] != d {
 			return
 		}
+		defer bastionSessionsChanged()
 		d.idle = time.AfterFunc(bastionIdle, func() {
 			bastionDialers.Lock()
 			if d.conns > 0 || bastionDialers.m[connectionID] != d {
@@ -178,6 +183,7 @@ func (a *App) bastionDial(ctx context.Context, connectionID, addr string) (net.C
 			delete(bastionDialers.m, connectionID)
 			bastionDialers.Unlock()
 			d.lazy.Close()
+			bastionSessionsChanged()
 			log.Printf("network: app proxy: bastion session %s closed after %s idle", connectionID, bastionIdle)
 		})
 	}
@@ -201,6 +207,7 @@ func closeBastionDialer(connectionID string) {
 			d.idle.Stop()
 		}
 		d.lazy.Close()
+		bastionSessionsChanged()
 	}
 }
 
@@ -222,4 +229,46 @@ func closeBastionDialers(keep map[string]bool) {
 		}
 		d.lazy.Close()
 	}
+	if len(gone) > 0 {
+		bastionSessionsChanged()
+	}
 }
+
+// BastionSession is one app proxy bastion session, for the status bar.
+type BastionSession struct {
+	ConnectionID string `json:"connection_id"`
+	Name         string `json:"name"`
+	Conns        int    `json:"conns"` // proxied connections open on it now
+	State        string `json:"state"` // sshchan transport state
+}
+
+// BastionSessions lists the app proxy's bastion sessions (open, or idle
+// and closing after bastionIdle).
+func (a *App) BastionSessions() []BastionSession {
+	bastionDialers.Lock()
+	type entry struct {
+		id    string
+		conns int
+		lazy  *sshchan.LazySSH
+	}
+	var es []entry
+	for id, d := range bastionDialers.m {
+		es = append(es, entry{id, d.conns, d.lazy})
+	}
+	bastionDialers.Unlock()
+	out := make([]BastionSession, 0, len(es))
+	for _, e := range es {
+		name := e.id
+		if c, err := a.db.GetConnection(e.id); err == nil && c != nil {
+			name = c.Name
+		}
+		state, _ := e.lazy.State()
+		out = append(out, BastionSession{ConnectionID: e.id, Name: name, Conns: e.conns, State: state})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// bastionSessionsChanged tells the status bar to reload the list: a
+// session opened or closed, or went from idle to in use and back.
+func bastionSessionsChanged() { EventsEmit("bastion_sessions_changed", nil) }

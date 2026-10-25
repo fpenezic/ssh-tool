@@ -2627,7 +2627,9 @@ bastion must allow TCP forwarding (`AllowTcpForwarding`); the first
 connect asks for its host key and, without a saved password or key, for a
 login, in the app, while the client waits. A bastion's networks are set
 by hand, so they always go through it, as a pinned address does. Only TCP
-goes through.
+goes through. While a bastion session is open the status bar shows it (its name, or
+how many); the tooltip says how many connections each carries, or that
+it is idle and closes soon.
 
 ### CI runner (GitLab jobs through the VPNs)
 
