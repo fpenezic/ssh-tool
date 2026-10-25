@@ -114,7 +114,10 @@ func (a *App) ensureBrowserProxy(row *store.NetworkProfile) (int, error) {
 			p.lastUsed = time.Now()
 			p.mu.Unlock()
 			go func() {
-				a.serveSOCKS(c, nil, func(host string) (string, error) { return a.browserPick(id, host) }, "browser")
+				a.serveSOCKS(c, nil, func(host string) (string, string, error) {
+					pid, err := a.browserPick(id, host)
+					return pid, host, err
+				}, "browser")
 				p.mu.Lock()
 				p.active--
 				p.lastUsed = time.Now()

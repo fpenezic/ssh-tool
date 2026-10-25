@@ -323,9 +323,14 @@ func routeName(routes []sharedRoute, id string) string {
 type sharedPins struct{ set map[netip.Prefix]bool }
 
 // sharedPick chooses the profile for a destination.
-func (a *App) sharedPick(host string) (string, error) {
-	id, _, err := a.sharedPickWith(host, a.sharedProxyConfig().Priority)
-	return id, err
+// It returns the host to dial as well: the address the decision was made
+// on. A name only the local resolver knows is decided by its local
+// address, so that address is dialed - sending the name on would let the
+// far side (a bastion, the VPN's DNS) resolve it to a host nobody allowed.
+// A connection's own name is dialed as is: that name is what was allowed.
+func (a *App) sharedPick(host string) (id, dialHost string, err error) {
+	id, _, dialHost, err = a.sharedPickAddr(host, a.sharedProxyConfig().Priority)
+	return id, dialHost, err
 }
 
 // sharedPickWith chooses the profile for a destination and says why:
@@ -337,12 +342,18 @@ func (a *App) sharedPick(host string) (string, error) {
 //     tunnel is up (two customers with the same range are rarely
 //     connected at once), then by name.
 func (a *App) sharedPickWith(host string, priority []string) (id, why string, err error) {
+	id, why, _, err = a.sharedPickAddr(host, priority)
+	return id, why, err
+}
+
+// sharedPickAddr is sharedPickWith plus the host to dial (see sharedPick).
+func (a *App) sharedPickAddr(host string, priority []string) (id, why, dialHost string, err error) {
 	routes, hosts := a.sharedRoutes()
 	if id, ok := hosts[strings.ToLower(host)]; ok {
 		if jumpConnOf(id) != "" {
-			return id, "through its jump host, as its terminal connects", nil
+			return id, "through its jump host, as its terminal connects", host, nil
 		}
-		return id, "a connection in the tree uses this name", nil
+		return id, "a connection in the tree uses this name", host, nil
 	}
 	ip, err := netip.ParseAddr(host)
 	resolved := ""
@@ -352,7 +363,7 @@ func (a *App) sharedPickWith(host string, priority []string) (id, why string, er
 		addrs, lerr := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 		cancel()
 		if lerr != nil || len(addrs) == 0 {
-			return "", "", fmt.Errorf("no shared profile knows %q", host)
+			return "", "", "", fmt.Errorf("no shared profile knows %q", host)
 		}
 		ip = addrs[0].Unmap()
 		resolved = fmt.Sprintf("%s resolves to %s; ", host, ip)
@@ -374,14 +385,14 @@ func (a *App) sharedPickWith(host string, priority []string) (id, why string, er
 		}
 	}
 	if len(all) == 0 {
-		return "", "", fmt.Errorf("%s is in no shared profile's networks", ip)
+		return "", "", "", fmt.Errorf("%s is in no shared profile's networks", ip)
 	}
 	if len(pins) > 0 {
 		r := a.mostSpecific(pins, rank)
 		if jumpConnOf(r.profileID) != "" {
-			return r.profileID, resolved + "through its jump host, as its terminal connects", nil
+			return r.profileID, resolved + "through its jump host, as its terminal connects", ip.String(), nil
 		}
-		return r.profileID, resolved + "pinned to it (" + r.prefix.String() + ")", nil
+		return r.profileID, resolved + "pinned to it (" + r.prefix.String() + ")", ip.String(), nil
 	}
 	best := -1
 	var top sharedRoute
@@ -391,10 +402,10 @@ func (a *App) sharedPickWith(host string, priority []string) (id, why string, er
 		}
 	}
 	if best >= 0 {
-		return top.profileID, fmt.Sprintf("%s%s, priority %d", resolved, top.prefix, best+1), nil
+		return top.profileID, fmt.Sprintf("%s%s, priority %d", resolved, top.prefix, best+1), ip.String(), nil
 	}
 	r := a.mostSpecific(all, nil)
-	return r.profileID, resolved + "most specific network (" + r.prefix.String() + ")", nil
+	return r.profileID, resolved + "most specific network (" + r.prefix.String() + ")", ip.String(), nil
 }
 
 // mostSpecific picks the longest prefix; ties go to priority, then a

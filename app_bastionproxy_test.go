@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 
 	"ssh-tool/internal/store"
 )
@@ -101,5 +102,29 @@ func TestJumpDuplicateAddress(t *testing.T) {
 	}, nil)
 	if len(routes) != 1 || routes[0].prefix.String() != "10.50.0.2/32" || jumpConnOf(routes[0].profileID) != "3" {
 		t.Fatalf("routes = %+v", routes)
+	}
+}
+
+// A name only the local resolver knows is decided by its local address,
+// and that address - not the name - is what the proxy dials; a
+// connection's own name is dialed as is.
+func TestSharedPickDialsWhatWasAllowed(t *testing.T) {
+	a := &App{}
+	sharedTable.Lock()
+	sharedTable.at = time.Now()
+	sharedTable.routes = []sharedRoute{
+		{netip.MustParsePrefix("127.0.0.1/32"), jumpRouteID("c"), jumpRouteName, true},
+		{netip.MustParsePrefix("::1/128"), jumpRouteID("c"), jumpRouteName, true},
+	}
+	sharedTable.hosts = map[string]string{"app.internal.example": jumpRouteID("c")}
+	sharedTable.Unlock()
+	defer sharedRoutesInvalidate()
+	_, _, dial, err := a.sharedPickAddr("localhost", nil)
+	if err != nil || (dial != "127.0.0.1" && dial != "::1") {
+		t.Fatalf("locally resolved name: dial %q, %v", dial, err)
+	}
+	_, _, dial, err = a.sharedPickAddr("app.internal.example", nil)
+	if err != nil || dial != "app.internal.example" {
+		t.Fatalf("connection name: dial %q, %v", dial, err)
 	}
 }

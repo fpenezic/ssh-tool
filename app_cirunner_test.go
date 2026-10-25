@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/netip"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -545,5 +546,35 @@ func TestWithDialFloorWatchesTheConnect(t *testing.T) {
 	case <-c.Done():
 	case <-time.After(time.Second):
 		t.Fatal("a cancel of the connect after the hop deadline did not reach the dial")
+	}
+}
+
+// A save whose settings write fails leaves the vault as it was: the old
+// config keeps its old token and cache keys.
+func TestCIRunnerFailedSaveRollsBackSecrets(t *testing.T) {
+	a := newDbTestApp(t)
+	if _, err := a.CIRunnerSet(CIRunnerConfig{ConfigTOML: ciTestTOML}, ""); err != nil {
+		t.Fatal(err)
+	}
+	id := ciStoredID(t, a, 0)
+	m, _ := ciParseTOML(a.ciRunnerConfig().ConfigTOML)
+	r := ciRunners(m)[0]
+	r["token"] = "glrt-new"
+	r["cache"].(map[string]any)["s3"].(map[string]any)["SecretKey"] = "cache-secret-new"
+	text, _ := toml.Marshal(m)
+
+	// The settings write fails: local state points into a missing directory.
+	good := localStateStore.path
+	localStateStore.path = filepath.Join(t.TempDir(), "missing", "local-state.json")
+	_, err := a.CIRunnerSet(CIRunnerConfig{ConfigTOML: string(text)}, "")
+	localStateStore.path = good
+	if err == nil {
+		t.Fatal("save succeeded with an unwritable local state")
+	}
+	if tok, _, _ := a.vault.Get(ciTokenKey(id)); tok != "glrt-secret-one" {
+		t.Errorf("token after the failed save = %q", tok)
+	}
+	if sk, _, _ := a.vault.Get(ciSecretKey(id, "s3", "SecretKey")); sk != "cache-secret-one" {
+		t.Errorf("cache secret after the failed save = %q", sk)
 	}
 }
