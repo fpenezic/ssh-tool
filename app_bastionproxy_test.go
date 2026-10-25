@@ -147,3 +147,17 @@ func TestJumpBeatsProfileOnTie(t *testing.T) {
 		t.Fatalf("bastion network vs ranked profile: %q", got.profileID)
 	}
 }
+
+// Two connections with the same address and different jump paths leave it
+// unrouted by jump host; the same path twice still routes it.
+func TestJumpDuplicateAddress(t *testing.T) {
+	routes, _ := jumpConnRoutes([]store.Connection{
+		{ID: "1", Name: "one", Hostname: "10.50.0.1", Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{Hostname: "jump-a.example.com"}}}},
+		{ID: "2", Name: "two", Hostname: "10.50.0.1", Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{Hostname: "jump-b.example.com"}}}},
+		{ID: "3", Name: "three", Hostname: "10.50.0.2", Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{Hostname: "jump-a.example.com"}}}},
+		{ID: "4", Name: "four", Hostname: "10.50.0.2", Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{Hostname: "jump-a.example.com"}}}},
+	}, nil)
+	if len(routes) != 1 || routes[0].prefix.String() != "10.50.0.2/32" || jumpConnOf(routes[0].profileID) != "3" {
+		t.Fatalf("routes = %+v", routes)
+	}
+}

@@ -14,6 +14,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -69,7 +70,7 @@ func (a *App) normalizeBastions(in []ProxyBastion) ([]ProxyBastion, error) {
 			continue
 		}
 		conn, err := a.db.GetConnection(b.ConnectionID)
-		missing := conn == nil || errors.Is(err, sql.ErrNoRows) || errors.Is(err, store.ErrNotFound)
+		missing := errors.Is(err, sql.ErrNoRows) || errors.Is(err, store.ErrNotFound) || (err == nil && conn == nil)
 		if err != nil && !missing {
 			// A lookup that failed is not a deleted connection: keep the
 			// setting as it is.
@@ -151,19 +152,53 @@ func jumpConnOf(id string) string {
 const jumpRouteName = "connections with a jump host"
 
 func jumpConnRoutes(conns []store.Connection, folders []store.Folder) ([]sharedRoute, map[string]string) {
-	var routes []sharedRoute
-	hosts := map[string]string{}
+	// Group by address or name: two connections with the same one and
+	// different paths (another jump chain or network profile) leave it
+	// ambiguous, so neither routes it and it goes by the normal route
+	// selection; the same path twice is fine.
+	type entry struct {
+		id, path string
+		names    []string
+	}
+	byKey := map[string]*entry{}
+	var order []string
 	for _, c := range conns {
 		rs := resolver.ResolveWith(c, folders)
 		if rs.JumpHost == nil || rs.Hostname == "" {
 			continue
 		}
-		id := jumpRouteID(c.ID)
+		key := strings.ToLower(rs.Hostname)
 		if ip, err := netip.ParseAddr(rs.Hostname); err == nil {
-			ip = ip.Unmap()
-			routes = append(routes, sharedRoute{netip.PrefixFrom(ip, ip.BitLen()), id, jumpRouteName, true})
+			key = ip.Unmap().String()
+		}
+		pj, _ := json.Marshal(rs.JumpHost)
+		path := string(pj)
+		if rs.NetworkProfileID != nil {
+			path += "|" + *rs.NetworkProfileID
+		}
+		e := byKey[key]
+		if e == nil {
+			byKey[key] = &entry{id: jumpRouteID(c.ID), path: path, names: []string{c.Name}}
+			order = append(order, key)
+			continue
+		}
+		e.names = append(e.names, c.Name)
+		if e.path != path {
+			e.id = ""
+		}
+	}
+	var routes []sharedRoute
+	hosts := map[string]string{}
+	for _, key := range order {
+		e := byKey[key]
+		if e.id == "" {
+			log.Printf("network: app proxy: %s is used by %s with different jump paths; not routed by jump host", key, strings.Join(e.names, ", "))
+			continue
+		}
+		if ip, err := netip.ParseAddr(key); err == nil {
+			routes = append(routes, sharedRoute{netip.PrefixFrom(ip, ip.BitLen()), e.id, jumpRouteName, true})
 		} else {
-			hosts[strings.ToLower(rs.Hostname)] = id
+			hosts[key] = e.id
 		}
 	}
 	return routes, hosts

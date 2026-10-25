@@ -1477,13 +1477,7 @@ type ConnectionsUpdateInput struct {
 }
 
 func (a *App) ConnectionsUpdate(in ConnectionsUpdateInput) (*store.Connection, error) {
-	// An app proxy bastion's session was built from the old settings; a
-	// change that does not touch how it connects (a favourite, the sort
-	// order, notes) leaves it, and the jobs on it, alone.
-	if in.Hostname != nil || in.Overrides != nil || in.FolderID != nil || in.ClearFolder {
-		defer closeBastionDialer(in.ID)
-	}
-	return a.db.UpdateConnection(store.UpdateConnection{
+	c, err := a.db.UpdateConnection(store.UpdateConnection{
 		ID:                  in.ID,
 		FolderID:            in.FolderID,
 		ClearFolder:         in.ClearFolder,
@@ -1501,11 +1495,22 @@ func (a *App) ConnectionsUpdate(in ConnectionsUpdateInput) (*store.Connection, e
 		LocalShellDir:       in.LocalShellDir,
 		ClearLocalShellDir:  in.ClearLocalShellDir,
 	})
+	// An app proxy bastion's session was built from the old settings; a
+	// change that does not touch how it connects (a favourite, the sort
+	// order, notes) leaves it, and the jobs on it, alone. Only a saved
+	// change closes it.
+	if err == nil && (in.Hostname != nil || in.Overrides != nil || in.FolderID != nil || in.ClearFolder) {
+		closeBastionDialer(in.ID)
+	}
+	return c, err
 }
 
 func (a *App) ConnectionsDelete(id string) error {
+	if err := a.db.DeleteConnection(id); err != nil {
+		return err
+	}
 	closeBastionDialer(id)
-	return a.db.DeleteConnection(id)
+	return nil
 }
 
 func (a *App) ConnectionsClone(id string) (*store.Connection, error) {
