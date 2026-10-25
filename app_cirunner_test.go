@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 const ciTestTOML = `concurrent = 1
@@ -44,7 +46,7 @@ func TestCIRunnerImportAndBuild(t *testing.T) {
 	if stored := a.ciRunnerConfig(); strings.Contains(stored.ConfigTOML, "glrt-") {
 		t.Fatal("token in the settings row")
 	}
-	if tok, ok, _ := a.vault.Get(ciTokenKey(0)); !ok || tok != "glrt-secret-one" {
+	if tok, ok, _ := a.vault.Get(ciTokenKey(ciStoredID(t, a, 0))); !ok || tok != "glrt-secret-one" {
 		t.Fatalf("vault token = %q, %v", tok, ok)
 	}
 	for _, secret := range []string{"cache-access-one", "cache-secret-one"} {
@@ -102,7 +104,7 @@ func TestCIRunnerImportAndBuild(t *testing.T) {
 	if _, err := a.CIRunnerSet(a.ciRunnerConfig(), ""); err != nil {
 		t.Fatal(err)
 	}
-	if tok, _, _ := a.vault.Get(ciTokenKey(0)); tok != "glrt-secret-one" {
+	if tok, _, _ := a.vault.Get(ciTokenKey(ciStoredID(t, a, 0))); tok != "glrt-secret-one" {
 		t.Fatalf("token lost on re-save: %q", tok)
 	}
 }
@@ -266,10 +268,11 @@ func TestCICacheSecretEmptied(t *testing.T) {
 	if _, err := a.CIRunnerSet(CIRunnerConfig{ConfigTOML: cleared}, ""); err != nil {
 		t.Fatal(err)
 	}
-	if a.ciVaultHas(ciSecretKey(0, "s3", "AccessKey")) {
+	id := ciStoredID(t, a, 0)
+	if has, _ := a.ciVaultHas(ciSecretKey(id, "s3", "AccessKey")); has {
 		t.Error("emptied AccessKey still in the vault")
 	}
-	if !a.ciVaultHas(ciSecretKey(0, "s3", "SecretKey")) {
+	if has, _ := a.ciVaultHas(ciSecretKey(id, "s3", "SecretKey")); !has {
 		t.Error("SecretKey (marker kept) lost")
 	}
 }
@@ -286,7 +289,84 @@ func TestCIStashStoredSecrets(t *testing.T) {
 	if strings.Contains(a.ciRunnerConfig().ConfigTOML, "cache-secret-one") {
 		t.Fatal("cache secret still in the settings")
 	}
-	if !a.ciVaultHas(ciSecretKey(0, "s3", "SecretKey")) {
+	if has, _ := a.ciVaultHas(ciSecretKey(ciStoredID(t, a, 0), "s3", "SecretKey")); !has {
 		t.Fatal("cache secret not in the vault")
+	}
+}
+
+// ciStoredID is runner i's id in the stored config.
+func ciStoredID(t *testing.T, a *App, i int) string {
+	t.Helper()
+	m, err := ciParseTOML(a.ciRunnerConfig().ConfigTOML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, _ := ciRunners(m)[i][ciIDField].(string)
+	if id == "" {
+		t.Fatalf("runner %d has no id", i)
+	}
+	return id
+}
+
+// Swapping two runners in the stored config keeps each one's token: the
+// vault keys follow the runner's id, not its position; the id never
+// reaches the runner's config.
+func TestCIRunnerReorderKeepsSecrets(t *testing.T) {
+	a := newDbTestApp(t)
+	two := ciTestTOML + `
+[[runners]]
+  name = "second"
+  url = "https://gitlab.example.com"
+  token = "glrt-secret-two"
+  executor = "docker"
+  [runners.docker]
+    image = "alpine:3.22"
+`
+	if _, err := a.CIRunnerSet(CIRunnerConfig{ConfigTOML: two}, ""); err != nil {
+		t.Fatal(err)
+	}
+	m, _ := ciParseTOML(a.ciRunnerConfig().ConfigTOML)
+	rs := m["runners"].([]any)
+	m["runners"] = []any{rs[1], rs[0]}
+	swapped, _ := toml.Marshal(m)
+	if _, err := a.CIRunnerSet(CIRunnerConfig{ConfigTOML: string(swapped)}, ""); err != nil {
+		t.Fatal(err)
+	}
+	text, _, err := a.ciBuildTOML(a.ciRunnerConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(text, ciIDField) {
+		t.Fatal("the id reached the runner's config")
+	}
+	built, _ := ciParseTOML(text)
+	got := ciRunners(built)
+	if got[0]["name"] != "second" || got[0]["token"] != "glrt-secret-two" || got[1]["token"] != "glrt-secret-one" {
+		t.Fatalf("tokens after reorder: %v=%v, %v=%v", got[0]["name"], got[0]["token"], got[1]["name"], got[1]["token"])
+	}
+}
+
+// A config stored before ids (secrets under index keys) keeps working and
+// moves to ids at the next save.
+func TestCIRunnerLegacyIndexKeys(t *testing.T) {
+	a := newDbTestApp(t)
+	if err := a.vault.Put(ciTokenKey("0"), "glrt-legacy"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(CIRunnerConfig{ConfigTOML: strings.Replace(ciTestTOML, `token = "glrt-secret-one"`, "", 1)})
+	if err := a.db.SetSetting(ciRunnerKey, string(b)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := a.ciBuildTOML(a.ciRunnerConfig()); err != nil {
+		t.Fatalf("legacy build: %v", err)
+	}
+	if _, err := a.CIRunnerSet(a.ciRunnerConfig(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if tok, _, _ := a.vault.Get(ciTokenKey(ciStoredID(t, a, 0))); tok != "glrt-legacy" {
+		t.Fatalf("moved token = %q", tok)
+	}
+	if has, _ := a.ciVaultHas(ciTokenKey("0")); has {
+		t.Error("legacy index key left behind")
 	}
 }
