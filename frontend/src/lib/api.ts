@@ -611,6 +611,14 @@ export interface SharedProxyConfig {
   bastions?: ProxyBastion[];
 }
 
+export interface BastionSession {
+  connection_id: string;
+  name: string;
+  /** Proxied connections open on it now (0 = idle, closing after 2 min). */
+  conns: number;
+  state: string;
+}
+
 export interface ProxyBastion {
   connection_id: string;
   networks: string[];
@@ -1618,6 +1626,7 @@ export const api = {
   },
   networkSharedProxySet: (cfg: SharedProxyConfig) => G.NetworkSharedProxySet(cfg as any) as unknown as Promise<void>,
   networkSharedProxyDetails: () => G.NetworkSharedProxyDetails() as unknown as Promise<SharedProxyDetails>,
+  bastionSessions: () => G.BastionSessions() as unknown as Promise<BastionSession[]>,
   networkSharedProxyWhich: (host: string) => G.NetworkSharedProxyWhich(host) as unknown as Promise<SharedProxyWhich>,
   ciRunnerGet: async (): Promise<{ config: CIRunnerConfig; status: CIRunnerStatus }> => {
     const r = (await G.CIRunnerGet()) as unknown as [CIRunnerConfig, CIRunnerStatus];
