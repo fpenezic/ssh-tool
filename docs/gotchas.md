@@ -2119,6 +2119,37 @@ everything mobile is behind a build tag or an `isMobile` check.
    gateway's MASQUERADE and works. A lab GitLab in a container on the same
    host needs `GIT_STRATEGY: none` or a second network for the test.
 
+138. **A first hop in auto mode spends the connect deadline before the
+   tunnel dial.** (`app_network.go`) The direct probe (up to 3 s) and the
+   tunnel start run inside the per-hop deadline (`firstHopDial`,
+   `DialVia` defaults to 10 s, the user's connect timeout may be 5 s), so
+   the dial through a just-started tunnel - a DNS lookup inside it
+   first, for a name - could start with nothing left and fail in the
+   same microsecond ("write udp ... i/o timeout"). `withDialFloor` gives
+   that dial at least `tunnelDialFloor`; it watches the connect's own
+   context (`sshlayer.ConnectCtxKey`, set by `firstHopDial`), because the
+   hop context's error stays DeadlineExceeded and would hide a later
+   Cancel.
+
+139. **The app proxy must dial what it allowed.** (`app_sharedproxy.go`,
+   `serveSOCKS`) A destination is decided by its address; a name only the
+   local resolver knows is decided by its local address, so that address
+   is what gets dialed (`sharedPick` returns the dial host). Passing the
+   name on lets a bastion's direct-tcpip or a VPN's DNS resolve it to a
+   host nobody allowed. Only a connection's own name (the names map) goes
+   on as a name.
+
+140. **The CI runner is per machine, and its secrets follow the runner.**
+   (`app_cirunner.go`) The setting is in local state (`ci_runner`, also in
+   the mirror's machine-local list), vault keys carry the machine id
+   (`ci_runner:<machine>:token:<runner id>`), and each `[[runners]]` block
+   carries `ssh_tool_key` (taken out of the config the runner gets). Keys
+   by index or without a machine id are from earlier versions: copied,
+   never deleted, and only to the same runner at the same place (same
+   url and name). Every vault write of a save goes through
+   `ciVaultJournal`, rolled back when the save fails; `CIRunnerSet` is
+   serialized.
+
 ---
 
 # Archive
