@@ -626,3 +626,25 @@ func TestCIRunnerLegacyArrayFieldsNoPanic(t *testing.T) {
 		t.Fatalf("CIRunnerSet: %v", err)
 	}
 }
+
+// A legacy runner without a name still takes over its index token.
+func TestCIRunnerLegacyNoNameMigrates(t *testing.T) {
+	a := newDbTestApp(t)
+	noName := `
+[[runners]]
+  url = "https://gitlab.example.com"
+  executor = "docker"
+`
+	if err := a.vault.Put(ciTokenKey("0"), "glrt-legacy"); err != nil {
+		t.Fatal(err)
+	}
+	if err := localStateStore.set(ciRunnerKey, mustJSON(CIRunnerConfig{ConfigTOML: noName})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.CIRunnerSet(CIRunnerConfig{ConfigTOML: noName}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if tok, _, _ := a.vault.Get(ciTokenKey(ciStoredID(t, a, 0))); tok != "glrt-legacy" {
+		t.Fatalf("moved token = %q", tok)
+	}
+}
