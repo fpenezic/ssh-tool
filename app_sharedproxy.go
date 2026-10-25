@@ -124,6 +124,7 @@ func (a *App) NetworkSharedProxySet(c SharedProxyConfig) error {
 			return err
 		}
 	}
+	prevListen, hadListen := localStateStore.get(sharedProxyListenKey)
 	lb, _ := json.Marshal(sharedProxyListen{Enabled: c.Enabled, Bind: c.Bind, Port: c.Port})
 	if err := localStateStore.set(sharedProxyListenKey, string(lb)); err != nil {
 		stopSharedProxy()
@@ -135,6 +136,13 @@ func (a *App) NetworkSharedProxySet(c SharedProxyConfig) error {
 	synced.Enabled, synced.Bind, synced.Port = false, "", 0
 	b, _ := json.Marshal(synced)
 	if err := a.db.SetSetting(sharedProxyKey, string(b)); err != nil {
+		// Not saved after all: this machine's listen setting goes back to
+		// what it was, so the next start does not bring this one up.
+		if hadListen {
+			_ = localStateStore.set(sharedProxyListenKey, prevListen)
+		} else {
+			_ = localStateStore.delete(sharedProxyListenKey)
+		}
 		stopSharedProxy()
 		return err
 	}
