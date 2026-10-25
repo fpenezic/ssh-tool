@@ -46,6 +46,8 @@ import (
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
+
+	"ssh-tool/internal/creds"
 )
 
 // CIRunnerConfig is the app setting ciRunnerKey.
@@ -892,7 +894,7 @@ func (a *App) ciRunnerStopOnLock() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			ids, err := docker(ctx, nil, "ps", "-aq", "--filter", "label="+ciLabel)
 			cancel()
-			if err == nil && ids == "" {
+			if (err == nil && ids == "") || errors.Is(err, errDockerMissing) {
 				return
 			}
 		}
@@ -900,6 +902,11 @@ func (a *App) ciRunnerStopOnLock() {
 		for attempt := 0; attempt < 3; attempt++ {
 			if attempt > 0 {
 				time.Sleep(5 * time.Second)
+				// Unlocked again meanwhile: the runner (maybe started anew
+				// by the unlock) stays.
+				if a.vault.Status().Kind == creds.StatusUnlocked {
+					return
+				}
 			}
 			if _, err = a.CIRunnerStop(); err == nil {
 				log.Printf("ci runner: stopped, the vault locked")
@@ -1333,6 +1340,8 @@ func ciRemoveAll() error {
 	return nil
 }
 
+var errDockerMissing = errors.New("docker is not installed (or not on PATH)")
+
 // dockerBin finds the docker CLI. An app started from the macOS Finder or
 // a Linux desktop menu gets a short PATH without /usr/local/bin or
 // Homebrew, so the usual install places are tried after PATH.
@@ -1397,7 +1406,7 @@ func dockerEnv(ctx context.Context, stdin *bytes.Reader, env []string, args ...s
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
-			return "", errors.New("docker is not installed (or not on PATH)")
+			return "", errDockerMissing
 		}
 		msg := strings.TrimSpace(errb.String())
 		if msg == "" {
