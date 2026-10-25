@@ -869,18 +869,44 @@ func (a *App) ciRunnerStopOnLock() {
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		gw, _, _ := ciContainer(ctx, ciGatewayName)
-		rn, _, _ := ciContainer(ctx, ciRunnerName)
-		cancel()
-		if gw == "" && rn == "" {
-			return
+		// A start in flight (an auto start, say) is aborted and waited for,
+		// as at quit, so it cannot bring the runner up after the lock.
+		ciState.Lock()
+		started, busy, done, cancel := ciState.started, ciState.busy, ciState.done, ciState.cancel
+		ciState.Unlock()
+		if busy {
+			if cancel != nil {
+				cancel()
+			}
+			if done != nil {
+				select {
+				case <-done:
+				case <-time.After(15 * time.Second):
+				}
+			}
+			started = true
 		}
-		if _, err := a.CIRunnerStop(); err != nil {
-			log.Printf("ci runner: stop on vault lock: %v", err)
-			return
+		if !started {
+			// Not started by this process: only what carries our label,
+			// and an unknown state (docker not answering) counts as there.
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ids, err := docker(ctx, nil, "ps", "-aq", "--filter", "label="+ciLabel)
+			cancel()
+			if err == nil && ids == "" {
+				return
+			}
 		}
-		log.Printf("ci runner: stopped, the vault locked")
+		var err error
+		for attempt := 0; attempt < 3; attempt++ {
+			if attempt > 0 {
+				time.Sleep(5 * time.Second)
+			}
+			if _, err = a.CIRunnerStop(); err == nil {
+				log.Printf("ci runner: stopped, the vault locked")
+				return
+			}
+		}
+		log.Printf("ci runner: stop on vault lock: %v", err)
 	}()
 }
 
