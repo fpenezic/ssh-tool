@@ -4196,7 +4196,11 @@
     </p>
     {#if st}
       {#if !st.docker}
-        <p class="hint warn-note">Docker is not reachable: {st.docker_err || "not installed"}. Install Docker Desktop (Windows, macOS) or Docker Engine and start it.</p>
+        <p class="hint warn-note" title={st.docker_err || ""}>
+          Docker is not running, or not installed. Start Docker Desktop (Windows,
+          macOS) or Docker Engine (Linux), then
+          <button type="button" class="link-btn" onclick={() => ciLoad(false)}>check again</button>.
+        </p>
       {:else}
         <p class="hint inline">Docker {st.docker}{st.desktop ? " (Docker Desktop)" : ""}.
           {#if !sp.enabled}<strong>Turn the App proxy on first</strong> (Plugins &amp; proxy).{:else if spDetails && Object.keys(spDetails.profiles).length}Through it: {Object.entries(spDetails.profiles).map(([n, c]) => `${n} (${c})`).join(", ")}.{:else}No VPN is marked via proxy yet.{/if}
