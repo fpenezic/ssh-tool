@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/netip"
 	"sort"
 	"strings"
 	"sync"
@@ -121,6 +122,66 @@ func (a *App) bastionRoutes() []sharedRoute {
 		}
 	}
 	return routes
+}
+
+// bastionJumpRoutes routes the connections of the tree that jump through
+// a bastion (their last hop is that connection, or the same host and
+// port typed by hand) to it: an address becomes a pinned /32, a name goes
+// to the names map, where a SOCKS client that sends names (socks5h) has
+// it resolved on the bastion. It wins over the same connection's network
+// profile: the bastion is the hop the connection is opened from.
+func (a *App) bastionJumpRoutes(conns []store.Connection, folders []store.Folder) ([]sharedRoute, map[string]string) {
+	type hostPort struct {
+		host string
+		port uint16
+	}
+	byID := map[string]string{}     // bastion connection id -> route id
+	byAddr := map[hostPort]string{} // bastion host:port -> route id
+	names := map[string]string{}    // route id -> display name
+	for _, b := range a.sharedProxyConfig().Bastions {
+		for _, c := range conns {
+			if c.ID != b.ConnectionID {
+				continue
+			}
+			rs := resolver.ResolveWith(c, folders)
+			id := bastionRouteID(c.ID)
+			byID[c.ID] = id
+			byAddr[hostPort{strings.ToLower(rs.Hostname), rs.Port}] = id
+			names[id] = c.Name + " (bastion)"
+		}
+	}
+	if len(byID) == 0 {
+		return nil, nil
+	}
+	var routes []sharedRoute
+	hosts := map[string]string{}
+	for _, c := range conns {
+		rs := resolver.ResolveWith(c, folders)
+		j := rs.JumpHost
+		if j == nil || rs.Hostname == "" {
+			continue
+		}
+		id := ""
+		if j.ConnectionID != nil {
+			id = byID[*j.ConnectionID]
+		}
+		if id == "" {
+			port := uint16(22)
+			if j.Port != nil {
+				port = *j.Port
+			}
+			id = byAddr[hostPort{strings.ToLower(j.Hostname), port}]
+		}
+		if id == "" {
+			continue
+		}
+		if ip, err := netip.ParseAddr(rs.Hostname); err == nil {
+			routes = append(routes, sharedRoute{netip.PrefixFrom(ip, ip.BitLen()), id, names[id], true})
+		} else {
+			hosts[strings.ToLower(rs.Hostname)] = id
+		}
+	}
+	return routes, hosts
 }
 
 // bastionDialers holds one SSH session per bastion while the proxy uses

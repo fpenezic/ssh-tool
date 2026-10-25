@@ -4921,7 +4921,8 @@
                 credentials (jump hosts and network profile included) and
                 opens each connection from there. The client never sees a key
                 or a password. The bastion must allow TCP forwarding. Its
-                networks always go through it.
+                networks always go through it, and so do the connections in
+                the tree that use it as their jump host.
               </p>
               {#each sp.bastions as b (b.connection_id)}
                 <div class="np-bastion-row">

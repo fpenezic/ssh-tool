@@ -258,6 +258,14 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 		}
 	}
 	routes = append(routes, a.bastionRoutes()...)
+	if conns, err := a.db.ListConnections(nil); err == nil {
+		folders, _ := a.db.ListFolders()
+		jr, jh := a.bastionJumpRoutes(conns, folders)
+		routes = append(routes, jr...)
+		for name, id := range jh {
+			hosts[name] = id
+		}
+	}
 	sharedTable.at, sharedTable.routes, sharedTable.hosts = time.Now(), routes, hosts
 	return routes, hosts
 }
@@ -348,6 +356,13 @@ func (a *App) mostSpecific(rs []sharedRoute, rank map[string]int) sharedRoute {
 	}
 	if len(pick) > 1 {
 		sort.SliceStable(pick, func(i, j int) bool {
+			// A bastion before a profile with the same route: a connection
+			// that jumps through a bastion is opened from there, even when
+			// it also has a network profile (which reaches the bastion).
+			bi, bj := bastionOf(pick[i].profileID) != "", bastionOf(pick[j].profileID) != ""
+			if bi != bj {
+				return bi
+			}
 			ri, iok := rank[pick[i].profileID]
 			rj, jok := rank[pick[j].profileID]
 			if iok != jok {
