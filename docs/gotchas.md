@@ -2144,9 +2144,10 @@ everything mobile is behind a build tag or an `isMobile` check.
    the mirror's machine-local list), vault keys carry the machine id
    (`ci_runner:<machine>:token:<runner id>`), and each `[[runners]]` block
    carries `ssh_tool_key` (taken out of the config the runner gets). Keys
-   by index or without a machine id are from earlier versions: copied,
-   never deleted, and only to the same runner at the same place (same
-   url and name). Every vault write of a save goes through
+   by index or without a machine id are from earlier versions. Keys
+   without a machine id are copied and kept (another machine may still
+   own them); index keys go only to the same runner at the same place
+   (same url and name) and are deleted once that save is through. Every vault write of a save goes through
    `ciVaultJournal`, rolled back when the save fails; `CIRunnerSet` is
    serialized.
 

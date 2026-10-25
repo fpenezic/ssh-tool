@@ -496,7 +496,12 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (_ CIRunnerConfig, err
 		if id, _ := p[ciIDField].(string); id != "" {
 			return false
 		}
-		return p["url"] == r["url"] && p["name"] == r["name"]
+		// Asserted, not compared as any: an array-valued field would panic.
+		pu, ok1 := p["url"].(string)
+		pn, ok2 := p["name"].(string)
+		ru, ok3 := r["url"].(string)
+		rn, ok4 := r["name"].(string)
+		return ok1 && ok2 && ok3 && ok4 && pu == ru && pn == rn
 	}
 	var tokens map[string]string
 	// legacy: index keys copied to runner ids; removed: tokens emptied in
