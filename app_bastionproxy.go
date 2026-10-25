@@ -13,6 +13,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -26,6 +27,7 @@ import (
 
 	"ssh-tool/internal/resolver"
 	"ssh-tool/internal/sshchan"
+	"ssh-tool/internal/store"
 )
 
 // ProxyBastion is one bastion of the app proxy.
@@ -65,7 +67,13 @@ func (a *App) normalizeBastions(in []ProxyBastion) ([]ProxyBastion, error) {
 			continue
 		}
 		conn, err := a.db.GetConnection(b.ConnectionID)
-		if err != nil || conn == nil {
+		missing := conn == nil || errors.Is(err, sql.ErrNoRows) || errors.Is(err, store.ErrNotFound)
+		if err != nil && !missing {
+			// A lookup that failed is not a deleted connection: keep the
+			// setting as it is.
+			return nil, fmt.Errorf("bastion: %w", err)
+		}
+		if missing {
 			if saved[b.ConnectionID] {
 				continue
 			}
@@ -253,6 +261,11 @@ func (a *App) BastionSessions() []BastionSession {
 	}
 	var es []entry
 	for id, d := range bastionDialers.m {
+		// A dial that never got a session (connect failed) is not an
+		// open session; it is dropped with its idle timer.
+		if state, _ := d.lazy.State(); d.conns == 0 && state != sshchan.TransportConnected {
+			continue
+		}
 		es = append(es, entry{id, d.conns, d.lazy})
 	}
 	bastionDialers.Unlock()
