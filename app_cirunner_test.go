@@ -214,3 +214,15 @@ func TestCIQuitWaitsAndBlocksStarts(t *testing.T) {
 	ciState.closing, ciState.started = false, false
 	ciState.Unlock()
 }
+
+func TestCISubnets(t *testing.T) {
+	sn := ciSubnets()
+	if len(sn) != 512 || sn[0].String() != "172.31.255.0/24" || sn[511].String() != "172.30.0.0/24" {
+		t.Fatalf("got %d, first %v, last %v", len(sn), sn[0], sn[len(sn)-1])
+	}
+	for _, p := range sn {
+		if !ciSubnetPool.Contains(p.Addr()) || p.Bits() != 24 {
+			t.Fatalf("%v outside the pool", p)
+		}
+	}
+}
