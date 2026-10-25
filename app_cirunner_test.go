@@ -578,3 +578,33 @@ func TestCIRunnerFailedSaveRollsBackSecrets(t *testing.T) {
 		t.Errorf("cache secret after the failed save = %q", sk)
 	}
 }
+
+// Index-keyed secrets go only to the same runner at the same place: a
+// reordered pre-id config does not hand one runner another's token.
+func TestCIRunnerLegacyReorderDoesNotInherit(t *testing.T) {
+	a := newDbTestApp(t)
+	two := strings.Replace(ciTestTOML, `token = "glrt-secret-one"`, "", 1) + `
+[[runners]]
+  name = "second"
+  url = "https://gitlab.example.com"
+  executor = "docker"
+`
+	if err := a.vault.Put(ciTokenKey("0"), "glrt-first"); err != nil {
+		t.Fatal(err)
+	}
+	if err := localStateStore.set(ciRunnerKey, mustJSON(CIRunnerConfig{ConfigTOML: two})); err != nil {
+		t.Fatal(err)
+	}
+	m, _ := ciParseTOML(two)
+	rs := m["runners"].([]any)
+	m["runners"] = []any{rs[1], rs[0]}
+	swapped, _ := toml.Marshal(m)
+	if _, err := a.CIRunnerSet(CIRunnerConfig{ConfigTOML: string(swapped)}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if has, _ := a.ciVaultHas(ciTokenKey(ciStoredID(t, a, 0))); has {
+		t.Error("the moved second runner inherited the first runner's token")
+	}
+}
+
+func mustJSON(v any) string { b, _ := json.Marshal(v); return string(b) }

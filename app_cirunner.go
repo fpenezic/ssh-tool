@@ -479,7 +479,25 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (_ CIRunnerConfig, err
 	// Index keys are taken over only from an imported config stored
 	// before ids: a form-mode token ("0") is another runner, maybe on
 	// another GitLab, and stays out of a newly imported one.
-	prevImported := a.ciRunnerConfig().ConfigTOML != ""
+	// Within it, only the same runner at the same place (no id yet, same
+	// url and name) inherits: a block moved, replaced or added would get
+	// another runner's secrets.
+	var prevRunners []map[string]any
+	if prev := a.ciRunnerConfig().ConfigTOML; prev != "" {
+		if pm, perr := ciParseTOML(prev); perr == nil {
+			prevRunners = ciRunners(pm)
+		}
+	}
+	sameLegacyRunner := func(i int, r map[string]any) bool {
+		if i >= len(prevRunners) {
+			return false
+		}
+		p := prevRunners[i]
+		if id, _ := p[ciIDField].(string); id != "" {
+			return false
+		}
+		return p["url"] == r["url"] && p["name"] == r["name"]
+	}
 	var tokens map[string]string
 	// legacy: index keys copied to runner ids; removed: tokens emptied in
 	// the form. Both are deleted from the vault after the save.
@@ -510,7 +528,7 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (_ CIRunnerConfig, err
 				if id, err = ciNewID(); err != nil {
 					return c, err
 				}
-				if _, had := r[ciIDField]; !had && prevImported {
+				if _, had := r[ciIDField]; !had && sameLegacyRunner(i, r) {
 					// First save with ids: take over what the index held,
 					// and let the old keys go once the save is through.
 					copied, err := a.ciCopySecrets(j, strconv.Itoa(i), id)
