@@ -2432,7 +2432,9 @@
           const d = r.config.enabled ? await api.networkSharedProxyDetails() : null;
           if (spPending === 1) {
             const saved = spBastionsOf(r.config.bastions);
-            const unsaved = sp.bastions.filter((b) => !b.networksText.trim() && !saved.some((x) => x.connection_id === b.connection_id));
+            // Rows the backend does not have yet (added, maybe being typed
+            // into while this save ran) stay as they are.
+            const unsaved = sp.bastions.filter((b) => !saved.some((x) => x.connection_id === b.connection_id));
             sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], bastions: [...saved, ...unsaved], listening: r.listening };
             spDetails = d;
           }
