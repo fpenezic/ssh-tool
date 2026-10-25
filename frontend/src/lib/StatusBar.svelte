@@ -730,7 +730,7 @@
   {#if bastionSessions.length > 0}
     <span class="seg vpn" title={bastionTitle}>
       <IconBastion size={11} />
-      <span>{bastionSessions.length === 1 ? bastionSessions[0].label : bastionSessions.length}</span>
+      <span class="seg-clip">{bastionSessions.length === 1 ? bastionSessions[0].label : bastionSessions.length}</span>
     </span>
   {/if}
 
@@ -1076,6 +1076,8 @@
   .seg.has-error { color: var(--yellow); }
   .seg.bcast { color: var(--peach); }
   .seg.vpn { color: var(--mauve, #b675f0); }
+  /* A long jump chain is cut; the tooltip has it whole. */
+  .seg-clip { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Server-status readout: a group of small icon+number stats for the
      focused session, muted so it reads as ambient info. */
   .seg.stats { gap: 0.55rem; color: var(--subtext0); }

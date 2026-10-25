@@ -440,8 +440,9 @@ func TestCIRunnerIsMachineLocal(t *testing.T) {
 	if tok, _, _ := a.vault.Get(ciTokenKey("0")); tok != "glrt-legacy" {
 		t.Fatalf("adopted token = %q", tok)
 	}
-	if _, ok, _ := a.vault.Get("ci_runner:token:0"); ok {
-		t.Error("legacy key left behind")
+	// The old key stays for a machine that still reads it.
+	if _, ok, _ := a.vault.Get("ci_runner:token:0"); !ok {
+		t.Error("legacy key deleted")
 	}
 }
 

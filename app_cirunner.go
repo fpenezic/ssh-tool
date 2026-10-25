@@ -142,9 +142,11 @@ func ciVaultPrefix() string {
 	return "ci_runner:" + ciMachine.id + ":"
 }
 
-// ciAdoptLegacyVaultKeys moves the runner secrets stored before the keys
+// ciAdoptLegacyVaultKeys copies the runner secrets stored before the keys
 // carried a machine id ("ci_runner:token:<id>", "ci_runner:secret:...")
-// to this machine's keys, for the runners in this machine's config.
+// to this machine's keys, for the runners in this machine's config. The
+// old keys stay: the vault is synced, and another machine that pulled the
+// same old setting must not take them away from the runner's own machine.
 func (a *App) ciAdoptLegacyVaultKeys() {
 	c := a.ciRunnerConfig()
 	ids := []string{"0"}
@@ -173,13 +175,12 @@ func (a *App) ciAdoptLegacyVaultKeys() {
 				continue
 			}
 			if a.vault.Put(p[1], v) == nil {
-				_ = a.vault.Delete(p[0])
 				moved++
 			}
 		}
 	}
 	if moved > 0 {
-		log.Printf("ci runner: %d secrets moved to this machine's vault keys", moved)
+		log.Printf("ci runner: %d secrets copied to this machine's vault keys", moved)
 	}
 }
 

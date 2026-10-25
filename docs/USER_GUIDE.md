@@ -2640,8 +2640,9 @@ lists each with how many users it has, or that it is idle and closing.
 GitLab runner in Docker whose jobs reach your customers through the app
 proxy - several customers at once, each address through the VPN whose
 networks contain it or the jump host of the connection it belongs to - without touching `.gitlab-ci.yml`. It needs Docker
-(Docker Desktop on Windows and macOS) and the app proxy turned on with at
-least one profile marked **Reachable through the app proxy**.
+(Docker Desktop on Windows and macOS) and the app proxy turned on, with
+at least one profile marked **Reachable through the app proxy** or a
+connection with a jump host.
 
 Either **Set up here** (GitLab URL, the runner token from GitLab's *New
 runner* page, a job image) or **Import config.toml** - your existing
