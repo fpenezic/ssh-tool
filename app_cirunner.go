@@ -96,6 +96,81 @@ const (
 
 func ciTokenKey(i int) string { return "ci_runner:token:" + strconv.Itoa(i) }
 
+// ciInVault stands in a stored config.toml for a secret kept in the vault:
+// left as is it keeps the vault's value, replaced it saves the new one,
+// emptied it deletes it.
+const ciInVault = "(saved in the vault)"
+
+// ciCacheSecrets are the secret fields of [runners.cache.<section>]; they
+// go to the vault like the token.
+var ciCacheSecrets = map[string][]string{
+	"s3":    {"AccessKey", "SecretKey", "SessionToken"},
+	"gcs":   {"PrivateKey"},
+	"azure": {"AccountKey"},
+}
+
+func ciSecretKey(i int, section, name string) string {
+	return "ci_runner:secret:" + strconv.Itoa(i) + ":" + section + "." + name
+}
+
+func (a *App) ciVaultHas(key string) bool {
+	v, ok, err := a.vault.Get(key)
+	return err == nil && ok && v != ""
+}
+
+// ciStashCacheSecrets moves runner i's cache secrets to the vault and
+// leaves the marker in their place.
+func (a *App) ciStashCacheSecrets(i int, r map[string]any) error {
+	cache, _ := r["cache"].(map[string]any)
+	for section, names := range ciCacheSecrets {
+		sec, _ := cache[section].(map[string]any)
+		for _, name := range names {
+			key := ciSecretKey(i, section, name)
+			v, _ := sec[name].(string)
+			switch v = strings.TrimSpace(v); v {
+			case ciInVault:
+				if !a.ciVaultHas(key) {
+					sec[name] = ""
+				}
+			case "":
+				if a.ciVaultHas(key) {
+					if err := a.vault.Delete(key); err != nil {
+						return fmt.Errorf("runner cache secret: %w", err)
+					}
+				}
+			default:
+				if err := a.vault.Put(key, v); err != nil {
+					return fmt.Errorf("runner cache secret: %w", err)
+				}
+				sec[name] = ciInVault
+			}
+		}
+	}
+	return nil
+}
+
+// ciFillCacheSecrets puts runner i's cache secrets back from the vault.
+func (a *App) ciFillCacheSecrets(i int, r map[string]any) error {
+	cache, _ := r["cache"].(map[string]any)
+	for section, names := range ciCacheSecrets {
+		sec, _ := cache[section].(map[string]any)
+		for _, name := range names {
+			if v, _ := sec[name].(string); v != ciInVault {
+				continue
+			}
+			v, ok, err := a.vault.Get(ciSecretKey(i, section, name))
+			if err != nil {
+				return fmt.Errorf("runner cache secret: %w", err)
+			}
+			if !ok {
+				v = ""
+			}
+			sec[name] = v
+		}
+	}
+	return nil
+}
+
 var ciState struct {
 	sync.Mutex
 	busy      bool
@@ -197,10 +272,21 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (CIRunnerConfig, error
 		}
 		tokens = map[int]string{}
 		for i, r := range rs {
-			if t, _ := r["token"].(string); strings.TrimSpace(t) != "" {
-				tokens[i] = strings.TrimSpace(t)
+			t, _ := r["token"].(string)
+			switch t = strings.TrimSpace(t); {
+			case t != "" && t != ciInVault:
+				tokens[i] = t
+				r["token"] = ciInVault
+			case a.ciVaultHas(ciTokenKey(i)):
+				// The marker, or no token in an older import: the vault
+				// keeps it.
+				r["token"] = ciInVault
+			default:
+				delete(r, "token")
 			}
-			delete(r, "token")
+			if err := a.ciStashCacheSecrets(i, r); err != nil {
+				return c, err
+			}
 		}
 		b, err := toml.Marshal(m)
 		if err != nil {
@@ -589,6 +675,7 @@ func ciApplyRoutes(ctx context.Context, add, del []string) ([]string, error) {
 // app and is not up yet. Called once the vault opens: the tokens and
 // the proxy password live there.
 func (a *App) ciRunnerAutoStart() {
+	a.ciStashStoredSecrets()
 	c := a.ciRunnerConfig()
 	if !c.AutoStart {
 		return
@@ -605,6 +692,40 @@ func (a *App) ciRunnerAutoStart() {
 			log.Printf("ci runner: auto start: %v", err)
 		}
 	}()
+}
+
+// ciStashStoredSecrets moves cache secrets an earlier version left in the
+// stored config.toml into the vault (once the vault is open), the way a
+// save does now.
+func (a *App) ciStashStoredSecrets() {
+	c := a.ciRunnerConfig()
+	if c.ConfigTOML == "" {
+		return
+	}
+	m, err := ciParseTOML(c.ConfigTOML)
+	if err != nil {
+		return
+	}
+	plain := false
+	for _, r := range ciRunners(m) {
+		cache, _ := r["cache"].(map[string]any)
+		for section, names := range ciCacheSecrets {
+			sec, _ := cache[section].(map[string]any)
+			for _, name := range names {
+				if v, _ := sec[name].(string); strings.TrimSpace(v) != "" && v != ciInVault {
+					plain = true
+				}
+			}
+		}
+	}
+	if !plain {
+		return
+	}
+	if _, err := a.CIRunnerSet(c, ""); err != nil {
+		log.Printf("ci runner: moving cache secrets to the vault: %v", err)
+		return
+	}
+	log.Printf("ci runner: cache secrets moved from the settings to the vault")
 }
 
 // ciRunnerStopOnQuit removes the containers this process started: with
@@ -725,6 +846,9 @@ func (a *App) ciBuildTOML(c CIRunnerConfig) (text string, autoDirect []string, e
 			return "", nil, fmt.Errorf("runner %s has no token", label)
 		}
 		r["token"] = t
+		if err := a.ciFillCacheSecrets(i, r); err != nil {
+			return "", nil, err
+		}
 		if u, _ := r["url"].(string); u != "" {
 			if pu, err := url.Parse(u); err == nil && pu.Hostname() != "" {
 				autoDirect = append(autoDirect, pu.Hostname())
