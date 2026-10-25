@@ -2674,8 +2674,10 @@ Stop and Start.
 **Extra hosts** (`name:ip`) are names the jobs must resolve that only the
 customer's DNS knows - a job resolves names with your normal DNS.
 **Stop**, or quitting ssh-tool, removes all three: without the app there
-is no proxy. **Start with the app** starts it again once the vault is
-open. **Logs** shows the runner's log.
+is no proxy. **Stop when the vault locks** (on by default) does the same
+when the vault locks, by hand or by the idle auto-lock: a running runner
+holds its tokens and cache keys in its container. **Start with the app**
+starts it again once the vault is open. **Logs** shows the runner's log.
 
 Notes:
 

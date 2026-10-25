@@ -861,6 +861,16 @@ export class CIRunnerConfig {
              */
             this["auto_start"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * KeepOnLock leaves the runner running when the vault locks. Off by
+             * default: a running runner holds its tokens and cache keys in its
+             * container, which a locked vault should not leave out.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["keep_on_lock"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

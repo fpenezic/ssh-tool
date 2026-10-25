@@ -2472,8 +2472,8 @@
   // CI runner (app_cirunner.go): a GitLab runner in Docker whose jobs
   // reach the VPNs through the app proxy's gateway.
   let ci = $state<{ config: CIRunnerConfig; status: CIRunnerStatus } | null>(null);
-  type CiForm = { mode: "form" | "import"; url: string; name: string; image: string; token: string; toml: string; hostsText: string; directText: string; autoStart: boolean };
-  let ciForm = $state<CiForm>({ mode: "form", url: "", name: "", image: "", token: "", toml: "", hostsText: "", directText: "", autoStart: false });
+  type CiForm = { mode: "form" | "import"; url: string; name: string; image: string; token: string; toml: string; hostsText: string; directText: string; autoStart: boolean; stopOnLock: boolean };
+  let ciForm = $state<CiForm>({ mode: "form", url: "", name: "", image: "", token: "", toml: "", hostsText: "", directText: "", autoStart: false, stopOnLock: true });
   let ciBusy = $state<"" | "start" | "stop">("");
   let ciLogs = $state<string | null>(null);
   async function ciLoad(fill = !ci) {
@@ -2483,7 +2483,7 @@
         const c = ci.config;
         ciForm = {
           mode: c.config_toml ? "import" : "form", url: c.url ?? "", name: c.name ?? "", image: c.image ?? "", token: "",
-          toml: c.config_toml ?? "", hostsText: (c.extra_hosts ?? []).join("\n"), directText: (c.direct ?? []).join("\n"), autoStart: !!c.auto_start,
+          toml: c.config_toml ?? "", hostsText: (c.extra_hosts ?? []).join("\n"), directText: (c.direct ?? []).join("\n"), autoStart: !!c.auto_start, stopOnLock: !c.keep_on_lock,
         };
       }
     } catch (e: any) { toast.err(errMsg(e)); }
@@ -2495,7 +2495,7 @@
       await api.ciRunnerSet({
         url: f.mode === "form" ? f.url.trim() : "", name: f.name.trim(), image: f.image.trim(),
         config_toml: f.mode === "import" ? f.toml : "",
-        extra_hosts: lines(f.hostsText), direct: lines(f.directText), auto_start: f.autoStart,
+        extra_hosts: lines(f.hostsText), direct: lines(f.directText), auto_start: f.autoStart, keep_on_lock: !f.stopOnLock,
       }, f.mode === "form" ? f.token.trim() : "");
       await ciLoad(true);
       if (!quiet) toast.ok("CI runner saved");
@@ -4258,6 +4258,9 @@
     </div>
     <div class="row" style="gap:0.5rem; align-items:center; margin-top:0.5rem">
       <label class="oc-choice"><input type="checkbox" bind:checked={ciForm.autoStart} /> Start with the app (once the vault is open)</label>
+      <label class="oc-choice" title="A running runner holds its tokens and cache keys in its container. Off keeps it running while the vault is locked (and through an idle auto-lock).">
+        <input type="checkbox" bind:checked={ciForm.stopOnLock} /> Stop when the vault locks
+      </label>
       <span class="np-spacer"></span>
       <button onclick={() => ciSave()}>Save</button>
     </div>
