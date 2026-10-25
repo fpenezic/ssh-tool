@@ -2615,28 +2615,30 @@ The summary names each overlap and which profile wins it, and **Which VPN
 for...** answers for one address or name, with the reason ("pinned to
 it", "priority 1", "most specific network").
 
-**Through a bastion** (under the app proxy) adds networks that are not
-behind a VPN but behind an SSH host: pick a connection from the tree and
-list the networks behind it (`10.20.0.0/16, 10.30.1.5`). An address in
-them is opened from that host, like `ssh -J`: the app connects to it with
-the connection's own credentials, jump hosts and network profile, so a
-bastion behind a VPN or behind another jump host works, and the client
-(a CI job, `curl`) never sees a key or a password. One SSH session per
-bastion carries every connection and closes after 2 minutes unused. The
-bastion must allow TCP forwarding (`AllowTcpForwarding`); the first
-connect asks for its host key and, without a saved password or key, for a
-login, in the app, while the client waits. A bastion's networks are set
-by hand, so they always go through it, as a pinned address does.
-Connections in the tree whose jump host is the bastion (picked from the
-tree, or the same host and port typed) go through it without being
-listed: an address is pinned to it, and a name is sent to the bastion to
-resolve when the client passes names (`socks5h://`; a CI job resolves
-names itself, so it needs **Extra hosts** for them). Such a connection
-goes through the bastion even when it also has a network profile, which
-only takes it to the bastion. Only TCP
-goes through. While a bastion session is open the status bar shows it (its name, or
-how many); the tooltip says how many connections each carries, or that
-it is idle and closes soon.
+**Connections with a jump host** (under the app proxy, on by default):
+a connection in the tree that has a jump host - set on it or on a
+folder, a connection from the tree or a host typed - is reached through
+the app proxy the way its terminal connects. Its network profile comes
+up as its mode says (a bastion behind a VPN works), the jump chain is
+walked through the shared bastion pool, and the address is opened from
+the last hop. The client (a CI job, `curl`) never sees a key or a
+password. An address is pinned to that path, even when the connection
+also has a network profile (the profile only reaches the first hop); a
+name is sent to the last hop to resolve when the client passes names
+(`socks5h://`), while a CI job resolves names itself and needs **Extra
+hosts** for them. The first connect may ask for a host key or a login in
+the app while the client waits.
+
+**Networks behind a bastion** adds whole networks behind an SSH host,
+beyond the connections in the tree: pick the host's connection and list
+the networks (`10.20.0.0/16, 10.30.1.5`). An address in them is opened
+from that host, like `ssh -J`, with the connection's own credentials,
+jump hosts and network profile. One SSH session per bastion carries
+every connection and closes after 2 minutes unused; while it is open the
+status bar shows it (its name, or how many), the tooltip how many
+connections each carries or that it is idle. The bastion must allow TCP
+forwarding (`AllowTcpForwarding`). Its networks are set by hand, so they
+always go through it, as a pinned address does. Only TCP goes through.
 
 ### CI runner (GitLab jobs through the VPNs)
 
