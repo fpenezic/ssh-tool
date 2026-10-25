@@ -882,6 +882,16 @@ func ciApplyRoutes(ctx context.Context, add, del []string) ([]string, error) {
 // app and is not up yet. Called once the vault opens: the tokens and
 // the proxy password live there.
 func (a *App) ciRunnerAutoStart() {
+	// A setting from before the split still lives in the synced store:
+	// it becomes this machine's now, and the store row goes, so it stops
+	// travelling to machines that pull the profile later.
+	if _, ok := localStateStore.get(ciRunnerKey); !ok {
+		if v, ok, _ := a.db.GetSetting(ciRunnerKey); ok {
+			if err := a.localSettingSet(ciRunnerKey, v); err != nil {
+				log.Printf("ci runner: moving the setting to this machine: %v", err)
+			}
+		}
+	}
 	a.ciAdoptLegacyVaultKeys()
 	a.ciStashStoredSecrets()
 	c := a.ciRunnerConfig()

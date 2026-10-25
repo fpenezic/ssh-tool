@@ -477,3 +477,19 @@ func freePort(t *testing.T) int {
 	defer l.Close()
 	return l.Addr().(*net.TCPAddr).Port
 }
+
+// A runner setting still in the synced store moves to this machine at
+// unlock, and the store row goes.
+func TestCIRunnerSettingMovesOutOfTheStore(t *testing.T) {
+	a := newDbTestApp(t)
+	if err := a.db.SetSetting(ciRunnerKey, `{"url":"https://gitlab.example.com"}`); err != nil {
+		t.Fatal(err)
+	}
+	a.ciRunnerAutoStart()
+	if _, ok, _ := a.db.GetSetting(ciRunnerKey); ok {
+		t.Error("store row still there")
+	}
+	if c := a.ciRunnerConfig(); c.URL != "https://gitlab.example.com" {
+		t.Errorf("config = %+v", c)
+	}
+}
