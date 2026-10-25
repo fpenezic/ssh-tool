@@ -191,6 +191,17 @@ func ciRunnerID(r map[string]any, i int) string {
 	return strconv.Itoa(i)
 }
 
+// ciOptString is an optional string field: absent is "", a value of any
+// other type is not ok (compared as any, an array would panic).
+func ciOptString(r map[string]any, k string) (string, bool) {
+	v, present := r[k]
+	if !present {
+		return "", true
+	}
+	s, ok := v.(string)
+	return s, ok
+}
+
 func ciNewID() (string, error) {
 	b := make([]byte, 8)
 	if _, err := rand.Read(b); err != nil {
@@ -496,12 +507,14 @@ func (a *App) CIRunnerSet(c CIRunnerConfig, token string) (_ CIRunnerConfig, err
 		if id, _ := p[ciIDField].(string); id != "" {
 			return false
 		}
-		// Asserted, not compared as any: an array-valued field would panic.
-		pu, ok1 := p["url"].(string)
-		pn, ok2 := p["name"].(string)
-		ru, ok3 := r["url"].(string)
-		rn, ok4 := r["name"].(string)
-		return ok1 && ok2 && ok3 && ok4 && pu == ru && pn == rn
+		for _, f := range []string{"url", "name"} {
+			pv, ok1 := ciOptString(p, f)
+			rv, ok2 := ciOptString(r, f)
+			if !ok1 || !ok2 || pv != rv {
+				return false
+			}
+		}
+		return true
 	}
 	var tokens map[string]string
 	// legacy: index keys copied to runner ids; removed: tokens emptied in
