@@ -4235,9 +4235,11 @@
     {:else}
       <p class="hint">
         Your existing runner's config.toml: cache, image, volumes, extra_hosts
-        and the rest are used as written. Tokens move to the vault; the app
-        puts the jobs on its own network (network_mode). Only the docker
-        executor is supported.
+        and the rest are used as written. Tokens and cache keys (S3, GCS,
+        Azure) move to the vault and read <code>(saved in the vault)</code>
+        here: leave that to keep one, type a new value to replace it, empty
+        it to remove it. The app puts the jobs on its own network
+        (network_mode). Only the docker executor is supported.
         {#if st && ciForm.toml}{st.runners} {st.runners === 1 ? "runner" : "runners"}, {st.tokens} {st.tokens === 1 ? "token" : "tokens"} in the vault.{/if}
       </p>
       <input type="file" accept=".toml,text/plain" onchange={ciPickFile} />

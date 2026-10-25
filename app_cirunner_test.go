@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/netip"
 	"strings"
 	"testing"
@@ -20,6 +21,8 @@ check_interval = 0
     Type = "s3"
     [runners.cache.s3]
       ServerAddress = "192.0.2.20:9000"
+      AccessKey = "cache-access-one"
+      SecretKey = "cache-secret-one"
   [runners.docker]
     image = "alpine:3.22"
     volumes = ["/cache"]
@@ -44,6 +47,14 @@ func TestCIRunnerImportAndBuild(t *testing.T) {
 	if tok, ok, _ := a.vault.Get(ciTokenKey(0)); !ok || tok != "glrt-secret-one" {
 		t.Fatalf("vault token = %q, %v", tok, ok)
 	}
+	for _, secret := range []string{"cache-access-one", "cache-secret-one"} {
+		if strings.Contains(c.ConfigTOML, secret) {
+			t.Fatalf("cache secret %q left in the stored config", secret)
+		}
+	}
+	if !strings.Contains(c.ConfigTOML, ciInVault) {
+		t.Fatalf("no vault marker in the stored config:\n%s", c.ConfigTOML)
+	}
 
 	text, direct, err := a.ciBuildTOML(a.ciRunnerConfig())
 	if err != nil {
@@ -56,6 +67,10 @@ func TestCIRunnerImportAndBuild(t *testing.T) {
 	r := ciRunners(m)[0]
 	if r["token"] != "glrt-secret-one" {
 		t.Fatalf("built token = %v", r["token"])
+	}
+	s3 := r["cache"].(map[string]any)["s3"].(map[string]any)
+	if s3["AccessKey"] != "cache-access-one" || s3["SecretKey"] != "cache-secret-one" {
+		t.Fatalf("built cache secrets = %v / %v", s3["AccessKey"], s3["SecretKey"])
 	}
 	d := r["docker"].(map[string]any)
 	if d["network_mode"] != ciNetworkName {
@@ -233,5 +248,45 @@ func TestCIRouteDiff(t *testing.T) {
 	add, del := ciRouteDiff(have, want)
 	if strings.Join(add, ",") != "10.239.248.54/32" || strings.Join(del, ",") != "192.0.2.0/24" {
 		t.Fatalf("add %v del %v", add, del)
+	}
+}
+
+// Emptying a cache secret in the stored config deletes it from the vault;
+// the marker keeps it.
+func TestCICacheSecretEmptied(t *testing.T) {
+	a := newDbTestApp(t)
+	if _, err := a.CIRunnerSet(CIRunnerConfig{ConfigTOML: ciTestTOML}, ""); err != nil {
+		t.Fatal(err)
+	}
+	stored := a.ciRunnerConfig().ConfigTOML
+	cleared := strings.Replace(stored, "AccessKey = '"+ciInVault+"'", "AccessKey = ''", 1)
+	if cleared == stored {
+		t.Fatalf("marker not found as expected:\n%s", stored)
+	}
+	if _, err := a.CIRunnerSet(CIRunnerConfig{ConfigTOML: cleared}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if a.ciVaultHas(ciSecretKey(0, "s3", "AccessKey")) {
+		t.Error("emptied AccessKey still in the vault")
+	}
+	if !a.ciVaultHas(ciSecretKey(0, "s3", "SecretKey")) {
+		t.Error("SecretKey (marker kept) lost")
+	}
+}
+
+// A config stored by an earlier version, cache secrets in plain text, is
+// moved to the vault once the vault opens.
+func TestCIStashStoredSecrets(t *testing.T) {
+	a := newDbTestApp(t)
+	b, _ := json.Marshal(CIRunnerConfig{ConfigTOML: strings.Replace(ciTestTOML, `token = "glrt-secret-one"`, "", 1)})
+	if err := a.db.SetSetting(ciRunnerKey, string(b)); err != nil {
+		t.Fatal(err)
+	}
+	a.ciStashStoredSecrets()
+	if strings.Contains(a.ciRunnerConfig().ConfigTOML, "cache-secret-one") {
+		t.Fatal("cache secret still in the settings")
+	}
+	if !a.ciVaultHas(ciSecretKey(0, "s3", "SecretKey")) {
+		t.Fatal("cache secret not in the vault")
 	}
 }

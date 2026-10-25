@@ -2646,9 +2646,13 @@ least one profile marked **Reachable through the app proxy**.
 Either **Set up here** (GitLab URL, the runner token from GitLab's *New
 runner* page, a job image) or **Import config.toml** - your existing
 runner's file, used as written (cache, image, volumes, extra_hosts); only
-the docker executor is supported. Tokens move to the vault; the
-config.toml is put together at start and copied into the runner
-container, never written to your disk.
+the docker executor is supported. Tokens and cache keys (S3 access and
+secret keys, GCS and Azure keys) move to the vault and read `(saved in
+the vault)` in the form: leave that to keep one, type a new value to
+replace it, empty it to remove it. Several `[[runners]]` in one file (a
+self-hosted GitLab and gitlab.com, say) share the runner container and
+its gateway. The config.toml is put together at start and copied into
+the runner container, never written to your disk.
 
 While the runner runs, the gateway follows the app proxy: a VPN, a
 network or a connection with a jump host added later is in its routes
