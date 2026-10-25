@@ -22,7 +22,7 @@
   import { tcpdump } from "./tcpdumpStore.svelte";
   import { logtail } from "./logtailStore.svelte";
   import { fleet } from "./fleetStore.svelte";
-  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot, IconSave, IconUpload, IconDownload, IconFile, IconPopOut, IconBastion } from "./iconMap";
+  import { IconBroadcast, IconHost, IconFolder, IconTunnel, IconLock, IconActivity, IconRefresh, IconCpu, IconMemory, IconDisk, IconUsers, IconVpn, IconBot, IconSave, IconUpload, IconDownload, IconFile, IconPopOut, IconBastion, IconContainer } from "./iconMap";
   import McpActivityPanel from "./McpActivityPanel.svelte";
   import { mcpCounterTitle } from "./mcpLevel";
   import { networkProfiles } from "./networkProfiles.svelte";
@@ -735,8 +735,8 @@
   {/if}
 
   {#if ciRunning}
-    <button class="seg vpn" onclick={() => view.openNetworkProfile("ci")} title="CI runner running: its jobs reach the VPNs marked via proxy - click to manage">
-      <IconTunnel size={11} />
+    <button class="seg vpn" onclick={() => view.openNetworkProfile("ci")} title="CI runner running: its jobs reach the VPNs marked via proxy and the connections behind jump hosts - click to manage">
+      <IconContainer size={11} />
       <span>CI runner</span>
     </button>
   {/if}
