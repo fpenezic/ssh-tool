@@ -607,8 +607,8 @@ export interface SharedProxyConfig {
   priority?: string[];
   /** Older single override, read by the backend as priority = [use]. */
   use?: string;
-  /** Leave the tree's connections with a jump host out (in by default). */
-  no_jump_connections?: boolean;
+  /** Let the tree's connections with a jump host through (off by default). */
+  jump_connections?: boolean;
 }
 
 export interface BastionSession {

@@ -35,9 +35,10 @@ type SharedProxyConfig struct {
 	Priority []string `json:"priority,omitempty"`
 	// Use is the older single override, read as Priority = [Use].
 	Use string `json:"use,omitempty"`
-	// NoJumpConnections leaves the tree's connections with a jump host out
-	// of the proxy (they are in by default: reached as a terminal would).
-	NoJumpConnections bool `json:"no_jump_connections,omitempty"`
+	// JumpConnections lets the tree's connections with a jump host through
+	// the proxy, reached as a terminal would. Off unless chosen: it opens
+	// every such connection to the proxy's clients.
+	JumpConnections bool `json:"jump_connections,omitempty"`
 }
 
 const (
@@ -280,7 +281,7 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 	}
 	if conns, err := a.db.ListConnections(nil); err == nil {
 		folders, _ := a.db.ListFolders()
-		if !a.sharedProxyConfig().NoJumpConnections {
+		if a.sharedProxyConfig().JumpConnections {
 			jr, jh := jumpConnRoutes(conns, folders)
 			routes = append(routes, jr...)
 			for name, id := range jh {
