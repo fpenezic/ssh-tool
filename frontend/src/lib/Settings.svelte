@@ -2864,6 +2864,9 @@
   $effect(() => {
     const id = view.pendingNetworkProfileId;
     if (!id) return;
+    // A save in flight: the link stays pending and this effect runs again
+    // when npBusy clears.
+    if (npBusy) return;
     if (id === "ci") {
       view.pendingNetworkProfileId = null;
       npSelect("ci");
