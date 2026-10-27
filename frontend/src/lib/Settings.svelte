@@ -841,16 +841,17 @@
   // The one just saved matches the stored values by then and takes them.
   async function syncLoadConfig(keepDrafts = true) {
     try {
-      if (!oauthRedirectUri) {
-        oauthRedirectUri = await api.oauthRedirectUri();
-      }
       // The first load has no stored config to compare with: what the form
-      // held when it started stands in, so typing during it counts too.
+      // held when it started (before any request) stands in, so typing
+      // during it counts too.
       const snap = () => JSON.stringify([syncUrl, syncUsername, syncPassword]);
       const snapSftp = () => JSON.stringify([sftpHost, sftpPort, sftpUser, sftpDir, sftpAuthMode, sftpCredId]);
       const snapDropbox = () => JSON.stringify([dropboxAppKey, dropboxFolder]);
       const first = syncCfg === null;
       const before = { w: snap(), s: snapSftp(), d: snapDropbox() };
+      if (!oauthRedirectUri) {
+        oauthRedirectUri = await api.oauthRedirectUri();
+      }
       const cfg = await api.syncConfigGet();
       // Measured once the answer is here, against the config the form was
       // edited from, so typing during the request counts too.
