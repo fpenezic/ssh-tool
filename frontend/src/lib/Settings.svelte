@@ -2646,8 +2646,19 @@
     const c = np.local_proxy ?? { enabled: false, port: 0 };
     const f: LpForm = { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080, networksText: (c.networks ?? []).join("\n") };
     try { f.details = await api.networkProfileLocalProxyDetails(np.id); } catch { /* shown on save */ }
+    // Typed into the open form while the details loaded: keep that.
+    if (lpDirty(np.id)) return;
     lpOpen = { ...lpOpen, [np.id]: f };
     lpBase = { ...lpBase, [np.id]: lpSnap(f) };
+  }
+  // Switch clicks and Saves go out one at a time, each built from the
+  // configuration stored when its turn comes: two quick clicks no longer
+  // send the same stale config with one change each.
+  let lpChain: Promise<unknown> = Promise.resolve();
+  function lpQueue<T>(job: () => Promise<T>): Promise<T> {
+    const run = lpChain.then(job, job);
+    lpChain = run.catch(() => {});
+    return run;
   }
   function lpDiscard(np: NetworkProfileInfo) {
     const b = { ...lpBase };
@@ -2657,10 +2668,13 @@
   }
   // A switch: saved on the click, with the stored address, port and
   // networks, so half-typed text fields are not saved along with it.
-  async function lpToggle(np: NetworkProfileInfo, key: "shared" | "enabled", on: boolean) {
+  function lpToggle(np: NetworkProfileInfo, key: "shared" | "enabled", on: boolean) {
+    return lpQueue(() => lpToggleNow(np, key, on));
+  }
+  async function lpToggleNow(np: NetworkProfileInfo, key: "shared" | "enabled", on: boolean) {
     const f = lpOpen[np.id];
     if (!f) return;
-    const c = np.local_proxy ?? { enabled: false, port: 0 };
+    const c = networkProfiles.list.find((p) => p.id === np.id)?.local_proxy ?? { enabled: false, port: 0 };
     try {
       await api.networkProfileSetLocalProxy(np.id, {
         enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080,
@@ -2674,9 +2688,15 @@
       spLoad();
     } catch (e: any) { toast.err(errMsg(e)); lpOpen = { ...lpOpen }; }
   }
-  async function lpSave(np: NetworkProfileInfo): Promise<boolean> {
+  function lpSave(np: NetworkProfileInfo): Promise<boolean> {
+    return lpQueue(() => lpSaveNow(np));
+  }
+  async function lpSaveNow(np: NetworkProfileInfo): Promise<boolean> {
     const f = lpOpen[np.id];
     if (!f) return true;
+    // The baseline becomes what this request sends; text typed while it
+    // runs stays dirty.
+    const sent = lpSnap(f);
     try {
       await api.networkProfileSetLocalProxy(np.id, {
         enabled: f.enabled, shared: f.shared, bind: f.bind.trim(), port: Number(f.port),
@@ -2685,7 +2705,7 @@
       await networkProfiles.load(true);
       f.details = await api.networkProfileLocalProxyDetails(np.id);
       lpOpen = { ...lpOpen, [np.id]: f };
-      lpBase = { ...lpBase, [np.id]: lpSnap(f) };
+      lpBase = { ...lpBase, [np.id]: sent };
       toast.ok("Proxy settings saved");
       spLoad();
       return true;

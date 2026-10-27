@@ -41,7 +41,7 @@
     treeBookmarks.selected = { key: b.key, connId: b.spec.connection_id };
     dbTabs.treeSelected = null;
     // The editor shows the connection's forwards, where the bookmark lives.
-    view.editorTabForce = "forwards";
+    void view.forceEditorTab("forwards");
   }
 
   function openMenu(e: MouseEvent, b: TreeBookmark) {
