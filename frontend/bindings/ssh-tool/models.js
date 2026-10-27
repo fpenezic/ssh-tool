@@ -7049,12 +7049,13 @@ export class SharedProxyConfig {
         }
         if (/** @type {any} */(false)) {
             /**
-             * NoJumpConnections leaves the tree's connections with a jump host out
-             * of the proxy (they are in by default: reached as a terminal would).
+             * JumpConnections lets the tree's connections with a jump host through
+             * the proxy, reached as a terminal would. Off unless chosen: it opens
+             * every such connection to the proxy's clients.
              * @member
              * @type {boolean | undefined}
              */
-            this["no_jump_connections"] = undefined;
+            this["jump_connections"] = undefined;
         }
 
         Object.assign(this, $$source);
