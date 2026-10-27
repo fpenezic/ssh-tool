@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { registerUnsaved } from "./unsaved.svelte.ts";
+  import { registerUnsaved, confirmLeave } from "./unsaved.svelte.ts";
   import {
     api,
     type PortForward,
@@ -180,7 +180,9 @@
   // editing - delete + recreate to change it.
   let editingForwardId = $state<string | null>(null);
 
-  function openEditForward(spec: PortForward) {
+  async function openEditForward(spec: PortForward) {
+    // Another forward's half-edited form would be overwritten: ask first.
+    if (spec.id !== editingForwardId && !(await confirmLeave(["tab"]))) return;
     editingForwardId = spec.id;
     nKind = spec.kind;
     nLocalAddr = spec.local_addr ?? "127.0.0.1";
