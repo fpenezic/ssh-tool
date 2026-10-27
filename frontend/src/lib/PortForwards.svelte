@@ -227,6 +227,20 @@
     resetForm();
   }
 
+  // This view stays mounted while the selected connection changes. A form
+  // left open (a clean one passes the unsaved guard without a prompt) would
+  // otherwise sit under the next connection and save the previous one's
+  // forward. A dirty one was already saved or discarded by the guard.
+  let formConnId: string | null = null;
+  $effect(() => {
+    const id = connection.id;
+    if (id === formConnId) return;
+    formConnId = id;
+    cancelForm();
+    addBookmarkFor = null;
+    editBmIndex = null;
+  });
+
   async function submitForward(): Promise<boolean> {
     if (editingForwardId) return updateForward();
     return createForward();

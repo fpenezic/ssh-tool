@@ -412,7 +412,25 @@
   let draftConnEpoch = 0;
   let draftFolderId: string | null = null;
   let draftFolderEpoch = 0;
+  // The stored values each draft started from: what "the user changed it"
+  // is measured against when the same item reloads.
+  let draftConnOrig: Record<string, unknown> | null = null;
+  let draftFolderOrig: Record<string, unknown> | null = null;
   function discardDraft() { draftEpoch++; }
+  function edited(cur: object | null, orig: Record<string, unknown> | null): boolean {
+    return !!cur && !!orig && JSON.stringify(cur) !== JSON.stringify(orig);
+  }
+  // Same item reloaded while edits are open: a field the user changed keeps
+  // its value, every other field takes the refreshed one (a sync may have
+  // changed it), so Save does not write stale values back.
+  function mergeDraft<T extends object>(cur: T, orig: Record<string, unknown>, fresh: T): T {
+    const out = { ...fresh } as Record<string, unknown>;
+    const c = cur as Record<string, unknown>;
+    for (const k of Object.keys(out)) {
+      if (JSON.stringify(c[k]) !== JSON.stringify(orig[k])) out[k] = c[k];
+    }
+    return out as T;
+  }
   $effect(() => registerUnsaved({
     label: () => conn?.name ?? folder?.name ?? "",
     dirty: () => (!!conn && dirty) || (!conn && !!folder && folderDirty),
@@ -422,10 +440,10 @@
 
   $effect(() => {
     if (folder) {
-      const keep = folder.id === draftFolderId && draftEpoch === draftFolderEpoch && untrack(() => folderDirty);
+      const keep = folder.id === draftFolderId && draftEpoch === draftFolderEpoch && untrack(() => edited(editingFolder, draftFolderOrig));
       draftFolderId = folder.id;
       draftFolderEpoch = draftEpoch;
-      if (!keep) editingFolder = {
+      const fresh = {
         name: folder.name,
         username: folder.settings.username ?? "",
         port: folder.settings.port?.toString() ?? "",
@@ -452,6 +470,9 @@
         kafka: kafkaDraftFrom(folder.settings),
         db: dbDraftFrom(folder.settings),
       };
+      const prev = untrack(() => editingFolder);
+      editingFolder = keep && prev && draftFolderOrig ? mergeDraft(prev, draftFolderOrig, fresh) : fresh;
+      draftFolderOrig = JSON.parse(JSON.stringify(fresh));
     } else {
       editingFolder = null;
     }
@@ -753,6 +774,10 @@
     if (forced && edTabs.some((t) => t.id === forced)) return forced;
     return edTabs.some((t) => t.id === edTabPref) ? edTabPref : "general";
   });
+  // For view.forceEditorTab: which tab a forced change would leave.
+  $effect(() => {
+    view.editorTabShown = conn ? edTab : null;
+  });
 
   function folderPathOf(folderId: string | null | undefined): string {
     const names: string[] = [];
@@ -1050,10 +1075,10 @@
       api.connectionsResolve(conn.id).then((r) => (resolved = r)).catch((e) => (resolveErr = String(e)));
       // A tree reload (sync, a refresh) hands in a new object for the same
       // connection: edits in progress stay. Discard bumps draftEpoch.
-      const keep = conn.id === draftConnId && draftEpoch === draftConnEpoch && untrack(() => dirty);
+      const keep = conn.id === draftConnId && draftEpoch === draftConnEpoch && untrack(() => edited(editing, draftConnOrig));
       draftConnId = conn.id;
       draftConnEpoch = draftEpoch;
-      if (!keep) editing = {
+      const fresh = {
         name: conn.name,
         hostname: conn.hostname,
         notes: conn.notes,
@@ -1090,6 +1115,9 @@
         localShellDir: conn.local_shell_dir ?? "",
         tags: [...(conn.tags ?? [])],
       };
+      const prev = untrack(() => editing);
+      editing = keep && prev && draftConnOrig ? mergeDraft(prev, draftConnOrig, fresh) : fresh;
+      draftConnOrig = JSON.parse(JSON.stringify(fresh));
     } else {
       resolved = null;
       editing = null;

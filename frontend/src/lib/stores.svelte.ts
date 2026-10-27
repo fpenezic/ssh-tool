@@ -1111,6 +1111,21 @@ class ViewStore {
   // one picked: "db" for a database row, "forwards" for a bookmark. Not
   // remembered; a click on the connection row or on an editor tab clears it.
   editorTabForce = $state<string | null>(null);
+  // The editor tab on screen, kept by DetailPane, so forceEditorTab knows
+  // whether the forward form (the only sub-form an editor tab holds) is
+  // the one a change would close.
+  editorTabShown = $state<string | null>(null);
+
+  // Sets (or clears) the forced editor tab. With the Forwards tab on screen
+  // and a half-edited forward form, a change that leaves it asks first
+  // (Save / Discard / Stay); false on Stay. Every writer of editorTabForce
+  // outside the editor itself goes through here.
+  async forceEditorTab(t: string | null): Promise<boolean> {
+    if (t === this.editorTabForce) return true;
+    if (this.editorTabShown === "forwards" && t !== "forwards" && !(await confirmLeave(["tab"]))) return false;
+    this.editorTabForce = t;
+    return true;
+  }
 
   // Set by reveal() to ask the connections Sidebar to scroll a row
   // into view once the tree has re-rendered with the ancestors

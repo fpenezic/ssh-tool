@@ -29,11 +29,12 @@
   let lastId: string | null = null;
   let lastAt = 0;
   // A click selects the row and shows the connection's Database settings.
-  function select(r: DbTreeRow) {
+  async function select(r: DbTreeRow) {
+    // Services replaces the Forwards tab: a half-edited forward asks first.
+    if (!(await view.forceEditorTab("db"))) return;
     selection.selectConnection(connId);
     treeBookmarks.selected = null;
     dbTabs.treeSelected = { connId, id: r.id };
-    view.editorTabForce = "db";
   }
   function isSelected(r: DbTreeRow): boolean {
     return dbTreeSelectedUnder(connId) && dbTabs.treeSelected?.id === r.id;

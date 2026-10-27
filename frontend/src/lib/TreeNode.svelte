@@ -141,16 +141,19 @@
     selection.selectDynamicEntry(folderId, entryId);
   }
 
-  function handleConnClick(e: MouseEvent, connId: string, name: string, hostname: string) {
+  async function handleConnClick(e: MouseEvent, connId: string, name: string, hostname: string) {
     // Modifier flags come from the event or the last mousedown
     // (fallback for draggable-element WebView quirk).
     const ctrl = e.ctrlKey || lastMouseMods.ctrl;
     const meta = e.metaKey || lastMouseMods.meta;
     const shift = e.shiftKey || lastMouseMods.shift;
     lastMouseMods = { ctrl: false, meta: false, shift: false };
+    // Leaving a forced tab (a database or bookmark row was clicked) may
+    // close a half-edited forward form: that asks first. Without a forced
+    // tab nothing is awaited and the click is handled at once.
+    if (view.editorTabForce !== null && !(await view.forceEditorTab(null))) return;
     treeBookmarks.selected = null;
     dbTabs.treeSelected = null;
-    view.editorTabForce = null;
 
     console.debug("[tree] conn click", {
       ctrl, meta, shift,
