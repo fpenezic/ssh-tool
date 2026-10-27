@@ -2645,9 +2645,14 @@
     if (lpDirty(np.id)) return;
     const c = np.local_proxy ?? { enabled: false, port: 0 };
     const f: LpForm = { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080, networksText: (c.networks ?? []).join("\n") };
+    const open = lpOpen[np.id];
+    const before = open ? lpSnap(open) : null;
     try { f.details = await api.networkProfileLocalProxyDetails(np.id); } catch { /* shown on save */ }
-    // Typed into the open form while the details loaded: keep that.
-    if (lpDirty(np.id)) return;
+    // Typed into the open form while the details loaded: keep that. Compared
+    // with the form as this load found it, since after a Discard there is no
+    // baseline to compare with.
+    const now = lpOpen[np.id];
+    if (now && before !== null && lpSnap(now) !== before) return;
     lpOpen = { ...lpOpen, [np.id]: f };
     lpBase = { ...lpBase, [np.id]: lpSnap(f) };
   }
