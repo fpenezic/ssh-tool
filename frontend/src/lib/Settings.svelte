@@ -2782,10 +2782,11 @@
     },
     scope: "settings",
   }));
-  async function npSelect(id: string) {
+  // True once the item is open: already was, or the switch went ahead.
+  async function npSelect(id: string): Promise<boolean> {
     // Reselecting the open item changes nothing (and keeps its draft).
-    if (id === npSel) return;
-    if (!(await confirmLeave(["settings"]))) return;
+    if (id === npSel) return true;
+    if (!(await confirmLeave(["settings"]))) return false;
     npSel = id;
     npCancelEdit();
     if (id === "new") {
@@ -2794,6 +2795,7 @@
     }
     const np = networkProfiles.list.find((p) => p.id === id);
     if (np) npOpenTab(npTab, np);
+    return true;
   }
   // Deep link to one profile. Waits for the profile list, which may still
   // be loading when Settings mounts.
@@ -2809,9 +2811,8 @@
     const np = networkProfiles.list.find((p) => p.id === id);
     if (!np) return;
     view.pendingNetworkProfileId = null;
-    npSel = id;
-    npCancelEdit();
-    npOpenTab("settings", np);
+    // Through npSelect, so unsaved edits on the open profile ask first.
+    void npSelect(id).then((ok) => { if (ok) npOpenTab("settings", np); });
   });
   function npOpenTab(t: NpTab, np: NetworkProfileInfo | null = npCur) {
     npTab = t;

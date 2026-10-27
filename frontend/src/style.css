@@ -193,6 +193,13 @@ body {
     opacity: 1;
     font-style: italic;
 }
+/* Latte's overlay0 is too faint on its field background (about 2:1);
+   subtext0 keeps the hint readable (about 4.5:1) and the italic still
+   tells it from a value. */
+html.theme-light #app input::placeholder,
+html.theme-light #app textarea::placeholder {
+    color: var(--subtext0);
+}
 #app input.editable-select {
     user-select: text;
     -webkit-user-select: text;

@@ -181,8 +181,10 @@
   let editingForwardId = $state<string | null>(null);
 
   async function openEditForward(spec: PortForward) {
+    // The same forward is already open: keep what is typed.
+    if (showAdd && spec.id === editingForwardId) return;
     // Another forward's half-edited form would be overwritten: ask first.
-    if (spec.id !== editingForwardId && !(await confirmLeave(["tab"]))) return;
+    if (!(await confirmLeave(["tab"]))) return;
     editingForwardId = spec.id;
     nKind = spec.kind;
     nLocalAddr = spec.local_addr ?? "127.0.0.1";

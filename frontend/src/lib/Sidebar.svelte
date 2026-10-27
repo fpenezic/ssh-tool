@@ -39,6 +39,17 @@
   //
   // Same target test as the context menu below: anything inside a row
   // belongs to that row's own handler.
+  // Back on the start page (Home, Esc, the empty-tree click, anything
+  // else): no row highlight or forced editor tab is left over for the next
+  // selection. Runs on the committed state, so Stay in the unsaved prompt
+  // keeps them.
+  $effect(() => {
+    if (selection.current.kind !== "none") return;
+    treeBookmarks.selected = null;
+    dbTabs.treeSelected = null;
+    view.editorTabForce = null;
+  });
+
   function onEmptyAreaClick(e: MouseEvent) {
     const t = e.target as HTMLElement | null;
     if (t?.closest('[role="treeitem"]')) return;
@@ -396,6 +407,9 @@
   function onSearchKey(e: KeyboardEvent) {
     if (e.key === "Escape") {
       e.preventDefault();
+      // No filter left to clear (the tree's first Escape cleared it and
+      // put the focus here): this Escape goes to the start page.
+      if (!nameFilter.isActive() && selection.current.kind !== "none") selection.select({ kind: "none" });
       nameFilter.clear();
       treeEl?.focus();
       return;

@@ -40,6 +40,13 @@ class ConfirmModalStore {
     checked?: boolean;
     altLabel?: string;
   }): Promise<ConfirmResult> {
+    // A dialog already open is answered "cancel" first: its caller (the
+    // unsaved-changes prompt, say) would otherwise wait forever.
+    const prev = this.pending;
+    if (prev) {
+      this.pending = null;
+      prev.resolve({ ok: false, checked: !!prev.checked });
+    }
     return new Promise((resolve) => {
       this.pending = {
         title: opts.title,
