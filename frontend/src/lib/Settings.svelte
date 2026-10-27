@@ -836,10 +836,10 @@
   let hasGdriveToken = $state(false);
   let gdriveConnecting = $state(false);
 
-  // keepDrafts: back on the Sync section, a transport form with unsaved
-  // changes keeps them (the other loads follow a save or connect, where
-  // the stored values are what the form should show).
-  async function syncLoadConfig(keepDrafts = false) {
+  // A transport form with unsaved changes keeps them across every reload
+  // (the section reopened, another transport saved or connected, a push).
+  // The one just saved matches the stored values by then and takes them.
+  async function syncLoadConfig(keepDrafts = true) {
     try {
       if (!oauthRedirectUri) {
         oauthRedirectUri = await api.oauthRedirectUri();
@@ -2730,7 +2730,8 @@
       lpBase = { ...lpBase, [np.id]: sent };
       toast.ok("Proxy settings saved");
       spLoad();
-      return true;
+      // Typed again while it saved: still unsaved, so a leave keeps asking.
+      return !lpDirty(np.id);
     } catch (e: any) { toast.err(errMsg(e)); return false; }
   }
   async function lpCopy(np: NetworkProfileInfo, what: "url" | "gateway" | "routes") {
@@ -3418,7 +3419,7 @@
     if (activeSection === "sync") {
       // Untracked: it reads the form to keep drafts, and the effect must
       // not rerun on every keystroke.
-      untrack(() => void syncLoadConfig(true));
+      untrack(() => void syncLoadConfig());
       void syncLoadCredOptions();
     }
   });

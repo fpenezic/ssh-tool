@@ -30,6 +30,7 @@ func TestJumpConnections(t *testing.T) {
 		{Name: "b", Hostname: "app.internal.example", FolderID: &folder.ID},
 		{Name: "direct", Hostname: "10.40.1.7"},
 		{Name: "c", Hostname: "c.internal.example", Overrides: store.InheritableSettings{JumpHost: viaRef}},
+		{Name: "d", Hostname: "d.internal.example", Overrides: store.InheritableSettings{JumpHost: viaRef}},
 	} {
 		got, err := a.db.CreateConnection(c)
 		if err != nil {
@@ -74,6 +75,15 @@ func TestJumpConnections(t *testing.T) {
 	if id, _, err := a.sharedPickWith("10.40.9.9", nil); err == nil {
 		t.Errorf("conflicting extra hosts pinned the address to %q", id)
 	}
+	// Two names behind the same chain on one address: one path, pinned.
+	if _, err := a.CIRunnerSet(CIRunnerConfig{URL: "https://gitlab.example.com", ExtraHosts: []string{
+		"c.internal.example:10.40.9.8", "d.internal.example:10.40.9.8"}}, "glrt-x"); err != nil {
+		t.Fatal(err)
+	}
+	sharedRoutesInvalidate()
+	if id, _, err := a.sharedPickWith("10.40.9.8", nil); err != nil || jumpConnOf(id) == "" {
+		t.Errorf("same-path extra hosts not pinned: %q, %v", id, err)
+	}
 
 	if err := a.db.SetSetting(sharedProxyKey, `{"port":1080}`); err != nil {
 		t.Fatal(err)
@@ -105,7 +115,7 @@ func TestJumpKeyLabel(t *testing.T) {
 // Two connections with the same address and different jump paths leave it
 // unrouted by jump host; the same path twice still routes it.
 func TestJumpDuplicateAddress(t *testing.T) {
-	routes, _ := jumpConnRoutes([]store.Connection{
+	routes, _, _ := jumpConnRoutes([]store.Connection{
 		{ID: "1", Name: "one", Hostname: "10.50.0.1", Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{Hostname: "jump-a.example.com"}}}},
 		{ID: "2", Name: "two", Hostname: "10.50.0.1", Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{Hostname: "jump-b.example.com"}}}},
 		{ID: "3", Name: "three", Hostname: "10.50.0.2", Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{Hostname: "jump-a.example.com"}}}},

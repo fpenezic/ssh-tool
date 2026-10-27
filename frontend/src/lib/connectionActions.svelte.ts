@@ -122,6 +122,17 @@ interface MoveTarget {
   excludeIds: Set<string>;
   title: string;
 }
+
+// Deletes one by one, carries on past a failure (each shown as a toast),
+// and says how many failed.
+async function deleteEach(ids: string[], del: (id: string) => Promise<unknown>): Promise<number> {
+  let failed = 0;
+  for (const id of ids) {
+    try { await del(id); } catch (e) { failed++; toast.err(unwrapRaw(String((e as any)?.message ?? e))); }
+  }
+  return failed;
+}
+
 class ConnectionActionsStore {
   // Reconnect an open SSH session in place: tear it down, open a new one
   // for the same connection and swap it into the panes that showed the
@@ -1059,10 +1070,9 @@ class ConnectionActionsStore {
       .map((c) => ({ kind: "connection" as const, name: c.name, detail: c.hostname, warn: tree.deleteWarn(c) }));
     this.deleteItems = items;
     this.deletePending = async () => {
-      for (const id of ids) {
-        try { await api.connectionsDelete(id); } catch {}
-      }
-      selection.select({ kind: "none" });
+      // The deleted item's editor goes without a prompt, and only when the
+      // delete went through; a failure keeps the selection and its draft.
+      if ((await deleteEach(ids, (id) => api.connectionsDelete(id))) === 0) selection.selectForce({ kind: "none" });
       await tree.load();
     };
   }
@@ -1072,10 +1082,7 @@ class ConnectionActionsStore {
     for (const id of ids) collectFolderVictims(id, items);
     this.deleteItems = items;
     this.deletePending = async () => {
-      for (const id of ids) {
-        try { await api.foldersDelete(id); } catch {}
-      }
-      selection.select({ kind: "none" });
+      if ((await deleteEach(ids, (id) => api.foldersDelete(id))) === 0) selection.selectForce({ kind: "none" });
       await tree.load();
     };
   }
@@ -1087,10 +1094,7 @@ class ConnectionActionsStore {
       .map((c) => ({ kind: "credential" as const, name: c.name, detail: c.kind }));
     this.deleteItems = items;
     this.deletePending = async () => {
-      for (const id of ids) {
-        try { await api.credentialsDelete(id); } catch (e) { toast.err(unwrapRaw(String((e as any)?.message ?? e))); }
-      }
-      selection.select({ kind: "none" });
+      if ((await deleteEach(ids, (id) => api.credentialsDelete(id))) === 0) selection.selectForce({ kind: "none" });
       await credentials.load();
     };
   }
@@ -1100,12 +1104,9 @@ class ConnectionActionsStore {
     for (const id of ids) collectCredFolderVictims(id, items);
     this.deleteItems = items;
     this.deletePending = async () => {
-      for (const id of ids) {
-        // Backend cascades: credentials in the subtree go through the
-        // full vault-cleanup path, subfolders via FK.
-        try { await api.credentialFoldersDelete(id); } catch (e) { toast.err(unwrapRaw(String((e as any)?.message ?? e))); }
-      }
-      selection.select({ kind: "none" });
+      // Backend cascades: credentials in the subtree go through the full
+      // vault-cleanup path, subfolders via FK.
+      if ((await deleteEach(ids, (id) => api.credentialFoldersDelete(id))) === 0) selection.selectForce({ kind: "none" });
       await credentials.load();
     };
   }

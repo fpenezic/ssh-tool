@@ -33,7 +33,7 @@
   async function select(r: DbTreeRow): Promise<boolean> {
     // Services replaces the Forwards tab: a half-edited forward asks first.
     if (!(await view.forceEditorTab("db"))) return false;
-    selection.selectConnection(connId);
+    if (!(await selection.selectConnection(connId))) return false;
     treeBookmarks.selected = null;
     dbTabs.treeSelected = { connId, id: r.id };
     return true;

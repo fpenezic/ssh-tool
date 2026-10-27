@@ -633,35 +633,42 @@ class SelectionStore {
   // An editor with unsaved edits holds the selection: the change waits
   // for the Save / Discard / Stay prompt and runs again once it may.
   // Re-selecting what is already selected is not a change.
+  // held() answers null when nothing holds the change (it runs at once),
+  // else the prompt's outcome: true once the change ran, false on Stay.
   private bypass = false;
-  private held(retry: () => void): boolean {
-    if (this.bypass || !hasUnsaved()) return false;
-    void confirmLeave().then((ok) => {
-      if (!ok) return;
+  private held(retry: () => void): Promise<boolean> | null {
+    if (this.bypass || !hasUnsaved()) return null;
+    return confirmLeave().then((ok) => {
+      if (!ok) return false;
       this.bypass = true;
       try { retry(); } finally { this.bypass = false; }
+      return true;
     });
-    return true;
   }
 
   // For code that has already dealt with the editor (it deleted the item
   // being edited): no prompt.
   selectForce(s: Selection) {
     this.bypass = true;
-    try { this.select(s); } finally { this.bypass = false; }
+    try { void this.select(s); } finally { this.bypass = false; }
   }
 
-  select(s: Selection) {
+  // Resolves true once the selection is s (at once when nothing is
+  // unsaved), false when the user chose Stay: a caller that does more than
+  // select (a row highlight, a double-click connect) waits for it.
+  select(s: Selection): Promise<boolean> {
     const same = JSON.stringify(s) === JSON.stringify(this.current) &&
       this.extras.size + this.folderExtras.size + this.credentialExtras.size +
       this.credentialFolderExtras.size + this.dynamicExtras.size === 0;
-    if (!same && this.held(() => this.select(s))) return;
+    const held = same ? null : this.held(() => this.select(s));
+    if (held) return held;
     this.current = s;
     this.extras = new Set();
     this.folderExtras = new Set();
     this.credentialExtras = new Set();
     this.credentialFolderExtras = new Set();
     this.dynamicExtras = new Set();
+    return Promise.resolve(true);
   }
 
   static dynKey(folderId: string, entryId: string): string {
@@ -761,8 +768,8 @@ class SelectionStore {
   }
 
   // Single-click on a connection: clear multi, anchor here.
-  selectConnection(id: string) {
-    this.select({ kind: "connection", id });
+  selectConnection(id: string): Promise<boolean> {
+    return this.select({ kind: "connection", id });
   }
 
   // Ctrl/Cmd+click: toggle one connection in/out of the multi-set.
@@ -847,8 +854,8 @@ class SelectionStore {
 
   // ----- folder multi-select (mirrors the connection helpers) -----
 
-  selectFolderById(id: string) {
-    this.select({ kind: "folder", id });
+  selectFolderById(id: string): Promise<boolean> {
+    return this.select({ kind: "folder", id });
   }
 
   toggleFolder(id: string) {

@@ -279,10 +279,14 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 			}
 		}
 	}
+	// A route id's path: a jump connection's chain (two connections with
+	// the same chain are one path), a profile its own id.
+	jumpPaths := map[string]string{}
 	if conns, err := a.db.ListConnections(nil); err == nil {
 		folders, _ := a.db.ListFolders()
 		if a.sharedProxyConfig().JumpConnections {
-			jr, jh := jumpConnRoutes(conns, folders)
+			jr, jh, jp := jumpConnRoutes(conns, folders)
+			jumpPaths = jp
 			routes = append(routes, jr...)
 			for name, id := range jh {
 				hosts[name] = id
@@ -294,8 +298,16 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 	// host or a VPN) pins the address it is given there to the same path.
 	// Two names on one address with different paths cannot both be pinned:
 	// the job sends only the address, so either pin would send the other
-	// name's traffic the wrong way. Such an address is left unpinned.
-	pinIDs := map[netip.Addr]map[string]bool{}
+	// name's traffic the wrong way. Such an address is left unpinned. Two
+	// connections behind the same chain are one path, kept under the
+	// first one's id.
+	pathOf := func(id string) string {
+		if p, ok := jumpPaths[id]; ok {
+			return "jump:" + p
+		}
+		return "id:" + id
+	}
+	pinIDs := map[netip.Addr]map[string]string{}
 	var pinOrder []netip.Addr
 	for _, h := range a.ciExtraHosts() {
 		name, addr, _ := strings.Cut(h, ":")
@@ -309,16 +321,18 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 		}
 		ip = ip.Unmap()
 		if pinIDs[ip] == nil {
-			pinIDs[ip] = map[string]bool{}
+			pinIDs[ip] = map[string]string{}
 			pinOrder = append(pinOrder, ip)
 		}
-		pinIDs[ip][id] = true
+		if _, seen := pinIDs[ip][pathOf(id)]; !seen {
+			pinIDs[ip][pathOf(id)] = id
+		}
 	}
 	for _, ip := range pinOrder {
 		if len(pinIDs[ip]) != 1 {
 			continue
 		}
-		for id := range pinIDs[ip] {
+		for _, id := range pinIDs[ip] {
 			routes = append(routes, sharedRoute{netip.PrefixFrom(ip, ip.BitLen()), id, routeName(routes, id), true})
 		}
 	}
