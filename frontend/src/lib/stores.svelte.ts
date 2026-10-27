@@ -650,12 +650,15 @@ class SelectionStore {
   // exists (deleted, or gone with a deleted folder) leaves the selection.
   // An anchor that went gives way to a remaining item, or none. No prompt:
   // a deleted item's draft has nothing left to save into.
-  dropMissing() {
-    const exists = (kind: string, id: string) =>
+  // gone: ids known to be deleted, dropped even when the reload failed and
+  // the stores still hold them.
+  dropMissing(gone: string[] = []) {
+    const deleted = new Set(gone);
+    const exists = (kind: string, id: string) => !deleted.has(id) && (
       kind === "connection" ? !!tree.connectionById(id)
       : kind === "folder" ? !!tree.folderById(id)
       : kind === "credential" ? !!credentials.byId(id)
-      : credentials.folders.some((f) => f.id === id);
+      : credentials.folders.some((f) => f.id === id));
     const keep = (kind: string, set: Set<string>) => new Set([...set].filter((id) => exists(kind, id)));
     this.extras = keep("connection", this.extras);
     this.folderExtras = keep("folder", this.folderExtras);

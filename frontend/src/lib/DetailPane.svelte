@@ -1339,9 +1339,9 @@
       // Top-level folders only - children are cascade-deleted by the DB.
       // What went (cascades included) leaves the selection after the
       // reload, without a prompt; a folder that failed keeps it.
-      await deleteEach(folderIds, (id) => api.foldersDelete(id));
+      const gone = await deleteEach(folderIds, (id) => api.foldersDelete(id));
       await tree.load();
-      selection.dropMissing();
+      selection.dropMissing(gone);
     };
   }
 
@@ -1366,9 +1366,9 @@
     }
     deleteItems = items;
     deletePending = async () => {
-      await deleteEach(connIds, (id) => api.connectionsDelete(id));
+      const gone = await deleteEach(connIds, (id) => api.connectionsDelete(id));
       await tree.load();
-      selection.dropMissing();
+      selection.dropMissing(gone);
     };
   }
 
