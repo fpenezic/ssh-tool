@@ -233,12 +233,18 @@ func rdScan(ctx context.Context, c *rdConn, match string, max int) (keys []strin
 	seen := map[string]bool{}
 	cursor := "0"
 	deadline := time.Now().Add(rdScanBudget)
+	// The budget bounds a stalled read too, not only the loop: without it a
+	// SCAN that never answers waits for the caller's much longer deadline.
+	// A little past the budget, so a reply in flight still lands; a stop
+	// here closes the connection and the caller drops it.
+	sctx, cancel := context.WithDeadline(ctx, deadline.Add(2*time.Second))
+	defer cancel()
 	for {
 		cmd := []string{"SCAN", cursor, "COUNT", "1000"}
 		if match != "" {
 			cmd = append(cmd, "MATCH", match)
 		}
-		r, err := c.one(ctx, cmd...)
+		r, err := c.one(sctx, cmd...)
 		if err != nil {
 			return nil, false, err
 		}
@@ -249,13 +255,20 @@ func rdScan(ctx context.Context, c *rdConn, match string, max int) (keys []strin
 			return nil, false, errors.New("unexpected SCAN reply")
 		}
 		cursor = r.elems[0].text()
+		// COUNT is only a hint: one reply can carry far more keys, so the
+		// cap applies inside the reply as well.
+		cut := false
 		for _, k := range r.elems[1].elems {
+			if len(keys) >= max {
+				cut = true
+				break
+			}
 			if s := k.text(); !seen[s] {
 				seen[s] = true
 				keys = append(keys, s)
 			}
 		}
-		if cursor == "0" {
+		if cursor == "0" && !cut {
 			return keys, true, nil
 		}
 		if len(keys) >= max || time.Now().After(deadline) {
@@ -685,15 +698,17 @@ func (s *rdSession) run(ctx context.Context, stmt string, _ bool, maxRows int) *
 	}
 	s.mu.Lock()
 	s.stop = nil
+	// The reply arrived in full, so a SELECT took effect even when a Stop
+	// came right after it: the next connection must open on that database.
+	if strings.EqualFold(args[0], "SELECT") && r.kind == '+' && r.text() == "OK" && len(args) == 2 {
+		s.db, _ = strconv.Atoi(args[1])
+		c.db = s.db
+	}
 	if rctx.Err() != nil {
 		// Stopped as the reply came: the connection may be mid-way.
 		c.close()
 	} else {
 		s.c = c
-		if strings.EqualFold(args[0], "SELECT") && r.kind == '+' && r.text() == "OK" && len(args) == 2 {
-			s.db, _ = strconv.Atoi(args[1])
-			c.db = s.db
-		}
 	}
 	s.mu.Unlock()
 	return rdResult(args, r, maxRows)

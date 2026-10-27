@@ -3,6 +3,8 @@ package dbx
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"net"
 	"strings"
 	"testing"
 )
@@ -71,6 +73,7 @@ func TestRDRedact(t *testing.T) {
 	cases := map[string]string{
 		"AUTH s3cret":                               "AUTH ***",
 		"AUTH bob s3cret":                           "AUTH bob ***",
+		"AUTH bob s3cret extra":                     "AUTH *** *** ***",
 		"HELLO 2 AUTH bob s3cret":                   "HELLO 2 AUTH bob ***",
 		"CONFIG SET requirepass s3cret maxmemory 1": "CONFIG SET requirepass *** maxmemory 1",
 		"ACL SETUSER bob on >s3cret ~* +@read":      "ACL SETUSER bob on *** ~* +@read",
@@ -150,5 +153,36 @@ func TestRDGroups(t *testing.T) {
 	b.WriteString(rdPreviewText("list", rdParse(t, "*2\r\n$1\r\na\r\n$1\r\nb\r\n"), 5))
 	if b.String() != `["a","b"]...` {
 		t.Fatal(b.String())
+	}
+}
+
+// One SCAN reply can carry far more keys than COUNT: the cap holds inside
+// a reply, and a reply cut short is not reported as the end.
+func TestRDScanCapsAReply(t *testing.T) {
+	cli, srv := net.Pipe()
+	defer cli.Close()
+	go func() {
+		defer srv.Close()
+		br := bufio.NewReader(srv)
+		for {
+			if _, err := br.ReadString('\n'); err != nil { // *N
+				return
+			}
+			// Drain the rest of the command (SCAN 0 COUNT 1000: 4 bulk strings).
+			for i := 0; i < 8; i++ {
+				if _, err := br.ReadString('\n'); err != nil {
+					return
+				}
+			}
+			_, _ = srv.Write([]byte("*2\r\n$1\r\n0\r\n*3\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n"))
+		}
+	}()
+	rc := &rdConn{c: cli, br: bufio.NewReader(cli), bw: bufio.NewWriter(cli)}
+	keys, done, err := rdScan(context.Background(), rc, "", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(keys) != 2 || done {
+		t.Fatalf("keys %v done %v, want 2 keys and not done", keys, done)
 	}
 }

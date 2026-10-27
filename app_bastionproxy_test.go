@@ -29,6 +29,7 @@ func TestJumpConnections(t *testing.T) {
 		{Name: "a", Hostname: "10.40.1.5", Overrides: store.InheritableSettings{JumpHost: viaRef}},
 		{Name: "b", Hostname: "app.internal.example", FolderID: &folder.ID},
 		{Name: "direct", Hostname: "10.40.1.7"},
+		{Name: "c", Hostname: "c.internal.example", Overrides: store.InheritableSettings{JumpHost: viaRef}},
 	} {
 		got, err := a.db.CreateConnection(c)
 		if err != nil {
@@ -62,6 +63,16 @@ func TestJumpConnections(t *testing.T) {
 	sharedRoutesInvalidate()
 	if id, _, err := a.sharedPickWith("10.40.9.9", nil); err != nil || jumpConnOf(id) != ids["b"] {
 		t.Errorf("extra host address: %q, %v", id, err)
+	}
+	// Two extra-host names on one address with different paths: the job
+	// sends only the address, so neither path is pinned to it.
+	if _, err := a.CIRunnerSet(CIRunnerConfig{URL: "https://gitlab.example.com", ExtraHosts: []string{
+		"app.internal.example:10.40.9.9", "c.internal.example:10.40.9.9"}}, "glrt-x"); err != nil {
+		t.Fatal(err)
+	}
+	sharedRoutesInvalidate()
+	if id, _, err := a.sharedPickWith("10.40.9.9", nil); err == nil {
+		t.Errorf("conflicting extra hosts pinned the address to %q", id)
 	}
 
 	if err := a.db.SetSetting(sharedProxyKey, `{"port":1080}`); err != nil {
