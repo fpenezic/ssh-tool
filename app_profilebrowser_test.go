@@ -33,9 +33,23 @@ func TestBrowserPick(t *testing.T) {
 		"wiki.customer.invalid":     id, // unknown to local DNS: try inside the VPN
 		"localhost":                 "",
 	} {
-		got, err := a.browserPick(id, host)
+		got, _, err := a.browserPick(id, host)
 		if err != nil || got != want {
 			t.Errorf("%s -> %q, %v (want %q)", host, got, err, want)
 		}
+	}
+
+	// A name the local resolver puts inside the profile's networks (a hosts
+	// entry) is dialed by that address: the customer's DNS may not know it.
+	lo, err := db.CreateNetworkProfile("loopback", `{"peers":[{"public_key":"y","allowed_ips":["127.0.0.0/8","::1/128"]}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, dial, err := a.browserPick(lo.ID, "localhost")
+	if err != nil || got != lo.ID || (dial != "127.0.0.1" && dial != "::1") {
+		t.Errorf("localhost -> %q dial %q, %v", got, dial, err)
+	}
+	if _, dial, _ := a.browserPick(id, "intranet.customer.example"); dial != "intranet.customer.example" {
+		t.Errorf("a connection's name is dialed as is, got %q", dial)
 	}
 }

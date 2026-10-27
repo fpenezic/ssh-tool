@@ -115,8 +115,7 @@ func (a *App) ensureBrowserProxy(row *store.NetworkProfile) (int, error) {
 			p.mu.Unlock()
 			go func() {
 				a.serveSOCKS(c, nil, func(host string) (string, string, error) {
-					pid, err := a.browserPick(id, host)
-					return pid, host, err
+					return a.browserPick(id, host)
 				}, "browser")
 				p.mu.Lock()
 				p.active--
@@ -159,11 +158,14 @@ func stopBrowserProxies() {
 
 // browserPick sends a destination into the profile's tunnel when it is
 // one of the profile's networks, a connection's name, or a name only the
-// customer's DNS knows; anything else goes out directly ("").
-func (a *App) browserPick(id, host string) (string, error) {
+// customer's DNS knows; anything else goes out directly (""). dialHost is
+// what to dial: a name the local resolver (a hosts entry, say) put inside
+// the profile's networks is dialed by that address, since the customer's
+// DNS may not know it; the browser still sends the name (Host, SNI).
+func (a *App) browserPick(id, host string) (pid, dialHost string, err error) {
 	row, err := a.db.GetNetworkProfile(id)
 	if err != nil || row == nil {
-		return "", errors.New("profile gone")
+		return "", "", errors.New("profile gone")
 	}
 	routes, _ := a.profileRoutes(row, profileLocalProxy(row.ConfigJSON))
 	in := func(ip netip.Addr) bool {
@@ -176,12 +178,12 @@ func (a *App) browserPick(id, host string) (string, error) {
 	}
 	if ip, err := netip.ParseAddr(host); err == nil {
 		if in(ip.Unmap()) {
-			return id, nil
+			return id, host, nil
 		}
-		return "", nil
+		return "", host, nil
 	}
 	if a.profileHostname(id, host) {
-		return id, nil
+		return id, host, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
@@ -189,12 +191,12 @@ func (a *App) browserPick(id, host string) (string, error) {
 	if err != nil || len(addrs) == 0 {
 		// Unknown here: most likely an intranet name, resolved inside
 		// the VPN by the tunnel's dialer.
-		return id, nil
+		return id, host, nil
 	}
-	if in(addrs[0].Unmap()) {
-		return id, nil
+	if ip := addrs[0].Unmap(); in(ip) {
+		return id, ip.String(), nil
 	}
-	return "", nil
+	return "", host, nil
 }
 
 // profileHostname reports whether a connection using the profile has

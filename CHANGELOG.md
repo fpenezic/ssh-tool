@@ -26,6 +26,9 @@ while Wails v3 was a prerelease upstream.
 - New credential: the dialog opens near the top and grows downwards, so the fields and the Create button no longer move under the cursor while the password strength hints appear.
 - Sync: the WebDAV, SFTP and Dropbox forms grey out Save until something changed, with Discard and an "Unsaved changes" marker.
 
+### Network profiles
+- A profile's **Browser** reaches a name that only this machine's hosts file knows (an OpenShift route behind the VPN, say): the address from the hosts file is dialed inside the tunnel, and the browser still sends the name. Before, the name went into the tunnel and failed when the customer's DNS did not know it.
+
 ### Navigation
 - A **Home** button in the Connections header goes back to the start page (recent connections, workspaces, profiles). **Esc** in the tree does the same (after clearing an active filter). Before, only a click on empty tree space did, and a long tree has none.
 
