@@ -202,8 +202,8 @@ wails3 generate bindings ./...     # rewrites frontend/bindings/
 
 Release:
 ```bash
-git tag -a v0.X.Y -m "..."
-git push origin HEAD v0.X.Y
+git tag -a vX.Y.Z -m "..."
+git push origin HEAD vX.Y.Z
 # CI (GitHub Actions) builds + publishes on tag push; see below
 ```
 
@@ -273,9 +273,9 @@ author asks to ship/promote/release:
    `.vulncheck-allow` for an ID with no fix yet, the repository variable
    `SKIP_VULNCHECK=true` to bypass once).
 
-4. Commit changelog as final release commit: `chore(release): v0.X.Y`.
+4. Commit changelog as final release commit: `chore(release): vX.Y.Z`.
 
-5. Tag annotated: `git tag -a v0.X.Y -m "v0.X.Y - one-line summary"`.
+5. Tag annotated: `git tag -a vX.Y.Z -m "vX.Y.Z - one-line summary"`.
 
 6. Push commits + tag. GitHub Actions builds every platform
    (desktop x4 + the signed android APK) and publishes a GitHub
@@ -302,7 +302,7 @@ Notes:
   fetches it from this repo (raw.githubusercontent) on a timer -
   no push, no web deploy.
 - `task build` injects version from `git describe --tags --always
-  --dirty`. Tagged build → `v0.X.Y`; untagged → SHA + `-dirty`.
+  --dirty`. Tagged build → `vX.Y.Z`; untagged → SHA + `-dirty`.
 - Plain `go run .` shows `dev` / `unknown`.
 
 ## Style conventions
