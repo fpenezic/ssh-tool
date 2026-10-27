@@ -839,16 +839,19 @@
   // A transport form with unsaved changes keeps them across every reload
   // (the section reopened, another transport saved or connected, a push).
   // The one just saved matches the stored values by then and takes them.
+  let syncInitial: { w: string; s: string; d: string } | null = null;
   async function syncLoadConfig(keepDrafts = true) {
     try {
-      // The first load has no stored config to compare with: what the form
-      // held when it started (before any request) stands in, so typing
-      // during it counts too.
+      // Until a config has loaded there is nothing stored to compare with:
+      // the form's values from the very first load stand in (taken before
+      // any request, and kept when a load fails), so whatever was typed
+      // since counts as a draft.
       const snap = () => JSON.stringify([syncUrl, syncUsername, syncPassword]);
       const snapSftp = () => JSON.stringify([sftpHost, sftpPort, sftpUser, sftpDir, sftpAuthMode, sftpCredId]);
       const snapDropbox = () => JSON.stringify([dropboxAppKey, dropboxFolder]);
       const first = syncCfg === null;
-      const before = { w: snap(), s: snapSftp(), d: snapDropbox() };
+      syncInitial ??= { w: snap(), s: snapSftp(), d: snapDropbox() };
+      const before = syncInitial;
       if (!oauthRedirectUri) {
         oauthRedirectUri = await api.oauthRedirectUri();
       }
@@ -2839,6 +2842,12 @@
   async function npSelect(id: string): Promise<boolean> {
     // Reselecting the open item changes nothing (and keeps its draft).
     if (id === npSel) return true;
+    // A save or create in flight reads the form when its requests return:
+    // the form must not be cleared or switched under it.
+    if (npBusy) {
+      toast.info("Wait for the profile to finish saving");
+      return false;
+    }
     if (!(await confirmLeave(["settings"]))) return false;
     npSel = id;
     npCancelEdit();
