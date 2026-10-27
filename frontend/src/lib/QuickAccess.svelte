@@ -49,9 +49,13 @@
     connectingId = null;
   }
 
-  function onRowClick(c: Connection) {
-    selection.selectConnection(c.id);
+  async function onRowClick(c: Connection) {
     const now = Date.now();
+    // On Stay in the unsaved prompt: no double-click connect either.
+    if (!(await selection.selectConnection(c.id))) {
+      lastClickId = "";
+      return;
+    }
     if (c.id === lastClickId && now - lastClickAt < 400) {
       lastClickId = "";
       quickConnect(c);

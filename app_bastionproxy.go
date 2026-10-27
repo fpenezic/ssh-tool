@@ -42,7 +42,9 @@ func jumpConnOf(id string) string {
 // one line, however many connections.
 const jumpRouteName = "connections with a jump host"
 
-func jumpConnRoutes(conns []store.Connection, folders []store.Folder) ([]sharedRoute, map[string]string) {
+// paths maps each route id it returns to its jump path (chain and network
+// profile), for callers that must tell one path from another.
+func jumpConnRoutes(conns []store.Connection, folders []store.Folder) (routes []sharedRoute, hosts map[string]string, paths map[string]string) {
 	// Group by address or name: two connections with the same one and
 	// different paths (another jump chain or network profile) leave it
 	// ambiguous, so neither routes it and it goes by the normal route
@@ -78,10 +80,13 @@ func jumpConnRoutes(conns []store.Connection, folders []store.Folder) ([]sharedR
 			e.id = ""
 		}
 	}
-	var routes []sharedRoute
-	hosts := map[string]string{}
+	hosts = map[string]string{}
+	paths = map[string]string{}
 	for _, key := range order {
 		e := byKey[key]
+		if e.id != "" {
+			paths[e.id] = e.path
+		}
 		if e.id == "" {
 			log.Printf("network: app proxy: %s is used by %s with different jump paths; not routed by jump host", key, strings.Join(e.names, ", "))
 			continue
@@ -92,7 +97,7 @@ func jumpConnRoutes(conns []store.Connection, folders []store.Folder) ([]sharedR
 			hosts[key] = e.id
 		}
 	}
-	return routes, hosts
+	return routes, hosts, paths
 }
 
 // jumpDial opens addr the way a connect to the connection would reach its

@@ -70,8 +70,11 @@
     ]);
   }
 
-  function openConnMenu(e: MouseEvent, conn: { id: string; name: string; hostname: string | null }) {
-    if (!selection.isConnectionSelected(conn.id)) selection.selectConnection(conn.id);
+  async function openConnMenu(e: MouseEvent, conn: { id: string; name: string; hostname: string | null }) {
+    // The menu acts on the selection: wait for it (an unsaved prompt may
+    // stand in between), and keep the browser's own menu away meanwhile.
+    e.preventDefault();
+    if (!selection.isConnectionSelected(conn.id) && !(await selection.selectConnection(conn.id))) return;
     const ids = selection.selectedConnectionIds();
     const allFav = ids.every((id) => tree.connectionById(id)?.favorite);
     const allTunnels = ids.every((id) => tunnels.isTunnel(id));
@@ -176,8 +179,12 @@
       selection.toggleConnection(connId);
       return;
     }
-    selection.select({ kind: "connection", id: connId });
     const now = Date.now();
+    // On Stay in the unsaved prompt: no double-click connect either.
+    if (!(await selection.select({ kind: "connection", id: connId }))) {
+      lastClickId = "";
+      return;
+    }
     if (connId === lastClickId && now - lastClickAt < 400) {
       lastClickId = "";
       quickConnect(connId, name, hostname);

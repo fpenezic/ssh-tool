@@ -181,8 +181,13 @@
       selection.toggleConnection(connId);
       return;
     }
-    selection.selectConnection(connId);
     const now = Date.now();
+    // On Stay in the unsaved prompt nothing else happens: no double-click
+    // connect to a row that did not get selected.
+    if (!(await selection.selectConnection(connId))) {
+      lastClickId = "";
+      return;
+    }
     if (connId === lastClickId && now - lastClickAt < 400) {
       lastClickId = "";
       quickConnect(connId, name, hostname);
@@ -513,15 +518,16 @@
     };
   }
 
-  function openFolderMenu(e: MouseEvent) {
+  async function openFolderMenu(e: MouseEvent) {
     // Desktop right-click selects the row first (both panes are visible, so
     // selecting is harmless and lets the menu act on the multi-selection).
     // On mobile, selecting flips mobileShowDetail and navigates to the
     // folder settings pane - so a long-press would pop the menu AND slide
     // away the tree underneath it. Skip the auto-select on mobile and act on
     // this single folder; "Folder settings" below is the deliberate path in.
+    e.preventDefault();
     if (!isMobile && !selection.isFolderSelected(folder.id)) {
-      selection.selectFolderById(folder.id);
+      if (!(await selection.selectFolderById(folder.id))) return;
     }
     const ids = isMobile && !selection.isFolderSelected(folder.id)
       ? [folder.id]
@@ -579,8 +585,11 @@
     ]);
   }
 
-  function openConnMenu(e: MouseEvent, conn: { id: string; name: string; hostname: string }) {
-    if (!selection.isConnectionSelected(conn.id)) selection.selectConnection(conn.id);
+  async function openConnMenu(e: MouseEvent, conn: { id: string; name: string; hostname: string }) {
+    // The menu acts on the selection: wait for it (an unsaved prompt may
+    // stand in between), and keep the browser's own menu away meanwhile.
+    e.preventDefault();
+    if (!selection.isConnectionSelected(conn.id) && !(await selection.selectConnection(conn.id))) return;
     const ids = selection.selectedConnectionIds();
     const allFav = ids.every((id) => tree.connectionById(id)?.favorite);
     const allTunnels = ids.every((id) => tunnels.isTunnel(id));

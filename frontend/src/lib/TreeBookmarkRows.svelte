@@ -24,9 +24,12 @@
   // not fire reliably on touch WebViews.
   let lastKey = "";
   let lastAt = 0;
-  function onClick(b: TreeBookmark) {
-    select(b);
+  async function onClick(b: TreeBookmark) {
     const now = Date.now();
+    if (!(await select(b))) {
+      lastKey = "";
+      return;
+    }
     if (b.key === lastKey && now - lastAt < 400) {
       lastKey = "";
       void openBookmark(b.spec, b.bm);
@@ -36,16 +39,19 @@
     }
   }
 
-  function select(b: TreeBookmark) {
-    selection.selectConnection(b.spec.connection_id);
+  // False on Stay in the unsaved prompt: then nothing else happens either.
+  async function select(b: TreeBookmark): Promise<boolean> {
+    if (!(await selection.selectConnection(b.spec.connection_id))) return false;
     treeBookmarks.selected = { key: b.key, connId: b.spec.connection_id };
     dbTabs.treeSelected = null;
     // The editor shows the connection's forwards, where the bookmark lives.
-    void view.forceEditorTab("forwards");
+    return view.forceEditorTab("forwards");
   }
 
-  function openMenu(e: MouseEvent, b: TreeBookmark) {
-    select(b);
+  async function openMenu(e: MouseEvent, b: TreeBookmark) {
+    // Before the await, so the browser's own menu does not come up on Stay.
+    e.preventDefault();
+    if (!(await select(b))) return;
     contextMenu.show(e, [
       { label: "Open", iconComponent: IconExternalLink, onSelect: () => void openBookmark(b.spec, b.bm) },
       { label: "Hide from tree", iconComponent: IconX, onSelect: () => void treeBookmarks.hide(b) },
