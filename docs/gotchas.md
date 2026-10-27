@@ -2159,9 +2159,10 @@ everything mobile is behind a build tag or an `isMobile` check.
    changing the selection is covered for free; `select()` resolves false
    on Stay, so a caller that does more than select (a row highlight, a
    double-click connect, a context menu on the selection) awaits it. Code
-   that deletes selected items calls `selection.forget(goneIds)` with the
-   ids that were really deleted (no prompt: their drafts have nothing to
-   save into). Scopes matter: Settings stays mounted
+   that deletes selected items reloads and then calls
+   `selection.dropMissing()`, which drops whatever no longer exists
+   (cascades included) without a prompt: those drafts have nothing to
+   save into. Scopes matter: Settings stays mounted
    behind the other views, so its forms register `"settings"` and only
    their own navigation asks; a sub-form inside one editor tab (the
    forward form) is `"tab"`. A draft `$effect` that re-reads the stored

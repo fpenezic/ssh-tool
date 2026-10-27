@@ -646,19 +646,23 @@ class SelectionStore {
     });
   }
 
-  // Deleted items leave the selection: out of the multi-sets, and an anchor
-  // that went gives way to a remaining one (or none). No prompt: a deleted
-  // item's draft has nothing left to save into.
-  forget(ids: string[]) {
-    if (!ids.length) return;
-    const gone = new Set(ids);
-    const keep = (set: Set<string>) => new Set([...set].filter((id) => !gone.has(id)));
-    this.extras = keep(this.extras);
-    this.folderExtras = keep(this.folderExtras);
-    this.credentialExtras = keep(this.credentialExtras);
-    this.credentialFolderExtras = keep(this.credentialFolderExtras);
+  // After a delete and the reload: whatever is selected and no longer
+  // exists (deleted, or gone with a deleted folder) leaves the selection.
+  // An anchor that went gives way to a remaining item, or none. No prompt:
+  // a deleted item's draft has nothing left to save into.
+  dropMissing() {
+    const exists = (kind: string, id: string) =>
+      kind === "connection" ? !!tree.connectionById(id)
+      : kind === "folder" ? !!tree.folderById(id)
+      : kind === "credential" ? !!credentials.byId(id)
+      : credentials.folders.some((f) => f.id === id);
+    const keep = (kind: string, set: Set<string>) => new Set([...set].filter((id) => exists(kind, id)));
+    this.extras = keep("connection", this.extras);
+    this.folderExtras = keep("folder", this.folderExtras);
+    this.credentialExtras = keep("credential", this.credentialExtras);
+    this.credentialFolderExtras = keep("credentialFolder", this.credentialFolderExtras);
     const c = this.current;
-    if (c.kind === "none" || c.kind === "dynamicEntry" || !gone.has(c.id)) return;
+    if (c.kind === "none" || c.kind === "dynamicEntry" || exists(c.kind, c.id)) return;
     const pool = c.kind === "connection" ? this.extras : c.kind === "folder" ? this.folderExtras
       : c.kind === "credential" ? this.credentialExtras : this.credentialFolderExtras;
     const next = pool.values().next().value;
