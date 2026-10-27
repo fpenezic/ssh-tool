@@ -836,11 +836,17 @@
   let hasGdriveToken = $state(false);
   let gdriveConnecting = $state(false);
 
-  async function syncLoadConfig() {
+  // keepDrafts: back on the Sync section, a transport form with unsaved
+  // changes keeps them (the other loads follow a save or connect, where
+  // the stored values are what the form should show).
+  async function syncLoadConfig(keepDrafts = false) {
     try {
       if (!oauthRedirectUri) {
         oauthRedirectUri = await api.oauthRedirectUri();
       }
+      const had = keepDrafts && syncCfg !== null;
+      const keepWebdav = had && webdavDirty, keepSftp = had && sftpDirty, keepDropbox = had && dropboxDirty;
+      const prev = { syncUrl, syncUsername, sftpHost, sftpPort, sftpUser, sftpDir, sftpAuthMode, sftpCredId, dropboxAppKey, dropboxFolder };
       syncCfg = await api.syncConfigGet();
       syncUrl = syncCfg.url;
       syncUsername = syncCfg.username;
@@ -863,6 +869,9 @@
       gdriveClientId = syncCfg.gdrive_client_id;
       hasGdriveSecret = syncCfg.has_gdrive_secret;
       hasGdriveToken = syncCfg.has_gdrive_token;
+      if (keepWebdav) ({ syncUrl, syncUsername } = prev);
+      if (keepSftp) ({ sftpHost, sftpPort, sftpUser, sftpDir, sftpAuthMode, sftpCredId } = prev);
+      if (keepDropbox) ({ dropboxAppKey, dropboxFolder } = prev);
     } catch { /* ignore */ }
   }
 
@@ -3404,7 +3413,9 @@
       void loadAutoBackupPrefs();
     }
     if (activeSection === "sync") {
-      void syncLoadConfig();
+      // Untracked: it reads the form to keep drafts, and the effect must
+      // not rerun on every keystroke.
+      untrack(() => void syncLoadConfig(true));
       void syncLoadCredOptions();
     }
   });
