@@ -52,4 +52,15 @@ func TestBrowserPick(t *testing.T) {
 	if _, dial, _ := a.browserPick(id, "intranet.customer.example"); dial != "intranet.customer.example" {
 		t.Errorf("a connection's name is dialed as is, got %q", dial)
 	}
+	// The same for a connection's name: a hosts entry inside the networks
+	// still decides the address.
+	loID := lo.ID
+	if _, err := db.CreateConnection(store.NewConnection{Name: "route", Hostname: "localhost",
+		Overrides: store.InheritableSettings{NetworkProfileID: &loID}}); err != nil {
+		t.Fatal(err)
+	}
+	got, dial, err = a.browserPick(lo.ID, "localhost")
+	if err != nil || got != lo.ID || (dial != "127.0.0.1" && dial != "::1") {
+		t.Errorf("connection name localhost -> %q dial %q, %v", got, dial, err)
+	}
 }

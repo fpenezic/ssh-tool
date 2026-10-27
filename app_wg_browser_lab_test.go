@@ -62,7 +62,7 @@ func TestWireGuardLabBrowserProxyHostsName(t *testing.T) {
 		t.Fatal(err)
 	}
 	proxy := fmt.Sprintf("socks5h://127.0.0.1:%d", port)
-	out, err := exec.Command("curl", "-sS", "-m", "15", "-x", proxy, url).CombinedOutput()
+	out, err := exec.Command("curl", "-sS", "-m", "15", "--noproxy", "", "-x", proxy, url).CombinedOutput()
 	if err != nil || !strings.Contains(string(out), expect) {
 		t.Fatalf("through the VPN by the hosts-only name: %v %s", err, out)
 	}

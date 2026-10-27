@@ -182,9 +182,11 @@ func (a *App) browserPick(id, host string) (pid, dialHost string, err error) {
 		}
 		return "", host, nil
 	}
-	if a.profileHostname(id, host) {
-		return id, host, nil
-	}
+	// A connection's name goes into the tunnel whatever it resolves to
+	// here; when the local resolver puts it inside the profile's networks
+	// (a hosts entry for a name the customer's DNS does not know), that
+	// address is what gets dialed, the same as for any other name.
+	conn := a.profileHostname(id, host)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 	cancel()
@@ -195,6 +197,9 @@ func (a *App) browserPick(id, host string) (pid, dialHost string, err error) {
 	}
 	if ip := addrs[0].Unmap(); in(ip) {
 		return id, ip.String(), nil
+	}
+	if conn {
+		return id, host, nil
 	}
 	return "", host, nil
 }
