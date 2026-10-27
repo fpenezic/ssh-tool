@@ -2,8 +2,8 @@
 
 All notable changes to ssh-tool are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
-This project uses SemVer with a `0.x` prefix while Wails v3 remains
-a prerelease upstream.
+This project uses SemVer. Releases before 1.0.0 used a `0.x` prefix
+while Wails v3 was a prerelease upstream.
 
 ---
 
