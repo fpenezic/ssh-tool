@@ -654,6 +654,18 @@ class SelectionStore {
   // the stores still hold them.
   dropMissing(gone: string[] = []) {
     const deleted = new Set(gone);
+    // A deleted folder takes its subtree with it: add what the stores still
+    // hold under it, for when the reload failed and they hold it all.
+    const under = (parentOf: (id: string) => string | null | undefined, id: string) => {
+      for (let p = parentOf(id), n = 0; p && n < 10000; p = parentOf(p), n++) if (deleted.has(p)) return true;
+      return false;
+    };
+    const folderParent = (id: string) => tree.folderById(id)?.parent_id ?? null;
+    const credFolderParent = (id: string) => credentials.folders.find((f) => f.id === id)?.parent_id ?? null;
+    for (const f of tree.folders) if (under(folderParent, f.id)) deleted.add(f.id);
+    for (const c of tree.connections) if (c.folder_id && (deleted.has(c.folder_id) || under(folderParent, c.folder_id))) deleted.add(c.id);
+    for (const f of credentials.folders) if (under(credFolderParent, f.id)) deleted.add(f.id);
+    for (const c of credentials.list) if (c.folder_id && (deleted.has(c.folder_id) || under(credFolderParent, c.folder_id))) deleted.add(c.id);
     const exists = (kind: string, id: string) => !deleted.has(id) && (
       kind === "connection" ? !!tree.connectionById(id)
       : kind === "folder" ? !!tree.folderById(id)
