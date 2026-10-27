@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TagInput from "./TagInput.svelte";
   import ExpiryInput from "./ExpiryInput.svelte";
   import { credentials, selection } from "./stores.svelte";
   import { errMsg } from "./connectErrors";
@@ -28,7 +29,7 @@
   // Optional expiry date (YYYY-MM-DD) for time-limited secrets - API
   // tokens, setup / auth keys. Empty = no expiry.
   let expiresDate = $state("");
-  let tagsRaw = $state("");
+  let tags = $state<string[]>([]);
 
   let password = $state("");
 
@@ -287,8 +288,8 @@
   let resultPub = $state<string | null>(null);
   let resultFp = $state<string | null>(null);
 
-  function tags(): string[] {
-    return tagsRaw.split(",").map((s) => s.trim()).filter(Boolean);
+  function tagList(): string[] {
+    return tags;
   }
 
   async function browsePuttyKey() {
@@ -311,7 +312,7 @@
       const base = {
         name,
         hint: hint || undefined,
-        tags: tags(),
+        tags: tagList(),
         default_username: defaultUser || undefined,
         folder_id: defaultFolderId ?? undefined,
         // <input type=date> gives YYYY-MM-DD in local time; store the
@@ -518,9 +519,11 @@
         <label>Default username
           <input bind:value={defaultUser} placeholder="optional, used as suggestion" />
         </label>
-        <label>Tags
-          <input bind:value={tagsRaw} placeholder="comma,separated" />
-        </label>
+        <!-- A div, not a label: a label hands its click to the first chip's
+             remove button. -->
+        <div class="field">Tags
+          <TagInput bind:tags known={credentials.allTags()} />
+        </div>
         {#if kind === "api_token" || kind === "password" || kind === "key_generate" || kind === "key_import_paste" || kind === "key_file_ref"}
           <label>Expires <span class="hint inline">(optional - warns you before a time-limited token / key lapses)</span>
             <ExpiryInput bind:value={expiresDate} />
@@ -782,12 +785,16 @@
   .overlay {
     position: fixed; inset: 0;
     background: rgba(0, 0, 0, 0.5);
-    display: flex; align-items: center; justify-content: center; z-index: 50;
+    /* Anchored at the top, not centred: the form grows while you type
+       (the password strength hints, kind-specific fields), and a centred
+       modal moved every field and the Create button under the cursor. */
+    display: flex; align-items: flex-start; justify-content: center; z-index: 50;
+    padding-top: 6vh;
   }
   .modal {
     background: var(--base); color: var(--text);
     border: 1px solid var(--surface0); border-radius: 6px;
-    width: min(560px, 92vw); max-height: 90vh; overflow: auto;
+    width: min(560px, 92vw); max-height: 88vh; overflow: auto;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
   }
   header {
@@ -805,7 +812,7 @@
     padding: 1rem;
     display: flex; flex-direction: column; gap: 0.6rem;
   }
-  label {
+  label, .field {
     display: flex; flex-direction: column; gap: 0.25rem;
     font-size: 0.8rem; color: var(--subtext0);
   }

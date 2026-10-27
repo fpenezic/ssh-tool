@@ -1322,6 +1322,7 @@ export const api = {
     set_folder_to_null?: boolean;
     name?: string;
     hint?: string;
+    tags?: string[];
     default_username?: string;
     set_default_username_to_null?: boolean;
     config?: Record<string, any>;

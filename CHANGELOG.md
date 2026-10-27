@@ -22,6 +22,9 @@ a prerelease upstream.
 - Browser launcher: Save is greyed out until the path changes, with Discard next to it.
 - Credentials: editing a credential joins the unsaved-changes prompt, and Save stays greyed out until something changed. A click on empty space in the credential list, or Esc, clears the selection, the same as in the connection tree.
 - Credentials: the expiry date field, the day count and the 30d / 90d / 365d buttons follow the theme instead of the browser's default look.
+- Credentials: tags can be edited after creation, and both forms use the same tag field as connections (chips, Enter or comma adds, suggestions from tags already in use).
+- New credential: the dialog opens near the top and grows downwards, so the fields and the Create button no longer move under the cursor while the password strength hints appear.
+- Sync: the WebDAV, SFTP and Dropbox forms grey out Save until something changed, with Discard and an "Unsaved changes" marker.
 
 ### Navigation
 - A **Home** button in the Connections header goes back to the start page (recent connections, workspaces, profiles). **Esc** in the tree does the same (after clearing an active filter). Before, only a click on empty tree space did, and a long tree has none.

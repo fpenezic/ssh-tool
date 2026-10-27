@@ -1,5 +1,6 @@
 <script lang="ts">
   import { registerUnsaved } from "./unsaved.svelte.ts";
+  import TagInput from "./TagInput.svelte";
   import ExpiryInput from "./ExpiryInput.svelte";
   import { credentials, selection, view } from "./stores.svelte";
   import { toast } from "./toast.svelte";
@@ -262,6 +263,7 @@
   let editing = $state(false);
   let editName = $state("");
   let editHint = $state("");
+  let editTags = $state<string[]>([]);
   let editUsername = $state("");
   let editExpires = $state(""); // YYYY-MM-DD, "" = no expiry
   let editSaving = $state(false);
@@ -285,7 +287,7 @@
   // differs, and leaving with changes asks first (unsaved.svelte.ts).
   let editBase = "";
   function editSnap(): string {
-    return JSON.stringify([editName, editHint, editUsername, editExpires]);
+    return JSON.stringify([editName, editHint, editUsername, editExpires, editTags]);
   }
   const editDirty = $derived(editing && editSnap() !== editBase);
   $effect(() => registerUnsaved({
@@ -299,6 +301,7 @@
     if (!cred) return;
     editName = cred.name;
     editHint = cred.hint ?? "";
+    editTags = [...(cred.tags ?? [])];
     editUsername = cred.default_username ?? "";
     // unix -> YYYY-MM-DD (local) for the date input; "" when no expiry.
     editExpires = cred.expires_at
@@ -321,6 +324,7 @@
         // emptied field to undefined, which the backend reads as
         // "no change" and the old hint came back on save.
         hint: editHint,
+        tags: editTags,
         default_username: editUsername || undefined,
         set_default_username_to_null: editUsername === "" && cred.default_username !== null,
         expires_at: editExpires ? Math.floor(new Date(editExpires + "T00:00:00").getTime() / 1000) : undefined,
@@ -777,6 +781,11 @@
         <label>Default username
           <input bind:value={editUsername} placeholder="e.g. ubuntu, admin" />
         </label>
+        <!-- A div, not a label: a label hands its click to the first chip's
+             remove button. -->
+        <div class="field">Tags
+          <TagInput bind:tags={editTags} known={credentials.allTags()} />
+        </div>
         {#if cred.kind === "api_token" || cred.kind === "password" || cred.kind === "key"}
           <label>Expires <span class="hint inline">(optional - clear to remove)</span>
             <ExpiryInput bind:value={editExpires} />
@@ -1261,7 +1270,7 @@
   .ts { color: var(--overlay0); font-size: 0.75rem; margin-right: 0.4rem; }
   .by { color: var(--subtext0); font-size: 0.75rem; margin-right: 0.4rem; }
   .form { display: flex; flex-direction: column; gap: 0.6rem; max-width: 560px; }
-  .form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--subtext0); }
+  .form label, .form .field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--subtext0); }
   .field-hint { color: var(--overlay0); font-size: 0.72rem; line-height: 1.45; }
   .cert-status > span:first-child { flex: 1; min-width: 12rem; }
   .cert-wait { font-size: 0.78rem; color: var(--subtext0); }
