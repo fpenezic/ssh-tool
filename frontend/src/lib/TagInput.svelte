@@ -45,6 +45,13 @@
   }
 
   function onKey(e: KeyboardEvent) {
+    // Ctrl/Cmd+S saves from a handler further up: commit what is typed
+    // first, or the save goes out without it. Not prevented, so it reaches
+    // that handler.
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      add();
+      return;
+    }
     const n = suggestions.length;
     if (e.key === "ArrowDown" && n) {
       e.preventDefault();
@@ -88,8 +95,11 @@
         {#each suggestions as s, i (s.tag)}
           <!-- mousedown, not click: click lands after the input's blur
                has already committed whatever was typed. -->
+          <!-- Out of the Tab order: the list closes when the input loses
+               focus, so a focused option would vanish under the cursor. -->
           <button
             type="button"
+            tabindex="-1"
             role="option"
             aria-selected={i === pick}
             class:picked={i === pick}
