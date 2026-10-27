@@ -1292,7 +1292,16 @@
     }
   }
 
-  function openFolderDelete(folderIds: string[]) {
+  function openFolderDelete(selected: string[]) {
+    // A subfolder of another selected folder goes with its parent (the
+    // DB cascades); deleting it again would only report "not found".
+    const chosen = new Set(selected);
+    const folderIds = selected.filter((id) => {
+      for (let p = tree.folderById(id)?.parent_id ?? null; p; p = tree.folderById(p)?.parent_id ?? null) {
+        if (chosen.has(p)) return false;
+      }
+      return true;
+    });
     const items: typeof deleteItems = [];
     for (const id of folderIds) collectFolderVictims(id, items);
     deleteItems = items;

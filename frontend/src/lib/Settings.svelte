@@ -1065,10 +1065,22 @@
     sftpDir !== syncCfg.sftp_dir || sftpAuthMode !== (syncCfg.sftp_auth_mode || "credential") || sftpCredId !== syncCfg.sftp_cred_id ||
     sftpInlinePassword !== "" || sftpInlineKeyPem !== "" || sftpInlineKeyPassphrase !== ""));
   const dropboxDirty = $derived(!syncCfg || (dropboxAppKey !== syncCfg.dropbox_app_key || dropboxFolder !== (syncCfg.dropbox_folder || "/ssh-tool")));
-  async function syncDiscard() {
-    syncPassword = "";
-    sftpInlinePassword = ""; sftpInlineKeyPem = ""; sftpInlineKeyPassphrase = "";
-    await syncLoadConfig();
+  // Back to the stored values for one transport only: a draft on another
+  // transport's form stays.
+  function syncDiscard(kind: "webdav" | "sftp" | "dropbox") {
+    const c = syncCfg;
+    if (kind === "webdav") {
+      syncPassword = "";
+      if (c) { syncUrl = c.url; syncUsername = c.username; }
+    } else if (kind === "sftp") {
+      sftpInlinePassword = ""; sftpInlineKeyPem = ""; sftpInlineKeyPassphrase = "";
+      if (c) {
+        sftpHost = c.sftp_host; sftpPort = c.sftp_port || 22; sftpUser = c.sftp_user; sftpDir = c.sftp_dir;
+        sftpAuthMode = c.sftp_auth_mode || "credential"; sftpCredId = c.sftp_cred_id;
+      }
+    } else if (c) {
+      dropboxAppKey = c.dropbox_app_key; dropboxFolder = c.dropbox_folder || "/ssh-tool";
+    }
   }
 
   async function syncSaveConfig() {
@@ -2473,8 +2485,11 @@
   async function spLoad() {
     try {
       const r = await api.networkSharedProxyGet();
+      // Back on the page with an address still being typed: keep it.
+      const keep = spDirty ? { bind: sp.bind, port: sp.port } : null;
       sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], jumps: !!r.config.jump_connections, listening: r.listening };
       spBase = { bind: sp.bind, port: sp.port };
+      if (keep) { sp.bind = keep.bind; sp.port = keep.port; }
       spDetails = sp.enabled ? await api.networkSharedProxyDetails() : null;
     } catch { /* shown on save */ }
   }
@@ -2484,17 +2499,17 @@
   let spQueue: Promise<void> = Promise.resolve();
   let spPending = 0;
   function spSave(fields = false): Promise<void> {
-    const req = {
-      enabled: sp.enabled,
-      bind: fields ? sp.bind.trim() : spBase.bind,
-      port: fields ? Number(sp.port) : spBase.port,
-      priority: $state.snapshot(sp.priority),
-      jump_connections: sp.jumps,
-    };
+    // A switch sends the stored address and port as they are when its turn
+    // in the queue comes, so an explicit Save queued before it is not
+    // undone by the older pair.
+    const typed = fields ? { bind: sp.bind.trim(), port: Number(sp.port) } : null;
+    const rest = { enabled: sp.enabled, priority: $state.snapshot(sp.priority), jump_connections: sp.jumps };
     spPending++;
     spQueue = spQueue.then(async () => {
+      const req = { ...rest, ...(typed ?? { bind: spBase.bind, port: spBase.port }) };
       try {
         await api.networkSharedProxySet(req);
+        if (typed) spBase = { ...typed };
         if (spPending === 1) {
           const r = await api.networkSharedProxyGet();
           const d = r.config.enabled ? await api.networkSharedProxyDetails() : null;
@@ -6240,7 +6255,7 @@
     <div class="row" style="gap:0.5rem">
       <button class="primary" onclick={syncSaveConfig} disabled={!webdavDirty}>Save</button>
       {#if webdavDirty}
-        <button onclick={syncDiscard} title="Throw the unsaved changes away">Discard</button>
+        <button onclick={() => syncDiscard("webdav")} title="Throw the unsaved changes away">Discard</button>
         <span class="dirty-note">Unsaved changes</span>
       {/if}
     </div>
@@ -6317,7 +6332,7 @@
     <div class="row" style="gap:0.5rem">
       <button class="primary" onclick={syncSaveSftp} disabled={!sftpDirty}>Save</button>
       {#if sftpDirty}
-        <button onclick={syncDiscard} title="Throw the unsaved changes away">Discard</button>
+        <button onclick={() => syncDiscard("sftp")} title="Throw the unsaved changes away">Discard</button>
         <span class="dirty-note">Unsaved changes</span>
       {/if}
     </div>
@@ -6351,7 +6366,7 @@
     <div class="row" style="gap:0.5rem; align-items:center">
       <button class="primary" onclick={dropboxSaveConfig} disabled={!dropboxDirty}>Save</button>
       {#if dropboxDirty}
-        <button onclick={syncDiscard} title="Throw the unsaved changes away">Discard</button>
+        <button onclick={() => syncDiscard("dropbox")} title="Throw the unsaved changes away">Discard</button>
         <span class="dirty-note">Unsaved changes</span>
       {/if}
       {#if hasDropboxToken}
