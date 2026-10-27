@@ -2514,8 +2514,9 @@
           const r = await api.networkSharedProxyGet();
           const d = r.config.enabled ? await api.networkSharedProxyDetails() : null;
           if (spPending === 1) {
-            // Text still being typed (a switch saved meanwhile) stays.
-            const keep = !fields && spDirty ? { bind: sp.bind, port: sp.port } : null;
+            // Text typed while this request ran stays (spBase already
+            // holds what a Save sent, so only later edits count as dirty).
+            const keep = spDirty ? { bind: sp.bind, port: sp.port } : null;
             sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], jumps: !!r.config.jump_connections, listening: r.listening };
             spBase = { bind: sp.bind, port: sp.port };
             if (keep) { sp.bind = keep.bind; sp.port = keep.port; }
