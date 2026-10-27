@@ -2652,7 +2652,12 @@
     // with the form as this load found it, since after a Discard there is no
     // baseline to compare with.
     const now = lpOpen[np.id];
-    if (now && before !== null && lpSnap(now) !== before) return;
+    if (now && before !== null && lpSnap(now) !== before) {
+      // After a Discard the baseline is gone: the stored values are it, so
+      // what was typed shows as unsaved.
+      if (lpBase[np.id] === undefined) lpBase = { ...lpBase, [np.id]: lpSnap(f) };
+      return;
+    }
     lpOpen = { ...lpOpen, [np.id]: f };
     lpBase = { ...lpBase, [np.id]: lpSnap(f) };
   }
