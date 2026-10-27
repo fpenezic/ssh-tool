@@ -90,7 +90,8 @@ The main window has a top tab bar with four sections:
 
 - **Connections** - folder tree on the left, connection editor on the
   right. With nothing selected the right side shows the home pane
-  (see §3, Home pane).
+  (see §3, Home pane); the **Home** button in the tree header, **Esc**
+  in the tree or a click on empty tree space goes back to it.
 - **Credentials** - credential folder tree on the left, credential
   editor on the right.
 - **Settings** - side-nav with grouped settings panels.
@@ -209,6 +210,8 @@ Collapsible; collapsed state persists.
 ### Home pane
 
 With nothing selected in the tree, the right side shows an overview
+(back to it: the **Home** button in the Connections header, **Esc** in
+the tree once any filter is cleared, or a click on empty tree space),
 built from what the app already keeps. Nothing is fetched from a server
 and no host is contacted for it, except the liveness probe below.
 
@@ -514,6 +517,19 @@ connection), **VNC** when the console is on, and **...** with **Use a
 different credential...** and **Delete connection**. The settings sit
 in tabs under the header; the editor reopens on the tab you used last.
 
+**Unsaved changes.** Edits are kept until you click **Save** (or press
+Ctrl+S). Save is greyed out while nothing differs from what is stored;
+with changes it turns orange (**Save \***), a **Discard** button
+appears next to it, and an "Unsaved changes" line with **Save now** /
+**Discard** sits under the fields. Switching editor tabs keeps them.
+Leaving the connection with changes - another row in the tree,
+Ctrl/Shift+click, Home, Esc - asks first: **Save**, **Discard** or
+**Stay**. The same goes for a half-filled forward form when you switch
+tabs, and for the folder editor. A switch over an inherited setting
+(VNC, Kafka, Database) that you turn on and off again goes back to
+inheriting, so it is not a change. The forwards themselves (Forwards
+tab) are saved by their own Create / Save, not by the connection's Save.
+
 **General**
 
 - **Name**
@@ -549,7 +565,10 @@ in tabs under the header; the editor reopens on the tab you used last.
   unset on the connection.
 - **Icon** - Upload PNG/SVG/JPG/WebP/GIF (≤256 KB). Clears to the
   default monitor icon.
-- **Tags** - chip editor with type-and-enter.
+- **Tags** - chip editor: Enter, a comma or leaving the field adds the
+  tag, Backspace in an empty field removes the last one, and tags
+  already in use are offered while you type (most used first). The
+  credential editor uses the same field.
 - **Notes** - markdown textarea with an **Edit / Preview** toggle.
   Supports headings (`#` through `######`), `**bold**`, `*italic*`,
   `` `inline code` ``, fenced code blocks, `-`/`*`/`+` unordered
@@ -799,7 +818,9 @@ Each credential has a **kind** that determines auth behaviour:
 
 When a credential is selected:
 
-- **Name**, **hint**, **tags**, **default username** - inline edit.
+- **Name**, **hint**, **tags**, **default username**, **expiry** -
+  **Edit** opens them; Save is greyed out until something changed, and
+  leaving the credential with changes asks Save / Discard / Stay.
   Clearing the hint and saving removes it. Edit mode also exposes an
   **Icon** picker (upload PNG/SVG/JPG/WebP/GIF or choose from the
   library), same as connections and folders.
@@ -838,6 +859,9 @@ When a credential is selected:
   is hard-coded at 5 today; a configurable slider is on the
   roadmap.
 
+A click on empty space in the credential list, or **Esc** there, clears
+the selection.
+
 When a credential **folder** is selected, the header exposes:
 **Rename**, **+ Folder** (subfolder), **+ Credential** (creates in
 this folder), **Delete**.
@@ -845,7 +869,8 @@ this folder), **Delete**.
 ### Creating a credential
 
 Click `+` in the credentials header (or **+ Credential** in a folder
-header). Modal walks through:
+header). Modal walks through (every kind also takes **Tags**, the same
+chip field as connections):
 
 - **Password** - name + password. A 5-segment **strength meter**
   shows entropy + label (very weak / weak / fair / strong / very
@@ -2582,7 +2607,8 @@ SOCKS credentials, the same as the SSH dynamic forwards); it closes after
 
 ### App proxy (programs and a CI runner through the VPNs)
 
-The **app proxy** (Plugins & proxy -> App proxy) is one SOCKS5 proxy for things
+The **app proxy** (Plugins & proxy -> App proxy, turned on with the
+switch next to its title) is one SOCKS5 proxy for things
 outside the app - a CI runner, `curl`, a script, a database tool - that
 reaches every profile you mark **Reachable through the app proxy** (a
 profile's Proxy tab). Each address goes through the VPN whose networks
@@ -2597,7 +2623,11 @@ one closes. The app has to be running; the listener starts with it.
 A profile's networks are the routes the server pushed (from the last
 connect; a full-tunnel default route is left out), the addresses of
 connections in the tree that use it, and any **Extra networks** on its
-Proxy tab, which lists them all. Host names of those connections go to
+Proxy tab, which lists them all. On the Proxy tab **Reachable through the
+app proxy** and **Separate proxy for this VPN only** apply on the click;
+the listen address, port and extra networks wait for **Save** (with
+**Discard**, both greyed out while nothing changed). The app proxy's own
+listen address and port work the same way. Host names of those connections go to
 their profile as well and are resolved inside the VPN.
 
 When two profiles carry the same network (two customers that both push
@@ -4067,7 +4097,12 @@ to root with a warning.
 ## 19. Settings
 
 Side-nav with grouped panels (last-opened section persists as
-`settings_active_section`):
+`settings_active_section`). A switch, tick box or choice takes effect
+on the click. Text fields (addresses, ports, paths, server settings)
+wait for **Save**, which is greyed out until something changed, with
+**Discard** and an "Unsaved changes" marker next to it. A network
+profile with unsaved changes asks Save / Discard / Stay before another
+profile opens.
 
 ### Appearance → Appearance
 
@@ -4482,6 +4517,7 @@ typing without an extra click.
 | **Space** | Select without connecting |
 | **Double-click connection** | Connect |
 | **Delete** | Delete selected connection / folder (confirm modal - Enter confirms, Esc cancels) |
+| **Esc** | Clear an active name filter; with none, back to the home pane |
 | **Right-click** | Open context menu (positions itself to stay on-screen) |
 | **Right-click empty area** | New connection / New folder at root |
 

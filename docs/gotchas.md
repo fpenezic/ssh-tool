@@ -2151,6 +2151,22 @@ everything mobile is behind a build tag or an `isMobile` check.
    `ciVaultJournal`, rolled back when the save fails; `CIRunnerSet` is
    serialized.
 
+141. **Navigation goes through the unsaved-edit guard.**
+   (`frontend/src/lib/unsaved.svelte.ts`) An editor with a draft registers
+   a source (dirty, save -> bool, discard, scope) while mounted; whatever
+   moves away from it awaits `confirmLeave(scopes)` first. Every
+   `SelectionStore` mutator goes through `held()`, so a new way of
+   changing the selection is covered for free, but code that deletes the
+   item being edited must use `selection.selectForce()` (no prompt) and
+   only after the delete succeeded. Scopes matter: Settings stays mounted
+   behind the other views, so its forms register `"settings"` and only
+   their own navigation asks; a sub-form inside one editor tab (the
+   forward form) is `"tab"`. A draft `$effect` that re-reads the stored
+   item must keep the draft on a reload of the same item while it is dirty
+   (`tree.load()` hands in new objects), or a sync / refresh wipes it.
+   Tri-state switches ("" / on / off) flip through `flipTri` so on-off
+   lands back on inherit instead of an explicit copy of it.
+
 ---
 
 # Archive

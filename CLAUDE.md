@@ -52,7 +52,7 @@ Author wants 300+ connections, daily-driver UX, full opkssh support
 ## Tech stack
 
 Backend (Go 1.26):
-- Wails v3 beta.34 (`github.com/wailsapp/wails/v3`) - desktop shell + IPC.
+- Wails v3.0.0 (`github.com/wailsapp/wails/v3`) - desktop shell + IPC.
   When bumping this in go.mod, bump `WAILS3_VERSION` in
   `.github/workflows/release.yml` to match: the release build regenerates
   `frontend/bindings/` with the CLI that env pins (`build:frontend` ->
@@ -170,7 +170,7 @@ Tests + checks:
 go build ./...
 go test ./...                      # 31 packages carry tests
 cd frontend && npm run check       # svelte-check, 0 errors expected
-cd frontend && npm run test        # vitest, 36 files / 346 cases
+cd frontend && npm run test        # vitest, 37 files / 349 cases
 ```
 
 The Database tests that need a real server skip unless `DBTEST_PG` /
@@ -236,21 +236,23 @@ Android/mobile build-tag + event-transport traps. The file is split into
 
 ## Versioning workflow
 
-SemVer with `0.x` prefix while Wails v3 is still a prerelease upstream
-(alpha until 2026-08-02, beta since). `v1.0.0` waits for a real
-`v3.0.0` - beta does not count.
+SemVer. `v1.0.0` is the first release on Wails v3.0.0 stable; before it
+the app stayed on `0.x` while Wails v3 was a prerelease. Upstream ships
+Wails minors often: bump it when a fix or feature is needed, not on
+every release (and keep `WAILS3_VERSION` in release.yml in step).
 Current: see latest `v*` tag on `main`.
 
 **Every user-facing change ships with a version bump.** When the
 author asks to ship/promote/release:
 
 1. Decide the bump:
-   - **patch** (`v0.x.y → v0.x.(y+1)`) - bugfix only.
-   - **minor** (`v0.x.y → v0.(x+1).0`) - new feature(s), back-
+   - **patch** (`vX.Y.Z -> vX.Y.(Z+1)`) - bugfix only.
+   - **minor** (`vX.Y.Z -> vX.(Y+1).0`) - new feature(s), back-
      compatible. New decoder, new tab, new provider - all minor.
-     `v0.101.x` is perfectly fine.
-   - **major within 0.x** for breaking changes; `v1.0.0` reserved
-     for when Wails v3 stable.
+     `v1.40.x` is perfectly fine.
+   - **major** (`v2.0.0`) - only for a real break: a store / vault /
+     sync format an older app cannot read, a removed feature or
+     platform. Schema migrations that older apps tolerate are not one.
 
 2. Update `CHANGELOG.md`: new `## [vX.Y.Z]` block at the top,
    grouped by area, prose written for a returning user. The block opens
