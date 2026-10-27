@@ -124,12 +124,15 @@ interface MoveTarget {
 }
 
 // Deletes one by one and carries on past a failure (each shown as a
-// toast). The caller reloads and then drops what is gone from the
-// selection (selection.dropMissing), cascades included.
-async function deleteEach(ids: string[], del: (id: string) => Promise<unknown>): Promise<void> {
+// toast); returns the ids that went. The caller reloads and then drops
+// what is gone from the selection (selection.dropMissing), cascades
+// included.
+async function deleteEach(ids: string[], del: (id: string) => Promise<unknown>): Promise<string[]> {
+  const gone: string[] = [];
   for (const id of ids) {
-    try { await del(id); } catch (e) { toast.err(unwrapRaw(String((e as any)?.message ?? e))); }
+    try { await del(id); gone.push(id); } catch (e) { toast.err(unwrapRaw(String((e as any)?.message ?? e))); }
   }
+  return gone;
 }
 
 class ConnectionActionsStore {
@@ -1071,9 +1074,9 @@ class ConnectionActionsStore {
     this.deletePending = async () => {
       // The deleted item's editor goes without a prompt, and only when the
       // delete went through; a failure keeps the selection and its draft.
-      await deleteEach(ids, (id) => api.connectionsDelete(id));
+      const gone = await deleteEach(ids, (id) => api.connectionsDelete(id));
       await tree.load();
-      selection.dropMissing();
+      selection.dropMissing(gone);
     };
   }
 
@@ -1082,9 +1085,9 @@ class ConnectionActionsStore {
     for (const id of ids) collectFolderVictims(id, items);
     this.deleteItems = items;
     this.deletePending = async () => {
-      await deleteEach(ids, (id) => api.foldersDelete(id));
+      const gone = await deleteEach(ids, (id) => api.foldersDelete(id));
       await tree.load();
-      selection.dropMissing();
+      selection.dropMissing(gone);
     };
   }
 
@@ -1095,9 +1098,9 @@ class ConnectionActionsStore {
       .map((c) => ({ kind: "credential" as const, name: c.name, detail: c.kind }));
     this.deleteItems = items;
     this.deletePending = async () => {
-      await deleteEach(ids, (id) => api.credentialsDelete(id));
+      const gone = await deleteEach(ids, (id) => api.credentialsDelete(id));
       await credentials.load();
-      selection.dropMissing();
+      selection.dropMissing(gone);
     };
   }
 
@@ -1108,9 +1111,9 @@ class ConnectionActionsStore {
     this.deletePending = async () => {
       // Backend cascades: credentials in the subtree go through the full
       // vault-cleanup path, subfolders via FK.
-      await deleteEach(ids, (id) => api.credentialFoldersDelete(id));
+      const gone = await deleteEach(ids, (id) => api.credentialFoldersDelete(id));
       await credentials.load();
-      selection.dropMissing();
+      selection.dropMissing(gone);
     };
   }
 
