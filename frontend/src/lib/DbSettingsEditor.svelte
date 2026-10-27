@@ -8,6 +8,7 @@
   import { createLoginCredential } from "./loginModal.svelte.ts";
   import { IconPlus, IconTrash, IconChevronRight } from "./iconMap";
   import { serviceCards, toggleCard } from "./serviceCards.svelte.ts";
+  import { flipTri } from "./triSwitch";
   import { DB_ENGINES, dbEngineInfo, type DbTarget } from "./api";
 
   interface Props {
@@ -17,6 +18,10 @@
     inheritLabel: string;
     // Whether the database is on once inheritance is applied.
     effectiveOn: boolean;
+    // What a folder above gives when this one inherits, and the stored
+    // value: the switch lands back on inherit instead of a copy of it.
+    inheritedOn: boolean;
+    savedEnabled: string;
     // The engine once inheritance is applied, for the port hint.
     effectiveEngine: string;
     onOpen?: () => void;
@@ -29,7 +34,7 @@
     // allowed), so "inherit" can say what it gives.
     inheritedReadOnly?: boolean;
   }
-  let { draft = $bindable(), inheritLabel, effectiveOn, effectiveEngine, onOpen, showTargets = false, connName = "", onOpenTarget, inheritedReadOnly = false }: Props = $props();
+  let { draft = $bindable(), inheritLabel, effectiveOn, inheritedOn, savedEnabled, effectiveEngine, onOpen, showTargets = false, connName = "", onOpenTarget, inheritedReadOnly = false }: Props = $props();
   // Read-only once this level's own choice is applied: what a listed
   // database left on "(as above)" gets.
   const ownReadOnly = $derived(draft.readOnly === "on" || (draft.readOnly === "" && inheritedReadOnly));
@@ -82,7 +87,7 @@
   const port = $derived(dbEngineInfo(engine).port);
 
   function cycle() {
-    draft = { ...draft, enabled: draft.enabled === "on" ? "off" : "on" };
+    draft = { ...draft, enabled: flipTri(draft.enabled, savedEnabled, inheritedOn) };
   }
 
   const folded = $derived(serviceCards.folded.includes("db"));

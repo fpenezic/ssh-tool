@@ -8,6 +8,7 @@ import { resolveColorTag } from "./palette";
 import { terminalPrefs } from "./terminalPrefs.svelte.ts";
 import { focusActivePane } from "./paneFocus";
 import { takeNetworkVia } from "./networkVia";
+import { hasUnsaved, confirmLeave } from "./unsaved.svelte.ts";
 
 // A detached window shows terminals only: no tree, no Settings. What it
 // is asked to reveal or open there goes to the main window instead
@@ -614,7 +615,32 @@ class SelectionStore {
   // to look up the right (folderId, entryId) pair from the key).
   dynamicExtras = $state<Set<string>>(new Set());
 
+  // An editor with unsaved edits holds the selection: the change waits
+  // for the Save / Discard / Stay prompt and runs again once it may.
+  // Re-selecting what is already selected is not a change.
+  private bypass = false;
+  private held(retry: () => void): boolean {
+    if (this.bypass || !hasUnsaved()) return false;
+    void confirmLeave().then((ok) => {
+      if (!ok) return;
+      this.bypass = true;
+      try { retry(); } finally { this.bypass = false; }
+    });
+    return true;
+  }
+
+  // For code that has already dealt with the editor (it deleted the item
+  // being edited): no prompt.
+  selectForce(s: Selection) {
+    this.bypass = true;
+    try { this.select(s); } finally { this.bypass = false; }
+  }
+
   select(s: Selection) {
+    const same = JSON.stringify(s) === JSON.stringify(this.current) &&
+      this.extras.size + this.folderExtras.size + this.credentialExtras.size +
+      this.credentialFolderExtras.size + this.dynamicExtras.size === 0;
+    if (!same && this.held(() => this.select(s))) return;
     this.current = s;
     this.extras = new Set();
     this.folderExtras = new Set();
@@ -633,6 +659,7 @@ class SelectionStore {
 
   // Ctrl/Cmd+click on a dynamic entry: toggle it in/out of the set.
   toggleDynamic(folderId: string, entryId: string) {
+    if (this.held(() => this.toggleDynamic(folderId, entryId))) return;
     const key = SelectionStore.dynKey(folderId, entryId);
     if (this.current.kind === "dynamicEntry" &&
         this.current.folderId === folderId && this.current.entryId === entryId) {
@@ -674,6 +701,7 @@ class SelectionStore {
   // isn't a dynamic entry of the same folder, fall back to single-
   // click semantics.
   rangeDynamic(folderId: string, entryId: string, orderedEntryIds: string[]) {
+    if (this.held(() => this.rangeDynamic(folderId, entryId, orderedEntryIds))) return;
     if (this.current.kind !== "dynamicEntry" || this.current.folderId !== folderId) {
       this.select({ kind: "dynamicEntry", folderId, entryId });
       return;
@@ -724,6 +752,7 @@ class SelectionStore {
 
   // Ctrl/Cmd+click: toggle one connection in/out of the multi-set.
   toggleConnection(id: string) {
+    if (this.held(() => this.toggleConnection(id))) return;
     if (this.current.kind === "connection" && this.current.id === id) {
       // Removing the anchor: promote first extra (if any) to anchor.
       const first = this.extras.values().next().value;
@@ -761,6 +790,7 @@ class SelectionStore {
   // Shift+click: select range between anchor and `id` within the same folder.
   // If anchor isn't a connection, behave like single-click.
   rangeConnection(id: string, orderedIds: string[]) {
+    if (this.held(() => this.rangeConnection(id, orderedIds))) return;
     if (this.current.kind !== "connection") {
       this.select({ kind: "connection", id });
       return;
@@ -807,6 +837,7 @@ class SelectionStore {
   }
 
   toggleFolder(id: string) {
+    if (this.held(() => this.toggleFolder(id))) return;
     if (this.current.kind === "folder" && this.current.id === id) {
       const first = this.folderExtras.values().next().value;
       if (first) {
@@ -858,6 +889,7 @@ class SelectionStore {
   // tree.flatVisibleFolderIds(). Falls back to plain select when the
   // anchor isn't a folder.
   rangeFolder(id: string, orderedIds: string[]) {
+    if (this.held(() => this.rangeFolder(id, orderedIds))) return;
     if (this.current.kind !== "folder") {
       this.select({ kind: "folder", id });
       return;
@@ -882,6 +914,7 @@ class SelectionStore {
   selectCredentialById(id: string) { this.select({ kind: "credential", id }); }
 
   toggleCredential(id: string) {
+    if (this.held(() => this.toggleCredential(id))) return;
     if (this.current.kind === "credential" && this.current.id === id) {
       const first = this.credentialExtras.values().next().value;
       if (first) {
@@ -924,6 +957,7 @@ class SelectionStore {
   }
 
   rangeCredential(id: string, orderedIds: string[]) {
+    if (this.held(() => this.rangeCredential(id, orderedIds))) return;
     if (this.current.kind !== "credential") {
       this.select({ kind: "credential", id });
       return;
@@ -946,6 +980,7 @@ class SelectionStore {
   // ----- credential-folder multi-select (mirrors the folder helpers) -----
 
   toggleCredentialFolder(id: string) {
+    if (this.held(() => this.toggleCredentialFolder(id))) return;
     if (this.current.kind === "credentialFolder" && this.current.id === id) {
       const first = this.credentialFolderExtras.values().next().value;
       if (first) {
@@ -991,6 +1026,7 @@ class SelectionStore {
   }
 
   rangeCredentialFolder(id: string, orderedIds: string[]) {
+    if (this.held(() => this.rangeCredentialFolder(id, orderedIds))) return;
     if (this.current.kind !== "credentialFolder") {
       this.select({ kind: "credentialFolder", id });
       return;

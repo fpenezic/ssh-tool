@@ -47,6 +47,9 @@
     {/if}
     <div class="row">
       <button onclick={onCancel}>{confirmModal.pending.cancelLabel}</button>
+      {#if confirmModal.pending.altLabel}
+        <button class="danger" onclick={() => confirmModal.alt()}>{confirmModal.pending.altLabel}</button>
+      {/if}
       <button
         class={confirmModal.pending.danger ? "danger" : "primary"}
         bind:this={okBtn}

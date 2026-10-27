@@ -41,6 +41,7 @@
   import SearchableSelect from "./SearchableSelect.svelte";
   import { fileToBase64, CERT_FILE_ACCEPT } from "./fileB64";
   import { updateCheck } from "./updateCheck.svelte";
+  import { registerUnsaved, confirmLeave } from "./unsaved.svelte.ts";
 
   let browserPath = $state("");
   let browserPersistent = $state(false);
@@ -2263,7 +2264,29 @@
     } catch (e: any) { toast.err(errMsg(e)); }
     finally { npBusy = false; }
   }
+  // Unsaved-edit guard for the profile's Settings form: the values it opened
+  // with, compared with what is typed now. A profile switch asks first.
+  let npBase = $state("");
+  function npSnap(): string {
+    return JSON.stringify([npName, npConf, nbManagement, nbDevice, nbCredId, tsControl, tsHostname, tsCredId, tsNewKeySecret,
+      oc, ocMtu, ocBackups, ocNewPassword, ocCertPaste, ocCertPassword, !!ocCertFile, !!ocCertKeyFile,
+      ov, ovText, ovNewPassword, cp, cpNewPassword]);
+  }
+  const npDirty = $derived(npEditingId !== null && npSnap() !== npBase);
   function npStartEdit(np: NetworkProfileInfo) {
+    npStartEditFields(np);
+    npBase = npSnap();
+  }
+  // Saves the open Settings form with its kind's save; true once it is no
+  // longer dirty (a failed save leaves it open, with the error shown).
+  async function npSaveCurrent(): Promise<boolean> {
+    const np = networkProfiles.list.find((p) => p.id === npEditingId);
+    if (!np) return true;
+    const save = { netbird: npSaveNetbird, openconnect: npSaveOpenConnect, openvpn: npSaveOpenVPN, checkpoint: npSaveCheckpoint, tailscale: npSaveTailscale }[np.kind as string] ?? npSaveEdit;
+    await save();
+    return !npDirty;
+  }
+  function npStartEditFields(np: NetworkProfileInfo) {
     npEditingId = np.id;
     npEditKind = np.kind;
     npName = np.name;
@@ -2302,7 +2325,7 @@
     // current config (rename-only).
     npConf = "";
     api.networkProfileRenderConf(np.id)
-      .then((text) => { if (npEditingId === np.id) npConf = text; })
+      .then((text) => { if (npEditingId === np.id) { npConf = text; npBase = npSnap(); } })
       .catch((e) => toast.err(errMsg(e)));
   }
   function npCancelEdit() {
@@ -2536,15 +2559,53 @@
   // Local proxy panel per profile (form state while open).
   type LpForm = { enabled: boolean; shared: boolean; bind: string; port: number; networksText: string; details?: import("./api").LocalProxyDetails };
   let lpOpen = $state<Record<string, LpForm>>({});
+  // The stored address, port and networks per profile: the form is dirty
+  // while they differ. The two switches save at once and are not part of it.
+  let lpBase = $state<Record<string, string>>({});
+  function lpSnap(f: LpForm): string {
+    return JSON.stringify([f.bind.trim(), Number(f.port), f.networksText.split(/[\s,]+/).filter(Boolean)]);
+  }
+  function lpDirty(id: string): boolean {
+    const f = lpOpen[id];
+    return !!f && lpBase[id] !== undefined && lpSnap(f) !== lpBase[id];
+  }
   async function lpLoad(np: NetworkProfileInfo) {
+    // Back on the Proxy tab with edits still open: keep them.
+    if (lpDirty(np.id)) return;
     const c = np.local_proxy ?? { enabled: false, port: 0 };
     const f: LpForm = { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080, networksText: (c.networks ?? []).join("\n") };
     try { f.details = await api.networkProfileLocalProxyDetails(np.id); } catch { /* shown on save */ }
     lpOpen = { ...lpOpen, [np.id]: f };
+    lpBase = { ...lpBase, [np.id]: lpSnap(f) };
   }
-  async function lpSave(np: NetworkProfileInfo) {
+  function lpDiscard(np: NetworkProfileInfo) {
+    const b = { ...lpBase };
+    delete b[np.id];
+    lpBase = b;
+    void lpLoad(np);
+  }
+  // A switch: saved on the click, with the stored address, port and
+  // networks, so half-typed text fields are not saved along with it.
+  async function lpToggle(np: NetworkProfileInfo, key: "shared" | "enabled", on: boolean) {
     const f = lpOpen[np.id];
     if (!f) return;
+    const c = np.local_proxy ?? { enabled: false, port: 0 };
+    try {
+      await api.networkProfileSetLocalProxy(np.id, {
+        enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080,
+        networks: c.networks ?? [], [key]: on,
+      });
+      f[key] = on;
+      await networkProfiles.load(true);
+      f.details = await api.networkProfileLocalProxyDetails(np.id);
+      lpOpen = { ...lpOpen, [np.id]: f };
+      toast.ok(key === "shared" ? (on ? `${np.name} reachable through the app proxy` : `${np.name} left out of the app proxy`) : (on ? `Separate proxy for ${np.name} on` : `Separate proxy for ${np.name} off`));
+      spLoad();
+    } catch (e: any) { toast.err(errMsg(e)); lpOpen = { ...lpOpen }; }
+  }
+  async function lpSave(np: NetworkProfileInfo): Promise<boolean> {
+    const f = lpOpen[np.id];
+    if (!f) return true;
     try {
       await api.networkProfileSetLocalProxy(np.id, {
         enabled: f.enabled, shared: f.shared, bind: f.bind.trim(), port: Number(f.port),
@@ -2553,9 +2614,11 @@
       await networkProfiles.load(true);
       f.details = await api.networkProfileLocalProxyDetails(np.id);
       lpOpen = { ...lpOpen, [np.id]: f };
+      lpBase = { ...lpBase, [np.id]: lpSnap(f) };
       toast.ok("Proxy settings saved");
       spLoad();
-    } catch (e: any) { toast.err(errMsg(e)); }
+      return true;
+    } catch (e: any) { toast.err(errMsg(e)); return false; }
   }
   async function lpCopy(np: NetworkProfileInfo, what: "url" | "gateway" | "routes") {
     try {
@@ -2600,7 +2663,23 @@
     npSelect("general");
     void flashSetting(`plugin-${name}`);
   }
-  function npSelect(id: string) {
+  $effect(() => registerUnsaved({
+    label: () => networkProfiles.list.find((p) => p.id === npSel)?.name ?? "",
+    dirty: () => npDirty || lpDirty(npSel),
+    save: async () => {
+      const np = networkProfiles.list.find((p) => p.id === npSel);
+      if (np && lpDirty(np.id) && !(await lpSave(np))) return false;
+      return npDirty ? npSaveCurrent() : true;
+    },
+    discard: () => {
+      const np = networkProfiles.list.find((p) => p.id === npSel);
+      if (np && lpDirty(np.id)) lpDiscard(np);
+      if (npDirty) npRevert();
+    },
+    scope: "settings",
+  }));
+  async function npSelect(id: string) {
+    if (id !== npSel && !(await confirmLeave(["settings"]))) return;
     npSel = id;
     npCancelEdit();
     const np = networkProfiles.list.find((p) => p.id === id);
@@ -4328,8 +4407,8 @@
       {/if}
       <div class="row" style="gap:0.5rem">
         {#if npEditingId}
-          <button class="primary" onclick={npSaveNetbird} disabled={npBusy || !npName.trim()}>Save changes</button>
-          <button onclick={npRevert}>Revert</button>
+          <button class="primary" onclick={npSaveNetbird} disabled={npBusy || !npDirty || !npName.trim()}>Save changes</button>
+          <button onclick={npRevert} disabled={!npDirty} title="Throw the unsaved changes away">Discard</button>
         {:else}
           <button class="primary" onclick={npCreateNetbird} disabled={npBusy || !nbInstalled || !npName.trim() || !nbCredId}>Add profile</button>
         {/if}
@@ -4454,8 +4533,8 @@
       {/if}
       <div class="row" style="gap:0.5rem">
         {#if npEditingId}
-          <button class="primary" onclick={npSaveOpenConnect} disabled={npBusy || !npName.trim() || !oc.server.trim()}>Save changes</button>
-          <button onclick={npRevert}>Revert</button>
+          <button class="primary" onclick={npSaveOpenConnect} disabled={npBusy || !npDirty || !npName.trim() || !oc.server.trim()}>Save changes</button>
+          <button onclick={npRevert} disabled={!npDirty} title="Throw the unsaved changes away">Discard</button>
         {:else}
           <button class="primary" onclick={npCreateOpenConnect} disabled={npBusy || !ocInstalled || !npName.trim() || !oc.server.trim()}>Add profile</button>
           {#if ocMissing}<span class="hint inline">Needs {ocMissing}.</span>{/if}
@@ -4521,8 +4600,8 @@
       </div>
       <div class="row" style="gap:0.5rem">
         {#if npEditingId}
-          <button class="primary" onclick={npSaveOpenVPN} disabled={npBusy || !npName.trim()}>Save changes</button>
-          <button onclick={npRevert}>Revert</button>
+          <button class="primary" onclick={npSaveOpenVPN} disabled={npBusy || !npDirty || !npName.trim()}>Save changes</button>
+          <button onclick={npRevert} disabled={!npDirty} title="Throw the unsaved changes away">Discard</button>
         {:else}
           <button class="primary" onclick={npCreateOpenVPN} disabled={npBusy || !ovInstalled || !npName.trim() || !ovText.trim()}>Add profile</button>
           {#if ovMissing}<span class="hint inline">Needs {ovMissing}.</span>{/if}
@@ -4579,8 +4658,8 @@
       {/if}
       <div class="row" style="gap:0.5rem">
         {#if npEditingId}
-          <button class="primary" onclick={npSaveCheckpoint} disabled={npBusy || !npName.trim() || !cp.server.trim()}>Save changes</button>
-          <button onclick={npRevert}>Revert</button>
+          <button class="primary" onclick={npSaveCheckpoint} disabled={npBusy || !npDirty || !npName.trim() || !cp.server.trim()}>Save changes</button>
+          <button onclick={npRevert} disabled={!npDirty} title="Throw the unsaved changes away">Discard</button>
         {:else}
           <button class="primary" onclick={npCreateCheckpoint} disabled={npBusy || !cpInstalled || !npName.trim() || !cp.server.trim()}>Add profile</button>
           {#if cpMissing}<span class="hint inline">Needs {cpMissing}.</span>{/if}
@@ -4636,8 +4715,8 @@
       {/if}
       <div class="row" style="gap:0.5rem">
         {#if npEditingId}
-          <button class="primary" onclick={npSaveTailscale} disabled={npBusy || !npName.trim()}>Save changes</button>
-          <button onclick={npRevert}>Revert</button>
+          <button class="primary" onclick={npSaveTailscale} disabled={npBusy || !npDirty || !npName.trim()}>Save changes</button>
+          <button onclick={npRevert} disabled={!npDirty} title="Throw the unsaved changes away">Discard</button>
         {:else}
           <button class="primary" onclick={npCreateTailscale} disabled={npBusy || !tsInstalled || !npName.trim() || !tsCredId}>Add profile</button>
         {/if}
@@ -4654,8 +4733,8 @@
       </label>
       <div class="row" style="gap:0.5rem">
         {#if npEditingId}
-          <button class="primary" onclick={npSaveEdit} disabled={npBusy || !npName.trim()}>Save changes</button>
-          <button onclick={npRevert}>Revert</button>
+          <button class="primary" onclick={npSaveEdit} disabled={npBusy || !npDirty || !npName.trim()}>Save changes</button>
+          <button onclick={npRevert} disabled={!npDirty} title="Throw the unsaved changes away">Discard</button>
         {:else}
           <button class="primary" onclick={npCreate} disabled={npBusy || !npName.trim() || !npConf.trim()}>Add profile</button>
         {/if}
@@ -5060,11 +5139,11 @@
             {:else}
               <div class="oc-form np-sp-form">
                 <label class="oc-choice oc-span">
-                  <input type="checkbox" bind:checked={lp.shared} /> Reachable through the app proxy
+                  <input type="checkbox" checked={lp.shared} onchange={(e) => lpToggle(np, "shared", (e.target as HTMLInputElement).checked)} /> Reachable through the app proxy
                   <button class="link-btn" onclick={() => npSelect("general")}>(Plugins &amp; proxy &gt; App proxy)</button>
                 </label>
                 <label class="oc-choice oc-span" title="A SOCKS5 proxy for this VPN alone, with its own password; the tunnel comes up on the first connection">
-                  <input type="checkbox" bind:checked={lp.enabled} /> Separate proxy for this VPN only
+                  <input type="checkbox" checked={lp.enabled} onchange={(e) => lpToggle(np, "enabled", (e.target as HTMLInputElement).checked)} /> Separate proxy for this VPN only
                 </label>
                 {#if lp.enabled}
                   <label class="oc-field" title="127.0.0.1 is enough for Docker Desktop (host.docker.internal). A Linux Docker host needs the docker bridge address or 0.0.0.0 - firewall the port then.">
@@ -5081,7 +5160,9 @@
                   <textarea rows="2" class="mono" bind:value={lp.networksText} placeholder="10.20.0.0/16"></textarea>
                 </label>
                 <div class="row oc-span" style="gap:0.5rem">
-                  <button class="primary" onclick={() => lpSave(np)}>Save</button>
+                  <button class="primary" onclick={() => lpSave(np)} disabled={!lpDirty(np.id)}>Save</button>
+                  <button onclick={() => lpDiscard(np)} disabled={!lpDirty(np.id)} title="Throw the unsaved changes away">Discard</button>
+                  {#if lpDirty(np.id)}<span class="dirty-note">Unsaved changes</span>{/if}
                 </div>
               </div>
               {#if lp.details}
@@ -7653,6 +7734,9 @@
 </section>
 
 <style>
+  /* Same marker as the connection editor's "Unsaved changes" pill. */
+  .dirty-note { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--yellow); font-size: 0.78rem; font-weight: 600; }
+  .dirty-note::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); }
   /* Network profiles page: list beside the selected item. */
   .np-title { display: flex; align-items: baseline; gap: 0.8rem; }
   /* The count's own vertical margin would grow the row and push the
