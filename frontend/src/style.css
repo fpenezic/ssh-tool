@@ -185,6 +185,14 @@ body {
     user-select: none;
     -webkit-user-select: none;
 }
+/* Placeholders read as examples, not values: a "127.0.0.1" placeholder
+   looked the same as a typed 127.0.0.1. Dimmer and italic, in every theme. */
+#app input::placeholder,
+#app textarea::placeholder {
+    color: var(--overlay0);
+    opacity: 1;
+    font-style: italic;
+}
 #app input.editable-select {
     user-select: text;
     -webkit-user-select: text;

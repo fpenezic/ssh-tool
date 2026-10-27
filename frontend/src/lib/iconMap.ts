@@ -226,3 +226,6 @@ import DatabaseZap from "@lucide/svelte/icons/database-zap";
 import ScrollText from "@lucide/svelte/icons/scroll-text";
 import Eye2 from "@lucide/svelte/icons/scan-eye";
 export { DatabaseZap as IconDb, ScrollText as IconSql, Eye2 as IconView };
+// The start page (dashboard) - sidebar header button.
+import House from "@lucide/svelte/icons/house";
+export { House as IconHome };

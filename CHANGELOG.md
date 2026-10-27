@@ -18,6 +18,15 @@ a prerelease upstream.
 - A background tree reload (sync, a refresh) no longer resets an editor that has unsaved changes.
 - Turning VNC, Kafka or Database on and off again no longer leaves the connection marked as changed: the switch goes back to inheriting. A switch showing an inherited "on" now turns off on the first click.
 - VPN profile, Proxy tab: **Reachable through the app proxy** and **Separate proxy for this VPN only** take effect on the click. Listen address, port and extra networks keep their Save, now with an "Unsaved changes" marker.
+- App proxy: an on/off switch next to the title replaces the checkbox at the far right. Listen address and port have Save and Discard, greyed out while nothing changed, and turning the proxy on or off no longer saves a half-typed address with it.
+- Browser launcher: Save is greyed out until the path changes, with Discard next to it.
+
+### Navigation
+- A **Home** button in the Connections header goes back to the start page (recent connections, workspaces, profiles). **Esc** in the tree does the same (after clearing an active filter). Before, only a click on empty tree space did, and a long tree has none.
+
+### Small fixes
+- Forward form: one Cancel (the header's "+ Add" no longer turns into a second one), no "No forwards yet" under an open form, no stray divider above the list, a description example that fits the kind, the browser-profile note in normal text (orange is kept for "running - restart to apply").
+- Placeholders are dimmer and italic, so an example like 127.0.0.1 no longer looks like a typed value.
 
 ## [0.119.0] - Oracle and SQL Server, CI runner through VPNs and jump hosts, detached windows
 
