@@ -662,8 +662,8 @@ class SelectionStore {
     };
     // Parent maps built once: a walk per item over array lookups would be
     // quadratic on a big tree.
-    const fp = new Map(tree.folders.map((f) => [f.id, f.parent_id]));
-    const cfp = new Map(credentials.folders.map((f) => [f.id, f.parent_id]));
+    const fp = new Map(tree.folders.map((f) => [f.id, f.parent_id] as const));
+    const cfp = new Map(credentials.folders.map((f) => [f.id, f.parent_id] as const));
     const folderParent = (id: string) => fp.get(id) ?? null;
     const credFolderParent = (id: string) => cfp.get(id) ?? null;
     for (const f of tree.folders) if (under(folderParent, f.id)) deleted.add(f.id);
