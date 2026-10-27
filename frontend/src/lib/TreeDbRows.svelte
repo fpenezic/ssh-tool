@@ -29,19 +29,24 @@
   let lastId: string | null = null;
   let lastAt = 0;
   // A click selects the row and shows the connection's Database settings.
-  async function select(r: DbTreeRow) {
+  // False on Stay in the unsaved prompt: then nothing else happens either.
+  async function select(r: DbTreeRow): Promise<boolean> {
     // Services replaces the Forwards tab: a half-edited forward asks first.
-    if (!(await view.forceEditorTab("db"))) return;
+    if (!(await view.forceEditorTab("db"))) return false;
     selection.selectConnection(connId);
     treeBookmarks.selected = null;
     dbTabs.treeSelected = { connId, id: r.id };
+    return true;
   }
   function isSelected(r: DbTreeRow): boolean {
     return dbTreeSelectedUnder(connId) && dbTabs.treeSelected?.id === r.id;
   }
-  function onClick(r: DbTreeRow) {
-    select(r);
+  async function onClick(r: DbTreeRow) {
     const now = Date.now();
+    if (!(await select(r))) {
+      lastId = null;
+      return;
+    }
     if (r.id === lastId && now - lastAt < 400) {
       lastId = null;
       void connectionActions.openDb(connId, r.id);
@@ -50,8 +55,8 @@
       lastAt = now;
     }
   }
-  function openMenu(e: MouseEvent, r: DbTreeRow) {
-    select(r);
+  async function openMenu(e: MouseEvent, r: DbTreeRow) {
+    if (!(await select(r))) return;
     contextMenu.show(e, [
       { label: "Open", iconComponent: IconDb, onSelect: () => void connectionActions.openDb(connId, r.id) },
       ...(r.isDefault || rows.length < 2 ? [] : [{ label: "Set as default", iconComponent: IconStar, onSelect: () => void setDefault(r) }]),

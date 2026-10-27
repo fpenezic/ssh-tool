@@ -769,11 +769,13 @@
     tabs.push({ id: "advanced", label: "Advanced" });
     return tabs;
   });
-  const edTab = $derived.by<EdTab>(() => {
-    const forced = edTabOf(view.editorTabForce);
+  function tabWith(force: string | null): EdTab {
+    const forced = edTabOf(force);
     if (forced && edTabs.some((t) => t.id === forced)) return forced;
     return edTabs.some((t) => t.id === edTabPref) ? edTabPref : "general";
-  });
+  }
+  const edTab = $derived.by<EdTab>(() => tabWith(view.editorTabForce));
+  view.editorTabFor = (force) => tabWith(force);
   // For view.forceEditorTab: which tab a forced change would leave.
   $effect(() => {
     view.editorTabShown = conn ? edTab : null;

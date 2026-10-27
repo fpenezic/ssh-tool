@@ -1115,6 +1115,9 @@ class ViewStore {
   // whether the forward form (the only sub-form an editor tab holds) is
   // the one a change would close.
   editorTabShown = $state<string | null>(null);
+  // Which tab the editor would show with a given forced tab (the forced one
+  // when it exists there, else the user's last pick). Set by DetailPane.
+  editorTabFor: ((force: string | null) => string) | null = null;
 
   // Sets (or clears) the forced editor tab. With the Forwards tab on screen
   // and a half-edited forward form, a change that leaves it asks first
@@ -1122,7 +1125,8 @@ class ViewStore {
   // outside the editor itself goes through here.
   async forceEditorTab(t: string | null): Promise<boolean> {
     if (t === this.editorTabForce) return true;
-    if (this.editorTabShown === "forwards" && t !== "forwards" && !(await confirmLeave(["tab"]))) return false;
+    const next = this.editorTabFor ? this.editorTabFor(t) : t;
+    if (this.editorTabShown === "forwards" && next !== "forwards" && !(await confirmLeave(["tab"]))) return false;
     this.editorTabForce = t;
     return true;
   }
