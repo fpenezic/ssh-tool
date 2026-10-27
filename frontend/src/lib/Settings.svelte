@@ -2341,7 +2341,21 @@
     // current config (rename-only).
     npConf = "";
     api.networkProfileRenderConf(np.id)
-      .then((text) => { if (npEditingId === np.id) { npConf = text; npBase = npSnap(); } })
+      .then((text) => {
+        if (npEditingId !== np.id) return;
+        // Typed before the config arrived: a name edit stays an edit; a
+        // config already typed is not replaced.
+        const touched = npSnap() !== npBase;
+        if (npConf === "") npConf = text;
+        if (!touched) { npBase = npSnap(); return; }
+        const typedName = npName;
+        npName = np.name;
+        const typedConf = npConf;
+        npConf = text;
+        npBase = npSnap();
+        npName = typedName;
+        npConf = typedConf;
+      })
       .catch((e) => toast.err(errMsg(e)));
   }
   function npCancelEdit() {
@@ -2703,10 +2717,22 @@
     npSelect("general");
     void flashSetting(`plugin-${name}`);
   }
+  // The New profile form: dirty once anything that identifies the profile
+  // was typed (the device / host name defaults filled in on their own do
+  // not count).
+  const npNewDirty = $derived(npSel === "new" && npEditingId === null && (
+    !!npName.trim() || !!npConf.trim() || !!nbManagement.trim() || !!nbCredId || !!tsControl.trim() || !!tsCredId ||
+    !!oc.server.trim() || !!ovText.trim() || !!cp.server.trim() || !!ocNewPassword || !!ovNewPassword || !!cpNewPassword));
+  async function npCreateCurrent(): Promise<boolean> {
+    const create = { netbird: npCreateNetbird, openconnect: npCreateOpenConnect, openvpn: npCreateOpenVPN, checkpoint: npCreateCheckpoint, tailscale: npCreateTailscale }[npKind as string] ?? npCreate;
+    await create();
+    return !npNewDirty;
+  }
   $effect(() => registerUnsaved({
-    label: () => networkProfiles.list.find((p) => p.id === npSel)?.name ?? "",
-    dirty: () => npDirty || lpDirty(npSel),
+    label: () => npSel === "new" ? "The new profile" : networkProfiles.list.find((p) => p.id === npSel)?.name ?? "",
+    dirty: () => npDirty || npNewDirty || lpDirty(npSel),
     save: async () => {
+      if (npNewDirty) return npCreateCurrent();
       const np = networkProfiles.list.find((p) => p.id === npSel);
       if (np && lpDirty(np.id) && !(await lpSave(np))) return false;
       return npDirty ? npSaveCurrent() : true;
@@ -2715,11 +2741,14 @@
       const np = networkProfiles.list.find((p) => p.id === npSel);
       if (np && lpDirty(np.id)) lpDiscard(np);
       if (npDirty) npRevert();
+      if (npNewDirty) npCancelEdit();
     },
     scope: "settings",
   }));
   async function npSelect(id: string) {
-    if (id !== npSel && !(await confirmLeave(["settings"]))) return;
+    // Reselecting the open item changes nothing (and keeps its draft).
+    if (id === npSel) return;
+    if (!(await confirmLeave(["settings"]))) return;
     npSel = id;
     npCancelEdit();
     const np = networkProfiles.list.find((p) => p.id === id);
