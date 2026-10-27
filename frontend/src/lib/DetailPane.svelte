@@ -1337,23 +1337,24 @@
     deleteItems = items;
     deletePending = async () => {
       // Top-level folders only - children are cascade-deleted by the DB.
-      // The editor is dropped without a prompt only once its item is
-      // gone; a failed delete keeps the selection and its draft.
-      const failed = await deleteEach(folderIds, (id) => api.foldersDelete(id));
-      if (failed === 0) selection.selectForce({ kind: "none" });
+      // What went leaves the selection without a prompt (its draft has
+      // nothing to save into); a folder that failed keeps it and its draft.
+      selection.forget(await deleteEach(folderIds, (id) => api.foldersDelete(id)));
       await tree.load();
     };
   }
 
-  // Deletes one by one, carries on past a failure, reports how many failed.
-  async function deleteEach(ids: string[], del: (id: string) => Promise<unknown>): Promise<number> {
-    let failed = 0;
+  // Deletes one by one, carries on past a failure (reported in a toast),
+  // returns the ids that went.
+  async function deleteEach(ids: string[], del: (id: string) => Promise<unknown>): Promise<string[]> {
+    const gone: string[] = [];
     let first = "";
     for (const id of ids) {
-      try { await del(id); } catch (e) { failed++; first ||= errMsg(e); }
+      try { await del(id); gone.push(id); } catch (e) { first ||= errMsg(e); }
     }
+    const failed = ids.length - gone.length;
     if (failed) toast.err(failed === ids.length ? `Delete failed: ${first}` : `${failed} of ${ids.length} not deleted: ${first}`);
-    return failed;
+    return gone;
   }
 
   function openConnDelete(connIds: string[]) {
@@ -1364,8 +1365,7 @@
     }
     deleteItems = items;
     deletePending = async () => {
-      const failed = await deleteEach(connIds, (id) => api.connectionsDelete(id));
-      if (failed === 0) selection.selectForce({ kind: "none" });
+      selection.forget(await deleteEach(connIds, (id) => api.connectionsDelete(id)));
       await tree.load();
     };
   }

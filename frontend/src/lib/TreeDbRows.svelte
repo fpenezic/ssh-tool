@@ -31,9 +31,11 @@
   // A click selects the row and shows the connection's Database settings.
   // False on Stay in the unsaved prompt: then nothing else happens either.
   async function select(r: DbTreeRow): Promise<boolean> {
-    // Services replaces the Forwards tab: a half-edited forward asks first.
-    if (!(await view.forceEditorTab("db"))) return false;
+    // The selection first (it asks about every draft of another
+    // connection), then the tab: on the same connection Services replaces
+    // Forwards, and a half-edited forward asks there.
     if (!(await selection.selectConnection(connId))) return false;
+    if (!(await view.forceEditorTab("db"))) return false;
     treeBookmarks.selected = null;
     dbTabs.treeSelected = { connId, id: r.id };
     return true;

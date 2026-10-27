@@ -2156,9 +2156,12 @@ everything mobile is behind a build tag or an `isMobile` check.
    a source (dirty, save -> bool, discard, scope) while mounted; whatever
    moves away from it awaits `confirmLeave(scopes)` first. Every
    `SelectionStore` mutator goes through `held()`, so a new way of
-   changing the selection is covered for free, but code that deletes the
-   item being edited must use `selection.selectForce()` (no prompt) and
-   only after the delete succeeded. Scopes matter: Settings stays mounted
+   changing the selection is covered for free; `select()` resolves false
+   on Stay, so a caller that does more than select (a row highlight, a
+   double-click connect, a context menu on the selection) awaits it. Code
+   that deletes selected items calls `selection.forget(goneIds)` with the
+   ids that were really deleted (no prompt: their drafts have nothing to
+   save into). Scopes matter: Settings stays mounted
    behind the other views, so its forms register `"settings"` and only
    their own navigation asks; a sub-form inside one editor tab (the
    forward form) is `"tab"`. A draft `$effect` that re-reads the stored

@@ -646,12 +646,35 @@ class SelectionStore {
     });
   }
 
-  // For code that has already dealt with the editor (it deleted the item
-  // being edited): no prompt.
-  selectForce(s: Selection) {
-    this.bypass = true;
-    try { void this.select(s); } finally { this.bypass = false; }
+  // Deleted items leave the selection: out of the multi-sets, and an anchor
+  // that went gives way to a remaining one (or none). No prompt: a deleted
+  // item's draft has nothing left to save into.
+  forget(ids: string[]) {
+    if (!ids.length) return;
+    const gone = new Set(ids);
+    const keep = (set: Set<string>) => new Set([...set].filter((id) => !gone.has(id)));
+    this.extras = keep(this.extras);
+    this.folderExtras = keep(this.folderExtras);
+    this.credentialExtras = keep(this.credentialExtras);
+    this.credentialFolderExtras = keep(this.credentialFolderExtras);
+    const c = this.current;
+    if (c.kind === "none" || c.kind === "dynamicEntry" || !gone.has(c.id)) return;
+    const pool = c.kind === "connection" ? this.extras : c.kind === "folder" ? this.folderExtras
+      : c.kind === "credential" ? this.credentialExtras : this.credentialFolderExtras;
+    const next = pool.values().next().value;
+    if (next) {
+      const rest = new Set(pool);
+      rest.delete(next);
+      if (c.kind === "connection") this.extras = rest;
+      else if (c.kind === "folder") this.folderExtras = rest;
+      else if (c.kind === "credential") this.credentialExtras = rest;
+      else this.credentialFolderExtras = rest;
+      this.current = { kind: c.kind, id: next };
+    } else {
+      this.current = { kind: "none" };
+    }
   }
+
 
   // Resolves true once the selection is s (at once when nothing is
   // unsaved), false when the user chose Stay: a caller that does more than
