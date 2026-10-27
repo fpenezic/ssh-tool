@@ -292,14 +292,33 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 	// The CI runner's extra hosts: a job resolves a name itself and sends
 	// the address, so a name the tree routes (a connection behind a jump
 	// host or a VPN) pins the address it is given there to the same path.
+	// Two names on one address with different paths cannot both be pinned:
+	// the job sends only the address, so either pin would send the other
+	// name's traffic the wrong way. Such an address is left unpinned.
+	pinIDs := map[netip.Addr]map[string]bool{}
+	var pinOrder []netip.Addr
 	for _, h := range a.ciExtraHosts() {
 		name, addr, _ := strings.Cut(h, ":")
 		id, ok := hosts[strings.ToLower(name)]
 		if !ok {
 			continue
 		}
-		if ip, err := netip.ParseAddr(strings.Trim(addr, "[]")); err == nil {
-			ip = ip.Unmap()
+		ip, err := netip.ParseAddr(strings.Trim(addr, "[]"))
+		if err != nil {
+			continue
+		}
+		ip = ip.Unmap()
+		if pinIDs[ip] == nil {
+			pinIDs[ip] = map[string]bool{}
+			pinOrder = append(pinOrder, ip)
+		}
+		pinIDs[ip][id] = true
+	}
+	for _, ip := range pinOrder {
+		if len(pinIDs[ip]) != 1 {
+			continue
+		}
+		for id := range pinIDs[ip] {
 			routes = append(routes, sharedRoute{netip.PrefixFrom(ip, ip.BitLen()), id, routeName(routes, id), true})
 		}
 	}

@@ -655,7 +655,10 @@ func chReadLines(body io.Reader, maxRows int, onCut func()) *Result {
 func chException(br *bufio.Reader, line []byte, ncols int) (string, bool) {
 	s := string(line)
 	if s == "__exception__" {
-		rest, _ := io.ReadAll(io.LimitReader(br, 64<<10))
+		rest, err := io.ReadAll(io.LimitReader(br, 64<<10))
+		if errors.Is(err, context.Canceled) {
+			return "query stopped", true
+		}
 		return chErr(strings.TrimSpace(string(rest))).Error(), true
 	}
 	if !strings.HasPrefix(s, "Code: ") || !strings.Contains(s, "DB::Exception") {
@@ -664,10 +667,17 @@ func chException(br *bufio.Reader, line []byte, ncols int) (string, bool) {
 	last := false
 	if ncols < 0 {
 		_, err := br.Peek(1)
+		// A Stop while peeking is not "the last line": it is the stop.
+		if errors.Is(err, context.Canceled) {
+			return "query stopped", true
+		}
 		last = err != nil
 	}
 	if (ncols >= 0 && len(chFields(line)) != ncols) || last {
-		rest, _ := io.ReadAll(io.LimitReader(br, 64<<10))
+		rest, err := io.ReadAll(io.LimitReader(br, 64<<10))
+		if errors.Is(err, context.Canceled) {
+			return "query stopped", true
+		}
 		return chErr(strings.TrimSpace(s + "\n" + string(rest))).Error(), true
 	}
 	return "", false

@@ -250,10 +250,11 @@ func rdRedact(stmt string) string {
 	hide := map[int]bool{}
 	switch cmd {
 	case "AUTH":
+		// AUTH pass / AUTH user pass: the last word. A malformed AUTH with
+		// more words hides them all, since which one is the password is
+		// anyone's guess (the last-only rule kept it in the audit line).
 		for i := 1; i < len(args); i++ {
-			if i == len(args)-1 {
-				hide[i] = true
-			}
+			hide[i] = len(args) > 3 || i == len(args)-1
 		}
 	case "CONFIG":
 		for i := 2; i+1 < len(args); i += 2 {

@@ -14,7 +14,10 @@ import { hasUnsaved, confirmLeave } from "./unsaved.svelte.ts";
 // is asked to reveal or open there goes to the main window instead
 // (RevealInMainWindow -> reveal_in_tree, handled in App.svelte).
 export const inDetachedWindow = typeof window !== "undefined" &&
-  (new URLSearchParams(window.location.search).has("detached") || /[#&?]detached=/.test(window.location.hash));
+  (new URLSearchParams(window.location.search).has("detached") ||
+    // The hash forms App.svelte's routeParams reads: #detached=, #/detached=,
+    // #?detached=, #/?detached=, or after another param.
+    /^#\/?\??(?:[^#]*&)?detached=/.test(window.location.hash));
 import { loudestMcpLevel } from "./mcpLevel";
 
 class TreeStore {
