@@ -844,10 +844,13 @@
       if (!oauthRedirectUri) {
         oauthRedirectUri = await api.oauthRedirectUri();
       }
+      const cfg = await api.syncConfigGet();
+      // Measured once the answer is here, against the config the form was
+      // edited from, so typing during the request counts too.
       const had = keepDrafts && syncCfg !== null;
       const keepWebdav = had && webdavDirty, keepSftp = had && sftpDirty, keepDropbox = had && dropboxDirty;
       const prev = { syncUrl, syncUsername, sftpHost, sftpPort, sftpUser, sftpDir, sftpAuthMode, sftpCredId, dropboxAppKey, dropboxFolder };
-      syncCfg = await api.syncConfigGet();
+      syncCfg = cfg;
       syncUrl = syncCfg.url;
       syncUsername = syncCfg.username;
       syncAuto = syncCfg.auto;
