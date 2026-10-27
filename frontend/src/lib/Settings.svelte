@@ -2070,7 +2070,7 @@
     if (npEditingId || npKind !== "netbird") return;
     if (nbDevice.trim() !== "") return;
     api.suggestNetbirdDeviceName()
-      .then((n) => { if (!npEditingId && npKind === "netbird" && nbDevice.trim() === "") nbDevice = n; })
+      .then((n) => { if (!npEditingId && npKind === "netbird" && nbDevice.trim() === "") { nbDevice = n; npSuggested.nb = n; } })
       .catch(() => {});
   });
 
@@ -2081,7 +2081,7 @@
     if (npEditingId || npKind !== "tailscale") return;
     if (tsHostname.trim() !== "") return;
     api.suggestTailscaleHostname()
-      .then((n) => { if (!npEditingId && npKind === "tailscale" && tsHostname.trim() === "") tsHostname = n; })
+      .then((n) => { if (!npEditingId && npKind === "tailscale" && tsHostname.trim() === "") { tsHostname = n; npSuggested.ts = n; } })
       .catch(() => {});
   });
 
@@ -2283,8 +2283,8 @@
   // Unsaved-edit guard for the profile's Settings form: the values it opened
   // with, compared with what is typed now. A profile switch asks first.
   let npBase = $state("");
-  function npSnap(): string {
-    return JSON.stringify([npName, npConf, nbManagement, nbDevice, nbCredId, tsControl, tsHostname, tsCredId, tsNewKeySecret,
+  function npSnap(names: { nb: string; ts: string } = { nb: nbDevice, ts: tsHostname }): string {
+    return JSON.stringify([npName, npConf, nbManagement, names.nb, nbCredId, tsControl, names.ts, tsCredId, tsNewKeySecret,
       oc, ocMtu, ocBackups, ocNewPassword, ocCertPaste, ocCertPassword, !!ocCertFile, !!ocCertKeyFile,
       ov, ovText, ovNewPassword, cp, cpNewPassword]);
   }
@@ -2717,13 +2717,33 @@
     npSelect("general");
     void flashSetting(`plugin-${name}`);
   }
-  // The New profile form: dirty once anything that identifies the profile
-  // was typed (the device / host name defaults filled in on their own do
-  // not count).
-  const npNewDirty = $derived(npSel === "new" && npEditingId === null && (
-    !!npName.trim() || !!npConf.trim() || !!nbManagement.trim() || !!nbCredId || !!tsControl.trim() || !!tsCredId ||
-    !!oc.server.trim() || !!ovText.trim() || !!cp.server.trim() || !!ocNewPassword || !!ovNewPassword || !!cpNewPassword));
+  // The New profile form against the empty form it opened as: any field
+  // typed counts, the device / host names the app suggested on its own do
+  // not (they count once edited).
+  let npSuggested = $state({ nb: "", ts: "" });
+  let npEmptySnap = $state("");
+  const npNewDirty = $derived(npSel === "new" && npEditingId === null && npEmptySnap !== "" &&
+    npSnap({ nb: nbDevice === npSuggested.nb ? "" : nbDevice, ts: tsHostname === npSuggested.ts ? "" : tsHostname }) !== npEmptySnap);
+  // What each kind's Add profile button needs. The prompt's Save goes
+  // through the same gate: an incomplete profile is not created (an inline
+  // secret would otherwise be stored in the vault before the backend
+  // rejected the profile).
+  function npNewReady(): boolean {
+    if (npBusy || !npName.trim()) return false;
+    switch (npKind) {
+      case "netbird": return nbInstalled && !!nbCredId;
+      case "openconnect": return ocInstalled && !!oc.server.trim();
+      case "openvpn": return ovInstalled && !!ovText.trim();
+      case "checkpoint": return cpInstalled && !!cp.server.trim();
+      case "tailscale": return tsInstalled && !!tsCredId;
+      default: return !!npConf.trim();
+    }
+  }
   async function npCreateCurrent(): Promise<boolean> {
+    if (!npNewReady()) {
+      toast.err("The new profile is not complete yet: finish it, or choose Discard.");
+      return false;
+    }
     const create = { netbird: npCreateNetbird, openconnect: npCreateOpenConnect, openvpn: npCreateOpenVPN, checkpoint: npCreateCheckpoint, tailscale: npCreateTailscale }[npKind as string] ?? npCreate;
     await create();
     return !npNewDirty;
@@ -2751,6 +2771,10 @@
     if (!(await confirmLeave(["settings"]))) return;
     npSel = id;
     npCancelEdit();
+    if (id === "new") {
+      npSuggested = { nb: "", ts: "" };
+      npEmptySnap = npSnap();
+    }
     const np = networkProfiles.list.find((p) => p.id === id);
     if (np) npOpenTab(npTab, np);
   }
