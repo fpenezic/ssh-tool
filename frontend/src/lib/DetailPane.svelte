@@ -1337,10 +1337,11 @@
     deleteItems = items;
     deletePending = async () => {
       // Top-level folders only - children are cascade-deleted by the DB.
-      // What went leaves the selection without a prompt (its draft has
-      // nothing to save into); a folder that failed keeps it and its draft.
-      selection.forget(await deleteEach(folderIds, (id) => api.foldersDelete(id)));
+      // What went (cascades included) leaves the selection after the
+      // reload, without a prompt; a folder that failed keeps it.
+      await deleteEach(folderIds, (id) => api.foldersDelete(id));
       await tree.load();
+      selection.dropMissing();
     };
   }
 
@@ -1365,8 +1366,9 @@
     }
     deleteItems = items;
     deletePending = async () => {
-      selection.forget(await deleteEach(connIds, (id) => api.connectionsDelete(id)));
+      await deleteEach(connIds, (id) => api.connectionsDelete(id));
       await tree.load();
+      selection.dropMissing();
     };
   }
 
