@@ -20,6 +20,8 @@ a prerelease upstream.
 - VPN profile, Proxy tab: **Reachable through the app proxy** and **Separate proxy for this VPN only** take effect on the click. Listen address, port and extra networks keep their Save, now with an "Unsaved changes" marker.
 - App proxy: an on/off switch next to the title replaces the checkbox at the far right. Listen address and port have Save and Discard, greyed out while nothing changed, and turning the proxy on or off no longer saves a half-typed address with it.
 - Browser launcher: Save is greyed out until the path changes, with Discard next to it.
+- Credentials: editing a credential joins the unsaved-changes prompt, and Save stays greyed out until something changed. A click on empty space in the credential list, or Esc, clears the selection, the same as in the connection tree.
+- Credentials: the expiry date field, the day count and the 30d / 90d / 365d buttons follow the theme instead of the browser's default look.
 
 ### Navigation
 - A **Home** button in the Connections header goes back to the start page (recent connections, workspaces, profiles). **Esc** in the tree does the same (after clearing an active filter). Before, only a click on empty tree space did, and a long tree has none.

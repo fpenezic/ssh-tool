@@ -31,7 +31,19 @@
   // modal the connections tree uses - victims listed, folders cascade
   // (backend deletes contained credentials through the vault-cleanup
   // path), multi-selection deletes everything selected.
+ // Same as the connection tree: a click on empty space below the rows, or
+  // Esc, clears the selection and shows the start text again.
+  function onCredEmptyClick(e: MouseEvent) {
+    if ((e.target as HTMLElement | null)?.closest('[role="treeitem"]')) return;
+    if (selection.current.kind !== "none") selection.select({ kind: "none" });
+  }
+
   function onCredTreeKey(e: KeyboardEvent) {
+    if (e.key === "Escape" && selection.current.kind !== "none") {
+      e.preventDefault();
+      selection.select({ kind: "none" });
+      return;
+    }
     if (e.key !== "Delete" && !(e.key === "Backspace" && e.metaKey)) return;
     const folderIds = selection.selectedCredentialFolderIds();
     if (folderIds.length > 0) {
@@ -173,6 +185,7 @@
       role="tree"
       tabindex="-1"
       onkeydown={onCredTreeKey}
+      onclick={onCredEmptyClick}
       ondragover={credAreaDragOver}
       ondragleave={credAreaDragLeave}
       ondrop={credAreaDrop}
