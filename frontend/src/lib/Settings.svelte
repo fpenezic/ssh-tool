@@ -1056,6 +1056,21 @@
     }
   }
 
+  // Each transport's form against the stored config: Save is live only
+  // when something differs (a typed secret always counts), Discard reloads.
+  // No stored config read (the load failed): Save stays available.
+  const webdavDirty = $derived(!syncCfg || (syncUrl !== syncCfg.url || syncUsername !== syncCfg.username || syncPassword !== ""));
+  const sftpDirty = $derived(!syncCfg || (
+    sftpHost !== syncCfg.sftp_host || sftpPort !== (syncCfg.sftp_port || 22) || sftpUser !== syncCfg.sftp_user ||
+    sftpDir !== syncCfg.sftp_dir || sftpAuthMode !== (syncCfg.sftp_auth_mode || "credential") || sftpCredId !== syncCfg.sftp_cred_id ||
+    sftpInlinePassword !== "" || sftpInlineKeyPem !== "" || sftpInlineKeyPassphrase !== ""));
+  const dropboxDirty = $derived(!syncCfg || (dropboxAppKey !== syncCfg.dropbox_app_key || dropboxFolder !== (syncCfg.dropbox_folder || "/ssh-tool")));
+  async function syncDiscard() {
+    syncPassword = "";
+    sftpInlinePassword = ""; sftpInlineKeyPem = ""; sftpInlineKeyPassphrase = "";
+    await syncLoadConfig();
+  }
+
   async function syncSaveConfig() {
     syncErr = null;
     try {
@@ -6169,7 +6184,11 @@
       <PasswordInput bind:value={syncPassword} placeholder={syncCfg?.has_password ? "saved - leave blank to keep" : "app password / token"} />
     </label>
     <div class="row" style="gap:0.5rem">
-      <button class="primary" onclick={syncSaveConfig}>Save</button>
+      <button class="primary" onclick={syncSaveConfig} disabled={!webdavDirty}>Save</button>
+      {#if webdavDirty}
+        <button onclick={syncDiscard} title="Throw the unsaved changes away">Discard</button>
+        <span class="dirty-note">Unsaved changes</span>
+      {/if}
     </div>
   </div>
   {:else if syncTransport === "sftp"}
@@ -6242,7 +6261,11 @@
       {/if}
     {/if}
     <div class="row" style="gap:0.5rem">
-      <button class="primary" onclick={syncSaveSftp}>Save</button>
+      <button class="primary" onclick={syncSaveSftp} disabled={!sftpDirty}>Save</button>
+      {#if sftpDirty}
+        <button onclick={syncDiscard} title="Throw the unsaved changes away">Discard</button>
+        <span class="dirty-note">Unsaved changes</span>
+      {/if}
     </div>
   </div>
   {:else if syncTransport === "dropbox"}
@@ -6272,7 +6295,11 @@
       <span class="field-hint">Path inside the app folder. Created on first push.</span>
     </label>
     <div class="row" style="gap:0.5rem; align-items:center">
-      <button class="primary" onclick={dropboxSaveConfig}>Save</button>
+      <button class="primary" onclick={dropboxSaveConfig} disabled={!dropboxDirty}>Save</button>
+      {#if dropboxDirty}
+        <button onclick={syncDiscard} title="Throw the unsaved changes away">Discard</button>
+        <span class="dirty-note">Unsaved changes</span>
+      {/if}
       {#if hasDropboxToken}
         <span class="field-hint" style="color:var(--ok, #3a3)">Connected</span>
         <button onclick={dropboxDisconnect}>Disconnect</button>

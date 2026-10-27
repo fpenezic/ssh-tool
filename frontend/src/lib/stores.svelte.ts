@@ -432,6 +432,18 @@ class CredentialStore {
   loading = $state(false);
   error = $state<string | null>(null);
 
+  // Distinct credential tags with counts, most used first (the tag editor's
+  // suggestions). Same shape as tree.allTags().
+  allTags(): Array<{ tag: string; count: number }> {
+    const m = new Map<string, number>();
+    for (const c of this.list) {
+      for (const t of c.tags ?? []) m.set(t, (m.get(t) ?? 0) + 1);
+    }
+    return [...m.entries()]
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag));
+  }
+
   async load() {
     this.loading = true;
     this.error = null;

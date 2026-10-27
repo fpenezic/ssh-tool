@@ -6,6 +6,7 @@
   import { untrack } from "svelte";
   import { registerUnsaved, confirmLeave } from "./unsaved.svelte.ts";
   import { flipTri } from "./triSwitch";
+  import TagInput from "./TagInput.svelte";
   import { isMobile } from "./platform";
   import { toast } from "./toast.svelte";
   import { tunnels } from "./tunnels.svelte.ts";
@@ -977,7 +978,6 @@
     { value: AUTH_NONE, label: "None - do not inherit, ask at connect" },
     ...sshCredOptions(editing?.authRef),
   ]);
-  let newTagInput = $state("");
 
   // A local-shell connection ("telnet", serial console, "claude", ...):
   // no SSH host/port/auth/jump/VNC - just a shell kind + a command. The
@@ -1090,7 +1090,6 @@
         localShellDir: conn.local_shell_dir ?? "",
         tags: [...(conn.tags ?? [])],
       };
-      newTagInput = "";
     } else {
       resolved = null;
       editing = null;
@@ -1140,61 +1139,6 @@
       !tagsEq
     );
   });
-
-  // Existing tags offered while typing, so "prod" does not become "Prod" and
-  // "production" on the next three hosts. Most used first, the ones this
-  // connection already has left out. Shown on focus too, empty input
-  // included: picking beats remembering.
-  let tagFocus = $state(false);
-  let tagPick = $state(-1);
-  const tagSuggestions = $derived.by(() => {
-    if (!editing || !tagFocus) return [];
-    const q = newTagInput.trim().toLowerCase();
-    const have = new Set(editing.tags);
-    const all = tree.allTags().filter((t) => !have.has(t.tag));
-    const starts = all.filter((t) => t.tag.toLowerCase().startsWith(q));
-    const contains = q ? all.filter((t) => !t.tag.toLowerCase().startsWith(q) && t.tag.toLowerCase().includes(q)) : [];
-    return [...starts, ...contains].slice(0, 8);
-  });
-
-  function pickTag(tag: string) {
-    newTagInput = tag;
-    tagPick = -1;
-    addTag();
-  }
-
-  function onTagKey(e: KeyboardEvent) {
-    const n = tagSuggestions.length;
-    if (e.key === "ArrowDown" && n) {
-      e.preventDefault();
-      tagPick = (tagPick + 1) % n;
-    } else if (e.key === "ArrowUp" && n) {
-      e.preventDefault();
-      tagPick = tagPick <= 0 ? n - 1 : tagPick - 1;
-    } else if (e.key === "Enter" || e.key === "Tab" && tagPick >= 0) {
-      if (e.key === "Tab" && !newTagInput.trim() && tagPick < 0) return;
-      e.preventDefault();
-      if (tagPick >= 0 && tagPick < n) pickTag(tagSuggestions[tagPick].tag);
-      else addTag();
-    } else if (e.key === "Escape") {
-      tagFocus = false;
-    } else {
-      tagPick = -1;
-    }
-  }
-
-  function addTag() {
-    if (!editing) return;
-    const v = newTagInput.trim();
-    if (!v) return;
-    if (editing.tags.includes(v)) { newTagInput = ""; return; }
-    editing = { ...editing, tags: [...editing.tags, v] };
-    newTagInput = "";
-  }
-  function removeTag(tag: string) {
-    if (!editing) return;
-    editing = { ...editing, tags: editing.tags.filter((t) => t !== tag) };
-  }
 
   async function saveConn(): Promise<boolean> {
     if (!conn || !editing) return false;
@@ -2424,42 +2368,7 @@
       /></div>
       <div class="tag-editor span-2">
         <span class="tag-label">Tags</span>
-        <div class="tag-row">
-          {#each editing.tags as t (t)}
-            <span class="tag-chip">
-              {t}
-              <button type="button" class="tag-x" onclick={() => removeTag(t)} title="Remove tag">×</button>
-            </span>
-          {/each}
-          <div class="tag-input-wrap">
-            <input
-              class="tag-input"
-              bind:value={newTagInput}
-              placeholder="add tag and press Enter"
-              onkeydown={onTagKey}
-              onfocus={() => { tagFocus = true; tagPick = -1; }}
-              onblur={() => { tagFocus = false; addTag(); }}
-            />
-            {#if tagSuggestions.length}
-              <div class="tag-suggest" role="listbox">
-                {#each tagSuggestions as s, i (s.tag)}
-                  <!-- mousedown, not click: click lands after the input's blur
-                       has already committed whatever was typed. -->
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={i === tagPick}
-                    class:picked={i === tagPick}
-                    onmousedown={(e) => { e.preventDefault(); pickTag(s.tag); }}
-                  >
-                    <span>{s.tag}</span>
-                    <span class="tag-count">{s.count}</span>
-                  </button>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        </div>
+        <TagInput bind:tags={editing.tags} known={tree.allTags()} />
       </div>
       <div class="span-2 notes-block">
         <div class="notes-head">
@@ -3424,66 +3333,6 @@
   }
   .tag-editor { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.4rem 0; }
   .tag-label { font-size: 0.78rem; color: var(--subtext0); }
-  .tag-row {
-    display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center;
-    padding: 0.35rem 0.5rem;
-    background: var(--mantle);
-    border: 1px solid var(--surface0);
-    border-radius: 3px;
-    min-height: 2rem;
-  }
-  .tag-chip {
-    display: inline-flex; align-items: center; gap: 0.25rem;
-    background: var(--surface0); color: var(--text);
-    padding: 0.15rem 0.5rem;
-    border-radius: 999px;
-    font-size: 0.78rem;
-  }
-  .tag-x {
-    background: transparent; border: 0; color: var(--overlay0);
-    cursor: pointer; padding: 0; font-size: 0.9rem; line-height: 1;
-  }
-  .tag-x:hover { color: var(--red); }
-  .tag-input {
-    flex: 1; min-width: 8rem;
-    background: transparent; border: 0; color: var(--text);
-    font: inherit; font-size: 0.82rem;
-    padding: 0.15rem 0;
-  }
-  .tag-input:focus { outline: none; }
-  .tag-input-wrap { position: relative; flex: 1; min-width: 8rem; display: flex; }
-  .tag-input-wrap .tag-input { width: 100%; }
-  .tag-suggest {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    min-width: 12rem;
-    max-width: 20rem;
-    z-index: 20;
-    display: flex;
-    flex-direction: column;
-    background: var(--base);
-    border: 1px solid var(--surface1);
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-    padding: 3px;
-  }
-  .tag-suggest button {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    background: transparent;
-    border: 0;
-    color: var(--text);
-    font: inherit;
-    font-size: 0.8rem;
-    text-align: left;
-    padding: 0.25rem 0.5rem;
-    border-radius: 3px;
-    cursor: pointer;
-  }
-  .tag-suggest button:hover, .tag-suggest button.picked { background: var(--surface0); }
-  .tag-count { color: var(--overlay1); font-size: 0.72rem; }
 
   /* Same cap as .form, so the forward cards line up with the fields above
      instead of stretching across a wide window. */
