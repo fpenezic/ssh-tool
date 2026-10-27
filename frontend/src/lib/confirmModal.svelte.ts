@@ -12,6 +12,9 @@ interface ConfirmState {
   // where a separate settings toggle is the long way round.
   checkboxLabel?: string;
   checked: boolean;
+  // A third button between Cancel and OK (Discard in the unsaved-changes
+  // prompt). Its click resolves with alt: true and ok: false.
+  altLabel?: string;
   resolve: (r: ConfirmResult) => void;
 }
 
@@ -20,6 +23,7 @@ interface ConfirmState {
 export interface ConfirmResult {
   ok: boolean;
   checked: boolean;
+  alt?: boolean;
 }
 
 class ConfirmModalStore {
@@ -34,6 +38,7 @@ class ConfirmModalStore {
     checkboxLabel?: string;
     // Initial state of the checkbox (default unchecked).
     checked?: boolean;
+    altLabel?: string;
   }): Promise<ConfirmResult> {
     return new Promise((resolve) => {
       this.pending = {
@@ -44,6 +49,7 @@ class ConfirmModalStore {
         danger: !!opts.danger,
         checkboxLabel: opts.checkboxLabel,
         checked: !!opts.checked,
+        altLabel: opts.altLabel,
         resolve,
       };
     });
@@ -57,6 +63,11 @@ class ConfirmModalStore {
     const p = this.pending;
     this.pending = null;
     p?.resolve({ ok: true, checked: !!p?.checked });
+  }
+  alt() {
+    const p = this.pending;
+    this.pending = null;
+    p?.resolve({ ok: false, checked: !!p?.checked, alt: true });
   }
   cancel() {
     const p = this.pending;

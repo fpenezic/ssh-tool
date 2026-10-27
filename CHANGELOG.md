@@ -7,6 +7,18 @@ a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Platform
+- Wails v3.0.0 stable (was beta.34).
+
+### Editors
+- Unsaved edits are no longer dropped without a word. Leaving a connection or folder with unsaved changes (a click in the tree, Ctrl+click, a new item), switching editor tabs with a half-edited forward, or switching VPN profiles with unsaved profile settings asks first: **Save**, **Discard** or **Stay**.
+- A **Discard** button sits next to Save in the connection and folder editors (and in the "Unsaved changes" line), and on a VPN profile's Settings and Proxy tabs (it replaces Revert). Save is greyed out while nothing changed, in the folder editor too.
+- A background tree reload (sync, a refresh) no longer resets an editor that has unsaved changes.
+- Turning VNC, Kafka or Database on and off again no longer leaves the connection marked as changed: the switch goes back to inheriting. A switch showing an inherited "on" now turns off on the first click.
+- VPN profile, Proxy tab: **Reachable through the app proxy** and **Separate proxy for this VPN only** take effect on the click. Listen address, port and extra networks keep their Save, now with an "Unsaved changes" marker.
+
 ## [0.119.0] - Oracle and SQL Server, CI runner through VPNs and jump hosts, detached windows
 
 The Database tab now speaks Oracle and Microsoft SQL Server (MSSQL), both with pure-Go drivers: nothing to install next to the app. A GitLab runner can send its jobs through your VPNs and bastions, several customers at once, set up from Settings.

@@ -8,6 +8,7 @@
   import { createLoginCredential } from "./loginModal.svelte.ts";
   import { IconChevronRight } from "./iconMap";
   import { serviceCards, toggleCard } from "./serviceCards.svelte.ts";
+  import { flipTri } from "./triSwitch";
 
   const NEW_LOGIN = "__new_login__";
 
@@ -19,12 +20,16 @@
     // Whether Kafka is on once inheritance is applied - the block opens
     // for an inherited "on" too.
     effectiveOn: boolean;
+    // What a folder above gives when this one inherits, and the stored
+    // value: the switch lands back on inherit instead of a copy of it.
+    inheritedOn: boolean;
+    savedEnabled: string;
     onOpen?: () => void;
     // Whether a folder above makes it read-only (nothing set = writes
     // allowed), so "inherit" can say what it gives.
     inheritedReadOnly?: boolean;
   }
-  let { draft = $bindable(), inheritLabel, effectiveOn, onOpen, inheritedReadOnly = false }: Props = $props();
+  let { draft = $bindable(), inheritLabel, effectiveOn, inheritedOn, savedEnabled, onOpen, inheritedReadOnly = false }: Props = $props();
 
   // A SASL login is a username + password: password / vault credentials,
   // and ones backed by KeePass / Bitwarden / Infisical (also kind password).
@@ -36,7 +41,7 @@
   );
 
   function cycle() {
-    draft = { ...draft, enabled: draft.enabled === "on" ? "off" : "on" };
+    draft = { ...draft, enabled: flipTri(draft.enabled, savedEnabled, inheritedOn) };
   }
 
   const folded = $derived(serviceCards.folded.includes("kafka"));

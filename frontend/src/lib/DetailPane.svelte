@@ -3,6 +3,9 @@
   import { splitHostInput } from "./hostInput";
   import HomePane from "./HomePane.svelte";
   import { tree, credentials, selection, sessions, paneTabs, view, jumpChainHostnames } from "./stores.svelte";
+  import { untrack } from "svelte";
+  import { registerUnsaved, confirmLeave } from "./unsaved.svelte.ts";
+  import { flipTri } from "./triSwitch";
   import { isMobile } from "./platform";
   import { toast } from "./toast.svelte";
   import { tunnels } from "./tunnels.svelte.ts";
@@ -400,9 +403,28 @@
     return s;
   }
 
+  // Unsaved-edit guard: the tree, the editor tabs and the rest ask before
+  // a navigation would drop the draft (unsaved.svelte.ts). Discard bumps
+  // the epoch so both draft effects below reload from the stored values.
+  let draftEpoch = $state(0);
+  let draftConnId: string | null = null;
+  let draftConnEpoch = 0;
+  let draftFolderId: string | null = null;
+  let draftFolderEpoch = 0;
+  function discardDraft() { draftEpoch++; }
+  $effect(() => registerUnsaved({
+    label: () => conn?.name ?? folder?.name ?? "",
+    dirty: () => (!!conn && dirty) || (!conn && !!folder && folderDirty),
+    save: () => (conn ? saveConn() : folder ? saveFolder() : Promise.resolve(true)),
+    discard: discardDraft,
+  }));
+
   $effect(() => {
     if (folder) {
-      editingFolder = {
+      const keep = folder.id === draftFolderId && draftEpoch === draftFolderEpoch && untrack(() => folderDirty);
+      draftFolderId = folder.id;
+      draftFolderEpoch = draftEpoch;
+      if (!keep) editingFolder = {
         name: folder.name,
         username: folder.settings.username ?? "",
         port: folder.settings.port?.toString() ?? "",
@@ -467,8 +489,8 @@
   });
 
   let folderSaving = false;
-  async function saveFolder() {
-    if (!folder || !editingFolder || folderSaving) return;
+  async function saveFolder(): Promise<boolean> {
+    if (!folder || !editingFolder || folderSaving) return false;
     folderSaving = true;
     const settings = { ...folder.settings };
     settings.username = editingFolder.username.trim() || undefined;
@@ -506,8 +528,10 @@
       await api.foldersUpdate({ id: folder.id, name: editingFolder.name, settings });
       await tree.load();
       showSaved();
+      return true;
     } catch (e: any) {
       toast.err(`Save failed: ${errMsg(e)}`);
+      return false;
     } finally {
       folderSaving = false;
     }
@@ -577,7 +601,10 @@
   let edTabPref = $state<EdTab>((() => {
     try { return edTabOf(localStorage.getItem(ED_TAB_KEY)) || "general"; } catch { return "general"; }
   })());
-  function setEdTab(t: EdTab) {
+  async function setEdTab(t: EdTab) {
+    // Only a sub-form inside the tab (the forward form) is lost here; the
+    // connection draft itself survives a tab switch.
+    if (!(await confirmLeave(["tab"]))) return;
     view.editorTabForce = null;
     edTabPref = t;
     try { localStorage.setItem(ED_TAB_KEY, t); } catch { /* private window */ }
@@ -765,6 +792,7 @@
     !!editing && (editing.kafka.enabled === "on" ||
       (editing.kafka.enabled === "" && kafkaInheritedFrom(conn?.folder_id)))
   );
+  const vncInheritedOn = $derived(!!inheritedSetting(conn?.folder_id, "vnc_enabled").value);
   const connVncOn = $derived(
     !!editing && (editing.vncEnabled === "on" ||
       (editing.vncEnabled === "" && !!inheritedSetting(conn?.folder_id, "vnc_enabled").value))
@@ -1020,7 +1048,12 @@
       resolved = null;
       resolveErr = null;
       api.connectionsResolve(conn.id).then((r) => (resolved = r)).catch((e) => (resolveErr = String(e)));
-      editing = {
+      // A tree reload (sync, a refresh) hands in a new object for the same
+      // connection: edits in progress stay. Discard bumps draftEpoch.
+      const keep = conn.id === draftConnId && draftEpoch === draftConnEpoch && untrack(() => dirty);
+      draftConnId = conn.id;
+      draftConnEpoch = draftEpoch;
+      if (!keep) editing = {
         name: conn.name,
         hostname: conn.hostname,
         notes: conn.notes,
@@ -1163,8 +1196,8 @@
     editing = { ...editing, tags: editing.tags.filter((t) => t !== tag) };
   }
 
-  async function saveConn() {
-    if (!conn || !editing) return;
+  async function saveConn(): Promise<boolean> {
+    if (!conn || !editing) return false;
     const overrides = { ...conn.overrides };
     overrides.username = editing.username.trim() || undefined;
     {
@@ -1209,7 +1242,7 @@
     overrides.initial_command_line_delay_ms = parseDelayMs(editing.initialCommandDelay);
     const localKind = editing.localShellKind.trim();
     const localDir = editing.localShellDir.trim();
-    await api.connectionsUpdate({
+    return api.connectionsUpdate({
       id: conn.id,
       name: editing.name,
       hostname: editing.hostname,
@@ -1230,8 +1263,10 @@
         resolved = await api.connectionsResolve(conn.id);
       }
       showSaved();
+      return true;
     }).catch((e) => {
       toast.err(`Save failed: ${errMsg(e)}`);
+      return false;
     });
   }
 
@@ -1322,7 +1357,7 @@
       for (const id of folderIds) {
         try { await api.foldersDelete(id); } catch {}
       }
-      selection.select({ kind: "none" });
+      selection.selectForce({ kind: "none" });
       await tree.load();
     };
   }
@@ -1338,7 +1373,7 @@
       for (const id of connIds) {
         try { await api.connectionsDelete(id); } catch {}
       }
-      selection.select({ kind: "none" });
+      selection.selectForce({ kind: "none" });
       await tree.load();
     };
   }
@@ -1756,7 +1791,17 @@
         {#if folderSub}<span class="ed-sub">{folderSub}</span>{/if}
       </div>
       <div class="head-actions">
-        <button class="primary save-btn" class:dirty={folderDirty} onclick={saveFolder}>
+        {#if folderDirty}
+          <button onclick={discardDraft} title="Throw the unsaved changes away">Discard</button>
+        {/if}
+        <button
+          class="save-btn"
+          class:dirty={folderDirty}
+          class:just-saved={savedHint && !folderDirty}
+          disabled={!folderDirty}
+          title={folderDirty ? "Save unsaved changes" : "No unsaved changes"}
+          onclick={saveFolder}
+        >
           {#if savedHint && !folderDirty}✓ Saved{:else if folderDirty}Save *{:else}Save{/if}
         </button>
         <button onclick={addSubfolder} title="New subfolder">+ Folder</button>
@@ -1986,6 +2031,8 @@
       <DbSettingsEditor
         bind:draft={editingFolder.db}
         inheritLabel="(inherit from parent)"
+        inheritedOn={dbInheritedFrom(folder?.parent_id, "db_enabled") === true}
+        savedEnabled={encodeBool(folder?.settings.db_enabled)}
         effectiveOn={editingFolder.db.enabled === "on" || (editingFolder.db.enabled === "" && dbInheritedFrom(folder?.parent_id, "db_enabled") === true)}
         effectiveEngine={dbInheritedFrom(folder?.parent_id, "db_engine") ?? ""}
         inheritedReadOnly={dbInheritedFrom(folder?.parent_id, "db_read_only") === true}
@@ -1993,6 +2040,8 @@
       <KafkaSettingsEditor
         bind:draft={editingFolder.kafka}
         inheritLabel="(inherit from parent)"
+        inheritedOn={kafkaInheritedFrom(folder?.parent_id)}
+        savedEnabled={encodeBool(folder?.settings.kafka_enabled)}
         effectiveOn={editingFolder.kafka.enabled === "on" || (editingFolder.kafka.enabled === "" && kafkaInheritedFrom(folder?.parent_id))}
         inheritedReadOnly={dbInheritedFrom(folder?.parent_id, "kafka_read_only") === true}
       />
@@ -2037,6 +2086,9 @@
         {#if headSub}<span class="ed-sub" title={headSub}>{headSub}</span>{/if}
       </div>
       <div class="head-actions">
+        {#if dirty}
+          <button onclick={discardDraft} title="Throw the unsaved changes away">Discard</button>
+        {/if}
         <button
           class="save-btn"
           class:dirty
@@ -2438,6 +2490,7 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
+          <button class="link-save" onclick={discardDraft}>Discard</button>
         </div>
       {/if}
     </div>
@@ -2562,6 +2615,7 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
+          <button class="link-save" onclick={discardDraft}>Discard</button>
         </div>
       {/if}
     </div>
@@ -2608,6 +2662,7 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
+          <button class="link-save" onclick={discardDraft}>Discard</button>
         </div>
       {/if}
     </div>
@@ -2641,29 +2696,30 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
+          <button class="link-save" onclick={discardDraft}>Discard</button>
         </div>
       {/if}
     </div>
     {:else if edTab === "vnc"}
     <div class="form">
-      <div class="span-2 vnc-section" class:on={editing.vncEnabled === "on"}>
+      <div class="span-2 vnc-section" class:on={connVncOn}>
         <div class="vnc-head">
           <button type="button"
             class="vnc-switch"
             role="switch"
             aria-label="Enable VNC console"
-            aria-checked={editing.vncEnabled === "on"}
-            onclick={() => { if (editing) editing = { ...editing, vncEnabled: editing.vncEnabled === "on" ? "off" : "on" }; }}
+            aria-checked={connVncOn}
+            onclick={() => { if (editing) editing = { ...editing, vncEnabled: flipTri(editing.vncEnabled, encodeBool(conn?.overrides?.vnc_enabled), vncInheritedOn) }; }}
           >
             <span class="vnc-knob"></span>
           </button>
           <span class="vnc-title">VNC console</span>
           <span class="vnc-spacer"></span>
-          {#if editing.vncEnabled === "on"}
+          {#if connVncOn}
             <button type="button" class="vnc-open" onclick={openVncConsole}>Open console</button>
           {/if}
         </div>
-        {#if editing.vncEnabled === "on"}
+        {#if connVncOn}
         <div class="vnc-grid">
           <label>RFB port
             <input
@@ -2703,6 +2759,7 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
+          <button class="link-save" onclick={discardDraft}>Discard</button>
         </div>
       {/if}
     </div>
@@ -2711,6 +2768,8 @@
       <DbSettingsEditor
         bind:draft={editing.db}
         inheritLabel="(inherit from folder)"
+        inheritedOn={dbInheritedFrom(conn?.folder_id, "db_enabled") === true}
+        savedEnabled={encodeBool(conn?.overrides?.db_enabled)}
         effectiveOn={connDbOn}
         effectiveEngine={dbInheritedFrom(conn?.folder_id, "db_engine") ?? ""}
         inheritedReadOnly={dbInheritedFrom(conn?.folder_id, "db_read_only") === true}
@@ -2722,6 +2781,8 @@
       <KafkaSettingsEditor
         bind:draft={editing.kafka}
         inheritLabel="(inherit from folder)"
+        inheritedOn={kafkaInheritedFrom(conn?.folder_id)}
+        savedEnabled={encodeBool(conn?.overrides?.kafka_enabled)}
         effectiveOn={editing.kafka.enabled === "on" || (editing.kafka.enabled === "" && kafkaInheritedFrom(conn?.folder_id))}
         inheritedReadOnly={dbInheritedFrom(conn?.folder_id, "kafka_read_only") === true}
         onOpen={() => { if (conn) connectionActions.openKafka(conn.id); }}
@@ -2731,6 +2792,7 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
+          <button class="link-save" onclick={discardDraft}>Discard</button>
         </div>
       {/if}
     </div>
@@ -2747,6 +2809,7 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
+          <button class="link-save" onclick={discardDraft}>Discard</button>
         </div>
       {/if}
     </div>

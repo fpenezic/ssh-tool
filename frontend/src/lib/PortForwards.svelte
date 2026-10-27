@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { registerUnsaved } from "./unsaved.svelte.ts";
   import {
     api,
     type PortForward,
@@ -192,7 +193,29 @@
     nDesc = spec.description ?? "";
     nBrowserMode = spec.browser_mode ?? "";
     showAdd = true;
+    formBase = formSnap();
   }
+
+  function openAdd() {
+    resetForm();
+    showAdd = true;
+    formBase = formSnap();
+  }
+
+  // Unsaved-edit guard: the form's values when it opened, so switching the
+  // editor tab or the selection asks before dropping what was typed.
+  let formBase = $state("");
+  function formSnap(): string {
+    return JSON.stringify([nKind, nLocalAddr, nLocalPort ?? null, nRemoteHost, nRemotePort ?? null, nAutoStart, nDesc, nBrowserMode]);
+  }
+  const formDirty = $derived(showAdd && formSnap() !== formBase);
+  $effect(() => registerUnsaved({
+    label: () => `the ${editingForwardId ? "edited" : "new"} forward on ${connection.name}`,
+    dirty: () => formDirty,
+    save: submitForward,
+    discard: cancelForm,
+    scope: "tab",
+  }));
 
   function cancelForm() {
     showAdd = false;
@@ -200,12 +223,12 @@
     resetForm();
   }
 
-  async function submitForward() {
+  async function submitForward(): Promise<boolean> {
     if (editingForwardId) return updateForward();
     return createForward();
   }
 
-  async function createForward() {
+  async function createForward(): Promise<boolean> {
     err = null;
     try {
       await api.forwardsCreate({
@@ -221,8 +244,10 @@
       showAdd = false;
       resetForm();
       await reload();
+      return true;
     } catch (e: any) {
       err = errMsg(e);
+      return false;
     }
   }
 
@@ -235,8 +260,8 @@
     return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : undefined;
   }
 
-  async function updateForward() {
-    if (!editingForwardId) return;
+  async function updateForward(): Promise<boolean> {
+    if (!editingForwardId) return false;
     err = null;
     const isDyn = nKind === "dynamic";
     const localPort = portOrUndef(nLocalPort);
@@ -259,8 +284,10 @@
       });
       cancelForm();
       await reload();
+      return true;
     } catch (e: any) {
       err = errMsg(e);
+      return false;
     }
   }
 
@@ -489,7 +516,7 @@
 <div class="forwards">
   <header>
     <strong>Port forwards</strong>
-    <button onclick={() => { if (showAdd) { cancelForm(); } else { resetForm(); showAdd = true; } }}>{showAdd ? "Cancel" : "+ Add"}</button>
+    <button onclick={() => { if (showAdd) { cancelForm(); } else { openAdd(); } }}>{showAdd ? "Cancel" : "+ Add"}</button>
   </header>
 
   {#if tunnel}
