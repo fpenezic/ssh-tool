@@ -2284,7 +2284,7 @@
   // with, compared with what is typed now. A profile switch asks first.
   let npBase = $state("");
   function npSnap(names: { nb: string; ts: string } = { nb: nbDevice, ts: tsHostname }): string {
-    return JSON.stringify([npName, npConf, nbManagement, names.nb, nbCredId, tsControl, names.ts, tsCredId, tsNewKeySecret,
+    return JSON.stringify([npName, npConf, nbManagement, names.nb, nbCredId, nbNewKeyName, nbNewKeySecret, tsControl, names.ts, tsCredId, tsNewKeyName, tsNewKeySecret,
       oc, ocMtu, ocBackups, ocNewPassword, ocCertPaste, ocCertPassword, !!ocCertFile, !!ocCertKeyFile,
       ov, ovText, ovNewPassword, cp, cpNewPassword]);
   }
@@ -2364,6 +2364,7 @@
     nbManagement = ""; nbDevice = ""; nbCredId = "";
     tsControl = ""; tsHostname = ""; tsCredId = "";
     tsNewKeyOpen = false; tsNewKeyName = ""; tsNewKeySecret = "";
+    nbNewKeyOpen = false; nbNewKeyName = ""; nbNewKeySecret = "";
     oc = ocEmpty(); ocMtu = ""; ocBackups = "";
     ocResetInline();
     ov = ovEmpty();
