@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { registerUnsaved } from "./unsaved.svelte.ts";
   import ExpiryInput from "./ExpiryInput.svelte";
   import { credentials, selection, view } from "./stores.svelte";
   import { toast } from "./toast.svelte";
@@ -280,6 +281,20 @@
     }
   });
 
+  // What the edit form opened with: Save is live only once something
+  // differs, and leaving with changes asks first (unsaved.svelte.ts).
+  let editBase = "";
+  function editSnap(): string {
+    return JSON.stringify([editName, editHint, editUsername, editExpires]);
+  }
+  const editDirty = $derived(editing && editSnap() !== editBase);
+  $effect(() => registerUnsaved({
+    label: () => cred?.name ?? "",
+    dirty: () => editDirty,
+    save: saveEdit,
+    discard: () => { editing = false; },
+  }));
+
   function startEdit() {
     if (!cred) return;
     editName = cred.name;
@@ -291,10 +306,11 @@
       : "";
     editErr = null;
     editing = true;
+    editBase = editSnap();
   }
 
-  async function saveEdit() {
-    if (!cred) return;
+  async function saveEdit(): Promise<boolean> {
+    if (!cred) return false;
     editSaving = true; editErr = null;
     try {
       await api.credentialsUpdate({
@@ -313,9 +329,11 @@
       await credentials.load();
       editing = false;
       toast.ok("Credential saved");
+      return true;
     } catch (e: any) {
       editErr = errMsg(e);
       toast.err(`Save failed: ${errMsg(e)}`);
+      return false;
     }
     finally { editSaving = false; }
   }
@@ -738,7 +756,7 @@
       {/if}
       <div class="head-actions">
         {#if editing}
-          <button class="primary" disabled={editSaving} onclick={saveEdit}>
+          <button class="primary" disabled={editSaving || !editDirty} onclick={saveEdit}>
             {editSaving ? "Saving…" : "Save"}
           </button>
           <button onclick={() => (editing = false)}>Cancel</button>

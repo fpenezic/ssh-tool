@@ -34,6 +34,24 @@
   .exp { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
   .days { display: flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; color: var(--subtext0); }
   .days input { width: 5rem; }
-  .chip { padding: 0.15rem 0.5rem; font-size: 0.8rem; }
-  .chip.on { border-color: var(--accent, var(--blue)); }
+  /* Own styles: the editors' input / button rules are scoped to them and
+     do not reach into this component, which left the date field, the day
+     count and the chips in the browser's default look. Same values as the
+     credential editor's fields and buttons. */
+  input {
+    background: var(--mantle); color: var(--text);
+    border: 1px solid var(--surface0); border-radius: 3px;
+    padding: 0.35rem 0.5rem; font: inherit;
+  }
+  input:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
+  input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.7; }
+  input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+  .chip {
+    background: var(--surface0); color: var(--text);
+    border: 1px solid transparent; border-radius: 3px;
+    padding: 0.3rem 0.55rem; font: inherit; font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .chip:hover { background: var(--surface1); }
+  .chip.on { border-color: var(--blue); color: var(--blue); }
 </style>
