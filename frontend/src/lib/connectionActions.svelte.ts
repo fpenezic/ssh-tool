@@ -123,6 +123,15 @@ interface MoveTarget {
   title: string;
 }
 
+// The ids without any of their ancestors among them.
+function topLevelOnly(ids: string[], parentOf: (id: string) => string | null): string[] {
+  const chosen = new Set(ids);
+  return ids.filter((id) => {
+    for (let p = parentOf(id), n = 0; p && n < 10000; p = parentOf(p), n++) if (chosen.has(p)) return false;
+    return true;
+  });
+}
+
 // Deletes one by one and carries on past a failure (each shown as a
 // toast); returns the ids that went. The caller reloads and then drops
 // what is gone from the selection (selection.dropMissing), cascades
@@ -1080,7 +1089,10 @@ class ConnectionActionsStore {
     };
   }
 
-  openDeleteFolders(ids: string[]) {
+  openDeleteFolders(selected: string[]) {
+    // A subfolder of another selected folder goes with it (the DB
+    // cascades): deleting it again would only report "not found".
+    const ids = topLevelOnly(selected, (id) => tree.folderById(id)?.parent_id ?? null);
     const items: typeof this.deleteItems = [];
     for (const id of ids) collectFolderVictims(id, items);
     this.deleteItems = items;
@@ -1104,7 +1116,9 @@ class ConnectionActionsStore {
     };
   }
 
-  openDeleteCredFolders(ids: string[]) {
+  openDeleteCredFolders(selected: string[]) {
+    // Same for credential folders: the backend cascades a subtree.
+    const ids = topLevelOnly(selected, (id) => credentials.folders.find((f) => f.id === id)?.parent_id ?? null);
     const items: typeof this.deleteItems = [];
     for (const id of ids) collectCredFolderVictims(id, items);
     this.deleteItems = items;
