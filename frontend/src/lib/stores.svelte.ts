@@ -660,8 +660,12 @@ class SelectionStore {
       for (let p = parentOf(id), n = 0; p && n < 10000; p = parentOf(p), n++) if (deleted.has(p)) return true;
       return false;
     };
-    const folderParent = (id: string) => tree.folderById(id)?.parent_id ?? null;
-    const credFolderParent = (id: string) => credentials.folders.find((f) => f.id === id)?.parent_id ?? null;
+    // Parent maps built once: a walk per item over array lookups would be
+    // quadratic on a big tree.
+    const fp = new Map(tree.folders.map((f) => [f.id, f.parent_id]));
+    const cfp = new Map(credentials.folders.map((f) => [f.id, f.parent_id]));
+    const folderParent = (id: string) => fp.get(id) ?? null;
+    const credFolderParent = (id: string) => cfp.get(id) ?? null;
     for (const f of tree.folders) if (under(folderParent, f.id)) deleted.add(f.id);
     for (const c of tree.connections) if (c.folder_id && (deleted.has(c.folder_id) || under(folderParent, c.folder_id))) deleted.add(c.id);
     for (const f of credentials.folders) if (under(credFolderParent, f.id)) deleted.add(f.id);
