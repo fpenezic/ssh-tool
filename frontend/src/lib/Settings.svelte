@@ -42,6 +42,7 @@
   import { fileToBase64, CERT_FILE_ACCEPT } from "./fileB64";
   import { updateCheck } from "./updateCheck.svelte";
   import { registerUnsaved, confirmLeave } from "./unsaved.svelte.ts";
+  import Switch from "./Switch.svelte";
 
   let browserPath = $state("");
   let browserPersistent = $state(false);
@@ -2423,10 +2424,27 @@
   let sp = $state<{ enabled: boolean; bind: string; port: number; priority: string[]; jumps: boolean; listening: boolean }>({ enabled: false, bind: "127.0.0.1", port: 1080, priority: [], jumps: false, listening: false });
   const spProfiles = $derived(networkProfiles.list.filter((p) => p.local_proxy?.shared));
   let spDetails = $state<import("./api").SharedProxyDetails | null>(null);
+  // The stored listen address and port: the two fields are dirty while
+  // they differ, and only Save sends them. The switches and priority clicks
+  // save at once with the stored pair, not with half-typed text.
+  let spBase = $state({ bind: "127.0.0.1", port: 1080 });
+  const spDirty = $derived(sp.bind.trim() !== spBase.bind || Number(sp.port) !== spBase.port);
+  function spDiscard() {
+    sp.bind = spBase.bind;
+    sp.port = spBase.port;
+  }
+  $effect(() => registerUnsaved({
+    label: () => "App proxy",
+    dirty: () => npSel === "general" && sp.enabled && spDirty,
+    save: async () => { await spSave(true); return !spDirty; },
+    discard: spDiscard,
+    scope: "settings",
+  }));
   async function spLoad() {
     try {
       const r = await api.networkSharedProxyGet();
       sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], jumps: !!r.config.jump_connections, listening: r.listening };
+      spBase = { bind: sp.bind, port: sp.port };
       spDetails = sp.enabled ? await api.networkSharedProxyDetails() : null;
     } catch { /* shown on save */ }
   }
@@ -2435,9 +2453,12 @@
   // updates the form: quick priority clicks end in the order clicked last.
   let spQueue: Promise<void> = Promise.resolve();
   let spPending = 0;
-  function spSave(): Promise<void> {
+  function spSave(fields = false): Promise<void> {
     const req = {
-      enabled: sp.enabled, bind: sp.bind.trim(), port: Number(sp.port), priority: $state.snapshot(sp.priority),
+      enabled: sp.enabled,
+      bind: fields ? sp.bind.trim() : spBase.bind,
+      port: fields ? Number(sp.port) : spBase.port,
+      priority: $state.snapshot(sp.priority),
       jump_connections: sp.jumps,
     };
     spPending++;
@@ -2448,7 +2469,11 @@
           const r = await api.networkSharedProxyGet();
           const d = r.config.enabled ? await api.networkSharedProxyDetails() : null;
           if (spPending === 1) {
+            // Text still being typed (a switch saved meanwhile) stays.
+            const keep = !fields && spDirty ? { bind: sp.bind, port: sp.port } : null;
             sp = { enabled: r.config.enabled, bind: r.config.bind || "127.0.0.1", port: r.config.port || 1080, priority: r.config.priority ?? [], jumps: !!r.config.jump_connections, listening: r.listening };
+            spBase = { bind: sp.bind, port: sp.port };
+            if (keep) { sp.bind = keep.bind; sp.port = keep.port; }
             spDetails = d;
           }
           toast.ok(req.enabled ? `App proxy on ${req.bind}:${req.port}` : "App proxy off");
@@ -4907,12 +4932,11 @@
           </fieldset>
 
           <div class="np-h3 np-sp-head">
+            <Switch checked={sp.enabled} label="App proxy" onchange={(on) => { sp.enabled = on; void spSave(); }} />
             <h3>App proxy</h3>
             {#if sp.enabled}
               <span class="hint inline" class:warn={!sp.listening}>{sp.listening ? `listening on ${sp.bind}:${sp.port}` : "not listening - port taken?"}</span>
             {/if}
-            <span class="np-spacer"></span>
-            <label class="oc-choice"><input type="checkbox" checked={sp.enabled} onchange={(e) => { sp.enabled = (e.target as HTMLInputElement).checked; spSave(); }} /> On</label>
           </div>
           <p class="hint">
             Lets programs outside ssh-tool reach your customers through these
@@ -4932,7 +4956,9 @@
                 <span>Port</span>
                 <div class="row" style="gap:0.5rem; margin:0">
                   <input type="number" min="1" max="65535" bind:value={sp.port} style="width:7rem" />
-                  <button onclick={spSave}>Save</button>
+                  <button class="primary" onclick={() => spSave(true)} disabled={!spDirty}>Save</button>
+                  <button onclick={spDiscard} disabled={!spDirty} title="Throw the unsaved changes away">Discard</button>
+                  {#if spDirty}<span class="dirty-note">Unsaved changes</span>{/if}
                 </div>
               </label>
             </div>
@@ -5324,8 +5350,11 @@
       />
     </label>
     <div class="row">
-      <button class="primary" onclick={save}>Save</button>
-      {#if savedAt}
+      <button class="primary" onclick={save} disabled={browserPath.trim() === (savedPath ?? "").trim()}>Save</button>
+      {#if browserPath.trim() !== (savedPath ?? "").trim()}
+        <button onclick={() => (browserPath = savedPath ?? "")} title="Throw the unsaved changes away">Discard</button>
+        <span class="dirty-note">Unsaved changes</span>
+      {:else if savedAt}
         <span class="ok">Saved {savedAt}</span>
       {/if}
     </div>

@@ -516,7 +516,9 @@
 <div class="forwards">
   <header>
     <strong>Port forwards</strong>
-    <button onclick={() => { if (showAdd) { cancelForm(); } else { openAdd(); } }}>{showAdd ? "Cancel" : "+ Add"}</button>
+    <!-- The open form has its own Cancel; a second one up here read as a
+         different action. -->
+    {#if !showAdd}<button onclick={openAdd}>+ Add</button>{/if}
   </header>
 
   {#if tunnel}
@@ -541,8 +543,8 @@
         <!-- Kind is immutable once created (it changes the whole listener
              semantics); disabled while editing. -->
         <select bind:value={nKind} disabled={editingForwardId !== null}>
-          <option value="local">Local (L) - local listen → remote target</option>
-          <option value="remote">Remote (R) - remote listen → local target</option>
+          <option value="local">Local (L) - local listen -> remote target</option>
+          <option value="remote">Remote (R) - remote listen -> local target</option>
           <option value="dynamic">Dynamic (D) - SOCKS5 proxy</option>
         </select>
         {#if editingForwardId !== null}
@@ -600,7 +602,7 @@
         </div>
       {/if}
       <label>Description
-        <input bind:value={nDesc} placeholder="Postgres tunnel" />
+        <input bind:value={nDesc} placeholder={nKind === "dynamic" ? "Customer intranet" : nKind === "remote" ? "Package proxy for the server" : "Postgres tunnel"} />
       </label>
       {#if !tunnel}
         <!-- A tunnel starts every forward, so the flag means nothing there. -->
@@ -631,7 +633,7 @@
         </p>
       {/if}
       {#if editingForwardId !== null && statusOf(editingForwardId)?.state === "listening"}
-        <p class="edit-note">This forward is running - stop and start it again to apply changes.</p>
+        <p class="edit-note warn">This forward is running - stop and start it again to apply changes.</p>
       {/if}
       <div class="row" style="justify-content: flex-end; gap: 0.4rem;">
         <button onclick={cancelForm}>Cancel</button>
@@ -640,7 +642,7 @@
     </div>
   {/if}
 
-  {#if specs.length === 0}
+  {#if specs.length === 0 && !showAdd}
     <div class="empty">
       No forwards yet. Click <strong>+ Add</strong> to create one.
     </div>
@@ -770,9 +772,7 @@
 
 <style>
   .forwards {
-    margin-top: 1.5rem;
-    border-top: 1px solid var(--surface0);
-    padding-top: 1rem;
+    margin-top: 0.5rem;
   }
   header {
     /* `+ Add` used to live at the far right (justify-content:
@@ -817,8 +817,9 @@
     line-height: 1.3;
   }
   .edit-note {
-    margin: 0.2rem 0 0; font-size: 0.75rem; color: var(--peach);
+    margin: 0.2rem 0 0; font-size: 0.75rem; color: var(--subtext0);
   }
+  .edit-note.warn { color: var(--peach); }
   .add-form {
     background: var(--crust);
     border: 1px solid var(--surface0);

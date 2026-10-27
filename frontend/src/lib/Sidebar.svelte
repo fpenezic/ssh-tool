@@ -14,7 +14,7 @@
   import { setMultiDragImage } from "./dragImage";
   import QuickAccess from "./QuickAccess.svelte";
   import { IconFolderPlus, IconPlus, IconRotateCw, IconHost, IconTunnel, IconLoading, IconX, IconGlobe, IconExpandAll, IconCollapseAll,
-    IconRefresh, IconPlay, IconExternalLink, IconStar, IconMoveToFolder, IconDownload, IconTrash, IconTerminal } from "./iconMap";
+    IconRefresh, IconPlay, IconExternalLink, IconStar, IconMoveToFolder, IconDownload, IconTrash, IconTerminal, IconHome } from "./iconMap";
   import { expandedConnections } from "./treeState.svelte";
   import { probeState } from "./probeState.svelte";
   import TagFilter from "./TagFilter.svelte";
@@ -420,6 +420,12 @@
       searchInputEl?.focus();
       return;
     }
+    // Then a second Escape goes back to the start page.
+    if (e.key === "Escape" && selection.current.kind !== "none") {
+      e.preventDefault();
+      selection.select({ kind: "none" });
+      return;
+    }
 
     // Delete key removes the selection. Picks up multi-select
     // automatically since connectionActions reads selection state.
@@ -540,6 +546,11 @@
   <header>
     <h2>Connections</h2>
     <div class="actions">
+      <!-- Back to the start page. The empty-tree click does the same, but a
+           long tree has no empty space left to click. -->
+      <button onclick={() => selection.select({ kind: "none" })} title="Home - recent connections, workspaces, profiles (Esc in the tree)" class="iconbtn" disabled={selection.current.kind === "none"}>
+        <IconHome size={14} />
+      </button>
       <button onclick={addRootFolder} title="New folder" class="iconbtn">
         <IconFolderPlus size={14} />
       </button>
