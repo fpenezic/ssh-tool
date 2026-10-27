@@ -56,6 +56,9 @@
     }
   }
   async function openMenu(e: MouseEvent, r: DbTreeRow) {
+    // Before the await: on Stay the app's menu is not shown, and the
+    // browser's own must not come up in its place.
+    e.preventDefault();
     if (!(await select(r))) return;
     contextMenu.show(e, [
       { label: "Open", iconComponent: IconDb, onSelect: () => void connectionActions.openDb(connId, r.id) },
