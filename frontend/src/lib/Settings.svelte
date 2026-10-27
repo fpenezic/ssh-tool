@@ -844,11 +844,20 @@
       if (!oauthRedirectUri) {
         oauthRedirectUri = await api.oauthRedirectUri();
       }
+      // The first load has no stored config to compare with: what the form
+      // held when it started stands in, so typing during it counts too.
+      const snap = () => JSON.stringify([syncUrl, syncUsername, syncPassword]);
+      const snapSftp = () => JSON.stringify([sftpHost, sftpPort, sftpUser, sftpDir, sftpAuthMode, sftpCredId]);
+      const snapDropbox = () => JSON.stringify([dropboxAppKey, dropboxFolder]);
+      const first = syncCfg === null;
+      const before = { w: snap(), s: snapSftp(), d: snapDropbox() };
       const cfg = await api.syncConfigGet();
       // Measured once the answer is here, against the config the form was
       // edited from, so typing during the request counts too.
-      const had = keepDrafts && syncCfg !== null;
-      const keepWebdav = had && webdavDirty, keepSftp = had && sftpDirty, keepDropbox = had && dropboxDirty;
+      const had = keepDrafts && !first;
+      const keepWebdav = keepDrafts && (had ? webdavDirty : snap() !== before.w);
+      const keepSftp = keepDrafts && (had ? sftpDirty : snapSftp() !== before.s);
+      const keepDropbox = keepDrafts && (had ? dropboxDirty : snapDropbox() !== before.d);
       const prev = { syncUrl, syncUsername, sftpHost, sftpPort, sftpUser, sftpDir, sftpAuthMode, sftpCredId, dropboxAppKey, dropboxFolder };
       syncCfg = cfg;
       syncUrl = syncCfg.url;
@@ -5189,7 +5198,9 @@
             <label class="np-kindpick"><input type="radio" bind:group={npKind} value="openvpn" /> OpenVPN</label>
             <label class="np-kindpick"><input type="radio" bind:group={npKind} value="checkpoint" /> Check Point</label>
           </div>
-          {@render npForm()}
+          <!-- Locked while a save or create runs: it clears the form when done,
+               so a field typed meanwhile would be lost without a word. -->
+          <fieldset class="np-fieldset" disabled={npBusy}>{@render npForm()}</fieldset>
 
         {:else if npCur}
           {@const np = npCur}
@@ -5284,7 +5295,9 @@
             <p class="hint">{npPresenceText(np)}</p>
 
           {:else if npTab === "settings"}
-            {@render npForm()}
+            <!-- Locked while a save or create runs: it clears the form when done,
+               so a field typed meanwhile would be lost without a word. -->
+          <fieldset class="np-fieldset" disabled={npBusy}>{@render npForm()}</fieldset>
             <div class="np-danger">
               <button class="danger" onclick={() => npDelete(np)}>Delete profile</button>
             </div>
@@ -7906,6 +7919,8 @@
 </section>
 
 <style>
+  /* Only there to disable the profile form during a save: no box of its own. */
+  .np-fieldset { display: contents; border: 0; padding: 0; margin: 0; min-width: 0; }
   /* Same marker as the connection editor's "Unsaved changes" pill. */
   .dirty-note { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--yellow); font-size: 0.78rem; font-weight: 600; }
   .dirty-note::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); }
