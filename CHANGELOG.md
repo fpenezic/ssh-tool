@@ -9,6 +9,9 @@ while Wails v3 was a prerelease upstream.
 
 ## [Unreleased]
 
+### Security
+- go-jose 4.1.6 (used by opkssh sign-in): a JWK set with a crafted RSA key could make parsing hang (GHSA-mgcc-cww5-fp2q).
+
 ### Small fixes
 - Terminal on Linux: with WebGL off, letters were sometimes cut at the same columns on every row ("root" shown as "roct"). The terminal is still aligned to whole pixels (which keeps the block cursor from leaving a line behind), but without the transform that caused the clipping.
 - File browser: the Modified column shows local time, as `ls -l` and the OS file manager do. It showed UTC, an hour or two off in Central Europe.
