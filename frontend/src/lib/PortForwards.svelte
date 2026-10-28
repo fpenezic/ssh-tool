@@ -71,16 +71,24 @@
     return all.filter((f) => ids.has(f.id));
   }
 
+  // Lists can overlap, and the view stays mounted across connections: only
+  // the newest request, for the connection still shown, is applied.
+  let reloadGen = 0;
   async function reload() {
     err = null;
+    const gen = ++reloadGen;
+    const connId = connection.id;
     try {
-      specs = (await api.forwardsList(connection.id)) ?? [];
+      const list = (await api.forwardsList(connId)) ?? [];
+      if (gen !== reloadGen || connId !== connection.id) return;
+      specs = list;
       // The forward being edited is gone (deleted here or elsewhere): its
       // form would only fail to save, and a failed save blocks leaving.
       if (editingForwardId && !specs.some((s) => s.id === editingForwardId)) cancelForm();
-      active = await liveForwards();
+      const live = await liveForwards();
+      if (gen === reloadGen) active = live;
     } catch (e) {
-      err = errMsg(e);
+      if (gen === reloadGen) err = errMsg(e);
     }
     // Bookmarks pinned to the tree hang off these specs.
     void treeBookmarks.refresh();
