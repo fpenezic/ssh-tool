@@ -754,7 +754,7 @@
   {:else}
     <header>
       {#if editing}
-        <input class="edit-name" bind:value={editName} />
+        <input class="edit-name" bind:value={editName} disabled={editSaving} />
       {:else}
         <h1>{cred.name}</h1>
       {/if}
@@ -763,7 +763,7 @@
           <button class="primary" disabled={editSaving || !editDirty} onclick={saveEdit}>
             {editSaving ? "Saving…" : "Save"}
           </button>
-          <button onclick={() => (editing = false)}>Cancel</button>
+          <button onclick={() => (editing = false)} disabled={editSaving}>Cancel</button>
         {:else}
           <button onclick={startEdit}>Edit</button>
           <button class="danger" onclick={deleteCred}>Delete</button>
@@ -775,6 +775,9 @@
 
     {#if editing}
       <div class="form edit-form">
+        <!-- Locked while Save runs: it closes the editor when done, so a field
+             typed meanwhile would be lost. -->
+        <fieldset class="lock" disabled={editSaving}>
         <label>Hint
           <input bind:value={editHint} placeholder="Short reminder (not the secret)" />
         </label>
@@ -802,6 +805,7 @@
           onNamedChange={() => credentials.load()}
         />
         {#if editErr}<div class="err">{editErr}</div>{/if}
+        </fieldset>
       </div>
     {:else}
       <dl>
@@ -1241,6 +1245,7 @@
     flex: 1; margin-right: 0.75rem;
   }
   .edit-form { margin-bottom: 1rem; }
+  .lock { display: contents; border: 0; padding: 0; margin: 0; min-width: 0; }
   dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1rem; }
   dt { color: var(--overlay0); font-size: 0.8rem; }
   dd { margin: 0; }

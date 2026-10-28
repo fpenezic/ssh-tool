@@ -68,7 +68,9 @@ export async function confirmLeave(scopes: Scope[] = SELECTION): Promise<boolean
     for (const s of dirty) {
       if (!(await s.save())) return false;
     }
-    return true;
+    // Something may have been typed while the saves ran: leave only when
+    // every source in scope is clean now.
+    return dirtySources(scopes).length === 0;
   } finally {
     asking = false;
   }
