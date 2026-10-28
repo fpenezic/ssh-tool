@@ -32,7 +32,13 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="overlay" onkeydown={onKey} role="dialog" aria-modal="true" tabindex="-1">
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div class="modal" role="document" use:clickOutside={{ onOutside: onCancel, enabled: !confirmModal.pending.modal }} onkeydown={(e) => e.stopPropagation()}>
+  <div class="modal" role="document" use:clickOutside={{ onOutside: onCancel, enabled: !confirmModal.pending.modal }} onkeydown={(e) => {
+    // Esc answers Cancel / Stay from anywhere in the dialog. Enter stays
+    // with the focused button (OK by default), so Tab to another and Enter
+    // picks that one.
+    if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+    e.stopPropagation();
+  }}>
     <h2>{confirmModal.pending.title}</h2>
     <p class="msg">{confirmModal.pending.message}</p>
     {#if confirmModal.pending.checkboxLabel}

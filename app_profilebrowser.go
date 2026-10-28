@@ -195,8 +195,12 @@ func (a *App) browserPick(id, host string) (pid, dialHost string, err error) {
 		// the VPN by the tunnel's dialer.
 		return id, host, nil
 	}
-	if ip := addrs[0].Unmap(); in(ip) {
-		return id, ip.String(), nil
+	// Any address in the profile's networks: a name can resolve to several,
+	// and the first need not be the one behind the VPN.
+	for _, addr := range addrs {
+		if ip := addr.Unmap(); in(ip) {
+			return id, ip.String(), nil
+		}
 	}
 	if conn {
 		return id, host, nil
