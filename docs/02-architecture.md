@@ -1,9 +1,5 @@
 # Architecture
 
-> **Note:** Earlier drafts described a Tauri / russh stack. That
-> implementation lives on the `rust-legacy` branch but isn't the
-> active code. See `04-tech-stack.md` for the current stack.
-
 ## High-level
 
 ```

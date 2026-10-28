@@ -1,16 +1,10 @@
 # Tech stack
 
-> **Note:** Earlier drafts of this doc described a Rust + Tauri stack.
-> That implementation lives on the `rust-legacy` branch but isn't the
-> active code anymore - we pivoted to Go + Wails for opkssh support
-> (the russh fork rejects opkssh's `valid_before=u64::MAX` certs).
-> What follows describes the current stack.
-
-## Backend (Go 1.25)
+## Backend (Go 1.26)
 
 | Module | Purpose |
 |---|---|
-| `github.com/wailsapp/wails/v3` | Desktop shell + IPC (beta.8) |
+| `github.com/wailsapp/wails/v3` | Desktop shell + IPC (3.0.0) |
 | `modernc.org/sqlite` | SQLite, pure Go (no CGO) |
 | `golang.org/x/crypto/ssh` | SSH client |
 | `golang.org/x/crypto/ssh/agent` | Agent integration |
@@ -30,7 +24,14 @@
 | `github.com/tobischo/gokeepasslib/v3` | KeePass `.kdbx` reader (live credential backend) |
 | `github.com/pelletier/go-toml/v2` | TOML export / import round-trip |
 | `github.com/kayrus/putty` | PuTTY / KiTTY private-key parsing |
+| `github.com/twmb/franz-go` | Kafka tab client (dials through the connection's SSH session) |
+| `github.com/jackc/pgx/v5` | Database tab: PostgreSQL |
+| `github.com/go-sql-driver/mysql` | Database tab: MySQL / MariaDB |
+| `github.com/sijms/go-ora/v2` | Database tab: Oracle (pure Go) |
+| `github.com/microsoft/go-mssqldb` | Database tab: SQL Server (pure Go) |
 
+ClickHouse (HTTP interface), OpenSearch / Elasticsearch (REST) and
+Redis (own RESP2 client) need no driver library.
 The dynamic inventory providers (`internal/inventory/{proxmox,
 hetzner,digitalocean,linode,vultr,scaleway,aws_ec2}.go`) hit
 provider HTTP APIs directly with `net/http` - no SDK dependencies.
@@ -48,7 +49,7 @@ runtime / `ansible-inventory` shell-out.
 | Package | Purpose |
 |---|---|
 | `svelte` 5 | UI framework (runes API: $state, $derived, $effect, $props) |
-| `vite` 5 | Build tool, dev server |
+| `vite` 6 | Build tool, dev server |
 | `@wailsio/runtime` | v3 frontend runtime (Events, dialogs, file drop) |
 | `@xterm/xterm` 6 | Terminal emulator |
 | `@xterm/addon-fit` | Auto-resize |
@@ -56,10 +57,12 @@ runtime / `ansible-inventory` shell-out.
 | `@xterm/addon-canvas` | Canvas 2D fallback renderer |
 | `@xterm/addon-web-links` | Clickable URLs |
 | `@xterm/addon-search` | Scrollback search |
+| `@xterm/addon-unicode11` | Unicode 11 width table (emoji widths) |
+| `@codemirror/*` | SQL editor in the Database tab |
 | `@lucide/svelte` | Icon set (replaced emoji placeholders) |
 | `@novnc/novnc` | VNC console client |
 | `typescript` 5 | Static types |
-| `vitest` 2 | Frontend unit tests (`npm run test`) |
+| `vitest` 4 | Frontend unit tests (`npm run test`) |
 | `svelte-check` 4 | Type/template checking (`npm run check`) |
 
 Wails autogenerates TS bindings into `frontend/bindings/`. The
@@ -86,10 +89,10 @@ nothing is uploaded there.
 
 ## Version pinning
 
-- Go: 1.25 (see `go.mod` - that file is the only source of truth; CI uses `go-version-file: go.mod`)
+- Go: 1.26, toolchain on the latest patch (see `go.mod` - that file is the only source of truth; CI uses `go-version-file: go.mod`)
 - Node: 20.x LTS
-- Wails CLI v3: matches the prerelease tag pinned in `go.mod` (currently
-  beta.8; the same tag is pinned as `WAILS3_VERSION` in
+- Wails CLI v3: matches the version in `go.mod` (currently v3.0.0; the
+  same version is pinned as `WAILS3_VERSION` in
   `.github/workflows/release.yml`)
 
 ## What we don't use, and why

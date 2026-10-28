@@ -320,10 +320,10 @@ plugin).
   option and plain-text export (ANSI stripped). Recording + in-app
   playback (browser, scrubber, speed, idle-skip) shipped; these are
   the leftovers.
-- **Translucent terminal window (macOS, experimental)** - parked
-  until Wails v3 is stable. Needs xterm `allowTransparency` (WebGL
-  perf hit / renderer fallback), NSVisualEffectView + WKWebView
-  compositing is flaky in the alpha (resize flicker), and themes
+- **Translucent terminal window (macOS, experimental)** - parked.
+  Needs xterm `allowTransparency` (WebGL perf hit / renderer
+  fallback), NSVisualEffectView + WKWebView compositing was flaky in
+  the Wails alphas (resize flicker; recheck on 3.0), and themes
   assume a solid background across the whole shell. If ever: opt-in
   setting, macOS only, default off.
 
@@ -505,9 +505,9 @@ locally. Remaining for a real distributable:
 - **VNC / SFTP on mobile.** `app_vnc.go` is `!android`; VNC tabs untested
   on a phone. SFTP open-dir returns an error on android.
 - **Wails runtime version.** The android IPC transport is hand-rolled
-  (`src/lib/androidTransport.ts`) because npm `@wailsio/runtime` is
-  alpha.79 (no android transport). Revisit when the published runtime
-  catches up. Likewise the Go->JS event long-poll (`MobilePollEvents`)
+  (`src/lib/androidTransport.ts`) because npm `@wailsio/runtime` was
+  alpha.79 then (no android transport). The 3.0.0 runtime ships an
+  `android.js`: check whether it can replace ours. Likewise the Go->JS event long-poll (`MobilePollEvents`)
   could become a native push transport (custom `application.Transport`
   dispatching via JNI `executeJavaScript`) - deferred; the long-poll
   works and settles to a clean cadence.

@@ -14,7 +14,7 @@ info:
   # on the website, not in taskmgr.
   description: "ssh-tool"
   copyright: "(c) 2026, Filip Penezic"
-  comments: "Wails v3 experimental branch"
+  comments: "SSH connection manager"
   version: "0.1.0"
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
   #                               # Should match the name of your .icon file without the extension

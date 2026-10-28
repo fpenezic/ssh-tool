@@ -5,16 +5,16 @@ What to install for hacking on ssh-tool.
 ## Toolchain
 
 ```bash
-# Go 1.25 (go.mod pins the exact toolchain)
+# Go 1.26 (go.mod pins the exact toolchain)
 # https://go.dev/dl - use the official installer or rely on
-# your distro's package manager if it ships 1.25+
-go version    # -> go1.25.x or newer
+# your distro's package manager if it ships 1.26+
+go version    # -> go1.26.x or newer
 
 # Node 20 LTS
 # https://nodejs.org or use fnm/nvm
 
-# Wails CLI v3
-go install -v github.com/wailsapp/wails/v3/cmd/wails3@latest
+# Wails CLI v3 - the version in go.mod
+go install -v github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
 wails3 --version
 ```
 
@@ -36,13 +36,8 @@ sudo apt install -y \
     build-essential \
     pkg-config \
     libgtk-4-dev \
-    libwebkit2gtk-4.1-dev
+    libwebkitgtk-6.0-dev
 ```
-
-For machine-bound vault auto-unlock to work natively on Linux you
-need a running Secret Service implementation
-(gnome-keyring-daemon or kwallet). On headless WSL it's easiest to
-disable auto-unlock and use the passphrase on every launch.
 
 ### macOS
 

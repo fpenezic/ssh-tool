@@ -103,8 +103,7 @@ archive bundle. Exports never include credential secrets by default.
 
 ### Multi-window, multi-tab, multi-pane
 
-- **Native multi-window** with drag-out detach + drag-back redock
-  (Wails v3 alpha).
+- **Native multi-window** with drag-out detach + drag-back redock.
 - **Binary pane splits** inside a tab (right / down / close).
 - **Broadcast input** across selected sessions, shared between
   windows. Multiple named groups in parallel - a session can sit

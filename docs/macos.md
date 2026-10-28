@@ -55,7 +55,7 @@ hand.
 ```bash
 git clone https://github.com/fpenezic/ssh-tool.git
 cd ssh-tool
-git checkout v0.X.Y            # a release tag; main is the work in progress
+git checkout vX.Y.Z            # a release tag; main is the work in progress
 task darwin:build              # bin/ssh-tool.app (and the bare bin/ssh-tool)
 task darwin:package            # optional: bin/ssh-tool.dmg
 ```

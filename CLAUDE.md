@@ -127,9 +127,12 @@ ssh-tool/
 │  ├─ bitwarden/           Bitwarden / Vaultwarden credential backend
 │  ├─ infisical/           Infisical credential backend
 │  ├─ share/               session sharing: browser guest + MCP
-│  ├─ presence/            LAN presence for shared sessions
+│  ├─ presence/            tunnel ownership across machines sharing a synced profile
 │  ├─ updater/             in-app update check + staged install
 │  ├─ exporter/            encrypted archive export / import
+│  ├─ cmdmarks/            command timestamps in the terminal
+│  ├─ outbatch/            coalesces terminal output into fewer, larger chunks
+│  ├─ mcpprompt/           the one MCP system prompt text
 │  └─ initcmd/             initial-command sequencing
 ├─ frontend/
 │  ├─ src/                 App.svelte + lib/* (~80 components/stores)
@@ -166,7 +169,7 @@ task linux:build                   # bin/ssh-tool
 Tests + checks:
 ```bash
 go build ./...
-go test ./...                      # 31 packages carry tests
+go test ./...                      # 32 packages carry tests
 cd frontend && npm run check       # svelte-check, 0 errors expected
 cd frontend && npm run test        # vitest, 37 files / 349 cases
 ```

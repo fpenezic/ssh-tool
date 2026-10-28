@@ -6,7 +6,7 @@ Daily-driver SSH manager for sysadmins with 300+ hosts: folder-
 inherited tree, encrypted vault, multi-tab split-pane terminal,
 native multi-window, SOCKS5 forwards, batch exec, RDM import.
 
-Built on Wails v3 (beta) + Svelte 5 + Go. Single binary, cross-
+Built on Wails v3 + Svelte 5 + Go. Single binary, cross-
 platform: Windows, Linux and Android releases; macOS runs from a
 build of your own (see below).
 
@@ -18,7 +18,7 @@ build of your own (see below).
   multi-select batch editor.
 - **Encrypted credential vault** - Argon2id + XChaCha20-Poly1305,
   file-only persistence with an optional machine-bound auto-unlock
-  sidecar (no OS keychain - removed in v0.12.8), idle auto-lock,
+  sidecar (no OS keychain), idle auto-lock,
   password strength meter.
 - **Multi-window, multi-tab, multi-pane** terminal with native
   detach / redock and broadcast input across windows.
@@ -48,8 +48,16 @@ build of your own (see below).
   syntax highlighting (mode and CRLF/LF endings preserved on save).
 - **Port forwards** - local / remote / SOCKS5 dynamic with
   isolated-browser launcher.
+- **Kafka and Database tabs** per connection, riding its SSH session:
+  Kafka topics, consumer, produce and groups; PostgreSQL, MySQL, Oracle,
+  SQL Server, ClickHouse, OpenSearch / Elasticsearch and Redis, with
+  read-only guards. Pure-Go drivers, nothing to install.
+- **VNC console** tab (noVNC) for remote desktops and Proxmox VMs.
+- **App proxy and CI runner** - other programs, containers and a GitLab
+  runner reach your customers through the VPN profiles and jump hosts.
 - **Imports** from Devolutions RDM JSON, ssh_config, MobaXterm
-  `.mxtsessions`, PuTTY / KiTTY `.reg` and SuperPuTTY `Sessions.xml`;
+  `.mxtsessions`, PuTTY / KiTTY `.reg`, SuperPuTTY `Sessions.xml` and
+  kafka-tool profiles;
   encrypted archive export.
 
 ## Install
@@ -225,7 +233,10 @@ ssh-tool/
 │  ├─ resolver/       inheritable-settings resolver (folder -> conn)
 │  ├─ local/          in-app local PTY (Win/Mac/Linux shells)
 │  ├─ exporter/       encrypted archive export / import
-│  ├─ importer/       RDM, ssh_config, MobaXterm, PuTTY, SuperPuTTY
+│  ├─ importer/       RDM, ssh_config, MobaXterm, PuTTY, SuperPuTTY, kafka-tool
+│  ├─ kafka/          Kafka tab (franz-go over the connection's SSH session)
+│  ├─ dbx/            Database tab (PostgreSQL ... Redis), read-only guards
+│  ├─ sshchan/        a tab's TCP connections as channels on one SSH session
 │  ├─ wg/             userspace WireGuard network profiles
 │  ├─ tunnelhelper/   VPN plugin manager (NetBird, Tailscale, OpenConnect, OpenVPN, Check Point)
 │  ├─ totp/           RFC 6238 one-time codes
