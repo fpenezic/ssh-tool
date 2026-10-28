@@ -4679,7 +4679,8 @@
           <button class="primary" onclick={npSaveNetbird} disabled={npBusy || !npDirty || !npName.trim()}>Save changes</button>
           <button onclick={npRevert} disabled={!npDirty} title="Throw the unsaved changes away">Discard</button>
         {:else}
-          <button class="primary" onclick={npCreateNetbird} disabled={npBusy || !nbInstalled || !npName.trim() || !nbCredId}>Add profile</button>
+          <button class="primary" onclick={npCreateNetbird} disabled={npBusy || !nbInstalled || !npName.trim() || !nbCredId || !!nbNewKeyName.trim() || !!nbNewKeySecret}
+            title={nbNewKeyName.trim() || nbNewKeySecret ? "Create the setup key above first (or clear it)" : undefined}>Add profile</button>
         {/if}
       </div>
     {:else if (npEditingId ? npEditKind : npKind) === "openconnect"}
@@ -4987,7 +4988,8 @@
           <button class="primary" onclick={npSaveTailscale} disabled={npBusy || !npDirty || !npName.trim()}>Save changes</button>
           <button onclick={npRevert} disabled={!npDirty} title="Throw the unsaved changes away">Discard</button>
         {:else}
-          <button class="primary" onclick={npCreateTailscale} disabled={npBusy || !tsInstalled || !npName.trim() || !tsCredId}>Add profile</button>
+          <button class="primary" onclick={npCreateTailscale} disabled={npBusy || !tsInstalled || !npName.trim() || !tsCredId || !!tsNewKeyName.trim() || !!tsNewKeySecret}
+            title={tsNewKeyName.trim() || tsNewKeySecret ? "Create the auth key above first (or clear it)" : undefined}>Add profile</button>
         {/if}
       </div>
     {:else}
