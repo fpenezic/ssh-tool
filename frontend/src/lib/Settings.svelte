@@ -2842,9 +2842,10 @@
   async function npSelect(id: string): Promise<boolean> {
     // Reselecting the open item changes nothing (and keeps its draft).
     if (id === npSel) return true;
-    // A save or create in flight reads the form when its requests return:
-    // the form must not be cleared or switched under it.
-    if (npBusy) {
+    // A save or create in flight reads the form when its requests return,
+    // and an inline setup / auth key being created writes its id into it:
+    // the form must not be cleared or switched under either.
+    if (npBusy || nbNewKeyBusy || tsNewKeyBusy) {
       toast.info("Wait for the profile to finish saving");
       return false;
     }
@@ -2865,8 +2866,8 @@
     const id = view.pendingNetworkProfileId;
     if (!id) return;
     // A save in flight: the link stays pending and this effect runs again
-    // when npBusy clears.
-    if (npBusy) return;
+    // when the flags clear.
+    if (npBusy || nbNewKeyBusy || tsNewKeyBusy) return;
     if (id === "ci") {
       view.pendingNetworkProfileId = null;
       npSelect("ci");
