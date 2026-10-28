@@ -249,6 +249,9 @@ ssh-tool/
 │  ├─ share/          session sharing (browser guest, MCP)
 │  ├─ presence/       network profile ownership across synced machines
 │  ├─ updater/        in-app update check + staged install
+│  ├─ cmdmarks/       command timestamps in the terminal
+│  ├─ outbatch/       coalesces terminal output into larger chunks
+│  ├─ mcpprompt/      the MCP system prompt text
 │  └─ initcmd/        initial-command sequencing
 ├─ frontend/          Svelte 5 + xterm.js
 └─ docs/              user guide, app description, TODO, etc.

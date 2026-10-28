@@ -48,5 +48,34 @@ reviews:
       instructions: |
         Release blocks are not hard-wrapped: one line per paragraph and per
         bullet.
+    - path: "docs/**/*.md"
+      instructions: &docs_facts |
+        Check stated facts against the repo: Go version (go.mod `go` line),
+        Wails version (go.mod; also WAILS3_VERSION in
+        .github/workflows/release.yml), frontend package majors
+        (frontend/package.json), schema version (last entry of `migrations`
+        in internal/store/migrations.go), the internal/ packages listed in
+        layout trees, and that settings, menu items and file paths named in
+        the text exist. Wails v3 is stable (3.0.0): flag it described as
+        beta, alpha or a prerelease, except as history. CHANGELOG.md,
+        docs/gotchas.md and docs/TODO.md record history and keep old
+        versions.
+    - path: "README.md"
+      instructions: *docs_facts
+    - path: "CLAUDE.md"
+      instructions: *docs_facts
+  pre_merge_checks:
+    custom_checks:
+      - name: "User-facing docs"
+        mode: warning
+        instructions: |
+          Pass when the PR changes no user-visible behaviour (UI, settings,
+          shortcuts, CLI flags, import/export formats, platform support,
+          install steps), or when it does and also updates the matching
+          text: docs/USER_GUIDE.md for the feature, README.md when a
+          highlight, install or build step changes, and CHANGELOG.md under
+          [Unreleased] or the release block. Fail and name the missing file
+          when user-visible behaviour changes without them. Internal
+          refactors, tests and CI-only changes pass.
 chat:
   auto_reply: true
