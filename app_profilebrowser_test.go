@@ -1,6 +1,11 @@
 package main
 
 import (
+	"context"
+	"encoding/binary"
+	"io"
+	"net"
+	"net/netip"
 	"path/filepath"
 	"testing"
 
@@ -63,5 +68,73 @@ func TestBrowserPick(t *testing.T) {
 	got, dial, err = a.browserPick(lo.ID, "localhost")
 	if err != nil || got != lo.ID || (dial != "127.0.0.1" && dial != "::1") {
 		t.Errorf("connection name localhost -> %q dial %q, %v", got, dial, err)
+	}
+}
+
+// Every address of a name inside the profile's networks, in the
+// resolver's order (one outside is left out), so a dead one can be skipped.
+func TestBrowserPickAllAddresses(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "store.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	a := &App{db: db}
+	np, err := db.CreateNetworkProfile("customer", `{"peers":[{"public_key":"x","allowed_ips":["10.9.0.0/16"]}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := browserLookup
+	defer func() { browserLookup = saved }()
+	browserLookup = func(context.Context, string, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("192.0.2.1"), netip.MustParseAddr("10.9.1.6"), netip.MustParseAddr("10.9.1.5")}, nil
+	}
+	pid, hosts, err := a.browserPickAll(np.ID, "app.customer.example")
+	if err != nil || pid != np.ID || len(hosts) != 2 || hosts[0] != "10.9.1.6" || hosts[1] != "10.9.1.5" {
+		t.Fatalf("got %q %v, %v", pid, hosts, err)
+	}
+}
+
+// serveSOCKS goes on to the next address when one refuses the connection.
+func TestServeSOCKSTriesNextAddress(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		_, _ = c.Write([]byte("ok"))
+		c.Close()
+	}()
+	port := ln.Addr().(*net.TCPAddr).Port
+	// 127.0.0.2 is loopback too, with nothing listening on that port: refused.
+	pick := func(string) (string, []string, error) { return "", []string{"127.0.0.2", "127.0.0.1"}, nil }
+	cli, srv := net.Pipe()
+	defer cli.Close()
+	go (&App{}).serveSOCKS(srv, nil, pick, "test")
+	if _, err := cli.Write([]byte{5, 1, 0}); err != nil {
+		t.Fatal(err)
+	}
+	hello := make([]byte, 2)
+	if _, err := io.ReadFull(cli, hello); err != nil || hello[1] != 0 {
+		t.Fatalf("greeting %v, %v", hello, err)
+	}
+	host := "app.customer.example"
+	req := append([]byte{5, 1, 0, 3, byte(len(host))}, host...)
+	req = binary.BigEndian.AppendUint16(req, uint16(port))
+	if _, err := cli.Write(req); err != nil {
+		t.Fatal(err)
+	}
+	reply := make([]byte, 10)
+	if _, err := io.ReadFull(cli, reply); err != nil || reply[1] != 0 {
+		t.Fatalf("connect reply %v, %v", reply, err)
+	}
+	got := make([]byte, 2)
+	if _, err := io.ReadFull(cli, got); err != nil || string(got) != "ok" {
+		t.Fatalf("relay %q, %v", got, err)
 	}
 }
