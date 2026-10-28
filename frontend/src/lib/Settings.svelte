@@ -2734,15 +2734,18 @@
   function lpToggle(np: NetworkProfileInfo, key: "shared" | "enabled", on: boolean) {
     return lpQueue(() => lpToggleNow(np, key, on));
   }
+  // The last configuration written per profile: queued writes build on it,
+  // not on the profile list, which a failed refresh leaves behind.
+  const lpWritten: Record<string, { enabled: boolean; shared: boolean; bind: string; port: number; networks: string[] }> = {};
   async function lpToggleNow(np: NetworkProfileInfo, key: "shared" | "enabled", on: boolean) {
     const f = lpOpen[np.id];
     if (!f) return;
     const c = networkProfiles.list.find((p) => p.id === np.id)?.local_proxy ?? { enabled: false, port: 0 };
+    const base = lpWritten[np.id] ?? { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080, networks: c.networks ?? [] };
+    const req = { ...base, [key]: on };
     try {
-      await api.networkProfileSetLocalProxy(np.id, {
-        enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080,
-        networks: c.networks ?? [], [key]: on,
-      });
+      await api.networkProfileSetLocalProxy(np.id, req);
+      lpWritten[np.id] = req;
       // Onto the form as it is now (a load may have replaced it meanwhile,
       // and it may hold newer typing), not the one captured before. The
       // switch is saved here; the refreshes after it may fail on their own.
@@ -2764,11 +2767,13 @@
     // The baseline becomes what this request sends; text typed while it
     // runs stays dirty.
     const sent = lpSnap(f);
+    const req = {
+      enabled: f.enabled, shared: f.shared, bind: f.bind.trim(), port: Number(f.port),
+      networks: f.networksText.split(/[\s,]+/).filter(Boolean),
+    };
     try {
-      await api.networkProfileSetLocalProxy(np.id, {
-        enabled: f.enabled, shared: f.shared, bind: f.bind.trim(), port: Number(f.port),
-        networks: f.networksText.split(/[\s,]+/).filter(Boolean),
-      });
+      await api.networkProfileSetLocalProxy(np.id, req);
+      lpWritten[np.id] = req;
       // Saved: the baseline moves now. The refreshes after it are view
       // updates and may fail on their own.
       lpBase = { ...lpBase, [np.id]: sent };
