@@ -474,7 +474,7 @@
   // repeat) before the palette unmounts must not dial again.
   let chosen = false;
 
-  function chooseResult(r: Result) {
+  async function chooseResult(r: Result) {
     if (chosen) return;
     chosen = true;
     // A marked set outranks the row that was clicked: having marked four
@@ -507,7 +507,11 @@
       return;
     }
     if (r.entry.kind === "folder") {
-      selection.select({ kind: "folder", id: r.entry.folder.id });
+      // On Stay in the unsaved prompt the palette stays open and usable.
+      if (!(await selection.select({ kind: "folder", id: r.entry.folder.id }))) {
+        chosen = false;
+        return;
+      }
       view.setTab("connections");
       onClose();
       return;

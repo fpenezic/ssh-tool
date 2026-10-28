@@ -67,6 +67,7 @@ export async function confirmLeave(scopes: Scope[] = SELECTION): Promise<boolean
       okLabel: "Save",
       altLabel: "Discard",
       cancelLabel: "Stay",
+      modal: true,
     });
     if (r.alt) {
       for (const s of dirty) s.discard();

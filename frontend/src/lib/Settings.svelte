@@ -840,7 +840,11 @@
   // (the section reopened, another transport saved or connected, a push).
   // The one just saved matches the stored values by then and takes them.
   let syncInitial: { w: string; s: string; d: string } | null = null;
+  // Loads can overlap (the section opens, a save reloads): only the newest
+  // one's answer is applied.
+  let syncLoadGen = 0;
   async function syncLoadConfig(keepDrafts = true) {
+    const gen = ++syncLoadGen;
     try {
       // Until a config has loaded there is nothing stored to compare with:
       // the form's values from the very first load stand in (taken before
@@ -856,6 +860,7 @@
         oauthRedirectUri = await api.oauthRedirectUri();
       }
       const cfg = await api.syncConfigGet();
+      if (gen !== syncLoadGen) return;
       // Measured once the answer is here, against the config the form was
       // edited from, so typing during the request counts too.
       const had = keepDrafts && !first;
@@ -2738,14 +2743,14 @@
         enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080,
         networks: c.networks ?? [], [key]: on,
       });
-      await networkProfiles.load(true);
-      const details = await api.networkProfileLocalProxyDetails(np.id);
       // Onto the form as it is now (a load may have replaced it meanwhile,
-      // and it may hold newer typing), not the one captured before.
+      // and it may hold newer typing), not the one captured before. The
+      // switch is saved here; the refreshes after it may fail on their own.
       const cur = lpOpen[np.id] ?? f;
       cur[key] = on;
-      cur.details = details;
       lpOpen = { ...lpOpen, [np.id]: cur };
+      await networkProfiles.load(true).catch(() => {});
+      try { cur.details = await api.networkProfileLocalProxyDetails(np.id); lpOpen = { ...lpOpen, [np.id]: cur }; } catch { /* the list shows it */ }
       toast.ok(key === "shared" ? (on ? `${np.name} reachable through the app proxy` : `${np.name} left out of the app proxy`) : (on ? `Separate proxy for ${np.name} on` : `Separate proxy for ${np.name} off`));
       spLoad();
     } catch (e: any) { toast.err(errMsg(e)); lpOpen = { ...lpOpen }; }
@@ -2764,12 +2769,13 @@
         enabled: f.enabled, shared: f.shared, bind: f.bind.trim(), port: Number(f.port),
         networks: f.networksText.split(/[\s,]+/).filter(Boolean),
       });
-      await networkProfiles.load(true);
-      const details = await api.networkProfileLocalProxyDetails(np.id);
-      const cur = lpOpen[np.id] ?? f;
-      cur.details = details;
-      lpOpen = { ...lpOpen, [np.id]: cur };
+      // Saved: the baseline moves now. The refreshes after it are view
+      // updates and may fail on their own.
       lpBase = { ...lpBase, [np.id]: sent };
+      await networkProfiles.load(true).catch(() => {});
+      const cur = lpOpen[np.id] ?? f;
+      try { cur.details = await api.networkProfileLocalProxyDetails(np.id); } catch { /* kept as it was */ }
+      lpOpen = { ...lpOpen, [np.id]: cur };
       toast.ok("Proxy settings saved");
       spLoad();
       // Typed again while it saved: still unsaved, so a leave keeps asking.
