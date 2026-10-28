@@ -15,6 +15,10 @@ interface ConfirmState {
   // A third button between Cancel and OK (Discard in the unsaved-changes
   // prompt). Its click resolves with alt: true and ok: false.
   altLabel?: string;
+  // Only the buttons (or Esc) answer: a click outside is ignored. The
+  // unsaved-changes prompt opens on a click, and the second click of a
+  // double-click would otherwise land outside it and answer Stay.
+  modal?: boolean;
   resolve: (r: ConfirmResult) => void;
 }
 
@@ -39,6 +43,7 @@ class ConfirmModalStore {
     // Initial state of the checkbox (default unchecked).
     checked?: boolean;
     altLabel?: string;
+    modal?: boolean;
   }): Promise<ConfirmResult> {
     // A dialog already open is answered "cancel" first: its caller (the
     // unsaved-changes prompt, say) would otherwise wait forever.
@@ -57,6 +62,7 @@ class ConfirmModalStore {
         checkboxLabel: opts.checkboxLabel,
         checked: !!opts.checked,
         altLabel: opts.altLabel,
+        modal: opts.modal,
         resolve,
       };
     });

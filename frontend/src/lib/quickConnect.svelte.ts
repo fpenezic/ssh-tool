@@ -91,9 +91,10 @@ class QuickConnectStore {
         x.connectionId === s.connectionId ? { ...x, connectionId: conn.id } : x,
       );
       await tree.load();
-      selection.select({ kind: "connection", id: conn.id });
-      view.setTab("connections");
       toast.ok(`Saved "${conn.name}" - rename or move it in the editor`);
+      // Saved either way; the view moves to it only when the selection
+      // went through (Stay in an unsaved prompt keeps the editor).
+      if (await selection.select({ kind: "connection", id: conn.id })) view.setTab("connections");
     } catch (e: any) {
       toast.err(`Save failed: ${e?.message ?? e}`);
     }
