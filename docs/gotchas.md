@@ -533,6 +533,13 @@ everything mobile is behind a build tag or an `isMobile` check.
     usually already clean (it's relinked before the regen); the gradle
     versionName is the one that needs the clean-tree re-assemble.
 
+    The versionCode is `major*1000000 + minor*1000 + patch`, computed in
+    two places (build/android/Taskfile.yml and the release workflow's
+    re-assemble) that must agree. The workflow used `major*100000`, so
+    once the minor passed 100, 0.119.0 (119000) outranked 1.0.1 (100001):
+    Android refused 1.0.0 and 1.0.1 over an installed 0.x as a downgrade
+    (`INSTALL_FAILED_VERSION_DOWNGRADE`), while desktop updated fine.
+
 34. **Android sync pull, sidecar, and relaunch.** There is no machine-
     bound sidecar on android (`machine_android.go` stubs it). `SyncPullLive`
     therefore reads the vault passphrase from the Keystore secure store

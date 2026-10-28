@@ -7,6 +7,11 @@ while Wails v3 was a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Android
+- 1.0.0 and 1.0.1 could not be installed over a 0.x version ("package conflicts" / downgrade): their APKs carried a lower internal version number than 0.119. Fixed; this release installs over any earlier one.
+
 ## [1.0.1] - Sharper terminal on Linux, go-jose security fix
 
 A patch release: the Linux terminal no longer cuts letters with WebGL off, the file browser shows local times, and go-jose gets a security fix.

@@ -285,7 +285,11 @@ jobs:
           ver="${tag#v}"
           base="${ver%%-*}"
           IFS=. read -r MA MI PA <<< "$base"
-          code=$((MA * 100000 + MI * 1000 + PA))
+          # Same formula as build/android/Taskfile.yml. major*1e6 keeps every
+          # minor below the next major: with *1e5, 0.119.0 (119000) sorted
+          # above 1.0.1 (100001) and Android refused the update as a
+          # downgrade.
+          code=$((MA * 1000000 + MI * 1000 + PA))
           (cd build/android && ./gradlew assembleDebug -PversionName="$ver" -PversionCode="$code")
           mkdir -p bin
           cp build/android/app/build/outputs/apk/debug/app-debug.apk bin/ssh-tool-android-arm64.apk
