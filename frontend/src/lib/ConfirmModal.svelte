@@ -11,10 +11,20 @@
   // OS double-click interval decides, however long it is set), so the
   // buttons that act take only a first click; keyboard activation has
   // detail 0.
-  // Also a short time after opening, for a WebView that restarts the click
-  // count when the element under the pointer changes.
-  let shownAt = 0;
-  function single(e: MouseEvent): boolean { return e.detail <= 1 && Date.now() - shownAt >= 400; }
+  // Not enough on its own: a WebView may restart the count when the element
+  // under the pointer changes, and the OS interval can be long. So a click
+  // also counts only once the pointer has really moved since the dialog
+  // opened (a double-click's second press comes without moving), or a key
+  // was pressed. Cancel / Stay is always live.
+  let armed = false;
+  let origin: { x: number; y: number } | null = null;
+  function onMove(e: PointerEvent) {
+    if (armed) return;
+    if (!origin) { origin = { x: e.clientX, y: e.clientY }; return; }
+    if (Math.abs(e.clientX - origin.x) + Math.abs(e.clientY - origin.y) > 4) armed = true;
+  }
+  function onAnyKey() { armed = true; }
+  function single(e: MouseEvent): boolean { return e.detail <= 1 && armed; }
 
   // This component stays mounted and renders nothing until asked, so the
   // claim is tied to `pending` rather than to mounting. Returning the
@@ -28,10 +38,17 @@
   // when it closes.
   $effect(() => {
     if (!confirmModal.pending) return;
-    shownAt = Date.now();
+    armed = false;
+    origin = null;
+    window.addEventListener("pointermove", onMove, true);
+    window.addEventListener("keydown", onAnyKey, true);
     const before = document.activeElement as HTMLElement | null;
     setTimeout(() => okBtn?.focus(), 0);
-    return () => { before?.focus?.(); };
+    return () => {
+      window.removeEventListener("pointermove", onMove, true);
+      window.removeEventListener("keydown", onAnyKey, true);
+      before?.focus?.();
+    };
   });
 
   // Keyboard activation (Enter on the button: detail 0) is never a stray

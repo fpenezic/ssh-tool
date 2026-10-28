@@ -26,16 +26,17 @@ func TestBrowserPick(t *testing.T) {
 		Overrides: store.InheritableSettings{NetworkProfileID: &id}}); err != nil {
 		t.Fatal(err)
 	}
-	for host, want := range map[string]string{
-		"10.9.1.1":                  id,
-		"192.0.2.1":                 "",
-		"intranet.customer.example": id,
-		"wiki.customer.invalid":     id, // unknown to local DNS: try inside the VPN
-		"localhost":                 "",
+	// The profile and what is dialed: serveSOCKS connects to the latter.
+	for host, want := range map[string]struct{ pid, dial string }{
+		"10.9.1.1":                  {id, "10.9.1.1"},
+		"192.0.2.1":                 {"", "192.0.2.1"},
+		"intranet.customer.example": {id, "intranet.customer.example"},
+		"wiki.customer.invalid":     {id, "wiki.customer.invalid"}, // unknown to local DNS: try inside the VPN
+		"localhost":                 {"", "localhost"},
 	} {
-		got, _, err := a.browserPick(id, host)
-		if err != nil || got != want {
-			t.Errorf("%s -> %q, %v (want %q)", host, got, err, want)
+		got, dial, err := a.browserPick(id, host)
+		if err != nil || got != want.pid || dial != want.dial {
+			t.Errorf("%s -> %q dial %q, %v (want %q dial %q)", host, got, dial, err, want.pid, want.dial)
 		}
 	}
 
