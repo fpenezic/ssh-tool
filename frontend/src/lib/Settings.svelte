@@ -2513,7 +2513,9 @@
   // save at once with the stored pair, not with half-typed text.
   let spBase = $state({ bind: "127.0.0.1", port: 1080 });
   const spDirty = $derived(sp.bind.trim() !== spBase.bind || Number(sp.port) !== spBase.port);
+  // Not while a save runs: its reload would bring back what was discarded.
   function spDiscard() {
+    if (spPending > 0) return;
     sp.bind = spBase.bind;
     sp.port = spBase.port;
   }
@@ -2540,7 +2542,7 @@
   // was asked for, and only a reload with no newer save queued behind it
   // updates the form: quick priority clicks end in the order clicked last.
   let spQueue: Promise<void> = Promise.resolve();
-  let spPending = 0;
+  let spPending = $state(0);
   function spSave(fields = false): Promise<void> {
     // A switch sends the stored address and port as they are when its turn
     // in the queue comes, so an explicit Save queued before it is not
@@ -2728,14 +2730,16 @@
   // send the same stale config with one change each.
   let lpChain: Promise<unknown> = Promise.resolve();
   // Requests queued or running: a profile switch waits for them (busy).
-  let lpPending = 0;
+  let lpPending = $state(0);
   function lpQueue<T>(job: () => Promise<T>): Promise<T> {
     lpPending++;
     const run = lpChain.then(job, job).finally(() => { lpPending--; });
     lpChain = run.catch(() => {});
     return run;
   }
+  // Not while a proxy write runs (same reason as spDiscard).
   function lpDiscard(np: NetworkProfileInfo) {
+    if (lpPending > 0) return;
     const b = { ...lpBase };
     delete b[np.id];
     lpBase = b;
@@ -5182,7 +5186,7 @@
                 <div class="row" style="gap:0.5rem; margin:0">
                   <input type="number" min="1" max="65535" bind:value={sp.port} style="width:7rem" />
                   <button class="primary" onclick={() => spSave(true)} disabled={!spDirty}>Save</button>
-                  <button onclick={spDiscard} disabled={!spDirty} title="Throw the unsaved changes away">Discard</button>
+                  <button onclick={spDiscard} disabled={!spDirty || spPending > 0} title="Throw the unsaved changes away">Discard</button>
                   {#if spDirty}<span class="dirty-note">Unsaved changes</span>{/if}
                 </div>
               </label>
@@ -5416,7 +5420,7 @@
                 </label>
                 <div class="row oc-span" style="gap:0.5rem">
                   <button class="primary" onclick={() => lpSave(np)} disabled={!lpDirty(np.id)}>Save</button>
-                  <button onclick={() => lpDiscard(np)} disabled={!lpDirty(np.id)} title="Throw the unsaved changes away">Discard</button>
+                  <button onclick={() => lpDiscard(np)} disabled={!lpDirty(np.id) || lpPending > 0} title="Throw the unsaved changes away">Discard</button>
                   {#if lpDirty(np.id)}<span class="dirty-note">Unsaved changes</span>{/if}
                 </div>
               </div>
