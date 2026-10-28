@@ -128,6 +128,9 @@
 
   async function quickConnect(connId: string, _name: string, _hostname: string) {
     if (connectingId === connId) return;
+    // Every way in (click, double-click, Enter) goes through the selection
+    // guard: a connect does not start while an unsaved prompt says Stay.
+    if (!selection.isConnectionSelected(connId) && !(await selection.selectConnection(connId))) return;
     connectingId = connId;
     connectErrId = null;
     connectErr   = null;
@@ -164,12 +167,6 @@
     const meta = e.metaKey || lastMouseMods.meta;
     const shift = e.shiftKey || lastMouseMods.shift;
     lastMouseMods = { ctrl: false, meta: false, shift: false };
-    // Leaving a forced tab (a database or bookmark row was clicked) may
-    // close a half-edited forward form: that asks first. Without a forced
-    // tab nothing is awaited and the click is handled at once.
-    if (view.editorTabForce !== null && !(await view.forceEditorTab(null))) return;
-    treeBookmarks.selected = null;
-    dbTabs.treeSelected = null;
 
     if (shift) {
       selection.rangeConnection(connId, tree.flatVisibleConnectionIds());
@@ -185,6 +182,15 @@
       lastClickId = "";
       return;
     }
+    // Then out of a forced tab (a database or bookmark row was clicked):
+    // that may close a half-edited forward form and asks first. Only after
+    // the selection, so Stay there keeps the forced view as it was.
+    if (view.editorTabForce !== null && !(await view.forceEditorTab(null))) {
+      lastClickId = "";
+      return;
+    }
+    treeBookmarks.selected = null;
+    dbTabs.treeSelected = null;
     if (connId === lastClickId && now - lastClickAt < 400) {
       lastClickId = "";
       quickConnect(connId, name, hostname);

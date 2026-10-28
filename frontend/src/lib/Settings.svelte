@@ -2738,10 +2738,14 @@
         enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080,
         networks: c.networks ?? [], [key]: on,
       });
-      f[key] = on;
       await networkProfiles.load(true);
-      f.details = await api.networkProfileLocalProxyDetails(np.id);
-      lpOpen = { ...lpOpen, [np.id]: f };
+      const details = await api.networkProfileLocalProxyDetails(np.id);
+      // Onto the form as it is now (a load may have replaced it meanwhile,
+      // and it may hold newer typing), not the one captured before.
+      const cur = lpOpen[np.id] ?? f;
+      cur[key] = on;
+      cur.details = details;
+      lpOpen = { ...lpOpen, [np.id]: cur };
       toast.ok(key === "shared" ? (on ? `${np.name} reachable through the app proxy` : `${np.name} left out of the app proxy`) : (on ? `Separate proxy for ${np.name} on` : `Separate proxy for ${np.name} off`));
       spLoad();
     } catch (e: any) { toast.err(errMsg(e)); lpOpen = { ...lpOpen }; }
@@ -2761,8 +2765,10 @@
         networks: f.networksText.split(/[\s,]+/).filter(Boolean),
       });
       await networkProfiles.load(true);
-      f.details = await api.networkProfileLocalProxyDetails(np.id);
-      lpOpen = { ...lpOpen, [np.id]: f };
+      const details = await api.networkProfileLocalProxyDetails(np.id);
+      const cur = lpOpen[np.id] ?? f;
+      cur.details = details;
+      lpOpen = { ...lpOpen, [np.id]: cur };
       lpBase = { ...lpBase, [np.id]: sent };
       toast.ok("Proxy settings saved");
       spLoad();
