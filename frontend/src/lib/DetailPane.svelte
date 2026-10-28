@@ -1170,7 +1170,19 @@
     );
   });
 
+  // One save at a time, whoever calls (button, Ctrl+S, the leave prompt),
+  // as the folder editor already does.
+  let connSaving = false;
   async function saveConn(): Promise<boolean> {
+    if (!conn || !editing || connSaving) return false;
+    connSaving = true;
+    try {
+      return await saveConnNow();
+    } finally {
+      connSaving = false;
+    }
+  }
+  async function saveConnNow(): Promise<boolean> {
     if (!conn || !editing) return false;
     const overrides = { ...conn.overrides };
     overrides.username = editing.username.trim() || undefined;
