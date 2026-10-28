@@ -313,7 +313,8 @@
   }
 
   async function saveEdit(): Promise<boolean> {
-    if (!cred) return false;
+    // One at a time, whoever calls (button, Ctrl+S, the leave prompt).
+    if (!cred || editSaving) return false;
     editSaving = true; editErr = null;
     try {
       await api.credentialsUpdate({
