@@ -2332,7 +2332,12 @@
   }
   // Saves the open Settings form with its kind's save; true once it is no
   // longer dirty (a failed save leaves it open, with the error shown).
+  // A save or create, or an inline setup / auth key being created (it
+  // writes its id into the form when done): the form is locked and no
+  // save, create, discard or switch starts meanwhile.
+  const npAnyBusy = $derived(npBusy || nbNewKeyBusy || tsNewKeyBusy);
   async function npSaveCurrent(): Promise<boolean> {
+    if (npAnyBusy) return false;
     const np = networkProfiles.list.find((p) => p.id === npEditingId);
     if (!np) return true;
     const save = { netbird: npSaveNetbird, openconnect: npSaveOpenConnect, openvpn: npSaveOpenVPN, checkpoint: npSaveCheckpoint, tailscale: npSaveTailscale }[np.kind as string] ?? npSaveEdit;
@@ -2813,6 +2818,7 @@
     }
   }
   async function npCreateCurrent(): Promise<boolean> {
+    if (npAnyBusy) return false;
     if (!npNewReady()) {
       toast.err("The new profile is not complete yet: finish it, or choose Discard.");
       return false;
@@ -2845,7 +2851,7 @@
     // A save or create in flight reads the form when its requests return,
     // and an inline setup / auth key being created writes its id into it:
     // the form must not be cleared or switched under either.
-    if (npBusy || nbNewKeyBusy || tsNewKeyBusy) {
+    if (npAnyBusy) {
       toast.info("Wait for the profile to finish saving");
       return false;
     }
@@ -2867,7 +2873,7 @@
     if (!id) return;
     // A save in flight: the link stays pending and this effect runs again
     // when the flags clear.
-    if (npBusy || nbNewKeyBusy || tsNewKeyBusy) return;
+    if (npAnyBusy) return;
     if (id === "ci") {
       view.pendingNetworkProfileId = null;
       npSelect("ci");
@@ -2903,6 +2909,7 @@
   }
   // Revert the Settings form to the stored profile.
   function npRevert() {
+    if (npAnyBusy) return;
     const np = npCur;
     npCancelEdit();
     if (np) npStartEdit(np);
@@ -5214,7 +5221,7 @@
           </div>
           <!-- Locked while a save or create runs: it clears the form when done,
                so a field typed meanwhile would be lost without a word. -->
-          <fieldset class="np-fieldset" disabled={npBusy}>{@render npForm()}</fieldset>
+          <fieldset class="np-fieldset" disabled={npAnyBusy}>{@render npForm()}</fieldset>
 
         {:else if npCur}
           {@const np = npCur}
@@ -5311,7 +5318,7 @@
           {:else if npTab === "settings"}
             <!-- Locked while a save or create runs: it clears the form when done,
                so a field typed meanwhile would be lost without a word. -->
-          <fieldset class="np-fieldset" disabled={npBusy}>{@render npForm()}</fieldset>
+          <fieldset class="np-fieldset" disabled={npAnyBusy}>{@render npForm()}</fieldset>
             <div class="np-danger">
               <button class="danger" onclick={() => npDelete(np)}>Delete profile</button>
             </div>
