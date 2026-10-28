@@ -75,6 +75,9 @@
     err = null;
     try {
       specs = (await api.forwardsList(connection.id)) ?? [];
+      // The forward being edited is gone (deleted here or elsewhere): its
+      // form would only fail to save, and a failed save blocks leaving.
+      if (editingForwardId && !specs.some((s) => s.id === editingForwardId)) cancelForm();
       active = await liveForwards();
     } catch (e) {
       err = errMsg(e);

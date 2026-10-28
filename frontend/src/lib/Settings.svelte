@@ -839,7 +839,7 @@
   // A transport form with unsaved changes keeps them across every reload
   // (the section reopened, another transport saved or connected, a push).
   // The one just saved matches the stored values by then and takes them.
-  let syncInitial: { w: string; s: string; d: string } | null = null;
+  let syncInitial: { w: string; s: string; d: string; o: string; g: string } | null = null;
   // Loads can overlap (the section opens, a save reloads): only the newest
   // one's answer is applied.
   let syncLoadGen = 0;
@@ -853,8 +853,12 @@
       const snap = () => JSON.stringify([syncUrl, syncUsername, syncPassword]);
       const snapSftp = () => JSON.stringify([sftpHost, sftpPort, sftpUser, sftpDir, sftpAuthMode, sftpCredId]);
       const snapDropbox = () => JSON.stringify([dropboxAppKey, dropboxFolder]);
+      // OneDrive and Google Drive have no Save of their own (Connect stores
+      // the client ID), so a typed ID is a draft until then.
+      const snapOnedrive = () => JSON.stringify([onedriveClientId, onedriveAccountType]);
+      const snapGdrive = () => JSON.stringify([gdriveClientId]);
       const first = syncCfg === null;
-      syncInitial ??= { w: snap(), s: snapSftp(), d: snapDropbox() };
+      syncInitial ??= { w: snap(), s: snapSftp(), d: snapDropbox(), o: snapOnedrive(), g: snapGdrive() };
       const before = syncInitial;
       if (!oauthRedirectUri) {
         oauthRedirectUri = await api.oauthRedirectUri();
@@ -867,7 +871,13 @@
       const keepWebdav = keepDrafts && (had ? webdavDirty : snap() !== before.w);
       const keepSftp = keepDrafts && (had ? sftpDirty : snapSftp() !== before.s);
       const keepDropbox = keepDrafts && (had ? dropboxDirty : snapDropbox() !== before.d);
-      const prev = { syncUrl, syncUsername, sftpHost, sftpPort, sftpUser, sftpDir, sftpAuthMode, sftpCredId, dropboxAppKey, dropboxFolder };
+      const old = syncCfg;
+      const keepOnedrive = keepDrafts && (had && old
+        ? onedriveClientId !== old.onedrive_client_id || onedriveAccountType !== (old.onedrive_account_type || "personal")
+        : snapOnedrive() !== before.o);
+      const keepGdrive = keepDrafts && (had && old ? gdriveClientId !== old.gdrive_client_id : snapGdrive() !== before.g);
+      const prev = { syncUrl, syncUsername, sftpHost, sftpPort, sftpUser, sftpDir, sftpAuthMode, sftpCredId, dropboxAppKey, dropboxFolder,
+        onedriveClientId, onedriveAccountType, gdriveClientId };
       syncCfg = cfg;
       syncUrl = syncCfg.url;
       syncUsername = syncCfg.username;
@@ -893,6 +903,8 @@
       if (keepWebdav) ({ syncUrl, syncUsername } = prev);
       if (keepSftp) ({ sftpHost, sftpPort, sftpUser, sftpDir, sftpAuthMode, sftpCredId } = prev);
       if (keepDropbox) ({ dropboxAppKey, dropboxFolder } = prev);
+      if (keepOnedrive) ({ onedriveClientId, onedriveAccountType } = prev);
+      if (keepGdrive) ({ gdriveClientId } = prev);
     } catch { /* ignore */ }
   }
 
