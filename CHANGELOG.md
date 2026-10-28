@@ -25,14 +25,22 @@ while Wails v3 was a prerelease upstream.
 - Credentials: tags can be edited after creation, and both forms use the same tag field as connections (chips, Enter or comma adds, suggestions from tags already in use).
 - New credential: the dialog opens near the top and grows downwards, so the fields and the Create button no longer move under the cursor while the password strength hints appear.
 - Sync: the WebDAV, SFTP and Dropbox forms grey out Save until something changed, with Discard and an "Unsaved changes" marker.
+- While a save is running, leaving the editor waits ("Wait for the save to finish") instead of offering Save or Discard, the form is locked, and Discard is off; something typed during a save is no longer lost or written back stale. This covers connections, folders, credentials, forwards, bookmarks, VPN profiles and both proxy forms.
+- The unsaved-changes prompt cannot be answered by the second click of the double-click that opened it (its Save and Discard need a real mouse movement, a key, or on touch a deliberate tap), Esc answers Stay, Tab stays inside it, and screen readers announce its title and message.
+- A click, double-click, Enter or right-click on a tree row, in Quick access or in the palette does nothing more when the prompt is answered with Stay (no connect, no menu on the old selection, no tab switch). Bulk deletes keep the selection on whatever could not be deleted.
 
 ### Network profiles
+- The profile **Browser** and the app proxy use any address of a name that lies inside the VPN, not only the first one the resolver returns; the profile browser tries the next address when one does not answer.
+- Two CI runner extra hosts with the same address but different jump paths are no longer pinned to one of them at random (the same path is still pinned).
 - A profile's **Browser** reaches a name that only this machine's hosts file knows (an OpenShift route behind the VPN, say): the address from the hosts file is dialed inside the tunnel, and the browser still sends the name. Before, the name went into the tunnel and failed when the customer's DNS did not know it.
 
 ### Navigation
 - A **Home** button in the Connections header goes back to the start page (recent connections, workspaces, profiles). **Esc** in the tree does the same (after clearing an active filter). Before, only a click on empty tree space did, and a long tree has none.
 
 ### Small fixes
+- Database tab, Redis: a malformed `AUTH` with extra words no longer leaves the password in the audit line; key sampling keeps to its limit inside a single SCAN reply and gives up on a stalled read after its time budget; a `SELECT` that succeeded right before Stop is kept for the next query.
+- Database tab, ClickHouse: stopping a query that was returning an error reports "query stopped" instead of an empty or partial error.
+- Detached windows: the window is recognised in every hash form of its address, so it never offers "Open in a new window" itself.
 - Forward form: one Cancel (the header's "+ Add" no longer turns into a second one), no "No forwards yet" under an open form, no stray divider above the list, a description example that fits the kind, the browser-profile note in normal text (orange is kept for "running - restart to apply").
 - Placeholders are dimmer and italic, so an example like 127.0.0.1 no longer looks like a typed value.
 
