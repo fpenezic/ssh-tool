@@ -241,9 +241,15 @@
     editBmIndex = null;
   });
 
+  let fwSaving = $state(false);
   async function submitForward(): Promise<boolean> {
-    if (editingForwardId) return updateForward();
-    return createForward();
+    if (fwSaving) return false;
+    fwSaving = true;
+    try {
+      return editingForwardId ? await updateForward() : await createForward();
+    } finally {
+      fwSaving = false;
+    }
   }
 
   async function createForward(): Promise<boolean> {
@@ -557,6 +563,9 @@
 
   {#if showAdd}
     <div class="add-form">
+      <!-- Locked while Save / Create runs: it resets the form when done, so a
+           field typed meanwhile would be lost. -->
+      <fieldset class="lock" disabled={fwSaving}>
       <label>Kind
         <!-- Kind is immutable once created (it changes the whole listener
              semantics); disabled while editing. -->
@@ -657,6 +666,7 @@
         <button onclick={cancelForm}>Cancel</button>
         <button class="primary" onclick={submitForward}>{editingForwardId !== null ? "Save" : "Create"}</button>
       </div>
+      </fieldset>
     </div>
   {/if}
 
@@ -838,6 +848,7 @@
     margin: 0.2rem 0 0; font-size: 0.75rem; color: var(--subtext0);
   }
   .edit-note.warn { color: var(--peach); }
+  .lock { display: contents; border: 0; padding: 0; margin: 0; min-width: 0; }
   .add-form {
     background: var(--crust);
     border: 1px solid var(--surface0);
