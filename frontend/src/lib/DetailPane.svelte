@@ -416,6 +416,12 @@
   // is measured against when the same item reloads.
   let draftConnOrig: Record<string, unknown> | null = null;
   let draftFolderOrig: Record<string, unknown> | null = null;
+  // While a save runs: the draft it sent. Its reload compares with that,
+  // not with the values before the save, so a field changed back during
+  // the save (B saved, then A again) stays A instead of taking B.
+  let draftConnSent: Record<string, unknown> | null = null;
+  let draftFolderSent: Record<string, unknown> | null = null;
+  const snapDraft = (d: object) => JSON.parse(JSON.stringify(d)) as Record<string, unknown>;
   // Not while a save runs: its reload would bring back what was discarded.
   function discardDraft() {
     if (connSaving || folderSaving) return;
@@ -452,7 +458,8 @@
 
   $effect(() => {
     if (folder) {
-      const keep = folder.id === draftFolderId && draftEpoch === draftFolderEpoch && untrack(() => edited(editingFolder, draftFolderOrig));
+      const base = draftFolderSent ?? draftFolderOrig;
+      const keep = folder.id === draftFolderId && draftEpoch === draftFolderEpoch && untrack(() => edited(editingFolder, base));
       draftFolderId = folder.id;
       draftFolderEpoch = draftEpoch;
       const fresh = {
@@ -483,7 +490,7 @@
         db: dbDraftFrom(folder.settings),
       };
       const prev = untrack(() => editingFolder);
-      editingFolder = keep && prev && draftFolderOrig ? mergeDraft(prev, draftFolderOrig, fresh) : fresh;
+      editingFolder = keep && prev && base ? mergeDraft(prev, base, fresh) : fresh;
       draftFolderOrig = JSON.parse(JSON.stringify(fresh));
     } else {
       editingFolder = null;
@@ -526,6 +533,7 @@
   async function saveFolder(): Promise<boolean> {
     if (!folder || !editingFolder || folderSaving) return false;
     folderSaving = true;
+    draftFolderSent = snapDraft(editingFolder);
     const settings = { ...folder.settings };
     settings.username = editingFolder.username.trim() || undefined;
     {
@@ -568,6 +576,7 @@
       return false;
     } finally {
       folderSaving = false;
+      draftFolderSent = null;
     }
   }
 
@@ -1089,7 +1098,8 @@
       api.connectionsResolve(conn.id).then((r) => (resolved = r)).catch((e) => (resolveErr = String(e)));
       // A tree reload (sync, a refresh) hands in a new object for the same
       // connection: edits in progress stay. Discard bumps draftEpoch.
-      const keep = conn.id === draftConnId && draftEpoch === draftConnEpoch && untrack(() => edited(editing, draftConnOrig));
+      const base = draftConnSent ?? draftConnOrig;
+      const keep = conn.id === draftConnId && draftEpoch === draftConnEpoch && untrack(() => edited(editing, base));
       draftConnId = conn.id;
       draftConnEpoch = draftEpoch;
       const fresh = {
@@ -1130,7 +1140,7 @@
         tags: [...(conn.tags ?? [])],
       };
       const prev = untrack(() => editing);
-      editing = keep && prev && draftConnOrig ? mergeDraft(prev, draftConnOrig, fresh) : fresh;
+      editing = keep && prev && base ? mergeDraft(prev, base, fresh) : fresh;
       draftConnOrig = JSON.parse(JSON.stringify(fresh));
     } else {
       resolved = null;
@@ -1188,10 +1198,12 @@
   async function saveConn(): Promise<boolean> {
     if (!conn || !editing || connSaving) return false;
     connSaving = true;
+    draftConnSent = snapDraft(editing);
     try {
       return await saveConnNow();
     } finally {
       connSaving = false;
+      draftConnSent = null;
     }
   }
   async function saveConnNow(): Promise<boolean> {
