@@ -8,7 +8,7 @@ import { resolveColorTag } from "./palette";
 import { terminalPrefs } from "./terminalPrefs.svelte.ts";
 import { focusActivePane } from "./paneFocus";
 import { takeNetworkVia } from "./networkVia";
-import { hasUnsaved, confirmLeave } from "./unsaved.svelte.ts";
+import { hasUnsaved, hasBusy, confirmLeave } from "./unsaved.svelte.ts";
 
 // A detached window shows terminals only: no tree, no Settings. What it
 // is asked to reveal or open there goes to the main window instead
@@ -637,7 +637,9 @@ class SelectionStore {
   // else the prompt's outcome: true once the change ran, false on Stay.
   private bypass = false;
   private held(retry: () => void): Promise<boolean> | null {
-    if (this.bypass || !hasUnsaved()) return null;
+    // A save still running counts too: its form may already look clean
+    // while it reloads, and the change waits for it (confirmLeave says so).
+    if (this.bypass || (!hasUnsaved() && !hasBusy())) return null;
     return confirmLeave().then((ok) => {
       if (!ok) return false;
       this.bypass = true;

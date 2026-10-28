@@ -44,6 +44,11 @@ export function hasUnsaved(scopes: Scope[] = SELECTION): boolean {
   return dirtySources(scopes).length > 0;
 }
 
+// A source in scope with a save running (it may already look clean).
+export function hasBusy(scopes: Scope[] = SELECTION): boolean {
+  return [...sources].some((s) => scopes.includes(s.scope ?? "editor") && s.busy?.());
+}
+
 // Resolves true when the caller may navigate: nothing was dirty, the edits
 // were saved, or the user chose Discard.
 export async function confirmLeave(scopes: Scope[] = SELECTION): Promise<boolean> {

@@ -170,6 +170,9 @@ func (a *App) browserPick(id, host string) (pid, dialHost string, err error) {
 	return pid, dialHost, err
 }
 
+// browserLookup is the local resolver browserPickAll asks (a test swaps it).
+var browserLookup = net.DefaultResolver.LookupNetIP
+
 // browserPickAll is browserPick with every address worth trying: a name
 // the local resolver puts inside the profile's networks at several
 // addresses gets all of them, in the resolver's order, so a dead one does
@@ -200,7 +203,7 @@ func (a *App) browserPickAll(id, host string) (pid string, dialHosts []string, e
 	// address is what gets dialed, the same as for any other name.
 	conn := a.profileHostname(id, host)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	addrs, err := browserLookup(ctx, "ip", host)
 	cancel()
 	if err != nil || len(addrs) == 0 {
 		// Unknown here: most likely an intranet name, resolved inside

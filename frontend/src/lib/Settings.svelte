@@ -2759,7 +2759,10 @@
       cur[key] = on;
       lpOpen = { ...lpOpen, [np.id]: cur };
       await networkProfiles.load(true).catch(() => {});
-      try { cur.details = await api.networkProfileLocalProxyDetails(np.id); lpOpen = { ...lpOpen, [np.id]: cur }; } catch { /* the list shows it */ }
+      try {
+        cur.details = await api.networkProfileLocalProxyDetails(np.id);
+        if (lpOpen[np.id] === cur) lpOpen = { ...lpOpen, [np.id]: cur };
+      } catch { /* the list shows it */ }
       toast.ok(key === "shared" ? (on ? `${np.name} reachable through the app proxy` : `${np.name} left out of the app proxy`) : (on ? `Separate proxy for ${np.name} on` : `Separate proxy for ${np.name} off`));
       spLoad();
     } catch (e: any) { toast.err(errMsg(e)); lpOpen = { ...lpOpen }; }
@@ -2790,7 +2793,8 @@
       await networkProfiles.load(true).catch(() => {});
       const cur = lpOpen[np.id] ?? f;
       try { cur.details = await api.networkProfileLocalProxyDetails(np.id); } catch { /* kept as it was */ }
-      lpOpen = { ...lpOpen, [np.id]: cur };
+      // Only onto the same form: a load that replaced it meanwhile wins.
+      if (lpOpen[np.id] === cur) lpOpen = { ...lpOpen, [np.id]: cur };
       toast.ok("Proxy settings saved");
       spLoad();
       // Typed again while it saved: still unsaved, so a leave keeps asking.
