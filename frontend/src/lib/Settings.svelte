@@ -1737,6 +1737,8 @@
   // Live tunnel details, per profile, shown on demand.
   let npInfoOpen = $state<Record<string, import("./api").VpnTunnelInfo | null | undefined>>({});
   let npBusy = $state(false);
+  // A profile delete, from its confirmation to the end: part of npAnyBusy.
+  let npDeleteBusy = $state(false);
   // NetBird form fields
   let nbManagement = $state("");
   let nbDevice = $state("");
@@ -2335,7 +2337,7 @@
   // A save or create, or an inline setup / auth key being created (it
   // writes its id into the form when done): the form is locked and no
   // save, create, discard or switch starts meanwhile.
-  const npAnyBusy = $derived(npBusy || nbNewKeyBusy || tsNewKeyBusy);
+  const npAnyBusy = $derived(npBusy || nbNewKeyBusy || tsNewKeyBusy || npDeleteBusy);
   async function npSaveCurrent(): Promise<boolean> {
     if (npAnyBusy) return false;
     const np = networkProfiles.list.find((p) => p.id === npEditingId);
@@ -2454,19 +2456,24 @@
     finally { npBusy = false; }
   }
   async function npDelete(np: NetworkProfileInfo) {
-    const ok = await showConfirm({
-      title: "Delete network profile",
-      message: `Delete "${np.name}"? Connections and folders set to it fall back to their inherited network.`,
-      okLabel: "Delete",
-    });
-    if (!ok) return;
+    // Held from before the confirmation: a save or key creation must not
+    // start while it is open, nor this delete start during one.
+    if (npAnyBusy) return;
+    npDeleteBusy = true;
     try {
+      const ok = await showConfirm({
+        title: "Delete network profile",
+        message: `Delete "${np.name}"? Connections and folders set to it fall back to their inherited network.`,
+        okLabel: "Delete",
+      });
+      if (!ok) return;
       await api.networkProfileDelete(np.id);
       // The delete also cleared the profile from connections / folders.
       await Promise.all([networkProfiles.load(true), tree.load()]);
       npSel = "general";
       npCancelEdit();
     } catch (e: any) { toast.err(errMsg(e)); }
+    finally { npDeleteBusy = false; }
   }
   async function npSetPolicy(np: NetworkProfileInfo, mode: string, paused: boolean) {
     try {
@@ -5320,7 +5327,7 @@
                so a field typed meanwhile would be lost without a word. -->
           <fieldset class="np-fieldset" disabled={npAnyBusy}>{@render npForm()}</fieldset>
             <div class="np-danger">
-              <button class="danger" onclick={() => npDelete(np)}>Delete profile</button>
+              <button class="danger" onclick={() => npDelete(np)} disabled={npAnyBusy}>Delete profile</button>
             </div>
 
           {:else if npTab === "proxy"}
