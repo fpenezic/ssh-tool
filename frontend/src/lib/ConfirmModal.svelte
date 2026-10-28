@@ -24,6 +24,13 @@
     if (Math.abs(e.clientX - origin.x) + Math.abs(e.clientY - origin.y) > 4) armed = true;
   }
   function onAnyKey() { armed = true; }
+  // Touch and pen do not move a pointer before a tap: a press that comes
+  // half a second after the dialog opened is not the tail of the tap or
+  // double-tap that opened it.
+  let shownAt = 0;
+  function onDown(e: PointerEvent) {
+    if (e.pointerType !== "mouse" && Date.now() - shownAt >= 500) armed = true;
+  }
   function single(e: MouseEvent): boolean { return e.detail <= 1 && armed; }
 
   // This component stays mounted and renders nothing until asked, so the
@@ -40,12 +47,15 @@
     if (!confirmModal.pending) return;
     armed = false;
     origin = null;
+    shownAt = Date.now();
     window.addEventListener("pointermove", onMove, true);
+    window.addEventListener("pointerdown", onDown, true);
     window.addEventListener("keydown", onAnyKey, true);
     const before = document.activeElement as HTMLElement | null;
     setTimeout(() => okBtn?.focus(), 0);
     return () => {
       window.removeEventListener("pointermove", onMove, true);
+      window.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("keydown", onAnyKey, true);
       before?.focus?.();
     };
