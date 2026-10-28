@@ -2734,9 +2734,15 @@
   function lpToggle(np: NetworkProfileInfo, key: "shared" | "enabled", on: boolean) {
     return lpQueue(() => lpToggleNow(np, key, on));
   }
-  // The last configuration written per profile: queued writes build on it,
-  // not on the profile list, which a failed refresh leaves behind.
-  const lpWritten: Record<string, { enabled: boolean; shared: boolean; bind: string; port: number; networks: string[] }> = {};
+  // The last configuration written per profile, for when the refresh after
+  // the write failed: queued writes build on it rather than on a list left
+  // behind. Any fresh list (after a write, a sync pull, anything) is the
+  // truth again and clears it.
+  let lpWritten: Record<string, { enabled: boolean; shared: boolean; bind: string; port: number; networks: string[] }> = {};
+  $effect(() => {
+    void networkProfiles.list;
+    lpWritten = {};
+  });
   async function lpToggleNow(np: NetworkProfileInfo, key: "shared" | "enabled", on: boolean) {
     const f = lpOpen[np.id];
     if (!f) return;
