@@ -2170,6 +2170,18 @@ everything mobile is behind a build tag or an `isMobile` check.
    (`tree.load()` hands in new objects), or a sync / refresh wipes it.
    Tri-state switches ("" / on / off) flip through `flipTri` so on-off
    lands back on inherit instead of an explicit copy of it.
+   A save in flight is its own state: sources report `busy()` (the form
+   is locked, Discard is off, `confirmLeave` and `held()` wait), because
+   the form can look clean while the save reloads. The editor draft
+   effects ignore reloads while their item saves and reconcile once
+   afterwards (`draftReconcile`): against the sent draft on success, the
+   pre-save values on failure. Async loads that overlap (Sync config,
+   proxy forms, `networkProfiles.load`) take a generation and only the
+   newest answer applies; a write's result goes onto the current form
+   object, not one captured before the await. The unsaved prompt is
+   `modal` (no outside click) and its acting buttons arm only after real
+   pointer movement, a key, or a deliberate touch press, so the
+   double-click that opened it cannot answer it.
 
 ---
 
