@@ -2685,6 +2685,7 @@
     const f: LpForm = { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080, networksText: (c.networks ?? []).join("\n") };
     const open = lpOpen[np.id];
     const before = open ? lpSnap(open) : null;
+    const beforeSwitches = open ? { enabled: open.enabled, shared: open.shared } : null;
     try { f.details = await api.networkProfileLocalProxyDetails(np.id); } catch { /* shown on save */ }
     // Typed into the open form while the details loaded: keep that. Compared
     // with the form as this load found it, since after a Discard there is no
@@ -2695,6 +2696,12 @@
       // what was typed shows as unsaved.
       if (lpBase[np.id] === undefined) lpBase = { ...lpBase, [np.id]: lpSnap(f) };
       return;
+    }
+    // A switch saved while the details loaded: its new state wins over the
+    // older answer.
+    if (now && beforeSwitches && (now.enabled !== beforeSwitches.enabled || now.shared !== beforeSwitches.shared)) {
+      f.enabled = now.enabled;
+      f.shared = now.shared;
     }
     lpOpen = { ...lpOpen, [np.id]: f };
     lpBase = { ...lpBase, [np.id]: lpSnap(f) };

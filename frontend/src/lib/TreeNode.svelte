@@ -654,9 +654,12 @@
   // Right-click on a dynamic (inventory) host: connect and the fleet tools,
   // acting on the dynamic multi-selection like the saved-connection menu
   // does on its own. Fleet tools take dynamic hosts as "dyn:<entryId>".
-  function openDynMenu(e: MouseEvent, folderId: string, entry: { id: string; name: string; hostname: string; status: string }) {
+  async function openDynMenu(e: MouseEvent, folderId: string, entry: { id: string; name: string; hostname: string; status: string }) {
     e.stopPropagation();
-    if (!selection.isDynamicEntrySelected(folderId, entry.id)) selection.selectDynamicEntry(folderId, entry.id);
+    // The menu acts on the selection: wait for it (an unsaved prompt may
+    // stand in between), and keep the browser's own menu away meanwhile.
+    e.preventDefault();
+    if (!selection.isDynamicEntrySelected(folderId, entry.id) && !(await selection.selectDynamicEntry(folderId, entry.id))) return;
     const sel = selection.selectedDynamicEntries();
     const one = sel.length <= 1;
     contextMenu.show(e, [

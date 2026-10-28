@@ -1134,8 +1134,8 @@ class SelectionStore {
     return credentials.folderById(this.current.id);
   }
 
-  selectDynamicEntry(folderId: string, entryId: string) {
-    this.select({ kind: "dynamicEntry", folderId, entryId });
+  selectDynamicEntry(folderId: string, entryId: string): Promise<boolean> {
+    return this.select({ kind: "dynamicEntry", folderId, entryId });
   }
 
   isDynamicEntrySelected(folderId: string, entryId: string): boolean {
@@ -1197,7 +1197,9 @@ class ViewStore {
   // view, expand the ancestor folders so the row is rendered, select
   // it, and queue a scroll-into-view. Lazy imports avoid a circular
   // module ref at the top of the file.
-  reveal(kind: "folder" | "connection", id: string) {
+  // The selection goes first: on Stay in the unsaved prompt the view stays
+  // where it is (no tab switch, no folders expanded).
+  async reveal(kind: "folder" | "connection", id: string) {
     if (inDetachedWindow) {
       api.revealInMainWindow(kind, id).catch(console.error);
       return;
@@ -1206,18 +1208,18 @@ class ViewStore {
       void this.revealDynamic(id.slice(4));
       return;
     }
-    this.tab = "connections";
     // Expand every ancestor folder so the target row exists in the DOM.
     let folderId: string | null;
     if (kind === "connection") {
       const c = tree.connectionById(id);
       folderId = c?.folder_id ?? null;
-      if (c) selection.select({ kind: "connection", id });
+      if (c && !(await selection.select({ kind: "connection", id }))) return;
     } else {
       const f = tree.folderById(id);
       folderId = f?.parent_id ?? null;
-      if (f) selection.select({ kind: "folder", id });
+      if (f && !(await selection.select({ kind: "folder", id }))) return;
     }
+    this.tab = "connections";
     for (let i = 0; i < 10000 && folderId; i++) {
       expandedConnections.set(folderId, true);
       folderId = tree.folderById(folderId)?.parent_id ?? null;
@@ -1229,7 +1231,6 @@ class ViewStore {
   // dynamic folder holding the entry - loading the cached entries of
   // folders nobody expanded yet - then expand down to it and select it.
   async revealDynamic(entryId: string) {
-    this.tab = "connections";
     const owner = () => {
       for (const [fid, list] of Object.entries(tree.dynamicEntries)) {
         if (list.some((e) => e.id === entryId)) return fid;
@@ -1245,7 +1246,9 @@ class ViewStore {
       }
     }
     if (!folderId) return; // the host left the inventory since connecting
-    selection.selectDynamicEntry(folderId, entryId);
+    // As in reveal(): the view moves only once the selection went through.
+    if (!(await selection.selectDynamicEntry(folderId, entryId))) return;
+    this.tab = "connections";
     let f: string | null = folderId;
     for (let i = 0; i < 10000 && f; i++) {
       expandedConnections.set(f, true);
