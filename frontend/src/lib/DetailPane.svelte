@@ -416,7 +416,11 @@
   // is measured against when the same item reloads.
   let draftConnOrig: Record<string, unknown> | null = null;
   let draftFolderOrig: Record<string, unknown> | null = null;
-  function discardDraft() { draftEpoch++; }
+  // Not while a save runs: its reload would bring back what was discarded.
+  function discardDraft() {
+    if (connSaving || folderSaving) return;
+    draftEpoch++;
+  }
   function edited(cur: object | null, orig: Record<string, unknown> | null): boolean {
     return !!cur && !!orig && JSON.stringify(cur) !== JSON.stringify(orig);
   }
@@ -518,7 +522,7 @@
     );
   });
 
-  let folderSaving = false;
+  let folderSaving = $state(false);
   async function saveFolder(): Promise<boolean> {
     if (!folder || !editingFolder || folderSaving) return false;
     folderSaving = true;
@@ -1180,7 +1184,7 @@
 
   // One save at a time, whoever calls (button, Ctrl+S, the leave prompt),
   // as the folder editor already does.
-  let connSaving = false;
+  let connSaving = $state(false);
   async function saveConn(): Promise<boolean> {
     if (!conn || !editing || connSaving) return false;
     connSaving = true;
@@ -1794,7 +1798,7 @@
       </div>
       <div class="head-actions">
         {#if folderDirty}
-          <button onclick={discardDraft} title="Throw the unsaved changes away">Discard</button>
+          <button onclick={discardDraft} disabled={connSaving || folderSaving} title="Throw the unsaved changes away">Discard</button>
         {/if}
         <button
           class="save-btn"
@@ -2089,7 +2093,7 @@
       </div>
       <div class="head-actions">
         {#if dirty}
-          <button onclick={discardDraft} title="Throw the unsaved changes away">Discard</button>
+          <button onclick={discardDraft} disabled={connSaving || folderSaving} title="Throw the unsaved changes away">Discard</button>
         {/if}
         <button
           class="save-btn"
@@ -2457,7 +2461,7 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
-          <button class="link-save" onclick={discardDraft}>Discard</button>
+          <button class="link-save" onclick={discardDraft} disabled={connSaving || folderSaving}>Discard</button>
         </div>
       {/if}
     </div>
@@ -2582,7 +2586,7 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
-          <button class="link-save" onclick={discardDraft}>Discard</button>
+          <button class="link-save" onclick={discardDraft} disabled={connSaving || folderSaving}>Discard</button>
         </div>
       {/if}
     </div>
@@ -2629,7 +2633,7 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
-          <button class="link-save" onclick={discardDraft}>Discard</button>
+          <button class="link-save" onclick={discardDraft} disabled={connSaving || folderSaving}>Discard</button>
         </div>
       {/if}
     </div>
@@ -2663,7 +2667,7 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
-          <button class="link-save" onclick={discardDraft}>Discard</button>
+          <button class="link-save" onclick={discardDraft} disabled={connSaving || folderSaving}>Discard</button>
         </div>
       {/if}
     </div>
@@ -2726,7 +2730,7 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
-          <button class="link-save" onclick={discardDraft}>Discard</button>
+          <button class="link-save" onclick={discardDraft} disabled={connSaving || folderSaving}>Discard</button>
         </div>
       {/if}
     </div>
@@ -2759,7 +2763,7 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
-          <button class="link-save" onclick={discardDraft}>Discard</button>
+          <button class="link-save" onclick={discardDraft} disabled={connSaving || folderSaving}>Discard</button>
         </div>
       {/if}
     </div>
@@ -2776,7 +2780,7 @@
         <div class="span-2 dirty-hint">
           <span class="dirty-pill">Unsaved changes</span>
           <button class="link-save" onclick={saveConn}>Save now</button>
-          <button class="link-save" onclick={discardDraft}>Discard</button>
+          <button class="link-save" onclick={discardDraft} disabled={connSaving || folderSaving}>Discard</button>
         </div>
       {/if}
     </div>
