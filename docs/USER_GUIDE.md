@@ -4547,11 +4547,12 @@ preserved across edits / reloads.
 <a id="android-mobile"></a>
 ## 22. Android / mobile
 
-Shipped in v0.36.0. The same app runs on an Android phone (arm64,
-DeX-ready) - it is the desktop Go core compiled for android via the
-NDK, not a separate codebase. Built locally (`task android:package`);
-not in CI. The installed app id is `app.sshtool`. What changes on a
-phone:
+The same app runs on an Android phone (arm64, DeX-ready) - it is the
+desktop Go core compiled for android via the NDK, not a separate
+codebase. Every release attaches a signed `ssh-tool-android-arm64.apk`
+(install steps in the README); a newer APK installs over the old one and
+keeps your data. The installed app id is `app.sshtool`. What changes on
+a phone:
 
 ### Vault unlock with biometrics
 

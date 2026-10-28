@@ -128,6 +128,15 @@ and 11. It offers the same thing on first run: a copy into
 `%LOCALAPPDATA%\Programs\ssh-tool` and a Start Menu shortcut, no
 administrator rights.
 
+### Android
+
+Every release attaches `ssh-tool-android-arm64.apk` (arm64 phones and
+tablets, DeX-ready). Download it on the phone, allow your browser or file
+manager to install unknown apps when Android asks, and open it. A newer
+APK installs over the old one and keeps your data; the in-app updater
+does not cover Android yet. What differs from desktop:
+[Android / mobile](docs/USER_GUIDE.md#22-android--mobile) in the guide.
+
 ### macOS
 
 No release build yet: a distributed macOS app needs an Apple Developer

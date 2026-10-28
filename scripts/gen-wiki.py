@@ -8,14 +8,20 @@ headings kept, the "N. " numbering dropped. A page's preamble (its title,
 screenshot and caption - everything before its first "## ") is kept from
 the existing wiki page, so screenshots stay curated in the wiki. Links to
 guide anchors ("](#credentials)") point at the page that now holds that
-anchor. Hand-written pages (Home, FAQ, MCP, Session sharing) are not
+anchor. The Installation page is README.md's "## Install" section, so the
+install steps have one source; its repo-relative links point at GitHub.
+Hand-written pages (Home, FAQ, MCP, Session sharing) are not
 touched. Review with git diff in the wiki clone, then commit and push.
 """
 import re
 import sys
 from pathlib import Path
 
-GUIDE = Path(__file__).resolve().parent.parent / "docs" / "USER_GUIDE.md"
+ROOT = Path(__file__).resolve().parent.parent
+GUIDE = ROOT / "docs" / "USER_GUIDE.md"
+README = ROOT / "README.md"
+BLOB = "https://github.com/fpenezic/ssh-tool/blob/main/"
+RAW_INSTALL = "Install"  # README section that becomes the Installation page
 
 # page -> guide section keys ("7b", "Storage locations", ...), in order
 PAGES = {
@@ -106,6 +112,35 @@ def main():
             body.append("\n".join(lines))
         path.write_text(pre + "\n" + "\n\n".join(body) + "\n", encoding="utf-8")
         print(f"{page}: {', '.join(keys)}")
+
+    write_installation(wiki)
+
+
+def write_installation(wiki):
+    """README's install section as the wiki's Installation page: the
+    "### Platform" headings become the page's sections, README-relative
+    links point at the repo on GitHub."""
+    text = README.read_text(encoding="utf-8")
+    m = re.search(rf"^## {RAW_INSTALL}\n(.*?)(?=^## )", text, re.M | re.S)
+    if not m:
+        sys.exit(f"README.md has no '## {RAW_INSTALL}' section")
+    body = m.group(1).strip("\n")
+    body = re.sub(r"^### ", "## ", body, flags=re.M)
+
+    def link(mm):
+        target = mm.group(1)
+        if re.match(r"[a-z]+:", target):
+            return mm.group(0)
+        if target.startswith("#"):  # an anchor in the README itself
+            return f"](https://github.com/fpenezic/ssh-tool{target})"
+        if target.startswith("docs/USER_GUIDE.md#22-"):  # the guide's Android section
+            return "](Mobile)"
+        return f"]({BLOB}{target})"
+    body = re.sub(r"\]\(([^)\s]+)\)", link, body)
+    head = ("# Installation\n\n"
+            "> Generated from the README's Install section; it tracks the latest release.\n\n")
+    (wiki / "Installation.md").write_text(head + body + "\n", encoding="utf-8")
+    print("Installation: README Install")
 
 
 if __name__ == "__main__":
