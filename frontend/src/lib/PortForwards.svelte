@@ -468,6 +468,7 @@
   $effect(() => registerUnsaved({
     label: () => `the bookmark on ${connection.name}`,
     dirty: () => bmDirty,
+    busy: () => bmSaving,
     save: async () => {
       const spec = specs.find((s) => s.id === addBookmarkFor);
       return spec ? saveBookmark(spec) : true;
@@ -503,8 +504,18 @@
     bmBase = bmSnap();
   }
 
+  // Locks the bookmark form while it saves: the save closes it when done.
+  let bmSaving = $state(false);
   async function saveBookmark(spec: PortForward): Promise<boolean> {
-    if (!newBmName.trim() || !newBmUrl.trim()) return false;
+    if (bmSaving || !newBmName.trim() || !newBmUrl.trim()) return false;
+    bmSaving = true;
+    try {
+      return await saveBookmarkNow(spec);
+    } finally {
+      bmSaving = false;
+    }
+  }
+  async function saveBookmarkNow(spec: PortForward): Promise<boolean> {
     const existing = spec.bookmarks ?? [];
     const entry: ProxyBookmark = { name: newBmName.trim(), url: newBmUrl.trim() };
     if (newBmInTree) entry.in_tree = true;
@@ -795,6 +806,7 @@
               {/each}
               {#if addBookmarkFor === spec.id}
                 <span class="bm-add-form">
+                  <fieldset class="lock" disabled={bmSaving}>
                   <input bind:value={newBmName} placeholder="Label" class="bm-input" />
                   <input
                     bind:value={newBmUrl}
@@ -806,6 +818,7 @@
                   </label>
                   <button class="bm-save" onclick={() => saveBookmark(spec)}>{editBmIndex !== null ? "Save" : "Add"}</button>
                   <button onclick={() => { addBookmarkFor = null; editBmIndex = null; }}>✕</button>
+                  </fieldset>
                 </span>
                 {#if spec.kind === "local" && !spec.local_port}
                   <span class="bm-hint">

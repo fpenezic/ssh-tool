@@ -2515,6 +2515,7 @@
   $effect(() => registerUnsaved({
     label: () => "App proxy",
     dirty: () => npSel === "general" && sp.enabled && spDirty,
+    busy: () => spPending > 0,
     save: async () => { await spSave(true); return !spDirty; },
     discard: spDiscard,
     scope: "settings",
@@ -2702,8 +2703,11 @@
   // configuration stored when its turn comes: two quick clicks no longer
   // send the same stale config with one change each.
   let lpChain: Promise<unknown> = Promise.resolve();
+  // Requests queued or running: a profile switch waits for them (busy).
+  let lpPending = 0;
   function lpQueue<T>(job: () => Promise<T>): Promise<T> {
-    const run = lpChain.then(job, job);
+    lpPending++;
+    const run = lpChain.then(job, job).finally(() => { lpPending--; });
     lpChain = run.catch(() => {});
     return run;
   }
@@ -2837,7 +2841,7 @@
   $effect(() => registerUnsaved({
     label: () => npSel === "new" ? "The new profile" : networkProfiles.list.find((p) => p.id === npSel)?.name ?? "",
     dirty: () => npDirty || npNewDirty || lpDirty(npSel),
-    busy: () => npAnyBusy,
+    busy: () => npAnyBusy || lpPending > 0,
     save: async () => {
       if (npNewDirty) return npCreateCurrent();
       const np = networkProfiles.list.find((p) => p.id === npSel);
