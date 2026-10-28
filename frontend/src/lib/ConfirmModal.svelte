@@ -4,6 +4,14 @@
   import { claimKeyboard } from "./paneFocus";
 
   let okBtn = $state<HTMLButtonElement | null>(null);
+  let modalEl = $state<HTMLDivElement | null>(null);
+  // When the dialog opened: the buttons ignore clicks for a moment, since
+  // the dialog often opens on a click (the unsaved prompt on a row) and the
+  // second click of a double-click would otherwise land on whatever button
+  // sits under the pointer - Discard included.
+  let shownAt = 0;
+  const GRACE_MS = 400;
+  function settled(): boolean { return Date.now() - shownAt >= GRACE_MS; }
 
   // This component stays mounted and renders nothing until asked, so the
   // claim is tied to `pending` rather than to mounting. Returning the
@@ -13,14 +21,32 @@
     return claimKeyboard();
   });
 
+  // Focus moves into the dialog when it opens and back to where it was
+  // when it closes.
   $effect(() => {
-    if (confirmModal.pending) {
-      setTimeout(() => okBtn?.focus(), 0);
-    }
+    if (!confirmModal.pending) return;
+    shownAt = Date.now();
+    const before = document.activeElement as HTMLElement | null;
+    setTimeout(() => okBtn?.focus(), 0);
+    return () => { before?.focus?.(); };
   });
 
-  function onConfirm() { confirmModal.confirm(); }
+  function onConfirm() { if (settled()) confirmModal.confirm(); }
   function onCancel()  { confirmModal.cancel(); }
+  function onAlt()     { if (settled()) confirmModal.alt(); }
+
+  // Tab stays inside the dialog (it is modal: nothing behind it may take
+  // focus or keys).
+  function trapTab(e: KeyboardEvent) {
+    if (e.key !== "Tab" || !modalEl) return;
+    const items = [...modalEl.querySelectorAll<HTMLElement>("button, input, [tabindex]:not([tabindex='-1'])")]
+      .filter((el) => !(el as HTMLButtonElement).disabled);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    const at = document.activeElement;
+    if (e.shiftKey && (at === first || !modalEl.contains(at))) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && (at === last || !modalEl.contains(at))) { e.preventDefault(); first.focus(); }
+  }
 
   function onKey(e: KeyboardEvent) {
     if (e.key === "Enter")  { e.preventDefault(); onConfirm(); }
@@ -30,17 +56,19 @@
 
 {#if confirmModal.pending}
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="overlay" onkeydown={onKey} role="dialog" aria-modal="true" tabindex="-1">
+<div class="overlay" onkeydown={onKey} role="dialog" aria-modal="true" tabindex="-1"
+  aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-msg">
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div class="modal" role="document" use:clickOutside={{ onOutside: onCancel, enabled: !confirmModal.pending.modal }} onkeydown={(e) => {
+  <div class="modal" role="document" bind:this={modalEl} use:clickOutside={{ onOutside: onCancel, enabled: !confirmModal.pending.modal }} onkeydown={(e) => {
     // Esc answers Cancel / Stay from anywhere in the dialog. Enter stays
     // with the focused button (OK by default), so Tab to another and Enter
     // picks that one.
     if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+    trapTab(e);
     e.stopPropagation();
   }}>
-    <h2>{confirmModal.pending.title}</h2>
-    <p class="msg">{confirmModal.pending.message}</p>
+    <h2 id="confirm-modal-title">{confirmModal.pending.title}</h2>
+    <p class="msg" id="confirm-modal-msg">{confirmModal.pending.message}</p>
     {#if confirmModal.pending.checkboxLabel}
       <label class="optout">
         <input
@@ -54,7 +82,7 @@
     <div class="row">
       <button onclick={onCancel}>{confirmModal.pending.cancelLabel}</button>
       {#if confirmModal.pending.altLabel}
-        <button class="danger" onclick={() => confirmModal.alt()}>{confirmModal.pending.altLabel}</button>
+        <button class="danger" onclick={onAlt}>{confirmModal.pending.altLabel}</button>
       {/if}
       <button
         class={confirmModal.pending.danger ? "danger" : "primary"}

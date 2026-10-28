@@ -248,7 +248,7 @@ func (a *App) serveLocalProxy(id string, c net.Conn) {
 	a.serveSOCKS(c, func(pw string) bool {
 		want, err := a.localProxyPassword(id)
 		return err == nil && subtleEqual(pw, want)
-	}, func(host string) (string, string, error) { return id, host, nil }, "profile "+id)
+	}, func(host string) (string, []string, error) { return id, []string{host}, nil }, "profile "+id)
 }
 
 // serveSOCKS is one SOCKS5 client: username/password auth (RFC 1929),
@@ -256,9 +256,10 @@ func (a *App) serveLocalProxy(id string, c net.Conn) {
 // SOCKS credentials), then CONNECT through the tunnel of the profile
 // pick chooses for the destination host; pick returning "" dials
 // directly.
-// pick returns the profile (or jump route) for a destination and the host
-// to dial for it; see sharedPick for why that can differ from the asked one.
-func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host string) (id, dialHost string, err error), what string) {
+// pick returns the profile (or jump route) for a destination and the hosts
+// to dial for it, tried in order until one answers; see sharedPick for why
+// they can differ from the asked one.
+func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host string) (id string, dialHosts []string, err error), what string) {
 	defer c.Close()
 	_ = c.SetDeadline(time.Now().Add(30 * time.Second))
 	hdr := make([]byte, 2)
@@ -340,7 +341,10 @@ func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host
 	port := strconv.Itoa(int(binary.BigEndian.Uint16(pb)))
 	target := net.JoinHostPort(host, port)
 
-	id, dialHost, err := pick(host)
+	id, dialHosts, err := pick(host)
+	if err == nil && len(dialHosts) == 0 {
+		err = errors.New("nothing to dial")
+	}
 	if err != nil {
 		log.Printf("network: local proxy (%s): %s: %v", what, target, err)
 		reply(2) // not allowed by ruleset
@@ -348,7 +352,7 @@ func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host
 	}
 	// Dial what the decision was made on, not a name the far side might
 	// resolve elsewhere.
-	target = net.JoinHostPort(dialHost, port)
+	target = net.JoinHostPort(dialHosts[0], port)
 	var d tunnelDialer = &net.Dialer{}
 	name := "direct"
 	if conn := jumpConnOf(id); conn != "" {
@@ -385,8 +389,17 @@ func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host
 		a.wgAcquire(id, hold)
 		defer a.wgRelease(hold)
 	}
+	// Each address in turn, inside one overall bound: the next one when an
+	// address does not answer.
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	up, err := d.DialContext(ctx, "tcp", target)
+	var up net.Conn
+	for _, h := range dialHosts {
+		target = net.JoinHostPort(h, port)
+		if up, err = d.DialContext(ctx, "tcp", target); err == nil || ctx.Err() != nil {
+			break
+		}
+		log.Printf("network: local proxy %q: dial %s: %v", name, target, err)
+	}
 	cancel()
 	if err != nil {
 		log.Printf("network: local proxy %q: dial %s: %v", name, target, err)

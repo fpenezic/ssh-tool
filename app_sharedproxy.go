@@ -362,9 +362,12 @@ type sharedPins struct{ set map[netip.Prefix]bool }
 // address, so that address is dialed - sending the name on would let the
 // far side (a bastion, the VPN's DNS) resolve it to a host nobody allowed.
 // A connection's own name is dialed as is: that name is what was allowed.
-func (a *App) sharedPick(host string) (id, dialHost string, err error) {
-	id, _, dialHost, err = a.sharedPickAddr(host, a.sharedProxyConfig().Priority)
-	return id, dialHost, err
+func (a *App) sharedPick(host string) (id string, dialHosts []string, err error) {
+	id, _, dialHost, err := a.sharedPickAddr(host, a.sharedProxyConfig().Priority)
+	if err != nil {
+		return "", nil, err
+	}
+	return id, []string{dialHost}, nil
 }
 
 // sharedPickWith chooses the profile for a destination and says why:

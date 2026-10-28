@@ -114,8 +114,8 @@ func (a *App) ensureBrowserProxy(row *store.NetworkProfile) (int, error) {
 			p.lastUsed = time.Now()
 			p.mu.Unlock()
 			go func() {
-				a.serveSOCKS(c, nil, func(host string) (string, string, error) {
-					return a.browserPick(id, host)
+				a.serveSOCKS(c, nil, func(host string) (string, []string, error) {
+					return a.browserPickAll(id, host)
 				}, "browser")
 				p.mu.Lock()
 				p.active--
@@ -163,9 +163,21 @@ func stopBrowserProxies() {
 // the profile's networks is dialed by that address, since the customer's
 // DNS may not know it; the browser still sends the name (Host, SNI).
 func (a *App) browserPick(id, host string) (pid, dialHost string, err error) {
+	pid, hosts, err := a.browserPickAll(id, host)
+	if len(hosts) > 0 {
+		dialHost = hosts[0]
+	}
+	return pid, dialHost, err
+}
+
+// browserPickAll is browserPick with every address worth trying: a name
+// the local resolver puts inside the profile's networks at several
+// addresses gets all of them, in the resolver's order, so a dead one does
+// not fail the page.
+func (a *App) browserPickAll(id, host string) (pid string, dialHosts []string, err error) {
 	row, err := a.db.GetNetworkProfile(id)
 	if err != nil || row == nil {
-		return "", "", errors.New("profile gone")
+		return "", nil, errors.New("profile gone")
 	}
 	routes, _ := a.profileRoutes(row, profileLocalProxy(row.ConfigJSON))
 	in := func(ip netip.Addr) bool {
@@ -178,9 +190,9 @@ func (a *App) browserPick(id, host string) (pid, dialHost string, err error) {
 	}
 	if ip, err := netip.ParseAddr(host); err == nil {
 		if in(ip.Unmap()) {
-			return id, host, nil
+			return id, []string{host}, nil
 		}
-		return "", host, nil
+		return "", []string{host}, nil
 	}
 	// A connection's name goes into the tunnel whatever it resolves to
 	// here; when the local resolver puts it inside the profile's networks
@@ -193,19 +205,23 @@ func (a *App) browserPick(id, host string) (pid, dialHost string, err error) {
 	if err != nil || len(addrs) == 0 {
 		// Unknown here: most likely an intranet name, resolved inside
 		// the VPN by the tunnel's dialer.
-		return id, host, nil
+		return id, []string{host}, nil
 	}
-	// Any address in the profile's networks: a name can resolve to several,
-	// and the first need not be the one behind the VPN.
+	// Every address in the profile's networks: a name can resolve to
+	// several, and the first need not be the one behind the VPN.
+	var inside []string
 	for _, addr := range addrs {
 		if ip := addr.Unmap(); in(ip) {
-			return id, ip.String(), nil
+			inside = append(inside, ip.String())
 		}
 	}
-	if conn {
-		return id, host, nil
+	if len(inside) > 0 {
+		return id, inside, nil
 	}
-	return "", host, nil
+	if conn {
+		return id, []string{host}, nil
+	}
+	return "", []string{host}, nil
 }
 
 // profileHostname reports whether a connection using the profile has
