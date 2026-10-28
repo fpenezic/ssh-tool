@@ -10,6 +10,7 @@ while Wails v3 was a prerelease upstream.
 ## [Unreleased]
 
 ### Small fixes
+- Terminal on Linux: with WebGL off, letters were sometimes cut at the same columns on every row ("root" shown as "roct"). The terminal is still aligned to whole pixels (which keeps the block cursor from leaving a line behind), but without the transform that caused the clipping.
 - File browser: the Modified column shows local time, as `ls -l` and the OS file manager do. It showed UTC, an hour or two off in Central Europe.
 
 ## [1.0.0] - 1.0 on Wails v3 stable

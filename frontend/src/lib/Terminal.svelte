@@ -874,23 +874,27 @@
   // layout above the terminal (rem paddings, line heights) routinely puts
   // the screen at .5 / .34 px, so nudge it onto whole device pixels.
   // Chromium snaps canvases by itself, which is why a plain xterm page never
-  // shows this. Skipped on Chromium (WebView2, Android): there the transform
-  // puts the screen on its own compositing layer, which drops ClearType and
-  // leaves the DOM renderer's text visibly soft.
+  // shows this. Skipped on Chromium (WebView2, Android).
+  //
+  // The nudge is a relative left/top offset (`.xterm-screen` is already
+  // position: relative), never a transform: a transform puts the screen on
+  // its own compositing layer, where Chromium drops ClearType and WebKitGTK
+  // clips the DOM renderer's glyphs at its tile edges ("root" drawn as
+  // "roct", the same columns cut on every row).
   const snapNeeded = !/Chrome\//.test(navigator.userAgent);
   function snapScreen() {
     if (!snapNeeded) return;
     const el = host?.querySelector<HTMLElement>(".xterm-screen");
     if (!el) return;
-    el.style.transform = "";
+    el.style.left = "";
+    el.style.top = "";
     const r = el.getBoundingClientRect();
     if (!r.width) return;
     const dpr = window.devicePixelRatio || 1;
     const dx = (Math.round(r.left * dpr) - r.left * dpr) / dpr;
     const dy = (Math.round(r.top * dpr) - r.top * dpr) / dpr;
-    if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
-      el.style.transform = `translate(${dx}px, ${dy}px)`;
-    }
+    if (Math.abs(dx) > 0.001) el.style.left = `${dx}px`;
+    if (Math.abs(dy) > 0.001) el.style.top = `${dy}px`;
   }
 
   async function notifyResize() {

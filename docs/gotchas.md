@@ -982,8 +982,9 @@ everything mobile is behind a build tag or an `isMobile` check.
        pixel, and WebKitGTK does not repaint that pixel when the cell it
        came from changes: the block cursor left a 1px "_" under every spot
        it moved away from, with both renderers. The layout puts
-       `.xterm-screen` at .5 / .34 px routinely; `snapScreen()` translates
-       it onto whole pixels on every resize and activation. Chromium snaps
+       `.xterm-screen` at .5 / .34 px routinely; `snapScreen()` moves
+       it onto whole pixels on every resize and activation, with a
+       relative left/top offset (see 119: never a transform). Chromium snaps
        canvases itself, so a plain xterm page never reproduces it.
 
     **Measure with the buffers FULL.** An idle measurement said scrollback was
@@ -1902,13 +1903,17 @@ everything mobile is behind a build tag or an `isMobile` check.
    their defaults from it.
 
 119. **Never transform the terminal screen on Chromium.** `snapScreen()` in
-   `Terminal.svelte` nudges `.xterm-screen` onto whole device pixels with a
-   `transform: translate(...)`, which WebKitGTK needs (stale cursor line at
-   fractional positions). On WebView2 the transform puts the screen on its
-   own compositing layer, Chromium drops ClearType there and the DOM
-   renderer's text turns soft. Whether it happens depends on the layout
+   `Terminal.svelte` nudges `.xterm-screen` onto whole device pixels, which
+   WebKitGTK needs (stale cursor line at fractional positions). It used a
+   `transform: translate(...)`, and a transform puts the screen on its own
+   compositing layer: on WebView2 Chromium drops ClearType there and the
+   DOM renderer's text turns soft; on WebKitGTK the DOM renderer's glyphs
+   were clipped at the layer's tile edges ("root" as "roct", the same
+   columns cut on every row). Whether it happens depends on the layout
    above the terminal, so two machines with the same monitor and scaling
-   can differ. The snap is skipped when the user agent has `Chrome/`.
+   can differ. The snap is now a relative left/top offset (`.xterm-screen`
+   is position: relative already), which creates no layer, and it is still
+   skipped when the user agent has `Chrome/`.
 
 120. **ClickHouse over HTTP: settings, sessions and stopping a query.**
    (`internal/dbx/clickhouse.go`) A login whose profile has `readonly = 1`
