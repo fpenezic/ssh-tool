@@ -2764,19 +2764,23 @@
       spLoad();
     } catch (e: any) { toast.err(errMsg(e)); lpOpen = { ...lpOpen }; }
   }
+  // The text fields are taken when Save is clicked (a second click queued
+  // behind a running save must not pick up what was typed later); the two
+  // switches are not the form's business here - they come from the last
+  // written state when the job runs, so a switch queued ahead is kept.
   function lpSave(np: NetworkProfileInfo): Promise<boolean> {
-    return lpQueue(() => lpSaveNow(np));
+    const f = lpOpen[np.id];
+    if (!f) return Promise.resolve(true);
+    const sent = lpSnap(f);
+    const text = { bind: f.bind.trim(), port: Number(f.port), networks: f.networksText.split(/[\s,]+/).filter(Boolean) };
+    return lpQueue(() => lpSaveNow(np, text, sent));
   }
-  async function lpSaveNow(np: NetworkProfileInfo): Promise<boolean> {
+  async function lpSaveNow(np: NetworkProfileInfo, text: { bind: string; port: number; networks: string[] }, sent: string): Promise<boolean> {
     const f = lpOpen[np.id];
     if (!f) return true;
-    // The baseline becomes what this request sends; text typed while it
-    // runs stays dirty.
-    const sent = lpSnap(f);
-    const req = {
-      enabled: f.enabled, shared: f.shared, bind: f.bind.trim(), port: Number(f.port),
-      networks: f.networksText.split(/[\s,]+/).filter(Boolean),
-    };
+    const c = networkProfiles.list.find((p) => p.id === np.id)?.local_proxy;
+    const switches = lpWritten[np.id] ?? { enabled: !!c?.enabled, shared: !!c?.shared };
+    const req = { enabled: switches.enabled, shared: switches.shared, ...text };
     try {
       await api.networkProfileSetLocalProxy(np.id, req);
       lpWritten[np.id] = req;
