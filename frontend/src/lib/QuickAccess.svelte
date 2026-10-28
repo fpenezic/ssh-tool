@@ -44,6 +44,8 @@
 
   async function quickConnect(c: Connection) {
     if (connectingId === c.id) return;
+    // Through the selection guard, as in the tree.
+    if (!selection.isConnectionSelected(c.id) && !(await selection.selectConnection(c.id))) return;
     connectingId = c.id;
     await connectionActions.connectDefault(c.id);
     connectingId = null;
