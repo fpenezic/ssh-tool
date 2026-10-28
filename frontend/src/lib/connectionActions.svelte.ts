@@ -132,15 +132,18 @@ function topLevelOnly(ids: string[], parentOf: (id: string) => string | null): s
   });
 }
 
-// Deletes one by one and carries on past a failure (each shown as a
-// toast); returns the ids that went. The caller reloads and then drops
-// what is gone from the selection (selection.dropMissing), cascades
-// included.
-async function deleteEach(ids: string[], del: (id: string) => Promise<unknown>): Promise<string[]> {
+// Deletes one by one and carries on past a failure; one toast sums up the
+// failures (not one per item). Returns the ids that went. The caller
+// reloads and then drops what is gone from the selection
+// (selection.dropMissing), cascades included. Shared by every delete flow.
+export async function deleteEach(ids: string[], del: (id: string) => Promise<unknown>): Promise<string[]> {
   const gone: string[] = [];
+  let first = "";
   for (const id of ids) {
-    try { await del(id); gone.push(id); } catch (e) { toast.err(unwrapRaw(String((e as any)?.message ?? e))); }
+    try { await del(id); gone.push(id); } catch (e) { first ||= unwrapRaw(String((e as any)?.message ?? e)); }
   }
+  const failed = ids.length - gone.length;
+  if (failed) toast.err(failed === ids.length ? `Delete failed: ${first}` : `${failed} of ${ids.length} not deleted: ${first}`);
   return gone;
 }
 
