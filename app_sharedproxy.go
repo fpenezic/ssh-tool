@@ -399,7 +399,18 @@ func (a *App) sharedPickAddr(host string, priority []string) (id, why, dialHost 
 		if lerr != nil || len(addrs) == 0 {
 			return "", "", "", fmt.Errorf("no shared profile knows %q", host)
 		}
+		// The first address some shared network contains: a name can resolve
+		// to several, and the first need not be the one behind a VPN.
 		ip = addrs[0].Unmap()
+	pick:
+		for _, a := range addrs {
+			for _, r := range routes {
+				if r.prefix.Contains(a.Unmap()) {
+					ip = a.Unmap()
+					break pick
+				}
+			}
+		}
 		resolved = fmt.Sprintf("%s resolves to %s; ", host, ip)
 	}
 	rank := map[string]int{}
