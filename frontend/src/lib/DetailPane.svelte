@@ -416,11 +416,15 @@
   // is measured against when the same item reloads.
   let draftConnOrig: Record<string, unknown> | null = null;
   let draftFolderOrig: Record<string, unknown> | null = null;
-  // While a save runs: the draft it sent. Its reload compares with that,
-  // not with the values before the save, so a field changed back during
-  // the save (B saved, then A again) stays A instead of taking B.
+  // While a save runs: the draft it sent. Reloads meanwhile leave the
+  // draft alone (they may still carry the old values, and the save may
+  // fail); once it succeeded, one reconcile runs against what it sent, so
+  // a field changed back during the save (B saved, then A again) stays A.
   let draftConnSent: Record<string, unknown> | null = null;
   let draftFolderSent: Record<string, unknown> | null = null;
+  let draftConnMergeBase: Record<string, unknown> | null = null;
+  let draftFolderMergeBase: Record<string, unknown> | null = null;
+  let draftReconcile = $state(0);
   const snapDraft = (d: object) => JSON.parse(JSON.stringify(d)) as Record<string, unknown>;
   // Not while a save runs: its reload would bring back what was discarded.
   function discardDraft() {
@@ -457,8 +461,12 @@
   }));
 
   $effect(() => {
+    void draftReconcile;
     if (folder) {
-      const base = draftFolderSent ?? draftFolderOrig;
+      // A save of this folder is running: its own result settles the draft.
+      if (draftFolderSent && folder.id === draftFolderId && draftEpoch === draftFolderEpoch) return;
+      const base = draftFolderMergeBase ?? draftFolderOrig;
+      draftFolderMergeBase = null;
       const keep = folder.id === draftFolderId && draftEpoch === draftFolderEpoch && untrack(() => edited(editingFolder, base));
       draftFolderId = folder.id;
       draftFolderEpoch = draftEpoch;
@@ -566,17 +574,22 @@
     settings.network_profile_id = decodeNetProfile(editingFolder.networkProfile);
     settings.initial_command = editingFolder.initialCommand.trim() || undefined;
     settings.initial_command_line_delay_ms = parseDelayMs(editingFolder.initialCommandDelay);
+    let ok = false;
     try {
       await api.foldersUpdate({ id: folder.id, name: editingFolder.name, settings });
       await tree.load();
       showSaved();
+      ok = true;
       return true;
     } catch (e: any) {
       toast.err(`Save failed: ${errMsg(e)}`);
       return false;
     } finally {
       folderSaving = false;
+      // As in saveConn: reconcile once against what was sent, on success.
+      if (ok) draftFolderMergeBase = draftFolderSent;
       draftFolderSent = null;
+      if (ok) draftReconcile++;
     }
   }
 
@@ -1092,13 +1105,18 @@
   });
 
   $effect(() => {
+    void draftReconcile;
     if (conn) {
+      // A save of this connection is running: its own result settles the
+      // draft (and resolves the settings again).
+      if (draftConnSent && conn.id === draftConnId && draftEpoch === draftConnEpoch) return;
       resolved = null;
       resolveErr = null;
       api.connectionsResolve(conn.id).then((r) => (resolved = r)).catch((e) => (resolveErr = String(e)));
       // A tree reload (sync, a refresh) hands in a new object for the same
       // connection: edits in progress stay. Discard bumps draftEpoch.
-      const base = draftConnSent ?? draftConnOrig;
+      const base = draftConnMergeBase ?? draftConnOrig;
+      draftConnMergeBase = null;
       const keep = conn.id === draftConnId && draftEpoch === draftConnEpoch && untrack(() => edited(editing, base));
       draftConnId = conn.id;
       draftConnEpoch = draftEpoch;
@@ -1199,11 +1217,17 @@
     if (!conn || !editing || connSaving) return false;
     connSaving = true;
     draftConnSent = snapDraft(editing);
+    let ok = false;
     try {
-      return await saveConnNow();
+      ok = await saveConnNow();
+      return ok;
     } finally {
       connSaving = false;
+      // Saved: reconcile once against what was sent. Failed: the draft
+      // stays as it is (reloads meanwhile did not touch it).
+      if (ok) draftConnMergeBase = draftConnSent;
       draftConnSent = null;
+      if (ok) draftReconcile++;
     }
   }
   async function saveConnNow(): Promise<boolean> {
