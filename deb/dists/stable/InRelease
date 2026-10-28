@@ -4,47 +4,47 @@ Hash: SHA512
 Architectures: amd64 arm64
 Codename: stable
 Components: main
-Date: Sun, 25 Oct 2026 23:36:19 +0000
+Date: Wed, 28 Oct 2026 08:25:41 +0000
 Description: ssh-tool releases
 Label: ssh-tool
 Origin: ssh-tool
 Suite: stable
 MD5Sum:
- 415d14faa3ce4e47ee9b79ebb81e9dcf              177 Release
- c6ec60c38a6b2920dc748f2872005364             3430 main/binary-amd64/Packages
- 2ec0b78558f26051db4727bbd66669c4             1267 main/binary-amd64/Packages.gz
+ 245345f7f475afeee238cb19814f1e49              177 Release
+ 94d20f6d2030362f0356ad56328dd78e             3426 main/binary-amd64/Packages
+ 871188daf5790be63f7156fa20bf497f             1274 main/binary-amd64/Packages.gz
  106e60b4469f2dcefaf76b38bb101282               85 main/binary-amd64/Release
  d41d8cd98f00b204e9800998ecf8427e                0 main/binary-arm64/Packages
- 324dba87ef5859722fc3fec4c03a7707               29 main/binary-arm64/Packages.gz
+ 6e6d800be8c127451fb6f7d37ddda119               29 main/binary-arm64/Packages.gz
  079da93967502ee513fb68a8e0eb678b               85 main/binary-arm64/Release
 SHA1:
- e6994b2c13e55f03d760f3e5a4216a15954ef3fc              177 Release
- cca7a6a95f8b4fa107ce79189dd299f13bc67610             3430 main/binary-amd64/Packages
- 970cd3d83eb5c4fbdc20940f76734eb14a7f1b3c             1267 main/binary-amd64/Packages.gz
+ cfd45672335e1678d7530d114fedf12da53aaa76              177 Release
+ 1ea9efea064c9920f355598f18049ac343ff92b8             3426 main/binary-amd64/Packages
+ 3b6dc4e9fc4d516dfb892e100378b9f097a8213d             1274 main/binary-amd64/Packages.gz
  5e0fbbffe3d802b006fea16ebf77943de2ffb9c5               85 main/binary-amd64/Release
  da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-arm64/Packages
- 50180f31c4df2bee5c6f2541c4d22b7773bf0469               29 main/binary-arm64/Packages.gz
+ 48479ae5f573c2594c6c4f0b88ad8acb0039db0a               29 main/binary-arm64/Packages.gz
  e03e01aebcde9a578e13b247380c8b7194a7b669               85 main/binary-arm64/Release
 SHA256:
- 60923e04c3891a7cf214154799e7d413d9c512d84bdc551627e7a4fb88149811              177 Release
- 02f9c6002728f1e6272f432dce4748fc0d0c88c2a479512d9a52c4ae615a0a6b             3430 main/binary-amd64/Packages
- a612062f9b24147c9f3a51c95b5439ef1a5b1fc173de679b70676804c8bc1b5d             1267 main/binary-amd64/Packages.gz
+ d68c9f59cba114473d6ba3fe4e7310ca40177aeb68a51dd86bbdf1cdc6c0e8fe              177 Release
+ 8d0e4ba7e12461a30ccae7fd5af31f6b4b613149423d49fa1ea966d1f7150dc8             3426 main/binary-amd64/Packages
+ a13349827214d535ac93d2864a229a3e00a04476584804dd3445f14f28cb8b27             1274 main/binary-amd64/Packages.gz
  9fabe4f66c635ea2b291a5a7c06b5025f0484035eababf8449a18f704b05f862               85 main/binary-amd64/Release
  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-arm64/Packages
- 0b5706fd17ecd8c46327c4d5da8a169a2479a305f173661d353fbc57b0ba3c2a               29 main/binary-arm64/Packages.gz
+ e50e68f880e6d8dd8a4ad1d40e666e7ace17935a54aa39be8b5aaae657f09d61               29 main/binary-arm64/Packages.gz
  cec73169cc57d615475cf3bbb1ef8ecaa5eaff6a8ae71977f3e6e18185f4741b               85 main/binary-arm64/Release
 SHA512:
- 623967d2ffaf8457152e6456ee69b04f869a6daf50788aa1d3d286c4bfac51a110ca136df8835dcb5e1dca824407b9adf2cfcdd3d098b1da4169bacc30e0829d              177 Release
- 849e161080832d4cd6fc1c5cb829aec97f572d87f1719759218d1f4111c2f633d0534799f075b5cad5a95fe168eab81687b14866af4d81b9541211ae7ac0b874             3430 main/binary-amd64/Packages
- a7e78bc349f7af3d6f6a245af99cb200d3302b0159b32a745209c1975bdf6791f1c884ccf353589b55a2d23af53f005a8b6feaaa7824fc303e5e1f4f06875138             1267 main/binary-amd64/Packages.gz
+ 5f874372d8414aa51921f1f8837ffceb855dd15144cb4dd605afbb10001b3673532a4a6184e6354d036d33f6c74dd496e0fa2580179c4f7ab67e422813894b6a              177 Release
+ e53dc9bececfb2287cea98485bb7bde3d17ffba44c285a69017c78bb5bed8506cf52c1bc92e65174b6a200d72b509110ece1f268340b91214ed476c9c5ce34ba             3426 main/binary-amd64/Packages
+ ff7e47a89047beb4dc2d23e4fb068b3028175720bc0184beaa38da8c4432e7e5d20f23f4cc557a40df0f8cb866a6121461e78845cb0e0fea5378a1e6f96c5ec5             1274 main/binary-amd64/Packages.gz
  04a3424df11822bd1ed2f37a3dea95b4f24d215410c24cfa207e19bc3f269ad8afa844cda23a4dc689e546b08b4bd6975810e397ca0bef69d7ce48c0a3f61bfc               85 main/binary-amd64/Release
  cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-arm64/Packages
- d6d56ff0b82712b2da3a3b0fc09329625900b98929cd073210210dda28485c72fb9cbe1ff549946bb87fb073c5f6200ed0c48f5313c0340b5cbb6cc3c69ec81e               29 main/binary-arm64/Packages.gz
+ b96fb88828b7d0596c6f9d1be57b09aa707e6b9cfe897d71d3f851f0ca52f8308499ecc803a3f8476a03cd1c49b15492066b9d8ecfbc9f7c8c28ddfc296c5a95               29 main/binary-arm64/Packages.gz
  9c51551456b5db60d62f6f938610a41beefc040757d8731a0ef47e28fcb55f1839fdb2906a01a4536b595d101cbb6b2c724d1e444247f9d3932044855107d900               85 main/binary-arm64/Release
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYKAB0WIQT5t/b75QABLFu+0clmc8pHeaQNbgUCat6ScwAKCRBmc8pHeaQN
-bqmwAQClhk+2m938J6sgUc40tEgItMYpXRa3SLmOT/qqZEEUngD/Y/WeHnen1DjC
-RZjYg9OGcDukU22fhmT0Vsy/IPSbBQU=
-=+piS
+iHUEARYKAB0WIQT5t/b75QABLFu+0clmc8pHeaQNbgUCauGxhQAKCRBmc8pHeaQN
+bszEAQC+k81HnbJfauys1a6yZ/vChOv16dtspvR9j7G2bA3jFAD/SPqUfh3xALaf
+1kZK7nUSbPD3brvMfzjdPbcCYJG1ugU=
+=Cejo
 -----END PGP SIGNATURE-----
