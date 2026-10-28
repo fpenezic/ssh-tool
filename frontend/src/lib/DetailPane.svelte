@@ -423,17 +423,25 @@
   // Same item reloaded while edits are open: a field the user changed keeps
   // its value, every other field takes the refreshed one (a sync may have
   // changed it), so Save does not write stale values back.
+  // The Database and Kafka drafts are groups of separate settings, merged
+  // field by field (their lists stay whole); any other field is one value.
+  const NESTED_DRAFTS = new Set(["db", "kafka"]);
   function mergeDraft<T extends object>(cur: T, orig: Record<string, unknown>, fresh: T): T {
     const out = { ...fresh } as Record<string, unknown>;
     const c = cur as Record<string, unknown>;
     for (const k of Object.keys(out)) {
-      if (JSON.stringify(c[k]) !== JSON.stringify(orig[k])) out[k] = c[k];
+      if (JSON.stringify(c[k]) === JSON.stringify(orig[k])) continue;
+      const isGroup = NESTED_DRAFTS.has(k) && [c[k], orig[k], out[k]].every((v) => !!v && typeof v === "object" && !Array.isArray(v));
+      out[k] = isGroup
+        ? mergeDraft(c[k] as object, orig[k] as Record<string, unknown>, out[k] as object)
+        : c[k];
     }
     return out as T;
   }
   $effect(() => registerUnsaved({
     label: () => conn?.name ?? folder?.name ?? "",
     dirty: () => (!!conn && dirty) || (!conn && !!folder && folderDirty),
+    busy: () => connSaving || folderSaving,
     save: () => (conn ? saveConn() : folder ? saveFolder() : Promise.resolve(true)),
     discard: discardDraft,
   }));

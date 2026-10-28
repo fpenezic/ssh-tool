@@ -181,6 +181,8 @@
   let editingForwardId = $state<string | null>(null);
 
   async function openEditForward(spec: PortForward) {
+    // A save in flight closes the form when it lands.
+    if (fwSaving) return;
     // The same forward is already open: keep what is typed.
     if (showAdd && spec.id === editingForwardId) return;
     // Another forward's half-edited form would be overwritten: ask first.
@@ -201,6 +203,7 @@
   }
 
   function openAdd() {
+    if (fwSaving) return;
     resetForm();
     showAdd = true;
     formBase = formSnap();
@@ -216,6 +219,7 @@
   $effect(() => registerUnsaved({
     label: () => `the ${editingForwardId ? "edited" : "new"} forward on ${connection.name}`,
     dirty: () => formDirty,
+    busy: () => fwSaving,
     save: submitForward,
     discard: cancelForm,
     scope: "tab",
@@ -456,7 +460,25 @@
   let newBmUrl = $state("");
   let newBmInTree = $state(false);
 
-  function openAddBookmark(spec: PortForward) {
+  // The bookmark form is a draft of its own: the values it opened with,
+  // so a tab switch or a selection change asks before dropping it.
+  let bmBase = "";
+  const bmSnap = () => JSON.stringify([newBmName, newBmUrl, newBmInTree]);
+  const bmDirty = $derived(addBookmarkFor !== null && bmSnap() !== bmBase);
+  $effect(() => registerUnsaved({
+    label: () => `the bookmark on ${connection.name}`,
+    dirty: () => bmDirty,
+    save: async () => {
+      const spec = specs.find((s) => s.id === addBookmarkFor);
+      return spec ? saveBookmark(spec) : true;
+    },
+    discard: () => { addBookmarkFor = null; editBmIndex = null; },
+    scope: "tab",
+  }));
+
+  async function openAddBookmark(spec: PortForward) {
+    // Another bookmark's half-typed form would be overwritten: ask first.
+    if (bmDirty && !(await confirmLeave(["tab"]))) return;
     addBookmarkFor = spec.id;
     editBmIndex = null;
     newBmName = "";
@@ -465,20 +487,24 @@
     // is typing a path onto the end rather than the whole URL. A SOCKS
     // proxy has no single address to suggest.
     newBmUrl = spec.kind === "local" ? defaultURL(spec) : "";
+    bmBase = bmSnap();
   }
 
-  function openEditBookmark(spec: PortForward, index: number) {
+  async function openEditBookmark(spec: PortForward, index: number) {
     const bm = (spec.bookmarks ?? [])[index];
     if (!bm) return;
+    if (addBookmarkFor === spec.id && editBmIndex === index) return;
+    if (bmDirty && !(await confirmLeave(["tab"]))) return;
     addBookmarkFor = spec.id;
     editBmIndex = index;
     newBmName = bm.name;
     newBmUrl = bm.url;
     newBmInTree = !!bm.in_tree;
+    bmBase = bmSnap();
   }
 
-  async function saveBookmark(spec: PortForward) {
-    if (!newBmName.trim() || !newBmUrl.trim()) return;
+  async function saveBookmark(spec: PortForward): Promise<boolean> {
+    if (!newBmName.trim() || !newBmUrl.trim()) return false;
     const existing = spec.bookmarks ?? [];
     const entry: ProxyBookmark = { name: newBmName.trim(), url: newBmUrl.trim() };
     if (newBmInTree) entry.in_tree = true;
@@ -492,8 +518,10 @@
       addBookmarkFor = null;
       editBmIndex = null;
       await reload();
+      return true;
     } catch (e: any) {
       err = errMsg(e);
+      return false;
     }
   }
 
@@ -744,7 +772,7 @@
               </button>
               {/if}
             {/if}
-            <button onclick={() => openEditForward(spec)} title="Edit this forward">Edit</button>
+            <button onclick={() => openEditForward(spec)} title="Edit this forward" disabled={fwSaving}>Edit</button>
             <button class="danger" onclick={() => removeForward(spec.id)}>Delete</button>
           </div>
           {#if spec.kind === "dynamic" || spec.kind === "local"}
