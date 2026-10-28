@@ -30,7 +30,7 @@
   import appIcon from "../assets/images/app-icon-64.png";
   import type { TunnelInfo, NetworkProfileInfo } from "./api";
   import DeleteConfirm from "./DeleteConfirm.svelte";
-  import { connectionActions } from "./connectionActions.svelte";
+  import { connectionActions, deleteEach } from "./connectionActions.svelte";
   import { explain as explainConnectError, unwrapRaw as unwrapConnectErr, errMsg } from "./connectErrors";
   import { EventsOn } from "./wailsRuntime";
   import { renderMarkdown } from "./markdown";
@@ -1365,18 +1365,6 @@
     };
   }
 
-  // Deletes one by one, carries on past a failure (reported in a toast),
-  // returns the ids that went.
-  async function deleteEach(ids: string[], del: (id: string) => Promise<unknown>): Promise<string[]> {
-    const gone: string[] = [];
-    let first = "";
-    for (const id of ids) {
-      try { await del(id); gone.push(id); } catch (e) { first ||= errMsg(e); }
-    }
-    const failed = ids.length - gone.length;
-    if (failed) toast.err(failed === ids.length ? `Delete failed: ${first}` : `${failed} of ${ids.length} not deleted: ${first}`);
-    return gone;
-  }
 
   function openConnDelete(connIds: string[]) {
     const items: typeof deleteItems = [];

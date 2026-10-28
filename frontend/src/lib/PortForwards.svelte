@@ -478,6 +478,8 @@
   }));
 
   async function openAddBookmark(spec: PortForward) {
+    // A bookmark save in flight closes the form when it lands.
+    if (bmSaving) return;
     // Another bookmark's half-typed form would be overwritten: ask first.
     if (bmDirty && !(await confirmLeave(["tab"]))) return;
     addBookmarkFor = spec.id;
@@ -493,7 +495,7 @@
 
   async function openEditBookmark(spec: PortForward, index: number) {
     const bm = (spec.bookmarks ?? [])[index];
-    if (!bm) return;
+    if (!bm || bmSaving) return;
     if (addBookmarkFor === spec.id && editBmIndex === index) return;
     if (bmDirty && !(await confirmLeave(["tab"]))) return;
     addBookmarkFor = spec.id;

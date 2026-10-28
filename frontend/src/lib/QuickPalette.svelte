@@ -473,6 +473,7 @@
   // One choice per palette: a second Enter (a double press, or a key
   // repeat) before the palette unmounts must not dial again.
   let chosen = false;
+  let selecting = $state(false);
 
   async function chooseResult(r: Result) {
     if (chosen) return;
@@ -507,8 +508,17 @@
       return;
     }
     if (r.entry.kind === "folder") {
-      // On Stay in the unsaved prompt the palette stays open and usable.
-      if (!(await selection.select({ kind: "folder", id: r.entry.folder.id }))) {
+      // On Stay in the unsaved prompt the palette stays open and usable;
+      // the prompt's buttons are outside the palette, so outside clicks do
+      // not close it meanwhile.
+      selecting = true;
+      let ok: boolean;
+      try {
+        ok = await selection.select({ kind: "folder", id: r.entry.folder.id });
+      } finally {
+        selecting = false;
+      }
+      if (!ok) {
         chosen = false;
         return;
       }
@@ -772,7 +782,7 @@
   <div
     class="modal"
     role="document"
-    use:clickOutside={{ onOutside: onClose }}
+    use:clickOutside={{ onOutside: onClose, enabled: !selecting }}
     onkeydown={(e) => {
       // Handle nav here so the input's own keystrokes don't bubble up
       // to the window listener (which would re-trigger the global
