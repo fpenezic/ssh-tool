@@ -7,7 +7,9 @@ while Wails v3 was a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [1.0.0] - 1.0 on Wails v3 stable
+
+ssh-tool reaches 1.0 and leaves the 0.x line, now built on Wails v3.0.0 stable. Your store, vault and sync carry over unchanged; this release also brings a round of fixes, mostly around unsaved edits in the editors.
 
 ### Platform
 - Wails v3.0.0 stable (was beta.34).

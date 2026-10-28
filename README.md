@@ -175,7 +175,7 @@ through the package manager instead.
 
 - Go 1.26+ (`go.mod` is the source of truth)
 - Node 20+
-- [`wails3` CLI](https://wails.io) (beta) - `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.34` (the version in `go.mod`)
+- [`wails3` CLI](https://wails.io) - `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0` (the version in `go.mod`)
 - [Task](https://taskfile.dev) - `go install github.com/go-task/task/v3/cmd/task@latest`
 
 ### Build for your platform
@@ -246,19 +246,18 @@ ssh-tool/
 See [`CLAUDE.md`](CLAUDE.md) for an exhaustive handoff document
 intended for new contributors (or future Claude Code instances).
 
-## Status
+## Status and release rhythm
 
-Active development. Wails v3 is still a prerelease upstream (beta
-since 2026-08-02), so expect occasional breakage when bumping. The
-project started as a Rust + Tauri app and was ported to Go - do
-**not** reintroduce russh-based code; we moved to Go specifically
-because `russh`'s forked `ssh-key`
-crate rejects opkssh "forever" certs (`valid_before=u64::MAX`) and
-rewriting them breaks the CA signature.
+ssh-tool is a daily driver: since 1.0 it runs on Wails v3.0.0 stable and covers what it set out to replace. Releases follow the work, not a calendar:
 
-Current release: see the latest `v*` tag on `main` and
-[CHANGELOG.md](CHANGELOG.md). Builds are published at
-[sshtool.app](https://sshtool.app).
+- **Patch** (1.x.**y**) - bug fixes, out as soon as a fix is tested, often within a day or two of the report. Security fixes (a Go toolchain or dependency advisory) go out right away.
+- **Minor** (1.**x**.0) - new features: a provider, a database, a tab, an importer. Expect one every week or two.
+- **Major** (**2**.0.0) - only for a real break: a store, vault or sync format an older app cannot read, or a removed platform or feature. None planned.
+- Larger changes go to the **Release candidates** update channel first (`-rcN` tags); everyone else gets the final release.
+
+For scale: during the port and the first months in summer 2026 there were up to ten releases a day; since autumn it is a few a week, and it should settle lower now that the feature set is complete.
+
+Current release: the latest `v*` tag on `main` and [CHANGELOG.md](CHANGELOG.md). Builds are published at [sshtool.app](https://sshtool.app).
 
 ## License
 

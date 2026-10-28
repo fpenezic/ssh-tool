@@ -44,10 +44,8 @@ Author wants 300+ connections, daily-driver UX, full opkssh support
 - Default branch: `main`.
 - History starts at the open-source release; earlier development
   happened in a private repo (full pre-OSS history archived there).
-- The project started as a Rust/Tauri app and was ported to Go.
-  Do NOT reintroduce russh-based code - russh's forked ssh-key crate
+- SSH stays on `golang.org/x/crypto/ssh`: russh's forked ssh-key crate
   rejects opkssh "forever" certs (`valid_before=u64::MAX`).
-  `golang.org/x/crypto/ssh` accepts them natively.
 
 ## Tech stack
 
