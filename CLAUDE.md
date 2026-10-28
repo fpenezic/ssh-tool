@@ -265,11 +265,7 @@ author asks to ship/promote/release:
 3. Before a stable tag: Dependabot shows no open alert in this repo or
    ssh-tool-plugins (or each is dismissed with its reason), and
    `python3 scripts/vulncheck.py . . ./internal/...` reports nothing the
-   code reaches. Dependabot alerts can lag a new advisory, so also run
-   `python3 scripts/advisories.py` here and in ssh-tool-plugins
-   (`python3 ../ssh-tool/scripts/advisories.py $(dirname */go.mod)`): it
-   asks the advisory database for our exact versions and fails on a hit
-   that is neither dismissed in Dependabot nor in `.advisories-allow`. Keep go.mod's `toolchain` line on the latest Go patch
+   code reaches. Keep go.mod's `toolchain` line on the latest Go patch
    release: dependabot does not see standard-library fixes. The release
    workflow enforces the govulncheck part (stable tags only;
    `.vulncheck-allow` for an ID with no fix yet, the repository variable
