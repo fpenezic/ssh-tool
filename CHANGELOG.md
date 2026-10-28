@@ -7,6 +7,11 @@ while Wails v3 was a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Small fixes
+- File browser: the Modified column shows local time, as `ls -l` and the OS file manager do. It showed UTC, an hour or two off in Central Europe.
+
 ## [1.0.0] - 1.0 on Wails v3 stable
 
 ssh-tool reaches 1.0 and leaves the 0.x line, now built on Wails v3.0.0 stable. Your store, vault and sync carry over unchanged; this release also brings a round of fixes, mostly around unsaved edits in the editors.

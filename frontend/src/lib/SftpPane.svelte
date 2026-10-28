@@ -589,9 +589,12 @@
     if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
     return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
   }
+  // Local time, the way `ls -l` on the server and the OS file manager
+  // show it (toISOString would print UTC).
   function fmtDate(unix: number): string {
     const d = new Date(unix * 1000);
-    return d.toISOString().slice(0, 16).replace("T", " ");
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   }
   // Live: rate over the last few seconds plus ETA. Finished: the average
   // over the whole transfer, which is the number worth remembering.
