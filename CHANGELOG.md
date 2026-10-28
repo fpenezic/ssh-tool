@@ -10,7 +10,7 @@ while Wails v3 was a prerelease upstream.
 ## [Unreleased]
 
 ### Security
-- go-jose 4.1.6 (used by opkssh sign-in): a JWK set with a crafted RSA key could make parsing hang (GHSA-mgcc-cww5-fp2q).
+- go-jose updated from 4.1.4 to 4.1.6, which fixes GHSA-mgcc-cww5-fp2q: in 4.1.4 a JWK set with a crafted RSA key could make parsing hang (go-jose is used by the opkssh sign-in).
 
 ### Small fixes
 - Terminal on Linux: with WebGL off, letters were sometimes cut at the same columns on every row ("root" shown as "roct"). The terminal is still aligned to whole pixels (which keeps the block cursor from leaving a line behind), but without the transform that caused the clipping.
