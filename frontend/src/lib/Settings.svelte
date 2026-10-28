@@ -2683,15 +2683,27 @@
     const f = lpOpen[id];
     return !!f && lpBase[id] !== undefined && lpSnap(f) !== lpBase[id];
   }
+  // Per profile: bumped by every load and every successful write, so a
+  // load that started before a write cannot apply its older answer after it.
+  const lpGen: Record<string, number> = {};
+  const lpBump = (id: string) => (lpGen[id] = (lpGen[id] ?? 0) + 1);
   async function lpLoad(np: NetworkProfileInfo) {
     // Back on the Proxy tab with edits still open: keep them.
     if (lpDirty(np.id)) return;
-    const c = np.local_proxy ?? { enabled: false, port: 0 };
+    const gen = lpBump(np.id);
+    // The newest known state: the last write when the list lags behind,
+    // else the list as it is now (np may be an older copy).
+    const listed = networkProfiles.list.find((p) => p.id === np.id)?.local_proxy ?? np.local_proxy;
+    const w = lpWritten[np.id];
+    const c = w ? { ...w, networks: w.networks } : (listed ?? { enabled: false, port: 0 });
     const f: LpForm = { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080, networksText: (c.networks ?? []).join("\n") };
     const open = lpOpen[np.id];
     const before = open ? lpSnap(open) : null;
     const beforeSwitches = open ? { enabled: open.enabled, shared: open.shared } : null;
     try { f.details = await api.networkProfileLocalProxyDetails(np.id); } catch { /* shown on save */ }
+    // A write (or a newer load) came while this one waited: its answer is
+    // older than what is stored now.
+    if (lpGen[np.id] !== gen) return;
     // Typed into the open form while the details loaded: keep that. Compared
     // with the form as this load found it, since after a Discard there is no
     // baseline to compare with.
@@ -2752,6 +2764,7 @@
     try {
       await api.networkProfileSetLocalProxy(np.id, req);
       lpWritten[np.id] = req;
+      lpBump(np.id);
       // Onto the form as it is now (a load may have replaced it meanwhile,
       // and it may hold newer typing), not the one captured before. The
       // switch is saved here; the refreshes after it may fail on their own.
@@ -2787,6 +2800,7 @@
     try {
       await api.networkProfileSetLocalProxy(np.id, req);
       lpWritten[np.id] = req;
+      lpBump(np.id);
       // Saved: the baseline moves now. The refreshes after it are view
       // updates and may fail on their own.
       lpBase = { ...lpBase, [np.id]: sent };
