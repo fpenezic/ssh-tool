@@ -2837,6 +2837,7 @@
   $effect(() => registerUnsaved({
     label: () => npSel === "new" ? "The new profile" : networkProfiles.list.find((p) => p.id === npSel)?.name ?? "",
     dirty: () => npDirty || npNewDirty || lpDirty(npSel),
+    busy: () => npAnyBusy,
     save: async () => {
       if (npNewDirty) return npCreateCurrent();
       const np = networkProfiles.list.find((p) => p.id === npSel);

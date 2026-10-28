@@ -293,6 +293,7 @@
   $effect(() => registerUnsaved({
     label: () => cred?.name ?? "",
     dirty: () => editDirty,
+    busy: () => editSaving,
     save: saveEdit,
     discard: () => { editing = false; },
   }));

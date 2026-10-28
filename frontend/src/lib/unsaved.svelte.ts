@@ -3,6 +3,7 @@
 // selection, an editor tab, a profile switch) asks confirmLeave() first and
 // goes ahead only on true. The prompt offers Save, Discard and Stay.
 import { confirmModal } from "./confirmModal.svelte.ts";
+import { toast } from "./toast.svelte";
 
 export interface UnsavedSource {
   // Shown in the prompt: "db-01", "the forward on db-01".
@@ -12,6 +13,9 @@ export interface UnsavedSource {
   save: () => Promise<boolean>;
   // Throws the edits away, back to the stored values.
   discard: () => void;
+  // A save of this source is running: it can be neither saved again nor
+  // discarded (the request is on its way), so a navigation waits.
+  busy?: () => boolean;
   // Which navigation drops it. "editor" (default): the connection / folder
   // editor, lost on a selection change. "tab": a sub-form inside one editor
   // tab (the forward form), lost on a tab switch and a selection change.
@@ -43,6 +47,10 @@ export function hasUnsaved(scopes: Scope[] = SELECTION): boolean {
 // Resolves true when the caller may navigate: nothing was dirty, the edits
 // were saved, or the user chose Discard.
 export async function confirmLeave(scopes: Scope[] = SELECTION): Promise<boolean> {
+  if ([...sources].some((s) => scopes.includes(s.scope ?? "editor") && s.busy?.())) {
+    toast.info("Wait for the save to finish");
+    return false;
+  }
   const dirty = dirtySources(scopes);
   if (dirty.length === 0) return true;
   // A second navigation while the prompt is open is dropped; the first
