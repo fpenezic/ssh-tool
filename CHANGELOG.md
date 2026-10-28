@@ -7,7 +7,9 @@ while Wails v3 was a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [1.0.1] - Sharper terminal on Linux, go-jose security fix
+
+A patch release: the Linux terminal no longer cuts letters with WebGL off, the file browser shows local times, and go-jose gets a security fix.
 
 ### Security
 - go-jose updated from 4.1.4 to 4.1.6, which fixes GHSA-mgcc-cww5-fp2q: in 4.1.4 a JWK set with a crafted RSA key could make parsing hang (go-jose is used by the opkssh sign-in).
