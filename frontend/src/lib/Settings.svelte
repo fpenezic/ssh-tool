@@ -2738,12 +2738,18 @@
     return run;
   }
   // Not while a proxy write runs (same reason as spDiscard).
+  // Back to the stored values at once (form and baseline together), not
+  // through a reload a following switch write could cancel.
   function lpDiscard(np: NetworkProfileInfo) {
     if (lpPending > 0) return;
-    const b = { ...lpBase };
-    delete b[np.id];
-    lpBase = b;
-    void lpLoad(np);
+    const listed = networkProfiles.list.find((p) => p.id === np.id)?.local_proxy ?? np.local_proxy;
+    const c = lpWritten[np.id] ?? listed ?? { enabled: false, port: 0 };
+    const f: LpForm = {
+      enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080,
+      networksText: (c.networks ?? []).join("\n"), details: lpOpen[np.id]?.details,
+    };
+    lpOpen = { ...lpOpen, [np.id]: f };
+    lpBase = { ...lpBase, [np.id]: lpSnap(f) };
   }
   // A switch: saved on the click, with the stored address, port and
   // networks, so half-typed text fields are not saved along with it.
