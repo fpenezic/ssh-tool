@@ -586,10 +586,11 @@
       return false;
     } finally {
       folderSaving = false;
-      // As in saveConn: reconcile once against what was sent, on success.
+      // As in saveConn: reconcile once, against what was sent on success,
+      // against the values from before the save on failure.
       if (ok) draftFolderMergeBase = draftFolderSent;
       draftFolderSent = null;
-      if (ok) draftReconcile++;
+      draftReconcile++;
     }
   }
 
@@ -1223,11 +1224,12 @@
       return ok;
     } finally {
       connSaving = false;
-      // Saved: reconcile once against what was sent. Failed: the draft
-      // stays as it is (reloads meanwhile did not touch it).
+      // Reconcile once now: saved - against what was sent; failed - against
+      // the values from before the save (draftConnOrig), so the edits stay
+      // and untouched fields take a reload skipped meanwhile.
       if (ok) draftConnMergeBase = draftConnSent;
       draftConnSent = null;
-      if (ok) draftReconcile++;
+      draftReconcile++;
     }
   }
   async function saveConnNow(): Promise<boolean> {
