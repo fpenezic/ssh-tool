@@ -390,12 +390,17 @@ func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host
 		defer a.wgRelease(hold)
 	}
 	// Each address in turn, inside one overall bound: the next one when an
-	// address does not answer.
+	// address does not answer. Every attempt gets its share of the time
+	// left, so a silent first address cannot use it all up.
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	var up net.Conn
-	for _, h := range dialHosts {
+	for i, h := range dialHosts {
 		target = net.JoinHostPort(h, port)
-		if up, err = d.DialContext(ctx, "tcp", target); err == nil || ctx.Err() != nil {
+		dl, _ := ctx.Deadline()
+		actx, acancel := context.WithTimeout(ctx, time.Until(dl)/time.Duration(len(dialHosts)-i))
+		up, err = d.DialContext(actx, "tcp", target)
+		acancel()
+		if err == nil || ctx.Err() != nil {
 			break
 		}
 		log.Printf("network: local proxy %q: dial %s: %v", name, target, err)

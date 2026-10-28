@@ -5,13 +5,16 @@
 
   let okBtn = $state<HTMLButtonElement | null>(null);
   let modalEl = $state<HTMLDivElement | null>(null);
-  // When the dialog opened: the buttons ignore clicks for a moment, since
-  // the dialog often opens on a click (the unsaved prompt on a row) and the
-  // second click of a double-click would otherwise land on whatever button
-  // sits under the pointer - Discard included.
+  // The dialog often opens on a click (the unsaved prompt on a row), and
+  // the second click of a double-click would land on whatever button sits
+  // under the pointer - Discard included. That click carries detail 2 (the
+  // OS double-click interval decides, however long it is set), so the
+  // buttons that act take only a first click; keyboard activation has
+  // detail 0.
+  // Also a short time after opening, for a WebView that restarts the click
+  // count when the element under the pointer changes.
   let shownAt = 0;
-  const GRACE_MS = 400;
-  function settled(): boolean { return Date.now() - shownAt >= GRACE_MS; }
+  function single(e: MouseEvent): boolean { return e.detail <= 1 && Date.now() - shownAt >= 400; }
 
   // This component stays mounted and renders nothing until asked, so the
   // claim is tied to `pending` rather than to mounting. Returning the
@@ -31,9 +34,11 @@
     return () => { before?.focus?.(); };
   });
 
-  function onConfirm() { if (settled()) confirmModal.confirm(); }
+  // Keyboard activation (Enter on the button: detail 0) is never a stray
+  // click, and the overlay's Enter passes no event.
+  function onConfirm(e?: MouseEvent) { if (!e || e.detail === 0 || single(e)) confirmModal.confirm(); }
   function onCancel()  { confirmModal.cancel(); }
-  function onAlt()     { if (settled()) confirmModal.alt(); }
+  function onAlt(e: MouseEvent) { if (e.detail === 0 || single(e)) confirmModal.alt(); }
 
   // Tab stays inside the dialog (it is modal: nothing behind it may take
   // focus or keys).
