@@ -13,17 +13,25 @@ class NetworkProfilesStore {
   private loaded = false;
   private subscribed = false;
 
+  // Loads overlap (a write's refresh, a tunnel event): only the newest
+  // one's answer is applied, so an older list cannot land last.
+  private gen = 0;
+
   async load(force = false) {
     if (this.loaded && !force) return;
+    const gen = ++this.gen;
     this.loading = true;
     this.error = null;
     try {
-      this.list = (await api.networkProfilesList()) ?? [];
-      this.loaded = true;
+      const list = (await api.networkProfilesList()) ?? [];
+      if (gen === this.gen) {
+        this.list = list;
+        this.loaded = true;
+      }
     } catch (e) {
-      this.error = String(e);
+      if (gen === this.gen) this.error = String(e);
     } finally {
-      this.loading = false;
+      if (gen === this.gen) this.loading = false;
     }
     if (!this.subscribed) {
       this.subscribed = true;

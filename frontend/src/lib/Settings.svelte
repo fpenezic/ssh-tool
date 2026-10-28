@@ -1102,14 +1102,21 @@
     if (kind === "webdav") {
       syncPassword = "";
       if (c) { syncUrl = c.url; syncUsername = c.username; }
+      // No config ever loaded: back to the values the form started with.
+      else if (syncInitial) [syncUrl, syncUsername] = JSON.parse(syncInitial.w) as [string, string, string];
     } else if (kind === "sftp") {
       sftpInlinePassword = ""; sftpInlineKeyPem = ""; sftpInlineKeyPassphrase = "";
       if (c) {
         sftpHost = c.sftp_host; sftpPort = c.sftp_port || 22; sftpUser = c.sftp_user; sftpDir = c.sftp_dir;
         sftpAuthMode = c.sftp_auth_mode || "credential"; sftpCredId = c.sftp_cred_id;
+      } else if (syncInitial) {
+        [sftpHost, sftpPort, sftpUser, sftpDir, sftpAuthMode, sftpCredId] =
+          JSON.parse(syncInitial.s) as [string, number, string, string, typeof sftpAuthMode, string];
       }
     } else if (c) {
       dropboxAppKey = c.dropbox_app_key; dropboxFolder = c.dropbox_folder || "/ssh-tool";
+    } else if (syncInitial) {
+      [dropboxAppKey, dropboxFolder] = JSON.parse(syncInitial.d) as [string, string];
     }
   }
 
@@ -2882,11 +2889,13 @@
   function npNewReady(): boolean {
     if (npBusy || !npName.trim()) return false;
     switch (npKind) {
-      case "netbird": return nbInstalled && !!nbCredId;
+      // An inline key typed but not created yet would be dropped by the
+      // create (it only uses the picked credential): not ready until it is.
+      case "netbird": return nbInstalled && !!nbCredId && !nbNewKeyName.trim() && !nbNewKeySecret;
       case "openconnect": return ocInstalled && !!oc.server.trim();
       case "openvpn": return ovInstalled && !!ovText.trim();
       case "checkpoint": return cpInstalled && !!cp.server.trim();
-      case "tailscale": return tsInstalled && !!tsCredId;
+      case "tailscale": return tsInstalled && !!tsCredId && !tsNewKeyName.trim() && !tsNewKeySecret;
       default: return !!npConf.trim();
     }
   }
