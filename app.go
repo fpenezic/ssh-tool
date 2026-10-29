@@ -205,6 +205,12 @@ type App struct {
 
 	pendingTabDragMu sync.Mutex
 	pendingTabDrag   *TabDragPayload
+	// tabDragsInFlight: drags accepted by the main window whose tab is
+	// still being rebuilt (WindowAcceptTabDrag -> WindowTabDragDone /
+	// WindowTabDragFailed), by drag id. Their sessions have left the
+	// source's detachedSessions already, so a source closed mid-rebuild
+	// does not end them. Guarded by detachedMu.
+	tabDragsInFlight map[string]tabDragInFlight
 
 	// updateMu guards the update pipeline state. The asset (URL +
 	// manifest sha256) is captured by CheckForUpdate and the apply
@@ -387,6 +393,12 @@ type vncSessionMeta struct {
 	// this the tunnel's 30s wgTouch expires mid-session and the idle-stop
 	// tears the tunnel down under a live console (dropped every 2 min).
 	wgProfileID string
+}
+
+// tabDragInFlight is one accepted drag being rebuilt in the main window.
+type tabDragInFlight struct {
+	source string
+	sids   []string
 }
 
 // TabDragPayload is returned by WindowAcceptTabDrag.
@@ -7928,30 +7940,66 @@ func (a *App) WindowAcceptTabDrag() (*TabDragPayload, error) {
 	p := a.pendingTabDrag
 	a.pendingTabDrag = nil
 	log.Printf("tabdrag: accept %s", p.TabID)
+	if p.DragID != "" {
+		// A drag carries one tab of the source window, which may hold
+		// more. Its sessions leave the source's set now, not when the
+		// rebuild is done: a source closed in between would end them
+		// under the main window rebuilding the tab. WindowTabDragDone
+		// hands them to the main window (as WindowSendTab does),
+		// WindowTabDragFailed back to the source.
+		sids := parseCSVList(p.Sessions)
+		a.detachedMu.Lock()
+		if ids, ok := a.detachedSessions[p.source]; ok {
+			a.detachedSessions[p.source] = removeStrings(ids, sids)
+		}
+		if a.tabDragsInFlight == nil {
+			a.tabDragsInFlight = map[string]tabDragInFlight{}
+		}
+		a.tabDragsInFlight[p.DragID] = tabDragInFlight{source: p.source, sids: sids}
+		a.detachedMu.Unlock()
+	}
 	return p, nil
 }
 
 // WindowTabDragDone is the receiver's word that the tab of an accepted
 // drag (WindowAcceptTabDrag) is rebuilt. Only then does the tab leave
-// its source: a rebuild that fails leaves it where it was, sessions and
-// all. A drag carries one tab of the source window, which may hold more.
-// Its sessions now belong to the main window (as in WindowSendTab), so
-// closing the source later does not end them; the source drops the tab
-// on tab_drag_accepted and closes once it is empty.
-func (a *App) WindowTabDragDone(dragID, tabID, sessions string) {
-	if dragID == "" {
+// its source: the source drops it on tab_drag_accepted and closes once
+// it is empty. Its sessions stay with the main window.
+func (a *App) WindowTabDragDone(dragID string) {
+	a.detachedMu.Lock()
+	_, ok := a.tabDragsInFlight[dragID]
+	delete(a.tabDragsInFlight, dragID)
+	a.detachedMu.Unlock()
+	if !ok {
 		return
-	}
-	source := "detached-" + tabID
-	if sids := parseCSVList(sessions); len(sids) > 0 {
-		a.detachedMu.Lock()
-		if ids, ok := a.detachedSessions[source]; ok {
-			a.detachedSessions[source] = removeStrings(ids, sids)
-		}
-		a.detachedMu.Unlock()
 	}
 	log.Printf("tabdrag: done %s", dragID)
 	EventsEmit("tab_drag_accepted", map[string]string{"drag_id": dragID})
+}
+
+// WindowTabDragFailed: the main window could not rebuild the tab of an
+// accepted drag, which therefore stays in its source window. Its sessions
+// go back to the source; if the source closed meanwhile, nothing shows
+// them any more and they end, as the close would have ended them.
+func (a *App) WindowTabDragFailed(dragID string) {
+	a.detachedMu.Lock()
+	f, ok := a.tabDragsInFlight[dragID]
+	delete(a.tabDragsInFlight, dragID)
+	if !ok {
+		a.detachedMu.Unlock()
+		return
+	}
+	_, open := a.detachedSessions[f.source]
+	if open {
+		a.detachedSessions[f.source] = append(a.detachedSessions[f.source], f.sids...)
+	}
+	a.detachedMu.Unlock()
+	log.Printf("tabdrag: failed %s (source open: %v)", dragID, open)
+	if !open {
+		for _, sid := range f.sids {
+			a.endDetachedSession(f.source, sid)
+		}
+	}
 }
 
 // WindowCancelTabDrag clears a pending drag without accepting it (drag ended
@@ -7960,15 +8008,19 @@ func (a *App) WindowTabDragDone(dragID, tabID, sessions string) {
 // drop arrive in no fixed order (measured: within 1ms, either way round).
 // By then the user may have started the next drag of the same tab - same
 // tabID - so only the drag gesture dragID is cleared.
-func (a *App) WindowCancelTabDrag(dragID string) {
+//
+// Reports whether it cleared the drag. False means the main window took
+// it (or will have): the source then still waits for tab_drag_accepted.
+func (a *App) WindowCancelTabDrag(dragID string) bool {
 	a.pendingTabDragMu.Lock()
 	defer a.pendingTabDragMu.Unlock()
 	if a.pendingTabDrag == nil || a.pendingTabDrag.DragID != dragID {
 		log.Printf("tabdrag: cancel %s, not pending", dragID)
-		return
+		return false
 	}
 	a.pendingTabDrag = nil
 	log.Printf("tabdrag: cancel %s, cleared", dragID)
+	return true
 }
 
 // WindowTarget is one open window a tab can be sent to.

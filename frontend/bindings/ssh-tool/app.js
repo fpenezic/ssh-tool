@@ -5456,8 +5456,11 @@ export function WindowAcceptTabDrag() {
  * drop arrive in no fixed order (measured: within 1ms, either way round).
  * By then the user may have started the next drag of the same tab - same
  * tabID - so only the drag gesture dragID is cleared.
+ * 
+ * Reports whether it cleared the drag. False means the main window took
+ * it (or will have): the source then still waits for tab_drag_accepted.
  * @param {string} dragID
- * @returns {$CancellablePromise<void>}
+ * @returns {$CancellablePromise<boolean>}
  */
 export function WindowCancelTabDrag(dragID) {
     return $Call.ByID(4035557260, dragID);
@@ -5607,18 +5610,25 @@ export function WindowStartTabDrag(tabID, sessions, layout, dragID) {
 /**
  * WindowTabDragDone is the receiver's word that the tab of an accepted
  * drag (WindowAcceptTabDrag) is rebuilt. Only then does the tab leave
- * its source: a rebuild that fails leaves it where it was, sessions and
- * all. A drag carries one tab of the source window, which may hold more.
- * Its sessions now belong to the main window (as in WindowSendTab), so
- * closing the source later does not end them; the source drops the tab
- * on tab_drag_accepted and closes once it is empty.
+ * its source: the source drops it on tab_drag_accepted and closes once
+ * it is empty. Its sessions stay with the main window.
  * @param {string} dragID
- * @param {string} tabID
- * @param {string} sessions
  * @returns {$CancellablePromise<void>}
  */
-export function WindowTabDragDone(dragID, tabID, sessions) {
-    return $Call.ByID(1009915478, dragID, tabID, sessions);
+export function WindowTabDragDone(dragID) {
+    return $Call.ByID(1009915478, dragID);
+}
+
+/**
+ * WindowTabDragFailed: the main window could not rebuild the tab of an
+ * accepted drag, which therefore stays in its source window. Its sessions
+ * go back to the source; if the source closed meanwhile, nothing shows
+ * them any more and they end, as the close would have ended them.
+ * @param {string} dragID
+ * @returns {$CancellablePromise<void>}
+ */
+export function WindowTabDragFailed(dragID) {
+    return $Call.ByID(3664106543, dragID);
 }
 
 /**
