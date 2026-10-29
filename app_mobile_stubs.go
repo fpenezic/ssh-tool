@@ -55,3 +55,6 @@ func explorerMenuTarget() string { return "" }
 func registerExplorerMenu() error   { return ErrURLSchemeNotSupported }
 func unregisterExplorerMenu() error { return ErrURLSchemeNotSupported }
 func explorerMenuStatus() string    { return "" }
+
+// VNC consoles are desktop-only (app_vnc.go); nothing to close.
+func (a *App) closeVncConsole(string) {}
