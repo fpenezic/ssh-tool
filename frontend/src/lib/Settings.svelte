@@ -10,6 +10,7 @@
   import KeepassSettings from "./KeepassSettings.svelte";
   import BitwardenSettings from "./BitwardenSettings.svelte";
   import InfisicalSettings from "./InfisicalSettings.svelte";
+  import { windowChrome } from "./windowChrome.svelte";
   import { api, type AboutInfo, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type SuperPuttyImportSummary, type KafkaToolImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo, type PluginDownloadProgress } from "./api";
   import { vaultState } from "./vaultState.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
@@ -3754,6 +3755,29 @@
       Scales the whole app's <code>rem</code>-based sizes (tree, panels,
       modals). Default 13. Terminal font size has its own setting.
     </p>
+
+    <h3 style="margin-top:0.8rem">Window</h3>
+    <fieldset class="check-cards">
+      <label class:active={windowChrome.compact}>
+        <input
+          type="checkbox"
+          checked={windowChrome.compact}
+          onchange={(e) => void windowChrome.setCompact((e.target as HTMLInputElement).checked).catch((err) => toast.err(errMsg(err)))}
+        />
+        <div>
+          <div class="mode-name">Compact title bar (experimental)</div>
+          <div class="mode-desc">
+            Drops the system title bar and uses the tab bar in its place, so terminals get the extra row. Drag the empty part of the tab bar to move the window; on macOS the traffic lights stay. Applies after a restart.
+          </div>
+        </div>
+      </label>
+    </fieldset>
+    {#if windowChrome.compact !== windowChrome.active}
+      <p class="hint inline">
+        Takes effect after a restart.
+        <button type="button" class="font-step" onclick={() => void api.appRelaunch()}>Restart now</button>
+      </p>
+    {/if}
     {/if}
 
     <fieldset class="check-cards">

@@ -5462,6 +5462,23 @@ export function WindowCancelTabDrag() {
 }
 
 /**
+ * @returns {$CancellablePromise<$models.WindowChrome>}
+ */
+export function WindowChromeGet() {
+    return $Call.ByID(2153054477).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType274($result);
+    }));
+}
+
+/**
+ * @param {boolean} on
+ * @returns {$CancellablePromise<void>}
+ */
+export function WindowChromeSetCompact(on) {
+    return $Call.ByID(3159409426, on);
+}
+
+/**
  * WindowCloseSelf closes the calling window WITHOUT touching its
  * sessions. Used by the redock path - the main window has just
  * claimed ownership, so we clear the detached slot before closing
@@ -5522,7 +5539,7 @@ export function WindowDetachTabAt(tabID, screenX, screenY, sessions, layout) {
  */
 export function WindowListTargets(callerName) {
     return $Call.ByID(2387681781, callerName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType275($result);
+        return $$createType276($result);
     }));
 }
 
@@ -5590,7 +5607,7 @@ export function WindowStartTabDrag(tabID, sessions, layout) {
  */
 export function WorkspaceCreate(name, layoutJSON) {
     return $Call.ByID(2050853866, name, layoutJSON).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType277($result);
+        return $$createType278($result);
     }));
 }
 
@@ -5620,7 +5637,7 @@ export function WorkspaceTouchLastOpened(id) {
  */
 export function WorkspaceUpdate(id, name, layoutJSON) {
     return $Call.ByID(1777295735, id, name, layoutJSON).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType277($result);
+        return $$createType278($result);
     }));
 }
 
@@ -5631,7 +5648,7 @@ export function WorkspaceUpdate(id, name, layoutJSON) {
  */
 export function WorkspacesList() {
     return $Call.ByID(3941184719).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType278($result);
+        return $$createType279($result);
     }));
 }
 
@@ -5910,8 +5927,9 @@ const $$createType270 = $Create.Nullable($$createType269);
 const $$createType271 = $Create.Array($$createType269);
 const $$createType272 = $models.TabDragPayload.createFrom;
 const $$createType273 = $Create.Nullable($$createType272);
-const $$createType274 = $models.WindowTarget.createFrom;
-const $$createType275 = $Create.Array($$createType274);
-const $$createType276 = store$0.Workspace.createFrom;
-const $$createType277 = $Create.Nullable($$createType276);
-const $$createType278 = $Create.Array($$createType276);
+const $$createType274 = $models.WindowChrome.createFrom;
+const $$createType275 = $models.WindowTarget.createFrom;
+const $$createType276 = $Create.Array($$createType275);
+const $$createType277 = store$0.Workspace.createFrom;
+const $$createType278 = $Create.Nullable($$createType277);
+const $$createType279 = $Create.Array($$createType277);

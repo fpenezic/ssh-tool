@@ -4125,6 +4125,13 @@ profile opens.
 - **UI font size (px)** - scales the whole app's rem-based sizes
   (tree, panels, modals). 11-18, default 13. Terminal has its own
   font size knob.
+- **Compact title bar (experimental)** - desktop, off by default,
+  applies after a restart. Drops the system title bar: the tab bar
+  (and a detached window's top bar) takes its place, so terminals get
+  the extra row. Drag the empty part of the bar to move the window,
+  double-click it to maximise. Windows and Linux get minimise /
+  maximise / close buttons at the right end; macOS keeps its traffic
+  lights. The log tail window keeps the system frame.
 - **Show session uptime in tab bar** - opt-in. Small "5m" / "2h" /
   "1d3h" indicator next to each connected tab's label showing how
   long the session has been up. Refreshes every 30 s.

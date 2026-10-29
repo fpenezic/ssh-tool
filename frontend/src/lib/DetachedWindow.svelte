@@ -17,6 +17,9 @@
   import { serializeOpenTabs } from "./lastSession.svelte";
   import { workspaces } from "./workspaces.svelte";
   import StatusBar from "./StatusBar.svelte";
+  import WindowControls from "./WindowControls.svelte";
+  import { windowChrome } from "./windowChrome.svelte";
+  import { Window } from "@wailsio/runtime";
   import { vncSessions } from "./vncState.svelte.ts";
   import { kafkaTabs } from "./kafkaState.svelte";
   import { dbTabs, dbTabTitle } from "./dbState.svelte";
@@ -272,10 +275,29 @@
       console.warn("close-self failed", e);
     }
   }
+
+  // Compact title bar: the top bar is this window's title bar (same
+  // rules as the main window's tab bar in App.svelte).
+  void windowChrome.load();
+  function onTitlebarDblClick(e: MouseEvent) {
+    if (!windowChrome.ownControls) return;
+    if ((e.target as HTMLElement).closest("button")) return;
+    void Window.ToggleMaximise();
+  }
 </script>
 
+{#if windowChrome.ownControls}
+  <WindowControls />
+{/if}
 <div class="detached">
-  <div class="topbar">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="topbar"
+    class:titlebar={windowChrome.active}
+    class:mac={windowChrome.mac}
+    class:own-controls={windowChrome.ownControls}
+    ondblclick={onTitlebarDblClick}
+  >
     <span class="title">Detached window - {detachedTabKey}</span>
     <button class="redock" onclick={redock} title="Send this tab back to the main window">
       ⤴ Re-dock to main window
@@ -309,6 +331,10 @@
     border-bottom: 1px solid var(--surface0);
     font-size: 0.8rem;
   }
+  .topbar.titlebar { --wails-draggable: drag; user-select: none; }
+  .topbar.titlebar button { --wails-draggable: no-drag; }
+  .topbar.titlebar.mac { padding-left: 78px; }
+  .topbar.titlebar.own-controls { padding-right: calc(132px + 0.8rem); }
   .title { color: var(--subtext0); }
   .redock {
     background: var(--blue);

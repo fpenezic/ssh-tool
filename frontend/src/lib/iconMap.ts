@@ -168,6 +168,9 @@ export {
   PictureInPicture as IconPopOut,
 };
 
+// Window buttons of the compact title bar (WindowControls.svelte).
+export { Square as IconMaximize, Copy as IconRestore };
+
 // Dynamic-inventory entry kinds. Host shares IconHost (server tower)
 // with the rest of the app. VM uses Monitor (full machine). LXC
 // container uses Box for the "lightweight container" connotation.

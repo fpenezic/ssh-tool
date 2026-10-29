@@ -25,6 +25,9 @@
   import { deepLink } from "./lib/deepLink.svelte";
   import { IconHost, IconKey, IconSettings, IconTerminal, IconSearch } from "./lib/iconMap";
   import Settings from "./lib/Settings.svelte";
+  import WindowControls from "./lib/WindowControls.svelte";
+  import { windowChrome } from "./lib/windowChrome.svelte";
+  import { Window } from "@wailsio/runtime";
   import QuickPalette from "./lib/QuickPalette.svelte";
   import SnippetPalette from "./lib/SnippetPalette.svelte";
   import ToastHost from "./lib/ToastHost.svelte";
@@ -89,6 +92,7 @@
   // before any tree row renders - avoids the brief "compact then
   // jump to cozy" reflow on app start.
   appPrefs.load();
+  windowChrome.load();
   vaultPrefs.load();
   localShellPrefs.load();
   lastSession.load();
@@ -1355,6 +1359,16 @@
     window.addEventListener("pagehide", flush);
     return () => window.removeEventListener("pagehide", flush);
   });
+
+  // Compact title bar: double-clicking the empty part of the tab bar
+  // maximises like a native title bar. macOS gets this from the runtime
+  // (it maps a double-click on a drag region to the system action).
+  function onTitlebarDblClick(e: MouseEvent) {
+    if (!windowChrome.ownControls) return;
+    const t = e.target as HTMLElement;
+    if (t.closest("button, input, select, a, [role=menu]")) return;
+    void Window.ToggleMaximise();
+  }
 </script>
 
 <svelte:window onkeydown={onGlobalKey} />
@@ -1373,6 +1387,15 @@
   <ToastHost />
   <TooltipHost />
 {:else}
+
+{#if windowChrome.ownControls}
+  <WindowControls />
+{/if}
+{#if windowChrome.active && !vaultReady}
+  <!-- The tab bar is hidden behind the vault gate: keep a strip to move
+       the window by until it is unlocked. -->
+  <div class="titlebar-strip" class:mac={windowChrome.mac}></div>
+{/if}
 
 {#if !vaultReady}
   <VaultGate
@@ -1433,7 +1456,13 @@
 {/if}
 
 <div class="app">
-  <nav class="tabs">
+  <nav
+    class="tabs"
+    class:titlebar={windowChrome.active}
+    class:mac={windowChrome.mac}
+    class:own-controls={windowChrome.ownControls}
+    ondblclick={onTitlebarDblClick}
+  >
     <div class="tabs-group tabs-left">
       <button class:active={view.tab === "connections"} onclick={() => view.setTab("connections")} title="Connections">
         <IconHost size={14} /> <span class="tab-label">Connections</span>
@@ -1782,6 +1811,7 @@
     font-size: var(--ui-font-size, 13px);
   }
   :global(*) { box-sizing: border-box; }
+  :global(:root) { --titlebar-h: 32px; }
   .app {
     display: grid;
     /* Tab row was 36px fixed; that clipped the second row when the
@@ -1808,6 +1838,30 @@
     padding: 0 0.5rem;
     gap: 0.25rem 0.5rem;
   }
+  /* Compact title bar: the tab bar is the window's drag region. The
+     custom property inherits, so everything clickable opts back out. */
+  .tabs.titlebar {
+    --wails-draggable: drag;
+    min-height: var(--titlebar-h);
+    user-select: none;
+  }
+  .tabs.titlebar :global(:is(button, input, select, a, label, [role="menu"])) {
+    --wails-draggable: no-drag;
+  }
+  /* Room for the native traffic lights (macOS) or our own window
+     buttons (WindowControls, 3 x 44px). */
+  .tabs.titlebar.mac { padding-left: 78px; }
+  .tabs.titlebar.own-controls { padding-right: calc(132px + 0.5rem); }
+  .titlebar-strip {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 132px;
+    height: var(--titlebar-h);
+    z-index: 10000;
+    --wails-draggable: drag;
+  }
+  .titlebar-strip.mac { right: 0; }
   .tabs-group {
     display: flex;
     flex-wrap: wrap;

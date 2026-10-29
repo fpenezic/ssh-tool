@@ -307,6 +307,10 @@ type App struct {
 	// closes or a quit is let through): a detached window closing after
 	// that keeps its share of the last session (detached_session.go).
 	appClosing atomic.Bool
+	// compactTitleBar records whether the main window was created
+	// without the native title bar (window.json, app_window_prefs.go).
+	// Set once in configurePlatform before the frontend loads.
+	compactTitleBar bool
 
 	// mainWindow is the primary application window. main.go writes
 	// it after construction so the tray + IPCs can address it.
@@ -7746,6 +7750,7 @@ func (a *App) WindowDetachTabAt(tabID string, screenX, screenY int, sessions str
 		EnableFileDrop:   true,
 		DevToolsEnabled:  true,
 	}
+	applyCompactChrome(&opts, a.compactTitleBar)
 	if screenX != 0 || screenY != 0 {
 		opts.InitialPosition = application.WindowXY
 		opts.X = screenX - 500

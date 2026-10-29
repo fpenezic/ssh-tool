@@ -29,6 +29,14 @@ function nn<T>(p: PromiseLike<T | null>): Promise<T> {
   });
 }
 
+// Main window chrome: compact title bar pref vs what this window started
+// with (the pref applies on restart). See app_window_prefs.go.
+export interface WindowChrome {
+  compact_title_bar: boolean;
+  active: boolean;
+  os: string;
+}
+
 export interface JumpHostSpec {
   hostname: string;
   port?: number;
@@ -1765,6 +1773,8 @@ export const api = {
   syncAutoSet: (enabled: boolean, checkMinutes: number) =>
     G.SyncAutoSet(enabled, checkMinutes),
   appRelaunch: () => G.AppRelaunch(),
+  windowChromeGet: () => nn(G.WindowChromeGet()) as Promise<WindowChrome>,
+  windowChromeSetCompact: (on: boolean) => G.WindowChromeSetCompact(on),
   httpDo: (req: HttpRequest) =>
     nn(G.HttpDo(req as any)) as Promise<HttpResponse>,
   batchExec: (input: BatchExecInput) =>
