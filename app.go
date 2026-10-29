@@ -7824,6 +7824,8 @@ func (a *App) endDetachedSession(window, sid string) {
 		a.KafkaClose(sid)
 	case strings.HasPrefix(sid, "db:"):
 		a.DbClose(sid)
+	case strings.HasPrefix(sid, "vnc:"):
+		a.closeVncConsole(sid)
 	default:
 		if _, ok := a.localPool.Get(sid); ok {
 			_ = a.LocalShellDisconnect(sid)

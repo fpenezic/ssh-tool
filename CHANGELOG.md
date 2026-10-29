@@ -12,6 +12,8 @@ while Wails v3 was a prerelease upstream.
 ### Window
 - New experimental **Compact title bar** (Settings -> Appearance -> Window, off by default, applies after a restart): the system title bar goes and the tab bar takes its place, in the main window and in detached windows, so terminals get one more row. Drag the empty part of the bar to move the window and double-click it to maximise; Windows and Linux get minimise / maximise / close at the right end, macOS keeps its traffic lights.
 - Dragging a tab out of a detached window back into the main window redocks it reliably, and it can be dropped anywhere in the main window, not just on the tab bar. Before, it worked only some of the time.
+- Redocking one tab of a detached window that holds several keeps the others there; before, the whole window closed and its other tabs vanished from view. A tab can also be redocked onto a main window that has no tabs left.
+- A VNC console tab survives being detached or redocked; before, the move closed the console and the new window showed "VNC session not found".
 
 ### Android
 - 1.0.0 and 1.0.1 could not be installed over a 0.x version ("package conflicts" / downgrade): their APKs carried a lower internal version number than 0.119. Fixed; this release installs over any earlier one.

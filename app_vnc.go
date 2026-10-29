@@ -486,6 +486,10 @@ func (a *App) registerVncFor(sessionID, connectionID string, open func(ctx conte
 // VncClose tears down a console: drops the metadata and disconnects any
 // SSH session the console owned (the tunnel). The bridge token is
 // single-use and already consumed or GC'd.
+// closeVncConsole ends a console from shared code (endDetachedSession);
+// VNC is desktop-only, mobile has a no-op.
+func (a *App) closeVncConsole(sessionID string) { a.VncClose(sessionID) }
+
 func (a *App) VncClose(sessionID string) {
 	a.vncMu.Lock()
 	m := a.vncSessions[sessionID]

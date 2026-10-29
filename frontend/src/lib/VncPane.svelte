@@ -360,10 +360,12 @@
     clearConnectTimers();
     window.removeEventListener("keydown", onKeydown, true);
     teardownRfb();
-    // Tell the backend to tear down the bridge upstream + any owned SSH
-    // tunnel. Safe to call even if already closed.
-    api.vncClose(sessionId);
-    vncSessions.delete(sessionId);
+    // Only this window's noVNC client goes. The console itself (bridge,
+    // upstream, owned SSH tunnel) is ended where every tab kind is: on
+    // closing the tab (endSession) or its detached window
+    // (endDetachedSession). A pane also unmounts when its tab moves to
+    // another window, and closing the console here killed it before the
+    // other window could reconnect ("VNC session not found").
   });
 </script>
 

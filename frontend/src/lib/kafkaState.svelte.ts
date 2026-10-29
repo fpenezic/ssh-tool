@@ -6,6 +6,7 @@
 // The handles live on the backend (app_kafka.go); this is a cache refreshed
 // by KafkaPane and by a detached window's KafkaList.
 
+import { vncSessions } from "./vncState.svelte.ts";
 import { api, type Connection, type KafkaClusterInfo } from "./api";
 import { tree, paneTabs, view } from "./stores.svelte";
 import { formatCount } from "./kafkaFormat";
@@ -134,6 +135,10 @@ export function kafkaInheritedFrom(folderId: string | null | undefined): boolean
 // Ends a pane's backend session whatever kind it is.
 export async function endSession(sessionId: string, kind: string | undefined) {
   if (kind === "local") return api.localShellDisconnect(sessionId);
+  if (kind === "vnc") {
+    vncSessions.delete(sessionId);
+    return api.vncClose(sessionId);
+  }
   if (kind === "kafka") {
     kafkaTabs.forget(sessionId);
     return api.kafkaClose(sessionId);
