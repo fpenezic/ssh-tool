@@ -473,12 +473,15 @@ everything mobile is behind a build tag or an `isMobile` check.
     `native:biometric`) are bridged by a Go listener
     (`registerMobileBiometricBridge`) re-enqueuing onto the same queue.
 
-29. **Android IPC transport is hand-rolled.** npm `@wailsio/runtime` is
-    alpha.79 with no android transport (it does a `fetch` POST the
-    WebView can't service). `src/lib/androidTransport.ts` registers a
-    custom transport via `setTransport`, routing through
+29. **Android IPC transport comes from the runtime.** The default
+    `fetch` POST transport hangs in the Android WebView (it cannot hand
+    POST bodies to `shouldInterceptRequest`). `@wailsio/runtime` 3.0.0
+    installs its own transport when `window.wails.invokeAsync` exists:
     `window.wails.invokeAsync` -> Java `handleRuntimeCall` ->
     `nativeHandleRuntimeCall` and back via `window._wailsAndroidCallback`.
+    Until 1.0.x the app shipped the same transport by hand
+    (`androidTransport.ts`, from the alpha.79 days); a runtime downgrade
+    below 3.0.0 would bring the "Checking vault..." hang back.
     Android-only methods absent from the committed (desktop) bindings are
     called with `Call.ByName("main.App.MethodName")`.
 

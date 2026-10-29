@@ -504,10 +504,7 @@ locally. Remaining for a real distributable:
   build is produced or tested. Needs a Mac toolchain + Apple Developer.
 - **VNC / SFTP on mobile.** `app_vnc.go` is `!android`; VNC tabs untested
   on a phone. SFTP open-dir returns an error on android.
-- **Wails runtime version.** The android IPC transport is hand-rolled
-  (`src/lib/androidTransport.ts`) because npm `@wailsio/runtime` was
-  alpha.79 then (no android transport). The 3.0.0 runtime ships an
-  `android.js`: check whether it can replace ours. Likewise the Go->JS event long-poll (`MobilePollEvents`)
+- **Android event transport.** The Go->JS event long-poll (`MobilePollEvents`)
   could become a native push transport (custom `application.Transport`
   dispatching via JNI `executeJavaScript`) - deferred; the long-poll
   works and settles to a clean cadence.
