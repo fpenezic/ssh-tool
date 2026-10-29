@@ -14,23 +14,30 @@ class WindowChrome {
   // This window started without the native title bar.
   active = $state(false);
   os = $state("");
-  private loaded = false;
+  private loading = false;
 
   get mac() { return this.active && this.os === "darwin"; }
   // Windows / Linux draw their own window buttons.
   get ownControls() { return this.active && this.os !== "darwin"; }
 
+  // Retries a failed call: a frameless window that never learns it is
+  // one has no controls and no drag region. Server mode (no window IPC)
+  // gives up after the last try and keeps the native look.
   async load() {
-    if (this.loaded || isMobile) return;
-    this.loaded = true;
-    try {
-      const c = await api.windowChromeGet();
-      this.compact = c.compact_title_bar;
-      this.active = c.active;
-      this.os = c.os;
-    } catch {
-      // server mode / older backend: native frame, nothing to draw
+    if (this.loading || this.os || isMobile) return;
+    this.loading = true;
+    for (let i = 0; i < 5; i++) {
+      try {
+        const c = await api.windowChromeGet();
+        this.compact = c.compact_title_bar;
+        this.active = c.active;
+        this.os = c.os;
+        break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+      }
     }
+    this.loading = false;
   }
 
   async setCompact(on: boolean) {

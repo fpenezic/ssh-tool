@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tree, credentials, view, sessions, paneTabs, hostKeyStore, authPromptStore, mcpApprovalStore, mcpShared, mcpBridge, shareApprovalStore, shareShared, shareBridge, decodePaneLayoutsMulti, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
+  import { tree, credentials, view, sessions, paneTabs, drag, hostKeyStore, authPromptStore, mcpApprovalStore, mcpShared, mcpBridge, shareApprovalStore, shareShared, shareBridge, decodePaneLayoutsMulti, closedTabs, selection, type HostKeyChallenge } from "./lib/stores.svelte";
   import { networkProfiles } from "./lib/networkProfiles.svelte";
   import { workspaces } from "./lib/workspaces.svelte";
   import { isMobile } from "./lib/platform";
@@ -9,6 +9,7 @@
   import { api } from "./lib/api";
   import { errMsg as humanError } from "./lib/connectErrors";
   import { EventsOn } from "./lib/wailsRuntime";
+  import { acceptTabDrag, reconstructTabFromPayload, TAB_DRAG_TYPE } from "./lib/tabTransfer";
   import { focusActivePane } from "./lib/paneFocus";
   import Sidebar from "./lib/Sidebar.svelte";
   import DetailPane from "./lib/DetailPane.svelte";
@@ -161,6 +162,34 @@
   EventsOn("tab_cycle_key", (dir: any) => {
     if (!vaultReady || view.tab !== "terminal") return;
     cycleTabs(Number(dir) < 0 ? -1 : 1);
+  });
+
+  // Tabs arriving in the main window (tabTransfer.ts). Here, not in
+  // TerminalArea: that unmounts while the main window has no tabs, and an
+  // empty main window is a common target. A tab dragged out of a detached
+  // window redocks wherever it lands; TerminalArea's tab bar also takes it
+  // (and stops it there). Own tab and workspace drags set drag.tabId or
+  // carry another type.
+  const isMainWindow = !isDetached && !isLogtailWindow;
+  function isForeignTabDrag(e: DragEvent): boolean {
+    return isMainWindow && !drag.tabId && !!e.dataTransfer?.types.includes(TAB_DRAG_TYPE);
+  }
+  function onWindowDragOver(e: DragEvent) {
+    if (!isForeignTabDrag(e)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  }
+  function onWindowDrop(e: DragEvent) {
+    if (!isForeignTabDrag(e)) return;
+    e.preventDefault();
+    void acceptTabDrag();
+  }
+  if (isMainWindow) EventsOn("window_receive_tab", async (data: any) => {
+    if ((data?.target ?? "") !== "main") return;
+    try {
+      const p = await api.windowAcceptTabDrag();
+      if (p) await reconstructTabFromPayload(p);
+    } catch { /* nothing pending */ }
   });
 
   function onGlobalKey(e: KeyboardEvent) {
@@ -1371,7 +1400,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onGlobalKey} />
+<svelte:window onkeydown={onGlobalKey} ondragover={onWindowDragOver} ondrop={onWindowDrop} />
 
 {#if isLogtailWindow}
   <!-- Standalone log-tail window: embedded stream view re-attaching to the
