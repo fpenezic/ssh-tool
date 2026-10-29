@@ -8,6 +8,7 @@ import { api } from "./api";
 import { sessions, paneTabs, view, decodePaneLayout } from "./stores.svelte";
 import { kafkaTabs } from "./kafkaState.svelte";
 import { dbTabs, dbTabTitle } from "./dbState.svelte";
+import { vncSessions } from "./vncState.svelte.ts";
 
 // The custom type a tab drag carries (TerminalArea dragstart). Nothing
 // else sets it; file drops carry "Files".
@@ -31,6 +32,39 @@ export async function reconstructTabFromPayload(p: { tab_id: string; sessions: s
         status: "connected",
       });
     }
+  }
+  // Local shells and VNC consoles live on the backend too; without an
+  // entry Terminal.svelte would take a local PTY for an SSH session
+  // (same hydration as DetachedWindow.svelte).
+  try {
+    for (const l of (await api.localShellList()) ?? []) {
+      if (!sessionIds.includes(l.session_id) || sessions.tabs.find((t) => t.sessionId === l.session_id)) continue;
+      sessions.add({
+        sessionId: l.session_id,
+        connectionId: l.connection_id || "local:" + l.session_id,
+        name: l.name || l.display || l.kind,
+        hostname: l.kind,
+        status: "connected",
+        kind: "local",
+      });
+    }
+  } catch (e) {
+    console.warn("local shells", e);
+  }
+  try {
+    for (const v of await vncSessions.refresh()) {
+      if (!sessionIds.includes(v.session_id) || sessions.tabs.find((t) => t.sessionId === v.session_id)) continue;
+      sessions.add({
+        sessionId: v.session_id,
+        connectionId: "",
+        name: v.title,
+        hostname: "",
+        status: "connecting",
+        kind: "vnc",
+      });
+    }
+  } catch (e) {
+    console.warn("vnc sessions", e);
   }
   // Kafka tabs travel too; their handle lives on the backend.
   try {
@@ -77,13 +111,22 @@ export async function reconstructTabFromPayload(p: { tab_id: string; sessions: s
 }
 
 // Claim a pending drag from a detached window and rebuild its tab here.
-// The source window removes the tab itself (tab_drag_accepted) and closes
-// once it has none left, so its other tabs stay where they are.
+// Once rebuilt, WindowTabDragDone tells the source, which removes the tab
+// (tab_drag_accepted) and closes once it has none left, so its other tabs
+// stay where they are. A failed rebuild leaves the tab in the source.
 export async function acceptTabDrag() {
+  let p: Awaited<ReturnType<typeof api.windowAcceptTabDrag>>;
   try {
-    const p = await api.windowAcceptTabDrag();
-    if (p) await reconstructTabFromPayload(p);
+    p = await api.windowAcceptTabDrag();
   } catch {
-    // No pending drag - silently ignore
+    return; // no pending drag
   }
+  if (!p) return;
+  try {
+    await reconstructTabFromPayload(p);
+  } catch (e) {
+    console.warn("redock: rebuilding the tab failed, it stays in its window", e);
+    return;
+  }
+  if (p.drag_id) await api.windowTabDragDone(p.drag_id, p.tab_id, p.sessions);
 }

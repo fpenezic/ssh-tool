@@ -5342,9 +5342,6 @@ export function VaultUnlock(passphrase, rememberOnMachine) {
 }
 
 /**
- * VncClose tears down a console: drops the metadata and disconnects any
- * SSH session the console owned (the tunnel). The bridge token is
- * single-use and already consumed or GC'd.
  * @param {string} sessionID
  * @returns {$CancellablePromise<void>}
  */
@@ -5605,6 +5602,23 @@ export function WindowSendTab(callerName, targetName, tabID, sessions, layout) {
  */
 export function WindowStartTabDrag(tabID, sessions, layout, dragID) {
     return $Call.ByID(1852490528, tabID, sessions, layout, dragID);
+}
+
+/**
+ * WindowTabDragDone is the receiver's word that the tab of an accepted
+ * drag (WindowAcceptTabDrag) is rebuilt. Only then does the tab leave
+ * its source: a rebuild that fails leaves it where it was, sessions and
+ * all. A drag carries one tab of the source window, which may hold more.
+ * Its sessions now belong to the main window (as in WindowSendTab), so
+ * closing the source later does not end them; the source drops the tab
+ * on tab_drag_accepted and closes once it is empty.
+ * @param {string} dragID
+ * @param {string} tabID
+ * @param {string} sessions
+ * @returns {$CancellablePromise<void>}
+ */
+export function WindowTabDragDone(dragID, tabID, sessions) {
+    return $Call.ByID(1009915478, dragID, tabID, sessions);
 }
 
 /**
