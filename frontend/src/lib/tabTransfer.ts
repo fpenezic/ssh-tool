@@ -17,7 +17,11 @@ export const TAB_DRAG_TYPE = "application/x-ssh-tool-tab";
 // Reconstruct a tab in THIS window from a pending-drag payload (used by the
 // detached-drop redock AND the "Send to window" receive). Does not remove
 // anything from the source - the caller decides that.
-export async function reconstructTabFromPayload(p: { tab_id: string; sessions: string; layout: string }) {
+//
+// strict (a drag redock): throw instead of restoring a tab whose sessions
+// are not all known here; the tab then stays in its source window. "Send
+// to window" is not strict: its source has already let go of the tab.
+export async function reconstructTabFromPayload(p: { tab_id: string; sessions: string; layout: string }, strict = false) {
   const sessionIds = p.sessions ? p.sessions.split(",") : [];
   const live = (await api.sshActiveSessions()) ?? [];
   // Ensure every session the tab references exists in this window's store.
@@ -97,6 +101,12 @@ export async function reconstructTabFromPayload(p: { tab_id: string; sessions: s
   } catch (e) {
     console.warn("db handles", e);
   }
+  // Every session the tab shows must be known here before it is restored:
+  // a lookup that failed above (or a VNC console the list left out) would
+  // otherwise leave a pane without its session record - a local shell
+  // routed to the SSH calls. Throwing keeps the tab in its source window.
+  const missing = sessionIds.filter((id) => !sessions.tabs.some((t) => t.sessionId === id));
+  if (strict && missing.length > 0) throw new Error(`sessions not found: ${missing.join(", ")}`);
   const layout = decodePaneLayout(p.layout ?? "");
   if (layout) {
     paneTabs.addTabFromLayout(layout);
@@ -123,10 +133,11 @@ export async function acceptTabDrag() {
   }
   if (!p) return;
   try {
-    await reconstructTabFromPayload(p);
+    await reconstructTabFromPayload(p, true);
   } catch (e) {
     console.warn("redock: rebuilding the tab failed, it stays in its window", e);
+    if (p.drag_id) await api.windowTabDragFailed(p.drag_id).catch(console.error);
     return;
   }
-  if (p.drag_id) await api.windowTabDragDone(p.drag_id, p.tab_id, p.sessions);
+  if (p.drag_id) await api.windowTabDragDone(p.drag_id);
 }

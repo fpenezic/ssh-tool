@@ -827,10 +827,13 @@
   }
 
 
-  // The current drag gesture out of a detached window (WindowStartTabDrag)
-  // and the local tab it carries.
+  // Drag gestures out of this detached window (WindowStartTabDrag) that
+  // the main window may still claim, drag id -> local tab id. Not just
+  // the last one: a second drag can start before the main window has
+  // rebuilt the first, whose tab must still leave here when it is done.
+  const outstandingDrags = new Map<string, string>();
+  // The drag in flight now (its dragend reads it).
   let detachedDragId = "";
-  let detachedDragTabId = "";
 
   async function onTabBarDrop(e: DragEvent) {
     if (isDetachedWindow) return;
@@ -916,9 +919,10 @@
     // from here, and an emptied window closes. Sessions stay connected
     // (WindowAcceptTabDrag moved them to the main window).
     if (isDetachedWindow) unsubAccepted = EventsOn("tab_drag_accepted", async (data: any) => {
-      if (!detachedDragId || (data?.drag_id ?? "") !== detachedDragId) return;
-      paneTabs.removeTab(detachedDragTabId);
-      detachedDragId = "";
+      const tabId = outstandingDrags.get(data?.drag_id ?? "");
+      if (tabId === undefined) return;
+      outstandingDrags.delete(data.drag_id);
+      paneTabs.removeTab(tabId);
       if (paneTabs.tabs.length === 0) await api.windowCloseSelf(selfWindowName);
     });
   });
@@ -1366,9 +1370,10 @@
             e.dataTransfer?.setData(TAB_DRAG_TYPE, t.tabId);
           } catch { /* ignore */ }
           if (isDetachedWindow) {
-            detachedDragId = `${detachedTabKey}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-            detachedDragTabId = t.tabId;
-            api.windowStartTabDrag(detachedTabKey, tabSessionIds(t.tabId), tabLayoutBlob(t.tabId), detachedDragId).catch(console.error);
+            const dragId = `${detachedTabKey}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+            outstandingDrags.set(dragId, t.tabId);
+            detachedDragId = dragId;
+            api.windowStartTabDrag(detachedTabKey, tabSessionIds(t.tabId), tabLayoutBlob(t.tabId), dragId).catch(console.error);
           }
           e.stopPropagation();
         }}
@@ -1392,9 +1397,14 @@
             // over IPC in no fixed order, and a cancel landing first threw
             // the payload away before the drop could claim it (redock
             // working only some of the time). Keyed by the drag's own id,
-            // so a late cancel cannot clear the next drag of this tab.
+            // so a late cancel cannot clear the next drag of this tab. A drag
+            // the main window took stays outstanding until tab_drag_accepted.
             const id = detachedDragId;
-            setTimeout(() => { api.windowCancelTabDrag(id).catch(console.error); }, 1500);
+            setTimeout(() => {
+              api.windowCancelTabDrag(id).then((cleared) => {
+                if (cleared) outstandingDrags.delete(id);
+              }).catch(console.error);
+            }, 1500);
           } else {
             const outside = e.clientX < 0 || e.clientX > window.innerWidth ||
                             e.clientY < 0 || e.clientY > window.innerHeight;
