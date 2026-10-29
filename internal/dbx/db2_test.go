@@ -95,6 +95,8 @@ func TestDB2Limit(t *testing.T) {
 		{"SELECT * FROM t LIMIT 5", "SELECT * FROM t LIMIT 5"},
 		{"SELECT * FROM t WITH UR", "SELECT * FROM t WITH UR"},
 		{"SELECT * FROM t FOR READ ONLY", "SELECT * FROM t FOR READ ONLY"},
+		// A subquery's own bound is not the outer query's.
+		{"SELECT * FROM t WHERE a = (SELECT a FROM u FETCH FIRST 1 ROW ONLY)", "SELECT * FROM t WHERE a = (SELECT a FROM u FETCH FIRST 1 ROW ONLY)\nFETCH FIRST 501 ROWS ONLY"},
 		// A word in a string is no clause.
 		{"SELECT 'limit' FROM t", "SELECT 'limit' FROM t\nFETCH FIRST 501 ROWS ONLY"},
 	}
