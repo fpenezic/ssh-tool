@@ -5454,11 +5454,16 @@ export function WindowAcceptTabDrag() {
 
 /**
  * WindowCancelTabDrag clears a pending drag without accepting it (drag ended
- * without being dropped on the main window).
+ * without being dropped on the main window). The source window sends this
+ * a while after its dragend, because that dragend and the main window's
+ * drop arrive in no fixed order (measured: within 1ms, either way round).
+ * By then the user may have started the next drag of the same tab - same
+ * tabID - so only the drag gesture dragID is cleared.
+ * @param {string} dragID
  * @returns {$CancellablePromise<void>}
  */
-export function WindowCancelTabDrag() {
-    return $Call.ByID(4035557260);
+export function WindowCancelTabDrag(dragID) {
+    return $Call.ByID(4035557260, dragID);
 }
 
 /**
@@ -5590,14 +5595,16 @@ export function WindowSendTab(callerName, targetName, tabID, sessions, layout) {
  * WindowStartTabDrag registers an in-flight tab drag originating from a
  * detached window. The main window polls this on drop to reclaim the tab.
  * layout is an opaque base64 blob carrying the pane tree so splits and
- * titles survive the redock.
+ * titles survive the redock. dragID is unique per drag gesture; the
+ * matching WindowCancelTabDrag passes it back.
  * @param {string} tabID
  * @param {string} sessions
  * @param {string} layout
+ * @param {string} dragID
  * @returns {$CancellablePromise<void>}
  */
-export function WindowStartTabDrag(tabID, sessions, layout) {
-    return $Call.ByID(1852490528, tabID, sessions, layout);
+export function WindowStartTabDrag(tabID, sessions, layout, dragID) {
+    return $Call.ByID(1852490528, tabID, sessions, layout, dragID);
 }
 
 /**

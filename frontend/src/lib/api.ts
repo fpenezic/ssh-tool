@@ -1798,11 +1798,11 @@ export const api = {
   windowRedockTab: (tabId: string, sessions: string, layout: string) =>
     G.WindowRedockTab(tabId, sessions, layout),
   windowCloseSelf: (windowName: string) => G.WindowCloseSelf(windowName),
-  windowStartTabDrag: (tabId: string, sessions: string, layout: string) =>
-    G.WindowStartTabDrag(tabId, sessions, layout),
+  windowStartTabDrag: (tabId: string, sessions: string, layout: string, dragId: string) =>
+    G.WindowStartTabDrag(tabId, sessions, layout, dragId),
   windowAcceptTabDrag: () =>
     G.WindowAcceptTabDrag() as unknown as Promise<{ tab_id: string; sessions: string; layout: string } | null>,
-  windowCancelTabDrag: () => G.WindowCancelTabDrag(),
+  windowCancelTabDrag: (dragId: string) => G.WindowCancelTabDrag(dragId),
   revealInMainWindow: (kind: "folder" | "connection" | "settings" | "network-profile", id: string) => G.RevealInMainWindow(kind, id),
   setDetachedWindowTitle: (name: string, title: string) => G.SetDetachedWindowTitle(name, title),
   detachedSessionSave: (window: string, tabs: string) => G.DetachedSessionSave(window, tabs),
