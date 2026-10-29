@@ -9,6 +9,9 @@ while Wails v3 was a prerelease upstream.
 
 ## [Unreleased]
 
+### Database
+- **IBM Db2** joins the Database tab: Db2 for Linux, UNIX and Windows over its own DRDA protocol, with a pure-Go driver (no IBM client to install), through the connection's SSH session like the other engines. The tree lists the schemas of the database you connect to, with tables, views and materialized query tables, their columns, keys, indexes and foreign keys; query tabs run SQL and SQL PL blocks (ended by `@` on a line of its own), and read-only mode sends only `SELECT`, `WITH` and `VALUES` and rolls each run back.
+
 ### Window
 - New experimental **Compact title bar** (Settings -> Appearance -> Window, off by default, applies after a restart): the system title bar goes and the tab bar takes its place, in the main window and in detached windows, so terminals get one more row. Drag the empty part of the bar to move the window and double-click it to maximise; Windows and Linux get minimise / maximise / close at the right end, macOS keeps its traffic lights.
 - Dragging a tab out of a detached window back into the main window redocks it reliably, and it can be dropped anywhere in the main window, not just on the tab bar. Before, it worked only some of the time.

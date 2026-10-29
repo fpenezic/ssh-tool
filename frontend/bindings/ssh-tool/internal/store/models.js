@@ -1931,7 +1931,7 @@ export class InheritableSettings {
         if (/** @type {any} */(false)) {
             /**
              * DbEngine is "postgres", "mysql" (MySQL and MariaDB), "clickhouse",
-             * "opensearch", "redis", "oracle" or "mssql" (dbx.Engine*).
+             * "opensearch", "redis", "oracle", "mssql" or "db2" (dbx.Engine*).
              * @member
              * @type {string | null | undefined}
              */

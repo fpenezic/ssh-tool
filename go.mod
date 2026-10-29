@@ -7,6 +7,7 @@ toolchain go1.26.10
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
 	github.com/coder/websocket v1.8.15
+	github.com/go-db2/go-db2 v0.0.0-20261029213137-75cf9ae2fc03
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/golang-sql/sqlexp v0.1.0

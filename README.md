@@ -50,7 +50,7 @@ build of your own (see below).
   isolated-browser launcher.
 - **Kafka and Database tabs** per connection, riding its SSH session:
   Kafka topics, consumer, produce and groups; PostgreSQL, MySQL, Oracle,
-  SQL Server, ClickHouse, OpenSearch / Elasticsearch and Redis, with
+  SQL Server, IBM Db2, ClickHouse, OpenSearch / Elasticsearch and Redis, with
   read-only guards. Pure-Go drivers, nothing to install.
 - **VNC console** tab (noVNC) for remote desktops and Proxmox VMs.
 - **App proxy and CI runner** - other programs, containers and a GitLab

@@ -203,7 +203,7 @@ type InheritableSettings struct {
 	// folder of database hosts sets engine, port and login once.
 	DbEnabled *bool `json:"db_enabled,omitempty"`
 	// DbEngine is "postgres", "mysql" (MySQL and MariaDB), "clickhouse",
-	// "opensearch", "redis", "oracle" or "mssql" (dbx.Engine*).
+	// "opensearch", "redis", "oracle", "mssql" or "db2" (dbx.Engine*).
 	DbEngine *string `json:"db_engine,omitempty"`
 	// DbAddr is host[:port] as seen from wherever the database is dialed
 	// from: the connection's host when DbUseTunnel, else this machine or

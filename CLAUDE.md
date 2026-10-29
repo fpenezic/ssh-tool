@@ -24,8 +24,8 @@ TOTP codes from Bitwarden / KeePass items answer SSH and VPN logins.
 A Kafka tab per connection (topics, consumer, produce, groups; franz-go
 in core) whose broker connections ride that connection's SSH session,
 and a Database tab the same way (PostgreSQL / MySQL via pgx and
-go-sql-driver, Oracle / SQL Server via go-ora and go-mssqldb (both pure
-Go), ClickHouse over its HTTP interface and OpenSearch /
+go-sql-driver, Oracle / SQL Server / Db2 via go-ora, go-mssqldb and
+go-db2 (all pure Go), ClickHouse over its HTTP interface and OpenSearch /
 Elasticsearch over REST with net/http, Redis with its own RESP2 client,
 internal/dbx).
 Local audit log + sealed password / API-token
@@ -119,7 +119,7 @@ ssh-tool/
 │  ├─ totp/                RFC 6238 codes from otpauth URIs / KeePass fields
 │  ├─ inventory/           dynamic providers: Proxmox, Hetzner, DO, Linode, Vultr, Scaleway, AWS EC2, Ansible
 │  ├─ kafka/               Kafka tab: franz-go client dialing through the connection's SSH session
-│  ├─ dbx/                 Database tab: PostgreSQL / MySQL / Oracle / SQL Server / ClickHouse / OpenSearch / Redis, sessions, read-only guards
+│  ├─ dbx/                 Database tab: PostgreSQL / MySQL / Oracle / SQL Server / Db2 / ClickHouse / OpenSearch / Redis, sessions, read-only guards
 │  ├─ sshchan/             LazySSH: a tab's TCP connections as direct-tcpip channels on one SSH session
 │  ├─ httpc/               HTTP/SOAP probe (used by HttpModal)
 │  ├─ local/               in-app local PTY (Win/Mac/Linux shells)
@@ -175,8 +175,8 @@ cd frontend && npm run test        # vitest, 37 files / 349 cases
 ```
 
 The Database tests that need a real server skip unless `DBTEST_PG` /
-`DBTEST_MYSQL` / `DBTEST_CH` / `DBTEST_OS` / `DBTEST_ES` / `DBTEST_REDIS` / `DBTEST_ORA` / `DBTEST_MSSQL` name one (URLs; docker one-liners in
-`internal/dbx/integration_test.go` and `oracle_mssql_integration_test.go`).
+`DBTEST_MYSQL` / `DBTEST_CH` / `DBTEST_OS` / `DBTEST_ES` / `DBTEST_REDIS` / `DBTEST_ORA` / `DBTEST_MSSQL` / `DBTEST_DB2` name one (URLs; docker one-liners in
+`internal/dbx/integration_test.go`, `oracle_mssql_integration_test.go` and `db2_integration_test.go`).
 
 Narrower runs while iterating: `go test ./internal/resolver/`
 (inheritance), `./internal/creds/` (vault + machine sidecar),

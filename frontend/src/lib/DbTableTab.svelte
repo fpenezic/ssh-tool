@@ -43,7 +43,7 @@
       const glob = name.endsWith(":*") ? name.slice(0, -1).replace(/[*?[\]\\]/g, "\\$&") + "*" : "*";
       return `SCAN 0 MATCH "${glob.replace(/["\\]/g, "\\$&")}" COUNT 1000`;
     }
-    if (info.engine === "oracle") return `SELECT *\nFROM ${qname}\nFETCH FIRST 100 ROWS ONLY;`;
+    if (info.engine === "oracle" || info.engine === "db2") return `SELECT *\nFROM ${qname}\nFETCH FIRST 100 ROWS ONLY;`;
     if (info.engine === "mssql") return `SELECT TOP 100 *\nFROM ${qname};`;
     return `SELECT *\nFROM ${qname}\nLIMIT 100;`;
   }
