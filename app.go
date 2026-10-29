@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -7949,6 +7950,17 @@ func (a *App) WindowAcceptTabDrag() (*TabDragPayload, error) {
 		// WindowTabDragFailed back to the source.
 		sids := parseCSVList(p.Sessions)
 		a.detachedMu.Lock()
+		// The source still shows a tab until its transfer is done, so the
+		// same tab can be dragged again meanwhile: a second rebuild of
+		// those sessions would put the tab in the main window twice.
+		// Refused; the first transfer removes the tab from the source.
+		for id, f := range a.tabDragsInFlight {
+			if slices.ContainsFunc(sids, func(s string) bool { return slices.Contains(f.sids, s) }) {
+				a.detachedMu.Unlock()
+				log.Printf("tabdrag: accept %s refused, %s still in flight", p.DragID, id)
+				return nil, fmt.Errorf("this tab is still being moved")
+			}
+		}
 		if ids, ok := a.detachedSessions[p.source]; ok {
 			a.detachedSessions[p.source] = removeStrings(ids, sids)
 		}

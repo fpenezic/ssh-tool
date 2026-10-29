@@ -23,12 +23,23 @@ export const TAB_DRAG_TYPE = "application/x-ssh-tool-tab";
 // to window" is not strict: its source has already let go of the tab.
 export async function reconstructTabFromPayload(p: { tab_id: string; sessions: string; layout: string }, strict = false) {
   const sessionIds = p.sessions ? p.sessions.split(",") : [];
+  const layout = decodePaneLayout(p.layout ?? "");
+  // The fallback below rebuilds SSH panes only; a strict redock that
+  // cannot restore the tab as it was keeps it in its source instead.
+  if (strict && !layout) throw new Error("tab layout missing or invalid");
+  // Session records this call adds, taken back if a strict redock is
+  // refused below (records only: the sessions stay connected).
+  const added: string[] = [];
+  const add = (t: Parameters<typeof sessions.add>[0]) => {
+    sessions.add(t);
+    added.push(t.sessionId);
+  };
   const live = (await api.sshActiveSessions()) ?? [];
   // Ensure every session the tab references exists in this window's store.
   for (const s of live) {
     if (!sessionIds.includes(s.session_id)) continue;
     if (!sessions.tabs.find((t) => t.sessionId === s.session_id)) {
-      sessions.add({
+      add({
         sessionId: s.session_id,
         connectionId: s.connection_id,
         name: s.name,
@@ -43,7 +54,7 @@ export async function reconstructTabFromPayload(p: { tab_id: string; sessions: s
   try {
     for (const l of (await api.localShellList()) ?? []) {
       if (!sessionIds.includes(l.session_id) || sessions.tabs.find((t) => t.sessionId === l.session_id)) continue;
-      sessions.add({
+      add({
         sessionId: l.session_id,
         connectionId: l.connection_id || "local:" + l.session_id,
         name: l.name || l.display || l.kind,
@@ -58,7 +69,7 @@ export async function reconstructTabFromPayload(p: { tab_id: string; sessions: s
   try {
     for (const v of await vncSessions.refresh()) {
       if (!sessionIds.includes(v.session_id) || sessions.tabs.find((t) => t.sessionId === v.session_id)) continue;
-      sessions.add({
+      add({
         sessionId: v.session_id,
         connectionId: "",
         name: v.title,
@@ -74,7 +85,7 @@ export async function reconstructTabFromPayload(p: { tab_id: string; sessions: s
   try {
     for (const k of await kafkaTabs.refresh()) {
       if (!sessionIds.includes(k.id) || sessions.tabs.find((t) => t.sessionId === k.id)) continue;
-      sessions.add({
+      add({
         sessionId: k.id,
         connectionId: k.connection_id,
         name: `${k.name} (Kafka)`,
@@ -89,7 +100,7 @@ export async function reconstructTabFromPayload(p: { tab_id: string; sessions: s
   try {
     for (const d of await dbTabs.refresh()) {
       if (!sessionIds.includes(d.id) || sessions.tabs.find((t) => t.sessionId === d.id)) continue;
-      sessions.add({
+      add({
         sessionId: d.id,
         connectionId: d.connection_id,
         name: dbTabTitle(d),
@@ -106,8 +117,10 @@ export async function reconstructTabFromPayload(p: { tab_id: string; sessions: s
   // otherwise leave a pane without its session record - a local shell
   // routed to the SSH calls. Throwing keeps the tab in its source window.
   const missing = sessionIds.filter((id) => !sessions.tabs.some((t) => t.sessionId === id));
-  if (strict && missing.length > 0) throw new Error(`sessions not found: ${missing.join(", ")}`);
-  const layout = decodePaneLayout(p.layout ?? "");
+  if (strict && missing.length > 0) {
+    for (const id of added) sessions.remove(id);
+    throw new Error(`sessions not found: ${missing.join(", ")}`);
+  }
   if (layout) {
     paneTabs.addTabFromLayout(layout);
   } else {

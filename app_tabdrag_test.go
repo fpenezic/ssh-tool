@@ -55,3 +55,21 @@ func TestTabDragCancelOwnGestureOnly(t *testing.T) {
 		t.Fatal("a cancelled drag was still pending")
 	}
 }
+
+// While a transfer is being rebuilt, a second drag of the same tab (same
+// sessions) is refused; another tab of the window still moves.
+func TestTabDragRefusesSecondTransferOfSameTab(t *testing.T) {
+	a := &App{detachedSessions: map[string][]string{"detached-k": {"s1", "s2"}}}
+	a.WindowStartTabDrag("k", "s1", "", "d1")
+	if _, err := a.WindowAcceptTabDrag(); err != nil {
+		t.Fatal(err)
+	}
+	a.WindowStartTabDrag("k", "s1", "", "d2")
+	if _, err := a.WindowAcceptTabDrag(); err == nil {
+		t.Fatal("second transfer of s1 accepted while the first is in flight")
+	}
+	a.WindowStartTabDrag("k", "s2", "", "d3")
+	if _, err := a.WindowAcceptTabDrag(); err != nil {
+		t.Fatalf("another tab refused: %v", err)
+	}
+}
