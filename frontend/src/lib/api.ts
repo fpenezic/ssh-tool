@@ -1801,7 +1801,9 @@ export const api = {
   windowStartTabDrag: (tabId: string, sessions: string, layout: string, dragId: string) =>
     G.WindowStartTabDrag(tabId, sessions, layout, dragId),
   windowAcceptTabDrag: () =>
-    G.WindowAcceptTabDrag() as unknown as Promise<{ tab_id: string; sessions: string; layout: string } | null>,
+    G.WindowAcceptTabDrag() as unknown as Promise<{ tab_id: string; sessions: string; layout: string; drag_id?: string } | null>,
+  windowTabDragDone: (dragId: string, tabId: string, sessions: string) =>
+    G.WindowTabDragDone(dragId, tabId, sessions),
   windowCancelTabDrag: (dragId: string) => G.WindowCancelTabDrag(dragId),
   revealInMainWindow: (kind: "folder" | "connection" | "settings" | "network-profile", id: string) => G.RevealInMainWindow(kind, id),
   setDetachedWindowTitle: (name: string, title: string) => G.SetDetachedWindowTitle(name, title),

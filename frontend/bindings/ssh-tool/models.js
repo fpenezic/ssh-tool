@@ -7923,6 +7923,17 @@ export class TabDragPayload {
              */
             this["layout"] = "";
         }
+        if (!("drag_id" in $$source)) {
+            /**
+             * DragID names one drag gesture (WindowStartTabDrag), so a deferred
+             * cancel only ever clears its own drag, and the receiver confirms the
+             * rebuilt tab with it (WindowTabDragDone). Empty for a "Send to
+             * window" payload, which no cancel touches.
+             * @member
+             * @type {string}
+             */
+            this["drag_id"] = "";
+        }
 
         Object.assign(this, $$source);
     }
