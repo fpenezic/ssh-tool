@@ -229,7 +229,11 @@ func hideToTray(appInst *App, w *application.WebviewWindow) {
 // persistence, quit/minimise hooks and deep-link dispatch. Returns a
 // cleanup func (single-instance listener shutdown) to defer, or nil.
 func configurePlatform(app *application.App, appInst *App) func() {
-	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
+	// Compact title bar (experimental, applyCompactChrome). Read once:
+	// detached windows opened later follow what the main window started
+	// with, not a pref flipped since.
+	appInst.compactTitleBar = loadWindowPrefs().CompactTitleBar
+	mainOpts := application.WebviewWindowOptions{
 		Name:             "main",
 		Title:            appName,
 		Width:            1200,
@@ -247,7 +251,9 @@ func configurePlatform(app *application.App, appInst *App) func() {
 		// development; without this the WebView2 / WebKitGTK build
 		// has no console output reachable from the UI.
 		DevToolsEnabled: true,
-	})
+	}
+	applyCompactChrome(&mainOpts, appInst.compactTitleBar)
+	mainWindow := app.Window.NewWithOptions(mainOpts)
 	registerFileDropForwarding(mainWindow)
 	installTabKeyGuard(mainWindow)
 	appInst.mainWindow = mainWindow

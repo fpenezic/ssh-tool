@@ -9,6 +9,9 @@ while Wails v3 was a prerelease upstream.
 
 ## [Unreleased]
 
+### Window
+- New experimental **Compact title bar** (Settings -> Appearance -> Window, off by default, applies after a restart): the system title bar goes and the tab bar takes its place, in the main window and in detached windows, so terminals get one more row. Drag the empty part of the bar to move the window and double-click it to maximise; Windows and Linux get minimise / maximise / close at the right end, macOS keeps its traffic lights.
+
 ### Android
 - 1.0.0 and 1.0.1 could not be installed over a 0.x version ("package conflicts" / downgrade): their APKs carried a lower internal version number than 0.119. Fixed; this release installs over any earlier one.
 

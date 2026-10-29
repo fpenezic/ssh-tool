@@ -8825,6 +8825,54 @@ export class VncSession {
 }
 
 /**
+ * WindowChrome is what the frontend needs to draw the tab bar as a
+ * title bar: whether the pref is on (Settings checkbox), whether this
+ * window actually started with it (the pref only applies on restart),
+ * and the OS (traffic-light inset on macOS, own buttons elsewhere).
+ */
+export class WindowChrome {
+    /**
+     * Creates a new WindowChrome instance.
+     * @param {Partial<WindowChrome>} [$$source = {}] - The source object to create the WindowChrome.
+     */
+    constructor($$source = {}) {
+        if (!("compact_title_bar" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["compact_title_bar"] = false;
+        }
+        if (!("active" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["active"] = false;
+        }
+        if (!("os" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["os"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new WindowChrome instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {WindowChrome}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new WindowChrome(/** @type {Partial<WindowChrome>} */($$parsedSource));
+    }
+}
+
+/**
  * WindowTarget is one open window a tab can be sent to.
  */
 export class WindowTarget {

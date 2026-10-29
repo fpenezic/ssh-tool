@@ -131,5 +131,6 @@ export {
     TunnelInfo,
     UpdateCheckResult,
     VncSession,
+    WindowChrome,
     WindowTarget
 } from "./models.js";
