@@ -18,6 +18,13 @@ while Wails v3 was a prerelease upstream.
 - Redocking one tab of a detached window that holds several keeps the others there; before, the whole window closed and its other tabs vanished from view. A tab can also be redocked onto a main window that has no tabs left.
 - A VNC console tab survives being detached or redocked; before, the move closed the console and the new window showed "VNC session not found".
 
+### Network profiles
+- Opening the Settings tab of an OpenConnect (AnyConnect and the others), OpenVPN or Check Point profile no longer asks about unsaved changes on the way out when nothing was edited.
+- **Resume** on a paused profile no longer connects the VPN by itself: the tunnel comes up with the next connection through it, or with Connect. Pause and Resume explain what they do in a tooltip, also on a profile that is down (Pause there sends connections direct instead of bringing the tunnel up).
+
+### Small fixes
+- The on / off switches (App proxy, VNC, Kafka, Database and the others) had no knob in the off position, only a grey bar.
+
 ### Android
 - 1.0.0 and 1.0.1 could not be installed over a 0.x version ("package conflicts" / downgrade): their APKs carried a lower internal version number than 0.119. Fixed; this release installs over any earlier one.
 

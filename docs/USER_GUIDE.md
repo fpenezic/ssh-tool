@@ -2555,8 +2555,12 @@ through the app proxy) and **New profile**. A profile opens on four tabs:
 it, when the session ends), **Settings** (the profile itself, and Delete),
 **Proxy** and **Details**. Above them: **Connect** brings the tunnel
 up now (it turns into **Disconnect** while the tunnel runs), **Pause** /
-**Resume** shows the pause switch's state (yellow while paused; Pause
-stops the tunnel, Resume connects it again), and
+**Resume** shows the pause switch's state (yellow while paused). Pause
+sends connections through the profile direct and keeps the tunnel down
+(stopping it if it runs), also on a profile that is down, where it stops
+the next connection from bringing the tunnel up. Resume lifts the pause
+without connecting: the tunnel comes up with the next connection
+through it, or with Connect. And
 **Browser**, after a divider, opens a browser through the
 profile. Assign a profile to a
 folder or a connection via its **Network** setting (in the detail

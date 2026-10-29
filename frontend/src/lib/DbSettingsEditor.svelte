@@ -276,7 +276,7 @@
     padding: 0.6rem 0.75rem;
     background: var(--surface1);
   }
-  .vnc-head { display: flex; align-items: center; gap: 0.55rem; font-size: 0.85rem; color: var(--text1); }
+  .vnc-head { display: flex; align-items: center; gap: 0.55rem; font-size: 0.85rem; color: var(--text); }
   .vnc-spacer { flex: 1 1 auto; }
   .vnc-title { font-weight: 600; }
   .vnc-switch {
@@ -287,11 +287,11 @@
   .db-section.on .vnc-switch { background: var(--accent, #4a8); border-color: var(--accent, #4a8); }
   .vnc-knob {
     position: absolute; top: 1px; left: 1px; width: 14px; height: 14px;
-    border-radius: 50%; background: var(--text1); transition: transform 0.15s ease;
+    border-radius: 50%; background: var(--text); transition: transform 0.15s ease;
   }
   .db-section.on .vnc-knob { transform: translateX(16px); background: #fff; }
   .vnc-open {
-    font-size: 0.78rem; padding: 0.2rem 0.6rem; background: var(--surface2); color: var(--text1);
+    font-size: 0.78rem; padding: 0.2rem 0.6rem; background: var(--surface2); color: var(--text);
     border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
   }
   .vnc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.6rem; }
@@ -307,7 +307,7 @@
   .vnc-grid label.check { padding-bottom: 0.35rem; }
   .checks { display: flex; align-items: end; gap: 1rem; }
   .t-head { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
-  .t-title { font-weight: 600; font-size: 0.82rem; color: var(--text1); }
+  .t-title { font-weight: 600; font-size: 0.82rem; color: var(--text); }
   .t-hint { flex: 1 1 12rem; font-size: 0.72rem; color: var(--overlay1); }
   .t-head .vnc-open { display: inline-flex; align-items: center; gap: 0.25rem; }
   .target {
@@ -321,7 +321,7 @@
   }
   .t-actions { grid-column: 2 / -1; display: flex; align-items: center; gap: 0.4rem; }
   .t-spacer { flex: 1 1 auto; }
-  label.check { flex-direction: row !important; align-items: center; gap: 0.35rem !important; color: var(--text1); align-self: end; }
+  label.check { flex-direction: row !important; align-items: center; gap: 0.35rem !important; color: var(--text); align-self: end; }
   .t-del { background: none; border: none; color: var(--overlay1); cursor: pointer; padding: 0.2rem; display: inline-flex; }
   .t-del:hover { color: var(--red); }
   .link { background: none; border: none; color: var(--overlay1); font-size: 0.7rem; cursor: pointer; text-decoration: underline; }

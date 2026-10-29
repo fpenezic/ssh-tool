@@ -3599,7 +3599,7 @@
     align-items: center;
     gap: 0.55rem;
     font-size: 0.85rem;
-    color: var(--text1);
+    color: var(--text);
   }
   .vnc-head .vnc-spacer { flex: 1 1 auto; }
   .vnc-title { font-weight: 600; }
@@ -3655,7 +3655,7 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: var(--text1);
+    background: var(--text);
     transition: transform 0.15s ease;
   }
   .vnc-section.on .vnc-knob {
@@ -3666,7 +3666,7 @@
     font-size: 0.78rem;
     padding: 0.2rem 0.6rem;
     background: var(--surface2);
-    color: var(--text1);
+    color: var(--text);
     border: 1px solid var(--border);
     border-radius: 4px;
     cursor: pointer;

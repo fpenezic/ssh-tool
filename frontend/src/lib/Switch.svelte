@@ -50,7 +50,7 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: var(--text1);
+    background: var(--text);
     transition: transform 0.15s ease;
   }
   .switch.on .knob {

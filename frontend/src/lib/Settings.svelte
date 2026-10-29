@@ -32,6 +32,7 @@
   import { probeState } from "./probeState.svelte";
   import { MCP_SYSTEM_PROMPT_HINT } from "./mcpSystemPrompt";
   import { copyText, writeClipboard } from "./clipboard";
+  import { tooltipGroup } from "./tooltip.svelte";
   import { IconCopy, IconPlay, IconStop, IconPause, IconGlobe, IconArrowUp, IconArrowDown, IconRefresh } from "./iconMap";
   import { localShellPrefs } from "./localShellPrefs.svelte.ts";
   import { recordingsModal } from "./recording.svelte";
@@ -2349,8 +2350,19 @@
   let npBase = $state("");
   function npSnap(names: { nb: string; ts: string } = { nb: nbDevice, ts: tsHostname }): string {
     return JSON.stringify([npName, npConf, nbManagement, names.nb, nbCredId, nbNewKeyName, nbNewKeySecret, tsControl, names.ts, tsCredId, tsNewKeyName, tsNewKeySecret,
-      oc, ocMtu, ocBackups, ocNewPassword, ocCertPaste, ocCertPassword, !!ocCertFile, !!ocCertKeyFile,
-      ov, ovText, ovNewPassword, cp, cpNewPassword]);
+      npCfgSnap(oc), ocMtu, ocBackups, ocNewPassword, ocCertPaste, ocCertPassword, !!ocCertFile, !!ocCertKeyFile,
+      npCfgSnap(ov), ovText, ovNewPassword, npCfgSnap(cp), cpNewPassword]);
+  }
+  // A plugin config as the snapshot sees it: unset, false, "" and [] are
+  // one value (the backend stores them all as absent, omitempty), keys in
+  // a fixed order. The stored config arrives without those keys, and the
+  // form's bind:checked / bind:value fill an undefined field with what the
+  // control shows (false, "") when it renders - which made a profile whose
+  // Settings were only opened look edited ("unsaved changes").
+  function npCfgSnap(c: object): [string, unknown][] {
+    return Object.entries(c)
+      .filter(([, v]) => v !== undefined && v !== false && v !== "" && !(Array.isArray(v) && v.length === 0))
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   }
   const npDirty = $derived(npEditingId !== null && npSnap() !== npBase);
   function npStartEdit(np: NetworkProfileInfo) {
@@ -2506,18 +2518,17 @@
       await networkProfiles.load(true);
     } catch (e: any) { toast.err(errMsg(e)); }
   }
-  // Pause stops the tunnel; Resume brings it back up, so the button
-  // undoes what it did rather than leaving the profile down until the
-  // next connection (or a second click on Connect).
+  // Pause stops the tunnel and sends connections direct; Resume only lifts
+  // that (author's call: resuming must not dial the VPN by itself).
   async function npTogglePause(np: NetworkProfileInfo) {
     const mode = np.mode === "auto" ? "auto" : "always";
     if (!np.paused) {
       await npSetPolicy(np, mode, true);
       return;
     }
+    // Resume only lifts the pause: the tunnel comes up with the next
+    // connection through it, or Connect.
     await npSetPolicy(np, mode, false);
-    const fresh = networkProfiles.list.find((p) => p.id === np.id);
-    if (fresh && !fresh.paused) await npTest(fresh);
   }
   // Browser through a profile (web bookmarks live in the tree).
   async function npBrowser(np: NetworkProfileInfo, url: string) {
@@ -5362,7 +5373,7 @@
             {/if}
           </div>
           <div class="np-meta">{npServerLine(np)}</div>
-          <div class="np-actions">
+          <div class="np-actions" use:tooltipGroup>
             <!-- One state-driven primary action, Pause as a toggle that shows
                  its state, then Browser behind a divider: it does not depend
                  on the tunnel's state. -->
@@ -5377,7 +5388,11 @@
               </button>
             {/if}
             <button class="np-act" class:paused={np.paused} onclick={() => npTogglePause(np)}
-              title={np.paused ? "Paused: connections dial direct. Click to resume and connect" : "Dial direct and stop the tunnel"}>
+              title={np.paused
+                ? "Paused: connections through this profile dial direct and the tunnel stays down. Resume goes back to normal; the tunnel comes up with the next connection through it (or Connect)."
+                : np.status.running
+                  ? "Pause: stop the tunnel, and connections through this profile dial direct until you resume"
+                  : "Pause: connections through this profile dial direct instead of bringing the tunnel up, until you resume"}>
               {#if np.paused}<IconPlay size={13} /> Resume{:else}<IconPause size={13} /> Pause{/if}
             </button>
             <span class="np-sep" aria-hidden="true"></span>

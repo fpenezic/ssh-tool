@@ -144,7 +144,7 @@
     padding: 0.6rem 0.75rem;
     background: var(--surface1);
   }
-  .vnc-head { display: flex; align-items: center; gap: 0.55rem; font-size: 0.85rem; color: var(--text1); }
+  .vnc-head { display: flex; align-items: center; gap: 0.55rem; font-size: 0.85rem; color: var(--text); }
   .vnc-spacer { flex: 1 1 auto; }
   .vnc-title { font-weight: 600; }
   .vnc-switch {
@@ -155,11 +155,11 @@
   .kafka-section.on .vnc-switch { background: var(--accent, #4a8); border-color: var(--accent, #4a8); }
   .vnc-knob {
     position: absolute; top: 1px; left: 1px; width: 14px; height: 14px;
-    border-radius: 50%; background: var(--text1); transition: transform 0.15s ease;
+    border-radius: 50%; background: var(--text); transition: transform 0.15s ease;
   }
   .kafka-section.on .vnc-knob { transform: translateX(16px); background: #fff; }
   .vnc-open {
-    font-size: 0.78rem; padding: 0.2rem 0.6rem; background: var(--surface2); color: var(--text1);
+    font-size: 0.78rem; padding: 0.2rem 0.6rem; background: var(--surface2); color: var(--text);
     border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
   }
   .vnc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.6rem; }
