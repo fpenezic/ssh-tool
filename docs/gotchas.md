@@ -2290,6 +2290,14 @@ NOT under the local fresh tabId. See commit `afc85e3`.
 - `WindowStartTabDrag(tabID, sessions)` registers a pending
   cross-window drag payload.
 - `WindowAcceptTabDrag()` pops the payload (one-shot).
+- `WindowCancelTabDrag(dragID)` from the source's dragend is deferred
+  (1.5s) and keyed by a per-gesture drag id. The source's dragend and
+  the main window's drop reach Go within ~1ms in either order (measured
+  on WebView2), so an immediate cancel threw the payload away about
+  half the time; a deferred cancel keyed by tab id then killed the
+  user's next attempt of the same tab. The main window accepts the drop
+  anywhere (window-level handler on the `application/x-ssh-tool-tab`
+  type), the tab bar on any type.
 - `WindowRedockTab(...)` emits `window_redock` so the main window
   restores the tab.
 - `WindowCloseSelf(name)` closes a named window without touching

@@ -888,6 +888,9 @@
     view.setTab("terminal");
   }
 
+  // The current drag gesture out of a detached window (WindowStartTabDrag).
+  let detachedDragId = "";
+
   async function onTabBarDrop(e: DragEvent) {
     if (isDetachedWindow) return;
     e.preventDefault();
@@ -910,6 +913,12 @@
       }
       return;
     }
+    // The window-level handler below would see this drop again.
+    e.stopPropagation();
+    await acceptRedock();
+  }
+
+  async function acceptRedock() {
     try {
       const p = await api.windowAcceptTabDrag();
       if (!p) return;
@@ -919,6 +928,26 @@
     } catch {
       // No pending drag - silently ignore
     }
+  }
+
+  // A tab dragged out of a detached window redocks wherever it lands in
+  // the main window, not only on the tab bar (the bar keeps taking any
+  // drop, in case a WebView ever drops the custom type across windows).
+  // Recognised by the custom MIME type: nothing else here sets it, and
+  // file drops (SFTP, native) carry "Files" instead.
+  function isForeignTabDrag(e: DragEvent): boolean {
+    return !isDetachedWindow && !drag.tabId && !draggingWs &&
+      !!e.dataTransfer?.types.includes("application/x-ssh-tool-tab");
+  }
+  function onWindowDragOver(e: DragEvent) {
+    if (!isForeignTabDrag(e)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  }
+  function onWindowDrop(e: DragEvent) {
+    if (!isForeignTabDrag(e)) return;
+    e.preventDefault();
+    void acceptRedock();
   }
 
   // ----- "Send to window" (cross-monitor tab move, no new window) -----
@@ -1163,6 +1192,8 @@
     return `${day}d${hr % 24}h`;
   }
 </script>
+
+<svelte:window ondragover={onWindowDragOver} ondrop={onWindowDrop} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -1415,7 +1446,8 @@
             e.dataTransfer?.setData("application/x-ssh-tool-tab", t.tabId);
           } catch { /* ignore */ }
           if (isDetachedWindow) {
-            api.windowStartTabDrag(detachedTabKey, tabSessionIds(t.tabId), tabLayoutBlob(t.tabId)).catch(console.error);
+            detachedDragId = `${detachedTabKey}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+            api.windowStartTabDrag(detachedTabKey, tabSessionIds(t.tabId), tabLayoutBlob(t.tabId), detachedDragId).catch(console.error);
           }
           e.stopPropagation();
         }}
@@ -1434,8 +1466,14 @@
             dragFocusRestore = null;
           }
           if (isDetachedWindow) {
-            // Cancel the pending drag - no-op if main window already accepted it.
-            api.windowCancelTabDrag().catch(console.error);
+            // Cancel the pending drag - no-op if main window already accepted
+            // it. Deferred: this dragend and the main window's drop arrive
+            // over IPC in no fixed order, and a cancel landing first threw
+            // the payload away before the drop could claim it (redock
+            // working only some of the time). Keyed by the drag's own id,
+            // so a late cancel cannot clear the next drag of this tab.
+            const id = detachedDragId;
+            setTimeout(() => { api.windowCancelTabDrag(id).catch(console.error); }, 1500);
           } else {
             const outside = e.clientX < 0 || e.clientX > window.innerWidth ||
                             e.clientY < 0 || e.clientY > window.innerHeight;

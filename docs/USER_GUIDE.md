@@ -3158,7 +3158,8 @@ ships the full pane tree as an opaque blob, not just session IDs.
 ### Redock
 
 Click the **Redock** button in the detached window's topbar, or
-drag the tab back to the main window's tab bar. The pane tree
+drag the tab back into the main window (anywhere: tab bar, terminal,
+any view). The pane tree
 travels back with the same serialisation, so a redocked split-pane
 tab arrives in the main window intact.
 

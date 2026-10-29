@@ -399,6 +399,10 @@ type TabDragPayload struct {
 	TabID    string `json:"tab_id"`
 	Sessions string `json:"sessions"`
 	Layout   string `json:"layout"`
+	// dragID names one drag gesture (WindowStartTabDrag), so a deferred
+	// cancel only ever clears its own drag. Empty for a "Send to window"
+	// payload, which no cancel touches.
+	dragID string
 }
 
 // sessionMetaEntry holds the per-session display info we hand back from
@@ -7885,11 +7889,13 @@ func (a *App) WindowCloseSelf(windowName string) {
 // WindowStartTabDrag registers an in-flight tab drag originating from a
 // detached window. The main window polls this on drop to reclaim the tab.
 // layout is an opaque base64 blob carrying the pane tree so splits and
-// titles survive the redock.
-func (a *App) WindowStartTabDrag(tabID string, sessions string, layout string) {
+// titles survive the redock. dragID is unique per drag gesture; the
+// matching WindowCancelTabDrag passes it back.
+func (a *App) WindowStartTabDrag(tabID string, sessions string, layout string, dragID string) {
 	a.pendingTabDragMu.Lock()
-	a.pendingTabDrag = &TabDragPayload{TabID: tabID, Sessions: sessions, Layout: layout}
+	a.pendingTabDrag = &TabDragPayload{TabID: tabID, Sessions: sessions, Layout: layout, dragID: dragID}
 	a.pendingTabDragMu.Unlock()
+	log.Printf("tabdrag: start %s (%s)", tabID, dragID)
 }
 
 // WindowAcceptTabDrag is called by the main window when a tab is dropped onto
@@ -7898,19 +7904,30 @@ func (a *App) WindowAcceptTabDrag() (*TabDragPayload, error) {
 	a.pendingTabDragMu.Lock()
 	defer a.pendingTabDragMu.Unlock()
 	if a.pendingTabDrag == nil {
+		log.Printf("tabdrag: accept, nothing pending")
 		return nil, fmt.Errorf("no pending tab drag")
 	}
 	p := a.pendingTabDrag
 	a.pendingTabDrag = nil
+	log.Printf("tabdrag: accept %s", p.TabID)
 	return p, nil
 }
 
 // WindowCancelTabDrag clears a pending drag without accepting it (drag ended
-// without being dropped on the main window).
-func (a *App) WindowCancelTabDrag() {
+// without being dropped on the main window). The source window sends this
+// a while after its dragend, because that dragend and the main window's
+// drop arrive in no fixed order (measured: within 1ms, either way round).
+// By then the user may have started the next drag of the same tab - same
+// tabID - so only the drag gesture dragID is cleared.
+func (a *App) WindowCancelTabDrag(dragID string) {
 	a.pendingTabDragMu.Lock()
+	defer a.pendingTabDragMu.Unlock()
+	if a.pendingTabDrag == nil || a.pendingTabDrag.dragID != dragID {
+		log.Printf("tabdrag: cancel %s, not pending", dragID)
+		return
+	}
 	a.pendingTabDrag = nil
-	a.pendingTabDragMu.Unlock()
+	log.Printf("tabdrag: cancel %s, cleared", dragID)
 }
 
 // WindowTarget is one open window a tab can be sent to.
