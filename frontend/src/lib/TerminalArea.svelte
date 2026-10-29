@@ -25,6 +25,7 @@
   import { detachTabsToWindow } from "./detachTabs";
   import { onMount, onDestroy } from "svelte";
   import { EventsOn } from "./wailsRuntime";
+  import { reconstructTabFromPayload, acceptTabDrag, TAB_DRAG_TYPE } from "./tabTransfer";
   import { appPrefs } from "./appPrefs.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
   import { focusActivePane } from "./paneFocus";
@@ -825,71 +826,11 @@
     }
   }
 
-  // Reconstruct a tab in THIS window from a pending-drag payload (used by the
-  // detached-drop redock AND the "Send to window" receive). Does not remove
-  // anything from the source - the caller decides that.
-  async function reconstructTabFromPayload(p: { tab_id: string; sessions: string; layout: string }) {
-    const sessionIds = p.sessions ? p.sessions.split(",") : [];
-    const live = (await api.sshActiveSessions()) ?? [];
-    // Ensure every session the tab references exists in this window's store.
-    for (const s of live) {
-      if (!sessionIds.includes(s.session_id)) continue;
-      if (!sessions.tabs.find((t) => t.sessionId === s.session_id)) {
-        sessions.add({
-          sessionId: s.session_id,
-          connectionId: s.connection_id,
-          name: s.name,
-          hostname: s.hostname,
-          status: "connected",
-        });
-      }
-    }
-    // Kafka tabs travel too; their handle lives on the backend.
-    try {
-      for (const k of await kafkaTabs.refresh()) {
-        if (!sessionIds.includes(k.id) || sessions.tabs.find((t) => t.sessionId === k.id)) continue;
-        sessions.add({
-          sessionId: k.id,
-          connectionId: k.connection_id,
-          name: `${k.name} (Kafka)`,
-          hostname: k.bootstrap.join(","),
-          kind: "kafka",
-          status: "connected",
-        });
-      }
-    } catch (e) {
-      console.warn("kafka handles", e);
-    }
-    try {
-      for (const d of await dbTabs.refresh()) {
-        if (!sessionIds.includes(d.id) || sessions.tabs.find((t) => t.sessionId === d.id)) continue;
-        sessions.add({
-          sessionId: d.id,
-          connectionId: d.connection_id,
-          name: dbTabTitle(d),
-          hostname: d.addr,
-          kind: "db",
-          status: "connected",
-        });
-      }
-    } catch (e) {
-      console.warn("db handles", e);
-    }
-    const layout = decodePaneLayout(p.layout ?? "");
-    if (layout) {
-      paneTabs.addTabFromLayout(layout);
-    } else {
-      for (const sid of sessionIds) {
-        const s = live.find((x) => x.session_id === sid);
-        if (!s) continue;
-        paneTabs.addTab(s.session_id, s.name);
-      }
-    }
-    view.setTab("terminal");
-  }
 
-  // The current drag gesture out of a detached window (WindowStartTabDrag).
+  // The current drag gesture out of a detached window (WindowStartTabDrag)
+  // and the local tab it carries.
   let detachedDragId = "";
+  let detachedDragTabId = "";
 
   async function onTabBarDrop(e: DragEvent) {
     if (isDetachedWindow) return;
@@ -913,41 +854,11 @@
       }
       return;
     }
-    // The window-level handler below would see this drop again.
+    // Takes any drop, not only the tab type (App.svelte handles that one
+    // window-wide), in case a WebView ever drops the custom type across
+    // windows. App's handler must not see it again.
     e.stopPropagation();
-    await acceptRedock();
-  }
-
-  async function acceptRedock() {
-    try {
-      const p = await api.windowAcceptTabDrag();
-      if (!p) return;
-      await reconstructTabFromPayload(p);
-      // Redock: the source is a detached window; close it.
-      await api.windowCloseSelf("detached-" + p.tab_id);
-    } catch {
-      // No pending drag - silently ignore
-    }
-  }
-
-  // A tab dragged out of a detached window redocks wherever it lands in
-  // the main window, not only on the tab bar (the bar keeps taking any
-  // drop, in case a WebView ever drops the custom type across windows).
-  // Recognised by the custom MIME type: nothing else here sets it, and
-  // file drops (SFTP, native) carry "Files" instead.
-  function isForeignTabDrag(e: DragEvent): boolean {
-    return !isDetachedWindow && !drag.tabId && !draggingWs &&
-      !!e.dataTransfer?.types.includes("application/x-ssh-tool-tab");
-  }
-  function onWindowDragOver(e: DragEvent) {
-    if (!isForeignTabDrag(e)) return;
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-  }
-  function onWindowDrop(e: DragEvent) {
-    if (!isForeignTabDrag(e)) return;
-    e.preventDefault();
-    void acceptRedock();
+    await acceptTabDrag();
   }
 
   // ----- "Send to window" (cross-monitor tab move, no new window) -----
@@ -987,7 +898,8 @@
   let unsubReceive: (() => void) | null = null;
   let unsubLogtailRedock: (() => void) | null = null;
   onMount(() => {
-    unsubReceive = EventsOn("window_receive_tab", async (data: any) => {
+    // The main window takes these in App.svelte (mounted with no tabs).
+    if (isDetachedWindow) unsubReceive = EventsOn("window_receive_tab", async (data: any) => {
       if ((data?.target ?? "") !== selfWindowName) return;
       try {
         const p = await api.windowAcceptTabDrag();
@@ -1000,8 +912,18 @@
       const sid = data?.session_id;
       if (sid) logtail.close(sid);
     });
+    // The main window claimed a tab dragged out of this one: it is gone
+    // from here, and an emptied window closes. Sessions stay connected
+    // (WindowAcceptTabDrag moved them to the main window).
+    if (isDetachedWindow) unsubAccepted = EventsOn("tab_drag_accepted", async (data: any) => {
+      if (!detachedDragId || (data?.drag_id ?? "") !== detachedDragId) return;
+      paneTabs.removeTab(detachedDragTabId);
+      detachedDragId = "";
+      if (paneTabs.tabs.length === 0) await api.windowCloseSelf(selfWindowName);
+    });
   });
-  onDestroy(() => { unsubReceive?.(); unsubLogtailRedock?.(); });
+  let unsubAccepted: (() => void) | null = null;
+  onDestroy(() => { unsubReceive?.(); unsubLogtailRedock?.(); unsubAccepted?.(); });
 
   // The session that the tab's active pane (or first leaf) points at.
   // Duplicate keys off the SESSION, not a tree lookup: a tab can be a
@@ -1192,8 +1114,6 @@
     return `${day}d${hr % 24}h`;
   }
 </script>
-
-<svelte:window ondragover={onWindowDragOver} ondrop={onWindowDrop} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -1443,10 +1363,11 @@
           // store. The benign value is just to keep the drag alive
           // for browsers that hide empty drags.
           try {
-            e.dataTransfer?.setData("application/x-ssh-tool-tab", t.tabId);
+            e.dataTransfer?.setData(TAB_DRAG_TYPE, t.tabId);
           } catch { /* ignore */ }
           if (isDetachedWindow) {
             detachedDragId = `${detachedTabKey}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+            detachedDragTabId = t.tabId;
             api.windowStartTabDrag(detachedTabKey, tabSessionIds(t.tabId), tabLayoutBlob(t.tabId), detachedDragId).catch(console.error);
           }
           e.stopPropagation();

@@ -403,6 +403,8 @@ type TabDragPayload struct {
 	// cancel only ever clears its own drag. Empty for a "Send to window"
 	// payload, which no cancel touches.
 	dragID string
+	// source is the detached window the drag came from (dragID set).
+	source string
 }
 
 // sessionMetaEntry holds the per-session display info we hand back from
@@ -7791,6 +7793,7 @@ func (a *App) WindowDetachTabAt(tabID string, screenX, screenY int, sessions str
 			if !a.quitting() {
 				a.detachedSessionDrop(name)
 			}
+			a.dropTabDragFrom(name)
 			a.detachedMu.Lock()
 			ids := a.detachedSessions[name]
 			delete(a.detachedSessions, name)
@@ -7879,10 +7882,22 @@ func (a *App) WindowCloseSelf(windowName string) {
 	a.detachedMu.Lock()
 	delete(a.detachedSessions, windowName)
 	a.detachedMu.Unlock()
+	a.dropTabDragFrom(windowName)
 	// Redocked or emptied: nothing of it to bring back at the next start.
 	a.detachedSessionDrop(windowName)
 	if w, ok := a.app.Window.GetByName(windowName); ok {
 		w.Close()
+	}
+}
+
+// dropTabDragFrom clears a pending drag out of a closing detached window:
+// its deferred cancel never runs once the window is gone (closed within
+// the delay), and a later drop must not claim it.
+func (a *App) dropTabDragFrom(windowName string) {
+	a.pendingTabDragMu.Lock()
+	defer a.pendingTabDragMu.Unlock()
+	if p := a.pendingTabDrag; p != nil && p.dragID != "" && p.source == windowName {
+		a.pendingTabDrag = nil
 	}
 }
 
@@ -7893,7 +7908,7 @@ func (a *App) WindowCloseSelf(windowName string) {
 // matching WindowCancelTabDrag passes it back.
 func (a *App) WindowStartTabDrag(tabID string, sessions string, layout string, dragID string) {
 	a.pendingTabDragMu.Lock()
-	a.pendingTabDrag = &TabDragPayload{TabID: tabID, Sessions: sessions, Layout: layout, dragID: dragID}
+	a.pendingTabDrag = &TabDragPayload{TabID: tabID, Sessions: sessions, Layout: layout, dragID: dragID, source: "detached-" + tabID}
 	a.pendingTabDragMu.Unlock()
 	log.Printf("tabdrag: start %s (%s)", tabID, dragID)
 }
@@ -7910,6 +7925,20 @@ func (a *App) WindowAcceptTabDrag() (*TabDragPayload, error) {
 	p := a.pendingTabDrag
 	a.pendingTabDrag = nil
 	log.Printf("tabdrag: accept %s", p.TabID)
+	if p.dragID != "" {
+		// A drag carries one tab of the source window, which may hold
+		// more. Its sessions now belong to the main window (as in
+		// WindowSendTab), so closing the source later does not end them;
+		// the source drops the tab and closes once it is empty.
+		if sids := parseCSVList(p.Sessions); len(sids) > 0 {
+			a.detachedMu.Lock()
+			if ids, ok := a.detachedSessions[p.source]; ok {
+				a.detachedSessions[p.source] = removeStrings(ids, sids)
+			}
+			a.detachedMu.Unlock()
+		}
+		EventsEmit("tab_drag_accepted", map[string]string{"drag_id": p.dragID})
+	}
 	return p, nil
 }
 
