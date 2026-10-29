@@ -104,16 +104,20 @@ func pending(engine, text string) int {
 }
 
 // terminatorLine reports a line at i that ends a statement or batch: "/"
-// on Oracle, GO on SQL Server, which may carry a repeat count (count, at
-// least 1) and a -- comment. n is where the next line starts.
+// on Oracle, "@" (the db2 -td@ convention) or "/" on Db2, GO on SQL
+// Server, which may carry a repeat count (count, at least 1) and a --
+// comment. n is where the next line starts.
 func terminatorLine(engine, s string, i int) (n, count int, ok bool) {
-	if engine != EngineOracle && engine != EngineMSSQL {
+	if engine != EngineOracle && engine != EngineMSSQL && engine != EngineDB2 {
 		return i, 0, false
 	}
 	n = lineEnd(s, i)
 	line := strings.TrimSpace(s[i:n])
 	if engine == EngineOracle {
 		return n, 1, line == "/"
+	}
+	if engine == EngineDB2 {
+		return n, 1, line == "@" || line == "/"
 	}
 	if j := strings.Index(line, "--"); j >= 0 {
 		line = line[:j]
@@ -167,6 +171,24 @@ func blockStmt(engine, stmt string) bool {
 			case "PROCEDURE", "FUNCTION", "PACKAGE", "TRIGGER", "TYPE":
 				return true
 			}
+		}
+	case EngineDB2:
+		// SQL PL: a compound statement, or a routine, trigger or module
+		// whose body holds statements of its own.
+		switch at(0) {
+		case "BEGIN":
+			return true
+		case "CREATE":
+			i := 1
+			if at(i) == "OR" && at(i+1) == "REPLACE" {
+				i += 2
+			}
+			switch at(i) {
+			case "PROCEDURE", "FUNCTION", "TRIGGER", "MODULE":
+				return true
+			}
+		case "ALTER":
+			return at(1) == "MODULE"
 		}
 	case EngineMSSQL:
 		switch at(0) {
@@ -291,7 +313,7 @@ func skipNonCode(engine, s string, i int) int {
 					return j + 2
 				}
 				j++
-			case s[j] == '/' && s[j+1] == '*' && (engine == EnginePostgres || engine == EngineClickHouse || engine == EngineMSSQL):
+			case s[j] == '/' && s[j+1] == '*' && (engine == EnginePostgres || engine == EngineClickHouse || engine == EngineMSSQL || engine == EngineDB2):
 				depth++
 				j++
 			}
@@ -304,8 +326,8 @@ func skipNonCode(engine, s string, i int) int {
 			}
 		}
 		// MySQL and ClickHouse strings take backslash escapes; Postgres
-		// only in E'...'. Oracle and SQL Server never.
-		sqlStd := engine == EngineOracle || engine == EngineMSSQL
+		// only in E'...'. Oracle, SQL Server and Db2 never.
+		sqlStd := engine == EngineOracle || engine == EngineMSSQL || engine == EngineDB2
 		backslash := engine == EngineMySQL || engine == EngineClickHouse || (!sqlStd && i > 0 && (s[i-1] == 'E' || s[i-1] == 'e'))
 		return quoted(s, i, '\'', backslash)
 	case c == '[' && engine == EngineMSSQL:
@@ -449,6 +471,9 @@ func readLead(engine, k string) bool {
 	if engine == EngineOracle || engine == EngineMSSQL {
 		return k == "SELECT" || k == "WITH"
 	}
+	if engine == EngineDB2 {
+		return k == "SELECT" || k == "WITH" || k == "VALUES"
+	}
 	return readKeywords[k] || (engine == EngineClickHouse && k == "EXISTS")
 }
 
@@ -511,7 +536,12 @@ func sqlIsRead(engine, stmt string) bool {
 		return false
 	case engine == EngineMSSQL && msWriteWord(words) != "":
 		return false
+	case engine == EngineDB2 && (words["INSERT"] || words["UPDATE"] || words["DELETE"] || words["MERGE"]):
+		// A data-change table reference: SELECT ... FROM FINAL TABLE
+		// (INSERT ...) runs the INSERT.
+		return false
 	case engine == EngineMSSQL && words["NEXT"] && words["VALUE"],
+		engine == EngineDB2 && ((words["NEXT"] && words["VALUE"]) || words["NEXTVAL"]),
 		engine == EngineOracle && words["NEXTVAL"]:
 		// A sequence moves on in a read, and no rollback takes it back.
 		return false
@@ -579,12 +609,17 @@ func sqlCheckReadOnly(engine, stmt string) error {
 			return fmt.Errorf("read-only connection: %s is not allowed (T-SQL runs a second statement without a semicolon)", w)
 		}
 	}
-	if w := codeWords(engine, stmt); (engine == EngineMSSQL && w["NEXT"] && w["VALUE"]) || (engine == EngineOracle && w["NEXTVAL"]) {
+	if w := codeWords(engine, stmt); ((engine == EngineMSSQL || engine == EngineDB2) && w["NEXT"] && w["VALUE"]) || ((engine == EngineOracle || engine == EngineDB2) && w["NEXTVAL"]) {
 		return fmt.Errorf("read-only connection: taking a sequence's next value is a write no rollback undoes")
 	}
 	if engine == EngineOracle && k == "WITH" && !sqlIsRead(engine, stmt) {
 		if w := codeWords(engine, stmt); w["FUNCTION"] || w["PROCEDURE"] {
 			return fmt.Errorf("read-only connection: WITH FUNCTION / PROCEDURE (PL/SQL in a query) is not allowed")
+		}
+	}
+	if engine == EngineDB2 && !sqlIsRead(engine, stmt) {
+		if w := codeWords(engine, stmt); w["INSERT"] || w["UPDATE"] || w["DELETE"] || w["MERGE"] {
+			return fmt.Errorf("read-only connection: a query over INSERT / UPDATE / DELETE / MERGE (FINAL TABLE, OLD TABLE) writes")
 		}
 	}
 	if !sqlIsRead(engine, stmt) {
@@ -644,6 +679,13 @@ func IsTxControl(engine, stmt string) bool {
 			return second == "TRANSACTION"
 		}
 		return false
+	case EngineDB2:
+		// BEGIN opens a compound statement, not a transaction.
+		switch leadKeyword(engine, stmt) {
+		case "COMMIT", "ROLLBACK", "SAVEPOINT", "RELEASE":
+			return true
+		}
+		return false
 	case EngineMSSQL:
 		words := w
 		if blockStmt(engine, stmt) && !msRoutine(engine, stmt) {
@@ -684,6 +726,10 @@ var (
 	oraReplaceRE = regexp.MustCompile(`(?i)(\bIDENTIFIED\s+BY\s+(?:VALUES\s+)?'\*\*\*'\s+REPLACE\s+)('(?:[^']|'')*'|"(?:[^"]|"")*"|[^\s;'"]+)`)
 )
 
+// Db2 passwords follow USING, unquoted or quoted: CONNECT TO db USER u
+// USING secret, SET ENCRYPTION PASSWORD = 'x' (the generic pattern).
+var db2SecretRE = regexp.MustCompile(`(?i)(\bUSER\s+\S+\s+USING\s+)('(?:[^']|'')*'|"(?:[^"]|"")*"|[^\s;'"]+)`)
+
 // RedactSecrets hides quoted passwords in a statement before it is stored
 // (audit log, LLM activity). Comments go first - "IDENTIFIED /*x*/ BY
 // 'pw'" would otherwise slip past the patterns - and are worth nothing in
@@ -699,6 +745,9 @@ func RedactSecrets(engine, stmt string) string {
 	if engine == EngineOracle {
 		out = oraSecretRE.ReplaceAllString(out, "${1}'***'")
 		out = oraReplaceRE.ReplaceAllString(out, "${1}'***'")
+	}
+	if engine == EngineDB2 {
+		out = db2SecretRE.ReplaceAllString(out, "${1}'***'")
 	}
 	return out
 }

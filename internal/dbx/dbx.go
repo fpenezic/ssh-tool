@@ -1,6 +1,6 @@
 // Package dbx is the SQL client behind a connection's Database tab:
 // databases, tables and their structure, browsing rows, and query sessions
-// for PostgreSQL, MySQL / MariaDB, ClickHouse, Oracle and SQL Server, and
+// for PostgreSQL, MySQL / MariaDB, ClickHouse, Oracle, SQL Server and Db2, and
 // indices and queries
 // for OpenSearch / Elasticsearch, keys and commands for Redis.
 //
@@ -47,6 +47,9 @@ const (
 	EngineOracle = "oracle"
 	// EngineMSSQL is Microsoft SQL Server (and Azure SQL).
 	EngineMSSQL = "mssql"
+	// EngineDB2 is IBM Db2 (LUW); Config.Database is the database and the
+	// tree's databases are its schemas.
+	EngineDB2 = "db2"
 )
 
 // DefaultPort is the port an address without one gets. tls matters to
@@ -68,6 +71,8 @@ func DefaultPort(engine, tls string) int {
 		return 1521
 	case EngineMSSQL:
 		return 1433
+	case EngineDB2:
+		return 50000
 	}
 	return 5432
 }
@@ -328,6 +333,8 @@ func Open(cfg Config) (*Handle, error) {
 		h.eng = newOra(cfg)
 	case EngineMSSQL:
 		h.eng = newMS(cfg)
+	case EngineDB2:
+		h.eng = newDB2(cfg)
 	default:
 		return nil, fmt.Errorf("unknown database engine %q", cfg.Engine)
 	}

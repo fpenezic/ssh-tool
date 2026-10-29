@@ -11,7 +11,7 @@
   import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
   import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, HighlightStyle } from "@codemirror/language";
   import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-  import { sql, PostgreSQL, MySQL, MSSQL, PLSQL } from "@codemirror/lang-sql";
+  import { sql, PostgreSQL, MySQL, MSSQL, PLSQL, StandardSQL } from "@codemirror/lang-sql";
   import { tags } from "@lezer/highlight";
 
   interface Props {
@@ -58,7 +58,9 @@
     // backslash escapes, # comments) is the closest. OpenSearch scripts mix
     // console requests and SQL: MySQL's double-quoted strings colour the
     // JSON bodies too.
-    const dialect = eng === "postgres" ? PostgreSQL : eng === "oracle" ? PLSQL : eng === "mssql" ? MSSQL : MySQL;
+    // Db2 has no dialect of its own here either: standard SQL's quoting
+    // ('' only, "identifiers", -- and /* */ comments) is its own.
+    const dialect = eng === "postgres" ? PostgreSQL : eng === "oracle" ? PLSQL : eng === "mssql" ? MSSQL : eng === "db2" ? StandardSQL : MySQL;
     if (eng === "redis") {
       // Commands, not SQL: no highlighting to get wrong.
       return cmPlaceholder("One command per line: GET key, HGETALL key, SCAN 0 MATCH user:*   Ctrl+Enter runs the line under the cursor, Ctrl+Shift+Enter all of them");
@@ -67,6 +69,8 @@
       ? "GET /index/_search with the JSON body below it, or SELECT ...   Ctrl+Enter runs the request or statement under the cursor, Ctrl+Shift+Enter the whole script"
       : eng === "oracle"
       ? "SELECT ...   End a PL/SQL block with / on a line of its own. Ctrl+Enter runs the statement under the cursor, Ctrl+Shift+Enter the whole script"
+      : eng === "db2"
+      ? "SELECT ...   End an SQL PL block (BEGIN ... END, CREATE PROCEDURE) with @ on a line of its own. Ctrl+Enter runs the statement under the cursor, Ctrl+Shift+Enter the whole script"
       : eng === "mssql"
       ? "SELECT ...   GO on a line of its own ends a batch. Ctrl+Enter runs the statement under the cursor, Ctrl+Shift+Enter the whole script"
       : "SELECT ...   Ctrl+Enter runs the statement under the cursor, Ctrl+Shift+Enter the whole script";

@@ -1651,8 +1651,8 @@ Topic and group administration is not available to it. See
 <a id="databases"></a>
 ## 6d. Databases
 
-Browse and query a PostgreSQL, MySQL / MariaDB, Oracle, SQL Server or
-ClickHouse database, an OpenSearch / Elasticsearch cluster or a Redis
+Browse and query a PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, IBM Db2
+or ClickHouse database, an OpenSearch / Elasticsearch cluster or a Redis
 server from the connection
 that reaches it. Like Kafka, the database is a service on a
 connection: switch it on in the connection (or once on a folder of
@@ -1667,17 +1667,19 @@ In the connection editor (or a folder's), the **Services** tab, which holds
 the database and Kafka:
 
 - **Engine** - PostgreSQL, MySQL / MariaDB, Oracle (see [Oracle](#oracle)),
-  SQL Server (see [SQL Server](#mssql)), ClickHouse (over its HTTP
+  SQL Server (see [SQL Server](#mssql)), IBM Db2 (see [Db2](#db2)),
+  ClickHouse (over its HTTP
   interface, see [ClickHouse](#clickhouse) below), OpenSearch /
   Elasticsearch (see [OpenSearch / Elasticsearch](#opensearch)) or Redis /
   Valkey (see [Redis](#redis)).
 - **Address** - host and port as seen from where the database is dialed:
   from the SSH host when it runs there or behind it. Empty means
-  `127.0.0.1` and the engine's port (5432 / 3306 / 1521 / 1433 / 8123 /
-  9200 / 6379; ClickHouse with TLS on takes 8443).
+  `127.0.0.1` and the engine's port (5432 / 3306 / 1521 / 1433 / 50000 /
+  8123 / 9200 / 6379; ClickHouse with TLS on takes 8443).
 - **Database** - the one the tab opens first; empty takes the server's
   default for the login. On Oracle the field is **Service**: the service
-  name to log in to.
+  name to log in to. On Db2 it is the database to connect to, and it is
+  required.
 - **Login** - a password credential whose default username and password are
   the database login, so vault, KeePass, Bitwarden and Infisical
   credentials all work. A credential without a password works for trust
@@ -1696,7 +1698,7 @@ the database and Kafka:
   would otherwise commit on its own and escape the transaction;
   `SELECT ... INTO OUTFILE` is refused too). It is a strong guard, but the
   real guarantee is a login with read-only grants - use one for production.
-  Oracle and SQL Server differ, see their sections.
+  Oracle, SQL Server and Db2 differ, see their sections.
 - **TLS** - *Require* (encrypted, certificate not checked) or *Verify
   certificate* (it must match the address's host name), end to end inside
   the tunnel.
@@ -1883,6 +1885,44 @@ Microsoft SQL Server (MSSQL) and Azure SQL. What differs:
 - **The tree** groups tables by schema; row counts and sizes come from the
   partition statistics. SQL Server has no `SHOW CREATE TABLE`: **DDL** is
   rebuilt from the catalog (views show their own definition).
+
+<a id="db2"></a>
+### Db2
+
+IBM Db2 for Linux, UNIX and Windows (LUW), over its own DRDA protocol with
+a pure-Go driver: no IBM client to install. What differs:
+
+- **Database** is required: the database to connect to (`SAMPLE`, ...).
+  The tree lists the schemas in it, with `SYS*`, `NULLID` and `SQLJ` as
+  **system**, and the tab starts on the login's own schema. Port 50000.
+- **SQL PL blocks** - a compound statement (`BEGIN ... END`) or a
+  `CREATE [OR REPLACE] PROCEDURE / FUNCTION / TRIGGER / MODULE` keeps its
+  own semicolons and runs to a line holding only `@` (the `db2 -td@`
+  convention) or `/`. `CALL` shows the first result set a procedure
+  returns.
+- **Rows** - the driver reads a whole result before it shows any of it, so
+  a query gets `FETCH FIRST n ROWS ONLY` (the tab's row limit, plus one to
+  show the cut) added before it is sent. A query that already ends in its
+  own `FETCH FIRST` / `LIMIT`, `FOR READ ONLY` or an isolation clause
+  (`WITH UR`) runs as written: bound it yourself.
+- **Read-only.** The driver has no read-only transaction: a read-only tab
+  sends only `SELECT`, `WITH` and `VALUES` - no `CALL`, SQL PL block, query
+  over `INSERT` / `UPDATE` / `DELETE` / `MERGE` (`FINAL TABLE`,
+  `OLD TABLE`) or `NEXT VALUE FOR` - with autocommit off, and rolls each
+  run back (Db2 rolls back DDL too). A login with read-only grants is the
+  real guarantee.
+- **Transactions** - statements autocommit, as on Oracle; `COMMIT` and
+  `ROLLBACK` are passed through.
+- **No affected-row count** after an `INSERT` / `UPDATE` / `DELETE`: the
+  driver does not report it correctly yet, so none is shown rather than a
+  wrong one. `SELECT COUNT(*)` tells.
+- **DDL** of a table is rebuilt from the catalog (the server's own comes
+  from `db2look`, which SQL cannot reach); views and materialized query
+  tables show their own text. Row counts are `CARD` from the last
+  `RUNSTATS`.
+- Each connection goes through a short-lived listener on this machine's
+  `127.0.0.1` (the driver takes no other route) that hands it to the SSH
+  session; TLS is still checked against the real server name.
 
 <a id="opensearch"></a>
 ### OpenSearch / Elasticsearch
