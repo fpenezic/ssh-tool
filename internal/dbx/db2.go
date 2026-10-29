@@ -337,6 +337,10 @@ func (e *db2Engine) describe(ctx context.Context, database, _, name string) (*Ta
 		c.Comment = strings.TrimSpace(comment)
 		d.Columns = append(d.Columns, c)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, db2Err(err)
+	}
 	rows.Close()
 	pk := make([]string, len(pkCols))
 	for _, p := range pkCols {
@@ -373,6 +377,10 @@ func (e *db2Engine) describe(ctx context.Context, database, _, name string) (*Ta
 		}
 		d.Indexes[i].Columns = append(d.Indexes[i].Columns, col)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, db2Err(err)
+	}
 	rows.Close()
 
 	rows, err = db.QueryContext(ctx, `
@@ -407,6 +415,10 @@ func (e *db2Engine) describe(ctx context.Context, database, _, name string) (*Ta
 		}
 		f.cols = append(f.cols, db2Ident(strings.TrimSpace(col)))
 		f.rcols = append(f.rcols, db2Ident(strings.TrimSpace(rcol)))
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, db2Err(err)
 	}
 	rows.Close()
 	for _, n := range order {
@@ -484,6 +496,10 @@ func (e *db2Engine) browse(ctx context.Context, database, _, name string, offset
 		}
 		pk = append(pk, db2Ident(strings.TrimSpace(c)))
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, db2Err(err)
+	}
 	rows.Close()
 	q := "SELECT * FROM " + db2Ident(database) + "." + db2Ident(name)
 	if len(pk) > 0 {
@@ -558,15 +574,18 @@ func (s *db2Session) open(ctx context.Context) error {
 }
 
 func (s *db2Session) run(ctx context.Context, stmt string, readOnly bool, maxRows int) *Result {
+	// A reopen that failed leaves no connection: the next run tries again.
 	s.mu.Lock()
-	broken := s.broken
-	s.broken = false
+	reopen := s.broken || s.conn == nil
 	s.mu.Unlock()
-	if broken {
+	if reopen {
 		s.closeConn()
 		if err := s.open(ctx); err != nil {
 			return errResult(err)
 		}
+		s.mu.Lock()
+		s.broken = false
+		s.mu.Unlock()
 	}
 	ctx, stop := context.WithCancel(ctx)
 	s.mu.Lock()
@@ -633,11 +652,29 @@ func db2Limit(stmt string, maxRows int) string {
 	}
 	s := strings.TrimRight(strings.TrimSpace(stmt), ";")
 	s = strings.TrimSpace(s)
-	if db2Tail.MatchString(codeOnly(EngineDB2, s)) {
+	if db2Tail.MatchString(db2TopLevel(codeOnly(EngineDB2, s))) {
 		return stmt
 	}
 	// A trailing -- comment would swallow the clause.
 	return s + fmt.Sprintf("\nFETCH FIRST %d ROWS ONLY", maxRows+1)
+}
+
+// db2TopLevel blanks what is inside parentheses, so a subquery's own
+// FETCH FIRST does not count as the outer query's.
+func db2TopLevel(s string) string {
+	b := []byte(s)
+	depth := 0
+	for i, c := range b {
+		switch {
+		case c == '(':
+			depth++
+		case c == ')' && depth > 0:
+			depth--
+		case depth > 0:
+			b[i] = ' '
+		}
+	}
+	return string(b)
 }
 
 func (s *db2Session) cancel() {
