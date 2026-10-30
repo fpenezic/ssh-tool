@@ -2198,6 +2198,46 @@ everything mobile is behind a build tag or an `isMobile` check.
    pointer movement, a key, or a deliberate touch press, so the
    double-click that opened it cannot answer it.
 
+142. **An unset field in a snapshot-compared form looks like an edit.**
+   (`Settings.svelte`, `npCfgSnap`) The backend drops empty fields
+   (`omitempty`), so a stored config arrives without `no_udp: false`,
+   `auth_group: ""` and the like. Svelte 5's `bind:checked` / `bind:value`
+   write what the control shows into an `undefined` field when it
+   renders, so a JSON snapshot taken before the render differs from one
+   taken after: "unsaved changes" with nothing edited. Compare such
+   objects through a normaliser (unset, false, "" and [] as one value,
+   keys sorted), or give the empty template every bound field.
+
+143. **Db2 goes through a vendored go-db2 and a loopback bridge.**
+   (`internal/dbx/db2.go`, `third_party/go-db2/PATCHES.md`) go-db2 dials
+   TCP itself and takes no dialer: `db2Connector` opens the upstream with
+   `Config.Dial` first, then a listener on `127.0.0.1:0` that accepts one
+   connection and pipes it; the pipe must run while the driver connects
+   (its handshake goes over it). TLS keeps the real `ServerName`. go-db2
+   also reads a whole result before the first row, so `db2Limit` adds
+   `FETCH FIRST n+1` at the top level (`db2TopLevel`: a subquery's own
+   bound does not count). The affected-row count is right only with the
+   vendored copy (upstream reads SQLERRD1 and turns 0 into 1): bumping
+   go-db2 means re-applying the patch or dropping the vendor once
+   upstream has it. A cancelled statement leaves the go-db2 connection
+   broken; `db2Session` reopens on the next run.
+
+144. **A pane unmounts when its tab moves windows.** (`VncPane.svelte`,
+   `tabTransfer.ts`) Detach, redock and Send to window all unmount the
+   pane in the old window. Teardown that ends a backend session belongs
+   in `endSession` (closing the tab) and `endDetachedSession` (closing a
+   detached window), never in a pane's `onDestroy`: the VNC console was
+   closed there and every move killed it. The receiving window must also
+   know every session the tab shows (`reconstructTabFromPayload`
+   hydrates SSH, local, VNC, Kafka, Database); a drag redock is strict
+   and confirms with `WindowTabDragDone` only after the rebuild.
+
+145. **`--wails-draggable` inherits.** (`App.svelte`, `DetachedWindow.svelte`,
+   compact title bar) It is a CSS custom property, so every child of a
+   drag-region bar is draggable too and a click on a tab would start a
+   window move. Interactive children opt out with `no-drag`; a new kind
+   of control in the bar needs adding to that selector.
+
 ---
 
 # Archive
