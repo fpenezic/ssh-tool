@@ -9,6 +9,8 @@ while Wails v3 was a prerelease upstream.
 
 ## [Unreleased]
 
+IBM Db2 joins the Database tab, an experimental compact title bar gives terminals one more row, and dragging tabs back from detached windows now works every time. Plus fixes in the network profiles and on Android.
+
 ### Database
 - **IBM Db2** joins the Database tab: Db2 for Linux, UNIX and Windows over its own DRDA protocol, with a pure-Go driver (no IBM client to install), through the connection's SSH session like the other engines. The tree lists the schemas of the database you connect to, with tables, views and materialized query tables, their columns, keys, indexes and foreign keys; query tabs run SQL and SQL PL blocks (ended by `@` on a line of its own), and read-only mode sends only `SELECT`, `WITH` and `VALUES` and rolls each run back.
 
