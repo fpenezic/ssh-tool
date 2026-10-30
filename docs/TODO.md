@@ -320,12 +320,15 @@ plugin).
   option and plain-text export (ANSI stripped). Recording + in-app
   playback (browser, scrubber, speed, idle-skip) shipped; these are
   the leftovers.
-- **Translucent terminal window (macOS, experimental)** - parked.
-  Needs xterm `allowTransparency` (WebGL perf hit / renderer
-  fallback), NSVisualEffectView + WKWebView compositing was flaky in
-  the Wails alphas (resize flicker; recheck on 3.0), and themes
-  assume a solid background across the whole shell. If ever: opt-in
-  setting, macOS only, default off.
+- **Translucent window (macOS)** - not planned here; open for a PR from
+  someone who runs macOS daily and tests it themselves (no Mac in CI).
+  What one would need: Wails 3.0's `MacBackdropTranslucent` /
+  `MacBackdropLiquidGlass` (Liquid Glass on macOS 26, NSVisualEffectView
+  before), `-tags private_mac_apis` on the darwin build only (the webview
+  stays opaque without it), and translucent backgrounds for the chrome
+  only (tab bar, sidebar): the terminal keeps a solid one, since xterm's
+  `allowTransparency` costs the WebGL renderer and readability. Opt-in,
+  default off, next to the compact title bar (which works on macOS).
 
 ---
 
