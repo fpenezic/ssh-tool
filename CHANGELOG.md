@@ -27,6 +27,8 @@ IBM Db2 joins the Database tab, an experimental compact title bar gives terminal
 - Opening the Settings tab of an OpenConnect (AnyConnect and the others), OpenVPN or Check Point profile no longer asks about unsaved changes on the way out when nothing was edited.
 - **Resume** on a paused profile no longer connects the VPN by itself: the tunnel comes up with the next connection through it, or with Connect. Pause and Resume explain what they do in a tooltip, also on a profile that is down (Pause there sends connections direct instead of bringing the tunnel up).
 
+- A VPN profile's separate proxy no longer starts on port 1080, which the app proxy holds by default: it takes the first free port from 1081 up (saved, so a client set up with it keeps working). A port that is taken now says so, instead of a raw socket error.
+
 ### Small fixes
 - The on / off switches (App proxy, VNC, Kafka, Database and the others) had no knob in the off position, only a grey bar.
 

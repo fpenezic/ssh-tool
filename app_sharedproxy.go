@@ -162,7 +162,7 @@ func (a *App) startSharedProxy(c SharedProxyConfig) error {
 	addr := net.JoinHostPort(c.Bind, strconv.Itoa(c.Port))
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("listen on %s: %w", addr, err)
+		return listenErr(addr, c.Port, err)
 	}
 	sharedProxy.Lock()
 	sharedProxy.ln = ln

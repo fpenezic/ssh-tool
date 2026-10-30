@@ -2703,6 +2703,20 @@
     const m = Math.max(0, Math.round((Date.now() / 1000 - unix) / 60));
     return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
   }
+  // The port a profile's own proxy starts on when it has none stored: the
+  // first from 1081 up that neither the app proxy nor another profile's
+  // proxy holds. Not 1080 (the app proxy's default, so the first profile
+  // always collided), and not random: it is saved on the first switch-on
+  // and stays, so a client set up with it (DBeaver) keeps working.
+  function lpDefaultPort(id: string): number {
+    const used = new Set<number>([sp.port || 1080]);
+    for (const p of networkProfiles.list) {
+      if (p.id !== id && p.local_proxy?.port) used.add(p.local_proxy.port);
+    }
+    let port = 1081;
+    while (used.has(port)) port++;
+    return port;
+  }
   // Local proxy panel per profile (form state while open).
   type LpForm = { enabled: boolean; shared: boolean; bind: string; port: number; networksText: string; details?: import("./api").LocalProxyDetails };
   let lpOpen = $state<Record<string, LpForm>>({});
@@ -2729,7 +2743,7 @@
     const listed = networkProfiles.list.find((p) => p.id === np.id)?.local_proxy ?? np.local_proxy;
     const w = lpWritten[np.id];
     const c = w ? { ...w, networks: w.networks } : (listed ?? { enabled: false, port: 0 });
-    const f: LpForm = { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080, networksText: (c.networks ?? []).join("\n") };
+    const f: LpForm = { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || lpDefaultPort(np.id), networksText: (c.networks ?? []).join("\n") };
     const open = lpOpen[np.id];
     const before = open ? lpSnap(open) : null;
     const beforeSwitches = open ? { enabled: open.enabled, shared: open.shared } : null;
@@ -2776,7 +2790,7 @@
     const listed = networkProfiles.list.find((p) => p.id === np.id)?.local_proxy ?? np.local_proxy;
     const c = lpWritten[np.id] ?? listed ?? { enabled: false, port: 0 };
     const f: LpForm = {
-      enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080,
+      enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || lpDefaultPort(np.id),
       networksText: (c.networks ?? []).join("\n"), details: lpOpen[np.id]?.details,
     };
     lpOpen = { ...lpOpen, [np.id]: f };
@@ -2800,7 +2814,7 @@
     const f = lpOpen[np.id];
     if (!f) return;
     const c = networkProfiles.list.find((p) => p.id === np.id)?.local_proxy ?? { enabled: false, port: 0 };
-    const base = lpWritten[np.id] ?? { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || 1080, networks: c.networks ?? [] };
+    const base = lpWritten[np.id] ?? { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || lpDefaultPort(np.id), networks: c.networks ?? [] };
     const req = { ...base, [key]: on };
     try {
       await api.networkProfileSetLocalProxy(np.id, req);

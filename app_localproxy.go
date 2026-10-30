@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"ssh-tool/internal/resolver"
@@ -198,11 +199,23 @@ func (a *App) startLocalProxies() {
 	}
 }
 
+// listenErr words a failed listen: a port already taken is the usual
+// case (the app proxy, another profile's proxy, another program), and the
+// raw socket error does not say so on Windows ("Only one usage of each
+// socket address ...").
+func listenErr(addr string, port int, err error) error {
+	msg := err.Error()
+	if errors.Is(err, syscall.EADDRINUSE) || strings.Contains(msg, "address already in use") || strings.Contains(msg, "Only one usage of each socket address") {
+		return fmt.Errorf("port %d is already in use on %s (the app proxy, another profile's proxy or another program): pick another port", port, addr)
+	}
+	return fmt.Errorf("listen on %s: %w", addr, err)
+}
+
 func (a *App) startLocalProxy(id string, cfg LocalProxyConfig) error {
 	addr := net.JoinHostPort(cfg.Bind, strconv.Itoa(cfg.Port))
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("listen on %s: %w", addr, err)
+		return listenErr(addr, cfg.Port, err)
 	}
 	localProxies.Lock()
 	localProxies.m[id] = &localProxy{ln: ln, addr: addr}
