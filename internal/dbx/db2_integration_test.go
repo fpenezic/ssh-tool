@@ -56,8 +56,8 @@ func TestIntegrationDB2(t *testing.T) {
 	})
 	res := mustRun(t, sess, "INSERT INTO "+table+" (name, price, data) WITH n(i) AS (VALUES 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1200) SELECT 'item ' || i, i * 1.5, BX'DEAD' FROM n;\n"+
 		"CREATE VIEW "+view+" AS SELECT id, name FROM "+table+" WHERE id <= 10")
-	// No affected count (db2.go: go-db2 reports 1 for everything).
-	if res[0].Error != "" || res[0].RowsAffected != -1 || !res[0].Write {
+	// The real count: upstream go-db2 reports 1 (third_party/go-db2/PATCHES.md).
+	if res[0].Error != "" || res[0].RowsAffected != 1200 || !res[0].Write {
 		t.Fatalf("insert %+v", res[0])
 	}
 
@@ -135,7 +135,7 @@ func TestIntegrationDB2(t *testing.T) {
 	}
 
 	res = sess.Run(ctx, "UPDATE "+table+" SET price = NULL WHERE id <= 3; SELECT price FROM "+table+" WHERE id = 1; SELECT nope FROM "+table+"; VALUES 1", dbx.RunOptions{})
-	if len(res) != 3 || res[0].Error != "" || res[1].Rows[0][0] != nil || !strings.Contains(res[2].Error, "SQL0206N") && !strings.Contains(res[2].Error, "-206") {
+	if len(res) != 3 || res[0].RowsAffected != 3 || res[1].Rows[0][0] != nil || !strings.Contains(res[2].Error, "SQL0206N") && !strings.Contains(res[2].Error, "-206") {
 		t.Fatalf("script: %d results, %+v", len(res), res)
 	}
 

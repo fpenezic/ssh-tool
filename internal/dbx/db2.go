@@ -626,12 +626,15 @@ func (s *db2Session) exec(ctx context.Context, c db2Conn, stmt string, maxRows i
 		// A procedure may return result sets.
 		return sqlRead(ctx, c, stmt, maxRows, db2Dialect, nil)
 	}
-	// No affected count: go-db2 reads it from the wrong place in the
-	// SQLCARD (SQLERRD1 instead of SQLERRD3) and reports 1 for every
-	// statement, an UPDATE of a thousand rows included. Unknown beats wrong.
+	// The affected count is right only with the vendored go-db2
+	// (third_party/go-db2/PATCHES.md): upstream reads it from the wrong
+	// place in the SQLCARD and reports 1 for everything.
 	r := &Result{RowsAffected: -1}
-	if _, err := c.ExecContext(ctx, stmt); err != nil {
+	res, err := c.ExecContext(ctx, stmt)
+	if err != nil {
 		r.Error = db2Err(err).Error()
+	} else if n, err := res.RowsAffected(); err == nil && !blockStmt(EngineDB2, stmt) && isDML(EngineDB2, stmt) {
+		r.RowsAffected = n
 	}
 	return r
 }

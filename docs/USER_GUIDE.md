@@ -1913,9 +1913,6 @@ a pure-Go driver: no IBM client to install. What differs:
   real guarantee.
 - **Transactions** - statements autocommit, as on Oracle; `COMMIT` and
   `ROLLBACK` are passed through.
-- **No affected-row count** after an `INSERT` / `UPDATE` / `DELETE`: the
-  driver does not report it correctly yet, so none is shown rather than a
-  wrong one. `SELECT COUNT(*)` tells.
 - **DDL** of a table is rebuilt from the catalog (the server's own comes
   from `db2look`, which SQL cannot reach); views and materialized query
   tables show their own text. Row counts are `CARD` from the last

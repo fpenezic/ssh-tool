@@ -111,3 +111,5 @@ require (
 )
 
 // replace github.com/wailsapp/wails/v2 v2.12.0 => /home/bipe/go/pkg/mod
+
+replace github.com/go-db2/go-db2 => ./third_party/go-db2

@@ -138,6 +138,7 @@ ssh-tool/
 │  ├─ src/                 App.svelte + lib/* (~80 components/stores)
 │  ├─ bindings/            wails-generated, committed (regenerated on build)
 │  └─ package.json
+├─ third_party/go-db2/     go-db2 vendored with one fix (PATCHES.md; go.mod replace)
 ├─ build/                  per-OS task config, icons, NSIS, AppImage
 │  └─ android/             gradle + JNI bridge (MainActivity, WailsBridge, SecureStore, SessionService)
 ├─ docs/                   user guide, TODO, gotchas, planning docs

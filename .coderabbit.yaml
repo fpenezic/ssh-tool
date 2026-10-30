@@ -17,6 +17,8 @@ reviews:
     - "!**/go.sum"
     - "!**/package-lock.json"
     - "!frontend/dist/**"
+    # Vendored upstream code; only its PATCHES.md and the patch are ours.
+    - "!third_party/**/*.go"
   path_instructions:
     - path: "**/*"
       instructions: |
