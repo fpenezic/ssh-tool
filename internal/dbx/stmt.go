@@ -727,8 +727,14 @@ var (
 )
 
 // Db2 passwords follow USING, unquoted or quoted: CONNECT TO db USER u
-// USING secret, SET ENCRYPTION PASSWORD = 'x' (the generic pattern).
-var db2SecretRE = regexp.MustCompile(`(?i)(\bUSER\s+\S+\s+USING\s+)('(?:[^']|'')*'|"(?:[^"]|"")*"|[^\s;'"]+)`)
+// USING secret, SET ENCRYPTION PASSWORD = 'x' (the generic pattern). A
+// federation user mapping carries one as an option, REMOTE_PASSWORD
+// 'x' (also after SET / ADD in ALTER USER MAPPING), which the generic
+// pattern misses: the _ is a word character, so no \b before PASSWORD.
+var (
+	db2SecretRE       = regexp.MustCompile(`(?i)(\bUSER\s+\S+\s+USING\s+)('(?:[^']|'')*'|"(?:[^"]|"")*"|[^\s;'"]+)`)
+	db2RemotePasswdRE = regexp.MustCompile(`(?i)(\bREMOTE_PASSWORD\s+)('(?:[^']|'')*')`)
+)
 
 // RedactSecrets hides quoted passwords in a statement before it is stored
 // (audit log, LLM activity). Comments go first - "IDENTIFIED /*x*/ BY
@@ -748,6 +754,7 @@ func RedactSecrets(engine, stmt string) string {
 	}
 	if engine == EngineDB2 {
 		out = db2SecretRE.ReplaceAllString(out, "${1}'***'")
+		out = db2RemotePasswdRE.ReplaceAllString(out, "${1}'***'")
 	}
 	return out
 }

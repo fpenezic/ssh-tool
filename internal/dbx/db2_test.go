@@ -74,9 +74,11 @@ func TestIsTxControlDB2(t *testing.T) {
 
 func TestRedactSecretsDB2(t *testing.T) {
 	cases := map[string]string{
-		"CONNECT TO sample USER db2inst1 USING s3cret": "CONNECT TO sample USER db2inst1 USING '***'",
-		"CONNECT TO sample USER db2inst1 USING 'a b'":  "CONNECT TO sample USER db2inst1 USING '***'",
-		"SET ENCRYPTION PASSWORD = 'k3y'":              "SET ENCRYPTION PASSWORD = '***'",
+		"CONNECT TO sample USER db2inst1 USING s3cret":                                               "CONNECT TO sample USER db2inst1 USING '***'",
+		"CONNECT TO sample USER db2inst1 USING 'a b'":                                                "CONNECT TO sample USER db2inst1 USING '***'",
+		"CREATE USER MAPPING FOR u SERVER s OPTIONS (REMOTE_AUTHID 'x', REMOTE_PASSWORD 'se''cret')": "CREATE USER MAPPING FOR u SERVER s OPTIONS (REMOTE_AUTHID 'x', REMOTE_PASSWORD '***')",
+		"ALTER USER MAPPING FOR u SERVER s OPTIONS (SET REMOTE_PASSWORD 'new')":                      "ALTER USER MAPPING FOR u SERVER s OPTIONS (SET REMOTE_PASSWORD '***')",
+		"SET ENCRYPTION PASSWORD = 'k3y'":                                                            "SET ENCRYPTION PASSWORD = '***'",
 	}
 	for in, want := range cases {
 		if got := RedactSecrets(EngineDB2, in); got != want {

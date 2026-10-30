@@ -1921,8 +1921,11 @@ a pure-Go driver: no IBM client to install. What differs:
   tables show their own text. Row counts are `CARD` from the last
   `RUNSTATS`.
 - Each connection goes through a short-lived listener on this machine's
-  `127.0.0.1` (the driver takes no other route) that hands it to the SSH
-  session; TLS is still checked against the real server name.
+  `127.0.0.1` (the driver takes no other route) that hands it to the
+  route **Reach the database** picks: the SSH session with *Through SSH*,
+  the jump host or network profile with *Direct*. With TLS on *Verify
+  certificate*, the certificate is checked against the real server name,
+  not `127.0.0.1`; *Require* encrypts without checking it.
 
 <a id="opensearch"></a>
 ### OpenSearch / Elasticsearch
