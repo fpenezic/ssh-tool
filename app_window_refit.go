@@ -57,16 +57,31 @@ func refitMaximisedWindows() {
 		return
 	}
 	log.Printf("display change: settled, checking maximised windows")
+	// Unmaximise / maximise show and activate the window: a window hidden
+	// to the tray stays out, and the one that had focus gets it back.
+	var refit []*application.WebviewWindow
+	var focused *application.WebviewWindow
 	for _, w := range app.Window.GetAll() {
 		ww, ok := w.(*application.WebviewWindow)
-		if !ok || !ww.IsMaximised() {
+		if !ok || !ww.IsVisible() {
 			continue
 		}
+		if ww.IsFocused() {
+			focused = ww
+		}
+		if ww.IsMaximised() {
+			refit = append(refit, ww)
+		}
+	}
+	for _, ww := range refit {
 		width, height := ww.Size()
 		if scr, err := ww.GetScreen(); err == nil && scr != nil {
 			log.Printf("display change: refit %s (window %dx%d, work area %dx%d)", ww.Name(), width, height, scr.WorkArea.Width, scr.WorkArea.Height)
 		}
 		ww.UnMaximise()
 		ww.Maximise()
+	}
+	if focused != nil && len(refit) > 0 {
+		focused.Focus()
 	}
 }
