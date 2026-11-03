@@ -23,7 +23,13 @@
     if (!origin) { origin = { x: e.clientX, y: e.clientY }; return; }
     if (Math.abs(e.clientX - origin.x) + Math.abs(e.clientY - origin.y) > 4) armed = true;
   }
-  function onAnyKey() { armed = true; }
+  // Esc answers Cancel / Stay wherever focus is: the click that opened
+  // the dialog can leave it on an element behind the overlay, out of reach
+  // of the dialog's own key handler.
+  function onAnyKey(e: KeyboardEvent) {
+    armed = true;
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancel(); }
+  }
   // Touch and pen do not move a pointer before a tap: a press that comes
   // half a second after the dialog opened is not the tail of the tap or
   // double-tap that opened it.

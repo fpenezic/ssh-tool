@@ -18,7 +18,7 @@ IBM Db2 joins the Database tab, an experimental compact title bar gives terminal
 - **IBM Db2** joins the Database tab: Db2 for Linux, UNIX and Windows over its own DRDA protocol, with a pure-Go driver (no IBM client to install), through the connection's SSH session like the other engines. The tree lists the schemas of the database you connect to, with tables, views and materialized query tables, their columns, keys, indexes and foreign keys; query tabs run SQL and SQL PL blocks (ended by `@` on a line of its own), and read-only mode sends only `SELECT`, `WITH` and `VALUES` and rolls each run back.
 
 ### Window
-- New experimental **Compact title bar** (Settings -> Appearance -> Window, off by default, applies after a restart): the system title bar goes and the tab bar takes its place, in the main window and in detached windows, so terminals get one more row. Drag the empty part of the bar to move the window and double-click it to maximise; Windows and Linux get minimise / maximise / close at the right end, macOS keeps its traffic lights.
+- New experimental **Compact title bar** (Settings -> Appearance -> Window, off by default, applies after a restart): the system title bar goes and the tab bar takes its place, in the main window and in detached windows, so terminals get one more row. Drag the empty part of the bar to move the window and double-click it to maximise; Windows and Linux get minimise / maximise / close at the right end, macOS keeps its traffic lights. The bar keeps working while a dialog is open (tcpdump, logs, a confirmation): it stays above the dialog's shade, so the window still moves, snaps and maximises, as with the system title bar.
 - Dragging a tab out of a detached window back into the main window redocks it reliably, and it can be dropped anywhere in the main window, not just on the tab bar. Before, it worked only some of the time.
 - Redocking one tab of a detached window that holds several keeps the others there; before, the whole window closed and its other tabs vanished from view. A tab can also be redocked onto a main window that has no tabs left.
 - A VNC console tab survives being detached or redocked; before, the move closed the console and the new window showed "VNC session not found".
@@ -31,6 +31,7 @@ IBM Db2 joins the Database tab, an experimental compact title bar gives terminal
 
 ### Small fixes
 - The on / off switches (App proxy, VNC, Kafka, Database and the others) had no knob in the off position, only a grey bar.
+- Esc answers Cancel / Stay in a confirmation (unsaved changes and the others) wherever the focus is; before, it did nothing when the click that opened it had left the focus behind the dialog.
 
 ### Android
 - 1.0.0 and 1.0.1 could not be installed over a 0.x version ("package conflicts" / downgrade): their APKs carried a lower internal version number than 0.119. Fixed; this release installs over any earlier one.

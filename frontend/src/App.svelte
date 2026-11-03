@@ -27,6 +27,7 @@
   import { IconHost, IconKey, IconSettings, IconTerminal, IconSearch } from "./lib/iconMap";
   import Settings from "./lib/Settings.svelte";
   import WindowControls from "./lib/WindowControls.svelte";
+  import { titlebarLift } from "./lib/titlebarLift";
   import { windowChrome } from "./lib/windowChrome.svelte";
   import { Window } from "@wailsio/runtime";
   import QuickPalette from "./lib/QuickPalette.svelte";
@@ -1491,6 +1492,7 @@
     class:mac={windowChrome.mac}
     class:own-controls={windowChrome.ownControls}
     ondblclick={onTitlebarDblClick}
+    use:titlebarLift={windowChrome.active}
   >
     <div class="tabs-group tabs-left">
       <button class:active={view.tab === "connections"} onclick={() => view.setTab("connections")} title="Connections">
@@ -1877,6 +1879,10 @@
   .tabs.titlebar :global(:is(button, input, select, a, label, [role="menu"])) {
     --wails-draggable: no-drag;
   }
+  /* A modal is open (titlebarLift): the bar sits above its backdrop and
+     still moves the window; the shield keeps the tabs out of reach. */
+  .tabs.titlebar:global(.lifted) { position: relative; z-index: 10000; }
+  .tabs.titlebar:global(.lifted)::after { content: ""; position: absolute; inset: 0; }
   /* Room for the native traffic lights (macOS) or our own window
      buttons (WindowControls, 3 x 44px). */
   .tabs.titlebar.mac { padding-left: 78px; }

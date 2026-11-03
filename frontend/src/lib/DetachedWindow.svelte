@@ -18,6 +18,7 @@
   import { workspaces } from "./workspaces.svelte";
   import StatusBar from "./StatusBar.svelte";
   import WindowControls from "./WindowControls.svelte";
+  import { titlebarLift } from "./titlebarLift";
   import { windowChrome } from "./windowChrome.svelte";
   import { Window } from "@wailsio/runtime";
   import { vncSessions } from "./vncState.svelte.ts";
@@ -297,6 +298,7 @@
     class:mac={windowChrome.mac}
     class:own-controls={windowChrome.ownControls}
     ondblclick={onTitlebarDblClick}
+    use:titlebarLift={windowChrome.active}
   >
     <span class="title">Detached window - {detachedTabKey}</span>
     <button class="redock" onclick={redock} title="Send this tab back to the main window">
@@ -333,6 +335,9 @@
   }
   .topbar.titlebar { --wails-draggable: drag; user-select: none; }
   .topbar.titlebar button { --wails-draggable: no-drag; }
+  /* Above a modal's backdrop, as in App.svelte (titlebarLift). */
+  .topbar.titlebar:global(.lifted) { position: relative; z-index: 10000; }
+  .topbar.titlebar:global(.lifted)::after { content: ""; position: absolute; inset: 0; }
   .topbar.titlebar.mac { padding-left: 78px; }
   .topbar.titlebar.own-controls { padding-right: calc(132px + 0.8rem); }
   .title { color: var(--subtext0); }
