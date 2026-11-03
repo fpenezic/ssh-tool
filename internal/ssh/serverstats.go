@@ -397,7 +397,9 @@ func isRealMount(fs, mount string, sizeKB int64) bool {
 	if fs == "devfs" {
 		return false
 	}
-	for _, p := range []string{"/snap", "/boot/efi", "/run", "/dev", "/sys", "/proc"} {
+	// /usr/lib/wsl: WSL's GPU driver share, a 9p view of the Windows
+	// system drive that /mnt/c already lists.
+	for _, p := range []string{"/snap", "/boot/efi", "/run", "/dev", "/sys", "/proc", "/usr/lib/wsl"} {
 		if mount == p || strings.HasPrefix(mount, p+"/") {
 			return false
 		}
