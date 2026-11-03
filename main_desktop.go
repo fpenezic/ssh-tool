@@ -162,6 +162,11 @@ func buildApp(appInst *App) *application.App {
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
+		Windows: application.WindowsOptions{
+			// Re-maximises a compact window a display change left at
+			// the wrong size (app_window_refit.go).
+			WndProcInterceptor: displayChangeInterceptor(appInst),
+		},
 		// App-level quit gate. The WindowClosing hook below only
 		// covers closing the window - macOS Cmd+Q (and any direct
 		// app.Quit()) goes through applicationShouldTerminate
