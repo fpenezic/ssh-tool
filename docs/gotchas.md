@@ -2238,6 +2238,22 @@ everything mobile is behind a build tag or an `isMobile` check.
    window move. Interactive children opt out with `no-drag`; a new kind
    of control in the bar needs adding to that selector.
 
+146. **A modal's backdrop covers the compact title bar.** (`titlebarLift.ts`)
+   Without the lift the window cannot be moved or snapped while a modal
+   is open. Modals have no common hook, so the lift detects cover with
+   `elementsFromPoint` at the top centre, re-checked from a
+   MutationObserver (runs before paint; a timer showed one dimmed frame).
+   A full-height fixed element that is not a modal would lift the bar
+   too; keep such things below the band or `pointer-events: none`.
+
+147. **Maximised frameless window keeps the old screen's size after a
+   display change.** (`app_window_refit.go`, Windows) Wails sizes the
+   client area of a maximised frameless window from its cached screen
+   list, which the display change can refresh too late (KVM switch,
+   dock). The window rect is right and only the WebView is short, so a
+   size check misses it; the fix re-maximises every maximised window
+   after the display messages settle.
+
 ---
 
 # Archive
