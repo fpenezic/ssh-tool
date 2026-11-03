@@ -31,7 +31,7 @@ IBM Db2 joins the Database tab, an experimental compact title bar gives terminal
 
 ### Small fixes
 - The on / off switches (App proxy, VNC, Kafka, Database and the others) had no knob in the off position, only a grey bar.
-- Server status no longer lists read-only images with no free space as full disks: in WSL the kernel tools image (`/usr/lib/linux-tools/...`) showed as 100% used, inodes included. A read-only disk with room left still shows.
+- Server status no longer lists read-only images with no free space as full disks: in WSL the kernel tools image (`/usr/lib/linux-tools/...`) showed as 100% used, inodes included. WSL's driver share (`/usr/lib/wsl/drivers`, the same Windows drive as `/mnt/c`) is no longer listed twice. A read-only disk with room left still shows.
 - Esc answers Cancel / Stay in a confirmation (unsaved changes and the others) wherever the focus is; before, it did nothing when the click that opened it had left the focus behind the dialog.
 
 ### Android

@@ -188,6 +188,8 @@ func TestIsRealMountContainerRuntimes(t *testing.T) {
 		{"/dev/sdb1", "/var/lib/docker", true},
 		{"/dev/sdb1", "/var/lib/dockerdata", true},
 		{"/dev/sda1", "/", true},
+		{"drivers", "/usr/lib/wsl/drivers", false},
+		{"C:\\", "/mnt/c", true},
 	}
 	for _, c := range cases {
 		if got := isRealMount(c.fs, c.mount, 1000); got != c.want {
