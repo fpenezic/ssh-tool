@@ -195,3 +195,27 @@ func TestIsRealMountContainerRuntimes(t *testing.T) {
 		}
 	}
 }
+
+// WSL mounts read-only ext4 images (kernel tools, headers) that always read
+// 100%: a read-only mount with nothing free is dropped, a read-only one with
+// room left and every writable one stay.
+func TestParseServerStats_ReadOnlyImage(t *testing.T) {
+	sep := statsSep + "\n"
+	out := sep + sep +
+		"Filesystem 1024-blocks Used Available Capacity Mounted on\n" +
+		"/dev/sdd 1055762868 115000000 887000000 12% /\n" +
+		"/dev/sdb 98304 98304 0 100% /usr/lib/linux-tools/6.1.0-example\n" +
+		"/dev/sdc 2000 1000 1000 50% /mnt/ro data\n" +
+		"/dev/sde 1000 1000 0 100% /data\n" +
+		sep + sep + sep + sep + sep + sep + sep + sep +
+		"/usr/lib/linux-tools/6.1.0-example\n/mnt/ro\\040data\n"
+	s := parseServerStats(out)
+	var got []string
+	for _, p := range s.Partitions {
+		got = append(got, p.Mount)
+	}
+	want := []string{"/", "/mnt/ro data", "/data"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("partitions %q, want %q", got, want)
+	}
+}

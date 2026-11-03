@@ -85,7 +85,8 @@ const statsProbeCommand = `cat /proc/loadavg 2>/dev/null; echo __SSHTOOL_SEP__; 
 	`cat /proc/uptime 2>/dev/null; echo __SSHTOOL_SEP__; ` +
 	`nproc 2>/dev/null; echo __SSHTOOL_SEP__; ` +
 	`df -Pi 2>/dev/null; echo __SSHTOOL_SEP__; ` +
-	`if command -v systemctl >/dev/null 2>&1; then echo __SSHTOOL_SYSTEMD__; systemctl --failed --no-legend --plain --no-pager 2>/dev/null | awk '{print $1}'; fi`
+	`if command -v systemctl >/dev/null 2>&1; then echo __SSHTOOL_SYSTEMD__; systemctl --failed --no-legend --plain --no-pager 2>/dev/null | awk '{print $1}'; fi; echo __SSHTOOL_SEP__; ` +
+	`awk '$4 ~ /(^|,)ro(,|$)/ {print $2}' /proc/mounts 2>/dev/null`
 
 const statsSep = "__SSHTOOL_SEP__"
 
@@ -345,6 +346,29 @@ func parseServerStats(out string) *ServerStats {
 			}
 			s.FailedUnits = len(s.FailedUnitNames)
 		}
+	}
+
+	// Section 10: read-only mount points from /proc/mounts (octal escapes:
+	// a space is \040). A read-only mount with nothing free is an image,
+	// not a disk that fills: WSL's kernel tools and headers on /dev/sdb,
+	// a squashfs under another name. It always reads 100% (and its inodes
+	// too), so it would raise a false alarm; a read-only disk with room
+	// left stays listed.
+	if len(sections) > 10 {
+		ro := map[string]bool{}
+		for _, l := range strings.Split(sections[10], "\n") {
+			if m := strings.TrimSpace(l); m != "" {
+				ro[strings.ReplaceAll(m, `\040`, " ")] = true
+			}
+		}
+		kept := s.Partitions[:0]
+		for _, p := range s.Partitions {
+			if ro[p.Mount] && p.AvailKB == 0 {
+				continue
+			}
+			kept = append(kept, p)
+		}
+		s.Partitions = kept
 	}
 
 	s.OK = got
