@@ -131,14 +131,59 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		DbTLS:              firstNonNil(over.DbTLS, base.DbTLS),
 		DbCredentialRef:    firstNonNil(over.DbCredentialRef, base.DbCredentialRef),
 		Sensitive:          firstNonNilBool(over.Sensitive, base.Sensitive),
-		// The connection's own list (folders do not set one).
-		DbTargets: over.DbTargets,
+		// A folder's databases, then the connection's own.
+		DbTargets: mergeTargets(base.DbTargets, over.DbTargets),
 		DbLabel:   over.DbLabel,
 		// The default among them; a target since removed falls back to
 		// the connection's own.
 		DbDefaultTarget: over.DbDefaultTarget,
 		SSHOptions:      mergeMap(base.SSHOptions, over.SSHOptions),
 		EnvVars:         mergeMap(base.EnvVars, over.EnvVars),
+	}
+	return out
+}
+
+// mergeTargets lists the databases from above first, then the ones this
+// level adds. An entry whose id is already listed adjusts that one (its
+// non-nil fields win, a non-empty name renames it); an Override entry with
+// nothing to adjust is dropped, so a database removed from the folder does
+// not come back as a blank row.
+func mergeTargets(base, over []store.DbTarget) []store.DbTarget {
+	if len(over) == 0 {
+		return base
+	}
+	out := make([]store.DbTarget, 0, len(base)+len(over))
+	idx := make(map[string]int, len(base)+len(over))
+	for _, t := range base {
+		if t.Override {
+			continue
+		}
+		idx[t.ID] = len(out)
+		out = append(out, t)
+	}
+	for _, t := range over {
+		i, ok := idx[t.ID]
+		if !ok {
+			if t.Override {
+				continue
+			}
+			idx[t.ID] = len(out)
+			out = append(out, t)
+			continue
+		}
+		m := out[i]
+		if t.Name != "" {
+			m.Name = t.Name
+		}
+		m.Engine = firstNonNil(t.Engine, m.Engine)
+		m.Addr = firstNonNil(t.Addr, m.Addr)
+		m.Database = firstNonNil(t.Database, m.Database)
+		m.CredentialRef = firstNonNil(t.CredentialRef, m.CredentialRef)
+		m.ReadOnly = firstNonNilBool(t.ReadOnly, m.ReadOnly)
+		m.TLS = firstNonNil(t.TLS, m.TLS)
+		m.UseTunnel = firstNonNilBool(t.UseTunnel, m.UseTunnel)
+		m.InTree = firstNonNilBool(t.InTree, m.InTree)
+		out[i] = m
 	}
 	return out
 }

@@ -626,9 +626,6 @@ don't.
 - **Redis, what the first cut left out.** Cluster mode (MOVED / ASK
   redirects; today one node), Sentinel, RESP3; a value editor per type;
   grouping on a second `:` level; key order past the 10 000-key sample.
-- **A list of databases inherited from a folder.** The listed databases
-  are per connection; a replicated cluster (the same prod / stage list on
-  every node) would want the list on the folder. Wait for the ask.
 
 ## Out of scope
 

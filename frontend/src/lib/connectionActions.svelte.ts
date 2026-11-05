@@ -8,7 +8,7 @@ import { splitHostInput, hostOverrides } from "./hostInput";
 import { tree, sessions, paneTabs, view, selection, credentials, type PaneNode } from "./stores.svelte";
 import { vncSessions } from "./vncState.svelte.ts";
 import { kafkaTabs, kafkaEnabledFor } from "./kafkaState.svelte";
-import { dbTabs, dbEnabledFor, dbTabTitle, dbTreeRows } from "./dbState.svelte";
+import { dbTabs, dbEnabledFor, dbTabTitle, dbTargetsFor, dbTreeRows } from "./dbState.svelte";
 import { askLogin } from "./loginModal.svelte.ts";
 import { showPrompt } from "./promptModal.svelte.ts";
 import { showConfirm } from "./confirmModal.svelte.ts";
@@ -645,7 +645,7 @@ class ConnectionActionsStore {
     if (dbEnabledFor(c)) {
       const own = c?.overrides?.db_label || c?.overrides?.db_name || "";
       items.push({ label: `Open database ${own}`.trim(), iconComponent: IconDb, onSelect: () => this.openDb(id) });
-      for (const t of c?.overrides?.db_targets ?? []) {
+      for (const t of dbTargetsFor(c)) {
         items.push({ label: `Open database ${t.name || t.database || ""}`.trim(), iconComponent: IconDb, onSelect: () => this.openDb(id, t.id) });
       }
     }
@@ -946,7 +946,7 @@ class ConnectionActionsStore {
       } catch (e) {
         const msg = String((e as any)?.message ?? e);
         if (!interactive || !/needs a login/.test(msg)) throw e;
-        const target = c.overrides?.db_targets?.find((t) => t.id === targetId);
+        const target = dbTargetsFor(c).find((t) => t.id === targetId);
         const label = target ? `${c.name} / ${target.name || target.database || "database"}` : c.name;
         const r = await askLogin({
           title: `Log in to ${label}`,
@@ -1167,9 +1167,13 @@ class ConnectionActionsStore {
     const rows = dbTreeRows(conn);
     const row = rows.find((r) => r.id === targetId);
     const label = row?.label ?? "database";
-    const listed = (conn.overrides?.db_targets ?? []).length;
+    const all = dbTargetsFor(conn);
+    const listed = all.length;
+    const from = all.find((t) => t.id === targetId)?.from ?? "";
     let message: string;
-    if (targetId !== "") {
+    if (targetId !== "" && from) {
+      message = `"${label}" is listed by the folder ${from}, so it is only hidden on ${conn.name}: the folder and its other connections keep it, and "Show in tree" in the Database settings brings it back.`;
+    } else if (targetId !== "") {
       message = `"${label}" leaves the databases of ${conn.name}. The connection and its other databases stay.`;
     } else if (listed > 0) {
       message = `"${label}" is hidden from the tree. The other databases of ${conn.name} stay; they keep taking its settings as their defaults, and "Show in tree" in the Database tab brings it back.`;

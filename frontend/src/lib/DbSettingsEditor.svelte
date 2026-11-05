@@ -4,7 +4,7 @@
   // the Kafka section (a switch heading a collapsible block).
 
   import { credentials } from "./stores.svelte";
-  import { dbDraftError, DB_NONE, newTargetId, type DbDraft } from "./dbDraft";
+  import { dbDraftError, DB_NONE, newTargetId, type DbDraft, type ListedTarget } from "./dbDraft";
   import { createLoginCredential } from "./loginModal.svelte.ts";
   import { IconPlus, IconTrash, IconChevronRight } from "./iconMap";
   import { serviceCards, toggleCard } from "./serviceCards.svelte.ts";
@@ -25,9 +25,15 @@
     // The engine once inheritance is applied, for the port hint.
     effectiveEngine: string;
     onOpen?: () => void;
-    // Connections list databases under them (prod, stage, another login);
-    // folders do not. connName names new logins.
+    // The list of databases (prod, stage, another login): a connection's
+    // show under it, a folder's under every connection in it. connName
+    // names new logins.
     showTargets?: boolean;
+    // The folder editor: no own-database name, tree row or default.
+    isFolder?: boolean;
+    // The databases the folders above list, merged (read-only here; a
+    // connection can hide one, give it another login or make it default).
+    inheritedTargets?: ListedTarget[];
     connName?: string;
     onOpenTarget?: (id: string) => void;
     // Whether a folder above makes it read-only (nothing set = writes
@@ -36,7 +42,7 @@
     // The query timeout a folder above sets (seconds; undefined = none).
     inheritedTimeout?: number;
   }
-  let { draft = $bindable(), inheritLabel, effectiveOn, inheritedOn, savedEnabled, effectiveEngine, onOpen, showTargets = false, connName = "", onOpenTarget, inheritedReadOnly = false, inheritedTimeout }: Props = $props();
+  let { draft = $bindable(), inheritLabel, effectiveOn, inheritedOn, savedEnabled, effectiveEngine, onOpen, showTargets = false, isFolder = false, inheritedTargets = [], connName = "", onOpenTarget, inheritedReadOnly = false, inheritedTimeout }: Props = $props();
   // Read-only once this level's own choice is applied: what a listed
   // database left on "(as above)" gets.
   const ownReadOnly = $derived(draft.readOnly === "on" || (draft.readOnly === "" && inheritedReadOnly));
@@ -73,6 +79,26 @@
   function setTargetCred(i: number, v: string) {
     updateTarget(i, { credential_ref: v === "" ? undefined : v === DB_NONE ? "" : v });
   }
+  // An inherited database as this connection changes it.
+  function ovr(id: string): DbTarget | undefined {
+    return draft.overrides.find((o) => o.id === id);
+  }
+  function setOvr(id: string, patch: Partial<DbTarget>) {
+    const has = draft.overrides.some((o) => o.id === id);
+    const overrides = has
+      ? draft.overrides.map((o) => (o.id === id ? { ...o, ...patch } : o))
+      : [...draft.overrides, { id, name: "", override: true, ...patch }];
+    draft = { ...draft, overrides };
+  }
+  // The login select of an inherited row: "" = as the folder lists it.
+  function inhCred(t: ListedTarget): string {
+    const v = ovr(t.id)?.credential_ref;
+    return v === undefined ? "" : v === "" ? DB_NONE : v;
+  }
+  function inhShown(t: ListedTarget): boolean {
+    const o = ovr(t.id);
+    return o?.in_tree !== undefined ? o.in_tree !== false : t.in_tree !== false;
+  }
   function targetRO(t: DbTarget): string {
     return t.read_only === undefined ? "" : t.read_only ? "on" : "off";
   }
@@ -95,7 +121,7 @@
   const folded = $derived(serviceCards.folded.includes("db"));
   // What a folded card says: the engine and how many databases.
   const summary = $derived.by(() => {
-    const n = 1 + (showTargets ? draft.targets.length : 0);
+    const n = (isFolder ? 0 : 1) + (showTargets ? draft.targets.length + inheritedTargets.length : 0);
     return `${dbEngineInfo(engine).short} · ${n} database${n === 1 ? "" : "s"}`;
   });
 </script>
@@ -121,7 +147,7 @@
   </div>
   {#if effectiveOn && !folded}
     <div class="vnc-grid">
-      {#if showTargets}
+      {#if showTargets && !isFolder}
         <label title="How this database shows under the connection in the tree and on its tab. Empty: its database name.">Name
           <input bind:value={draft.label} placeholder={draft.name || "database"} spellcheck="false" />
         </label>
@@ -130,7 +156,7 @@
             <input type="checkbox" checked={draft.inTree !== "off"} onchange={(e) => (draft = { ...draft, inTree: (e.currentTarget as HTMLInputElement).checked ? "" : "off" })} />
             Show in tree
           </label>
-          {#if draft.targets.length > 0}
+          {#if draft.targets.length + inheritedTargets.length > 0}
             <label class="check" title="The default opens on Double-click opens -> Database and is listed first in the tree.">
               <input type="radio" name="db-default" checked={draft.defaultTarget === ""} onchange={() => (draft = { ...draft, defaultTarget: "" })} />
               Default
@@ -210,10 +236,43 @@
     {#if showTargets}
       <div class="targets">
         <div class="t-head">
-          <span class="t-title">Databases on this host</span>
-          <span class="t-hint">Each opens its own tab and shows under the connection in the tree. Empty fields take the values above.</span>
+          <span class="t-title">{isFolder ? "Databases on every host in this folder" : "Databases on this host"}</span>
+          <span class="t-hint">{isFolder
+            ? "Every connection under this folder lists these, each opening its own tab. Empty fields take that connection's values."
+            : "Each opens its own tab and shows under the connection in the tree. Empty fields take the values above."}</span>
           <button type="button" class="vnc-open" onclick={addTarget}><IconPlus size={12} /> Add</button>
         </div>
+        {#each inheritedTargets as t (t.id)}
+          <div class="target inherited">
+            <div class="inh-name">
+              <span class="t-name">{t.name || t.database || "database"}</span>
+              <span class="t-meta">{[t.name && t.database ? t.database : "", t.engine ? dbEngineInfo(t.engine).short : "", t.read_only ? "read-only" : ""].filter(Boolean).join(" · ")}</span>
+              <span class="inh">from {t.from}</span>
+            </div>
+            {#if !isFolder}
+              <label>Login
+                <select value={inhCred(t)} onchange={(e) => pickLogin(e.currentTarget as HTMLSelectElement, inhCred(t), (v) => setOvr(t.id, { credential_ref: v === "" ? undefined : v === DB_NONE ? "" : v }), `${connName || "New"} / ${t.name || t.database || "db"}`)}>
+                  <option value="">(as the folder lists it)</option>
+                  <option value={DB_NONE}>None (ask)</option>
+                  {#each credOptions as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+                  <option value={NEW_LOGIN}>+ New login...</option>
+                </select>
+              </label>
+              <div class="t-actions">
+                <label class="check" title="A row under the connection in the tree that opens this database. Off hides it on this connection only.">
+                  <input type="checkbox" checked={inhShown(t)} onchange={(e) => setOvr(t.id, { in_tree: (e.currentTarget as HTMLInputElement).checked ? undefined : false })} />
+                  Show in tree
+                </label>
+                <label class="check" title="The default opens on Double-click opens -> Database and is listed first in the tree.">
+                  <input type="radio" name="db-default" checked={draft.defaultTarget === t.id} onchange={() => (draft = { ...draft, defaultTarget: t.id })} />
+                  Default
+                </label>
+                <span class="t-spacer"></span>
+                {#if onOpenTarget}<button type="button" class="vnc-open" title="Open this database (saved settings)" onclick={() => onOpenTarget(t.id)}>Open</button>{/if}
+              </div>
+            {/if}
+          </div>
+        {/each}
         {#each draft.targets as t, i (t.id)}
           <div class="target">
             <label>Name
@@ -259,10 +318,12 @@
                 <input type="checkbox" checked={t.in_tree !== false} onchange={(e) => updateTarget(i, { in_tree: (e.currentTarget as HTMLInputElement).checked ? undefined : false })} />
                 Show in tree
               </label>
-              <label class="check" title="The default opens on Double-click opens -> Database and is listed first in the tree.">
-                <input type="radio" name="db-default" checked={draft.defaultTarget === t.id} onchange={() => (draft = { ...draft, defaultTarget: t.id })} />
-                Default
-              </label>
+              {#if !isFolder}
+                <label class="check" title="The default opens on Double-click opens -> Database and is listed first in the tree.">
+                  <input type="radio" name="db-default" checked={draft.defaultTarget === t.id} onchange={() => (draft = { ...draft, defaultTarget: t.id })} />
+                  Default
+                </label>
+              {/if}
               <span class="t-spacer"></span>
               {#if onOpenTarget}<button type="button" class="vnc-open" title="Open this database (saved settings)" onclick={() => onOpenTarget(t.id)}>Open</button>{/if}
               <button type="button" class="t-del" title="Remove from the list" onclick={() => removeTarget(i)}><IconTrash size={13} /></button>
@@ -316,6 +377,9 @@
   }
   .vnc-grid input:focus, .vnc-grid select:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
   .inh { font-size: 0.7rem; color: var(--overlay1); }
+  .target.inherited .inh-name { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 0.5rem; }
+  .target.inherited .t-name { font-weight: 600; color: var(--text); }
+  .target.inherited .t-meta { font-size: 0.74rem; color: var(--subtext0); }
   .targets { margin-top: 0.8rem; border-top: 1px solid var(--border); padding-top: 0.6rem; display: flex; flex-direction: column; gap: 0.5rem; }
   .vnc-grid label.check { padding-bottom: 0.35rem; }
   .checks { display: flex; align-items: end; gap: 1rem; }

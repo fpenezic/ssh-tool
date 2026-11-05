@@ -1725,16 +1725,9 @@ is what **Double-click opens -> Database** opens.
 ### Several databases on one host
 
 One Database tab already shows every database of its server, and each
-query tab picks the one it runs on. When a host needs more than one
-login or server - *prod* and *stage* with different users, read-only for
-one of them, or PostgreSQL and MySQL side by side - list them under
-**Databases on this host** in the connection's Services tab: a name, and
-only what differs (database, login, writes, engine, address); empty
-fields take the values above. Each is a row under the connection in the
-tree (unless its **Show in tree** is off), opens its own tab
-(`host / stage`) on double-click or Enter, and is in the right-click menu
-as **Open database stage**. The list belongs to
-the connection; folders hold the defaults.
+query tab picks the one it runs on. When a host needs more than one login or server - *prod* and *stage* with different users, read-only for one of them, or PostgreSQL and MySQL side by side - list them under **Databases on this host** in the connection's Services tab: a name, and only what differs (database, login, writes, engine, address); empty fields take the values above. Each is a row under the connection in the tree (unless its **Show in tree** is off), opens its own tab (`host / stage`) on double-click or Enter, and is in the right-click menu as **Open database stage**.
+
+A folder can hold the list too (**Databases on every host in this folder** in the folder's Database settings): a replicated cluster lists *prod* and *stage* once, and every connection under the folder shows them, before the ones it lists itself. Empty fields take each connection's own values, so one entry works on every node. On a connection, an inherited database is shown with the folder it comes from; it is edited in that folder, but the connection can give it its own login, hide it (**Show in tree** off, or **Remove** on its tree row, which hides it on that connection only) or make it the default.
 
 ### Opening it
 

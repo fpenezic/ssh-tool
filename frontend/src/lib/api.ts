@@ -222,6 +222,9 @@ export interface DbTarget {
   tls?: string;
   use_tunnel?: boolean;
   in_tree?: boolean; // absent = shown under the connection
+  // Only adjusts the database of the same id a folder lists (hide it,
+  // another login on this host); dropped when no folder lists it.
+  override?: boolean;
 }
 
 // ----- Database (app_db.go / internal/dbx) -----

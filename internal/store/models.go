@@ -239,8 +239,10 @@ type InheritableSettings struct {
 	DbDefaultTarget *string `json:"db_default_target,omitempty"`
 	// DbTargets are the databases listed under a connection (prod, stage,
 	// another engine on the same host), each opening its own tab. A field
-	// a target leaves nil takes the Db* value above. Set on connections;
-	// not inherited from folders (the Db* defaults are). Empty: the
+	// a target leaves nil takes the Db* value above. A folder's list goes
+	// to every connection under it, before the connection's own (a
+	// replicated cluster lists prod / stage once); an Override entry on a
+	// connection adjusts an inherited one of the same id. Empty: the
 	// connection itself is the one database.
 	DbTargets []DbTarget `json:"db_targets,omitempty"`
 	// Sensitive marks production or otherwise critical hosts: the LLM
@@ -264,6 +266,10 @@ type DbTarget struct {
 	UseTunnel     *bool   `json:"use_tunnel,omitempty"`
 	// InTree: a row under the connection in the tree (nil = shown).
 	InTree *bool `json:"in_tree,omitempty"`
+	// Override: this entry only adjusts the database of the same id that
+	// a folder lists (hide it, another login on this host); its non-nil
+	// fields win. Dropped when no folder lists that id any more.
+	Override bool `json:"override,omitempty"`
 }
 
 // JumpHostOverride is tagged-union with two variants: "none" (explicit

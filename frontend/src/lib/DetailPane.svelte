@@ -46,7 +46,7 @@
   import { kafkaEnabledFor, kafkaInheritedFrom } from "./kafkaState.svelte";
   import DbSettingsEditor from "./DbSettingsEditor.svelte";
   import { applyDbDraft, dbDraftError, dbDraftFrom, dbDraftSame, type DbDraft } from "./dbDraft";
-  import { dbEnabledFor, dbInheritedFrom } from "./dbState.svelte";
+  import { dbDefaultFor, dbEnabledFor, dbFolderTargets, dbInheritedFrom } from "./dbState.svelte";
 
   // Populate the Network dropdowns; cached after the first load and
   // refreshed via the network_tunnel_changed event inside the store.
@@ -1016,9 +1016,7 @@
   function openDefaultService() {
     if (!conn) return;
     if (dbEnabledFor(conn)) {
-      const o = conn.overrides ?? {};
-      const def = (o.db_targets ?? []).some((t) => t.id === o.db_default_target) ? o.db_default_target! : "";
-      connectionActions.openDb(conn.id, def);
+      connectionActions.openDb(conn.id, dbDefaultFor(conn));
     } else {
       connectionActions.openKafka(conn.id);
     }
@@ -1282,7 +1280,7 @@
     overrides.tunnel_only = decodeBool(editing.tunnelOnly);
     overrides.tunnel_autostart = decodeBool(editing.tunnelAutostart);
     applyKafkaDraft(overrides, editing.kafka);
-    applyDbDraft(overrides, editing.db);
+    applyDbDraft(overrides, editing.db, dbFolderTargets(conn?.folder_id).map((t) => t.id));
     overrides.network_profile_id = decodeNetProfile(editing.networkProfile);
     overrides.initial_command = editing.initialCommand.trim() || undefined;
     overrides.initial_command_line_delay_ms = parseDelayMs(editing.initialCommandDelay);
@@ -2091,6 +2089,9 @@
         effectiveEngine={dbInheritedFrom(folder?.parent_id, "db_engine") ?? ""}
         inheritedReadOnly={dbInheritedFrom(folder?.parent_id, "db_read_only") === true}
         inheritedTimeout={dbInheritedFrom(folder?.parent_id, "db_query_timeout")}
+        showTargets
+        isFolder
+        inheritedTargets={dbFolderTargets(folder?.parent_id)}
       />
       <KafkaSettingsEditor
         bind:draft={editingFolder.kafka}
@@ -2796,6 +2797,7 @@
         inheritedTimeout={dbInheritedFrom(conn?.folder_id, "db_query_timeout")}
         onOpen={() => { if (conn) connectionActions.openDb(conn.id); }}
         showTargets
+        inheritedTargets={dbFolderTargets(conn?.folder_id)}
         connName={conn?.name ?? ""}
         onOpenTarget={(id) => { if (conn) connectionActions.openDb(conn.id, id); }}
       />
