@@ -415,6 +415,10 @@ func (e *oraEngine) describe(ctx context.Context, database, _, name string) (*Ta
 		f.raw = append(f.raw, col)
 		f.rraw = append(f.rraw, rcol)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, oraErr(err)
+	}
 	rows.Close()
 	for _, n := range order {
 		f := fks[n]
@@ -501,7 +505,23 @@ func (e *oraEngine) browse(ctx context.Context, database, _, name string, where 
 	}
 	rows.Close()
 	// OFFSET / FETCH is 12c+; 11g is long out of support.
-	w, args := whereClause(where, oraIdent, func(n int) string { return ":" + strconv.Itoa(n) })
+	types, err := oraColumnTypes(ctx, db, database, name, where)
+	if err != nil {
+		return nil, err
+	}
+	w, args, err := whereClause(where, oraIdent, numbered(":"), func(c Cond, v any) any {
+		// A DATE or TIMESTAMP key binds as a time, as the grid printed it:
+		// as text Oracle would read it with the session's NLS format.
+		if s, ok := v.(string); ok && (types[c.Column] == "DATE" || strings.HasPrefix(types[c.Column], "TIMESTAMP") && !strings.Contains(types[c.Column], "ZONE")) {
+			if t, err := time.Parse("2006-01-02 15:04:05.999999999", s); err == nil {
+				return t
+			}
+		}
+		return v
+	})
+	if err != nil {
+		return nil, err
+	}
 	q := "SELECT * FROM " + oraIdent(database) + "." + oraIdent(name) + w
 	if len(pk) > 0 {
 		q += " ORDER BY " + strings.Join(pk, ", ")
@@ -692,4 +712,26 @@ func oraErr(err error) error {
 		return nil
 	}
 	return errors.New(strings.TrimSpace(err.Error()))
+}
+
+// oraColumnTypes is DATA_TYPE of the table's columns a filter names (none
+// asked without a filter).
+func oraColumnTypes(ctx context.Context, db *sql.DB, owner, table string, where []Cond) (map[string]string, error) {
+	if len(where) == 0 {
+		return nil, nil
+	}
+	rows, err := db.QueryContext(ctx, `SELECT COLUMN_NAME, DATA_TYPE FROM ALL_TAB_COLUMNS WHERE OWNER = :1 AND TABLE_NAME = :2`, owner, table)
+	if err != nil {
+		return nil, oraErr(err)
+	}
+	defer rows.Close()
+	m := map[string]string{}
+	for rows.Next() {
+		var c, t string
+		if err := rows.Scan(&c, &t); err != nil {
+			return nil, oraErr(err)
+		}
+		m[c] = t
+	}
+	return m, oraErr(rows.Err())
 }

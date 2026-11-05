@@ -318,7 +318,7 @@
           {#if active.kind === "query"}
             <DbQueryTab {sessionId} tab={active} {info} databases={dbNames} tables={tableNames} onChange={changed} />
           {:else}
-            <DbTableTab {sessionId} tab={active} {info} onChange={changed} onQuery={(sql) => newQuery(sql, active?.database)} />
+            <DbTableTab {sessionId} tab={active} {info} onChange={changed} onQuery={(sql, db) => newQuery(sql, db ?? active?.database)} />
           {/if}
         {/key}
       {:else}

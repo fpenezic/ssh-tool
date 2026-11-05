@@ -20,13 +20,13 @@
     // The rows are one page of more (a table's Data view): sorting and
     // filtering say they cover this page only.
     paged?: boolean;
-    // Columns whose values lead somewhere (a foreign key): a non-NULL cell
-    // shows a link that calls onLink with its row.
-    linkCols?: Set<number>;
+    // Cells that lead somewhere (a foreign key): canLink says which, and
+    // such a cell shows a link that calls onLink with its row.
+    canLink?: (row: (string | null)[], ci: number) => boolean;
     linkTitle?: (ci: number) => string;
     onLink?: (row: (string | null)[], ci: number) => void;
   }
-  let { result, exportName, paged = false, linkCols, linkTitle, onLink }: Props = $props();
+  let { result, exportName, paged = false, canLink, linkTitle, onLink }: Props = $props();
 
   const ROW_H = 24;
   const cols = $derived(result.columns ?? []);
@@ -238,7 +238,7 @@
                 tabindex="-1"
                 onclick={() => (sel = { r: ri, c: ci })}
                 ondblclick={() => (opened = { r: ri, c: ci })}
-              >{#if v !== null && onLink && linkCols?.has(ci)}<button
+              >{#if v !== null && onLink && canLink?.(r, ci)}<button
                   class="fk"
                   title={linkTitle?.(ci) ?? "Open the referenced row"}
                   onclick={(e) => { e.stopPropagation(); onLink(r, ci); }}

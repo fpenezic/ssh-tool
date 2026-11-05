@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -416,8 +417,10 @@ func (e *db2Engine) describe(ctx context.Context, database, _, name string) (*Ta
 		}
 		f.cols = append(f.cols, db2Ident(strings.TrimSpace(col)))
 		f.rcols = append(f.rcols, db2Ident(strings.TrimSpace(rcol)))
-		f.raw = append(f.raw, strings.TrimSpace(col))
-		f.rraw = append(f.rraw, strings.TrimSpace(rcol))
+		// Leading blanks are part of a delimited name; only the
+		// padding at the end goes.
+		f.raw = append(f.raw, strings.TrimRight(col, " "))
+		f.rraw = append(f.rraw, strings.TrimRight(rcol, " "))
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -508,12 +511,27 @@ func (e *db2Engine) browse(ctx context.Context, database, _, name string, where 
 		return nil, db2Err(err)
 	}
 	rows.Close()
-	// The marker is typed VARCHAR: left untyped, Db2 describes it as the
+	// A text marker is typed VARCHAR: left untyped, Db2 describes it as the
 	// column's type, and go-db2 then encodes a string for an INTEGER
 	// column wrongly - the row silently does not match. The server casts
 	// the text instead, and the column side stays as it is (its index
 	// still applies).
-	w, args := whereClause(where, db2Ident, func(int) string { return "CAST(? AS VARCHAR(4000))" })
+	// go-db2 cannot send a binary parameter either (DRDA -30020): a binary
+	// key goes as its hex text, turned into bytes by the server.
+	w, args, err := whereClause(where, db2Ident, func(_ int, c Cond) string {
+		if c.Hex {
+			return "HEXTORAW(CAST(? AS VARCHAR(32672)))"
+		}
+		return "CAST(? AS VARCHAR(32672))" // the longest VARCHAR
+	}, func(c Cond, v any) any {
+		if b, ok := v.([]byte); ok {
+			return hex.EncodeToString(b)
+		}
+		return v
+	})
+	if err != nil {
+		return nil, err
+	}
 	q := "SELECT * FROM " + db2Ident(database) + "." + db2Ident(name) + w
 	if len(pk) > 0 {
 		q += " ORDER BY " + strings.Join(pk, ", ")

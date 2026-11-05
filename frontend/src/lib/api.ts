@@ -297,7 +297,7 @@ export interface DbForeignKey {
   ref_columns?: string[];
 }
 // One equality of a filtered browse; a null value is IS NULL.
-export interface DbCond { column: string; value: string | null }
+export interface DbCond { column: string; value: string | null; hex?: boolean }
 export interface DbIndex { name: string; columns: string[]; unique: boolean; primary: boolean; def?: string }
 export interface DbTableDetail {
   schema: string;

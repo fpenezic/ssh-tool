@@ -105,6 +105,15 @@ export class Cond {
              */
             this["value"] = null;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Hex: Value is a binary cell as the grid shows it (0x... or \x...),
+             * bound as its bytes.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["hex"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

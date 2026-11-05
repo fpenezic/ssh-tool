@@ -379,16 +379,35 @@ func (h *Handle) Describe(ctx context.Context, database, schema, name string) (*
 type Cond struct {
 	Column string  `json:"column"`
 	Value  *string `json:"value"`
+	// Hex: Value is a binary cell as the grid shows it (0x... or \x...),
+	// bound as its bytes.
+	Hex bool `json:"hex,omitempty"`
+}
+
+// bindValue is what a condition binds: the bytes of a binary cell, the
+// text otherwise.
+func (c Cond) bindValue() (any, error) {
+	if !c.Hex {
+		return *c.Value, nil
+	}
+	h := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(*c.Value, "0x"), "0X"), `\x`)
+	b, err := hex.DecodeString(h)
+	if err != nil {
+		return nil, fmt.Errorf("filter on %s: %q is not a hex value", c.Column, *c.Value)
+	}
+	return b, nil
 }
 
 // ErrNoFilter is a filtered browse on an engine without one.
 var ErrNoFilter = errors.New("this engine cannot filter a table's rows")
 
 // whereClause is " WHERE a = $1 AND b IS NULL" for where, with the bind
-// values in order; ph(n) is the engine's n-th placeholder (1-based).
-func whereClause(where []Cond, ident func(string) string, ph func(int) string) (string, []any) {
+// values in order; ph(n, c) is the engine's n-th placeholder (1-based)
+// for condition c, bind (may be nil) turns a condition's value into what
+// the engine binds for it.
+func whereClause(where []Cond, ident func(string) string, ph func(int, Cond) string, bind func(Cond, any) any) (string, []any, error) {
 	if len(where) == 0 {
-		return "", nil
+		return "", nil, nil
 	}
 	var parts []string
 	var args []any
@@ -397,11 +416,26 @@ func whereClause(where []Cond, ident func(string) string, ph func(int) string) (
 			parts = append(parts, ident(c.Column)+" IS NULL")
 			continue
 		}
-		args = append(args, *c.Value)
-		parts = append(parts, ident(c.Column)+" = "+ph(len(args)))
+		v, err := c.bindValue()
+		if err != nil {
+			return "", nil, err
+		}
+		if bind != nil {
+			v = bind(c, v)
+		}
+		args = append(args, v)
+		parts = append(parts, ident(c.Column)+" = "+ph(len(args), c))
 	}
-	return " WHERE " + strings.Join(parts, " AND "), args
+	return " WHERE " + strings.Join(parts, " AND "), args, nil
 }
+
+// numbered is a placeholder style with the position in it ($1, :1, @p1).
+func numbered(prefix string) func(int, Cond) string {
+	return func(n int, _ Cond) string { return prefix + strconv.Itoa(n) }
+}
+
+// qmark is the ? placeholder.
+func qmark(int, Cond) string { return "?" }
 
 // Browse reads a page of a table's rows, in primary-key order when it has
 // one.

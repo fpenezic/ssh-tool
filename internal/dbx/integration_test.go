@@ -362,6 +362,18 @@ func itEngine(t *testing.T, engine string) {
 // like SQL matches nothing and errors nothing). The same SQL on every
 // engine with foreign keys; names are compared without case (Oracle and
 // Db2 fold unquoted ones up).
+// itBinKey is how an engine writes a binary key column and the value
+// 0xDEAD in SQL, and how its grid shows that value.
+type itBinKey struct{ typ, literal, shown string }
+
+var itBinKeys = map[string]itBinKey{
+	dbx.EnginePostgres: {"bytea", `'\xdead'::bytea`, `\xdead`},
+	dbx.EngineMySQL:    {"VARBINARY(8)", "X'DEAD'", "0xdead"},
+	dbx.EngineMSSQL:    {"VARBINARY(8)", "0xDEAD", "0xdead"},
+	dbx.EngineOracle:   {"RAW(8)", "HEXTORAW('DEAD')", "0xdead"},
+	dbx.EngineDB2:      {"VARBINARY(8)", "BX'DEAD'", "0xdead"},
+}
+
 func itForeignKeys(t *testing.T, h *dbx.Handle, sess *dbx.Session, database, schema, prefix string) {
 	t.Helper()
 	ctx := ctx30(t)
@@ -383,6 +395,7 @@ func itForeignKeys(t *testing.T, h *dbx.Handle, sess *dbx.Session, database, sch
 		"INSERT INTO " + parent + " (id, code) VALUES (1, 'one')",
 		"INSERT INTO " + parent + " (id, code) VALUES (2, 'two')",
 		"INSERT INTO " + child + " (id, parent_id, pcode) VALUES (10, 2, 'two')",
+		"INSERT INTO " + child + " (id, parent_id, pcode) VALUES (11, NULL, NULL)",
 	} {
 		mustRun(t, sess, q)
 	}
@@ -418,6 +431,13 @@ func itForeignKeys(t *testing.T, h *dbx.Handle, sess *dbx.Session, database, sch
 	if len(page.Rows) != 1 {
 		t.Fatalf("followed composite: %d rows", len(page.Rows))
 	}
+	// Both members count: a pair no parent has matches nothing.
+	one := "one"
+	page, err = h.BrowseWhere(ctx, fk2.RefDatabase, fk2.RefSchema, fk2.RefTable,
+		[]dbx.Cond{{Column: fk2.RefColumns[0], Value: &two}, {Column: fk2.RefColumns[1], Value: &one}}, 0, 50)
+	if err != nil || len(page.Rows) != 0 {
+		t.Fatalf("mismatched composite: err %v, rows %v", err, page)
+	}
 	page, err = h.BrowseWhere(ctx, fk.RefDatabase, fk.RefSchema, fk.RefTable, []dbx.Cond{{Column: fk.RefColumns[0], Value: &two}}, 0, 50)
 	if err != nil {
 		t.Fatal(err)
@@ -437,7 +457,44 @@ func itForeignKeys(t *testing.T, h *dbx.Handle, sess *dbx.Session, database, sch
 	if err != nil {
 		t.Fatalf("IS NULL: %v", err)
 	}
-	if len(page.Rows) != 0 {
+	if len(page.Rows) != 1 || *page.Rows[0][0] != "11" {
 		t.Fatalf("IS NULL: %d rows", len(page.Rows))
+	}
+
+	// A binary key, followed with the value as the grid shows it.
+	bk, ok := itBinKeys[h.Engine()]
+	if !ok {
+		t.Fatalf("no binary key type for %s", h.Engine())
+	}
+	bparent, bchild := parent+"b", child+"b"
+	if parent == strings.ToUpper(parent) {
+		bparent, bchild = parent+"B", child+"B"
+	}
+	mustRun(t, sess, "CREATE TABLE "+bparent+" (k "+bk.typ+" NOT NULL PRIMARY KEY, label VARCHAR(10))")
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		sess.Run(ctx, "DROP TABLE "+bchild, dbx.RunOptions{})
+		sess.Run(ctx, "DROP TABLE "+bparent, dbx.RunOptions{})
+	})
+	mustRun(t, sess, "CREATE TABLE "+bchild+" (id INT NOT NULL PRIMARY KEY, k "+bk.typ+", CONSTRAINT "+bchild+"_fk FOREIGN KEY (k) REFERENCES "+bparent+" (k))")
+	mustRun(t, sess, "INSERT INTO "+bparent+" (k, label) VALUES ("+bk.literal+", 'dead')")
+	mustRun(t, sess, "INSERT INTO "+bchild+" (id, k) VALUES (1, "+bk.literal+")")
+	bd, err := h.Describe(ctx, database, schema, bchild)
+	if err != nil || len(bd.ForeignKeys) != 1 {
+		t.Fatalf("binary foreign key: %v %+v", err, bd)
+	}
+	bf := bd.ForeignKeys[0]
+	cp, err := h.Browse(ctx, database, schema, bchild, 0, 5)
+	if err != nil || len(cp.Rows) != 1 || *cp.Rows[0][1] != bk.shown {
+		t.Fatalf("binary cell: %v %v (want %q)", err, cp, bk.shown)
+	}
+	shown := *cp.Rows[0][1]
+	page, err = h.BrowseWhere(ctx, bf.RefDatabase, bf.RefSchema, bf.RefTable, []dbx.Cond{{Column: bf.RefColumns[0], Value: &shown, Hex: true}}, 0, 5)
+	if err != nil {
+		t.Fatalf("followed binary key: %v", err)
+	}
+	if len(page.Rows) != 1 || *page.Rows[0][1] != "dead" {
+		t.Fatalf("followed binary key: %d rows", len(page.Rows))
 	}
 }
