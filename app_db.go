@@ -400,6 +400,18 @@ func (a *App) DbBrowse(id, database, schema, name string, where []dbx.Cond, orde
 	return dh.h.BrowseQuery(ctx, database, schema, name, where, order, offset, limit)
 }
 
+// DbReferencedBy lists the foreign keys of other tables that point at a
+// table (the "Referenced by" of a row).
+func (a *App) DbReferencedBy(id, database, schema, name string) ([]dbx.ForeignKey, error) {
+	dh, err := a.dbGet(id)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := dbCtx()
+	defer cancel()
+	return dh.h.ReferencedBy(ctx, database, schema, name)
+}
+
 // DbActivity lists the server's sessions (who runs what, waits on what,
 // is blocked by whom).
 func (a *App) DbActivity(id string) (*dbx.Result, error) {

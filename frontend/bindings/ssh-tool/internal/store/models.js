@@ -1983,6 +1983,15 @@ export class InheritableSettings {
         }
         if (/** @type {any} */(false)) {
             /**
+             * DbQueryTimeout stops a query tab's statement after this many
+             * seconds (0 = no limit, nil = inherit; the default is none).
+             * @member
+             * @type {number | null | undefined}
+             */
+            this["db_query_timeout"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * DbTLS is "disable" (nil), "require" or "verify-full".
              * @member
              * @type {string | null | undefined}
@@ -2062,7 +2071,7 @@ export class InheritableSettings {
     static createFrom($$source = {}) {
         const $$createField5_0 = $$createType0;
         const $$createField6_0 = $$createType0;
-        const $$createField44_0 = $$createType10;
+        const $$createField45_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ssh_options" in $$parsedSource) {
             $$parsedSource["ssh_options"] = $$createField5_0($$parsedSource["ssh_options"]);
@@ -2071,7 +2080,7 @@ export class InheritableSettings {
             $$parsedSource["env_vars"] = $$createField6_0($$parsedSource["env_vars"]);
         }
         if ("db_targets" in $$parsedSource) {
-            $$parsedSource["db_targets"] = $$createField44_0($$parsedSource["db_targets"]);
+            $$parsedSource["db_targets"] = $$createField45_0($$parsedSource["db_targets"]);
         }
         return new InheritableSettings(/** @type {Partial<InheritableSettings>} */($$parsedSource));
     }
@@ -2775,6 +2784,13 @@ export class ResolvedSettings {
              */
             this["db_read_only"] = false;
         }
+        if (!("db_query_timeout" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["db_query_timeout"] = 0;
+        }
         if (!("db_tls" in $$source)) {
             /**
              * @member
@@ -2831,7 +2847,7 @@ export class ResolvedSettings {
         const $$createField5_0 = $$createType12;
         const $$createField6_0 = $$createType0;
         const $$createField7_0 = $$createType0;
-        const $$createField42_0 = $$createType10;
+        const $$createField43_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("jump_host" in $$parsedSource) {
             $$parsedSource["jump_host"] = $$createField5_0($$parsedSource["jump_host"]);
@@ -2843,7 +2859,7 @@ export class ResolvedSettings {
             $$parsedSource["env_vars"] = $$createField7_0($$parsedSource["env_vars"]);
         }
         if ("db_targets" in $$parsedSource) {
-            $$parsedSource["db_targets"] = $$createField42_0($$parsedSource["db_targets"]);
+            $$parsedSource["db_targets"] = $$createField43_0($$parsedSource["db_targets"]);
         }
         return new ResolvedSettings(/** @type {Partial<ResolvedSettings>} */($$parsedSource));
     }

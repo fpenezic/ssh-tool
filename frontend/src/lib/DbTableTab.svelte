@@ -1,16 +1,24 @@
 <script lang="ts">
   // A table (or view) tab: its rows a page at a time in key order, its
   // structure, and its DDL. Read-only by construction - changes go through
-  // a query tab ("Query" opens one on this table). A foreign key cell links
+  // a query tab ("Query" opens one on this table; edited cells and "Copy as
+  // SQL" become a script there to read and run). A foreign key cell links
   // to the row it references: the tab walks there (the referenced table,
-  // filtered to that key) and Back returns, a breadcrumb showing the path.
+  // filtered to that key) and Back returns, a breadcrumb showing the path;
+  // "Referenced by" walks the other way. Filter and sort run on the server.
 
   import { untrack } from "svelte";
-  import { api, type DbCond, type DbForeignKey, type DbHandleInfo, type DbResult, type DbTableDetail } from "./api";
+  import { api, type DbCond, type DbForeignKey, type DbHandleInfo, type DbOrder, type DbResult, type DbTableDetail } from "./api";
+  import DbFilterBar from "./DbFilterBar.svelte";
+  import DbRefPanel from "./DbRefPanel.svelte";
+  import { deleteSql, insertSql, primaryKey, updateSql, type SqlEngine } from "./dbSql";
+  import { toast } from "./toast.svelte.ts";
+  import { showConfirm } from "./confirmModal.svelte.ts";
+  import { clickOutside } from "./clickOutside";
   import type { DbTab, DbTableView, DbTrailStep } from "./dbState.svelte";
   import DbResultGrid from "./DbResultGrid.svelte";
   import { errMsg } from "./connectErrors";
-  import { IconRefresh, IconSql, IconCopy, IconArrowLeft } from "./iconMap";
+  import { IconRefresh, IconSql, IconCopy, IconArrowLeft, IconSearch } from "./iconMap";
   import { selectAllWithin } from "./selectWithin";
 
   interface Props {
@@ -41,6 +49,19 @@
     tab.trail = trail.length ? $state.snapshot(trail) : undefined;
     onChange();
   }
+
+  // The Data view's own filter and server sort, for the table shown (a
+  // move to another one starts without them).
+  let filter = $state<DbCond[]>([]);
+  let filterOpen = $state(false);
+  let sort = $state<{ column: string; desc: boolean } | null>(null);
+  // The row picked in the grid (for Referenced by and Copy as SQL) and the
+  // edited cells, keyed "row:col" by the page's row index.
+  let picked = $state<(string | null)[] | null>(null);
+  let edits = $state(new Map<string, string | null>());
+  // A cell whose column is in several foreign keys: which one to follow.
+  let choose = $state<{ row: (string | null)[]; keys: DbForeignKey[] } | null>(null);
+  let sqlMenu = $state(false);
 
   let offset = $state(0);
   let page = $state<DbResult | null>(null);
@@ -74,7 +95,8 @@
     err = null;
     const t = cur;
     try {
-      const p = await api.dbBrowse(sessionId, t.database, t.schema, t.name, t.where, offset, PAGE);
+      const order: DbOrder[] = sort ? [{ column: sort.column, desc: sort.desc }] : [];
+      const p = await api.dbBrowse(sessionId, t.database, t.schema, t.name, [...t.where, ...filter], order, offset, PAGE);
       if (t !== cur) return; // Back or a follow moved on meanwhile
       page = p;
     } catch (e) {
@@ -108,40 +130,50 @@
     if (v !== "data" && !detail) loadDetail();
   });
 
-  // Each grid column that is part of a foreign key, with that key (the
-  // first one when a column is in several; Structure lists them all).
+  // Each grid column that is part of a foreign key, with its keys (a
+  // column can be in several: the link then asks which).
   const fkOf = $derived.by(() => {
-    const m = new Map<number, DbForeignKey>();
+    const m = new Map<number, DbForeignKey[]>();
     const cols = page?.columns ?? [];
     for (const fk of detail?.foreign_keys ?? []) {
       if (!fk.ref_table || !fk.columns?.length || fk.columns.length !== fk.ref_columns?.length) continue;
       for (const c of fk.columns) {
         const i = cols.findIndex((x) => x.name === c);
-        if (i >= 0 && !m.has(i)) m.set(i, fk);
+        if (i >= 0) m.set(i, [...(m.get(i) ?? []), fk]);
       }
     }
     return m;
   });
-  // A row links only when every member of the key has a value: with a
-  // NULL member it references nothing (MATCH SIMPLE).
-  function canLink(row: (string | null)[], ci: number): boolean {
-    const fk = fkOf.get(ci);
-    if (!fk) return false;
+  // A key a row can follow: every member has a value (with a NULL member
+  // it references nothing, MATCH SIMPLE).
+  function usable(fk: DbForeignKey, row: (string | null)[]): boolean {
     const cols = page?.columns ?? [];
     return fk.columns!.every((c) => {
       const i = cols.findIndex((x) => x.name === c);
       return i >= 0 && row[i] !== null;
     });
   }
+  function canLink(row: (string | null)[], ci: number): boolean {
+    return (fkOf.get(ci) ?? []).some((fk) => usable(fk, row));
+  }
   // Binary cells show as 0x... / \x...; their bytes are what is bound.
   const BINARY = /binary|blob|bytea|\braw\b|bit data|image/i;
   function linkTitle(ci: number): string {
-    const fk = fkOf.get(ci);
-    return fk ? `Open the ${fk.ref_table} row this references (${fk.name})` : "";
+    const ks = fkOf.get(ci) ?? [];
+    if (ks.length > 1) return `Open a row this references (${ks.length} keys: ${ks.map((k) => k.ref_table).join(", ")})`;
+    return ks[0] ? `Open the ${ks[0].ref_table} row this references (${ks[0].name})` : "";
   }
   function follow(row: (string | null)[], ci: number) {
-    const fk = fkOf.get(ci);
-    if (!fk || !fk.columns || !fk.ref_columns || !fk.ref_table) return;
+    const ks = (fkOf.get(ci) ?? []).filter((fk) => usable(fk, row));
+    if (ks.length > 1) {
+      choose = { row, keys: ks };
+      return;
+    }
+    if (ks[0]) followKey(row, ks[0]);
+  }
+  function followKey(row: (string | null)[], fk: DbForeignKey) {
+    choose = null;
+    if (!fk.columns || !fk.ref_columns || !fk.ref_table) return;
     const cols = page?.columns ?? [];
     const where: DbCond[] = [];
     for (let k = 0; k < fk.columns.length; k++) {
@@ -149,12 +181,28 @@
       if (i < 0 || row[i] === null) return;
       where.push({ column: fk.ref_columns[k], value: row[i], hex: BINARY.test(cols[i].type) || undefined });
     }
-    trail = [...trail, { database: fk.ref_database || cur.database, schema: fk.ref_schema ?? "", name: fk.ref_table, where, offset }];
+    walk({ database: fk.ref_database || cur.database, schema: fk.ref_schema ?? "", name: fk.ref_table, where });
+  }
+  // Moves to another table's rows (a followed key either way).
+  // Unsent cell edits are lost by a move: ask first.
+  async function dropEdits(): Promise<boolean> {
+    if (!edits.size) return true;
+    return showConfirm({
+      title: "Unsent changes",
+      message: `${edits.size} edited cell${edits.size === 1 ? "" : "s"} of ${cur.name} ${edits.size === 1 ? "is" : "are"} not in a script yet. Drop ${edits.size === 1 ? "it" : "them"}?`,
+      okLabel: "Drop",
+      danger: true,
+    });
+  }
+  async function walk(t: { database: string; schema: string; name: string; where: DbCond[] }) {
+    if (!(await dropEdits())) return;
+    trail = [...trail, { ...t, offset }];
     saveTrail();
     moveTo(0);
   }
-  function back(to = trail.length - 1) {
+  async function back(to = trail.length - 1) {
     if (to < 0 || to >= trail.length) return;
+    if (!(await dropEdits())) return;
     const back = trail[to].offset;
     trail = trail.slice(0, to);
     saveTrail();
@@ -166,17 +214,72 @@
     page = null;
     detail = null;
     err = null;
+    filter = [];
+    sort = null;
+    picked = null;
+    choose = null;
+    edits = new Map();
+  }
+  // The same table, read again from the first page (a new filter or sort).
+  function reread() {
+    offset = 0;
+    picked = null;
+    edits = new Map();
+    loadPage();
   }
   function condText(where: DbCond[]): string {
-    return where.map((c) => `${c.column} ${c.value === null ? "IS NULL" : "= " + c.value}`).join(", ");
+    return where
+      .map((c) => `${c.column} ${c.value === null ? (c.op === "<>" ? "IS NOT NULL" : "IS NULL") : `${c.op || "="} ${c.value}`}`)
+      .join(", ");
+  }
+
+  // SQL text for rows: the engines with a SQL grammar here.
+  const sqlEngine = $derived<SqlEngine | null>(hasFks ? (info.engine as SqlEngine) : null);
+  const sqlTable = $derived(sqlEngine ? { engine: sqlEngine, database: cur.database, schema: cur.schema, name: cur.name } : null);
+  const pk = $derived(primaryKey(detail?.indexes));
+  function copySql(kind: "insert" | "delete", all: boolean) {
+    if (!sqlTable || !page) return;
+    const rows = all ? page.rows ?? [] : picked ? [picked] : [];
+    if (!rows.length) {
+      toast.info("Pick a row first");
+      return;
+    }
+    const cols = page.columns ?? [];
+    const text = kind === "insert" ? insertSql(sqlTable, cols, rows) : deleteSql(sqlTable, cols, rows, pk);
+    api.clipboardSetText(text).then(
+      () => toast.ok(`${kind.toUpperCase()} for ${rows.length} row${rows.length === 1 ? "" : "s"} copied`),
+      () => {},
+    );
+  }
+  function onEdit(row: number, ci: number, value: string | null) {
+    const k = `${row}:${ci}`;
+    const next = new Map(edits);
+    if (value === (page?.rows ?? [])[row]?.[ci]) next.delete(k);
+    else next.set(k, value);
+    edits = next;
+  }
+  // The edits as an UPDATE script in a query tab, to read and run there.
+  function editScript() {
+    if (!sqlTable || !page || !edits.size) return;
+    const byRow = new Map<number, Map<number, string | null>>();
+    for (const [k, v] of edits) {
+      const [r, c] = k.split(":").map(Number);
+      byRow.set(r, (byRow.get(r) ?? new Map()).set(c, v));
+    }
+    const rows = page.rows ?? [];
+    const changes = [...byRow.entries()].map(([r, set]) => ({ row: rows[r], set }));
+    onQuery(updateSql(sqlTable, page.columns ?? [], changes, pk) + "\n", cur.database);
   }
 
   function show(v: DbTableView) {
     tab.view = v;
     onChange();
   }
-  function go(delta: number) {
+  async function go(delta: number) {
+    if (!(await dropEdits())) return;
     offset = Math.max(0, offset + delta);
+    edits = new Map();
+    picked = null;
     loadPage();
   }
   function refresh() {
@@ -210,19 +313,71 @@
       <button disabled={offset === 0 || loading} onclick={() => go(-PAGE)}>Prev</button>
       <span class="range">{page ? `${offset + 1} - ${offset + (page.rows ?? []).length}` : ""}</span>
       <button disabled={loading || !page || (page.rows ?? []).length < PAGE} onclick={() => go(PAGE)}>Next</button>
+      {#if sqlEngine}
+        <button class:on={filterOpen || filter.length > 0} title="Filter the table on the server" onclick={() => (filterOpen = !filterOpen)}>
+          <IconSearch size={13} /> Filter{filter.length ? ` (${filter.length})` : ""}
+        </button>
+        <span class="menu-wrap" use:clickOutside={{ onOutside: () => (sqlMenu = false), enabled: sqlMenu }}>
+          <button title="The picked row (or the page) as SQL, copied to the clipboard" onclick={() => (sqlMenu = !sqlMenu)}><IconCopy size={13} /> Copy as SQL</button>
+          {#if sqlMenu}
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <div class="menu" onclick={() => (sqlMenu = false)}>
+              <button disabled={!picked} onclick={() => copySql("insert", false)}>INSERT - picked row</button>
+              <button onclick={() => copySql("insert", true)}>INSERT - this page</button>
+              <button disabled={!picked} onclick={() => copySql("delete", false)}>DELETE - picked row</button>
+              <button onclick={() => copySql("delete", true)}>DELETE - this page</button>
+            </div>
+          {/if}
+        </span>
+        {#if edits.size}
+          <span class="edits">{edits.size} edited</span>
+          <button class="primary" title="Open the changes as an UPDATE script in a query tab, to read and run there" onclick={editScript}>Script</button>
+          <button title="Throw the edits away" onclick={() => (edits = new Map())}>Discard</button>
+        {/if}
+      {/if}
     {/if}
     <span class="spacer"></span>
     <button title="Open a query tab on this table" onclick={() => onQuery(queryText(), cur.database)}><IconSql size={13} /> Query</button>
     <button title="Reload" onclick={refresh}><IconRefresh size={13} /></button>
   </div>
+  {#if viewName === "data" && filterOpen && page && sqlEngine}
+    <DbFilterBar columns={page.columns ?? []} applied={filter} onApply={(c) => { filter = c; reread(); }} onClose={() => (filterOpen = false)} />
+  {/if}
+  {#if choose}
+    <div class="choose">
+      <span>Follow which key?</span>
+      {#each choose.keys as k (k.name)}
+        <button onclick={() => choose && followKey(choose.row, k)}>{k.ref_table} <span class="cond">({(k.columns ?? []).join(", ")})</span></button>
+      {/each}
+      <button onclick={() => (choose = null)}>Cancel</button>
+    </div>
+  {/if}
   <div class="body">
     {#if err}
       <pre class="err">{err}</pre>
     {:else if viewName === "data"}
       {#if page}
-        <div class="gridbox"><DbResultGrid result={page} exportName={`${cur.name}-${offset + 1}`} paged {canLink} {linkTitle} onLink={follow} /></div>
-        {#if cur.where.length && (page.rows ?? []).length === 0}
-          <p class="muted">No {cur.name} row matches {condText(cur.where)}.</p>
+        <div class="gridbox">
+          <DbResultGrid
+            result={page}
+            exportName={`${cur.name}-${offset + 1}`}
+            paged
+            {canLink}
+            {linkTitle}
+            onLink={follow}
+            serverSort={sqlEngine ? sort : null}
+            onServerSort={sqlEngine ? (v) => { sort = v; reread(); } : undefined}
+            onSelect={(r) => (picked = r)}
+            editable={!!sqlEngine && !info.read_only}
+            {edits}
+            {onEdit}
+          />
+        </div>
+        {#if (cur.where.length || filter.length) && (page.rows ?? []).length === 0}
+          <p class="muted">No {cur.name} row matches {condText([...cur.where, ...filter])}.</p>
+        {/if}
+        {#if hasFks}
+          <DbRefPanel {sessionId} database={cur.database} schema={cur.schema} name={cur.name} columns={page.columns ?? []} row={picked} onOpen={walk} />
         {/if}
       {:else}
         <p class="muted">Loading...</p>
@@ -280,6 +435,21 @@
 
 <style>
   .ttab { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .bar button.on { border-color: var(--blue); }
+  .bar button.primary { border-color: var(--blue); }
+  .edits { font-size: 0.74rem; color: var(--yellow); }
+  .menu-wrap { position: relative; }
+  .menu {
+    position: absolute; top: calc(100% + 2px); left: 0; z-index: 20; display: flex; flex-direction: column; min-width: 12rem;
+    background: var(--mantle); border: 1px solid var(--surface1); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.35); padding: 0.2rem;
+  }
+  .menu button { justify-content: flex-start; background: none; border-color: transparent; }
+  .menu button:hover:not(:disabled) { background: var(--surface0); }
+  .choose { display: flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--surface0); font-size: 0.76rem; }
+  .choose button {
+    display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.76rem; padding: 0.15rem 0.5rem;
+    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 4px; cursor: pointer;
+  }
   .trail { display: flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--surface0); font-size: 0.76rem; overflow-x: auto; white-space: nowrap; }
   .trail button {
     display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.76rem; padding: 0.15rem 0.45rem;

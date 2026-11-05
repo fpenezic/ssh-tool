@@ -19,9 +19,11 @@
     engine: string;
     // Table names for completion ("schema.table" and "table").
     tables: string[];
+    // Their columns, for the ones described so far.
+    columns?: Record<string, string[]>;
     onRun: (mode: "statement" | "all") => void;
   }
-  let { value = $bindable(), engine, tables, onRun }: Props = $props();
+  let { value = $bindable(), engine, tables, columns = {}, onRun }: Props = $props();
 
   let host: HTMLDivElement;
   let view: EditorView | null = null;
@@ -51,9 +53,9 @@
     ".cm-placeholder": { color: "var(--overlay0)" },
   });
 
-  function sqlFor(eng: string, names: string[]) {
+  function sqlFor(eng: string, names: string[], cols: Record<string, string[]> = {}) {
     const schema: Record<string, string[]> = {};
-    for (const n of names) schema[n] = [];
+    for (const n of names) schema[n] = cols[n] ?? [];
     // ClickHouse has no dialect of its own here; MySQL's quoting (backticks,
     // backslash escapes, # comments) is the closest. OpenSearch scripts mix
     // console requests and SQL: MySQL's double-quoted strings colour the
@@ -123,7 +125,8 @@
   $effect(() => {
     const eng = engine;
     const names = tables;
-    untrack(() => view?.dispatch({ effects: lang.reconfigure(sqlFor(eng, names)) }));
+    const cols = columns;
+    untrack(() => view?.dispatch({ effects: lang.reconfigure(sqlFor(eng, names, cols)) }));
   });
 
   onDestroy(() => {

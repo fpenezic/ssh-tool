@@ -186,6 +186,9 @@
           <option value="on">Read-only</option>
         </select>
       </label>
+      <label title="A query tab's statement that runs longer is stopped on the server, as Stop does. Empty inherits; 0 means no limit.">Query timeout (s)
+        <input inputmode="numeric" pattern="[0-9]*" bind:value={draft.timeout} placeholder={`${inheritLabel} · no limit`} />
+      </label>
       <label title="TLS runs end to end, inside the tunnel. Require: encrypted, certificate not checked. Verify: the certificate must match the address's host name.">TLS
         <select bind:value={draft.tls}>
           <option value="">{inheritLabel}</option>

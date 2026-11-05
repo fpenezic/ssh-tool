@@ -32,3 +32,17 @@ describe("dbDraft", () => {
     expect(dbDraftSame({ ...dbDraftFrom(s), targets: [] }, s)).toBe(false);
   });
 });
+
+describe("query timeout", () => {
+  it("is inherited when empty, a number of seconds otherwise", () => {
+    const d = dbDraftFrom({ db_query_timeout: 30 });
+    expect(d.timeout).toBe("30");
+    const s: InheritableSettings = {};
+    applyDbDraft(s, { ...d, timeout: "" });
+    expect(s.db_query_timeout).toBeUndefined();
+    applyDbDraft(s, { ...d, timeout: " 0 " });
+    expect(s.db_query_timeout).toBe(0);
+    applyDbDraft(s, { ...d, timeout: "abc" });
+    expect(s.db_query_timeout).toBeUndefined();
+  });
+});

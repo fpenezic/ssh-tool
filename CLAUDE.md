@@ -172,7 +172,7 @@ Tests + checks:
 go build ./...
 go test ./...                      # 32 packages carry tests
 cd frontend && npm run check       # svelte-check, 0 errors expected
-cd frontend && npm run test        # vitest, 37 files / 349 cases
+cd frontend && npm run test        # vitest, 38 files / 355 cases
 ```
 
 The Database tests that need a real server skip unless `DBTEST_PG` /

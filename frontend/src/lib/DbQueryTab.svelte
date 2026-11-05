@@ -9,9 +9,10 @@
   import { dbTabs, byteOffset, charIndex, type DbTab } from "./dbState.svelte";
   import DbEditor from "./DbEditor.svelte";
   import DbResultGrid from "./DbResultGrid.svelte";
+  import DbPlanNode from "./DbPlanNode.svelte";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { errMsg } from "./connectErrors";
-  import { IconPlay, IconStop, IconSql } from "./iconMap";
+  import { IconPlay, IconStop, IconSql, IconX } from "./iconMap";
 
   interface Props {
     sessionId: string;
@@ -19,9 +20,41 @@
     info: DbHandleInfo;
     databases: string[];
     tables: string[];
+    // Where each listed table lives: the columns of the ones the text names
+    // are fetched for completion.
+    tableRefs?: { database: string; schema: string; name: string }[];
     onChange: () => void;
   }
-  let { sessionId, tab, info, databases, tables, onChange }: Props = $props();
+  let { sessionId, tab, info, databases, tables, tableRefs = [], onChange }: Props = $props();
+
+  // Column completion: a table the script names gets its columns described
+  // once (a beat after typing stops), and the editor offers them after the
+  // table's name or alias-free in the statement.
+  let columns = $state<Record<string, string[]>>({});
+  const asked = new Set<string>();
+  let colTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const text = sqlText.toLowerCase();
+    const refs = tableRefs;
+    clearTimeout(colTimer);
+    colTimer = setTimeout(() => {
+      for (const r of refs) {
+        const key = `${r.database}/${r.schema}/${r.name}`;
+        if (asked.has(key) || !new RegExp(`\\b${r.name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(text)) continue;
+        asked.add(key);
+        api.dbDescribe(sessionId, r.database, r.schema, r.name).then(
+          (d) => {
+            const cols = (d.columns ?? []).map((c) => c.name);
+            const next = { ...columns, [r.name]: cols };
+            if (r.schema && r.schema !== "public") next[`${r.schema}.${r.name}`] = cols;
+            columns = next;
+          },
+          () => {},
+        );
+      }
+    }, 600);
+    return () => clearTimeout(colTimer);
+  });
 
   const run = $derived(dbTabs.peek(sessionId, tab.key));
   const live = () => dbTabs.run(sessionId, tab.key);
@@ -49,21 +82,59 @@
     });
   });
 
+  // The selection, else the statement under the cursor (flashed).
+  async function statementHere(): Promise<string> {
+    const s = editor?.selection();
+    if (s?.text) return s.text;
+    const st = await api.dbStatementAt(info.engine, sqlText, byteOffset(sqlText, s?.cursor ?? 0));
+    if (!st) return "";
+    const from = charIndex(sqlText, st.start);
+    const to = charIndex(sqlText, st.end);
+    editor?.flash(from, to);
+    return sqlText.slice(from, to);
+  }
+
+  // EXPLAIN of the statement under the cursor as a plan tree (estimates
+  // only: the statement itself does not run).
+  const explainPrefix = $derived(info.engine === "postgres" ? "EXPLAIN (FORMAT JSON) " : info.engine === "mysql" ? "EXPLAIN FORMAT=JSON " : "");
+  let plan = $state<{ statement: string; tree: unknown } | null>(null);
+  let planErr = $state<string | null>(null);
+  let explaining = $state(false);
+  async function explain() {
+    if (run.running || explaining || !explainPrefix) return;
+    const stmt = (await statementHere()).trim().replace(/;\s*$/, "");
+    if (!stmt) return;
+    if (/^explain\b/i.test(stmt)) {
+      planErr = "This is an EXPLAIN already: Run shows its output.";
+      plan = null;
+      return;
+    }
+    explaining = true;
+    planErr = null;
+    try {
+      const r = await api.dbRun(sessionId, tab.key, tab.database, explainPrefix + stmt, 10);
+      const res = (r.results ?? [])[0];
+      if (!res || res.error) {
+        planErr = res?.error ?? "no plan came back";
+        plan = null;
+        return;
+      }
+      const cell = res.rows?.[0]?.[0] ?? "";
+      plan = { statement: stmt, tree: JSON.parse(cell) };
+    } catch (e) {
+      planErr = errMsg(e);
+      plan = null;
+    } finally {
+      explaining = false;
+    }
+  }
+
   async function exec(mode: "statement" | "all") {
     if (run.running) return;
+    plan = null;
+    planErr = null;
     let script = sqlText;
-    if (mode === "statement") {
-      const s = editor?.selection();
-      if (s?.text) script = s.text;
-      else {
-        const st = await api.dbStatementAt(info.engine, sqlText, byteOffset(sqlText, s?.cursor ?? 0));
-        if (!st) return;
-        const from = charIndex(sqlText, st.start);
-        const to = charIndex(sqlText, st.end);
-        editor?.flash(from, to);
-        script = sqlText.slice(from, to);
-      }
-    }
+    if (mode === "statement") script = await statementHere();
     if (!script.trim()) return;
     if (info.sensitive && !info.read_only) {
       const writes = (await api.dbIsWrite(info.engine, script)) ?? [];
@@ -147,6 +218,9 @@
     {:else}
       <button class="go" title="Run the statement under the cursor, or the selection (Ctrl+Enter)" onclick={() => exec("statement")}><IconPlay size={13} /> Run</button>
       <button title="Run the whole script, statement by statement (Ctrl+Shift+Enter)" onclick={() => exec("all")}><IconSql size={13} /> Run all</button>
+      {#if explainPrefix}
+        <button title="The server's plan for the statement under the cursor, as a tree (estimates; the statement is not run)" disabled={explaining} onclick={explain}>Explain</button>
+      {/if}
     {/if}
     <label class="limit" title="Rows a statement brings back at most; the rest is not read">
       Limit
@@ -163,12 +237,25 @@
     {#if info.read_only}<span class="ro" title="Writes are refused on this connection">read-only</span>{/if}
   </div>
   <div class="editor" style:height="{editorH}px">
-    <DbEditor bind:this={editor} bind:value={sqlText} engine={info.engine} {tables} onRun={exec} />
+    <DbEditor bind:this={editor} bind:value={sqlText} engine={info.engine} {tables} {columns} onRun={exec} />
   </div>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="drag" onpointerdown={startDrag} title="Drag to resize"></div>
   <div class="results">
-    {#if run.error}
+    {#if plan || planErr}
+      <div class="plan">
+        <div class="plan-head">
+          <span class="muted-s">Plan{plan ? ` · ${plan.statement.length > 80 ? plan.statement.slice(0, 80) + "..." : plan.statement}` : ""}</span>
+          <span class="spacer"></span>
+          <button class="ic" title="Back to the results" onclick={() => { plan = null; planErr = null; }}><IconX size={13} /></button>
+        </div>
+        {#if planErr}
+          <pre class="err">{planErr}</pre>
+        {:else if plan}
+          <div class="plan-body"><DbPlanNode node={plan.tree} /></div>
+        {/if}
+      </div>
+    {:else if run.error}
       <pre class="err">{run.error}</pre>
     {:else if run.running && run.results.length === 0}
       <p class="muted">Running...</p>
@@ -201,6 +288,12 @@
 </div>
 
 <style>
+  .plan { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+  .plan-head { display: flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--surface0); }
+  .plan-body { overflow: auto; padding: 0.4rem 0.6rem; font-size: 0.78rem; }
+  .muted-s { font-size: 0.74rem; color: var(--subtext0); font-family: var(--mono-font, ui-monospace, monospace); }
+  .ic { padding: 0.1rem 0.25rem; background: none; border: 0; color: var(--overlay1); cursor: pointer; display: inline-flex; }
+  .ic:hover { color: var(--text); }
   .qtab { display: flex; flex-direction: column; height: 100%; min-height: 0; }
   .bar { display: flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--surface0); flex-wrap: wrap; }
   .bar select { background: var(--mantle); color: var(--text); border: 1px solid var(--surface0); border-radius: 3px; padding: 0.15rem 0.3rem; font-size: 0.78rem; }

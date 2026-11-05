@@ -13,11 +13,12 @@
   import { dbTabs, nextQueryKey, tableKey, type DbTab } from "./dbState.svelte";
   import DbQueryTab from "./DbQueryTab.svelte";
   import DbTableTab from "./DbTableTab.svelte";
+  import DbSessionsTab from "./DbSessionsTab.svelte";
   import { sessions } from "./stores.svelte";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { errMsg } from "./connectErrors";
   import { formatBytes } from "./kafkaFormat";
-  import { IconRefresh, IconPlus, IconDb, IconX, IconTable, IconView, IconSql, IconChevronRight, IconChevronDown } from "./iconMap";
+  import { IconActivity, IconRefresh, IconPlus, IconDb, IconX, IconTable, IconView, IconSql, IconChevronRight, IconChevronDown } from "./iconMap";
 
   interface Props {
     sessionId: string;
@@ -87,6 +88,11 @@
     const k = nextQueryKey(saved.tabs);
     addTab({ kind: "query", title: `Query ${k.slice(1)}`, database: database ?? active?.database ?? info?.database ?? "", sql }, k);
   }
+  // The server's sessions, one tab per database tab.
+  function openSessions() {
+    addTab({ kind: "sessions", title: "Sessions", database: active?.database ?? info?.database ?? "" }, "sessions");
+  }
+  const hasSessions = $derived(!!info && ["postgres", "mysql", "oracle", "mssql", "db2"].includes(info.engine));
   function openTable(db: string, o: DbObject) {
     addTab(
       { kind: "table", title: o.name, database: db, schema: o.schema, name: o.name, view: "data" },
@@ -208,6 +214,15 @@
     return [...out];
   });
   const dbNames = $derived((databases ?? []).map((d) => d.name));
+  // Where each listed table lives, for the query tab's column completion.
+  const tableRefs = $derived.by(() => {
+    const out: { database: string; schema: string; name: string }[] = [];
+    for (const [db, v] of Object.entries(objects)) {
+      if (!Array.isArray(v)) continue;
+      for (const o of v) out.push({ database: db, schema: o.schema ?? "", name: o.name });
+    }
+    return out;
+  });
 
   function countText(n: number): string {
     if (n < 0) return "";
@@ -239,6 +254,7 @@
     <div class="tree-head">
       <IconDb size={14} />
       <span class="srv" title={server?.version ?? info?.addr ?? ""}>{serverText || info?.addr || "..."}</span>
+      {#if hasSessions}<button title="The server's sessions: who runs what, and stop one" onclick={openSessions}><IconActivity size={13} /></button>{/if}
       <button title="Reload the databases and tables" onclick={refreshAll} disabled={loading}><IconRefresh size={13} /></button>
     </div>
     <div class="tree-tools">
@@ -300,7 +316,7 @@
       {#each tabs as t (t.key)}
         <div class="tab" class:on={active?.key === t.key} title={t.kind === "table" ? `${t.database}${t.schema ? "." + t.schema : ""}.${t.name}` : t.database}>
           <button class="tab-btn" onclick={() => show(t.key)} onauxclick={(e) => { if (e.button === 1) closeTab(t); }}>
-            {#if t.kind === "query"}<IconSql size={12} />{:else}<IconTable size={12} />{/if}
+            {#if t.kind === "query"}<IconSql size={12} />{:else if t.kind === "sessions"}<IconActivity size={12} />{:else}<IconTable size={12} />{/if}
             {t.title}
             {#if t.kind === "query" && dbTabs.runs[sessionId + "\0" + t.key]?.running}<span class="dot" title="Running"></span>{/if}
             {#if t.kind === "query" && dbTabs.runs[sessionId + "\0" + t.key]?.inTx}<span class="dot tx" title="Open transaction"></span>{/if}
@@ -316,7 +332,9 @@
       {:else if active}
         {#key active.key}
           {#if active.kind === "query"}
-            <DbQueryTab {sessionId} tab={active} {info} databases={dbNames} tables={tableNames} onChange={changed} />
+            <DbQueryTab {sessionId} tab={active} {info} databases={dbNames} tables={tableNames} {tableRefs} onChange={changed} />
+          {:else if active.kind === "sessions"}
+            <DbSessionsTab {sessionId} {info} />
           {:else}
             <DbTableTab {sessionId} tab={active} {info} onChange={changed} onQuery={(sql, db) => newQuery(sql, db ?? active?.database)} />
           {/if}
