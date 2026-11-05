@@ -7,15 +7,15 @@
   // filtered to that key) and Back returns, a breadcrumb showing the path;
   // "Referenced by" walks the other way. Filter and sort run on the server.
 
-  import { untrack } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import { api, type DbCond, type DbForeignKey, type DbHandleInfo, type DbOrder, type DbResult, type DbTableDetail } from "./api";
   import DbFilterBar from "./DbFilterBar.svelte";
   import DbRefPanel from "./DbRefPanel.svelte";
-  import { deleteSql, insertSql, primaryKey, updateSql, type SqlEngine } from "./dbSql";
+  import { deleteSql, insertSql, isBinaryType, primaryKey, serverFilled, updateSql, type SqlEngine } from "./dbSql";
   import { toast } from "./toast.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { clickOutside } from "./clickOutside";
-  import type { DbTab, DbTableView, DbTrailStep } from "./dbState.svelte";
+  import { dbTableEdits, type DbTab, type DbTableView, type DbTrailStep } from "./dbState.svelte";
   import DbResultGrid from "./DbResultGrid.svelte";
   import { errMsg } from "./connectErrors";
   import { IconRefresh, IconSql, IconCopy, IconArrowLeft, IconSearch } from "./iconMap";
@@ -59,6 +59,13 @@
   // edited cells, keyed "row:col" by the page's row index.
   let picked = $state<(string | null)[] | null>(null);
   let edits = $state(new Map<string, string | null>());
+  // The pane asks before a tab switch or close drops them.
+  onDestroy(() => delete dbTableEdits[sessionId + "\0" + tab.key]);
+  $effect(() => {
+    const k = sessionId + "\0" + tab.key;
+    if (edits.size) dbTableEdits[k] = edits.size;
+    else delete dbTableEdits[k];
+  });
   // A cell whose column is in several foreign keys: which one to follow.
   let choose = $state<{ row: (string | null)[]; keys: DbForeignKey[] } | null>(null);
   let sqlMenu = $state(false);
@@ -90,19 +97,23 @@
     return `SELECT *\nFROM ${qname}\nLIMIT 100;`;
   }
 
+  // Each read numbered: a sort or filter rereads the same table, so only
+  // the newest answer may land.
+  let readNo = 0;
   async function loadPage() {
     loading = true;
     err = null;
     const t = cur;
+    const no = ++readNo;
     try {
       const order: DbOrder[] = sort ? [{ column: sort.column, desc: sort.desc }] : [];
       const p = await api.dbBrowse(sessionId, t.database, t.schema, t.name, [...t.where, ...filter], order, offset, PAGE);
-      if (t !== cur) return; // Back or a follow moved on meanwhile
+      if (t !== cur || no !== readNo) return; // moved on, or a newer read is out
       page = p;
     } catch (e) {
-      if (t === cur) err = errMsg(e);
+      if (t === cur && no === readNo) err = errMsg(e);
     } finally {
-      if (t === cur) loading = false;
+      if (t === cur && no === readNo) loading = false;
     }
     // The links in the grid come from the table's foreign keys.
     if (!detail && hasFks) void loadDetail(true);
@@ -156,8 +167,7 @@
   function canLink(row: (string | null)[], ci: number): boolean {
     return (fkOf.get(ci) ?? []).some((fk) => usable(fk, row));
   }
-  // Binary cells show as 0x... / \x...; their bytes are what is bound.
-  const BINARY = /binary|blob|bytea|\braw\b|bit data|image/i;
+
   function linkTitle(ci: number): string {
     const ks = fkOf.get(ci) ?? [];
     if (ks.length > 1) return `Open a row this references (${ks.length} keys: ${ks.map((k) => k.ref_table).join(", ")})`;
@@ -179,7 +189,7 @@
     for (let k = 0; k < fk.columns.length; k++) {
       const i = cols.findIndex((x) => x.name === fk.columns![k]);
       if (i < 0 || row[i] === null) return;
-      where.push({ column: fk.ref_columns[k], value: row[i], hex: BINARY.test(cols[i].type) || undefined });
+      where.push({ column: fk.ref_columns[k], value: row[i], hex: isBinaryType(info.engine, cols[i].type) || undefined });
     }
     walk({ database: fk.ref_database || cur.database, schema: fk.ref_schema ?? "", name: fk.ref_table, where });
   }
@@ -237,6 +247,8 @@
   const sqlEngine = $derived<SqlEngine | null>(hasFks ? (info.engine as SqlEngine) : null);
   const sqlTable = $derived(sqlEngine ? { engine: sqlEngine, database: cur.database, schema: cur.schema, name: cur.name } : null);
   const pk = $derived(primaryKey(detail?.columns));
+  // Identity and generated columns: the server fills them.
+  const filled = $derived(new Set((detail?.columns ?? []).filter((c) => serverFilled(c.extra)).map((c) => c.name)));
   // A value cut at the cell limit would go into the SQL cut, and without
   // the table's description the key is unknown (the WHERE would name every
   // column): refuse both.
@@ -253,7 +265,7 @@
     return false;
   }
   function copySql(kind: "insert" | "delete", all: boolean) {
-    if (!sqlTable || !page || sqlBlocked(kind === "delete")) return;
+    if (!sqlTable || !page || sqlBlocked(true)) return;
     const rows = all ? page.rows ?? [] : picked ? [picked] : [];
     if (!rows.length) {
       toast.info("Pick a row first");
@@ -262,7 +274,7 @@
     const cols = page.columns ?? [];
     let text: string;
     try {
-      text = kind === "insert" ? insertSql(sqlTable, cols, rows) : deleteSql(sqlTable, cols, rows, pk);
+      text = kind === "insert" ? insertSql(sqlTable, cols, rows, filled) : deleteSql(sqlTable, cols, rows, pk);
     } catch (e) {
       toast.err(errMsg(e));
       return;
@@ -291,7 +303,7 @@
     const changes = [...byRow.entries()].map(([r, set]) => ({ row: rows[r], set }));
     let text: string;
     try {
-      text = updateSql(sqlTable, page.columns ?? [], changes, pk);
+      text = updateSql(sqlTable, page.columns ?? [], changes, pk, filled);
     } catch (e) {
       toast.err(errMsg(e));
       return;
@@ -373,7 +385,7 @@
     <button title="Reload" onclick={refresh}><IconRefresh size={13} /></button>
   </div>
   {#if viewName === "data" && filterOpen && page && sqlEngine}
-    <DbFilterBar columns={page.columns ?? []} applied={filter} onApply={(c) => { filter = c; reread(); }} onClose={() => (filterOpen = false)} />
+    <DbFilterBar engine={info.engine} columns={page.columns ?? []} applied={filter} onApply={async (c) => { if (!(await dropEdits())) return; filter = c; reread(); }} onClose={() => (filterOpen = false)} />
   {/if}
   {#if choose}
     <div class="choose">
@@ -398,7 +410,7 @@
             {linkTitle}
             onLink={follow}
             serverSort={sqlEngine ? sort : null}
-            onServerSort={sqlEngine ? (v) => { sort = v; reread(); } : undefined}
+            onServerSort={sqlEngine ? async (v) => { if (!(await dropEdits())) return; sort = v; reread(); } : undefined}
             onSelect={(r) => (picked = r)}
             editable={!!sqlEngine && !info.read_only}
             {edits}
@@ -409,7 +421,7 @@
           <p class="muted">No {cur.name} row matches {condText([...cur.where, ...filter])}.</p>
         {/if}
         {#if hasFks}
-          <DbRefPanel {sessionId} database={cur.database} schema={cur.schema} name={cur.name} columns={page.columns ?? []} row={picked} onOpen={walk} />
+          <DbRefPanel {sessionId} engine={info.engine} database={cur.database} schema={cur.schema} name={cur.name} columns={page.columns ?? []} row={picked} onOpen={walk} />
         {/if}
       {:else}
         <p class="muted">Loading...</p>

@@ -5,20 +5,22 @@
 
   import { untrack } from "svelte";
   import type { DbCond, DbCondOp, DbResultColumn } from "./api";
+  import { isBinaryType } from "./dbSql";
   import { IconX } from "./iconMap";
 
   interface Props {
+    engine: string;
     columns: DbResultColumn[];
     applied: DbCond[];
     onApply: (conds: DbCond[]) => void;
     onClose: () => void;
   }
-  let { columns, applied, onApply, onClose }: Props = $props();
+  let { engine, columns, applied, onApply, onClose }: Props = $props();
 
   type Op = DbCondOp | "IS NULL" | "IS NOT NULL";
   interface Row { column: string; op: Op; value: string }
   const OPS: Op[] = ["=", "<>", "<", ">", "<=", ">=", "LIKE", "NOT LIKE", "IS NULL", "IS NOT NULL"];
-  const BINARY = /binary|blob|bytea|\braw\b|bit data|image/i;
+
 
   function fromConds(cs: DbCond[]): Row[] {
     return cs.map((c) => ({
@@ -43,7 +45,7 @@
         const type = columns.find((c) => c.name === r.column)?.type ?? "";
         if (r.op === "IS NULL") return { column: r.column, value: null };
         if (r.op === "IS NOT NULL") return { column: r.column, value: null, op: "<>" as DbCondOp };
-        return { column: r.column, value: r.value, op: r.op as DbCondOp, hex: BINARY.test(type) || undefined };
+        return { column: r.column, value: r.value, op: r.op as DbCondOp, hex: isBinaryType(engine, type) || undefined };
       });
   }
   function apply() {

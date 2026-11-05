@@ -10,7 +10,7 @@
 
   import { onDestroy, untrack } from "svelte";
   import { api, type DbDatabase, type DbHandleInfo, type DbObject, type DbServerInfo } from "./api";
-  import { dbTabs, nextQueryKey, tableKey, type DbTab } from "./dbState.svelte";
+  import { dbTableEdits, dbTabs, nextQueryKey, tableKey, type DbTab } from "./dbState.svelte";
   import DbQueryTab from "./DbQueryTab.svelte";
   import DbTableTab from "./DbTableTab.svelte";
   import DbSessionsTab from "./DbSessionsTab.svelte";
@@ -71,8 +71,22 @@
     }
   });
 
-  function show(key: string) {
+  // Leaving a table tab with unsent cell edits drops them: ask first.
+  async function leaveEdits(key: string | undefined): Promise<boolean> {
+    const n = key ? dbTableEdits[sessionId + "\0" + key] ?? 0 : 0;
+    if (!n) return true;
+    const ok = await showConfirm({
+      title: "Unsent changes",
+      message: `${n} edited cell${n === 1 ? "" : "s"} in this table tab ${n === 1 ? "is" : "are"} not in a script yet. Drop ${n === 1 ? "it" : "them"}?`,
+      okLabel: "Drop",
+      danger: true,
+    });
+    if (ok && key) delete dbTableEdits[sessionId + "\0" + key];
+    return ok;
+  }
+  async function show(key: string) {
     if (!saved) return;
+    if (key !== saved.active && !(await leaveEdits(saved.active))) return;
     saved.active = key;
     changed();
   }
@@ -101,6 +115,7 @@
   }
   async function closeTab(t: DbTab) {
     if (!saved) return;
+    if (!(await leaveEdits(t.key))) return;
     if (t.kind === "query") {
       const inTx = await api.dbTabInTx(sessionId, t.key).catch(() => false);
       if (inTx) {
@@ -208,7 +223,7 @@
       if (!Array.isArray(v)) continue;
       for (const o of v) {
         out.add(o.name);
-        if (o.schema && o.schema !== "public") out.add(`${o.schema}.${o.name}`);
+        if (o.schema) out.add(`${o.schema}.${o.name}`);
       }
     }
     return [...out];

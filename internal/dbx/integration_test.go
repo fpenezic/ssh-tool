@@ -523,8 +523,12 @@ func itForeignKeys(t *testing.T, h *dbx.Handle, sess *dbx.Session, database, sch
 			t.Fatalf("referenced by: %+v", k)
 		}
 	}
-	if !(len(in[0].Columns) == 2) && !(len(in[1].Columns) == 2) {
-		t.Fatalf("referenced by: no composite key %+v", in)
+	comp := in[0]
+	if len(comp.Columns) != 2 {
+		comp = in[1]
+	}
+	if len(comp.Columns) != 2 || !eq(comp.Columns[1], "pcode") || !eq(comp.RefColumns[1], "code") {
+		t.Fatalf("referenced by: composite key %+v", in)
 	}
 
 	two, twoCode := "2", "two"

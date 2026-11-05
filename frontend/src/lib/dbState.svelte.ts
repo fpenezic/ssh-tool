@@ -50,7 +50,16 @@ export interface DbRunState {
   inTx: boolean;
   error?: string; // a call error (no session, handle closed)
   ranAt?: number;
+  // The last Explain of the tab, shown instead of the results until a run
+  // or a close (kept here, like the results, so a tab switch keeps it).
+  plan?: { statement: string; tree: unknown } | null;
+  planErr?: string | null;
 }
+
+// Unsent cell edits of a table tab (sessionId + "\0" + key -> count): the
+// tab's DbTableTab holds them, and the pane asks before a switch or a
+// close drops them (the tab remounts per key).
+export const dbTableEdits = $state<Record<string, number>>({});
 
 const IDLE_RUN: DbRunState = Object.freeze({ running: false, results: [], shown: 0, inTx: false }) as DbRunState;
 

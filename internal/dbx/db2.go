@@ -605,23 +605,27 @@ func (s *db2Session) open(ctx context.Context) error {
 }
 
 func (s *db2Session) run(ctx context.Context, stmt string, readOnly bool, maxRows int) *Result {
-	// A reopen that failed leaves no connection: the next run tries again.
+	// The cancel handle is in place before a reopen, so Stop or the query
+	// timeout during it ends the run too.
+	ctx, stop := context.WithCancel(ctx)
 	s.mu.Lock()
+	s.stop = stop
+	// A reopen that failed leaves no connection: the next run tries again.
 	reopen := s.broken || s.conn == nil
 	s.mu.Unlock()
 	if reopen {
 		s.closeConn()
 		if err := s.open(ctx); err != nil {
+			s.mu.Lock()
+			s.stop = nil
+			s.mu.Unlock()
+			stop()
 			return errResult(err)
 		}
 		s.mu.Lock()
 		s.broken = false
 		s.mu.Unlock()
 	}
-	ctx, stop := context.WithCancel(ctx)
-	s.mu.Lock()
-	s.stop = stop
-	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
 		s.stop = nil

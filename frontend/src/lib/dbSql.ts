@@ -17,6 +17,14 @@ export interface SqlColumn {
   type: string;
 }
 
+// A column the server fills itself, from the described column's extra:
+// an identity that refuses a value (PostgreSQL, SQL Server, a GENERATED
+// ALWAYS one on Oracle / Db2) or a generated / computed column. A plain
+// auto_increment takes a value and is not one.
+export function serverFilled(extra: string | undefined): boolean {
+  return /GENERATED ALWAYS|GENERATED$|^generated$|^identity$|^computed/i.test(extra ?? "");
+}
+
 export function ident(engine: SqlEngine, name: string): string {
   if (engine === "mysql") return "`" + name.replace(/`/g, "``") + "`";
   if (engine === "mssql") return "[" + name.replace(/]/g, "]]") + "]";
@@ -39,6 +47,13 @@ export function tableName(t: SqlTable): string {
 }
 
 const BINARY = /binary|blob|bytea|\braw\b|bit data|image/i;
+
+// A column whose cells the grid shows as hex (0x... or \x...): bound and
+// written as bytes. MySQL / MariaDB BIT too; PostgreSQL bit strings are
+// 0s and 1s, not hex.
+export function isBinaryType(engine: string, type: string): boolean {
+  return BINARY.test(type) || (engine === "mysql" && /^bit\b/i.test(type));
+}
 const NUMERIC = /int|numeric|decimal|number|float|double|real|money|serial/i;
 const NUMBER = /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/;
 const TEMPORAL = /date|timestamp/i;
@@ -47,7 +62,7 @@ const TEMPORAL = /date|timestamp/i;
 // \x...); a number stays bare for a numeric column.
 export function literal(engine: SqlEngine, v: string | null, type: string): string {
   if (v === null) return "NULL";
-  if (BINARY.test(type) && /^(0x|\\x)[0-9a-fA-F]*$/.test(v)) {
+  if (isBinaryType(engine, type) && /^(0x|\\x)[0-9a-fA-F]*$/.test(v)) {
     const hex = v.slice(2);
     switch (engine) {
       case "postgres":
@@ -71,8 +86,9 @@ export function literal(engine: SqlEngine, v: string | null, type: string): stri
     return `_utf8mb4 X'${hex}'`;
   }
   const q = v.replace(/'/g, "''");
-  // Oracle reads a bare date string with the session's NLS format.
-  if (engine === "oracle" && TEMPORAL.test(type) && !/zone/i.test(type)) return `TIMESTAMP '${q}'`;
+  // Oracle reads a bare date string with the session's NLS format; a
+  // TIMESTAMP literal takes the offset a zoned value prints with too.
+  if (engine === "oracle" && TEMPORAL.test(type)) return `TIMESTAMP '${q}'`;
   if (engine === "mssql" && /^n?(var)?char|^n?text/i.test(type)) return `N'${q}'`;
   return `'${q}'`;
 }
@@ -80,10 +96,27 @@ export function literal(engine: SqlEngine, v: string | null, type: string): stri
 // The condition that picks one row: its key columns, or every column when
 // the table has no primary key (then it can match more than one row, and
 // the script says so).
+// Types the engine cannot compare with = (json, LOBs, xml): a keyless row
+// is picked without them.
+function noCompare(engine: SqlEngine, type: string): boolean {
+  switch (engine) {
+    case "postgres":
+      return /^json$|^xml$/i.test(type);
+    case "oracle":
+      return /lob|^long|xmltype/i.test(type);
+    case "mssql":
+      return /^n?text$|^image$|^xml$/i.test(type);
+    case "db2":
+      return /lob|^xml$/i.test(type);
+    default:
+      return false;
+  }
+}
+
 // A key column the rows do not have is an error, not a dropped condition:
 // a WHERE missing part of the key would touch more rows than the one meant.
 export function rowWhere(engine: SqlEngine, cols: SqlColumn[], row: (string | null)[], key: string[]): string {
-  const use = key.length ? key : cols.map((c) => c.name);
+  const use = key.length ? key : cols.filter((c) => !noCompare(engine, c.type)).map((c) => c.name);
   return use
     .map((k) => {
       const i = cols.findIndex((c) => c.name === k);
@@ -94,22 +127,47 @@ export function rowWhere(engine: SqlEngine, cols: SqlColumn[], row: (string | nu
     .join(" AND ");
 }
 
-export function insertSql(t: SqlTable, cols: SqlColumn[], rows: (string | null)[][]): string {
-  const names = cols.map((c) => ident(t.engine, c.name)).join(", ");
-  return rows
-    .map((r) => `INSERT INTO ${tableName(t)} (${names}) VALUES (${cols.map((c, i) => literal(t.engine, r[i], c.type)).join(", ")});`)
-    .join("\n");
+// The note a keyless table's statements start with.
+function keylessNote(engine: SqlEngine, cols: SqlColumn[], key: string[]): string {
+  if (key.length) return "";
+  const left = cols.filter((c) => noCompare(engine, c.type)).map((c) => c.name);
+  return (
+    "-- no primary key: each condition names every column and can match more than one row\n" +
+    (left.length ? `-- left out of the conditions (cannot be compared with =): ${left.join(", ")}\n` : "")
+  );
+}
+
+// filled: the columns the server fills (serverFilled), left out.
+export function insertSql(t: SqlTable, cols: SqlColumn[], rows: (string | null)[][], filled: Set<string> = new Set()): string {
+  const keep = cols.map((c, i) => ({ c, i })).filter(({ c }) => !filled.has(c.name));
+  const names = keep.map(({ c }) => ident(t.engine, c.name)).join(", ");
+  const note = keep.length < cols.length ? `-- left out (the server fills them): ${cols.filter((c) => filled.has(c.name)).map((c) => c.name).join(", ")}\n` : "";
+  return (
+    note +
+    rows.map((r) => `INSERT INTO ${tableName(t)} (${names}) VALUES (${keep.map(({ c, i }) => literal(t.engine, r[i], c.type)).join(", ")});`).join("\n")
+  );
 }
 
 export function deleteSql(t: SqlTable, cols: SqlColumn[], rows: (string | null)[][], key: string[]): string {
-  const note = key.length ? "" : "-- no primary key: each condition names every column and can match more than one row\n";
+  const note = keylessNote(t.engine, cols, key);
   return note + rows.map((r) => `DELETE FROM ${tableName(t)} WHERE ${rowWhere(t.engine, cols, r, key)};`).join("\n");
 }
 
 // UPDATE statements for edited cells: changes maps a row (as the server
 // sent it) to its column index -> new value.
-export function updateSql(t: SqlTable, cols: SqlColumn[], changes: { row: (string | null)[]; set: Map<number, string | null> }[], key: string[]): string {
-  const note = key.length ? "" : "-- no primary key: each condition names every column and can match more than one row\n";
+export function updateSql(
+  t: SqlTable,
+  cols: SqlColumn[],
+  changes: { row: (string | null)[]; set: Map<number, string | null> }[],
+  key: string[],
+  filled: Set<string> = new Set(),
+): string {
+  for (const c of changes) {
+    for (const ci of c.set.keys()) {
+      if (filled.has(cols[ci].name)) throw new Error(`${cols[ci].name} is filled by the server (identity or generated): it cannot be set`);
+    }
+  }
+  const note = keylessNote(t.engine, cols, key);
   return (
     note +
     changes

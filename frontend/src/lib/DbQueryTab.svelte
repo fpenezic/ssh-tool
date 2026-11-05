@@ -32,29 +32,52 @@
   // table's name or alias-free in the statement.
   let columns = $state<Record<string, string[]>>({});
   const asked = new Set<string>();
+  // A tree reload (new tableRefs) may follow an ALTER TABLE: describe again.
+  $effect(() => {
+    void tableRefs;
+    untrack(() => {
+      asked.clear();
+      columns = {};
+    });
+  });
   let colTimer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
     const text = sqlText.toLowerCase();
-    const refs = tableRefs;
+    // The tab's own database only: a same-named table elsewhere would
+    // offer its columns here.
+    const refs = tableRefs.filter((r) => r.database === tab.database);
     clearTimeout(colTimer);
     colTimer = setTimeout(() => {
       for (const r of refs) {
         const key = `${r.database}/${r.schema}/${r.name}`;
-        if (asked.has(key) || !new RegExp(`\\b${r.name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(text)) continue;
+        if (asked.has(key) || !mentions(text, r.name.toLowerCase())) continue;
         asked.add(key);
         api.dbDescribe(sessionId, r.database, r.schema, r.name).then(
           (d) => {
             const cols = (d.columns ?? []).map((c) => c.name);
             const next = { ...columns, [r.name]: cols };
-            if (r.schema && r.schema !== "public") next[`${r.schema}.${r.name}`] = cols;
+            if (r.schema) next[`${r.schema}.${r.name}`] = cols;
             columns = next;
           },
-          () => {},
+          () => asked.delete(key), // try again after the next pause
         );
       }
     }, 600);
     return () => clearTimeout(colTimer);
   });
+  // Whether text names the table: not inside a longer identifier ($ and
+  // non-ASCII letters included, which \b does not handle).
+  function mentions(text: string, name: string): boolean {
+    // By hand, not a lookbehind: older WebKit has none.
+    const word = /[\p{L}\p{N}_$]/u;
+    for (let at = text.indexOf(name); at >= 0; at = text.indexOf(name, at + 1)) {
+      const before = at > 0 ? text[at - 1] : "";
+      const after = text[at + name.length] ?? "";
+      if (!(before && word.test(before)) && !(after && word.test(after))) return true;
+    }
+    return false;
+  }
+
 
   const run = $derived(dbTabs.peek(sessionId, tab.key));
   const live = () => dbTabs.run(sessionId, tab.key);
@@ -97,49 +120,65 @@
   // EXPLAIN of the statement under the cursor as a plan tree (estimates
   // only: the statement itself does not run).
   const explainPrefix = $derived(info.engine === "postgres" ? "EXPLAIN (FORMAT JSON) " : info.engine === "mysql" ? "EXPLAIN FORMAT=JSON " : "");
-  let plan = $state<{ statement: string; tree: unknown } | null>(null);
-  let planErr = $state<string | null>(null);
+  const plan = $derived(run.plan ?? null);
+  const planErr = $derived(run.planErr ?? null);
+  function setPlan(p: { statement: string; tree: unknown } | null, e: string | null) {
+    const r = live();
+    r.plan = p;
+    r.planErr = e;
+  }
   let explaining = $state(false);
   async function explain() {
     if (run.running || explaining || !explainPrefix) return;
     let stmt: string;
     try {
       stmt = (await statementHere()).trim().replace(/;\s*$/, "");
+      // One statement: the backend would run every statement of a
+      // selection, a DELETE after the SELECT included.
+      const first = stmt ? await api.dbStatementAt(info.engine, stmt, 0) : null;
+      if (first && sqlTextEnd(stmt, first.end) < stmt.length) {
+        setPlan(null, "Explain takes one statement: the selection holds more than one.");
+        return;
+      }
     } catch (e) {
-      planErr = errMsg(e);
-      plan = null;
+      setPlan(null, errMsg(e));
       return;
     }
     if (!stmt) return;
     if (/^explain\b/i.test(stmt)) {
-      planErr = "This is an EXPLAIN already: Run shows its output.";
-      plan = null;
+      setPlan(null, "This is an EXPLAIN already: Run shows its output.");
       return;
     }
     explaining = true;
-    planErr = null;
     try {
       const r = await api.dbRun(sessionId, tab.key, tab.database, explainPrefix + stmt, 10);
       const res = (r.results ?? [])[0];
       if (!res || res.error) {
-        planErr = res?.error ?? "no plan came back";
-        plan = null;
+        setPlan(null, res?.error ?? "no plan came back");
+        return;
+      }
+      if (res.cut_cells > 0) {
+        setPlan(null, "The plan is longer than a cell holds here (256 KiB): run the EXPLAIN in the editor to see its text.");
         return;
       }
       const cell = res.rows?.[0]?.[0] ?? "";
-      plan = { statement: stmt, tree: JSON.parse(cell) };
+      setPlan({ statement: stmt, tree: JSON.parse(cell) }, null);
     } catch (e) {
-      planErr = errMsg(e);
-      plan = null;
+      setPlan(null, errMsg(e));
     } finally {
       explaining = false;
     }
   }
+  // Where the statement found at 0 ends, as a character index, trailing
+  // ; and blanks after it included.
+  function sqlTextEnd(text: string, endByte: number): number {
+    const end = charIndex(text, endByte);
+    return end + (text.slice(end).match(/^[\s;]*/)?.[0].length ?? 0);
+  }
 
   async function exec(mode: "statement" | "all") {
     if (run.running) return;
-    plan = null;
-    planErr = null;
+    setPlan(null, null);
     let script = sqlText;
     if (mode === "statement") script = await statementHere();
     if (!script.trim()) return;
@@ -254,7 +293,7 @@
         <div class="plan-head">
           <span class="muted-s">Plan{plan ? ` · ${plan.statement.length > 80 ? plan.statement.slice(0, 80) + "..." : plan.statement}` : ""}</span>
           <span class="spacer"></span>
-          <button class="ic" title="Back to the results" onclick={() => { plan = null; planErr = null; }}><IconX size={13} /></button>
+          <button class="ic" title="Back to the results" onclick={() => setPlan(null, null)}><IconX size={13} /></button>
         </div>
         {#if planErr}
           <pre class="err">{planErr}</pre>

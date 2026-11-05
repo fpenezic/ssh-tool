@@ -5,9 +5,11 @@
 
   import { api, type DbCond, type DbForeignKey, type DbResultColumn } from "./api";
   import { errMsg } from "./connectErrors";
+  import { isBinaryType } from "./dbSql";
 
   interface Props {
     sessionId: string;
+    engine: string;
     database: string;
     schema: string;
     name: string;
@@ -15,10 +17,10 @@
     row: (string | null)[] | null;
     onOpen: (t: { database: string; schema: string; name: string; where: DbCond[] }) => void;
   }
-  let { sessionId, database, schema, name, columns, row, onOpen }: Props = $props();
+  let { sessionId, engine, database, schema, name, columns, row, onOpen }: Props = $props();
 
   const CAP = 50;
-  const BINARY = /binary|blob|bytea|\braw\b|bit data|image/i;
+
 
   let keys = $state<DbForeignKey[] | null>(null);
   let keysErr = $state<string | null>(null);
@@ -38,7 +40,7 @@
     for (let i = 0; i < (k.columns ?? []).length; i++) {
       const ci = columns.findIndex((c) => c.name === k.ref_columns?.[i]);
       if (ci < 0 || r[ci] === null) return null;
-      out.push({ column: k.columns![i], value: r[ci], hex: BINARY.test(columns[ci].type) || undefined });
+      out.push({ column: k.columns![i], value: r[ci], hex: isBinaryType(engine, columns[ci].type) || undefined });
     }
     return out;
   }
