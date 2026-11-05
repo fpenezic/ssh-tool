@@ -42,6 +42,10 @@ func fakeHelper(mode string) {
 			}
 		}
 		_ = os.WriteFile(os.Getenv("TUNNELHELPER_MARK"), []byte("eof"), 0o600)
+	case "browser": // a browser login that fails
+		out(map[string]any{"event": "open_url", "url": "https://vpn.example.com/saml"})
+		out(map[string]string{"event": "error", "error": "browser login failed"})
+		return
 	case "hang": // a login nobody answers
 		out(map[string]any{"event": "auth", "id": "1", "message": "OTP?",
 			"fields": []map[string]string{{"key": "otp", "name": "otp", "label": "OTP:", "kind": "password"}}})
@@ -204,5 +208,19 @@ func TestRefusedLoginIsLoginError(t *testing.T) {
 	}
 	if _, err := fakeSpawn(t, "cert", Options{ReadyTimeout: 20 * time.Second}); errors.As(err, &le) {
 		t.Fatalf("certificate error marked as a login: %v", err)
+	}
+}
+
+// A login nobody answers until the ready timeout, and a browser login that
+// fails, are LoginErrors too.
+func TestUnansweredAndBrowserLoginAreLoginErrors(t *testing.T) {
+	var le *LoginError
+	_, err := fakeSpawn(t, "hang", Options{ReadyTimeout: 2 * time.Second, OnAuth: func(*Proc, AuthChallenge) {}})
+	if !errors.As(err, &le) {
+		t.Fatalf("unanswered login: %T %v", err, err)
+	}
+	_, err = fakeSpawn(t, "browser", Options{ReadyTimeout: 20 * time.Second, OnOpenURL: func(string) {}})
+	if !errors.As(err, &le) {
+		t.Fatalf("browser login: %T %v", err, err)
 	}
 }

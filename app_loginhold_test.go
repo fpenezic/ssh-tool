@@ -9,22 +9,32 @@ import (
 )
 
 // A login that did not finish holds proxy starts of the profile; any other
-// failure (gateway down, bad certificate) does not, and the tunnel coming
-// up lifts the hold.
+// failure (gateway down, bad certificate) does not, a start that succeeded
+// while the failed one ran keeps it from holding, and the tunnel coming up
+// lifts the hold.
 func TestLoginHold(t *testing.T) {
 	a := &App{}
 	const id = "p-hold"
-	t.Cleanup(func() { clearLoginHold(id) })
+	t.Cleanup(func() { tunnelStarted(id) })
+	login := fmt.Errorf("profile lab: %w", &tunnelhelper.LoginError{Err: errors.New("login cancelled")})
 
-	a.holdAfterLogin(id, "lab", fmt.Errorf("profile lab: %w", errors.New("gateway does not answer")))
+	a.holdAfterLogin(id, "lab", fmt.Errorf("profile lab: %w", errors.New("gateway does not answer")), loginUps(id))
 	if a.loginHeld(id, "lab") {
 		t.Fatal("held after a failure that was not a login")
 	}
-	a.holdAfterLogin(id, "lab", fmt.Errorf("profile lab: %w", &tunnelhelper.LoginError{Err: errors.New("login cancelled")}))
+
+	gen := loginUps(id)
+	tunnelStarted(id) // a newer start (Connect) came up meanwhile
+	a.holdAfterLogin(id, "lab", login, gen)
+	if a.loginHeld(id, "lab") {
+		t.Fatal("a stale failure held the profile over a newer start")
+	}
+
+	a.holdAfterLogin(id, "lab", login, loginUps(id))
 	if !a.loginHeld(id, "lab") || !a.loginHeld(id, "lab") {
 		t.Fatal("not held after an unfinished login")
 	}
-	clearLoginHold(id)
+	tunnelStarted(id)
 	if a.loginHeld(id, "lab") {
 		t.Fatal("still held after the tunnel came up")
 	}
