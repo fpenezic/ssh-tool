@@ -24,6 +24,8 @@ IBM Db2 joins the Database tab, an experimental compact title bar gives terminal
 - A VNC console tab survives being detached or redocked; before, the move closed the console and the new window showed "VNC session not found".
 
 ### Network profiles
+- A VPN login that a program started through a proxy (a database tool retrying after the computer woke up) and that did not finish is no longer tried again by the next connection: with a Duo push second factor every retry sent another push, one every couple of minutes. Connections through the proxy are refused at once until you press **Connect** on the profile, and a notification says so.
+- A profile's separate proxy that is started with the app listens on `127.0.0.1` even when its stored settings name no address; one written outside the app (an import, a hand edit) listened on every interface.
 - Opening the Settings tab of an OpenConnect (AnyConnect and the others), OpenVPN or Check Point profile no longer asks about unsaved changes on the way out when nothing was edited.
 - **Resume** on a paused profile no longer connects the VPN by itself: the tunnel comes up with the next connection through it, or with Connect. Pause and Resume explain what they do in a tooltip, also on a profile that is down (Pause there sends connections direct instead of bringing the tunnel up).
 

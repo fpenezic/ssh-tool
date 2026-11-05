@@ -213,6 +213,14 @@ type tunnelDialer interface {
 // ensureTunnel starts (or reuses) the profile's tunnel regardless of
 // kind and leaves a wgTouch hold - see ensureWgTunnel for why.
 func (a *App) ensureTunnel(row *store.NetworkProfile) (tunnelDialer, error) {
+	t, err := a.ensureTunnelKind(row)
+	if err == nil {
+		clearLoginHold(row.ID)
+	}
+	return t, err
+}
+
+func (a *App) ensureTunnelKind(row *store.NetworkProfile) (tunnelDialer, error) {
 	kind := parsePolicy(row.ConfigJSON).Kind
 	if err := pluginKindUnsupported(kind); err != nil {
 		return nil, err
