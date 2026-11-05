@@ -310,20 +310,21 @@ func (e *oraEngine) describe(ctx context.Context, database, _, name string) (*Ta
 	// source with trailing whitespace.
 	rows, err = db.QueryContext(ctx, `
 		SELECT c.COLUMN_NAME, c.DATA_TYPE, c.DATA_LENGTH, NVL(c.CHAR_LENGTH, 0), NVL(c.CHAR_USED, ' '),
-		       c.DATA_PRECISION, c.DATA_SCALE, c.NULLABLE, c.DATA_DEFAULT, NVL(m.COMMENTS, ' ')
+		       c.DATA_PRECISION, c.DATA_SCALE, c.NULLABLE, c.DATA_DEFAULT, NVL(m.COMMENTS, ' '), NVL(ic.GENERATION_TYPE, ' ')
 		FROM ALL_TAB_COLUMNS c
 		LEFT JOIN ALL_COL_COMMENTS m ON m.OWNER = c.OWNER AND m.TABLE_NAME = c.TABLE_NAME AND m.COLUMN_NAME = c.COLUMN_NAME
+		LEFT JOIN ALL_TAB_IDENTITY_COLS ic ON ic.OWNER = c.OWNER AND ic.TABLE_NAME = c.TABLE_NAME AND ic.COLUMN_NAME = c.COLUMN_NAME
 		WHERE c.OWNER = :1 AND c.TABLE_NAME = :2 ORDER BY c.COLUMN_ID`, database, name)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var c Column
-		var typ, charUsed, nullable, comment string
+		var typ, charUsed, nullable, comment, gen string
 		var length, charLen int64
 		var prec, scale sql.NullInt64
 		var def sql.NullString
-		if err := rows.Scan(&c.Name, &typ, &length, &charLen, &charUsed, &prec, &scale, &nullable, &def, &comment); err != nil {
+		if err := rows.Scan(&c.Name, &typ, &length, &charLen, &charUsed, &prec, &scale, &nullable, &def, &comment, &gen); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -337,6 +338,10 @@ func (e *oraEngine) describe(ctx context.Context, database, _, name string) (*Ta
 			c.Key = "PRI"
 		}
 		c.Comment = strings.TrimSpace(comment)
+		// Named as Db2 does; Copy as SQL leaves an ALWAYS one out.
+		if g := strings.TrimSpace(gen); g != "" {
+			c.Extra = "GENERATED " + g + " AS IDENTITY"
+		}
 		d.Columns = append(d.Columns, c)
 	}
 	rows.Close()

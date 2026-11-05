@@ -42,10 +42,6 @@ func sqlInbound(ctx context.Context, db *sql.DB, errf func(error) error, q strin
 		if err := rows.Scan(&n, &d, &s, &t, &c, &rc); err != nil {
 			return nil, errf(err)
 		}
-		// Catalogs with fixed-width names pad at the end; a leading blank
-		// is part of a delimited name.
-		n, d, s, t = strings.TrimRight(n, " "), strings.TrimRight(d, " "), strings.TrimRight(s, " "), strings.TrimRight(t, " ")
-		c, rc = strings.TrimRight(c, " "), strings.TrimRight(rc, " ")
 		if k := len(out) - 1; k >= 0 && out[k].Name == n && out[k].Database == d && out[k].Schema == s && out[k].Table == t {
 			out[k].Columns = append(out[k].Columns, c)
 			out[k].RefColumns = append(out[k].RefColumns, rc)
@@ -164,6 +160,18 @@ func (e *db2Engine) inbound(ctx context.Context, database, _, name string) ([]Fo
 		  AND p.TABNAME = r.REFTABNAME AND p.COLSEQ = k.COLSEQ
 		WHERE r.REFTABSCHEMA = ? AND r.REFTABNAME = ?
 		ORDER BY r.TABSCHEMA, r.TABNAME, r.CONSTNAME, k.COLSEQ`, database, name)
+	// SYSCAT pads some names to their fixed width; only Db2's: another
+	// engine's delimited name may end in a blank of its own.
+	for i := range fks {
+		f := &fks[i]
+		f.Name, f.Database, f.Table = strings.TrimRight(f.Name, " "), strings.TrimRight(f.Database, " "), strings.TrimRight(f.Table, " ")
+		for j := range f.Columns {
+			f.Columns[j] = strings.TrimRight(f.Columns[j], " ")
+		}
+		for j := range f.RefColumns {
+			f.RefColumns[j] = strings.TrimRight(f.RefColumns[j], " ")
+		}
+	}
 	return withRef(clearSchema(fks), database, "", name), err
 }
 

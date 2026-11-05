@@ -187,7 +187,7 @@
     }
     if (!sel) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
-      const v = rows[sel.r]?.[sel.c];
+      const v = shown(sel.r, sel.c);
       api.clipboardSetText(v ?? "").catch(() => {});
       e.preventDefault();
       return;
@@ -212,11 +212,13 @@
     return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
   }
   async function exportAs(kind: "csv" | "json") {
+    // As shown: an edited cell exports its edit.
+    const out = rows.map((r, ri) => r.map((_, ci) => shown(ri, ci)));
     let text: string;
     if (kind === "csv") {
-      text = [cols.map((c) => csvCell(c.name)).join(","), ...rows.map((r) => r.map(csvCell).join(","))].join("\r\n") + "\r\n";
+      text = [cols.map((c) => csvCell(c.name)).join(","), ...out.map((r) => r.map(csvCell).join(","))].join("\r\n") + "\r\n";
     } else {
-      text = JSON.stringify(rows.map((r) => Object.fromEntries(cols.map((c, i) => [c.name, r[i]]))), null, 2) + "\n";
+      text = JSON.stringify(out.map((r) => Object.fromEntries(cols.map((c, i) => [c.name, r[i]]))), null, 2) + "\n";
     }
     try {
       const path = await api.saveTextFile(`${exportName}.${kind}`, text);
@@ -249,7 +251,7 @@
             class:sorted={sort?.c === i || serverSort?.column === c.name}
             role="columnheader"
             tabindex="-1"
-            aria-sort={sort?.c === i ? (sort.desc ? "descending" : "ascending") : "none"}
+            aria-sort={sort?.c === i ? (sort.desc ? "descending" : "ascending") : serverSort?.column === c.name ? (serverSort.desc ? "descending" : "ascending") : "none"}
             title="{c.name} ({c.type}) - click to sort {onServerSort ? 'the table' : 'the rows shown'}"
             onclick={() => toggleSort(i)}
           >

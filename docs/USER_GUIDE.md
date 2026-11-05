@@ -1781,14 +1781,7 @@ completion of the table names listed so far.
   open, and closing the tab asks first (closing rolls it back).
 - With several statements, each result is a chip above the grid. Result
   sets show in a grid that stays fast with many rows: click a cell and
-  **Ctrl+C** copies it, double-click (or Enter) opens the full value below -
-  JSON pretty-printed. A click on a column header sorts the rows (again for
-  descending, a third time back to the server's order): numbers as
-  numbers, `NULL` last. **Ctrl+F** (or the magnifier under the grid) keeps
-  only the rows with the text in any column and marks the cells; **Esc**
-  closes it. Both work on the rows already fetched - on a table's Data
-  view that is the page shown - and `#` keeps each row's number from the
-  server. **CSV** and **JSON** save the rows as shown.
+  **Ctrl+C** copies it, double-click (or Enter) opens the full value below - JSON pretty-printed. A click on a column header sorts the rows (again for descending, a third time back to the server's order): numbers as numbers, `NULL` last; in a SQL table's Data view the header sorts the whole table on the server instead (see Tables). **Ctrl+F** (or the magnifier under the grid) keeps only the rows with the text in any column and marks the cells; **Esc** closes it. It works on the rows already fetched - on a table's Data view that is the page shown - and `#` keeps each row's number from the server. **CSV** and **JSON** save the rows as shown, edited cells with their edit.
 - On a connection marked *sensitive*, statements that change data are
   listed for confirmation before they run.
 

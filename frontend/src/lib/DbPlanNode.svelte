@@ -16,11 +16,15 @@
   const obj = $derived(node !== null && typeof node === "object" ? (node as Record<string, unknown>) : null);
   const pg = $derived(obj && typeof obj["Node Type"] === "string" ? obj : null);
 
-  const PG_DETAIL = ["Filter", "Index Cond", "Recheck Cond", "Hash Cond", "Merge Cond", "Join Filter", "Sort Key", "Group Key", "Cache Key"];
+  const PG_DETAIL = ["CTE Name", "Filter", "Index Cond", "Recheck Cond", "Hash Cond", "Merge Cond", "Join Filter", "Sort Key", "Group Key", "Cache Key"];
   function pgTitle(n: Record<string, unknown>): string {
     let t = String(n["Node Type"]);
     if (n["Join Type"] && t !== "Hash") t = `${n["Join Type"]} ${t}`;
-    const on = n["Relation Name"] ? ` on ${n["Schema"] ? n["Schema"] + "." : ""}${n["Relation Name"]}${n["Alias"] && n["Alias"] !== n["Relation Name"] ? " " + n["Alias"] : ""}` : "";
+    const on = n["Relation Name"]
+      ? ` on ${n["Schema"] ? n["Schema"] + "." : ""}${n["Relation Name"]}${n["Alias"] && n["Alias"] !== n["Relation Name"] ? " " + n["Alias"] : ""}`
+      : n["CTE Name"] // CTE Scan, WorkTable Scan
+      ? ` on ${n["CTE Name"]}${n["Alias"] && n["Alias"] !== n["CTE Name"] ? " " + n["Alias"] : ""}`
+      : "";
     const idx = n["Index Name"] ? ` using ${n["Index Name"]}` : "";
     return t + idx + on;
   }
@@ -54,9 +58,16 @@
     {/each}
   {/if}
 {:else if isArray}
-  {#each node as unknown[] as c, i (i)}
-    <DbPlanNode node={c} label={label ? `${label}[${i}]` : ""} {depth} />
-  {/each}
+  {#if (node as unknown[]).every((v) => v === null || typeof v !== "object")}
+    <!-- A list of names (MySQL possible_keys, used_columns): one line. -->
+    <div class="leaf" style:padding-left="{depth * 1.1 + 1.4}rem">
+      {#if label}<span class="key">{label}</span>: {/if}<span class="mono">{(node as unknown[]).map(String).join(", ")}</span>
+    </div>
+  {:else}
+    {#each node as unknown[] as c, i (i)}
+      <DbPlanNode node={c} label={label ? `${label}[${i}]` : ""} {depth} />
+    {/each}
+  {/if}
 {:else if obj}
   <div class="gen" style:padding-left="{depth * 1.1}rem">
     {#if label}

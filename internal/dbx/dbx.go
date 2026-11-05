@@ -472,6 +472,9 @@ func orderList(order []Order, pk []string, ident func(string) string) string {
 	seen := map[string]bool{}
 	for _, o := range order {
 		q := ident(o.Column)
+		if seen[q] {
+			continue // SQL Server refuses a column twice in ORDER BY
+		}
 		seen[q] = true
 		if o.Desc {
 			q += " DESC"
