@@ -267,7 +267,13 @@ func stopLocalProxies() {
 func (a *App) serveLocalProxy(id string, c net.Conn) {
 	a.serveSOCKS(c, func(pw string) bool {
 		want, err := a.localProxyPassword(id)
-		return err == nil && subtleEqual(pw, want)
+		if err != nil {
+			// Usually a locked vault: say so, or the refusal below reads
+			// as a client with the wrong password.
+			log.Printf("network: local proxy (profile %s): cannot check the password: %v", id, err)
+			return false
+		}
+		return subtleEqual(pw, want)
 	}, func(host string) (string, []string, error) { return id, []string{host}, nil }, "profile "+id)
 }
 
