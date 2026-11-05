@@ -192,6 +192,13 @@ func (a *App) startLocalProxies() {
 	}
 	for _, r := range rows {
 		if cfg := profileLocalProxy(r.ConfigJSON); cfg.Enabled {
+			// Stored configs are normalised on save, but one written
+			// elsewhere (an import, a hand edit) may lack the address:
+			// an empty one would listen on every interface.
+			if err := cfg.normalize(); err != nil {
+				log.Printf("network: local proxy for %q: %v", r.Name, err)
+				continue
+			}
 			if err := a.startLocalProxy(r.ID, cfg); err != nil {
 				log.Printf("network: local proxy for %q: %v", r.Name, err)
 			}
