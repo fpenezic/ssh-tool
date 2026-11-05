@@ -11,7 +11,7 @@
 import { api, dbEngineInfo, type Connection, type DbHandleInfo, type DbResult } from "./api";
 import { tree, selection } from "./stores.svelte";
 
-export type DbTabKind = "query" | "table";
+export type DbTabKind = "query" | "table" | "sessions";
 export type DbTableView = "data" | "structure" | "ddl";
 
 export interface DbTab {

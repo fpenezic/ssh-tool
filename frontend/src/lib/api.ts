@@ -105,6 +105,7 @@ export interface InheritableSettings {
   db_use_tunnel?: boolean;
   db_default?: boolean;
   db_read_only?: boolean;
+  db_query_timeout?: number;
   db_tls?: string;
   db_credential_ref?: string;
   // Databases listed under the connection; a field left out takes the db_*
@@ -201,6 +202,7 @@ export interface ResolvedSettings {
   db_use_tunnel: boolean;
   db_default: boolean;
   db_read_only: boolean;
+  db_query_timeout: number;
   db_tls: string;
   db_credential_ref: string | null;
   db_targets: DbTarget[] | null;
@@ -290,6 +292,11 @@ export interface DbColumn {
 export interface DbForeignKey {
   name: string;
   def: string;
+  // The table holding the key, when it is not the one described
+  // (dbReferencedBy).
+  database?: string;
+  schema?: string;
+  table?: string;
   columns?: string[];
   ref_database?: string;
   ref_schema?: string;
@@ -297,7 +304,12 @@ export interface DbForeignKey {
   ref_columns?: string[];
 }
 // One equality of a filtered browse; a null value is IS NULL.
-export interface DbCond { column: string; value: string | null; hex?: boolean }
+// One condition of a filtered browse: op "" is =; a null value is IS NULL
+// (IS NOT NULL with <>).
+export type DbCondOp = "" | "=" | "<>" | "<" | ">" | "<=" | ">=" | "LIKE" | "NOT LIKE";
+export interface DbCond { column: string; value: string | null; hex?: boolean; op?: DbCondOp }
+// A server-side sort key.
+export interface DbOrder { column: string; desc?: boolean }
 export interface DbIndex { name: string; columns: string[]; unique: boolean; primary: boolean; def?: string }
 export interface DbTableDetail {
   schema: string;
@@ -309,9 +321,10 @@ export interface DbTableDetail {
   ddl: string;
   ddl_note?: string;
 }
+export interface DbResultColumn { name: string; type: string }
 export interface DbResult {
   statement: string;
-  columns: { name: string; type: string }[] | null;
+  columns: DbResultColumn[] | null;
   rows: (string | null)[][] | null;
   has_rows: boolean;
   rows_affected: number;
@@ -1920,8 +1933,12 @@ export const api = {
     G.DbObjects(id, database, system) as unknown as Promise<DbObject[] | null>,
   dbDescribe: (id: string, database: string, schema: string, name: string) =>
     nn(G.DbDescribe(id, database, schema, name)) as Promise<DbTableDetail>,
-  dbBrowse: (id: string, database: string, schema: string, name: string, where: DbCond[], offset: number, limit: number) =>
-    nn(G.DbBrowse(id, database, schema, name, where as any, offset, limit)) as Promise<DbResult>,
+  dbBrowse: (id: string, database: string, schema: string, name: string, where: DbCond[], order: DbOrder[], offset: number, limit: number) =>
+    nn(G.DbBrowse(id, database, schema, name, where as any, order as any, offset, limit)) as Promise<DbResult>,
+  dbReferencedBy: (id: string, database: string, schema: string, name: string) =>
+    G.DbReferencedBy(id, database, schema, name).then((r: any) => (r ?? []) as DbForeignKey[]),
+  dbActivity: (id: string) => nn(G.DbActivity(id)) as Promise<DbResult>,
+  dbKill: (id: string, sessionID: string, endSession: boolean) => G.DbKill(id, sessionID, endSession) as Promise<void>,
   dbRun: (id: string, tabKey: string, database: string, script: string, maxRows: number) =>
     nn(G.DbRun(id, tabKey, database, script, maxRows)) as Promise<DbRunResult>,
   dbCancel: (id: string, tabKey: string) => G.DbCancel(id, tabKey) as unknown as Promise<void>,

@@ -2277,6 +2277,15 @@ everything mobile is behind a build tag or an `isMobile` check.
    bind breaks the conversation outright (SQLCODE -30020), so a binary
    key goes as hex text through `HEXTORAW(CAST(? AS VARCHAR(...)))`.
 
+150. **A Svelte 5 `$effect` that reads the state it writes loops.**
+   (`DbSessionsTab.svelte`, `DbFilterBar.svelte`) An effect that calls a
+   loader which checks `if (loading) return` subscribes to `loading`, so
+   every finished load runs it again (Sessions reloaded nonstop and lost
+   the picked row); an effect that resets a form from props but reads the
+   form's own rows to pick a default re-runs on every edit and throws the
+   edit away. Load once with `onMount`, and read anything but the
+   trigger inside `untrack`.
+
 ---
 
 # Archive

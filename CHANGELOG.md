@@ -15,6 +15,14 @@ IBM Db2 joins the Database tab, an experimental compact title bar gives terminal
 - opkssh is updated to 0.19.2 (openpubkey 0.30.0): a provider whose key set holds one key that cannot be read no longer breaks the login (hello.coop failed with "Ed25519: invalid key algorithm"), Ed25519 ID tokens verify again, and token keys are checked more strictly (a token must use the algorithm its key is published for).
 
 ### Database
+- **Referenced by**: pick a row in a table's Data view and see which tables point at it and how many of their rows, a click away (same breadcrumb as following a key). A column in several foreign keys asks which one to follow.
+- **Filter and sort on the server** in a table's Data view: conditions on columns (`=`, `<>`, `<`, `>`, `LIKE`, `IS NULL` and the rest) and a header click sort the whole table, not just the page shown.
+- **Copy as SQL**: the picked row or the page as `INSERT` or `DELETE` statements in the engine's syntax.
+- **Edit cells** in the Data view: changed cells collect into an `UPDATE` script that opens in a query tab to read and run; nothing is sent by itself.
+- **Explain** in query tabs (PostgreSQL, MySQL / MariaDB): the statement's plan as a tree with cost, rows and conditions.
+- Query tabs complete **column names** of the tables a script uses, after the table's name or alias.
+- **Sessions**: the server's sessions (who runs what, for how long, waiting on what, blocked by whom), with Stop statement and End session; audited, refused on read-only connections.
+- **Query timeout** setting for Database tabs (inherited like the other Database settings): a statement that runs longer is stopped on the server, as Stop does.
 - **Follow foreign keys** in a table's Data view (PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, Db2): a link in a foreign key cell opens the row it references, in the same tab, with a breadcrumb of the path and **Back**. Composite keys follow all their columns.
 - **IBM Db2** joins the Database tab: Db2 for Linux, UNIX and Windows over its own DRDA protocol, with a pure-Go driver (no IBM client to install), through the connection's SSH session like the other engines. The tree lists the schemas of the database you connect to, with tables, views and materialized query tables, their columns, keys, indexes and foreign keys; query tabs run SQL and SQL PL blocks (ended by `@` on a line of its own), and read-only mode sends only `SELECT`, `WITH` and `VALUES` and rolls each run back.
 

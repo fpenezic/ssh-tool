@@ -2024,7 +2024,63 @@ above the grid shows the path (`orders / customers (id = 42) /
 countries (code = HR)`), **Back** returns one step and a click on a
 crumb jumps back to it. Structure and DDL show the table you are on.
 The key values are sent as parameters, so reading them is as read-only
-as browsing.
+as browsing. A column that belongs to several keys asks which one to
+follow.
+
+**Referenced by** (under the grid, same engines) walks the other way:
+pick a row and it lists the tables whose foreign keys point at it, each
+with how many of their rows do (counted up to 50, shown as `50+`
+beyond). A click opens those rows, on the same breadcrumb.
+
+**Filter and sort on the server.** **Filter** opens conditions on
+columns (`=`, `<>`, `<`, `>`, `<=`, `>=`, `LIKE`, `NOT LIKE`, `IS NULL`,
+`IS NOT NULL`; all must hold), applied to the whole table, not just the
+page; a header click sorts the table (ascending, descending, off), with
+the primary key after it so Prev / Next stay stable. Values go as
+parameters.
+
+**Copy as SQL** puts `INSERT` or `DELETE` statements for the picked row,
+or the whole page, on the clipboard, in the engine's own syntax (binary
+values as hex literals, Oracle dates as `TIMESTAMP '...'`).
+
+**Editing cells.** Double-click a cell, then **Edit** in the value pane:
+**Set** (or **Set NULL**) marks the cell as changed, in yellow. Nothing
+is sent: **Script** opens the changes as `UPDATE` statements in a query
+tab, keyed by the primary key, to read and run there (on a sensitive
+connection Run asks first, as for any write); **Discard** drops them.
+Moving to another page or table asks before it drops unsent edits. A
+table without a primary key gets statements that name every column and
+say so. Not offered on a read-only connection.
+
+**Query timeout.** In the connection's (or folder's) Database settings,
+**Query timeout (s)** stops a query tab's statement that runs longer,
+on the server, the way **Stop** does; the result says so. Empty
+inherits, 0 means no limit (the default). It applies to Database tabs
+opened after the change.
+
+### Query tabs: plans and completion
+
+- **Explain** (PostgreSQL, MySQL / MariaDB) shows the server's plan for
+  the statement under the cursor as a tree: each step, the table and
+  index it uses, its estimated cost and rows, and its conditions. The
+  statement itself does not run.
+- Completion offers a table's **columns** once the script names the
+  table (after `table.` or its alias, `o.`), fetched in the background
+  for the tables you use.
+
+### Sessions
+
+The activity button at the top of the database list opens **Sessions**:
+the server's other sessions with user, database, client, state, how
+long the statement has run, what it waits on and which session blocks
+it (PostgreSQL, MySQL / MariaDB, SQL Server, Oracle, Db2). Pick one and
+**Stop statement** (PostgreSQL, MySQL, Oracle) or **End session**; both
+ask first, are recorded in the audit log and are refused on a read-only
+connection. **auto** refreshes every 3 seconds. Seeing other users'
+sessions takes a monitoring grant on most servers (`pg_monitor`,
+`PROCESS`, `VIEW SERVER STATE`, `SELECT_CATALOG_ROLE`, Db2 monitor
+authority); without one the server's error shows, or only your own
+sessions.
 
 Statements that change data are recorded in the audit log (the statement,
 cut to 300 characters, and the rows affected or the error).

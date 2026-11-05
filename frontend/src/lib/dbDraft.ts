@@ -15,6 +15,8 @@ export interface DbDraft {
   tunnel: string;
   def: string;
   readOnly: string;
+  // Seconds a query tab's statement may run ("" = inherit, "0" = no limit).
+  timeout: string;
   tls: string;
   cred: string;
   // The connection's own database in the tree (connections only).
@@ -41,6 +43,7 @@ export function dbDraftFrom(s: InheritableSettings | undefined | null): DbDraft 
     tunnel: enc(o.db_use_tunnel),
     def: enc(o.db_default),
     readOnly: enc(o.db_read_only),
+    timeout: o.db_query_timeout === undefined || o.db_query_timeout === null ? "" : String(o.db_query_timeout),
     tls: o.db_tls ?? "",
     cred: encRef(o.db_credential_ref),
     label: o.db_label ?? "",
@@ -59,6 +62,8 @@ export function applyDbDraft<T extends InheritableSettings>(s: T, d: DbDraft): T
   s.db_use_tunnel = dec(d.tunnel);
   s.db_default = dec(d.def);
   s.db_read_only = dec(d.readOnly);
+  const secs = d.timeout.trim();
+  s.db_query_timeout = /^\d+$/.test(secs) ? Number(secs) : undefined;
   s.db_tls = d.tls || undefined;
   s.db_credential_ref = decRef(d.cred);
   s.db_label = d.label.trim() || undefined;
@@ -95,6 +100,6 @@ export function dbDraftSame(d: DbDraft, s: InheritableSettings | undefined | nul
   const o = dbDraftFrom(s);
   return (Object.keys(o) as (keyof DbDraft)[]).every((k) => {
     if (k === "targets") return JSON.stringify(cleanTargets(d.targets)) === JSON.stringify(cleanTargets(o.targets));
-    return k === "addr" || k === "name" || k === "label" ? d[k].trim() === o[k].trim() : d[k] === o[k];
+    return k === "addr" || k === "name" || k === "label" || k === "timeout" ? d[k].trim() === o[k].trim() : d[k] === o[k];
   });
 }
