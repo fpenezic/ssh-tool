@@ -312,6 +312,9 @@ Notes:
 - App runs natively on Windows (not WSL). Don't add WSL-specific
   paths. Must work without WSL installed.
 - No emojis in code, docs, commits, or UI unless explicitly asked.
+- Docs (`docs/*.md`, the user guide, gotchas) are not hard-wrapped:
+  one paragraph or bullet per line. Older wrapped text is unwrapped when
+  a change touches it.
 - No em-dashes anywhere - code, comments, docs, commits, UI
   strings. Use a plain ASCII hyphen with spaces (` - `) instead;
   keep all punctuation ASCII. (En-dashes too.)
