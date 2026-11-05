@@ -192,6 +192,7 @@ func (a *App) dbOpen(connectionID, targetID string, login *[2]string) (*DbHandle
 	cfg := dbx.Config{
 		Engine: settings.DbEngine, Addr: addr, Database: settings.DbName,
 		User: user, Password: password, TLS: settings.DbTLS, ReadOnly: settings.DbReadOnly,
+		QueryTimeout: time.Duration(settings.DbQueryTimeout) * time.Second,
 	}
 	if settings.DbUseTunnel {
 		if settings.Hostname == "" {
@@ -387,15 +388,46 @@ func (a *App) DbDescribe(id, database, schema, name string) (*dbx.TableDetail, e
 }
 
 // DbBrowse reads a page of a table's rows; where (may be empty) keeps the
-// rows matching every condition, a foreign key followed from another row.
-func (a *App) DbBrowse(id, database, schema, name string, where []dbx.Cond, offset, limit int) (*dbx.Result, error) {
+// rows matching every condition (a followed foreign key, the Data view's
+// filter), order (may be empty) sorts them on the server.
+func (a *App) DbBrowse(id, database, schema, name string, where []dbx.Cond, order []dbx.Order, offset, limit int) (*dbx.Result, error) {
 	dh, err := a.dbGet(id)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := dbCtx()
 	defer cancel()
-	return dh.h.BrowseWhere(ctx, database, schema, name, where, offset, limit)
+	return dh.h.BrowseQuery(ctx, database, schema, name, where, order, offset, limit)
+}
+
+// DbActivity lists the server's sessions (who runs what, waits on what,
+// is blocked by whom).
+func (a *App) DbActivity(id string) (*dbx.Result, error) {
+	dh, err := a.dbGet(id)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := dbCtx()
+	defer cancel()
+	return dh.h.Activity(ctx)
+}
+
+// DbKill stops what a server session runs, or ends the session (session
+// true). Audited; refused on a read-only connection.
+func (a *App) DbKill(id, sessionID string, session bool) error {
+	dh, err := a.dbGet(id)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := dbCtx()
+	defer cancel()
+	err = dh.h.Kill(ctx, sessionID, session)
+	meta := map[string]string{"handle_id": id, "session": sessionID, "end_session": fmt.Sprint(session)}
+	if err != nil {
+		meta["error"] = err.Error()
+	}
+	a.recordAudit("db.kill", dh.info.ConnectionID, meta)
+	return err
 }
 
 // DbRunResult is what a run returned: one result per statement run (it

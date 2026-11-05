@@ -9,6 +9,7 @@ export {
     ForeignKey,
     Index,
     $Object,
+    Order,
     Result,
     ResultColumn,
     ServerInfo,

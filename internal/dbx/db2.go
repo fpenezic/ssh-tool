@@ -486,7 +486,7 @@ func db2RebuildDDL(schema, name string, cols []Column, pk []string) string {
 	return b.String()
 }
 
-func (e *db2Engine) browse(ctx context.Context, database, _, name string, where []Cond, offset, limit int) (*Result, error) {
+func (e *db2Engine) browse(ctx context.Context, database, _, name string, where []Cond, order []Order, offset, limit int) (*Result, error) {
 	db, err := e.db()
 	if err != nil {
 		return nil, err
@@ -533,8 +533,8 @@ func (e *db2Engine) browse(ctx context.Context, database, _, name string, where 
 		return nil, err
 	}
 	q := "SELECT * FROM " + db2Ident(database) + "." + db2Ident(name) + w
-	if len(pk) > 0 {
-		q += " ORDER BY " + strings.Join(pk, ", ")
+	if ob := orderList(order, pk, db2Ident); ob != "" {
+		q += " ORDER BY " + ob
 	}
 	// OFFSET is Db2 11.1+; the first page needs none.
 	if offset > 0 {

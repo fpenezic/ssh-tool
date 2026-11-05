@@ -90,6 +90,82 @@ func (s *itServer) open(t *testing.T, readOnly bool) *dbx.Handle {
 	return h
 }
 
+// itTimeout: a handle with a query timeout stops a long statement by
+// itself, says so, and its session runs the next one.
+func itTimeout(t *testing.T, s *itServer, database, long, after string) {
+	t.Helper()
+	cfg := s.cfg
+	cfg.QueryTimeout = time.Second
+	h, err := dbx.Open(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(h.Close)
+	sess, err := h.OpenSession(ctx30(t), "timeout", database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	r := sess.Run(context.Background(), long, dbx.RunOptions{})
+	if time.Since(start) > 15*time.Second {
+		t.Fatalf("the timeout did not stop %q", long)
+	}
+	if !strings.Contains(r[0].Error, "query timeout") {
+		t.Fatalf("timed out statement: %+v", r[0])
+	}
+	mustRun(t, sess, after)
+}
+
+// itActivity: a long statement on another session shows in Activity, and
+// Kill stops it (the statement, then the session). A server that keeps
+// its sessions view behind a grant answers with that error (allowed names
+// it), which is fine for a login without one.
+func itActivity(t *testing.T, s *itServer, h *dbx.Handle, database, long, match, allowed string) {
+	t.Helper()
+	other, err := h.OpenSession(ctx30(t), "busy", database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan []*dbx.Result, 1)
+	go func() { done <- other.Run(context.Background(), long, dbx.RunOptions{}) }()
+	time.Sleep(1500 * time.Millisecond)
+	act, err := h.Activity(ctx30(t))
+	if err != nil {
+		if allowed != "" && strings.Contains(err.Error(), allowed) {
+			other.Cancel()
+			<-done
+			t.Logf("activity needs a grant here: %v", err)
+			return
+		}
+		t.Fatal(err)
+	}
+	id := ""
+	qi := len(act.Columns) - 1
+	for _, r := range act.Rows {
+		if r[qi] != nil && strings.Contains(strings.ToLower(*r[qi]), strings.ToLower(match)) {
+			id = *r[0]
+		}
+	}
+	if id == "" {
+		other.Cancel()
+		<-done
+		t.Fatalf("activity does not show %q: %d rows", match, len(act.Rows))
+	}
+	if err := h.Kill(ctx30(t), id, false); err != nil {
+		other.Cancel()
+		<-done
+		t.Fatalf("kill %s: %v", id, err)
+	}
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("kill did not stop the statement")
+	}
+	if err := h.Kill(ctx30(t), "1; DROP TABLE x", false); err == nil {
+		t.Fatal("a malformed session id was accepted")
+	}
+}
+
 func ctx30(t *testing.T) context.Context {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
@@ -264,6 +340,8 @@ func itEngine(t *testing.T, engine string) {
 
 	// Cancel stops a long statement and keeps the session.
 	sleep := map[bool]string{true: "SELECT pg_sleep(30)", false: "SELECT SLEEP(30)"}[pg]
+	itTimeout(t, s, s.cfg.Database, sleep, "SELECT 1")
+	itActivity(t, s, h, s.cfg.Database, map[bool]string{true: "SELECT pg_sleep(20)", false: "SELECT SLEEP(20)"}[pg], "sleep(20)", "")
 	done := make(chan []*dbx.Result)
 	start := time.Now()
 	go func() { done <- sess.Run(context.Background(), sleep, dbx.RunOptions{}) }()
@@ -422,6 +500,24 @@ func itForeignKeys(t *testing.T, h *dbx.Handle, sess *dbx.Session, database, sch
 		t.Fatalf("composite foreign key %+v", fk2)
 	}
 
+	// The other way: the parent lists both keys of the child.
+	in, err := h.ReferencedBy(ctx, database, schema, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(in) != 2 {
+		t.Fatalf("referenced by: %+v", in)
+	}
+	for _, k := range in {
+		if !eq(k.Table, child) || !eq(k.Database, database) || !eq(k.Schema, schema) || !eq(k.RefTable, parent) ||
+			len(k.Columns) != len(k.RefColumns) || !eq(k.Columns[0], "parent_id") || !eq(k.RefColumns[0], "id") {
+			t.Fatalf("referenced by: %+v", k)
+		}
+	}
+	if !(len(in[0].Columns) == 2) && !(len(in[1].Columns) == 2) {
+		t.Fatalf("referenced by: no composite key %+v", in)
+	}
+
 	two, twoCode := "2", "two"
 	page, err := h.BrowseWhere(ctx, fk2.RefDatabase, fk2.RefSchema, fk2.RefTable,
 		[]dbx.Cond{{Column: fk2.RefColumns[0], Value: &two}, {Column: fk2.RefColumns[1], Value: &twoCode}}, 0, 50)
@@ -459,6 +555,19 @@ func itForeignKeys(t *testing.T, h *dbx.Handle, sess *dbx.Session, database, sch
 	}
 	if len(page.Rows) != 1 || *page.Rows[0][0] != "11" {
 		t.Fatalf("IS NULL: %d rows", len(page.Rows))
+	}
+
+	// The Data view's filter and sort, on the server.
+	codeCol := fk2.RefColumns[1]
+	tpat, one1 := "t%", "1"
+	page, err = h.BrowseQuery(ctx, fk.RefDatabase, fk.RefSchema, fk.RefTable, []dbx.Cond{{Column: codeCol, Value: &tpat, Op: "LIKE"}}, nil, 0, 50)
+	if err != nil || len(page.Rows) != 1 || *page.Rows[0][1] != "two" {
+		t.Fatalf("LIKE: err %v, rows %v", err, page)
+	}
+	page, err = h.BrowseQuery(ctx, fk.RefDatabase, fk.RefSchema, fk.RefTable, []dbx.Cond{{Column: fk.RefColumns[0], Value: &one1, Op: ">="}},
+		[]dbx.Order{{Column: codeCol, Desc: true}}, 0, 50)
+	if err != nil || len(page.Rows) != 2 || *page.Rows[0][1] != "two" || *page.Rows[1][1] != "one" {
+		t.Fatalf(">= sorted desc: err %v, rows %v", err, page)
 	}
 
 	// A binary key, followed with the value as the grid shows it.

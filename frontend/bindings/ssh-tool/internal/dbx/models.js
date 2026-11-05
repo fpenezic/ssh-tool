@@ -107,6 +107,15 @@ export class Cond {
         }
         if (/** @type {any} */(false)) {
             /**
+             * Op is the comparison ("" is =): = <> < > <= >= LIKE "NOT LIKE".
+             * A nil Value takes IS NULL, or IS NOT NULL with Op <>.
+             * @member
+             * @type {string | undefined}
+             */
+            this["op"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * Hex: Value is a binary cell as the grid shows it (0x... or \x...),
              * bound as its bytes.
              * @member
@@ -203,6 +212,29 @@ export class ForeignKey {
         }
         if (/** @type {any} */(false)) {
             /**
+             * Database / Schema / Table: the table that holds the key, set when it
+             * is not the one described (ReferencedBy).
+             * @member
+             * @type {string | undefined}
+             */
+            this["database"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["schema"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["table"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * @member
              * @type {string[] | undefined}
              */
@@ -246,14 +278,14 @@ export class ForeignKey {
      * @returns {ForeignKey}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType0;
-        const $$createField6_0 = $$createType0;
+        const $$createField5_0 = $$createType0;
+        const $$createField9_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("columns" in $$parsedSource) {
-            $$parsedSource["columns"] = $$createField2_0($$parsedSource["columns"]);
+            $$parsedSource["columns"] = $$createField5_0($$parsedSource["columns"]);
         }
         if ("ref_columns" in $$parsedSource) {
-            $$parsedSource["ref_columns"] = $$createField6_0($$parsedSource["ref_columns"]);
+            $$parsedSource["ref_columns"] = $$createField9_0($$parsedSource["ref_columns"]);
         }
         return new ForeignKey(/** @type {Partial<ForeignKey>} */($$parsedSource));
     }
@@ -395,6 +427,44 @@ export class $Object {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new $Object(/** @type {Partial<$Object>} */($$parsedSource));
+    }
+}
+
+/**
+ * Order is one sort key of a browse, server side.
+ */
+export class Order {
+    /**
+     * Creates a new Order instance.
+     * @param {Partial<Order>} [$$source = {}] - The source object to create the Order.
+     */
+    constructor($$source = {}) {
+        if (!("column" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["column"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["desc"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Order instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {Order}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new Order(/** @type {Partial<Order>} */($$parsedSource));
     }
 }
 

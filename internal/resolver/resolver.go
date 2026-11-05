@@ -127,6 +127,7 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 		DbUseTunnel:        firstNonNilBool(over.DbUseTunnel, base.DbUseTunnel),
 		DbDefault:          firstNonNilBool(over.DbDefault, base.DbDefault),
 		DbReadOnly:         firstNonNilBool(over.DbReadOnly, base.DbReadOnly),
+		DbQueryTimeout:     firstNonNilU32(over.DbQueryTimeout, base.DbQueryTimeout),
 		DbTLS:              firstNonNil(over.DbTLS, base.DbTLS),
 		DbCredentialRef:    firstNonNil(over.DbCredentialRef, base.DbCredentialRef),
 		Sensitive:          firstNonNilBool(over.Sensitive, base.Sensitive),
@@ -281,6 +282,7 @@ func finalize(s store.InheritableSettings, hostname string) store.ResolvedSettin
 		DbUseTunnel:        s.DbUseTunnel == nil || *s.DbUseTunnel,
 		DbDefault:          s.DbDefault != nil && *s.DbDefault,
 		DbReadOnly:         s.DbReadOnly != nil && *s.DbReadOnly,
+		DbQueryTimeout:     u32Or(s.DbQueryTimeout, 0),
 		DbTLS:              dbTLS,
 		DbCredentialRef:    dbCred,
 		DbTargets:          s.DbTargets,
@@ -323,6 +325,13 @@ func firstNonNilBool(a, b *bool) *bool {
 
 // strOr is the trimmed value of an optional string, def when unset or
 // blank.
+func u32Or(p *uint32, def uint32) uint32 {
+	if p == nil {
+		return def
+	}
+	return *p
+}
+
 func strOr(p *string, def string) string {
 	if p == nil {
 		return def

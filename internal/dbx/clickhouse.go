@@ -333,8 +333,8 @@ func splitTop(s string) []string {
 	return append(out, strings.TrimSpace(s[start:]))
 }
 
-func (e *chEngine) browse(ctx context.Context, database, _, name string, where []Cond, offset, limit int) (*Result, error) {
-	if len(where) > 0 {
+func (e *chEngine) browse(ctx context.Context, database, _, name string, where []Cond, order []Order, offset, limit int) (*Result, error) {
+	if len(where) > 0 || len(order) > 0 {
 		return nil, ErrNoFilter
 	}
 	rows, err := e.rows(ctx, `SELECT sorting_key FROM system.tables WHERE database = `+chString(database)+` AND name = `+chString(name))
