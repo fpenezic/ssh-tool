@@ -88,3 +88,49 @@ func TestDbRemoveOnlyDatabase(t *testing.T) {
 		t.Errorf("tab still on: %+v", o)
 	}
 }
+
+// A database a folder lists: Remove hides it on that connection only, the
+// default may be it, and Default falls through to the next shown one.
+func TestDbRemoveInheritedTarget(t *testing.T) {
+	a := newResolveTestApp(t)
+	on := true
+	f, err := a.db.CreateFolder(store.NewFolder{Name: "cluster", Settings: store.InheritableSettings{DbEnabled: &on,
+		DbTargets: []store.DbTarget{{ID: "prod", Name: "prod"}, {ID: "stage", Name: "stage"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mk := func(name string) *store.Connection {
+		c, err := a.db.CreateConnection(store.NewConnection{Name: name, Hostname: name + ".example.com", FolderID: &f.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	n1, n2 := mk("node1"), mk("node2")
+	if err := a.DbSetDefault(n1.ID, "stage"); err != nil {
+		t.Fatalf("an inherited database can be the default: %v", err)
+	}
+	if err := a.DbRemove(n1.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.DbRemove(n1.ID, "stage"); err != nil {
+		t.Fatal(err)
+	}
+	o := reload(t, a, n1.ID)
+	if len(o.DbTargets) != 1 || !o.DbTargets[0].Override || o.DbTargets[0].ID != "stage" || o.DbTargets[0].InTree == nil || *o.DbTargets[0].InTree {
+		t.Fatalf("expected one hiding override: %+v", o.DbTargets)
+	}
+	if o.DbDefaultTarget == nil || *o.DbDefaultTarget != "prod" {
+		t.Errorf("default should move to prod: %v", o.DbDefaultTarget)
+	}
+	if o2 := reload(t, a, n2.ID); len(o2.DbTargets) != 0 {
+		t.Errorf("node2 changed: %+v", o2.DbTargets)
+	}
+	ff, _ := a.db.GetFolder(f.ID)
+	if ff == nil || len(ff.Settings.DbTargets) != 2 || ff.Settings.DbTargets[1].InTree != nil {
+		t.Errorf("folder list changed: %+v", ff)
+	}
+	if err := a.DbRemove(n1.ID, "nope"); err == nil {
+		t.Error("an unknown database should be refused")
+	}
+}

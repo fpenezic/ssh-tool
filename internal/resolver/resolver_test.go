@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"strings"
 	"testing"
 
 	"ssh-tool/internal/store"
@@ -444,5 +445,50 @@ func TestDbDefaultTarget(t *testing.T) {
 	r = ResolveWith(conn("c2", nil, "h", store.InheritableSettings{DbEnabled: &on, DbTargets: targets, DbDefaultTarget: &gone}), nil)
 	if r.DbDefaultTarget != "" {
 		t.Fatalf("a removed target should fall back to the connection's own: %q", r.DbDefaultTarget)
+	}
+}
+
+func TestDbTargetsInherited(t *testing.T) {
+	// A cluster folder lists prod and stage once; a subfolder adds reports.
+	root := folder("cluster", nil, store.InheritableSettings{DbTargets: []store.DbTarget{
+		{ID: "p", Name: "prod", Database: ptr("app")},
+		{ID: "s", Name: "stage", Database: ptr("app_stage"), ReadOnly: ptr(true)},
+	}})
+	sub := folder("east", ptr("cluster"), store.InheritableSettings{DbTargets: []store.DbTarget{{ID: "r", Name: "reports"}}})
+	folders := []store.Folder{root, sub}
+	names := func(r store.ResolvedSettings) string {
+		var s []string
+		for _, t := range r.DbTargets {
+			s = append(s, t.Name)
+		}
+		return strings.Join(s, ",")
+	}
+
+	r := ResolveWith(conn("c1", ptr("east"), "h", store.InheritableSettings{}), folders)
+	if got := names(r); got != "prod,stage,reports" {
+		t.Fatalf("inherited list = %q", got)
+	}
+	// The connection adds its own after them and adjusts stage: hidden
+	// from the tree, its own login; the rest of stage stays the folder's.
+	r = ResolveWith(conn("c2", ptr("east"), "h", store.InheritableSettings{DbTargets: []store.DbTarget{
+		{ID: "own", Name: "local"},
+		{ID: "s", Override: true, InTree: ptr(false), CredentialRef: ptr("cred-s")},
+		{ID: "gone", Override: true, InTree: ptr(false)},
+	}}), folders)
+	if got := names(r); got != "prod,stage,reports,local" {
+		t.Fatalf("merged list = %q", got)
+	}
+	st := r.DbTargets[1]
+	if st.InTree == nil || *st.InTree || st.CredentialRef == nil || *st.CredentialRef != "cred-s" || st.Database == nil || *st.Database != "app_stage" || st.ReadOnly == nil || !*st.ReadOnly || st.Override {
+		t.Fatalf("stage override = %+v", st)
+	}
+	// The folder's own copy is untouched by the connection's override.
+	if root.Settings.DbTargets[1].InTree != nil {
+		t.Fatal("override leaked into the folder's list")
+	}
+	// The default may be an inherited database.
+	r = ResolveWith(conn("c3", ptr("east"), "h", store.InheritableSettings{DbDefaultTarget: ptr("s")}), folders)
+	if r.DbDefaultTarget != "s" {
+		t.Fatalf("default = %q", r.DbDefaultTarget)
 	}
 }

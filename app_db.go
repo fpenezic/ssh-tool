@@ -616,23 +616,54 @@ func (a *App) DbSaveLogin(connectionID, targetID, name, user, password string) (
 	if targetID == "" {
 		over.DbCredentialRef = &id
 	} else {
-		found := false
-		targets := append([]store.DbTarget(nil), over.DbTargets...)
-		for i := range targets {
-			if targets[i].ID == targetID {
-				targets[i].CredentialRef = &id
-				found = true
-			}
+		listed, err := a.dbListedTargets(conn, over)
+		if err != nil {
+			return "", err
 		}
-		if !found {
+		i, ok := dbTargetEntry(&over, listed, targetID)
+		if !ok {
 			return "", fmt.Errorf("that database is no longer listed on the connection")
 		}
-		over.DbTargets = targets
+		over.DbTargets[i].CredentialRef = &id
 	}
 	if _, err := a.db.UpdateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over}); err != nil {
 		return "", err
 	}
 	return id, nil
+}
+
+// dbListedTargets is the connection's database list once its folders'
+// are applied, for settings over (the stored ones or an edit of them).
+func (a *App) dbListedTargets(conn *store.Connection, over store.InheritableSettings) ([]store.DbTarget, error) {
+	folders, err := a.db.ListFolders()
+	if err != nil {
+		return nil, err
+	}
+	c := *conn
+	c.Overrides = over
+	return resolver.ResolveWith(c, folders).DbTargets, nil
+}
+
+// dbTargetEntry is the index in over.DbTargets of the entry that sets the
+// listed database id on this connection: its own target, or for one a
+// folder lists, the Override entry (added when there is none yet), so a
+// change to it stays on this connection. The slice is copied first.
+func dbTargetEntry(over *store.InheritableSettings, listed []store.DbTarget, id string) (int, bool) {
+	known := false
+	for _, t := range listed {
+		known = known || t.ID == id
+	}
+	if !known {
+		return 0, false
+	}
+	over.DbTargets = append([]store.DbTarget(nil), over.DbTargets...)
+	for i, t := range over.DbTargets {
+		if t.ID == id {
+			return i, true
+		}
+	}
+	over.DbTargets = append(over.DbTargets, store.DbTarget{ID: id, Override: true})
+	return len(over.DbTargets) - 1, true
 }
 
 // DbRemove takes one database off a connection (the tree's Remove / Delete
@@ -651,9 +682,14 @@ func (a *App) DbRemove(connectionID, targetID string) error {
 		return fmt.Errorf("connection not found")
 	}
 	over := conn.Overrides
+	listed, err := a.dbListedTargets(conn, over)
+	if err != nil {
+		return err
+	}
 	off := false
-	if targetID == "" {
-		if len(over.DbTargets) == 0 {
+	switch {
+	case targetID == "":
+		if len(listed) == 0 {
 			over.DbEnabled = &off
 			over.DbInTree = nil
 			over.DbDefaultTarget = nil
@@ -661,20 +697,28 @@ func (a *App) DbRemove(connectionID, targetID string) error {
 			return err
 		}
 		over.DbInTree = &off
-	} else {
+	case dbOwnTarget(over, targetID):
 		kept := over.DbTargets[:0:0]
 		for _, t := range over.DbTargets {
 			if t.ID != targetID {
 				kept = append(kept, t)
 			}
 		}
-		if len(kept) == len(over.DbTargets) {
+		over.DbTargets = kept
+	default:
+		// A folder lists it: hidden on this connection, the folder's list
+		// and the other connections under it stay as they are.
+		i, ok := dbTargetEntry(&over, listed, targetID)
+		if !ok {
 			return fmt.Errorf("that database is no longer listed on the connection")
 		}
-		over.DbTargets = kept
+		over.DbTargets[i].InTree = &off
 	}
-	over.DbDefaultTarget = dbDefaultAfterRemove(over)
-	if over.DbInTree != nil && !*over.DbInTree && len(over.DbTargets) == 0 {
+	if listed, err = a.dbListedTargets(conn, over); err != nil {
+		return err
+	}
+	over.DbDefaultTarget = dbDefaultAfterRemove(over, listed)
+	if over.DbInTree != nil && !*over.DbInTree && len(listed) == 0 {
 		// The last listed one went while the own database was hidden:
 		// nothing is left, so the tab goes off rather than show nothing.
 		over.DbEnabled = &off
@@ -684,14 +728,26 @@ func (a *App) DbRemove(connectionID, targetID string) error {
 	return err
 }
 
+// dbOwnTarget: the connection lists id itself (not only adjusts a
+// folder's).
+func dbOwnTarget(over store.InheritableSettings, id string) bool {
+	for _, t := range over.DbTargets {
+		if t.ID == id && !t.Override {
+			return true
+		}
+	}
+	return false
+}
+
 // dbDefaultAfterRemove keeps the default when it is still listed and
 // shown; otherwise it picks the own database when that is shown, else the
 // first listed database shown in the tree (nil = the own database).
-func dbDefaultAfterRemove(over store.InheritableSettings) *string {
+// listed is the connection's list with its folders' applied.
+func dbDefaultAfterRemove(over store.InheritableSettings, listed []store.DbTarget) *string {
 	shown := func(b *bool) bool { return b == nil || *b }
 	ownShown := shown(over.DbInTree)
 	if d := over.DbDefaultTarget; d != nil && *d != "" {
-		for _, t := range over.DbTargets {
+		for _, t := range listed {
 			if t.ID == *d && shown(t.InTree) {
 				return d
 			}
@@ -702,7 +758,7 @@ func dbDefaultAfterRemove(over store.InheritableSettings) *string {
 	if ownShown {
 		return nil
 	}
-	for _, t := range over.DbTargets {
+	for _, t := range listed {
 		if shown(t.InTree) {
 			id := t.ID
 			return &id
@@ -723,8 +779,12 @@ func (a *App) DbSetDefault(connectionID, targetID string) error {
 	if targetID == "" {
 		over.DbDefaultTarget = nil
 	} else {
+		listed, err := a.dbListedTargets(conn, over)
+		if err != nil {
+			return err
+		}
 		found := false
-		for _, t := range over.DbTargets {
+		for _, t := range listed {
 			found = found || t.ID == targetID
 		}
 		if !found {

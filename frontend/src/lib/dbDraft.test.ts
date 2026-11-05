@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DB_NONE, applyDbDraft, dbDraftError, dbDraftFrom, dbDraftSame } from "./dbDraft";
+import { DB_NONE, applyDbDraft, dbDraftError, dbDraftFrom, dbDraftSame, mergeTargets } from "./dbDraft";
 import type { InheritableSettings } from "./api";
 
 describe("dbDraft", () => {
@@ -48,5 +48,25 @@ describe("query timeout", () => {
     expect(dbDraftError({ ...d, timeout: "" })).toBe("");
     expect(dbDraftError({ ...d, timeout: "1.5" })).toMatch(/whole number/);
     expect(dbDraftError({ ...d, timeout: "4294967296" })).toMatch(/whole number/);
+  });
+});
+
+describe("databases a folder lists", () => {
+  const folder = mergeTargets([], [{ id: "p", name: "prod", database: "app" }, { id: "s", name: "stage", read_only: true }], "cluster");
+  it("come first, adjusted by a connection's override, orphans dropped", () => {
+    const m = mergeTargets(folder, [{ id: "own", name: "local" }, { id: "s", name: "", override: true, in_tree: false }, { id: "x", name: "", override: true, in_tree: false }], "");
+    expect(m.map((t) => [t.id, t.from])).toEqual([["p", "cluster"], ["s", "cluster"], ["own", ""]]);
+    expect(m[1]).toMatchObject({ name: "stage", read_only: true, in_tree: false });
+    expect(folder[1].in_tree).toBeUndefined();
+  });
+  it("keep only overrides that change something and that a folder still lists", () => {
+    const d = dbDraftFrom({ db_targets: [{ id: "s", name: "", override: true, in_tree: false }] });
+    expect(d.targets).toEqual([]);
+    d.overrides.push({ id: "p", name: "", override: true }, { id: "gone", name: "", override: true, credential_ref: "c1" });
+    const s = applyDbDraft({} as InheritableSettings, { ...d, defaultTarget: "p" }, ["p", "s"]);
+    expect(s.db_targets).toEqual([{ id: "s", name: "", override: true, in_tree: false }]);
+    expect(s.db_default_target).toBe("p");
+    expect(dbDraftSame(dbDraftFrom(s), s)).toBe(true);
+    expect(applyDbDraft({} as InheritableSettings, { ...d, defaultTarget: "p" }).db_default_target).toBeUndefined();
   });
 });

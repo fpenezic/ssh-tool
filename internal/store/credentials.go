@@ -460,6 +460,10 @@ func serviceCredRoles(s *InheritableSettings, credID string) []string {
 			if name == "" && t.Database != nil {
 				name = *t.Database
 			}
+			if name == "" {
+				// An Override entry: the login of a database its folder lists.
+				name = "from the folder's list"
+			}
 			roles = append(roles, "Database login ("+name+")")
 		}
 	}

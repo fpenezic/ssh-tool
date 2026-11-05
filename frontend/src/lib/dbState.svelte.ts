@@ -8,7 +8,8 @@
 // that did not open the tab shows the same tabs. Results stay in the
 // window that ran them.
 
-import { api, dbEngineInfo, type Connection, type DbHandleInfo, type DbResult } from "./api";
+import { api, dbEngineInfo, type Connection, type DbHandleInfo, type DbResult, type DbTarget } from "./api";
+import { mergeTargets, type ListedTarget } from "./dbDraft";
 import { tree, selection } from "./stores.svelte";
 
 export type DbTabKind = "query" | "table" | "sessions";
@@ -173,6 +174,35 @@ export function dbInheritedFrom<K extends "db_enabled" | "db_engine" | "db_read_
   return undefined;
 }
 
+// The databases the folders from folderId upwards list, root folder's
+// first, each with the folder it comes from.
+export function dbFolderTargets(folderId: string | null | undefined): ListedTarget[] {
+  const chain: { name: string; list: DbTarget[] | undefined }[] = [];
+  for (let i = 0; i < 10000 && folderId; i++) {
+    const f = tree.folderById(folderId);
+    if (!f) break;
+    chain.unshift({ name: f.name, list: f.settings?.db_targets });
+    folderId = f.parent_id;
+  }
+  let out: ListedTarget[] = [];
+  for (const c of chain) out = mergeTargets(out, c.list, c.name);
+  return out;
+}
+
+// A connection's listed databases with its folders' applied (what the
+// resolver gives the backend): the folders' first, then its own.
+export function dbTargetsFor(conn: Connection | null | undefined): ListedTarget[] {
+  if (!conn) return [];
+  return mergeTargets(dbFolderTargets(conn.folder_id), conn.overrides?.db_targets, "");
+}
+
+// The default database id: the marked one while it is listed, else ""
+// (the connection's own).
+export function dbDefaultFor(conn: Connection | null | undefined): string {
+  const d = conn?.overrides?.db_default_target;
+  return d && dbTargetsFor(conn).some((t) => t.id === d) ? d : "";
+}
+
 // UTF-16 index <-> UTF-8 byte offset, for the backend's statement ranges.
 export function byteOffset(s: string, index: number): number {
   return new TextEncoder().encode(s.slice(0, index)).length;
@@ -209,7 +239,8 @@ export function dbTreeRows(conn: Connection | null | undefined): DbTreeRow[] {
   if (!conn || !dbEnabledFor(conn)) return [];
   const o = conn.overrides ?? {};
   const out: DbTreeRow[] = [];
-  const def = (o.db_targets ?? []).some((t) => t.id === o.db_default_target) ? o.db_default_target! : "";
+  const listed = dbTargetsFor(conn);
+  const def = dbDefaultFor(conn);
   if (o.db_in_tree !== false) {
     const engine = o.db_engine ?? dbInheritedFrom(conn.folder_id, "db_engine");
     out.push({
@@ -220,7 +251,7 @@ export function dbTreeRows(conn: Connection | null | undefined): DbTreeRow[] {
         .filter(Boolean).join(" · "),
     });
   }
-  for (const t of o.db_targets ?? []) {
+  for (const t of listed) {
     if (t.in_tree === false) continue;
     out.push({
       id: t.id,
