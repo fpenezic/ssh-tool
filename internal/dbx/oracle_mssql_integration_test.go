@@ -6,11 +6,15 @@ package dbx_test
 //	DBTEST_MSSQL=sqlserver://sa:Secret_123@127.0.0.1:1433/appdb (the database
 //	  is created when missing)
 //
+//	(the Sessions check needs a monitoring grant: as SYSTEM, GRANT
+//	SELECT_CATALOG_ROLE, ALTER SYSTEM TO app, then DBTEST_ORA_MONITOR=1)
+//
 //	docker run -d -e ORACLE_PASSWORD=secret -e APP_USER=app -e APP_USER_PASSWORD=secret -p 127.0.0.1:1521:1521 gvenzl/oracle-free:23-slim-faststart
 //	docker run -d -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD=Secret_123 -p 127.0.0.1:1433:1433 mcr.microsoft.com/mssql/server:2022-latest
 
 import (
 	"context"
+	"os"
 	"fmt"
 	"regexp"
 	"strings"
@@ -199,7 +203,14 @@ func TestIntegrationOracle(t *testing.T) {
 
 	itCancel(t, sess, "SELECT COUNT(*) FROM ALL_OBJECTS a, ALL_OBJECTS b, ALL_OBJECTS c", "SELECT 1 FROM DUAL")
 	itTimeout(t, s, schema, "SELECT COUNT(*) FROM ALL_OBJECTS a, ALL_OBJECTS b, ALL_OBJECTS c", "SELECT 1 FROM DUAL")
-	itActivity(t, s, h, schema, "SELECT COUNT(*) FROM ALL_OBJECTS a, ALL_OBJECTS b, ALL_OBJECTS c", "ALL_OBJECTS a", "ORA-00942")
+	// The sessions view needs SELECT_CATALOG_ROLE and ALTER SYSTEM, which
+	// the plain fixture does not grant; DBTEST_ORA_MONITOR=1 says the login
+	// has them, and then a refusal fails the test.
+	oraAllowed := "ORA-00942"
+	if os.Getenv("DBTEST_ORA_MONITOR") == "1" {
+		oraAllowed = ""
+	}
+	itActivity(t, s, h, schema, "SELECT COUNT(*) FROM ALL_OBJECTS a, ALL_OBJECTS b, ALL_OBJECTS c", "ALL_OBJECTS a", "SELECT 1 FROM DUAL", oraAllowed)
 
 	ro := s.open(t, true)
 	rs, err := ro.OpenSession(ctx, "q", schema)
@@ -356,7 +367,7 @@ func TestIntegrationMSSQL(t *testing.T) {
 
 	itCancel(t, sess, "WAITFOR DELAY '00:00:30'", "SELECT 1")
 	itTimeout(t, s, dbName, "WAITFOR DELAY '00:00:30'", "SELECT 1")
-	itActivity(t, s, h, dbName, "WAITFOR DELAY '00:00:20'", "WAITFOR", "")
+	itActivity(t, s, h, dbName, "WAITFOR DELAY '00:00:20'", "WAITFOR", "SELECT 1", "")
 
 	ro := s.open(t, true)
 	rs, err := ro.OpenSession(ctx, "q", dbName)

@@ -33,8 +33,10 @@
     // Whether a folder above makes it read-only (nothing set = writes
     // allowed), so "inherit" can say what it gives.
     inheritedReadOnly?: boolean;
+    // The query timeout a folder above sets (seconds; undefined = none).
+    inheritedTimeout?: number;
   }
-  let { draft = $bindable(), inheritLabel, effectiveOn, inheritedOn, savedEnabled, effectiveEngine, onOpen, showTargets = false, connName = "", onOpenTarget, inheritedReadOnly = false }: Props = $props();
+  let { draft = $bindable(), inheritLabel, effectiveOn, inheritedOn, savedEnabled, effectiveEngine, onOpen, showTargets = false, connName = "", onOpenTarget, inheritedReadOnly = false, inheritedTimeout }: Props = $props();
   // Read-only once this level's own choice is applied: what a listed
   // database left on "(as above)" gets.
   const ownReadOnly = $derived(draft.readOnly === "on" || (draft.readOnly === "" && inheritedReadOnly));
@@ -187,7 +189,13 @@
         </select>
       </label>
       <label title="A query tab's statement that runs longer is stopped on the server, as Stop does. Empty inherits; 0 means no limit.">Query timeout (s)
-        <input inputmode="numeric" pattern="[0-9]*" bind:value={draft.timeout} placeholder={`${inheritLabel} · no limit`} />
+        <!-- Digits only: anything else would save as "inherit" and drop a set limit. -->
+        <input
+          inputmode="numeric"
+          bind:value={draft.timeout}
+          oninput={(e) => { const el = e.currentTarget as HTMLInputElement; const v = el.value.replace(/\D+/g, ""); if (v !== el.value) { el.value = v; draft.timeout = v; } }}
+          placeholder={`${inheritLabel} · ${inheritedTimeout ? inheritedTimeout + " s" : "no limit"}`}
+        />
       </label>
       <label title="TLS runs end to end, inside the tunnel. Require: encrypted, certificate not checked. Verify: the certificate must match the address's host name.">TLS
         <select bind:value={draft.tls}>

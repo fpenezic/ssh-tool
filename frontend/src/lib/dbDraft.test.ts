@@ -42,7 +42,11 @@ describe("query timeout", () => {
     expect(s.db_query_timeout).toBeUndefined();
     applyDbDraft(s, { ...d, timeout: " 0 " });
     expect(s.db_query_timeout).toBe(0);
+    applyDbDraft(s, { ...d, timeout: "30" });
+    expect(s.db_query_timeout).toBe(30);
     applyDbDraft(s, { ...d, timeout: "abc" });
+    expect(s.db_query_timeout).toBeUndefined();
+    applyDbDraft(s, { ...d, timeout: "4294967296" });
     expect(s.db_query_timeout).toBeUndefined();
   });
 });

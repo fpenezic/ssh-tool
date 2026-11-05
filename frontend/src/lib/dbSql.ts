@@ -33,7 +33,8 @@ export function tableName(t: SqlTable): string {
     case "mssql":
       return `${id(t.schema || "dbo")}.${id(t.name)}`;
     default:
-      return t.schema && t.schema !== "public" ? `${id(t.schema)}.${id(t.name)}` : id(t.name);
+      // Always qualified: the session's search_path may not start with public.
+      return t.schema ? `${id(t.schema)}.${id(t.name)}` : id(t.name);
   }
 }
 
@@ -62,8 +63,13 @@ export function literal(engine: SqlEngine, v: string | null, type: string): stri
     }
   }
   if (NUMERIC.test(type) && !/interval|point/i.test(type) && NUMBER.test(v)) return v;
-  let q = v.replace(/'/g, "''");
-  if (engine === "mysql") q = q.replace(/\\/g, "\\\\");
+  // MySQL reads a backslash in a string as an escape or not depending on
+  // sql_mode (NO_BACKSLASH_ESCAPES): such a value goes as hex instead.
+  if (engine === "mysql" && v.includes("\\")) {
+    const hex = [...new TextEncoder().encode(v)].map((b) => b.toString(16).padStart(2, "0")).join("");
+    return `_utf8mb4 X'${hex}'`;
+  }
+  const q = v.replace(/'/g, "''");
   // Oracle reads a bare date string with the session's NLS format.
   if (engine === "oracle" && TEMPORAL.test(type) && !/zone/i.test(type)) return `TIMESTAMP '${q}'`;
   if (engine === "mssql" && /^n?(var)?char|^n?text/i.test(type)) return `N'${q}'`;
@@ -73,16 +79,17 @@ export function literal(engine: SqlEngine, v: string | null, type: string): stri
 // The condition that picks one row: its key columns, or every column when
 // the table has no primary key (then it can match more than one row, and
 // the script says so).
+// A key column the rows do not have is an error, not a dropped condition:
+// a WHERE missing part of the key would touch more rows than the one meant.
 export function rowWhere(engine: SqlEngine, cols: SqlColumn[], row: (string | null)[], key: string[]): string {
   const use = key.length ? key : cols.map((c) => c.name);
   return use
     .map((k) => {
       const i = cols.findIndex((c) => c.name === k);
-      if (i < 0) return null;
+      if (i < 0) throw new Error(`key column ${k} is not among the columns shown`);
       const v = row[i];
       return v === null ? `${ident(engine, k)} IS NULL` : `${ident(engine, k)} = ${literal(engine, v, cols[i].type)}`;
     })
-    .filter((x): x is string => x !== null)
     .join(" AND ");
 }
 
@@ -114,9 +121,9 @@ export function updateSql(t: SqlTable, cols: SqlColumn[], changes: { row: (strin
   );
 }
 
-// A table's primary key columns from its described indexes; index column
-// labels can carry " DESC" (Db2) or " (included)" (SQL Server).
-export function primaryKey(indexes: { primary: boolean; columns: string[] }[] | null | undefined): string[] {
-  const pk = (indexes ?? []).find((i) => i.primary);
-  return (pk?.columns ?? []).filter((c) => !c.endsWith(" (included)")).map((c) => c.replace(/ (ASC|DESC)$/, ""));
+// A table's primary key columns: the columns described with key PRI (the
+// index labels can carry " DESC" or " (included)", which a column's own
+// name could too).
+export function primaryKey(columns: { name: string; key?: string }[] | null | undefined): string[] {
+  return (columns ?? []).filter((c) => c.key === "PRI").map((c) => c.name);
 }

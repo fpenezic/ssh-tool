@@ -150,7 +150,7 @@ export function dbEnabledFor(conn: Connection | null | undefined): boolean {
 }
 
 // A db_* setting as the folder chain from folderId upwards sets it.
-export function dbInheritedFrom<K extends "db_enabled" | "db_engine" | "db_read_only" | "kafka_read_only">(
+export function dbInheritedFrom<K extends "db_enabled" | "db_engine" | "db_read_only" | "db_query_timeout" | "kafka_read_only">(
   folderId: string | null | undefined,
   key: K,
 ): NonNullable<import("./api").InheritableSettings[K]> | undefined {

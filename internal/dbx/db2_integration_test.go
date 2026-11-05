@@ -151,7 +151,7 @@ func TestIntegrationDB2(t *testing.T) {
 
 	itCancel(t, sess, "SELECT COUNT(*) FROM SYSCAT.COLUMNS a, SYSCAT.COLUMNS b, SYSCAT.COLUMNS c", "VALUES 1")
 	itTimeout(t, s, schema, "SELECT COUNT(*) FROM SYSCAT.COLUMNS a, SYSCAT.COLUMNS b, SYSCAT.COLUMNS c", "VALUES 1")
-	itActivity(t, s, h, schema, "SELECT COUNT(*) FROM SYSCAT.COLUMNS a, SYSCAT.COLUMNS b, SYSCAT.COLUMNS c", "SYSCAT.COLUMNS a", "")
+	itActivity(t, s, h, schema, "SELECT COUNT(*) FROM SYSCAT.COLUMNS a, SYSCAT.COLUMNS b, SYSCAT.COLUMNS c", "SYSCAT.COLUMNS a", "VALUES 1", "")
 
 	ro := s.open(t, true)
 	rs, err := ro.OpenSession(ctx, "q", schema)

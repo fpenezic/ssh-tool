@@ -29,7 +29,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -633,22 +632,34 @@ func (s *Session) Run(ctx context.Context, script string, opts RunOptions) []*Re
 			start := time.Now()
 			// The timeout cancels on the server, as Stop does: closing the
 			// client's context alone leaves some engines' statement running.
-			var timedOut atomic.Bool
+			// The callback and the end of the statement take the same lock:
+			// a timeout that fires as the statement ends either cancels it
+			// or sees it done - it never cancels the next statement (a
+			// server-side cancel stops whatever runs at that moment).
+			var tmu sync.Mutex
+			var timedOut, finished bool
 			var timer *time.Timer
 			if d := s.h.cfg.QueryTimeout; d > 0 {
 				timer = time.AfterFunc(d, func() {
-					timedOut.Store(true)
-					s.s.cancel()
+					tmu.Lock()
+					defer tmu.Unlock()
+					if !finished {
+						timedOut = true
+						s.s.cancel()
+					}
 				})
 			}
 			r = s.s.run(ctx, st.Text, readOnly, opts.maxRows())
+			tmu.Lock()
+			finished = true
+			tmu.Unlock()
 			if timer != nil {
 				timer.Stop()
 			}
 			r.Statement = st.Text
 			r.DurationMs = time.Since(start).Milliseconds()
 			r.Write = !IsRead(engine, st.Text)
-			if timedOut.Load() {
+			if timedOut {
 				msg := fmt.Sprintf("stopped after the query timeout (%s)", s.h.cfg.QueryTimeout)
 				if r.Error != "" {
 					msg += ": " + r.Error

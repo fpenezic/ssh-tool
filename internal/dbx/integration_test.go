@@ -105,8 +105,12 @@ func itTimeout(t *testing.T, s *itServer, database, long, after string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Bounded here too, so a timeout that never fires fails the test
+	// instead of hanging it.
+	rctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
 	start := time.Now()
-	r := sess.Run(context.Background(), long, dbx.RunOptions{})
+	r := sess.Run(rctx, long, dbx.RunOptions{})
 	if time.Since(start) > 15*time.Second {
 		t.Fatalf("the timeout did not stop %q", long)
 	}
@@ -120,7 +124,7 @@ func itTimeout(t *testing.T, s *itServer, database, long, after string) {
 // Kill stops it (the statement, then the session). A server that keeps
 // its sessions view behind a grant answers with that error (allowed names
 // it), which is fine for a login without one.
-func itActivity(t *testing.T, s *itServer, h *dbx.Handle, database, long, match, allowed string) {
+func itActivity(t *testing.T, s *itServer, h *dbx.Handle, database, long, match, after, allowed string) {
 	t.Helper()
 	other, err := h.OpenSession(ctx30(t), "busy", database)
 	if err != nil {
@@ -160,6 +164,11 @@ func itActivity(t *testing.T, s *itServer, h *dbx.Handle, database, long, match,
 	case <-done:
 	case <-time.After(15 * time.Second):
 		t.Fatal("kill did not stop the statement")
+	}
+	// Stopping the statement keeps the session where the engine can do
+	// that (SQL Server and Db2 can only end it).
+	if e := h.Engine(); e != dbx.EngineMSSQL && e != dbx.EngineDB2 {
+		mustRun(t, other, after)
 	}
 	if err := h.Kill(ctx30(t), "1; DROP TABLE x", false); err == nil {
 		t.Fatal("a malformed session id was accepted")
@@ -341,7 +350,7 @@ func itEngine(t *testing.T, engine string) {
 	// Cancel stops a long statement and keeps the session.
 	sleep := map[bool]string{true: "SELECT pg_sleep(30)", false: "SELECT SLEEP(30)"}[pg]
 	itTimeout(t, s, s.cfg.Database, sleep, "SELECT 1")
-	itActivity(t, s, h, s.cfg.Database, map[bool]string{true: "SELECT pg_sleep(20)", false: "SELECT SLEEP(20)"}[pg], "sleep(20)", "")
+	itActivity(t, s, h, s.cfg.Database, map[bool]string{true: "SELECT pg_sleep(20)", false: "SELECT SLEEP(20)"}[pg], "sleep(20)", "SELECT 1", "")
 	done := make(chan []*dbx.Result)
 	start := time.Now()
 	go func() { done <- sess.Run(context.Background(), sleep, dbx.RunOptions{}) }()

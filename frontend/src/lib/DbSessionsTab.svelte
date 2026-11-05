@@ -33,6 +33,8 @@
       err = null;
     } catch (e) {
       err = errMsg(e);
+      // The grid goes: nothing it showed may stay picked for a kill.
+      picked = null;
     } finally {
       loading = false;
     }

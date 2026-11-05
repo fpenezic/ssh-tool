@@ -51,6 +51,9 @@ func TestWhereOpsAndOrder(t *testing.T) {
 	if got := orderList([]Order{{Column: "name", Desc: true}, {Column: "id"}}, []string{`"id"`}, pgIdent); got != `"name" DESC, "id"` {
 		t.Fatalf("order %q", got)
 	}
+	if got := orderList([]Order{{Column: "name"}}, []string{`"id"`, `"k"`}, pgIdent); got != `"name", "id", "k"` {
+		t.Fatalf("order then key %q", got)
+	}
 	if got := orderList(nil, []string{`"a"`, `"b"`}, pgIdent); got != `"a", "b"` {
 		t.Fatalf("pk order %q", got)
 	}

@@ -158,7 +158,26 @@ func (e *msEngine) kill(ctx context.Context, id string, _ bool) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.ExecContext(ctx, "KILL "+id) // digits (Kill checked it); SQL Server ends the session
+	// SQL Server refuses to KILL its own session, and the target can be
+	// one of this pool's idle connections: run it from another one.
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return msErr(err)
+	}
+	defer conn.Close()
+	var spid int64
+	if err := conn.QueryRowContext(ctx, "SELECT @@SPID").Scan(&spid); err != nil {
+		return msErr(err)
+	}
+	if strconv.FormatInt(spid, 10) == id {
+		other, err := db.Conn(ctx)
+		if err != nil {
+			return msErr(err)
+		}
+		defer other.Close()
+		conn = other
+	}
+	_, err = conn.ExecContext(ctx, "KILL "+id) // digits (Kill checked it); SQL Server ends the session
 	return msErr(err)
 }
 
@@ -199,10 +218,10 @@ func (e *db2Engine) activity(ctx context.Context) *Result {
 		SELECT c.APPLICATION_HANDLE AS ID, c.SESSION_AUTH_ID AS "USER", c.CLIENT_HOSTNAME AS CLIENT,
 		       COALESCE(a.ACTIVITY_STATE, 'IDLE') AS STATE,
 		       TIMESTAMPDIFF(2, CHAR(CURRENT TIMESTAMP - a.LOCAL_START_TIME)) AS RUNNING_S,
-		       a.ACTIVITY_TYPE AS WAITING, CAST(NULL AS BIGINT) AS BLOCKED_BY,
+		       a.ACTIVITY_TYPE AS ACTIVITY, CAST(NULL AS BIGINT) AS BLOCKED_BY,
 		       CAST(SUBSTR(a.STMT_TEXT, 1, 4000) AS VARCHAR(4000)) AS QUERY
 		FROM TABLE(MON_GET_CONNECTION(NULL, -2)) c
-		LEFT JOIN TABLE(MON_GET_ACTIVITY(NULL, -2)) a ON a.APPLICATION_HANDLE = c.APPLICATION_HANDLE
+		LEFT JOIN TABLE(MON_GET_ACTIVITY(NULL, -2)) a ON a.APPLICATION_HANDLE = c.APPLICATION_HANDLE AND a.MEMBER = c.MEMBER
 		WHERE c.APPLICATION_HANDLE <> MON_GET_APPLICATION_HANDLE()
 		ORDER BY CASE WHEN a.ACTIVITY_STATE IS NULL THEN 1 ELSE 0 END, a.LOCAL_START_TIME`, MaxRowsCeiling, db2Dialect, nil)
 }
