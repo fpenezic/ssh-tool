@@ -63,7 +63,8 @@ export function applyDbDraft<T extends InheritableSettings>(s: T, d: DbDraft): T
   s.db_default = dec(d.def);
   s.db_read_only = dec(d.readOnly);
   const secs = d.timeout.trim();
-  s.db_query_timeout = /^\d+$/.test(secs) ? Number(secs) : undefined;
+  // uint32 on the backend: a larger number would fail the whole save.
+  s.db_query_timeout = /^\d+$/.test(secs) && Number(secs) <= 4294967295 ? Number(secs) : undefined;
   s.db_tls = d.tls || undefined;
   s.db_credential_ref = decRef(d.cred);
   s.db_label = d.label.trim() || undefined;

@@ -236,16 +236,30 @@
   // SQL text for rows: the engines with a SQL grammar here.
   const sqlEngine = $derived<SqlEngine | null>(hasFks ? (info.engine as SqlEngine) : null);
   const sqlTable = $derived(sqlEngine ? { engine: sqlEngine, database: cur.database, schema: cur.schema, name: cur.name } : null);
-  const pk = $derived(primaryKey(detail?.indexes));
+  const pk = $derived(primaryKey(detail?.columns));
+  // A value cut at the cell limit would go into the SQL cut: refuse.
+  function sqlBlocked(): boolean {
+    if (page && page.cut_cells > 0) {
+      toast.err(`${page.cut_cells} value${page.cut_cells === 1 ? " is" : "s are"} cut on this page (too long to show whole): no SQL from it`);
+      return true;
+    }
+    return false;
+  }
   function copySql(kind: "insert" | "delete", all: boolean) {
-    if (!sqlTable || !page) return;
+    if (!sqlTable || !page || sqlBlocked()) return;
     const rows = all ? page.rows ?? [] : picked ? [picked] : [];
     if (!rows.length) {
       toast.info("Pick a row first");
       return;
     }
     const cols = page.columns ?? [];
-    const text = kind === "insert" ? insertSql(sqlTable, cols, rows) : deleteSql(sqlTable, cols, rows, pk);
+    let text: string;
+    try {
+      text = kind === "insert" ? insertSql(sqlTable, cols, rows) : deleteSql(sqlTable, cols, rows, pk);
+    } catch (e) {
+      toast.err(errMsg(e));
+      return;
+    }
     api.clipboardSetText(text).then(
       () => toast.ok(`${kind.toUpperCase()} for ${rows.length} row${rows.length === 1 ? "" : "s"} copied`),
       () => {},
@@ -260,7 +274,7 @@
   }
   // The edits as an UPDATE script in a query tab, to read and run there.
   function editScript() {
-    if (!sqlTable || !page || !edits.size) return;
+    if (!sqlTable || !page || !edits.size || sqlBlocked()) return;
     const byRow = new Map<number, Map<number, string | null>>();
     for (const [k, v] of edits) {
       const [r, c] = k.split(":").map(Number);
@@ -268,7 +282,14 @@
     }
     const rows = page.rows ?? [];
     const changes = [...byRow.entries()].map(([r, set]) => ({ row: rows[r], set }));
-    onQuery(updateSql(sqlTable, page.columns ?? [], changes, pk) + "\n", cur.database);
+    let text: string;
+    try {
+      text = updateSql(sqlTable, page.columns ?? [], changes, pk);
+    } catch (e) {
+      toast.err(errMsg(e));
+      return;
+    }
+    onQuery(text + "\n", cur.database);
   }
 
   function show(v: DbTableView) {
@@ -282,9 +303,13 @@
     picked = null;
     loadPage();
   }
-  function refresh() {
-    if (viewName === "data") loadPage();
-    else loadDetail();
+  async function refresh() {
+    if (viewName === "data") {
+      if (!(await dropEdits())) return;
+      edits = new Map();
+      picked = null;
+      loadPage();
+    } else loadDetail();
   }
 </script>
 

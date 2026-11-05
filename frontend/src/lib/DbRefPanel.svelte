@@ -56,14 +56,20 @@
     }
     refs = ks.map((k) => ({ key: k, where: whereFor(k, r), count: null }));
     // Arrow keys move the pick quickly: count once it settles.
-    timer = setTimeout(() => {
-      refs.forEach((ref, i) => {
-        if (!ref.where) return;
-        api.dbBrowse(sessionId, ref.key.database ?? database, ref.key.schema ?? "", ref.key.table ?? "", ref.where, [], 0, CAP + 1).then(
-          (p) => { if (row === r && refs[i]) refs[i].count = (p.rows ?? []).length; },
-          (e) => { if (row === r && refs[i]) refs[i].err = errMsg(e); },
-        );
-      });
+    // One count at a time: a table referenced by many keys would otherwise
+    // ask for all of them at once from the small tree pool.
+    timer = setTimeout(async () => {
+      for (let i = 0; i < refs.length; i++) {
+        const ref = refs[i];
+        if (!ref.where) continue;
+        if (row !== r) return; // the pick moved on
+        try {
+          const p = await api.dbBrowse(sessionId, ref.key.database ?? database, ref.key.schema ?? "", ref.key.table ?? "", ref.where, [], 0, CAP + 1);
+          if (row === r && refs[i]) refs[i].count = (p.rows ?? []).length;
+        } catch (e) {
+          if (row === r && refs[i]) refs[i].err = errMsg(e);
+        }
+      }
     }, 250);
     return () => clearTimeout(timer);
   });

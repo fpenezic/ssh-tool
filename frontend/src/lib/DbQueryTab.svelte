@@ -102,7 +102,14 @@
   let explaining = $state(false);
   async function explain() {
     if (run.running || explaining || !explainPrefix) return;
-    const stmt = (await statementHere()).trim().replace(/;\s*$/, "");
+    let stmt: string;
+    try {
+      stmt = (await statementHere()).trim().replace(/;\s*$/, "");
+    } catch (e) {
+      planErr = errMsg(e);
+      plan = null;
+      return;
+    }
     if (!stmt) return;
     if (/^explain\b/i.test(stmt)) {
       planErr = "This is an EXPLAIN already: Run shows its output.";
@@ -213,7 +220,7 @@
       {#if !databases.includes(tab.database)}<option value={tab.database}>{tab.database || "(default)"}</option>{/if}
       {#each databases as d (d)}<option value={d}>{d}</option>{/each}
     </select>
-    {#if run.running}
+    {#if run.running || explaining}
       <button class="stop" title="Stop the running statement" onclick={() => api.dbCancel(sessionId, tab.key)}><IconStop size={13} /> Stop</button>
     {:else}
       <button class="go" title="Run the statement under the cursor, or the selection (Ctrl+Enter)" onclick={() => exec("statement")}><IconPlay size={13} /> Run</button>

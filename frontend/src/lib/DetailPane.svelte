@@ -2080,6 +2080,7 @@
         effectiveOn={editingFolder.db.enabled === "on" || (editingFolder.db.enabled === "" && dbInheritedFrom(folder?.parent_id, "db_enabled") === true)}
         effectiveEngine={dbInheritedFrom(folder?.parent_id, "db_engine") ?? ""}
         inheritedReadOnly={dbInheritedFrom(folder?.parent_id, "db_read_only") === true}
+        inheritedTimeout={dbInheritedFrom(folder?.parent_id, "db_query_timeout")}
       />
       <KafkaSettingsEditor
         bind:draft={editingFolder.kafka}
@@ -2782,6 +2783,7 @@
         effectiveOn={connDbOn}
         effectiveEngine={dbInheritedFrom(conn?.folder_id, "db_engine") ?? ""}
         inheritedReadOnly={dbInheritedFrom(conn?.folder_id, "db_read_only") === true}
+        inheritedTimeout={dbInheritedFrom(conn?.folder_id, "db_query_timeout")}
         onOpen={() => { if (conn) connectionActions.openDb(conn.id); }}
         showTargets
         connName={conn?.name ?? ""}
