@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -344,6 +343,10 @@ func (e *msEngine) describe(ctx context.Context, database, schema, name string) 
 		f.raw = append(f.raw, col)
 		f.rraw = append(f.rraw, rcol)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, msErr(err)
+	}
 	rows.Close()
 	for _, n := range order {
 		f := fks[n]
@@ -438,7 +441,21 @@ func (e *msEngine) browse(ctx context.Context, database, schema, name string, wh
 	if len(pk) > 0 {
 		order = strings.Join(pk, ", ")
 	}
-	w, args := whereClause(where, msIdent, func(n int) string { return "@p" + strconv.Itoa(n) })
+	types, err := msColumnTypes(ctx, db, d, schema, name, where)
+	if err != nil {
+		return nil, err
+	}
+	w, args, err := whereClause(where, msIdent, numbered("@p"), func(c Cond, v any) any {
+		// Text binds as nvarchar; against a varchar column that converts
+		// the column and loses its index. Send varchar there.
+		if s, ok := v.(string); ok && (types[c.Column] == "varchar" || types[c.Column] == "char") {
+			return mssql.VarChar(s)
+		}
+		return v
+	})
+	if err != nil {
+		return nil, err
+	}
 	q := fmt.Sprintf("SELECT * FROM %s.%s.%s%s ORDER BY %s OFFSET %d ROWS FETCH NEXT %d ROWS ONLY",
 		d, msIdent(schema), msIdent(name), w, order, offset, limit)
 	conn, err := db.Conn(ctx)
@@ -696,4 +713,34 @@ func msErr(err error) error {
 		return fmt.Errorf("Msg %d, Level %d, State %d, Line %d: %s", me.Number, me.Class, me.State, me.LineNo, me.Message)
 	}
 	return err
+}
+
+// msColumnTypes is the type name of the table's columns a filter names
+// (none asked without a filter). d is the quoted database.
+func msColumnTypes(ctx context.Context, db *sql.DB, d, schema, table string, where []Cond) (map[string]string, error) {
+	if len(where) == 0 {
+		return nil, nil
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT c.name, t.name FROM `+d+`.sys.columns c
+		JOIN `+d+`.sys.types t ON t.user_type_id = c.user_type_id
+		JOIN `+d+`.sys.objects o ON o.object_id = c.object_id
+		JOIN `+d+`.sys.schemas s ON s.schema_id = o.schema_id
+		WHERE s.name = @p1 AND o.name = @p2`, schema, table)
+	if err != nil {
+		return nil, msErr(err)
+	}
+	defer rows.Close()
+	m := map[string]string{}
+	for rows.Next() {
+		var c, t string
+		if err := rows.Scan(&c, &t); err != nil {
+			return nil, msErr(err)
+		}
+		m[c] = t
+	}
+	if err := rows.Err(); err != nil {
+		return nil, msErr(err)
+	}
+	return m, nil
 }

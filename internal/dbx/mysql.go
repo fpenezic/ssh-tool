@@ -320,7 +320,10 @@ func (e *myEngine) browse(ctx context.Context, database, _, name string, where [
 		pk = append(pk, myIdent(c))
 	}
 	rows.Close()
-	w, args := whereClause(where, myIdent, func(int) string { return "?" })
+	w, args, err := whereClause(where, myIdent, qmark, nil)
+	if err != nil {
+		return nil, err
+	}
 	q := "SELECT * FROM " + myIdent(database) + "." + myIdent(name) + w
 	if len(pk) > 0 {
 		q += " ORDER BY " + strings.Join(pk, ", ")

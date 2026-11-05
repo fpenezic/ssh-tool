@@ -5,8 +5,9 @@
   // to the row it references: the tab walks there (the referenced table,
   // filtered to that key) and Back returns, a breadcrumb showing the path.
 
+  import { untrack } from "svelte";
   import { api, type DbCond, type DbForeignKey, type DbHandleInfo, type DbResult, type DbTableDetail } from "./api";
-  import type { DbTab, DbTableView } from "./dbState.svelte";
+  import type { DbTab, DbTableView, DbTrailStep } from "./dbState.svelte";
   import DbResultGrid from "./DbResultGrid.svelte";
   import { errMsg } from "./connectErrors";
   import { IconRefresh, IconSql, IconCopy, IconArrowLeft } from "./iconMap";
@@ -17,7 +18,9 @@
     tab: DbTab;
     info: DbHandleInfo;
     onChange: () => void;
-    onQuery: (sql: string) => void;
+    // database: where the query runs (a followed key can cross to another
+    // database on MySQL).
+    onQuery: (sql: string, database?: string) => void;
   }
   let { sessionId, tab, info, onChange, onQuery }: Props = $props();
 
@@ -25,13 +28,19 @@
   const viewName = $derived<DbTableView>(tab.view ?? "data");
 
   // Where the tab stands: the table it was opened on, or a row reached
-  // through foreign keys from it (the last of trail).
+  // through foreign keys from it (the last of trail). The trail is part
+  // of the saved tab, so a reload or a detached window keeps the path;
+  // each step keeps the page the level before it was on, for Back.
   interface Target { database: string; schema: string; name: string; where: DbCond[] }
-  let trail = $state<Target[]>([]);
+  // The pane remounts this per tab ({#key}), so the saved trail is read once.
+  let trail = $state<DbTrailStep[]>(untrack(() => tab.trail ?? []));
   const cur = $derived<Target>(
     trail.length ? trail[trail.length - 1] : { database: tab.database, schema: tab.schema ?? "", name: tab.name ?? "", where: [] },
   );
-  const offsets: number[] = []; // the page each level was on, for Back
+  function saveTrail() {
+    tab.trail = trail.length ? $state.snapshot(trail) : undefined;
+    onChange();
+  }
 
   let offset = $state(0);
   let page = $state<DbResult | null>(null);
@@ -65,11 +74,13 @@
     err = null;
     const t = cur;
     try {
-      page = await api.dbBrowse(sessionId, t.database, t.schema, t.name, t.where, offset, PAGE);
+      const p = await api.dbBrowse(sessionId, t.database, t.schema, t.name, t.where, offset, PAGE);
+      if (t !== cur) return; // Back or a follow moved on meanwhile
+      page = p;
     } catch (e) {
-      err = errMsg(e);
+      if (t === cur) err = errMsg(e);
     } finally {
-      loading = false;
+      if (t === cur) loading = false;
     }
     // The links in the grid come from the table's foreign keys.
     if (!detail && hasFks) void loadDetail(true);
@@ -98,7 +109,7 @@
   });
 
   // Each grid column that is part of a foreign key, with that key (the
-  // first one when a column is in several).
+  // first one when a column is in several; Structure lists them all).
   const fkOf = $derived.by(() => {
     const m = new Map<number, DbForeignKey>();
     const cols = page?.columns ?? [];
@@ -111,7 +122,19 @@
     }
     return m;
   });
-  const linkCols = $derived(new Set(fkOf.keys()));
+  // A row links only when every member of the key has a value: with a
+  // NULL member it references nothing (MATCH SIMPLE).
+  function canLink(row: (string | null)[], ci: number): boolean {
+    const fk = fkOf.get(ci);
+    if (!fk) return false;
+    const cols = page?.columns ?? [];
+    return fk.columns!.every((c) => {
+      const i = cols.findIndex((x) => x.name === c);
+      return i >= 0 && row[i] !== null;
+    });
+  }
+  // Binary cells show as 0x... / \x...; their bytes are what is bound.
+  const BINARY = /binary|blob|bytea|\braw\b|bit data|image/i;
   function linkTitle(ci: number): string {
     const fk = fkOf.get(ci);
     return fk ? `Open the ${fk.ref_table} row this references (${fk.name})` : "";
@@ -123,28 +146,26 @@
     const where: DbCond[] = [];
     for (let k = 0; k < fk.columns.length; k++) {
       const i = cols.findIndex((x) => x.name === fk.columns![k]);
-      if (i < 0) return;
-      where.push({ column: fk.ref_columns[k], value: row[i] });
+      if (i < 0 || row[i] === null) return;
+      where.push({ column: fk.ref_columns[k], value: row[i], hex: BINARY.test(cols[i].type) || undefined });
     }
-    offsets.push(offset);
-    trail = [...trail, { database: fk.ref_database || cur.database, schema: fk.ref_schema ?? "", name: fk.ref_table, where }];
-    reset();
+    trail = [...trail, { database: fk.ref_database || cur.database, schema: fk.ref_schema ?? "", name: fk.ref_table, where, offset }];
+    saveTrail();
+    moveTo(0);
   }
   function back(to = trail.length - 1) {
     if (to < 0 || to >= trail.length) return;
+    const back = trail[to].offset;
     trail = trail.slice(0, to);
-    offset = offsets.splice(to)[0] ?? 0;
-    page = null;
-    detail = null;
-    if (viewName === "data") loadPage();
-    else loadDetail();
+    saveTrail();
+    moveTo(back);
   }
-  function reset() {
-    offset = 0;
+  // A new target: the view's effect loads it once page / detail clear.
+  function moveTo(at: number) {
+    offset = at;
     page = null;
     detail = null;
-    if (viewName === "data") loadPage();
-    else loadDetail();
+    err = null;
   }
   function condText(where: DbCond[]): string {
     return where.map((c) => `${c.column} ${c.value === null ? "IS NULL" : "= " + c.value}`).join(", ");
@@ -191,7 +212,7 @@
       <button disabled={loading || !page || (page.rows ?? []).length < PAGE} onclick={() => go(PAGE)}>Next</button>
     {/if}
     <span class="spacer"></span>
-    <button title="Open a query tab on this table" onclick={() => onQuery(queryText())}><IconSql size={13} /> Query</button>
+    <button title="Open a query tab on this table" onclick={() => onQuery(queryText(), cur.database)}><IconSql size={13} /> Query</button>
     <button title="Reload" onclick={refresh}><IconRefresh size={13} /></button>
   </div>
   <div class="body">
@@ -199,7 +220,7 @@
       <pre class="err">{err}</pre>
     {:else if viewName === "data"}
       {#if page}
-        <div class="gridbox"><DbResultGrid result={page} exportName={`${cur.name}-${offset + 1}`} paged {linkCols} {linkTitle} onLink={follow} /></div>
+        <div class="gridbox"><DbResultGrid result={page} exportName={`${cur.name}-${offset + 1}`} paged {canLink} {linkTitle} onLink={follow} /></div>
         {#if cur.where.length && (page.rows ?? []).length === 0}
           <p class="muted">No {cur.name} row matches {condText(cur.where)}.</p>
         {/if}

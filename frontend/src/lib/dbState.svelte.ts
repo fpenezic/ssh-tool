@@ -23,6 +23,17 @@ export interface DbTab {
   name?: string; // table tabs
   sql?: string; // query tabs
   view?: DbTableView; // table tabs
+  // Table tabs: the rows reached through foreign keys from the table, in
+  // order, and the page each level was on (DbTableTab).
+  trail?: DbTrailStep[];
+}
+
+export interface DbTrailStep {
+  database: string;
+  schema: string;
+  name: string;
+  where: { column: string; value: string | null; hex?: boolean }[];
+  offset: number;
 }
 
 // What is saved and mirrored: the tabs and which one is in front.

@@ -203,6 +203,12 @@ func dbIPCTunnel(t *testing.T, engine, env string) {
 	if err != nil || len(page.Rows) != 2 || page.Rows[1][1] != nil {
 		t.Fatalf("browse %v %+v", err, page)
 	}
+	// Filtered, the way a followed foreign key reads its row.
+	one := "1"
+	page, err = a.DbBrowse(info.ID, dbName, found, table, []dbx.Cond{{Column: "id", Value: &one}}, 0, 10)
+	if err != nil || len(page.Rows) != 1 || *page.Rows[0][0] != "1" {
+		t.Fatalf("filtered browse %v %+v", err, page)
+	}
 
 	// Read-only connection: refused in the backend.
 	roInfo, err := a.DbOpen(newConn("ro", true), "")

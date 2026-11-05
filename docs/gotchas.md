@@ -2273,7 +2273,9 @@ everything mobile is behind a build tag or an `isMobile` check.
    nothing (no error). The filter types its markers
    `CAST(? AS VARCHAR(4000))`: the server converts the text and the
    column side stays bare, so its index still applies. Any future bind
-   of a string against a numeric Db2 column needs the same.
+   of a string against a numeric Db2 column needs the same. A `[]byte`
+   bind breaks the conversation outright (SQLCODE -30020), so a binary
+   key goes as hex text through `HEXTORAW(CAST(? AS VARCHAR(...)))`.
 
 ---
 

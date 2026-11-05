@@ -385,7 +385,10 @@ func (e *pgEngine) browse(ctx context.Context, database, schema, name string, wh
 	if pk, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
 		return nil, pgErr(err)
 	}
-	w, args := whereClause(where, pgIdent, func(n int) string { return "$" + strconv.Itoa(n) })
+	w, args, err := whereClause(where, pgIdent, numbered("$"), nil)
+	if err != nil {
+		return nil, err
+	}
 	q := "SELECT * FROM " + pgIdent(schema) + "." + pgIdent(name) + w
 	if len(pk) > 0 {
 		for i := range pk {
