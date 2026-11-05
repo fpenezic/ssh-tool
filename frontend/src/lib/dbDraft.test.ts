@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DB_NONE, applyDbDraft, dbDraftFrom, dbDraftSame } from "./dbDraft";
+import { DB_NONE, applyDbDraft, dbDraftError, dbDraftFrom, dbDraftSame } from "./dbDraft";
 import type { InheritableSettings } from "./api";
 
 describe("dbDraft", () => {
@@ -44,9 +44,9 @@ describe("query timeout", () => {
     expect(s.db_query_timeout).toBe(0);
     applyDbDraft(s, { ...d, timeout: "30" });
     expect(s.db_query_timeout).toBe(30);
-    applyDbDraft(s, { ...d, timeout: "abc" });
-    expect(s.db_query_timeout).toBeUndefined();
-    applyDbDraft(s, { ...d, timeout: "4294967296" });
-    expect(s.db_query_timeout).toBeUndefined();
+    expect(dbDraftError({ ...d, timeout: "30" })).toBe("");
+    expect(dbDraftError({ ...d, timeout: "" })).toBe("");
+    expect(dbDraftError({ ...d, timeout: "1.5" })).toMatch(/whole number/);
+    expect(dbDraftError({ ...d, timeout: "4294967296" })).toMatch(/whole number/);
   });
 });

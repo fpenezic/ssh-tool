@@ -45,7 +45,7 @@
   import { applyKafkaDraft, kafkaDraftFrom, kafkaDraftSame, type KafkaDraft } from "./kafkaDraft";
   import { kafkaEnabledFor, kafkaInheritedFrom } from "./kafkaState.svelte";
   import DbSettingsEditor from "./DbSettingsEditor.svelte";
-  import { applyDbDraft, dbDraftFrom, dbDraftSame, type DbDraft } from "./dbDraft";
+  import { applyDbDraft, dbDraftError, dbDraftFrom, dbDraftSame, type DbDraft } from "./dbDraft";
   import { dbEnabledFor, dbInheritedFrom } from "./dbState.svelte";
 
   // Populate the Network dropdowns; cached after the first load and
@@ -540,6 +540,11 @@
   let folderSaving = $state(false);
   async function saveFolder(): Promise<boolean> {
     if (!folder || !editingFolder || folderSaving) return false;
+    const dbErr = dbDraftError(editingFolder.db);
+    if (dbErr) {
+      toast.err(dbErr);
+      return false;
+    }
     folderSaving = true;
     draftFolderSent = snapDraft(editingFolder);
     const settings = { ...folder.settings };
@@ -1234,6 +1239,11 @@
   }
   async function saveConnNow(): Promise<boolean> {
     if (!conn || !editing) return false;
+    const dbErr = dbDraftError(editing.db);
+    if (dbErr) {
+      toast.err(dbErr);
+      return false;
+    }
     const overrides = { ...conn.overrides };
     overrides.username = editing.username.trim() || undefined;
     {

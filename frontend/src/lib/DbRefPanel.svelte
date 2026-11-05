@@ -65,7 +65,8 @@
         if (row !== r) return; // the pick moved on
         try {
           const p = await api.dbBrowse(sessionId, ref.key.database ?? database, ref.key.schema ?? "", ref.key.table ?? "", ref.where, [], 0, CAP + 1);
-          if (row === r && refs[i]) refs[i].count = (p.rows ?? []).length;
+          // A result cut at its byte limit has more rows than it brought.
+          if (row === r && refs[i]) refs[i].count = p.truncated ? CAP + 1 : (p.rows ?? []).length;
         } catch (e) {
           if (row === r && refs[i]) refs[i].err = errMsg(e);
         }

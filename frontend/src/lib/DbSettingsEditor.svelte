@@ -4,7 +4,7 @@
   // the Kafka section (a switch heading a collapsible block).
 
   import { credentials } from "./stores.svelte";
-  import { DB_NONE, newTargetId, type DbDraft } from "./dbDraft";
+  import { dbDraftError, DB_NONE, newTargetId, type DbDraft } from "./dbDraft";
   import { createLoginCredential } from "./loginModal.svelte.ts";
   import { IconPlus, IconTrash, IconChevronRight } from "./iconMap";
   import { serviceCards, toggleCard } from "./serviceCards.svelte.ts";
@@ -189,11 +189,12 @@
         </select>
       </label>
       <label title="A query tab's statement that runs longer is stopped on the server, as Stop does. Empty inherits; 0 means no limit.">Query timeout (s)
-        <!-- Digits only: anything else would save as "inherit" and drop a set limit. -->
+        <!-- Not whole seconds: marked, and the save refuses it (dbDraftError). -->
         <input
           inputmode="numeric"
+          class:bad={!!dbDraftError(draft)}
+          title={dbDraftError(draft) || undefined}
           bind:value={draft.timeout}
-          oninput={(e) => { const el = e.currentTarget as HTMLInputElement; const v = el.value.replace(/\D+/g, ""); if (v !== el.value) { el.value = v; draft.timeout = v; } }}
           placeholder={`${inheritLabel} · ${inheritedTimeout ? inheritedTimeout + " s" : "no limit"}`}
         />
       </label>
@@ -274,6 +275,7 @@
 </div>
 
 <style>
+  input.bad { border-color: var(--red) !important; }
   .card-fold { display: inline-flex; align-items: center; gap: 0.3rem; background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
   .card-fold :global(svg) { color: var(--overlay1); transition: transform 0.12s; }
   .card-fold.open :global(svg) { transform: rotate(90deg); }
