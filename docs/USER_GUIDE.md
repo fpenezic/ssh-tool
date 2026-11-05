@@ -2792,6 +2792,18 @@ tab): its own port and password and its own gateway command
 (`sshtool-gw-<profile>`), for a container that must stay apart from the
 other customers, overlapping address ranges included.
 
+**A login that does not finish waits for you.** A program that reaches a
+VPN through a proxy (the app proxy or a profile's own) brings the tunnel
+up when it needs it, and logs in with the stored credentials. When that
+login does not finish (a second factor left unanswered, a Duo push nobody
+approved, a prompt that timed out or was cancelled), the next connection
+does not start another one: each would be a new push on your phone, and a
+database tool that keeps retrying would send one every couple of minutes.
+Connections through the proxy are refused at once instead, and a
+notification asks you to press **Connect** on the profile. Connect, or any
+connection you open in the app through the profile, logs in again; once
+the tunnel is up the proxy serves everything as before.
+
 Docker Desktop reaches a proxy on `127.0.0.1` through
 `host.docker.internal`; a Linux Docker host needs the proxy on the
 docker bridge address (or `0.0.0.0`, firewalled). A name only the

@@ -24,12 +24,14 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/proxy"
@@ -101,6 +103,29 @@ func (e *CertUntrustedError) Error() string { return e.Msg }
 type UnreachableError struct{ Msg string }
 
 func (e *UnreachableError) Error() string { return e.Msg }
+
+// LoginError is a start that failed after the helper had asked for a
+// login: the gateway took the credentials and refused them, or nobody
+// answered (a one-time code or push left unanswered, a prompt that timed
+// out or was cancelled). Starting again right away is another login - with
+// a push second factor, another push on the user's phone - so callers that
+// start tunnels on their own hold off until the user acts.
+type LoginError struct{ Err error }
+
+func (e *LoginError) Error() string { return e.Err.Error() }
+func (e *LoginError) Unwrap() error { return e.Err }
+
+// loginErr marks a failed start as a LoginError when a login form was
+// shown. A certificate or unreachable gateway is not one: no credentials
+// were tried.
+func loginErr(err error, sawAuth bool) error {
+	var ce *CertUntrustedError
+	var ue *UnreachableError
+	if !sawAuth || errors.As(err, &ce) || errors.As(err, &ue) {
+		return err
+	}
+	return &LoginError{Err: err}
+}
 
 // Options tunes one spawn. Zero value = the plain NetBird / Tailscale
 // contract.
@@ -533,6 +558,7 @@ func spawn(profileID, name, exePath string, args, env []string, opts Options) (*
 
 	// Read protocol lines; the first must be ready or error.
 	readyCh := make(chan error, 1)
+	var sawAuth atomic.Bool
 	go func() {
 		sc := bufio.NewScanner(stdout)
 		sc.Buffer(make([]byte, 0, 64*1024), maxLine)
@@ -573,6 +599,7 @@ func spawn(profileID, name, exePath string, args, env []string, opts Options) (*
 					opts.OnSession(ev.Cookie)
 				}
 			case "auth":
+				sawAuth.Store(true)
 				ch := AuthChallenge{ID: ev.ID, Message: ev.Message, Banner: ev.Banner, Error: ev.Error, Fields: ev.Fields}
 				if opts.OnAuth == nil {
 					_ = p.Cancel(ch.ID)
@@ -612,13 +639,13 @@ func spawn(profileID, name, exePath string, args, env []string, opts Options) (*
 			_ = stdin.Close()
 			_ = cmd.Process.Kill()
 			go func() { _ = cmd.Wait() }() // reap the failed child
-			return nil, err
+			return nil, loginErr(err, sawAuth.Load())
 		}
 	case <-time.After(timeout):
 		_ = stdin.Close()
 		_ = cmd.Process.Kill()
 		go func() { _ = cmd.Wait() }()
-		return nil, fmt.Errorf("helper did not become ready within %s", timeout)
+		return nil, loginErr(fmt.Errorf("helper did not become ready within %s", timeout), sawAuth.Load())
 	}
 
 	socksDialer, err := proxy.SOCKS5("tcp", p.socksAddr, nil, proxy.Direct)

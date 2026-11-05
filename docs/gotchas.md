@@ -2254,6 +2254,18 @@ everything mobile is behind a build tag or an `isMobile` check.
    size check misses it; the fix re-maximises every maximised window
    after the display messages settle.
 
+148. **A proxy-started VPN login must not be retried by the next client.**
+   (`app_loginhold.go`, `tunnelhelper.LoginError`) Concurrent proxy
+   dials share one start, but sequential ones do not: a login that
+   fails (an unanswered Duo push, a prompt that times out after 2 min)
+   ends the helper, and the client's next retry spawns a fresh one that
+   logs in again from the vault, one push per retry cycle. A start that
+   failed after the helper sent an `auth` event is a `LoginError`;
+   only the proxies hold on it, and any successful `ensureTunnel` lifts
+   the hold. A plugin's own reconnect after a lost session does not
+   re-login (measured with ocserv); the resume happens on the next
+   start, through the same path.
+
 ---
 
 # Archive

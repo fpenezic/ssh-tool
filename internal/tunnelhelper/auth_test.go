@@ -168,3 +168,41 @@ func TestSessionCookieAndDetach(t *testing.T) {
 		t.Fatal("detached helper still listed")
 	}
 }
+
+// A start that failed after a login form is a LoginError (a retry is
+// another login); one that failed before any form, or on the certificate
+// or an unreachable gateway, is not.
+func TestLoginErr(t *testing.T) {
+	plain := errors.New("login cancelled")
+	var le *LoginError
+	if err := loginErr(plain, true); !errors.As(err, &le) || err.Error() != "login cancelled" {
+		t.Fatalf("after a form: %v", err)
+	}
+	if err := loginErr(plain, false); errors.As(err, &le) {
+		t.Fatalf("no form: %v", err)
+	}
+	if err := loginErr(&CertUntrustedError{Msg: "x"}, true); errors.As(err, &le) {
+		t.Fatalf("certificate: %v", err)
+	}
+	if err := loginErr(&UnreachableError{Msg: "x"}, true); errors.As(err, &le) {
+		t.Fatalf("unreachable: %v", err)
+	}
+}
+
+// A refused login comes back as a LoginError; a helper that fails before
+// any form does not.
+func TestRefusedLoginIsLoginError(t *testing.T) {
+	_, err := fakeSpawn(t, "auth", Options{
+		ReadyTimeout: 20 * time.Second,
+		OnAuth: func(p *Proc, ch AuthChallenge) {
+			_ = p.Answer(ch.ID, map[string]string{"main:password:1": "wrong"})
+		},
+	})
+	var le *LoginError
+	if !errors.As(err, &le) {
+		t.Fatalf("refused login: %T %v", err, err)
+	}
+	if _, err := fakeSpawn(t, "cert", Options{ReadyTimeout: 20 * time.Second}); errors.As(err, &le) {
+		t.Fatalf("certificate error marked as a login: %v", err)
+	}
+}

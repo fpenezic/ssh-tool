@@ -404,10 +404,18 @@ func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host
 			return
 		}
 		name = row.Name
+		// A login the last proxy client started did not finish: this one
+		// does not start another (app_loginhold.go). A tunnel that is up
+		// serves it either way.
+		if !a.tunnelStatus(id).Running && a.loginHeld(id, row.Name) {
+			reply(1)
+			return
+		}
 		// A login prompt (one-time code) can take a while; the client waits.
 		_ = c.SetDeadline(time.Now().Add(6 * time.Minute))
 		if d, err = a.ensureTunnel(row); err != nil {
 			log.Printf("network: local proxy %q: tunnel: %v", row.Name, err)
+			a.holdAfterLogin(id, row.Name, err)
 			reply(1)
 			return
 		}
