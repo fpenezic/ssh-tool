@@ -410,7 +410,7 @@ func msRebuildDDL(schema, name string, det *TableDetail) string {
 	return b.String()
 }
 
-func (e *msEngine) browse(ctx context.Context, database, schema, name string, where []Cond, offset, limit int) (*Result, error) {
+func (e *msEngine) browse(ctx context.Context, database, schema, name string, where []Cond, order []Order, offset, limit int) (*Result, error) {
 	db, err := e.db()
 	if err != nil {
 		return nil, err
@@ -437,9 +437,9 @@ func (e *msEngine) browse(ctx context.Context, database, schema, name string, wh
 	}
 	rows.Close()
 	// OFFSET / FETCH needs an ORDER BY; without a key, any order will do.
-	order := "(SELECT NULL)"
-	if len(pk) > 0 {
-		order = strings.Join(pk, ", ")
+	ob := orderList(order, pk, msIdent)
+	if ob == "" {
+		ob = "(SELECT NULL)"
 	}
 	types, err := msColumnTypes(ctx, db, d, schema, name, where)
 	if err != nil {
@@ -457,7 +457,7 @@ func (e *msEngine) browse(ctx context.Context, database, schema, name string, wh
 		return nil, err
 	}
 	q := fmt.Sprintf("SELECT * FROM %s.%s.%s%s ORDER BY %s OFFSET %d ROWS FETCH NEXT %d ROWS ONLY",
-		d, msIdent(schema), msIdent(name), w, order, offset, limit)
+		d, msIdent(schema), msIdent(name), w, ob, offset, limit)
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return nil, msErr(err)

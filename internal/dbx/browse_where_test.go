@@ -32,3 +32,26 @@ func TestWhereClause(t *testing.T) {
 		t.Fatal("bad hex accepted")
 	}
 }
+
+// Comparisons other than =, IS NOT NULL from <> with no value, unknown
+// operators and LIKE on binary refused; the asked sort comes before the
+// primary key, which is not repeated.
+func TestWhereOpsAndOrder(t *testing.T) {
+	five, pat := "5", "a%"
+	w, args, err := whereClause([]Cond{{Column: "n", Value: &five, Op: ">="}, {Column: "s", Value: &pat, Op: "NOT LIKE"}, {Column: "x", Op: "<>"}},
+		pgIdent, numbered("$"), nil)
+	if err != nil || w != ` WHERE "n" >= $1 AND "s" NOT LIKE $2 AND "x" IS NOT NULL` || len(args) != 2 {
+		t.Fatalf("%q %v %v", w, args, err)
+	}
+	for _, c := range []Cond{{Column: "n", Value: &five, Op: "; DROP"}, {Column: "n", Op: ">"}, {Column: "b", Value: &five, Op: "LIKE", Hex: true}} {
+		if _, _, err := whereClause([]Cond{c}, pgIdent, numbered("$"), nil); err == nil {
+			t.Fatalf("accepted %+v", c)
+		}
+	}
+	if got := orderList([]Order{{Column: "name", Desc: true}, {Column: "id"}}, []string{`"id"`}, pgIdent); got != `"name" DESC, "id"` {
+		t.Fatalf("order %q", got)
+	}
+	if got := orderList(nil, []string{`"a"`, `"b"`}, pgIdent); got != `"a", "b"` {
+		t.Fatalf("pk order %q", got)
+	}
+}

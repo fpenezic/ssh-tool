@@ -367,7 +367,7 @@ func pgIdent(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }
 
-func (e *pgEngine) browse(ctx context.Context, database, schema, name string, where []Cond, offset, limit int) (*Result, error) {
+func (e *pgEngine) browse(ctx context.Context, database, schema, name string, where []Cond, order []Order, offset, limit int) (*Result, error) {
 	p, err := e.pool(ctx, database)
 	if err != nil {
 		return nil, err
@@ -390,11 +390,11 @@ func (e *pgEngine) browse(ctx context.Context, database, schema, name string, wh
 		return nil, err
 	}
 	q := "SELECT * FROM " + pgIdent(schema) + "." + pgIdent(name) + w
-	if len(pk) > 0 {
-		for i := range pk {
-			pk[i] = pgIdent(pk[i])
-		}
-		q += " ORDER BY " + strings.Join(pk, ", ")
+	for i := range pk {
+		pk[i] = pgIdent(pk[i])
+	}
+	if ob := orderList(order, pk, pgIdent); ob != "" {
+		q += " ORDER BY " + ob
 	}
 	q += fmt.Sprintf(" LIMIT %d OFFSET %d", limit, offset)
 	conn, err := p.Acquire(ctx)

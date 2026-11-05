@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -110,6 +111,9 @@ type Config struct {
 	// ReadOnly opens every session read-only and refuses writes (see
 	// CheckReadOnly).
 	ReadOnly bool
+	// QueryTimeout stops a query tab's statement that runs longer (the
+	// same cancel as the Stop button). 0 = no limit.
+	QueryTimeout time.Duration
 	// Dial opens database connections. nil dials directly.
 	Dial DialFunc
 	// AppName shows up in the server's connection list.
@@ -216,8 +220,13 @@ type Index struct {
 // the way Browse takes it (the database is the schema on MySQL, Oracle
 // and Db2).
 type ForeignKey struct {
-	Name        string   `json:"name"`
-	Def         string   `json:"def"`
+	Name string `json:"name"`
+	Def  string `json:"def"`
+	// Database / Schema / Table: the table that holds the key, set when it
+	// is not the one described (ReferencedBy).
+	Database    string   `json:"database,omitempty"`
+	Schema      string   `json:"schema,omitempty"`
+	Table       string   `json:"table,omitempty"`
 	Columns     []string `json:"columns,omitempty"`
 	RefDatabase string   `json:"ref_database,omitempty"`
 	RefSchema   string   `json:"ref_schema,omitempty"`
@@ -288,7 +297,7 @@ type engine interface {
 	databases(ctx context.Context) ([]Database, error)
 	objects(ctx context.Context, database string, system bool) ([]Object, error)
 	describe(ctx context.Context, database, schema, name string) (*TableDetail, error)
-	browse(ctx context.Context, database, schema, name string, where []Cond, offset, limit int) (*Result, error)
+	browse(ctx context.Context, database, schema, name string, where []Cond, order []Order, offset, limit int) (*Result, error)
 	session(ctx context.Context, database string) (session, error)
 	close()
 }
@@ -379,6 +388,9 @@ func (h *Handle) Describe(ctx context.Context, database, schema, name string) (*
 type Cond struct {
 	Column string  `json:"column"`
 	Value  *string `json:"value"`
+	// Op is the comparison ("" is =): = <> < > <= >= LIKE "NOT LIKE".
+	// A nil Value takes IS NULL, or IS NOT NULL with Op <>.
+	Op string `json:"op,omitempty"`
 	// Hex: Value is a binary cell as the grid shows it (0x... or \x...),
 	// bound as its bytes.
 	Hex bool `json:"hex,omitempty"`
@@ -399,7 +411,7 @@ func (c Cond) bindValue() (any, error) {
 }
 
 // ErrNoFilter is a filtered browse on an engine without one.
-var ErrNoFilter = errors.New("this engine cannot filter a table's rows")
+var ErrNoFilter = errors.New("this engine cannot filter or sort a table's rows on the server")
 
 // whereClause is " WHERE a = $1 AND b IS NULL" for where, with the bind
 // values in order; ph(n, c) is the engine's n-th placeholder (1-based)
@@ -412,9 +424,26 @@ func whereClause(where []Cond, ident func(string) string, ph func(int, Cond) str
 	var parts []string
 	var args []any
 	for _, c := range where {
+		op := c.Op
+		if op == "" {
+			op = "="
+		}
+		if !condOps[op] {
+			return "", nil, fmt.Errorf("filter on %s: unknown comparison %q", c.Column, c.Op)
+		}
 		if c.Value == nil {
-			parts = append(parts, ident(c.Column)+" IS NULL")
+			switch op {
+			case "=":
+				parts = append(parts, ident(c.Column)+" IS NULL")
+			case "<>":
+				parts = append(parts, ident(c.Column)+" IS NOT NULL")
+			default:
+				return "", nil, fmt.Errorf("filter on %s: %s needs a value", c.Column, op)
+			}
 			continue
+		}
+		if c.Hex && strings.Contains(op, "LIKE") {
+			return "", nil, fmt.Errorf("filter on %s: LIKE does not apply to a binary column", c.Column)
 		}
 		v, err := c.bindValue()
 		if err != nil {
@@ -424,9 +453,38 @@ func whereClause(where []Cond, ident func(string) string, ph func(int, Cond) str
 			v = bind(c, v)
 		}
 		args = append(args, v)
-		parts = append(parts, ident(c.Column)+" = "+ph(len(args), c))
+		parts = append(parts, ident(c.Column)+" "+op+" "+ph(len(args), c))
 	}
 	return " WHERE " + strings.Join(parts, " AND "), args, nil
+}
+
+var condOps = map[string]bool{"=": true, "<>": true, "<": true, ">": true, "<=": true, ">=": true, "LIKE": true, "NOT LIKE": true}
+
+// Order is one sort key of a browse, server side.
+type Order struct {
+	Column string `json:"column"`
+	Desc   bool   `json:"desc,omitempty"`
+}
+
+// orderList is the ORDER BY list: the asked keys first, then the primary
+// key (already quoted) so pages stay stable; "" when there is neither.
+func orderList(order []Order, pk []string, ident func(string) string) string {
+	var parts []string
+	seen := map[string]bool{}
+	for _, o := range order {
+		q := ident(o.Column)
+		seen[q] = true
+		if o.Desc {
+			q += " DESC"
+		}
+		parts = append(parts, q)
+	}
+	for _, k := range pk {
+		if !seen[k] {
+			parts = append(parts, k)
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // numbered is a placeholder style with the position in it ($1, :1, @p1).
@@ -446,6 +504,12 @@ func (h *Handle) Browse(ctx context.Context, database, schema, name string, offs
 // BrowseWhere is Browse of the rows matching every condition in where (a
 // foreign key followed from another table's row).
 func (h *Handle) BrowseWhere(ctx context.Context, database, schema, name string, where []Cond, offset, limit int) (*Result, error) {
+	return h.BrowseQuery(ctx, database, schema, name, where, nil, offset, limit)
+}
+
+// BrowseQuery is BrowseWhere sorted by order on the server (the primary
+// key after it, so pages stay stable).
+func (h *Handle) BrowseQuery(ctx context.Context, database, schema, name string, where []Cond, order []Order, offset, limit int) (*Result, error) {
 	if limit <= 0 {
 		limit = DefaultMaxRows
 	}
@@ -460,7 +524,12 @@ func (h *Handle) BrowseWhere(ctx context.Context, database, schema, name string,
 			return nil, errors.New("filter: empty column name")
 		}
 	}
-	return h.eng.browse(ctx, database, schema, name, where, offset, limit)
+	for _, o := range order {
+		if o.Column == "" {
+			return nil, errors.New("sort: empty column name")
+		}
+	}
+	return h.eng.browse(ctx, database, schema, name, where, order, offset, limit)
 }
 
 // Session is a query tab's own server connection: session state (SET,
@@ -562,10 +631,30 @@ func (s *Session) Run(ctx context.Context, script string, opts RunOptions) []*Re
 		}
 		if r == nil {
 			start := time.Now()
+			// The timeout cancels on the server, as Stop does: closing the
+			// client's context alone leaves some engines' statement running.
+			var timedOut atomic.Bool
+			var timer *time.Timer
+			if d := s.h.cfg.QueryTimeout; d > 0 {
+				timer = time.AfterFunc(d, func() {
+					timedOut.Store(true)
+					s.s.cancel()
+				})
+			}
 			r = s.s.run(ctx, st.Text, readOnly, opts.maxRows())
+			if timer != nil {
+				timer.Stop()
+			}
 			r.Statement = st.Text
 			r.DurationMs = time.Since(start).Milliseconds()
 			r.Write = !IsRead(engine, st.Text)
+			if timedOut.Load() {
+				msg := fmt.Sprintf("stopped after the query timeout (%s)", s.h.cfg.QueryTimeout)
+				if r.Error != "" {
+					msg += ": " + r.Error
+				}
+				r.Error = msg
+			}
 		}
 		out = append(out, r)
 		if r.Error != "" || ctx.Err() != nil {

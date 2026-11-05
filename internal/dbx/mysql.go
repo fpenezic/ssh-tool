@@ -299,7 +299,7 @@ func myIdent(s string) string {
 	return "`" + strings.ReplaceAll(s, "`", "``") + "`"
 }
 
-func (e *myEngine) browse(ctx context.Context, database, _, name string, where []Cond, offset, limit int) (*Result, error) {
+func (e *myEngine) browse(ctx context.Context, database, _, name string, where []Cond, order []Order, offset, limit int) (*Result, error) {
 	db, err := e.db()
 	if err != nil {
 		return nil, err
@@ -325,8 +325,8 @@ func (e *myEngine) browse(ctx context.Context, database, _, name string, where [
 		return nil, err
 	}
 	q := "SELECT * FROM " + myIdent(database) + "." + myIdent(name) + w
-	if len(pk) > 0 {
-		q += " ORDER BY " + strings.Join(pk, ", ")
+	if ob := orderList(order, pk, myIdent); ob != "" {
+		q += " ORDER BY " + ob
 	}
 	q += fmt.Sprintf(" LIMIT %d OFFSET %d", limit, offset)
 	conn, err := db.Conn(ctx)

@@ -198,6 +198,8 @@ func TestIntegrationOracle(t *testing.T) {
 	}
 
 	itCancel(t, sess, "SELECT COUNT(*) FROM ALL_OBJECTS a, ALL_OBJECTS b, ALL_OBJECTS c", "SELECT 1 FROM DUAL")
+	itTimeout(t, s, schema, "SELECT COUNT(*) FROM ALL_OBJECTS a, ALL_OBJECTS b, ALL_OBJECTS c", "SELECT 1 FROM DUAL")
+	itActivity(t, s, h, schema, "SELECT COUNT(*) FROM ALL_OBJECTS a, ALL_OBJECTS b, ALL_OBJECTS c", "ALL_OBJECTS a", "ORA-00942")
 
 	ro := s.open(t, true)
 	rs, err := ro.OpenSession(ctx, "q", schema)
@@ -353,6 +355,8 @@ func TestIntegrationMSSQL(t *testing.T) {
 	}
 
 	itCancel(t, sess, "WAITFOR DELAY '00:00:30'", "SELECT 1")
+	itTimeout(t, s, dbName, "WAITFOR DELAY '00:00:30'", "SELECT 1")
+	itActivity(t, s, h, dbName, "WAITFOR DELAY '00:00:20'", "WAITFOR", "")
 
 	ro := s.open(t, true)
 	rs, err := ro.OpenSession(ctx, "q", dbName)

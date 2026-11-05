@@ -219,6 +219,9 @@ type InheritableSettings struct {
 	DbDefault *bool `json:"db_default,omitempty"`
 	// DbReadOnly refuses writes in the backend (see dbx.CheckReadOnly).
 	DbReadOnly *bool `json:"db_read_only,omitempty"`
+	// DbQueryTimeout stops a query tab's statement after this many
+	// seconds (0 = no limit, nil = inherit; the default is none).
+	DbQueryTimeout *uint32 `json:"db_query_timeout,omitempty"`
 	// DbTLS is "disable" (nil), "require" or "verify-full".
 	DbTLS *string `json:"db_tls,omitempty"`
 	// DbCredentialRef is the database login: the credential's default
@@ -397,6 +400,7 @@ type ResolvedSettings struct {
 	DbUseTunnel     bool       `json:"db_use_tunnel"`
 	DbDefault       bool       `json:"db_default"`
 	DbReadOnly      bool       `json:"db_read_only"`
+	DbQueryTimeout  uint32     `json:"db_query_timeout"`
 	DbTLS           string     `json:"db_tls"`
 	DbCredentialRef *string    `json:"db_credential_ref"`
 	DbTargets       []DbTarget `json:"db_targets"`

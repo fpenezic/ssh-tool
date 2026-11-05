@@ -482,7 +482,7 @@ func oraRebuildDDL(schema, name string, cols []Column, pk []string) string {
 	return b.String()
 }
 
-func (e *oraEngine) browse(ctx context.Context, database, _, name string, where []Cond, offset, limit int) (*Result, error) {
+func (e *oraEngine) browse(ctx context.Context, database, _, name string, where []Cond, order []Order, offset, limit int) (*Result, error) {
 	db, err := e.db()
 	if err != nil {
 		return nil, err
@@ -523,8 +523,8 @@ func (e *oraEngine) browse(ctx context.Context, database, _, name string, where 
 		return nil, err
 	}
 	q := "SELECT * FROM " + oraIdent(database) + "." + oraIdent(name) + w
-	if len(pk) > 0 {
-		q += " ORDER BY " + strings.Join(pk, ", ")
+	if ob := orderList(order, pk, oraIdent); ob != "" {
+		q += " ORDER BY " + ob
 	}
 	q += fmt.Sprintf(" OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", offset, limit)
 	start := time.Now()
