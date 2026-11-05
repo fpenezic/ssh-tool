@@ -1,13 +1,15 @@
 <script lang="ts">
   // A table (or view) tab: its rows a page at a time in key order, its
   // structure, and its DDL. Read-only by construction - changes go through
-  // a query tab ("Query" opens one on this table).
+  // a query tab ("Query" opens one on this table). A foreign key cell links
+  // to the row it references: the tab walks there (the referenced table,
+  // filtered to that key) and Back returns, a breadcrumb showing the path.
 
-  import { api, type DbHandleInfo, type DbResult, type DbTableDetail } from "./api";
+  import { api, type DbCond, type DbForeignKey, type DbHandleInfo, type DbResult, type DbTableDetail } from "./api";
   import type { DbTab, DbTableView } from "./dbState.svelte";
   import DbResultGrid from "./DbResultGrid.svelte";
   import { errMsg } from "./connectErrors";
-  import { IconRefresh, IconSql, IconCopy } from "./iconMap";
+  import { IconRefresh, IconSql, IconCopy, IconArrowLeft } from "./iconMap";
   import { selectAllWithin } from "./selectWithin";
 
   interface Props {
@@ -21,6 +23,16 @@
 
   const PAGE = 200;
   const viewName = $derived<DbTableView>(tab.view ?? "data");
+
+  // Where the tab stands: the table it was opened on, or a row reached
+  // through foreign keys from it (the last of trail).
+  interface Target { database: string; schema: string; name: string; where: DbCond[] }
+  let trail = $state<Target[]>([]);
+  const cur = $derived<Target>(
+    trail.length ? trail[trail.length - 1] : { database: tab.database, schema: tab.schema ?? "", name: tab.name ?? "", where: [] },
+  );
+  const offsets: number[] = []; // the page each level was on, for Back
+
   let offset = $state(0);
   let page = $state<DbResult | null>(null);
   let detail = $state<DbTableDetail | null>(null);
@@ -29,15 +41,15 @@
 
   const qname = $derived(
     info.engine === "mysql" || info.engine === "clickhouse"
-      ? "`" + (tab.name ?? "").replace(/`/g, "``") + "`"
+      ? "`" + cur.name.replace(/`/g, "``") + "`"
       : info.engine === "mssql"
-      ? `[${(tab.schema || "dbo").replace(/]/g, "]]")}].[${(tab.name ?? "").replace(/]/g, "]]")}]`
-      : (tab.schema && tab.schema !== "public" ? `"${tab.schema.replace(/"/g, '""')}".` : "") + `"${(tab.name ?? "").replace(/"/g, '""')}"`,
+      ? `[${(cur.schema || "dbo").replace(/]/g, "]]")}].[${cur.name.replace(/]/g, "]]")}]`
+      : (cur.schema && cur.schema !== "public" ? `"${cur.schema.replace(/"/g, '""')}".` : "") + `"${cur.name.replace(/"/g, '""')}"`,
   );
 
   // The query a "Query" click starts with, in the engine's language.
   function queryText(): string {
-    const name = tab.name ?? "";
+    const name = cur.name;
     if (info.engine === "opensearch") return `GET /${name}/_search\n{\n  "query": { "match_all": {} },\n  "size": 100\n}`;
     if (info.engine === "redis") {
       const glob = name.endsWith(":*") ? name.slice(0, -1).replace(/[*?[\]\\]/g, "\\$&") + "*" : "*";
@@ -51,30 +63,92 @@
   async function loadPage() {
     loading = true;
     err = null;
+    const t = cur;
     try {
-      page = await api.dbBrowse(sessionId, tab.database, tab.schema ?? "", tab.name ?? "", offset, PAGE);
+      page = await api.dbBrowse(sessionId, t.database, t.schema, t.name, t.where, offset, PAGE);
     } catch (e) {
       err = errMsg(e);
     } finally {
       loading = false;
     }
+    // The links in the grid come from the table's foreign keys.
+    if (!detail && hasFks) void loadDetail(true);
   }
-  async function loadDetail() {
-    loading = true;
-    err = null;
+  async function loadDetail(quiet = false) {
+    if (!quiet) {
+      loading = true;
+      err = null;
+    }
+    const t = cur;
     try {
-      detail = await api.dbDescribe(sessionId, tab.database, tab.schema ?? "", tab.name ?? "");
+      const d = await api.dbDescribe(sessionId, t.database, t.schema, t.name);
+      if (t === cur) detail = d;
     } catch (e) {
-      err = errMsg(e);
+      if (!quiet) err = errMsg(e);
     } finally {
-      loading = false;
+      if (!quiet) loading = false;
     }
   }
+  // Engines with foreign keys; the others have nothing to follow.
+  const hasFks = $derived(["postgres", "mysql", "oracle", "mssql", "db2"].includes(info.engine));
   $effect(() => {
     const v = viewName;
     if (v === "data" && !page) loadPage();
     if (v !== "data" && !detail) loadDetail();
   });
+
+  // Each grid column that is part of a foreign key, with that key (the
+  // first one when a column is in several).
+  const fkOf = $derived.by(() => {
+    const m = new Map<number, DbForeignKey>();
+    const cols = page?.columns ?? [];
+    for (const fk of detail?.foreign_keys ?? []) {
+      if (!fk.ref_table || !fk.columns?.length || fk.columns.length !== fk.ref_columns?.length) continue;
+      for (const c of fk.columns) {
+        const i = cols.findIndex((x) => x.name === c);
+        if (i >= 0 && !m.has(i)) m.set(i, fk);
+      }
+    }
+    return m;
+  });
+  const linkCols = $derived(new Set(fkOf.keys()));
+  function linkTitle(ci: number): string {
+    const fk = fkOf.get(ci);
+    return fk ? `Open the ${fk.ref_table} row this references (${fk.name})` : "";
+  }
+  function follow(row: (string | null)[], ci: number) {
+    const fk = fkOf.get(ci);
+    if (!fk || !fk.columns || !fk.ref_columns || !fk.ref_table) return;
+    const cols = page?.columns ?? [];
+    const where: DbCond[] = [];
+    for (let k = 0; k < fk.columns.length; k++) {
+      const i = cols.findIndex((x) => x.name === fk.columns![k]);
+      if (i < 0) return;
+      where.push({ column: fk.ref_columns[k], value: row[i] });
+    }
+    offsets.push(offset);
+    trail = [...trail, { database: fk.ref_database || cur.database, schema: fk.ref_schema ?? "", name: fk.ref_table, where }];
+    reset();
+  }
+  function back(to = trail.length - 1) {
+    if (to < 0 || to >= trail.length) return;
+    trail = trail.slice(0, to);
+    offset = offsets.splice(to)[0] ?? 0;
+    page = null;
+    detail = null;
+    if (viewName === "data") loadPage();
+    else loadDetail();
+  }
+  function reset() {
+    offset = 0;
+    page = null;
+    detail = null;
+    if (viewName === "data") loadPage();
+    else loadDetail();
+  }
+  function condText(where: DbCond[]): string {
+    return where.map((c) => `${c.column} ${c.value === null ? "IS NULL" : "= " + c.value}`).join(", ");
+  }
 
   function show(v: DbTableView) {
     tab.view = v;
@@ -91,6 +165,20 @@
 </script>
 
 <div class="ttab">
+  {#if trail.length}
+    <div class="trail">
+      <button title="Back to where this row was reached from" onclick={() => back()}><IconArrowLeft size={13} /> Back</button>
+      <button class="crumb" onclick={() => back(0)}>{tab.name}</button>
+      {#each trail as t, i (i)}
+        <span class="sep">/</span>
+        {#if i < trail.length - 1}
+          <button class="crumb" onclick={() => back(i + 1)}>{t.name} <span class="cond">({condText(t.where)})</span></button>
+        {:else}
+          <span class="here">{t.name} <span class="cond">({condText(t.where)})</span></span>
+        {/if}
+      {/each}
+    </div>
+  {/if}
   <div class="bar">
     <div class="seg">
       <button class:on={viewName === "data"} onclick={() => show("data")}>Data</button>
@@ -111,7 +199,10 @@
       <pre class="err">{err}</pre>
     {:else if viewName === "data"}
       {#if page}
-        <div class="gridbox"><DbResultGrid result={page} exportName={`${tab.name}-${offset + 1}`} paged /></div>
+        <div class="gridbox"><DbResultGrid result={page} exportName={`${cur.name}-${offset + 1}`} paged {linkCols} {linkTitle} onLink={follow} /></div>
+        {#if cur.where.length && (page.rows ?? []).length === 0}
+          <p class="muted">No {cur.name} row matches {condText(cur.where)}.</p>
+        {/if}
       {:else}
         <p class="muted">Loading...</p>
       {/if}
@@ -168,6 +259,16 @@
 
 <style>
   .ttab { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .trail { display: flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--surface0); font-size: 0.76rem; overflow-x: auto; white-space: nowrap; }
+  .trail button {
+    display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.76rem; padding: 0.15rem 0.45rem;
+    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 4px; cursor: pointer;
+  }
+  .trail button.crumb { background: none; border-color: transparent; color: var(--blue); }
+  .trail button.crumb:hover { border-color: var(--surface1); }
+  .trail .sep { color: var(--overlay0); }
+  .trail .here { font-weight: 600; }
+  .trail .cond { font-weight: 400; color: var(--subtext0); font-family: var(--mono-font, ui-monospace, monospace); }
   .bar { display: flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--surface0); }
   .bar button, .ddl-head button {
     display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; padding: 0.2rem 0.55rem;

@@ -285,6 +285,19 @@ export interface DbColumn {
   extra?: string;
   comment?: string;
 }
+// columns pairs with ref_columns in key order; ref_database / ref_schema /
+// ref_table name the referenced table the way dbBrowse takes it.
+export interface DbForeignKey {
+  name: string;
+  def: string;
+  columns?: string[];
+  ref_database?: string;
+  ref_schema?: string;
+  ref_table?: string;
+  ref_columns?: string[];
+}
+// One equality of a filtered browse; a null value is IS NULL.
+export interface DbCond { column: string; value: string | null }
 export interface DbIndex { name: string; columns: string[]; unique: boolean; primary: boolean; def?: string }
 export interface DbTableDetail {
   schema: string;
@@ -292,7 +305,7 @@ export interface DbTableDetail {
   kind: DbObjectKind;
   columns: DbColumn[] | null;
   indexes: DbIndex[] | null;
-  foreign_keys: { name: string; def: string }[] | null;
+  foreign_keys: DbForeignKey[] | null;
   ddl: string;
   ddl_note?: string;
 }
@@ -1907,8 +1920,8 @@ export const api = {
     G.DbObjects(id, database, system) as unknown as Promise<DbObject[] | null>,
   dbDescribe: (id: string, database: string, schema: string, name: string) =>
     nn(G.DbDescribe(id, database, schema, name)) as Promise<DbTableDetail>,
-  dbBrowse: (id: string, database: string, schema: string, name: string, offset: number, limit: number) =>
-    nn(G.DbBrowse(id, database, schema, name, offset, limit)) as Promise<DbResult>,
+  dbBrowse: (id: string, database: string, schema: string, name: string, where: DbCond[], offset: number, limit: number) =>
+    nn(G.DbBrowse(id, database, schema, name, where as any, offset, limit)) as Promise<DbResult>,
   dbRun: (id: string, tabKey: string, database: string, script: string, maxRows: number) =>
     nn(G.DbRun(id, tabKey, database, script, maxRows)) as Promise<DbRunResult>,
   dbCancel: (id: string, tabKey: string) => G.DbCancel(id, tabKey) as unknown as Promise<void>,

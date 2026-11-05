@@ -2266,6 +2266,15 @@ everything mobile is behind a build tag or an `isMobile` check.
    re-login (measured with ocserv); the resume happens on the next
    start, through the same path.
 
+149. **go-db2 encodes a string bind wrongly for an INTEGER marker.**
+   (`internal/dbx/db2.go`, BrowseWhere) An untyped `?` compared with an
+   INTEGER column is described by the server as INTEGER, and the driver
+   then sends the Go string so that `ID = ?` with `"2"` silently matches
+   nothing (no error). The filter types its markers
+   `CAST(? AS VARCHAR(4000))`: the server converts the text and the
+   column side stays bare, so its index still applies. Any future bind
+   of a string against a numeric Db2 column needs the same.
+
 ---
 
 # Archive

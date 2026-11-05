@@ -2015,6 +2015,17 @@ CREATE`; on PostgreSQL rebuilt from the catalog, without partitioning,
 storage options, ownership and grants). **Query** opens a query tab on the
 table.
 
+**Following foreign keys.** On PostgreSQL, MySQL / MariaDB, Oracle, SQL
+Server and Db2, a cell in a foreign key column shows a small link icon
+(not on NULL). Click it and the tab moves to the row that value
+references: the referenced table, filtered to that key (all of its
+columns for a composite key). Keep following from there; a breadcrumb
+above the grid shows the path (`orders / customers (id = 42) /
+countries (code = HR)`), **Back** returns one step and a click on a
+crumb jumps back to it. Structure and DDL show the table you are on.
+The key values are sent as parameters, so reading them is as read-only
+as browsing.
+
 Statements that change data are recorded in the audit log (the statement,
 cut to 300 characters, and the rows affected or the error).
 

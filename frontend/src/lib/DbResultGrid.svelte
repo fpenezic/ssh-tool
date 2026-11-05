@@ -9,7 +9,7 @@
   import { untrack } from "svelte";
   import { api, type DbResult } from "./api";
   import { toast } from "./toast.svelte.ts";
-  import { IconDownload, IconX, IconCopy, IconArrowUp, IconArrowDown, IconSearch } from "./iconMap";
+  import { IconDownload, IconX, IconCopy, IconArrowUp, IconArrowDown, IconSearch, IconLink } from "./iconMap";
   import { selectAllWithin } from "./selectWithin";
   import { sortedOrder } from "./dbSort";
 
@@ -20,8 +20,13 @@
     // The rows are one page of more (a table's Data view): sorting and
     // filtering say they cover this page only.
     paged?: boolean;
+    // Columns whose values lead somewhere (a foreign key): a non-NULL cell
+    // shows a link that calls onLink with its row.
+    linkCols?: Set<number>;
+    linkTitle?: (ci: number) => string;
+    onLink?: (row: (string | null)[], ci: number) => void;
   }
-  let { result, exportName, paged = false }: Props = $props();
+  let { result, exportName, paged = false, linkCols, linkTitle, onLink }: Props = $props();
 
   const ROW_H = 24;
   const cols = $derived(result.columns ?? []);
@@ -233,7 +238,12 @@
                 tabindex="-1"
                 onclick={() => (sel = { r: ri, c: ci })}
                 ondblclick={() => (opened = { r: ri, c: ci })}
-              >{v === null ? "NULL" : v.length > 300 ? v.slice(0, 300) + "..." : v}</div>
+              >{#if v !== null && onLink && linkCols?.has(ci)}<button
+                  class="fk"
+                  title={linkTitle?.(ci) ?? "Open the referenced row"}
+                  onclick={(e) => { e.stopPropagation(); onLink(r, ci); }}
+                  ondblclick={(e) => e.stopPropagation()}
+                ><IconLink size={11} /></button>{/if}{v === null ? "NULL" : v.length > 300 ? v.slice(0, 300) + "..." : v}</div>
             {/each}
           </div>
         {/each}
@@ -310,6 +320,11 @@
   .ctype { font-weight: 400; font-size: 0.68rem; color: var(--overlay1); }
   .cell.num { color: var(--overlay1); text-align: right; background: color-mix(in srgb, var(--surface0) 55%, transparent); }
   .cell.null { color: var(--overlay0); font-style: italic; }
+  .cell .fk {
+    display: inline-flex; vertical-align: -1px; margin-right: 0.3rem; padding: 0; border: 0; background: none;
+    color: var(--blue); cursor: pointer;
+  }
+  .cell .fk:hover { color: var(--sapphire); }
   .head .sortable { cursor: pointer; }
   .head .sortable:hover { background: var(--surface1); }
   .head .sorted .cname { color: var(--blue); }

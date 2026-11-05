@@ -273,14 +273,20 @@ func (e *pgEngine) describe(ctx context.Context, database, schema, name string) 
 	}
 
 	rows, err = p.Query(ctx, `
-		SELECT conname, pg_get_constraintdef(oid, true) FROM pg_constraint
-		WHERE conrelid = $1 AND contype = 'f' ORDER BY conname`, oid)
+		SELECT c.conname, pg_get_constraintdef(c.oid, true), rn.nspname, rc.relname,
+		       ARRAY(SELECT a.attname::text FROM unnest(c.conkey) WITH ORDINALITY k(n, o)
+		             JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.n ORDER BY k.o),
+		       ARRAY(SELECT a.attname::text FROM unnest(c.confkey) WITH ORDINALITY k(n, o)
+		             JOIN pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.n ORDER BY k.o)
+		FROM pg_constraint c
+		JOIN pg_class rc ON rc.oid = c.confrelid JOIN pg_namespace rn ON rn.oid = rc.relnamespace
+		WHERE c.conrelid = $1 AND c.contype = 'f' ORDER BY c.conname`, oid)
 	if err != nil {
 		return nil, pgErr(err)
 	}
 	d.ForeignKeys, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (ForeignKey, error) {
-		var fk ForeignKey
-		err := r.Scan(&fk.Name, &fk.Def)
+		fk := ForeignKey{RefDatabase: database}
+		err := r.Scan(&fk.Name, &fk.Def, &fk.RefSchema, &fk.RefTable, &fk.Columns, &fk.RefColumns)
 		return fk, err
 	})
 	if err != nil {
@@ -361,7 +367,7 @@ func pgIdent(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }
 
-func (e *pgEngine) browse(ctx context.Context, database, schema, name string, offset, limit int) (*Result, error) {
+func (e *pgEngine) browse(ctx context.Context, database, schema, name string, where []Cond, offset, limit int) (*Result, error) {
 	p, err := e.pool(ctx, database)
 	if err != nil {
 		return nil, err
@@ -379,7 +385,8 @@ func (e *pgEngine) browse(ctx context.Context, database, schema, name string, of
 	if pk, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
 		return nil, pgErr(err)
 	}
-	q := "SELECT * FROM " + pgIdent(schema) + "." + pgIdent(name)
+	w, args := whereClause(where, pgIdent, func(n int) string { return "$" + strconv.Itoa(n) })
+	q := "SELECT * FROM " + pgIdent(schema) + "." + pgIdent(name) + w
 	if len(pk) > 0 {
 		for i := range pk {
 			pk[i] = pgIdent(pk[i])
@@ -393,7 +400,7 @@ func (e *pgEngine) browse(ctx context.Context, database, schema, name string, of
 	}
 	defer conn.Release()
 	start := time.Now()
-	r := pgRead(ctx, conn.Conn(), conn.Conn(), q, limit, true)
+	r := pgRead(ctx, conn.Conn(), conn.Conn(), q, limit, true, args...)
 	r.Statement = q
 	r.DurationMs = time.Since(start).Milliseconds()
 	if r.Error != "" {
@@ -464,11 +471,11 @@ func (s *pgSession) run(ctx context.Context, stmt string, readOnly bool, maxRows
 // pgRead runs stmt and reads its rows under the bounds. cancelOnCut stops
 // the server once the bound is hit; otherwise the rest is read and dropped
 // (a write with RETURNING must not be cancelled half way).
-func pgRead(ctx context.Context, q pgQuerier, conn *pgx.Conn, stmt string, maxRows int, cancelOnCut bool) *Result {
+func pgRead(ctx context.Context, q pgQuerier, conn *pgx.Conn, stmt string, maxRows int, cancelOnCut bool, args ...any) *Result {
 	r := &Result{RowsAffected: -1}
 	rctx, cut := context.WithCancel(ctx)
 	defer cut()
-	rows, err := q.Query(rctx, stmt)
+	rows, err := q.Query(rctx, stmt, args...)
 	if err != nil {
 		r.Error = pgErr(err).Error()
 		return r

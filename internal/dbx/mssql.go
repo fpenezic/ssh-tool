@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -321,7 +322,8 @@ func (e *msEngine) describe(ctx context.Context, database, schema, name string) 
 	}
 	type fk struct {
 		cols, rcols []string
-		ref         string
+		raw, rraw   []string
+		ref, rs, rt string
 	}
 	fks := map[string]*fk{}
 	var order []string
@@ -333,19 +335,26 @@ func (e *msEngine) describe(ctx context.Context, database, schema, name string) 
 		}
 		f := fks[n]
 		if f == nil {
-			f = &fk{ref: msIdent(rs) + "." + msIdent(rt)}
+			f = &fk{ref: msIdent(rs) + "." + msIdent(rt), rs: rs, rt: rt}
 			fks[n] = f
 			order = append(order, n)
 		}
 		f.cols = append(f.cols, msIdent(col))
 		f.rcols = append(f.rcols, msIdent(rcol))
+		f.raw = append(f.raw, col)
+		f.rraw = append(f.rraw, rcol)
 	}
 	rows.Close()
 	for _, n := range order {
 		f := fks[n]
 		det.ForeignKeys = append(det.ForeignKeys, ForeignKey{
-			Name: n,
-			Def:  fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s (%s)", strings.Join(f.cols, ", "), f.ref, strings.Join(f.rcols, ", ")),
+			Name:        n,
+			Def:         fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s (%s)", strings.Join(f.cols, ", "), f.ref, strings.Join(f.rcols, ", ")),
+			Columns:     f.raw,
+			RefDatabase: database,
+			RefSchema:   f.rs,
+			RefTable:    f.rt,
+			RefColumns:  f.rraw,
 		})
 	}
 
@@ -398,7 +407,7 @@ func msRebuildDDL(schema, name string, det *TableDetail) string {
 	return b.String()
 }
 
-func (e *msEngine) browse(ctx context.Context, database, schema, name string, offset, limit int) (*Result, error) {
+func (e *msEngine) browse(ctx context.Context, database, schema, name string, where []Cond, offset, limit int) (*Result, error) {
 	db, err := e.db()
 	if err != nil {
 		return nil, err
@@ -429,15 +438,16 @@ func (e *msEngine) browse(ctx context.Context, database, schema, name string, of
 	if len(pk) > 0 {
 		order = strings.Join(pk, ", ")
 	}
-	q := fmt.Sprintf("SELECT * FROM %s.%s.%s ORDER BY %s OFFSET %d ROWS FETCH NEXT %d ROWS ONLY",
-		d, msIdent(schema), msIdent(name), order, offset, limit)
+	w, args := whereClause(where, msIdent, func(n int) string { return "@p" + strconv.Itoa(n) })
+	q := fmt.Sprintf("SELECT * FROM %s.%s.%s%s ORDER BY %s OFFSET %d ROWS FETCH NEXT %d ROWS ONLY",
+		d, msIdent(schema), msIdent(name), w, order, offset, limit)
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return nil, msErr(err)
 	}
 	defer conn.Close()
 	start := time.Now()
-	r := msRead(ctx, conn, q, limit, nil)
+	r := msRead(ctx, conn, q, limit, nil, args...)
 	r.Statement = q
 	r.DurationMs = time.Since(start).Milliseconds()
 	if r.Error != "" {
@@ -527,10 +537,10 @@ func (s *msSession) run(ctx context.Context, stmt string, readOnly bool, maxRows
 // msRead runs a batch and reads its first result set that has columns;
 // later ones are counted in Note, PRINT output is added to it, and with no
 // result set the affected counts add up to RowsAffected.
-func msRead(ctx context.Context, conn *sql.Conn, stmt string, maxRows int, onCut func()) *Result {
+func msRead(ctx context.Context, conn *sql.Conn, stmt string, maxRows int, onCut func(), args ...any) *Result {
 	r := &Result{RowsAffected: -1}
 	msg := &sqlexp.ReturnMessage{}
-	rows, err := conn.QueryContext(ctx, stmt, msg)
+	rows, err := conn.QueryContext(ctx, stmt, append([]any{msg}, args...)...)
 	if err != nil {
 		r.Error = msErr(err).Error()
 		return r

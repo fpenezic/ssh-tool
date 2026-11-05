@@ -1151,17 +1151,19 @@ export function CredentialsUsage(id) {
 }
 
 /**
- * DbBrowse reads a page of a table's rows.
+ * DbBrowse reads a page of a table's rows; where (may be empty) keeps the
+ * rows matching every condition, a foreign key followed from another row.
  * @param {string} id
  * @param {string} database
  * @param {string} schema
  * @param {string} name
+ * @param {dbx$0.Cond[]} where
  * @param {number} offset
  * @param {number} limit
  * @returns {$CancellablePromise<dbx$0.Result | null>}
  */
-export function DbBrowse(id, database, schema, name, offset, limit) {
-    return $Call.ByID(2832198233, id, database, schema, name, offset, limit).then(/** @type {($result: any) => any} */(($result) => {
+export function DbBrowse(id, database, schema, name, where, offset, limit) {
+    return $Call.ByID(2832198233, id, database, schema, name, where, offset, limit).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType61($result);
     }));
 }

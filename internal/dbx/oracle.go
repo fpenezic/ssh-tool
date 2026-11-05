@@ -393,6 +393,7 @@ func (e *oraEngine) describe(ctx context.Context, database, _, name string) (*Ta
 	}
 	type fk struct {
 		cols, rcols []string
+		raw, rraw   []string
 		rs, rt      string
 	}
 	fks := map[string]*fk{}
@@ -411,6 +412,8 @@ func (e *oraEngine) describe(ctx context.Context, database, _, name string) (*Ta
 		}
 		f.cols = append(f.cols, oraIdent(col))
 		f.rcols = append(f.rcols, oraIdent(rcol))
+		f.raw = append(f.raw, col)
+		f.rraw = append(f.rraw, rcol)
 	}
 	rows.Close()
 	for _, n := range order {
@@ -420,8 +423,12 @@ func (e *oraEngine) describe(ctx context.Context, database, _, name string) (*Ta
 			ref = oraIdent(f.rs) + "." + ref
 		}
 		d.ForeignKeys = append(d.ForeignKeys, ForeignKey{
-			Name: n,
-			Def:  fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s (%s)", strings.Join(f.cols, ", "), ref, strings.Join(f.rcols, ", ")),
+			Name:        n,
+			Def:         fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s (%s)", strings.Join(f.cols, ", "), ref, strings.Join(f.rcols, ", ")),
+			Columns:     f.raw,
+			RefDatabase: f.rs,
+			RefTable:    f.rt,
+			RefColumns:  f.rraw,
 		})
 	}
 
@@ -471,7 +478,7 @@ func oraRebuildDDL(schema, name string, cols []Column, pk []string) string {
 	return b.String()
 }
 
-func (e *oraEngine) browse(ctx context.Context, database, _, name string, offset, limit int) (*Result, error) {
+func (e *oraEngine) browse(ctx context.Context, database, _, name string, where []Cond, offset, limit int) (*Result, error) {
 	db, err := e.db()
 	if err != nil {
 		return nil, err
@@ -494,13 +501,14 @@ func (e *oraEngine) browse(ctx context.Context, database, _, name string, offset
 	}
 	rows.Close()
 	// OFFSET / FETCH is 12c+; 11g is long out of support.
-	q := "SELECT * FROM " + oraIdent(database) + "." + oraIdent(name)
+	w, args := whereClause(where, oraIdent, func(n int) string { return ":" + strconv.Itoa(n) })
+	q := "SELECT * FROM " + oraIdent(database) + "." + oraIdent(name) + w
 	if len(pk) > 0 {
 		q += " ORDER BY " + strings.Join(pk, ", ")
 	}
 	q += fmt.Sprintf(" OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", offset, limit)
 	start := time.Now()
-	r := sqlRead(ctx, db, q, limit, oraDialect, nil)
+	r := sqlRead(ctx, db, q, limit, oraDialect, nil, args...)
 	r.Statement = q
 	r.DurationMs = time.Since(start).Milliseconds()
 	if r.Error != "" {

@@ -157,6 +157,7 @@ func TestIntegrationOracle(t *testing.T) {
 		t.Fatalf("view ddl %v %+v", err, vd)
 	}
 
+	itForeignKeys(t, h, sess, schema, "", table)
 	page, err := h.Browse(ctx, schema, "", table, 100, 50)
 	if err != nil {
 		t.Fatal(err)
@@ -308,6 +309,7 @@ func TestIntegrationMSSQL(t *testing.T) {
 		t.Fatalf("view ddl %v %+v", err, vd)
 	}
 
+	itForeignKeys(t, h, sess, dbName, "dbo", table)
 	page, err := h.Browse(ctx, dbName, "dbo", table, 100, 50)
 	if err != nil {
 		t.Fatal(err)

@@ -15,6 +15,7 @@ IBM Db2 joins the Database tab, an experimental compact title bar gives terminal
 - opkssh is updated to 0.19.2 (openpubkey 0.30.0): a provider whose key set holds one key that cannot be read no longer breaks the login (hello.coop failed with "Ed25519: invalid key algorithm"), Ed25519 ID tokens verify again, and token keys are checked more strictly (a token must use the algorithm its key is published for).
 
 ### Database
+- **Follow foreign keys** in a table's Data view (PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, Db2): a link in a foreign key cell opens the row it references, in the same tab, with a breadcrumb of the path and **Back**. Composite keys follow all their columns.
 - **IBM Db2** joins the Database tab: Db2 for Linux, UNIX and Windows over its own DRDA protocol, with a pure-Go driver (no IBM client to install), through the connection's SSH session like the other engines. The tree lists the schemas of the database you connect to, with tables, views and materialized query tables, their columns, keys, indexes and foreign keys; query tabs run SQL and SQL PL blocks (ended by `@` on a line of its own), and read-only mode sends only `SELECT`, `WITH` and `VALUES` and rolls each run back.
 
 ### Window
