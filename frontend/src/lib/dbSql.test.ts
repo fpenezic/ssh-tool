@@ -25,6 +25,7 @@ describe("dbSql", () => {
     expect(literal("postgres", "it's", "text")).toBe("'it''s'");
     expect(literal("mysql", "a\\b", "varchar")).toBe("_utf8mb4 X'615c62'");
     expect(literal("mysql", "it's", "varchar")).toBe("'it''s'");
+    expect(literal("mysql", "a\0b", "varchar")).toBe("_utf8mb4 X'610062'");
     expect(literal("postgres", "\\xdead", "bytea")).toBe("'\\xdead'::bytea");
     expect(literal("mysql", "0xdead", "varbinary")).toBe("X'dead'");
     expect(literal("oracle", "0xdead", "raw")).toBe("HEXTORAW('dead')");

@@ -64,8 +64,9 @@ export function literal(engine: SqlEngine, v: string | null, type: string): stri
   }
   if (NUMERIC.test(type) && !/interval|point/i.test(type) && NUMBER.test(v)) return v;
   // MySQL reads a backslash in a string as an escape or not depending on
-  // sql_mode (NO_BACKSLASH_ESCAPES): such a value goes as hex instead.
-  if (engine === "mysql" && v.includes("\\")) {
+  // sql_mode (NO_BACKSLASH_ESCAPES), and a NUL can cut a pasted statement:
+  // such a value goes as hex instead.
+  if (engine === "mysql" && (v.includes("\\") || v.includes("\0"))) {
     const hex = [...new TextEncoder().encode(v)].map((b) => b.toString(16).padStart(2, "0")).join("");
     return `_utf8mb4 X'${hex}'`;
   }

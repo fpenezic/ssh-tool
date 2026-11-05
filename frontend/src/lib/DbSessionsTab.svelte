@@ -65,6 +65,12 @@
       danger: true,
     });
     if (!ok) return;
+    // A refresh while the dialog was open can have replaced the row: act
+    // only on the session that was confirmed (an id can be reused).
+    if (!picked || picked[0] !== id) {
+      toast.info(`Session ${id} is no longer the picked one: nothing was sent`);
+      return;
+    }
     try {
       await api.dbKill(sessionId, id, endSession);
       toast.ok(endSession ? `Session ${id} ended` : `Asked session ${id} to stop`);

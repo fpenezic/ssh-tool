@@ -62,9 +62,9 @@ export function applyDbDraft<T extends InheritableSettings>(s: T, d: DbDraft): T
   s.db_use_tunnel = dec(d.tunnel);
   s.db_default = dec(d.def);
   s.db_read_only = dec(d.readOnly);
+  // dbDraftError refuses anything else before a save gets here.
   const secs = d.timeout.trim();
-  // uint32 on the backend: a larger number would fail the whole save.
-  s.db_query_timeout = /^\d+$/.test(secs) && Number(secs) <= 4294967295 ? Number(secs) : undefined;
+  s.db_query_timeout = secs === "" ? undefined : Number(secs);
   s.db_tls = d.tls || undefined;
   s.db_credential_ref = decRef(d.cred);
   s.db_label = d.label.trim() || undefined;
@@ -91,6 +91,17 @@ function cleanTargets(list: DbTarget[]): DbTarget[] {
     if (t.in_tree === false) out.in_tree = false;
     return out;
   });
+}
+
+// What makes the draft unsavable ("" = nothing): a query timeout that is
+// not whole seconds within the backend's uint32. Saving it as "inherit"
+// would silently drop a limit that was set.
+export function dbDraftError(d: DbDraft): string {
+  const secs = d.timeout.trim();
+  if (secs !== "" && (!/^\d+$/.test(secs) || Number(secs) > 4294967295)) {
+    return `Query timeout: "${secs}" is not a whole number of seconds (0 for no limit, empty to inherit)`;
+  }
+  return "";
 }
 
 export function newTargetId(): string {

@@ -237,8 +237,15 @@
   const sqlEngine = $derived<SqlEngine | null>(hasFks ? (info.engine as SqlEngine) : null);
   const sqlTable = $derived(sqlEngine ? { engine: sqlEngine, database: cur.database, schema: cur.schema, name: cur.name } : null);
   const pk = $derived(primaryKey(detail?.columns));
-  // A value cut at the cell limit would go into the SQL cut: refuse.
-  function sqlBlocked(): boolean {
+  // A value cut at the cell limit would go into the SQL cut, and without
+  // the table's description the key is unknown (the WHERE would name every
+  // column): refuse both.
+  function sqlBlocked(needKey: boolean): boolean {
+    if (needKey && !detail) {
+      toast.err("The table's structure is not read yet (its primary key is needed): try again in a moment, or Reload");
+      if (hasFks) void loadDetail(true);
+      return true;
+    }
     if (page && page.cut_cells > 0) {
       toast.err(`${page.cut_cells} value${page.cut_cells === 1 ? " is" : "s are"} cut on this page (too long to show whole): no SQL from it`);
       return true;
@@ -246,7 +253,7 @@
     return false;
   }
   function copySql(kind: "insert" | "delete", all: boolean) {
-    if (!sqlTable || !page || sqlBlocked()) return;
+    if (!sqlTable || !page || sqlBlocked(kind === "delete")) return;
     const rows = all ? page.rows ?? [] : picked ? [picked] : [];
     if (!rows.length) {
       toast.info("Pick a row first");
@@ -262,7 +269,7 @@
     }
     api.clipboardSetText(text).then(
       () => toast.ok(`${kind.toUpperCase()} for ${rows.length} row${rows.length === 1 ? "" : "s"} copied`),
-      () => {},
+      (e) => toast.err(`Copy failed: ${errMsg(e)}`),
     );
   }
   function onEdit(row: number, ci: number, value: string | null) {
@@ -274,7 +281,7 @@
   }
   // The edits as an UPDATE script in a query tab, to read and run there.
   function editScript() {
-    if (!sqlTable || !page || !edits.size || sqlBlocked()) return;
+    if (!sqlTable || !page || !edits.size || sqlBlocked(true)) return;
     const byRow = new Map<number, Map<number, string | null>>();
     for (const [k, v] of edits) {
       const [r, c] = k.split(":").map(Number);
