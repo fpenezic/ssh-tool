@@ -2254,37 +2254,11 @@ everything mobile is behind a build tag or an `isMobile` check.
    size check misses it; the fix re-maximises every maximised window
    after the display messages settle.
 
-148. **A proxy-started VPN login must not be retried by the next client.**
-   (`app_loginhold.go`, `tunnelhelper.LoginError`) Concurrent proxy
-   dials share one start, but sequential ones do not: a login that
-   fails (an unanswered Duo push, a prompt that times out after 2 min)
-   ends the helper, and the client's next retry spawns a fresh one that
-   logs in again from the vault, one push per retry cycle. A start that
-   failed after the helper sent an `auth` event is a `LoginError`;
-   only the proxies hold on it, and any successful `ensureTunnel` lifts
-   the hold. A plugin's own reconnect after a lost session does not
-   re-login (measured with ocserv); the resume happens on the next
-   start, through the same path.
+148. **A proxy-started VPN login must not be retried by the next client.** (`app_loginhold.go`, `tunnelhelper.LoginError`) Concurrent proxy dials share one start, but sequential ones do not: a login that fails (an unanswered Duo push, a prompt that times out after 2 min) ends the helper, and the client's next retry spawns a fresh one that logs in again from the vault, one push per retry cycle. A start that failed after the helper sent an `auth` event is a `LoginError`; only the proxies hold on it, and any successful `ensureTunnel` lifts the hold. A plugin's own reconnect after a lost session does not re-login (measured with ocserv); the resume happens on the next start, through the same path.
 
-149. **go-db2 encodes a string bind wrongly for an INTEGER marker.**
-   (`internal/dbx/db2.go`, BrowseWhere) An untyped `?` compared with an
-   INTEGER column is described by the server as INTEGER, and the driver
-   then sends the Go string so that `ID = ?` with `"2"` silently matches
-   nothing (no error). The filter types its markers
-   `CAST(? AS VARCHAR(32672))` (the longest VARCHAR, so no key is cut): the server converts the text and the
-   column side stays bare, so its index still applies. Any future bind
-   of a string against a numeric Db2 column needs the same. A `[]byte`
-   bind breaks the conversation outright (SQLCODE -30020), so a binary
-   key goes as hex text through `HEXTORAW(CAST(? AS VARCHAR(...)))`.
+149. **go-db2 encodes a string bind wrongly for an INTEGER marker.** (`internal/dbx/db2.go`, BrowseWhere) An untyped `?` compared with an INTEGER column is described by the server as INTEGER, and the driver then sends the Go string so that `ID = ?` with `"2"` silently matches nothing (no error). The filter types its markers `CAST(? AS VARCHAR(32672))` (the longest VARCHAR, so no key is cut): the server converts the text and the column side stays bare, so its index still applies. Any future bind of a string against a numeric Db2 column needs the same. A `[]byte` bind breaks the conversation outright (SQLCODE -30020), so a binary key goes as hex text through `HEXTORAW(CAST(? AS VARCHAR(...)))`.
 
-150. **A Svelte 5 `$effect` that reads the state it writes loops.**
-   (`DbSessionsTab.svelte`, `DbFilterBar.svelte`) An effect that calls a
-   loader which checks `if (loading) return` subscribes to `loading`, so
-   every finished load runs it again (Sessions reloaded nonstop and lost
-   the picked row); an effect that resets a form from props but reads the
-   form's own rows to pick a default re-runs on every edit and throws the
-   edit away. Load once with `onMount`, and read anything but the
-   trigger inside `untrack`.
+150. **A Svelte 5 `$effect` that reads the state it writes loops.** (`DbSessionsTab.svelte`, `DbFilterBar.svelte`) An effect that calls a loader which checks `if (loading) return` subscribes to `loading`, so every finished load runs it again (Sessions reloaded nonstop and lost the picked row); an effect that resets a form from props but reads the form's own rows to pick a default re-runs on every edit and throws the edit away. Load once with `onMount`, and read anything but the trigger inside `untrack`.
 
 ---
 
