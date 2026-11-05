@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 
+	"ssh-tool/internal/store"
 	"ssh-tool/internal/tunnelhelper"
 )
 
@@ -19,17 +21,73 @@ import (
 // couple of minutes for as long as the client keeps retrying. Held, proxy
 // connections through the profile fail at once until the tunnel comes up
 // some other way: Connect on the profile, or a connection the user opens
-// in the app. Only the proxies check the hold; whatever the user starts
-// goes ahead and, once the tunnel is up, lifts it.
+// in the app. Only proxy-started tunnels check the hold; whatever the user
+// starts goes ahead and, once the tunnel is up, lifts it.
 var loginHolds = struct {
 	sync.Mutex
 	m map[string]*loginHold
-}{m: map[string]*loginHold{}}
+	// ups counts successful starts per profile: a proxy start that
+	// failed while a newer one succeeded must not hold the profile.
+	ups   map[string]uint64
+	start map[string]*sync.Mutex
+}{m: map[string]*loginHold{}, ups: map[string]uint64{}, start: map[string]*sync.Mutex{}}
 
 type loginHold struct {
 	since    time.Time
 	refused  int
 	lastNote time.Time
+}
+
+var errLoginHeld = errors.New("VPN login needed: the last login started through a proxy did not finish; Connect the profile to log in")
+
+type proxyStartKey struct{}
+
+// withProxyStart marks a dial made for a proxy client (a jump-host route
+// of the app proxy), so a tunnel it needs is started under the hold.
+func withProxyStart(ctx context.Context) context.Context {
+	return context.WithValue(ctx, proxyStartKey{}, true)
+}
+
+// ensureTunnelCtx is ensureTunnel, held when ctx comes from a proxy client.
+func (a *App) ensureTunnelCtx(ctx context.Context, row *store.NetworkProfile) (tunnelDialer, error) {
+	if on, _ := ctx.Value(proxyStartKey{}).(bool); on {
+		return a.ensureTunnelFromProxy(row)
+	}
+	return a.ensureTunnel(row)
+}
+
+// ensureTunnelFromProxy starts a profile's tunnel for a proxy client. One
+// proxy start per profile at a time, so the hold a failed login sets is in
+// place before the next client looks (concurrent clients wait here, as
+// they would on the pending start).
+func (a *App) ensureTunnelFromProxy(row *store.NetworkProfile) (tunnelDialer, error) {
+	if a.tunnelStatus(row.ID).Running {
+		return a.ensureTunnel(row)
+	}
+	loginHolds.Lock()
+	mu := loginHolds.start[row.ID]
+	if mu == nil {
+		mu = &sync.Mutex{}
+		loginHolds.start[row.ID] = mu
+	}
+	loginHolds.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
+	if !a.tunnelStatus(row.ID).Running && a.loginHeld(row.ID, row.Name) {
+		return nil, errLoginHeld
+	}
+	gen := loginUps(row.ID)
+	t, err := a.ensureTunnel(row)
+	if err != nil {
+		a.holdAfterLogin(row.ID, row.Name, err, gen)
+	}
+	return t, err
+}
+
+func loginUps(id string) uint64 {
+	loginHolds.Lock()
+	defer loginHolds.Unlock()
+	return loginHolds.ups[id]
 }
 
 // loginHeld reports whether proxy starts of the profile's tunnel are held,
@@ -50,13 +108,17 @@ func (a *App) loginHeld(id, name string) bool {
 }
 
 // holdAfterLogin puts the profile on hold when err is a login that did not
-// finish, and tells the user once.
-func (a *App) holdAfterLogin(id, name string, err error) {
+// finish and no start succeeded since gen, and tells the user once.
+func (a *App) holdAfterLogin(id, name string, err error, gen uint64) {
 	var le *tunnelhelper.LoginError
 	if !errors.As(err, &le) {
 		return
 	}
 	loginHolds.Lock()
+	if loginHolds.ups[id] != gen {
+		loginHolds.Unlock()
+		return
+	}
 	_, already := loginHolds.m[id]
 	if !already {
 		loginHolds.m[id] = &loginHold{since: time.Now(), lastNote: time.Now()}
@@ -72,9 +134,10 @@ func (a *App) holdAfterLogin(id, name string, err error) {
 	EventsEmit("network_tunnel_changed", id)
 }
 
-// clearLoginHold lifts the hold once the tunnel is up.
-func clearLoginHold(id string) {
+// tunnelStarted records a successful start and lifts the hold.
+func tunnelStarted(id string) {
 	loginHolds.Lock()
+	loginHolds.ups[id]++
 	h := loginHolds.m[id]
 	delete(loginHolds.m, id)
 	loginHolds.Unlock()

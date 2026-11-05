@@ -199,8 +199,9 @@ func TestIsRealMountContainerRuntimes(t *testing.T) {
 }
 
 // WSL mounts read-only ext4 images (kernel tools, headers) that always read
-// 100%: a read-only mount with nothing free is dropped, a read-only one with
-// room left and every writable one stay.
+// 100%: a read-only mount under /usr with nothing free is dropped; a
+// read-only one with room left, a full read-only one elsewhere and every
+// writable one stay.
 func TestParseServerStats_ReadOnlyImage(t *testing.T) {
 	sep := statsSep + "\n"
 	out := sep + sep +
@@ -209,15 +210,32 @@ func TestParseServerStats_ReadOnlyImage(t *testing.T) {
 		"/dev/sdb 98304 98304 0 100% /usr/lib/linux-tools/6.1.0-example\n" +
 		"/dev/sdc 2000 1000 1000 50% /mnt/ro data\n" +
 		"/dev/sde 1000 1000 0 100% /data\n" +
+		"/dev/sdf 1000 1000 0 100% /usr/src/headers 6.1\n" +
+		"/dev/sdg 1000 1000 0 100% /mnt/broken\n" +
 		sep + sep + sep + sep + sep + sep + sep + sep +
-		"/usr/lib/linux-tools/6.1.0-example\n/mnt/ro\\040data\n"
+		"/usr/lib/linux-tools/6.1.0-example\n/mnt/ro\\040data\n/usr/src/headers\\0406.1\n/mnt/broken\n"
 	s := parseServerStats(out)
 	var got []string
 	for _, p := range s.Partitions {
 		got = append(got, p.Mount)
 	}
-	want := []string{"/", "/mnt/ro data", "/data"}
+	// /mnt/broken: a data disk remounted read-only while full stays.
+	want := []string{"/", "/mnt/ro data", "/data", "/mnt/broken"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("partitions %q, want %q", got, want)
+	}
+}
+
+func TestUnescapeMount(t *testing.T) {
+	for in, want := range map[string]string{
+		`/mnt/a\040b`:  "/mnt/a b",
+		`/mnt/a\134b`:  `/mnt/a\b`,
+		`/mnt/tab\011`: "/mnt/tab\t",
+		`/plain`:       "/plain",
+		`/odd\04`:      `/odd\04`,
+	} {
+		if got := unescapeMount(in); got != want {
+			t.Errorf("unescapeMount(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

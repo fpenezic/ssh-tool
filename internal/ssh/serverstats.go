@@ -348,22 +348,22 @@ func parseServerStats(out string) *ServerStats {
 		}
 	}
 
-	// Section 10: read-only mount points from /proc/mounts (octal escapes:
-	// a space is \040). A read-only mount with nothing free is an image,
-	// not a disk that fills: WSL's kernel tools and headers on /dev/sdb,
-	// a squashfs under another name. It always reads 100% (and its inodes
-	// too), so it would raise a false alarm; a read-only disk with room
-	// left stays listed.
+	// Section 10: read-only mount points from /proc/mounts. A read-only
+	// mount under /usr with nothing free is a system image, not a disk
+	// that fills: WSL's kernel tools and headers on /dev/sdb. It always
+	// reads 100% (and its inodes too), so it would raise a false alarm.
+	// Elsewhere a full read-only mount stays listed: a data disk the
+	// kernel remounted read-only after errors is worth seeing.
 	if len(sections) > 10 {
 		ro := map[string]bool{}
 		for _, l := range strings.Split(sections[10], "\n") {
 			if m := strings.TrimSpace(l); m != "" {
-				ro[strings.ReplaceAll(m, `\040`, " ")] = true
+				ro[unescapeMount(m)] = true
 			}
 		}
 		kept := s.Partitions[:0]
 		for _, p := range s.Partitions {
-			if ro[p.Mount] && p.AvailKB == 0 {
+			if ro[p.Mount] && p.AvailKB == 0 && strings.HasPrefix(p.Mount, "/usr/") {
 				continue
 			}
 			kept = append(kept, p)
@@ -373,6 +373,26 @@ func parseServerStats(out string) *ServerStats {
 
 	s.OK = got
 	return s
+}
+
+// unescapeMount decodes the octal escapes /proc/mounts writes for a space,
+// tab, newline and backslash in a mount path (\040, \011, \012, \134).
+func unescapeMount(m string) string {
+	if !strings.Contains(m, `\`) {
+		return m
+	}
+	var b strings.Builder
+	for i := 0; i < len(m); i++ {
+		if m[i] == '\\' && i+4 <= len(m) {
+			if v, err := strconv.ParseUint(m[i+1:i+4], 8, 8); err == nil {
+				b.WriteByte(byte(v))
+				i += 3
+				continue
+			}
+		}
+		b.WriteByte(m[i])
+	}
+	return b.String()
 }
 
 // isRealMount reports whether a df row describes a real, user-relevant

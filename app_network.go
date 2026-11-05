@@ -215,7 +215,7 @@ type tunnelDialer interface {
 func (a *App) ensureTunnel(row *store.NetworkProfile) (tunnelDialer, error) {
 	t, err := a.ensureTunnelKind(row)
 	if err == nil {
-		clearLoginHold(row.ID)
+		tunnelStarted(row.ID)
 	}
 	return t, err
 }
@@ -583,7 +583,7 @@ func (a *App) wgDialerForCtx(hookCtx context.Context, profileID string) (sshlaye
 			dl, hasDL := ctx.Deadline()
 			roomForBoth := !hasDL || time.Until(dl) > directProbeTimeout
 			if roomForBoth && a.tunnelStatus(row.ID).Running {
-				if t, terr := a.ensureTunnel(row); terr == nil {
+				if t, terr := a.ensureTunnelCtx(ctx, row); terr == nil {
 					sshlayer.ReportProgress(ctx, "Connecting to "+addr+" via VPN "+row.Name+" (already up)")
 					tctx, tcancel := ctx, context.CancelFunc(func() {})
 					if hasDL {
@@ -618,7 +618,7 @@ func (a *App) wgDialerForCtx(hookCtx context.Context, profileID string) (sshlaye
 				return c, nil
 			}
 			a.reportTunnelStep(ctx, row, "Not reachable directly - ")
-			t, terr := a.ensureTunnel(row)
+			t, terr := a.ensureTunnelCtx(ctx, row)
 			if terr != nil {
 				return nil, fmt.Errorf("direct dial failed (%v) and tunnel failed: %w", derr, terr)
 			}
@@ -635,7 +635,7 @@ func (a *App) wgDialerForCtx(hookCtx context.Context, profileID string) (sshlaye
 		}, nil
 	}
 	a.reportTunnelStep(hookCtx, row, "")
-	t, err := a.ensureTunnel(row)
+	t, err := a.ensureTunnelCtx(hookCtx, row)
 	if err != nil {
 		return nil, err
 	}

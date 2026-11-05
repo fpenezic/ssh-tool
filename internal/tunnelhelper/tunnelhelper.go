@@ -591,6 +591,7 @@ func spawn(profileID, name, exePath string, args, env []string, opts Options) (*
 					go opts.OnInfo(p)
 				}
 			case "open_url":
+				sawAuth.Store(true) // a browser login is a login too
 				if opts.OnOpenURL != nil && ev.URL != "" {
 					go opts.OnOpenURL(ev.URL)
 				}
