@@ -232,6 +232,8 @@ func itEngine(t *testing.T, engine string) {
 		t.Fatalf("binary: %q, want %q", *page.Rows[0][3], wantBin)
 	}
 
+	itForeignKeys(t, h, sess, s.cfg.Database, schema, table)
+
 	// A read past the bound stops, and the session still works after it.
 	res = sess.Run(ctx, "SELECT * FROM "+table, dbx.RunOptions{MaxRows: 500})
 	if res[0].Error != "" || len(res[0].Rows) != 500 || !res[0].Truncated {
@@ -351,5 +353,91 @@ func itEngine(t *testing.T, engine string) {
 		if r := rs.Run(ctx, "SELECT nextval('"+table+"_id_seq')", dbx.RunOptions{}); !strings.Contains(r[0].Error, "read-only") {
 			t.Fatalf("nextval in read-only: %+v", r[0])
 		}
+	}
+}
+
+// itForeignKeys: a child table's foreign key comes back with its columns
+// and the referenced table named the way BrowseWhere takes it, and
+// following it reads the referenced row (a bound value: one that looks
+// like SQL matches nothing and errors nothing). The same SQL on every
+// engine with foreign keys; names are compared without case (Oracle and
+// Db2 fold unquoted ones up).
+func itForeignKeys(t *testing.T, h *dbx.Handle, sess *dbx.Session, database, schema, prefix string) {
+	t.Helper()
+	ctx := ctx30(t)
+	parent, child := prefix+"_p", prefix+"_c"
+	if prefix == strings.ToUpper(prefix) { // Oracle, Db2: the catalog holds unquoted names upper case
+		parent, child = prefix+"_P", prefix+"_C"
+	}
+	mustRun(t, sess, "CREATE TABLE "+parent+" (id INT NOT NULL PRIMARY KEY, code VARCHAR(10) NOT NULL, CONSTRAINT "+parent+"_uq UNIQUE (id, code))")
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		sess.Run(ctx, "DROP TABLE "+child, dbx.RunOptions{})
+		sess.Run(ctx, "DROP TABLE "+parent, dbx.RunOptions{})
+	})
+	mustRun(t, sess, "CREATE TABLE "+child+" (id INT NOT NULL PRIMARY KEY, parent_id INT, pcode VARCHAR(10), "+
+		"CONSTRAINT "+child+"_fk FOREIGN KEY (parent_id) REFERENCES "+parent+" (id), "+
+		"CONSTRAINT "+child+"_fk2 FOREIGN KEY (parent_id, pcode) REFERENCES "+parent+" (id, code))")
+	for _, q := range []string{
+		"INSERT INTO " + parent + " (id, code) VALUES (1, 'one')",
+		"INSERT INTO " + parent + " (id, code) VALUES (2, 'two')",
+		"INSERT INTO " + child + " (id, parent_id, pcode) VALUES (10, 2, 'two')",
+	} {
+		mustRun(t, sess, q)
+	}
+
+	d, err := h.Describe(ctx, database, schema, child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.ForeignKeys) != 2 {
+		t.Fatalf("foreign keys %+v", d.ForeignKeys)
+	}
+	fk, fk2 := d.ForeignKeys[0], d.ForeignKeys[1]
+	if len(fk.Columns) == 2 {
+		fk, fk2 = fk2, fk
+	}
+	eq := strings.EqualFold
+	if len(fk.Columns) != 1 || !eq(fk.Columns[0], "parent_id") || len(fk.RefColumns) != 1 || !eq(fk.RefColumns[0], "id") ||
+		!eq(fk.RefTable, parent) || !eq(fk.RefDatabase, database) || !eq(fk.RefSchema, schema) {
+		t.Fatalf("foreign key %+v", fk)
+	}
+
+	if len(fk2.Columns) != 2 || !eq(fk2.Columns[0], "parent_id") || !eq(fk2.Columns[1], "pcode") ||
+		len(fk2.RefColumns) != 2 || !eq(fk2.RefColumns[0], "id") || !eq(fk2.RefColumns[1], "code") {
+		t.Fatalf("composite foreign key %+v", fk2)
+	}
+
+	two, twoCode := "2", "two"
+	page, err := h.BrowseWhere(ctx, fk2.RefDatabase, fk2.RefSchema, fk2.RefTable,
+		[]dbx.Cond{{Column: fk2.RefColumns[0], Value: &two}, {Column: fk2.RefColumns[1], Value: &twoCode}}, 0, 50)
+	if err != nil {
+		t.Fatalf("followed composite: %v", err)
+	}
+	if len(page.Rows) != 1 {
+		t.Fatalf("followed composite: %d rows", len(page.Rows))
+	}
+	page, err = h.BrowseWhere(ctx, fk.RefDatabase, fk.RefSchema, fk.RefTable, []dbx.Cond{{Column: fk.RefColumns[0], Value: &two}}, 0, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Rows) != 1 || *page.Rows[0][0] != "2" || *page.Rows[0][1] != "two" {
+		t.Fatalf("followed: %d rows %v", len(page.Rows), page.Rows)
+	}
+	odd := "2' OR '1'='1"
+	page, err = h.BrowseWhere(ctx, fk.RefDatabase, fk.RefSchema, fk.RefTable, []dbx.Cond{{Column: fk2.RefColumns[1], Value: &odd}}, 0, 50)
+	if err != nil {
+		t.Fatalf("bound value: %v", err)
+	}
+	if len(page.Rows) != 0 {
+		t.Fatalf("bound value: %d rows", len(page.Rows))
+	}
+	page, err = h.BrowseWhere(ctx, database, schema, child, []dbx.Cond{{Column: fk.Columns[0], Value: nil}}, 0, 50)
+	if err != nil {
+		t.Fatalf("IS NULL: %v", err)
+	}
+	if len(page.Rows) != 0 {
+		t.Fatalf("IS NULL: %d rows", len(page.Rows))
 	}
 }

@@ -386,15 +386,16 @@ func (a *App) DbDescribe(id, database, schema, name string) (*dbx.TableDetail, e
 	return dh.h.Describe(ctx, database, schema, name)
 }
 
-// DbBrowse reads a page of a table's rows.
-func (a *App) DbBrowse(id, database, schema, name string, offset, limit int) (*dbx.Result, error) {
+// DbBrowse reads a page of a table's rows; where (may be empty) keeps the
+// rows matching every condition, a foreign key followed from another row.
+func (a *App) DbBrowse(id, database, schema, name string, where []dbx.Cond, offset, limit int) (*dbx.Result, error) {
 	dh, err := a.dbGet(id)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := dbCtx()
 	defer cancel()
-	return dh.h.Browse(ctx, database, schema, name, offset, limit)
+	return dh.h.BrowseWhere(ctx, database, schema, name, where, offset, limit)
 }
 
 // DbRunResult is what a run returned: one result per statement run (it

@@ -38,6 +38,7 @@ import ChevronRight from "@lucide/svelte/icons/chevron-right";
 import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import ArrowUp from "@lucide/svelte/icons/arrow-up";
 import ArrowDown from "@lucide/svelte/icons/arrow-down";
+import ArrowLeft from "@lucide/svelte/icons/arrow-left";
 import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
 import ChevronsDownUp from "@lucide/svelte/icons/chevrons-down-up";
 import User from "@lucide/svelte/icons/user";
@@ -85,6 +86,7 @@ export {
   ChevronDown as IconChevronDown,
   ArrowUp as IconArrowUp,
   ArrowDown as IconArrowDown,
+  ArrowLeft as IconArrowLeft,
   ChevronsUpDown as IconExpandAll,
   ChevronsDownUp as IconCollapseAll,
   User as IconUser,

@@ -113,6 +113,7 @@ func TestIntegrationDB2(t *testing.T) {
 		t.Fatalf("view ddl %v %+v", err, vd)
 	}
 
+	itForeignKeys(t, h, sess, schema, "", table)
 	page, err := h.Browse(ctx, schema, "", table, 100, 50)
 	if err != nil {
 		t.Fatal(err)

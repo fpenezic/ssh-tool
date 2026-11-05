@@ -470,7 +470,10 @@ func (e *osEngine) describe(ctx context.Context, _, _, name string) (*TableDetai
 	return d, nil
 }
 
-func (e *osEngine) browse(ctx context.Context, _, _, name string, offset, limit int) (*Result, error) {
+func (e *osEngine) browse(ctx context.Context, _, _, name string, where []Cond, offset, limit int) (*Result, error) {
+	if len(where) > 0 {
+		return nil, ErrNoFilter
+	}
 	fields, isIndex, err := e.mapping(ctx, name)
 	if err != nil {
 		return nil, err

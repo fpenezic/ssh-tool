@@ -199,7 +199,7 @@ func dbIPCTunnel(t *testing.T, engine, env string) {
 			found = o.Schema
 		}
 	}
-	page, err := a.DbBrowse(info.ID, dbName, found, table, 0, 10)
+	page, err := a.DbBrowse(info.ID, dbName, found, table, nil, 0, 10)
 	if err != nil || len(page.Rows) != 2 || page.Rows[1][1] != nil {
 		t.Fatalf("browse %v %+v", err, page)
 	}

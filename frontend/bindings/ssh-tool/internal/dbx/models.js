@@ -81,6 +81,46 @@ export class Column {
 }
 
 /**
+ * Cond is one equality a filtered browse keeps rows by: Column = Value,
+ * or Column IS NULL for a nil Value. The column is quoted as an
+ * identifier and the value sent as a bind parameter, never spliced in.
+ */
+export class Cond {
+    /**
+     * Creates a new Cond instance.
+     * @param {Partial<Cond>} [$$source = {}] - The source object to create the Cond.
+     */
+    constructor($$source = {}) {
+        if (!("column" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["column"] = "";
+        }
+        if (!("value" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["value"] = null;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Cond instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {Cond}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new Cond(/** @type {Partial<Cond>} */($$parsedSource));
+    }
+}
+
+/**
  * Database is one database on the server.
  */
 export class Database {
@@ -127,7 +167,10 @@ export class Database {
 }
 
 /**
- * ForeignKey describes a foreign key.
+ * ForeignKey describes a foreign key. Columns pairs with RefColumns, in
+ * key order; RefDatabase / RefSchema / RefTable name the referenced table
+ * the way Browse takes it (the database is the schema on MySQL, Oracle
+ * and Db2).
  */
 export class ForeignKey {
     /**
@@ -149,6 +192,41 @@ export class ForeignKey {
              */
             this["def"] = "";
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["columns"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["ref_database"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["ref_schema"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["ref_table"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["ref_columns"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -159,7 +237,15 @@ export class ForeignKey {
      * @returns {ForeignKey}
      */
     static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType0;
+        const $$createField6_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("columns" in $$parsedSource) {
+            $$parsedSource["columns"] = $$createField2_0($$parsedSource["columns"]);
+        }
+        if ("ref_columns" in $$parsedSource) {
+            $$parsedSource["ref_columns"] = $$createField6_0($$parsedSource["ref_columns"]);
+        }
         return new ForeignKey(/** @type {Partial<ForeignKey>} */($$parsedSource));
     }
 }

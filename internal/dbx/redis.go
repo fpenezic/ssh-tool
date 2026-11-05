@@ -430,7 +430,10 @@ func (e *rdEngine) describe(ctx context.Context, database, _, name string) (*Tab
 	return d, nil
 }
 
-func (e *rdEngine) browse(ctx context.Context, database, _, name string, offset, limit int) (*Result, error) {
+func (e *rdEngine) browse(ctx context.Context, database, _, name string, where []Cond, offset, limit int) (*Result, error) {
+	if len(where) > 0 {
+		return nil, ErrNoFilter
+	}
 	db, err := e.rdDB(database)
 	if err != nil {
 		return nil, err

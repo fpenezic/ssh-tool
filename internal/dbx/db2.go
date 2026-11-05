@@ -396,6 +396,7 @@ func (e *db2Engine) describe(ctx context.Context, database, _, name string) (*Ta
 	}
 	type fk struct {
 		cols, rcols []string
+		raw, rraw   []string
 		rs, rt      string
 	}
 	fks := map[string]*fk{}
@@ -415,6 +416,8 @@ func (e *db2Engine) describe(ctx context.Context, database, _, name string) (*Ta
 		}
 		f.cols = append(f.cols, db2Ident(strings.TrimSpace(col)))
 		f.rcols = append(f.rcols, db2Ident(strings.TrimSpace(rcol)))
+		f.raw = append(f.raw, strings.TrimSpace(col))
+		f.rraw = append(f.rraw, strings.TrimSpace(rcol))
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -428,8 +431,12 @@ func (e *db2Engine) describe(ctx context.Context, database, _, name string) (*Ta
 			ref = db2Ident(f.rs) + "." + ref
 		}
 		d.ForeignKeys = append(d.ForeignKeys, ForeignKey{
-			Name: n,
-			Def:  fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s (%s)", strings.Join(f.cols, ", "), ref, strings.Join(f.rcols, ", ")),
+			Name:        n,
+			Def:         fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s (%s)", strings.Join(f.cols, ", "), ref, strings.Join(f.rcols, ", ")),
+			Columns:     f.raw,
+			RefDatabase: f.rs,
+			RefTable:    f.rt,
+			RefColumns:  f.rraw,
 		})
 	}
 
@@ -476,7 +483,7 @@ func db2RebuildDDL(schema, name string, cols []Column, pk []string) string {
 	return b.String()
 }
 
-func (e *db2Engine) browse(ctx context.Context, database, _, name string, offset, limit int) (*Result, error) {
+func (e *db2Engine) browse(ctx context.Context, database, _, name string, where []Cond, offset, limit int) (*Result, error) {
 	db, err := e.db()
 	if err != nil {
 		return nil, err
@@ -501,7 +508,13 @@ func (e *db2Engine) browse(ctx context.Context, database, _, name string, offset
 		return nil, db2Err(err)
 	}
 	rows.Close()
-	q := "SELECT * FROM " + db2Ident(database) + "." + db2Ident(name)
+	// The marker is typed VARCHAR: left untyped, Db2 describes it as the
+	// column's type, and go-db2 then encodes a string for an INTEGER
+	// column wrongly - the row silently does not match. The server casts
+	// the text instead, and the column side stays as it is (its index
+	// still applies).
+	w, args := whereClause(where, db2Ident, func(int) string { return "CAST(? AS VARCHAR(4000))" })
+	q := "SELECT * FROM " + db2Ident(database) + "." + db2Ident(name) + w
 	if len(pk) > 0 {
 		q += " ORDER BY " + strings.Join(pk, ", ")
 	}
@@ -511,7 +524,7 @@ func (e *db2Engine) browse(ctx context.Context, database, _, name string, offset
 	}
 	q += fmt.Sprintf(" FETCH FIRST %d ROWS ONLY", limit)
 	start := time.Now()
-	r := sqlRead(ctx, db, q, limit, db2Dialect, nil)
+	r := sqlRead(ctx, db, q, limit, db2Dialect, nil, args...)
 	r.Statement = q
 	r.DurationMs = time.Since(start).Milliseconds()
 	if r.Error != "" {

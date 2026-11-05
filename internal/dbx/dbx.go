@@ -211,10 +211,18 @@ type Index struct {
 	Def     string   `json:"def,omitempty"`
 }
 
-// ForeignKey describes a foreign key.
+// ForeignKey describes a foreign key. Columns pairs with RefColumns, in
+// key order; RefDatabase / RefSchema / RefTable name the referenced table
+// the way Browse takes it (the database is the schema on MySQL, Oracle
+// and Db2).
 type ForeignKey struct {
-	Name string `json:"name"`
-	Def  string `json:"def"`
+	Name        string   `json:"name"`
+	Def         string   `json:"def"`
+	Columns     []string `json:"columns,omitempty"`
+	RefDatabase string   `json:"ref_database,omitempty"`
+	RefSchema   string   `json:"ref_schema,omitempty"`
+	RefTable    string   `json:"ref_table,omitempty"`
+	RefColumns  []string `json:"ref_columns,omitempty"`
 }
 
 // TableDetail is a table's (or view's) structure.
@@ -280,7 +288,7 @@ type engine interface {
 	databases(ctx context.Context) ([]Database, error)
 	objects(ctx context.Context, database string, system bool) ([]Object, error)
 	describe(ctx context.Context, database, schema, name string) (*TableDetail, error)
-	browse(ctx context.Context, database, schema, name string, offset, limit int) (*Result, error)
+	browse(ctx context.Context, database, schema, name string, where []Cond, offset, limit int) (*Result, error)
 	session(ctx context.Context, database string) (session, error)
 	close()
 }
@@ -365,9 +373,45 @@ func (h *Handle) Describe(ctx context.Context, database, schema, name string) (*
 	return h.eng.describe(ctx, database, schema, name)
 }
 
+// Cond is one equality a filtered browse keeps rows by: Column = Value,
+// or Column IS NULL for a nil Value. The column is quoted as an
+// identifier and the value sent as a bind parameter, never spliced in.
+type Cond struct {
+	Column string  `json:"column"`
+	Value  *string `json:"value"`
+}
+
+// ErrNoFilter is a filtered browse on an engine without one.
+var ErrNoFilter = errors.New("this engine cannot filter a table's rows")
+
+// whereClause is " WHERE a = $1 AND b IS NULL" for where, with the bind
+// values in order; ph(n) is the engine's n-th placeholder (1-based).
+func whereClause(where []Cond, ident func(string) string, ph func(int) string) (string, []any) {
+	if len(where) == 0 {
+		return "", nil
+	}
+	var parts []string
+	var args []any
+	for _, c := range where {
+		if c.Value == nil {
+			parts = append(parts, ident(c.Column)+" IS NULL")
+			continue
+		}
+		args = append(args, *c.Value)
+		parts = append(parts, ident(c.Column)+" = "+ph(len(args)))
+	}
+	return " WHERE " + strings.Join(parts, " AND "), args
+}
+
 // Browse reads a page of a table's rows, in primary-key order when it has
 // one.
 func (h *Handle) Browse(ctx context.Context, database, schema, name string, offset, limit int) (*Result, error) {
+	return h.BrowseWhere(ctx, database, schema, name, nil, offset, limit)
+}
+
+// BrowseWhere is Browse of the rows matching every condition in where (a
+// foreign key followed from another table's row).
+func (h *Handle) BrowseWhere(ctx context.Context, database, schema, name string, where []Cond, offset, limit int) (*Result, error) {
 	if limit <= 0 {
 		limit = DefaultMaxRows
 	}
@@ -377,7 +421,12 @@ func (h *Handle) Browse(ctx context.Context, database, schema, name string, offs
 	if offset < 0 {
 		offset = 0
 	}
-	return h.eng.browse(ctx, database, schema, name, offset, limit)
+	for _, c := range where {
+		if c.Column == "" {
+			return nil, errors.New("filter: empty column name")
+		}
+	}
+	return h.eng.browse(ctx, database, schema, name, where, offset, limit)
 }
 
 // Session is a query tab's own server connection: session state (SET,

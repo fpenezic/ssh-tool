@@ -219,32 +219,53 @@ func (e *myEngine) describe(ctx context.Context, database, _, name string) (*Tab
 	}
 	rows.Close()
 
+	// A row per key column, grouped here: GROUP_CONCAT would need a
+	// separator no column name can hold.
 	rows, err = db.QueryContext(ctx, `
-		SELECT k.CONSTRAINT_NAME,
-		       GROUP_CONCAT(k.COLUMN_NAME ORDER BY k.ORDINAL_POSITION),
-		       k.REFERENCED_TABLE_SCHEMA, k.REFERENCED_TABLE_NAME,
-		       GROUP_CONCAT(k.REFERENCED_COLUMN_NAME ORDER BY k.ORDINAL_POSITION)
+		SELECT k.CONSTRAINT_NAME, k.COLUMN_NAME, k.REFERENCED_TABLE_SCHEMA, k.REFERENCED_TABLE_NAME, k.REFERENCED_COLUMN_NAME
 		FROM information_schema.KEY_COLUMN_USAGE k
 		WHERE k.TABLE_SCHEMA = ? AND k.TABLE_NAME = ? AND k.REFERENCED_TABLE_NAME IS NOT NULL
-		GROUP BY k.CONSTRAINT_NAME, k.REFERENCED_TABLE_SCHEMA, k.REFERENCED_TABLE_NAME
-		ORDER BY k.CONSTRAINT_NAME`, database, name)
+		ORDER BY k.CONSTRAINT_NAME, k.ORDINAL_POSITION`, database, name)
 	if err != nil {
 		return nil, myErr(err)
 	}
+	var fkOrder []string
+	fkByName := map[string]*ForeignKey{}
 	for rows.Next() {
-		var n, cols, rs, rt, rcols string
-		if err := rows.Scan(&n, &cols, &rs, &rt, &rcols); err != nil {
+		var n, col, rs, rt, rcol string
+		if err := rows.Scan(&n, &col, &rs, &rt, &rcol); err != nil {
 			rows.Close()
 			return nil, myErr(err)
 		}
-		ref := myIdent(rt)
-		if rs != database {
-			ref = myIdent(rs) + "." + ref
+		f := fkByName[n]
+		if f == nil {
+			f = &ForeignKey{Name: n, RefDatabase: rs, RefTable: rt}
+			fkByName[n] = f
+			fkOrder = append(fkOrder, n)
 		}
-		d.ForeignKeys = append(d.ForeignKeys, ForeignKey{
-			Name: n,
-			Def:  fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s (%s)", cols, ref, rcols),
-		})
+		f.Columns = append(f.Columns, col)
+		f.RefColumns = append(f.RefColumns, rcol)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, myErr(err)
+	}
+	for _, n := range fkOrder {
+		f := fkByName[n]
+		ref := myIdent(f.RefTable)
+		if f.RefDatabase != database {
+			ref = myIdent(f.RefDatabase) + "." + ref
+		}
+		cl := make([]string, len(f.Columns))
+		for i, c := range f.Columns {
+			cl[i] = myIdent(c)
+		}
+		rcl := make([]string, len(f.RefColumns))
+		for i, c := range f.RefColumns {
+			rcl[i] = myIdent(c)
+		}
+		f.Def = fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s (%s)", strings.Join(cl, ", "), ref, strings.Join(rcl, ", "))
+		d.ForeignKeys = append(d.ForeignKeys, *f)
 	}
 	rows.Close()
 
@@ -278,7 +299,7 @@ func myIdent(s string) string {
 	return "`" + strings.ReplaceAll(s, "`", "``") + "`"
 }
 
-func (e *myEngine) browse(ctx context.Context, database, _, name string, offset, limit int) (*Result, error) {
+func (e *myEngine) browse(ctx context.Context, database, _, name string, where []Cond, offset, limit int) (*Result, error) {
 	db, err := e.db()
 	if err != nil {
 		return nil, err
@@ -299,7 +320,8 @@ func (e *myEngine) browse(ctx context.Context, database, _, name string, offset,
 		pk = append(pk, myIdent(c))
 	}
 	rows.Close()
-	q := "SELECT * FROM " + myIdent(database) + "." + myIdent(name)
+	w, args := whereClause(where, myIdent, func(int) string { return "?" })
+	q := "SELECT * FROM " + myIdent(database) + "." + myIdent(name) + w
 	if len(pk) > 0 {
 		q += " ORDER BY " + strings.Join(pk, ", ")
 	}
@@ -310,7 +332,7 @@ func (e *myEngine) browse(ctx context.Context, database, _, name string, offset,
 	}
 	defer conn.Close()
 	start := time.Now()
-	r := myRead(ctx, conn, q, limit, nil)
+	r := myRead(ctx, conn, q, limit, nil, args...)
 	r.Statement = q
 	r.DurationMs = time.Since(start).Milliseconds()
 	if r.Error != "" {
@@ -427,9 +449,9 @@ func (s *mySession) exec(ctx context.Context, stmt string, maxRows int) *Result 
 // QUERY) stops the server, whose "interrupted" error is then expected;
 // with no onCut the rest is read and dropped. The protocol has no other
 // way to end a result early.
-func myRead(ctx context.Context, conn *sql.Conn, stmt string, maxRows int, onCut func()) *Result {
+func myRead(ctx context.Context, conn *sql.Conn, stmt string, maxRows int, onCut func(), args ...any) *Result {
 	r := &Result{RowsAffected: -1}
-	rows, err := conn.QueryContext(ctx, stmt)
+	rows, err := conn.QueryContext(ctx, stmt, args...)
 	if err != nil {
 		r.Error = myErr(err).Error()
 		return r

@@ -34,10 +34,10 @@ type sqlDialect struct {
 // later one is counted in Note, not shown (a T-SQL batch, sp_help). Past
 // the bounds onCut stops the server when not nil; otherwise the rest is
 // read and dropped.
-func sqlRead(ctx context.Context, q sqlQuerier, stmt string, maxRows int, d sqlDialect, onCut func()) *Result {
+func sqlRead(ctx context.Context, q sqlQuerier, stmt string, maxRows int, d sqlDialect, onCut func(), args ...any) *Result {
 	errf := d.errf
 	r := &Result{RowsAffected: -1}
-	rows, err := q.QueryContext(ctx, stmt)
+	rows, err := q.QueryContext(ctx, stmt, args...)
 	if err != nil {
 		r.Error = errf(err).Error()
 		return r

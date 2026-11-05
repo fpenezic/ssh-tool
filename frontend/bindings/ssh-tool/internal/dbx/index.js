@@ -4,6 +4,7 @@
 
 export {
     Column,
+    Cond,
     Database,
     ForeignKey,
     Index,
