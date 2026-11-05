@@ -20,9 +20,10 @@ export interface SqlColumn {
 // A column the server fills itself, from the described column's extra:
 // an identity that refuses a value (PostgreSQL, SQL Server, a GENERATED
 // ALWAYS one on Oracle / Db2) or a generated / computed column. A plain
-// auto_increment takes a value and is not one.
+// auto_increment takes a value and is not one, nor is MySQL's
+// DEFAULT_GENERATED (only its default is an expression).
 export function serverFilled(extra: string | undefined): boolean {
-  return /GENERATED ALWAYS|GENERATED$|^generated$|^identity$|^computed/i.test(extra ?? "");
+  return /GENERATED ALWAYS|(VIRTUAL|STORED) GENERATED|^generated$|^identity$|^computed/i.test(extra ?? "");
 }
 
 export function ident(engine: SqlEngine, name: string): string {
