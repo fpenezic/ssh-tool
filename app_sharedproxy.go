@@ -176,7 +176,11 @@ func (a *App) startSharedProxy(c SharedProxyConfig) error {
 			}
 			go a.serveSOCKS(conn, func(pw string) bool {
 				want, err := a.sharedProxyPassword()
-				return err == nil && subtleEqual(pw, want)
+				if err != nil {
+					log.Printf("network: app proxy: cannot check the password: %v", err)
+					return false
+				}
+				return subtleEqual(pw, want)
 			}, a.sharedPick, "shared")
 		}
 	}()
