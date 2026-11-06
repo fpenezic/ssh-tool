@@ -264,6 +264,8 @@ export interface DbHandleInfo {
   // SSH session state of a tunnel transport (see KafkaClusterInfo).
   state: string;
   error?: string;
+  // Why the server stopped answering its last check (absent = answering).
+  down?: string;
   read_only: boolean;
   sensitive: boolean;
   tls: string;
@@ -305,6 +307,21 @@ export interface DbForeignKey {
   ref_schema?: string;
   ref_table?: string;
   ref_columns?: string[];
+}
+// A schema's tables and foreign keys, for its ER diagram (dbSchemaGraph).
+export interface DbGraphColumn {
+  name: string;
+  type: string;
+  key?: boolean; // part of the primary key
+  nullable?: boolean;
+}
+export interface DbGraphTable {
+  name: string;
+  columns: DbGraphColumn[];
+}
+export interface DbSchemaGraph {
+  tables: DbGraphTable[];
+  foreign_keys: DbForeignKey[];
 }
 // One equality of a filtered browse; a null value is IS NULL.
 // One condition of a filtered browse: op "" is =; a null value is IS NULL
@@ -1940,6 +1957,8 @@ export const api = {
     nn(G.DbBrowse(id, database, schema, name, where as any, order as any, offset, limit)) as Promise<DbResult>,
   dbReferencedBy: (id: string, database: string, schema: string, name: string) =>
     G.DbReferencedBy(id, database, schema, name).then((r: any) => (r ?? []) as DbForeignKey[]),
+  dbSchemaGraph: (id: string, database: string, schema: string) =>
+    G.DbSchemaGraph(id, database, schema).then((r: any) => ({ tables: r?.tables ?? [], foreign_keys: r?.foreign_keys ?? [] }) as DbSchemaGraph),
   dbActivity: (id: string) => nn(G.DbActivity(id)) as Promise<DbResult>,
   dbKill: (id: string, sessionID: string, endSession: boolean) => G.DbKill(id, sessionID, endSession) as Promise<void>,
   dbRun: (id: string, tabKey: string, database: string, script: string, maxRows: number) =>

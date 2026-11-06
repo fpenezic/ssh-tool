@@ -487,6 +487,8 @@ func itForeignKeys(t *testing.T, h *dbx.Handle, sess *dbx.Session, database, sch
 		mustRun(t, sess, q)
 	}
 
+	itGraph(t, h, database, schema, parent, child)
+
 	d, err := h.Describe(ctx, database, schema, child)
 	if err != nil {
 		t.Fatal(err)
@@ -618,5 +620,49 @@ func itForeignKeys(t *testing.T, h *dbx.Handle, sess *dbx.Session, database, sch
 	}
 	if len(page.Rows) != 1 || *page.Rows[0][1] != "dead" {
 		t.Fatalf("followed binary key: %d rows", len(page.Rows))
+	}
+}
+
+// itGraph: the schema's ER graph has both tables with their key columns
+// and the child's two keys (one composite) pointing at the parent.
+func itGraph(t *testing.T, h *dbx.Handle, database, schema, parent, child string) {
+	t.Helper()
+	g, err := h.SchemaGraph(ctx30(t), database, schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eq := strings.EqualFold
+	var p, c *dbx.GraphTable
+	for i := range g.Tables {
+		switch {
+		case eq(g.Tables[i].Name, parent):
+			p = &g.Tables[i]
+		case eq(g.Tables[i].Name, child):
+			c = &g.Tables[i]
+		}
+	}
+	if p == nil || c == nil {
+		t.Fatalf("graph tables: %d, parent %v child %v", len(g.Tables), p != nil, c != nil)
+	}
+	if len(p.Columns) != 2 || !eq(p.Columns[0].Name, "id") || !p.Columns[0].Key || p.Columns[1].Key || p.Columns[1].Nullable || p.Columns[0].Type == "" {
+		t.Fatalf("parent columns %+v", p.Columns)
+	}
+	if len(c.Columns) != 3 || !c.Columns[1].Nullable || c.Columns[1].Key {
+		t.Fatalf("child columns %+v", c.Columns)
+	}
+	var keys []dbx.ForeignKey
+	for _, f := range g.ForeignKeys {
+		if eq(f.Table, child) {
+			keys = append(keys, f)
+		}
+	}
+	if len(keys) != 2 {
+		t.Fatalf("graph keys %+v", g.ForeignKeys)
+	}
+	for _, f := range keys {
+		if !eq(f.RefTable, parent) || !eq(f.RefDatabase, database) || !eq(f.RefSchema, schema) || !eq(f.Database, database) || !eq(f.Schema, schema) ||
+			len(f.Columns) != len(f.RefColumns) || len(f.Columns) == 0 || !eq(f.Columns[0], "parent_id") || !eq(f.RefColumns[0], "id") {
+			t.Fatalf("graph key %+v", f)
+		}
 	}
 }

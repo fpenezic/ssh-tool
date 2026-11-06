@@ -12,7 +12,7 @@ import { api, dbEngineInfo, type Connection, type DbHandleInfo, type DbResult, t
 import { mergeTargets, type ListedTarget } from "./dbDraft";
 import { tree, selection } from "./stores.svelte";
 
-export type DbTabKind = "query" | "table" | "sessions";
+export type DbTabKind = "query" | "table" | "sessions" | "er";
 export type DbTableView = "data" | "structure" | "ddl";
 
 export interface DbTab {
@@ -27,6 +27,10 @@ export interface DbTab {
   // Table tabs: the rows reached through foreign keys from the table, in
   // order, and the page each level was on (DbTableTab).
   trail?: DbTrailStep[];
+  // ER tabs: where boxes were moved to (table -> [x, y]; none = arranged)
+  // and whether boxes show only their key columns (unset = by size).
+  layout?: Record<string, [number, number]>;
+  keysOnly?: boolean;
 }
 
 export interface DbTrailStep {

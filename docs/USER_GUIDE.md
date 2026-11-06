@@ -2020,6 +2020,12 @@ Statements that change data are recorded in the audit log (the statement, cut to
 - **Explain** (PostgreSQL, MySQL / MariaDB) shows the server's plan for the statement under the cursor as a tree: each step, the table and index it uses, its estimated cost and rows, and its conditions. The statement itself does not run.
 - Completion offers a table's **columns** once the script names the table (after `table.` or its alias, `o.`), fetched in the background for the tables you use.
 
+### ER diagram
+
+The diagram button next to a schema (PostgreSQL, SQL Server) or a database (MySQL / MariaDB, Oracle, Db2) in the database list opens its **ER diagram**: every table as a box with its columns (primary key columns marked `PK`, foreign key columns `FK`, a `?` after a type that takes NULL) and a line for each foreign key, from the key's column to the column it references. Tables that others point at sit left of the ones pointing at them; tables with no key to or from another one go in a grid under the rest.
+
+Drag a box by its header to move it, drag the background to pan, Ctrl + wheel (or `-` / `+`) to zoom, **Fit** to see it all. Hovering a box lights up its keys and the tables they join; **Find tables** lights up the matching tables and their neighbours. A double-click on a header opens the table. **keys only** folds every box to its key columns (on by itself above 120 tables). Moved boxes stay where you put them, with the tab; **Arrange** lays them out again. A key to a table in another schema has no line; hovering its column says where it goes.
+
 ### Sessions
 
 The activity button at the top of the database list opens **Sessions**: the server's other sessions with user, database, client, state, how long the statement has run, what it waits on and which session blocks it (PostgreSQL, MySQL / MariaDB, SQL Server, Oracle, Db2). Pick one and **Stop statement** (PostgreSQL, MySQL, Oracle) or **End session**; both ask first, are recorded in the audit log and are refused on a read-only connection. **auto** refreshes every 3 seconds. Seeing other users' sessions takes a monitoring grant on most servers (`pg_monitor`, `PROCESS`, `VIEW SERVER STATE`, `SELECT_CATALOG_ROLE`, Db2 monitor authority); without one the server's error shows, or only your own sessions.

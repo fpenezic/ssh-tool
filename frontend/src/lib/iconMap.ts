@@ -104,6 +104,7 @@ import Globe from "@lucide/svelte/icons/globe";
 import FileBadge from "@lucide/svelte/icons/file-badge";
 import GlobeLock from "@lucide/svelte/icons/globe-lock";
 import Activity from "@lucide/svelte/icons/activity";
+import ChartNetwork from "@lucide/svelte/icons/chart-network";
 import Search from "@lucide/svelte/icons/search";
 import Cpu from "@lucide/svelte/icons/cpu";
 import Bot from "@lucide/svelte/icons/bot";
@@ -120,6 +121,7 @@ export {
   Globe as IconGlobe,
   GlobeLock as IconVpn,
   Activity as IconActivity,
+  ChartNetwork as IconGraph,
   Search as IconSearch,
   Cpu as IconCpu,
   Bot as IconBot,

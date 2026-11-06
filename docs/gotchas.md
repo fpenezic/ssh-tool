@@ -2260,6 +2260,8 @@ everything mobile is behind a build tag or an `isMobile` check.
 
 150. **A Svelte 5 `$effect` that reads the state it writes loops.** (`DbSessionsTab.svelte`, `DbFilterBar.svelte`) An effect that calls a loader which checks `if (loading) return` subscribes to `loading`, so every finished load runs it again (Sessions reloaded nonstop and lost the picked row); an effect that resets a form from props but reads the form's own rows to pick a default re-runs on every edit and throws the edit away. Load once with `onMount`, and read anything but the trigger inside `untrack`.
 
+151. **A database pool reconnects silently, so nothing notices a dead server.** (`app_db_alive.go`, `DbPane.svelte`, `TreeDbRows.svelte`) pgx and database/sql open a new connection on the next call and an idle pool never fails, so a tab that loaded once stayed "connected" after its server stopped while the SSH session stayed up. `dbWatch` pings every open handle (`Handle.Ping` = the engine's `info` query) every 20 s and emits `db_alive:<id>` on a change; DbPane maps it to the tab status, and the tree's database row is green only for a status of `connected` (a tab in another window has no status there: the handle's `down` from DbList decides). The ping keeps the SSH session and the server login in use while the tab is open.
+
 ---
 
 # Archive

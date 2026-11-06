@@ -8,17 +8,19 @@
   // Left: databases, and the tables / views of the ones opened (grouped by
   // schema on Postgres). Right: query and table tabs.
 
-  import { onDestroy, untrack } from "svelte";
+  import { onDestroy, onMount, untrack } from "svelte";
+  import { EventsOn } from "./wailsRuntime";
   import { api, type DbDatabase, type DbHandleInfo, type DbObject, type DbServerInfo } from "./api";
   import { dbTableEdits, dbTabs, nextQueryKey, tableKey, type DbTab } from "./dbState.svelte";
   import DbQueryTab from "./DbQueryTab.svelte";
   import DbTableTab from "./DbTableTab.svelte";
   import DbSessionsTab from "./DbSessionsTab.svelte";
+  import DbErTab from "./DbErTab.svelte";
   import { sessions } from "./stores.svelte";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { errMsg } from "./connectErrors";
   import { formatBytes } from "./kafkaFormat";
-  import { IconActivity, IconRefresh, IconPlus, IconDb, IconX, IconTable, IconView, IconSql, IconChevronRight, IconChevronDown } from "./iconMap";
+  import { IconActivity, IconRefresh, IconPlus, IconDb, IconX, IconTable, IconView, IconSql, IconChevronRight, IconChevronDown, IconGraph } from "./iconMap";
 
   interface Props {
     sessionId: string;
@@ -106,6 +108,13 @@
   function openSessions() {
     addTab({ kind: "sessions", title: "Sessions", database: active?.database ?? info?.database ?? "" }, "sessions");
   }
+  // A schema's ER diagram, one tab per schema. Engines whose schema is
+  // the database (MySQL, Oracle, Db2) open it from the database row.
+  function openEr(db: string, schema: string) {
+    addTab({ kind: "er", title: `ER ${schema || db}`, database: db, schema }, `er:${db}/${schema}`);
+  }
+  const hasEr = $derived(!!info && ["postgres", "mysql", "oracle", "mssql", "db2"].includes(info.engine));
+  const erOnDb = $derived(!!info && ["mysql", "oracle", "db2"].includes(info.engine));
   const hasSessions = $derived(!!info && ["postgres", "mysql", "oracle", "mssql", "db2"].includes(info.engine));
   function openTable(db: string, o: DbObject) {
     addTab(
@@ -147,6 +156,17 @@
     });
   });
 
+  // The backend asks the server every 20 s (app_db_alive.go): the tab is
+  // drawn connected only while it answers, and a tree that failed to load
+  // loads again once it does.
+  onMount(() =>
+    EventsOn<{ ok: boolean; error?: string }>(`db_alive:${sessionId}`, (p) => {
+      if (!p.ok) sessions.setStatus(sessionId, "error", `The server stopped answering: ${p.error ?? ""}`);
+      else if (loadErr) void load();
+      else if (!loading) sessions.setStatus(sessionId, "connected");
+    }),
+  );
+
   async function load() {
     loading = true;
     loadErr = null;
@@ -157,7 +177,8 @@
       dbTabs.set(st);
       server = srv;
       databases = dbs ?? [];
-      sessions.setStatus(sessionId, "connected");
+      if (st.down) sessions.setStatus(sessionId, "error", `The server stopped answering: ${st.down}`);
+      else sessions.setStatus(sessionId, "connected");
       // The database the login landed on opens by itself.
       const cur = srv.database || st.database;
       if (cur && expanded[cur] === undefined) toggle(cur, true);
@@ -290,6 +311,7 @@
               <span class="dname">{d.name}</span>
             </button>
             {#if d.size_bytes > 0}<span class="meta">{formatBytes(d.size_bytes)}</span>{/if}
+            {#if hasEr && erOnDb}<button class="mini" title="ER diagram of {d.name}" onclick={() => openEr(d.name, "")}><IconGraph size={12} /></button>{/if}
             <button class="mini" title="New query tab on {d.name}" onclick={() => newQuery("", d.name)}><IconSql size={12} /></button>
           </div>
           {#if expanded[d.name]}
@@ -302,7 +324,7 @@
               <p class="muted ind">No tables</p>
             {:else}
               {#each groups(obj) as [schema, list] (schema)}
-                {#if schema}<div class="schema ind">{schema}</div>{/if}
+                {#if schema}<div class="schema ind"><span class="sname">{schema}</span>{#if hasEr && !erOnDb}<button class="mini" title="ER diagram of {schema}" onclick={() => openEr(d.name, schema)}><IconGraph size={12} /></button>{/if}</div>{/if}
                 {#each list as o (o.schema + "." + o.name)}
                   <button
                     class="obj"
@@ -331,7 +353,7 @@
       {#each tabs as t (t.key)}
         <div class="tab" class:on={active?.key === t.key} title={t.kind === "table" ? `${t.database}${t.schema ? "." + t.schema : ""}.${t.name}` : t.database}>
           <button class="tab-btn" onclick={() => show(t.key)} onauxclick={(e) => { if (e.button === 1) closeTab(t); }}>
-            {#if t.kind === "query"}<IconSql size={12} />{:else if t.kind === "sessions"}<IconActivity size={12} />{:else}<IconTable size={12} />{/if}
+            {#if t.kind === "query"}<IconSql size={12} />{:else if t.kind === "sessions"}<IconActivity size={12} />{:else if t.kind === "er"}<IconGraph size={12} />{:else}<IconTable size={12} />{/if}
             {t.title}
             {#if t.kind === "query" && dbTabs.runs[sessionId + "\0" + t.key]?.running}<span class="dot" title="Running"></span>{/if}
             {#if t.kind === "query" && dbTabs.runs[sessionId + "\0" + t.key]?.inTx}<span class="dot tx" title="Open transaction"></span>{/if}
@@ -350,6 +372,8 @@
             <DbQueryTab {sessionId} tab={active} {info} databases={dbNames} tables={tableNames} {tableRefs} onChange={changed} />
           {:else if active.kind === "sessions"}
             <DbSessionsTab {sessionId} {info} />
+          {:else if active.kind === "er"}
+            <DbErTab {sessionId} tab={active} {info} onChange={changed} onOpenTable={(db, schema, name) => openTable(db, { schema, name, kind: "table" } as DbObject)} />
           {:else}
             <DbTableTab {sessionId} tab={active} {info} onChange={changed} onQuery={(sql, db) => newQuery(sql, db ?? active?.database)} />
           {/if}
@@ -380,6 +404,8 @@
   .dname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .sys { opacity: 0.6; }
   .meta { flex: 0 0 auto; font-size: 0.68rem; color: var(--overlay1); }
+  .schema { display: flex; align-items: center; gap: 0.25rem; padding-right: 0.4rem; }
+  .schema .sname { flex: 1 1 auto; }
   .schema { font-size: 0.7rem; color: var(--overlay1); text-transform: uppercase; letter-spacing: 0.03em; padding: 0.3rem 0 0.1rem; }
   .ind { padding-left: 1.4rem; }
   .obj { display: flex; align-items: center; gap: 0.35rem; width: 100%; background: none; border: none; color: var(--text); cursor: pointer; padding: 0.15rem 0.5rem 0.15rem 1.4rem; text-align: left; font: inherit; }
