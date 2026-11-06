@@ -20,7 +20,12 @@
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { errMsg } from "./connectErrors";
   import { formatBytes } from "./kafkaFormat";
-  import { IconActivity, IconRefresh, IconPlus, IconDb, IconX, IconTable, IconView, IconSql, IconChevronRight, IconChevronDown, IconGraph } from "./iconMap";
+  import { IconActivity, IconRefresh, IconPlus, IconDb, IconX, IconTable, IconView, IconSql, IconChevronRight, IconChevronDown, IconGraph, IconCopy, IconDownload, IconFile, IconHash } from "./iconMap";
+  import { contextMenu, type MenuItem } from "./contextMenu.svelte.ts";
+  import { countText as countSql, ident, selectText, tableName, type SqlEngine } from "./dbSql";
+  import { readAll, rowsCsv, rowsJson } from "./dbExport";
+  import { toast } from "./toast.svelte.ts";
+  import type { DbTableView } from "./dbState.svelte";
 
   interface Props {
     sessionId: string;
@@ -116,11 +121,154 @@
   const hasEr = $derived(!!info && ["postgres", "mysql", "oracle", "mssql", "db2"].includes(info.engine));
   const erOnDb = $derived(!!info && ["mysql", "oracle", "db2"].includes(info.engine));
   const hasSessions = $derived(!!info && ["postgres", "mysql", "oracle", "mssql", "db2"].includes(info.engine));
-  function openTable(db: string, o: DbObject) {
-    addTab(
-      { kind: "table", title: o.name, database: db, schema: o.schema, name: o.name, view: "data" },
+  function openTable(db: string, o: DbObject, view?: DbTableView) {
+    const k = addTab(
+      { kind: "table", title: o.name, database: db, schema: o.schema, name: o.name, view: view ?? "data" },
       tableKey(db, o.schema, o.name),
     );
+    // An open tab keeps its view unless one is asked for (the tree's menu).
+    const t = view && saved?.tabs.find((x) => x.key === k);
+    if (t && t.view !== view) {
+      t.view = view;
+      changed();
+    }
+  }
+
+  // Right-click in the tree. SQL engines get their own quoting; ClickHouse
+  // quotes like MySQL; OpenSearch and Redis names go as they are.
+  const SQL_ENGINES = ["postgres", "mysql", "oracle", "mssql", "db2"];
+  const sqlEngine = $derived(info && SQL_ENGINES.includes(info.engine) ? (info.engine as SqlEngine) : null);
+  // A whole table reads page by page through Browse: the engines that page
+  // by offset without a ceiling (OpenSearch stops at 10000, Redis at its
+  // key sample).
+  const canExport = $derived(!!sqlEngine || info?.engine === "clickhouse");
+  function fullName(db: string, schema: string, name: string): string {
+    if (sqlEngine) return tableName({ engine: sqlEngine, database: db, schema, name });
+    if (info?.engine === "clickhouse") return `\`${db.replace(/`/g, "``")}\`.\`${name.replace(/`/g, "``")}\``;
+    return name;
+  }
+  function quoteName(n: string): string {
+    if (sqlEngine) return ident(sqlEngine, n);
+    if (info?.engine === "clickhouse") return "`" + n.replace(/`/g, "``") + "`";
+    return n;
+  }
+  function copy(text: string, what: string) {
+    api.clipboardSetText(text).then(
+      () => toast.ok(`${what} copied`),
+      (e) => toast.err(`Copy failed: ${errMsg(e)}`),
+    );
+  }
+  async function copyDdl(db: string, o: DbObject) {
+    try {
+      const d = await api.dbDescribe(sessionId, db, o.schema, o.name);
+      if (!d.ddl) {
+        toast.info(`No DDL for ${o.name}${d.ddl_note ? `: ${d.ddl_note}` : ""}`);
+        return;
+      }
+      copy(d.ddl, `DDL of ${o.name}`);
+    } catch (e) {
+      toast.err(`DDL of ${o.name}: ${errMsg(e)}`);
+    }
+  }
+  // The exact count, run on a session of its own and closed after; on
+  // OpenSearch the _count request opens in a query tab instead.
+  async function countRows(db: string, o: DbObject) {
+    const sql = info ? countSql(info.engine, o.schema, o.name) : null;
+    if (!sql) return;
+    if (info?.engine === "opensearch") {
+      newQuery(sql, db);
+      return;
+    }
+    const key = `count:${Date.now()}`;
+    try {
+      const r = await api.dbRun(sessionId, key, db, sql, 1);
+      const res = r.results?.[0];
+      if (res?.error) throw new Error(res.error);
+      const n = res?.rows?.[0]?.[0];
+      toast.ok(`${o.name}: ${n === undefined || n === null ? "?" : Number(n).toLocaleString()} rows`, 6000);
+    } catch (e) {
+      toast.err(`Count ${o.name}: ${errMsg(e)}`);
+    } finally {
+      api.dbCloseTab(sessionId, key).catch(() => {});
+    }
+  }
+
+  // A whole table to a file: read a page at a time (shown below the tree,
+  // with Stop), then saved where asked.
+  const EXPORT_PAGE = 10000;
+  let exporting = $state<{ name: string; rows: number; stop: boolean } | null>(null);
+  async function exportTable(db: string, o: DbObject, kind: "csv" | "json") {
+    if (exporting) {
+      toast.info(`Exporting ${exporting.name} already: wait for it or stop it`);
+      return;
+    }
+    exporting = { name: o.name, rows: 0, stop: false };
+    try {
+      const all = await readAll(
+        (offset, limit) => api.dbBrowse(sessionId, db, o.schema, o.name, [], [], offset, limit),
+        EXPORT_PAGE,
+        () => !!exporting?.stop,
+        (n) => {
+          if (exporting) exporting.rows = n;
+        },
+      );
+      if (!all) {
+        toast.info(`Export of ${o.name} stopped`);
+        return;
+      }
+      const text = kind === "csv" ? rowsCsv(all.columns, all.rows) : rowsJson(all.columns, all.rows);
+      const path = await api.saveTextFile(`${o.name}.${kind}`, text);
+      if (path) {
+        const n = all.rows.length;
+        const msg = `Exported ${n.toLocaleString()} row${n === 1 ? "" : "s"} of ${o.name} to ${path}`;
+        if (all.cut) toast.err(`${msg} - ${all.cut} value${all.cut === 1 ? " was" : "s were"} too long and cut (256 KiB per value)`, 10000);
+        else toast.ok(msg, 5000);
+      }
+    } catch (e) {
+      toast.err(`Export ${o.name}: ${errMsg(e)}`);
+    } finally {
+      exporting = null;
+    }
+  }
+
+  function objMenu(e: MouseEvent, db: string, o: DbObject) {
+    e.preventDefault();
+    const items: MenuItem[] = [
+      { label: "Open data", iconComponent: IconTable, onSelect: () => openTable(db, o, "data") },
+      { label: "Structure", iconComponent: IconView, onSelect: () => openTable(db, o, "structure") },
+      { label: "DDL", iconComponent: IconFile, onSelect: () => openTable(db, o, "ddl") },
+      { label: "New query", iconComponent: IconSql, sep: true, onSelect: () => info && newQuery(selectText(info.engine, o.schema, o.name), db) },
+    ];
+    if (info && countSql(info.engine, o.schema, o.name)) items.push({ label: "Count rows", iconComponent: IconHash, onSelect: () => void countRows(db, o) });
+    items.push(
+      { label: "Copy name", iconComponent: IconCopy, sep: true, onSelect: () => copy(fullName(db, o.schema, o.name), "Name") },
+      { label: "Copy DDL", iconComponent: IconCopy, onSelect: () => void copyDdl(db, o) },
+    );
+    if (canExport) {
+      items.push(
+        { label: "Export to CSV...", iconComponent: IconDownload, sep: true, disabled: !!exporting, onSelect: () => void exportTable(db, o, "csv") },
+        { label: "Export to JSON...", iconComponent: IconDownload, disabled: !!exporting, onSelect: () => void exportTable(db, o, "json") },
+      );
+    }
+    if (hasEr) items.push({ label: "ER diagram", iconComponent: IconGraph, sep: true, onSelect: () => openEr(db, erOnDb ? "" : o.schema) });
+    contextMenu.show(e, items);
+  }
+  function dbMenu(e: MouseEvent, db: string) {
+    e.preventDefault();
+    const items: MenuItem[] = [{ label: "New query", iconComponent: IconSql, onSelect: () => newQuery("", db) }];
+    if (hasEr && erOnDb) items.push({ label: "ER diagram", iconComponent: IconGraph, onSelect: () => openEr(db, "") });
+    items.push(
+      { label: "Copy name", iconComponent: IconCopy, onSelect: () => copy(quoteName(db), "Name") },
+      { label: "Refresh tables", iconComponent: IconRefresh, sep: true, onSelect: () => { expanded[db] = true; void loadObjects(db); } },
+    );
+    contextMenu.show(e, items);
+  }
+  function schemaMenu(e: MouseEvent, db: string, schema: string) {
+    e.preventDefault();
+    const items: MenuItem[] = [];
+    if (hasEr && !erOnDb) items.push({ label: "ER diagram", iconComponent: IconGraph, onSelect: () => openEr(db, schema) });
+    items.push({ label: "Copy name", iconComponent: IconCopy, onSelect: () => copy(quoteName(schema), "Name") });
+    contextMenu.show(e, items);
   }
   async function closeTab(t: DbTab) {
     if (!saved) return;
@@ -331,7 +479,8 @@
         <p class="muted">{info?.state === "connecting" ? "Connecting over SSH..." : "Loading..."}</p>
       {:else}
         {#each shownDbs as d (d.name)}
-          <div class="db-row" class:sys={d.system}>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="db-row" class:sys={d.system} oncontextmenu={(e) => dbMenu(e, d.name)}>
             <button class="twisty" onclick={() => toggle(d.name)}>
               {#if expanded[d.name]}<IconChevronDown size={12} />{:else}<IconChevronRight size={12} />{/if}
               <span class="dname">{d.name}</span>
@@ -350,7 +499,8 @@
               <p class="muted ind">No tables</p>
             {:else}
               {#each groups(obj) as [schema, list] (schema)}
-                {#if schema}<div class="schema ind"><span class="sname">{schema}</span>{#if hasEr && !erOnDb}<button class="mini" title="ER diagram of {schema}" onclick={() => openEr(d.name, schema)}><IconGraph size={12} /></button>{/if}</div>{/if}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                {#if schema}<div class="schema ind" oncontextmenu={(e) => schemaMenu(e, d.name, schema)}><span class="sname">{schema}</span>{#if hasEr && !erOnDb}<button class="mini" title="ER diagram of {schema}" onclick={() => openEr(d.name, schema)}><IconGraph size={12} /></button>{/if}</div>{/if}
                 {#each list as o (o.schema + "." + o.name)}
                   <button
                     class="obj"
@@ -359,6 +509,7 @@
                     class:on={active?.kind === "table" && active.key === tableKey(d.name, o.schema, o.name)}
                     title={o.comment || `${o.kind}${o.rows >= 0 ? ` · about ${o.rows} rows` : ""}${o.size_bytes >= 0 ? ` · ${formatBytes(o.size_bytes)}` : ""}`}
                     onclick={() => openTable(d.name, o)}
+                    oncontextmenu={(e) => objMenu(e, d.name, o)}
                   >
                     {#if o.kind === "view" || o.kind === "matview"}<IconView size={12} />{:else}<IconTable size={12} />{/if}
                     <span class="oname">{o.name}</span>
@@ -371,6 +522,12 @@
         {/each}
       {/if}
     </div>
+    {#if exporting}
+      <div class="export-bar" title="The rows are read a page at a time, then saved where you choose">
+        <span class="ex-text">Exporting {exporting.name}: {exporting.rows.toLocaleString()} rows</span>
+        <button onclick={() => exporting && (exporting.stop = true)}>Stop</button>
+      </div>
+    {/if}
   </aside>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="vdrag" onpointerdown={startDrag}></div>
@@ -452,6 +609,9 @@
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
   .dot.tx { background: var(--yellow); }
   .content { flex: 1 1 auto; min-height: 0; }
+  .export-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.5rem; font-size: 0.74rem; color: var(--subtext0); border-top: 1px solid var(--surface0); }
+  .ex-text { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .export-bar button { font-size: 0.72rem; padding: 0.1rem 0.45rem; background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 3px; cursor: pointer; }
   .muted { margin: 0.6rem 0.75rem; font-size: 0.8rem; color: var(--subtext0); }
   pre.err { margin: 0.5rem; color: var(--red); white-space: pre-wrap; font-size: 0.75rem; }
   .retry { margin: 0 0.5rem; font-size: 0.75rem; background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 3px; cursor: pointer; padding: 0.15rem 0.5rem; }

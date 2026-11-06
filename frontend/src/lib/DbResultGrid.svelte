@@ -1,15 +1,21 @@
 <script lang="ts">
   // A result set as a grid: only the rows in view are in the DOM, so the
-  // 100k-row ceiling stays smooth. Click picks a cell (Ctrl+C copies it),
-  // double-click opens the value in full below the grid (JSON
-  // pretty-printed). A header click sorts and Ctrl+F filters the rows that
-  // were fetched, here in the window; # keeps the server's row number.
-  // Export writes the rows as shown.
+  // 100k-row ceiling stays smooth. Click picks a cell, Shift / a drag / a
+  // # click pick more; Ctrl+C copies one value, or more cells as a table
+  // Excel and Teams paste as one. Double-click edits in place on an
+  // editable grid and opens the value in full below the grid otherwise
+  // (JSON pretty-printed); right-click has the rest. A header click sorts
+  // and Ctrl+F filters the rows that were fetched, here in the window; #
+  // keeps the server's row number. Export writes the rows as shown.
 
   import { untrack } from "svelte";
   import { api, type DbResult } from "./api";
   import { toast } from "./toast.svelte.ts";
-  import { IconDownload, IconX, IconCopy, IconArrowUp, IconArrowDown, IconSearch, IconLink } from "./iconMap";
+  import { IconDownload, IconX, IconCopy, IconArrowUp, IconArrowDown, IconSearch, IconLink, IconPencil, IconRotateCw, IconEye, IconTable, IconClipboard, IconSql } from "./iconMap";
+  import { contextMenu, type MenuItem } from "./contextMenu.svelte.ts";
+  import { copyTable, tableMarkdown } from "./clipboardTable";
+  import { cellsWhere, type SqlEngine } from "./dbSql";
+  import { rowsCsv, rowsJson } from "./dbExport";
   import { selectAllWithin } from "./selectWithin";
   import { sortedOrder } from "./dbSort";
 
@@ -29,15 +35,21 @@
     // click asks for that sort instead of sorting the page here.
     serverSort?: { column: string; desc: boolean } | null;
     onServerSort?: (s: { column: string; desc: boolean } | null) => void;
-    // The row of the picked cell, as the server sent it (null: none).
-    onSelect?: (row: (string | null)[] | null) => void;
-    // Cells can be changed in the value pane; edits (keyed "row:col" by the
-    // server's row index) show in place, onEdit records one.
+    // The row of the picked cell, as the server sent it (null: none), and
+    // the rows the selection spans.
+    onSelect?: (row: (string | null)[] | null, rows: (string | null)[][]) => void;
+    // Cells can be changed in place or in the value pane; edits (keyed
+    // "row:col" by the server's row index) show in place, onEdit records
+    // one (the server's own value drops it).
     editable?: boolean;
     edits?: Map<string, string | null>;
     onEdit?: (row: number, ci: number, value: string | null) => void;
+    // The engine's SQL, for "Copy as WHERE" (none: not offered).
+    sqlEngine?: SqlEngine | null;
+    // More right-click items for the selected rows (Copy as INSERT ...).
+    rowMenu?: (rows: (string | null)[][]) => MenuItem[];
   }
-  let { result, exportName, paged = false, canLink, linkTitle, onLink, serverSort = null, onServerSort, onSelect, editable = false, edits, onEdit }: Props = $props();
+  let { result, exportName, paged = false, canLink, linkTitle, onLink, serverSort = null, onServerSort, onSelect, editable = false, edits, onEdit, sqlEngine = null, rowMenu }: Props = $props();
 
   const ROW_H = 24;
   const cols = $derived(result.columns ?? []);
@@ -118,8 +130,32 @@
   const last = $derived(Math.min(rows.length, Math.ceil((scrollTop + viewH) / ROW_H) + 10));
   const visible = $derived(rows.slice(first, last));
 
+  // The picked cell (sel) and the corner the selection started from
+  // (anchor): the selection is the rectangle between them. Click picks one
+  // cell, Shift+click / Shift+arrows / a drag stretch it, a # click picks
+  // whole rows, Ctrl+A everything.
   let sel = $state<{ r: number; c: number } | null>(null);
+  let anchor = $state<{ r: number; c: number } | null>(null);
   let opened = $state<{ r: number; c: number } | null>(null);
+  const rect = $derived(
+    sel && anchor
+      ? { r0: Math.min(sel.r, anchor.r), r1: Math.max(sel.r, anchor.r), c0: Math.min(sel.c, anchor.c), c1: Math.max(sel.c, anchor.c) }
+      : null,
+  );
+  const multi = $derived(!!rect && (rect.r1 > rect.r0 || rect.c1 > rect.c0));
+  function inRect(ri: number, ci: number): boolean {
+    return !!rect && ri >= rect.r0 && ri <= rect.r1 && ci >= rect.c0 && ci <= rect.c1;
+  }
+  function pick(r: number, c: number, extend = false) {
+    if (!extend || !anchor) anchor = { r, c };
+    sel = { r, c };
+  }
+  function clearSel() {
+    sel = null;
+    anchor = null;
+    openValue(null);
+    inline = null;
+  }
   // A new result: back to the top, nothing picked. The filter stays (it is
   // what you are looking for), and so does the sort while the column is
   // still there by name - Next on a table keeps its order.
@@ -127,16 +163,14 @@
     const cs = result.columns ?? [];
     untrack(() => {
       if (sort && cs[sort.c]?.name !== sort.name) sort = null;
+      clearSel();
     });
-    sel = null;
-    opened = null;
     if (scroller) scroller.scrollTop = 0;
   });
   // A new order or filter: what was picked points at another row.
   $effect(() => {
     void view;
-    sel = null;
-    opened = null;
+    untrack(clearSel);
   });
 
   // A cell as shown: its edit when it has one.
@@ -144,19 +178,199 @@
     const k = `${view[ri]}:${ci}`;
     return edits?.has(k) ? edits.get(k)! : rows[ri]?.[ci] ?? null;
   }
+  // The selection's server row indexes, top to bottom.
+  const selRows = $derived(rect ? view.slice(rect.r0, rect.r1 + 1) : []);
   $effect(() => {
     const s = sel;
-    untrack(() => onSelect?.(s ? rows[s.r] ?? null : null));
+    const rs = selRows;
+    untrack(() => onSelect?.(s ? rows[s.r] ?? null : null, rs.map((i) => base[i])));
   });
+  // Rows with an edit in them: their # shows it, wherever the cell is.
+  const dirtyRows = $derived(new Set([...(edits?.keys() ?? [])].map((k) => Number(k.split(":")[0]))));
+
+  // The value pane below the grid; edit there for a long or multi-line
+  // value. Opening another cell drops a half-made edit.
   let editing = $state<string | null>(null);
-  $effect(() => {
-    void opened;
-    editing = null;
-  });
+  function openValue(at: { r: number; c: number } | null, edit = false) {
+    opened = at;
+    editing = at && edit ? shown(at.r, at.c) ?? "" : null;
+  }
   function saveEdit(v: string | null) {
     if (!opened || !onEdit) return;
     onEdit(view[opened.r], opened.c, v);
     editing = null;
+  }
+
+  // In-place edit: double-click, F2 or Enter on a cell of an editable grid.
+  // Enter keeps the value and steps down, Tab right (Shift+Tab left), Esc
+  // drops it; leaving the field keeps it. A NULL left empty stays NULL.
+  const canEdit = $derived(editable && !!onEdit);
+  const LONG = 200;
+  let inline = $state<{ r: number; c: number; orig: string | null; value: string } | null>(null);
+  let inlineEl = $state<HTMLInputElement | null>(null);
+  function startEdit(r: number, c: number) {
+    if (!canEdit) return;
+    const v = shown(r, c);
+    pick(r, c);
+    if (v !== null && (v.length > LONG || /[\r\n]/.test(v))) {
+      openValue({ r, c }, true);
+      return;
+    }
+    inline = { r, c, orig: v, value: v ?? "" };
+    queueMicrotask(() => inlineEl?.select());
+  }
+  function commitInline() {
+    const ed = inline;
+    if (!ed || !onEdit) return;
+    inline = null;
+    if (ed.orig === null && ed.value === "") return;
+    if (ed.value === ed.orig) return;
+    onEdit(view[ed.r], ed.c, ed.value);
+  }
+  function inlineKey(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (!inline) return;
+    const { r, c } = inline;
+    let to: { r: number; c: number } | null = null;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      inline = null;
+      scroller?.focus();
+      return;
+    }
+    if (e.key === "Enter") to = { r: Math.min(rows.length - 1, r + 1), c };
+    else if (e.key === "Tab") to = { r, c: Math.max(0, Math.min(cols.length - 1, c + (e.shiftKey ? -1 : 1))) };
+    else return;
+    e.preventDefault();
+    commitInline();
+    pick(to.r, to.c);
+    scrollToSel();
+    scroller?.focus();
+  }
+
+  // Mouse: press picks (Shift stretches), a drag stretches to where the
+  // pointer is; a right press inside the selection keeps it for the menu.
+  let dragging = false;
+  function cellDown(e: MouseEvent, r: number, c: number) {
+    if (inline && (inline.r !== r || inline.c !== c)) commitInline();
+    if (e.button === 2) {
+      if (!inRect(r, c)) pick(r, c);
+      return;
+    }
+    if (e.button !== 0) return;
+    pick(r, c, e.shiftKey);
+    dragging = true;
+    const up = () => {
+      dragging = false;
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mouseup", up);
+  }
+  function cellEnter(r: number, c: number) {
+    if (dragging && (sel?.r !== r || sel?.c !== c)) sel = { r, c };
+  }
+  function rowDown(e: MouseEvent, r: number) {
+    if (inline) commitInline();
+    if (e.button === 2 && rect && r >= rect.r0 && r <= rect.r1) return;
+    const from = e.shiftKey && anchor ? anchor.r : r;
+    anchor = { r: from, c: 0 };
+    sel = { r, c: Math.max(0, cols.length - 1) };
+  }
+
+  function scrollToSel() {
+    if (!scroller || !sel) return;
+    const top = sel.r * ROW_H;
+    if (top < scroller.scrollTop) scroller.scrollTop = top;
+    else if (top + ROW_H * 2 > scroller.scrollTop + scroller.clientHeight) scroller.scrollTop = top + ROW_H * 2 - scroller.clientHeight;
+  }
+
+  // The selection's cells as shown, and its column names.
+  function selCells(): (string | null)[][] {
+    if (!rect) return [];
+    const out: (string | null)[][] = [];
+    for (let r = rect.r0; r <= rect.r1; r++) {
+      const row: (string | null)[] = [];
+      for (let c = rect.c0; c <= rect.c1; c++) row.push(shown(r, c));
+      out.push(row);
+    }
+    return out;
+  }
+  function selCols() {
+    return rect ? cols.slice(rect.c0, rect.c1 + 1) : [];
+  }
+  function copyText(text: string, what: string) {
+    api.clipboardSetText(text).then(
+      () => toast.ok(`${what} copied`),
+      (e) => toast.err(`Copy failed: ${String((e as any)?.message ?? e)}`),
+    );
+  }
+  function sizeText(): string {
+    if (!rect) return "";
+    const nr = rect.r1 - rect.r0 + 1;
+    const nc = rect.c1 - rect.c0 + 1;
+    return `${nr} row${nr === 1 ? "" : "s"} x ${nc} column${nc === 1 ? "" : "s"}`;
+  }
+  // Ctrl+C: one cell is its value; more go as a table (Excel, Teams).
+  async function copySel(withHead = false) {
+    if (!sel) return;
+    if (!multi && !withHead) {
+      copyText(shown(sel.r, sel.c) ?? "", "Value");
+      return;
+    }
+    try {
+      await copyTable(withHead ? selCols().map((c) => c.name) : null, selCells());
+      toast.ok(`${sizeText()} copied`);
+    } catch (e) {
+      toast.err(`Copy failed: ${String((e as any)?.message ?? e)}`);
+    }
+  }
+  function copyWhere() {
+    if (!sqlEngine) return;
+    try {
+      copyText(cellsWhere(sqlEngine, selCols(), selCells()), "WHERE");
+    } catch (e) {
+      toast.err(String((e as any)?.message ?? e));
+    }
+  }
+  // Every cell of the selection set to v (null), or back to the server's
+  // value (undefined).
+  function setSel(v: string | null | undefined) {
+    if (!rect || !onEdit) return;
+    for (let r = rect.r0; r <= rect.r1; r++) {
+      for (let c = rect.c0; c <= rect.c1; c++) onEdit(view[r], c, v === undefined ? rows[r]?.[c] ?? null : v);
+    }
+  }
+  function editedInSel(): number {
+    if (!rect || !edits?.size) return 0;
+    let n = 0;
+    for (let r = rect.r0; r <= rect.r1; r++) {
+      for (let c = rect.c0; c <= rect.c1; c++) if (edits.has(`${view[r]}:${c}`)) n++;
+    }
+    return n;
+  }
+  function openMenu(e: MouseEvent) {
+    e.preventDefault();
+    if (!sel) return;
+    const at = sel;
+    const nEdited = editedInSel();
+    const items: MenuItem[] = [];
+    if (canEdit) {
+      if (!multi) items.push({ label: "Edit", iconComponent: IconPencil, onSelect: () => startEdit(at.r, at.c) });
+      items.push({ label: multi ? "Set NULL (all selected)" : "Set NULL", iconComponent: IconX, onSelect: () => setSel(null) });
+      if (nEdited) items.push({ label: nEdited === 1 ? "Revert the change" : `Revert ${nEdited} changes`, iconComponent: IconRotateCw, onSelect: () => setSel(undefined) });
+    }
+    if (!multi) items.push({ label: "Open value", iconComponent: IconEye, onSelect: () => openValue(at) });
+    items.push(
+      multi
+        ? { label: `Copy ${sizeText()}`, iconComponent: IconCopy, sep: true, onSelect: () => void copySel() }
+        : { label: "Copy value", iconComponent: IconCopy, sep: true, onSelect: () => void copySel() },
+      { label: "Copy with headers", iconComponent: IconTable, onSelect: () => void copySel(true) },
+      { label: "Copy as Markdown", iconComponent: IconClipboard, onSelect: () => copyText(tableMarkdown(selCols().map((c) => c.name), selCells()), "Markdown") },
+    );
+    if (sqlEngine) items.push({ label: "Copy as WHERE", iconComponent: IconSql, onSelect: copyWhere });
+    const extra = rowMenu?.(selRows.map((i) => base[i])) ?? [];
+    if (extra.length) items.push({ ...extra[0], sep: true }, ...extra.slice(1));
+    contextMenu.show(e, items);
   }
 
   const openedValue = $derived(opened ? shown(opened.r, opened.c) : null);
@@ -175,7 +389,9 @@
   });
 
   function onKey(e: KeyboardEvent) {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+    if (e.target !== scroller) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key.toLowerCase() === "f") {
       e.preventDefault();
       e.stopPropagation();
       openFind();
@@ -185,41 +401,40 @@
       closeFind();
       return;
     }
-    if (!sel) return;
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
-      const v = shown(sel.r, sel.c);
-      api.clipboardSetText(v ?? "").catch(() => {});
+    if (mod && e.key.toLowerCase() === "a" && rows.length && cols.length) {
       e.preventDefault();
+      anchor = { r: 0, c: 0 };
+      sel = { r: rows.length - 1, c: cols.length - 1 };
+      return;
+    }
+    if (!sel) return;
+    if (mod && e.key.toLowerCase() === "c") {
+      e.preventDefault();
+      void copySel();
       return;
     }
     const moves: Record<string, [number, number]> = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
     const m = moves[e.key];
     if (m) {
       e.preventDefault();
-      sel = { r: Math.max(0, Math.min(rows.length - 1, sel.r + m[0])), c: Math.max(0, Math.min(cols.length - 1, sel.c + m[1])) };
-      if (scroller) {
-        const top = sel.r * ROW_H;
-        if (top < scroller.scrollTop) scroller.scrollTop = top;
-        else if (top + ROW_H * 2 > scroller.scrollTop + scroller.clientHeight) scroller.scrollTop = top + ROW_H * 2 - scroller.clientHeight;
-      }
+      pick(Math.max(0, Math.min(rows.length - 1, sel.r + m[0])), Math.max(0, Math.min(cols.length - 1, sel.c + m[1])), e.shiftKey);
+      scrollToSel();
+    } else if (e.key === "Enter" && e.shiftKey) {
+      openValue(sel);
+    } else if ((e.key === "Enter" || e.key === "F2") && canEdit) {
+      e.preventDefault();
+      startEdit(sel.r, sel.c);
     } else if (e.key === "Enter") {
-      opened = sel;
+      openValue(sel);
     }
   }
 
-  function csvCell(v: string | null): string {
-    if (v === null) return "";
-    return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-  }
-  async function exportAs(kind: "csv" | "json") {
+  function exportAs(kind: "csv" | "json") {
     // As shown: an edited cell exports its edit.
     const out = rows.map((r, ri) => r.map((_, ci) => shown(ri, ci)));
-    let text: string;
-    if (kind === "csv") {
-      text = [cols.map((c) => csvCell(c.name)).join(","), ...out.map((r) => r.map(csvCell).join(","))].join("\r\n") + "\r\n";
-    } else {
-      text = JSON.stringify(out.map((r) => Object.fromEntries(cols.map((c, i) => [c.name, r[i]]))), null, 2) + "\n";
-    }
+    return saveExport(kind, kind === "csv" ? rowsCsv(cols, out) : rowsJson(cols, out));
+  }
+  async function saveExport(kind: "csv" | "json", text: string) {
     try {
       const path = await api.saveTextFile(`${exportName}.${kind}`, text);
       if (path) toast.ok(`Exported ${rows.length} row${rows.length === 1 ? "" : "s"}${rows.length !== base.length ? " (filtered)" : ""} to ${path}`);
@@ -265,7 +480,14 @@
         {#each visible as r, k (first + k)}
           {@const ri = first + k}
           <div class="row" class:odd={ri % 2 === 1} style:grid-template-columns={template} style:top="{ri * ROW_H}px">
-            <div class="cell num">{view[ri] + 1}</div>
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              class="cell num"
+              class:dirty={dirtyRows.has(view[ri])}
+              title={dirtyRows.has(view[ri]) ? "This row has changes not in a script yet" : "Click to pick the row (Shift: rows)"}
+              onmousedown={(e) => rowDown(e, ri)}
+              oncontextmenu={openMenu}
+            >{view[ri] + 1}</div>
             {#each r as v0, ci (ci)}
               {@const ek = `${view[ri]}:${ci}`}
               {@const edited = !!edits?.has(ek)}
@@ -278,16 +500,31 @@
                 class:null={v === null}
                 class:hit={needle !== "" && v !== null && v.toLowerCase().includes(needle)}
                 class:sel={sel?.r === ri && sel?.c === ci}
+                class:inrect={multi && inRect(ri, ci)}
+                class:inline={inline?.r === ri && inline?.c === ci}
                 role="gridcell"
                 tabindex="-1"
-                onclick={() => (sel = { r: ri, c: ci })}
-                ondblclick={() => (opened = { r: ri, c: ci })}
-              >{#if v !== null && onLink && canLink?.(r, ci)}<button
+                title={edited ? `Changed, not in a script yet (was: ${v0 === null ? "NULL" : v0.length > 80 ? v0.slice(0, 80) + "..." : v0})` : undefined}
+                onmousedown={(e) => cellDown(e, ri, ci)}
+                onmouseenter={() => cellEnter(ri, ci)}
+                ondblclick={() => (canEdit ? startEdit(ri, ci) : openValue({ r: ri, c: ci }))}
+                oncontextmenu={openMenu}
+              >{#if inline?.r === ri && inline?.c === ci}<input
+                  class="inline-edit"
+                  bind:this={inlineEl}
+                  bind:value={inline.value}
+                  placeholder={inline.orig === null ? "NULL" : ""}
+                  spellcheck="false"
+                  onkeydown={inlineKey}
+                  onblur={commitInline}
+                  onmousedown={(e) => e.stopPropagation()}
+                  ondblclick={(e) => e.stopPropagation()}
+                />{:else}{#if v !== null && onLink && canLink?.(r, ci)}<button
                   class="fk"
                   title={linkTitle?.(ci) ?? "Open the referenced row"}
                   onclick={(e) => { e.stopPropagation(); onLink(r, ci); }}
                   ondblclick={(e) => e.stopPropagation()}
-                ><IconLink size={11} /></button>{/if}{v === null ? "NULL" : v.length > 300 ? v.slice(0, 300) + "..." : v}</div>
+                ><IconLink size={11} /></button>{/if}{v === null ? "NULL" : v.length > 300 ? v.slice(0, 300) + "..." : v}{/if}</div>
             {/each}
           </div>
         {/each}
@@ -299,10 +536,10 @@
       <div class="vp-head">
         <span class="vp-title">{cols[opened.c]?.name} · row {view[opened.r] + 1}{openedValue !== null ? ` · ${openedValue.length} chars` : ""}</span>
         {#if editable && onEdit && editing === null}
-          <button title="Change this value (collected into an UPDATE script, nothing is sent yet)" onclick={() => (editing = openedValue ?? "")}>Edit</button>
+          <button title="Change this value (collected into an UPDATE script, nothing is sent yet)" onclick={() => opened && openValue(opened, true)}>Edit</button>
         {/if}
         <button title="Copy the value" onclick={() => api.clipboardSetText(openedValue ?? "").catch(() => {})}><IconCopy size={13} /></button>
-        <button title="Close" onclick={() => (opened = null)}><IconX size={13} /></button>
+        <button title="Close" onclick={() => openValue(null)}><IconX size={13} /></button>
       </div>
       {#if editing !== null}
         <textarea class="vp-edit" bind:value={editing} spellcheck="false"></textarea>
@@ -376,7 +613,14 @@
   .ctype { font-weight: 400; font-size: 0.68rem; color: var(--overlay1); }
   .cell.num { color: var(--overlay1); text-align: right; background: color-mix(in srgb, var(--surface0) 55%, transparent); }
   .cell.null { color: var(--overlay0); font-style: italic; }
-  .cell.edited { background: color-mix(in srgb, var(--yellow) 18%, transparent); }
+  .cell.edited { position: relative; background: color-mix(in srgb, var(--yellow) 18%, transparent); }
+  /* The corner mark stays when the cell is picked (its blue would hide the yellow). */
+  .cell.edited::after {
+    content: ""; position: absolute; top: 0; right: 0; width: 0; height: 0;
+    border-top: 6px solid var(--yellow); border-left: 6px solid transparent;
+  }
+  .cell.num.dirty { color: var(--yellow); font-weight: 600; box-shadow: inset 3px 0 0 var(--yellow); }
+  .cell.num { cursor: pointer; }
   .vp-edit {
     flex: 1 1 auto; min-height: 4rem; margin: 0.3rem 0.5rem; font-family: var(--mono-font, ui-monospace, monospace); font-size: 0.78rem;
     background: var(--base); color: var(--text); border: 1px solid var(--surface1); border-radius: 4px; padding: 0.3rem;
@@ -398,7 +642,16 @@
   .find-count { font-size: 0.72rem; color: var(--subtext0); }
   .find button { background: none; border: none; color: var(--overlay1); cursor: pointer; padding: 0.15rem; display: inline-flex; }
   .find button:hover { color: var(--text); }
+  .cell.inrect { background: color-mix(in srgb, var(--blue) 12%, transparent); }
   .cell.sel { outline: 1px solid var(--blue); outline-offset: -1px; background: color-mix(in srgb, var(--blue) 14%, transparent); }
+  .cell.edited.sel, .cell.edited.inrect { background: color-mix(in srgb, var(--yellow) 22%, color-mix(in srgb, var(--blue) 14%, transparent)); }
+  .cell.inline { padding: 0; overflow: visible; }
+  .inline-edit {
+    width: 100%; height: 100%; box-sizing: border-box; margin: 0; padding: 0 0.4rem; font: inherit; color: var(--text);
+    background: var(--base); border: 1px solid var(--blue); border-radius: 0; outline: none;
+  }
+  .inline-edit::placeholder { color: var(--overlay0); font-style: italic; }
+  .scroller { user-select: none; }
   .value-pane { flex: 0 0 auto; max-height: 40%; display: flex; flex-direction: column; border-top: 1px solid var(--surface1); background: var(--mantle); }
   .vp-head { display: flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.5rem; font-size: 0.75rem; color: var(--subtext0); }
   .vp-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -12,6 +12,8 @@ export interface MenuItem {
   icon?: string;
   danger?: boolean;
   disabled?: boolean;
+  // A divider line above this item (a new group).
+  sep?: boolean;
   onSelect: () => void;
 }
 
