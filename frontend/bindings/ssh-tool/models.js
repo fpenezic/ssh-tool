@@ -4607,6 +4607,17 @@ export class LocalProxyConfig {
              */
             this["networks"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Domains are DNS suffixes the app proxy sends through this profile by
+             * name, resolved inside the VPN (example.local takes db1.example.local),
+             * beyond the ones the gateway reports. They are search domains too: a
+             * short name the local resolver does not know is tried in them.
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["domains"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -4618,9 +4629,13 @@ export class LocalProxyConfig {
      */
     static createFrom($$source = {}) {
         const $$createField4_0 = $$createType4;
+        const $$createField5_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("networks" in $$parsedSource) {
             $$parsedSource["networks"] = $$createField4_0($$parsedSource["networks"]);
+        }
+        if ("domains" in $$parsedSource) {
+            $$parsedSource["domains"] = $$createField5_0($$parsedSource["domains"]);
         }
         return new LocalProxyConfig(/** @type {Partial<LocalProxyConfig>} */($$parsedSource));
     }
@@ -4659,6 +4674,22 @@ export class LocalProxyDetails {
              */
             this["sources"] = [];
         }
+        if (!("domains" in $$source)) {
+            /**
+             * Domains the app proxy sends through by name; GatewayDomains are the
+             * ones of them the gateway reported (the rest were added by hand).
+             * @member
+             * @type {string[]}
+             */
+            this["domains"] = [];
+        }
+        if (!("gateway_domains" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["gateway_domains"] = [];
+        }
         if (!("gateway" in $$source)) {
             /**
              * docker run for a tun2socks gateway
@@ -4686,12 +4717,20 @@ export class LocalProxyDetails {
     static createFrom($$source = {}) {
         const $$createField1_0 = $$createType4;
         const $$createField2_0 = $$createType4;
+        const $$createField3_0 = $$createType4;
+        const $$createField4_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("routes" in $$parsedSource) {
             $$parsedSource["routes"] = $$createField1_0($$parsedSource["routes"]);
         }
         if ("sources" in $$parsedSource) {
             $$parsedSource["sources"] = $$createField2_0($$parsedSource["sources"]);
+        }
+        if ("domains" in $$parsedSource) {
+            $$parsedSource["domains"] = $$createField3_0($$parsedSource["domains"]);
+        }
+        if ("gateway_domains" in $$parsedSource) {
+            $$parsedSource["gateway_domains"] = $$createField4_0($$parsedSource["gateway_domains"]);
         }
         return new LocalProxyDetails(/** @type {Partial<LocalProxyDetails>} */($$parsedSource));
     }

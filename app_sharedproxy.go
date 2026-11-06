@@ -214,6 +214,26 @@ var sharedTable struct {
 	at     time.Time
 	routes []sharedRoute
 	hosts  map[string]string // lower-case connection hostname -> profile id
+	// DNS domains of the shared profiles: a name in one goes through that
+	// profile as a name, resolved inside the VPN; search is the per-profile
+	// list a short name is tried in.
+	domains []sharedDomain
+	search  []sharedSearch
+}
+
+// sharedDomain is one DNS suffix and the profile behind it.
+type sharedDomain struct {
+	suffix    string
+	profileID string
+	name      string
+	gateway   bool // reported by the gateway (else added by hand)
+}
+
+// sharedSearch is a profile's search domains, for short names.
+type sharedSearch struct {
+	profileID string
+	name      string
+	domains   []string
 }
 
 func sharedRoutesInvalidate() {
@@ -229,6 +249,8 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 		return sharedTable.routes, sharedTable.hosts
 	}
 	var routes []sharedRoute
+	var domains []sharedDomain
+	var search []sharedSearch
 	hosts := map[string]string{}
 	rows, err := a.db.ListNetworkProfiles()
 	if err == nil {
@@ -275,11 +297,19 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 			if pins == nil {
 				continue
 			}
-			list, _ := a.profileRoutes(r, profileLocalProxy(r.ConfigJSON))
+			cfg := profileLocalProxy(r.ConfigJSON)
+			list, _ := a.profileRoutes(r, cfg)
 			for _, s := range list {
 				if p, err := netip.ParsePrefix(s); err == nil {
 					routes = append(routes, sharedRoute{p, r.ID, r.Name, pins.set[p]})
 				}
+			}
+			doms, gw, srch := profileDomains(r, cfg)
+			for _, d := range doms {
+				domains = append(domains, sharedDomain{d, r.ID, r.Name, gw[d]})
+			}
+			if len(srch) > 0 {
+				search = append(search, sharedSearch{r.ID, r.Name, srch})
 			}
 		}
 	}
@@ -341,7 +371,83 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 		}
 	}
 	sharedTable.at, sharedTable.routes, sharedTable.hosts = time.Now(), routes, hosts
+	sharedTable.domains, sharedTable.search = domains, search
 	return routes, hosts
+}
+
+// sharedNames is the domain side of the table (fresh as sharedRoutes).
+func (a *App) sharedNames() ([]sharedDomain, []sharedSearch) {
+	a.sharedRoutes()
+	sharedTable.Lock()
+	defer sharedTable.Unlock()
+	return sharedTable.domains, sharedTable.search
+}
+
+// sharedByDomain is the profile whose DNS domain host is in: the longest
+// suffix; between profiles with the same one, the priority, then a
+// profile whose tunnel is up, then the name.
+func (a *App) sharedByDomain(host string, domains []sharedDomain, rank map[string]int) (sharedDomain, bool) {
+	all := make([]string, 0, len(domains))
+	for _, d := range domains {
+		all = append(all, d.suffix)
+	}
+	suffix := domainOf(host, all)
+	if suffix == "" {
+		return sharedDomain{}, false
+	}
+	var pick []sharedDomain
+	for _, d := range domains {
+		if d.suffix == suffix {
+			pick = append(pick, d)
+		}
+	}
+	sort.SliceStable(pick, func(i, j int) bool {
+		ri, iok := rank[pick[i].profileID]
+		rj, jok := rank[pick[j].profileID]
+		if iok != jok {
+			return iok
+		}
+		if iok && ri != rj {
+			return ri < rj
+		}
+		ui, uj := a.tunnelStatus(pick[i].profileID).Running, a.tunnelStatus(pick[j].profileID).Running
+		if ui != uj {
+			return ui
+		}
+		return pick[i].name < pick[j].name
+	})
+	return pick[0], true
+}
+
+// sharedBySearch is the profile a short name (no dot) is tried in, with
+// the names to dial in its order: the first profile by priority, then a
+// tunnel that is up, then the name, that has search domains.
+func (a *App) sharedBySearch(host string, search []sharedSearch, rank map[string]int) (sharedSearch, []string, bool) {
+	if host == "" || strings.Contains(host, ".") || len(search) == 0 {
+		return sharedSearch{}, nil, false
+	}
+	pick := append([]sharedSearch(nil), search...)
+	sort.SliceStable(pick, func(i, j int) bool {
+		ri, iok := rank[pick[i].profileID]
+		rj, jok := rank[pick[j].profileID]
+		if iok != jok {
+			return iok
+		}
+		if iok && ri != rj {
+			return ri < rj
+		}
+		ui, uj := a.tunnelStatus(pick[i].profileID).Running, a.tunnelStatus(pick[j].profileID).Running
+		if ui != uj {
+			return ui
+		}
+		return pick[i].name < pick[j].name
+	})
+	s := pick[0]
+	names := make([]string, 0, len(s.domains))
+	for _, d := range s.domains {
+		names = append(names, strings.ToLower(host)+"."+d)
+	}
+	return s, names, true
 }
 
 // routeName is the summary name of route id among routes (a jump route
@@ -367,21 +473,26 @@ type sharedPins struct{ set map[netip.Prefix]bool }
 // far side (a bastion, the VPN's DNS) resolve it to a host nobody allowed.
 // A connection's own name is dialed as is: that name is what was allowed.
 func (a *App) sharedPick(host string) (id string, dialHosts []string, err error) {
-	id, _, dialHost, err := a.sharedPickAddr(host, a.sharedProxyConfig().Priority)
+	id, _, dialHosts, err = a.sharedPickHosts(host, a.sharedProxyConfig().Priority)
 	if err != nil {
 		return "", nil, err
 	}
-	return id, []string{dialHost}, nil
+	return id, dialHosts, nil
 }
 
 // sharedPickWith chooses the profile for a destination and says why:
 //  1. a connection's name maps to its profile;
-//  2. an address pinned to a profile (by hand, or a connection's
+//  2. a name in a profile's DNS domain goes there as a name, resolved
+//     inside the VPN (the longest domain first);
+//  3. an address pinned to a profile (by hand, or a connection's
 //     address), the most specific pin first;
-//  3. the first profile in priority whose networks contain it;
-//  4. the most specific route; between equal ones a profile whose
+//  4. the first profile in priority whose networks contain it;
+//  5. the most specific route; between equal ones a profile whose
 //     tunnel is up (two customers with the same range are rarely
 //     connected at once), then by name.
+//
+// A name the local resolver does not know and no domain takes is a
+// short name (no dot) tried in a profile's search domains, last.
 func (a *App) sharedPickWith(host string, priority []string) (id, why string, err error) {
 	id, why, _, err = a.sharedPickAddr(host, priority)
 	return id, why, err
@@ -389,22 +500,54 @@ func (a *App) sharedPickWith(host string, priority []string) (id, why string, er
 
 // sharedPickAddr is sharedPickWith plus the host to dial (see sharedPick).
 func (a *App) sharedPickAddr(host string, priority []string) (id, why, dialHost string, err error) {
+	id, why, hosts, err := a.sharedPickHosts(host, priority)
+	if err != nil {
+		return "", "", "", err
+	}
+	return id, why, hosts[0], nil
+}
+
+// sharedPickHosts is sharedPickAddr with every host to try: a short name
+// expanded with search domains is tried in each, in order.
+func (a *App) sharedPickHosts(host string, priority []string) (id, why string, dialHosts []string, err error) {
 	routes, hosts := a.sharedRoutes()
 	if id, ok := hosts[strings.ToLower(host)]; ok {
 		if jumpConnOf(id) != "" {
-			return id, "through its jump host, as its terminal connects", host, nil
+			return id, "through its jump host, as its terminal connects", []string{host}, nil
 		}
-		return id, "a connection in the tree uses this name", host, nil
+		return id, "a connection in the tree uses this name", []string{host}, nil
+	}
+	rank := map[string]int{}
+	for i, p := range priority {
+		if _, ok := rank[p]; !ok {
+			rank[p] = i
+		}
 	}
 	ip, err := netip.ParseAddr(host)
 	resolved := ""
 	if err != nil {
+		// A name in a profile's DNS domain: the name goes on, resolved by
+		// the VPN's DNS - the domain is what was allowed, and a local
+		// lookup would miss it or (split horizon) find another host.
+		domains, search := a.sharedNames()
+		if d, ok := a.sharedByDomain(host, domains, rank); ok {
+			from := "added by hand"
+			if d.gateway {
+				from = "from the gateway"
+			}
+			return d.profileID, fmt.Sprintf("domain %s (%s)", d.suffix, from), []string{strings.ToLower(strings.TrimSuffix(host, "."))}, nil
+		}
 		// A name no connection uses: try the local resolver.
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		addrs, lerr := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 		cancel()
 		if lerr != nil || len(addrs) == 0 {
-			return "", "", "", fmt.Errorf("no shared profile knows %q", host)
+			// Unknown here: a short name may be a host in a VPN's search
+			// domain (db1 -> db1.example.local).
+			if s, names, ok := a.sharedBySearch(host, search, rank); ok {
+				return s.profileID, "short name, tried in the search domains: "+strings.Join(s.domains, ", "), names, nil
+			}
+			return "", "", nil, fmt.Errorf("no shared profile knows %q", host)
 		}
 		// The first address some shared network contains: a name can resolve
 		// to several, and the first need not be the one behind a VPN.
@@ -420,12 +563,6 @@ func (a *App) sharedPickAddr(host string, priority []string) (id, why, dialHost 
 		}
 		resolved = fmt.Sprintf("%s resolves to %s; ", host, ip)
 	}
-	rank := map[string]int{}
-	for i, p := range priority {
-		if _, ok := rank[p]; !ok {
-			rank[p] = i
-		}
-	}
 	var pins, all []sharedRoute
 	for _, r := range routes {
 		if !r.prefix.Contains(ip) {
@@ -437,14 +574,14 @@ func (a *App) sharedPickAddr(host string, priority []string) (id, why, dialHost 
 		}
 	}
 	if len(all) == 0 {
-		return "", "", "", fmt.Errorf("%s is in no shared profile's networks", ip)
+		return "", "", nil, fmt.Errorf("%s is in no shared profile's networks", ip)
 	}
 	if len(pins) > 0 {
 		r := a.mostSpecific(pins, rank)
 		if jumpConnOf(r.profileID) != "" {
-			return r.profileID, resolved + "through its jump host, as its terminal connects", ip.String(), nil
+			return r.profileID, resolved + "through its jump host, as its terminal connects", []string{ip.String()}, nil
 		}
-		return r.profileID, resolved + "pinned to it (" + r.prefix.String() + ")", ip.String(), nil
+		return r.profileID, resolved + "pinned to it (" + r.prefix.String() + ")", []string{ip.String()}, nil
 	}
 	best := -1
 	var top sharedRoute
@@ -454,10 +591,10 @@ func (a *App) sharedPickAddr(host string, priority []string) (id, why, dialHost 
 		}
 	}
 	if best >= 0 {
-		return top.profileID, fmt.Sprintf("%s%s, priority %d", resolved, top.prefix, best+1), ip.String(), nil
+		return top.profileID, fmt.Sprintf("%s%s, priority %d", resolved, top.prefix, best+1), []string{ip.String()}, nil
 	}
 	r := a.mostSpecific(all, nil)
-	return r.profileID, resolved + "most specific network (" + r.prefix.String() + ")", ip.String(), nil
+	return r.profileID, resolved + "most specific network (" + r.prefix.String() + ")", []string{ip.String()}, nil
 }
 
 // mostSpecific picks the longest prefix; ties go to priority, then a

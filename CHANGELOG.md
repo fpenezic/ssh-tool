@@ -9,7 +9,10 @@ while Wails v3 was a prerelease upstream.
 
 ## [Unreleased]
 
-The Database grid works more like a spreadsheet: edit cells in place, select and copy blocks of cells straight into Excel or Teams, right-click menus on cells and in the tree, and export a whole table to CSV or JSON.
+The Database grid works more like a spreadsheet: edit cells in place, select and copy blocks of cells straight into Excel or Teams, right-click menus on cells and in the tree, and export a whole table to CSV or JSON. The app proxy routes names by the VPNs' DNS domains.
+
+### Network profiles
+- **The app proxy routes by DNS domain**: a name in a VPN's domain goes through that VPN as a name and is resolved by its DNS, so `db1.prod.example.local` works through the proxy even when this machine cannot resolve it. The domains come from the server (search domains from OpenConnect, OpenVPN and Check Point, split DNS from OpenConnect) and from **Extra DNS domains** on the profile's Proxy tab; the longest one wins. A short name this machine cannot resolve (`db1`) is tried in the VPN's search domains. **Which VPN for...** names the domain.
 
 ### Database
 - A folder's list of databases shows and can be edited with the folder's own Database switch off, so it can list prod / stage for the connections under it that turn the Database on, without turning it on for all of them.

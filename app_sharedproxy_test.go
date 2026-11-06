@@ -3,6 +3,7 @@ package main
 import (
 	"net/netip"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -82,5 +83,105 @@ func TestSharedPick(t *testing.T) {
 	}
 	if _, _, err := a.sharedPickWith("203.0.113.1", nil); err == nil {
 		t.Error("uncovered destination accepted")
+	}
+}
+
+func TestNormalizeDomain(t *testing.T) {
+	for in, want := range map[string]string{
+		"Example.Local":      "example.local",
+		" *.corp.example. ":  "corp.example",
+		".example.local":     "example.local",
+		"_msdcs.example.lan": "_msdcs.example.lan",
+		"corp":               "corp",
+	} {
+		if got, err := normalizeDomain(in); err != nil || got != want {
+			t.Errorf("%q -> %q, %v (want %q)", in, got, err, want)
+		}
+	}
+	for _, bad := range []string{"", ".", "a..b", "exa mple.local", "ex/ample", "10.0.0.0/8"} {
+		if _, err := normalizeDomain(bad); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}
+
+func TestDomainOf(t *testing.T) {
+	ds := []string{"example.local", "prod.example.local", "corp"}
+	for host, want := range map[string]string{
+		"db1.prod.example.local":  "prod.example.local",
+		"DB1.Example.Local.":      "example.local",
+		"example.local":           "example.local",
+		"notexample.local":        "",
+		"host.corp":               "corp",
+		"example.local.other.net": "",
+	} {
+		if got := domainOf(host, ds); got != want {
+			t.Errorf("%s -> %q (want %q)", host, got, want)
+		}
+	}
+}
+
+// A name in a shared profile's DNS domain goes there by name (resolved
+// inside the VPN), before any local lookup; the longest domain wins, and
+// between profiles with one domain the priority decides. A short name
+// is tried in the search domains of the first profile.
+func TestSharedPickDomains(t *testing.T) {
+	a := &App{}
+	sharedTable.Lock()
+	sharedTable.at = time.Now()
+	sharedTable.routes = []sharedRoute{{netip.MustParsePrefix("10.0.0.0/8"), "net", "net", false}}
+	sharedTable.hosts = map[string]string{"app01.customer.example": "c"}
+	sharedTable.domains = []sharedDomain{
+		{"example.local", "a", "a", true},
+		{"prod.example.local", "b", "b", false},
+		{"shared.example", "a", "a", false},
+		{"shared.example", "b", "b", false},
+	}
+	sharedTable.search = []sharedSearch{
+		{"b", "b", []string{"prod.example.local", "example.local"}},
+		{"a", "a", []string{"example.local"}},
+	}
+	sharedTable.Unlock()
+	defer sharedRoutesInvalidate()
+	pick := func(host string, prio ...string) (string, string, []string) {
+		t.Helper()
+		id, why, dial, err := a.sharedPickHosts(host, prio)
+		if err != nil {
+			t.Fatalf("%s: %v", host, err)
+		}
+		return id, why, dial
+	}
+	if id, why, dial := pick("DB1.example.local"); id != "a" || dial[0] != "db1.example.local" || why != "domain example.local (from the gateway)" {
+		t.Errorf("example.local: %s %q %v", id, why, dial)
+	}
+	if id, _, _ := pick("db1.prod.example.local"); id != "b" {
+		t.Errorf("longest domain: %s", id)
+	}
+	// Ties go by priority (after it, a tunnel that is up, which needs the
+	// tunnel manager this test has none of).
+	if id, _, _ := pick("x.shared.example", "a"); id != "a" {
+		t.Errorf("same domain, by priority a: %s", id)
+	}
+	if id, _, _ := pick("x.shared.example", "b"); id != "b" {
+		t.Errorf("same domain, by priority: %s", id)
+	}
+	// A connection's own name still wins over a domain.
+	sharedTable.Lock()
+	sharedTable.hosts["db9.example.local"] = "c"
+	sharedTable.Unlock()
+	if id, _, _ := pick("db9.example.local"); id != "c" {
+		t.Errorf("connection name: %s", id)
+	}
+	// Short names: the search domains of the first profile, in order.
+	s, names, ok := a.sharedBySearch("db1", sharedTable.search, map[string]int{"a": 0})
+	if !ok || s.profileID != "a" || len(names) != 1 || names[0] != "db1.example.local" {
+		t.Errorf("search by priority: %v %v %v", s, names, ok)
+	}
+	s, names, ok = a.sharedBySearch("DB1", sharedTable.search, map[string]int{"b": 0, "a": 1})
+	if !ok || s.profileID != "b" || strings.Join(names, ",") != "db1.prod.example.local,db1.example.local" {
+		t.Errorf("search domains in order: %v %v %v", s, names, ok)
+	}
+	if _, _, ok := a.sharedBySearch("db1.other", sharedTable.search, nil); ok {
+		t.Error("a dotted name was expanded")
 	}
 }

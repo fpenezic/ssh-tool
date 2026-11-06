@@ -2718,13 +2718,14 @@
     return port;
   }
   // Local proxy panel per profile (form state while open).
-  type LpForm = { enabled: boolean; shared: boolean; bind: string; port: number; networksText: string; details?: import("./api").LocalProxyDetails };
+  type LpForm = { enabled: boolean; shared: boolean; bind: string; port: number; networksText: string; domainsText: string; details?: import("./api").LocalProxyDetails };
+  const lpList = (t: string) => t.split(/[\s,]+/).filter(Boolean);
   let lpOpen = $state<Record<string, LpForm>>({});
   // The stored address, port and networks per profile: the form is dirty
   // while they differ. The two switches save at once and are not part of it.
   let lpBase = $state<Record<string, string>>({});
   function lpSnap(f: LpForm): string {
-    return JSON.stringify([f.bind.trim(), Number(f.port), f.networksText.split(/[\s,]+/).filter(Boolean)]);
+    return JSON.stringify([f.bind.trim(), Number(f.port), lpList(f.networksText), lpList(f.domainsText)]);
   }
   function lpDirty(id: string): boolean {
     const f = lpOpen[id];
@@ -2743,7 +2744,7 @@
     const listed = networkProfiles.list.find((p) => p.id === np.id)?.local_proxy ?? np.local_proxy;
     const w = lpWritten[np.id];
     const c = w ? { ...w, networks: w.networks } : (listed ?? { enabled: false, port: 0 });
-    const f: LpForm = { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || lpDefaultPort(np.id), networksText: (c.networks ?? []).join("\n") };
+    const f: LpForm = { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || lpDefaultPort(np.id), networksText: (c.networks ?? []).join("\n"), domainsText: (c.domains ?? []).join("\n") };
     const open = lpOpen[np.id];
     const before = open ? lpSnap(open) : null;
     const beforeSwitches = open ? { enabled: open.enabled, shared: open.shared } : null;
@@ -2791,7 +2792,7 @@
     const c = lpWritten[np.id] ?? listed ?? { enabled: false, port: 0 };
     const f: LpForm = {
       enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || lpDefaultPort(np.id),
-      networksText: (c.networks ?? []).join("\n"), details: lpOpen[np.id]?.details,
+      networksText: (c.networks ?? []).join("\n"), domainsText: (c.domains ?? []).join("\n"), details: lpOpen[np.id]?.details,
     };
     lpOpen = { ...lpOpen, [np.id]: f };
     lpBase = { ...lpBase, [np.id]: lpSnap(f) };
@@ -2805,7 +2806,7 @@
   // the write failed: queued writes build on it rather than on a list left
   // behind. Any fresh list (after a write, a sync pull, anything) is the
   // truth again and clears it.
-  let lpWritten: Record<string, { enabled: boolean; shared: boolean; bind: string; port: number; networks: string[] }> = {};
+  let lpWritten: Record<string, { enabled: boolean; shared: boolean; bind: string; port: number; networks: string[]; domains: string[] }> = {};
   $effect(() => {
     void networkProfiles.list;
     lpWritten = {};
@@ -2814,7 +2815,7 @@
     const f = lpOpen[np.id];
     if (!f) return;
     const c = networkProfiles.list.find((p) => p.id === np.id)?.local_proxy ?? { enabled: false, port: 0 };
-    const base = lpWritten[np.id] ?? { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || lpDefaultPort(np.id), networks: c.networks ?? [] };
+    const base = lpWritten[np.id] ?? { enabled: c.enabled, shared: !!c.shared, bind: c.bind || "127.0.0.1", port: c.port || lpDefaultPort(np.id), networks: c.networks ?? [], domains: c.domains ?? [] };
     const req = { ...base, [key]: on };
     try {
       await api.networkProfileSetLocalProxy(np.id, req);
@@ -2843,10 +2844,10 @@
     const f = lpOpen[np.id];
     if (!f) return Promise.resolve(true);
     const sent = lpSnap(f);
-    const text = { bind: f.bind.trim(), port: Number(f.port), networks: f.networksText.split(/[\s,]+/).filter(Boolean) };
+    const text = { bind: f.bind.trim(), port: Number(f.port), networks: lpList(f.networksText), domains: lpList(f.domainsText) };
     return lpQueue(() => lpSaveNow(np, text, sent));
   }
-  async function lpSaveNow(np: NetworkProfileInfo, text: { bind: string; port: number; networks: string[] }, sent: string): Promise<boolean> {
+  async function lpSaveNow(np: NetworkProfileInfo, text: { bind: string; port: number; networks: string[]; domains: string[] }, sent: string): Promise<boolean> {
     const f = lpOpen[np.id];
     if (!f) return true;
     const c = networkProfiles.list.find((p) => p.id === np.id)?.local_proxy;
@@ -5500,6 +5501,10 @@
                   <span>Extra networks <span class="hint inline">(one per line)</span></span>
                   <textarea rows="2" class="mono" bind:value={lp.networksText} placeholder="10.20.0.0/16"></textarea>
                 </label>
+                <label class="oc-field oc-span" title="Names in these domains go through this VPN as names and are resolved by its DNS (example.local takes db1.prod.example.local), besides the domains the server reports. A short name the local resolver does not know (db1) is tried in them too. One per line.">
+                  <span>Extra DNS domains <span class="hint inline">(one per line; the app proxy routes names in them)</span></span>
+                  <textarea rows="2" class="mono" bind:value={lp.domainsText} placeholder="example.local"></textarea>
+                </label>
                 <div class="row oc-span" style="gap:0.5rem">
                   <button class="primary" onclick={() => lpSave(np)} disabled={!lpDirty(np.id)}>Save</button>
                   <button onclick={() => lpDiscard(np)} disabled={!lpDirty(np.id) || lpPending > 0} title="Throw the unsaved changes away">Discard</button>
@@ -5510,6 +5515,8 @@
                 <h3 class="np-h3">Networks {np.local_proxy?.shared ? "the app proxy sends" : "a proxy sends"} through this VPN</h3>
                 <pre class="np-info">{lp.details.routes.join("\n") || "none yet - connect once, or add connections or networks"}</pre>
                 <p class="hint inline">{lp.details.sources.join("; ")}</p>
+                <h3 class="np-h3">DNS domains {np.local_proxy?.shared ? "the app proxy routes" : "routed"} through this VPN by name</h3>
+                <pre class="np-info">{lp.details.domains.map((d) => (lp.details?.gateway_domains.includes(d) ? `${d}  (from the server)` : `${d}  (added by hand)`)).join("\n") || "none - the server reported none yet; add them above"}</pre>
               {/if}
               {#if np.local_proxy?.enabled && lp.details?.url}
                 <h3 class="np-h3">This VPN's own proxy {#if !np.local_proxy_listening}<span class="hint inline warn">not listening - port taken?</span>{/if}</h3>

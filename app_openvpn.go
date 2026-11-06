@@ -342,7 +342,7 @@ func (a *App) ensureOpenVPNTunnel(row *store.NetworkProfile) (tunnelDialer, erro
 		ReadyTimeout: 6 * time.Minute, // typed one-time codes take a while
 		OnAuth:       filler.handle,
 		OnInfo: func(p *tunnelhelper.Proc) {
-			a.rememberRoutes(row.ID, p.Info())
+			a.rememberGateway(row.ID, p.Info())
 			EventsEmit("network_tunnel_changed", row.ID)
 		},
 		OnOpenURL: func(u string) { a.ovpnOpenLogin(row.Name, u) },
@@ -351,7 +351,7 @@ func (a *App) ensureOpenVPNTunnel(row *store.NetworkProfile) (tunnelDialer, erro
 		log.Printf("openvpn %s: connect to %s failed: %v", row.Name, cfg.Server, err)
 		return nil, fmt.Errorf("profile %s: %w", row.Name, err)
 	}
-	a.rememberRoutes(row.ID, p.Info())
+	a.rememberGateway(row.ID, p.Info())
 	log.Printf("openvpn %s: connected to %s in %s", row.Name, cfg.Server, time.Since(connectStart).Round(10*time.Millisecond))
 	a.wgTouch(row.ID)
 	a.recordAudit("network.tunnel.start", row.ID, map[string]string{"name": row.Name, "kind": kindOpenVPN})

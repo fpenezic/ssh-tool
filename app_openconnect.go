@@ -290,7 +290,7 @@ func (a *App) ocConnect(row *store.NetworkProfile, cfg *OpenConnectConfig, exe s
 			ReadyTimeout: 6 * time.Minute, // typed one-time codes take a while
 			OnAuth:       filler.handle,
 			OnInfo: func(p *tunnelhelper.Proc) {
-				a.rememberRoutes(row.ID, p.Info())
+				a.rememberGateway(row.ID, p.Info())
 				EventsEmit("network_tunnel_changed", row.ID)
 			},
 			OnSession: func(c string) { ocSessionSet(row.ID, gw.Server, c) },
@@ -329,7 +329,7 @@ func (a *App) ocConnect(row *store.NetworkProfile, cfg *OpenConnectConfig, exe s
 		}
 		filler.commitChange()
 		a.wgTouch(row.ID)
-		a.rememberRoutes(row.ID, p.Info())
+		a.rememberGateway(row.ID, p.Info())
 		a.recordAudit("network.tunnel.start", row.ID, map[string]string{"name": row.Name, "kind": kindOpenConnect})
 		go a.presencePublish(row.ID, kindOpenConnect)
 		EventsEmit("network_tunnel_changed", row.ID)
