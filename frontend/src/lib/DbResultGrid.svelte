@@ -13,7 +13,7 @@
   import { toast } from "./toast.svelte.ts";
   import { IconDownload, IconX, IconCopy, IconArrowUp, IconArrowDown, IconSearch, IconLink, IconPencil, IconRotateCw, IconEye, IconTable, IconClipboard, IconSql } from "./iconMap";
   import { contextMenu, type MenuItem } from "./contextMenu.svelte.ts";
-  import { copyTable, tableMarkdown } from "./clipboardTable";
+  import { copyTable, setPlain, tableMarkdown } from "./clipboardTable";
   import { cellsWhere, type SqlEngine } from "./dbSql";
   import { rowsCsv, rowsJson } from "./dbExport";
   import { selectAllWithin } from "./selectWithin";
@@ -40,10 +40,11 @@
     onSelect?: (row: (string | null)[] | null, rows: (string | null)[][]) => void;
     // Cells can be changed in place or in the value pane; edits (keyed
     // "row:col" by the server's row index) show in place, onEdit records
-    // one (the server's own value drops it).
+    // changes in one go (a cell set to the server's own value drops its
+    // edit).
     editable?: boolean;
     edits?: Map<string, string | null>;
-    onEdit?: (row: number, ci: number, value: string | null) => void;
+    onEdit?: (changes: { row: number; ci: number; value: string | null }[]) => void;
     // The engine's SQL, for "Copy as WHERE" (none: not offered).
     sqlEngine?: SqlEngine | null;
     // More right-click items for the selected rows (Copy as INSERT ...).
@@ -197,7 +198,7 @@
   }
   function saveEdit(v: string | null) {
     if (!opened || !onEdit) return;
-    onEdit(view[opened.r], opened.c, v);
+    onEdit([{ row: view[opened.r], ci: opened.c, value: v }]);
     editing = null;
   }
 
@@ -225,11 +226,12 @@
     inline = null;
     if (ed.orig === null && ed.value === "") return;
     if (ed.value === ed.orig) return;
-    onEdit(view[ed.r], ed.c, ed.value);
+    onEdit([{ row: view[ed.r], ci: ed.c, value: ed.value }]);
   }
   function inlineKey(e: KeyboardEvent) {
     e.stopPropagation();
-    if (!inline) return;
+    // Enter that picks an IME candidate is the input method's, not ours.
+    if (!inline || e.isComposing || e.keyCode === 229) return;
     const { r, c } = inline;
     let to: { r: number; c: number } | null = null;
     if (e.key === "Escape") {
@@ -299,7 +301,7 @@
     return rect ? cols.slice(rect.c0, rect.c1 + 1) : [];
   }
   function copyText(text: string, what: string) {
-    api.clipboardSetText(text).then(
+    setPlain(text).then(
       () => toast.ok(`${what} copied`),
       (e) => toast.err(`Copy failed: ${String((e as any)?.message ?? e)}`),
     );
@@ -326,6 +328,11 @@
   }
   function copyWhere() {
     if (!sqlEngine) return;
+    // A cut value (past the cell limit, ending in "...") would match no row.
+    if (result.cut_cells > 0) {
+      toast.err(`${result.cut_cells} value${result.cut_cells === 1 ? " is" : "s are"} cut in this result (too long to show whole): no WHERE from it`);
+      return;
+    }
     try {
       copyText(cellsWhere(sqlEngine, selCols(), selCells()), "WHERE");
     } catch (e) {
@@ -336,9 +343,11 @@
   // value (undefined).
   function setSel(v: string | null | undefined) {
     if (!rect || !onEdit) return;
+    const changes: { row: number; ci: number; value: string | null }[] = [];
     for (let r = rect.r0; r <= rect.r1; r++) {
-      for (let c = rect.c0; c <= rect.c1; c++) onEdit(view[r], c, v === undefined ? rows[r]?.[c] ?? null : v);
+      for (let c = rect.c0; c <= rect.c1; c++) changes.push({ row: view[r], ci: c, value: v === undefined ? rows[r]?.[c] ?? null : v });
     }
+    onEdit(changes);
   }
   function editedInSel(): number {
     if (!rect || !edits?.size) return 0;
@@ -389,7 +398,9 @@
   });
 
   function onKey(e: KeyboardEvent) {
-    if (e.target !== scroller) return;
+    // A click focuses the cell itself (tabindex -1), so keys come from cells
+    // too; a field or button inside the grid keeps its own.
+    if ((e.target as HTMLElement | null)?.closest?.("input, textarea, button")) return;
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === "f") {
       e.preventDefault();

@@ -275,11 +275,16 @@
   function rowsText(n: number): string {
     return n ? `${n} selected row${n === 1 ? "" : "s"}` : "selected rows";
   }
-  function onEdit(row: number, ci: number, value: string | null) {
-    const k = `${row}:${ci}`;
+  // One new map for the whole batch: Set NULL on a large selection would
+  // otherwise copy the map once per cell.
+  function onEdit(changes: { row: number; ci: number; value: string | null }[]) {
     const next = new Map(edits);
-    if (value === (page?.rows ?? [])[row]?.[ci]) next.delete(k);
-    else next.set(k, value);
+    const rows = page?.rows ?? [];
+    for (const { row, ci, value } of changes) {
+      const k = `${row}:${ci}`;
+      if (value === rows[row]?.[ci]) next.delete(k);
+      else next.set(k, value);
+    }
     edits = next;
   }
   // The edits as an UPDATE script in a query tab, to read and run there.

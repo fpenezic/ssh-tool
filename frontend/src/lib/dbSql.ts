@@ -191,8 +191,13 @@ export function primaryKey(columns: { name: string; key?: string }[] | null | un
 // "Copy as WHERE" of grid cells: the condition that picks those values.
 // One column gives col = v or col IN (...) (a NULL among them adds
 // IS NULL); several give each row's cells ANDed, the rows ORed.
+// A value of a type the engine cannot compare with = (json, LOBs, xml) is
+// an error; NULL in such a column is still IS NULL.
 export function cellsWhere(engine: SqlEngine, cols: SqlColumn[], rows: (string | null)[][]): string {
   if (!cols.length || !rows.length) return "";
+  cols.forEach((c, i) => {
+    if (noCompare(engine, c.type) && rows.some((r) => r[i] !== null)) throw new Error(`${c.name} (${c.type}) cannot be compared with =: leave it out of the selection`);
+  });
   if (cols.length === 1) {
     const id = ident(engine, cols[0].name);
     const seen = new Set<string>();
@@ -212,18 +217,21 @@ export function cellsWhere(engine: SqlEngine, cols: SqlColumn[], rows: (string |
     ];
     return parts.join(" OR ");
   }
-  const names = cols.map((c) => c.name);
-  const each = rows.map((r) => rowWhere(engine, cols, r, names));
+  // By position, not by name: a result can carry two columns of one name.
+  const each = rows.map((r) =>
+    cols.map((c, i) => (r[i] === null ? `${ident(engine, c.name)} IS NULL` : `${ident(engine, c.name)} = ${literal(engine, r[i], c.type)}`)).join(" AND "),
+  );
   return each.length === 1 ? each[0] : each.map((w) => `(${w})`).join("\nOR ");
 }
 
 // A table's name as a query on the session's database names it, for any
-// engine of the Database tab (ClickHouse quotes like MySQL; PostgreSQL
-// leaves public unqualified).
+// engine of the Database tab (ClickHouse quotes like MySQL). The schema
+// is always named, public too: the session's search_path may not start
+// with it.
 export function objectName(engine: string, schema: string, name: string): string {
   if (engine === "mysql" || engine === "clickhouse") return "`" + name.replace(/`/g, "``") + "`";
   if (engine === "mssql") return `[${(schema || "dbo").replace(/]/g, "]]")}].[${name.replace(/]/g, "]]")}]`;
-  return (schema && schema !== "public" ? `"${schema.replace(/"/g, '""')}".` : "") + `"${name.replace(/"/g, '""')}"`;
+  return (schema ? `"${schema.replace(/"/g, '""')}".` : "") + `"${name.replace(/"/g, '""')}"`;
 }
 
 // The query a table's "Query" starts with, in the engine's language.

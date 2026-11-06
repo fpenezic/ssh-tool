@@ -184,8 +184,10 @@
       const r = await api.dbRun(sessionId, key, db, sql, 1);
       const res = r.results?.[0];
       if (res?.error) throw new Error(res.error);
+      // BigInt: a count past 2^53 stays exact.
       const n = res?.rows?.[0]?.[0];
-      toast.ok(`${o.name}: ${n === undefined || n === null ? "?" : Number(n).toLocaleString()} rows`, 6000);
+      const shown = n == null ? "?" : /^\d+$/.test(n) ? BigInt(n).toLocaleString() : n;
+      toast.ok(`${o.name}: ${shown} rows`, 6000);
     } catch (e) {
       toast.err(`Count ${o.name}: ${errMsg(e)}`);
     } finally {
@@ -203,6 +205,15 @@
       return;
     }
     exporting = { name: o.name, rows: 0, stop: false };
+    // Without a primary key the pages have no order of their own, so a
+    // page can repeat or skip rows (PostgreSQL may even start a scan
+    // mid-table): said at the end, not refused.
+    let keyless = false;
+    try {
+      keyless = !(await api.dbDescribe(sessionId, db, o.schema, o.name)).columns?.some((c) => c.key === "PRI");
+    } catch {
+      /* the export says what it can */
+    }
     try {
       const all = await readAll(
         (offset, limit) => api.dbBrowse(sessionId, db, o.schema, o.name, [], [], offset, limit),
@@ -221,7 +232,11 @@
       if (path) {
         const n = all.rows.length;
         const msg = `Exported ${n.toLocaleString()} row${n === 1 ? "" : "s"} of ${o.name} to ${path}`;
-        if (all.cut) toast.err(`${msg} - ${all.cut} value${all.cut === 1 ? " was" : "s were"} too long and cut (256 KiB per value)`, 10000);
+        const warn = [
+          ...(all.cut ? [`${all.cut} value${all.cut === 1 ? " was" : "s were"} too long and cut (256 KiB per value)`] : []),
+          ...(keyless && all.rows.length > EXPORT_PAGE ? ["the table has no primary key, so its pages have no fixed order: rows can be missing or repeated"] : []),
+        ];
+        if (warn.length) toast.err(`${msg} - ${warn.join("; ")}`, 12000);
         else toast.ok(msg, 5000);
       }
     } catch (e) {
