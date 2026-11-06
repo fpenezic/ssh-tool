@@ -9,12 +9,14 @@ while Wails v3 was a prerelease upstream.
 
 ## [Unreleased]
 
+The Database grid works more like a spreadsheet: edit cells in place, select and copy blocks of cells straight into Excel or Teams, right-click menus on cells and in the tree, and export a whole table to CSV or JSON.
+
 ### Database
 - A folder's list of databases shows and can be edited with the folder's own Database switch off, so it can list prod / stage for the connections under it that turn the Database on, without turning it on for all of them.
 - **Edit cells in place**: double-click, F2 or Enter types into the cell itself; Enter keeps the value and moves down, Tab moves right, Esc drops it. Long and multi-line values still open in the pane below.
 - **Changed cells stay visible**: a yellow mark in the cell's corner, the row number in yellow and the old value on hover, also while the cell is picked (its blue used to hide the yellow).
 - **Select and copy blocks of cells**: Shift+click, Shift+arrows, a drag, a click on `#` for rows, Ctrl+A. Ctrl+C copies them as a table that Excel splits into cells and Teams / Outlook paste as a table.
-- **Right-click on a cell**: Edit, Set NULL, Revert, Open value, Copy, Copy with headers, Copy as Markdown, Copy as WHERE, and in a table's Data view Copy as INSERT / DELETE of the selected rows (Copy as SQL above the grid takes the selection too).
+- **Right-click on a cell**: Edit, Set NULL, Revert, Open value, Copy, Copy with headers, Copy as Markdown, Copy as WHERE, and in a table's Data view Copy as INSERT / DELETE of the selected rows (Copy as SQL above the grid takes the selection too; INSERT carries the changed values, DELETE matches the rows as they are on the server).
 - **Right-click in the tree**: open a table's Data, Structure or DDL, New query, Count rows, Copy name, Copy DDL, Export, ER diagram; New query, Copy name and Refresh on a database.
 - **Export a whole table** to CSV or JSON (SQL engines and ClickHouse), read 10000 rows at a time with a progress bar and Stop, not only the page shown.
 - Script no longer asks to drop the edits it has just put into the query tab.
