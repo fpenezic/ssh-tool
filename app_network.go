@@ -149,19 +149,27 @@ func (a *App) idleStopFor(p profilePolicy) (time.Duration, bool) {
 // ("netbird up --management-url ... --setup-key KEY"); any other secret
 // is returned as it is.
 func netbirdKeyFromCommand(secret string) string {
-	// The last flag wins, as on NetBird's own command line.
-	key := ""
+	// The last flag wins, as on NetBird's own command line; a shell
+	// comment is not part of the command. A flag given with no value makes
+	// the key empty (refused by the caller), not the whole command.
+	key, found := "", false
 	f := strings.Fields(secret)
 	for i, w := range f {
+		if strings.HasPrefix(w, "#") {
+			break
+		}
 		for _, n := range []string{"--setup-key", "-k"} {
-			if w == n && i+1 < len(f) {
-				key = strings.Trim(f[i+1], `"'`)
+			if w == n {
+				found, key = true, ""
+				if i+1 < len(f) && !strings.HasPrefix(f[i+1], "-") && !strings.HasPrefix(f[i+1], "#") {
+					key = strings.Trim(f[i+1], `"'`)
+				}
 			} else if v, ok := strings.CutPrefix(w, n+"="); ok {
-				key = strings.Trim(v, `"'`)
+				found, key = true, strings.Trim(v, `"'`)
 			}
 		}
 	}
-	if key == "" {
+	if !found {
 		return secret
 	}
 	return key
@@ -518,6 +526,9 @@ func (a *App) ensureNetbirdTunnel(row *store.NetworkProfile) (tunnelDialer, erro
 		return nil, fmt.Errorf("profile %s: setup key credential holds an empty secret", row.Name)
 	}
 	setupKey = netbirdKeyFromCommand(setupKey)
+	if setupKey == "" {
+		return nil, fmt.Errorf("profile %s: credential %q holds a netbird command whose --setup-key has no value", row.Name, cred.Name)
+	}
 	if msg := netbirdKeyProblem(setupKey); msg != "" {
 		return nil, fmt.Errorf("profile %s: credential %q: %s", row.Name, cred.Name, msg)
 	}

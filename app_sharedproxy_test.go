@@ -293,6 +293,8 @@ func TestNetbirdKeyFromCommand(t *testing.T) {
 		`netbird up -k "K-2"`:                  "K-2",
 		"netbird up --setup-key=K-3":           "K-3",
 		"netbird up --setup-key=OLD -k NEW":    "NEW",
+		"netbird up --setup-key=":              "",
+		"netbird up -k K # -k X":               "K",
 		"A1B2C3D4-0000-4000-8000-000000000000": "A1B2C3D4-0000-4000-8000-000000000000",
 	} {
 		if got := netbirdKeyFromCommand(in); got != want {
