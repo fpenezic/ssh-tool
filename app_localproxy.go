@@ -879,7 +879,10 @@ func (a *App) rememberGateway(id string, info json.RawMessage) {
 	}
 	search := norm(v.Search)
 	domains := norm(v.Search, v.SplitDNS)
-	complete := len(routes) > 0
+	// Judged on the routes as sent: a full-tunnel VPN reports only a
+	// default route, which is kept out of the stored routes but still makes
+	// the report a whole description.
+	complete := len(v.Routes) > 0
 	if !complete && len(domains) == 0 {
 		return
 	}
