@@ -22,6 +22,8 @@ The Database tab grows up: IBM Db2, foreign keys to follow both ways, filter and
 - **Explain** in query tabs (PostgreSQL, MySQL / MariaDB): the statement's plan as a tree with cost, rows and conditions.
 - Query tabs complete **column names** of the tables a script uses, after the table's name or alias.
 - **Sessions**: the server's sessions (who runs what, for how long, waiting on what, blocked by whom), with Stop statement and End session; audited, refused on read-only connections.
+- **ER diagram** of a schema (PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, Db2): tables with their key columns and the foreign keys between them, laid out by who references whom; move boxes, zoom, find a table, open it with a double-click.
+- A Database tab (and its row in the tree) is green only while the server answers: it is checked every 20 seconds and turns red when it stops, back to green when it answers again. Before, it stayed green after the server went away until something was clicked.
 - **Database lists on folders**: the databases listed under a connection (prod, stage, another login) can be set on a folder, and every connection under it lists them; a connection can hide one, give it its own login or make it the default.
 - **Query timeout** setting for Database tabs (inherited like the other Database settings): a statement that runs longer is stopped on the server, as Stop does.
 - **Follow foreign keys** in a table's Data view (PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, Db2): a link in a foreign key cell opens the row it references, in the same tab, with a breadcrumb of the path and **Back**. Composite keys follow all their columns.

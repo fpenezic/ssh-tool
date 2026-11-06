@@ -1170,6 +1170,16 @@ export class DbTarget {
              */
             this["in_tree"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Override: this entry only adjusts the database of the same id that
+             * a folder lists (hide it, another login on this host); its non-nil
+             * fields win. Dropped when no folder lists that id any more.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["override"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -2039,8 +2049,10 @@ export class InheritableSettings {
             /**
              * DbTargets are the databases listed under a connection (prod, stage,
              * another engine on the same host), each opening its own tab. A field
-             * a target leaves nil takes the Db* value above. Set on connections;
-             * not inherited from folders (the Db* defaults are). Empty: the
+             * a target leaves nil takes the Db* value above. A folder's list goes
+             * to every connection under it, before the connection's own (a
+             * replicated cluster lists prod / stage once); an Override entry on a
+             * connection adjusts an inherited one of the same id. Empty: the
              * connection itself is the one database.
              * @member
              * @type {DbTarget[] | undefined}

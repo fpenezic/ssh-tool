@@ -292,6 +292,101 @@ export class ForeignKey {
 }
 
 /**
+ * GraphColumn is one column: its type as the server names it, whether it
+ * is part of the primary key and whether it takes NULL.
+ */
+export class GraphColumn {
+    /**
+     * Creates a new GraphColumn instance.
+     * @param {Partial<GraphColumn>} [$$source = {}] - The source object to create the GraphColumn.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("type" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["type"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["key"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["nullable"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new GraphColumn instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {GraphColumn}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new GraphColumn(/** @type {Partial<GraphColumn>} */($$parsedSource));
+    }
+}
+
+/**
+ * GraphTable is one table of the diagram.
+ */
+export class GraphTable {
+    /**
+     * Creates a new GraphTable instance.
+     * @param {Partial<GraphTable>} [$$source = {}] - The source object to create the GraphTable.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("columns" in $$source)) {
+            /**
+             * @member
+             * @type {GraphColumn[]}
+             */
+            this["columns"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new GraphTable instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {GraphTable}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType2;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("columns" in $$parsedSource) {
+            $$parsedSource["columns"] = $$createField1_0($$parsedSource["columns"]);
+        }
+        return new GraphTable(/** @type {Partial<GraphTable>} */($$parsedSource));
+    }
+}
+
+/**
  * Index describes an index.
  */
 export class Index {
@@ -577,8 +672,8 @@ export class Result {
      * @returns {Result}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType2;
-        const $$createField2_0 = $$createType4;
+        const $$createField1_0 = $$createType4;
+        const $$createField2_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("columns" in $$parsedSource) {
             $$parsedSource["columns"] = $$createField1_0($$parsedSource["columns"]);
@@ -625,6 +720,55 @@ export class ResultColumn {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new ResultColumn(/** @type {Partial<ResultColumn>} */($$parsedSource));
+    }
+}
+
+/**
+ * SchemaGraph is a schema's tables and the foreign keys between them.
+ */
+export class SchemaGraph {
+    /**
+     * Creates a new SchemaGraph instance.
+     * @param {Partial<SchemaGraph>} [$$source = {}] - The source object to create the SchemaGraph.
+     */
+    constructor($$source = {}) {
+        if (!("tables" in $$source)) {
+            /**
+             * @member
+             * @type {GraphTable[]}
+             */
+            this["tables"] = [];
+        }
+        if (!("foreign_keys" in $$source)) {
+            /**
+             * The foreign keys of the schema's tables, the same shape as a table's
+             * (Database / Schema / Table the referencing table, Ref* the
+             * referenced one, which may live in another schema).
+             * @member
+             * @type {ForeignKey[]}
+             */
+            this["foreign_keys"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SchemaGraph instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {SchemaGraph}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType8;
+        const $$createField1_0 = $$createType10;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("tables" in $$parsedSource) {
+            $$parsedSource["tables"] = $$createField0_0($$parsedSource["tables"]);
+        }
+        if ("foreign_keys" in $$parsedSource) {
+            $$parsedSource["foreign_keys"] = $$createField1_0($$parsedSource["foreign_keys"]);
+        }
+        return new SchemaGraph(/** @type {Partial<SchemaGraph>} */($$parsedSource));
     }
 }
 
@@ -804,8 +948,8 @@ export class TableDetail {
      * @returns {TableDetail}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType6;
-        const $$createField4_0 = $$createType8;
+        const $$createField3_0 = $$createType12;
+        const $$createField4_0 = $$createType14;
         const $$createField5_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("columns" in $$parsedSource) {
@@ -823,13 +967,17 @@ export class TableDetail {
 
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
-const $$createType1 = ResultColumn.createFrom;
+const $$createType1 = GraphColumn.createFrom;
 const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = $Create.Array($Create.Any);
+const $$createType3 = ResultColumn.createFrom;
 const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = Column.createFrom;
+const $$createType5 = $Create.Array($Create.Any);
 const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = Index.createFrom;
+const $$createType7 = GraphTable.createFrom;
 const $$createType8 = $Create.Array($$createType7);
 const $$createType9 = ForeignKey.createFrom;
 const $$createType10 = $Create.Array($$createType9);
+const $$createType11 = Column.createFrom;
+const $$createType12 = $Create.Array($$createType11);
+const $$createType13 = Index.createFrom;
+const $$createType14 = $Create.Array($$createType13);

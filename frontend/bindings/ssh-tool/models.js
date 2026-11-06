@@ -2188,6 +2188,15 @@ export class DbHandleInfo {
              */
             this["error"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Down is why the server stopped answering the last check ("" = it
+             * answers, or not checked yet; see dbWatch).
+             * @member
+             * @type {string | undefined}
+             */
+            this["down"] = undefined;
+        }
         if (!("read_only" in $$source)) {
             /**
              * @member

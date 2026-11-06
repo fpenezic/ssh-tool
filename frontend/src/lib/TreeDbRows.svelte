@@ -7,8 +7,8 @@
   import { onMount } from "svelte";
   import { connectionActions } from "./connectionActions.svelte";
   import { dbTabs, dbTreeRows, dbTreeSelectedUnder, type DbTreeRow } from "./dbState.svelte";
-  import { selection, tree, view } from "./stores.svelte";
-  import { api } from "./api";
+  import { selection, sessions, tree, view } from "./stores.svelte";
+  import { api, type DbHandleInfo } from "./api";
   import { toast } from "./toast.svelte.ts";
   import { IconStar } from "./iconMap";
   import { treeBookmarks } from "./treeBookmarks.svelte";
@@ -19,10 +19,14 @@
   let { connId, depth }: { connId: string; depth: number } = $props();
   onMount(() => void collapsedDbs.load());
   const rows = $derived(collapsedDbs.isExpanded(connId) ? [] : dbTreeRows(tree.connectionById(connId)));
-  // Databases with a tab open, drawn green like a connected connection.
-  const openIds = $derived(new Set(
-    Object.values(dbTabs.infos).filter((i) => i.connection_id === connId).map((i) => i.target_id ?? ""),
-  ));
+  // Databases with a tab open: green only while connected (the server
+  // answers; DbPane sets the tab's status from the backend's checks), red
+  // once it does not, plain while connecting. A tab in another window has
+  // no status here: its handle's last check decides.
+  const tabStatus = (i: DbHandleInfo) => sessions.tabs.find((t) => t.sessionId === i.id)?.status ?? (i.down ? "error" : "connected");
+  const mine = $derived(Object.values(dbTabs.infos).filter((i) => i.connection_id === connId));
+  const openIds = $derived(new Set(mine.filter((i) => tabStatus(i) === "connected").map((i) => i.target_id ?? "")));
+  const downIds = $derived(new Set(mine.filter((i) => ["error", "disconnected"].includes(tabStatus(i))).map((i) => i.target_id ?? "")));
 
   // Double-click by timing, like connection rows: native dblclick does not
   // fire reliably on touch WebViews.
@@ -84,12 +88,13 @@
     class="row"
     class:selected={isSelected(r)}
     class:live={openIds.has(r.id)}
+    class:down={!openIds.has(r.id) && downIds.has(r.id)}
     style="--depth: {depth};"
     role="treeitem"
     tabindex="0"
     aria-selected={isSelected(r)}
     data-kind="database"
-    title={`${r.label}${r.detail ? ` (${r.detail})` : ""}${openIds.has(r.id) ? " - open" : ""}\nDouble-click to open the database`}
+    title={`${r.label}${r.detail ? ` (${r.detail})` : ""}${openIds.has(r.id) ? " - open" : downIds.has(r.id) ? " - open, the server does not answer" : ""}\nDouble-click to open the database`}
     onclick={() => onClick(r)}
     oncontextmenu={(e) => openMenu(e, r)}
     onkeydown={(e) => {
@@ -121,6 +126,8 @@
   .row.selected { background: var(--surface1); }
   .row.live .name { font-weight: 600; color: var(--green); }
   .row.live .icon { color: var(--green); }
+  .row.down .name { font-weight: 600; color: var(--red); }
+  .row.down .icon { color: var(--red); }
   .row:focus-visible { outline: 1px solid var(--blue); outline-offset: -1px; }
   .chev { width: 1rem; flex-shrink: 0; }
   .icon { width: 1.2rem; display: inline-flex; justify-content: center; flex-shrink: 0; color: var(--teal); }

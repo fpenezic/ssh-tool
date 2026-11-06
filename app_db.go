@@ -52,8 +52,11 @@ type DbHandleInfo struct {
 	// State is the SSH session state of a tunnel transport
 	// (sshchan.Transport*), "" for the others; Error the last connect
 	// error.
-	State     string `json:"state"`
-	Error     string `json:"error,omitempty"`
+	State string `json:"state"`
+	Error string `json:"error,omitempty"`
+	// Down is why the server stopped answering the last check ("" = it
+	// answers, or not checked yet; see dbWatch).
+	Down      string `json:"down,omitempty"`
 	ReadOnly  bool   `json:"read_only"`
 	Sensitive bool   `json:"sensitive"`
 	TLS       string `json:"tls"`
@@ -66,6 +69,10 @@ type dbHandle struct {
 	// tabState is the UI's tab list (JSON), kept for a window that did not
 	// open the tab (detach, redock, reload). Guarded by App.dbMu.
 	tabState string
+	// stop ends dbWatch; down is its last ping error ("" = answering),
+	// guarded by App.dbMu.
+	stop chan struct{}
+	down string
 }
 
 var errDbClosed = errors.New("database tab is not open")
@@ -223,9 +230,11 @@ func (a *App) dbOpen(connectionID, targetID string, login *[2]string) (*DbHandle
 	}
 	dh.h = h
 
+	dh.stop = make(chan struct{})
 	a.dbMu.Lock()
 	a.dbHandles[dh.info.ID] = dh
 	a.dbMu.Unlock()
+	go a.dbWatch(dh.info.ID, dh)
 	if dh.lazy != nil {
 		go func() { _, _ = dh.lazy.Client(context.Background()) }()
 	}
@@ -240,6 +249,9 @@ func (a *App) dbOpen(connectionID, targetID string, login *[2]string) (*DbHandle
 		"read_only": fmt.Sprint(settings.DbReadOnly),
 	})
 	info := dh.status()
+	a.dbMu.Lock()
+	info.Down = dh.down
+	a.dbMu.Unlock()
 	return &info, nil
 }
 
@@ -314,7 +326,9 @@ func (a *App) DbList() []DbHandleInfo {
 	defer a.dbMu.Unlock()
 	out := make([]DbHandleInfo, 0, len(a.dbHandles))
 	for _, dh := range a.dbHandles {
-		out = append(out, dh.status())
+		info := dh.status()
+		info.Down = dh.down
+		out = append(out, info)
 	}
 	return out
 }
@@ -329,6 +343,9 @@ func (a *App) DbClose(id string) {
 	a.dbMu.Unlock()
 	if !ok {
 		return
+	}
+	if dh.stop != nil {
+		close(dh.stop)
 	}
 	if a.mcp != nil {
 		a.clearMcpGrant(id)
@@ -410,6 +427,18 @@ func (a *App) DbReferencedBy(id, database, schema, name string) ([]dbx.ForeignKe
 	ctx, cancel := dbCtx()
 	defer cancel()
 	return dh.h.ReferencedBy(ctx, database, schema, name)
+}
+
+// DbSchemaGraph reads a schema's tables, columns and foreign keys for its
+// ER diagram.
+func (a *App) DbSchemaGraph(id, database, schema string) (*dbx.SchemaGraph, error) {
+	dh, err := a.dbGet(id)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := dbCtx()
+	defer cancel()
+	return dh.h.SchemaGraph(ctx, database, schema)
 }
 
 // DbActivity lists the server's sessions (who runs what, waits on what,

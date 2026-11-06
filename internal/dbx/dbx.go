@@ -366,6 +366,13 @@ func (h *Handle) ReadOnly() bool { return h.cfg.ReadOnly }
 // Info reports the server version and the login.
 func (h *Handle) Info(ctx context.Context) (*ServerInfo, error) { return h.eng.info(ctx) }
 
+// Ping asks the server for something small (the same as Info), so a pool
+// whose connections died reconnects or fails here.
+func (h *Handle) Ping(ctx context.Context) error {
+	_, err := h.eng.info(ctx)
+	return err
+}
+
 // Databases lists the databases the login can see.
 func (h *Handle) Databases(ctx context.Context) ([]Database, error) { return h.eng.databases(ctx) }
 
