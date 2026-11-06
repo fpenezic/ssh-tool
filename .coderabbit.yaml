@@ -35,6 +35,9 @@ reviews:
           enforced in the Go backend, not only hidden in the UI.
         - Platform: the app runs natively on Windows; no WSL-specific paths.
           Files without a build tag also build for android.
+        - Exports (CSV / JSON / the clipboard table) are lossless copies of
+          the user's own data: values are written as they are, not
+          prefixed or altered against spreadsheet formula injection.
     - path: "**/*.go"
       instructions: |
         Look for: goroutine leaks and missing context cancellation, locks
