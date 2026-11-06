@@ -35,18 +35,12 @@ A PAT is rejected at registration with `setup key is invalid` /
 In the NetBird dashboard: **Setup Keys -> Create Setup Key**.
 
 - **Name** - anything identifiable, e.g. `ssh-tool`.
-- **Reusable** - turn this **on** if you'll run the profile on more
-  than one machine, or you sync the profile across machines. Each
-  machine registers as its own separate peer. A one-off key is
-  consumed after a single registration and then fails.
+- **Reusable** - turn this **on**. The helper keeps no NetBird identity between runs, so every connect registers the machine as a peer again (under its device name, into the key's groups); a one-off key works for the first connect only. It also lets a synced profile run on several machines, each its own peer.
 - **Usage limit** - `Unlimited` (or enough for your machines) for a
   reusable key.
 - **Expiration** - set a sane expiry. When it expires, no NEW peers
   can enroll with it; peers already registered keep working.
-- **Ephemeral peers** - optional. An ephemeral peer is auto-removed
-  after it's been offline for ~10 minutes. Handy for laptops that come
-  and go, but the machine then re-enrolls as a fresh peer each time it
-  reconnects, so pair ephemeral with a **reusable** key.
+- **Ephemeral peers** - recommended. An ephemeral peer is auto-removed after it's been offline for ~10 minutes, so the peers earlier connects left behind go away on their own.
 - **Auto-assigned groups** - **this is what grants access.** See the
   next section - registering a peer is not the same as letting it
   reach anything.
@@ -103,10 +97,7 @@ folder sends every host under it through that tunnel.
 
 ## Troubleshooting
 
-- **`setup key is invalid` / `no peer auth method provided`** - you
-  used a PAT, or the key is expired / already consumed (one-off), or
-  it belongs to a different NetBird instance than the Management URL.
-  Create a fresh **reusable setup key** on the right management server.
+- **`setup key is invalid` / `no peer auth method provided`** - the key is expired or already consumed (a one-off key, on the second connect), or it belongs to a different NetBird instance than the Management URL. Create a fresh **reusable setup key** on the right management server. (A personal access token, `nbp_...`, is refused by ssh-tool before it gets that far.)
 - **Tunnel connects but SSH times out** - the peer isn't in a group
   with an access policy to the target host. Fix the group / policy
   (section 3), not the key.
@@ -114,10 +105,7 @@ folder sends every host under it through that tunnel.
   full NetBird desktop client (or another tool) holding the default
   WireGuard port. ssh-tool's helper uses a random port, so this
   shouldn't happen; if it does, check for a conflicting client.
-- **Peer count keeps growing in the dashboard** - a one-off key can't
-  cause this, but re-enrolling (ephemeral, or wiping the profile) adds
-  a new peer each time. Prune stale peers in NetBird, or use ephemeral
-  peers so they auto-expire.
+- **Peer count keeps growing in the dashboard** - every connect registers a new peer (see Reusable above). Use ephemeral peers so the old ones expire, or prune them in NetBird.
 
 ## Where state lives
 

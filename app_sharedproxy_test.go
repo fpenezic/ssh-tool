@@ -263,3 +263,25 @@ func TestRememberGateway(t *testing.T) {
 		t.Errorf("carry: %s", got)
 	}
 }
+
+func TestNetbirdKeyProblem(t *testing.T) {
+	if netbirdKeyProblem("A1B2C3D4-0000-4000-8000-000000000000") != "" {
+		t.Error("a setup key was refused")
+	}
+	if netbirdKeyProblem(" nbp_abcdefghijklmnopqrstuvwxyz0123456789 ") == "" {
+		t.Error("a personal access token was taken")
+	}
+}
+
+func TestNetbirdKeyFromCommand(t *testing.T) {
+	for in, want := range map[string]string{
+		"netbird up --management-url https://vpn.example.com --setup-key K-1": "K-1",
+		`netbird up -k "K-2"`:                  "K-2",
+		"netbird up --setup-key=K-3":           "K-3",
+		"A1B2C3D4-0000-4000-8000-000000000000": "A1B2C3D4-0000-4000-8000-000000000000",
+	} {
+		if got := netbirdKeyFromCommand(in); got != want {
+			t.Errorf("%q -> %q (want %q)", in, got, want)
+		}
+	}
+}

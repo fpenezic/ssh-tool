@@ -648,8 +648,8 @@ type LocalProxyDetails struct {
 	// ones of them the gateway reported (the rest were added by hand).
 	Domains        []string `json:"domains"`
 	GatewayDomains []string `json:"gateway_domains"`
-	Gateway   string   `json:"gateway"` // docker run for a tun2socks gateway
-	Listening bool     `json:"listening"`
+	Gateway        string   `json:"gateway"` // docker run for a tun2socks gateway
+	Listening      bool     `json:"listening"`
 }
 
 // NetworkProfileLocalProxyDetails builds the proxy URL, the routes the

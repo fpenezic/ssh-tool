@@ -2864,21 +2864,15 @@ A NetBird profile needs three things:
   `vpn.example.com` is fine - it's normalised to `https://`).
 - **Device name** - the name this peer registers under in NetBird.
 - **Setup key** - stored as an API-token credential (the setup-key
-  picker has a **+ New** button so you don't have to leave the page).
+  picker has a **+ New** button so you don't have to leave the page). Pasting the whole command the dashboard shows under Peers / Clients -> Add (`netbird up --management-url ... --setup-key ...`) keeps just the key, and fills an empty Management URL from it; Settings -> Setup Keys shows the key alone.
 
 **Which key.** Use a **setup key**, NOT a personal access token
 (PAT). In the NetBird dashboard: **Setup Keys -> Create Setup Key**.
 The key is a UUID (e.g. `A1B2C3D4-...`); a PAT (starting `nbp_`) is a
 different thing and will be rejected with "setup key is invalid".
 
-- **Reusable** - use a reusable key if you sync this profile across
-  machines: each machine registers as its own separate peer (no
-  identity conflict, unlike WireGuard). A one-off key works for a
-  single machine only and is consumed after one registration.
-- **Ephemeral** - optional; an ephemeral peer is auto-removed after
-  it's offline for a while. Convenient for laptops, but the machine
-  re-registers (new peer) each time it reconnects, so pair it with a
-  reusable key.
+- **Reusable** - use a reusable key. The plugin keeps no NetBird identity between runs, so each connect registers the machine as a peer again, under its device name and into the key's groups; a one-off key works for the first connect only. A synced profile then runs on every machine, each its own peer (no identity conflict, unlike WireGuard).
+- **Ephemeral** - recommended with it: an ephemeral peer is removed after it has been offline for a while, so the peers of earlier connects do not pile up.
 - **Auto-assigned group** - assign the setup key to a NetBird **group
   that has an access policy to the hosts you need to reach**.
   Registration alone doesn't grant access; NetBird's policies decide
@@ -2888,10 +2882,7 @@ different thing and will be rejected with "setup key is invalid".
 - **Expiration** - set a sensible expiry; an expired key stops new
   registrations (existing peers keep working).
 
-Each machine keeps its NetBird registration state locally (under the
-data dir); it is not synced, which is what lets each machine be its
-own peer. Deleting the profile removes that state and the peer stops
-checking in.
+The profile syncs, the registration does not: each machine registers itself. Its NetBird DNS state lives under the data dir, and deleting the profile removes it.
 
 For a full step-by-step (which key, groups, access policies, common
 errors) see **`docs/netbird-setup.md`**.
