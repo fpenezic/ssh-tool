@@ -154,13 +154,17 @@ func (e *pgEngine) graph(ctx context.Context, database, schema string) (*SchemaG
 	}
 	g := &SchemaGraph{Tables: []GraphTable{}, ForeignKeys: []ForeignKey{}}
 	// Tables and partitioned tables; not the partitions, whose keys are
-	// copies of their parent's.
+	// copies of their parent's. A table may have no columns (a NULL row
+	// keeps it), and a NOT NULL domain makes its column NOT NULL, as in
+	// information_schema.columns.
 	rows, err := p.Query(ctx, `
-		SELECT c.relname, a.attname, format_type(a.atttypid, a.atttypmod), NOT a.attnotnull,
+		SELECT c.relname, a.attname, format_type(a.atttypid, a.atttypmod),
+		       NOT (a.attnotnull OR (ty.typtype = 'd' AND ty.typnotnull)),
 		       COALESCE(a.attnum = ANY(pk.conkey), false)
 		FROM pg_class c
 		JOIN pg_namespace n ON n.oid = c.relnamespace
-		JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+		LEFT JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+		LEFT JOIN pg_type ty ON ty.oid = a.atttypid
 		LEFT JOIN pg_constraint pk ON pk.conrelid = c.oid AND pk.contype = 'p'
 		WHERE n.nspname = $1 AND c.relkind IN ('r', 'p') AND NOT c.relispartition
 		ORDER BY c.relname, a.attnum`, schema)
@@ -168,13 +172,18 @@ func (e *pgEngine) graph(ctx context.Context, database, schema string) (*SchemaG
 		return nil, pgErr(err)
 	}
 	for rows.Next() {
-		var t, c, ty string
-		var null, key bool
+		var t string
+		var c, ty *string
+		var null, key *bool
 		if err := rows.Scan(&t, &c, &ty, &null, &key); err != nil {
 			rows.Close()
 			return nil, pgErr(err)
 		}
-		g.addColumn(t, GraphColumn{Name: c, Type: ty, Key: key, Nullable: null})
+		if c == nil {
+			g.Tables = append(g.Tables, GraphTable{Name: t, Columns: []GraphColumn{}})
+			continue
+		}
+		g.addColumn(t, GraphColumn{Name: *c, Type: *ty, Key: key != nil && *key, Nullable: null != nil && *null})
 	}
 	err = rows.Err()
 	rows.Close()
@@ -190,7 +199,7 @@ func (e *pgEngine) graph(ctx context.Context, database, schema string) (*SchemaG
 		FROM pg_constraint c
 		JOIN pg_class t ON t.oid = c.conrelid JOIN pg_namespace n ON n.oid = t.relnamespace
 		JOIN pg_class rt ON rt.oid = c.confrelid JOIN pg_namespace rn ON rn.oid = rt.relnamespace
-		WHERE c.contype = 'f' AND n.nspname = $1 AND NOT t.relispartition
+		WHERE c.contype = 'f' AND n.nspname = $1 AND NOT t.relispartition AND c.conparentid = 0
 		ORDER BY t.relname, c.conname`, schema)
 	if err != nil {
 		return nil, pgErr(err)

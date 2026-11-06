@@ -107,10 +107,17 @@ function cleanOverrides(list: DbTarget[], inherited: string[] | null): DbTarget[
   const out: DbTarget[] = [];
   for (const t of list) {
     if (inherited && !inherited.includes(t.id)) continue;
-    const o: DbTarget = { id: t.id, name: "", override: true };
-    if (t.credential_ref !== undefined && t.credential_ref !== null) o.credential_ref = t.credential_ref;
-    if (t.in_tree === false) o.in_tree = false;
-    if (o.credential_ref !== undefined || o.in_tree === false) out.push(o);
+    // Every field it sets is kept (the editor sets the login and the tree
+    // row; another app or the MCP may set the rest).
+    const o: DbTarget = { id: t.id, name: (t.name ?? "").trim(), override: true };
+    let set = !!o.name;
+    for (const k of ["engine", "addr", "database", "credential_ref", "read_only", "tls", "use_tunnel", "in_tree"] as const) {
+      const v = t[k];
+      if (v === undefined || v === null || (typeof v === "string" && k !== "credential_ref" && !v.trim())) continue;
+      (o as any)[k] = typeof v === "string" && k !== "credential_ref" ? v.trim() : v;
+      set = true;
+    }
+    if (set) out.push(o);
   }
   return out;
 }
@@ -139,7 +146,9 @@ export function mergeTargets(base: ListedTarget[], over: DbTarget[] | null | und
   for (const t of over ?? []) {
     const i = out.findIndex((b) => b.id === t.id);
     if (i < 0) {
-      if (!t.override) out.push({ ...t, from });
+      // A blank entry is an override an older app saved without its flag.
+      const blank = !(t.name ?? "").trim() && !(t.database ?? "").trim() && !(t.engine ?? "").trim() && !(t.addr ?? "").trim();
+      if (!t.override && !blank) out.push({ ...t, from });
       continue;
     }
     const m = out[i];

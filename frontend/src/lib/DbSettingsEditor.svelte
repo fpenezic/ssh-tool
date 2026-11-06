@@ -260,7 +260,7 @@
               </label>
               <div class="t-actions">
                 <label class="check" title="A row under the connection in the tree that opens this database. Off hides it on this connection only.">
-                  <input type="checkbox" checked={inhShown(t)} onchange={(e) => setOvr(t.id, { in_tree: (e.currentTarget as HTMLInputElement).checked ? undefined : false })} />
+                  <input type="checkbox" checked={inhShown(t)} onchange={(e) => { const on = (e.currentTarget as HTMLInputElement).checked; setOvr(t.id, { in_tree: on === (t.in_tree !== false) ? undefined : on }); }} />
                   Show in tree
                 </label>
                 <label class="check" title="The default opens on Double-click opens -> Database and is listed first in the tree.">

@@ -249,9 +249,6 @@ func (a *App) dbOpen(connectionID, targetID string, login *[2]string) (*DbHandle
 		"read_only": fmt.Sprint(settings.DbReadOnly),
 	})
 	info := dh.status()
-	a.dbMu.Lock()
-	info.Down = dh.down
-	a.dbMu.Unlock()
 	return &info, nil
 }
 
@@ -316,6 +313,9 @@ func (a *App) DbStatus(id string) (*DbHandleInfo, error) {
 		return nil, err
 	}
 	info := dh.status()
+	a.dbMu.Lock()
+	info.Down = dh.down
+	a.dbMu.Unlock()
 	return &info, nil
 }
 
@@ -718,7 +718,7 @@ func (a *App) DbRemove(connectionID, targetID string) error {
 	off := false
 	switch {
 	case targetID == "":
-		if len(listed) == 0 {
+		if !dbAnyShown(listed) {
 			over.DbEnabled = &off
 			over.DbInTree = nil
 			over.DbDefaultTarget = nil
@@ -726,7 +726,7 @@ func (a *App) DbRemove(connectionID, targetID string) error {
 			return err
 		}
 		over.DbInTree = &off
-	case dbOwnTarget(over, targetID):
+	case dbOwnTarget(over, targetID) && !a.dbFolderLists(conn, targetID):
 		kept := over.DbTargets[:0:0]
 		for _, t := range over.DbTargets {
 			if t.ID != targetID {
@@ -735,8 +735,10 @@ func (a *App) DbRemove(connectionID, targetID string) error {
 		}
 		over.DbTargets = kept
 	default:
-		// A folder lists it: hidden on this connection, the folder's list
-		// and the other connections under it stay as they are.
+		// A folder lists it (an entry of the connection's own with the same
+		// id only adjusts that one): hidden on this connection, the
+		// folder's list and the other connections under it stay as they
+		// are.
 		i, ok := dbTargetEntry(&over, listed, targetID)
 		if !ok {
 			return fmt.Errorf("that database is no longer listed on the connection")
@@ -747,14 +749,39 @@ func (a *App) DbRemove(connectionID, targetID string) error {
 		return err
 	}
 	over.DbDefaultTarget = dbDefaultAfterRemove(over, listed)
-	if over.DbInTree != nil && !*over.DbInTree && len(listed) == 0 {
-		// The last listed one went while the own database was hidden:
-		// nothing is left, so the tab goes off rather than show nothing.
+	if over.DbInTree != nil && !*over.DbInTree && !dbAnyShown(listed) {
+		// The last shown one went while the own database was hidden:
+		// nothing is left in the tree, so the tab goes off rather than
+		// show nothing (and Double-click open a hidden database).
 		over.DbEnabled = &off
 		over.DbInTree = nil
 	}
 	_, err = a.db.UpdateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over})
 	return err
+}
+
+// dbAnyShown: one of the listed databases has a row in the tree.
+func dbAnyShown(listed []store.DbTarget) bool {
+	for _, t := range listed {
+		if t.InTree == nil || *t.InTree {
+			return true
+		}
+	}
+	return false
+}
+
+// dbFolderLists: a folder above the connection lists the database id.
+func (a *App) dbFolderLists(conn *store.Connection, id string) bool {
+	listed, err := a.dbListedTargets(conn, store.InheritableSettings{})
+	if err != nil {
+		return false
+	}
+	for _, t := range listed {
+		if t.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // dbOwnTarget: the connection lists id itself (not only adjusts a

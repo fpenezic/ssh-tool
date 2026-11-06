@@ -147,7 +147,8 @@ func mergeSettings(base, over store.InheritableSettings) store.InheritableSettin
 // level adds. An entry whose id is already listed adjusts that one (its
 // non-nil fields win, a non-empty name renames it); an Override entry with
 // nothing to adjust is dropped, so a database removed from the folder does
-// not come back as a blank row.
+// not come back as a blank row (also when an app older than the flag saved
+// the override without it).
 func mergeTargets(base, over []store.DbTarget) []store.DbTarget {
 	if len(over) == 0 {
 		return base
@@ -164,7 +165,9 @@ func mergeTargets(base, over []store.DbTarget) []store.DbTarget {
 	for _, t := range over {
 		i, ok := idx[t.ID]
 		if !ok {
-			if t.Override {
+			// A blank entry is an override an older app saved without its
+			// flag: nothing to adjust any more, and no database of its own.
+			if t.Override || blankTarget(t) {
 				continue
 			}
 			idx[t.ID] = len(out)
@@ -186,6 +189,13 @@ func mergeTargets(base, over []store.DbTarget) []store.DbTarget {
 		out[i] = m
 	}
 	return out
+}
+
+// blankTarget names no database of its own: no name, database, engine or
+// address.
+func blankTarget(t store.DbTarget) bool {
+	empty := func(p *string) bool { return p == nil || strings.TrimSpace(*p) == "" }
+	return strings.TrimSpace(t.Name) == "" && empty(t.Database) && empty(t.Engine) && empty(t.Addr)
 }
 
 func mergeMap(base, over map[string]string) map[string]string {

@@ -474,6 +474,7 @@ func TestDbTargetsInherited(t *testing.T) {
 		{ID: "own", Name: "local"},
 		{ID: "s", Override: true, InTree: ptr(false), CredentialRef: ptr("cred-s")},
 		{ID: "gone", Override: true, InTree: ptr(false)},
+		{ID: "old-app", InTree: ptr(false), CredentialRef: ptr("c")}, // override saved without its flag
 	}}), folders)
 	if got := names(r); got != "prod,stage,reports,local" {
 		t.Fatalf("merged list = %q", got)

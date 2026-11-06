@@ -1734,9 +1734,9 @@ A folder can hold the list too (**Databases on every host in this folder** in th
 **Open** next to Connect in the connection header (the default database;
 its arrow lists every database and Kafka), **Open database** in
 the connection's right-click menu, on a terminal tab's right-click menu, or
-the default action as above. A second open of the same connection brings
-its tab forward. The SSH session opens with the first request, with the
-usual host-key and password prompts.
+the default action as above. A second open of the same connection brings its tab forward. The SSH session opens with the first request, with the usual host-key and password prompts.
+
+While the tab is open the app asks the server for a trivial `SELECT 1` every 20 seconds. The tab's dot and the database's row in the tree are green only while the server answers, red once it does not (a stopped server, a failover, a dropped VPN behind a live SSH session; the tab's tooltip says why), and plain while it connects or after the tab is closed. When the server answers again they turn green by themselves, and a list that failed to load in the meantime loads again. The check keeps the SSH session and the database login in use while the tab is open, so a server's idle timeout does not end them.
 
 The Database tab is a normal tab: it detaches to its own window and back,
 splits (a split opens a terminal on the same host), comes back with *Reopen

@@ -366,11 +366,21 @@ func (h *Handle) ReadOnly() bool { return h.cfg.ReadOnly }
 // Info reports the server version and the login.
 func (h *Handle) Info(ctx context.Context) (*ServerInfo, error) { return h.eng.info(ctx) }
 
-// Ping asks the server for something small (the same as Info), so a pool
-// whose connections died reconnects or fails here.
+// Ping runs the smallest statement the engine has (SELECT 1 and the
+// like, no grants needed), so a pool whose connections died reconnects or
+// fails here. A bare driver ping is not enough: database/sql only opens a
+// connection for a driver without one. Engines without a ping of their
+// own answer Info.
 func (h *Handle) Ping(ctx context.Context) error {
+	if p, ok := h.eng.(pinger); ok {
+		return p.ping(ctx)
+	}
 	_, err := h.eng.info(ctx)
 	return err
+}
+
+type pinger interface {
+	ping(ctx context.Context) error
 }
 
 // Databases lists the databases the login can see.

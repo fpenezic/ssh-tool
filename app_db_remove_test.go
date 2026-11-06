@@ -134,3 +134,35 @@ func TestDbRemoveInheritedTarget(t *testing.T) {
 		t.Error("an unknown database should be refused")
 	}
 }
+
+// An entry of the connection's own that shares its id with a folder's
+// only adjusts that one: Remove hides it instead of letting the folder's
+// version come back. With every row hidden, the Database tab goes off.
+func TestDbRemoveSharedIDAndLastShown(t *testing.T) {
+	a := newResolveTestApp(t)
+	on := true
+	f, err := a.db.CreateFolder(store.NewFolder{Name: "cluster", Settings: store.InheritableSettings{DbEnabled: &on,
+		DbTargets: []store.DbTarget{{ID: "prod", Name: "prod"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := "app_local"
+	c, err := a.db.CreateConnection(store.NewConnection{Name: "n1", Hostname: "n1.example.com", FolderID: &f.ID,
+		Overrides: store.InheritableSettings{DbTargets: []store.DbTarget{{ID: "prod", Name: "prod", Database: &db}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.DbRemove(c.ID, "prod"); err != nil {
+		t.Fatal(err)
+	}
+	o := reload(t, a, c.ID)
+	if len(o.DbTargets) != 1 || o.DbTargets[0].InTree == nil || *o.DbTargets[0].InTree {
+		t.Fatalf("shared id should be hidden, not dropped: %+v", o.DbTargets)
+	}
+	if err := a.DbRemove(c.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if o := reload(t, a, c.ID); o.DbEnabled == nil || *o.DbEnabled {
+		t.Fatalf("nothing shown: the tab should go off: %+v", o)
+	}
+}

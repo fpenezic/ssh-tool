@@ -11,6 +11,7 @@
 import { api, dbEngineInfo, type Connection, type DbHandleInfo, type DbResult, type DbTarget } from "./api";
 import { mergeTargets, type ListedTarget } from "./dbDraft";
 import { tree, selection } from "./stores.svelte";
+import { EventsOn } from "./wailsRuntime";
 
 export type DbTabKind = "query" | "table" | "sessions" | "er";
 export type DbTableView = "data" | "structure" | "ddl";
@@ -85,6 +86,18 @@ class DbStore {
 
   set(info: DbHandleInfo) {
     this.infos[info.id] = info;
+  }
+  // The backend's server checks (app_db_alive.go) keep each handle's down
+  // current in every window, for the tree rows of tabs that live in
+  // another one. Subscribed once, by the first tree or pane that needs it.
+  private watching = false;
+  watchAlive() {
+    if (this.watching) return;
+    this.watching = true;
+    EventsOn<{ id: string; ok: boolean; error?: string }>("db_alive", (p) => {
+      const i = this.infos[p.id];
+      if (i) this.infos[p.id] = { ...i, down: p.ok ? undefined : p.error || "not answering" };
+    });
   }
   get(sessionId: string): DbHandleInfo | undefined {
     return this.infos[sessionId];
