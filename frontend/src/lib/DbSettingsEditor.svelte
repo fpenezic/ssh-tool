@@ -4,7 +4,7 @@
   // the Kafka section (a switch heading a collapsible block).
 
   import { credentials } from "./stores.svelte";
-  import { dbDraftError, DB_NONE, newTargetId, type DbDraft, type ListedTarget } from "./dbDraft";
+  import { dbTimeoutError, DB_NONE, newTargetId, type DbDraft, type ListedTarget } from "./dbDraft";
   import { createLoginCredential } from "./loginModal.svelte.ts";
   import { IconPlus, IconTrash, IconChevronRight } from "./iconMap";
   import { serviceCards, toggleCard } from "./serviceCards.svelte.ts";
@@ -218,8 +218,8 @@
         <!-- Not whole seconds: marked, and the save refuses it (dbDraftError). -->
         <input
           inputmode="numeric"
-          class:bad={!!dbDraftError(draft)}
-          title={dbDraftError(draft) || undefined}
+          class:bad={!!dbTimeoutError(draft)}
+          title={dbTimeoutError(draft) || undefined}
           bind:value={draft.timeout}
           placeholder={`${inheritLabel} · ${inheritedTimeout ? inheritedTimeout + " s" : "no limit"}`}
         />

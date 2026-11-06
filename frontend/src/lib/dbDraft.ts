@@ -131,14 +131,23 @@ function cleanOverrides(list: DbTarget[], inherited: string[] | null): DbTarget[
   return out;
 }
 
-// What makes the draft unsavable ("" = nothing): a query timeout that is
-// not whole seconds within the backend's uint32. Saving it as "inherit"
-// would silently drop a limit that was set.
-export function dbDraftError(d: DbDraft): string {
+// The query timeout field's own error ("" = fine): the field is marked by
+// this alone, not by an error elsewhere in the draft (a listed database
+// just added, still empty, made it red).
+export function dbTimeoutError(d: DbDraft): string {
   const secs = d.timeout.trim();
   if (secs !== "" && (!/^\d+$/.test(secs) || Number(secs) > 4294967295)) {
     return `Query timeout: "${secs}" is not a whole number of seconds (0 for no limit, empty to inherit)`;
   }
+  return "";
+}
+
+// What makes the draft unsavable ("" = nothing): a query timeout that is
+// not whole seconds within the backend's uint32. Saving it as "inherit"
+// would silently drop a limit that was set.
+export function dbDraftError(d: DbDraft): string {
+  const t = dbTimeoutError(d);
+  if (t) return t;
   // A listed database needs something of its own: one with only a login
   // would read as a leftover override (mergeTargets drops those) and
   // vanish after the save.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DB_NONE, applyDbDraft, dbDraftError, dbDraftFrom, dbDraftSame, mergeTargets } from "./dbDraft";
+import { DB_NONE, applyDbDraft, dbDraftError, dbDraftFrom, dbDraftSame, dbTimeoutError, mergeTargets } from "./dbDraft";
 import type { InheritableSettings } from "./api";
 
 describe("dbDraft", () => {
@@ -46,6 +46,11 @@ describe("query timeout", () => {
     expect(s.db_query_timeout).toBe(30);
     expect(dbDraftError({ ...d, timeout: "30" })).toBe("");
     expect(dbDraftError({ ...d, timeout: "" })).toBe("");
+    // An empty listed database is the draft's error, not the timeout's.
+    const blank = { ...d, timeout: "", targets: [{ id: "t1", name: "" }] };
+    expect(dbDraftError(blank)).toMatch(/needs a name/);
+    expect(dbTimeoutError(blank)).toBe("");
+    expect(dbTimeoutError({ ...d, timeout: "1.5" })).toMatch(/whole number/);
     expect(dbDraftError({ ...d, timeout: "1.5" })).toMatch(/whole number/);
     expect(dbDraftError({ ...d, timeout: "4294967296" })).toMatch(/whole number/);
     expect(dbDraftError({ ...d, targets: [{ id: "a", name: " ", credential_ref: "c1" }] })).toMatch(/needs a name/);
