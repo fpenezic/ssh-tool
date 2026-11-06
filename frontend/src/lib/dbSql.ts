@@ -187,3 +187,62 @@ export function updateSql(
 export function primaryKey(columns: { name: string; key?: string }[] | null | undefined): string[] {
   return (columns ?? []).filter((c) => c.key === "PRI").map((c) => c.name);
 }
+
+// "Copy as WHERE" of grid cells: the condition that picks those values.
+// One column gives col = v or col IN (...) (a NULL among them adds
+// IS NULL); several give each row's cells ANDed, the rows ORed.
+export function cellsWhere(engine: SqlEngine, cols: SqlColumn[], rows: (string | null)[][]): string {
+  if (!cols.length || !rows.length) return "";
+  if (cols.length === 1) {
+    const id = ident(engine, cols[0].name);
+    const seen = new Set<string>();
+    const vals: string[] = [];
+    let hasNull = false;
+    for (const r of rows) {
+      const v = r[0];
+      if (v === null) hasNull = true;
+      else if (!seen.has(v)) {
+        seen.add(v);
+        vals.push(literal(engine, v, cols[0].type));
+      }
+    }
+    const parts = [
+      ...(vals.length === 1 ? [`${id} = ${vals[0]}`] : vals.length ? [`${id} IN (${vals.join(", ")})`] : []),
+      ...(hasNull ? [`${id} IS NULL`] : []),
+    ];
+    return parts.join(" OR ");
+  }
+  const names = cols.map((c) => c.name);
+  const each = rows.map((r) => rowWhere(engine, cols, r, names));
+  return each.length === 1 ? each[0] : each.map((w) => `(${w})`).join("\nOR ");
+}
+
+// A table's name as a query on the session's database names it, for any
+// engine of the Database tab (ClickHouse quotes like MySQL; PostgreSQL
+// leaves public unqualified).
+export function objectName(engine: string, schema: string, name: string): string {
+  if (engine === "mysql" || engine === "clickhouse") return "`" + name.replace(/`/g, "``") + "`";
+  if (engine === "mssql") return `[${(schema || "dbo").replace(/]/g, "]]")}].[${name.replace(/]/g, "]]")}]`;
+  return (schema && schema !== "public" ? `"${schema.replace(/"/g, '""')}".` : "") + `"${name.replace(/"/g, '""')}"`;
+}
+
+// The query a table's "Query" starts with, in the engine's language.
+export function selectText(engine: string, schema: string, name: string): string {
+  if (engine === "opensearch") return `GET /${name}/_search\n{\n  "query": { "match_all": {} },\n  "size": 100\n}`;
+  if (engine === "redis") {
+    const glob = name.endsWith(":*") ? name.slice(0, -1).replace(/[*?[\]\\]/g, "\\$&") + "*" : "*";
+    return `SCAN 0 MATCH "${glob.replace(/["\\]/g, "\\$&")}" COUNT 1000`;
+  }
+  const q = objectName(engine, schema, name);
+  if (engine === "oracle" || engine === "db2") return `SELECT *\nFROM ${q}\nFETCH FIRST 100 ROWS ONLY;`;
+  if (engine === "mssql") return `SELECT TOP 100 *\nFROM ${q};`;
+  return `SELECT *\nFROM ${q}\nLIMIT 100;`;
+}
+
+// The exact row count, for the engines with SQL; OpenSearch counts with
+// _count, Redis has no count of a key group.
+export function countText(engine: string, schema: string, name: string): string | null {
+  if (engine === "opensearch") return `GET /${name}/_count`;
+  if (engine === "redis") return null;
+  return `SELECT COUNT(*)\nFROM ${objectName(engine, schema, name)};`;
+}

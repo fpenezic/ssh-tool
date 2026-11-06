@@ -11,6 +11,7 @@
   import FleetShell from "./FleetShell.svelte";
   import FactsReport, { REPORT_CSS } from "./FactsReport.svelte";
   import { errMsg } from "./connectErrors";
+  import { copyTable as copyRows } from "./clipboardTable";
 
   interface Props { scope: FleetOpen; }
   let { scope }: Props = $props();
@@ -523,49 +524,16 @@
     ];
     return lines.join("\n") + "\n";
   }
-  // The same rows as a real table: Teams and Outlook paste the HTML as a
-  // table, Excel splits it into cells. The tab-separated text is the plain
-  // fallback, which Excel also splits whatever the locale's list separator.
-  function tsv(): string {
-    const cell = (v: string) => v.replace(/[\t\r\n]+/g, " ");
-    return [exportCols.map(exHead), ...sorted.map((r) => exportCols.map((c) => exCell(c, r)))]
-      .map((row) => row.map(cell).join("\t")).join("\n") + "\n";
-  }
-  function html(): string {
-    const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const th = exportCols.map((c) => `<th style="text-align:left;border:1px solid #999;padding:2px 6px">${esc(exHead(c))}</th>`).join("");
-    const rows = sorted.map((r) => `<tr>${exportCols.map((c) => `<td style="border:1px solid #999;padding:2px 6px">${esc(exCell(c, r))}</td>`).join("")}</tr>`).join("");
-    return `<table style="border-collapse:collapse"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>`;
-  }
-  // Same clipboard pattern as Run command's "Copy all": both flavours in
-  // one write, the Go-side plain text when the rich write is missing or
-  // refused (permissions, unfocused document).
+  // The same rows as a real table (clipboardTable): Teams and Outlook paste
+  // it as a table, Excel splits it into cells.
   let copiedHint = $state(false);
   async function copyTable() {
-    const text = tsv();
-    const done = () => {
+    try {
+      await copyRows(exportCols.map(exHead), sorted.map((r) => exportCols.map((c) => exCell(c, r))));
       copiedHint = true;
       setTimeout(() => { copiedHint = false; }, 1600);
-    };
-    try {
-      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            "text/html": new Blob([html()], { type: "text/html" }),
-            "text/plain": new Blob([text], { type: "text/plain" }),
-          }),
-        ]);
-      } else {
-        await api.clipboardSetText(text);
-      }
-      done();
     } catch (e: any) {
-      try {
-        await api.clipboardSetText(text);
-        done();
-      } catch {
-        toast.err("Copy failed: " + errMsg(e));
-      }
+      toast.err("Copy failed: " + errMsg(e));
     }
   }
   async function exportCsv() {

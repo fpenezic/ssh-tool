@@ -63,7 +63,8 @@
     tabindex="-1"
     onkeydown={(e) => { if (e.key === "Escape") contextMenu.close(); }}
   >
-    {#each contextMenu.items as item}
+    {#each contextMenu.items as item, i}
+      {#if item.sep && i > 0}<div class="sep" role="separator"></div>{/if}
       <button
         type="button"
         class="item"
@@ -117,6 +118,7 @@
   .item:disabled { color: var(--overlay0); cursor: not-allowed; }
   .item.danger { color: var(--red); }
   .item.danger:hover { background: var(--red); color: var(--on-accent); }
+  .sep { height: 1px; margin: 0.25rem 0.3rem; background: var(--surface0); }
   .ico { width: 1.2rem; display: inline-flex; align-items: center; justify-content: center; }
   .lbl { flex: 1; }
 </style>

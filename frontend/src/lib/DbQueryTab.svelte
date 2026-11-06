@@ -9,6 +9,9 @@
   import { dbTabs, byteOffset, charIndex, type DbTab } from "./dbState.svelte";
   import DbEditor from "./DbEditor.svelte";
   import DbResultGrid from "./DbResultGrid.svelte";
+  import type { SqlEngine } from "./dbSql";
+  // "Copy as WHERE" in the grid: the engines with a SQL grammar in dbSql.
+  const SQL_ENGINES = ["postgres", "mysql", "oracle", "mssql", "db2"];
   import DbPlanNode from "./DbPlanNode.svelte";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { errMsg } from "./connectErrors";
@@ -320,7 +323,7 @@
           <pre class="err">{shownResult.error}</pre>
           <pre class="stmt">{shownResult.statement}</pre>
         {:else if shownResult.has_rows}
-          <div class="gridbox"><DbResultGrid result={shownResult} exportName={`${info.name}-${tab.title}`.replace(/[^\w.-]+/g, "_")} /></div>
+          <div class="gridbox"><DbResultGrid result={shownResult} exportName={`${info.name}-${tab.title}`.replace(/[^\w.-]+/g, "_")} sqlEngine={SQL_ENGINES.includes(info.engine) ? (info.engine as SqlEngine) : null} /></div>
         {:else}
           <p class="done">
             {shownResult.command || "Done"}{shownResult.rows_affected >= 0 && !shownResult.command ? ` - ${shownResult.rows_affected} row${shownResult.rows_affected === 1 ? "" : "s"} affected` : ""} · {shownResult.duration_ms} ms

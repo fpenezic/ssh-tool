@@ -232,7 +232,8 @@ export { Workflow as IconKafka, Send as IconSend };
 import DatabaseZap from "@lucide/svelte/icons/database-zap";
 import ScrollText from "@lucide/svelte/icons/scroll-text";
 import Eye2 from "@lucide/svelte/icons/scan-eye";
-export { DatabaseZap as IconDb, ScrollText as IconSql, Eye2 as IconView };
+import Hash from "@lucide/svelte/icons/hash";
+export { DatabaseZap as IconDb, ScrollText as IconSql, Eye2 as IconView, Hash as IconHash };
 // The start page (dashboard) - sidebar header button.
 import House from "@lucide/svelte/icons/house";
 export { House as IconHome };

@@ -11,7 +11,7 @@
   import { api, type DbCond, type DbForeignKey, type DbHandleInfo, type DbOrder, type DbResult, type DbTableDetail } from "./api";
   import DbFilterBar from "./DbFilterBar.svelte";
   import DbRefPanel from "./DbRefPanel.svelte";
-  import { deleteSql, insertSql, isBinaryType, primaryKey, serverFilled, updateSql, type SqlEngine } from "./dbSql";
+  import { deleteSql, insertSql, isBinaryType, primaryKey, selectText, serverFilled, updateSql, type SqlEngine } from "./dbSql";
   import { toast } from "./toast.svelte.ts";
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { clickOutside } from "./clickOutside";
@@ -58,6 +58,8 @@
   // The row picked in the grid (for Referenced by and Copy as SQL) and the
   // edited cells, keyed "row:col" by the page's row index.
   let picked = $state<(string | null)[] | null>(null);
+  // The rows the grid's selection spans (Copy as SQL).
+  let pickedRows = $state<(string | null)[][]>([]);
   let edits = $state(new Map<string, string | null>());
   // The pane asks before a tab switch or close drops them.
   onDestroy(() => delete dbTableEdits[sessionId + "\0" + tab.key]);
@@ -76,25 +78,9 @@
   let err = $state<string | null>(null);
   let loading = $state(false);
 
-  const qname = $derived(
-    info.engine === "mysql" || info.engine === "clickhouse"
-      ? "`" + cur.name.replace(/`/g, "``") + "`"
-      : info.engine === "mssql"
-      ? `[${(cur.schema || "dbo").replace(/]/g, "]]")}].[${cur.name.replace(/]/g, "]]")}]`
-      : (cur.schema && cur.schema !== "public" ? `"${cur.schema.replace(/"/g, '""')}".` : "") + `"${cur.name.replace(/"/g, '""')}"`,
-  );
-
   // The query a "Query" click starts with, in the engine's language.
   function queryText(): string {
-    const name = cur.name;
-    if (info.engine === "opensearch") return `GET /${name}/_search\n{\n  "query": { "match_all": {} },\n  "size": 100\n}`;
-    if (info.engine === "redis") {
-      const glob = name.endsWith(":*") ? name.slice(0, -1).replace(/[*?[\]\\]/g, "\\$&") + "*" : "*";
-      return `SCAN 0 MATCH "${glob.replace(/["\\]/g, "\\$&")}" COUNT 1000`;
-    }
-    if (info.engine === "oracle" || info.engine === "db2") return `SELECT *\nFROM ${qname}\nFETCH FIRST 100 ROWS ONLY;`;
-    if (info.engine === "mssql") return `SELECT TOP 100 *\nFROM ${qname};`;
-    return `SELECT *\nFROM ${qname}\nLIMIT 100;`;
+    return selectText(info.engine, cur.schema, cur.name);
   }
 
   // Each read numbered: a sort or filter rereads the same table, so only
@@ -227,6 +213,7 @@
     filter = [];
     sort = null;
     picked = null;
+    pickedRows = [];
     choose = null;
     edits = new Map();
   }
@@ -234,6 +221,7 @@
   function reread() {
     offset = 0;
     picked = null;
+    pickedRows = [];
     edits = new Map();
     loadPage();
   }
@@ -264,9 +252,9 @@
     }
     return false;
   }
-  function copySql(kind: "insert" | "delete", all: boolean) {
+  function copySql(kind: "insert" | "delete", all: boolean, picks: (string | null)[][] = pickedRows) {
     if (!sqlTable || !page || sqlBlocked(true)) return;
-    const rows = all ? page.rows ?? [] : picked ? [picked] : [];
+    const rows = all ? page.rows ?? [] : picks;
     if (!rows.length) {
       toast.info("Pick a row first");
       return;
@@ -283,6 +271,9 @@
       () => toast.ok(`${kind.toUpperCase()} for ${rows.length} row${rows.length === 1 ? "" : "s"} copied`),
       (e) => toast.err(`Copy failed: ${errMsg(e)}`),
     );
+  }
+  function rowsText(n: number): string {
+    return n ? `${n} selected row${n === 1 ? "" : "s"}` : "selected rows";
   }
   function onEdit(row: number, ci: number, value: string | null) {
     const k = `${row}:${ci}`;
@@ -308,6 +299,10 @@
       toast.err(errMsg(e));
       return;
     }
+    // The edits are in the script now: the tab switch must not ask to drop
+    // them (the count the pane asks by goes with them, before the switch).
+    edits = new Map();
+    delete dbTableEdits[sessionId + "\0" + tab.key];
     onQuery(text + "\n", cur.database);
   }
 
@@ -320,6 +315,7 @@
     offset = Math.max(0, offset + delta);
     edits = new Map();
     picked = null;
+    pickedRows = [];
     loadPage();
   }
   async function refresh() {
@@ -327,6 +323,7 @@
       if (!(await dropEdits())) return;
       edits = new Map();
       picked = null;
+    pickedRows = [];
       loadPage();
     } else loadDetail();
   }
@@ -362,13 +359,13 @@
           <IconSearch size={13} /> Filter{filter.length ? ` (${filter.length})` : ""}
         </button>
         <span class="menu-wrap" use:clickOutside={{ onOutside: () => (sqlMenu = false), enabled: sqlMenu }}>
-          <button title="The picked row (or the page) as SQL, copied to the clipboard" onclick={() => (sqlMenu = !sqlMenu)}><IconCopy size={13} /> Copy as SQL</button>
+          <button title="The selected rows (or the page) as SQL, copied to the clipboard" onclick={() => (sqlMenu = !sqlMenu)}><IconCopy size={13} /> Copy as SQL</button>
           {#if sqlMenu}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div class="menu" onclick={() => (sqlMenu = false)}>
-              <button disabled={!picked} onclick={() => copySql("insert", false)}>INSERT - picked row</button>
+              <button disabled={!pickedRows.length} onclick={() => copySql("insert", false)}>INSERT - {rowsText(pickedRows.length)}</button>
               <button onclick={() => copySql("insert", true)}>INSERT - this page</button>
-              <button disabled={!picked} onclick={() => copySql("delete", false)}>DELETE - picked row</button>
+              <button disabled={!pickedRows.length} onclick={() => copySql("delete", false)}>DELETE - {rowsText(pickedRows.length)}</button>
               <button onclick={() => copySql("delete", true)}>DELETE - this page</button>
             </div>
           {/if}
@@ -411,10 +408,15 @@
             onLink={follow}
             serverSort={sqlEngine ? sort : null}
             onServerSort={sqlEngine ? async (v) => { if (!(await dropEdits())) return; sort = v; reread(); } : undefined}
-            onSelect={(r) => (picked = r)}
+            onSelect={(r, rs) => { picked = r; pickedRows = rs; }}
             editable={!!sqlEngine && !info.read_only}
             {edits}
             {onEdit}
+            {sqlEngine}
+            rowMenu={sqlEngine ? (rs) => [
+              { label: `Copy as INSERT (${rowsText(rs.length)})`, iconComponent: IconSql, onSelect: () => copySql("insert", false, rs) },
+              { label: `Copy as DELETE (${rowsText(rs.length)})`, iconComponent: IconSql, onSelect: () => copySql("delete", false, rs) },
+            ] : undefined}
           />
         </div>
         {#if (cur.where.length || filter.length) && (page.rows ?? []).length === 0}
