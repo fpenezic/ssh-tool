@@ -208,11 +208,12 @@
     // Without a primary key the pages have no order of their own, so a
     // page can repeat or skip rows (PostgreSQL may even start a scan
     // mid-table): said at the end, not refused.
-    let keyless = false;
+    // null: the key could not be read, which warns the same way.
+    let keyless: boolean | null = null;
     try {
       keyless = !(await api.dbDescribe(sessionId, db, o.schema, o.name)).columns?.some((c) => c.key === "PRI");
     } catch {
-      /* the export says what it can */
+      /* warned below */
     }
     try {
       const all = await readAll(
@@ -234,7 +235,9 @@
         const msg = `Exported ${n.toLocaleString()} row${n === 1 ? "" : "s"} of ${o.name} to ${path}`;
         const warn = [
           ...(all.cut ? [`${all.cut} value${all.cut === 1 ? " was" : "s were"} too long and cut (256 KiB per value)`] : []),
-          ...(keyless && all.rows.length > EXPORT_PAGE ? ["the table has no primary key, so its pages have no fixed order: rows can be missing or repeated"] : []),
+          ...(keyless !== false && all.pages > 1
+            ? [`${keyless ? "the table has no primary key" : "its primary key could not be read"}, so its pages may have no fixed order: rows can be missing or repeated`]
+            : []),
         ];
         if (warn.length) toast.err(`${msg} - ${warn.join("; ")}`, 12000);
         else toast.ok(msg, 5000);

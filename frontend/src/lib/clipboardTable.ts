@@ -9,23 +9,30 @@ export type Cell = string | null;
 
 // head: the column names, or null for the rows alone. A null cell is
 // empty in TSV and HTML (a spreadsheet has no NULL), "NULL" in Markdown.
+// A TSV cell with a tab, a line break or a quote is quoted the way Excel
+// writes and reads it ("" for a quote), so the value pastes whole.
 export function tableTsv(head: string[] | null, rows: Cell[][]): string {
-  const cell = (v: Cell) => (v ?? "").replace(/[\t\r\n]+/g, " ");
+  const cell = (v: Cell) => {
+    const s = v ?? "";
+    return /[\t\r\n"]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
   return [...(head ? [head] : []), ...rows].map((r) => r.map(cell).join("\t")).join("\n") + "\n";
 }
 
 function esc(v: string): string {
   return v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-// A cell's text for HTML: line breaks as <br>, runs of spaces kept (a
-// receiver collapses them otherwise).
+// A cell's text for HTML: the characters as they are, a line break as a
+// <br> that Excel keeps inside the cell (mso-data-placement), and
+// white-space: pre-wrap so a receiver does not collapse runs of spaces.
+const TD = "border:1px solid #999;padding:2px 6px;white-space:pre-wrap";
 function cellHtml(v: string): string {
-  return esc(v).replace(/\r?\n/g, "<br>").replace(/ {2}/g, " &nbsp;");
+  return esc(v).replace(/\r?\n/g, '<br style="mso-data-placement:same-cell">');
 }
 
 export function tableHtml(head: string[] | null, rows: Cell[][]): string {
   const th = head ? `<thead><tr>${head.map((h) => `<th style="text-align:left;border:1px solid #999;padding:2px 6px">${esc(h)}</th>`).join("")}</tr></thead>` : "";
-  const body = rows.map((r) => `<tr>${r.map((v) => `<td style="border:1px solid #999;padding:2px 6px">${cellHtml(v ?? "")}</td>`).join("")}</tr>`).join("");
+  const body = rows.map((r) => `<tr>${r.map((v) => `<td style="${TD}">${cellHtml(v ?? "")}</td>`).join("")}</tr>`).join("");
   return `<table style="border-collapse:collapse">${th}<tbody>${body}</tbody></table>`;
 }
 
