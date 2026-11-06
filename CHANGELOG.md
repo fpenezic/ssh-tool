@@ -18,6 +18,7 @@ while Wails v3 was a prerelease upstream.
 - **Right-click in the tree**: open a table's Data, Structure or DDL, New query, Count rows, Copy name, Copy DDL, Export, ER diagram; New query, Copy name and Refresh on a database.
 - **Export a whole table** to CSV or JSON (SQL engines and ClickHouse), read 10000 rows at a time with a progress bar and Stop, not only the page shown.
 - Script no longer asks to drop the edits it has just put into the query tab.
+- JSON export of a result with two columns of one name keeps both values: the repeat is named `name (2)` (it used to keep only the last one).
 
 ## [1.1.0] - Database tab grows up: Db2, foreign keys, ER diagram
 
