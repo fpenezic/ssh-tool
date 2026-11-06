@@ -265,6 +265,12 @@ func TestRememberGateway(t *testing.T) {
 	if d, s := read(); len(d) != 0 || len(s) != 0 {
 		t.Errorf("complete report without domains kept %v %v", d, s)
 	}
+	// An empty routes list is a whole report too: routes and domains go.
+	a.rememberGateway(np.ID, json.RawMessage(`{"routes":["10.1.0.0/16"],"search_domains":["example.com"]}`))
+	a.rememberGateway(np.ID, json.RawMessage(`{"routes":[]}`))
+	if row, _ := db.GetNetworkProfile(np.ID); strings.Contains(row.ConfigJSON, "last_routes") || strings.Contains(row.ConfigJSON, "last_domains") {
+		t.Errorf("empty routes list kept the old state: %s", row.ConfigJSON)
+	}
 	// A full-tunnel report (default route only) is complete as well.
 	a.rememberGateway(np.ID, json.RawMessage(`{"routes":["10.1.0.0/16"],"search_domains":["example.com"]}`))
 	a.rememberGateway(np.ID, json.RawMessage(`{"routes":["0.0.0.0/0"]}`))

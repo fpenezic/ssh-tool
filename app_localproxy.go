@@ -857,15 +857,19 @@ func (a *App) profileRoutes(row *store.NetworkProfile, cfg LocalProxyConfig) ([]
 // is partial and changes only what it carries.
 func (a *App) rememberGateway(id string, info json.RawMessage) {
 	var v struct {
-		Routes   []string `json:"routes"`
-		Search   []string `json:"search_domains"`
-		SplitDNS []string `json:"split_dns"`
+		Routes   *[]string `json:"routes"`
+		Search   []string  `json:"search_domains"`
+		SplitDNS []string  `json:"split_dns"`
 	}
 	if json.Unmarshal(info, &v) != nil {
 		return
 	}
+	var sent []string
+	if v.Routes != nil {
+		sent = *v.Routes
+	}
 	var routes []string
-	for _, r := range v.Routes {
+	for _, r := range sent {
 		if p, err := parseRoute(r); err == nil && p.Bits() > 0 {
 			routes = append(routes, p.String())
 		}
@@ -885,10 +889,11 @@ func (a *App) rememberGateway(id string, info json.RawMessage) {
 	}
 	search := norm(v.Search)
 	domains := norm(v.Search, v.SplitDNS)
-	// Judged on the routes as sent: a full-tunnel VPN reports only a
-	// default route, which is kept out of the stored routes but still makes
-	// the report a whole description.
-	complete := len(v.Routes) > 0
+	// A report that carries a routes field describes the whole tunnel,
+	// an empty list included (NetBird with its last route removed sends
+	// []); so does a full-tunnel VPN's default route alone, which is kept
+	// out of the stored routes. Without the field the report is partial.
+	complete := v.Routes != nil
 	if !complete && len(domains) == 0 {
 		return
 	}
