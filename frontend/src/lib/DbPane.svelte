@@ -200,7 +200,11 @@
       const late = aliveDuringLoad as { ok: boolean; error?: string } | null;
       const down = late && !late.ok ? late.error || "not answering" : st.down;
       if (down) sessions.setStatus(sessionId, "error", `The server stopped answering: ${down}`);
-      else sessions.setStatus(sessionId, "connected");
+      else {
+        sessions.setStatus(sessionId, "connected");
+        // Expanded databases whose tables failed while the server was away.
+        retryFailedObjects();
+      }
       // The database the login landed on opens by itself.
       const cur = srv.database || st.database;
       if (cur && expanded[cur] === undefined) toggle(cur, true);
