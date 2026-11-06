@@ -1,11 +1,17 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"net/netip"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"ssh-tool/internal/store"
 )
 
 func TestCollapseRoutes(t *testing.T) {
@@ -183,5 +189,77 @@ func TestSharedPickDomains(t *testing.T) {
 	}
 	if _, _, ok := a.sharedBySearch("db1.other", sharedTable.search, nil); ok {
 		t.Error("a dotted name was expanded")
+	}
+}
+
+// The whole pick for a short name the local resolver does not know: it
+// goes to the first profile's search domains, every expansion in order;
+// a name with a trailing dot finds its connection before any domain.
+func TestSharedPickShortNameAndTrailingDot(t *testing.T) {
+	a := &App{}
+	old := sharedLookup
+	sharedLookup = func(ctx context.Context, network, host string) ([]netip.Addr, error) {
+		return nil, errors.New("no such host")
+	}
+	defer func() { sharedLookup = old }()
+	sharedTable.Lock()
+	sharedTable.at = time.Now()
+	sharedTable.routes = nil
+	sharedTable.hosts = map[string]string{"db1.example.com": "conn"}
+	sharedTable.domains = []sharedDomain{{"example.com", "a", "a", true}}
+	sharedTable.search = []sharedSearch{{"a", "a", []string{"prod.example.com", "example.com"}}}
+	sharedTable.Unlock()
+	defer sharedRoutesInvalidate()
+	id, why, dial, err := a.sharedPickHosts("db7", nil)
+	if err != nil || id != "a" || strings.Join(dial, ",") != "db7.prod.example.com,db7.example.com" || !strings.Contains(why, "search domains") {
+		t.Errorf("short name: %s %q %v %v", id, why, dial, err)
+	}
+	if id, _, _, err := a.sharedPickHosts("DB1.example.com.", nil); err != nil || id != "conn" {
+		t.Errorf("trailing dot: %s %v", id, err)
+	}
+	if _, _, _, err := a.sharedPickHosts("db7.other.net", nil); err == nil {
+		t.Error("an unknown dotted name was accepted")
+	}
+}
+
+// What a helper reports is remembered: routes and domains; a later
+// report with routes but no domains clears them (the gateway stopped
+// pushing them), a report without routes changes only what it carries.
+func TestRememberGateway(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "store.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	a := &App{db: db}
+	np, err := db.CreateNetworkProfile("oc", `{"kind":"openconnect","server":"vpn.example.com"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func() (domains, search []string) {
+		t.Helper()
+		row, err := db.GetNetworkProfile(np.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, _, s := profileDomains(row, LocalProxyConfig{})
+		return d, s
+	}
+	a.rememberGateway(np.ID, json.RawMessage(`{"routes":["10.1.0.0/16"],"search_domains":["Example.COM"],"split_dns":["corp.example.com","example.com"]}`))
+	if d, s := read(); strings.Join(d, ",") != "example.com,corp.example.com" || strings.Join(s, ",") != "example.com" {
+		t.Fatalf("first report: %v %v", d, s)
+	}
+	a.rememberGateway(np.ID, json.RawMessage(`{"search_domains":["other.example"]}`))
+	if d, _ := read(); strings.Join(d, ",") != "other.example" {
+		t.Errorf("partial report: %v", d)
+	}
+	a.rememberGateway(np.ID, json.RawMessage(`{"routes":["10.1.0.0/16"]}`))
+	if d, s := read(); len(d) != 0 || len(s) != 0 {
+		t.Errorf("complete report without domains kept %v %v", d, s)
+	}
+	// An edit of the profile keeps what was learned.
+	got := carryIdleStop(`{"last_domains":["example.com"],"last_search_domains":["example.com"]}`, `{"kind":"openconnect"}`)
+	if !strings.Contains(got, `"last_domains"`) || !strings.Contains(got, `"last_search_domains"`) {
+		t.Errorf("carry: %s", got)
 	}
 }

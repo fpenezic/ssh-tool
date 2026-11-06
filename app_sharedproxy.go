@@ -287,7 +287,7 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 				if ip, err := netip.ParseAddr(rs.Hostname); err == nil {
 					pins.set[netip.PrefixFrom(ip, ip.BitLen())] = true
 				} else {
-					hosts[strings.ToLower(rs.Hostname)] = *rs.NetworkProfileID
+					hosts[hostKey(rs.Hostname)] = *rs.NetworkProfileID
 				}
 			}
 		}
@@ -323,7 +323,7 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 			jumpPaths = jp
 			routes = append(routes, jr...)
 			for name, id := range jh {
-				hosts[name] = id
+				hosts[hostKey(name)] = id
 			}
 		}
 	}
@@ -345,7 +345,7 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 	var pinOrder []netip.Addr
 	for _, h := range a.ciExtraHosts() {
 		name, addr, _ := strings.Cut(h, ":")
-		id, ok := hosts[strings.ToLower(name)]
+		id, ok := hosts[hostKey(name)]
 		if !ok {
 			continue
 		}
@@ -374,6 +374,16 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 	sharedTable.domains, sharedTable.search = domains, search
 	return routes, hosts
 }
+
+// hostKey is a host name as the connection-name map keys it: lower case,
+// without the trailing dot of a fully qualified name, so db1.example.com.
+// finds the connection db1.example.com before any domain does.
+func hostKey(h string) string {
+	return strings.ToLower(strings.TrimSuffix(h, "."))
+}
+
+// sharedLookup is the local resolver the pick asks (a test swaps it).
+var sharedLookup = net.DefaultResolver.LookupNetIP
 
 // sharedNames is the domain side of the table (fresh as sharedRoutes).
 func (a *App) sharedNames() ([]sharedDomain, []sharedSearch) {
@@ -511,7 +521,7 @@ func (a *App) sharedPickAddr(host string, priority []string) (id, why, dialHost 
 // expanded with search domains is tried in each, in order.
 func (a *App) sharedPickHosts(host string, priority []string) (id, why string, dialHosts []string, err error) {
 	routes, hosts := a.sharedRoutes()
-	if id, ok := hosts[strings.ToLower(host)]; ok {
+	if id, ok := hosts[hostKey(host)]; ok {
 		if jumpConnOf(id) != "" {
 			return id, "through its jump host, as its terminal connects", []string{host}, nil
 		}
@@ -539,11 +549,11 @@ func (a *App) sharedPickHosts(host string, priority []string) (id, why string, d
 		}
 		// A name no connection uses: try the local resolver.
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		addrs, lerr := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+		addrs, lerr := sharedLookup(ctx, "ip", host)
 		cancel()
 		if lerr != nil || len(addrs) == 0 {
 			// Unknown here: a short name may be a host in a VPN's search
-			// domain (db1 -> db1.example.local).
+			// domain (db1 -> db1.example.com).
 			if s, names, ok := a.sharedBySearch(host, search, rank); ok {
 				return s.profileID, "short name, tried in the search domains: "+strings.Join(s.domains, ", "), names, nil
 			}

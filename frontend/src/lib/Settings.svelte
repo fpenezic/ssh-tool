@@ -5501,9 +5501,9 @@
                   <span>Extra networks <span class="hint inline">(one per line)</span></span>
                   <textarea rows="2" class="mono" bind:value={lp.networksText} placeholder="10.20.0.0/16"></textarea>
                 </label>
-                <label class="oc-field oc-span" title="Names in these domains go through this VPN as names and are resolved by its DNS (example.local takes db1.prod.example.local), besides the domains the server reports. A short name the local resolver does not know (db1) is tried in them too. One per line.">
+                <label class="oc-field oc-span" title="Names in these domains go through this VPN as names and are resolved by its DNS (example.com takes db1.prod.example.com), besides the domains the server reports. A short name the local resolver does not know (db1) is tried in them too. One per line.">
                   <span>Extra DNS domains <span class="hint inline">(one per line; the app proxy routes names in them)</span></span>
-                  <textarea rows="2" class="mono" bind:value={lp.domainsText} placeholder="example.local"></textarea>
+                  <textarea rows="2" class="mono" bind:value={lp.domainsText} placeholder="example.com"></textarea>
                 </label>
                 <div class="row oc-span" style="gap:0.5rem">
                   <button class="primary" onclick={() => lpSave(np)} disabled={!lpDirty(np.id)}>Save</button>
@@ -5515,7 +5515,8 @@
                 <h3 class="np-h3">Networks {np.local_proxy?.shared ? "the app proxy sends" : "a proxy sends"} through this VPN</h3>
                 <pre class="np-info">{lp.details.routes.join("\n") || "none yet - connect once, or add connections or networks"}</pre>
                 <p class="hint inline">{lp.details.sources.join("; ")}</p>
-                <h3 class="np-h3">DNS domains {np.local_proxy?.shared ? "the app proxy routes" : "routed"} through this VPN by name</h3>
+                <!-- Only the app proxy routes by domain (this VPN's own proxy sends every name through it anyway). -->
+                <h3 class="np-h3">{np.local_proxy?.shared ? "DNS domains the app proxy routes through this VPN by name" : "DNS domains"}{#if !np.local_proxy?.shared}<span class="hint inline"> - not in use: the app proxy routes by them once this VPN is reachable through it</span>{/if}</h3>
                 <pre class="np-info">{lp.details.domains.map((d) => (lp.details?.gateway_domains.includes(d) ? `${d}  (from the server)` : `${d}  (added by hand)`)).join("\n") || "none - the server reported none yet; add them above"}</pre>
               {/if}
               {#if np.local_proxy?.enabled && lp.details?.url}
