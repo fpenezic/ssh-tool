@@ -29,6 +29,7 @@ import (
 	"ssh-tool/internal/presence"
 	sshlayer "ssh-tool/internal/ssh"
 	"ssh-tool/internal/store"
+	"ssh-tool/internal/tunnelhelper"
 	"ssh-tool/internal/wg"
 )
 
@@ -143,6 +144,50 @@ func (a *App) idleStopFor(p profilePolicy) (time.Duration, bool) {
 // JSON into a freshly marshalled one. The edit paths rebuild the config
 // from a typed struct per kind, which knows nothing about this shared
 // field and would silently reset it to the default.
+// netbirdKeyFromCommand is the key of a stored secret that holds the
+// whole command the NetBird dashboard shows for a new peer
+// ("netbird up --management-url ... --setup-key KEY"); any other secret
+// is returned as it is.
+func netbirdKeyFromCommand(secret string) string {
+	f := strings.Fields(secret)
+	for i, w := range f {
+		for _, n := range []string{"--setup-key", "-k"} {
+			if w == n && i+1 < len(f) {
+				return strings.Trim(f[i+1], `"'`)
+			}
+			if v, ok := strings.CutPrefix(w, n+"="); ok {
+				return strings.Trim(v, `"'`)
+			}
+		}
+	}
+	return secret
+}
+
+// netbirdKeyProblem says what is wrong with a NetBird setup key by its
+// shape ("" = nothing it can tell): a personal access token (nbp_...) is
+// the usual mix-up, and NetBird refuses it as "setup key is invalid"
+// after a minute of retries. A setup key is a UUID; one that is not is
+// let through (only the server can tell, and a one-time key looks the
+// same as a reusable one).
+func netbirdKeyProblem(key string) string {
+	k := strings.TrimSpace(key)
+	if strings.HasPrefix(strings.ToLower(k), "nbp_") {
+		return "this is a NetBird personal access token (nbp_...), not a setup key - create a setup key in the NetBird dashboard (Setup Keys) and store that"
+	}
+	return ""
+}
+
+// helperInfoOptions remembers what a NetBird / Tailscale helper reports
+// about its tunnel (routes, DNS domains - the app proxy routes names by
+// them), as the OpenConnect, OpenVPN and Check Point profiles do. A
+// helper that sends no info event changes nothing.
+func helperInfoOptions(a *App, id string) tunnelhelper.Options {
+	return tunnelhelper.Options{OnInfo: func(p *tunnelhelper.Proc) {
+		a.rememberGateway(id, p.Info())
+		EventsEmit("network_tunnel_changed", id)
+	}}
+}
+
 func carryIdleStop(oldJSON, newJSON string) string {
 	var old map[string]json.RawMessage
 	if json.Unmarshal([]byte(oldJSON), &old) != nil {
@@ -390,7 +435,7 @@ func (a *App) ensureTailscaleTunnel(row *store.NetworkProfile) (tunnelDialer, er
 		args = append(args, "--control", cfg.ControlURL)
 	}
 	env := []string{"SSHTOOL_TS_AUTHKEY=" + authKey}
-	p, err := a.nbman.Ensure(row.ID, row.Name, exe, args, env)
+	p, err := a.nbman.EnsureWith(row.ID, row.Name, exe, args, env, helperInfoOptions(a, row.ID))
 	if err != nil {
 		return nil, err
 	}
@@ -468,6 +513,10 @@ func (a *App) ensureNetbirdTunnel(row *store.NetworkProfile) (tunnelDialer, erro
 	if setupKey == "" {
 		return nil, fmt.Errorf("profile %s: setup key credential holds an empty secret", row.Name)
 	}
+	setupKey = netbirdKeyFromCommand(setupKey)
+	if msg := netbirdKeyProblem(setupKey); msg != "" {
+		return nil, fmt.Errorf("profile %s: credential %q: %s", row.Name, cred.Name, msg)
+	}
 	device := cfg.DeviceName
 	if device == "" {
 		device = defaultNetbirdDeviceName()
@@ -477,7 +526,7 @@ func (a *App) ensureNetbirdTunnel(row *store.NetworkProfile) (tunnelDialer, erro
 		args = append(args, "--management", cfg.ManagementURL)
 	}
 	env := []string{"SSHTOOL_NB_SETUP_KEY=" + setupKey}
-	p, err := a.nbman.Ensure(row.ID, row.Name, exe, args, env)
+	p, err := a.nbman.EnsureWith(row.ID, row.Name, exe, args, env, helperInfoOptions(a, row.ID))
 	if err != nil {
 		return nil, err
 	}

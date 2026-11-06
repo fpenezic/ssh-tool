@@ -555,7 +555,7 @@ func (a *App) sharedPickHosts(host string, priority []string) (id, why string, d
 			// Unknown here: a short name may be a host in a VPN's search
 			// domain (db1 -> db1.example.com).
 			if s, names, ok := a.sharedBySearch(host, search, rank); ok {
-				return s.profileID, "short name, tried in the search domains: "+strings.Join(s.domains, ", "), names, nil
+				return s.profileID, "short name, tried in the search domains: " + strings.Join(s.domains, ", "), names, nil
 			}
 			return "", "", nil, fmt.Errorf("no shared profile knows %q", host)
 		}
@@ -681,6 +681,7 @@ type SharedProxyDetails struct {
 	URL       string            `json:"url"`
 	Routes    []string          `json:"routes"`
 	Profiles  map[string]int    `json:"profiles"` // profile name -> routes
+	Domains   map[string]int    `json:"domains"`  // profile name -> DNS domains routed by name
 	Overlaps  []string          `json:"overlaps"`
 	Gateway   string            `json:"gateway"`
 	Listening bool              `json:"listening"`
@@ -703,7 +704,12 @@ func (a *App) NetworkSharedProxyDetails() (*SharedProxyDetails, error) {
 	d := &SharedProxyDetails{
 		URL:       fmt.Sprintf("socks5://%s:%s@%s", localProxyUser, pw, net.JoinHostPort(displayHost(c.Bind), strconv.Itoa(c.Port))),
 		Profiles:  map[string]int{},
+		Domains:   map[string]int{},
 		Listening: listening,
+	}
+	doms, _ := a.sharedNames()
+	for _, dm := range doms {
+		d.Domains[dm.name]++
 	}
 	seen := map[netip.Prefix]sharedRoute{}
 	for _, r := range routes {

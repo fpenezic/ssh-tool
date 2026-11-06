@@ -715,6 +715,8 @@ export interface SharedProxyDetails {
   url: string;
   routes: string[];
   profiles: Record<string, number>;
+  /** Profile name -> DNS domains the proxy routes by name. */
+  domains: Record<string, number>;
   overlaps: string[];
   gateway: string;
   listening: boolean;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { parseNetbirdKey } from "./netbirdKey";
   import { ocFlavorTitle, pluginTitle, profileRunsHere, NOT_ON_MOBILE_TITLE } from "./networkKind";
   import { onMount, tick, untrack } from "svelte";
   import { EventsOn } from "./wailsRuntime";
@@ -2243,6 +2244,20 @@
     finally { pluginBusy = false; }
   }
 
+  // The dashboard's "Add peer" shows a whole command: keep its key, and
+  // its management URL when the field is empty.
+  $effect(() => {
+    const p = parseNetbirdKey(nbNewKeySecret);
+    if (!p) return;
+    nbNewKeySecret = p.key;
+    // The URL only fills an empty field; the note says what was taken.
+    const tookURL = untrack(() => {
+      if (!p.management || nbManagement.trim()) return false;
+      nbManagement = p.management;
+      return true;
+    });
+    toast.info(tookURL ? "Took the setup key and the management URL from the command" : "Took the setup key from the command");
+  });
   async function nbCreateSetupKey() {
     if (!nbNewKeyName.trim() || !nbNewKeySecret) {
       toast.err("Name and setup key are required");
@@ -2716,6 +2731,17 @@
     let port = 1081;
     while (used.has(port)) port++;
     return port;
+  }
+  // The app proxy's profiles with what each takes: networks and DNS
+  // domains (a NetBird profile without routes has domains only).
+  function spThrough(d: import("./api").SharedProxyDetails): { name: string; text: string }[] {
+    const names = [...new Set([...Object.keys(d.profiles ?? {}), ...Object.keys(d.domains ?? {})])].sort();
+    return names.map((name) => {
+      const n = d.profiles?.[name] ?? 0;
+      const m = d.domains?.[name] ?? 0;
+      const parts = [n ? `${n} ${n === 1 ? "network" : "networks"}` : "", m ? `${m} DNS ${m === 1 ? "domain" : "domains"}` : ""].filter(Boolean);
+      return { name, text: parts.join(", ") };
+    });
   }
   // Local proxy panel per profile (form state while open).
   type LpForm = { enabled: boolean; shared: boolean; bind: string; port: number; networksText: string; domainsText: string; details?: import("./api").LocalProxyDetails };
@@ -4613,7 +4639,7 @@
         </p>
       {:else}
         <p class="hint inline">Docker {st.docker}{st.desktop ? " (Docker Desktop)" : ""}.
-          {#if !sp.enabled}<strong>Turn the App proxy on first</strong> (Plugins &amp; proxy).{:else if spDetails && Object.keys(spDetails.profiles).length}Through it: {Object.entries(spDetails.profiles).map(([n, c]) => `${n} (${c})`).join(", ")}.{:else}No VPN is marked via proxy yet.{/if}
+          {#if !sp.enabled}<strong>Turn the App proxy on first</strong> (Plugins &amp; proxy).{:else if spDetails && spThrough(spDetails).length}Through it: {spThrough(spDetails).map((p) => `${p.name} (${p.text})`).join(", ")}.{:else}No VPN is marked via proxy yet.{/if}
         </p>
       {/if}
       {#if st.last_err && !st.running}<p class="hint inline warn">{st.last_err}</p>{/if}
@@ -4731,8 +4757,12 @@
             <span>Setup key <span class="hint inline">(from NetBird dashboard -&gt; Setup Keys, not a PAT)</span></span>
             <PasswordInput bind:value={nbNewKeySecret} placeholder="e.g. A1B2C3D4-E5F6-..." />
           </label>
+          <!-- The usual mix-up: NetBird refuses a token as "setup key is invalid" only after a minute of retries. -->
+          {#if /^\s*nbp_/i.test(nbNewKeySecret)}
+            <p class="hint warn">This is a personal access token (nbp_...), not a setup key: create a setup key under Setup Keys in the NetBird dashboard.</p>
+          {/if}
           <div class="row" style="gap:0.5rem">
-            <button class="primary" onclick={nbCreateSetupKey} disabled={nbNewKeyBusy || !nbNewKeyName.trim() || !nbNewKeySecret}>Create</button>
+            <button class="primary" onclick={nbCreateSetupKey} disabled={nbNewKeyBusy || !nbNewKeyName.trim() || !nbNewKeySecret || /^\s*nbp_/i.test(nbNewKeySecret)}>Create</button>
           </div>
         </div>
       {/if}
@@ -5313,8 +5343,8 @@
             {/if}
             {#if spDetails}
               <p class="hint">
-                {#if Object.keys(spDetails.profiles).length}
-                  Through it: {Object.entries(spDetails.profiles).map(([n, c]) => `${n} (${c} ${c === 1 ? "network" : "networks"})`).join(", ")}.
+                {#if spThrough(spDetails).length}
+                  Through it: {spThrough(spDetails).map((p) => `${p.name} (${p.text})`).join(", ")}.
                   {spDetails.overlaps.length ? "" : "No overlaps."}
                 {:else}
                   No profile goes through it yet: open a profile's Proxy tab and tick Reachable through the app proxy.

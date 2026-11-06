@@ -4610,7 +4610,7 @@ export class LocalProxyConfig {
         if (/** @type {any} */(false)) {
             /**
              * Domains are DNS suffixes the app proxy sends through this profile by
-             * name, resolved inside the VPN (example.local takes db1.example.local),
+             * name, resolved inside the VPN (example.com takes db1.example.com),
              * beyond the ones the gateway reports. They are search domains too: a
              * short name the local resolver does not know is tried in them.
              * @member
@@ -7155,6 +7155,14 @@ export class SharedProxyDetails {
              */
             this["profiles"] = {};
         }
+        if (!("domains" in $$source)) {
+            /**
+             * profile name -> DNS domains routed by name
+             * @member
+             * @type {{ [_ in string]?: number }}
+             */
+            this["domains"] = {};
+        }
         if (!("overlaps" in $$source)) {
             /**
              * @member
@@ -7196,8 +7204,9 @@ export class SharedProxyDetails {
     static createFrom($$source = {}) {
         const $$createField1_0 = $$createType4;
         const $$createField2_0 = $$createType50;
-        const $$createField3_0 = $$createType4;
-        const $$createField6_0 = $$createType23;
+        const $$createField3_0 = $$createType50;
+        const $$createField4_0 = $$createType4;
+        const $$createField7_0 = $$createType23;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("routes" in $$parsedSource) {
             $$parsedSource["routes"] = $$createField1_0($$parsedSource["routes"]);
@@ -7205,11 +7214,14 @@ export class SharedProxyDetails {
         if ("profiles" in $$parsedSource) {
             $$parsedSource["profiles"] = $$createField2_0($$parsedSource["profiles"]);
         }
+        if ("domains" in $$parsedSource) {
+            $$parsedSource["domains"] = $$createField3_0($$parsedSource["domains"]);
+        }
         if ("overlaps" in $$parsedSource) {
-            $$parsedSource["overlaps"] = $$createField3_0($$parsedSource["overlaps"]);
+            $$parsedSource["overlaps"] = $$createField4_0($$parsedSource["overlaps"]);
         }
         if ("hosts" in $$parsedSource) {
-            $$parsedSource["hosts"] = $$createField6_0($$parsedSource["hosts"]);
+            $$parsedSource["hosts"] = $$createField7_0($$parsedSource["hosts"]);
         }
         return new SharedProxyDetails(/** @type {Partial<SharedProxyDetails>} */($$parsedSource));
     }
