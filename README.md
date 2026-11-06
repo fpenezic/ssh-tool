@@ -51,7 +51,9 @@ build of your own (see below).
 - **Kafka and Database tabs** per connection, riding its SSH session:
   Kafka topics, consumer, produce and groups; PostgreSQL, MySQL, Oracle,
   SQL Server, IBM Db2, ClickHouse, OpenSearch / Elasticsearch and Redis, with
-  read-only guards. Pure-Go drivers, nothing to install.
+  read-only guards; foreign keys to follow both ways, an ER diagram, server-side
+  filter and sort, cell edits as an UPDATE script, Explain and a Sessions view.
+  Pure-Go drivers, nothing to install.
 - **VNC console** tab (noVNC) for remote desktops and Proxmox VMs.
 - **App proxy and CI runner** - other programs, containers and a GitLab
   runner reach your customers through the VPN profiles and jump hosts.

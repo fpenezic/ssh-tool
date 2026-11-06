@@ -199,12 +199,7 @@ archive bundle. Exports never include credential secrets by default.
   consumer groups with lag and offset reset. Broker connections ride the
   connection's SSH session, so advertised broker names resolve on the far
   side - no local tunnels, no hosts-file entries.
-- **Databases** - a connection with the database enabled opens a
-  Database tab on PostgreSQL or MySQL / MariaDB: databases, tables and
-  their structure, query tabs with their own sessions, a fast results grid
-  and CSV / JSON export. Connections ride the connection's SSH session, so
-  a server on the host's loopback needs no port forward; read-only mode is
-  enforced in the backend.
+- **Databases** - a connection with the database enabled opens a Database tab on PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, IBM Db2, ClickHouse, OpenSearch / Elasticsearch or Redis: databases, tables and their structure, query tabs with their own sessions, a fast results grid and CSV / JSON export. Foreign keys can be followed both ways from a row, a schema has an ER diagram, filters and sorting run on the server, edited cells become an UPDATE script to read and run, Explain shows the plan (PostgreSQL, MySQL), a Sessions view stops a statement or a session, and a query timeout stops long statements. A folder can list the databases (prod, stage) every host under it has. Connections ride the connection's SSH session, so a server on the host's loopback needs no port forward; read-only mode is enforced in the backend.
 
 ### Import / export
 
