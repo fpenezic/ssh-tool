@@ -8,8 +8,8 @@ import { readAll, rowsCsv, rowsJson, type PageRead } from "./dbExport";
 import { cellsWhere, countText, objectName, selectText, type SqlColumn } from "./dbSql";
 
 describe("clipboardTable", () => {
-  it("writes TSV with and without a header, flattening tabs and newlines", () => {
-    expect(tableTsv(["a", "b"], [["1", null], ["x\ty", "l1\nl2"]])).toBe("a\tb\n1\t\nx y\tl1 l2\n");
+  it("writes TSV with and without a header, quoting tabs, line breaks and quotes", () => {
+    expect(tableTsv(["a", "b"], [["1", null], ["x\ty", "l1\nl2"], ['say "hi"', "plain"]])).toBe('a\tb\n1\t\n"x\ty"\t"l1\nl2"\n"say ""hi"""\tplain\n');
     expect(tableTsv(null, [["1", "2"]])).toBe("1\t2\n");
   });
   it("escapes HTML and leaves the head out when there is none", () => {
@@ -18,8 +18,10 @@ describe("clipboardTable", () => {
     expect(h).toContain("&lt;b&gt;&amp;");
     expect(tableHtml(["c"], [])).toContain("<thead>");
   });
-  it("keeps line breaks and space runs in HTML", () => {
-    expect(tableHtml(null, [["a\nb  c"]])).toContain(">a<br>b &nbsp;c<");
+  it("keeps line breaks in the cell and spaces as they are in HTML", () => {
+    const h = tableHtml(null, [["a\nb  c"]]);
+    expect(h).toContain('>a<br style="mso-data-placement:same-cell">b  c<');
+    expect(h).toContain("white-space:pre-wrap");
   });
   it("writes Markdown with NULL and escaped pipes", () => {
     expect(tableMarkdown(["a", "b"], [["x|y", null]])).toBe("| a | b |\n| --- | --- |\n| x\\|y | NULL |\n");
@@ -75,6 +77,8 @@ describe("dbExport", () => {
   it("writes CSV and JSON", () => {
     expect(rowsCsv(cols, [["1", 'a,"b"'], ["2", null]])).toBe('id,t\r\n1,"a,""b"""\r\n2,\r\n');
     expect(JSON.parse(rowsJson(cols, [["1", null]]))).toEqual([{ id: "1", t: null }]);
+    const dup = [{ name: "id", type: "int" }, { name: "id", type: "int" }, { name: "id (2)", type: "int" }];
+    expect(JSON.parse(rowsJson(dup, [["1", "2", "3"]]))).toEqual([{ id: "1", "id (3)": "2", "id (2)": "3" }]);
   });
   function pages(total: number, cutAt = Infinity) {
     const calls: [number, number][] = [];
@@ -94,6 +98,7 @@ describe("dbExport", () => {
     const { read, calls } = pages(25);
     const r = await readAll(read, 10, () => false, () => {});
     expect(r?.rows.length).toBe(25);
+    expect(r?.pages).toBe(3);
     expect(calls).toEqual([[0, 10], [10, 10], [20, 10]]);
   });
   it("asks once more after a full last page", async () => {

@@ -14,8 +14,29 @@ export function rowsCsv(cols: DbResultColumn[], rows: Row[]): string {
   return [cols.map((c) => csvCell(c.name)).join(","), ...rows.map((r) => r.map(csvCell).join(","))].join("\r\n") + "\r\n";
 }
 
+// A result can carry two columns of one name (a join's two ids): the
+// later ones become "name (2)", "name (3)" so no value is lost; unique
+// names stay as they are.
+export function jsonKeys(cols: DbResultColumn[]): string[] {
+  // Every name a column really has stays its own; a repeat takes the first
+  // free suffix (so a column named "id (2)" keeps that name).
+  const taken = new Set(cols.map((c) => c.name));
+  const seen = new Set<string>();
+  return cols.map((c) => {
+    if (!seen.has(c.name)) {
+      seen.add(c.name);
+      return c.name;
+    }
+    let k = c.name;
+    for (let n = 2; taken.has(k); n++) k = `${c.name} (${n})`;
+    taken.add(k);
+    return k;
+  });
+}
+
 export function rowsJson(cols: DbResultColumn[], rows: Row[]): string {
-  return JSON.stringify(rows.map((r) => Object.fromEntries(cols.map((c, i) => [c.name, r[i]]))), null, 2) + "\n";
+  const keys = jsonKeys(cols);
+  return JSON.stringify(rows.map((r) => Object.fromEntries(keys.map((k, i) => [k, r[i]]))), null, 2) + "\n";
 }
 
 export interface PageRead {
@@ -35,13 +56,15 @@ export async function readAll(
   pageSize: number,
   stopped: () => boolean,
   progress: (n: number) => void,
-): Promise<{ columns: DbResultColumn[]; rows: Row[]; cut: number } | null> {
+): Promise<{ columns: DbResultColumn[]; rows: Row[]; cut: number; pages: number } | null> {
   let columns: DbResultColumn[] | null = null;
   const rows: Row[] = [];
   let cut = 0;
+  let pages = 0;
   for (;;) {
     if (stopped()) return null;
     const p = await read(rows.length, pageSize);
+    pages++;
     columns ??= p.columns ?? [];
     const got = p.rows ?? [];
     for (const r of got) rows.push(r);
@@ -50,5 +73,5 @@ export async function readAll(
     if (!got.length || (got.length < pageSize && !p.truncated)) break;
   }
   if (stopped()) return null;
-  return { columns: columns ?? [], rows, cut };
+  return { columns: columns ?? [], rows, cut, pages };
 }
