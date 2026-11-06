@@ -262,7 +262,7 @@
     const cols = page.columns ?? [];
     let text: string;
     try {
-      text = kind === "insert" ? insertSql(sqlTable, cols, rows, filled) : deleteSql(sqlTable, cols, rows, pk);
+      text = kind === "insert" ? insertSql(sqlTable, cols, rows.map(asShown), filled) : deleteSql(sqlTable, cols, rows, pk);
     } catch (e) {
       toast.err(errMsg(e));
       return;
@@ -271,6 +271,19 @@
       () => toast.ok(`${kind.toUpperCase()} for ${rows.length} row${rows.length === 1 ? "" : "s"} copied`),
       (e) => toast.err(`Copy failed: ${errMsg(e)}`),
     );
+  }
+  // A row of the page as the grid shows it: INSERT takes the staged edits
+  // (what you see is what you copy, like the grid's export); DELETE keeps
+  // the server's values, its WHERE must match the row as it is. The grid
+  // hands back the page's own row arrays, so the index is by identity.
+  function asShown(row: (string | null)[]): (string | null)[] {
+    if (!edits.size || !page) return row;
+    const ri = (page.rows ?? []).indexOf(row);
+    if (ri < 0) return row;
+    return row.map((v, ci) => {
+      const k = `${ri}:${ci}`;
+      return edits.has(k) ? edits.get(k)! : v;
+    });
   }
   function rowsText(n: number): string {
     return n ? `${n} selected row${n === 1 ? "" : "s"}` : "selected rows";
