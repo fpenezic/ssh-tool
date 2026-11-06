@@ -37,6 +37,11 @@ const dec = (s: string) => (s === "on" ? true : s === "off" ? false : undefined)
 const encRef = (v: string | undefined) => (v === "" ? DB_NONE : v ?? "");
 const decRef = (s: string) => (s === DB_NONE ? "" : s || undefined);
 
+// No database of its own: no name, database, engine or address.
+export function blankTarget(t: DbTarget): boolean {
+  return !(t.name ?? "").trim() && !(t.database ?? "").trim() && !(t.engine ?? "").trim() && !(t.addr ?? "").trim();
+}
+
 export function dbDraftFrom(s: InheritableSettings | undefined | null): DbDraft {
   const o = s ?? {};
   return {
@@ -53,8 +58,12 @@ export function dbDraftFrom(s: InheritableSettings | undefined | null): DbDraft 
     label: o.db_label ?? "",
     inTree: enc(o.db_in_tree),
     defaultTarget: o.db_default_target ?? "",
-    targets: (o.db_targets ?? []).filter((t) => !t.override).map((t) => ({ ...t })),
-    overrides: (o.db_targets ?? []).filter((t) => t.override).map((t) => ({ ...t })),
+    // A blank entry (no name, database, engine or address) is an override
+    // an older app saved without its flag: it goes with the overrides, so
+    // the blank-target check does not block the save and the merge keeps
+    // treating it as one.
+    targets: (o.db_targets ?? []).filter((t) => !t.override && !blankTarget(t)).map((t) => ({ ...t })),
+    overrides: (o.db_targets ?? []).filter((t) => t.override || blankTarget(t)).map((t) => ({ ...t, override: true })),
   };
 }
 
@@ -133,8 +142,7 @@ export function dbDraftError(d: DbDraft): string {
   // A listed database needs something of its own: one with only a login
   // would read as a leftover override (mergeTargets drops those) and
   // vanish after the save.
-  const blank = (v: string | undefined) => !(v ?? "").trim();
-  if (d.targets.some((t) => blank(t.name) && blank(t.database) && blank(t.engine) && blank(t.addr))) {
+  if (d.targets.some(blankTarget)) {
     return "A listed database needs a name (or its own database, engine or address)";
   }
   return "";
@@ -154,8 +162,7 @@ export function mergeTargets(base: ListedTarget[], over: DbTarget[] | null | und
     const i = out.findIndex((b) => b.id === t.id);
     if (i < 0) {
       // A blank entry is an override an older app saved without its flag.
-      const blank = !(t.name ?? "").trim() && !(t.database ?? "").trim() && !(t.engine ?? "").trim() && !(t.addr ?? "").trim();
-      if (!t.override && !blank) out.push({ ...t, from });
+      if (!t.override && !blankTarget(t)) out.push({ ...t, from });
       continue;
     }
     const m = out[i];

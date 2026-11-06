@@ -80,4 +80,11 @@ describe("databases a folder lists", () => {
     const m = mergeTargets(folder, [{ id: "gone", name: "", in_tree: false, credential_ref: "c" }], "");
     expect(m.map((t) => t.id)).toEqual(["p", "s"]);
   });
+  it("read a flagless blank entry as an override, so the save is not blocked", () => {
+    const d = dbDraftFrom({ db_targets: [{ id: "s", name: "", credential_ref: "c1" }] });
+    expect(d.targets).toEqual([]);
+    expect(dbDraftError(d)).toBe("");
+    const s = applyDbDraft({} as InheritableSettings, d, ["s"]);
+    expect(s.db_targets).toEqual([{ id: "s", name: "", override: true, credential_ref: "c1" }]);
+  });
 });
