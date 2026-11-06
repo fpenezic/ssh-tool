@@ -652,6 +652,8 @@ export interface LocalProxyConfig {
   bind?: string;
   port: number;
   networks?: string[];
+  /** DNS suffixes the app proxy sends through this profile by name (and tries short names in). */
+  domains?: string[];
 }
 
 export interface SharedProxyConfig {
@@ -722,6 +724,9 @@ export interface LocalProxyDetails {
   url: string;
   routes: string[];
   sources: string[];
+  /** Domains routed by name; gateway_domains are the ones the gateway reported. */
+  domains: string[];
+  gateway_domains: string[];
   gateway: string;
   listening: boolean;
 }

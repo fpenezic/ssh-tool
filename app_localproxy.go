@@ -45,6 +45,11 @@ type LocalProxyConfig struct {
 	// Networks are extra destinations for the gateway's routes, beyond
 	// what the profile knows (pushed routes, connections in the tree).
 	Networks []string `json:"networks,omitempty"`
+	// Domains are DNS suffixes the app proxy sends through this profile by
+	// name, resolved inside the VPN (example.local takes db1.example.local),
+	// beyond the ones the gateway reports. They are search domains too: a
+	// short name the local resolver does not know is tried in them.
+	Domains []string `json:"domains,omitempty"`
 }
 
 const localProxyUser = "ssh-tool"
@@ -95,7 +100,102 @@ func (c *LocalProxyConfig) normalize() error {
 		nets = append(nets, p.String())
 	}
 	c.Networks = nets
+	var doms []string
+	seen := map[string]bool{}
+	for _, d := range c.Domains {
+		if strings.TrimSpace(d) == "" {
+			continue
+		}
+		n, err := normalizeDomain(d)
+		if err != nil {
+			return fmt.Errorf("domain %q: %w", strings.TrimSpace(d), err)
+		}
+		if !seen[n] {
+			seen[n] = true
+			doms = append(doms, n)
+		}
+	}
+	c.Domains = doms
 	return nil
+}
+
+// normalizeDomain reads a DNS suffix as typed or as a gateway sends it:
+// lower case, without a leading "*." or "." and a trailing ".". Labels are
+// letters, digits, hyphens and underscores (split DNS lists carry
+// _msdcs.example.local and the like).
+func normalizeDomain(s string) (string, error) {
+	d := strings.ToLower(strings.TrimSpace(s))
+	d = strings.TrimPrefix(d, "*.")
+	d = strings.Trim(d, ".")
+	if d == "" {
+		return "", errors.New("empty")
+	}
+	if len(d) > 253 {
+		return "", errors.New("longer than 253 characters")
+	}
+	for _, l := range strings.Split(d, ".") {
+		if l == "" || len(l) > 63 {
+			return "", errors.New("not a domain name")
+		}
+		for _, r := range l {
+			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+				return "", errors.New("not a domain name")
+			}
+		}
+	}
+	return d, nil
+}
+
+// domainOf is the suffix of host that one of domains is, longest first
+// ("" when none): db1.prod.example.local is in prod.example.local before
+// example.local. A host equal to a domain is in it too.
+func domainOf(host string, domains []string) string {
+	h := strings.ToLower(strings.TrimSuffix(host, "."))
+	best := ""
+	for _, d := range domains {
+		if (h == d || strings.HasSuffix(h, "."+d)) && len(d) > len(best) {
+			best = d
+		}
+	}
+	return best
+}
+
+// profileDomains is what the app proxy routes by name through a profile:
+// the domains the gateway reported last (search and split DNS) and the
+// ones added by hand, with where they came from; search is the list a
+// short name is tried in (the gateway's search domains, then the hand
+// ones).
+func profileDomains(row *store.NetworkProfile, cfg LocalProxyConfig) (domains []string, gateway map[string]bool, search []string) {
+	var v struct {
+		Domains []string `json:"last_domains"`
+		Search  []string `json:"last_search_domains"`
+	}
+	_ = json.Unmarshal([]byte(row.ConfigJSON), &v)
+	gateway = map[string]bool{}
+	seen := map[string]bool{}
+	add := func(list *[]string, d string) {
+		if n, err := normalizeDomain(d); err == nil && !seen[n] {
+			seen[n] = true
+			*list = append(*list, n)
+		}
+	}
+	for _, d := range v.Domains {
+		add(&domains, d)
+	}
+	for _, d := range domains {
+		gateway[d] = true
+	}
+	for _, d := range cfg.Domains {
+		add(&domains, d)
+	}
+	seen = map[string]bool{}
+	for _, d := range v.Search {
+		add(&search, d)
+	}
+	for _, d := range cfg.Domains {
+		add(&search, d)
+	}
+	return domains, gateway, search
 }
 
 // parseRoute reads a CIDR or a bare address (a host route).
@@ -541,9 +641,13 @@ func subtleEqual(a, b string) bool {
 
 // LocalProxyDetails is what the UI shows / copies for a profile's proxy.
 type LocalProxyDetails struct {
-	URL       string   `json:"url"`     // socks5://user:pass@host:port, for the host
-	Routes    []string `json:"routes"`  // destinations to send to the proxy
-	Sources   []string `json:"sources"` // where they came from, for the hint
+	URL     string   `json:"url"`     // socks5://user:pass@host:port, for the host
+	Routes  []string `json:"routes"`  // destinations to send to the proxy
+	Sources []string `json:"sources"` // where they came from, for the hint
+	// Domains the app proxy sends through by name; GatewayDomains are the
+	// ones of them the gateway reported (the rest were added by hand).
+	Domains        []string `json:"domains"`
+	GatewayDomains []string `json:"gateway_domains"`
 	Gateway   string   `json:"gateway"` // docker run for a tun2socks gateway
 	Listening bool     `json:"listening"`
 }
@@ -558,7 +662,14 @@ func (a *App) NetworkProfileLocalProxyDetails(id string) (*LocalProxyDetails, er
 	}
 	cfg := profileLocalProxy(row.ConfigJSON)
 	routes, sources := a.profileRoutes(row, cfg)
-	d := &LocalProxyDetails{Routes: collapseRoutes(routes), Sources: sources}
+	d := &LocalProxyDetails{Routes: collapseRoutes(routes), Sources: sources, Domains: []string{}, GatewayDomains: []string{}}
+	doms, gw, _ := profileDomains(row, cfg)
+	for _, dm := range doms {
+		d.Domains = append(d.Domains, dm)
+		if gw[dm] {
+			d.GatewayDomains = append(d.GatewayDomains, dm)
+		}
+	}
 	if !cfg.Enabled {
 		// Routes only: what the app proxy sends through this profile.
 		return d, nil
@@ -730,13 +841,18 @@ func (a *App) profileRoutes(row *store.NetworkProfile, cfg LocalProxyConfig) ([]
 	return out, sources
 }
 
-// rememberRoutes stores the routes a helper reported (OpenConnect /
-// OpenVPN), so the local proxy can name them while the tunnel is down.
-func (a *App) rememberRoutes(id string, info json.RawMessage) {
+// rememberGateway stores what a helper reported about its tunnel
+// (OpenConnect / OpenVPN / Check Point): the routes, and the DNS domains
+// (search domains, plus OpenConnect's split DNS), so the app proxy can
+// route by them while the tunnel is down. A list the helper did not send
+// is kept as it was.
+func (a *App) rememberGateway(id string, info json.RawMessage) {
 	var v struct {
-		Routes []string `json:"routes"`
+		Routes   []string `json:"routes"`
+		Search   []string `json:"search_domains"`
+		SplitDNS []string `json:"split_dns"`
 	}
-	if json.Unmarshal(info, &v) != nil || len(v.Routes) == 0 {
+	if json.Unmarshal(info, &v) != nil {
 		return
 	}
 	var routes []string
@@ -744,6 +860,24 @@ func (a *App) rememberRoutes(id string, info json.RawMessage) {
 		if p, err := parseRoute(r); err == nil && p.Bits() > 0 {
 			routes = append(routes, p.String())
 		}
+	}
+	norm := func(in ...[]string) []string {
+		var out []string
+		seen := map[string]bool{}
+		for _, l := range in {
+			for _, d := range l {
+				if n, err := normalizeDomain(d); err == nil && !seen[n] {
+					seen[n] = true
+					out = append(out, n)
+				}
+			}
+		}
+		return out
+	}
+	search := norm(v.Search)
+	domains := norm(v.Search, v.SplitDNS)
+	if len(routes) == 0 && len(domains) == 0 {
+		return
 	}
 	row, err := a.db.GetNetworkProfile(id)
 	if err != nil || row == nil {
@@ -753,11 +887,24 @@ func (a *App) rememberRoutes(id string, info json.RawMessage) {
 	if json.Unmarshal([]byte(row.ConfigJSON), &m) != nil {
 		return
 	}
-	nb, _ := json.Marshal(routes)
-	if string(m["last_routes"]) == string(nb) {
+	changed := false
+	set := func(key string, val []string) {
+		if len(val) == 0 {
+			return
+		}
+		nb, _ := json.Marshal(val)
+		if string(m[key]) != string(nb) {
+			m[key] = nb
+			changed = true
+		}
+	}
+	set("last_routes", routes)
+	set("last_domains", domains)
+	set("last_search_domains", search)
+	if !changed {
 		return
 	}
-	m["last_routes"] = nb
 	out, _ := json.Marshal(m)
 	_, _ = a.db.UpdateNetworkProfile(id, row.Name, string(out))
+	sharedRoutesInvalidate()
 }

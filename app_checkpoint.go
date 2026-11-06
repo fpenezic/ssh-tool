@@ -206,7 +206,7 @@ func (a *App) ensureCheckpointTunnel(row *store.NetworkProfile) (tunnelDialer, e
 			ReadyTimeout: 6 * time.Minute, // typed one-time codes take a while
 			OnAuth:       filler.handle,
 			OnInfo: func(p *tunnelhelper.Proc) {
-				a.rememberRoutes(row.ID, p.Info())
+				a.rememberGateway(row.ID, p.Info())
 				EventsEmit("network_tunnel_changed", row.ID)
 			},
 		})
@@ -230,7 +230,7 @@ func (a *App) ensureCheckpointTunnel(row *store.NetworkProfile) (tunnelDialer, e
 		}
 		log.Printf("checkpoint %s: connected to %s in %s", row.Name, cfg.Server, time.Since(connectStart).Round(10*time.Millisecond))
 		a.wgTouch(row.ID)
-		a.rememberRoutes(row.ID, p.Info())
+		a.rememberGateway(row.ID, p.Info())
 		a.recordAudit("network.tunnel.start", row.ID, map[string]string{"name": row.Name, "kind": kindCheckpoint})
 		go a.presencePublish(row.ID, kindCheckpoint)
 		EventsEmit("network_tunnel_changed", row.ID)
