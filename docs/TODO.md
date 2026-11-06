@@ -626,6 +626,7 @@ don't.
 - **Redis, what the first cut left out.** Cluster mode (MOVED / ASK
   redirects; today one node), Sentinel, RESP3; a value editor per type;
   grouping on a second `:` level; key order past the 10 000-key sample.
+- **Whole-table export written by the backend.** Today the tree's Export reads the table through `DbBrowse` 10000 rows a page and holds every row in the webview before one `SaveTextFile` call: memory grows with the table, and a table without a primary key has no fixed order between pages (a multi-page export is only warned about). Better: a Go-side export that streams one server-side read (a cursor / unbuffered query per engine in `internal/dbx`) straight to the chosen file, with progress events and cancel, then OpenSearch (`search_after` / PIT) and Redis (full `SCAN`) could export too. From the CodeRabbit review of #34.
 
 ## Out of scope
 
