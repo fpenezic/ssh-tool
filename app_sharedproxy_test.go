@@ -257,6 +257,12 @@ func TestRememberGateway(t *testing.T) {
 	if d, s := read(); len(d) != 0 || len(s) != 0 {
 		t.Errorf("complete report without domains kept %v %v", d, s)
 	}
+	// A full-tunnel report (default route only) is complete as well.
+	a.rememberGateway(np.ID, json.RawMessage(`{"routes":["10.1.0.0/16"],"search_domains":["example.com"]}`))
+	a.rememberGateway(np.ID, json.RawMessage(`{"routes":["0.0.0.0/0"]}`))
+	if d, _ := read(); len(d) != 0 {
+		t.Errorf("default-route-only report kept %v", d)
+	}
 	// An edit of the profile keeps what was learned.
 	got := carryIdleStop(`{"last_domains":["example.com"],"last_search_domains":["example.com"]}`, `{"kind":"openconnect"}`)
 	if !strings.Contains(got, `"last_domains"`) || !strings.Contains(got, `"last_search_domains"`) {
