@@ -7,9 +7,9 @@ while Wails v3 was a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [1.1.0] - Database tab grows up: Db2, foreign keys, ER diagram
 
-The Database tab grows up: IBM Db2, foreign keys to follow both ways, filter and sort on the server, cell edits that become an UPDATE script, Explain, a Sessions view and a query timeout. An experimental compact title bar gives terminals one more row, dragging tabs back from detached windows works every time, and a VPN login with a push second factor no longer repeats itself through a proxy. Plus fixes in the network profiles and on Android.
+The Database tab grows up: IBM Db2, foreign keys to follow both ways, an ER diagram of a schema, filter and sort on the server, cell edits that become an UPDATE script, Explain, a Sessions view, a query timeout, database lists on folders, and a tab that turns red when its server stops answering. An experimental compact title bar gives terminals one more row, dragging tabs back from detached windows works every time, and a VPN login with a push second factor no longer repeats itself through a proxy. Plus fixes in the network profiles and on Android.
 
 ### opkssh
 - opkssh is updated to 0.19.2 (openpubkey 0.30.0): a provider whose key set holds one key that cannot be read no longer breaks the login (hello.coop failed with "Ed25519: invalid key algorithm"), Ed25519 ID tokens verify again, and token keys are checked more strictly (a token must use the algorithm its key is published for).
