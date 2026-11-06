@@ -17,10 +17,15 @@ export function tableTsv(head: string[] | null, rows: Cell[][]): string {
 function esc(v: string): string {
   return v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+// A cell's text for HTML: line breaks as <br>, runs of spaces kept (a
+// receiver collapses them otherwise).
+function cellHtml(v: string): string {
+  return esc(v).replace(/\r?\n/g, "<br>").replace(/ {2}/g, " &nbsp;");
+}
 
 export function tableHtml(head: string[] | null, rows: Cell[][]): string {
   const th = head ? `<thead><tr>${head.map((h) => `<th style="text-align:left;border:1px solid #999;padding:2px 6px">${esc(h)}</th>`).join("")}</tr></thead>` : "";
-  const body = rows.map((r) => `<tr>${r.map((v) => `<td style="border:1px solid #999;padding:2px 6px">${esc(v ?? "")}</td>`).join("")}</tr>`).join("");
+  const body = rows.map((r) => `<tr>${r.map((v) => `<td style="border:1px solid #999;padding:2px 6px">${cellHtml(v ?? "")}</td>`).join("")}</tr>`).join("");
   return `<table style="border-collapse:collapse">${th}<tbody>${body}</tbody></table>`;
 }
 
@@ -36,8 +41,8 @@ export function tableMarkdown(head: string[], rows: Cell[][]): string {
 }
 
 // Both flavours in one write; the Go-side plain text when the rich write
-// is missing or refused (permissions, an unfocused document). Throws only
-// when the plain write fails too.
+// is missing or refused (permissions, an unfocused document). Throws when
+// the plain write fails too (refused, or the OS clipboard said no).
 export async function copyTable(head: string[] | null, rows: Cell[][]): Promise<void> {
   const text = tableTsv(head, rows);
   try {
@@ -53,5 +58,10 @@ export async function copyTable(head: string[] | null, rows: Cell[][]): Promise<
   } catch {
     /* the plain write below */
   }
-  await api.clipboardSetText(text);
+  await setPlain(text);
+}
+
+// The Go-side write; it answers false when the OS clipboard refused.
+export async function setPlain(text: string): Promise<void> {
+  if (!(await api.clipboardSetText(text))) throw new Error("the clipboard did not take the text");
 }

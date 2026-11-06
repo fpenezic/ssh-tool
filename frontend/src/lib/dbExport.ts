@@ -28,8 +28,8 @@ export interface PageRead {
 // Every row of a table, a page at a time: read(offset, limit) is one
 // page. A page the server cut short (its result size limit) is truncated
 // and the next starts where it ended; an empty page, or a short one that
-// was not cut, is the last. stopped() is asked before each page;
-// progress(n) after it.
+// was not cut, is the last. stopped() is asked before each page and once
+// more after the last (null: stopped); progress(n) after each page.
 export async function readAll(
   read: (offset: number, limit: number) => Promise<PageRead>,
   pageSize: number,
@@ -49,5 +49,6 @@ export async function readAll(
     progress(rows.length);
     if (!got.length || (got.length < pageSize && !p.truncated)) break;
   }
+  if (stopped()) return null;
   return { columns: columns ?? [], rows, cut };
 }
