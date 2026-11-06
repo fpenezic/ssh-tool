@@ -224,7 +224,6 @@ Mediums + selected Lows tracked here.
 Repository: ssh-tool-plugins (one module, licence and tag namespace per
 plugin).
 
-- **NetBird: names through the overlay's DNS.** The app proxy now dials a name in a profile's DNS domain as the name (PR #35); check that the NetBird helper resolves such a name with a DNS server reachable only inside the overlay (through its netstack, not the host network), and fix it there if not. Raised in the CodeRabbit review of #35, not verified.
 
 - **OpenVPN follow-ups** - tls-crypt-v2 (client key wrapped by the
   server key, increasingly the Access Server default), PKCS#12 import
