@@ -70,6 +70,10 @@ reviews:
     - path: "CLAUDE.md"
       instructions: *docs_facts
   pre_merge_checks:
+    # Code here is documented with comments, not JSDoc / Go docstrings on
+    # every function: the coverage check only ever fails.
+    docstrings:
+      mode: "off"
     custom_checks:
       - name: "User-facing docs"
         mode: warning
