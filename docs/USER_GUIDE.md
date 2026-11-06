@@ -2866,10 +2866,7 @@ A NetBird profile needs three things:
 - **Setup key** - stored as an API-token credential (the setup-key
   picker has a **+ New** button so you don't have to leave the page). Pasting the whole command the dashboard shows under Peers / Clients -> Add (`netbird up --management-url ... --setup-key ...`) keeps just the key, and fills an empty Management URL from it; Settings -> Setup Keys shows the key alone.
 
-**Which key.** Use a **setup key**, NOT a personal access token
-(PAT). In the NetBird dashboard: **Setup Keys -> Create Setup Key**.
-The key is a UUID (e.g. `A1B2C3D4-...`); a PAT (starting `nbp_`) is a
-different thing and will be rejected with "setup key is invalid".
+**Which key.** Use a **setup key**, NOT a personal access token (PAT). In the NetBird dashboard: **Setup Keys -> Create Setup Key**. The key is a UUID (e.g. `A1B2C3D4-...`); a PAT (starting `nbp_`) is a different thing, and ssh-tool refuses it at once - the key field says so and Create stays off, and a stored one fails the connect with that reason.
 
 - **Reusable** - use a reusable key. The plugin keeps no NetBird identity between runs, so each connect registers the machine as a peer again, under its device name and into the key's groups; a one-off key works for the first connect only. A synced profile then runs on every machine, each its own peer (no identity conflict, unlike WireGuard).
 - **Ephemeral** - recommended with it: an ephemeral peer is removed after it has been offline for a while, so the peers of earlier connects do not pile up.
