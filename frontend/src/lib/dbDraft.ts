@@ -130,6 +130,13 @@ export function dbDraftError(d: DbDraft): string {
   if (secs !== "" && (!/^\d+$/.test(secs) || Number(secs) > 4294967295)) {
     return `Query timeout: "${secs}" is not a whole number of seconds (0 for no limit, empty to inherit)`;
   }
+  // A listed database needs something of its own: one with only a login
+  // would read as a leftover override (mergeTargets drops those) and
+  // vanish after the save.
+  const blank = (v: string | undefined) => !(v ?? "").trim();
+  if (d.targets.some((t) => blank(t.name) && blank(t.database) && blank(t.engine) && blank(t.addr))) {
+    return "A listed database needs a name (or its own database, engine or address)";
+  }
   return "";
 }
 

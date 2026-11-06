@@ -48,6 +48,8 @@ describe("query timeout", () => {
     expect(dbDraftError({ ...d, timeout: "" })).toBe("");
     expect(dbDraftError({ ...d, timeout: "1.5" })).toMatch(/whole number/);
     expect(dbDraftError({ ...d, timeout: "4294967296" })).toMatch(/whole number/);
+    expect(dbDraftError({ ...d, targets: [{ id: "a", name: " ", credential_ref: "c1" }] })).toMatch(/needs a name/);
+    expect(dbDraftError({ ...d, targets: [{ id: "a", name: "stage" }] })).toBe("");
   });
 });
 

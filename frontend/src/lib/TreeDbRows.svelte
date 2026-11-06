@@ -29,6 +29,9 @@
   const tabStatus = (i: DbHandleInfo) => sessions.tabs.find((t) => t.sessionId === i.id)?.status ?? (i.down ? "error" : "connected");
   const mine = $derived(Object.values(dbTabs.infos).filter((i) => i.connection_id === connId));
   const openIds = $derived(new Set(mine.filter((i) => tabStatus(i) === "connected").map((i) => i.target_id ?? "")));
+  // Why a row is red: the server check failed (a handle's down), or only
+  // the tab's own error (its tree failed to load) - said differently.
+  const downWhy = $derived(new Map(mine.map((i) => [i.target_id ?? "", !!i.down])));
   const downIds = $derived(new Set(mine.filter((i) => ["error", "disconnected"].includes(tabStatus(i))).map((i) => i.target_id ?? "")));
 
   // Double-click by timing, like connection rows: native dblclick does not
@@ -97,7 +100,7 @@
     tabindex="0"
     aria-selected={isSelected(r)}
     data-kind="database"
-    title={`${r.label}${r.detail ? ` (${r.detail})` : ""}${openIds.has(r.id) ? " - open" : downIds.has(r.id) ? " - open, the server does not answer" : ""}\nDouble-click to open the database`}
+    title={`${r.label}${r.detail ? ` (${r.detail})` : ""}${openIds.has(r.id) ? " - open" : downIds.has(r.id) ? (downWhy.get(r.id) ? " - open, the server does not answer" : " - open, with an error (see its tab)") : ""}\nDouble-click to open the database`}
     onclick={() => onClick(r)}
     oncontextmenu={(e) => openMenu(e, r)}
     onkeydown={(e) => {
