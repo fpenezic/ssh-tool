@@ -69,4 +69,13 @@ describe("databases a folder lists", () => {
     expect(dbDraftSame(dbDraftFrom(s), s)).toBe(true);
     expect(applyDbDraft({} as InheritableSettings, { ...d, defaultTarget: "p" }).db_default_target).toBeUndefined();
   });
+  it("keep every field an override sets, a shown override of a folder-hidden one too", () => {
+    const d = dbDraftFrom({ db_targets: [{ id: "s", name: "", override: true, read_only: true, in_tree: true }] });
+    const s = applyDbDraft({} as InheritableSettings, d, ["s"]);
+    expect(s.db_targets).toEqual([{ id: "s", name: "", override: true, read_only: true, in_tree: true }]);
+  });
+  it("drop a blank entry an older app saved without its flag", () => {
+    const m = mergeTargets(folder, [{ id: "gone", name: "", in_tree: false, credential_ref: "c" }], "");
+    expect(m.map((t) => t.id)).toEqual(["p", "s"]);
+  });
 });

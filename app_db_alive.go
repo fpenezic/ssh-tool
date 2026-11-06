@@ -9,7 +9,9 @@ import (
 // handle's pool reconnects by itself on the next call, so nothing else
 // notices a server that stopped (a restarted container, a failover, a
 // dropped VPN) until the user clicks: dbWatch asks the server every
-// dbAliveEvery and tells the UI ("db_alive:<id>") when that changes. The
+// dbAliveEvery and tells every window ("db_alive", with the handle id)
+// when that changes, so a tree row in the main window follows a tab that
+// lives in a detached one. The
 // ping keeps the SSH session and the server login in use while the tab is
 // open; closing the tab stops it.
 
@@ -18,9 +20,10 @@ const (
 	dbAliveTimeout = 10 * time.Second
 )
 
-// DbAlive is the payload of db_alive:<id>: Error is "" while the server
+// DbAlive is the payload of db_alive: Error is "" while the server
 // answers.
 type DbAlive struct {
+	ID    string `json:"id"`
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
 }
@@ -52,7 +55,7 @@ func (a *App) dbWatch(id string, dh *dbHandle) {
 		dh.down = msg
 		a.dbMu.Unlock()
 		if first || (msg == "") != (last == "") {
-			EventsEmit("db_alive:"+id, DbAlive{OK: msg == "", Error: msg})
+			EventsEmit("db_alive", DbAlive{ID: id, OK: msg == "", Error: msg})
 		}
 		first, last = false, msg
 	}

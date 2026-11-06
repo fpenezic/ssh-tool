@@ -6,7 +6,7 @@
   // opens the table. Moved boxes stay where they were put (saved with the
   // tab); Arrange lays them out again.
 
-  import { onMount, untrack } from "svelte";
+  import { onDestroy, onMount, untrack } from "svelte";
   import { api, type DbForeignKey, type DbHandleInfo, type DbSchemaGraph } from "./api";
   import type { DbTab } from "./dbState.svelte";
   import { errMsg } from "./connectErrors";
@@ -50,13 +50,25 @@
     if (!graph) return;
     const b = boxes(graph.tables, graph.foreign_keys, keysOnly, measure);
     const saved = arrange ? undefined : tab.layout;
-    if (saved && b.every((x) => saved[x.name])) {
+    const has = (n: string) => !!saved && Object.hasOwn(saved, n);
+    if (saved && b.every((x) => has(x.name))) {
       for (const x of b) [x.x, x.y] = saved[x.name];
     } else {
       layout(b, edgesOf(graph.tables, graph.foreign_keys));
-      if (saved && !arrange) {
-        // New tables since the save: the fresh layout, the moved ones kept.
-        for (const x of b) if (saved[x.name]) [x.x, x.y] = saved[x.name];
+      if (saved) {
+        // Tables new since the save: laid out among themselves under the
+        // saved ones, which stay where they were put.
+        const old = b.filter((x) => has(x.name));
+        const fresh = b.filter((x) => !has(x.name));
+        for (const x of old) [x.x, x.y] = saved[x.name];
+        if (old.length && fresh.length) {
+          const top = bounds(old);
+          const sub = bounds(fresh);
+          for (const x of fresh) {
+            x.x += top.x - sub.x;
+            x.y += top.y + top.h + 80 - sub.y;
+          }
+        }
       }
     }
     list = b;
@@ -103,10 +115,14 @@
     const f = filter.trim().toLowerCase();
     const focus = hover ?? null;
     if (!f && !focus) return null;
-    const s = new Set<string>();
-    for (const b of list) if ((f && b.name.toLowerCase().includes(f)) || b.name === focus) s.add(b.name);
+    // The matches, then their direct neighbours (checked against the
+    // matches, not the growing set, so the result does not depend on the
+    // order of the keys).
+    const hits = new Set<string>();
+    for (const b of list) if ((f && b.name.toLowerCase().includes(f)) || b.name === focus) hits.add(b.name);
+    const s = new Set(hits);
     for (const e of edges) {
-      if (focus ? e.from === focus || e.to === focus : s.has(e.from) || s.has(e.to)) {
+      if (focus ? e.from === focus || e.to === focus : hits.has(e.from) || hits.has(e.to)) {
         s.add(e.from);
         s.add(e.to);
       }
@@ -139,10 +155,14 @@
     }
   }
 
-  // One drag at a time: the background pans, a header moves its box.
+  // One drag at a time: the background pans, a header moves its box. A
+  // cancelled pointer or an unmounted tab ends it without saving.
+  let endDrag: ((save: boolean) => void) | null = null;
+  onDestroy(() => endDrag?.(false));
   function drag(e: PointerEvent, box?: ErBox) {
     if (e.button !== 0) return;
     e.stopPropagation();
+    endDrag?.(false);
     const x0 = e.clientX, y0 = e.clientY;
     const start = box ? { x: box.x, y: box.y } : { x: view.x, y: view.y };
     let moved = false;
@@ -156,16 +176,25 @@
         view = { ...view, x: start.x + dx, y: start.y + dy };
       }
     };
-    const up = () => {
+    const finish = (save: boolean) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      if (box && moved) {
+      window.removeEventListener("pointercancel", cancel);
+      endDrag = null;
+      if (save && box && moved) {
         tab.layout = Object.fromEntries(list.map((b) => [b.name, [b.x, b.y] as [number, number]]));
         onChange();
+      } else if (!save && box && moved) {
+        box.x = start.x;
+        box.y = start.y;
       }
     };
+    const up = () => finish(true);
+    const cancel = () => finish(false);
+    endDrag = finish;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
   }
 
   function setKeysOnly(v: boolean) {

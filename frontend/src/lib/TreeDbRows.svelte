@@ -17,7 +17,10 @@
   import { IconDb, IconTrash } from "./iconMap";
 
   let { connId, depth }: { connId: string; depth: number } = $props();
-  onMount(() => void collapsedDbs.load());
+  onMount(() => {
+    void collapsedDbs.load();
+    dbTabs.watchAlive();
+  });
   const rows = $derived(collapsedDbs.isExpanded(connId) ? [] : dbTreeRows(tree.connectionById(connId)));
   // Databases with a tab open: green only while connected (the server
   // answers; DbPane sets the tab's status from the backend's checks), red

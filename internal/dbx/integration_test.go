@@ -318,6 +318,9 @@ func itEngine(t *testing.T, engine string) {
 	}
 
 	itForeignKeys(t, h, sess, s.cfg.Database, schema, table)
+	if pg {
+		itGraphPG(t, h, sess, s.cfg.Database, schema, table)
+	}
 
 	// A read past the bound stops, and the session still works after it.
 	res = sess.Run(ctx, "SELECT * FROM "+table, dbx.RunOptions{MaxRows: 500})
@@ -659,10 +662,85 @@ func itGraph(t *testing.T, h *dbx.Handle, database, schema, parent, child string
 	if len(keys) != 2 {
 		t.Fatalf("graph keys %+v", g.ForeignKeys)
 	}
+	single, composite := 0, 0
 	for _, f := range keys {
-		if !eq(f.RefTable, parent) || !eq(f.RefDatabase, database) || !eq(f.RefSchema, schema) || !eq(f.Database, database) || !eq(f.Schema, schema) ||
-			len(f.Columns) != len(f.RefColumns) || len(f.Columns) == 0 || !eq(f.Columns[0], "parent_id") || !eq(f.RefColumns[0], "id") {
+		if !eq(f.RefTable, parent) || !eq(f.RefDatabase, database) || !eq(f.RefSchema, schema) || !eq(f.Database, database) || !eq(f.Schema, schema) {
 			t.Fatalf("graph key %+v", f)
 		}
+		pairs := make([]string, len(f.Columns))
+		for i := range f.Columns {
+			if i >= len(f.RefColumns) {
+				t.Fatalf("graph key columns %+v", f)
+			}
+			pairs[i] = strings.ToLower(f.Columns[i] + ">" + f.RefColumns[i])
+		}
+		switch strings.Join(pairs, ",") {
+		case "parent_id>id":
+			single++
+		case "parent_id>id,pcode>code":
+			composite++
+		default:
+			t.Fatalf("graph key pairs %v", pairs)
+		}
+	}
+	if single != 1 || composite != 1 {
+		t.Fatalf("graph keys: %d single, %d composite", single, composite)
+	}
+}
+
+// itGraphPG: what only PostgreSQL has - a NOT NULL domain, a table with
+// no columns, and a key to a partitioned table (whose per-partition copies
+// must not show).
+func itGraphPG(t *testing.T, h *dbx.Handle, sess *dbx.Session, database, schema, prefix string) {
+	t.Helper()
+	dom, empty, part, ref := prefix+"_dom", prefix+"_empty", prefix+"_part", prefix+"_pref"
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		for _, q := range []string{"DROP TABLE " + ref, "DROP TABLE " + part, "DROP TABLE " + empty, "DROP DOMAIN " + dom} {
+			sess.Run(ctx, q, dbx.RunOptions{})
+		}
+	})
+	for _, q := range []string{
+		"CREATE DOMAIN " + dom + " AS int NOT NULL",
+		"CREATE TABLE " + empty + " ()",
+		"CREATE TABLE " + part + " (id int PRIMARY KEY, v " + dom + ") PARTITION BY RANGE (id)",
+		"CREATE TABLE " + part + "_1 PARTITION OF " + part + " FOR VALUES FROM (0) TO (100)",
+		"CREATE TABLE " + part + "_2 PARTITION OF " + part + " FOR VALUES FROM (100) TO (200)",
+		"CREATE TABLE " + ref + " (id int PRIMARY KEY, part_id int REFERENCES " + part + " (id))",
+	} {
+		mustRun(t, sess, q)
+	}
+	g, err := h.SchemaGraph(ctx30(t), database, schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawEmpty bool
+	for _, tb := range g.Tables {
+		switch tb.Name {
+		case empty:
+			sawEmpty = tb.Columns != nil && len(tb.Columns) == 0
+		case part:
+			if len(tb.Columns) != 2 || tb.Columns[1].Nullable {
+				t.Fatalf("a NOT NULL domain column is not nullable: %+v", tb.Columns)
+			}
+		case part + "_1", part + "_2":
+			t.Fatalf("a partition is listed: %s", tb.Name)
+		}
+	}
+	if !sawEmpty {
+		t.Fatal("the table without columns is missing")
+	}
+	n := 0
+	for _, f := range g.ForeignKeys {
+		if f.Table == ref {
+			n++
+			if f.RefTable != part {
+				t.Fatalf("key to a partition: %+v", f)
+			}
+		}
+	}
+	if n != 1 {
+		t.Fatalf("%d keys from %s, want 1", n, ref)
 	}
 }

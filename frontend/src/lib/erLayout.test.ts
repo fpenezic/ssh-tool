@@ -48,6 +48,10 @@ describe("ER layout", () => {
   it("draws an edge from the facing sides", () => {
     const [a, c] = boxes([t("a", "c_id"), t("c")], [], false, measure);
     a.x = 400; c.x = 0;
-    expect(edgePath(a, c, "c_id", "id").startsWith(`M 400 `)).toBe(true);
+    // Out of a's left side at c_id's line (24 + 18 + 9), into c's right
+    // side at id's line (24 + 9), the controls pulled half the gap apart.
+    const x2 = c.w;
+    const k = Math.max(40, (400 - x2) / 2);
+    expect(edgePath(a, c, "c_id", "id")).toBe(`M 400 51 C ${400 - k} 51, ${x2 + k} 33, ${x2} 33`);
   });
 });

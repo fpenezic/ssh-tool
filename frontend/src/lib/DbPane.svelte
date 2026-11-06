@@ -111,7 +111,7 @@
   // A schema's ER diagram, one tab per schema. Engines whose schema is
   // the database (MySQL, Oracle, Db2) open it from the database row.
   function openEr(db: string, schema: string) {
-    addTab({ kind: "er", title: `ER ${schema || db}`, database: db, schema }, `er:${db}/${schema}`);
+    addTab({ kind: "er", title: `ER ${schema || db}`, database: db, schema }, "er:" + JSON.stringify([db, schema]));
   }
   const hasEr = $derived(!!info && ["postgres", "mysql", "oracle", "mssql", "db2"].includes(info.engine));
   const erOnDb = $derived(!!info && ["mysql", "oracle", "db2"].includes(info.engine));
@@ -159,17 +159,37 @@
   // The backend asks the server every 20 s (app_db_alive.go): the tab is
   // drawn connected only while it answers, and a tree that failed to load
   // loads again once it does.
-  onMount(() =>
-    EventsOn<{ ok: boolean; error?: string }>(`db_alive:${sessionId}`, (p) => {
-      if (!p.ok) sessions.setStatus(sessionId, "error", `The server stopped answering: ${p.error ?? ""}`);
-      else if (loadErr) void load();
-      else if (!loading) sessions.setStatus(sessionId, "connected");
-    }),
-  );
+  // The last check's answer while a load runs: a failure that arrives
+  // then wins over the load's own success.
+  let aliveDuringLoad: { ok: boolean; error?: string } | null = null;
+  onMount(() => {
+    dbTabs.watchAlive();
+    return EventsOn<{ id: string; ok: boolean; error?: string }>("db_alive", (p) => {
+      if (p.id !== sessionId) return;
+      if (loading) aliveDuringLoad = p;
+      if (!p.ok) {
+        sessions.setStatus(sessionId, "error", `The server stopped answering: ${p.error ?? ""}`);
+        return;
+      }
+      if (loadErr) void load();
+      else if (!loading) {
+        sessions.setStatus(sessionId, "connected");
+        retryFailedObjects();
+      }
+    });
+  });
+  // Expanded databases whose tables failed to load (during an outage):
+  // read again once the server answers.
+  function retryFailedObjects() {
+    for (const [db, v] of Object.entries(objects)) {
+      if (expanded[db] && v && typeof v === "object" && !Array.isArray(v)) void loadObjects(db);
+    }
+  }
 
   async function load() {
     loading = true;
     loadErr = null;
+    aliveDuringLoad = null;
     sessions.setStatus(sessionId, "connecting");
     try {
       const [st, srv, dbs] = await Promise.all([api.dbStatus(sessionId), api.dbInfo(sessionId), api.dbDatabases(sessionId)]);
@@ -177,7 +197,9 @@
       dbTabs.set(st);
       server = srv;
       databases = dbs ?? [];
-      if (st.down) sessions.setStatus(sessionId, "error", `The server stopped answering: ${st.down}`);
+      const late = aliveDuringLoad as { ok: boolean; error?: string } | null;
+      const down = late && !late.ok ? late.error || "not answering" : st.down;
+      if (down) sessions.setStatus(sessionId, "error", `The server stopped answering: ${down}`);
       else sessions.setStatus(sessionId, "connected");
       // The database the login landed on opens by itself.
       const cur = srv.database || st.database;
