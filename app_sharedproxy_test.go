@@ -104,7 +104,7 @@ func TestNormalizeDomain(t *testing.T) {
 			t.Errorf("%q -> %q, %v (want %q)", in, got, err, want)
 		}
 	}
-	for _, bad := range []string{"", ".", "a..b", "exa mple.local", "ex/ample", "10.0.0.0/8"} {
+	for _, bad := range []string{"", ".", "a..b", "exa mple.local", "ex/ample", "10.0.0.0/8", "1", "0.2.1", "example.123"} {
 		if _, err := normalizeDomain(bad); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
@@ -220,6 +220,14 @@ func TestSharedPickShortNameAndTrailingDot(t *testing.T) {
 	if _, _, _, err := a.sharedPickHosts("db7.other.net", nil); err == nil {
 		t.Error("an unknown dotted name was accepted")
 	}
+	// An address with a trailing dot goes by the networks, even when a
+	// domain table somehow holds a numeric suffix.
+	sharedTable.Lock()
+	sharedTable.domains = append(sharedTable.domains, sharedDomain{"1", "a", "a", false})
+	sharedTable.Unlock()
+	if _, _, _, err := a.sharedPickHosts("192.0.2.1.", nil); err == nil {
+		t.Error("an address with a trailing dot passed as a name")
+	}
 }
 
 // What a helper reports is remembered: routes and domains; a later
@@ -284,6 +292,7 @@ func TestNetbirdKeyFromCommand(t *testing.T) {
 		"netbird up --management-url https://vpn.example.com --setup-key K-1": "K-1",
 		`netbird up -k "K-2"`:                  "K-2",
 		"netbird up --setup-key=K-3":           "K-3",
+		"netbird up --setup-key=OLD -k NEW":    "NEW",
 		"A1B2C3D4-0000-4000-8000-000000000000": "A1B2C3D4-0000-4000-8000-000000000000",
 	} {
 		if got := netbirdKeyFromCommand(in); got != want {
