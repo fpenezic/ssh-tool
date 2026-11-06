@@ -284,8 +284,9 @@ func (a *App) sharedRoutes() ([]sharedRoute, map[string]string) {
 				if pins == nil {
 					continue
 				}
-				if ip, err := netip.ParseAddr(rs.Hostname); err == nil {
-					pins.set[netip.PrefixFrom(ip, ip.BitLen())] = true
+				// An address with a trailing dot is an address too.
+				if ip, err := netip.ParseAddr(strings.TrimSuffix(rs.Hostname, ".")); err == nil {
+					pins.set[netip.PrefixFrom(ip.Unmap(), ip.Unmap().BitLen())] = true
 				} else {
 					hosts[hostKey(rs.Hostname)] = *rs.NetworkProfileID
 				}
