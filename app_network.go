@@ -153,9 +153,10 @@ func carryIdleStop(oldJSON, newJSON string) string {
 		return newJSON
 	}
 	// Per-profile settings kept outside the typed edit forms: the idle
-	// stop override, the local proxy and the routes it last learned.
+	// stop override, the local proxy and the routes and DNS domains it
+	// last learned.
 	carried := false
-	for _, k := range []string{"idle_stop_minutes", "local_proxy", "last_routes"} {
+	for _, k := range []string{"idle_stop_minutes", "local_proxy", "last_routes", "last_domains", "last_search_domains"} {
 		if old[k] != nil {
 			m[k] = old[k]
 			carried = true

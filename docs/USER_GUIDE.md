@@ -2688,7 +2688,7 @@ the listen address, port and extra networks wait for **Save** (with
 listen address and port work the same way. Host names of those connections go to
 their profile as well and are resolved inside the VPN.
 
-**DNS domains.** A name in one of a profile's DNS domains goes through that profile as a name and is resolved by the VPN's DNS, so `db1.prod.example.local` reaches the host behind the VPN even though this machine cannot resolve it (or resolves it to something else). The domains are the ones the server reports - search domains from OpenConnect, OpenVPN and Check Point, and OpenConnect's split-DNS domains, remembered from the last connect - plus any **Extra DNS domains** on the profile's Proxy tab (WireGuard, NetBird and Tailscale report none; add them there). The Proxy tab lists them with where each came from. The longest domain wins (`prod.example.local` before `example.local`); a domain on two profiles goes by **When networks overlap**, then the profile that is up. A connection's own host name still decides first. A short name with no dot (`db1`) that this machine cannot resolve is tried in the first profile's search domains, in order (`db1.example.local`); a short name this machine does resolve keeps going by its address. A WireGuard profile resolves names with the DNS servers in its configuration; without them only addresses work through it. A program that resolves names itself before it talks to the proxy (many JDBC drivers, `curl` without `--socks5-hostname`) sends an address instead, and that goes by the networks as before.
+**DNS domains.** A name in one of a profile's DNS domains goes through that profile as a name and is resolved by the VPN's DNS, so `db1.prod.example.com` reaches the host behind the VPN even though this machine cannot resolve it (or resolves it to something else). The domains are the ones the server reports - search domains from OpenConnect, OpenVPN and Check Point, and OpenConnect's split-DNS domains, remembered from the last connect - plus any **Extra DNS domains** on the profile's Proxy tab (WireGuard, NetBird and Tailscale report none; add them there). The Proxy tab lists them with where each came from. The longest domain wins (`prod.example.com` before `example.com`); a domain on two profiles goes by **When networks overlap**, then the profile that is up. A connection's own host name still decides first. A short name with no dot (`db1`) that this machine cannot resolve is tried in the first profile's search domains, in order (`db1.example.com`); a short name this machine does resolve keeps going by its address. A WireGuard profile resolves names with the DNS servers in its configuration; without them only addresses work through it. A program that resolves names itself before it talks to the proxy (many JDBC drivers, `curl` without `--socks5-hostname`) sends an address instead, and that goes by the networks as before.
 
 When two profiles carry the same network (two customers that both push
 `10.0.0.0/8`, say):
@@ -2703,7 +2703,7 @@ When two profiles carry the same network (two customers that both push
 
 The summary names each overlap and which profile wins it, and **Which VPN
 for...** answers for one address or name, with the reason ("pinned to
-it", "priority 1", "most specific network", "domain example.local (from the gateway)").
+it", "priority 1", "most specific network", "domain example.com (from the gateway)").
 
 **Connections with a jump host** (under the app proxy, off until you tick
 it, as it opens every such connection to the proxy's clients):

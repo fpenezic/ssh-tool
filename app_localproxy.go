@@ -46,7 +46,7 @@ type LocalProxyConfig struct {
 	// what the profile knows (pushed routes, connections in the tree).
 	Networks []string `json:"networks,omitempty"`
 	// Domains are DNS suffixes the app proxy sends through this profile by
-	// name, resolved inside the VPN (example.local takes db1.example.local),
+	// name, resolved inside the VPN (example.com takes db1.example.com),
 	// beyond the ones the gateway reports. They are search domains too: a
 	// short name the local resolver does not know is tried in them.
 	Domains []string `json:"domains,omitempty"`
@@ -122,7 +122,7 @@ func (c *LocalProxyConfig) normalize() error {
 // normalizeDomain reads a DNS suffix as typed or as a gateway sends it:
 // lower case, without a leading "*." or "." and a trailing ".". Labels are
 // letters, digits, hyphens and underscores (split DNS lists carry
-// _msdcs.example.local and the like).
+// _msdcs.example.com and the like).
 func normalizeDomain(s string) (string, error) {
 	d := strings.ToLower(strings.TrimSpace(s))
 	d = strings.TrimPrefix(d, "*.")
@@ -147,8 +147,8 @@ func normalizeDomain(s string) (string, error) {
 }
 
 // domainOf is the suffix of host that one of domains is, longest first
-// ("" when none): db1.prod.example.local is in prod.example.local before
-// example.local. A host equal to a domain is in it too.
+// ("" when none): db1.prod.example.com is in prod.example.com before
+// example.com. A host equal to a domain is in it too.
 func domainOf(host string, domains []string) string {
 	h := strings.ToLower(strings.TrimSuffix(host, "."))
 	best := ""
@@ -844,8 +844,11 @@ func (a *App) profileRoutes(row *store.NetworkProfile, cfg LocalProxyConfig) ([]
 // rememberGateway stores what a helper reported about its tunnel
 // (OpenConnect / OpenVPN / Check Point): the routes, and the DNS domains
 // (search domains, plus OpenConnect's split DNS), so the app proxy can
-// route by them while the tunnel is down. A list the helper did not send
-// is kept as it was.
+// route by them while the tunnel is down. A report with routes describes
+// the whole tunnel: domains missing from it (the helpers leave empty
+// lists out) clear the remembered ones, so a gateway that stopped
+// pushing a domain no longer draws its names. A report without routes
+// is partial and changes only what it carries.
 func (a *App) rememberGateway(id string, info json.RawMessage) {
 	var v struct {
 		Routes   []string `json:"routes"`
@@ -876,7 +879,8 @@ func (a *App) rememberGateway(id string, info json.RawMessage) {
 	}
 	search := norm(v.Search)
 	domains := norm(v.Search, v.SplitDNS)
-	if len(routes) == 0 && len(domains) == 0 {
+	complete := len(routes) > 0
+	if !complete && len(domains) == 0 {
 		return
 	}
 	row, err := a.db.GetNetworkProfile(id)
@@ -890,6 +894,10 @@ func (a *App) rememberGateway(id string, info json.RawMessage) {
 	changed := false
 	set := func(key string, val []string) {
 		if len(val) == 0 {
+			if complete && m[key] != nil {
+				delete(m, key)
+				changed = true
+			}
 			return
 		}
 		nb, _ := json.Marshal(val)
