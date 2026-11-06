@@ -224,7 +224,6 @@ Mediums + selected Lows tracked here.
 Repository: ssh-tool-plugins (one module, licence and tag namespace per
 plugin).
 
-
 - **OpenVPN follow-ups** - tls-crypt-v2 (client key wrapped by the
   server key, increasingly the Access Server default), PKCS#12 import
   inside the .ovpn, `fragment`. Tested only against the OpenVPN 2.6 lab server so
