@@ -38,8 +38,7 @@ In the NetBird dashboard: **Setup Keys -> Create Setup Key**.
 - **Reusable** - turn this **on**. The helper keeps no NetBird identity between runs, so every connect registers the machine as a peer again (under its device name, into the key's groups); a one-off key works for the first connect only. It also lets a synced profile run on several machines, each its own peer.
 - **Usage limit** - `Unlimited` (or enough for your machines) for a
   reusable key.
-- **Expiration** - set a sane expiry. When it expires, no NEW peers
-  can enroll with it; peers already registered keep working.
+- **Expiration** - when the key expires no new peer can enroll with it, and since ssh-tool registers on every connect, the profile's next connect fails too (a tunnel that is up keeps working). Set an expiry you will renew, or none, and replace the key in the profile when it runs out.
 - **Ephemeral peers** - recommended. An ephemeral peer is auto-removed after it's been offline for ~10 minutes, so the peers earlier connects left behind go away on their own.
 - **Auto-assigned groups** - **this is what grants access.** See the
   next section - registering a peer is not the same as letting it
