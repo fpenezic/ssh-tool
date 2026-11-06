@@ -133,7 +133,13 @@ func normalizeDomain(s string) (string, error) {
 	if len(d) > 253 {
 		return "", errors.New("longer than 253 characters")
 	}
-	for _, l := range strings.Split(d, ".") {
+	labels := strings.Split(d, ".")
+	// A last label of digits alone is no top-level domain: it would make
+	// addresses ("192.0.2.1") look like names in the domain.
+	if strings.Trim(labels[len(labels)-1], "0123456789") == "" {
+		return "", errors.New("not a domain name (it ends in a number)")
+	}
+	for _, l := range labels {
 		if l == "" || len(l) > 63 {
 			return "", errors.New("not a domain name")
 		}

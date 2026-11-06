@@ -533,7 +533,10 @@ func (a *App) sharedPickHosts(host string, priority []string) (id, why string, d
 			rank[p] = i
 		}
 	}
-	ip, err := netip.ParseAddr(host)
+	// An address written with a trailing dot ("192.0.2.1.") is an address:
+	// read it as one, so it goes by the networks and cannot pass as a name
+	// in some domain.
+	ip, err := netip.ParseAddr(strings.TrimSuffix(host, "."))
 	resolved := ""
 	if err != nil {
 		// A name in a profile's DNS domain: the name goes on, resolved by

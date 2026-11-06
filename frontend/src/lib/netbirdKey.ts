@@ -8,12 +8,16 @@ export interface PastedKey {
   management?: string;
 }
 
+// The last of the flags wins, as on NetBird's own command line
+// (--setup-key OLD -k NEW uses NEW).
 function flag(text: string, names: string[]): string | undefined {
+  let last: { at: number; v: string } | undefined;
   for (const n of names) {
-    const m = text.match(new RegExp(`(?:^|\\s)${n}(?:=|\\s+)(["']?)([^\\s"']+)\\1`));
-    if (m) return m[2];
+    for (const m of text.matchAll(new RegExp(`(?:^|\\s)${n}(?:=|\\s+)(["']?)([^\\s"']+)\\1`, "g"))) {
+      if (!last || (m.index ?? 0) > last.at) last = { at: m.index ?? 0, v: m[2] };
+    }
   }
-  return undefined;
+  return last?.v;
 }
 
 // null: the text is not a command (a plain key, or anything else, stays

@@ -149,18 +149,22 @@ func (a *App) idleStopFor(p profilePolicy) (time.Duration, bool) {
 // ("netbird up --management-url ... --setup-key KEY"); any other secret
 // is returned as it is.
 func netbirdKeyFromCommand(secret string) string {
+	// The last flag wins, as on NetBird's own command line.
+	key := ""
 	f := strings.Fields(secret)
 	for i, w := range f {
 		for _, n := range []string{"--setup-key", "-k"} {
 			if w == n && i+1 < len(f) {
-				return strings.Trim(f[i+1], `"'`)
-			}
-			if v, ok := strings.CutPrefix(w, n+"="); ok {
-				return strings.Trim(v, `"'`)
+				key = strings.Trim(f[i+1], `"'`)
+			} else if v, ok := strings.CutPrefix(w, n+"="); ok {
+				key = strings.Trim(v, `"'`)
 			}
 		}
 	}
-	return secret
+	if key == "" {
+		return secret
+	}
+	return key
 }
 
 // netbirdKeyProblem says what is wrong with a NetBird setup key by its
