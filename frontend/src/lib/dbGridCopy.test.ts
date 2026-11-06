@@ -19,6 +19,7 @@ describe("clipboardTable", () => {
   });
   it("writes Markdown with NULL and escaped pipes", () => {
     expect(tableMarkdown(["a", "b"], [["x|y", null]])).toBe("| a | b |\n| --- | --- |\n| x\\|y | NULL |\n");
+    expect(tableMarkdown(["a"], [["x\\"], ["p\\|q"]])).toBe("| a |\n| --- |\n| x\\\\ |\n| p\\\\\\|q |\n");
   });
 });
 

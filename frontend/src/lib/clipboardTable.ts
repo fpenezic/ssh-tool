@@ -25,7 +25,9 @@ export function tableHtml(head: string[] | null, rows: Cell[][]): string {
 }
 
 export function tableMarkdown(head: string[], rows: Cell[][]): string {
-  const cell = (v: Cell) => (v === null ? "NULL" : v.replace(/\|/g, "\\|").replace(/\r?\n/g, " "));
+  // The backslash first: a value ending in one would otherwise escape the
+  // pipe that closes its cell.
+  const cell = (v: Cell) => (v === null ? "NULL" : v.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " "));
   return [
     `| ${head.map(cell).join(" | ")} |`,
     `| ${head.map(() => "---").join(" | ")} |`,
