@@ -233,12 +233,18 @@
         </select>
       </label>
     </div>
-    {#if showTargets}
-      <div class="targets">
+  {/if}
+  <!-- A folder's list shows with its Database off too: the folder can list
+       prod / stage for the connections under it that turn it on, without
+       turning it on for all of them. -->
+  {#if showTargets && !folded && (effectiveOn || isFolder)}
+      <div class="targets" class:alone={!effectiveOn}>
         <div class="t-head">
           <span class="t-title">{isFolder ? "Databases on every host in this folder" : "Databases on this host"}</span>
           <span class="t-hint">{isFolder
-            ? "Every connection under this folder lists these, each opening its own tab. Empty fields take that connection's values."
+            ? effectiveOn
+              ? "Every connection under this folder lists these, each opening its own tab. Empty fields take that connection's values."
+              : "The connections under this folder that turn the Database on list these, each opening its own tab. Empty fields take that connection's values."
             : "Each opens its own tab and shows under the connection in the tree. Empty fields take the values above."}</span>
           <button type="button" class="vnc-open" onclick={addTarget}><IconPlus size={12} /> Add</button>
         </div>
@@ -331,7 +337,6 @@
           </div>
         {/each}
       </div>
-    {/if}
   {/if}
 </div>
 
@@ -380,6 +385,7 @@
   .target.inherited .inh-name { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 0.5rem; }
   .target.inherited .t-name { font-weight: 600; color: var(--text); }
   .target.inherited .t-meta { font-size: 0.74rem; color: var(--subtext0); }
+  .targets.alone { margin-top: 0.5rem; border-top: none; padding-top: 0; }
   .targets { margin-top: 0.8rem; border-top: 1px solid var(--border); padding-top: 0.6rem; display: flex; flex-direction: column; gap: 0.5rem; }
   .vnc-grid label.check { padding-bottom: 0.35rem; }
   .checks { display: flex; align-items: end; gap: 1rem; }
