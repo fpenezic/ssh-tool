@@ -13,7 +13,7 @@ The Database grid works more like a spreadsheet: edit cells in place, select and
 
 ### Network profiles
 - **The app proxy routes by DNS domain**: a name in a VPN's domain goes through that VPN as a name and is resolved by its DNS, so `db1.prod.example.com` works through the proxy even when this machine cannot resolve it. The domains come from the server (search domains from OpenConnect, OpenVPN and Check Point, split DNS from OpenConnect) and from **Extra DNS domains** on the profile's Proxy tab; the longest one wins. A short name this machine cannot resolve (`db1`) is tried in the VPN's search domains. **Which VPN for...** names the domain.
-- NetBird and Tailscale profiles remember what their plugin reports about the tunnel, like OpenConnect and OpenVPN: with the new NetBird plugin that is the NetBird DNS domain and the nameserver groups' domains, so names in them route through the app proxy with nothing added by hand.
+- NetBird and Tailscale profiles remember what their plugin reports about the tunnel, like OpenConnect and OpenVPN: with NetBird plugin 1.7 or later (on NetBird 0.82) that is the NetBird DNS domain and the nameserver groups' domains, so names in them route through the app proxy with nothing added by hand.
 - The NetBird setup key field takes the whole `netbird up --management-url ... --setup-key ...` command the dashboard shows when adding a peer and keeps just the key (filling an empty Management URL); a personal access token (`nbp_...`) is refused at once instead of failing as "setup key is invalid" after a minute.
 - The app proxy's summary counts each VPN's DNS domains next to its networks, so a VPN reached by domain only (NetBird without network routes) is listed too.
 
