@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { tree, selection, drag, sessions, paneTabs, view } from "./stores.svelte";
   import { splitHostInput, hostOverrides } from "./hostInput";
   import TreeNode from "./TreeNode.svelte";
@@ -420,7 +421,7 @@
   // filter and returns focus to the tree; ArrowDown / Enter jump to
   // the first visible row so the user can navigate without grabbing
   // the mouse.
-  function onSearchKey(e: KeyboardEvent) {
+  async function onSearchKey(e: KeyboardEvent) {
     if (e.key === "Escape") {
       e.preventDefault();
       // No filter left to clear (the tree's first Escape cleared it and
@@ -431,11 +432,12 @@
       return;
     }
     if (e.key === "ArrowDown" || e.key === "Enter") {
-      const row = treeEl?.querySelector<HTMLElement>('[role="treeitem"]');
-      if (row) {
-        e.preventDefault();
-        row.focus();
-      }
+      e.preventDefault();
+      // The filter may still be waiting for the typing pause: apply it
+      // first, so the first row is the first match.
+      nameFilter.flush();
+      await tick();
+      treeEl?.querySelector<HTMLElement>('[role="treeitem"]')?.focus();
     }
   }
 
@@ -637,7 +639,7 @@
         class="search-input"
         bind:this={searchInputEl}
         placeholder="Filter by name or hostname… (start typing in the tree)"
-        value={nameFilter.query}
+        value={nameFilter.text}
         oninput={(e) => nameFilter.set((e.target as HTMLInputElement).value)}
         onkeydown={onSearchKey}
       />

@@ -9,26 +9,65 @@
 
 import { tree } from "./stores.svelte";
 
+// How long typing pauses before the tree applies the filter: a typed word
+// remounts the rows once, not once per letter (each pass mounts or drops
+// every matching row; ~1 ms a row).
+const APPLY_DELAY_MS = 120;
+
 class NameFilterStore {
+  // What the search box shows, at once.
+  text = $state<string>("");
+  // What the tree filters by: text, after the typing pause.
   query = $state<string>("");
+  private timer: ReturnType<typeof setTimeout> | null = null;
 
   set(q: string) {
-    const wasInactive = !this.isActive();
-    this.query = q;
+    this.text = q;
+    if (this.timer) clearTimeout(this.timer);
+    // Clearing applies at once: the full tree is what the user expects
+    // back, and there is nothing more to type.
+    if (!q.trim()) {
+      this.apply();
+      return;
+    }
+    this.timer = setTimeout(() => this.apply(), APPLY_DELAY_MS);
+  }
+
+  // Apply what is typed now (Enter / ArrowDown into the tree, Escape).
+  flush() {
+    if (this.timer) this.apply();
+  }
+
+  private apply() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    const wasInactive = !this.query.trim();
+    this.query = this.text;
     // Eagerly load dynamic entries on first keystroke so the filter
     // can match against VMs / containers in dynamic folders that
     // haven't been expanded yet. Lazy expand-load alone would mean
     // searching for "prod" returns nothing until the user opens the
     // dynamic folder manually - defeats the search-from-anywhere UX.
-    if (wasInactive && this.isActive()) {
+    if (wasInactive && this.query.trim()) {
       for (const id of Object.keys(tree.dynamicFolders)) {
         if (!tree.dynamicEntries[id]) tree.loadDynamicEntries(id);
       }
     }
   }
-  clear() { this.query = ""; }
 
+  clear() {
+    this.text = "";
+    this.apply();
+  }
+
+  // Something is typed (the box's clear button, Escape handling), even
+  // if the tree has not applied it yet.
   isActive(): boolean {
+    return this.text.trim().length > 0;
+  }
+
+  // The tree is filtered (the typed text has been applied).
+  isApplied(): boolean {
     return this.query.trim().length > 0;
   }
 
