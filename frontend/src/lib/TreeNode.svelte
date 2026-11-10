@@ -210,7 +210,7 @@
   // to see matches, not click through folders. Off when no filter
   // active so the user's collapsed state is preserved.
   const expanded = $derived(
-    tagFilter.isFilterActive() || nameFilter.isActive()
+    tagFilter.isFilterActive() || nameFilter.isApplied()
       ? (tagFilter.folderHasMatch(folder.id) && nameFilter.folderHasMatch(folder.id))
       : expandedConnections.isExpanded(folder.id)
   );
