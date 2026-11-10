@@ -102,13 +102,13 @@
 </div>
 
 <style>
-  .refs { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; padding: 0.3rem 0.5rem; border-top: 1px solid var(--surface0); font-size: 0.75rem; }
+  .refs { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; padding: 0.3rem 0.5rem; border-top: 1px solid var(--surface0); font-size: var(--fs-sm); }
   .title { color: var(--subtext0); font-weight: 600; }
   .muted { color: var(--overlay1); }
   .err { color: var(--red); }
   button {
-    display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; padding: 0.12rem 0.45rem;
-    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 4px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--fs-sm); padding: 0.12rem 0.45rem;
+    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); cursor: pointer;
   }
   button:disabled { opacity: 0.5; cursor: default; }
   .n { color: var(--blue); font-variant-numeric: tabular-nums; }

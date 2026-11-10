@@ -200,55 +200,55 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 6px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(680px, 94vw); padding: 1.25rem;
     box-shadow: 0 10px 40px rgba(0,0,0,0.6);
     display: flex; flex-direction: column; max-height: 88vh;
   }
   header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
   .icon { color: var(--blue); display: inline-flex; }
-  h1 { margin: 0; font-size: 1rem; font-weight: 600; }
-  p { margin: 0.4rem 0; font-size: 0.85rem; line-height: 1.5; }
-  .summary { color: var(--overlay1); font-size: 0.8rem; font-weight: 600; }
+  h1 { margin: 0; font-size: var(--fs-md); font-weight: 600; }
+  p { margin: 0.4rem 0; font-size: var(--fs-sm); line-height: 1.5; }
+  .summary { color: var(--overlay1); font-size: var(--fs-sm); font-weight: 600; }
   .warn {
     background: var(--crust); border-left: 3px solid var(--yellow);
-    color: var(--yellow); font-size: 0.78rem; padding: 0.4rem 0.6rem;
-    border-radius: 3px; margin: 0.5rem 0;
+    color: var(--yellow); font-size: var(--fs-sm); padding: 0.4rem 0.6rem;
+    border-radius: var(--r-sm); margin: 0.5rem 0;
   }
   .tree {
     overflow-y: auto; margin: 0.5rem 0; padding-right: 0.25rem;
-    border: 1px solid var(--surface0); border-radius: 4px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     background: var(--mantle); padding: 0.6rem 0.7rem;
   }
   .edit {
     border: 1px solid var(--surface1);
     border-left: 3px solid var(--yellow);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.4rem 0.6rem;
     margin-bottom: 0.4rem;
   }
   .edit-head { display: flex; align-items: baseline; gap: 0.5rem; }
   .edit-head .kind {
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     color: var(--overlay1);
   }
   .edit-head .target { font-weight: 600; }
   .change {
     font-family: ui-monospace, monospace;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     color: var(--subtext1);
     margin-top: 0.2rem;
   }
   .section-label {
-    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+    font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.05em;
     color: var(--overlay0); margin: 0.5rem 0 0.3rem;
   }
   .section-label:first-child { margin-top: 0; }
   .folder { padding: 0.2rem 0; }
   .folder-head { display: flex; align-items: baseline; gap: 0.5rem; }
   .fname { font-weight: 600; }
-  .meta { color: var(--overlay0); font-size: 0.75rem; }
+  .meta { color: var(--overlay0); font-size: var(--fs-sm); }
   .conn {
     padding: 0.4rem 0; border-top: 1px solid var(--surface0);
   }
@@ -256,40 +256,40 @@
   .conn-head { display: flex; align-items: center; gap: 0.5rem; }
   .cname { font-weight: 600; }
   .target {
-    font-family: ui-monospace, monospace; font-size: 0.78rem; color: var(--subtext0);
+    font-family: ui-monospace, monospace; font-size: var(--fs-sm); color: var(--subtext0);
   }
   .conn-meta { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.25rem; }
   .chip {
-    background: var(--surface0); border-radius: 3px;
-    padding: 0.05rem 0.4rem; font-size: 0.72rem; color: var(--subtext1);
+    background: var(--surface0); border-radius: var(--r-sm);
+    padding: 0.05rem 0.4rem; font-size: var(--fs-xs); color: var(--subtext1);
   }
   .fwd {
     margin: 0.3rem 0 0 0.8rem; padding-left: 0.5rem;
     border-left: 2px solid var(--surface1);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .fwd-kind {
     display: inline-block; background: var(--blue); color: var(--on-accent);
-    border-radius: 3px; padding: 0 0.35rem; font-size: 0.68rem; font-weight: 600;
+    border-radius: var(--r-sm); padding: 0 0.35rem; font-size: var(--fs-xs); font-weight: 600;
     margin-right: 0.4rem;
   }
   .fwd-detail { font-family: ui-monospace, monospace; color: var(--subtext0); }
   .notes {
     margin-top: 0.3rem;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
     font-style: italic;
     white-space: pre-wrap;
   }
   .bookmarks { margin: 0.2rem 0 0.1rem 0.4rem; }
   .bm {
-    font-size: 0.74rem; color: var(--subtext0); font-family: ui-monospace, monospace;
+    font-size: var(--fs-sm); color: var(--subtext0); font-family: ui-monospace, monospace;
     padding: 0.05rem 0;
   }
   .row { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem; }
   button {
     background: var(--surface0); color: var(--text); border: 0;
-    padding: 0.4rem 0.85rem; border-radius: 3px; cursor: pointer; font: inherit;
+    padding: 0.4rem 0.85rem; border-radius: var(--r-sm); cursor: pointer; font: inherit;
   }
   button:hover { background: var(--surface1); }
   button.primary { background: var(--blue); color: var(--on-accent); font-weight: 600; }

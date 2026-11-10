@@ -53,9 +53,9 @@
     background: var(--base);
     color: var(--text);
     border: 1px solid var(--surface1);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.28rem 0.5rem;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     line-height: 1.35;
     max-width: 320px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);

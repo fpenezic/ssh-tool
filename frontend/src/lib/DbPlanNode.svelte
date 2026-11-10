@@ -93,8 +93,8 @@
   .line { display: flex; align-items: baseline; gap: 0.5rem; }
   .tw { width: 1rem; flex: 0 0 1rem; padding: 0; border: 0; background: none; color: var(--overlay1); cursor: pointer; font-family: var(--mono-font, ui-monospace, monospace); }
   .what { font-weight: 600; color: var(--text); }
-  .cost { color: var(--subtext0); font-size: 0.72rem; }
-  .detail, .leaf { color: var(--subtext1); font-size: 0.74rem; }
+  .cost { color: var(--subtext0); font-size: var(--fs-xs); }
+  .detail, .leaf { color: var(--subtext1); font-size: var(--fs-sm); }
   .leaf.strong { color: var(--text); font-weight: 600; }
   .key { color: var(--blue); }
   .mono { font-family: var(--mono-font, ui-monospace, monospace); }

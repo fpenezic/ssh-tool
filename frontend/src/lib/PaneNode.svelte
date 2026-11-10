@@ -951,7 +951,7 @@
     padding: 0 0.4rem;
     background: var(--crust);
     border-bottom: 1px solid var(--surface0);
-    font-size: 0.73rem;
+    font-size: var(--fs-sm);
     min-width: 0;
     user-select: none;
   }
@@ -967,7 +967,7 @@
     align-self: stretch;
     margin: 0 0.1rem 0 -0.2rem;
     background: var(--tag-color);
-    border-radius: 2px;
+    border-radius: var(--r-sm);
   }
   .pane-name {
     font-weight: 500;
@@ -978,9 +978,9 @@
     min-width: 0;
   }
   .kafka-badge {
-    font-size: 0.66rem;
+    font-size: var(--fs-xs);
     padding: 0 0.35rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     background: var(--surface0);
     color: var(--subtext0);
     white-space: nowrap;
@@ -988,7 +988,7 @@
   .kafka-badge.ro { color: var(--peach); }
   /* VNC status pill in the header (connected / connecting / error). */
   .vnc-pill {
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     color: var(--overlay1);
     white-space: nowrap;
     flex-shrink: 0;
@@ -997,13 +997,13 @@
   .vnc-pill.err { color: var(--red); }
   .reconnecting {
     color: var(--peach);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     margin-left: 0.4rem;
     flex-shrink: 0;
   }
   .disc-hint {
     color: var(--red);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     margin-left: 0.3rem;
   }
   .reconnect-inline {
@@ -1015,10 +1015,10 @@
     background: var(--blue);
     color: var(--on-accent);
     border: 0;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     cursor: pointer;
     font: inherit;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
   }
   .reconnect-inline:hover { background: var(--sapphire); }
@@ -1034,7 +1034,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.2rem;
-    font-size: 0.62rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
     padding: 0.02rem 0.4rem;
     border-radius: 999px;
@@ -1075,10 +1075,10 @@
        User / Password / Copy without reading the icon. */
     color: var(--subtext0);
     border: none;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     width: 20px;
     height: 18px;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     cursor: pointer;
     padding: 0;
     display: flex;
@@ -1105,7 +1105,7 @@
   /* Labelled dropdowns: text, not an icon, so they read as menus. */
   .pane-actions button.cp, .pane-actions button.tools {
     width: auto; padding: 0 4px 0 6px; gap: 2px; position: relative;
-    font-size: 0.72rem; color: var(--subtext1, var(--text));
+    font-size: var(--fs-xs); color: var(--subtext1, var(--text));
   }
   .pane-actions .tunnel-anchor + .tunnel-anchor { margin-left: 2px; }
   .pane-actions button.cp.open, .pane-actions button.tools.open { background: var(--surface0); color: var(--text); }
@@ -1115,13 +1115,13 @@
   }
   .hdr-menu {
     position: absolute; top: calc(100% + 4px); right: 0; z-index: 60; min-width: 13.5rem;
-    background: var(--mantle); border: 1px solid var(--surface1); border-radius: 6px;
+    background: var(--mantle); border: 1px solid var(--surface1); border-radius: var(--r-md);
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4); padding: 0.25rem;
     display: flex; flex-direction: column;
   }
   .pane-actions .hdr-menu button {
     width: 100%; height: auto; justify-content: flex-start; gap: 0.5rem;
-    padding: 0.32rem 0.55rem; font-size: 0.78rem; color: var(--text); white-space: nowrap;
+    padding: 0.32rem 0.55rem; font-size: var(--fs-sm); color: var(--text); white-space: nowrap;
   }
   .pane-actions .hdr-menu button :global(svg) { color: var(--subtext0); flex-shrink: 0; }
   /* Each entry keeps the accent its toolbar icon had, so the eye still
@@ -1135,10 +1135,10 @@
   .pane-actions .hdr-menu button.c-http :global(svg) { color: var(--sapphire); }
   .pane-actions .hdr-menu button.c-tls :global(svg) { color: var(--green); }
   .pane-actions .hdr-menu button.c-tunnels :global(svg) { color: var(--lavender); }
-  .hdr-menu .hint { margin-left: auto; padding-left: 0.8rem; font-size: 0.7rem; color: var(--subtext0); }
+  .hdr-menu .hint { margin-left: auto; padding-left: 0.8rem; font-size: var(--fs-xs); color: var(--subtext0); }
   .hdr-menu .hint.live { color: var(--green); }
   .hdr-menu .hint.warn { color: var(--yellow); }
-  .menu-head { padding: 0.3rem 0.55rem 0.15rem; font-size: 0.64rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--subtext0); }
+  .menu-head { padding: 0.3rem 0.55rem 0.15rem; font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--subtext0); }
   .menu-sep { height: 1px; background: var(--surface0); margin: 0.2rem 0.3rem; }
   .pane-actions button.close:hover {
     background: var(--red);
@@ -1155,16 +1155,16 @@
     background: var(--blue);
     color: var(--on-accent);
   }
-  .pane-actions button.cp { font-size: 0.72rem; }
+  .pane-actions button.cp { font-size: var(--fs-xs); }
   .copy-hint {
     position: absolute;
     top: 26px;
     right: 6px;
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.4rem 0.6rem;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     color: var(--green);
     z-index: 10;
     box-shadow: 0 2px 6px rgba(0,0,0,0.4);
@@ -1189,7 +1189,7 @@
     border: 2px solid var(--blue);
     pointer-events: none;
     z-index: 20;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
   }
   .drop-indicator.left   { top: 0; left: 0;   width: 50%; height: 100%; }
   .drop-indicator.right  { top: 0; right: 0;  width: 50%; height: 100%; }

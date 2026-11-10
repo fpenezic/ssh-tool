@@ -145,18 +145,18 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 6px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(460px, 92vw);
     padding: 1.1rem 1.3rem;
     box-shadow: 0 10px 40px rgba(0,0,0,0.5);
     display: flex; flex-direction: column; gap: 0.7rem;
   }
-  h2 { margin: 0; font-size: 1rem; color: var(--text); }
-  .msg { margin: 0; font-size: 0.88rem; color: var(--subtext1); line-height: 1.5; white-space: pre-line; }
+  h2 { margin: 0; font-size: var(--fs-md); color: var(--text); }
+  .msg { margin: 0; font-size: var(--fs-sm); color: var(--subtext1); line-height: 1.5; white-space: pre-line; }
   .row { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.3rem; }
   button {
     background: var(--surface0); color: var(--text); border: 0;
-    padding: 0.4rem 0.9rem; border-radius: 3px;
+    padding: 0.4rem 0.9rem; border-radius: var(--r-sm);
     cursor: pointer; font: inherit;
   }
   button:hover { background: var(--surface1); }
@@ -167,7 +167,7 @@
     align-items: center;
     gap: 0.45rem;
     margin: 0.1rem 0 0.9rem;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
     cursor: pointer;
   }

@@ -115,14 +115,14 @@
 
 <style>
   .producer { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.6rem; height: 100%; box-sizing: border-box; min-height: 0; }
-  .row { display: flex; gap: 0.8rem; align-items: center; font-size: 0.75rem; }
+  .row { display: flex; gap: 0.8rem; align-items: center; font-size: var(--fs-sm); }
   .row label { display: flex; gap: 0.35rem; align-items: center; }
   .field { display: flex; flex-direction: column; gap: 0.25rem; }
   .field.grow { flex: 1; min-height: 6rem; }
-  .lbl { display: flex; gap: 0.6rem; align-items: center; font-size: 0.72rem; color: var(--subtext0); }
-  .chk { display: flex; gap: 0.25rem; align-items: center; font-size: 0.7rem; color: var(--subtext0); }
+  .lbl { display: flex; gap: 0.6rem; align-items: center; font-size: var(--fs-xs); color: var(--subtext0); }
+  .chk { display: flex; gap: 0.25rem; align-items: center; font-size: var(--fs-xs); color: var(--subtext0); }
   .spacer { flex: 1; }
-  .mono { font-family: var(--mono-font, monospace); font-size: 0.75rem; }
+  .mono { font-family: var(--mono-font, monospace); font-size: var(--fs-sm); }
   textarea { flex: 1; resize: none; min-height: 5rem; }
   .hdr { display: grid; grid-template-columns: 12rem 1fr auto; gap: 0.3rem; }
   .warn { color: var(--peach); }

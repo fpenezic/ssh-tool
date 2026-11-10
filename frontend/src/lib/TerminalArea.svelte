@@ -1879,7 +1879,7 @@
     z-index: 101;
     background: var(--base);
     border: 1px solid var(--surface0);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     padding: 0.25rem;
     min-width: 140px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.5);
@@ -1910,9 +1910,9 @@
     padding: 0.35rem 0.75rem;
     text-align: left;
     font: inherit;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
   }
   .ctx-menu button:hover { background: var(--surface0); }
 
@@ -1935,7 +1935,7 @@
     border-right: 1px solid var(--surface0);
     border-bottom: 1px solid var(--surface0);
     color: var(--subtext0);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     min-width: 0;
     /* Cap a single tab's width - long hostnames truncate with
        ellipsis below in .label. Without this the first big tab
@@ -1979,20 +1979,20 @@
     border-radius: 5px 0 0 5px;
     background: color-mix(in srgb, var(--ws-color) 18%, var(--crust));
     color: var(--ws-color);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
     max-width: 160px;
     cursor: pointer;
   }
   .ws-frame-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .quick-chip {
-    font-size: 0.62rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.03em;
     color: var(--peach);
     border: 1px solid color-mix(in srgb, var(--peach) 55%, transparent);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0 3px;
     margin-right: 3px;
     flex: none;
@@ -2058,19 +2058,19 @@
     text-overflow: ellipsis;
   }
   .seg-sep { color: var(--surface1); padding: 0 0.05rem; }
-  .seg-more { color: var(--overlay1); font-size: 0.72rem; margin-left: 0.15rem; }
+  .seg-more { color: var(--overlay1); font-size: var(--fs-xs); margin-left: 0.15rem; }
   /* Yellow tint for SFTP folder marker - matches the openSftp pane
      toolbar button colour. */
   :global(.tab-label-segs .sftp-marker) { color: var(--yellow); }
   .uptime {
     color: var(--overlay0);
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     margin-left: 0.3rem;
     font-variant-numeric: tabular-nums;
   }
   .group-chip {
     color: var(--on-accent);
-    font-size: 0.62rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
     padding: 0 0.35rem;
     border-radius: 999px;
@@ -2117,7 +2117,7 @@
   .ctx-menu button.yolo { color: var(--red); }
   .ctx-heading {
     padding: 0.25rem 0.6rem;
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     color: var(--subtext0);
   }
   .ctx-sep {
@@ -2142,9 +2142,9 @@
     padding: 0.1rem 0.35rem;
     background: var(--surface0);
     border: 1px solid var(--surface1);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     color: var(--subtext0);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     cursor: pointer;
   }
   .hidden-chip:hover { color: var(--text); border-color: var(--overlay0); }
@@ -2161,7 +2161,7 @@
     display: inline-flex;
     align-items: center;
     color: var(--green);
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     margin-right: 0.15rem;
     flex-shrink: 0;
   }
@@ -2176,7 +2176,7 @@
     gap: 0.8rem;
     background: var(--red);
     color: var(--base);
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     font-weight: 600;
     height: 0;
     padding: 0;
@@ -2192,7 +2192,7 @@
     background: var(--base);
     color: var(--red);
     border: none;
-    border-radius: 5px;
+    border-radius: var(--r-md);
     padding: 0.15rem 0.7rem;
     cursor: pointer;
     font-weight: 600;
@@ -2222,12 +2222,12 @@
   }
   .bcast.partial { opacity: 0.55; }
   .bcast-groups {
-    font-size: 0.62rem;
+    font-size: var(--fs-xs);
     line-height: 1;
     color: var(--peach);
     background: color-mix(in oklab, var(--peach) 18%, transparent);
     padding: 0.05rem 0.25rem;
-    border-radius: 6px;
+    border-radius: var(--r-md);
     max-width: 8ch;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2244,7 +2244,7 @@
     border: 0;
     border-bottom: 1px solid var(--surface0);
     color: var(--subtext0);
-    font-size: 1rem;
+    font-size: var(--fs-md);
     line-height: 1;
     padding: 0 0.6rem;
     cursor: pointer;
@@ -2265,7 +2265,7 @@
     float: right;
     padding-left: 1.5rem;
     color: var(--overlay0);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
   }
   .tabbar-end {
     margin-left: auto;
@@ -2277,7 +2277,7 @@
   .bcast-btn {
     background: transparent; color: var(--subtext0); border: 0;
     padding: 0.3rem 0.45rem;
-    cursor: pointer; border-radius: 3px;
+    cursor: pointer; border-radius: var(--r-sm);
     display: inline-flex; align-items: center; gap: 0.25rem;
   }
   .bcast-btn:hover { background: var(--surface0); color: var(--text); }
@@ -2286,7 +2286,7 @@
     color: var(--on-accent);
   }
   .bcast-btn.active:hover { background: #f9c89a; }
-  .bcount { font-size: 0.7rem; font-weight: 600; }
+  .bcount { font-size: var(--fs-xs); font-weight: 600; }
   .term-area {
     position: relative;
     overflow: hidden;
@@ -2301,6 +2301,6 @@
     visibility: visible;
     pointer-events: auto;
   }
-  .kafka-listen { flex: none; min-width: 1.1em; padding: 0 0.3em; font-size: 0.62rem; line-height: 1.4; text-align: center; border-radius: 8px; background: color-mix(in srgb, var(--green) 28%, transparent); color: var(--green); }
+  .kafka-listen { flex: none; min-width: 1.1em; padding: 0 0.3em; font-size: var(--fs-xs); line-height: 1.4; text-align: center; border-radius: var(--r-md); background: color-mix(in srgb, var(--green) 28%, transparent); color: var(--green); }
   .kafka-listen.bad { background: color-mix(in srgb, var(--red) 28%, transparent); color: var(--red); }
 </style>

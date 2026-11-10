@@ -47,13 +47,13 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     margin-top: 0.3rem;
   }
   .bar { display: flex; gap: 2px; height: 4px; }
   .seg {
     flex: 1;
-    border-radius: 2px;
+    border-radius: var(--r-sm);
     transition: background 0.2s ease;
   }
   .row {
@@ -62,13 +62,13 @@
     align-items: baseline;
     color: var(--subtext0);
   }
-  .label { font-weight: 600; font-size: 0.75rem; }
-  .entropy { color: var(--overlay0); font-size: 0.7rem; }
+  .label { font-weight: 600; font-size: var(--fs-sm); }
+  .entropy { color: var(--overlay0); font-size: var(--fs-xs); }
   .feedback {
     margin: 0.15rem 0 0;
     padding-left: 1rem;
     color: var(--overlay1);
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     line-height: 1.4;
   }
   .feedback li { margin: 0; }

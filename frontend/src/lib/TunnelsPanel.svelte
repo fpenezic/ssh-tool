@@ -249,7 +249,7 @@
     background: var(--base, #1e1e2e);
     color: var(--text, #cdd6f4);
     border: 1px solid var(--surface1, #45475a);
-    border-radius: 8px;
+    border-radius: var(--r-md);
     width: 32rem;
     max-width: calc(100vw - 1rem);
     padding: 0.6rem 0.7rem;
@@ -257,7 +257,7 @@
     display: flex;
     flex-direction: column;
     max-height: 70vh;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .head {
     display: flex;
@@ -266,18 +266,18 @@
     margin-bottom: 0.5rem;
     gap: 0.5rem;
   }
-  .title { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; font-size: 0.85rem; }
-  .count { color: var(--subtext0); font-weight: 400; font-size: 0.75rem; }
+  .title { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; font-size: var(--fs-sm); }
+  .count { color: var(--subtext0); font-weight: 400; font-size: var(--fs-sm); }
   .head-actions { display: flex; gap: 0.35rem; align-items: center; }
   button {
     background: var(--surface0, #313244);
     border: 1px solid var(--surface1, #45475a);
     color: var(--text, #cdd6f4);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     padding: 0.2rem 0.5rem;
     cursor: pointer;
     font: inherit;
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
@@ -291,7 +291,7 @@
     margin-bottom: 0.45rem;
     background: var(--mantle);
     border: 1px solid var(--surface1);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     color: var(--text);
     padding: 0.3rem 0.5rem;
     font: inherit;
@@ -300,12 +300,12 @@
   .empty { color: var(--overlay1); padding: 0.5rem 0.2rem; line-height: 1.45; }
   .group {
     color: var(--overlay1);
-    font-size: 0.66rem;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 0.45rem 0.2rem 0.2rem;
   }
-  .tunnel { border-radius: 5px; }
+  .tunnel { border-radius: var(--r-md); }
   .tunnel.open { background: var(--mantle); }
   .row { display: flex; align-items: center; gap: 0.3rem; }
   .main {
@@ -327,7 +327,7 @@
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
   .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chip {
-    font-size: 0.6rem;
+    font-size: var(--fs-xs);
     border: 1px solid var(--surface2);
     color: var(--subtext0);
     border-radius: 999px;
@@ -339,42 +339,42 @@
   .state.st-connecting, .state.st-reconnecting { color: var(--yellow); }
   .state.st-error { color: var(--red); }
   .state.st-connected.degraded { color: var(--yellow); }
-  .fwd-sum { color: var(--overlay1); white-space: nowrap; font-size: 0.7rem; min-width: 5.5rem; text-align: right; }
+  .fwd-sum { color: var(--overlay1); white-space: nowrap; font-size: var(--fs-xs); min-width: 5.5rem; text-align: right; }
   .fwd-sum.bad { color: var(--peach); }
   .act { padding: 0.2rem 0.35rem; flex-shrink: 0; }
   .act.go { color: var(--green); }
   .act.small { padding: 0.1rem 0.3rem; }
   .err {
     color: var(--red);
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     padding: 0 0.4rem 0.3rem 1.25rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .detail { padding: 0.1rem 0.4rem 0.45rem 1.25rem; display: flex; flex-direction: column; gap: 0.2rem; }
-  .host { color: var(--overlay1); font-family: var(--mono, monospace); font-size: 0.7rem; margin-bottom: 0.1rem; }
+  .host { color: var(--overlay1); font-family: var(--mono, monospace); font-size: var(--fs-xs); margin-bottom: 0.1rem; }
   .fwd { display: flex; align-items: center; gap: 0.4rem; min-height: 1.3rem; }
   .fdot { width: 6px; height: 6px; border-radius: 50%; background: var(--surface2); flex-shrink: 0; }
   .fdot.fst-listening { background: var(--green); }
   .fdot.fst-error { background: var(--red); }
   .kind {
-    font-size: 0.6rem;
+    font-size: var(--fs-xs);
     font-weight: 700;
     color: var(--crust);
     background: var(--overlay1);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0 0.22rem;
     flex-shrink: 0;
   }
-  .flabel { font-family: var(--mono, monospace); font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .fdesc { color: var(--subtext0); font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .traffic, .ferr { margin-left: auto; font-size: 0.68rem; white-space: nowrap; }
+  .flabel { font-family: var(--mono, monospace); font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fdesc { color: var(--subtext0); font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .traffic, .ferr { margin-left: auto; font-size: var(--fs-xs); white-space: nowrap; }
   .traffic { color: var(--overlay1); }
   .ferr { color: var(--red); overflow: hidden; text-overflow: ellipsis; max-width: 12rem; }
   .muted { color: var(--overlay1); }
-  .muted.small { margin-left: auto; font-size: 0.68rem; }
+  .muted.small { margin-left: auto; font-size: var(--fs-xs); }
   .links { display: flex; gap: 0.4rem; margin-top: 0.25rem; }
-  .link { background: transparent; border: 0; color: var(--blue); padding: 0.1rem 0.2rem; font-size: 0.7rem; }
+  .link { background: transparent; border: 0; color: var(--blue); padding: 0.1rem 0.2rem; font-size: var(--fs-xs); }
   .link:hover:not(:disabled) { background: var(--surface0); }
 </style>

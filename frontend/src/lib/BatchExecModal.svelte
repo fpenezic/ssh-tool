@@ -443,7 +443,7 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 8px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(900px, 95vw);
     max-height: 88vh;
     display: flex; flex-direction: column;
@@ -457,7 +457,7 @@
     padding: 0.55rem 0.9rem;
     background: var(--mantle);
     border-bottom: 1px solid var(--surface0);
-    font-size: 0.9rem;
+    font-size: var(--fs-md);
   }
   .close {
     background: transparent; color: var(--subtext0); border: 0;
@@ -468,7 +468,7 @@
     padding: 0.4rem 0.9rem;
     background: var(--crust);
     border-bottom: 1px solid var(--surface0);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
   }
   .more { color: var(--overlay0); }
@@ -477,7 +477,7 @@
     border-bottom: 1px solid var(--surface0);
   }
   .cmd-label {
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
     display: block;
     margin-bottom: 0.25rem;
@@ -485,10 +485,10 @@
   textarea {
     width: 100%;
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.45rem 0.6rem;
     font-family: ui-monospace, "JetBrains Mono", monospace;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
   .cmd-row {
     display: flex;
@@ -501,21 +501,21 @@
     align-items: center;
     gap: 0.35rem;
     color: var(--subtext0);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .cmd-row input[type="number"] {
     width: 4.5rem;
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.25rem 0.4rem;
     font: inherit;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
   }
   .grow { flex: 1; }
   .cmd-row button {
     background: var(--surface0); color: var(--text); border: 0;
-    border-radius: 3px; padding: 0.35rem 0.85rem;
-    cursor: pointer; font: inherit; font-size: 0.82rem;
+    border-radius: var(--r-sm); padding: 0.35rem 0.85rem;
+    cursor: pointer; font: inherit; font-size: var(--fs-sm);
   }
   .cmd-row button:hover:not(:disabled) { background: var(--surface1); }
   .cmd-row button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -528,21 +528,21 @@
   .save-row input {
     flex: 1; max-width: 28rem;
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
-    padding: 0.3rem 0.5rem; font: inherit; font-size: 0.82rem;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
+    padding: 0.3rem 0.5rem; font: inherit; font-size: var(--fs-sm);
   }
   .ok-pill {
-    color: var(--green); font-size: 0.75rem;
+    color: var(--green); font-size: var(--fs-sm);
   }
 
   .err {
     padding: 0.45rem 0.9rem;
     background: color-mix(in oklab, var(--red) 14%, var(--bg-panel));
     color: var(--red);
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     border-bottom: 1px solid var(--surface0);
   }
-  .err.inline { padding: 0; background: transparent; border: 0; font-size: 0.72rem; }
+  .err.inline { padding: 0; background: transparent; border: 0; font-size: var(--fs-xs); }
 
   .summary {
     display: flex; gap: 0.5rem; align-items: center;
@@ -553,18 +553,18 @@
   .pill {
     padding: 0.05rem 0.5rem;
     border-radius: 999px;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
   }
   .pill.ok { background: var(--surface0); color: var(--green); }
   .pill.warn { background: var(--surface0); color: var(--yellow); }
   .pill.bad { background: var(--surface0); color: var(--red); }
-  .dim { color: var(--overlay0); font-size: 0.72rem; }
+  .dim { color: var(--overlay0); font-size: var(--fs-xs); }
   .summary .spacer { flex: 1; }
   .copy-all {
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     padding: 0.15rem 0.6rem;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     border: 1px solid var(--surface1);
     background: var(--surface0);
     color: var(--subtext1);
@@ -574,7 +574,7 @@
   .copy-all:disabled { opacity: 0.5; cursor: default; }
   .expand-toggle {
     display: flex; align-items: center; gap: 0.3rem;
-    font-size: 0.72rem; color: var(--subtext0);
+    font-size: var(--fs-xs); color: var(--subtext0);
     cursor: pointer; user-select: none;
   }
   .expand-toggle input { cursor: pointer; }
@@ -590,7 +590,7 @@
   .host {
     background: var(--crust);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
   }
   .host summary {
     display: flex;
@@ -612,9 +612,9 @@
     width: 9px; height: 9px; border-radius: 50%;
     flex-shrink: 0;
   }
-  .host .name { color: var(--text); font-size: 0.82rem; flex: 1; min-width: 0; }
+  .host .name { color: var(--text); font-size: var(--fs-sm); flex: 1; min-width: 0; }
   .host .meta {
-    color: var(--overlay1); font-size: 0.72rem;
+    color: var(--overlay1); font-size: var(--fs-xs);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   pre.stdout, pre.stderr {
@@ -623,7 +623,7 @@
     background: var(--mantle);
     color: var(--text);
     font-family: ui-monospace, monospace;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     white-space: pre-wrap;
     word-break: break-word;
     border-top: 1px solid var(--surface0);
@@ -634,7 +634,7 @@
   .empty-out {
     padding: 0.4rem 0.6rem;
     color: var(--overlay0);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     font-style: italic;
     border-top: 1px solid var(--surface0);
   }
@@ -650,7 +650,7 @@
     display: flex; flex-direction: column;
     background: var(--base);
     border: 1px solid var(--surface1);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     box-shadow: 0 4px 14px rgba(0,0,0,0.4);
     z-index: 50;
   }
@@ -661,7 +661,7 @@
     border-bottom: 1px solid var(--surface0);
     padding: 0.4rem 0.6rem;
     font: inherit;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     outline: none;
   }
   .snippet-list {
@@ -671,7 +671,7 @@
   .snippet-empty {
     padding: 0.6rem;
     color: var(--overlay0);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .snippet-item {
     display: flex; flex-direction: column;
@@ -685,14 +685,14 @@
     color: var(--text);
     cursor: pointer;
     text-align: left;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
   }
   .snippet-item:hover { background: var(--surface0); }
   .snippet-item:last-child { border-bottom: 0; }
   .snippet-name { font-weight: 600; }
   .snippet-preview {
     font-family: ui-monospace, monospace;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     color: var(--subtext0);
     white-space: nowrap;
     overflow: hidden;

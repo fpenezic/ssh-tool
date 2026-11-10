@@ -508,24 +508,24 @@
     height: 100%;
   }
   .fileview.inline header { margin-bottom: 0.4rem; }
-  .fileview.inline h2 { font-size: 0.85rem; }
+  .fileview.inline h2 { font-size: var(--fs-sm); }
 
   header {
     display: flex; align-items: center; justify-content: space-between;
     gap: 1rem; margin-bottom: 0.6rem;
   }
   h2 {
-    margin: 0; font-size: 1rem; font-weight: 600;
+    margin: 0; font-size: var(--fs-md); font-weight: 600;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .header-actions { display: flex; align-items: center; gap: 0.4rem; flex: 0 0 auto; }
-  .meta { color: var(--overlay1); font-size: 0.8rem; margin-right: 0.2rem; }
+  .meta { color: var(--overlay1); font-size: var(--fs-sm); margin-right: 0.2rem; }
   .eol-badge {
-    font-size: 0.68rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
     letter-spacing: 0.02em;
     padding: 0.1rem 0.3rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     background: color-mix(in srgb, var(--blue) 22%, transparent);
     color: var(--blue);
   }
@@ -539,14 +539,14 @@
     background: var(--surface0);
     border-left: 3px solid var(--yellow);
     padding: 0.35rem 0.6rem;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     margin-bottom: 0.5rem;
   }
   .body {
     flex: 1; overflow: auto;
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
   }
   /* Focused for keyboard scrolling; the dialog border is the visible frame,
      so an extra focus ring here would just be noise. */
@@ -564,7 +564,7 @@
     margin: 0;
     padding: 0.4rem 0.6rem;
     font-family: var(--font-mono, ui-monospace, "Cascadia Code", Consolas, monospace);
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     line-height: 1.45;
     tab-size: 4;
     white-space: pre;
@@ -625,7 +625,7 @@
 
   .code {
     font-family: var(--font-mono, ui-monospace, "Cascadia Code", Consolas, monospace);
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     line-height: 1.45;
     padding: 0.4rem 0;
     min-width: max-content;
@@ -661,7 +661,7 @@
   }
   .row.crlf-line .ln::after {
     content: "\\r";
-    font-size: 0.62rem;
+    font-size: var(--fs-xs);
     opacity: 0.85;
     margin-left: 0.15em;
   }

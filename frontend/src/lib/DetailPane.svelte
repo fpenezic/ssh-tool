@@ -3015,14 +3015,14 @@
      would break the two-column grid. */
   .cmd-input {
     font-family: ui-monospace, monospace;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     resize: vertical;
     min-height: 2.2rem;
   }
   .field-note {
     display: block;
     margin-top: 0.15rem;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     color: var(--overlay1, var(--subtext0));
     line-height: 1.3;
   }
@@ -3032,7 +3032,7 @@
     border-bottom: 1px solid var(--surface0);
     color: var(--text);
     font: inherit;
-    font-size: 1.1rem;
+    font-size: var(--fs-lg);
     font-weight: 600;
     padding: 0.1rem 0.2rem;
     width: 100%;
@@ -3040,7 +3040,7 @@
   }
   .title-input:focus { outline: none; border-bottom-color: var(--blue); }
   .section-label {
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     color: var(--overlay0);
     margin: 0 0 0.5rem;
     line-height: 1.4;
@@ -3076,13 +3076,13 @@
   .ed-title h1 { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
   .ed-name { overflow: hidden; text-overflow: ellipsis; }
   .ed-sub {
-    font-size: 0.78rem; color: var(--subtext0);
+    font-size: var(--fs-sm); color: var(--subtext0);
     font-family: ui-monospace, monospace;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .ed-pill {
     display: inline-flex; align-items: center; gap: 0.35rem;
-    font-size: 0.72rem; font-weight: 500;
+    font-size: var(--fs-xs); font-weight: 500;
     padding: 0.1rem 0.55rem; border-radius: 999px;
     border: 1px solid var(--surface1); color: var(--subtext0);
   }
@@ -3105,53 +3105,53 @@
     border-bottom: 2px solid transparent;
     color: var(--subtext0);
     padding: 0.45rem 0.75rem;
-    font: inherit; font-size: 0.85rem;
+    font: inherit; font-size: var(--fs-sm);
     cursor: pointer;
   }
   .ed-tabs button:hover { color: var(--text); }
   .ed-tabs button.active { color: var(--text); border-bottom-color: var(--blue); font-weight: 600; }
   .ed-warn {
-    margin-left: 0.35rem; font-size: 0.68rem; font-weight: 700;
+    margin-left: 0.35rem; font-size: var(--fs-xs); font-weight: 700;
     color: var(--base); background: var(--yellow);
     border-radius: 999px; padding: 0 0.4rem;
   }
   /* Jump chain as cards: this computer -> hops -> this host. */
   .chain-field { display: flex; flex-direction: column; gap: 0.3rem; }
-  .chain-label { font-size: 0.8rem; color: var(--subtext0); }
+  .chain-label { font-size: var(--fs-sm); color: var(--subtext0); }
   .chain-view {
     display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem;
     background: var(--mantle); border: 1px solid var(--surface0);
-    border-radius: 6px; padding: 0.45rem 0.6rem;
+    border-radius: var(--r-md); padding: 0.45rem 0.6rem;
   }
   .chain-app { width: 22px; height: 22px; display: block; }
   .chain-arrow { color: var(--overlay1); flex: none; }
   .chain-hop {
     display: inline-flex; align-items: center; gap: 0.35rem;
-    background: var(--surface0); border-radius: 5px;
+    background: var(--surface0); border-radius: var(--r-md);
     padding: 0.15rem 0.5rem 0.15rem 0.35rem;
-    font-size: 0.8rem; font-family: ui-monospace, monospace;
+    font-size: var(--fs-sm); font-family: ui-monospace, monospace;
   }
   .chain-hop.self { outline: 1px solid var(--blue); }
   /* The network profile: transport under the chain, not an SSH hop. */
   .chain-net {
     background: transparent; border: 1px dashed var(--mauve, #b675f0); color: var(--text);
-    cursor: pointer; font: inherit; font-size: 0.8rem; font-family: ui-monospace, monospace;
+    cursor: pointer; font: inherit; font-size: var(--fs-sm); font-family: ui-monospace, monospace;
   }
   .chain-net :global(svg) { color: var(--mauve, #b675f0); }
   .chain-net:hover { background: var(--surface0); }
   .chain-net.missing { border-color: var(--red); color: var(--red); }
-  .net-meta { color: var(--overlay1); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.72rem; }
-  .net-state { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.68rem; font-weight: 600; }
+  .net-meta { color: var(--overlay1); font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--fs-xs); }
+  .net-state { font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--fs-xs); font-weight: 600; }
   .net-state.ok { color: var(--green); }
   .net-state.warn { color: var(--yellow); }
   .net-state.off { color: var(--overlay0); }
   .chain-spacer { flex: 1; }
-  .chain-edit { font-size: 0.78rem; padding: 0.2rem 0.6rem; }
+  .chain-edit { font-size: var(--fs-sm); padding: 0.2rem 0.6rem; }
   .chain-editor { margin-top: 0.3rem; }
   /* Forwards tab: the tunnel's own controls above the forward list. */
   .tunnel-card {
     background: var(--mantle); border: 1px solid var(--surface0);
-    border-radius: 8px; padding: 0.75rem 0.9rem; margin-bottom: 1rem;
+    border-radius: var(--r-md); padding: 0.75rem 0.9rem; margin-bottom: 1rem;
   }
   .tunnel-state { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
   .fav-toggle {
@@ -3167,9 +3167,9 @@
   }
   .fav-toggle:hover { color: var(--yellow); }
   .fav-toggle.active { color: var(--yellow); }
-  h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+  h1 { margin: 0; font-size: var(--fs-lg); font-weight: 600; }
   h2 {
-    margin-top: 2rem; font-size: 0.85rem;
+    margin-top: 2rem; font-size: var(--fs-sm);
     text-transform: uppercase; letter-spacing: 0.05em; color: var(--subtext0);
   }
   /* Resolved-settings is opt-in noise - collapse it by default so the
@@ -3182,13 +3182,13 @@
     width: 100%;
     border-collapse: collapse;
     margin-top: 0.5rem;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
   }
   .resolved-table th {
     text-align: left;
     color: var(--overlay0);
     font-weight: 600;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     border-bottom: 1px solid var(--surface0);
@@ -3202,12 +3202,12 @@
   .resolved-table td:first-child {
     color: var(--subtext0);
     font-family: ui-monospace, monospace;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     width: 9rem;
   }
   .resolved-table td:last-child {
     color: var(--overlay0);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     text-align: right;
   }
   .resolved-raw {
@@ -3215,30 +3215,30 @@
   }
   .resolved-raw summary {
     color: var(--overlay0);
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     cursor: pointer;
     padding: 0.3rem 0;
   }
   .resolved-raw pre {
     background: var(--mantle);
     padding: 0.6rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     overflow: auto;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     margin: 0.3rem 0 0;
   }
   .tag-swatch {
     display: inline-block;
     width: 0.8rem;
     height: 0.8rem;
-    border-radius: 2px;
+    border-radius: var(--r-sm);
     vertical-align: middle;
     margin-right: 0.3rem;
     border: 1px solid var(--surface0);
   }
   pre {
     background: var(--crust); padding: 0.5rem 0.75rem;
-    border-radius: 4px; font-size: 0.78rem; overflow: auto;
+    border-radius: var(--r-sm); font-size: var(--fs-sm); overflow: auto;
   }
   /* Grid lets fields land 2-up on wide screens - auto-fit keeps it
      single-column under ~620px so phone-skinny windows stay readable.
@@ -3259,7 +3259,7 @@
   }
   .saved-pill {
     color: var(--green);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     font-weight: 600;
   }
   /* Save lives in the header next to Connect/Delete. It's disabled
@@ -3298,7 +3298,7 @@
     align-items: center;
     gap: 0.3rem;
     color: var(--yellow);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     font-weight: 600;
   }
   .dirty-pill::before {
@@ -3312,7 +3312,7 @@
     border: 0;
     color: var(--blue);
     font: inherit;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     text-decoration: underline;
     cursor: pointer;
     padding: 0;
@@ -3320,7 +3320,7 @@
   .link-save:hover { color: var(--lavender); }
   .form label {
     display: flex; flex-direction: column; gap: 0.25rem;
-    font-size: 0.8rem; color: var(--subtext0);
+    font-size: var(--fs-sm); color: var(--subtext0);
   }
   .form .row { display: flex; gap: 0.6rem; }
   .form .grow { flex: 1; }
@@ -3330,7 +3330,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
   }
   .notes-mode { display: flex; gap: 0.2rem; }
@@ -3339,8 +3339,8 @@
     color: var(--subtext0);
     border: 1px solid var(--surface0);
     padding: 0.15rem 0.55rem;
-    font-size: 0.72rem;
-    border-radius: 3px;
+    font-size: var(--fs-xs);
+    border-radius: var(--r-sm);
   }
   .notes-mode button:hover:not(:disabled) { background: var(--surface0); color: var(--text); }
   .notes-mode button.active {
@@ -3351,10 +3351,10 @@
   .notes-preview {
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.6rem 0.8rem;
     color: var(--text);
-    font-size: 0.88rem;
+    font-size: var(--fs-sm);
     line-height: 1.5;
     min-height: 5rem;
     max-height: 18rem;
@@ -3370,12 +3370,12 @@
     color: var(--text);
     font-weight: 600;
   }
-  .notes-preview :global(h1) { font-size: 1.05rem; }
-  .notes-preview :global(h2) { font-size: 0.98rem; }
-  .notes-preview :global(h3) { font-size: 0.92rem; }
+  .notes-preview :global(h1) { font-size: var(--fs-md); }
+  .notes-preview :global(h2) { font-size: var(--fs-md); }
+  .notes-preview :global(h3) { font-size: var(--fs-md); }
   .notes-preview :global(h4),
   .notes-preview :global(h5),
-  .notes-preview :global(h6) { font-size: 0.85rem; color: var(--subtext0); }
+  .notes-preview :global(h6) { font-size: var(--fs-sm); color: var(--subtext0); }
   .notes-preview :global(p) { margin: 0.35rem 0; }
   .notes-preview :global(ul),
   .notes-preview :global(ol) { margin: 0.35rem 0; padding-left: 1.4rem; }
@@ -3384,14 +3384,14 @@
     background: var(--surface0);
     color: var(--pink);
     padding: 0.05rem 0.35rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     font-family: ui-monospace, monospace;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
   }
   .notes-preview :global(pre) {
     background: var(--crust);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.5rem 0.7rem;
     overflow-x: auto;
     margin: 0.4rem 0;
@@ -3400,7 +3400,7 @@
     background: transparent;
     color: var(--text);
     padding: 0;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
   }
   .notes-preview :global(hr) {
     border: 0;
@@ -3417,7 +3417,7 @@
   .notes-preview :global(em) { color: var(--yellow); font-style: italic; }
   input, textarea, select {
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.35rem 0.5rem; font: inherit;
   }
   input:focus, textarea:focus, select:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
@@ -3427,7 +3427,7 @@
        doesn't grow 2px taller than .primary / .danger and break
        the head-actions row alignment. */
     border: 1px solid transparent;
-    padding: 0.4rem 0.85rem; border-radius: 3px;
+    padding: 0.4rem 0.85rem; border-radius: var(--r-sm);
     cursor: pointer; font: inherit;
     line-height: 1.2;
   }
@@ -3442,11 +3442,11 @@
   button.danger:hover { background: var(--red); color: var(--on-accent); }
   .err {
     color: var(--red); background: var(--crust);
-    padding: 0.5rem 0.75rem; border-radius: 4px;
+    padding: 0.5rem 0.75rem; border-radius: var(--r-sm);
     border-left: 3px solid var(--red);
   }
   .tag-editor { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.4rem 0; }
-  .tag-label { font-size: 0.78rem; color: var(--subtext0); }
+  .tag-label { font-size: var(--fs-sm); color: var(--subtext0); }
 
   /* Same cap as .form, so the forward cards line up with the fields above
      instead of stretching across a wide window. */
@@ -3457,7 +3457,7 @@
   .usage-link {
     display: inline-flex; align-items: center; gap: 0.35rem;
     background: none; border: 0; padding: 0.1rem 0.2rem; color: var(--text);
-    font: inherit; font-size: 0.85rem; cursor: pointer; border-radius: 3px;
+    font: inherit; font-size: var(--fs-sm); cursor: pointer; border-radius: var(--r-sm);
   }
   .usage-link:hover { background: var(--surface0); }
   .quick-actions {
@@ -3494,8 +3494,8 @@
     padding: 0.5rem 0.75rem;
     background: var(--crust);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
-    font-size: 0.85rem;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-sm);
   }
   .cred-override label {
     display: flex; gap: 0.5rem; align-items: center;
@@ -3508,23 +3508,23 @@
     display: inline-block;
     min-width: 80px;
     color: var(--subtext0);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .cred-override select,
   .cred-override input {
     background: var(--mantle);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.25rem 0.4rem;
     font: inherit;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     min-width: 220px;
   }
 
   .connect-err {
     margin-bottom: 0.75rem;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     word-break: break-word;
   }
   .err-summary { font-weight: 600; }
@@ -3532,11 +3532,11 @@
     font-weight: 400;
     color: var(--pink);
     margin-top: 0.2rem;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
   }
   .err-raw {
     margin-top: 0.35rem;
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
   }
   .err-raw summary {
     cursor: pointer;
@@ -3550,7 +3550,7 @@
     padding: 0.4rem 0.55rem;
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     color: var(--red);
     white-space: pre-wrap;
     word-break: break-word;
@@ -3558,10 +3558,10 @@
   .debug-log {
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.4rem 0.6rem;
     margin-bottom: 0.75rem;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .debug-log summary {
     cursor: pointer;
@@ -3577,15 +3577,15 @@
     white-space: pre-wrap;
     word-break: break-word;
     font-family: ui-monospace, monospace;
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     line-height: 1.5;
   }
   .ok-hint {
     color: var(--green); background: var(--crust);
-    padding: 0.45rem 0.75rem; border-radius: 4px;
+    padding: 0.45rem 0.75rem; border-radius: var(--r-sm);
     border-left: 3px solid var(--green);
     font-family: ui-monospace, monospace;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     margin-top: 0.4rem;
     /* break-all suits a copied value (a long ssh command, a host); it
        mangles a sentence by snapping words mid-character, and the
@@ -3597,14 +3597,14 @@
   /* The password field is now a PasswordInput wrapper, not a bare input. */
   .pass-row > :global(.pw-wrap) { flex: 1; min-width: 0; }
   .pass-row button { flex-shrink: 0; }
-  .pass-hint { font-size: 0.74rem; color: var(--green); margin-top: 0.15rem; }
+  .pass-hint { font-size: var(--fs-sm); color: var(--green); margin-top: 0.15rem; }
   /* The password is a credential-disclosure risk here, not a completed
      setting, so it must not read as the green confirmation above. */
   .pass-hint.warn { color: var(--warn); line-height: 1.45; }
 
   .vnc-section {
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     padding: 0.6rem 0.75rem;
     background: var(--surface1);
   }
@@ -3612,7 +3612,7 @@
     display: flex;
     align-items: center;
     gap: 0.55rem;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     color: var(--text);
   }
   .vnc-head .vnc-spacer { flex: 1 1 auto; }
@@ -3640,17 +3640,17 @@
     gap: 0.15rem;
     /* Same size as the VNC checkbox row rather than the smaller field labels -
        this is a statement to read, not a field caption. */
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     color: var(--text);
   }
-  .inline-check-text .field-note { font-size: 0.78rem; }
+  .inline-check-text .field-note { font-size: var(--fs-sm); }
 
   /* Toggle switch (matches a modern on/off control). */
   .vnc-switch {
     position: relative;
     width: 34px;
     height: 18px;
-    border-radius: 9px;
+    border-radius: var(--r-pill);
     border: 1px solid var(--border);
     background: var(--surface2);
     padding: 0;
@@ -3677,12 +3677,12 @@
     background: #fff;
   }
   .vnc-open {
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     padding: 0.2rem 0.6rem;
     background: var(--surface2);
     color: var(--text);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     cursor: pointer;
   }
   .vnc-open:hover { background: var(--surface3, var(--surface2)); }
@@ -3691,12 +3691,12 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     padding: 0.35rem 0.7rem;
     background: var(--surface1);
     color: var(--text);
     border: 1px solid var(--surface2);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     cursor: pointer;
   }
   .vnc-btn:hover { background: var(--surface2); border-color: var(--overlay0); }
@@ -3728,17 +3728,17 @@
     align-self: flex-end;
     width: auto;
     white-space: nowrap;
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     padding: 0.2rem 0.5rem;
   }
   .kp-badge {
     display: inline-block;
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     color: var(--overlay1, #9399b2);
     margin-top: 0.2rem;
   }
   .inh-hint {
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     color: var(--overlay0);
     margin-top: 0.15rem;
     font-style: italic;

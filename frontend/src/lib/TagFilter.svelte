@@ -158,9 +158,9 @@
     padding: 0.2rem 0;
   }
   .tf-header:hover { color: var(--text); }
-  .chev { color: var(--overlay0); font-size: 0.7rem; width: 0.8rem; text-align: center; }
+  .chev { color: var(--overlay0); font-size: var(--fs-xs); width: 0.8rem; text-align: center; }
   .tf-label {
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
@@ -169,7 +169,7 @@
     color: var(--on-accent);
     border-radius: 999px;
     padding: 0 0.4rem;
-    font-size: 0.65rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
     line-height: 1.3;
   }
@@ -177,7 +177,7 @@
     margin-top: 0.3rem;
   }
   .tf-section-label {
-    font-size: 0.62rem;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     color: var(--overlay1);
     letter-spacing: 0.06em;
@@ -202,7 +202,7 @@
     padding: 0.1rem 0.55rem;
     cursor: pointer;
     font: inherit;
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
   }
   .pill:hover { background: var(--surface1); color: var(--text); }
   .pill.on {
@@ -212,7 +212,7 @@
   }
   .pill .cnt {
     color: var(--overlay0);
-    font-size: 0.68rem;
+    font-size: var(--fs-xs);
   }
   .pill.on .cnt { color: var(--blue); }
   /* Facet pills get per-key accents so the eye separates auth from
@@ -239,7 +239,7 @@
     border: 0;
     cursor: pointer;
     font: inherit;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     padding: 0.1rem 0.4rem;
   }
   .clear:hover { color: var(--maroon); }

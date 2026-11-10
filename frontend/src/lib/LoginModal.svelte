@@ -71,21 +71,21 @@
 <style>
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 9500; }
   .modal {
-    background: var(--base); color: var(--text); border: 1px solid var(--surface0); border-radius: 6px;
+    background: var(--base); color: var(--text); border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(400px, 90vw); padding: 1.1rem 1.3rem; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
     display: flex; flex-direction: column; gap: 0.65rem;
   }
-  h3 { margin: 0; font-size: 0.95rem; }
-  .msg { margin: 0; font-size: 0.85rem; color: var(--subtext0); }
-  label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--subtext0); }
+  h3 { margin: 0; font-size: var(--fs-md); }
+  .msg { margin: 0; font-size: var(--fs-sm); color: var(--subtext0); }
+  label { display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--fs-sm); color: var(--subtext0); }
   label.check { flex-direction: row; align-items: center; gap: 0.4rem; color: var(--text); }
   .inp {
     width: 100%; box-sizing: border-box; background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface1); border-radius: 4px; padding: 0.4rem 0.6rem; font: inherit; font-size: 0.9rem; outline: none;
+    border: 1px solid var(--surface1); border-radius: var(--r-sm); padding: 0.4rem 0.6rem; font: inherit; font-size: var(--fs-md); outline: none;
   }
   .inp:focus { border-color: var(--blue); }
   .row { display: flex; justify-content: flex-end; gap: 0.5rem; }
-  button { background: var(--surface0); color: var(--text); border: 0; padding: 0.35rem 0.8rem; border-radius: 3px; cursor: pointer; font: inherit; }
+  button { background: var(--surface0); color: var(--text); border: 0; padding: 0.35rem 0.8rem; border-radius: var(--r-sm); cursor: pointer; font: inherit; }
   button:hover { background: var(--surface1); }
   button.primary { background: var(--blue); color: var(--on-accent); font-weight: 600; }
   button.primary:hover { background: var(--sapphire); }

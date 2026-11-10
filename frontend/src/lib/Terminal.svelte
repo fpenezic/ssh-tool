@@ -2372,8 +2372,8 @@
     transform: translate(calc(-100% - 6px), -50%);
     z-index: 6;
     padding: 0.15rem 0.5rem;
-    font-size: 0.75rem;
-    border-radius: 4px;
+    font-size: var(--fs-sm);
+    border-radius: var(--r-sm);
     border: 1px solid var(--surface1);
     background: var(--mantle);
     color: var(--text);
@@ -2399,7 +2399,7 @@
     gap: 0.3rem;
     background: var(--peach);
     color: var(--on-accent);
-    font-size: 0.65rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
     letter-spacing: 0.08em;
     padding: 0.1rem 0.4rem;
@@ -2412,7 +2412,7 @@
     letter-spacing: 0;
     background: rgba(0, 0, 0, 0.18);
     padding: 0 0.3rem;
-    border-radius: 6px;
+    border-radius: var(--r-md);
     max-width: 14ch;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2441,7 +2441,7 @@
   .sel-bar::-webkit-scrollbar { display: none; }
   .sel-hint {
     color: var(--subtext0);
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     margin-right: auto;
     white-space: nowrap;
     /* First thing to go when width is tight: the buttons are the
@@ -2457,13 +2457,13 @@
     background: var(--surface0);
     color: var(--text);
     border: 0;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     /* Comfortably past the 44px touch-target floor: this bar sits
        right above the key bar, and a mis-tap here loses the
        selection. */
     padding: 0.55rem 0.9rem;
     font: inherit;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     cursor: pointer;
     flex: 0 0 auto;
     white-space: nowrap;
@@ -2532,7 +2532,7 @@
   }
   :global(.term-host .xterm-viewport::-webkit-scrollbar-thumb) {
     background: var(--surface2);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
   }
   :global(.term-host .xterm-viewport::-webkit-scrollbar-track) {
     background: transparent;
@@ -2556,16 +2556,16 @@
     background: var(--mantle);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.2rem 0.4rem;
     font: inherit;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .search-bar input:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
   .search-bar button {
     background: var(--surface0); color: var(--text); border: 0;
-    border-radius: 3px; padding: 0.15rem 0.45rem;
-    cursor: pointer; font: inherit; font-size: 0.78rem;
+    border-radius: var(--r-sm); padding: 0.15rem 0.45rem;
+    cursor: pointer; font: inherit; font-size: var(--fs-sm);
   }
   .search-bar button:hover { background: var(--surface1); }
   :global(.xterm) { height: 100%; width: 100%; }

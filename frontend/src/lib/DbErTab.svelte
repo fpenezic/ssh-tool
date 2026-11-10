@@ -294,10 +294,10 @@
 
 <style>
   .er { display: flex; flex-direction: column; height: 100%; min-height: 0; position: relative; }
-  .bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--surface0); font-size: 0.78rem; flex-wrap: wrap; }
-  .bar input:not([type]) { width: 12rem; background: var(--base); color: var(--text); border: 1px solid var(--surface0); border-radius: 3px; padding: 0.2rem 0.4rem; font-size: 0.78rem; }
+  .bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--surface0); font-size: var(--fs-sm); flex-wrap: wrap; }
+  .bar input:not([type]) { width: 12rem; background: var(--base); color: var(--text); border: 1px solid var(--surface0); border-radius: var(--r-sm); padding: 0.2rem 0.4rem; font-size: var(--fs-sm); }
   .bar label { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--subtext0); }
-  .bar button { background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 3px; padding: 0.1rem 0.5rem; cursor: pointer; font-size: 0.78rem; }
+  .bar button { background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); padding: 0.1rem 0.5rem; cursor: pointer; font-size: var(--fs-sm); }
   .bar button.icon { display: inline-flex; padding: 0.2rem 0.35rem; }
   .bar button:hover { background: var(--surface1); }
   .title { font-weight: 600; }
@@ -305,7 +305,7 @@
   .spacer { flex: 1 1 auto; }
   .muted { color: var(--subtext0); }
   .pad { padding: 1rem; }
-  .note { margin: 0; padding: 0.3rem 0.6rem; font-size: 0.75rem; color: var(--subtext0); background: var(--mantle); border-bottom: 1px solid var(--surface0); }
+  .note { margin: 0; padding: 0.3rem 0.6rem; font-size: var(--fs-sm); color: var(--subtext0); background: var(--mantle); border-bottom: 1px solid var(--surface0); }
   .err { color: var(--red); padding: 1rem; white-space: pre-wrap; }
   .canvas { flex: 1 1 auto; min-height: 0; width: 100%; cursor: grab; background: var(--base); user-select: none; touch-action: none; }
   .canvas:active { cursor: grabbing; }
@@ -325,5 +325,5 @@
   .edge.on { stroke: var(--blue); stroke-width: 2.2; }
   .edge.dim { opacity: 0.15; }
   .arrow { fill: var(--overlay1); }
-  .tip { position: absolute; left: 0.6rem; bottom: 0.5rem; font: 11px ui-monospace, monospace; background: var(--mantle); border: 1px solid var(--surface1); border-radius: 3px; padding: 0.2rem 0.4rem; color: var(--text); pointer-events: none; }
+  .tip { position: absolute; left: 0.6rem; bottom: 0.5rem; font: 11px ui-monospace, monospace; background: var(--mantle); border: 1px solid var(--surface1); border-radius: var(--r-sm); padding: 0.2rem 0.4rem; color: var(--text); pointer-events: none; }
 </style>

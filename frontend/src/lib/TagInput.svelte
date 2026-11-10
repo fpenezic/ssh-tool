@@ -120,7 +120,7 @@
     padding: 0.35rem 0.5rem;
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     min-height: 2rem;
     box-sizing: border-box;
   }
@@ -129,17 +129,17 @@
     background: var(--surface0); color: var(--text);
     padding: 0.15rem 0.5rem;
     border-radius: 999px;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .tag-x {
     background: transparent; border: 0; color: var(--overlay0);
-    cursor: pointer; padding: 0; font-size: 0.9rem; line-height: 1;
+    cursor: pointer; padding: 0; font-size: var(--fs-md); line-height: 1;
   }
   .tag-x:hover { color: var(--red); }
   .tag-input {
     flex: 1; min-width: 8rem; width: 100%;
     background: transparent; border: 0; color: var(--text);
-    font: inherit; font-size: 0.82rem;
+    font: inherit; font-size: var(--fs-sm);
     padding: 0.15rem 0;
   }
   .tag-input:focus { outline: none; }
@@ -155,7 +155,7 @@
     flex-direction: column;
     background: var(--base);
     border: 1px solid var(--surface1);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
     padding: 3px;
   }
@@ -167,12 +167,12 @@
     border: 0;
     color: var(--text);
     font: inherit;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     text-align: left;
     padding: 0.25rem 0.5rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     cursor: pointer;
   }
   .tag-suggest button:hover, .tag-suggest button.picked { background: var(--surface0); }
-  .tag-count { color: var(--overlay1); font-size: 0.72rem; }
+  .tag-count { color: var(--overlay1); font-size: var(--fs-xs); }
 </style>

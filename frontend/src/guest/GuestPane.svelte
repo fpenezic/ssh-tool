@@ -71,7 +71,7 @@
     justify-content: center;
     height: 100%;
     color: #a6adc8;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     padding: 1rem;
     text-align: center;
   }

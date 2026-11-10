@@ -3,25 +3,25 @@
   // must look the same in a browser, printed to PDF, or mailed.
   export const REPORT_CSS = `
 .rp { -webkit-print-color-adjust: exact; print-color-adjust: exact; font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: #1f2328; background: #fff; padding: 1.2rem 1.4rem; }
-.rp h1 { font-size: 1.35rem; margin: 0 0 0.2rem; }
+.rp h1 { font-size: var(--fs-xl); margin: 0 0 0.2rem; }
 .rp .rp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .rp .rp-logo { max-height: 56px; max-width: 220px; object-fit: contain; }
-.rp h2 { font-size: 1rem; margin: 1.4rem 0 0.5rem; padding-bottom: 0.2rem; border-bottom: 1px solid #d0d7de; }
+.rp h2 { font-size: var(--fs-md); margin: 1.4rem 0 0.5rem; padding-bottom: 0.2rem; border-bottom: 1px solid #d0d7de; }
 .rp .rp-meta { color: #59636e; margin: 0 0 0.8rem; }
 .rp .rp-ctl { margin: 0 0 0.8rem; padding-bottom: 0.5rem; border-bottom: 1px dashed #d0d7de; }
 .rp .rp-sign { margin-top: -0.6rem; }
 .rp .rp-end { margin: 1.2rem 0 0; padding-top: 0.4rem; border-top: 1px solid #d0d7de; }
 .rp .rp-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.5rem; }
-.rp .rp-tile { border: 1px solid #d0d7de; border-radius: 6px; padding: 0.45rem 0.6rem; }
-.rp .rp-tile b { display: block; font-size: 1.35rem; line-height: 1.2; }
-.rp .rp-tile span { color: #59636e; font-size: 0.78rem; }
+.rp .rp-tile { border: 1px solid #d0d7de; border-radius: var(--r-md); padding: 0.45rem 0.6rem; }
+.rp .rp-tile b { display: block; font-size: var(--fs-xl); line-height: 1.2; }
+.rp .rp-tile span { color: #59636e; font-size: var(--fs-sm); }
 .rp .rp-tile.red { border-color: #cf222e; } .rp .rp-tile.red b { color: #cf222e; }
 .rp .rp-tile.yellow { border-color: #bf8700; } .rp .rp-tile.yellow b { color: #9a6700; }
 .rp .rp-tile.green b { color: #1a7f37; }
-.rp .rp-bar { display: flex; height: 1.5rem; border-radius: 4px; overflow: hidden; margin: 0.2rem 0 0.4rem; font-size: 0.78rem; font-weight: 600; }
+.rp .rp-bar { display: flex; height: 1.5rem; border-radius: var(--r-sm); overflow: hidden; margin: 0.2rem 0 0.4rem; font-size: var(--fs-sm); font-weight: 600; }
 .rp .rp-bar span { display: flex; align-items: center; justify-content: center; color: #fff; white-space: nowrap; overflow: hidden; min-width: 2.5rem; }
 .rp .rp-bar .g { background: #1a7f37; } .rp .rp-bar .y { background: #bf8700; } .rp .rp-bar .r { background: #cf222e; }
-.rp .rp-lead { font-size: 0.95rem; margin: 0 0 0.6rem; }
+.rp .rp-lead { font-size: var(--fs-md); margin: 0 0 0.6rem; }
 .rp .rp-sec { border-left: 3px solid #d0d7de; padding: 0.1rem 0 0.1rem 0.7rem; margin: 0.6rem 0 0.9rem; break-inside: avoid-page; }
 .rp .rp-sec.red { border-left-color: #cf222e; } .rp .rp-sec.yellow { border-left-color: #d4a72c; }
 .rp .rp-sec h3 { margin-top: 0.2rem; }
@@ -30,21 +30,21 @@
 .rp .rp-info { margin: 0.2rem 0 0; padding-left: 1.1rem; color: #59636e; }
 .rp .rp-info li { margin: 0.15rem 0; }
 .rp .rp-hosts { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.6rem; }
-.rp .rp-host { border-radius: 4px; padding: 0.05rem 0.45rem; font-size: 0.8rem; border: 1px solid; }
+.rp .rp-host { border-radius: var(--r-sm); padding: 0.05rem 0.45rem; font-size: var(--fs-sm); border: 1px solid; }
 .rp .rp-host.red { color: #cf222e; border-color: #cf222e; background: #ffebe9; }
 .rp .rp-host.yellow { color: #9a6700; border-color: #d4a72c; background: #fff8c5; }
 .rp .rp-host.green { color: #1a7f37; border-color: #4ac26b; background: #dafbe1; }
 .rp table { border-collapse: collapse; width: 100%; margin: 0.2rem 0 0.4rem; }
 .rp th, .rp td { text-align: left; border-bottom: 1px solid #d0d7de; padding: 0.22rem 0.5rem 0.22rem 0; vertical-align: top; }
-.rp th { color: #59636e; font-weight: 600; font-size: 0.78rem; }
+.rp th { color: #59636e; font-weight: 600; font-size: var(--fs-sm); }
 .rp td.num, .rp th.num { text-align: right; padding-right: 0.8rem; }
 .rp .red { color: #cf222e; } .rp .yellow { color: #9a6700; } .rp .green { color: #1a7f37; } .rp .dim { color: #59636e; }
 .rp .rp-none { color: #1a7f37; margin: 0.2rem 0; }
-.rp .rp-appendix { font-size: 0.75rem; overflow-x: auto; }
+.rp .rp-appendix { font-size: var(--fs-sm); overflow-x: auto; }
 .rp svg { vertical-align: middle; }
-.rp .rp-link { background: none; border: 0; padding: 0; margin-left: 0.25rem; color: #0969da; font: inherit; font-size: 0.75rem; cursor: pointer; }
+.rp .rp-link { background: none; border: 0; padding: 0; margin-left: 0.25rem; color: #0969da; font: inherit; font-size: var(--fs-sm); cursor: pointer; }
 .rp .rp-link:hover { text-decoration: underline; }
-.rp h3 { font-size: 0.86rem; margin: 0.8rem 0 0.2rem; }
+.rp h3 { font-size: var(--fs-sm); margin: 0.8rem 0 0.2rem; }
 @page wide { size: A4 landscape; }
 @media print { .rp .rp-appendix-wrap { page: wide; break-before: page; } .rp .rp-appendix { overflow: visible; font-size: 7.5pt; } .rp .rp-appendix td, .rp .rp-appendix th { padding: 0.12rem 0.3rem 0.12rem 0; } .rp { padding: 0; } .rp .rp-noprint { display: none; } .rp h2 { break-after: avoid; } .rp tr { break-inside: avoid; } }
 `;

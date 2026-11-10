@@ -64,7 +64,7 @@
   }
   .icon-emoji {
     display: inline-block;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     text-align: center;
   }
 </style>

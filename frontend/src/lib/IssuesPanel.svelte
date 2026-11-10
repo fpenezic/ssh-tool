@@ -59,9 +59,9 @@
     flex-direction: column;
     background: var(--base);
     border: 1px solid var(--surface0);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     color: var(--text);
   }
   header {
@@ -71,7 +71,7 @@
   .title { font-weight: 600; }
   .close {
     background: transparent; border: 0; color: var(--overlay0);
-    font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0 0.2rem;
+    font-size: var(--fs-lg); line-height: 1; cursor: pointer; padding: 0 0.2rem;
   }
   .close:hover { color: var(--text); }
   .empty { padding: 0.8rem 0.6rem; color: var(--subtext0); }
@@ -90,12 +90,12 @@
   .act {
     flex: 0 0 auto;
     background: var(--surface0); color: var(--text);
-    border: 1px solid var(--surface1); border-radius: 4px;
-    padding: 0.2rem 0.55rem; font-size: 0.76rem; cursor: pointer; white-space: nowrap;
+    border: 1px solid var(--surface1); border-radius: var(--r-sm);
+    padding: 0.2rem 0.55rem; font-size: var(--fs-sm); cursor: pointer; white-space: nowrap;
   }
   .act:hover { background: var(--surface1); }
   .acts { flex: 0 0 auto; display: flex; flex-direction: column; align-items: stretch; gap: 0.3rem; }
   .act.primary { background: var(--blue); color: var(--on-accent); border-color: var(--blue); }
   .act.primary:hover { filter: brightness(1.1); background: var(--blue); }
-  .wait { font-size: 0.72rem; color: var(--subtext0); white-space: nowrap; }
+  .wait { font-size: var(--fs-xs); color: var(--subtext0); white-space: nowrap; }
 </style>

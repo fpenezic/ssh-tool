@@ -282,29 +282,29 @@
   .inf-row {
     display: flex; align-items: center; justify-content: space-between;
     padding: 8px 10px; border: 1px solid var(--border, #333);
-    border-radius: 6px; gap: 12px;
+    border-radius: var(--r-md); gap: 12px;
   }
   .inf-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .inf-name { font-weight: 600; }
-  .inf-url { font-size: 0.8rem; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; }
-  .inf-used { font-size: 0.8rem; opacity: 0.7; }
+  .inf-url { font-size: var(--fs-sm); opacity: 0.7; overflow: hidden; text-overflow: ellipsis; }
+  .inf-used { font-size: var(--fs-sm); opacity: 0.7; }
   .inf-actions { display: flex; gap: 6px; flex-shrink: 0; }
   .inf-form {
     margin-top: 12px; padding: 12px; border: 1px solid var(--border, #333);
-    border-radius: 6px; display: flex; flex-direction: column; gap: 10px;
+    border-radius: var(--r-md); display: flex; flex-direction: column; gap: 10px;
     max-width: 520px;
   }
-  .inf-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
+  .inf-form label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); }
   .inf-form input, .inf-form :global(select) { width: 100%; box-sizing: border-box; }
   .api-picker { display: flex; gap: 6px; align-items: stretch; }
   .api-picker :global(.search-select) { flex: 1; min-width: 0; }
   .api-picker button { flex-shrink: 0; white-space: nowrap; }
   .api-form {
-    padding: 10px; border: 1px dashed var(--border, #444); border-radius: 6px;
+    padding: 10px; border: 1px dashed var(--border, #444); border-radius: var(--r-md);
     display: flex; flex-direction: column; gap: 8px;
   }
   .inf-form-actions { display: flex; gap: 8px; margin-top: 4px; }
-  .hint-inline { font-weight: 400; opacity: 0.6; font-size: 0.8rem; }
-  .hint.sub { margin: 0; font-size: 0.78rem; }
+  .hint-inline { font-weight: 400; opacity: 0.6; font-size: var(--fs-sm); }
+  .hint.sub { margin: 0; font-size: var(--fs-sm); }
   .danger { color: var(--danger, #e66); }
 </style>

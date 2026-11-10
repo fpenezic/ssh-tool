@@ -194,7 +194,7 @@
     background: var(--base);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     width: min(760px, 92vw);
     max-height: 86vh;
     display: flex;
@@ -229,7 +229,7 @@
   }
   header h2 {
     margin: 0;
-    font-size: 1rem;
+    font-size: var(--fs-md);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -246,7 +246,7 @@
     border: none;
     color: var(--subtext0);
     cursor: pointer;
-    font-size: 0.95rem;
+    font-size: var(--fs-md);
   }
   .close:hover { color: var(--text); }
   .list {
@@ -256,7 +256,7 @@
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
   th {
     text-align: left;
@@ -276,7 +276,7 @@
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .name .dim {
     color: var(--subtext0);
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     margin-left: 0.4rem;
   }
   .actions {

@@ -607,7 +607,7 @@
 
 <style>
   .grid-wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-  .scroller { flex: 1 1 auto; min-height: 0; overflow: auto; outline: none; font-size: 0.78rem; font-family: var(--mono-font, ui-monospace, monospace); }
+  .scroller { flex: 1 1 auto; min-height: 0; overflow: auto; outline: none; font-size: var(--fs-sm); font-family: var(--mono-font, ui-monospace, monospace); }
   .inner { position: relative; min-width: 100%; }
   .row { display: grid; height: 24px; align-items: stretch; }
   .body { position: relative; }
@@ -621,7 +621,7 @@
   .cell.lines { white-space: pre; }
   .head .cell { display: flex; gap: 0.35rem; align-items: baseline; font-weight: 600; }
   .cname { overflow: hidden; text-overflow: ellipsis; }
-  .ctype { font-weight: 400; font-size: 0.68rem; color: var(--overlay1); }
+  .ctype { font-weight: 400; font-size: var(--fs-xs); color: var(--overlay1); }
   .cell.num { color: var(--overlay1); text-align: right; background: color-mix(in srgb, var(--surface0) 55%, transparent); }
   .cell.null { color: var(--overlay0); font-style: italic; }
   .cell.edited { position: relative; background: color-mix(in srgb, var(--yellow) 18%, transparent); }
@@ -633,8 +633,8 @@
   .cell.num.dirty { color: var(--yellow); font-weight: 600; box-shadow: inset 3px 0 0 var(--yellow); }
   .cell.num { cursor: pointer; }
   .vp-edit {
-    flex: 1 1 auto; min-height: 4rem; margin: 0.3rem 0.5rem; font-family: var(--mono-font, ui-monospace, monospace); font-size: 0.78rem;
-    background: var(--base); color: var(--text); border: 1px solid var(--surface1); border-radius: 4px; padding: 0.3rem;
+    flex: 1 1 auto; min-height: 4rem; margin: 0.3rem 0.5rem; font-family: var(--mono-font, ui-monospace, monospace); font-size: var(--fs-sm);
+    background: var(--base); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); padding: 0.3rem;
   }
   .vp-actions { display: flex; gap: 0.35rem; padding: 0 0.5rem 0.4rem; }
   .cell .fk {
@@ -648,9 +648,9 @@
   .sort-ic { display: inline-flex; align-self: center; color: var(--blue); margin-left: auto; flex: 0 0 auto; }
   .cell.hit { background: color-mix(in srgb, var(--yellow) 22%, transparent); }
   .find { flex: 0 0 auto; display: flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.5rem; border-top: 1px solid var(--surface0); color: var(--overlay1); }
-  .find input { flex: 0 1 22rem; min-width: 8rem; font-size: 0.76rem; padding: 0.15rem 0.4rem; background: var(--base); color: var(--text); border: 1px solid var(--surface1); border-radius: 3px; outline: none; }
+  .find input { flex: 0 1 22rem; min-width: 8rem; font-size: var(--fs-sm); padding: 0.15rem 0.4rem; background: var(--base); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); outline: none; }
   .find input:focus { border-color: var(--blue); }
-  .find-count { font-size: 0.72rem; color: var(--subtext0); }
+  .find-count { font-size: var(--fs-xs); color: var(--subtext0); }
   .find button { background: none; border: none; color: var(--overlay1); cursor: pointer; padding: 0.15rem; display: inline-flex; }
   .find button:hover { color: var(--text); }
   .cell.inrect { background: color-mix(in srgb, var(--blue) 12%, transparent); }
@@ -664,18 +664,18 @@
   .inline-edit::placeholder { color: var(--overlay0); font-style: italic; }
   .scroller { user-select: none; }
   .value-pane { flex: 0 0 auto; max-height: 40%; display: flex; flex-direction: column; border-top: 1px solid var(--surface1); background: var(--mantle); }
-  .vp-head { display: flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.5rem; font-size: 0.75rem; color: var(--subtext0); }
+  .vp-head { display: flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.5rem; font-size: var(--fs-sm); color: var(--subtext0); }
   .vp-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .vp-head button { background: none; border: none; color: var(--overlay1); cursor: pointer; padding: 0.15rem; display: inline-flex; }
   .vp-head button:hover { color: var(--text); }
-  pre { margin: 0; padding: 0.4rem 0.6rem; overflow: auto; font-size: 0.78rem; white-space: pre-wrap; word-break: break-all; color: var(--text); user-select: text; }
+  pre { margin: 0; padding: 0.4rem 0.6rem; overflow: auto; font-size: var(--fs-sm); white-space: pre-wrap; word-break: break-all; color: var(--text); user-select: text; }
   pre.null { color: var(--overlay0); font-style: italic; }
   pre:focus { outline: none; }
-  .foot { flex: 0 0 auto; display: flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0.5rem; font-size: 0.74rem; color: var(--subtext0); border-top: 1px solid var(--surface0); }
+  .foot { flex: 0 0 auto; display: flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0.5rem; font-size: var(--fs-sm); color: var(--subtext0); border-top: 1px solid var(--surface0); }
   .spacer { flex: 1 1 auto; }
   .foot button {
-    display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; padding: 0.1rem 0.45rem;
-    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 3px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.25rem; font-size: var(--fs-xs); padding: 0.1rem 0.45rem;
+    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); cursor: pointer;
   }
   .foot button:hover { background: var(--surface1); }
 </style>

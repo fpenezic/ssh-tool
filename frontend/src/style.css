@@ -13,6 +13,27 @@ html {
     --ui-font-size: 13px;
     font-size: var(--ui-font-size);
 
+    /* Type scale. "UI font size" (Settings > Appearance) is the size of
+       the main text - tree rows, menus, descriptions, inputs - and the
+       rest follows it, so the number there is what one reads. The two
+       small steps have a floor: at the bottom of the range they would
+       be 8 and 9px. */
+    --fs-xs: max(0.75rem, 10px); /* badges, counts, group labels */
+    --fs-sm: max(0.85rem, 10px); /* hints, secondary columns, field labels */
+    --fs-md: 1rem;               /* body text */
+    --fs-lg: 1.15rem;            /* card / section titles */
+    --fs-xl: 1.4rem;             /* page titles, empty states */
+    /* Control heights (text inputs, selects, buttons), from the font so
+       they grow with it; compact for dense rows and toolbars. */
+    --ctl-h: 1.9rem;
+    --ctl-h-sm: 1.6rem;
+    /* Corner radius: controls and small blocks, cards and panels, modals,
+       pills (chips, switches). */
+    --r-sm: 3px;
+    --r-md: 6px;
+    --r-lg: 10px;
+    --r-pill: 999px;
+
     /* Catppuccin Mocha (default dark theme). Variables are
        referenced throughout the app - see style.css "theme-light"
        and "theme-hc" overrides for the alternative palettes.
@@ -267,7 +288,7 @@ html, body {
     background: var(--mantle);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.35rem 0.5rem;
     font: inherit;
 }

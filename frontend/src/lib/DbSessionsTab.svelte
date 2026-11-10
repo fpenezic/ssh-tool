@@ -108,19 +108,19 @@
 
 <style>
   .stab { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-  .bar { display: flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--surface0); font-size: 0.78rem; }
+  .bar { display: flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--surface0); font-size: var(--fs-sm); }
   .bar button {
-    display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; padding: 0.2rem 0.55rem;
-    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 4px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--fs-sm); padding: 0.2rem 0.55rem;
+    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); cursor: pointer;
   }
   .bar button:disabled { opacity: 0.45; cursor: default; }
   .bar button.danger:not(:disabled) { border-color: var(--red); }
   .bar label { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--subtext0); }
   .sep { width: 0.5rem; }
   .spacer { flex: 1 1 auto; }
-  .muted-s { font-size: 0.74rem; color: var(--subtext0); }
+  .muted-s { font-size: var(--fs-sm); color: var(--subtext0); }
   .body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
   .gridbox { flex: 1 1 auto; min-height: 0; }
-  pre.err { margin: 0.5rem 0.75rem; color: var(--red); white-space: pre-wrap; font-size: 0.78rem; }
-  .muted { margin: 0.6rem 0.75rem; font-size: 0.8rem; color: var(--subtext0); }
+  pre.err { margin: 0.5rem 0.75rem; color: var(--red); white-space: pre-wrap; font-size: var(--fs-sm); }
+  .muted { margin: 0.6rem 0.75rem; font-size: var(--fs-sm); color: var(--subtext0); }
 </style>

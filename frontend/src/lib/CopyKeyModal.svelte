@@ -135,6 +135,6 @@
 
 <style>
   .col { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.7rem; }
-  .small { font-size: 0.72rem; }
+  .small { font-size: var(--fs-xs); }
   .check { display: flex; gap: 0.45rem; align-items: center; margin-bottom: 0.7rem; }
 </style>

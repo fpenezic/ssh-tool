@@ -793,7 +793,7 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 6px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(560px, 92vw); max-height: 88vh; overflow: auto;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
   }
@@ -802,7 +802,7 @@
     padding: 0.8rem 1rem;
     border-bottom: 1px solid var(--surface0);
   }
-  h1 { margin: 0; font-size: 1rem; font-weight: 600; }
+  h1 { margin: 0; font-size: var(--fs-md); font-weight: 600; }
   .close {
     background: transparent; border: 0; color: var(--overlay0);
     cursor: pointer; font: inherit; padding: 0.2rem 0.5rem;
@@ -814,23 +814,23 @@
   }
   label, .field {
     display: flex; flex-direction: column; gap: 0.25rem;
-    font-size: 0.8rem; color: var(--subtext0);
+    font-size: var(--fs-sm); color: var(--subtext0);
   }
   input, textarea, select {
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.35rem 0.5rem; font: inherit;
   }
   input:focus, textarea:focus, select:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
-  textarea { font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem; }
-  .hint-text { color: var(--overlay0); font-size: 0.75rem; margin: 0; }
+  textarea { font-family: ui-monospace, Menlo, monospace; font-size: var(--fs-sm); }
+  .hint-text { color: var(--overlay0); font-size: var(--fs-sm); margin: 0; }
   .path-row { display: flex; gap: 0.4rem; align-items: stretch; }
   .path-row input { flex: 1; min-width: 0; }
   .path-row button { flex-shrink: 0; white-space: nowrap; }
   .row { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.4rem; }
   button {
     background: var(--surface0); color: var(--text); border: 0;
-    padding: 0.4rem 0.85rem; border-radius: 3px;
+    padding: 0.4rem 0.85rem; border-radius: var(--r-sm);
     cursor: pointer; font: inherit;
   }
   button:hover:not(:disabled) { background: var(--surface1); }
@@ -839,17 +839,17 @@
   button:disabled { opacity: 0.5; cursor: not-allowed; }
   .err {
     color: var(--red); background: var(--crust);
-    padding: 0.5rem 0.75rem; border-radius: 4px;
-    border-left: 3px solid var(--red); font-size: 0.85rem;
+    padding: 0.5rem 0.75rem; border-radius: var(--r-sm);
+    border-left: 3px solid var(--red); font-size: var(--fs-sm);
   }
   .success { padding: 1rem; }
   .success pre {
     background: var(--crust); padding: 0.6rem 0.8rem;
-    border-radius: 4px; font-size: 0.78rem;
+    border-radius: var(--r-sm); font-size: var(--fs-sm);
     overflow: auto; word-break: break-all; white-space: pre-wrap;
   }
   code {
-    font-size: 0.8rem; background: var(--crust);
-    padding: 0.1rem 0.3rem; border-radius: 3px;
+    font-size: var(--fs-sm); background: var(--crust);
+    padding: 0.1rem 0.3rem; border-radius: var(--r-sm);
   }
 </style>

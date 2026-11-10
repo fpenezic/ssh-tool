@@ -40,10 +40,10 @@
     color: var(--text);
     border: 1px solid var(--surface1);
     border-left-width: 3px;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.5rem 0.8rem;
     font: inherit;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
     cursor: pointer;
     min-width: 200px;
@@ -63,7 +63,7 @@
     height: 18px;
     border-radius: 50%;
     font-weight: 700;
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     flex-shrink: 0;
   }
   .toast.ok .sigil { background: var(--green); color: var(--on-accent); }
