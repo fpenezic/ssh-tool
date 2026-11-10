@@ -57,4 +57,12 @@
     transform: translateX(16px);
     background: #fff;
   }
+  /* Windows high contrast (forced colors): system colours, so the knob
+     stays visible against the track and "on" reads as selected. */
+  @media (forced-colors: active) {
+    .switch { border-color: ButtonText; background: ButtonFace; forced-color-adjust: none; }
+    .switch.on { background: Highlight; border-color: Highlight; }
+    .knob { background: ButtonText; forced-color-adjust: none; }
+    .switch.on .knob { background: HighlightText; }
+  }
 </style>

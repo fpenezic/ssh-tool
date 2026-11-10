@@ -9315,6 +9315,21 @@
   }
   fieldset.check-cards input[type="checkbox"]:disabled { opacity: 0.5; cursor: default; }
   fieldset.check-cards input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* Windows high contrast (forced colors) repaints the track and the
+     knob in the same system colour, so the state would not show: the
+     native checkbox comes back there. */
+  @media (forced-colors: active) {
+    fieldset.check-cards input[type="checkbox"] {
+      appearance: auto;
+      -webkit-appearance: auto;
+      width: 14px;
+      height: 14px;
+      margin-top: 0.2rem;
+      border: 0;
+      background: none;
+    }
+    fieldset.check-cards input[type="checkbox"]::after { content: none; }
+  }
   .mode-name { font-weight: 600; font-size: var(--fs-md); color: var(--text); }
   .mode-desc { font-size: var(--fs-sm); color: var(--subtext0); line-height: 1.5; margin-top: 0.15rem; }
   /* The manage grant is deliberately not persisted; that is a safety property
