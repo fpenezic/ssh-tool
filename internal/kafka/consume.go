@@ -525,7 +525,11 @@ func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int6
 			k.finish(ConsumeStopped, "")
 			return
 		}
-		got := false
+		// progress: a record below an end still awaited. Only those reset
+		// the idle clock: records past the ends (other partitions, or new
+		// ones on a busy topic) must not keep a wait alive that a trailing
+		// transaction marker would otherwise never end.
+		progress := false
 		limitHit := false
 		fetches.EachError(func(_ string, _ int32, err error) {
 			if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
@@ -536,19 +540,33 @@ func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int6
 			if limitHit {
 				return
 			}
-			got = true
 			if until != nil {
-				if e, ok := until[r.Partition]; ok && r.Offset+1 >= e {
-					delete(until, r.Partition)
+				if e, ok := until[r.Partition]; ok {
+					if r.Offset < e {
+						progress = true
+					}
+					// At or past the end: an end offset that is a
+					// transaction marker is never delivered itself.
+					if r.Offset+1 >= e {
+						delete(until, r.Partition)
+					}
 				}
 			}
 			if g != nil {
-				if e, ok := g.ends[r.Partition]; ok && r.Offset < e {
+				e, ok := g.ends[r.Partition]
+				switch {
+				case ok && r.Offset < e:
+					progress = true
 					k.offer(g, r)
 					if r.Offset+1 >= e {
 						delete(g.ends, r.Partition)
 					}
-				} else {
+				case ok:
+					// Past the end without the record at end-1: that one
+					// was a marker. The partition is read.
+					delete(g.ends, r.Partition)
+					g.late = append(g.late, r)
+				default:
 					g.late = append(g.late, r)
 				}
 				return
@@ -557,7 +575,7 @@ func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int6
 				limitHit = true
 			}
 		})
-		if got {
+		if progress {
 			idleSince = time.Now()
 		}
 		// The same idle rule as StopAtEnd: an end offset that carries no

@@ -1599,7 +1599,7 @@ without starting their consumers. A topic opens on its own subtabs:
 
 Pick where to start - the last N records of every partition, the last N records of the topic, the beginning, new records only, an offset, or a time - a partition or all, an optional record limit, and whether to **stop at end** (the end offsets as they were when you started). The consumer never joins a consumer group and never commits an offset: reading a topic here cannot move anyone's real consumers.
 
-**Last N in topic** is the newest N records across all partitions by record time, listed oldest first: it reads the last N of every partition, picks the newest N among them and shows them once every partition is read (the status bar says "picking the newest of ... read" until then); without stop at end it then goes on with new records as they come. A record limit keeps the newest of the pick, and a Keep only filter picks among the matches in what was read. When producers set their own record timestamps and those run out of order within a partition, the pick follows those timestamps.
+**Last N in topic** is the newest N records across all partitions by record time, listed oldest first: it reads the last N offsets of every partition, picks the newest N records among them and shows them once every partition is read (the status bar says "picking the newest of ... read" until then); without stop at end it then goes on with new records as they come. A record limit keeps the newest of the pick, and a Keep only filter picks among the matches in what was read. Two limits come with reading only that window. On a compacted topic, or one written in transactions, the last N offsets of a partition hold fewer than N records (removed records and commit markers take offsets too), so the pick can be shorter than N, as with Last N per partition. When producers set their own record timestamps and those run out of order within a partition, a newer record at an older offset outside the window is not seen: the pick is the newest by timestamp among the last N offsets of each partition.
 
 Records arrive in a list (partition, offset, time, key, value); a record
 opens below with its value pretty-printed when it is JSON, a hex dump when
@@ -1616,7 +1616,7 @@ done before storing: a record is kept only if it contains every filled text,
 ignoring case, anywhere in the full key, value or a header name or value.
 The rest are counted but not stored, so the status line reads "3 matched of
 48k read", and a limit counts matches (a limit of 1 stops at the first
-hit). It applies when Consume starts; the filter above the list still
+hit; in Last N in topic it keeps the newest match of the pick). It applies when Consume starts; the filter above the list still
 searches what is already buffered. Texts are plain substrings, no regex. A
 binary payload matches on the text inside it (strings in Protobuf or Avro)
 and on the base64 the list shows for it.

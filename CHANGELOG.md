@@ -44,7 +44,8 @@ The Database grid works more like a spreadsheet: edit cells in place, select and
 - JSON export of a result with two columns of one name keeps both values: the repeat is named `name (2)` (it used to keep only the last one).
 
 ### Kafka
-- **Last N in topic**: a consumer start point that shows the newest N records of the topic as a whole, by record time, oldest first, instead of the last N of every partition. It reads the last N of each partition, keeps the newest N and shows them once every partition is read; without stop at end it then follows new records. A record limit keeps the newest of the pick. The MCP `kafka_consume` tool takes it as `from=newest`; a consumer group cannot be reset to it.
+- **Stop at end no longer hangs on a busy transactional topic**: a partition whose end offset is a transaction commit marker never delivers that offset, and the 5 second idle rule that ends the read was reset by records arriving in other partitions, so the consumer could keep running. Only records still below an end count now.
+- **Last N in topic**: a consumer start point that shows the newest N records of the topic as a whole, by record time, oldest first, instead of the last N of every partition. It reads the last N offsets of each partition, keeps the newest N records and shows them once every partition is read; without stop at end it then follows new records. A record limit keeps the newest of the pick. Compacted or transactional partitions hold fewer records than offsets in that window, so the pick can be shorter than N. The MCP `kafka_consume` tool takes it as `from=newest`; a consumer group cannot be reset to it.
 
 ## [1.1.0] - Database tab grows up: Db2, foreign keys, ER diagram
 
