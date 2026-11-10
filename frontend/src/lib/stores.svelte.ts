@@ -2606,6 +2606,51 @@ class SessionStore {
 }
 export const sessions = new SessionStore();
 
+// Live sessions as the tree shows them, computed once for all rows: the
+// connection ids with a connected session (inventory hosts as
+// "dyn:<entryID>", gotcha 50), how many sit under each folder (its own
+// rows and every subfolder's), and the connection behind the focused
+// pane. Each TreeNode used to build the set itself and walk its subtree.
+class LiveTreeStore {
+  ids = $derived(
+    new Set(sessions.tabs.filter((t) => t.status === "connected").map((t) => t.connectionId)),
+  );
+  private counts = $derived.by(() => {
+    const m = new Map<string, number>();
+    if (this.ids.size === 0) return m;
+    const bump = (folderId: string | null | undefined) => {
+      let id = folderId ?? null;
+      while (id) {
+        m.set(id, (m.get(id) ?? 0) + 1);
+        id = tree.folderById(id)?.parent_id ?? null;
+      }
+    };
+    for (const id of this.ids) {
+      if (!id.startsWith("dyn:")) bump(tree.connectionById(id)?.folder_id);
+    }
+    // Inventory entries count once their folder's entries are loaded,
+    // same as the folder's row count.
+    for (const [fid, list] of Object.entries(tree.dynamicEntries)) {
+      for (const e of list ?? []) {
+        if (this.ids.has("dyn:" + e.id)) bump(fid);
+      }
+    }
+    return m;
+  });
+  inFolder(folderId: string): number {
+    return this.counts.get(folderId) ?? 0;
+  }
+  activeConnId = $derived.by(() => {
+    const tabId = paneTabs.activeTabId;
+    if (!tabId) return "";
+    const leaf = paneTabs.activePane(tabId);
+    if (!leaf) return "";
+    return sessions.tabs.find((s) => s.sessionId === leaf.sessionId)?.connectionId ?? "";
+  });
+}
+
+export const liveTree = new LiveTreeStore();
+
 // Walk a pane tree and collect every leaf id whose sessionId matches.
 function findLeavesForSession(node: PaneNode, sessionId: string): string[] {
   const out: string[] = [];
