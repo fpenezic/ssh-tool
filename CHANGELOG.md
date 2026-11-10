@@ -14,6 +14,7 @@ The Database grid works more like a spreadsheet: edit cells in place, select and
 ### Appearance
 - **UI font size means the text size**: the number in Settings > Appearance is now the size of the main text, and field labels, badges and titles are one step smaller or larger than it instead of a dozen fractions of it, with nothing under 10px. At 11, labels and notes that were 8 to 9px are now 10px. Text fields, selects and buttons in Settings share one height that grows with the font.
 - On / off options in Settings are switches, like the App proxy one; option cards put the radio or switch beside the title instead of on a line of its own; a section heading inside a card no longer renders larger than the card's own title.
+- **Disable WebGL renderer** in Settings > Terminal is now **GPU rendering (WebGL)** and reads the positive way round: off (the default, as before) draws with canvas, on draws new tabs on the graphics card. The stored setting is unchanged, so nothing flips on upgrade. On Android terminal tabs always use canvas.
 
 ### Connection tree
 - **Filtering a large tree is several times faster**: with 1000 connections the first letter typed takes about a third of the time it did and narrowing to a few folders about a tenth; typing a word applies the filter once after a short pause instead of after every letter. The tree looks up folders and connections by id instead of scanning the whole list for every row.
