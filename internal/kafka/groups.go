@@ -179,6 +179,11 @@ func (c *Cluster) ResetGroupOffsets(ctx context.Context, req ResetGroupRequest) 
 	if len(g.Members) > 0 {
 		return ErrGroupActive
 	}
+	if req.Mode == FromNewest {
+		// A committed offset is per partition; "the newest N of the topic"
+		// has no single offset to commit.
+		return fmt.Errorf("start mode %q is for reading only", req.Mode)
+	}
 	starts, _, err := c.startOffsets(ctx, ConsumeRequest{
 		Topic: req.Topic, Mode: req.Mode, N: req.N, Timestamp: req.Timestamp, Partition: -1,
 	})

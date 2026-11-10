@@ -101,7 +101,7 @@ export class TopicState {
       const id = await api.kafkaConsumeStart(this.sessionId, {
         topic: this.topic,
         mode: this.mode,
-        n: this.mode === "last" ? this.n : this.mode === "offset" ? this.offset : 0,
+        n: this.mode === "last" || this.mode === "newest" ? this.n : this.mode === "offset" ? this.offset : 0,
         timestamp: this.mode === "timestamp" ? new Date(this.when).getTime() : 0,
         partition: this.partition,
         limit: Math.max(0, this.limit | 0),
@@ -141,7 +141,7 @@ export class TopicState {
       return;
     }
     this.mode = req.mode;
-    if (req.mode === "last") this.n = req.n;
+    if (req.mode === "last" || req.mode === "newest") this.n = req.n;
     if (req.mode === "offset") this.offset = req.n;
     if (req.mode === "timestamp") this.when = localAt(req.timestamp);
     this.partition = req.partition;

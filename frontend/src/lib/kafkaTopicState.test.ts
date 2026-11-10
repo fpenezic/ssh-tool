@@ -48,6 +48,13 @@ describe("TopicState", () => {
     expect(calls).toContain("stop kc:2");
   });
 
+  it("adopts a newest-N consumer with its count", () => {
+    const t = topicState("s1", "audit");
+    t.adopt("kc:3", req("audit", { mode: "newest", n: 25 }) as any);
+    expect(t.mode).toBe("newest");
+    expect(t.n).toBe(25);
+  });
+
   it("closing the tab stops the backend consumer, forgetting does not", () => {
     topicState("s1", "a").adopt("kc:a", req("a") as any);
     topicState("s1", "b").adopt("kc:b", req("b") as any);

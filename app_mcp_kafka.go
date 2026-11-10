@@ -62,8 +62,8 @@ type mcpKafkaTopicArgs struct {
 type mcpKafkaConsumeArgs struct {
 	SessionID   string `json:"session_id" jsonschema:"the id of a shared Kafka session"`
 	Topic       string `json:"topic" jsonschema:"the topic to read"`
-	From        string `json:"from,omitempty" jsonschema:"where to start: last (default, the last n records of every partition), earliest, latest (wait for new records), offset, timestamp"`
-	N           int64  `json:"n,omitempty" jsonschema:"for from=last the records per partition (default 10); for from=offset the offset"`
+	From        string `json:"from,omitempty" jsonschema:"where to start: last (default, the last n records of every partition), newest (the newest n records of the topic as a whole, by record time), earliest, latest (wait for new records), offset, timestamp"`
+	N           int64  `json:"n,omitempty" jsonschema:"for from=last the records per partition, for from=newest the records in all (default 10); for from=offset the offset"`
 	Timestamp   string `json:"timestamp,omitempty" jsonschema:"for from=timestamp: RFC 3339 time or unix milliseconds"`
 	Partition   *int32 `json:"partition,omitempty" jsonschema:"read only this partition (default all)"`
 	MaxMessages int    `json:"max_messages,omitempty" jsonschema:"records to return (default 20, max 500)"`
@@ -335,7 +335,7 @@ func (a *App) mcpKafkaConsume(ctx context.Context, in mcpKafkaConsumeArgs) (stri
 	case "":
 		req.Mode = kafka.FromLast
 		fallthrough
-	case kafka.FromLast:
+	case kafka.FromLast, kafka.FromNewest:
 		if req.N <= 0 {
 			req.N = 10
 		}

@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"bufio"
+	"container/heap"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -23,6 +24,7 @@ const (
 	FromEarliest  = "earliest"  // the oldest retained record
 	FromLatest    = "latest"    // only records produced from now on
 	FromLast      = "last"      // the last N records of every partition
+	FromNewest    = "newest"    // the newest N records of the topic as a whole
 	FromOffset    = "offset"    // a given offset in every partition
 	FromTimestamp = "timestamp" // the first record at or after a time
 )
@@ -74,7 +76,15 @@ type ConsumeRequest struct {
 	Topic string `json:"topic"`
 	// Mode is one of the From* constants.
 	Mode string `json:"mode"`
-	// N is the record count for FromLast and the offset for FromOffset.
+	// N is the record count for FromLast and FromNewest and the offset for
+	// FromOffset.
+	//
+	// FromNewest reads the last N records of every partition (the newest N of
+	// the topic are among them), keeps the N with the newest record
+	// timestamps and shows them oldest first once every partition has been
+	// read up to the end it had at start; then it goes on like any other
+	// mode. A producer that sets its own timestamps (CreateTime) out of order
+	// within a partition can make the pick differ from a strict time order.
 	N int64 `json:"n"`
 	// Timestamp is unix milliseconds, for FromTimestamp.
 	Timestamp int64 `json:"timestamp"`
@@ -237,6 +247,9 @@ type ConsumeSnapshot struct {
 	Filtering bool `json:"filtering"`
 	// Partitions is the partition set being read.
 	Partitions []int32 `json:"partitions"`
+	// Gathering: a FromNewest consumer is still reading the partitions to
+	// pick the newest records; nothing is buffered until it is done.
+	Gathering bool `json:"gathering,omitempty"`
 }
 
 // Consumer reads one topic into a bounded buffer until stopped.
@@ -262,6 +275,7 @@ type Consumer struct {
 	received   uint64
 	dropped    uint64
 	partitions []int32
+	gathering  bool
 }
 
 // Consume starts a consumer. Start offsets are resolved before it returns,
@@ -322,8 +336,106 @@ func (c *Cluster) Consume(ctx context.Context, req ConsumeRequest) (*Consumer, e
 			}
 		}
 	}
-	go k.run(runCtx, cl, until)
+	var g *gather
+	if req.Mode == FromNewest && req.N > 0 {
+		gends := map[int32]int64{}
+		for p, s := range starts {
+			if e := ends[p]; e > s {
+				gends[p] = e
+			}
+		}
+		if len(gends) > 0 {
+			k.mu.Lock()
+			// More than the buffer holds would be evicted at the flush, and a
+			// limit keeps the newest of the pick, not the oldest.
+			n := int(min(req.N, int64(k.maxMsgs)))
+			if req.Limit > 0 {
+				n = min(n, req.Limit)
+			}
+			k.gathering = true
+			k.mu.Unlock()
+			g = &gather{n: n, ends: gends}
+		}
+	}
+	go k.run(runCtx, cl, until, g)
 	return k, nil
+}
+
+// gather is the first phase of a FromNewest consumer: the newest n matching
+// records seen so far, until every partition in ends has been read up to it.
+type gather struct {
+	n    int
+	h    recHeap
+	ends map[int32]int64 // partitions still being read, and their end
+	// late holds the records past the start-time ends (and those of the
+	// partitions that were empty), in arrival order, for after the flush.
+	late []*kgo.Record
+}
+
+// older orders records by timestamp, then partition and offset, so ties
+// still come out in one fixed order.
+func older(a, b *kgo.Record) bool {
+	if !a.Timestamp.Equal(b.Timestamp) {
+		return a.Timestamp.Before(b.Timestamp)
+	}
+	if a.Partition != b.Partition {
+		return a.Partition < b.Partition
+	}
+	return a.Offset < b.Offset
+}
+
+// recHeap is a min-heap by older: the root is the record to drop first.
+type recHeap []*kgo.Record
+
+func (h recHeap) Len() int           { return len(h) }
+func (h recHeap) Less(i, j int) bool { return older(h[i], h[j]) }
+func (h recHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *recHeap) Push(x any)        { *h = append(*h, x.(*kgo.Record)) }
+func (h *recHeap) Pop() any {
+	old := *h
+	r := old[len(old)-1]
+	*h = old[:len(old)-1]
+	return r
+}
+
+// offer takes one record of the gather phase.
+func (k *Consumer) offer(g *gather, r *kgo.Record) {
+	k.mu.Lock()
+	k.scanned++
+	k.mu.Unlock()
+	if k.filt.active() && !k.filt.match(r) {
+		return
+	}
+	if len(g.h) < g.n {
+		heap.Push(&g.h, r)
+		return
+	}
+	if older(g.h[0], r) {
+		g.h[0] = r
+		heap.Fix(&g.h, 0)
+	}
+}
+
+// flush ends the gather phase: the pick goes into the buffer oldest first,
+// then the records that came past the ends. It reports whether the limit is
+// reached.
+func (k *Consumer) flush(g *gather) bool {
+	k.mu.Lock()
+	k.gathering = false
+	k.mu.Unlock()
+	recs := []*kgo.Record(g.h)
+	sort.Slice(recs, func(i, j int) bool { return older(recs[i], recs[j]) })
+	for _, r := range recs {
+		if k.keep(r, false) {
+			return true
+		}
+	}
+	for _, r := range g.late {
+		if k.add(r) {
+			return true
+		}
+	}
+	return false
 }
 
 // startOffsets resolves the exact start offset of every partition read, and
@@ -366,7 +478,7 @@ func (c *Cluster) startOffsets(ctx context.Context, req ConsumeRequest) (map[int
 			o = first
 		case FromLatest:
 			o = end
-		case FromLast:
+		case FromLast, FromNewest:
 			o = max(first, end-max(req.N, 0))
 		case FromOffset:
 			o = min(max(req.N, first), end)
@@ -392,7 +504,7 @@ func (c *Cluster) startOffsets(ctx context.Context, req ConsumeRequest) (map[int
 	return starts, ends, nil
 }
 
-func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int64) {
+func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int64, g *gather) {
 	defer close(k.done)
 	defer cl.Close()
 
@@ -406,6 +518,10 @@ func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int6
 		fetches := cl.PollFetches(pollCtx)
 		cancel()
 		if ctx.Err() != nil || fetches.IsClientClosed() {
+			if g != nil {
+				// Stopped while gathering: show what was picked so far.
+				k.flush(g)
+			}
 			k.finish(ConsumeStopped, "")
 			return
 		}
@@ -426,22 +542,36 @@ func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int6
 					delete(until, r.Partition)
 				}
 			}
+			if g != nil {
+				if e, ok := g.ends[r.Partition]; ok && r.Offset < e {
+					k.offer(g, r)
+					if r.Offset+1 >= e {
+						delete(g.ends, r.Partition)
+					}
+				} else {
+					g.late = append(g.late, r)
+				}
+				return
+			}
 			if k.add(r) {
 				limitHit = true
 			}
 		})
+		if got {
+			idleSince = time.Now()
+		}
+		// The same idle rule as StopAtEnd: an end offset that carries no
+		// record (a transaction marker) must not keep the pick hidden.
+		if g != nil && (len(g.ends) == 0 || time.Since(idleSince) > stopAtEndIdle) {
+			limitHit = k.flush(g)
+			g = nil
+		}
 		if limitHit {
 			k.finish(ConsumeDone, "")
 			return
 		}
 		if until != nil {
-			if len(until) == 0 {
-				k.finish(ConsumeDone, "")
-				return
-			}
-			if got {
-				idleSince = time.Now()
-			} else if time.Since(idleSince) > stopAtEndIdle {
+			if len(until) == 0 || time.Since(idleSince) > stopAtEndIdle {
 				k.finish(ConsumeDone, "")
 				return
 			}
@@ -457,6 +587,12 @@ func (k *Consumer) add(r *kgo.Record) bool {
 		k.mu.Unlock()
 		return false
 	}
+	return k.keep(r, true)
+}
+
+// keep buffers a record that passed the filter; scan counts it as read too
+// (the gather phase counted it when it was read).
+func (k *Consumer) keep(r *kgo.Record, scan bool) bool {
 	m := Message{
 		Partition: r.Partition,
 		Offset:    r.Offset,
@@ -472,7 +608,9 @@ func (k *Consumer) add(r *kgo.Record) bool {
 	}
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	k.scanned++
+	if scan {
+		k.scanned++
+	}
 	k.received++
 	m.Seq = k.received
 	k.buf = append(k.buf, m)
@@ -585,6 +723,7 @@ func (k *Consumer) Snapshot(after uint64, o SnapshotOptions) ConsumeSnapshot {
 		Dropped:    k.dropped,
 		Buffered:   len(live),
 		Partitions: k.partitions,
+		Gathering:  k.gathering,
 		Messages:   []Message{},
 
 		BufferMessages: k.maxMsgs,

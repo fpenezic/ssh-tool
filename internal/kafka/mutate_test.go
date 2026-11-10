@@ -228,6 +228,9 @@ func TestGroups(t *testing.T) {
 	if d, _ = c.Group(ctx, "billing"); d.Lag != 3 {
 		t.Fatalf("after last-1 reset: lag %d", d.Lag)
 	}
+	if err := c.ResetGroupOffsets(ctx, ResetGroupRequest{Group: "billing", Topic: "orders", Mode: FromNewest, N: 1}); err == nil {
+		t.Fatal("a reset to the newest records of the topic went through")
+	}
 
 	if err := c.DeleteGroup(ctx, "billing"); err != nil {
 		t.Fatal(err)

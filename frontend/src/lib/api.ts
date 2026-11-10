@@ -436,7 +436,9 @@ export interface KafkaTopicMetrics {
   size_error?: string;
 }
 
-export type KafkaStartMode = "earliest" | "latest" | "last" | "offset" | "timestamp";
+// last = the last n of every partition; newest = the newest n of the topic
+// as a whole, by record time.
+export type KafkaStartMode = "earliest" | "latest" | "last" | "newest" | "offset" | "timestamp";
 
 export interface KafkaConsumeRequest {
   topic: string;
@@ -485,6 +487,9 @@ export interface KafkaConsumeSnapshot {
   buffer_bytes: number;
   filtering: boolean;
   partitions: number[];
+  // A "newest" consumer still reading the partitions to make its pick;
+  // nothing is buffered until it is done.
+  gathering?: boolean;
 }
 
 export interface KafkaPayloadInput { text: string; encoding: "utf8" | "base64" }

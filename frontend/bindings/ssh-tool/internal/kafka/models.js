@@ -148,7 +148,15 @@ export class ConsumeRequest {
         }
         if (!("n" in $$source)) {
             /**
-             * N is the record count for FromLast and the offset for FromOffset.
+             * N is the record count for FromLast and FromNewest and the offset for
+             * FromOffset.
+             * 
+             * FromNewest reads the last N records of every partition (the newest N of
+             * the topic are among them), keeps the N with the newest record
+             * timestamps and shows them oldest first once every partition has been
+             * read up to the end it had at start; then it goes on like any other
+             * mode. A producer that sets its own timestamps (CreateTime) out of order
+             * within a partition can make the pick differ from a strict time order.
              * @member
              * @type {number}
              */
@@ -348,6 +356,15 @@ export class ConsumeSnapshot {
              * @type {number[]}
              */
             this["partitions"] = [];
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Gathering: a FromNewest consumer is still reading the partitions to
+             * pick the newest records; nothing is buffered until it is done.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["gathering"] = undefined;
         }
 
         Object.assign(this, $$source);
