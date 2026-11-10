@@ -4602,7 +4602,7 @@
     <p class="hint warn-note">
       The {title} plugin is not installed.
       <button type="button" class="link-btn" onclick={() => showPlugin(name)}>Install it</button>
-      first (Plugins &amp; proxy, at the top of the list), then create the profile.
+      first (Plugins &amp; proxy, at the top of the list){npEditingId ? ": until then the profile cannot bring its tunnel up." : ", then create the profile."}
     </p>
   {/snippet}
 

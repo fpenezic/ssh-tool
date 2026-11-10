@@ -16,6 +16,7 @@ The Database grid works more like a spreadsheet: edit cells in place, select and
 - NetBird and Tailscale profiles remember what their plugin reports about the tunnel, like OpenConnect and OpenVPN: with NetBird plugin 1.7 or later (on NetBird 0.82) that is the NetBird DNS domain and the nameserver groups' domains, so names in them route through the app proxy with nothing added by hand.
 - The NetBird setup key field takes the whole `netbird up --management-url ... --setup-key ...` command the dashboard shows when adding a peer and keeps just the key (filling an empty Management URL); a personal access token (`nbp_...`) is refused at once instead of failing as "setup key is invalid" after a minute.
 - The app proxy's summary counts each VPN's DNS domains next to its networks, so a VPN reached by domain only (NetBird without network routes) is listed too.
+- A connection on an auto-mode profile whose plugin is not installed says so: the host was reachable directly, so the connect went ahead without the VPN and gave no hint the profile could never bring its tunnel up. A warning now shows once per profile while the app runs; click it to open the profile and install the plugin.
 
 ### Database
 - A folder's list of databases shows and can be edited with the folder's own Database switch off, so it can list prod / stage for the connections under it that turn the Database on, without turning it on for all of them.
