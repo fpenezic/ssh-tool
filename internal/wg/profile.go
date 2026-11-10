@@ -47,7 +47,12 @@ type Profile struct {
 	PrivateKey string   `json:"-"`         // base64, vault-only
 	Addresses  []string `json:"addresses"` // CIDR or bare IP
 	DNS        []string `json:"dns"`       // resolver IPs inside the tunnel
-	MTU        int      `json:"mtu"`       // 0 -> 1420
+	// Search domains: the names on wg-quick's DNS line ("DNS = 10.0.0.53,
+	// corp.example.com"), which wg-quick hands resolvconf as the search
+	// list. A short name is tried in them, and the app proxy routes names
+	// in them through this profile.
+	Search []string `json:"search_domains,omitempty"`
+	MTU    int      `json:"mtu"` // 0 -> 1420
 
 	Peers []Peer `json:"peers"`
 }
@@ -79,8 +84,8 @@ func (p *Profile) RenderConf() string {
 	if len(p.Addresses) > 0 {
 		fmt.Fprintf(&b, "Address = %s\n", strings.Join(p.Addresses, ", "))
 	}
-	if len(p.DNS) > 0 {
-		fmt.Fprintf(&b, "DNS = %s\n", strings.Join(p.DNS, ", "))
+	if dns := append(append([]string(nil), p.DNS...), p.Search...); len(dns) > 0 {
+		fmt.Fprintf(&b, "DNS = %s\n", strings.Join(dns, ", "))
 	}
 	if p.MTU > 0 {
 		fmt.Fprintf(&b, "MTU = %d\n", p.MTU)
@@ -148,7 +153,16 @@ func ParseConf(text string) (*Profile, error) {
 			case "address":
 				p.Addresses = append(p.Addresses, splitList(val)...)
 			case "dns":
-				p.DNS = append(p.DNS, splitList(val)...)
+				// wg-quick takes resolver addresses and search domains on
+				// one line: an address is a resolver, anything else a
+				// search domain.
+				for _, d := range splitList(val) {
+					if _, err := netip.ParseAddr(d); err == nil {
+						p.DNS = append(p.DNS, d)
+					} else {
+						p.Search = append(p.Search, strings.TrimSuffix(d, "."))
+					}
+				}
 			case "mtu":
 				n, err := strconv.Atoi(val)
 				if err != nil {
@@ -203,6 +217,11 @@ func (p *Profile) Validate() error {
 	for _, d := range p.DNS {
 		if _, err := netip.ParseAddr(d); err != nil {
 			return fmt.Errorf("bad DNS %q: %w", d, err)
+		}
+	}
+	for _, d := range p.Search {
+		if !validDomain(d) {
+			return fmt.Errorf("bad DNS entry %q: neither an address nor a search domain", d)
 		}
 	}
 	if len(p.Peers) == 0 {
@@ -302,4 +321,23 @@ func keyToHex(b64 string) (string, error) {
 		return "", fmt.Errorf("key is %d bytes, want 32", len(raw))
 	}
 	return hex.EncodeToString(raw), nil
+}
+
+// validDomain reports a DNS name: dot-separated labels of letters, digits
+// and hyphens (not at a label's ends), 63 bytes a label, 253 in all.
+func validDomain(d string) bool {
+	if d == "" || len(d) > 253 {
+		return false
+	}
+	for _, l := range strings.Split(d, ".") {
+		if l == "" || len(l) > 63 || l[0] == '-' || l[len(l)-1] == '-' {
+			return false
+		}
+		for _, c := range l {
+			if !(c == '-' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z') {
+				return false
+			}
+		}
+	}
+	return true
 }

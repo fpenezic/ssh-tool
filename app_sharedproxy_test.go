@@ -268,6 +268,16 @@ func TestSharedDomainHandBeatsGateway(t *testing.T) {
 	}
 }
 
+// A WireGuard profile's search domains (its config's DNS line) route by
+// name and are tried for short names, like a gateway's.
+func TestProfileDomainsWireGuardSearch(t *testing.T) {
+	row := &store.NetworkProfile{ConfigJSON: `{"dns":["10.99.0.1"],"search_domains":["lab.test"]}`}
+	doms, gw, search := profileDomains(row, LocalProxyConfig{})
+	if strings.Join(doms, ",") != "lab.test" || !gw["lab.test"] || strings.Join(search, ",") != "lab.test" {
+		t.Errorf("domains %v gateway %v search %v", doms, gw, search)
+	}
+}
+
 // A domain the gateway reports and the user also added by hand counts as
 // added by hand.
 func TestProfileDomainsHandOverGateway(t *testing.T) {

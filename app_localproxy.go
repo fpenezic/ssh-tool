@@ -175,8 +175,13 @@ func profileDomains(row *store.NetworkProfile, cfg LocalProxyConfig) (domains []
 	var v struct {
 		Domains []string `json:"last_domains"`
 		Search  []string `json:"last_search_domains"`
+		// A WireGuard profile's search domains, from the DNS line of its
+		// config: they count like the domains a gateway reports.
+		WgSearch []string `json:"search_domains"`
 	}
 	_ = json.Unmarshal([]byte(row.ConfigJSON), &v)
+	v.Domains = append(v.Domains, v.WgSearch...)
+	v.Search = append(v.Search, v.WgSearch...)
 	gateway = map[string]bool{}
 	seen := map[string]bool{}
 	add := func(list *[]string, d string) {

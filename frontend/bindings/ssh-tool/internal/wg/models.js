@@ -134,6 +134,17 @@ export class Profile {
              */
             this["dns"] = [];
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Search domains: the names on wg-quick's DNS line ("DNS = 10.0.0.53,
+             * corp.example.com"), which wg-quick hands resolvconf as the search
+             * list. A short name is tried in them, and the app proxy routes names
+             * in them through this profile.
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["search_domains"] = undefined;
+        }
         if (!("mtu" in $$source)) {
             /**
              * 0 -> 1420
@@ -161,7 +172,8 @@ export class Profile {
     static createFrom($$source = {}) {
         const $$createField4_0 = $$createType0;
         const $$createField5_0 = $$createType0;
-        const $$createField7_0 = $$createType2;
+        const $$createField6_0 = $$createType0;
+        const $$createField8_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("addresses" in $$parsedSource) {
             $$parsedSource["addresses"] = $$createField4_0($$parsedSource["addresses"]);
@@ -169,8 +181,11 @@ export class Profile {
         if ("dns" in $$parsedSource) {
             $$parsedSource["dns"] = $$createField5_0($$parsedSource["dns"]);
         }
+        if ("search_domains" in $$parsedSource) {
+            $$parsedSource["search_domains"] = $$createField6_0($$parsedSource["search_domains"]);
+        }
         if ("peers" in $$parsedSource) {
-            $$parsedSource["peers"] = $$createField7_0($$parsedSource["peers"]);
+            $$parsedSource["peers"] = $$createField8_0($$parsedSource["peers"]);
         }
         return new Profile(/** @type {Partial<Profile>} */($$parsedSource));
     }

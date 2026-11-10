@@ -22,14 +22,37 @@ type Tunnel struct {
 	Name      string // profile display name, for logs / UI
 	dev       *device.Device
 	tnet      *netstack.Net
+	search    []string // the profile's search domains, for short names
 	startedAt time.Time
 }
 
 // DialContext dials host:port through the tunnel. Hostnames resolve
 // via the profile's DNS servers inside the tunnel (netstack's own
-// resolver); without DNS in the profile only IP literals work.
+// resolver); without DNS in the profile only IP literals work. A short
+// name (no dot) is tried in the profile's search domains first, in
+// order, as resolv.conf would; then as written.
 func (t *Tunnel) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	return t.tnet.DialContext(ctx, network, addr)
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || len(t.search) == 0 || strings.Contains(host, ".") || strings.Contains(host, ":") {
+		return t.tnet.DialContext(ctx, network, addr)
+	}
+	var first error
+	for _, d := range t.search {
+		c, err := t.tnet.DialContext(ctx, network, net.JoinHostPort(host+"."+d, port))
+		if err == nil {
+			return c, nil
+		}
+		if first == nil {
+			first = err
+		}
+		if ctx.Err() != nil {
+			return nil, err
+		}
+	}
+	if c, err := t.tnet.DialContext(ctx, network, addr); err == nil {
+		return c, nil
+	}
+	return nil, first
 }
 
 // Status is a point-in-time snapshot for the UI, parsed from the
@@ -229,7 +252,7 @@ func startTunnel(p *Profile, bindPhysical bool) (*Tunnel, error) {
 		dev.Close()
 		return nil, fmt.Errorf("device up: %w", err)
 	}
-	return &Tunnel{ProfileID: p.ID, Name: p.Name, dev: dev, tnet: tnet, startedAt: time.Now()}, nil
+	return &Tunnel{ProfileID: p.ID, Name: p.Name, dev: dev, tnet: tnet, search: p.Search, startedAt: time.Now()}, nil
 }
 
 // buildUAPI renders the device.IpcSet key=value block: hex keys,

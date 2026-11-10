@@ -63,6 +63,25 @@ func TestParseConf(t *testing.T) {
 	}
 }
 
+// wg-quick's DNS line takes resolver addresses and search domains
+// together; the domains go to Search and come back on render.
+func TestParseConfDNSSearch(t *testing.T) {
+	conf := strings.Replace(sampleConf, "DNS = 10.0.0.1", "DNS = 1.2.3.4, example.com, fd00::53, corp.example.net.", 1)
+	p, err := ParseConf(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(p.DNS, ",") != "1.2.3.4,fd00::53" || strings.Join(p.Search, ",") != "example.com,corp.example.net" {
+		t.Fatalf("dns %v search %v", p.DNS, p.Search)
+	}
+	if !strings.Contains(p.RenderConf(), "DNS = 1.2.3.4, fd00::53, example.com, corp.example.net\n") {
+		t.Errorf("render:\n%s", p.RenderConf())
+	}
+	if _, err := ParseConf(strings.Replace(sampleConf, "DNS = 10.0.0.1", "DNS = 10.0.0.1, bad_domain!", 1)); err == nil || !strings.Contains(err.Error(), "bad DNS entry") {
+		t.Errorf("a broken entry: %v", err)
+	}
+}
+
 func TestParseConfErrors(t *testing.T) {
 	cases := []struct{ name, conf, want string }{
 		{"empty", "", "no Address"},
