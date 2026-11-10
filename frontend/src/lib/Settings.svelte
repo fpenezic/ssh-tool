@@ -3805,7 +3805,8 @@
     </label>
     <p class="hint inline">
       The size of the main text: tree rows, menus, descriptions, fields.
-      Hints and labels are a step smaller, titles a step larger, and
+      Field labels, badges and secondary columns are a step smaller,
+      titles a step larger, and
       nothing goes under 10px. Default 13. Terminal font size has its own
       setting.
     </p>
