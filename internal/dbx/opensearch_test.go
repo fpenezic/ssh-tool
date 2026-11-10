@@ -86,6 +86,14 @@ func TestOSRead(t *testing.T) {
 		"DESCRIBE TABLES LIKE logs",
 		"GET /logs/_search?q=a..b",
 		"POST /logs.2026.11/_search\n{}",
+		// A GET reads whatever its path says: date-math names, encoded ids.
+		"GET /%3Clogs-%7Bnow%2Fd%7D%3E/_search",
+		"GET /idx/_doc/a%2Fb",
+		"GET /idx/_doc/100%25",
+		"GET /_search/../_cluster/settings",
+		"POST /%3Clogs-%7Bnow%2Fd%7D%3E/_search\n{}",
+		"POST /idx/_search/\n{}",
+		"POST /100%25/_search\n{}",
 	}
 	for _, s := range read {
 		if !IsRead(EngineOpenSearch, s) || CheckReadOnly(EngineOpenSearch, s) != nil {
@@ -122,8 +130,14 @@ func TestOSRead(t *testing.T) {
 		"POST /_search/../idx/_doc\n{}",
 		"POST /idx/_search%2f..%2f_delete_by_query\n{}",
 		"POST /idx/_search\\..\\_delete_by_query\n{}",
-		"POST /idx/_search/%zz/_doc\n{}",
-		"GET /_search/../_cluster/settings",
+		"POST /idx/_search/..;/_delete_by_query\n{}",
+		"POST /idx/_search/..%3b/_delete_by_query\n{}",
+		"POST /idx/_search;x/../_delete_by_query\n{}",
+		"POST /idx/_search/%5fdelete_by_query\n{}",
+		"POST /idx/_search//_delete_by_query\n{}",
+		"POST /idx/_search/%c0%ae%c0%ae/_delete_by_query\n{}",
+		"POST /idx/_search/\uff0e\uff0e/_delete_by_query\n{}",
+		"GET /_sql/../_delete_by_query\n{\"query\": \"SELECT 1\"}",
 	}
 	for _, s := range write {
 		if IsRead(EngineOpenSearch, s) || CheckReadOnly(EngineOpenSearch, s) == nil {

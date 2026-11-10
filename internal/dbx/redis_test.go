@@ -57,7 +57,9 @@ func TestRDRead(t *testing.T) {
 		"ACL SETUSER x on", "ACL LOG RESET", "SCRIPT FLUSH", "GET \"unterminated",
 		// Replies with passwords or password hashes.
 		"CONFIG GET *", "config get requirepass", "CONFIG GET *PASS*", "CONFIG GET maxmemory masterauth",
-		"CONFIG GET master?uth", "CONFIG GET [mr]*", "CONFIG GET tls-*", "CONFIG GET [", "ACL LIST", "acl getuser default"} {
+		"CONFIG GET master?uth", "CONFIG GET [mr]*", "CONFIG GET tls-*", "CONFIG GET [", "ACL LIST", "acl getuser default",
+		"CONFIG GET [z-a]equirepass", "CONFIG GET requirepas[t-r]", "CONFIG GET [z-a]asterauth",
+		"CONFIG GET primaryauth", "CONFIG GET prim*"} {
 		if IsRead(EngineRedis, s) || CheckReadOnly(EngineRedis, s) == nil {
 			t.Errorf("read: %q", s)
 		}

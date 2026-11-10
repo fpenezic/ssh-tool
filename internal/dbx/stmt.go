@@ -488,12 +488,13 @@ var msWriteWords = []string{
 	"KILL", "SHUTDOWN", "RECONFIGURE", "BULK", "INTO", "OPENQUERY", "OPENROWSET",
 	"OPENDATASOURCE", "WRITETEXT", "UPDATETEXT", "BEGIN", "COMMIT", "ROLLBACK",
 	"SAVE", "USE", "SET",
-	// Not undone by the rollback (SETUSER changes the session's identity,
-	// RAISERROR ... WITH LOG writes the error log, CHECKPOINT flushes) or
-	// with effects outside the statement (Service Broker SEND / RECEIVE,
-	// DISABLE / ENABLE TRIGGER, WAITFOR holding the connection).
-	"DISABLE", "ENABLE", "RECEIVE", "SEND", "SETUSER", "WAITFOR", "RAISERROR",
-	"CHECKPOINT",
+	// Not undone by the rollback: SETUSER changes the session's identity,
+	// RAISERROR ... WITH LOG writes the error log, CHECKPOINT flushes, and
+	// WAITFOR holds the connection. All reserved words, so no column has
+	// the name unbracketed. DISABLE / ENABLE TRIGGER and Service Broker
+	// SEND / RECEIVE are left out: the rollback undoes them, and they are
+	// not reserved (a column named send stays readable).
+	"SETUSER", "WAITFOR", "RAISERROR", "CHECKPOINT",
 }
 
 // msWriteWord is the first of msWriteWords in a SQL Server statement's
@@ -534,8 +535,10 @@ func sqlIsRead(engine, stmt string) bool {
 		return false
 	case lead == "WITH" && (words["INSERT"] || words["UPDATE"] || words["DELETE"] || words["MERGE"]):
 		return false
-	case lead == "EXPLAIN" && (words["ANALYZE"] || words["ANALYSE"]):
-		// PostgreSQL takes both spellings; either runs the statement.
+	case lead == "EXPLAIN" && (words["ANALYZE"] || words["ANALYSE"] || explainQuotedOption(engine, stmt)):
+		// PostgreSQL takes both spellings; either runs the statement. An
+		// option may also be written as a quoted name ("analyze",
+		// U&"\0061nalyze"), which codeWords does not see.
 		return false
 	case engine == EngineOracle && lead == "WITH" && (words["FUNCTION"] || words["PROCEDURE"]):
 		// WITH FUNCTION: PL/SQL in the query, which may be an autonomous
@@ -547,32 +550,94 @@ func sqlIsRead(engine, stmt string) bool {
 		// A data-change table reference: SELECT ... FROM FINAL TABLE
 		// (INSERT ...) runs the INSERT.
 		return false
-	case engine == EngineMSSQL && words["NEXT"] && words["VALUE"],
-		engine == EngineDB2 && ((words["NEXT"] && words["VALUE"]) || words["NEXTVAL"]),
-		engine == EngineOracle && (words["NEXTVAL"] || oraQuotedIdent(stmt, "NEXTVAL")):
+	case seqNext(engine, stmt, words):
 		// A sequence moves on in a read, and no rollback takes it back.
 		return false
 	}
 	return true
 }
 
-// oraQuotedIdent reports a double-quoted identifier in an Oracle statement
-// that is exactly want. codeOnly blanks quoted identifiers, so
-// seq."NEXTVAL" (a sequence moved on in a SELECT) has no NEXTVAL word.
-// Quoted identifiers are case-sensitive: "nextval" is another name.
-func oraQuotedIdent(stmt, want string) bool {
+// seqNext reports a statement that takes a sequence's next value, which
+// no rollback undoes.
+func seqNext(engine, stmt string, words map[string]bool) bool {
+	switch engine {
+	case EngineMSSQL:
+		return words["NEXT"] && words["VALUE"]
+	case EngineDB2:
+		return (words["NEXT"] && words["VALUE"]) || words["NEXTVAL"] || quotedMember(engine, stmt, "NEXTVAL")
+	case EngineOracle:
+		return words["NEXTVAL"] || quotedMember(engine, stmt, "NEXTVAL")
+	}
+	return false
+}
+
+// quotedMember reports want written as a double-quoted name after a dot
+// (seq."NEXTVAL"). codeOnly blanks quoted identifiers, so that form has no
+// NEXTVAL word. Quoted names are case-sensitive ("nextval" is another
+// name), and one not after a dot is a column alias, not a pseudo-column.
+func quotedMember(engine, stmt, want string) bool {
+	prev := byte(0)
 	for i := 0; i < len(stmt); {
-		n := skipNonCode(EngineOracle, stmt, i)
+		n := skipNonCode(engine, stmt, i)
 		if n <= i {
+			if c := stmt[i]; c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+				prev = c
+			}
 			i++
 			continue
 		}
-		if stmt[i] == '"' && n-i >= 2 && stmt[i+1:n-1] == want {
-			return true
+		if stmt[i] == '"' {
+			if prev == '.' && n-i >= 2 && stmt[i+1:n-1] == want {
+				return true
+			}
+			prev = '"'
 		}
 		i = n
 	}
 	return false
+}
+
+// explainQuotedOption reports a PostgreSQL EXPLAIN whose option list has a
+// quoted name in it: EXPLAIN ("analyze") or EXPLAIN (U&"\0061nalyze")
+// runs the statement, and codeWords cannot see the option through the
+// quotes. A quoted name there is refused whatever it spells.
+func explainQuotedOption(engine, stmt string) bool {
+	if engine != EnginePostgres {
+		return false
+	}
+	seenExplain, depth := false, 0
+	for i := 0; i < len(stmt); {
+		n := skipNonCode(engine, stmt, i)
+		if n > i {
+			if depth > 0 && stmt[i] == '"' {
+				return true
+			}
+			i = n
+			continue
+		}
+		c := stmt[i]
+		switch {
+		case !seenExplain && (c == 'E' || c == 'e') && len(stmt) >= i+7 && strings.EqualFold(stmt[i:i+7], "EXPLAIN"):
+			seenExplain = true
+			i += 7
+			continue
+		case seenExplain && depth == 0 && c == '(':
+			depth = 1
+		case depth > 0 && c == '(':
+			depth++
+		case depth > 0 && c == ')':
+			depth--
+			if depth == 0 {
+				return false
+			}
+		case seenExplain && depth == 0 && c != ' ' && c != '\t' && c != '\n' && c != '\r':
+			// No option list: the old form (EXPLAIN ANALYZE ...) has no
+			// quoted options.
+			return false
+		}
+		i++
+	}
+	return depth > 0
 }
 
 // codeWords is the set of upper-cased words in a statement's code (strings,
@@ -635,7 +700,7 @@ func sqlCheckReadOnly(engine, stmt string) error {
 			return fmt.Errorf("read-only connection: %s is not allowed (T-SQL runs a second statement without a semicolon)", w)
 		}
 	}
-	if w := codeWords(engine, stmt); ((engine == EngineMSSQL || engine == EngineDB2) && w["NEXT"] && w["VALUE"]) || ((engine == EngineOracle || engine == EngineDB2) && w["NEXTVAL"]) {
+	if seqNext(engine, stmt, codeWords(engine, stmt)) {
 		return fmt.Errorf("read-only connection: taking a sequence's next value is a write no rollback undoes")
 	}
 	if engine == EngineOracle && k == "WITH" && !sqlIsRead(engine, stmt) {

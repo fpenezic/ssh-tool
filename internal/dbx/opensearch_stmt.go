@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // A query tab script on OpenSearch / Elasticsearch mixes Kibana console
@@ -175,33 +176,57 @@ var osReadEndpoints = map[string]bool{
 }
 
 // osPathOdd reports a path whose meaning can change on the way to the
-// server: a "." or ".." segment, a backslash, or an encoded slash, after
-// percent-decoding (repeated, for a double-encoded "%252e"). endpoint()
-// reads the path as written, so "/idx/_search/../_delete_by_query" counts
-// as _search, but a reverse proxy that normalises paths (nginx with a URI
-// in proxy_pass, Traefik, Envoy) forwards it as _delete_by_query.
+// server, for a request the endpoint decides on. endpoint() reads the path
+// as written, so "/idx/_search/../_delete_by_query" counts as _search, but
+// a reverse proxy that normalises paths (nginx with a URI in proxy_pass,
+// Traefik, Envoy, a servlet container that drops ";params") forwards it as
+// _delete_by_query. Refused, after percent-decoding (repeated, for a
+// double-encoded "%252e"): a "." or ".." segment, a backslash, a ";", an
+// empty segment ("//", which some proxies merge), an encoded slash outside
+// a date-math index name ("<logs-{now/d}>" needs one), bytes that are not
+// UTF-8 (overlong "%c0%ae"), and past the first "_" segment any encoded
+// or non-ASCII character (fullwidth dots, "%5f" that a decoding proxy
+// turns into another endpoint).
 func osPathOdd(path string) bool {
 	if i := strings.IndexAny(path, "?#"); i >= 0 {
 		path = path[:i]
 	}
 	for range 4 {
-		low := strings.ToLower(path)
-		if strings.Contains(path, `\`) || strings.Contains(low, "%2f") || strings.Contains(low, "%5c") {
+		if !utf8.ValidString(path) || strings.ContainsAny(path, "\\;") {
 			return true
 		}
-		for _, seg := range strings.Split(path, "/") {
-			if seg == "." || seg == ".." {
+		segs := strings.Split(path, "/")
+		endpoint := false
+		for i, seg := range segs {
+			low := strings.ToLower(seg)
+			switch {
+			case seg == "." || seg == "..":
 				return true
+			case seg == "" && i > 0 && i < len(segs)-1:
+				return true
+			case strings.Contains(low, "%3b") || strings.Contains(low, "%5c"):
+				return true
+			case strings.Contains(low, "%2f") && !strings.HasPrefix(low, "%3c") && !strings.HasPrefix(low, "<"):
+				return true
+			}
+			if endpoint {
+				for _, r := range seg {
+					if r == '%' || r > 0x7e {
+						return true
+					}
+				}
+			}
+			if strings.HasPrefix(seg, "_") {
+				endpoint = true
 			}
 		}
 		if !strings.Contains(path, "%") {
 			return false
 		}
 		dec, err := url.PathUnescape(path)
-		if err != nil {
-			return true
-		}
-		if dec == path {
+		if err != nil || dec == path {
+			// A "%" that is no escape is taken as written, as the server
+			// does ("100%25" decodes to "100%").
 			return false
 		}
 		path = dec
@@ -211,20 +236,23 @@ func osPathOdd(path string) bool {
 
 // osRESTRead reports a block that only reads, or why it does not.
 func osRESTRead(req osREST) (bool, string) {
-	if osPathOdd(req.path) {
-		return false, "paths with . or .. segments or encoded slashes"
-	}
 	ep, next := req.endpoint()
 	sql := ep == "_sql" || ep == "_ppl" || (ep == "_plugins" || ep == "_opendistro") && (next == "_sql" || next == "_ppl")
 	switch req.method {
 	case "GET", "HEAD":
 		if !sql || strings.TrimSpace(req.body) == "" {
+			// Reads whatever the path says: no path check.
 			return true, ""
 		}
 		// Elasticsearch takes SQL on GET too: the body is checked the same.
 	case "POST":
 	default:
 		return false, req.method + " requests"
+	}
+	// From here the endpoint decides, so it has to be the one the server
+	// gets.
+	if osPathOdd(req.path) {
+		return false, "paths a proxy may rewrite (. or .. segments, encoded slashes, ;)"
 	}
 	if sql {
 		if next == "close" || next == "translate" || strings.HasSuffix(strings.SplitN(req.path, "?", 2)[0], "/close") ||

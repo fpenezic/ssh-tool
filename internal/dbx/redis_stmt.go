@@ -230,13 +230,20 @@ func rdReadArgs(args []string) (bool, string) {
 }
 
 // rdSecretParams are the config parameters whose value is a password.
-var rdSecretParams = []string{"requirepass", "masterauth", "masteruser", "tls-key-file-pass", "tls-client-key-file-pass"}
+// primaryauth / primaryuser are Valkey 8's names for masterauth /
+// masteruser.
+var rdSecretParams = []string{"requirepass", "masterauth", "masteruser", "primaryauth", "primaryuser", "tls-key-file-pass", "tls-client-key-file-pass"}
 
 // rdSecretParam is the first secret parameter a CONFIG GET glob pattern
 // matches (Redis matches parameter names without case), or "". A pattern
-// that does not parse is taken to match.
+// that does not parse is taken to match, and so is any pattern with a
+// bracket: Redis swaps a reversed range ([z-a] is [a-z]) where path.Match
+// matches nothing, so path.Match cannot be trusted with brackets.
 func rdSecretParam(pat string) string {
 	pat = strings.ToLower(pat)
+	if strings.ContainsRune(pat, '[') {
+		return "with a [...] pattern"
+	}
 	for _, p := range rdSecretParams {
 		if ok, err := path.Match(pat, p); ok || err != nil {
 			return p
