@@ -84,6 +84,8 @@ func TestOSRead(t *testing.T) {
 		"SELECT * FROM logs",
 		"SHOW TABLES LIKE %",
 		"DESCRIBE TABLES LIKE logs",
+		"GET /logs/_search?q=a..b",
+		"POST /logs.2026.11/_search\n{}",
 	}
 	for _, s := range read {
 		if !IsRead(EngineOpenSearch, s) || CheckReadOnly(EngineOpenSearch, s) != nil {
@@ -111,6 +113,17 @@ func TestOSRead(t *testing.T) {
 		"GET /_sql\n{\"query\": \"DELETE FROM logs\"}",
 		"DELETE FROM logs WHERE a = 1",
 		"SELECT * INTO x FROM logs",
+		// A proxy that normalises the path forwards what the dots make of it.
+		"POST /idx/_search/../_delete_by_query\n{}",
+		"POST /idx/_search/%2e%2e/_delete_by_query\n{}",
+		"POST /idx/_search/%2E%2E/_delete_by_query\n{}",
+		"POST /idx/_search/%252e%252e/_delete_by_query\n{}",
+		"POST /idx/_search/./../_delete_by_query\n{}",
+		"POST /_search/../idx/_doc\n{}",
+		"POST /idx/_search%2f..%2f_delete_by_query\n{}",
+		"POST /idx/_search\\..\\_delete_by_query\n{}",
+		"POST /idx/_search/%zz/_doc\n{}",
+		"GET /_search/../_cluster/settings",
 	}
 	for _, s := range write {
 		if IsRead(EngineOpenSearch, s) || CheckReadOnly(EngineOpenSearch, s) == nil {

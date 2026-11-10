@@ -1985,10 +1985,7 @@ database number (`3` or `db3`; empty is 0).
 - **Stop** closes the tab's connection, which also breaks off a blocking
   command (`BLPOP`, `XREAD BLOCK`); the next run connects again on the
   same database.
-- **Read-only** sends only read commands (an allowlist that checks
-  subcommands: `CONFIG GET` reads, `CONFIG SET` does not; `EVAL_RO` and
-  `FCALL_RO` read, `EVAL` does not). Redis has no read-only session, so an
-  ACL user limited to `+@read` is the real guard.
+- **Read-only** sends only read commands (an allowlist that checks subcommands: `CONFIG GET` reads, `CONFIG SET` does not; `EVAL_RO` and `FCALL_RO` read, `EVAL` does not). Commands whose reply carries a password are refused too: `CONFIG GET` with a pattern that matches `requirepass`, `masterauth` and the like (`CONFIG GET *`), `ACL LIST` and `ACL GETUSER`. Redis has no read-only session, so an ACL user limited to `+@read` is the real guard.
 
 ### Tables
 
