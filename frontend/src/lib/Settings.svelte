@@ -9291,11 +9291,14 @@
     width: 34px;
     height: 18px;
     border-radius: var(--r-pill);
-    border: 1px solid var(--border);
+    border: 1px solid var(--surface2);
     background: var(--surface2);
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
   }
+  /* The knob is white in both states and themes: off reads as a light
+     knob on a grey track, on as the same knob on the accent. A knob in
+     the text colour made "off" a dark blob in Latte. */
   fieldset.check-cards input[type="checkbox"]::after {
     content: "";
     position: absolute;
@@ -9304,7 +9307,8 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: var(--text);
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
     transition: transform 0.15s ease;
   }
   fieldset.check-cards input[type="checkbox"]:checked {
@@ -9313,7 +9317,6 @@
   }
   fieldset.check-cards input[type="checkbox"]:checked::after {
     transform: translateX(16px);
-    background: #fff;
   }
   fieldset.check-cards input[type="checkbox"]:disabled { opacity: 0.5; cursor: default; }
   fieldset.check-cards input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

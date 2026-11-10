@@ -31,7 +31,7 @@
     width: 34px;
     height: 18px;
     border-radius: var(--r-pill);
-    border: 1px solid var(--border);
+    border: 1px solid var(--surface2);
     background: var(--surface2);
     padding: 0;
     cursor: pointer;
@@ -50,12 +50,14 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: var(--text);
+    /* White in both states (see Settings' switch cards): a knob in the
+       text colour made "off" a dark blob in Latte. */
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
     transition: transform 0.15s ease;
   }
   .switch.on .knob {
     transform: translateX(16px);
-    background: #fff;
   }
   /* Windows high contrast (forced colors): system colours, so the knob
      stays visible against the track and "on" reads as selected. */
