@@ -2,7 +2,7 @@
   import { fleet, folderHostIds, folderHostIdsLoaded, unloadedDynamicUnder, TLS_WARN_DAYS, type FleetTool } from "./fleetStore.svelte";
   import { IconTable, IconShieldCheck, IconCompare, IconKeyRound as IconKeyRoundFleet, IconBastion, IconRouted, IconUpload } from "./iconMap";
   import { dynRef } from "./jumpRefs";
-  import { tree, selection, drag, sessions, paneTabs, view, jumpChainHostnames } from "./stores.svelte";
+  import { tree, selection, drag, sessions, paneTabs, view, jumpChainHostnames, liveTree } from "./stores.svelte";
   import { errMsg } from "./connectErrors";
   import { expandedConnections } from "./treeState.svelte";
   import { probeState } from "./probeState.svelte";
@@ -359,49 +359,13 @@
     return () => { for (const k of keys) probeState.unregisterDynamic(k); };
   });
 
-  // Set of connection_ids that currently have at least one connected session.
-  // Used to highlight tree rows for live connections.
-  const liveConnIds = $derived(
-    new Set(
-      sessions.tabs
-        .filter((t) => t.status === "connected")
-        .map((t) => t.connectionId)
-    )
-  );
-
-  // The connection backing the currently focused terminal pane (across
-  // the active tab's pane tree). Used to mark "this is the row you're
-  // looking at" with a stronger highlight when the appearance pref is
-  // on. Falls back to "" when nothing's focused.
-  const activeConnId = $derived.by(() => {
-    const tabId = paneTabs.activeTabId;
-    if (!tabId) return "";
-    const leaf = paneTabs.activePane(tabId);
-    if (!leaf) return "";
-    const sess = sessions.tabs.find((s) => s.sessionId === leaf.sessionId);
-    return sess?.connectionId ?? "";
-  });
-
-  // How many live connections live in this folder's subtree. Used for the
+  // Live sessions and the focused pane's connection, from one store-level
+  // derived for every row (liveTree).
+  const liveConnIds = $derived(liveTree.ids);
+  const activeConnId = $derived(liveTree.activeConnId);
+  // How many live connections live in this folder's subtree, for the
   // folder-row badge.
-  function countLiveInSubtree(id: string): number {
-    let n = 0;
-    for (const c of tree.connectionsIn(id)) {
-      if (liveConnIds.has(c.id)) n++;
-    }
-    // Dynamic-inventory entries are not `connections` rows, so connectionsIn()
-    // never sees them; their live sessions key on "dyn:<entryID>" (gotcha 50).
-    // Only counts entries already fetched for this folder - an unexpanded
-    // dynamic folder has none loaded, same as its row count.
-    for (const e of tree.dynamicEntries[id] ?? []) {
-      if (liveConnIds.has("dyn:" + e.id)) n++;
-    }
-    for (const sub of tree.childrenOf(id)) {
-      n += countLiveInSubtree(sub.id);
-    }
-    return n;
-  }
-  const liveInSubtree = $derived(countLiveInSubtree(folder.id));
+  const liveInSubtree = $derived(liveTree.inFolder(folder.id));
   const folderColor = $derived(tree.resolveColorForFolder(folder.id));
 
   // On mobile a plain tap on a folder row toggles its expansion - the
