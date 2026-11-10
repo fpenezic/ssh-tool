@@ -1218,7 +1218,7 @@ Pane toolbar (top of each pane):
 
 ### Terminal output
 
-- xterm.js with the WebGL renderer (canvas fallback if WebGL fails).
+- xterm.js, drawn by the canvas renderer by default; **GPU rendering (WebGL)** in Settings > Terminal switches new tabs to WebGL (off by default: it garbles text on some GPUs; canvas again if WebGL fails).
   The glyph cache is cleared on every resize so full-screen TUIs
   (htop, btop) that repaint the whole grid don't ghost old cells over
   new ones; **Ctrl+Shift+L** forces a redraw if it ever happens
