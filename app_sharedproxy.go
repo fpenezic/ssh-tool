@@ -442,8 +442,8 @@ func rankLess(rank map[string]int, a, b string) (less, decided bool) {
 	return false, false
 }
 
-// byRank orders candidates by the priority; ok is false when the first
-// two are not told apart by it.
+// byRank orders candidates by the priority and reports whether it decides
+// between the first two (false: the tunnel that is up decides).
 func byRank(pick []sharedDomain, rank map[string]int) bool {
 	sort.SliceStable(pick, func(i, j int) bool {
 		less, _ := rankLess(rank, pick[i].profileID, pick[j].profileID)

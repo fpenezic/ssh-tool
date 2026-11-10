@@ -434,7 +434,7 @@
     if (e.key === "ArrowDown" || e.key === "Enter") {
       e.preventDefault();
       // The filter may still be waiting for the typing pause: apply it
-      // first, so the first row is the first match.
+      // first, so the first row is of the filtered tree.
       nameFilter.flush();
       await tick();
       treeEl?.querySelector<HTMLElement>('[role="treeitem"]')?.focus();

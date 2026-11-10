@@ -242,7 +242,7 @@ An empty card says how to fill it.
 
 ### Name filter
 
-A live search bar above the tree filters by connection name OR hostname (case-insensitive substring). The tree follows a short pause in typing (about a tenth of a second), so a typed word filters it once; **Enter** or **Down** applies what is typed at once and moves to the first match. While the filter is active every folder containing a match auto-expands so you don't have to chase them. Clear with the **×** at the right or by emptying the input; clearing applies at once. This is separate from the Ctrl+K palette
+A live search bar above the tree filters by connection name OR hostname (case-insensitive substring). The tree follows a short pause in typing (about a tenth of a second), so a typed word filters it once; **Enter** or **Down** applies what is typed at once and moves to the first visible row (the folder that holds the first match, when it is in one). While the filter is active every folder containing a match auto-expands so you don't have to chase them. Clear with the **×** at the right or by emptying the input; clearing applies at once. This is separate from the Ctrl+K palette
 (see §11) - the palette is one-shot fuzzy-and-connect; the
 filter narrows the tree itself so you can still browse, select,
 right-click, and edit.
