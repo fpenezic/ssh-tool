@@ -20,9 +20,39 @@ export const inDetachedWindow = typeof window !== "undefined" &&
     /^#\/?\??(?:[^#]*&)?detached=/.test(window.location.hash));
 import { loudestMcpLevel } from "./mcpLevel";
 
+const byOrder = <T extends { sort_order: number; name: string }>(a: T, b: T) =>
+  a.sort_order - b.sort_order || a.name.localeCompare(b.name);
+
 class TreeStore {
-  folders = $state<Folder[]>([]);
-  connections = $state<Connection[]>([]);
+  // Raw, not deep proxies: load() replaces the arrays and nothing edits a
+  // folder or connection object in place, so the indexes below can be
+  // rebuilt from the array alone. Deep proxies made every row's lookups
+  // proxied reads (O(N^2) per filter keystroke at a few hundred rows).
+  folders = $state.raw<Folder[]>([]);
+  connections = $state.raw<Connection[]>([]);
+  // Lookups by id and by parent, rebuilt when load() replaces the arrays.
+  private folderIdx = $derived(new Map(this.folders.map((f) => [f.id, f])));
+  private connIdx = $derived(new Map(this.connections.map((c) => [c.id, c])));
+  private childIdx = $derived.by(() => {
+    const m = new Map<string | null, Folder[]>();
+    for (const f of this.folders) {
+      const k = f.parent_id ?? null;
+      const l = m.get(k);
+      if (l) l.push(f); else m.set(k, [f]);
+    }
+    for (const l of m.values()) l.sort(byOrder);
+    return m;
+  });
+  private inIdx = $derived.by(() => {
+    const m = new Map<string | null, Connection[]>();
+    for (const c of this.connections) {
+      const k = c.folder_id ?? null;
+      const l = m.get(k);
+      if (l) l.push(c); else m.set(k, [c]);
+    }
+    for (const l of m.values()) l.sort(byOrder);
+    return m;
+  });
   // Dynamic-inventory folder side-data: provider + refresh state.
   // Indexed by folder_id. Only folders that have an entry here are
   // "dynamic". Renderers check membership to swap the icon / show
@@ -125,10 +155,9 @@ class TreeStore {
     }
   }
 
+  // Sorted children; a copy, so a caller may sort or splice it.
   childrenOf(parentId: string | null): Folder[] {
-    return this.folders
-      .filter((f) => (f.parent_id ?? null) === parentId)
-      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+    return this.childIdx.get(parentId)?.slice() ?? [];
   }
 
   isDynamic(folderId: string): boolean {
@@ -168,14 +197,12 @@ class TreeStore {
   }
 
   connectionsIn(folderId: string | null): Connection[] {
-    return this.connections
-      .filter((c) => (c.folder_id ?? null) === folderId)
-      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+    return this.inIdx.get(folderId)?.slice() ?? [];
   }
 
   folderById(id: string | null): Folder | null {
     if (!id) return null;
-    return this.folders.find((f) => f.id === id) ?? null;
+    return this.folderIdx.get(id) ?? null;
   }
 
   // Who jumps through each host, for the tree's bastion marks. Keyed by
@@ -228,7 +255,7 @@ class TreeStore {
 
   connectionById(id: string | null): Connection | null {
     if (!id) return null;
-    return this.connections.find((c) => c.id === id) ?? null;
+    return this.connIdx.get(id) ?? null;
   }
 
   // All distinct tags in the tree, with a count of how many connections
