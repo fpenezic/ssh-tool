@@ -17,6 +17,7 @@ The Database grid works more like a spreadsheet: edit cells in place, select and
 - The NetBird setup key field takes the whole `netbird up --management-url ... --setup-key ...` command the dashboard shows when adding a peer and keeps just the key (filling an empty Management URL); a personal access token (`nbp_...`) is refused at once instead of failing as "setup key is invalid" after a minute.
 - The app proxy's summary counts each VPN's DNS domains next to its networks, so a VPN reached by domain only (NetBird without network routes) is listed too.
 - A connection on an auto-mode profile whose plugin is not installed says so: the host was reachable directly, so the connect went ahead without the VPN and gave no hint the profile could never bring its tunnel up. A warning now shows once per profile while the app runs; click it to open the profile and install the plugin.
+- Changing a profile's local proxy to a port that is already taken keeps the proxy listening on its old port; before, it stopped listening until the app restarted, while the profile still showed it on.
 
 ### Database
 - A folder's list of databases shows and can be edited with the folder's own Database switch off, so it can list prod / stage for the connections under it that turn the Database on, without turning it on for all of them.
@@ -28,6 +29,7 @@ The Database grid works more like a spreadsheet: edit cells in place, select and
 - **Export a whole table** to CSV or JSON (SQL engines and ClickHouse), read 10000 rows at a time with a progress bar and Stop, not only the page shown.
 - Script no longer asks to drop the edits it has just put into the query tab.
 - Adding a database to a connection's list no longer turns the Query timeout field red: an empty new entry is its own error (Save says it needs a name), not the timeout's.
+- **Read-only connections refuse more**: an OpenSearch / Elasticsearch request whose path has a `.` or `..` segment or an encoded slash (a proxy in front of the server can turn `/logs/_search/../_delete_by_query` into a delete); PostgreSQL `EXPLAIN (ANALYSE) ...`, the British spelling, which runs the statement like `ANALYZE` (it also counts as a write for the sensitive-connection confirm); on SQL Server `SETUSER`, `RAISERROR`, `WAITFOR`, `CHECKPOINT`, `SEND`, `RECEIVE`, `ENABLE` / `DISABLE TRIGGER`; on Oracle `seq."NEXTVAL"` written as a quoted name; on Redis `CONFIG GET` patterns that match a password setting (`CONFIG GET *`), `ACL LIST` and `ACL GETUSER`, whose replies carry passwords or their hashes.
 - JSON export of a result with two columns of one name keeps both values: the repeat is named `name (2)` (it used to keep only the last one).
 
 ## [1.1.0] - Database tab grows up: Db2, foreign keys, ER diagram
