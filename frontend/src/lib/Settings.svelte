@@ -4390,17 +4390,19 @@
     </div>
 
     <fieldset class="check-cards">
-      <label class:active={terminalPrefs.disableWebgl}>
+      <!-- Shown the positive way round (on = WebGL), stored as before
+           (terminal_disable_webgl), so nobody's setting flips. -->
+      <label class:active={!terminalPrefs.disableWebgl}>
         <input
           type="checkbox"
-          checked={terminalPrefs.disableWebgl}
-          onchange={(e) => terminalPrefs.setDisableWebgl((e.target as HTMLInputElement).checked)}
+          checked={!terminalPrefs.disableWebgl}
+          onchange={(e) => terminalPrefs.setDisableWebgl(!(e.target as HTMLInputElement).checked)}
         />
         <div>
-          <div class="mode-name">Disable WebGL renderer (use canvas fallback)</div>
+          <div class="mode-name">GPU rendering (WebGL)</div>
           <div class="mode-desc">
-            On by default: WebGL garbles text on some GPUs. Applies to
-            newly opened tabs.
+            Draws the terminal on the graphics card. Off by default: on some
+            GPUs it garbles text. Applies to newly opened tabs.
           </div>
         </div>
       </label>
