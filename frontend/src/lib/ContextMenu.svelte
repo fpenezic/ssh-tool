@@ -110,7 +110,8 @@
     border: 0;
     cursor: pointer;
     font: inherit;
-    font-size: var(--fs-sm);
+    /* Menu items are main text: the UI font size setting promises it. */
+    font-size: var(--fs-md);
     border-radius: var(--r-sm);
     text-align: left;
   }
