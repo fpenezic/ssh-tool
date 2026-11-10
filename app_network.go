@@ -22,6 +22,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"ssh-tool/internal/creds"
@@ -319,6 +320,34 @@ func pluginKindUnsupported(kind string) error {
 		return nil
 	}
 	return fmt.Errorf("%s profiles do not run on mobile: connect with the official VPN app as the system VPN and set the profile's mode to auto", t)
+}
+
+// pluginMissingNoted holds the profiles whose missing plugin the user was
+// told about in this run.
+var pluginMissingNoted sync.Map
+
+// notePluginMissing tells the user, once per profile per run, that an
+// auto-mode connect went directly because the profile's plugin is not
+// installed. Auto mode only looks for the plugin when the direct dial
+// fails, so a host reachable without the VPN connected with no word that
+// the profile could never have brought its tunnel up.
+func (a *App) notePluginMissing(row *store.NetworkProfile, kind string) {
+	title, ok := pluginKindTitles[kind]
+	if !ok {
+		return
+	}
+	if _, installed := pluginPath(kind); installed {
+		return
+	}
+	if _, seen := pluginMissingNoted.LoadOrStore(row.ID, true); seen {
+		return
+	}
+	log.Printf("net: profile %s: %s plugin not installed, connected directly", row.Name, title)
+	EventsEmit("network_notice", map[string]string{
+		"level":      "warn",
+		"profile_id": row.ID,
+		"message":    fmt.Sprintf("VPN profile %s: the %s plugin is not installed - connected directly. Click to open the profile.", row.Name, title),
+	})
 }
 
 // tunnelStop stops whichever manager runs the profile's tunnel and
@@ -680,6 +709,7 @@ func (a *App) wgDialerForCtx(hookCtx context.Context, profileID string) (sshlaye
 			cancel()
 			if derr == nil {
 				log.Printf("net: %s reachable directly, skipping tunnel %s", addr, row.Name)
+				a.notePluginMissing(row, pol.Kind)
 				return c, nil
 			}
 			a.reportTunnelStep(ctx, row, "Not reachable directly - ")

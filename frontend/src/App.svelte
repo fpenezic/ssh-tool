@@ -774,6 +774,14 @@
     if (n?.level === "err") toast.err(n.message, 8000);
     else if (n?.message) toast.info(n.message, 6000);
   });
+  // An auto-mode connect went directly because the profile's plugin is
+  // not installed (once per profile per run); click opens the profile,
+  // which offers the download.
+  EventsOn("network_notice", (n: any) => {
+    if (!n?.message) return;
+    const id = typeof n.profile_id === "string" ? n.profile_id : "";
+    toast.push("err", n.message, 12000, id ? () => view.openNetworkProfile(id) : undefined);
+  });
   // Live pull applied the other machine's profile into the running DB.
   // Reload every store that reads from it; SSH sessions are untouched.
   EventsOn("profile_reloaded", async () => {
