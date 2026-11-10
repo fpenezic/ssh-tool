@@ -769,3 +769,135 @@ func TestConsumeNewest(t *testing.T) {
 		}
 	})
 }
+
+// produceTx writes records into one partition of "empty" in a committed
+// transaction, so the partition's end offset is the commit marker, which a
+// consumer never sees.
+func produceTx(t *testing.T, seeds []string, p int32, secs ...int) {
+	t.Helper()
+	cl, err := kgo.NewClient(kgo.SeedBrokers(seeds...), kgo.RecordPartitioner(kgo.ManualPartitioner()), kgo.TransactionalID(fmt.Sprintf("tx-%d", p)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := cl.BeginTransaction(); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range secs {
+		r := &kgo.Record{Topic: "empty", Partition: p, Key: []byte(fmt.Sprintf("p%d-%d", p, s)), Timestamp: t0.Add(time.Duration(s) * time.Second)}
+		if err := cl.ProduceSync(ctx, r).FirstErr(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := cl.EndTransaction(ctx, kgo.TryCommit); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// keepBusy produces into partition 1 of "empty" every 100 ms until the
+// returned func is called; that func waits for the producer to stop, so it
+// never touches t after the test.
+func keepBusy(t *testing.T, seeds []string) func() {
+	stop, done := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 100; ; i++ {
+			select {
+			case <-stop:
+				return
+			case <-time.After(100 * time.Millisecond):
+				produceAt(t, seeds, 1, i)
+			}
+		}
+	}()
+	return func() { close(stop); <-done }
+}
+
+// A partition ending in a transaction marker never delivers its last
+// offset. The pick must still show: on idle while other partitions stay
+// busy, and as soon as a record past the end arrives.
+func TestConsumeNewestTxMarker(t *testing.T) {
+	waitPick := func(t *testing.T, k *Consumer, within time.Duration) ConsumeSnapshot {
+		t.Helper()
+		deadline := time.Now().Add(within)
+		for {
+			s := k.Snapshot(0, SnapshotOptions{})
+			if !s.Gathering {
+				return s
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("still gathering after %v: %+v", within, s)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	t.Run("busy other partition", func(t *testing.T) {
+		old := stopAtEndIdle
+		stopAtEndIdle = 500 * time.Millisecond
+		defer func() { stopAtEndIdle = old }()
+		fc := newFake(t, 0)
+		c := openFake(t, fc)
+		seeds := fc.ListenAddrs()
+		produceTx(t, seeds, 0, 10, 11, 12)
+		k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "empty", Mode: FromNewest, N: 5, Partition: -1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer k.Stop()
+		busy := keepBusy(t, seeds)
+		s := waitPick(t, k, 3*time.Second)
+		busy()
+		if got := keysOf(s.Messages[:3]); got != "p0-10 p0-11 p0-12" {
+			t.Fatalf("pick %q", got)
+		}
+	})
+
+	t.Run("record past the end", func(t *testing.T) {
+		fc := newFake(t, 0)
+		c := openFake(t, fc)
+		seeds := fc.ListenAddrs()
+		produceTx(t, seeds, 0, 10, 11, 12)
+		k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "empty", Mode: FromNewest, N: 5, Partition: -1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer k.Stop()
+		time.Sleep(300 * time.Millisecond)
+		produceAt(t, seeds, 0, 20)
+		// Well under the 5 s idle rule.
+		s := waitPick(t, k, 2*time.Second)
+		for s.Received < 4 {
+			time.Sleep(20 * time.Millisecond)
+			s = k.Snapshot(0, SnapshotOptions{})
+		}
+		if got := keysOf(s.Messages); got != "p0-10 p0-11 p0-12 p0-20" {
+			t.Fatalf("got %q", got)
+		}
+	})
+}
+
+// Stop at end over a partition that ends in a commit marker, while another
+// partition keeps getting records: the idle rule must still end it.
+func TestStopAtEndTxMarkerBusyTopic(t *testing.T) {
+	old := stopAtEndIdle
+	stopAtEndIdle = 500 * time.Millisecond
+	defer func() { stopAtEndIdle = old }()
+	fc := newFake(t, 0)
+	c := openFake(t, fc)
+	seeds := fc.ListenAddrs()
+	produceTx(t, seeds, 0, 10, 11, 12)
+	k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "empty", Mode: FromEarliest, Partition: -1, StopAtEnd: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer k.Stop()
+	defer keepBusy(t, seeds)()
+	select {
+	case <-k.Done():
+	case <-time.After(3 * time.Second):
+		t.Fatalf("still running: %+v", k.Snapshot(0, SnapshotOptions{}))
+	}
+}
