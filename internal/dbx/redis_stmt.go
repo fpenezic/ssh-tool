@@ -2,6 +2,8 @@ package dbx
 
 import (
 	"fmt"
+	"path"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -167,16 +169,19 @@ func init() {
 		rdReadCmds[c] = true
 	}
 	subs := map[string]string{
-		"OBJECT":   "ENCODING FREQ IDLETIME REFCOUNT HELP",
-		"MEMORY":   "USAGE STATS DOCTOR MALLOC-STATS HELP",
-		"XINFO":    "STREAM GROUPS CONSUMERS HELP",
-		"COMMAND":  "COUNT DOCS GETKEYS GETKEYSANDFLAGS INFO LIST HELP",
-		"CONFIG":   "GET HELP",
-		"CLIENT":   "LIST INFO GETNAME ID TRACKINGINFO GETREDIR HELP",
-		"SLOWLOG":  "GET LEN HELP",
-		"LATENCY":  "LATEST HISTORY DOCTOR GRAPH HISTOGRAM HELP",
-		"MODULE":   "LIST HELP",
-		"ACL":      "WHOAMI USERS CAT GETUSER LOG LIST DRYRUN HELP",
+		"OBJECT":  "ENCODING FREQ IDLETIME REFCOUNT HELP",
+		"MEMORY":  "USAGE STATS DOCTOR MALLOC-STATS HELP",
+		"XINFO":   "STREAM GROUPS CONSUMERS HELP",
+		"COMMAND": "COUNT DOCS GETKEYS GETKEYSANDFLAGS INFO LIST HELP",
+		"CONFIG":  "GET HELP",
+		"CLIENT":  "LIST INFO GETNAME ID TRACKINGINFO GETREDIR HELP",
+		"SLOWLOG": "GET LEN HELP",
+		"LATENCY": "LATEST HISTORY DOCTOR GRAPH HISTOGRAM HELP",
+		"MODULE":  "LIST HELP",
+		// Not LIST / GETUSER: their replies carry the users' password
+		// hashes, which a read-only tab (and an LLM run through it) should
+		// not hand out.
+		"ACL":      "WHOAMI USERS CAT LOG DRYRUN HELP",
 		"CLUSTER":  "INFO NODES SLOTS SHARDS KEYSLOT COUNTKEYSINSLOT GETKEYSINSLOT MYID MYSHARDID LINKS HELP",
 		"FUNCTION": "LIST STATS DUMP HELP",
 		"SCRIPT":   "EXISTS HELP",
@@ -200,6 +205,15 @@ func rdReadArgs(args []string) (bool, string) {
 	if rdReadCmds[cmd] {
 		return true, ""
 	}
+	if cmd == "CONFIG" && len(args) > 2 && strings.EqualFold(args[1], "GET") {
+		// CONFIG GET * (or *pass*) returns requirepass and masterauth in
+		// clear text: refused when a pattern can match one of them.
+		for _, pat := range args[2:] {
+			if p := rdSecretParam(pat); p != "" {
+				return false, "CONFIG GET " + p
+			}
+		}
+	}
 	if subs, ok := rdReadSubs[cmd]; ok {
 		// ACL LOG [count] reads; ACL LOG RESET clears the log.
 		reset := cmd == "ACL" && len(args) > 2 && strings.EqualFold(args[1], "LOG") && strings.EqualFold(args[2], "RESET")
@@ -213,6 +227,22 @@ func rdReadArgs(args []string) (bool, string) {
 		return false, cmd + sub
 	}
 	return false, cmd
+}
+
+// rdSecretParams are the config parameters whose value is a password.
+var rdSecretParams = []string{"requirepass", "masterauth", "masteruser", "tls-key-file-pass", "tls-client-key-file-pass"}
+
+// rdSecretParam is the first secret parameter a CONFIG GET glob pattern
+// matches (Redis matches parameter names without case), or "". A pattern
+// that does not parse is taken to match.
+func rdSecretParam(pat string) string {
+	pat = strings.ToLower(pat)
+	for _, p := range rdSecretParams {
+		if ok, err := path.Match(pat, p); ok || err != nil {
+			return p
+		}
+	}
+	return ""
 }
 
 func rdIsRead(stmt string) bool {
@@ -258,8 +288,7 @@ func rdRedact(stmt string) string {
 		}
 	case "CONFIG":
 		for i := 2; i+1 < len(args); i += 2 {
-			switch strings.ToLower(args[i]) {
-			case "requirepass", "masterauth", "masteruser", "tls-key-file-pass", "tls-client-key-file-pass":
+			if slices.Contains(rdSecretParams, strings.ToLower(args[i])) {
 				hide[i+1] = true
 			}
 		}

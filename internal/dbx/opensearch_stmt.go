@@ -3,6 +3,7 @@ package dbx
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"unicode"
@@ -173,8 +174,46 @@ var osReadEndpoints = map[string]bool{
 	"_search_shards": true, "_render": true,
 }
 
+// osPathOdd reports a path whose meaning can change on the way to the
+// server: a "." or ".." segment, a backslash, or an encoded slash, after
+// percent-decoding (repeated, for a double-encoded "%252e"). endpoint()
+// reads the path as written, so "/idx/_search/../_delete_by_query" counts
+// as _search, but a reverse proxy that normalises paths (nginx with a URI
+// in proxy_pass, Traefik, Envoy) forwards it as _delete_by_query.
+func osPathOdd(path string) bool {
+	if i := strings.IndexAny(path, "?#"); i >= 0 {
+		path = path[:i]
+	}
+	for range 4 {
+		low := strings.ToLower(path)
+		if strings.Contains(path, `\`) || strings.Contains(low, "%2f") || strings.Contains(low, "%5c") {
+			return true
+		}
+		for _, seg := range strings.Split(path, "/") {
+			if seg == "." || seg == ".." {
+				return true
+			}
+		}
+		if !strings.Contains(path, "%") {
+			return false
+		}
+		dec, err := url.PathUnescape(path)
+		if err != nil {
+			return true
+		}
+		if dec == path {
+			return false
+		}
+		path = dec
+	}
+	return true
+}
+
 // osRESTRead reports a block that only reads, or why it does not.
 func osRESTRead(req osREST) (bool, string) {
+	if osPathOdd(req.path) {
+		return false, "paths with . or .. segments or encoded slashes"
+	}
 	ep, next := req.endpoint()
 	sql := ep == "_sql" || ep == "_ppl" || (ep == "_plugins" || ep == "_opendistro") && (next == "_sql" || next == "_ppl")
 	switch req.method {

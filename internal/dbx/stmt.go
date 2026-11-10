@@ -488,6 +488,12 @@ var msWriteWords = []string{
 	"KILL", "SHUTDOWN", "RECONFIGURE", "BULK", "INTO", "OPENQUERY", "OPENROWSET",
 	"OPENDATASOURCE", "WRITETEXT", "UPDATETEXT", "BEGIN", "COMMIT", "ROLLBACK",
 	"SAVE", "USE", "SET",
+	// Not undone by the rollback (SETUSER changes the session's identity,
+	// RAISERROR ... WITH LOG writes the error log, CHECKPOINT flushes) or
+	// with effects outside the statement (Service Broker SEND / RECEIVE,
+	// DISABLE / ENABLE TRIGGER, WAITFOR holding the connection).
+	"DISABLE", "ENABLE", "RECEIVE", "SEND", "SETUSER", "WAITFOR", "RAISERROR",
+	"CHECKPOINT",
 }
 
 // msWriteWord is the first of msWriteWords in a SQL Server statement's
@@ -528,7 +534,8 @@ func sqlIsRead(engine, stmt string) bool {
 		return false
 	case lead == "WITH" && (words["INSERT"] || words["UPDATE"] || words["DELETE"] || words["MERGE"]):
 		return false
-	case lead == "EXPLAIN" && words["ANALYZE"]:
+	case lead == "EXPLAIN" && (words["ANALYZE"] || words["ANALYSE"]):
+		// PostgreSQL takes both spellings; either runs the statement.
 		return false
 	case engine == EngineOracle && lead == "WITH" && (words["FUNCTION"] || words["PROCEDURE"]):
 		// WITH FUNCTION: PL/SQL in the query, which may be an autonomous
@@ -542,11 +549,30 @@ func sqlIsRead(engine, stmt string) bool {
 		return false
 	case engine == EngineMSSQL && words["NEXT"] && words["VALUE"],
 		engine == EngineDB2 && ((words["NEXT"] && words["VALUE"]) || words["NEXTVAL"]),
-		engine == EngineOracle && words["NEXTVAL"]:
+		engine == EngineOracle && (words["NEXTVAL"] || oraQuotedIdent(stmt, "NEXTVAL")):
 		// A sequence moves on in a read, and no rollback takes it back.
 		return false
 	}
 	return true
+}
+
+// oraQuotedIdent reports a double-quoted identifier in an Oracle statement
+// that is exactly want. codeOnly blanks quoted identifiers, so
+// seq."NEXTVAL" (a sequence moved on in a SELECT) has no NEXTVAL word.
+// Quoted identifiers are case-sensitive: "nextval" is another name.
+func oraQuotedIdent(stmt, want string) bool {
+	for i := 0; i < len(stmt); {
+		n := skipNonCode(EngineOracle, stmt, i)
+		if n <= i {
+			i++
+			continue
+		}
+		if stmt[i] == '"' && n-i >= 2 && stmt[i+1:n-1] == want {
+			return true
+		}
+		i = n
+	}
+	return false
 }
 
 // codeWords is the set of upper-cased words in a statement's code (strings,

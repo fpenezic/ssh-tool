@@ -87,6 +87,7 @@ func TestCheckReadOnly(t *testing.T) {
 		"WITH d AS (DELETE FROM t RETURNING id) SELECT count(*) FROM d",
 		"with u as (update t set a = 1 returning *) select * from u",
 		"EXPLAIN ANALYZE DELETE FROM t", "EXPLAIN (ANALYZE, BUFFERS) SELECT 1",
+		"EXPLAIN ANALYSE DELETE FROM t", "EXPLAIN (ANALYSE) DELETE FROM t", "explain (analyse true, buffers) update t set a = 1",
 		"SELECT * INTO t2 FROM t",
 	}
 	for _, s := range refused {
@@ -166,6 +167,7 @@ func TestIsReadWriteForms(t *testing.T) {
 	for _, s := range []string{
 		"WITH d AS (DELETE FROM t RETURNING id) SELECT count(*) FROM d",
 		"EXPLAIN ANALYZE UPDATE t SET a = 1",
+		"EXPLAIN (ANALYSE) DELETE FROM t",
 		"SELECT * INTO new_t FROM t",
 	} {
 		if IsRead(EnginePostgres, s) {
@@ -310,7 +312,8 @@ func TestSplitMSSQL(t *testing.T) {
 
 func TestCheckReadOnlyOracleMSSQL(t *testing.T) {
 	ok := map[string][]string{
-		EngineOracle: {"SELECT * FROM t", "WITH x AS (SELECT 1 a FROM DUAL) SELECT a FROM x", "SELECT 'delete' FROM DUAL"},
+		EngineOracle: {"SELECT * FROM t", "WITH x AS (SELECT 1 a FROM DUAL) SELECT a FROM x", "SELECT 'delete' FROM DUAL",
+			`SELECT "nextval", 'x."NEXTVAL"' FROM t`, `SELECT s."CURRVAL" FROM DUAL`},
 		EngineMSSQL: {"SELECT * FROM t", "SELECT [update], 'drop' FROM t", "WITH x AS (SELECT 1 AS a) SELECT a FROM x",
 			"SELECT update_time FROM t", "SELECT @@ROWCOUNT, @delete FROM #exec",
 			"SELECT a FROM t ORDER BY a OFFSET 10 ROWS FETCH NEXT 5 ROWS ONLY"},
@@ -319,12 +322,14 @@ func TestCheckReadOnlyOracleMSSQL(t *testing.T) {
 		EngineOracle: {"DELETE FROM t", "BEGIN NULL; END;", "DECLARE x NUMBER; BEGIN NULL; END;", "EXPLAIN PLAN FOR SELECT 1 FROM DUAL",
 			"SELECT * INTO x FROM t", "WITH FUNCTION f RETURN NUMBER IS BEGIN RETURN 1; END; SELECT f FROM DUAL",
 			"WITH d AS (SELECT 1 FROM DUAL) DELETE FROM t", "CALL p()", "LOCK TABLE t IN EXCLUSIVE MODE",
-			"SELECT s.NEXTVAL FROM DUAL"},
+			"SELECT s.NEXTVAL FROM DUAL", `SELECT s."NEXTVAL" FROM DUAL`, `SELECT "S"."NEXTVAL" FROM DUAL`},
 		EngineMSSQL: {"DELETE FROM t", "EXEC sp_who", "sp_who", "SELECT 1 DELETE FROM t", "SELECT * INTO #x FROM t",
 			"SELECT 1 EXEC('DROP TABLE t')", "SELECT * FROM OPENQUERY(srv, 'DELETE x')", "SELECT 1 COMMIT",
 			"SELECT * FROM OPENROWSET(BULK 'x', SINGLE_CLOB) b", "WITH x AS (SELECT 1 AS a) MERGE t USING x ON 1=1 WHEN MATCHED THEN DELETE;",
 			"DECLARE @x int", "SHOWPLAN_ALL ON", "SELECT 1 USE master", "SELECT 1 SET IMPLICIT_TRANSACTIONS ON",
-			"SELECT NEXT VALUE FOR dbo.s"},
+			"SELECT NEXT VALUE FOR dbo.s", "SELECT 1 SETUSER 'sa'", "SELECT 1 RAISERROR('x', 10, 1) WITH LOG",
+			"SELECT 1 CHECKPOINT", "SELECT 1 WAITFOR DELAY '01:00:00'", "SELECT 1 DISABLE TRIGGER tr ON t",
+			"SELECT 1 ENABLE TRIGGER tr ON t", "SELECT 1 RECEIVE TOP(1) * FROM q", "SELECT 1 SEND ON CONVERSATION @h (0x00)"},
 	}
 	for eng, list := range ok {
 		for _, s := range list {

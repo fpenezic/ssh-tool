@@ -46,14 +46,18 @@ func TestRDSplit(t *testing.T) {
 
 func TestRDRead(t *testing.T) {
 	for _, s := range []string{"GET k", "hgetall h", "SCAN 0 MATCH a:*", "CONFIG GET maxmemory", "CLIENT LIST",
-		"INFO", "XINFO STREAM s", "EVAL_RO \"return 1\" 0", "SELECT 2", "MEMORY USAGE k", "JSON.GET j $", "ACL LOG 10"} {
+		"INFO", "XINFO STREAM s", "EVAL_RO \"return 1\" 0", "SELECT 2", "MEMORY USAGE k", "JSON.GET j $", "ACL LOG 10",
+		"CONFIG GET max*", "CONFIG GET maxmemory save", "ACL USERS", "ACL WHOAMI"} {
 		if !IsRead(EngineRedis, s) || CheckReadOnly(EngineRedis, s) != nil {
 			t.Errorf("not read: %q", s)
 		}
 	}
 	for _, s := range []string{"SET k v", "DEL k", "CONFIG SET maxmemory 1", "CONFIG", "CLIENT KILL ID 1",
 		"EVAL \"return 1\" 0", "FLUSHALL", "XREADGROUP GROUP g c STREAMS s >", "SORT k", "OBJECT", "MULTI",
-		"ACL SETUSER x on", "ACL LOG RESET", "SCRIPT FLUSH", "GET \"unterminated"} {
+		"ACL SETUSER x on", "ACL LOG RESET", "SCRIPT FLUSH", "GET \"unterminated",
+		// Replies with passwords or password hashes.
+		"CONFIG GET *", "config get requirepass", "CONFIG GET *PASS*", "CONFIG GET maxmemory masterauth",
+		"CONFIG GET master?uth", "CONFIG GET [mr]*", "CONFIG GET tls-*", "CONFIG GET [", "ACL LIST", "acl getuser default"} {
 		if IsRead(EngineRedis, s) || CheckReadOnly(EngineRedis, s) == nil {
 			t.Errorf("read: %q", s)
 		}
