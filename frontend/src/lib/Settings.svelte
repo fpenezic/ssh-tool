@@ -4402,7 +4402,9 @@
           <div class="mode-name">GPU rendering (WebGL)</div>
           <div class="mode-desc">
             Draws the terminal on the graphics card. Off by default: on some
-            GPUs it garbles text. Applies to newly opened tabs.
+            GPUs it garbles text. Applies to newly opened tabs. On Android,
+            terminal tabs always draw with Canvas; this still applies to
+            recording playback.
           </div>
         </div>
       </label>
@@ -8586,9 +8588,16 @@
      own label happens to end. Scoped to these two rather than applied to
      .num generally - elsewhere (the audit filter/limit row) short labels in
      a wrapping flex row would be stretched by a min-width. */
+  .num.scrollback-row { flex-wrap: wrap; }
   .num.scrollback-row > span:first-child {
     flex: 0 0 auto;
     min-width: 15rem;
+  }
+  /* On a phone the fixed label column alone is wider than the card at a
+     large UI size: let the label take its own width and the input wrap
+     below it. */
+  @media (max-width: 640px) {
+    .num.scrollback-row > span:first-child { min-width: 0; }
   }
   .num input[type="number"] {
     background: var(--mantle);
