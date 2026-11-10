@@ -284,6 +284,12 @@ html, body {
    Without it most selects were the engine's default control (white box,
    black border) next to themed inputs. The open popup list stays a
    native menu, coloured by color-scheme above. */
+/* A button a component does not style takes the app's font, not the
+   engine's 13.33px default. Zero specificity: any component rule wins. */
+:where(button) {
+    font: inherit;
+}
+
 :where(select) {
     background: var(--mantle);
     color: var(--text);
