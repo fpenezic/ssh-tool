@@ -1597,12 +1597,9 @@ without starting their consumers. A topic opens on its own subtabs:
 
 ### Consuming
 
-Pick where to start - the last N records of every partition, the
-beginning, new records only, an offset, or a time - a partition or all, an
-optional record limit, and whether to **stop at end** (the end offsets as
-they were when you started). The consumer never joins a consumer group and
-never commits an offset: reading a topic here cannot move anyone's real
-consumers.
+Pick where to start - the last N records of every partition, the last N records of the topic, the beginning, new records only, an offset, or a time - a partition or all, an optional record limit, and whether to **stop at end** (the end offsets as they were when you started). The consumer never joins a consumer group and never commits an offset: reading a topic here cannot move anyone's real consumers.
+
+**Last N in topic** is the newest N records across all partitions by record time, listed oldest first: it reads the last N of every partition, picks the newest N among them and shows them once every partition is read (the status bar says "picking the newest of ... read" until then); without stop at end it then goes on with new records as they come. A record limit keeps the newest of the pick, and a Keep only filter picks among the matches in what was read. When producers set their own record timestamps and those run out of order within a partition, the pick follows those timestamps.
 
 Records arrive in a list (partition, offset, time, key, value); a record
 opens below with its value pretty-printed when it is JSON, a hex dump when

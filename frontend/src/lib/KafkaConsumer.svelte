@@ -115,6 +115,7 @@
   <div class="bar">
     <select bind:value={c.mode} title="Where to start reading">
       <option value="last">Last N per partition</option>
+      <option value="newest">Last N in topic</option>
       <option value="earliest">From the beginning</option>
       <option value="latest">New records only</option>
       <option value="offset">From offset</option>
@@ -122,6 +123,8 @@
     </select>
     {#if c.mode === "last"}
       <input class="num" type="number" min="1" bind:value={c.n} title="Records per partition" />
+    {:else if c.mode === "newest"}
+      <input class="num" type="number" min="1" bind:value={c.n} title="Records in all: the newest by record time across the partitions, shown oldest first" />
     {:else if c.mode === "offset"}
       <input class="num" type="number" min="0" bind:value={c.offset} title="Offset (in every partition read)" />
     {:else if c.mode === "timestamp"}
@@ -158,7 +161,9 @@
   <div class="status">
     {#if c.snap}
       <span class="st {c.snap.state}">{c.snap.state}</span>
-      {#if c.snap.filtering}
+      {#if c.snap.gathering}
+        <span title="Reading the last N records of every partition to pick the newest N of the topic; they show once every partition is read">picking the newest of {formatCount(c.snap.scanned)} read</span>
+      {:else if c.snap.filtering}
         <span>{formatCount(c.snap.received)} matched of {formatCount(c.snap.scanned)} read</span>
       {:else}
         <span>{formatCount(c.snap.received)} read</span>

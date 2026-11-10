@@ -647,3 +647,125 @@ func TestContainsFold(t *testing.T) {
 		t.Error("base64 matched on a text payload")
 	}
 }
+
+// produceAt writes records into one partition of "empty" with the given
+// timestamps (seconds after t0), keyed p<partition>-<second>.
+func produceAt(t *testing.T, seeds []string, p int32, secs ...int) {
+	t.Helper()
+	cl, err := kgo.NewClient(kgo.SeedBrokers(seeds...), kgo.RecordPartitioner(kgo.ManualPartitioner()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	var recs []*kgo.Record
+	for _, s := range secs {
+		recs = append(recs, &kgo.Record{
+			Topic:     "empty",
+			Partition: p,
+			Key:       []byte(fmt.Sprintf("p%d-%d", p, s)),
+			Value:     []byte(fmt.Sprintf("v%d", s)),
+			Timestamp: t0.Add(time.Duration(s) * time.Second),
+		})
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := cl.ProduceSync(ctx, recs...).FirstErr(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func keysOf(msgs []Message) string {
+	var ks []string
+	for _, m := range msgs {
+		ks = append(ks, m.Key.Text)
+	}
+	return strings.Join(ks, " ")
+}
+
+func TestConsumeNewest(t *testing.T) {
+	fc := newFake(t, 0)
+	c := openFake(t, fc)
+	seeds := fc.ListenAddrs()
+	// Partition 0 holds the newest records, 1 the oldest, 2 some in between:
+	// the newest 5 of the topic are not the last N of each partition.
+	produceAt(t, seeds, 0, 100, 101, 102, 103)
+	produceAt(t, seeds, 1, 1, 2, 3, 4, 5, 6)
+	produceAt(t, seeds, 2, 50, 51, 52)
+
+	run := func(t *testing.T, req ConsumeRequest) ([]Message, ConsumeSnapshot) {
+		t.Helper()
+		req.Topic, req.Mode, req.Partition = "empty", FromNewest, -1
+		k, err := c.Consume(ctx10(t), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(k.Stop)
+		return drain(t, k)
+	}
+
+	t.Run("pick", func(t *testing.T) {
+		msgs, s := run(t, ConsumeRequest{N: 5, StopAtEnd: true})
+		if got, want := keysOf(msgs), "p2-52 p0-100 p0-101 p0-102 p0-103"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+		for i, m := range msgs {
+			if m.Seq != uint64(i+1) {
+				t.Fatalf("record %d has seq %d", i, m.Seq)
+			}
+		}
+		if s.State != ConsumeDone || s.Gathering || s.Scanned != 12 || s.Received != 5 {
+			t.Fatalf("snapshot %+v", s)
+		}
+	})
+	t.Run("more than there is", func(t *testing.T) {
+		msgs, _ := run(t, ConsumeRequest{N: 50, StopAtEnd: true})
+		if len(msgs) != 13 || msgs[0].Key.Text != "p1-1" || msgs[12].Key.Text != "p0-103" {
+			t.Fatalf("got %q", keysOf(msgs))
+		}
+	})
+	t.Run("limit keeps the newest", func(t *testing.T) {
+		msgs, s := run(t, ConsumeRequest{N: 5, Limit: 2})
+		if got, want := keysOf(msgs), "p0-102 p0-103"; got != want || s.State != ConsumeDone {
+			t.Fatalf("got %q (%s), want %q", got, s.State, want)
+		}
+	})
+	t.Run("filter", func(t *testing.T) {
+		// The pick is the newest N that match, among the last N read of
+		// each partition.
+		msgs, s := run(t, ConsumeRequest{N: 3, StopAtEnd: true, KeyContains: "P1-"})
+		if got, want := keysOf(msgs), "p1-4 p1-5 p1-6"; got != want || s.Scanned != 9 {
+			t.Fatalf("got %q scanned %d, want %q", got, s.Scanned, want)
+		}
+	})
+	t.Run("then follows", func(t *testing.T) {
+		req := ConsumeRequest{Topic: "empty", Mode: FromNewest, N: 2, Partition: -1}
+		k, err := c.Consume(ctx10(t), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer k.Stop()
+		deadline := time.Now().Add(10 * time.Second)
+		for k.Snapshot(0, SnapshotOptions{}).Received < 2 {
+			if time.Now().After(deadline) {
+				t.Fatal("no pick")
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		// A record older than the pick still comes after it: from here on it
+		// is arrival order, like every other mode.
+		produceAt(t, seeds, 1, 7)
+		for {
+			s := k.Snapshot(0, SnapshotOptions{})
+			if s.Received == 3 {
+				if got, want := keysOf(s.Messages), "p0-102 p0-103 p1-7"; got != want {
+					t.Fatalf("got %q, want %q", got, want)
+				}
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("new record not read: %+v", s)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	})
+}

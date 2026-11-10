@@ -9,7 +9,7 @@ while Wails v3 was a prerelease upstream.
 
 ## [Unreleased]
 
-The Database grid works more like a spreadsheet: edit cells in place, select and copy blocks of cells straight into Excel or Teams, right-click menus on cells and in the tree, and export a whole table to CSV or JSON. The app proxy routes names by the VPNs' DNS domains.
+The Database grid works more like a spreadsheet: edit cells in place, select and copy blocks of cells straight into Excel or Teams, right-click menus on cells and in the tree, and export a whole table to CSV or JSON. The app proxy routes names by the VPNs' DNS domains, and the Kafka consumer can show the newest records of a whole topic.
 
 ### Appearance
 - **UI font size means the text size**: the number in Settings > Appearance is now the size of the main text, and field labels, badges and titles are one step smaller or larger than it instead of a dozen fractions of it, with nothing under 10px. At 11, labels and notes that were 8 to 9px are now 10px. Text fields, selects and buttons in Settings share one height that grows with the font.
@@ -42,6 +42,9 @@ The Database grid works more like a spreadsheet: edit cells in place, select and
 - Adding a database to a connection's list no longer turns the Query timeout field red: an empty new entry is its own error (Save says it needs a name), not the timeout's.
 - **Read-only connections refuse more**: an OpenSearch / Elasticsearch POST whose path a proxy in front of the server could rewrite into another endpoint (`.` or `..` segments, `;`, `//`, encoded slashes: `/logs/_search/../_delete_by_query` is a delete there); PostgreSQL `EXPLAIN (ANALYSE) ...`, the British spelling, and `EXPLAIN ("analyze") ...` with the option quoted, both of which run the statement (they also count as writes for the sensitive-connection confirm); on SQL Server `SETUSER`, `RAISERROR`, `WAITFOR` and `CHECKPOINT`; on Oracle and Db2 `seq."NEXTVAL"` written as a quoted name; on Redis and Valkey `CONFIG GET` patterns that can match a password setting (`CONFIG GET *`, any `[...]` pattern), `ACL LIST` and `ACL GETUSER`, whose replies carry passwords or their hashes.
 - JSON export of a result with two columns of one name keeps both values: the repeat is named `name (2)` (it used to keep only the last one).
+
+### Kafka
+- **Last N in topic**: a consumer start point that shows the newest N records of the topic as a whole, by record time, oldest first, instead of the last N of every partition. It reads the last N of each partition, keeps the newest N and shows them once every partition is read; without stop at end it then follows new records. A record limit keeps the newest of the pick. The MCP `kafka_consume` tool takes it as `from=newest`; a consumer group cannot be reset to it.
 
 ## [1.1.0] - Database tab grows up: Db2, foreign keys, ER diagram
 
