@@ -235,22 +235,36 @@ func TestSharedDomainHandBeatsGateway(t *testing.T) {
 	if d, _ := a.sharedByDomain("h.same.test", domains, map[string]int{"c": 0}); d.profileID != "c" {
 		t.Errorf("gateway tie by priority c: %s", d.profileID)
 	}
-	got := strings.Join(domainClashes(domains, map[string]int{"c": 0}), "\n")
-	for _, want := range []string{
-		"domain vpn.example.com (A, from the gateway) inside example.com (B, by hand) - names in vpn.example.com go to B, added by hand",
-		"domain x.corp.test (C, from the gateway) inside corp.test (A, from the gateway) - names in x.corp.test go to C",
-		"domain lab.test: A and C - A wins (added by hand)",
-		"domain same.test: A and C - C wins",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("clashes miss %q:\n%s", want, got)
-		}
+	got := domainClashes(domains, map[string]int{"c": 0})
+	want := []string{
+		"domain lab.test: A (by hand), C (from the gateway) - A wins",
+		"domain same.test: A (from the gateway), C (from the gateway) - C wins",
+		"domain vpn.example.com: A (from the gateway), B (by hand, as example.com) - B wins",
+		"domain x.corp.test: C (from the gateway), A (from the gateway, as corp.test) - C wins",
 	}
-	if strings.Count(got, "\n") != 3 {
-		t.Errorf("clashes:\n%s", got)
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("clashes:\n got %q\nwant %q", got, want)
 	}
-	if l := domainClashes(domains, nil); !strings.Contains(strings.Join(l, "\n"), "same.test: A and C - whichever is connected wins") {
-		t.Errorf("no priority: %v", l)
+	if l := strings.Join(domainClashes(domains, nil), "\n"); !strings.Contains(l, "domain same.test: A (from the gateway), C (from the gateway) - whichever is connected wins") {
+		t.Errorf("no priority:\n%s", l)
+	}
+	// Three profiles: the line names the profile the pick takes, not a
+	// pairwise winner (a hand-added parent beats a longer gateway domain).
+	three := []sharedDomain{
+		{"a.b.example.com", "b", "vpnB", true},
+		{"example.com", "c", "vpnC", true},
+		{"b.example.com", "a", "vpnA", false},
+	}
+	got = domainClashes(three, nil)
+	want = []string{
+		"domain a.b.example.com: vpnB (from the gateway), vpnA (by hand, as b.example.com), vpnC (from the gateway, as example.com) - vpnA wins",
+		"domain b.example.com: vpnA (by hand), vpnC (from the gateway, as example.com) - vpnA wins",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("three profiles:\n got %q\nwant %q", got, want)
+	}
+	if d, _ := a.sharedByDomain("h.a.b.example.com", three, nil); d.profileID != "a" {
+		t.Errorf("three profiles pick: %s", d.profileID)
 	}
 }
 
