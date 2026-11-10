@@ -11,6 +11,9 @@ while Wails v3 was a prerelease upstream.
 
 The Database grid works more like a spreadsheet: edit cells in place, select and copy blocks of cells straight into Excel or Teams, right-click menus on cells and in the tree, and export a whole table to CSV or JSON. The app proxy routes names by the VPNs' DNS domains.
 
+### Connection tree
+- **Filtering a large tree is several times faster**: with 1000 connections the first letter typed takes about a third of the time it did and narrowing to a few folders about a tenth; typing a word applies the filter once after a short pause instead of after every letter. The tree looks up folders and connections by id instead of scanning the whole list for every row.
+
 ### Network profiles
 - **The app proxy routes by DNS domain**: a name in a VPN's domain goes through that VPN as a name and is resolved by its DNS, so `db1.prod.example.com` works through the proxy even when this machine cannot resolve it. The domains come from the server (search domains from OpenConnect, OpenVPN and Check Point, split DNS from OpenConnect) and from **Extra DNS domains** on the profile's Proxy tab; the longest one wins. A short name this machine cannot resolve (`db1`) is tried in the VPN's search domains. **Which VPN for...** names the domain.
 - NetBird and Tailscale profiles remember what their plugin reports about the tunnel, like OpenConnect and OpenVPN: with NetBird plugin 1.7 or later (on NetBird 0.82) that is the NetBird DNS domain and the nameserver groups' domains, so names in them route through the app proxy with nothing added by hand.
