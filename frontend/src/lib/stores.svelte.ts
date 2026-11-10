@@ -2620,7 +2620,9 @@ class LiveTreeStore {
     if (this.ids.size === 0) return m;
     const bump = (folderId: string | null | undefined) => {
       let id = folderId ?? null;
-      while (id) {
+      // Bounded like the other ancestor walks: a parent cycle in the
+      // folder data must not hang the UI.
+      for (let guard = 0; id && guard < 10000; guard++) {
         m.set(id, (m.get(id) ?? 0) + 1);
         id = tree.folderById(id)?.parent_id ?? null;
       }
