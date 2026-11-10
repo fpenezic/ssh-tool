@@ -5547,7 +5547,10 @@
                 <p class="hint inline">{lp.details.sources.join("; ")}</p>
                 <!-- Only the app proxy routes by domain (this VPN's own proxy sends every name through it anyway). -->
                 <h3 class="np-h3">{np.local_proxy?.shared ? "DNS domains the app proxy routes through this VPN by name" : "DNS domains"}{#if !np.local_proxy?.shared}<span class="hint inline"> - not in use: the app proxy routes by them once this VPN is reachable through it</span>{/if}</h3>
-                <pre class="np-info">{lp.details.domains.map((d) => (lp.details?.gateway_domains.includes(d) ? `${d}  (from the server)` : `${d}  (added by hand)`)).join("\n") || "none - the server reported none yet; add them above"}</pre>
+                <pre class="np-info">{lp.details.domains.map((d) => (lp.details?.gateway_domains.includes(d) ? `${d}  (from the server)` : lp.details?.config_domains?.includes(d) ? `${d}  (from the config)` : `${d}  (added by hand)`)).join("\n") || "none - the server reported none yet; add them above"}</pre>
+                {#if lp.details.config_domains_ignored}
+                  <p class="hint inline warn">The config's DNS line names search domains but no DNS server, so nothing in the tunnel resolves names in them: they are not used. Add the VPN's DNS server to that line.</p>
+                {/if}
               {/if}
               {#if np.local_proxy?.enabled && lp.details?.url}
                 <h3 class="np-h3">This VPN's own proxy {#if !np.local_proxy_listening}<span class="hint inline warn">not listening - port taken?</span>{/if}</h3>

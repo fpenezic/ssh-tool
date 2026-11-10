@@ -175,13 +175,12 @@ func profileDomains(row *store.NetworkProfile, cfg LocalProxyConfig) (domains []
 	var v struct {
 		Domains []string `json:"last_domains"`
 		Search  []string `json:"last_search_domains"`
-		// A WireGuard profile's search domains, from the DNS line of its
-		// config: they count like the domains a gateway reports.
-		WgSearch []string `json:"search_domains"`
 	}
 	_ = json.Unmarshal([]byte(row.ConfigJSON), &v)
-	v.Domains = append(v.Domains, v.WgSearch...)
-	v.Search = append(v.Search, v.WgSearch...)
+	// A WireGuard profile's search domains, from the DNS line of its
+	// config, count as added by hand (the user wrote them), after the
+	// gateway's and with the Extra DNS domains.
+	wgSearch, _ := wgConfigSearch(row.ConfigJSON)
 	gateway = map[string]bool{}
 	seen := map[string]bool{}
 	add := func(list *[]string, d string) {
@@ -196,7 +195,8 @@ func profileDomains(row *store.NetworkProfile, cfg LocalProxyConfig) (domains []
 	for _, d := range domains {
 		gateway[d] = true
 	}
-	for _, d := range cfg.Domains {
+	hand := append(append([]string(nil), wgSearch...), cfg.Domains...)
+	for _, d := range hand {
 		add(&domains, d)
 		// Added by hand too: the user's word, which beats a gateway's
 		// (sharedByDomain).
@@ -208,10 +208,31 @@ func profileDomains(row *store.NetworkProfile, cfg LocalProxyConfig) (domains []
 	for _, d := range v.Search {
 		add(&search, d)
 	}
+	for _, d := range wgSearch {
+		add(&search, d)
+	}
 	for _, d := range cfg.Domains {
 		add(&search, d)
 	}
 	return domains, gateway, search
+}
+
+// wgConfigSearch is a WireGuard profile's search domains (the names on its
+// config's DNS line). Without a DNS server on that line nothing resolves
+// a name in them inside the tunnel, so they are not used: ignored is
+// true then, for the Proxy tab to say so.
+func wgConfigSearch(configJSON string) (search []string, ignored bool) {
+	var v struct {
+		DNS    []string `json:"dns"`
+		Search []string `json:"search_domains"`
+	}
+	if json.Unmarshal([]byte(configJSON), &v) != nil || len(v.Search) == 0 {
+		return nil, false
+	}
+	if len(v.DNS) == 0 {
+		return nil, true
+	}
+	return v.Search, false
 }
 
 // parseRoute reads a CIDR or a bare address (a host route).
@@ -683,8 +704,13 @@ type LocalProxyDetails struct {
 	// ones of them the gateway reported (the rest were added by hand).
 	Domains        []string `json:"domains"`
 	GatewayDomains []string `json:"gateway_domains"`
-	Gateway        string   `json:"gateway"` // docker run for a tun2socks gateway
-	Listening      bool     `json:"listening"`
+	// ConfigDomains are the ones from a WireGuard config's DNS line;
+	// ConfigDomainsIgnored is set when that line names domains but no
+	// DNS server, so they are left out.
+	ConfigDomains        []string `json:"config_domains"`
+	ConfigDomainsIgnored bool     `json:"config_domains_ignored"`
+	Gateway              string   `json:"gateway"` // docker run for a tun2socks gateway
+	Listening            bool     `json:"listening"`
 }
 
 // NetworkProfileLocalProxyDetails builds the proxy URL, the routes the
@@ -697,7 +723,16 @@ func (a *App) NetworkProfileLocalProxyDetails(id string) (*LocalProxyDetails, er
 	}
 	cfg := profileLocalProxy(row.ConfigJSON)
 	routes, sources := a.profileRoutes(row, cfg)
-	d := &LocalProxyDetails{Routes: collapseRoutes(routes), Sources: sources, Domains: []string{}, GatewayDomains: []string{}}
+	d := &LocalProxyDetails{Routes: collapseRoutes(routes), Sources: sources, Domains: []string{}, GatewayDomains: []string{}, ConfigDomains: []string{}}
+	if s, ignored := wgConfigSearch(row.ConfigJSON); ignored {
+		d.ConfigDomainsIgnored = true
+	} else {
+		for _, dm := range s {
+			if n, err := normalizeDomain(dm); err == nil {
+				d.ConfigDomains = append(d.ConfigDomains, n)
+			}
+		}
+	}
 	doms, gw, _ := profileDomains(row, cfg)
 	for _, dm := range doms {
 		d.Domains = append(d.Domains, dm)

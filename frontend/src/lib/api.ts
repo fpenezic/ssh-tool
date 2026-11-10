@@ -729,6 +729,9 @@ export interface LocalProxyDetails {
   /** Domains routed by name; gateway_domains are the ones the gateway reported. */
   domains: string[];
   gateway_domains: string[];
+  /** From a WireGuard config's DNS line; ignored when that line has no DNS server. */
+  config_domains: string[];
+  config_domains_ignored: boolean;
   gateway: string;
   listening: boolean;
 }

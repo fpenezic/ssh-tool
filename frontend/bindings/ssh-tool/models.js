@@ -4690,6 +4690,23 @@ export class LocalProxyDetails {
              */
             this["gateway_domains"] = [];
         }
+        if (!("config_domains" in $$source)) {
+            /**
+             * ConfigDomains are the ones from a WireGuard config's DNS line;
+             * ConfigDomainsIgnored is set when that line names domains but no
+             * DNS server, so they are left out.
+             * @member
+             * @type {string[]}
+             */
+            this["config_domains"] = [];
+        }
+        if (!("config_domains_ignored" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["config_domains_ignored"] = false;
+        }
         if (!("gateway" in $$source)) {
             /**
              * docker run for a tun2socks gateway
@@ -4719,6 +4736,7 @@ export class LocalProxyDetails {
         const $$createField2_0 = $$createType4;
         const $$createField3_0 = $$createType4;
         const $$createField4_0 = $$createType4;
+        const $$createField5_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("routes" in $$parsedSource) {
             $$parsedSource["routes"] = $$createField1_0($$parsedSource["routes"]);
@@ -4731,6 +4749,9 @@ export class LocalProxyDetails {
         }
         if ("gateway_domains" in $$parsedSource) {
             $$parsedSource["gateway_domains"] = $$createField4_0($$parsedSource["gateway_domains"]);
+        }
+        if ("config_domains" in $$parsedSource) {
+            $$parsedSource["config_domains"] = $$createField5_0($$parsedSource["config_domains"]);
         }
         return new LocalProxyDetails(/** @type {Partial<LocalProxyDetails>} */($$parsedSource));
     }

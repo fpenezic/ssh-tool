@@ -269,12 +269,20 @@ func TestSharedDomainHandBeatsGateway(t *testing.T) {
 }
 
 // A WireGuard profile's search domains (its config's DNS line) route by
-// name and are tried for short names, like a gateway's.
+// name and are tried for short names; the user wrote them, so they count
+// as added by hand. Without a DNS server on the line they are not used.
 func TestProfileDomainsWireGuardSearch(t *testing.T) {
 	row := &store.NetworkProfile{ConfigJSON: `{"dns":["10.99.0.1"],"search_domains":["lab.test"]}`}
-	doms, gw, search := profileDomains(row, LocalProxyConfig{})
-	if strings.Join(doms, ",") != "lab.test" || !gw["lab.test"] || strings.Join(search, ",") != "lab.test" {
+	doms, gw, search := profileDomains(row, LocalProxyConfig{Domains: []string{"extra.test"}})
+	if strings.Join(doms, ",") != "lab.test,extra.test" || gw["lab.test"] || strings.Join(search, ",") != "lab.test,extra.test" {
 		t.Errorf("domains %v gateway %v search %v", doms, gw, search)
+	}
+	noDNS := &store.NetworkProfile{ConfigJSON: `{"search_domains":["lab.test"]}`}
+	if doms, _, search := profileDomains(noDNS, LocalProxyConfig{}); len(doms) != 0 || len(search) != 0 {
+		t.Errorf("no resolver: domains %v search %v", doms, search)
+	}
+	if _, ignored := wgConfigSearch(noDNS.ConfigJSON); !ignored {
+		t.Error("no resolver: not reported as ignored")
 	}
 }
 
