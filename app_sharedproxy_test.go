@@ -192,6 +192,78 @@ func TestSharedPickDomains(t *testing.T) {
 	}
 }
 
+// A domain added by hand beats a gateway's of another profile, whatever
+// the lengths; gateway against gateway and hand against hand go by the
+// longest suffix, then priority. Clashes are listed for the details.
+func TestSharedDomainHandBeatsGateway(t *testing.T) {
+	a := &App{}
+	domains := []sharedDomain{
+		{"vpn.example.com", "a", "A", true},
+		{"example.com", "b", "B", false},
+		{"corp.test", "a", "A", true},
+		{"x.corp.test", "c", "C", true},
+		{"lab.test", "a", "A", false},
+		{"lab.test", "c", "C", true},
+		{"same.test", "a", "A", true},
+		{"same.test", "c", "C", true},
+	}
+	cases := []struct{ host, want, suffix string }{
+		{"db1.vpn.example.com", "b", "example.com"}, // gateway A longer, hand B wins
+		{"db1.example.com", "b", "example.com"},
+		{"h.x.corp.test", "c", "x.corp.test"}, // gateway vs gateway: longest
+		{"h.corp.test", "a", "corp.test"},
+		{"h.lab.test", "a", "lab.test"}, // same suffix: hand wins over gateway
+	}
+	for _, c := range cases {
+		d, ok := a.sharedByDomain(c.host, domains, map[string]int{"c": 0})
+		if !ok || d.profileID != c.want || d.suffix != c.suffix {
+			t.Errorf("%s: got %s %s, want %s %s", c.host, d.profileID, d.suffix, c.want, c.suffix)
+		}
+	}
+	sharedTable.Lock()
+	sharedTable.at = time.Now()
+	sharedTable.routes, sharedTable.hosts, sharedTable.domains = nil, map[string]string{}, domains
+	sharedTable.Unlock()
+	defer sharedRoutesInvalidate()
+	if id, why, _, err := a.sharedPickHosts("db1.vpn.example.com", nil); err != nil || id != "b" || why != "domain example.com (added by hand; beats vpn.example.com from the gateway of A)" {
+		t.Errorf("why: %s %q %v", id, why, err)
+	}
+	// The same domain on two gateways goes by priority.
+	if d, _ := a.sharedByDomain("h.same.test", domains, map[string]int{"a": 0, "c": 1}); d.profileID != "a" {
+		t.Errorf("gateway tie by priority a: %s", d.profileID)
+	}
+	if d, _ := a.sharedByDomain("h.same.test", domains, map[string]int{"c": 0}); d.profileID != "c" {
+		t.Errorf("gateway tie by priority c: %s", d.profileID)
+	}
+	got := strings.Join(domainClashes(domains, map[string]int{"c": 0}), "\n")
+	for _, want := range []string{
+		"domain vpn.example.com (A, from the gateway) inside example.com (B, by hand) - names in vpn.example.com go to B, added by hand",
+		"domain x.corp.test (C, from the gateway) inside corp.test (A, from the gateway) - names in x.corp.test go to C",
+		"domain lab.test: A and C - A wins (added by hand)",
+		"domain same.test: A and C - C wins",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("clashes miss %q:\n%s", want, got)
+		}
+	}
+	if strings.Count(got, "\n") != 3 {
+		t.Errorf("clashes:\n%s", got)
+	}
+	if l := domainClashes(domains, nil); !strings.Contains(strings.Join(l, "\n"), "same.test: A and C - whichever is connected wins") {
+		t.Errorf("no priority: %v", l)
+	}
+}
+
+// A domain the gateway reports and the user also added by hand counts as
+// added by hand.
+func TestProfileDomainsHandOverGateway(t *testing.T) {
+	row := &store.NetworkProfile{ConfigJSON: `{"last_domains":["corp.example.com","gw.example.com"]}`}
+	doms, gw, _ := profileDomains(row, LocalProxyConfig{Domains: []string{"Corp.Example.com."}})
+	if strings.Join(doms, ",") != "corp.example.com,gw.example.com" || gw["corp.example.com"] || !gw["gw.example.com"] {
+		t.Errorf("domains %v gateway %v", doms, gw)
+	}
+}
+
 // The whole pick for a short name the local resolver does not know: it
 // goes to the first profile's search domains, every expansion in order;
 // a name with a trailing dot finds its connection before any domain.

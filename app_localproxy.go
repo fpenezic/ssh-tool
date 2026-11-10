@@ -193,6 +193,11 @@ func profileDomains(row *store.NetworkProfile, cfg LocalProxyConfig) (domains []
 	}
 	for _, d := range cfg.Domains {
 		add(&domains, d)
+		// Added by hand too: the user's word, which beats a gateway's
+		// (sharedByDomain).
+		if n, err := normalizeDomain(d); err == nil {
+			delete(gateway, n)
+		}
 	}
 	seen = map[string]bool{}
 	for _, d := range v.Search {

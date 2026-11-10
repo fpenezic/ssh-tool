@@ -18,6 +18,7 @@ The Database grid works more like a spreadsheet: edit cells in place, select and
 - The app proxy's summary counts each VPN's DNS domains next to its networks, so a VPN reached by domain only (NetBird without network routes) is listed too.
 - A connection on an auto-mode profile whose plugin is not installed says so: the host was reachable directly, so the connect went ahead without the VPN and gave no hint the profile could never bring its tunnel up. A warning now shows once per profile while the app runs; click it to open the profile and install the plugin.
 - Changing a profile's local proxy to a port that is already taken keeps the proxy listening on its old port; before, it stopped listening until the app restarted, while the profile still showed it on.
+- **A DNS domain added by hand beats one a VPN server pushed** on another profile, whatever their lengths: with `example.com` added on B and `vpn.example.com` pushed by A's gateway, `db1.vpn.example.com` now goes to B until `vpn.example.com` is added by hand on A. A server can push any domain, even another customer's. Domains of different profiles that claim the same names are listed under the app proxy's summary as overlaps, and **Which VPN for...** says when a hand-added domain won.
 
 ### Database
 - A folder's list of databases shows and can be edited with the folder's own Database switch off, so it can list prod / stage for the connections under it that turn the Database on, without turning it on for all of them.

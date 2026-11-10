@@ -394,21 +394,42 @@ func (a *App) sharedNames() ([]sharedDomain, []sharedSearch) {
 	return sharedTable.domains, sharedTable.search
 }
 
-// sharedByDomain is the profile whose DNS domain host is in: the longest
-// suffix; between profiles with the same one, the priority, then a
-// profile whose tunnel is up, then the name.
+// sharedByDomain is the profile whose DNS domain host is in. A domain
+// added by hand beats one a gateway reported, whatever their lengths: the
+// user said where those names go, and a gateway can push any domain (a
+// customer's VPN claiming another customer's domain, or "com"); pins beat
+// gateway routes the same way. Among the domains left, the longest suffix;
+// between profiles with the same one, the priority, then a profile whose
+// tunnel is up, then the name.
 func (a *App) sharedByDomain(host string, domains []sharedDomain, rank map[string]int) (sharedDomain, bool) {
-	all := make([]string, 0, len(domains))
+	h := hostKey(host)
+	var match []sharedDomain
+	hand := false
 	for _, d := range domains {
-		all = append(all, d.suffix)
+		if h == d.suffix || strings.HasSuffix(h, "."+d.suffix) {
+			match = append(match, d)
+			hand = hand || !d.gateway
+		}
 	}
-	suffix := domainOf(host, all)
-	if suffix == "" {
+	if hand {
+		kept := match[:0]
+		for _, d := range match {
+			if !d.gateway {
+				kept = append(kept, d)
+			}
+		}
+		match = kept
+	}
+	if len(match) == 0 {
 		return sharedDomain{}, false
 	}
+	longest := 0
+	for _, d := range match {
+		longest = max(longest, len(d.suffix))
+	}
 	var pick []sharedDomain
-	for _, d := range domains {
-		if d.suffix == suffix {
+	for _, d := range match {
+		if len(d.suffix) == longest {
 			pick = append(pick, d)
 		}
 	}
@@ -428,6 +449,67 @@ func (a *App) sharedByDomain(host string, domains []sharedDomain, rank map[strin
 		return pick[i].name < pick[j].name
 	})
 	return pick[0], true
+}
+
+// domainClashes lists DNS domains of different profiles that claim the
+// same names (the same suffix, or one inside the other) and which profile
+// takes them, for the app proxy's details. Nothing is blocked.
+func domainClashes(domains []sharedDomain, rank map[string]int) []string {
+	from := func(d sharedDomain) string {
+		if d.gateway {
+			return "from the gateway"
+		}
+		return "by hand"
+	}
+	byPriority := func(x, y sharedDomain) string {
+		rx, xok := rank[x.profileID]
+		ry, yok := rank[y.profileID]
+		switch {
+		case xok && (!yok || rx < ry):
+			return x.name
+		case yok:
+			return y.name
+		}
+		return "whichever is connected"
+	}
+	var out []string
+	seen := map[string]bool{}
+	for i, x := range domains {
+		for _, y := range domains[i+1:] {
+			if x.profileID == y.profileID {
+				continue
+			}
+			inner, outer := x, y
+			if len(y.suffix) > len(x.suffix) || (y.suffix == x.suffix && y.name < x.name) {
+				inner, outer = y, x
+			}
+			if inner.suffix != outer.suffix && !strings.HasSuffix(inner.suffix, "."+outer.suffix) {
+				continue
+			}
+			var line string
+			switch {
+			case inner.suffix == outer.suffix && inner.gateway == outer.gateway:
+				line = fmt.Sprintf("domain %s: %s and %s - %s wins", inner.suffix, inner.name, outer.name, byPriority(outer, inner))
+			case inner.suffix == outer.suffix:
+				hand := inner
+				if hand.gateway {
+					hand = outer
+				}
+				line = fmt.Sprintf("domain %s: %s and %s - %s wins (added by hand)", inner.suffix, inner.name, outer.name, hand.name)
+			default:
+				win := inner.name
+				if inner.gateway && !outer.gateway {
+					win = outer.name + ", added by hand"
+				}
+				line = fmt.Sprintf("domain %s (%s, %s) inside %s (%s, %s) - names in %s go to %s", inner.suffix, inner.name, from(inner), outer.suffix, outer.name, from(outer), inner.suffix, win)
+			}
+			if !seen[line] {
+				seen[line] = true
+				out = append(out, line)
+			}
+		}
+	}
+	return out
 }
 
 // sharedBySearch is the profile a short name (no dot) is tried in, with
@@ -548,6 +630,15 @@ func (a *App) sharedPickHosts(host string, priority []string) (id, why string, d
 			from := "added by hand"
 			if d.gateway {
 				from = "from the gateway"
+			} else {
+				// Say when a longer gateway domain of another profile lost.
+				h := hostKey(host)
+				for _, o := range domains {
+					if o.gateway && o.profileID != d.profileID && len(o.suffix) > len(d.suffix) && (h == o.suffix || strings.HasSuffix(h, "."+o.suffix)) {
+						from += fmt.Sprintf("; beats %s from the gateway of %s", o.suffix, o.name)
+						break
+					}
+				}
 			}
 			return d.profileID, fmt.Sprintf("domain %s (%s)", d.suffix, from), []string{strings.ToLower(strings.TrimSuffix(host, "."))}, nil
 		}
@@ -715,6 +806,13 @@ func (a *App) NetworkSharedProxyDetails() (*SharedProxyDetails, error) {
 	for _, dm := range doms {
 		d.Domains[dm.name]++
 	}
+	rank := map[string]int{}
+	for i, p := range c.Priority {
+		if _, ok := rank[p]; !ok {
+			rank[p] = i
+		}
+	}
+	d.Overlaps = append(d.Overlaps, domainClashes(doms, rank)...)
 	seen := map[netip.Prefix]sharedRoute{}
 	for _, r := range routes {
 		d.Profiles[r.name]++
