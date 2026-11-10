@@ -425,23 +425,35 @@ func domainCandidates(host string, domains []sharedDomain) []sharedDomain {
 	return pick
 }
 
-// byRank orders candidates by the app proxy's priority; ok is false when
-// the first two are not told apart by it (the tunnel that is up decides).
+// rankLess orders two profiles by the app proxy's priority: a ranked one
+// before an unranked one, then the lower rank. decided is false when the
+// priority does not tell them apart (the tunnel that is up, then the
+// name, decide in sharedByDomain). One comparator for the pick and for
+// the winner domainClashes names, so the two cannot drift apart.
+func rankLess(rank map[string]int, a, b string) (less, decided bool) {
+	ra, aok := rank[a]
+	rb, bok := rank[b]
+	if aok != bok {
+		return aok, true
+	}
+	if aok && ra != rb {
+		return ra < rb, true
+	}
+	return false, false
+}
+
+// byRank orders candidates by the priority; ok is false when the first
+// two are not told apart by it.
 func byRank(pick []sharedDomain, rank map[string]int) bool {
 	sort.SliceStable(pick, func(i, j int) bool {
-		ri, iok := rank[pick[i].profileID]
-		rj, jok := rank[pick[j].profileID]
-		if iok != jok {
-			return iok
-		}
-		return iok && ri < rj
+		less, _ := rankLess(rank, pick[i].profileID, pick[j].profileID)
+		return less
 	})
 	if len(pick) < 2 {
 		return true
 	}
-	r0, ok0 := rank[pick[0].profileID]
-	r1, ok1 := rank[pick[1].profileID]
-	return ok0 && (!ok1 || r0 < r1)
+	_, decided := rankLess(rank, pick[0].profileID, pick[1].profileID)
+	return decided
 }
 
 // sharedByDomain is the profile whose DNS domain host is in (see
@@ -453,13 +465,8 @@ func (a *App) sharedByDomain(host string, domains []sharedDomain, rank map[strin
 		return sharedDomain{}, false
 	}
 	sort.SliceStable(pick, func(i, j int) bool {
-		ri, iok := rank[pick[i].profileID]
-		rj, jok := rank[pick[j].profileID]
-		if iok != jok {
-			return iok
-		}
-		if iok && ri != rj {
-			return ri < rj
+		if less, decided := rankLess(rank, pick[i].profileID, pick[j].profileID); decided {
+			return less
 		}
 		ui, uj := a.tunnelStatus(pick[i].profileID).Running, a.tunnelStatus(pick[j].profileID).Running
 		if ui != uj {
