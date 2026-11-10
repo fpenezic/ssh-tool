@@ -360,13 +360,13 @@
   .vnc-title { font-weight: 600; }
   .vnc-switch {
     position: relative; width: 34px; height: 18px; border-radius: var(--r-pill);
-    border: 1px solid var(--border); background: var(--surface2); padding: 0;
+    border: 1px solid var(--surface2); background: var(--surface2); padding: 0;
     cursor: pointer; flex: 0 0 auto; transition: background 0.15s ease, border-color 0.15s ease;
   }
   .db-section.on .vnc-switch { background: var(--accent, #4a8); border-color: var(--accent, #4a8); }
   .vnc-knob {
     position: absolute; top: 1px; left: 1px; width: 14px; height: 14px;
-    border-radius: 50%; background: var(--text); transition: transform 0.15s ease;
+    border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform 0.15s ease;
   }
   .db-section.on .vnc-knob { transform: translateX(16px); background: #fff; }
   .vnc-open {
