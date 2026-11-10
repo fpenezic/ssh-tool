@@ -847,9 +847,11 @@ func TestConsumeNewestTxMarker(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer k.Stop()
-		busy := keepBusy(t, seeds)
+		defer keepBusy(t, seeds)()
 		s := waitPick(t, k, 3*time.Second)
-		busy()
+		if len(s.Messages) < 3 {
+			t.Fatalf("pick of %d records after gathering: %+v", len(s.Messages), s)
+		}
 		if got := keysOf(s.Messages[:3]); got != "p0-10 p0-11 p0-12" {
 			t.Fatalf("pick %q", got)
 		}
@@ -869,7 +871,11 @@ func TestConsumeNewestTxMarker(t *testing.T) {
 		produceAt(t, seeds, 0, 20)
 		// Well under the 5 s idle rule.
 		s := waitPick(t, k, 2*time.Second)
+		deadline := time.Now().Add(2 * time.Second)
 		for s.Received < 4 {
+			if time.Now().After(deadline) {
+				t.Fatalf("record past the end not buffered: %+v", s)
+			}
 			time.Sleep(20 * time.Millisecond)
 			s = k.Snapshot(0, SnapshotOptions{})
 		}
