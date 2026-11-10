@@ -80,6 +80,16 @@ func TestParseConfDNSSearch(t *testing.T) {
 	if _, err := ParseConf(strings.Replace(sampleConf, "DNS = 10.0.0.1", "DNS = 10.0.0.1, bad_domain!", 1)); err == nil || !strings.Contains(err.Error(), "bad DNS entry") {
 		t.Errorf("a broken entry: %v", err)
 	}
+	// A mistyped address stays an address and is refused, as wg-quick
+	// reads it, instead of becoming a search domain with no resolver.
+	for _, d := range []string{"10.0.0.300", "1.1.1", "8.8.8.8."} {
+		if _, err := ParseConf(strings.Replace(sampleConf, "DNS = 10.0.0.1", "DNS = "+d, 1)); err == nil || !strings.Contains(err.Error(), "bad DNS") {
+			t.Errorf("%s: %v", d, err)
+		}
+	}
+	if p, err := ParseConf(strings.Replace(sampleConf, "DNS = 10.0.0.1", "DNS = 10.0.0.1, _msdcs.example.com, corp", 1)); err != nil || strings.Join(p.Search, ",") != "_msdcs.example.com,corp" {
+		t.Errorf("underscore / single label: %v %v", p, err)
+	}
 }
 
 func TestParseConfErrors(t *testing.T) {

@@ -2,6 +2,7 @@ package wg
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -33,26 +34,24 @@ type Tunnel struct {
 // order, as resolv.conf would; then as written.
 func (t *Tunnel) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(addr)
-	if err != nil || len(t.search) == 0 || strings.Contains(host, ".") || strings.Contains(host, ":") {
+	if err != nil || len(t.search) == 0 || strings.Contains(host, ".") || strings.Contains(host, ":") || strings.EqualFold(host, "localhost") {
 		return t.tnet.DialContext(ctx, network, addr)
 	}
-	var first error
 	for _, d := range t.search {
 		c, err := t.tnet.DialContext(ctx, network, net.JoinHostPort(host+"."+d, port))
 		if err == nil {
 			return c, nil
 		}
-		if first == nil {
-			first = err
-		}
-		if ctx.Err() != nil {
+		// Only a name that does not exist moves on, as in resolv.conf: a
+		// name that resolves is the host, and a refused or timed-out dial
+		// to it is that host's error, never a reason to try a same-named
+		// host in the next domain.
+		var dnsErr *net.DNSError
+		if !errors.As(err, &dnsErr) || !dnsErr.IsNotFound || ctx.Err() != nil {
 			return nil, err
 		}
 	}
-	if c, err := t.tnet.DialContext(ctx, network, addr); err == nil {
-		return c, nil
-	}
-	return nil, first
+	return t.tnet.DialContext(ctx, network, addr)
 }
 
 // Status is a point-in-time snapshot for the UI, parsed from the

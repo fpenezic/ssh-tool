@@ -154,10 +154,13 @@ func ParseConf(text string) (*Profile, error) {
 				p.Addresses = append(p.Addresses, splitList(val)...)
 			case "dns":
 				// wg-quick takes resolver addresses and search domains on
-				// one line: an address is a resolver, anything else a
-				// search domain.
+				// one line. Like wg-quick, an entry of digits and dots or
+				// with a colon is an address (a mistyped one stays an
+				// address and fails Validate, instead of turning into a
+				// search domain and leaving the profile without a
+				// resolver); anything else is a search domain.
 				for _, d := range splitList(val) {
-					if _, err := netip.ParseAddr(d); err == nil {
+					if strings.Trim(d, "0123456789.") == "" || strings.Contains(d, ":") {
 						p.DNS = append(p.DNS, d)
 					} else {
 						p.Search = append(p.Search, strings.TrimSuffix(d, "."))
@@ -323,8 +326,9 @@ func keyToHex(b64 string) (string, error) {
 	return hex.EncodeToString(raw), nil
 }
 
-// validDomain reports a DNS name: dot-separated labels of letters, digits
-// and hyphens (not at a label's ends), 63 bytes a label, 253 in all.
+// validDomain reports a DNS name: dot-separated labels of letters, digits,
+// hyphens (not at a label's ends) and underscores, 63 bytes a label, 253
+// in all.
 func validDomain(d string) bool {
 	if d == "" || len(d) > 253 {
 		return false
@@ -334,7 +338,9 @@ func validDomain(d string) bool {
 			return false
 		}
 		for _, c := range l {
-			if !(c == '-' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z') {
+			// Underscores as the app proxy's normalizeDomain allows them
+			// (_msdcs.example.com and the like).
+			if !(c == '-' || c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z') {
 				return false
 			}
 		}

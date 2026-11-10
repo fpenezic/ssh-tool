@@ -1298,6 +1298,9 @@ func (a *App) NetworkProfileUpdate(id, name, confText string) (*NetworkProfileIn
 		return nil, err
 	}
 	a.tunnelStop(id)
+	// Its networks and DNS domains changed: the app proxy reads them anew
+	// instead of from its cache.
+	sharedRoutesInvalidate()
 	a.recordAudit("network.profile.update", id, map[string]string{"name": name, "config_replaced": fmt.Sprintf("%t", confText != "")})
 	EventsEmit("network_tunnel_changed", id)
 	info := a.infoFor(*updated)
