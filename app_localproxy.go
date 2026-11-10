@@ -239,15 +239,28 @@ func (a *App) NetworkProfileSetLocalProxy(id string, cfg LocalProxyConfig) (*Net
 	}
 	m["local_proxy"], _ = json.Marshal(cfg)
 	out, _ := json.Marshal(m)
+	// The old listener has to go before the new one can take its port.
+	// When the new one cannot start (the port is taken) or the save fails,
+	// the old one comes back: the stored config still says enabled, and
+	// nothing would listen until the app restarts.
+	restoreOld := func() {
+		stopLocalProxy(id)
+		if old := profileLocalProxy(row.ConfigJSON); old.Enabled && old.normalize() == nil {
+			if err := a.startLocalProxy(id, old); err != nil {
+				log.Printf("network: local proxy for %q: the previous listener did not come back: %v", row.Name, err)
+			}
+		}
+	}
 	stopLocalProxy(id)
 	if cfg.Enabled {
 		if err := a.startLocalProxy(id, cfg); err != nil {
+			restoreOld()
 			return nil, err
 		}
 	}
 	updated, err := a.db.UpdateNetworkProfile(id, row.Name, string(out))
 	if err != nil {
-		stopLocalProxy(id)
+		restoreOld()
 		return nil, err
 	}
 	a.recordAudit("network.profile.local_proxy", id, map[string]string{
