@@ -394,14 +394,13 @@ func (a *App) sharedNames() ([]sharedDomain, []sharedSearch) {
 	return sharedTable.domains, sharedTable.search
 }
 
-// sharedByDomain is the profile whose DNS domain host is in. A domain
-// added by hand beats one a gateway reported, whatever their lengths: the
-// user said where those names go, and a gateway can push any domain (a
-// customer's VPN claiming another customer's domain, or "com"); pins beat
-// gateway routes the same way. Among the domains left, the longest suffix;
-// between profiles with the same one, the priority, then a profile whose
-// tunnel is up, then the name.
-func (a *App) sharedByDomain(host string, domains []sharedDomain, rank map[string]int) (sharedDomain, bool) {
+// domainCandidates are the domains host is in that can take it: only the
+// ones added by hand when there is one (a domain added by hand beats one a
+// gateway reported, whatever their lengths: the user said where those
+// names go, and a gateway can push any domain - a customer's VPN claiming
+// another customer's domain, or "com"; pins beat gateway routes the same
+// way), then of those the longest suffix.
+func domainCandidates(host string, domains []sharedDomain) []sharedDomain {
 	h := hostKey(host)
 	var match []sharedDomain
 	hand := false
@@ -411,27 +410,47 @@ func (a *App) sharedByDomain(host string, domains []sharedDomain, rank map[strin
 			hand = hand || !d.gateway
 		}
 	}
-	if hand {
-		kept := match[:0]
-		for _, d := range match {
-			if !d.gateway {
-				kept = append(kept, d)
-			}
-		}
-		match = kept
-	}
-	if len(match) == 0 {
-		return sharedDomain{}, false
-	}
 	longest := 0
 	for _, d := range match {
-		longest = max(longest, len(d.suffix))
+		if !hand || !d.gateway {
+			longest = max(longest, len(d.suffix))
+		}
 	}
 	var pick []sharedDomain
 	for _, d := range match {
-		if len(d.suffix) == longest {
+		if (!hand || !d.gateway) && len(d.suffix) == longest {
 			pick = append(pick, d)
 		}
+	}
+	return pick
+}
+
+// byRank orders candidates by the app proxy's priority; ok is false when
+// the first two are not told apart by it (the tunnel that is up decides).
+func byRank(pick []sharedDomain, rank map[string]int) bool {
+	sort.SliceStable(pick, func(i, j int) bool {
+		ri, iok := rank[pick[i].profileID]
+		rj, jok := rank[pick[j].profileID]
+		if iok != jok {
+			return iok
+		}
+		return iok && ri < rj
+	})
+	if len(pick) < 2 {
+		return true
+	}
+	r0, ok0 := rank[pick[0].profileID]
+	r1, ok1 := rank[pick[1].profileID]
+	return ok0 && (!ok1 || r0 < r1)
+}
+
+// sharedByDomain is the profile whose DNS domain host is in (see
+// domainCandidates); between profiles with the same domain, the priority,
+// then a profile whose tunnel is up, then the name.
+func (a *App) sharedByDomain(host string, domains []sharedDomain, rank map[string]int) (sharedDomain, bool) {
+	pick := domainCandidates(host, domains)
+	if len(pick) == 0 {
+		return sharedDomain{}, false
 	}
 	sort.SliceStable(pick, func(i, j int) bool {
 		ri, iok := rank[pick[i].profileID]
@@ -451,63 +470,62 @@ func (a *App) sharedByDomain(host string, domains []sharedDomain, rank map[strin
 	return pick[0], true
 }
 
-// domainClashes lists DNS domains of different profiles that claim the
-// same names (the same suffix, or one inside the other) and which profile
-// takes them, for the app proxy's details. Nothing is blocked.
+// domainClashes lists the DNS domains that more than one profile claims
+// (the same suffix, or a profile's domain inside another's) with every
+// claim and the profile that takes names in it, by the same rule as
+// sharedByDomain, for the app proxy's details. Nothing is blocked.
 func domainClashes(domains []sharedDomain, rank map[string]int) []string {
-	from := func(d sharedDomain) string {
-		if d.gateway {
-			return "from the gateway"
-		}
-		return "by hand"
-	}
-	byPriority := func(x, y sharedDomain) string {
-		rx, xok := rank[x.profileID]
-		ry, yok := rank[y.profileID]
-		switch {
-		case xok && (!yok || rx < ry):
-			return x.name
-		case yok:
-			return y.name
-		}
-		return "whichever is connected"
-	}
-	var out []string
+	var suffixes []string
 	seen := map[string]bool{}
-	for i, x := range domains {
-		for _, y := range domains[i+1:] {
-			if x.profileID == y.profileID {
-				continue
-			}
-			inner, outer := x, y
-			if len(y.suffix) > len(x.suffix) || (y.suffix == x.suffix && y.name < x.name) {
-				inner, outer = y, x
-			}
-			if inner.suffix != outer.suffix && !strings.HasSuffix(inner.suffix, "."+outer.suffix) {
-				continue
-			}
-			var line string
-			switch {
-			case inner.suffix == outer.suffix && inner.gateway == outer.gateway:
-				line = fmt.Sprintf("domain %s: %s and %s - %s wins", inner.suffix, inner.name, outer.name, byPriority(outer, inner))
-			case inner.suffix == outer.suffix:
-				hand := inner
-				if hand.gateway {
-					hand = outer
-				}
-				line = fmt.Sprintf("domain %s: %s and %s - %s wins (added by hand)", inner.suffix, inner.name, outer.name, hand.name)
-			default:
-				win := inner.name
-				if inner.gateway && !outer.gateway {
-					win = outer.name + ", added by hand"
-				}
-				line = fmt.Sprintf("domain %s (%s, %s) inside %s (%s, %s) - names in %s go to %s", inner.suffix, inner.name, from(inner), outer.suffix, outer.name, from(outer), inner.suffix, win)
-			}
-			if !seen[line] {
-				seen[line] = true
-				out = append(out, line)
+	for _, d := range domains {
+		if !seen[d.suffix] {
+			seen[d.suffix] = true
+			suffixes = append(suffixes, d.suffix)
+		}
+	}
+	sort.Strings(suffixes)
+	var out []string
+	for _, s := range suffixes {
+		var claims []sharedDomain
+		profiles := map[string]bool{}
+		for _, d := range domains {
+			if s == d.suffix || strings.HasSuffix(s, "."+d.suffix) {
+				claims = append(claims, d)
+				profiles[d.profileID] = true
 			}
 		}
+		// Only where a profile with this very suffix meets another one.
+		own := false
+		for _, d := range claims {
+			own = own || d.suffix == s
+		}
+		if len(profiles) < 2 || !own {
+			continue
+		}
+		sort.SliceStable(claims, func(i, j int) bool {
+			if len(claims[i].suffix) != len(claims[j].suffix) {
+				return len(claims[i].suffix) > len(claims[j].suffix)
+			}
+			return claims[i].name < claims[j].name
+		})
+		var parts []string
+		for _, d := range claims {
+			from := "from the gateway"
+			if !d.gateway {
+				from = "by hand"
+			}
+			if d.suffix == s {
+				parts = append(parts, fmt.Sprintf("%s (%s)", d.name, from))
+			} else {
+				parts = append(parts, fmt.Sprintf("%s (%s, as %s)", d.name, from, d.suffix))
+			}
+		}
+		pick := domainCandidates(s, domains)
+		win := "whichever is connected"
+		if byRank(pick, rank) {
+			win = pick[0].name
+		}
+		out = append(out, fmt.Sprintf("domain %s: %s - %s wins", s, strings.Join(parts, ", "), win))
 	}
 	return out
 }
@@ -631,13 +649,17 @@ func (a *App) sharedPickHosts(host string, priority []string) (id, why string, d
 			if d.gateway {
 				from = "from the gateway"
 			} else {
-				// Say when a longer gateway domain of another profile lost.
+				// Say when the gateway domain that would have taken the name
+				// (the longest one) is another profile's and lost.
 				h := hostKey(host)
+				var top sharedDomain
 				for _, o := range domains {
-					if o.gateway && o.profileID != d.profileID && len(o.suffix) > len(d.suffix) && (h == o.suffix || strings.HasSuffix(h, "."+o.suffix)) {
-						from += fmt.Sprintf("; beats %s from the gateway of %s", o.suffix, o.name)
-						break
+					if o.gateway && len(o.suffix) > len(top.suffix) && (h == o.suffix || strings.HasSuffix(h, "."+o.suffix)) {
+						top = o
 					}
+				}
+				if top.suffix != "" && top.profileID != d.profileID && len(top.suffix) > len(d.suffix) {
+					from += fmt.Sprintf("; beats %s from the gateway of %s", top.suffix, top.name)
 				}
 			}
 			return d.profileID, fmt.Sprintf("domain %s (%s)", d.suffix, from), []string{strings.ToLower(strings.TrimSuffix(host, "."))}, nil
