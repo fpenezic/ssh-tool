@@ -3804,8 +3804,10 @@
       </div>
     </label>
     <p class="hint inline">
-      Scales the whole app's <code>rem</code>-based sizes (tree, panels,
-      modals). Default 13. Terminal font size has its own setting.
+      The size of the main text: tree rows, menus, descriptions, fields.
+      Hints and labels are a step smaller, titles a step larger, and
+      nothing goes under 10px. Default 13. Terminal font size has its own
+      setting.
     </p>
 
     <h3 style="margin-top:0.8rem">Window</h3>
@@ -8529,11 +8531,19 @@
   }
   h2 {
     margin: 0 0 0.6rem;
-    font-size: var(--fs-md);
+    font-size: var(--fs-lg);
     font-weight: 600;
     color: var(--text);
     letter-spacing: normal;
     text-transform: none;
+  }
+  /* A section inside a card: under the card's own title (h2), not above
+     it (the browser's default h3 was larger than our h2). */
+  h3 {
+    margin: 0.8rem 0 0.3rem;
+    font-size: var(--fs-md);
+    font-weight: 600;
+    color: var(--text);
   }
   /* Deep-link target (see flashSetting): three pulses of a mauve ring.
      Not blue - blue already marks a ticked option card. */
@@ -8557,8 +8567,13 @@
     border-radius: var(--r-md);
     padding: 1.1rem 1.4rem;
   }
+  /* In a row of controls the row spaces them; the label's own top margin
+     (for stacked fields) would push it below the buttons beside it. */
+  .row > .num { margin-top: 0; }
   .num {
     display: inline-flex;
+    /* A row (label, then its field), not the generic label column. */
+    flex-direction: row;
     align-items: center;
     gap: 0.6rem;
     margin-top: 0.4rem;
@@ -8748,7 +8763,7 @@
   }
   .hint {
     color: var(--subtext1);
-    font-size: var(--fs-sm);
+    font-size: var(--fs-md);
     margin: 0.4rem 0;
     line-height: 1.55;
   }
@@ -8805,6 +8820,29 @@
   input:focus {
     outline: 1px solid var(--blue);
     border-color: var(--blue);
+  }
+  /* One height for a normal control: text-like inputs, selects and the
+     plain / primary / danger buttons sit on one line at the same height. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
+  select {
+    height: var(--ctl-h);
+    padding-block: 0;
+    box-sizing: border-box;
+  }
+  /* A plain button carries only Svelte's scoped class, so
+     :not([class]) would never match one. */
+  button[class^="svelte-"]:not([class*=" "]),
+  button.primary,
+  button.danger,
+  button.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    height: var(--ctl-h);
+    padding-block: 0;
+    box-sizing: border-box;
+    white-space: nowrap;
   }
   .field-hint {
     font-size: var(--fs-sm);
@@ -9185,6 +9223,7 @@
   }
   fieldset.modes label {
     display: flex;
+    flex-direction: row;
     gap: 0.6rem;
     align-items: flex-start;
     padding: 0.5rem 0.7rem;
@@ -9219,6 +9258,7 @@
   }
   fieldset.check-cards label {
     display: flex;
+    flex-direction: row;
     gap: 0.6rem;
     align-items: flex-start;
     padding: 0.5rem 0.7rem;
@@ -9236,15 +9276,45 @@
     border-color: var(--accent);
     background: color-mix(in oklab, var(--accent) 6%, transparent);
   }
+  /* An on / off option is a switch, the same as the Switch component
+     (App proxy, Liveness probe): one control for booleans. Radio cards
+     stay for real choices. */
   fieldset.check-cards input[type="checkbox"] {
-    margin-top: 0.2rem;
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    margin: 0.05rem 0 0;
     flex-shrink: 0;
+    width: 34px;
+    height: 18px;
+    border-radius: var(--r-pill);
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  fieldset.check-cards input[type="checkbox"]::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    left: 1px;
     width: 14px;
     height: 14px;
-    accent-color: var(--blue);
-    cursor: pointer;
+    border-radius: 50%;
+    background: var(--text);
+    transition: transform 0.15s ease;
   }
-  .mode-name { font-weight: 600; font-size: var(--fs-sm); color: var(--text); }
+  fieldset.check-cards input[type="checkbox"]:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  fieldset.check-cards input[type="checkbox"]:checked::after {
+    transform: translateX(16px);
+    background: #fff;
+  }
+  fieldset.check-cards input[type="checkbox"]:disabled { opacity: 0.5; cursor: default; }
+  fieldset.check-cards input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .mode-name { font-weight: 600; font-size: var(--fs-md); color: var(--text); }
   .mode-desc { font-size: var(--fs-sm); color: var(--subtext0); line-height: 1.5; margin-top: 0.15rem; }
   /* The manage grant is deliberately not persisted; that is a safety property
      worth reading, not a footnote at the end of a paragraph. */

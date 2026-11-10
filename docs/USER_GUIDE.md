@@ -4174,9 +4174,7 @@ profile opens.
 - **Density** - Compact / Comfortable / Cozy. Drives the row padding
   on the connection / credential trees. Compact is the default;
   Cozy works well on a 4K monitor.
-- **UI font size (px)** - scales the whole app's rem-based sizes
-  (tree, panels, modals). 11-18, default 13. Terminal has its own
-  font size knob.
+- **UI font size (px)** - the size of the main text: tree rows, menus, descriptions, fields. Hints and labels are a step smaller, titles a step larger, and no text goes under 10px; fields and buttons grow with it. 11-18, default 13. Terminal has its own font size knob.
 - **Compact title bar (experimental)** - desktop, off by default,
   applies after a restart. Drops the system title bar: the tab bar
   (and a detached window's top bar) takes its place, so terminals get
