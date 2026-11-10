@@ -501,23 +501,23 @@
   .ttab { display: flex; flex-direction: column; height: 100%; min-height: 0; }
   .bar button.on { border-color: var(--blue); }
   .bar button.primary { border-color: var(--blue); }
-  .edits { font-size: 0.74rem; color: var(--yellow); }
+  .edits { font-size: var(--fs-sm); color: var(--yellow); }
   .menu-wrap { position: relative; }
   .menu {
     position: absolute; top: calc(100% + 2px); left: 0; z-index: 20; display: flex; flex-direction: column; min-width: 12rem;
-    background: var(--mantle); border: 1px solid var(--surface1); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.35); padding: 0.2rem;
+    background: var(--mantle); border: 1px solid var(--surface1); border-radius: var(--r-sm); box-shadow: 0 4px 12px rgba(0,0,0,0.35); padding: 0.2rem;
   }
   .menu button { justify-content: flex-start; background: none; border-color: transparent; }
   .menu button:hover:not(:disabled) { background: var(--surface0); }
-  .choose { display: flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--surface0); font-size: 0.76rem; }
+  .choose { display: flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--surface0); font-size: var(--fs-sm); }
   .choose button {
-    display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.76rem; padding: 0.15rem 0.5rem;
-    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 4px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--fs-sm); padding: 0.15rem 0.5rem;
+    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); cursor: pointer;
   }
-  .trail { display: flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--surface0); font-size: 0.76rem; overflow-x: auto; white-space: nowrap; }
+  .trail { display: flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--surface0); font-size: var(--fs-sm); overflow-x: auto; white-space: nowrap; }
   .trail button {
-    display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.76rem; padding: 0.15rem 0.45rem;
-    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 4px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--fs-sm); padding: 0.15rem 0.45rem;
+    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); cursor: pointer;
   }
   .trail button.crumb { background: none; border-color: transparent; color: var(--blue); }
   .trail button.crumb:hover { border-color: var(--surface1); }
@@ -526,8 +526,8 @@
   .trail .cond { font-weight: 400; color: var(--subtext0); font-family: var(--mono-font, ui-monospace, monospace); }
   .bar { display: flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--surface0); }
   .bar button, .ddl-head button {
-    display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; padding: 0.2rem 0.55rem;
-    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 4px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--fs-sm); padding: 0.2rem 0.55rem;
+    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); cursor: pointer;
   }
   .bar button:disabled { opacity: 0.45; cursor: default; }
   .seg { display: inline-flex; }
@@ -535,21 +535,21 @@
   .seg button:first-child { border-radius: 4px 0 0 4px; }
   .seg button:last-child { border-radius: 0 4px 4px 0; }
   .seg button.on { background: var(--surface2); border-color: var(--blue); }
-  .range { font-size: 0.75rem; color: var(--subtext0); min-width: 6em; text-align: center; }
+  .range { font-size: var(--fs-sm); color: var(--subtext0); min-width: 6em; text-align: center; }
   .spacer { flex: 1 1 auto; }
   .body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
   .gridbox { flex: 1 1 auto; min-height: 0; }
   .scroll { overflow: auto; padding: 0.5rem 0.75rem; }
-  table { border-collapse: collapse; font-size: 0.78rem; margin-bottom: 0.8rem; }
+  table { border-collapse: collapse; font-size: var(--fs-sm); margin-bottom: 0.8rem; }
   th, td { text-align: left; padding: 0.2rem 0.6rem 0.2rem 0; border-bottom: 1px solid var(--surface0); vertical-align: top; }
   th { color: var(--subtext0); font-weight: 600; }
   td.name { font-weight: 600; }
   .mono, pre { font-family: var(--mono-font, ui-monospace, monospace); }
-  h4 { margin: 0.4rem 0 0.3rem; font-size: 0.8rem; color: var(--subtext0); }
+  h4 { margin: 0.4rem 0 0.3rem; font-size: var(--fs-sm); color: var(--subtext0); }
   .ddl-head { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; }
-  pre.ddl { margin: 0; font-size: 0.78rem; white-space: pre-wrap; color: var(--text); user-select: text; }
+  pre.ddl { margin: 0; font-size: var(--fs-sm); white-space: pre-wrap; color: var(--text); user-select: text; }
   pre.ddl:focus { outline: none; }
-  pre.err { margin: 0.5rem 0.75rem; color: var(--red); white-space: pre-wrap; font-size: 0.78rem; }
-  .muted { margin: 0.6rem 0.75rem; font-size: 0.8rem; color: var(--subtext0); }
-  .muted.small { margin: 0; font-size: 0.72rem; }
+  pre.err { margin: 0.5rem 0.75rem; color: var(--red); white-space: pre-wrap; font-size: var(--fs-sm); }
+  .muted { margin: 0.6rem 0.75rem; font-size: var(--fs-sm); color: var(--subtext0); }
+  .muted.small { margin: 0; font-size: var(--fs-xs); }
 </style>

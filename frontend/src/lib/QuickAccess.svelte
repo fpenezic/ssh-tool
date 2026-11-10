@@ -138,12 +138,12 @@
     color: var(--subtext0);
     cursor: pointer;
     font: inherit;
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
   .qa-header:hover { color: var(--text); }
-  .qa-header .chev { width: 0.9rem; font-size: 0.7rem; color: var(--overlay0); }
+  .qa-header .chev { width: 0.9rem; font-size: var(--fs-xs); color: var(--overlay0); }
   .qa-header .title { flex: 1; text-align: left; }
   .qa-header .counts { display: flex; gap: 0.25rem; }
   .badge {
@@ -154,7 +154,7 @@
     color: var(--subtext0);
     border-radius: 999px;
     padding: 0 0.45rem;
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
   }
   .badge.fav { background: var(--yellow)33; color: var(--yellow); }
   .row {
@@ -168,15 +168,15 @@
     color: inherit;
     cursor: pointer;
     font: inherit;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     text-align: left;
   }
   .row:hover { background: var(--surface0); }
   .row.selected { background: var(--surface1); }
   .row.connecting { opacity: 0.7; cursor: wait; }
-  .ico { width: 1.1rem; text-align: center; font-size: 0.78rem; color: var(--overlay0); }
+  .ico { width: 1.1rem; text-align: center; font-size: var(--fs-sm); color: var(--overlay0); }
   .row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .host { color: var(--overlay0); font-size: 0.72rem; }
+  .host { color: var(--overlay0); font-size: var(--fs-xs); }
   .sep {
     height: 1px;
     background: var(--surface0);

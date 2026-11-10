@@ -731,15 +731,15 @@
   .row { display: flex; align-items: center; gap: 0.5rem; }
   .col { display: flex; flex-direction: column; gap: 0.3rem; }
   .groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
-  fieldset { border: 1px solid var(--surface0); border-radius: 6px; margin: 0; padding: 0.4rem 0.7rem 0.55rem; display: flex; flex-direction: column; gap: 0.3rem; }
-  legend { color: var(--subtext0); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0 0.3rem; }
+  fieldset { border: 1px solid var(--surface0); border-radius: var(--r-md); margin: 0; padding: 0.4rem 0.7rem 0.55rem; display: flex; flex-direction: column; gap: 0.3rem; }
+  legend { color: var(--subtext0); font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; padding: 0 0.3rem; }
   .check { display: flex; gap: 0.45rem; align-items: center; cursor: pointer; }
   .num { width: 4.5rem; }
-  .note { margin: 0; font-size: 0.74rem; }
+  .note { margin: 0; font-size: var(--fs-sm); }
   .toolbar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
   .sizes { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.6rem; }
   .spacer { flex: 1; }
-  .table-wrap { overflow: auto; flex: 1 1 0 !important; min-height: 8rem; border: 1px solid var(--surface0); border-radius: 6px; }
+  .table-wrap { overflow: auto; flex: 1 1 0 !important; min-height: 8rem; border: 1px solid var(--surface0); border-radius: var(--r-md); }
   /* Host names stay in view while scrolling sideways through the columns. */
   .table-wrap :global(.ftable th:first-child),
   .table-wrap :global(.ftable td:first-child) { position: sticky; left: 0; background: var(--base); z-index: 1; }
@@ -748,12 +748,12 @@
   .similar { background: color-mix(in srgb, var(--mauve) 20%, transparent); color: var(--mauve); }
   .sort { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; white-space: nowrap; display: inline-flex; gap: 0.25rem; align-items: center; }
   .sort:hover, .sort.on { color: var(--text); }
-  .arr { font-size: 0.6rem; min-width: 0.6rem; }
+  .arr { font-size: var(--fs-xs); min-width: 0.6rem; }
   .seg { display: inline-flex; gap: 0.2rem; }
-  .rs-panel { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.6rem 0.8rem; margin: 0.5rem; border: 1px solid var(--surface1); border-radius: 6px; background: var(--mantle); color: var(--text); }
-  .logo-prev { max-height: 28px; max-width: 120px; object-fit: contain; background: #fff; border-radius: 3px; padding: 2px; }
+  .rs-panel { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.6rem 0.8rem; margin: 0.5rem; border: 1px solid var(--surface1); border-radius: var(--r-md); background: var(--mantle); color: var(--text); }
+  .logo-prev { max-height: 28px; max-width: 120px; object-fit: contain; background: #fff; border-radius: var(--r-sm); padding: 2px; }
   .rs-nums { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; }
-  .report-wrap { overflow: auto; flex: 1 1 0 !important; min-height: 8rem; border: 1px solid var(--surface0); border-radius: 6px; background: #fff; }
+  .report-wrap { overflow: auto; flex: 1 1 0 !important; min-height: 8rem; border: 1px solid var(--surface0); border-radius: var(--r-md); background: #fff; }
   .linkish { background: none; border: 0; padding: 0; color: var(--blue); font: inherit; cursor: pointer; }
   .linkish:hover { text-decoration: underline; }
 </style>

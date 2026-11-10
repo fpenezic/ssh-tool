@@ -134,21 +134,21 @@
   .card-fold { display: inline-flex; align-items: center; gap: 0.3rem; background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
   .card-fold :global(svg) { color: var(--overlay1); transition: transform 0.12s; }
   .card-fold.open :global(svg) { transform: rotate(90deg); }
-  .card-sum { font-size: 0.72rem; color: var(--overlay1); }
+  .card-sum { font-size: var(--fs-xs); color: var(--overlay1); }
   /* Same look as DetailPane's VNC section; repeated here because those rules
      are scoped to DetailPane. */
   .kafka-section {
     grid-column: 1 / -1;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     padding: 0.6rem 0.75rem;
     background: var(--surface1);
   }
-  .vnc-head { display: flex; align-items: center; gap: 0.55rem; font-size: 0.85rem; color: var(--text); }
+  .vnc-head { display: flex; align-items: center; gap: 0.55rem; font-size: var(--fs-sm); color: var(--text); }
   .vnc-spacer { flex: 1 1 auto; }
   .vnc-title { font-weight: 600; }
   .vnc-switch {
-    position: relative; width: 34px; height: 18px; border-radius: 9px;
+    position: relative; width: 34px; height: 18px; border-radius: var(--r-pill);
     border: 1px solid var(--border); background: var(--surface2); padding: 0;
     cursor: pointer; flex: 0 0 auto; transition: background 0.15s ease, border-color 0.15s ease;
   }
@@ -159,21 +159,21 @@
   }
   .kafka-section.on .vnc-knob { transform: translateX(16px); background: #fff; }
   .vnc-open {
-    font-size: 0.78rem; padding: 0.2rem 0.6rem; background: var(--surface2); color: var(--text);
-    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    font-size: var(--fs-sm); padding: 0.2rem 0.6rem; background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--r-sm); cursor: pointer;
   }
   .vnc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.6rem; }
   .vnc-grid .span-2 { grid-column: 1 / -1; }
-  .vnc-grid label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--subtext0); }
+  .vnc-grid label { display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--fs-sm); color: var(--subtext0); }
   /* DetailPane's field look (its input / select rules are scoped). */
   .vnc-grid input, .vnc-grid select {
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.35rem 0.5rem; font: inherit;
   }
   .vnc-grid input:focus, .vnc-grid select:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
-  .inh { font-size: 0.7rem; color: var(--overlay1); }
-  .link { background: none; border: none; color: var(--overlay1); font-size: 0.7rem; cursor: pointer; text-decoration: underline; }
+  .inh { font-size: var(--fs-xs); color: var(--overlay1); }
+  .link { background: none; border: none; color: var(--overlay1); font-size: var(--fs-xs); cursor: pointer; text-decoration: underline; }
   @media (max-width: 640px) {
     .vnc-grid { grid-template-columns: 1fr; }
   }

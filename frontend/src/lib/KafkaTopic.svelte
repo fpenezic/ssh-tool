@@ -292,35 +292,35 @@
   .topic { display: flex; flex-direction: column; height: 100%; min-height: 0; }
   .head { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--surface0); background: var(--mantle); }
   .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30%; }
-  .meta { font-size: 0.72rem; color: var(--subtext0); white-space: nowrap; }
+  .meta { font-size: var(--fs-xs); color: var(--subtext0); white-space: nowrap; }
   .spacer { flex: 1; }
   nav { display: flex; gap: 0.15rem; }
-  nav button { font-size: 0.74rem; }
+  nav button { font-size: var(--fs-sm); }
   nav button.on { color: var(--blue); border-color: var(--blue); }
-  .actions { position: relative; font-size: 0.74rem; }
-  .actions summary { cursor: pointer; list-style: none; padding: 0.15rem 0.5rem; border: 1px solid var(--surface1); border-radius: 4px; }
-  .actions .menu { position: absolute; right: 0; top: 1.6rem; z-index: 20; display: flex; flex-direction: column; gap: 0.15rem; padding: 0.3rem; background: var(--base); border: 1px solid var(--surface1); border-radius: 6px; min-width: 14rem; box-shadow: 0 6px 18px #0006; }
+  .actions { position: relative; font-size: var(--fs-sm); }
+  .actions summary { cursor: pointer; list-style: none; padding: 0.15rem 0.5rem; border: 1px solid var(--surface1); border-radius: var(--r-sm); }
+  .actions .menu { position: absolute; right: 0; top: 1.6rem; z-index: 20; display: flex; flex-direction: column; gap: 0.15rem; padding: 0.3rem; background: var(--base); border: 1px solid var(--surface1); border-radius: var(--r-md); min-width: 14rem; box-shadow: 0 6px 18px #0006; }
   .actions .menu button { text-align: left; }
   .danger { color: var(--red); }
-  .error { color: var(--red); padding: 0.4rem 0.7rem; font-size: 0.75rem; }
+  .error { color: var(--red); padding: 0.4rem 0.7rem; font-size: var(--fs-sm); }
   .body { flex: 1; min-height: 0; }
   .msgs { height: 100%; }
   .msgs.off { display: none; }
   .scroll { height: 100%; overflow: auto; padding: 0.5rem 0.7rem; box-sizing: border-box; }
-  table { border-collapse: collapse; font-size: 0.74rem; width: 100%; user-select: text; }
+  table { border-collapse: collapse; font-size: var(--fs-sm); width: 100%; user-select: text; }
   th { text-align: left; color: var(--subtext0); font-weight: 600; border-bottom: 1px solid var(--surface1); padding: 0.2rem 0.5rem; }
   td { padding: 0.15rem 0.5rem; border-bottom: 1px solid var(--surface0); word-break: break-all; }
   tr.bad td { color: var(--peach); }
   tr.ovr td:first-child { color: var(--blue); }
-  .src { color: var(--overlay1); font-size: 0.68rem; }
+  .src { color: var(--overlay1); font-size: var(--fs-xs); }
   .mono { font-family: var(--mono-font, monospace); }
-  .row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; font-size: 0.74rem; }
+  .row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; font-size: var(--fs-sm); }
   .chk { display: flex; gap: 0.3rem; align-items: center; color: var(--subtext0); }
-  .hint { color: var(--overlay1); font-size: 0.72rem; }
+  .hint { color: var(--overlay1); font-size: var(--fs-xs); }
   .cfg-edit { display: flex; flex-direction: column; gap: 0.4rem; height: 100%; }
-  .cfg-edit textarea { flex: 1; min-height: 10rem; font-size: 0.75rem; }
+  .cfg-edit textarea { flex: 1; min-height: 10rem; font-size: var(--fs-sm); }
   .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.5rem; }
-  .tile { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.5rem 0.7rem; border: 1px solid var(--surface0); border-radius: 6px; background: var(--mantle); }
-  .tile span { font-size: 0.7rem; color: var(--subtext0); }
-  .tile b { font-size: 1rem; }
+  .tile { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.5rem 0.7rem; border: 1px solid var(--surface0); border-radius: var(--r-md); background: var(--mantle); }
+  .tile span { font-size: var(--fs-xs); color: var(--subtext0); }
+  .tile b { font-size: var(--fs-md); }
 </style>

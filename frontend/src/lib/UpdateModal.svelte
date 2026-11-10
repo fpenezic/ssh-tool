@@ -340,7 +340,7 @@
     display: flex; flex-direction: column;
     background: var(--base);
     border: 1px solid var(--surface0);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     z-index: 9001;
     overflow: hidden;
   }
@@ -352,24 +352,24 @@
   .title-row {
     display: flex; align-items: center; justify-content: space-between;
   }
-  h2 { font-size: 1rem; margin: 0; color: var(--text); }
+  h2 { font-size: var(--fs-md); margin: 0; color: var(--text); }
   .x {
     background: transparent; border: 0; color: var(--subtext0);
-    font-size: 1.4rem; line-height: 1; cursor: pointer;
-    padding: 0 0.3rem; border-radius: 3px;
+    font-size: var(--fs-xl); line-height: 1; cursor: pointer;
+    padding: 0 0.3rem; border-radius: var(--r-sm);
   }
   .x:hover { background: var(--surface0); color: var(--text); }
   .version-row {
     margin-top: 0.4rem;
     display: flex; align-items: center; gap: 0.5rem;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
   }
   .chip {
     font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     padding: 0.1rem 0.4rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     background: var(--surface0);
     color: var(--text);
   }
@@ -381,7 +381,7 @@
   .version-head { display: flex; align-items: baseline; gap: 0.4rem; margin-bottom: 0.3rem; }
   .v-tag {
     font-weight: 700; color: var(--blue); font-family: ui-monospace, monospace;
-    font-size: 0.9rem;
+    font-size: var(--fs-md);
   }
   .body {
     padding: 0.75rem 1rem;
@@ -389,21 +389,21 @@
     flex: 1;
     min-height: 0;
     color: var(--text);
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     line-height: 1.55;
   }
   .body :global(h1),
   .body :global(h2),
   .body :global(h3) { color: var(--text); margin-top: 1rem; }
-  .body :global(h2) { font-size: 0.95rem; }
-  .body :global(h3) { font-size: 0.88rem; }
+  .body :global(h2) { font-size: var(--fs-md); }
+  .body :global(h3) { font-size: var(--fs-sm); }
   .body :global(ul) { padding-left: 1.2rem; }
   .body :global(li) { margin: 0.2rem 0; }
   .body :global(code) {
     background: var(--mantle);
     padding: 0.05rem 0.3rem;
-    border-radius: 3px;
-    font-size: 0.82rem;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-sm);
   }
   .body :global(a) { color: var(--blue); }
   .body :global(strong) { color: var(--text); }
@@ -421,9 +421,9 @@
   }
   .spacer { flex: 1; }
   footer button {
-    font: inherit; font-size: 0.82rem;
+    font: inherit; font-size: var(--fs-sm);
     padding: 0.35rem 0.7rem;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     cursor: pointer;
     border: 1px solid var(--surface0);
   }
@@ -434,7 +434,7 @@
   .primary:disabled { background: var(--surface1); color: var(--overlay0); border-color: var(--surface1); cursor: not-allowed; }
   .staged {
     padding: 0.5rem 1rem;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     border-top: 1px solid var(--surface0);
     background: var(--mantle);
     color: var(--text-muted);
@@ -442,8 +442,8 @@
   .staged code {
     background: var(--base);
     padding: 0.05rem 0.3rem;
-    border-radius: 3px;
-    font-size: 0.72rem;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-xs);
   }
   .staged.err { color: var(--red); }
   .staged.ok { color: var(--green); }
@@ -455,7 +455,7 @@
   .bar {
     flex: 1;
     height: 6px;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     background: var(--surface0);
     overflow: hidden;
     position: relative;
@@ -463,7 +463,7 @@
   .bar .fill {
     height: 100%;
     background: var(--blue);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     transition: width 0.15s linear;
   }
   .bar.indeterminate .fill {

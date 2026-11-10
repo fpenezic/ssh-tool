@@ -140,16 +140,16 @@
     background: var(--crust);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     padding: 1rem 1.2rem;
     width: 90vw; max-width: 480px;
     max-height: 80vh;
     display: flex; flex-direction: column; gap: 0.5rem;
   }
-  h2 { margin: 0; font-size: 1rem; }
+  h2 { margin: 0; font-size: var(--fs-md); }
   .search {
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.35rem 0.5rem; font: inherit;
   }
   .search:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
@@ -157,7 +157,7 @@
     overflow: auto;
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.3rem;
     min-height: 200px;
     flex: 1;
@@ -167,20 +167,20 @@
     background: transparent; color: inherit; border: 0;
     font: inherit; cursor: pointer;
     padding: 0.2rem 0.4rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     display: flex; align-items: center; gap: 0.3rem;
   }
-  .chev { width: 1.1rem; color: var(--overlay0); font-size: 0.85rem; justify-content: center; padding: 0.2rem 0; }
+  .chev { width: 1.1rem; color: var(--overlay0); font-size: var(--fs-sm); justify-content: center; padding: 0.2rem 0; }
   .row { flex: 1; min-width: 0; text-align: left; }
   .row:hover { background: var(--surface0); }
   .row.root { background: var(--base); margin-bottom: 0.3rem; }
   .row.root:hover { background: var(--surface0); }
-  .ico { width: 1.2rem; text-align: center; font-size: 0.85rem; }
+  .ico { width: 1.2rem; text-align: center; font-size: var(--fs-sm); }
   .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .actions { display: flex; justify-content: flex-end; gap: 0.4rem; }
   button {
     background: var(--surface0); color: var(--text); border: 0;
-    padding: 0.4rem 0.9rem; border-radius: 3px; cursor: pointer; font: inherit;
+    padding: 0.4rem 0.9rem; border-radius: var(--r-sm); cursor: pointer; font: inherit;
   }
   button:hover { background: var(--surface1); }
 </style>

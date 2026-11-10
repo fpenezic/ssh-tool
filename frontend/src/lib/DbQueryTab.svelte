@@ -339,36 +339,36 @@
 <style>
   .plan { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
   .plan-head { display: flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--surface0); }
-  .plan-body { overflow: auto; padding: 0.4rem 0.6rem; font-size: 0.78rem; }
-  .muted-s { font-size: 0.74rem; color: var(--subtext0); font-family: var(--mono-font, ui-monospace, monospace); }
+  .plan-body { overflow: auto; padding: 0.4rem 0.6rem; font-size: var(--fs-sm); }
+  .muted-s { font-size: var(--fs-sm); color: var(--subtext0); font-family: var(--mono-font, ui-monospace, monospace); }
   .ic { padding: 0.1rem 0.25rem; background: none; border: 0; color: var(--overlay1); cursor: pointer; display: inline-flex; }
   .ic:hover { color: var(--text); }
   .qtab { display: flex; flex-direction: column; height: 100%; min-height: 0; }
   .bar { display: flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--surface0); flex-wrap: wrap; }
-  .bar select { background: var(--mantle); color: var(--text); border: 1px solid var(--surface0); border-radius: 3px; padding: 0.15rem 0.3rem; font-size: 0.78rem; }
+  .bar select { background: var(--mantle); color: var(--text); border: 1px solid var(--surface0); border-radius: var(--r-sm); padding: 0.15rem 0.3rem; font-size: var(--fs-sm); }
   .bar button {
-    display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; padding: 0.2rem 0.6rem;
-    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 4px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--fs-sm); padding: 0.2rem 0.6rem;
+    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); cursor: pointer;
   }
   .bar button:hover { background: var(--surface1); }
   .bar button.go { background: color-mix(in srgb, var(--green) 22%, var(--surface0)); border-color: color-mix(in srgb, var(--green) 50%, var(--surface1)); }
   .bar button.stop { background: color-mix(in srgb, var(--red) 22%, var(--surface0)); border-color: color-mix(in srgb, var(--red) 50%, var(--surface1)); }
-  .limit { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; color: var(--subtext0); }
+  .limit { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--fs-sm); color: var(--subtext0); }
   .spacer { flex: 1 1 auto; }
-  .tx { font-size: 0.72rem; padding: 0.05rem 0.4rem; border-radius: 3px; background: color-mix(in srgb, var(--yellow) 25%, transparent); color: var(--yellow); }
-  .ro { font-size: 0.72rem; color: var(--peach); }
+  .tx { font-size: var(--fs-xs); padding: 0.05rem 0.4rem; border-radius: var(--r-sm); background: color-mix(in srgb, var(--yellow) 25%, transparent); color: var(--yellow); }
+  .ro { font-size: var(--fs-xs); color: var(--peach); }
   .editor { flex: 0 0 auto; min-height: 80px; border-bottom: 1px solid var(--surface0); }
   .drag { flex: 0 0 5px; cursor: row-resize; background: var(--surface0); }
   .drag:hover { background: var(--surface1); }
   .results { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
   .gridbox { flex: 1 1 auto; min-height: 0; }
   .rtabs { display: flex; gap: 0.25rem; padding: 0.25rem 0.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--surface0); }
-  .rtabs button { font-size: 0.72rem; padding: 0.1rem 0.45rem; background: var(--surface0); color: var(--subtext0); border: 1px solid transparent; border-radius: 3px; cursor: pointer; }
+  .rtabs button { font-size: var(--fs-xs); padding: 0.1rem 0.45rem; background: var(--surface0); color: var(--subtext0); border: 1px solid transparent; border-radius: var(--r-sm); cursor: pointer; }
   .rtabs button.on { color: var(--text); border-color: var(--blue); }
   .rtabs button.bad { color: var(--red); }
-  .muted, .done { margin: 0.6rem 0.75rem; font-size: 0.8rem; color: var(--subtext0); }
+  .muted, .done { margin: 0.6rem 0.75rem; font-size: var(--fs-sm); color: var(--subtext0); }
   .done { color: var(--text); }
-  pre { margin: 0.5rem 0.75rem; white-space: pre-wrap; font-size: 0.78rem; }
+  pre { margin: 0.5rem 0.75rem; white-space: pre-wrap; font-size: var(--fs-sm); }
   pre.err { color: var(--red); }
   pre.stmt { color: var(--overlay1); }
   pre.out { color: var(--subtext1); overflow: auto; min-height: 0; }

@@ -182,9 +182,9 @@
     background: var(--surface0);
     color: var(--text);
     border: 1px solid var(--border-soft);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     font: inherit;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     line-height: 1;
     cursor: pointer;
     touch-action: manipulation;

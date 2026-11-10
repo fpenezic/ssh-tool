@@ -78,10 +78,10 @@
 <style>
   .acts { display: flex; gap: 0.8rem; }
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.5rem; margin-bottom: 0.8rem; }
-  .card { background: var(--mantle); border: 1px solid var(--surface0); border-radius: 6px; padding: 0.45rem 0.65rem; font-size: 0.78rem; }
+  .card { background: var(--mantle); border: 1px solid var(--surface0); border-radius: var(--r-md); padding: 0.45rem 0.65rem; font-size: var(--fs-sm); }
   .card.warn { border-color: color-mix(in srgb, var(--yellow) 45%, transparent); }
   .card.bad { border-color: color-mix(in srgb, var(--red) 45%, transparent); }
-  .h { color: var(--subtext0); font-size: 0.7rem; margin-bottom: 0.15rem; }
+  .h { color: var(--subtext0); font-size: var(--fs-xs); margin-bottom: 0.15rem; }
   .card.warn .h { color: var(--yellow); }
   .card.bad .h { color: var(--red); }
   .link { background: none; border: 0; padding: 0; margin-top: 0.15rem; color: var(--blue); font: inherit; cursor: pointer; }

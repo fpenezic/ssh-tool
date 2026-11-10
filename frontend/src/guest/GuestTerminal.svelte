@@ -199,7 +199,7 @@
     gap: 2px;
     background: rgba(17, 17, 27, 0.85);
     border: 1px solid #313244;
-    border-radius: 6px;
+    border-radius: var(--r-md);
     padding: 2px;
     z-index: 5;
   }
@@ -208,10 +208,10 @@
     border: none;
     color: #cdd6f4;
     cursor: pointer;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     min-width: 1.9rem;
     padding: 0.15rem 0.3rem;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
   }
   .zoom-bar button:hover {
     background: #313244;
@@ -228,11 +228,11 @@
     gap: 0.4rem;
   }
   .term-overlay .msg {
-    font-size: 1.1rem;
+    font-size: var(--fs-lg);
     font-weight: 600;
   }
   .term-overlay .reason {
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     color: #a6adc8;
   }
 </style>

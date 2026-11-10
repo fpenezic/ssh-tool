@@ -132,11 +132,11 @@
     overflow: auto;
     background: var(--base);
     border: 1px solid var(--surface1);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     padding: 0.7rem;
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
   }
-  .head { font-size: 0.8rem; color: var(--subtext0); margin-bottom: 0.5rem; }
+  .head { font-size: var(--fs-sm); color: var(--subtext0); margin-bottom: 0.5rem; }
   /* One tile per option (1..MAX columns), each showing that whole layout.
      Fixed tile size means nothing moves as the pointer travels. */
   .grid {
@@ -150,7 +150,7 @@
     padding: 3px;
     background: var(--surface0);
     border: 1px solid var(--surface1);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     cursor: pointer;
     width: 3.6rem;
     height: 3rem;
@@ -173,7 +173,7 @@
   .cell {
     display: block;
     background: var(--surface1);
-    border-radius: 1px;
+    border-radius: var(--r-sm);
     /* No min-height: with many rows per column a minimum forces overflow and
        the cells collapse to nothing. flex alone divides the tile exactly. */
     min-height: 0;
@@ -183,20 +183,20 @@
 
   .label {
     margin-top: 0.5rem;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     text-align: center;
     /* Two lines' worth, always - see the comment on the markup. */
     height: 2.4em;
   }
-  .note { color: var(--subtext0); font-size: 0.72rem; }
+  .note { color: var(--subtext0); font-size: var(--fs-xs); }
   .actions { display: flex; gap: 0.4rem; justify-content: flex-end; margin-top: 0.6rem; }
   .btn {
     background: var(--surface0);
     border: 1px solid var(--surface1);
     color: var(--text);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.25rem 0.6rem;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     cursor: pointer;
   }
   .btn.primary { background: var(--blue); border-color: var(--blue); color: var(--on-accent); }

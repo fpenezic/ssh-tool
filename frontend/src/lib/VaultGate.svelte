@@ -320,21 +320,21 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 6px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(460px, 92vw); padding: 1.2rem 1.4rem;
   }
   .modal.small { width: 280px; text-align: center; }
   header { margin-bottom: 0.5rem; }
-  h1 { margin: 0; font-size: 1.05rem; }
-  p { font-size: 0.85rem; color: var(--subtext0); }
+  h1 { margin: 0; font-size: var(--fs-md); }
+  p { font-size: var(--fs-sm); color: var(--subtext0); }
   p.info {
     background: var(--crust); padding: 0.4rem 0.6rem;
     border-left: 3px solid var(--yellow);
-    border-radius: 3px; font-size: 0.78rem;
+    border-radius: var(--r-sm); font-size: var(--fs-sm);
   }
   .vault-info {
     margin: 0.2rem 0 0.4rem;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
   }
   .vault-info summary {
@@ -358,12 +358,12 @@
   .vault-info code {
     background: var(--crust);
     padding: 0 0.25rem;
-    border-radius: 2px;
-    font-size: 0.72rem;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-xs);
   }
   label {
     display: flex; flex-direction: column; gap: 0.25rem;
-    font-size: 0.8rem; color: var(--subtext0); margin: 0.6rem 0;
+    font-size: var(--fs-sm); color: var(--subtext0); margin: 0.6rem 0;
   }
   label.checkbox {
     flex-direction: row; align-items: center; gap: 0.45rem;
@@ -378,7 +378,7 @@
   button {
     background: var(--surface0); color: var(--text);
     border: 0; padding: 0.4rem 0.85rem;
-    border-radius: 3px; cursor: pointer; font: inherit;
+    border-radius: var(--r-sm); cursor: pointer; font: inherit;
   }
   button:hover:not(:disabled) { background: var(--surface1); }
   button.primary { background: var(--blue); color: var(--on-accent); font-weight: 600; }
@@ -386,11 +386,11 @@
   button:disabled { opacity: 0.5; cursor: not-allowed; }
   .err {
     color: var(--red); background: var(--crust);
-    padding: 0.5rem 0.7rem; border-radius: 4px;
-    border-left: 3px solid var(--red); font-size: 0.82rem; margin: 0.5rem 0;
+    padding: 0.5rem 0.7rem; border-radius: var(--r-sm);
+    border-left: 3px solid var(--red); font-size: var(--fs-sm); margin: 0.5rem 0;
   }
   .hint {
-    font-size: 0.72rem; color: var(--overlay0);
+    font-size: var(--fs-xs); color: var(--overlay0);
     margin-top: 0.8rem; margin-bottom: 0;
   }
 </style>

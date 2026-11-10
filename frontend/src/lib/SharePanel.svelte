@@ -100,7 +100,7 @@
     background: var(--base, #1e1e2e);
     color: var(--text, #cdd6f4);
     border: 1px solid var(--surface1, #45475a);
-    border-radius: 8px;
+    border-radius: var(--r-md);
     min-width: 20rem;
     max-width: 26rem;
     padding: 0.6rem 0.8rem;
@@ -120,10 +120,10 @@
     background: var(--surface0, #313244);
     border: 1px solid var(--surface1, #45475a);
     color: var(--text, #cdd6f4);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     padding: 0.2rem 0.55rem;
     cursor: pointer;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .close {
     border: none;
@@ -132,7 +132,7 @@
   .empty,
   .no-guest {
     color: var(--overlay1, #7f849c);
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     padding: 0.4rem 0;
   }
   .share {
@@ -146,11 +146,11 @@
   }
   .bind {
     font-family: monospace;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     flex: 1;
   }
   .level {
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     padding: 0.05rem 0.45rem;
     border-radius: 999px;
     background: var(--surface0, #313244);
@@ -166,7 +166,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.25rem 0 0.25rem 0.6rem;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
   }
   .ip {
     font-family: monospace;
@@ -174,6 +174,6 @@
   }
   .joined {
     color: var(--overlay1, #7f849c);
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
   }
 </style>

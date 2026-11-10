@@ -243,7 +243,7 @@
   .jump-chain {
     margin-top: 0.6rem;
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.6rem 0.75rem;
     background: var(--crust);
   }
@@ -252,16 +252,16 @@
     margin-bottom: 0.4rem; gap: 0.4rem;
   }
   .header strong {
-    font-size: 0.78rem; text-transform: uppercase;
+    font-size: var(--fs-sm); text-transform: uppercase;
     color: var(--subtext0); letter-spacing: 0.04em;
   }
   .actions { display: flex; gap: 0.4rem; align-items: center; }
-  .muted { color: var(--overlay1); font-size: 0.78rem; }
+  .muted { color: var(--overlay1); font-size: var(--fs-sm); }
   button {
     background: var(--surface0); color: var(--text);
     border: 0; padding: 0.25rem 0.6rem;
-    border-radius: 3px; cursor: pointer;
-    font: inherit; font-size: 0.78rem;
+    border-radius: var(--r-sm); cursor: pointer;
+    font: inherit; font-size: var(--fs-sm);
   }
   button:hover:not(:disabled) { background: var(--surface1); }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -275,19 +275,19 @@
     border-left: 3px solid var(--blue);
     background: var(--mantle);
     padding: 0.5rem 0.6rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
   }
   .hop-head {
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 0.4rem;
   }
-  .step { font-size: 0.75rem; color: var(--subtext0); }
+  .step { font-size: var(--fs-sm); color: var(--subtext0); }
   .mode { display: flex; gap: 1px; margin-left: auto; margin-right: 0.5rem; }
-  .mode button { padding: 0.15rem 0.5rem; font-size: 0.72rem; border-radius: 0; }
+  .mode button { padding: 0.15rem 0.5rem; font-size: var(--fs-xs); border-radius: 0; }
   .mode button:first-child { border-radius: 3px 0 0 3px; }
   .mode button:last-child { border-radius: 0 3px 3px 0; }
   .mode button.on { background: var(--surface2); color: var(--text); font-weight: 600; }
-  .ref-note { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--overlay1); }
+  .ref-note { margin: 0.35rem 0 0; font-size: var(--fs-xs); color: var(--overlay1); }
   .ref-note.bad { color: var(--red); }
   .hop-actions { display: flex; gap: 0.2rem; }
   .row { display: flex; gap: 0.5rem; margin-top: 0.3rem; }
@@ -295,18 +295,18 @@
   .port { width: 5.5rem; }
   label {
     display: flex; flex-direction: column; gap: 0.2rem;
-    font-size: 0.74rem; color: var(--subtext0);
+    font-size: var(--fs-sm); color: var(--subtext0);
   }
   input {
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.3rem 0.45rem; font: inherit;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
   }
   input:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
   .hint {
-    margin-top: 0.5rem; font-size: 0.72rem;
+    margin-top: 0.5rem; font-size: var(--fs-xs);
     color: var(--overlay1); background: var(--mantle);
-    padding: 0.3rem 0.5rem; border-radius: 3px;
+    padding: 0.3rem 0.5rem; border-radius: var(--r-sm);
   }
 </style>

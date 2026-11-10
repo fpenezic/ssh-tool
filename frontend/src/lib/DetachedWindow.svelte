@@ -331,7 +331,7 @@
     padding: 0.3rem 0.8rem;
     background: var(--mantle);
     border-bottom: 1px solid var(--surface0);
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
   }
   .topbar.titlebar { --wails-draggable: drag; user-select: none; }
   .topbar.titlebar button { --wails-draggable: no-drag; }
@@ -346,10 +346,10 @@
     color: var(--on-accent);
     border: 0;
     padding: 0.25rem 0.7rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     cursor: pointer;
     font: inherit;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     font-weight: 600;
   }
   .redock:hover { background: var(--lavender); }

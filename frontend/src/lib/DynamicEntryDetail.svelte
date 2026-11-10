@@ -674,10 +674,10 @@
     flex-wrap: wrap;
     gap: 0.4rem 0.5rem;
   }
-  .head h1 { margin: 0; font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+  .head h1 { margin: 0; font-size: var(--fs-lg); font-weight: 600; display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
   .head .ico { color: var(--teal); display: inline-flex; }
   .head-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-  .head-actions button { background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 3px; padding: 0.35rem 0.8rem; cursor: pointer; }
+  .head-actions button { background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); padding: 0.35rem 0.8rem; cursor: pointer; }
   .head-actions button:hover { background: var(--surface1); }
   .head-actions button.primary { background: var(--blue); color: var(--on-accent); border-color: var(--blue); font-weight: 600; }
   .head-actions button.primary:hover { filter: brightness(1.08); }
@@ -685,24 +685,24 @@
   /* The header now carries its own 1rem bottom margin and an underline, so
      the old 1.25rem gap below this row left the provider line stranded
      between two separators. Pull it up against the header. */
-  .sub { color: var(--subtext0); font-size: 0.85rem; margin: -0.35rem 0 1rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .sub { color: var(--subtext0); font-size: var(--fs-sm); margin: -0.35rem 0 1rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .sub .muted { color: var(--overlay0); }
-  .sub .small { font-size: 0.75rem; }
-  .sub code { background: var(--surface0); padding: 0.05rem 0.4rem; border-radius: 2px; color: var(--text); }
+  .sub .small { font-size: var(--fs-sm); }
+  .sub code { background: var(--surface0); padding: 0.05rem 0.4rem; border-radius: var(--r-sm); color: var(--text); }
   .dyn-pill {
     color: var(--teal);
     background: color-mix(in oklab, var(--teal) 16%, var(--bg-panel));
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 0.1rem 0.45rem;
-    border-radius: 2px;
+    border-radius: var(--r-sm);
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
   }
 
-  .status { font-size: 0.7rem; padding: 0.1rem 0.5rem; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .status { font-size: var(--fs-xs); padding: 0.1rem 0.5rem; border-radius: var(--r-sm); text-transform: uppercase; letter-spacing: 0.05em; }
   .status-running { color: var(--green); background: color-mix(in oklab, var(--green) 12%, var(--bg-panel)); }
   .status-stopped { color: var(--yellow); background: color-mix(in oklab, var(--yellow) 14%, var(--bg-panel)); }
 
@@ -715,27 +715,27 @@
   .fact {
     background: var(--base);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.5rem 0.65rem;
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
   }
-  .fact-label { color: var(--overlay1); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
-  .fact-value { color: var(--text); font-size: 0.9rem; word-break: break-all; }
-  .fact-value.mono { font-family: ui-monospace, monospace; font-size: 0.85rem; }
+  .fact-label { color: var(--overlay1); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.05em; }
+  .fact-value { color: var(--text); font-size: var(--fs-md); word-break: break-all; }
+  .fact-value.mono { font-family: ui-monospace, monospace; font-size: var(--fs-sm); }
 
   /* Quick actions mirror the saved-connection pane, down to the icon
      tinting, so the two panes read as the same app rather than two
      different ones. Heading matches the .tags/.usage h3 style here
      (DetailPane uses h2 for its sections). */
   .quick-actions { margin-bottom: 1.5rem; }
-  .quick-actions h3 { margin: 0 0 0.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--subtext0); letter-spacing: 0.05em; }
+  .quick-actions h3 { margin: 0 0 0.5rem; font-size: var(--fs-sm); text-transform: uppercase; color: var(--subtext0); letter-spacing: 0.05em; }
   .actions-row { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
   .actions-row > button {
     display: inline-flex; align-items: center; gap: 0.35rem;
     background: var(--surface0); color: var(--text);
-    border: 1px solid var(--surface1); border-radius: 3px;
+    border: 1px solid var(--surface1); border-radius: var(--r-sm);
     padding: 0.35rem 0.7rem; cursor: pointer;
   }
   .actions-row > button:hover { background: var(--surface1); }
@@ -749,10 +749,10 @@
   }
   .ok-hint {
     color: var(--green); background: var(--crust);
-    padding: 0.45rem 0.75rem; border-radius: 4px;
+    padding: 0.45rem 0.75rem; border-radius: var(--r-sm);
     border-left: 3px solid var(--green);
     font-family: ui-monospace, monospace;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     margin-top: 0.5rem;
     /* The no-password explanation is a sentence; break-all would snap
        words mid-character (see DetailPane's .ok-hint). */
@@ -760,35 +760,35 @@
     word-break: normal;
   }
   .tags { margin-bottom: 1.5rem; }
-  .tags h3 { margin: 0 0 0.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--subtext0); letter-spacing: 0.05em; }
+  .tags h3 { margin: 0 0 0.5rem; font-size: var(--fs-sm); text-transform: uppercase; color: var(--subtext0); letter-spacing: 0.05em; }
   .tag-row { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   .tag {
     background: var(--surface0);
     color: var(--text);
     padding: 0.15rem 0.55rem;
-    border-radius: 2px;
-    font-size: 0.78rem;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-sm);
     font-family: ui-monospace, monospace;
   }
 
   .usage { margin-bottom: 1.5rem; }
-  .usage h3 { margin: 0 0 0.6rem; font-size: 0.85rem; text-transform: uppercase; color: var(--subtext0); letter-spacing: 0.05em; }
+  .usage h3 { margin: 0 0 0.6rem; font-size: var(--fs-sm); text-transform: uppercase; color: var(--subtext0); letter-spacing: 0.05em; }
   .bars { display: flex; flex-direction: column; gap: 0.4rem; }
   .bar-row { display: grid; grid-template-columns: 60px 1fr 60px; align-items: center; gap: 0.65rem; }
-  .bar-label { color: var(--subtext0); font-size: 0.8rem; }
-  .bar { background: var(--surface0); height: 6px; border-radius: 3px; overflow: hidden; }
+  .bar-label { color: var(--subtext0); font-size: var(--fs-sm); }
+  .bar { background: var(--surface0); height: 6px; border-radius: var(--r-sm); overflow: hidden; }
   .bar-fill { height: 100%; background: var(--blue); transition: width 0.3s ease-out; }
   .bar-fill.low { background: var(--green); }
   .bar-fill.med { background: var(--yellow); }
   .bar-fill.high { background: var(--red); }
-  .bar-val { color: var(--text); font-size: 0.78rem; text-align: right; }
+  .bar-val { color: var(--text); font-size: var(--fs-sm); text-align: right; }
 
   .raw { margin-top: 1.5rem; }
   .raw-toggle {
     background: transparent;
     border: none;
     color: var(--subtext0);
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     cursor: pointer;
     padding: 0.25rem 0;
   }
@@ -796,9 +796,9 @@
   .raw-pre {
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.75rem;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     color: var(--text);
     max-height: 320px;
     overflow: auto;
@@ -819,8 +819,8 @@
     padding: 0.5rem 0.75rem;
     background: var(--crust);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
-    font-size: 0.85rem;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-sm);
   }
   .cred-override label {
     display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
@@ -830,39 +830,39 @@
     display: inline-block;
     min-width: 80px;
     color: var(--subtext0);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .cred-override select,
   .cred-override input {
     background: var(--mantle);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.25rem 0.4rem;
-    font: inherit; font-size: 0.82rem;
+    font: inherit; font-size: var(--fs-sm);
     min-width: 220px;
   }
-  .hint.inline { display: inline; padding: 0; margin: 0.3rem 0 0; font-size: 0.78rem; color: var(--subtext0); }
+  .hint.inline { display: inline; padding: 0; margin: 0.3rem 0 0; font-size: var(--fs-sm); color: var(--subtext0); }
 
   /* Connect-error styles mirror DetailPane.svelte's so the failure
      panel looks identical whether the user clicked Connect on a
      regular connection or a dynamic-inventory entry. */
   .err {
     color: var(--red); background: var(--crust);
-    padding: 0.5rem 0.75rem; border-radius: 4px;
+    padding: 0.5rem 0.75rem; border-radius: var(--r-sm);
     border-left: 3px solid var(--red);
     margin-bottom: 0.75rem;
   }
   .connect-err {
-    font-size: 0.85rem; word-break: break-word;
+    font-size: var(--fs-sm); word-break: break-word;
     position: relative;
   }
   .err-summary { font-weight: 600; }
   .err-hint {
     font-weight: 400; color: var(--pink);
-    margin-top: 0.2rem; font-size: 0.8rem;
+    margin-top: 0.2rem; font-size: var(--fs-sm);
   }
-  .err-raw { margin-top: 0.35rem; font-size: 0.75rem; }
+  .err-raw { margin-top: 0.35rem; font-size: var(--fs-sm); }
   .err-raw summary {
     cursor: pointer; color: var(--subtext0); font-weight: 400; user-select: none;
   }
@@ -872,7 +872,7 @@
     padding: 0.4rem 0.55rem;
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     color: var(--red);
     white-space: pre-wrap;
     word-break: break-word;
@@ -881,15 +881,15 @@
     position: absolute; top: 0.4rem; right: 0.5rem;
     background: transparent; border: 1px solid var(--surface1);
     color: var(--subtext0); padding: 0.1rem 0.5rem;
-    border-radius: 3px; cursor: pointer; font: inherit;
-    font-size: 0.72rem;
+    border-radius: var(--r-sm); cursor: pointer; font: inherit;
+    font-size: var(--fs-xs);
   }
   .err-clear:hover { background: var(--surface0); color: var(--text); }
   .jump-users ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
   .usage-link {
     display: inline-flex; align-items: center; gap: 0.35rem;
     background: none; border: 0; padding: 0.1rem 0.2rem; color: var(--text);
-    font: inherit; font-size: 0.85rem; cursor: pointer; border-radius: 3px;
+    font: inherit; font-size: var(--fs-sm); cursor: pointer; border-radius: var(--r-sm);
   }
   .usage-link:hover { background: var(--surface0); }
   .muted { color: var(--overlay1); }

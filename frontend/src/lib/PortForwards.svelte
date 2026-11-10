@@ -864,49 +864,49 @@
     margin-bottom: 0.5rem;
   }
   header strong {
-    font-size: 0.78rem; text-transform: uppercase;
+    font-size: var(--fs-sm); text-transform: uppercase;
     color: var(--subtext0); letter-spacing: 0.04em;
   }
   .port-warn {
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     color: var(--peach);
     background: color-mix(in srgb, var(--peach) 10%, transparent);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.3rem 0.5rem;
   }
   .err-act {
     margin-left: 0.5rem;
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
   }
   .err {
     color: var(--red); background: var(--crust);
-    padding: 0.5rem 0.7rem; border-radius: 4px;
-    border-left: 3px solid var(--red); font-size: 0.82rem;
+    padding: 0.5rem 0.7rem; border-radius: var(--r-sm);
+    border-left: 3px solid var(--red); font-size: var(--fs-sm);
     margin: 0.5rem 0;
   }
   .tunnel-note {
     color: var(--subtext0);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     margin: 0.2rem 0 0.5rem;
   }
   .empty {
     color: var(--overlay0); padding: 0.6rem 0;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
   .field-note {
     display: block; margin-top: 0.15rem;
-    font-size: 0.72rem; color: var(--overlay1, var(--subtext0));
+    font-size: var(--fs-xs); color: var(--overlay1, var(--subtext0));
     line-height: 1.3;
   }
   .edit-note {
-    margin: 0.2rem 0 0; font-size: 0.75rem; color: var(--subtext0);
+    margin: 0.2rem 0 0; font-size: var(--fs-sm); color: var(--subtext0);
   }
   .edit-note.warn { color: var(--peach); }
   .lock { display: contents; border: 0; padding: 0; margin: 0; min-width: 0; }
   .add-form {
     background: var(--crust);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.7rem 0.85rem;
     margin-bottom: 0.6rem;
     display: flex; flex-direction: column; gap: 0.5rem;
@@ -916,7 +916,7 @@
   .port { width: 7rem; }
   label {
     display: flex; flex-direction: column; gap: 0.2rem;
-    font-size: 0.75rem; color: var(--subtext0);
+    font-size: var(--fs-sm); color: var(--subtext0);
   }
   label.checkbox {
     flex-direction: row; align-items: center; gap: 0.45rem;
@@ -924,9 +924,9 @@
   label.checkbox input { width: auto; margin: 0; }
   input, select {
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.3rem 0.45rem; font: inherit;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
   input:focus, select:focus {
     outline: 1px solid var(--blue); border-color: var(--blue);
@@ -935,13 +935,13 @@
   .item {
     background: var(--crust); border-left: 3px solid var(--surface0);
     padding: 0.5rem 0.7rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     display: flex; flex-direction: column; gap: 0.3rem;
   }
   .head { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
   .kind {
-    font-size: 0.7rem; padding: 0.05rem 0.4rem;
-    border-radius: 3px; text-transform: uppercase;
+    font-size: var(--fs-xs); padding: 0.05rem 0.4rem;
+    border-radius: var(--r-sm); text-transform: uppercase;
     letter-spacing: 0.04em;
   }
   .kind-local { background: var(--surface1); color: var(--blue); }
@@ -949,29 +949,29 @@
   .kind-dynamic { background: var(--surface1); color: var(--mauve); }
   .desc { flex: 1; font-weight: 500; }
   .badge {
-    font-size: 0.7rem; background: var(--surface0);
-    padding: 0.05rem 0.3rem; border-radius: 2px; color: var(--subtext0);
+    font-size: var(--fs-xs); background: var(--surface0);
+    padding: 0.05rem 0.3rem; border-radius: var(--r-sm); color: var(--subtext0);
   }
   .dot { width: 7px; height: 7px; border-radius: 50%; }
-  .status { font-size: 0.72rem; color: var(--subtext0); }
+  .status { font-size: var(--fs-xs); color: var(--subtext0); }
   .meta {
     display: flex; align-items: center; gap: 0.5rem;
-    font-size: 0.78rem; color: var(--subtext0);
+    font-size: var(--fs-sm); color: var(--subtext0);
     flex-wrap: wrap;
   }
   code {
     background: var(--mantle); padding: 0.05rem 0.35rem;
-    border-radius: 3px; font-size: 0.78rem;
+    border-radius: var(--r-sm); font-size: var(--fs-sm);
   }
   .arrow { color: var(--overlay0); }
-  .bytes { color: var(--overlay0); font-size: 0.72rem; margin-left: auto; }
+  .bytes { color: var(--overlay0); font-size: var(--fs-xs); margin-left: auto; }
   .copy-port {
     background: var(--surface0);
     color: var(--teal);
     border: 1px solid var(--surface1);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.1rem 0.45rem;
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     font-family: ui-monospace, monospace;
     cursor: pointer;
   }
@@ -979,8 +979,8 @@
   .actions { display: flex; gap: 0.4rem; margin-top: 0.2rem; }
   button {
     background: var(--surface0); color: var(--text); border: 0;
-    padding: 0.3rem 0.7rem; border-radius: 3px;
-    cursor: pointer; font: inherit; font-size: 0.8rem;
+    padding: 0.3rem 0.7rem; border-radius: var(--r-sm);
+    cursor: pointer; font: inherit; font-size: var(--fs-sm);
   }
   button:hover:not(:disabled) { background: var(--surface1); }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -997,11 +997,11 @@
   .bm-chip {
     display: inline-flex; align-items: center;
     background: var(--mantle); border: 1px solid var(--surface0);
-    border-radius: 3px; overflow: hidden;
+    border-radius: var(--r-sm); overflow: hidden;
   }
   .bm-launch {
     background: transparent; border: 0; color: var(--mauve);
-    padding: 0.2rem 0.5rem; font: inherit; font-size: 0.78rem;
+    padding: 0.2rem 0.5rem; font: inherit; font-size: var(--fs-sm);
     cursor: pointer; white-space: nowrap;
   }
   .bm-launch:disabled { color: var(--surface1); cursor: not-allowed; }
@@ -1016,7 +1016,7 @@
   .bm-edit {
     background: transparent; border: 0; border-left: 1px solid var(--surface0);
     color: var(--overlay0); padding: 0.2rem 0.35rem;
-    font: inherit; font-size: 0.75rem; cursor: pointer; line-height: 1;
+    font: inherit; font-size: var(--fs-sm); cursor: pointer; line-height: 1;
   }
   .bm-edit:hover { color: var(--blue); }
   .bm-pin {
@@ -1027,22 +1027,22 @@
   .bm-pin:hover, .bm-pin.on { color: var(--mauve); }
   .bm-tree {
     display: inline-flex; align-items: center; gap: 0.2rem;
-    font-size: 0.75rem; color: var(--subtext0); white-space: nowrap; cursor: pointer;
+    font-size: var(--fs-sm); color: var(--subtext0); white-space: nowrap; cursor: pointer;
   }
   .bm-del {
     background: transparent; border: 0; border-left: 1px solid var(--surface0);
     color: var(--overlay0); padding: 0.2rem 0.35rem;
-    font: inherit; font-size: 0.75rem; cursor: pointer; line-height: 1;
+    font: inherit; font-size: var(--fs-sm); cursor: pointer; line-height: 1;
   }
   .bm-del:hover { color: var(--red); }
   .bm-add-form {
     display: inline-flex; align-items: center; gap: 0.25rem;
     background: var(--mantle); border: 1px solid var(--surface1);
-    border-radius: 3px; padding: 0.15rem 0.35rem;
+    border-radius: var(--r-sm); padding: 0.15rem 0.35rem;
   }
   .bm-input {
     background: transparent; border: 0; border-bottom: 1px solid var(--surface0);
-    color: var(--text); font: inherit; font-size: 0.78rem;
+    color: var(--text); font: inherit; font-size: var(--fs-sm);
     padding: 0.1rem 0.2rem; width: 6rem; outline: none;
   }
   /* Wide enough for a prefilled http://127.0.0.1:{port}/path without
@@ -1050,24 +1050,24 @@
   .bm-url { width: 16rem; }
   .bm-save {
     background: var(--surface0); color: var(--green); border: 0;
-    padding: 0.15rem 0.45rem; border-radius: 2px;
-    font: inherit; font-size: 0.78rem; cursor: pointer;
+    padding: 0.15rem 0.45rem; border-radius: var(--r-sm);
+    font: inherit; font-size: var(--fs-sm); cursor: pointer;
   }
   .bm-save:hover { background: var(--surface1); }
   .bm-new {
     background: transparent; border: 1px dashed var(--surface1);
-    color: var(--overlay0); padding: 0.2rem 0.5rem; border-radius: 3px;
-    font: inherit; font-size: 0.78rem; cursor: pointer;
+    color: var(--overlay0); padding: 0.2rem 0.5rem; border-radius: var(--r-sm);
+    font: inherit; font-size: var(--fs-sm); cursor: pointer;
   }
   .bm-new:hover { border-color: var(--mauve); color: var(--mauve); }
   .bm-hint {
     display: block; width: 100%;
-    color: var(--overlay0); font-size: 0.72rem;
+    color: var(--overlay0); font-size: var(--fs-xs);
     margin-top: 0.25rem;
   }
   .bm-hint code {
     background: var(--surface0); color: var(--text);
-    padding: 0 0.2rem; border-radius: 2px;
+    padding: 0 0.2rem; border-radius: var(--r-sm);
   }
   .iconlbl { display: inline-flex; align-items: center; gap: 0.25rem; }
 </style>

@@ -323,11 +323,11 @@
 <style>
   .col { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.7rem; min-width: 0; }
   .pick { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; min-width: 0; }
-  .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; font-size: 0.78rem; }
-  .small { font-size: 0.72rem; }
+  .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; font-size: var(--fs-sm); }
+  .small { font-size: var(--fs-xs); }
   .check { display: flex; gap: 0.45rem; align-items: center; margin-bottom: 0.7rem; }
-  .summary { margin: 0 0 0.5rem; font-size: 0.8rem; }
+  .summary { margin: 0 0 0.5rem; font-size: var(--fs-sm); }
   .detail { max-width: 24rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar { height: 4px; background: var(--surface0); border-radius: 2px; overflow: hidden; margin-bottom: 0.5rem; }
+  .bar { height: 4px; background: var(--surface0); border-radius: var(--r-sm); overflow: hidden; margin-bottom: 0.5rem; }
   .bar > div { height: 100%; background: var(--blue); transition: width 0.2s; }
 </style>

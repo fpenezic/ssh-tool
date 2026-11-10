@@ -189,22 +189,22 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 6px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(440px, calc(100vw - 32px));
     padding: 1.1rem 1.3rem;
     box-shadow: 0 10px 40px rgba(0,0,0,0.5);
     display: flex; flex-direction: column; gap: 0.6rem;
   }
-  h3 { margin: 0; font-size: 1rem; }
-  .hint { margin: -0.3rem 0 0.2rem; font-size: 0.78rem; color: var(--subtext0); }
-  .sub { margin: -0.35rem 0 0; font-size: 0.72rem; color: var(--overlay1); }
-  .fld { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--subtext0); }
+  h3 { margin: 0; font-size: var(--fs-md); }
+  .hint { margin: -0.3rem 0 0.2rem; font-size: var(--fs-sm); color: var(--subtext0); }
+  .sub { margin: -0.35rem 0 0; font-size: var(--fs-xs); color: var(--overlay1); }
+  .fld { display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--fs-sm); color: var(--subtext0); }
   .inp-wrap { position: relative; }
   .inp, select {
     width: 100%; box-sizing: border-box;
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface1); border-radius: 4px;
-    padding: 0.4rem 0.6rem; font: inherit; font-size: 0.88rem;
+    border: 1px solid var(--surface1); border-radius: var(--r-sm);
+    padding: 0.4rem 0.6rem; font: inherit; font-size: var(--fs-sm);
     outline: none;
   }
   .inp:focus, select:focus { border-color: var(--blue); }
@@ -213,31 +213,31 @@
     z-index: 2;
     display: flex; flex-direction: column;
     background: var(--base);
-    border: 1px solid var(--surface1); border-radius: 4px;
+    border: 1px solid var(--surface1); border-radius: var(--r-sm);
     box-shadow: 0 4px 12px rgba(0,0,0,0.35);
     padding: 3px;
   }
   .suggest button {
     display: flex; align-items: center; gap: 0.6rem;
     background: transparent; border: 0; color: var(--text);
-    font: inherit; font-size: 0.82rem; text-align: left;
-    padding: 0.25rem 0.5rem; border-radius: 3px; cursor: pointer;
+    font: inherit; font-size: var(--fs-sm); text-align: left;
+    padding: 0.25rem 0.5rem; border-radius: var(--r-sm); cursor: pointer;
   }
   .suggest button:hover, .suggest button.picked { background: var(--surface0); }
   .suggest .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .suggest .via { color: var(--overlay1); font-size: 0.72rem; }
+  .suggest .via { color: var(--overlay1); font-size: var(--fs-xs); }
   .suggest .forget { color: var(--overlay1); padding: 0 0.2rem; }
   .suggest .forget:hover { color: var(--red); }
   .err {
-    font-size: 0.8rem; color: var(--red);
+    font-size: var(--fs-sm); color: var(--red);
     background: color-mix(in srgb, var(--red) 10%, transparent);
-    border-radius: 4px; padding: 0.4rem 0.6rem;
+    border-radius: var(--r-sm); padding: 0.4rem 0.6rem;
     white-space: pre-wrap; word-break: break-word;
   }
   .row { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.2rem; }
   button {
     background: var(--surface0); color: var(--text); border: 0;
-    padding: 0.35rem 0.8rem; border-radius: 3px;
+    padding: 0.35rem 0.8rem; border-radius: var(--r-sm);
     cursor: pointer; font: inherit;
   }
   button:hover:not(:disabled) { background: var(--surface1); }

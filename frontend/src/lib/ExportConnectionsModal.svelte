@@ -202,7 +202,7 @@
     background: var(--base);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     width: min(720px, 92vw);
     max-height: 86vh;
     display: flex;
@@ -216,44 +216,44 @@
   }
   header h2 {
     margin: 0;
-    font-size: 0.95rem;
+    font-size: var(--fs-md);
     color: var(--text);
   }
   .close {
     background: transparent; border: 0; color: var(--subtext0); cursor: pointer;
-    padding: 0.15rem 0.35rem; border-radius: 3px;
+    padding: 0.15rem 0.35rem; border-radius: var(--r-sm);
   }
   .close:hover { background: var(--surface0); color: var(--text); }
-  .hint { color: var(--subtext0); font-size: 0.78rem; margin: 0.2rem 0 0.6rem; line-height: 1.5; }
+  .hint { color: var(--subtext0); font-size: var(--fs-sm); margin: 0.2rem 0 0.6rem; line-height: 1.5; }
   .fmt {
     display: flex; gap: 0.8rem;
     padding: 0.4rem 0;
     border-top: 1px solid var(--surface0);
     border-bottom: 1px solid var(--surface0);
   }
-  .fmt label { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.82rem; }
+  .fmt label { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--fs-sm); }
   .strip {
     display: flex; flex-direction: column; gap: 0.25rem;
     padding: 0.5rem 0;
     border-bottom: 1px solid var(--surface0);
   }
   .strip-title {
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     color: var(--overlay0);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin-bottom: 0.15rem;
   }
   .strip-note {
-    font-size: 0.74rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
     margin: 0 0 0.3rem;
     line-height: 1.4;
   }
   .strip-note strong { color: var(--text); font-weight: 600; }
-  .strip .check { display: inline-flex; align-items: flex-start; gap: 0.4rem; font-size: 0.8rem; cursor: pointer; }
+  .strip .check { display: inline-flex; align-items: flex-start; gap: 0.4rem; font-size: var(--fs-sm); cursor: pointer; }
   .strip .check input { margin-top: 0.2rem; accent-color: var(--blue); flex-shrink: 0; }
-  .strip .dim { color: var(--overlay0); font-size: 0.74rem; }
+  .strip .dim { color: var(--overlay0); font-size: var(--fs-sm); }
   pre {
     flex: 1;
     overflow: auto;
@@ -261,8 +261,8 @@
     padding: 0.6rem 0.8rem;
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
-    font-size: 0.72rem;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-xs);
     white-space: pre-wrap;
     word-break: break-word;
   }
@@ -274,21 +274,21 @@
   }
   .actions button {
     background: var(--surface0); color: var(--text); border: 0;
-    border-radius: 3px; padding: 0.3rem 0.65rem;
-    cursor: pointer; font: inherit; font-size: 0.82rem;
+    border-radius: var(--r-sm); padding: 0.3rem 0.65rem;
+    cursor: pointer; font: inherit; font-size: var(--fs-sm);
     display: inline-flex; align-items: center; gap: 0.3rem;
   }
   .actions button:hover { background: var(--surface1); }
   .actions button.primary { background: var(--blue); color: var(--on-accent); }
   .actions button.primary:hover { background: var(--lavender); }
-  .ok-hint { color: var(--green); font-size: 0.78rem; margin-left: 0.4rem; }
+  .ok-hint { color: var(--green); font-size: var(--fs-sm); margin-left: 0.4rem; }
   .err {
     background: color-mix(in oklab, var(--red) 12%, var(--bg-panel));
     border-left: 3px solid var(--red);
     color: var(--red);
     padding: 0.5rem 0.7rem;
     border-radius: 0 3px 3px 0;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     margin: 0.5rem 0;
   }
   .busy { color: var(--overlay1); font-style: italic; padding: 0.5rem 0; }

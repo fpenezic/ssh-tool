@@ -366,7 +366,7 @@
     min-height: 0;
     overflow: auto;
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.4rem;
     /* Centre the fixed grid when fit-to-window leaves slack space. */
     display: flex;
@@ -390,7 +390,7 @@
   }
   .time {
     font-variant-numeric: tabular-nums;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
     white-space: nowrap;
   }
@@ -402,7 +402,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
     white-space: nowrap;
   }
@@ -410,7 +410,7 @@
     background: var(--surface0);
     color: var(--text);
     border: 1px solid var(--surface1);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.15rem 0.3rem;
   }
 </style>

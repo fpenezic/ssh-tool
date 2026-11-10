@@ -151,7 +151,7 @@
     text-align: center;
   }
   .big {
-    font-size: 1.3rem;
+    font-size: var(--fs-xl);
     font-weight: 600;
   }
   .sub {
@@ -160,10 +160,10 @@
   .fp-label {
     margin-top: 1rem;
     color: #a6adc8;
-    font-size: 0.9rem;
+    font-size: var(--fs-md);
   }
   .fp-words {
-    font-size: 1.5rem;
+    font-size: var(--fs-xl);
     font-weight: 700;
     letter-spacing: 0.02em;
     color: #89b4fa;
@@ -172,7 +172,7 @@
   .fp-hint {
     max-width: 26rem;
     color: #7f849c;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
   }
   .spinner {
     width: 28px;
@@ -207,7 +207,7 @@
     color: #a6adc8;
     padding: 0.55rem 0.9rem;
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     white-space: nowrap;
   }
   .tab.active {
@@ -225,12 +225,12 @@
     border: none;
     border-radius: 999px;
     padding: 0.15rem 0.7rem;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     cursor: pointer;
     font-weight: 600;
   }
   .badge {
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     padding: 0.12rem 0.55rem;
     border-radius: 999px;
     background: #313244;

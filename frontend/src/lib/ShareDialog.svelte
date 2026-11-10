@@ -202,7 +202,7 @@
     background: var(--base, #1e1e2e);
     color: var(--text, #cdd6f4);
     border: 1px solid var(--surface1, #45475a);
-    border-radius: 10px;
+    border-radius: var(--r-lg);
     padding: 1.3rem 1.5rem;
     width: min(32rem, 92vw);
     max-height: 90vh;
@@ -219,13 +219,13 @@
   }
   h2 {
     margin: 0 0 1rem;
-    font-size: 1.15rem;
+    font-size: var(--fs-lg);
   }
   section {
     margin-bottom: 1rem;
   }
   .section-title {
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--subtext0, #a6adc8);
@@ -235,7 +235,7 @@
     max-height: 12rem;
     overflow-y: auto;
     border: 1px solid var(--surface0, #313244);
-    border-radius: 6px;
+    border-radius: var(--r-md);
   }
   .tab-row {
     display: flex;
@@ -247,7 +247,7 @@
     flex: 1;
   }
   .pane-count {
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     color: var(--overlay1, #7f849c);
   }
   .radio {
@@ -259,9 +259,9 @@
     padding: 0.5rem 0.7rem;
     background: rgba(243, 139, 168, 0.12);
     border: 1px solid var(--red, #f38ba8);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     color: var(--red, #f38ba8);
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
   }
   .net-row {
     display: flex;
@@ -274,7 +274,7 @@
     width: 6rem;
   }
   .hint {
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     color: var(--overlay1, #7f849c);
     margin-top: 0.3rem;
   }
@@ -286,7 +286,7 @@
   }
   button {
     padding: 0.45rem 1.1rem;
-    border-radius: 6px;
+    border-radius: var(--r-md);
     border: 1px solid var(--surface1, #45475a);
     background: var(--surface0, #313244);
     color: var(--text, #cdd6f4);
@@ -310,12 +310,12 @@
   .url {
     flex: 1;
     font-family: monospace;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
   input,
   select {
     padding: 0.4rem 0.5rem;
-    border-radius: 6px;
+    border-radius: var(--r-md);
     border: 1px solid var(--surface1, #45475a);
     background: var(--mantle, #181825);
     color: var(--text, #cdd6f4);
@@ -324,23 +324,23 @@
     padding: 0.8rem;
     background: var(--mantle, #181825);
     border: 1px solid var(--surface0, #313244);
-    border-radius: 8px;
+    border-radius: var(--r-md);
     margin-bottom: 1rem;
   }
   .fp-title {
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0, #a6adc8);
     margin-bottom: 0.4rem;
   }
   .fp-words {
     font-family: monospace;
-    font-size: 1.3rem;
+    font-size: var(--fs-xl);
     font-weight: 700;
     color: var(--blue, #89b4fa);
   }
   .fp-hint {
     margin-top: 0.4rem;
-    font-size: 0.76rem;
+    font-size: var(--fs-sm);
     color: var(--overlay1, #7f849c);
   }
 </style>

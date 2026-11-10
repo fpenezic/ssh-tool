@@ -666,7 +666,7 @@
     display: flex; flex-direction: column;
     background: var(--base);
     border: 1px solid var(--surface0);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     z-index: 9001;
     overflow: hidden;
   }
@@ -679,14 +679,14 @@
     display: flex; align-items: center; justify-content: space-between;
   }
   h2 {
-    font-size: 1rem; margin: 0; color: var(--text);
+    font-size: var(--fs-md); margin: 0; color: var(--text);
     display: inline-flex; align-items: center; gap: 0.4rem;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .head-actions { display: inline-flex; align-items: center; gap: 0.15rem; flex-shrink: 0; }
   .icon-btn {
     background: transparent; border: 0; color: var(--subtext0);
-    cursor: pointer; padding: 0.2rem; border-radius: 3px;
+    cursor: pointer; padding: 0.2rem; border-radius: var(--r-sm);
     display: inline-flex; align-items: center;
   }
   .icon-btn:hover:not(:disabled) { background: var(--surface0); color: var(--text); }
@@ -695,30 +695,30 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .x {
     background: transparent; border: 0; color: var(--subtext0);
-    font-size: 1.4rem; line-height: 1; cursor: pointer;
-    padding: 0 0.3rem; border-radius: 3px;
+    font-size: var(--fs-xl); line-height: 1; cursor: pointer;
+    padding: 0 0.3rem; border-radius: var(--r-sm);
   }
   .x:hover { background: var(--surface0); color: var(--text); }
   .sub-row {
     margin-top: 0.35rem;
     display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
-    font-size: 0.76rem; color: var(--subtext0);
+    font-size: var(--fs-sm); color: var(--subtext0);
   }
   .sub-row .conn { color: var(--text); }
   .sub-row .meta {
     color: var(--overlay1);
     font-family: ui-monospace, monospace;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
   }
   .warn {
     margin-top: 0.35rem;
     color: var(--yellow);
-    font-size: 0.74rem;
+    font-size: var(--fs-sm);
   }
   .tabs { display: flex; gap: 0.2rem; margin-top: 0.55rem; margin-bottom: -0.56rem; }
   .tabs button {
     background: none; border: 0; border-bottom: 2px solid transparent;
-    color: var(--subtext0); font: inherit; font-size: 0.78rem;
+    color: var(--subtext0); font: inherit; font-size: var(--fs-sm);
     padding: 0.3rem 0.6rem; cursor: pointer;
   }
   .tabs button.active { color: var(--text); border-bottom-color: var(--blue); }
@@ -727,33 +727,33 @@
   .dim { color: var(--subtext0); }
   .seg-btn {
     background: none; border: 1px solid var(--surface1); color: var(--subtext0);
-    border-radius: 4px; font: inherit; font-size: 0.74rem; padding: 0.1rem 0.55rem; cursor: pointer;
+    border-radius: var(--r-sm); font: inherit; font-size: var(--fs-sm); padding: 0.1rem 0.55rem; cursor: pointer;
   }
   .seg-btn.on { background: var(--surface0); color: var(--text); border-color: var(--surface2); }
   .filter {
     margin-left: auto; background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface1); border-radius: 4px; font: inherit; font-size: 0.74rem;
+    border: 1px solid var(--surface1); border-radius: var(--r-sm); font: inherit; font-size: var(--fs-sm);
     padding: 0.15rem 0.45rem; width: 9rem;
   }
   .modal.wide { width: min(760px, 94vw); }
   .ptable {
     display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto minmax(0, 6rem) auto;
-    gap: 0.35rem 0.7rem; align-items: center; font-size: 0.82rem;
+    gap: 0.35rem 0.7rem; align-items: center; font-size: var(--fs-sm);
   }
-  .ptable .th { color: var(--subtext0); font-size: 0.74rem; }
+  .ptable .th { color: var(--subtext0); font-size: var(--fs-sm); }
   .ptable .num { text-align: right; font-variant-numeric: tabular-nums; }
   .ptable .cmd, .ptable .user { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ptable .cmd { font-family: ui-monospace, monospace; }
   .menu-cell { position: relative; }
   .pmenu {
     position: absolute; right: 0; top: 100%; z-index: 2; min-width: 12rem;
-    background: var(--mantle); border: 1px solid var(--surface1); border-radius: 6px;
+    background: var(--mantle); border: 1px solid var(--surface1); border-radius: var(--r-md);
     padding: 0.25rem; box-shadow: 0 8px 24px rgba(0,0,0,0.35);
     display: flex; flex-direction: column;
   }
   .pmenu button {
     background: none; border: 0; text-align: left; color: var(--text);
-    font: inherit; font-size: 0.76rem; padding: 0.3rem 0.5rem; border-radius: 4px; cursor: pointer;
+    font: inherit; font-size: var(--fs-sm); padding: 0.3rem 0.5rem; border-radius: var(--r-sm); cursor: pointer;
   }
   .pmenu button:hover { background: var(--surface0); }
   .pmenu button.bad { color: var(--red); }
@@ -762,17 +762,17 @@
   .unit-row {
     width: 100%; display: grid; grid-template-columns: auto auto auto minmax(0, 1fr);
     align-items: center; gap: 0.5rem; background: none; border: 0; color: var(--text);
-    font: inherit; font-size: 0.82rem; padding: 0.3rem 0.35rem; border-radius: 4px; cursor: pointer; text-align: left;
+    font: inherit; font-size: var(--fs-sm); padding: 0.3rem 0.35rem; border-radius: var(--r-sm); cursor: pointer; text-align: left;
   }
   .unit-row:hover, .unit.open .unit-row { background: var(--surface0); }
-  .ign { display: inline-flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; color: var(--subtext0); font-size: 0.74rem; }
+  .ign { display: inline-flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; color: var(--subtext0); font-size: var(--fs-sm); }
   /* Text actions next to the unit buttons: coloured so they read as links. */
   .unit-actions .more { color: var(--sapphire); }
   .unit-actions .more:hover { color: var(--text); text-decoration: underline; }
   .scope {
     display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer;
     background: var(--surface0); color: var(--sapphire); border: 1px solid var(--surface1);
-    border-radius: 10px; padding: 0.08rem 0.5rem; font: inherit; font-size: 0.74rem;
+    border-radius: var(--r-pill); padding: 0.08rem 0.5rem; font: inherit; font-size: var(--fs-sm);
   }
   .scope:hover { background: var(--surface1); color: var(--text); }
   .unit.ignored .uname, .unit.ignored .udesc { color: var(--overlay1); }
@@ -780,12 +780,12 @@
   .udot.active { background: var(--green); }
   .udot.failed { background: var(--red); }
   .uname { font-family: ui-monospace, monospace; }
-  .ustate { color: var(--subtext0); font-size: 0.7rem; }
+  .ustate { color: var(--subtext0); font-size: var(--fs-xs); }
   .udesc { color: var(--subtext0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .unit-body { padding: 0.35rem 0.5rem 0.5rem 1.2rem; }
   .ulog {
-    margin: 0; padding: 0.4rem 0.5rem; background: var(--mantle); border-radius: 4px;
-    font-size: 0.7rem; white-space: pre-wrap; word-break: break-word; color: var(--subtext1, var(--text));
+    margin: 0; padding: 0.4rem 0.5rem; background: var(--mantle); border-radius: var(--r-sm);
+    font-size: var(--fs-xs); white-space: pre-wrap; word-break: break-word; color: var(--subtext1, var(--text));
     max-height: 9rem; overflow: auto;
   }
   .unit-actions { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
@@ -794,7 +794,7 @@
     overflow-y: auto;
     flex: 1; min-height: 0;
     color: var(--text);
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
   }
   section {
     padding: 0.7rem 0;
@@ -804,7 +804,7 @@
   .sec-head {
     display: flex; align-items: center; gap: 0.35rem;
     color: var(--subtext1);
-    font-size: 0.76rem;
+    font-size: var(--fs-sm);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     margin-bottom: 0.4rem;
@@ -819,30 +819,30 @@
   .load-nums {
     display: flex; align-items: baseline; gap: 0.6rem;
     font-variant-numeric: tabular-nums;
-    font-size: 1.05rem;
+    font-size: var(--fs-md);
     color: var(--text);
     margin-bottom: 0.45rem;
   }
-  .load-nums .dim { color: var(--overlay1); font-size: 0.9rem; }
+  .load-nums .dim { color: var(--overlay1); font-size: var(--fs-md); }
   .load-nums .label {
-    margin-left: auto; font-size: 0.68rem; text-transform: uppercase;
+    margin-left: auto; font-size: var(--fs-xs); text-transform: uppercase;
     letter-spacing: 0.04em; color: var(--overlay0);
   }
   .bar {
     height: 8px;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     background: var(--surface0);
     overflow: hidden;
   }
   .bar .fill {
     height: 100%;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     transition: width 0.2s ease;
   }
   .bar-cap {
     margin-top: 0.25rem;
     color: var(--subtext0);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     font-variant-numeric: tabular-nums;
   }
   .part { margin-top: 0.55rem; }
@@ -851,7 +851,7 @@
     margin-left: auto;
     display: inline-flex; align-items: center; gap: 0.1rem;
     background: none; border: none; padding: 0;
-    color: var(--overlay1); font-size: 0.7rem; cursor: pointer;
+    color: var(--overlay1); font-size: var(--fs-xs); cursor: pointer;
   }
   .more:hover { color: var(--text); }
   .more-body {
@@ -860,7 +860,7 @@
   }
   .du-cut {
     display: flex; gap: 0.45rem; align-items: flex-start; margin: 0.3rem 0 0.45rem;
-    padding: 0.45rem 0.6rem; border-radius: 5px; font-size: 0.76rem; cursor: help;
+    padding: 0.45rem 0.6rem; border-radius: var(--r-md); font-size: var(--fs-sm); cursor: help;
     background: color-mix(in srgb, var(--yellow) 14%, transparent); color: var(--text);
     border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
   }
@@ -870,13 +870,13 @@
   .du-btn {
     margin-top: 0.35rem;
     background: var(--surface0); color: var(--text);
-    border: 1px solid var(--surface1); border-radius: 4px;
-    font-size: 0.72rem; padding: 0.15rem 0.5rem; cursor: pointer;
+    border: 1px solid var(--surface1); border-radius: var(--r-sm);
+    font-size: var(--fs-xs); padding: 0.15rem 0.5rem; cursor: pointer;
   }
   .du-btn:hover { background: var(--surface1); }
   .dirs {
     display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.6rem;
-    margin-top: 0.3rem; font-size: 0.72rem;
+    margin-top: 0.3rem; font-size: var(--fs-xs);
   }
   .dir-size { color: var(--subtext0); text-align: right; font-variant-numeric: tabular-nums; }
   .dir-path {
@@ -891,13 +891,13 @@
   .part-head .mount {
     font-family: ui-monospace, monospace;
     color: var(--text);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     max-width: 16rem;
   }
   .part-head .fs {
     color: var(--overlay0);
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     max-width: 12rem;
   }
@@ -914,12 +914,12 @@
     color: var(--text);
     border-radius: 999px;
     padding: 0.1rem 0.5rem;
-    font-size: 0.74rem;
+    font-size: var(--fs-sm);
     font-family: ui-monospace, monospace;
   }
   .chip-count {
     color: var(--subtext0);
-    font-size: 0.66rem;
+    font-size: var(--fs-xs);
     font-variant-numeric: tabular-nums;
   }
   .dim { color: var(--overlay0); }

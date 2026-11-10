@@ -980,7 +980,7 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 8px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(640px, 92vw);
     max-height: 70vh;
     display: flex; flex-direction: column;
@@ -993,7 +993,7 @@
     border-bottom: 1px solid var(--surface0);
     padding: 0.7rem 0.9rem;
     font: inherit;
-    font-size: 0.95rem;
+    font-size: var(--fs-md);
     outline: none;
   }
   .list {
@@ -1004,7 +1004,7 @@
   .empty {
     color: var(--overlay0);
     padding: 0.8rem 0.9rem;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
   .row {
     display: flex;
@@ -1026,7 +1026,7 @@
   .icon {
     width: 1.4rem;
     text-align: center;
-    font-size: 0.95rem;
+    font-size: var(--fs-md);
   }
   .meta {
     flex: 1;
@@ -1036,7 +1036,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 0.9rem;
+    font-size: var(--fs-md);
   }
   .label mark {
     background: transparent;
@@ -1045,7 +1045,7 @@
   }
   .sub {
     color: var(--overlay0);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     margin-top: 0.05rem;
     display: flex;
     flex-wrap: wrap;
@@ -1056,10 +1056,10 @@
   .sub-tag {
     display: inline-block;
     padding: 0.02rem 0.35rem;
-    border-radius: 2px;
+    border-radius: var(--r-sm);
     background: var(--surface0);
     color: var(--overlay1);
-    font-size: 0.65rem;
+    font-size: var(--fs-xs);
     font-family: ui-sans-serif, system-ui, sans-serif;
   }
   .sub-tag.hit { background: var(--yellow); color: var(--base); font-weight: 600; }
@@ -1067,9 +1067,9 @@
     color: var(--yellow);
     background: #292318;
     padding: 0.02rem 0.3rem;
-    border-radius: 2px;
+    border-radius: var(--r-sm);
     margin-left: 0.4rem;
-    font-size: 0.65rem;
+    font-size: var(--fs-xs);
   }
   .icon.tunnel-on { color: var(--green); }
   .icon.connected { color: var(--green); }
@@ -1085,7 +1085,7 @@
     margin-left: 0.4rem;
     padding: 0.02rem 0.3rem;
     border-radius: 999px;
-    font-size: 0.6rem;
+    font-size: var(--fs-xs);
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -1102,7 +1102,7 @@
   .pill-on { color: var(--on-accent); background: var(--green); }
   .hint {
     color: var(--overlay0);
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
   }
   .marked-count { color: var(--mauve); }
   .marked-bar {
@@ -1119,8 +1119,8 @@
   }
   .marked-chip {
     background: var(--surface0); border: 1px solid var(--mauve);
-    color: var(--text); border-radius: 3px;
-    padding: 0.1rem 0.4rem; font: inherit; font-size: 0.72rem;
+    color: var(--text); border-radius: var(--r-sm);
+    padding: 0.1rem 0.4rem; font: inherit; font-size: var(--fs-xs);
     cursor: pointer; display: inline-flex; align-items: center; gap: 0.3rem;
   }
   .marked-chip:hover { border-color: var(--red); }
@@ -1138,7 +1138,7 @@
     padding: 0.4rem 0.9rem;
     border-top: 1px solid var(--surface0);
     color: var(--overlay0);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     /* Same reason as .marked-bar: the key hints are what tell you Enter
        connects the marked set, so they must not be the thing that shrinks. */
     flex: 0 0 auto;
@@ -1146,9 +1146,9 @@
   kbd {
     background: var(--crust);
     border: 1px solid var(--surface0);
-    border-radius: 2px;
+    border-radius: var(--r-sm);
     padding: 0.05rem 0.3rem;
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     color: var(--subtext0);
     font-family: ui-monospace, monospace;
     margin-right: 0.2rem;

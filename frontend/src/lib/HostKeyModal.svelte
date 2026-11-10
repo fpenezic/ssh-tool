@@ -96,7 +96,7 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 6px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(520px, 92vw); padding: 1.25rem;
     box-shadow: 0 10px 40px rgba(0,0,0,0.6);
   }
@@ -105,11 +105,11 @@
     margin-bottom: 0.75rem;
   }
   header.warn { color: var(--red); }
-  .icon { font-size: 1.3rem; }
-  h1 { margin: 0; font-size: 1rem; font-weight: 600; }
-  p { margin: 0.5rem 0; font-size: 0.875rem; line-height: 1.5; }
-  .warn-text { color: var(--red); font-size: 0.875rem; }
-  .hint { color: var(--overlay0); font-size: 0.8rem; }
+  .icon { font-size: var(--fs-xl); }
+  h1 { margin: 0; font-size: var(--fs-md); font-weight: 600; }
+  p { margin: 0.5rem 0; font-size: var(--fs-sm); line-height: 1.5; }
+  .warn-text { color: var(--red); font-size: var(--fs-sm); }
+  .hint { color: var(--overlay0); font-size: var(--fs-sm); }
   .queue-hint :global(svg) {
     vertical-align: -2px;
   }
@@ -117,27 +117,27 @@
     background: var(--crust);
     border-left: 3px solid var(--blue);
     color: var(--blue);
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     padding: 0.4rem 0.6rem;
     margin-top: 0.8rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
   }
-  dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 1rem; margin: 0.75rem 0; font-size: 0.82rem; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 1rem; margin: 0.75rem 0; font-size: var(--fs-sm); }
   dt { color: var(--overlay0); }
   dd { margin: 0; }
-  .fp { font-family: monospace; font-size: 0.78rem; word-break: break-all; }
+  .fp { font-family: monospace; font-size: var(--fs-sm); word-break: break-all; }
   .fp.old { color: var(--red); }
   .fp.new { color: var(--green); }
   .row { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
   .accept-all-row { margin-top: 0.5rem; }
   button.accept-all {
     background: transparent; color: var(--subtext0);
-    border: 1px solid var(--surface1); font-size: 0.8rem;
+    border: 1px solid var(--surface1); font-size: var(--fs-sm);
   }
   button.accept-all:hover { background: var(--surface0); color: var(--text); }
   button {
     background: var(--surface0); color: var(--text); border: 0;
-    padding: 0.4rem 0.85rem; border-radius: 3px;
+    padding: 0.4rem 0.85rem; border-radius: var(--r-sm);
     cursor: pointer; font: inherit;
   }
   button:hover { background: var(--surface1); }

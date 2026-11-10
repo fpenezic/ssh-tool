@@ -1246,7 +1246,7 @@
     background: transparent;
     color: inherit;
     cursor: pointer;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     position: relative;
   }
   .row:hover { background: var(--surface0); }
@@ -1305,16 +1305,16 @@
   .row.conn.tagged.active-session.selected:not(.anchor) {
     box-shadow: inset 3px 0 0 var(--tag-color), inset 5px 0 0 var(--blue), inset -3px 0 0 var(--teal);
   }
-  .chev { width: 1rem; color: var(--overlay0); font-size: 1.05rem; line-height: 1; text-align: center; }
+  .chev { width: 1rem; color: var(--overlay0); font-size: var(--fs-md); line-height: 1; text-align: center; }
   /* The connection-row live indicator reuses .chev for alignment but is a
      status dot, not an expand caret - keep it small. */
-  .chev.dot { font-size: 0.7rem; }
+  .chev.dot { font-size: var(--fs-xs); }
   /* Liveness-probe dot (hollow ○) shown when there's no live session: green =
      reachable, red = unreachable. Unknown shows nothing. */
   .chev.dot.probe-up { color: var(--green); }
   .chev.dot.probe-down { color: var(--red); }
   /* Dynamic-entry probe dot (same ○ semantics, sized to the dyn row). */
-  .dyn-probe { width: 0.8rem; text-align: center; font-size: 0.7rem; flex: none; }
+  .dyn-probe { width: 0.8rem; text-align: center; font-size: var(--fs-xs); flex: none; }
   /* Filled dot = a live session on this dynamic entry, mirroring the static
      connection row. Dynamic sessions key on the synthetic "dyn:<entryID>"
      connection id (see gotcha 50), which is what liveConnIds holds. */
@@ -1334,9 +1334,9 @@
      (see onFolderRowClick), this just makes the chevron itself forgiving. */
   @media (pointer: coarse) {
     .row { padding-top: 0.5rem; padding-bottom: 0.5rem; }
-    .chev { width: 1.8rem; font-size: 1.05rem; }
+    .chev { width: 1.8rem; font-size: var(--fs-md); }
   }
-  .icon { width: 1.2rem; text-align: center; font-size: 0.85rem; }
+  .icon { width: 1.2rem; text-align: center; font-size: var(--fs-sm); }
   /* The name must survive a long subtitle: without a min-width a flex item
      refuses to shrink below its content, so a local connection whose Command
      is a whole script pushed the name out of the row entirely. */
@@ -1349,32 +1349,32 @@
     color: var(--text);
     background: var(--base);
     border: 1px solid var(--blue);
-    border-radius: 2px;
+    border-radius: var(--r-sm);
     padding: 0 0.2rem;
     margin: 0;
     outline: none;
   }
   .cert-badge {
-    flex-shrink: 0; font-size: 0.66rem; padding: 0 0.35rem; border-radius: 7px; margin-right: 0.2rem;
+    flex-shrink: 0; font-size: var(--fs-xs); padding: 0 0.35rem; border-radius: var(--r-md); margin-right: 0.2rem;
     color: var(--yellow); background: color-mix(in srgb, var(--yellow) 16%, transparent);
   }
   .jump-mark {
     flex-shrink: 0; display: inline-flex; align-items: center; gap: 0.15rem;
-    font-size: 0.66rem; margin-right: 0.25rem; color: var(--overlay1);
+    font-size: var(--fs-xs); margin-right: 0.25rem; color: var(--overlay1);
   }
   .jump-mark.folder-jump { color: var(--teal); }
   .jump-mark.bastion {
-    color: var(--teal); padding: 0 0.3rem; border-radius: 7px;
+    color: var(--teal); padding: 0 0.3rem; border-radius: var(--r-md);
     background: color-mix(in srgb, var(--teal) 14%, transparent);
   }
   .cert-badge.bad { color: var(--red); background: color-mix(in srgb, var(--red) 16%, transparent); }
   .name { flex: 1; min-width: 4rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .count { color: var(--overlay1); font-size: 0.75rem; }
+  .count { color: var(--overlay1); font-size: var(--fs-sm); }
   /* .host doubles as the local-shell Command, which can be arbitrarily long -
      cap it and ellipsise, and let it give up space before the name does. */
   .host {
     color: var(--overlay1);
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     margin-left: 0.4rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1393,21 +1393,21 @@
   .name.has-live { color: var(--green); font-weight: 600; }
   .live-badge {
     color: var(--green);
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     background: color-mix(in oklab, var(--green) 12%, var(--bg-panel));
     padding: 0.05rem 0.4rem;
     border-radius: 999px;
     margin-left: 0.3rem;
   }
-  .conn-hint { color: var(--yellow); font-size: 0.72rem; margin-left: 0.3rem; }
+  .conn-hint { color: var(--yellow); font-size: var(--fs-xs); margin-left: 0.3rem; }
   /* Tunnel-only connection: state of its tunnel (app_tunnels.go). */
   .tun-badge { display: inline-flex; align-items: center; margin-left: 0.3rem; color: var(--overlay0); flex-shrink: 0; }
   .tun-badge.tun-connected { color: var(--green); }
   .tun-badge.tun-connecting, .tun-badge.tun-reconnecting { color: var(--yellow); }
   .tun-badge.tun-error { color: var(--red); }
   .tun-badge.tun-connected.tun-degraded { color: var(--yellow); }
-  .fav { color: var(--yellow); font-size: 0.78rem; margin-left: 0.25rem; }
-  .conn-err  { color: var(--red); font-size: 0.78rem; margin-left: 0.3rem; cursor: help; }
+  .fav { color: var(--yellow); font-size: var(--fs-sm); margin-left: 0.25rem; }
+  .conn-err  { color: var(--red); font-size: var(--fs-sm); margin-left: 0.3rem; cursor: help; }
 
   /* Drop indicators */
   .row.drop-before::before,
@@ -1433,11 +1433,11 @@
   .dyn-tag {
     color: var(--teal);
     background: color-mix(in oklab, var(--teal) 16%, var(--bg-panel));
-    font-size: 0.62rem;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 0.05rem 0.35rem;
-    border-radius: 2px;
+    border-radius: var(--r-sm);
     margin-left: 0.3rem;
   }
   .dyn-err-dot {
@@ -1451,7 +1451,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     font-weight: 700;
     margin-left: 0.2rem;
     cursor: pointer;
@@ -1467,7 +1467,7 @@
     cursor: default;
     pointer-events: none;
     color: var(--overlay0);
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding-top: 0.35rem;
@@ -1492,7 +1492,7 @@
   .row.dyn-entry .dyn-name { color: var(--text); flex-shrink: 1; }
   .row.dyn-entry .dyn-host {
     color: var(--subtext0);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     font-family: ui-monospace, monospace;
     flex-shrink: 1;
     overflow: hidden;
@@ -1501,18 +1501,18 @@
   }
   .row.dyn-entry .dyn-kind {
     color: var(--overlay0);
-    font-size: 0.65rem;
+    font-size: var(--fs-xs);
     background: var(--surface0);
     padding: 0.05rem 0.3rem;
-    border-radius: 2px;
+    border-radius: var(--r-sm);
     font-family: ui-monospace, monospace;
   }
   .row.dyn-entry .dyn-status {
     color: var(--yellow);
-    font-size: 0.65rem;
+    font-size: var(--fs-xs);
     background: color-mix(in oklab, var(--yellow) 14%, var(--bg-panel));
     padding: 0.05rem 0.3rem;
-    border-radius: 2px;
+    border-radius: var(--r-sm);
     margin-left: auto;
   }
   .row.dyn-entry.stopped .dyn-name,

@@ -193,20 +193,20 @@
     max-width: 340px;
     background: var(--base);
     border: 1px solid var(--surface0);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     box-shadow: 0 8px 24px rgba(0,0,0,0.45);
     padding: 0.5rem 0.6rem;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
   }
   .head { font-weight: 600; color: var(--text); margin-bottom: 0.3rem; }
   .err { color: var(--red); margin-bottom: 0.3rem; word-break: break-word; }
   .muted { color: var(--overlay0); line-height: 1.4; }
-  .sub { color: var(--overlay0); font-size: 0.75rem; margin-bottom: 0.5rem; line-height: 1.35; }
+  .sub { color: var(--overlay0); font-size: var(--fs-sm); margin-bottom: 0.5rem; line-height: 1.35; }
   .row { display: flex; gap: 0.4rem; margin-top: 0.4rem; flex-wrap: wrap; }
   .btn {
     background: var(--mantle); border: 1px solid var(--surface1);
-    color: var(--text); border-radius: 3px; padding: 0.25rem 0.55rem;
-    cursor: pointer; font: inherit; font-size: 0.75rem;
+    color: var(--text); border-radius: var(--r-sm); padding: 0.25rem 0.55rem;
+    cursor: pointer; font: inherit; font-size: var(--fs-sm);
     display: inline-flex; align-items: center; gap: 0.2rem;
   }
   .btn:hover { background: var(--surface1); }
@@ -220,7 +220,7 @@
   }
   .btn.yolo:hover { background: color-mix(in srgb, var(--red) 15%, transparent); }
   .yolo-warn {
-    margin-top: 0.35rem; font-size: 0.7rem; line-height: 1.3;
+    margin-top: 0.35rem; font-size: var(--fs-xs); line-height: 1.3;
     color: var(--red); opacity: 0.9;
   }
   .active { display: flex; align-items: center; gap: 0.4rem; color: var(--text); }
@@ -228,7 +228,7 @@
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
   .link {
     background: transparent; border: 0; color: var(--blue);
-    cursor: pointer; font: inherit; font-size: 0.78rem;
+    cursor: pointer; font: inherit; font-size: var(--fs-sm);
     padding: 0.25rem 0; text-decoration: underline;
   }
   .link.prompt {
@@ -250,7 +250,7 @@
   }
   .manage-row input { cursor: pointer; }
   .manage-sub {
-    margin-top: 0.3rem; font-size: 0.7rem; line-height: 1.35;
+    margin-top: 0.3rem; font-size: var(--fs-xs); line-height: 1.35;
     color: var(--overlay0);
   }
   /* Shown only while the grant is on: a write grant that quietly came back
@@ -258,10 +258,10 @@
      say plainly that it does not. */
   .manage-note {
     margin-top: 0.35rem; padding: 0.3rem 0.4rem;
-    font-size: 0.7rem; line-height: 1.35;
+    font-size: var(--fs-xs); line-height: 1.35;
     color: var(--yellow);
     background: color-mix(in srgb, var(--yellow) 12%, transparent);
     border-left: 2px solid var(--yellow);
-    border-radius: 2px;
+    border-radius: var(--r-sm);
   }
 </style>

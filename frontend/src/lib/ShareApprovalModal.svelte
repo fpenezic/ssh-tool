@@ -72,14 +72,14 @@
     background: var(--base, #1e1e2e);
     color: var(--text, #cdd6f4);
     border: 1px solid var(--surface1, #45475a);
-    border-radius: 10px;
+    border-radius: var(--r-lg);
     padding: 1.3rem 1.5rem;
     width: min(30rem, 92vw);
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
   }
   h2 {
     margin: 0 0 0.9rem;
-    font-size: 1.1rem;
+    font-size: var(--fs-lg);
   }
   .row {
     display: flex;
@@ -90,7 +90,7 @@
   .label {
     width: 4rem;
     color: var(--subtext0, #a6adc8);
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
   }
   .ip {
     font-family: monospace;
@@ -106,28 +106,28 @@
     margin: 0.9rem 0;
     padding: 0.8rem;
     background: var(--mantle, #181825);
-    border-radius: 8px;
+    border-radius: var(--r-md);
     border: 1px solid var(--surface0, #313244);
   }
   .fp-title {
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0, #a6adc8);
     margin-bottom: 0.4rem;
   }
   .fp-words {
     font-family: monospace;
-    font-size: 1.35rem;
+    font-size: var(--fs-xl);
     font-weight: 700;
     color: var(--blue, #89b4fa);
     letter-spacing: 0.02em;
   }
   .fp-hint {
     margin-top: 0.5rem;
-    font-size: 0.76rem;
+    font-size: var(--fs-sm);
     color: var(--overlay1, #7f849c);
   }
   .more {
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0, #a6adc8);
     margin-bottom: 0.6rem;
   }
@@ -139,12 +139,12 @@
   }
   button {
     padding: 0.45rem 1.1rem;
-    border-radius: 6px;
+    border-radius: var(--r-md);
     border: 1px solid var(--surface1, #45475a);
     background: var(--surface0, #313244);
     color: var(--text, #cdd6f4);
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: var(--fs-md);
   }
   button.deny {
     border-color: var(--overlay0, #6c7086);

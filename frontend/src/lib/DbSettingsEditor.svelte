@@ -345,21 +345,21 @@
   .card-fold { display: inline-flex; align-items: center; gap: 0.3rem; background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
   .card-fold :global(svg) { color: var(--overlay1); transition: transform 0.12s; }
   .card-fold.open :global(svg) { transform: rotate(90deg); }
-  .card-sum { font-size: 0.72rem; color: var(--overlay1); }
+  .card-sum { font-size: var(--fs-xs); color: var(--overlay1); }
   /* Same look as the Kafka section; repeated because those rules are
      scoped to KafkaSettingsEditor. */
   .db-section {
     grid-column: 1 / -1;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     padding: 0.6rem 0.75rem;
     background: var(--surface1);
   }
-  .vnc-head { display: flex; align-items: center; gap: 0.55rem; font-size: 0.85rem; color: var(--text); }
+  .vnc-head { display: flex; align-items: center; gap: 0.55rem; font-size: var(--fs-sm); color: var(--text); }
   .vnc-spacer { flex: 1 1 auto; }
   .vnc-title { font-weight: 600; }
   .vnc-switch {
-    position: relative; width: 34px; height: 18px; border-radius: 9px;
+    position: relative; width: 34px; height: 18px; border-radius: var(--r-pill);
     border: 1px solid var(--border); background: var(--surface2); padding: 0;
     cursor: pointer; flex: 0 0 auto; transition: background 0.15s ease, border-color 0.15s ease;
   }
@@ -370,44 +370,44 @@
   }
   .db-section.on .vnc-knob { transform: translateX(16px); background: #fff; }
   .vnc-open {
-    font-size: 0.78rem; padding: 0.2rem 0.6rem; background: var(--surface2); color: var(--text);
-    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    font-size: var(--fs-sm); padding: 0.2rem 0.6rem; background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--r-sm); cursor: pointer;
   }
   .vnc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.6rem; }
-  .vnc-grid label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--subtext0); }
+  .vnc-grid label { display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--fs-sm); color: var(--subtext0); }
   .vnc-grid input, .vnc-grid select {
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.35rem 0.5rem; font: inherit;
   }
   .vnc-grid input:focus, .vnc-grid select:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
-  .inh { font-size: 0.7rem; color: var(--overlay1); }
+  .inh { font-size: var(--fs-xs); color: var(--overlay1); }
   .target.inherited .inh-name { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 0.5rem; }
   .target.inherited .t-name { font-weight: 600; color: var(--text); }
-  .target.inherited .t-meta { font-size: 0.74rem; color: var(--subtext0); }
+  .target.inherited .t-meta { font-size: var(--fs-sm); color: var(--subtext0); }
   .targets.alone { margin-top: 0.5rem; border-top: none; padding-top: 0; }
   .targets { margin-top: 0.8rem; border-top: 1px solid var(--border); padding-top: 0.6rem; display: flex; flex-direction: column; gap: 0.5rem; }
   .vnc-grid label.check { padding-bottom: 0.35rem; }
   .checks { display: flex; align-items: end; gap: 1rem; }
   .t-head { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
-  .t-title { font-weight: 600; font-size: 0.82rem; color: var(--text); }
-  .t-hint { flex: 1 1 12rem; font-size: 0.72rem; color: var(--overlay1); }
+  .t-title { font-weight: 600; font-size: var(--fs-sm); color: var(--text); }
+  .t-hint { flex: 1 1 12rem; font-size: var(--fs-xs); color: var(--overlay1); }
   .t-head .vnc-open { display: inline-flex; align-items: center; gap: 0.25rem; }
   .target {
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45rem 0.6rem; align-items: end;
-    padding: 0.5rem; border: 1px solid var(--surface0); border-radius: 5px; background: var(--mantle);
+    padding: 0.5rem; border: 1px solid var(--surface0); border-radius: var(--r-md); background: var(--mantle);
   }
-  .target label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.75rem; color: var(--subtext0); }
+  .target label { display: flex; flex-direction: column; gap: 0.2rem; font-size: var(--fs-sm); color: var(--subtext0); }
   .target input, .target select {
-    background: var(--base); color: var(--text); border: 1px solid var(--surface0); border-radius: 3px;
-    padding: 0.3rem 0.45rem; font: inherit; font-size: 0.8rem; min-width: 0;
+    background: var(--base); color: var(--text); border: 1px solid var(--surface0); border-radius: var(--r-sm);
+    padding: 0.3rem 0.45rem; font: inherit; font-size: var(--fs-sm); min-width: 0;
   }
   .t-actions { grid-column: 2 / -1; display: flex; align-items: center; gap: 0.4rem; }
   .t-spacer { flex: 1 1 auto; }
   label.check { flex-direction: row !important; align-items: center; gap: 0.35rem !important; color: var(--text); align-self: end; }
   .t-del { background: none; border: none; color: var(--overlay1); cursor: pointer; padding: 0.2rem; display: inline-flex; }
   .t-del:hover { color: var(--red); }
-  .link { background: none; border: none; color: var(--overlay1); font-size: 0.7rem; cursor: pointer; text-decoration: underline; }
+  .link { background: none; border: none; color: var(--overlay1); font-size: var(--fs-xs); cursor: pointer; text-decoration: underline; }
   @media (max-width: 640px) {
     .vnc-grid { grid-template-columns: 1fr; }
     .target { grid-template-columns: 1fr 1fr; }

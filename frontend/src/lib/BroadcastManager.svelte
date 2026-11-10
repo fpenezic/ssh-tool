@@ -237,7 +237,7 @@
     background: var(--base);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     width: min(520px, 92vw);
     max-height: 80vh;
     display: flex;
@@ -252,16 +252,16 @@
   header h2 {
     display: flex; align-items: center; gap: 0.4rem;
     margin: 0;
-    font-size: 0.9rem;
+    font-size: var(--fs-md);
     text-transform: uppercase; letter-spacing: 0.05em;
     color: var(--peach);
   }
   .close {
     background: transparent; border: 0; color: var(--subtext0); cursor: pointer;
-    padding: 0.15rem 0.35rem; border-radius: 3px;
+    padding: 0.15rem 0.35rem; border-radius: var(--r-sm);
   }
   .close:hover { background: var(--surface0); color: var(--text); }
-  .hint { color: var(--subtext0); font-size: 0.78rem; margin: 0.2rem 0 0.6rem; line-height: 1.5; }
+  .hint { color: var(--subtext0); font-size: var(--fs-sm); margin: 0.2rem 0 0.6rem; line-height: 1.5; }
   .group-row {
     display: flex;
     align-items: center;
@@ -270,18 +270,18 @@
   }
   .group-pick {
     display: inline-flex; align-items: center; gap: 0.3rem;
-    font-size: 0.78rem; color: var(--subtext0);
+    font-size: var(--fs-sm); color: var(--subtext0);
   }
   .group-pick select {
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface1); border-radius: 3px;
+    border: 1px solid var(--surface1); border-radius: var(--r-sm);
     padding: 0.2rem 0.4rem;
-    font: inherit; font-size: 0.78rem;
+    font: inherit; font-size: var(--fs-sm);
   }
   .group-row button {
     background: var(--surface0); color: var(--text); border: 0;
-    border-radius: 3px; padding: 0.25rem 0.6rem;
-    cursor: pointer; font: inherit; font-size: 0.78rem;
+    border-radius: var(--r-sm); padding: 0.25rem 0.6rem;
+    cursor: pointer; font: inherit; font-size: var(--fs-sm);
   }
   .group-row button:hover { background: var(--surface1); }
   .group-row button.danger { color: var(--red); }
@@ -292,8 +292,8 @@
     background: var(--surface0);
     color: var(--subtext0);
     padding: 0 0.4rem;
-    border-radius: 8px;
-    font-size: 0.7rem;
+    border-radius: var(--r-md);
+    font-size: var(--fs-xs);
   }
   .bulk {
     display: flex; align-items: center; gap: 0.4rem;
@@ -303,20 +303,20 @@
   }
   .bulk button {
     background: var(--surface0); color: var(--text); border: 0;
-    border-radius: 3px; padding: 0.25rem 0.6rem;
-    cursor: pointer; font: inherit; font-size: 0.78rem;
+    border-radius: var(--r-sm); padding: 0.25rem 0.6rem;
+    cursor: pointer; font: inherit; font-size: var(--fs-sm);
   }
   .bulk button:hover { background: var(--surface1); }
   .bulk .show-other {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    font-size: 0.74rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
     margin-left: 0.4rem;
     cursor: pointer;
   }
-  .bulk .count { margin-left: auto; color: var(--subtext0); font-size: 0.78rem; }
+  .bulk .count { margin-left: auto; color: var(--subtext0); font-size: var(--fs-sm); }
   .sessions {
     list-style: none; margin: 0.6rem 0 0; padding: 0;
     overflow-y: auto;
@@ -324,8 +324,8 @@
   .sessions li { padding: 0.25rem 0; }
   .sessions label {
     display: flex; align-items: center; gap: 0.5rem;
-    cursor: pointer; padding: 0.2rem 0.3rem; border-radius: 3px;
-    font-size: 0.85rem;
+    cursor: pointer; padding: 0.2rem 0.3rem; border-radius: var(--r-sm);
+    font-size: var(--fs-sm);
   }
   .sessions label:hover { background: var(--surface0); }
   .sessions .nm { flex: 1; }
@@ -341,14 +341,14 @@
     border-left: 3px solid var(--red);
     padding: 0.5rem 0.8rem;
     border-radius: 0 3px 3px 0;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .err pre {
     white-space: pre-wrap; word-break: break-word;
-    font-size: 0.72rem; margin: 0.3rem 0;
+    font-size: var(--fs-xs); margin: 0.3rem 0;
   }
   .err button {
     background: var(--surface0); color: var(--text); border: 0;
-    border-radius: 3px; padding: 0.2rem 0.5rem; cursor: pointer;
+    border-radius: var(--r-sm); padding: 0.2rem 0.5rem; cursor: pointer;
   }
 </style>

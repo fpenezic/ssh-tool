@@ -169,16 +169,16 @@
     background: var(--mantle);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.35rem 0.5rem;
     font: inherit;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     cursor: pointer;
     text-align: left;
   }
   .trigger:hover { border-color: var(--surface1); }
   .trigger .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .trigger .chev { color: var(--overlay0); font-size: 0.75rem; margin-left: 0.4rem; }
+  .trigger .chev { color: var(--overlay0); font-size: var(--fs-sm); margin-left: 0.4rem; }
   .popover {
     position: absolute;
     top: 100%;
@@ -187,7 +187,7 @@
     margin-top: 2px;
     background: var(--base);
     border: 1px solid var(--surface1);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     box-shadow: 0 8px 24px rgba(0,0,0,0.45);
     z-index: 50;
     max-height: 320px;
@@ -202,7 +202,7 @@
     border-bottom: 1px solid var(--surface0);
     padding: 0.45rem 0.55rem;
     font: inherit;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     outline: none;
   }
   .list { overflow-y: auto; flex: 1; padding: 0.2rem 0; }
@@ -218,7 +218,7 @@
     padding: 0.3rem 0.6rem;
     cursor: pointer;
     font: inherit;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     border-left: 2px solid transparent;
   }
   .row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -226,7 +226,7 @@
     margin-left: auto;
     flex-shrink: 0;
     color: var(--overlay0);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -238,6 +238,6 @@
   .empty {
     padding: 0.55rem 0.6rem;
     color: var(--overlay0);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
 </style>
