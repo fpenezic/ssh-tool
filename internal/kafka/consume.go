@@ -420,9 +420,13 @@ func (k *Consumer) offer(g *gather, r *kgo.Record) {
 // then the records that came past the ends. It reports whether the limit is
 // reached.
 func (k *Consumer) flush(g *gather) bool {
-	k.mu.Lock()
-	k.gathering = false
-	k.mu.Unlock()
+	// Gathering ends once the pick is in the buffer, so a snapshot that
+	// no longer says gathering holds all of it.
+	defer func() {
+		k.mu.Lock()
+		k.gathering = false
+		k.mu.Unlock()
+	}()
 	recs := []*kgo.Record(g.h)
 	sort.Slice(recs, func(i, j int) bool { return older(recs[i], recs[j]) })
 	for _, r := range recs {
