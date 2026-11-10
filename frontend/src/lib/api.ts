@@ -556,6 +556,8 @@ export interface WgProfile {
   paused?: boolean;
   addresses: string[];
   dns: string[];
+  /** Search domains: the names on the config's DNS line. */
+  search_domains?: string[];
   mtu: number;
   peers: WgPeer[];
 }
