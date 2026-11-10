@@ -1698,6 +1698,7 @@ the database and Kafka:
   would otherwise commit on its own and escape the transaction;
   `SELECT ... INTO OUTFILE` is refused too). It is a strong guard, but the
   real guarantee is a login with read-only grants - use one for production.
+  `EXPLAIN ANALYZE` (also spelled `ANALYSE`, or with the option quoted) runs the statement, so it counts as a write.
   Oracle, SQL Server and Db2 differ, see their sections.
 - **TLS** - *Require* (encrypted, certificate not checked) or *Verify
   certificate* (it must match the address's host name), end to end inside
@@ -1831,7 +1832,7 @@ Instant Client to install. What differs:
   statement. What a block prints with `DBMS_OUTPUT.PUT_LINE` shows under its
   result.
 - **Read-only** sends only `SELECT` and `WITH`, each in a `SET TRANSACTION
-  READ ONLY` that is rolled back; PL/SQL and `WITH FUNCTION` are refused. A
+  READ ONLY` that is rolled back; PL/SQL, `WITH FUNCTION` and a sequence's `NEXTVAL` (also written `seq."NEXTVAL"`) are refused. A
   function that runs as an autonomous transaction can still write - a
   login with read-only grants is the real guarantee.
 - **Stop** sends a break in band (no TCP urgent data through a tunnel): a
@@ -1861,7 +1862,7 @@ Microsoft SQL Server (MSSQL) and Azure SQL. What differs:
 - **Read-only.** SQL Server has no read-only transaction, and T-SQL needs
   no semicolon between two statements (`SELECT 1 DELETE FROM t` is two), so
   a read-only tab sends a plain `SELECT` or `WITH` only: no `EXEC`, `INTO`,
-  `OPENQUERY` / `OPENROWSET` or a second statement's keyword, inside a
+  `OPENQUERY` / `OPENROWSET` or a second statement's keyword (including `SETUSER`, `RAISERROR`, `WAITFOR` and `CHECKPOINT`, which the rollback does not undo), inside a
   transaction that is rolled back. A login with only `db_datareader` is the
   real guarantee.
 - **TLS** *Off* still encrypts the login (the password), as SSMS does,
@@ -1892,7 +1893,7 @@ a pure-Go driver: no IBM client to install. What differs:
 - **Read-only.** The driver has no read-only transaction: a read-only tab
   sends only `SELECT`, `WITH` and `VALUES` - no `CALL`, SQL PL block, query
   over `INSERT` / `UPDATE` / `DELETE` / `MERGE` (`FINAL TABLE`,
-  `OLD TABLE`) or `NEXT VALUE FOR` - with autocommit off, and rolls each
+  `OLD TABLE`), `NEXT VALUE FOR` or `seq.NEXTVAL` - with autocommit off, and rolls each
   run back (Db2 rolls back DDL too). A login with read-only grants is the
   real guarantee.
 - **Transactions** - statements autocommit, as on Oracle; `COMMIT` and
@@ -1951,7 +1952,7 @@ cluster as the one database.
 - **Read-only** sends only GET and HEAD requests, POST to the search
   endpoints (`_search`, `_count`, `_msearch`, `_mget`, `_field_caps`,
   `_validate`, `_explain`, `_analyze`, `_termvectors`, `_rank_eval`) and
-  SQL that reads. The cluster has no read-only session, so this check is
+  SQL that reads. A POST whose path a proxy in front of the cluster could rewrite into another endpoint (`.` or `..` segments, `;`, `//`, encoded slashes outside a date-math name) is refused. The cluster has no read-only session, so this check is
   all the tab can do: a login with a read-only role is the real guard.
 - **Stop** closes the request; the cluster cancels a search whose client
   went away. There are no sessions or transactions.
@@ -2598,7 +2599,7 @@ Each profile has a mode and a pause switch:
   fails bring the tunnel up. Good for a host reachable directly when
   you're on-site and only via VPN from elsewhere. On-site connects
   show no VPN badge because they really went direct. While the tunnel
-  is up, connects use it straight away without the probe.
+  is up, connects use it straight away without the probe. If the profile needs a plugin that is not installed, a connect that went direct says so once per profile while the app runs (click the warning to open the profile and install it); a connect the direct probe could not make fails with the same reason.
 - **Pause** - a per-profile kill switch: every connection using it
   dials direct and the tunnel is stopped immediately. For "I'm on the
   network, leave the VPN alone."
@@ -2682,7 +2683,7 @@ Proxy tab, which lists them all. On the Proxy tab **Reachable through the
 app proxy** and **Separate proxy for this VPN only** apply on the click;
 the listen address, port and extra networks wait for **Save** (with
 **Discard**, both greyed out while nothing changed). The app proxy's own
-listen address and port work the same way. Host names of those connections go to
+listen address and port work the same way. A port that is already taken is refused and the proxy keeps listening where it was. Host names of those connections go to
 their profile as well and are resolved inside the VPN.
 
 **DNS domains.** A name in one of a profile's DNS domains goes through that profile as a name and is resolved by the VPN's DNS, so `db1.prod.example.com` reaches the host behind the VPN even though this machine cannot resolve it (or resolves it to something else). The domains are the ones the server reports - search domains from OpenConnect, OpenVPN and Check Point, OpenConnect's split-DNS domains, and NetBird's own domain and nameserver-group domains (NetBird plugin 1.7 and later), remembered from the last connect - plus any **Extra DNS domains** on the profile's Proxy tab (WireGuard and Tailscale report none; add them there). The Proxy tab lists them with where each came from. The longest domain wins (`prod.example.com` before `example.com`); a domain on two profiles goes by **When networks overlap**, then the profile that is up. A connection's own host name still decides first. A short name with no dot (`db1`) that this machine cannot resolve is tried in the first profile's search domains, in order (`db1.example.com`); a short name this machine does resolve keeps going by its address. A WireGuard profile resolves names with the DNS servers in its configuration; without them only addresses work through it. A program that resolves names itself before it talks to the proxy (many JDBC drivers, `curl` with `--socks5` or a `socks5://` proxy URL; `--socks5-hostname` or `socks5h://` sends the name) sends an address instead, and that goes by the networks as before.

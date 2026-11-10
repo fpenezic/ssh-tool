@@ -344,6 +344,12 @@ func (a *App) startLocalProxy(id string, cfg LocalProxyConfig) error {
 		return listenErr(addr, cfg.Port, err)
 	}
 	localProxies.Lock()
+	// An entry this replaces (two updates of one profile racing) is
+	// closed, or its listener would be orphaned: stopLocalProxy only
+	// closes the one in the map.
+	if old := localProxies.m[id]; old != nil {
+		_ = old.ln.Close()
+	}
 	localProxies.m[id] = &localProxy{ln: ln, addr: addr}
 	localProxies.Unlock()
 	log.Printf("network: local proxy for profile %s listening on %s", id, addr)
