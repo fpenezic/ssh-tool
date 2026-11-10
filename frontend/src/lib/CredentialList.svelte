@@ -249,15 +249,15 @@
     color: var(--subtext0);
   }
   .empty .ico { font-size: 2.5rem; opacity: 0.4; margin-bottom: 0.6rem; }
-  .empty p { margin: 0.3rem 0; font-size: 0.85rem; }
-  .empty p.muted { color: var(--overlay0); font-size: 0.78rem; }
+  .empty p { margin: 0.3rem 0; font-size: var(--fs-sm); }
+  .empty p.muted { color: var(--overlay0); font-size: var(--fs-sm); }
 
   .skeleton { padding: 0.5rem 0.6rem; display: flex; flex-direction: column; gap: 0.4rem; }
   .sk-row {
     height: 0.7rem;
     width: var(--w, 70%);
     background: var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     animation: pulse 1.4s ease-in-out infinite;
   }
   @keyframes pulse {
@@ -277,7 +277,7 @@
     display: flex; align-items: center; justify-content: space-between;
   }
   h2 {
-    margin: 0; font-size: 0.85rem;
+    margin: 0; font-size: var(--fs-sm);
     text-transform: uppercase; letter-spacing: 0.05em;
     color: var(--subtext0);
   }
@@ -305,14 +305,14 @@
   .vault-banner > :global(svg) { flex: none; margin-top: 0.1rem; }
   .vb-text {
     display: flex; flex-direction: column; gap: 0.1rem;
-    font-size: 0.72rem; line-height: 1.35;
+    font-size: var(--fs-xs); line-height: 1.35;
     color: var(--subtext0);
   }
-  .vb-text strong { color: var(--warn); font-size: 0.76rem; }
+  .vb-text strong { color: var(--warn); font-size: var(--fs-sm); }
   .actions button {
     background: transparent; border: 0; color: var(--subtext0);
     cursor: pointer; padding: 0.15rem 0.35rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
   }
   .actions button:hover { background: var(--surface0); color: var(--text); }
   .actions .iconbtn { display: inline-flex; align-items: center; gap: 0.1rem; }
@@ -326,8 +326,8 @@
   .search-input {
     flex: 1; min-width: 0;
     background: var(--crust); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
-    font: inherit; font-size: 0.78rem;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
+    font: inherit; font-size: var(--fs-sm);
     padding: 0.25rem 0.4rem; outline: none;
   }
   .search-input:focus { border-color: var(--surface2); }
@@ -341,17 +341,17 @@
   .row {
     display: flex; align-items: center; gap: 0.25rem;
     padding: var(--row-pad-y) 0.4rem var(--row-pad-y) calc(0.4rem + var(--depth, 0) * 1rem);
-    cursor: pointer; border-radius: 3px;
+    cursor: pointer; border-radius: var(--r-sm);
     width: 100%;
   }
   .row:hover { background: var(--surface0); }
   .row.selected { background: var(--surface1); }
   .row:focus { outline: 1px solid var(--blue); outline-offset: -1px; }
-  .chev { width: 1rem; color: var(--overlay0); font-size: 0.85rem; text-align: center; }
-  .icon { width: 1.2rem; text-align: center; font-size: 0.85rem; }
+  .chev { width: 1rem; color: var(--overlay0); font-size: var(--fs-sm); text-align: center; }
+  .icon { width: 1.2rem; text-align: center; font-size: var(--fs-sm); }
   .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .kind-label { flex-shrink: 0; color: var(--overlay1); font-size: 0.75rem; margin-left: 0.4rem; }
-  .cred-expiry { margin-left: 0.35rem; padding: 0 0.3rem; border-radius: 999px; font-size: 0.65rem; font-weight: 600; vertical-align: middle; }
+  .kind-label { flex-shrink: 0; color: var(--overlay1); font-size: var(--fs-sm); margin-left: 0.4rem; }
+  .cred-expiry { margin-left: 0.35rem; padding: 0 0.3rem; border-radius: 999px; font-size: var(--fs-xs); font-weight: 600; vertical-align: middle; }
   .cred-expiry.soon { background: var(--yellow); color: var(--on-accent); }
   .cred-expiry.expired { background: var(--red); color: var(--on-accent); }
   .tree.drop-root {

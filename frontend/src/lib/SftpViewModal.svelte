@@ -77,7 +77,7 @@
     display: flex;
     flex-direction: column;
     border: 1px solid var(--surface0);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     box-shadow: 0 8px 30px rgba(0,0,0,0.5);
     overflow: hidden;
   }

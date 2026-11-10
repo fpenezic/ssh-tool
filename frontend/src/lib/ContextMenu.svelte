@@ -93,7 +93,7 @@
     position: fixed;
     background: var(--crust);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.25rem;
     min-width: 200px;
     z-index: 71;
@@ -110,8 +110,8 @@
     border: 0;
     cursor: pointer;
     font: inherit;
-    font-size: 0.85rem;
-    border-radius: 3px;
+    font-size: var(--fs-sm);
+    border-radius: var(--r-sm);
     text-align: left;
   }
   .item:hover:not(:disabled) { background: var(--surface0); }

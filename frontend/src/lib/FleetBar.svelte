@@ -34,16 +34,16 @@
   .fleet-bar {
     display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;
     padding: 0.45rem 0.6rem; margin: 0.4rem 0 0.6rem;
-    background: var(--mantle); border: 1px solid var(--surface0); border-radius: 6px;
+    background: var(--mantle); border: 1px solid var(--surface0); border-radius: var(--r-md);
   }
-  .tag { font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--subtext0); margin-right: 0.3rem; }
+  .tag { font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--subtext0); margin-right: 0.3rem; }
   button {
     display: inline-flex; align-items: center; gap: 0.35rem;
     background: var(--surface0); color: var(--text); border: 1px solid var(--surface1);
-    border-radius: 5px; font: inherit; font-size: 0.78rem; padding: 0.22rem 0.65rem; cursor: pointer;
+    border-radius: var(--r-md); font: inherit; font-size: var(--fs-sm); padding: 0.22rem 0.65rem; cursor: pointer;
   }
   button:hover:not(:disabled) { background: var(--surface1); }
   button:disabled { opacity: 0.5; cursor: default; }
   .sep { width: 1px; height: 18px; background: var(--surface1); margin: 0 0.2rem; }
-  .none { color: var(--subtext0); font-size: 0.76rem; }
+  .none { color: var(--subtext0); font-size: var(--fs-sm); }
 </style>

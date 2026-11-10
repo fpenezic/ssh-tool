@@ -289,22 +289,22 @@
   .kp-row {
     display: flex; align-items: center; justify-content: space-between;
     padding: 8px 10px; border: 1px solid var(--border, #333);
-    border-radius: 6px; gap: 12px;
+    border-radius: var(--r-md); gap: 12px;
   }
   .kp-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .kp-name { font-weight: 600; }
   .kp-src {
-    font-size: 0.75rem; text-transform: uppercase; opacity: 0.7;
+    font-size: var(--fs-sm); text-transform: uppercase; opacity: 0.7;
     letter-spacing: 0.05em;
   }
-  .kp-fetched { font-size: 0.8rem; opacity: 0.7; }
+  .kp-fetched { font-size: var(--fs-sm); opacity: 0.7; }
   .kp-actions { display: flex; gap: 6px; flex-shrink: 0; }
   .kp-form {
     margin-top: 12px; padding: 12px; border: 1px solid var(--border, #333);
-    border-radius: 6px; display: flex; flex-direction: column; gap: 10px;
+    border-radius: var(--r-md); display: flex; flex-direction: column; gap: 10px;
     max-width: 520px;
   }
-  .kp-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
+  .kp-form label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); }
   .path-row { display: flex; gap: 6px; align-items: stretch; }
   .path-row input { flex: 1; min-width: 0; }
   .path-row button { flex-shrink: 0; white-space: nowrap; }
@@ -312,6 +312,6 @@
     width: 100%; box-sizing: border-box;
   }
   .kp-form-actions { display: flex; gap: 8px; margin-top: 4px; }
-  .hint-inline { font-weight: 400; opacity: 0.6; font-size: 0.8rem; }
+  .hint-inline { font-weight: 400; opacity: 0.6; font-size: var(--fs-sm); }
   .danger { color: var(--danger, #e66); }
 </style>

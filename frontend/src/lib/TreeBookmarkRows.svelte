@@ -93,7 +93,7 @@
     width: 100%;
     padding: var(--row-pad-y) 0.4rem var(--row-pad-y) calc(0.4rem + var(--depth, 0) * 1rem);
     cursor: pointer;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
   }
   .row:hover { background: var(--surface0); }
   .row.selected { background: var(--surface1); }
@@ -109,7 +109,7 @@
     .chev { width: 1.8rem; }
   }
   .host {
-    color: var(--overlay1); font-size: 0.72rem; margin-left: 0.4rem;
+    color: var(--overlay1); font-size: var(--fs-xs); margin-left: 0.4rem;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%;
   }
 </style>

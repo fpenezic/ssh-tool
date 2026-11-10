@@ -89,21 +89,21 @@
 </div>
 
 <style>
-  .fbar { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--surface0); font-size: 0.76rem; }
+  .fbar { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--surface0); font-size: var(--fs-sm); }
   .frow, .factions { display: flex; align-items: center; gap: 0.3rem; }
   select, input {
-    font-size: 0.76rem; padding: 0.15rem 0.3rem; background: var(--base); color: var(--text);
-    border: 1px solid var(--surface1); border-radius: 4px;
+    font-size: var(--fs-sm); padding: 0.15rem 0.3rem; background: var(--base); color: var(--text);
+    border: 1px solid var(--surface1); border-radius: var(--r-sm);
   }
   input { flex: 0 1 18rem; font-family: var(--mono-font, ui-monospace, monospace); }
   button {
-    display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.76rem; padding: 0.15rem 0.5rem;
-    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 4px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.25rem; font-size: var(--fs-sm); padding: 0.15rem 0.5rem;
+    background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); cursor: pointer;
   }
   button:disabled { opacity: 0.45; cursor: default; }
   button.primary { border-color: var(--blue); }
   button.ic { padding: 0.15rem 0.25rem; background: none; border-color: transparent; color: var(--overlay1); }
   button.ic:hover { color: var(--text); }
-  .hint { color: var(--subtext0); font-size: 0.72rem; }
+  .hint { color: var(--subtext0); font-size: var(--fs-xs); }
   .spacer { flex: 1 1 auto; }
 </style>

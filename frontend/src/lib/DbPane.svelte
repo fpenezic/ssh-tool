@@ -591,23 +591,23 @@
   .tree { flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--surface0); background: var(--mantle); }
   .vdrag { flex: 0 0 4px; cursor: col-resize; }
   .vdrag:hover { background: var(--surface1); }
-  .tree-head { display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.5rem; font-size: 0.78rem; color: var(--subtext0); border-bottom: 1px solid var(--surface0); }
+  .tree-head { display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.5rem; font-size: var(--fs-sm); color: var(--subtext0); border-bottom: 1px solid var(--surface0); }
   .srv { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tree-head button, .mini { background: none; border: none; color: var(--overlay1); cursor: pointer; padding: 0.1rem; display: inline-flex; }
   .tree-head button:hover, .mini:hover { color: var(--text); }
   .tree-tools { display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.5rem; }
-  .tree-tools input:not([type]) { flex: 1 1 auto; min-width: 0; background: var(--base); color: var(--text); border: 1px solid var(--surface0); border-radius: 3px; padding: 0.2rem 0.4rem; font-size: 0.78rem; }
-  .tree-tools label { font-size: 0.72rem; color: var(--subtext0); display: inline-flex; align-items: center; gap: 0.2rem; white-space: nowrap; }
-  .tree-body { flex: 1 1 auto; overflow: auto; padding-bottom: 0.5rem; font-size: 0.8rem; }
+  .tree-tools input:not([type]) { flex: 1 1 auto; min-width: 0; background: var(--base); color: var(--text); border: 1px solid var(--surface0); border-radius: var(--r-sm); padding: 0.2rem 0.4rem; font-size: var(--fs-sm); }
+  .tree-tools label { font-size: var(--fs-xs); color: var(--subtext0); display: inline-flex; align-items: center; gap: 0.2rem; white-space: nowrap; }
+  .tree-body { flex: 1 1 auto; overflow: auto; padding-bottom: 0.5rem; font-size: var(--fs-sm); }
   .db-row { display: flex; align-items: center; gap: 0.25rem; padding: 0 0.4rem; }
   .db-row:hover { background: var(--surface0); }
   .twisty { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 0.25rem; background: none; border: none; color: var(--text); cursor: pointer; padding: 0.2rem 0; text-align: left; font: inherit; }
   .dname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .sys { opacity: 0.6; }
-  .meta { flex: 0 0 auto; font-size: 0.68rem; color: var(--overlay1); }
+  .meta { flex: 0 0 auto; font-size: var(--fs-xs); color: var(--overlay1); }
   .schema { display: flex; align-items: center; gap: 0.25rem; padding-right: 0.4rem; }
   .schema .sname { flex: 1 1 auto; }
-  .schema { font-size: 0.7rem; color: var(--overlay1); text-transform: uppercase; letter-spacing: 0.03em; padding: 0.3rem 0 0.1rem; }
+  .schema { font-size: var(--fs-xs); color: var(--overlay1); text-transform: uppercase; letter-spacing: 0.03em; padding: 0.3rem 0 0.1rem; }
   .ind { padding-left: 1.4rem; }
   .obj { display: flex; align-items: center; gap: 0.35rem; width: 100%; background: none; border: none; color: var(--text); cursor: pointer; padding: 0.15rem 0.5rem 0.15rem 1.4rem; text-align: left; font: inherit; }
   .obj.ind2 { padding-left: 1.9rem; }
@@ -619,7 +619,7 @@
   .tabs { display: flex; align-items: stretch; gap: 1px; height: 30px; border-bottom: 1px solid var(--surface0); background: var(--mantle); overflow-x: auto; overflow-y: hidden; flex: 0 0 auto; }
   .tab { display: flex; align-items: center; background: var(--surface0); border-bottom: 2px solid transparent; }
   .tab.on { background: var(--base); border-bottom-color: var(--blue); }
-  .tab-btn { display: inline-flex; align-items: center; gap: 0.3rem; background: none; border: none; color: var(--text); cursor: pointer; padding: 0.3rem 0.2rem 0.3rem 0.55rem; font-size: 0.78rem; white-space: nowrap; }
+  .tab-btn { display: inline-flex; align-items: center; gap: 0.3rem; background: none; border: none; color: var(--text); cursor: pointer; padding: 0.3rem 0.2rem 0.3rem 0.55rem; font-size: var(--fs-sm); white-space: nowrap; }
   .tab-x { background: none; border: none; color: var(--overlay1); cursor: pointer; padding: 0.2rem 0.4rem; display: inline-flex; }
   .tab-x:hover { color: var(--red); }
   .tab-add { background: none; border: none; color: var(--overlay1); cursor: pointer; padding: 0 0.5rem; display: inline-flex; align-items: center; }
@@ -627,12 +627,12 @@
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
   .dot.tx { background: var(--yellow); }
   .content { flex: 1 1 auto; min-height: 0; }
-  .export-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.5rem; font-size: 0.74rem; color: var(--subtext0); border-top: 1px solid var(--surface0); }
+  .export-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.5rem; font-size: var(--fs-sm); color: var(--subtext0); border-top: 1px solid var(--surface0); }
   .ex-text { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .export-bar button { font-size: 0.72rem; padding: 0.1rem 0.45rem; background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 3px; cursor: pointer; }
-  .muted { margin: 0.6rem 0.75rem; font-size: 0.8rem; color: var(--subtext0); }
-  pre.err { margin: 0.5rem; color: var(--red); white-space: pre-wrap; font-size: 0.75rem; }
-  .retry { margin: 0 0.5rem; font-size: 0.75rem; background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 3px; cursor: pointer; padding: 0.15rem 0.5rem; }
+  .export-bar button { font-size: var(--fs-xs); padding: 0.1rem 0.45rem; background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); cursor: pointer; }
+  .muted { margin: 0.6rem 0.75rem; font-size: var(--fs-sm); color: var(--subtext0); }
+  pre.err { margin: 0.5rem; color: var(--red); white-space: pre-wrap; font-size: var(--fs-sm); }
+  .retry { margin: 0 0.5rem; font-size: var(--fs-sm); background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: var(--r-sm); cursor: pointer; padding: 0.15rem 0.5rem; }
   @media (max-width: 640px) {
     .db-pane { flex-direction: column; }
     .tree { width: 100% !important; max-height: 35%; border-right: none; border-bottom: 1px solid var(--surface0); }

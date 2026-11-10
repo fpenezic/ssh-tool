@@ -94,7 +94,7 @@
     margin: 0.4rem 0;
   }
   .lbl {
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     color: var(--text-muted);
   }
   .row {
@@ -107,11 +107,11 @@
     width: 22px;
     height: 22px;
     border: 1px solid var(--border);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     cursor: pointer;
     padding: 0;
     color: var(--text-subtle);
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -123,16 +123,16 @@
     background: var(--bg-panel);
     color: var(--text);
     border: 1px solid var(--border);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.25rem 0.4rem;
     width: 7rem;
     font: inherit;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .hex:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
   .preview {
     width: 22px; height: 22px;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     border: 1px solid var(--border);
   }
 </style>

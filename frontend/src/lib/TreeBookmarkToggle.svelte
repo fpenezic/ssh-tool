@@ -26,8 +26,8 @@
 <style>
   .bm-toggle {
     flex-shrink: 0; display: inline-flex; align-items: center; gap: 0.15rem;
-    font: inherit; font-size: 0.66rem; line-height: 1;
-    margin-right: 0.25rem; padding: 0.1rem 0.3rem; border: 0; border-radius: 7px;
+    font: inherit; font-size: var(--fs-xs); line-height: 1;
+    margin-right: 0.25rem; padding: 0.1rem 0.3rem; border: 0; border-radius: var(--r-md);
     color: var(--mauve); background: color-mix(in srgb, var(--mauve) 14%, transparent);
     cursor: pointer;
   }

@@ -71,14 +71,14 @@
     background: var(--mantle);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     font: inherit;
   }
   .pw-wrap input:focus {
     outline: 1px solid var(--blue);
     border-color: var(--blue);
   }
-  .pw-wrap.mono input { font-family: monospace; font-size: 0.78rem; }
+  .pw-wrap.mono input { font-family: monospace; font-size: var(--fs-sm); }
   .reveal {
     position: absolute;
     right: 1px;

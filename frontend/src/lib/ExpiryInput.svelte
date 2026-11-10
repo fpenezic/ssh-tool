@@ -32,7 +32,7 @@
 
 <style>
   .exp { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
-  .days { display: flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; color: var(--subtext0); }
+  .days { display: flex; align-items: center; gap: 0.3rem; font-size: var(--fs-sm); color: var(--subtext0); }
   .days input { width: 5rem; }
   /* Own styles: the editors' input / button rules are scoped to them and
      do not reach into this component, which left the date field, the day
@@ -40,7 +40,7 @@
      credential editor's fields and buttons. */
   input {
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.35rem 0.5rem; font: inherit;
   }
   input:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
@@ -48,8 +48,8 @@
   input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
   .chip {
     background: var(--surface0); color: var(--text);
-    border: 1px solid transparent; border-radius: 3px;
-    padding: 0.3rem 0.55rem; font: inherit; font-size: 0.8rem;
+    border: 1px solid transparent; border-radius: var(--r-sm);
+    padding: 0.3rem 0.55rem; font: inherit; font-size: var(--fs-sm);
     cursor: pointer;
   }
   .chip:hover { background: var(--surface1); }

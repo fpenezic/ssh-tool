@@ -84,23 +84,23 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 6px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(640px, 92vw); max-height: 80vh; overflow: auto;
     padding: 1.1rem 1.3rem;
     box-shadow: 0 10px 40px rgba(0,0,0,0.5);
   }
   header { margin-bottom: 0.6rem; }
-  h1 { margin: 0; font-size: 1rem; font-weight: 600; color: var(--yellow); }
-  .hint { font-size: 0.85rem; color: var(--subtext0); line-height: 1.45; }
+  h1 { margin: 0; font-size: var(--fs-md); font-weight: 600; color: var(--yellow); }
+  .hint { font-size: var(--fs-sm); color: var(--subtext0); line-height: 1.45; }
   .warn { color: var(--red); }
   .preview {
     background: var(--mantle);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.6rem 0.7rem;
     font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     max-height: 280px;
     overflow: auto;
     white-space: pre-wrap;
@@ -109,7 +109,7 @@
   }
   .checkbox {
     display: flex; align-items: center; gap: 0.45rem;
-    font-size: 0.8rem; color: var(--subtext0);
+    font-size: var(--fs-sm); color: var(--subtext0);
     margin: 0.5rem 0 0.8rem;
     cursor: pointer;
   }
@@ -117,7 +117,7 @@
   .row { display: flex; justify-content: flex-end; gap: 0.5rem; }
   button {
     background: var(--surface0); color: var(--text); border: 0;
-    padding: 0.4rem 0.85rem; border-radius: 3px;
+    padding: 0.4rem 0.85rem; border-radius: var(--r-sm);
     cursor: pointer; font: inherit;
     display: flex; align-items: center; gap: 0.4rem;
   }
@@ -127,9 +127,9 @@
   kbd {
     background: var(--crust);
     border: 1px solid var(--surface0);
-    border-radius: 2px;
+    border-radius: var(--r-sm);
     padding: 0.05rem 0.3rem;
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     color: var(--subtext0);
     font-family: ui-monospace, monospace;
   }

@@ -585,7 +585,7 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 8px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(900px, 95vw); max-height: 85vh;
     display: flex; flex-direction: column; overflow: hidden;
     box-shadow: 0 20px 60px rgba(0,0,0,0.6);
@@ -598,40 +598,40 @@
   header {
     display: flex; align-items: center; gap: 0.8rem;
     padding: 0.55rem 0.9rem; background: var(--mantle);
-    border-bottom: 1px solid var(--surface0); font-size: 0.9rem;
+    border-bottom: 1px solid var(--surface0); font-size: var(--fs-md);
   }
-  .auth-state { flex: 1; font-size: 0.78rem; }
+  .auth-state { flex: 1; font-size: var(--fs-sm); }
   .auth-state .ok { color: var(--green); }
   .auth-state .warn { color: var(--yellow); }
   .detach, .minimize, .close {
     background: transparent; color: var(--subtext0); border: 0;
     cursor: pointer; font: inherit; padding: 0 0.4rem; line-height: 1;
   }
-  .detach { font-size: 1rem; }
-  .minimize { font-size: 1.2rem; }
+  .detach { font-size: var(--fs-md); }
+  .minimize { font-size: var(--fs-lg); }
   .detach:hover, .minimize:hover { color: var(--text); }
   .close:hover { color: var(--red); }
   .startform {
     display: flex; flex-direction: column; gap: 0.6rem; padding: 0.9rem;
   }
-  .kind-row { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; font-size: 0.85rem; }
-  .fld { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; }
+  .kind-row { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; font-size: var(--fs-sm); }
+  .fld { display: flex; flex-direction: column; gap: 0.2rem; font-size: var(--fs-sm); }
   .fld input, .fld select {
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 4px; padding: 0.35rem 0.5rem;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm); padding: 0.35rem 0.5rem;
   }
   .pick-row { display: flex; gap: 0.4rem; align-items: center; }
   .pick-row select { flex: 1; min-width: 0; }
   .refresh {
-    background: var(--surface0); color: var(--text); border: 0; border-radius: 4px;
-    padding: 0.35rem 0.6rem; cursor: pointer; font-size: 0.9rem; line-height: 1;
+    background: var(--surface0); color: var(--text); border: 0; border-radius: var(--r-sm);
+    padding: 0.35rem 0.6rem; cursor: pointer; font-size: var(--fs-md); line-height: 1;
   }
   .refresh:hover { background: var(--surface1); }
   .refresh:disabled { opacity: 0.5; cursor: default; }
-  .chk { font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; }
+  .chk { font-size: var(--fs-sm); display: flex; align-items: center; gap: 0.4rem; }
   .primary {
     align-self: flex-start; background: var(--blue); color: var(--crust);
-    border: 0; border-radius: 4px; padding: 0.4rem 1rem; cursor: pointer;
+    border: 0; border-radius: var(--r-sm); padding: 0.4rem 1rem; cursor: pointer;
   }
   .toolbar {
     display: flex; align-items: center; gap: 0.6rem;
@@ -640,67 +640,67 @@
   }
   .view-toggle {
     display: flex; gap: 1px; background: var(--mantle);
-    border: 1px solid var(--surface0); border-radius: 3px; overflow: hidden;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm); overflow: hidden;
   }
   .view-toggle button {
     background: transparent; color: var(--subtext0); border: 0;
-    padding: 0.25rem 0.6rem; cursor: pointer; font: inherit; font-size: 0.78rem;
+    padding: 0.25rem 0.6rem; cursor: pointer; font: inherit; font-size: var(--fs-sm);
   }
   .view-toggle button:hover { background: var(--surface0); color: var(--text); }
   .view-toggle button.active { background: var(--surface0); color: var(--text); }
   .filter-wrap { position: relative; flex: 1; }
   .filter {
     width: 100%; box-sizing: border-box; background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 4px; padding: 0.25rem 0.5rem;
-    font-size: 0.8rem;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm); padding: 0.25rem 0.5rem;
+    font-size: var(--fs-sm);
   }
   .suggest {
     position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 10;
-    background: var(--mantle); border: 1px solid var(--surface1); border-radius: 4px;
+    background: var(--mantle); border: 1px solid var(--surface1); border-radius: var(--r-sm);
     box-shadow: 0 4px 12px rgba(0,0,0,0.35); max-height: 40vh; overflow-y: auto;
   }
   .sug {
     display: flex; align-items: baseline; gap: 0.6rem; width: 100%;
     background: transparent; border: 0; text-align: left; cursor: pointer;
-    padding: 0.28rem 0.55rem; color: var(--text); font-size: 0.78rem;
+    padding: 0.28rem 0.55rem; color: var(--text); font-size: var(--fs-sm);
   }
   .sug.active, .sug:hover { background: var(--surface0); }
   .sug-label { font-family: var(--mono, ui-monospace, monospace); }
-  .sug-hint { font-size: 0.68rem; color: var(--overlay1); }
-  .chk { display: flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; color: var(--subtext0); white-space: nowrap; cursor: pointer; }
+  .sug-hint { font-size: var(--fs-xs); color: var(--overlay1); }
+  .chk { display: flex; align-items: center; gap: 0.25rem; font-size: var(--fs-xs); color: var(--subtext0); white-space: nowrap; cursor: pointer; }
   .help-btn { font-weight: 700; }
   .help {
     position: absolute; z-index: 12; margin: 0.2rem 0.7rem; padding: 0.5rem 0.7rem;
-    background: var(--mantle); border: 1px solid var(--surface1); border-radius: 5px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.35); font-size: 0.74rem; line-height: 1.7;
+    background: var(--mantle); border: 1px solid var(--surface1); border-radius: var(--r-md);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.35); font-size: var(--fs-sm); line-height: 1.7;
   }
   .help code {
-    background: var(--surface0); border-radius: 3px; padding: 0 0.25rem;
+    background: var(--surface0); border-radius: var(--r-sm); padding: 0 0.25rem;
     font-family: var(--mono, ui-monospace, monospace);
   }
-  .help-note { margin-top: 0.3rem; color: var(--overlay1); font-size: 0.68rem; }
-  .count { font-size: 0.72rem; color: var(--overlay1); white-space: nowrap; }
+  .help-note { margin-top: 0.3rem; color: var(--overlay1); font-size: var(--fs-xs); }
+  .count { font-size: var(--fs-xs); color: var(--overlay1); white-space: nowrap; }
   .tb {
     background: transparent; border: 0; color: var(--subtext0);
     cursor: pointer; padding: 0.1rem 0.3rem;
   }
   .tb:hover { color: var(--text); }
-  .notice { padding: 0.3rem 0.7rem; font-size: 0.72rem; color: var(--yellow); }
+  .notice { padding: 0.3rem 0.7rem; font-size: var(--fs-xs); color: var(--yellow); }
   .pwd {
     display: flex; align-items: center; gap: 0.5rem;
-    padding: 0.4rem 0.7rem; background: var(--mantle); font-size: 0.8rem;
+    padding: 0.4rem 0.7rem; background: var(--mantle); font-size: var(--fs-sm);
   }
   .pwd input {
     flex: 1; background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 4px; padding: 0.25rem 0.5rem;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm); padding: 0.25rem 0.5rem;
   }
   .pwd button {
     background: var(--surface0); color: var(--text); border: 0;
-    border-radius: 4px; padding: 0.25rem 0.7rem; cursor: pointer;
+    border-radius: var(--r-sm); padding: 0.25rem 0.7rem; cursor: pointer;
   }
   .lines {
     flex: 1; min-height: 0; overflow-y: auto; padding: 0.4rem 0.7rem;
-    font-family: var(--mono, ui-monospace, monospace); font-size: 0.76rem;
+    font-family: var(--mono, ui-monospace, monospace); font-size: var(--fs-sm);
     line-height: 1.4; background: var(--base);
   }
   .ln { white-space: pre-wrap; word-break: break-word; }
@@ -713,22 +713,22 @@
   .ln.level-none { color: var(--subtext1); }
   .lvl-tag {
     display: inline-block; min-width: 3.4em; margin-right: 0.5rem;
-    font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.03em;
+    font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.03em;
     opacity: 0.75; vertical-align: baseline;
   }
   .grp-count {
     display: inline-block; margin-right: 0.4rem; padding: 0 0.3rem;
-    background: var(--surface1); color: var(--subtext0); border-radius: 3px;
-    font-size: 0.66rem; font-weight: 600;
+    background: var(--surface1); color: var(--subtext0); border-radius: var(--r-sm);
+    font-size: var(--fs-xs); font-weight: 600;
   }
   .empty { color: var(--overlay0); padding: 1rem 0; text-align: center; }
-  .err { color: var(--red); padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+  .err { color: var(--red); padding: 0.3rem 0.7rem; font-size: var(--fs-sm); }
   /* The daemon's own refusal text, quoted verbatim under our explanation. */
-  .reason { color: var(--subtext0); font-family: var(--font-mono, monospace); font-size: 0.74rem; }
+  .reason { color: var(--subtext0); font-family: var(--font-mono, monospace); font-size: var(--fs-sm); }
   /* Not a failure - the tail will work, it just needs elevation. */
-  .note { color: var(--warn); padding: 0.3rem 0.7rem; font-size: 0.78rem; line-height: 1.4; }
+  .note { color: var(--warn); padding: 0.3rem 0.7rem; font-size: var(--fs-sm); line-height: 1.4; }
   .note code, .err code {
-    background: var(--surface0); border-radius: 3px;
+    background: var(--surface0); border-radius: var(--r-sm);
     padding: 0 0.2rem; font-size: 0.95em;
   }
 </style>

@@ -178,7 +178,7 @@
     gap: 0.4rem;
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     height: 360px;
     min-height: 0;
   }
@@ -189,7 +189,7 @@
     gap: 0.4rem;
     padding: 0.4rem 0.5rem;
     border-bottom: 1px solid var(--surface0);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .filter {
     flex: 1;
@@ -197,23 +197,23 @@
     background: var(--crust);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.2rem 0.4rem;
     font: inherit;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .filter:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
-  .count { color: var(--overlay0); font-size: 0.72rem; }
+  .count { color: var(--overlay0); font-size: var(--fs-xs); }
   .auto { display: flex; align-items: center; gap: 0.25rem; color: var(--subtext0); }
   .toolbar button {
     background: var(--surface0);
     color: var(--text);
     border: 0;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.2rem 0.55rem;
     cursor: pointer;
     font: inherit;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .toolbar button:hover { background: var(--surface1); }
   .scroll {
@@ -221,7 +221,7 @@
     overflow-y: auto;
     padding: 0.3rem 0.5rem;
     font-family: ui-monospace, monospace;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     line-height: 1.45;
   }
   .line {

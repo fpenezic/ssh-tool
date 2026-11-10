@@ -264,9 +264,9 @@
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
   @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
   .pick { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; min-width: 0; }
-  .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; font-size: 0.78rem; }
-  .small { font-size: 0.72rem; }
+  .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; font-size: var(--fs-sm); }
+  .small { font-size: var(--fs-xs); }
   .detail { max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar { height: 4px; background: var(--surface0); border-radius: 2px; overflow: hidden; margin-bottom: 0.5rem; }
+  .bar { height: 4px; background: var(--surface0); border-radius: var(--r-sm); overflow: hidden; margin-bottom: 0.5rem; }
   .bar > div { height: 100%; background: var(--blue); transition: width 0.2s; }
 </style>

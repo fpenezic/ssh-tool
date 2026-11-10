@@ -124,7 +124,7 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 6px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(460px, 92vw); padding: 1.25rem;
     box-shadow: 0 10px 40px rgba(0,0,0,0.6);
   }
@@ -132,17 +132,17 @@
     display: flex; align-items: center; gap: 0.5rem;
     margin-bottom: 0.75rem;
   }
-  .icon { font-size: 1.3rem; }
-  h1 { margin: 0; font-size: 1rem; font-weight: 600; }
-  p { margin: 0.5rem 0; font-size: 0.875rem; line-height: 1.5; }
+  .icon { font-size: var(--fs-xl); }
+  h1 { margin: 0; font-size: var(--fs-md); font-weight: 600; }
+  p { margin: 0.5rem 0; font-size: var(--fs-sm); line-height: 1.5; }
   .srv { color: var(--overlay0); }
-  .instr { color: var(--overlay0); font-size: 0.82rem; white-space: pre-wrap; }
+  .instr { color: var(--overlay0); font-size: var(--fs-sm); white-space: pre-wrap; }
   .fields { display: flex; flex-direction: column; gap: 0.6rem; margin: 0.75rem 0; }
   .fields label { display: flex; flex-direction: column; gap: 0.25rem; }
-  .fields .q { font-size: 0.8rem; color: var(--overlay0); }
+  .fields .q { font-size: var(--fs-sm); color: var(--overlay0); }
   .fields input {
     background: var(--crust); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.4rem 0.55rem; font: inherit; width: 100%; box-sizing: border-box;
   }
   .queue-hint :global(svg) {
@@ -152,15 +152,15 @@
     background: var(--crust);
     border-left: 3px solid var(--blue);
     color: var(--blue);
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     padding: 0.4rem 0.6rem;
     margin-top: 0.8rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
   }
   .row { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
   button {
     background: var(--surface0); color: var(--text); border: 0;
-    padding: 0.4rem 0.85rem; border-radius: 3px;
+    padding: 0.4rem 0.85rem; border-radius: var(--r-sm);
     cursor: pointer; font: inherit;
   }
   button:hover { background: var(--surface1); }

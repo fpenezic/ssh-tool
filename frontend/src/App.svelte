@@ -1946,7 +1946,7 @@
     margin-top: 4px;
     background: var(--base);
     border: 1px solid var(--surface1);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     min-width: 240px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     z-index: 80;
@@ -1962,12 +1962,12 @@
     border: 0;
     padding: 0.4rem 0.7rem;
     font: inherit;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     text-align: left;
     cursor: pointer;
   }
   .term-menu button:hover { background: var(--surface0); }
-  .term-menu .dim { color: var(--overlay0); font-size: 0.7rem; margin-left: 1rem; }
+  .term-menu .dim { color: var(--overlay0); font-size: var(--fs-xs); margin-left: 1rem; }
   .term-menu-sep { height: 1px; background: var(--surface0); margin: 0.2rem 0; }
   .term-menu-default-row {
     padding: 0.4rem 0.7rem;
@@ -1976,23 +1976,23 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .term-menu-default-row select {
     background: var(--mantle);
     color: var(--text);
     border: 1px solid var(--surface1);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.25rem 0.4rem;
     font: inherit;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .count {
     background: var(--surface0);
     color: var(--subtext0);
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     padding: 0.1rem 0.45rem;
-    border-radius: 8px;
+    border-radius: var(--r-md);
     font-weight: 600;
   }
   .count.all-connected {
@@ -2087,7 +2087,7 @@
     border: 0;
     border-bottom: 1px solid var(--border);
     font: inherit;
-    font-size: 0.92rem;
+    font-size: var(--fs-md);
     text-align: left;
     cursor: pointer;
   }
@@ -2114,19 +2114,19 @@
     background: var(--base);
     color: var(--text);
     border: 1px solid var(--surface1);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     padding: 1rem 1.2rem;
     min-width: 320px;
     max-width: 460px;
     box-shadow: 0 10px 40px rgba(0,0,0,0.5);
   }
-  .quit-modal h2 { margin: 0 0 0.5rem 0; font-size: 1rem; }
-  .quit-modal p { margin: 0 0 1rem 0; color: var(--subtext0); font-size: 0.85rem; }
+  .quit-modal h2 { margin: 0 0 0.5rem 0; font-size: var(--fs-md); }
+  .quit-modal p { margin: 0 0 1rem 0; color: var(--subtext0); font-size: var(--fs-sm); }
   .quit-modal .actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
   .quit-modal button {
     background: var(--surface0); color: var(--text);
-    border: 0; padding: 0.4rem 0.8rem; border-radius: 4px;
-    font: inherit; font-size: 0.85rem; cursor: pointer;
+    border: 0; padding: 0.4rem 0.8rem; border-radius: var(--r-sm);
+    font: inherit; font-size: var(--fs-sm); cursor: pointer;
   }
   .quit-modal button:hover { background: var(--surface1); }
   .quit-modal button.danger { background: var(--red); color: var(--on-accent); font-weight: 600; }
@@ -2145,7 +2145,7 @@
     max-height: 80vh;
     background: var(--base);
     border: 1px solid var(--surface0);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     z-index: 9001;
     overflow: hidden;
     display: flex; flex-direction: column;
@@ -2157,17 +2157,17 @@
     background: var(--mantle);
     border-bottom: 1px solid var(--surface0);
   }
-  .shortcuts h2 { font-size: 1rem; margin: 0; }
+  .shortcuts h2 { font-size: var(--fs-md); margin: 0; }
   .shortcuts .x {
     background: transparent; border: 0; color: var(--subtext0);
-    font-size: 1.4rem; line-height: 1; cursor: pointer;
-    padding: 0 0.3rem; border-radius: 3px;
+    font-size: var(--fs-xl); line-height: 1; cursor: pointer;
+    padding: 0 0.3rem; border-radius: var(--r-sm);
   }
   .shortcuts .x:hover { background: var(--surface0); color: var(--text); }
   .shortcuts dl {
     margin: 0; padding: 0.75rem 1rem;
     overflow-y: auto;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     display: grid;
     grid-template-columns: auto 1fr;
     gap: 0.5rem 1rem;
@@ -2182,10 +2182,10 @@
     background: var(--surface0);
     border: 1px solid var(--surface1);
     border-bottom-width: 2px;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.05rem 0.35rem;
     font-family: inherit;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     color: var(--text);
   }
 </style>

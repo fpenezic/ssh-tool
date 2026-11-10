@@ -462,7 +462,7 @@
 {/if}
 
 <style>
-  .icon-picker { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--subtext0); }
+  .icon-picker { display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--fs-sm); color: var(--subtext0); }
   .row { display: flex; align-items: center; gap: 0.4rem; }
   .builtin-preview { display: inline-flex; align-items: center; justify-content: center; }
 
@@ -470,14 +470,14 @@
   .ptab {
     background: transparent; color: var(--subtext0);
     border: 0; border-bottom: 2px solid transparent;
-    padding: 0.35rem 0.7rem; font: inherit; font-size: 0.8rem;
+    padding: 0.35rem 0.7rem; font: inherit; font-size: var(--fs-sm);
     cursor: pointer; margin-bottom: -1px; border-radius: 0;
   }
   .ptab:hover { color: var(--text); background: transparent; }
   .ptab.active { color: var(--blue); border-bottom-color: var(--blue); }
 
   .swatches { display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
-  .swatch-label { color: var(--subtext0); font-size: 0.75rem; margin-right: 0.2rem; }
+  .swatch-label { color: var(--subtext0); font-size: var(--fs-sm); margin-right: 0.2rem; }
   .swatch {
     width: 18px; height: 18px; border-radius: 50%;
     border: 2px solid transparent; padding: 0; cursor: pointer;
@@ -488,19 +488,19 @@
   .preview {
     width: 28px; height: 28px;
     display: flex; align-items: center; justify-content: center;
-    background: var(--crust); border: 1px solid var(--surface0); border-radius: 4px;
+    background: var(--crust); border: 1px solid var(--surface0); border-radius: var(--r-sm);
   }
   .preview img { width: 20px; height: 20px; object-fit: contain; }
-  .preview .emoji { font-size: 1rem; }
+  .preview .emoji { font-size: var(--fs-md); }
   button {
     background: var(--surface0); color: var(--text); border: 0;
-    border-radius: 3px; padding: 0.25rem 0.6rem; cursor: pointer;
-    font: inherit; font-size: 0.78rem;
+    border-radius: var(--r-sm); padding: 0.25rem 0.6rem; cursor: pointer;
+    font: inherit; font-size: var(--fs-sm);
   }
   button:hover:not(:disabled) { background: var(--surface1); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
   button.danger:hover { background: var(--red); color: var(--on-accent); }
-  .err { color: var(--red); font-size: 0.75rem; }
+  .err { color: var(--red); font-size: var(--fs-sm); }
 
   /* Picker modal */
   .picker-overlay {
@@ -512,7 +512,7 @@
   .picker-modal {
     background: var(--base);
     border: 1px solid var(--surface0);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     width: min(560px, 90vw);
     max-height: 80vh;
     display: flex; flex-direction: column;
@@ -524,13 +524,13 @@
     margin-bottom: 0.6rem;
   }
   .picker-modal header strong {
-    font-size: 0.85rem; color: var(--text);
+    font-size: var(--fs-sm); color: var(--text);
     text-transform: uppercase; letter-spacing: 0.04em;
   }
   .picker-modal .close {
     background: transparent; border: 0; color: var(--subtext0);
-    cursor: pointer; padding: 0.15rem 0.35rem; border-radius: 3px;
-    font-size: 0.9rem;
+    cursor: pointer; padding: 0.15rem 0.35rem; border-radius: var(--r-sm);
+    font-size: var(--fs-md);
   }
   .picker-modal .close:hover { background: var(--surface0); color: var(--text); }
   .loading, .empty {
@@ -548,7 +548,7 @@
     position: relative;
     background: var(--crust);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     aspect-ratio: 1 / 1;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; padding: 0.3rem;
@@ -559,17 +559,17 @@
     box-shadow: 0 0 0 1px var(--blue) inset;
   }
   .cell img { max-width: 100%; max-height: 100%; object-fit: contain; }
-  .cell .ph { color: var(--overlay0); font-size: 0.75rem; }
+  .cell .ph { color: var(--overlay0); font-size: var(--fs-sm); }
   .cell.unused img { opacity: 0.55; }
   .grid.deleting .cell.marked { border-color: var(--red); background: color-mix(in srgb, var(--red) 20%, transparent); }
   .grid.deleting .cell:hover { border-color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
   .lib-tools { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
-  .lib-tools button { font-size: 0.75rem; }
+  .lib-tools button { font-size: var(--fs-sm); }
   .lib-tools button.danger-on { color: var(--red); border-color: var(--red); }
   .cell .badge {
     position: absolute; bottom: 2px; right: 3px;
     background: var(--surface0); color: var(--subtext0);
-    font-size: 0.6rem; padding: 0 0.25rem;
-    border-radius: 8px; line-height: 1.2;
+    font-size: var(--fs-xs); padding: 0 0.25rem;
+    border-radius: var(--r-md); line-height: 1.2;
   }
 </style>

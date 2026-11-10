@@ -302,7 +302,7 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 8px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(960px, 95vw);
     max-height: 90vh;
     display: flex; flex-direction: column;
@@ -316,7 +316,7 @@
     padding: 0.55rem 0.9rem;
     background: var(--mantle);
     border-bottom: 1px solid var(--surface0);
-    font-size: 0.9rem;
+    font-size: var(--fs-md);
   }
   .close {
     background: transparent; color: var(--subtext0); border: 0;
@@ -347,7 +347,7 @@
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
   }
   .opts label.chk { color: var(--text); }
@@ -362,11 +362,11 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0.35rem;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
   .ct-presets { display: flex; gap: 0.25rem; }
   .ct-presets button {
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     padding: 0.15rem 0.45rem;
     background: var(--surface0);
     color: var(--subtext0);
@@ -393,27 +393,27 @@
     color: var(--blue);
     border: 1px dashed var(--surface1);
     padding: 0.2rem 0.6rem;
-    border-radius: 3px;
-    font-size: 0.78rem;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-sm);
     cursor: pointer;
   }
-  .body-section strong { font-size: 0.85rem; display: block; margin-bottom: 0.3rem; }
+  .body-section strong { font-size: var(--fs-sm); display: block; margin-bottom: 0.3rem; }
   .body-section textarea {
     width: 100%;
     background: var(--mantle);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.45rem 0.6rem;
     font-family: ui-monospace, "JetBrains Mono", monospace;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
   }
 
   .err {
     padding: 0.5rem 0.9rem;
     background: color-mix(in oklab, var(--red) 14%, var(--bg-panel));
     color: var(--red);
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     border-bottom: 1px solid var(--surface0);
   }
 
@@ -432,14 +432,14 @@
     gap: 0.8rem;
     flex-wrap: wrap;
   }
-  .status { font-weight: 600; font-size: 0.95rem; }
-  .duration { color: var(--overlay0); font-size: 0.78rem; }
+  .status { font-weight: 600; font-size: var(--fs-md); }
+  .duration { color: var(--overlay0); font-size: var(--fs-sm); }
   .warn-pill {
     background: var(--yellow);
     color: var(--on-accent);
     border-radius: 999px;
     padding: 0.05rem 0.55rem;
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
   }
   .body-toggle { margin-left: auto; display: flex; gap: 0.2rem; }
@@ -448,8 +448,8 @@
     color: var(--subtext0);
     border: 1px solid var(--surface0);
     padding: 0.1rem 0.55rem;
-    font-size: 0.72rem;
-    border-radius: 3px;
+    font-size: var(--fs-xs);
+    border-radius: var(--r-sm);
   }
   .body-toggle button.active {
     background: var(--surface0);
@@ -459,9 +459,9 @@
   .resp-headers {
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.4rem 0.6rem;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .resp-headers summary {
     cursor: pointer;
@@ -482,11 +482,11 @@
   .resp-body {
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.55rem 0.7rem;
     color: var(--text);
     font-family: ui-monospace, monospace;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     white-space: pre-wrap;
     word-break: break-word;
     margin: 0;
@@ -498,20 +498,20 @@
     background: var(--mantle);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.3rem 0.5rem;
     font: inherit;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
   button {
     background: var(--surface0);
     color: var(--text);
     border: 0;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.3rem 0.7rem;
     cursor: pointer;
     font: inherit;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
   }
   button:hover:not(:disabled) { background: var(--surface1); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }

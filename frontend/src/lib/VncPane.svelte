@@ -441,7 +441,7 @@
        back to the inherited body colour, which is DARK under Latte -
        dark text on a dark scrim, unreadable). Pin a light colour. */
     color: #dce0e8;
-    font-size: 0.9rem;
+    font-size: var(--fs-md);
     text-align: center;
     padding: 1rem;
   }
@@ -451,7 +451,7 @@
     background: rgba(255, 255, 255, 0.14);
     color: #dce0e8;
     border: 1px solid rgba(255, 255, 255, 0.24);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     cursor: pointer;
   }
   .vnc-overlay button:hover { background: rgba(255, 255, 255, 0.22); }

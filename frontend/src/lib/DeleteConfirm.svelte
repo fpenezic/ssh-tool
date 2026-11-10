@@ -79,7 +79,7 @@
     background: var(--crust);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 6px;
+    border-radius: var(--r-md);
     padding: 1rem 1.2rem;
     max-width: 520px;
     width: 90vw;
@@ -88,15 +88,15 @@
     flex-direction: column;
     gap: 0.6rem;
   }
-  h2 { margin: 0; font-size: 1rem; }
-  .hint { color: var(--subtext0); font-size: 0.82rem; margin: 0; line-height: 1.5; }
+  h2 { margin: 0; font-size: var(--fs-md); }
+  .hint { color: var(--subtext0); font-size: var(--fs-sm); margin: 0; line-height: 1.5; }
   .list {
     list-style: none;
     margin: 0;
     padding: 0.4rem 0.5rem;
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     overflow-y: auto;
     max-height: 50vh;
   }
@@ -106,12 +106,12 @@
     align-items: center;
     gap: 0.4rem;
     padding: 0.15rem 0;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
   .ic { text-align: center; }
   .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dt { color: var(--overlay0); font-size: 0.78rem; }
-  .warn { grid-column: 2 / -1; color: var(--red); font-size: 0.78rem; }
+  .dt { color: var(--overlay0); font-size: var(--fs-sm); }
+  .warn { grid-column: 2 / -1; color: var(--red); font-size: var(--fs-sm); }
   .actions {
     display: flex;
     justify-content: flex-end;
@@ -120,7 +120,7 @@
   }
   button {
     background: var(--surface0); color: var(--text); border: 0;
-    padding: 0.4rem 0.9rem; border-radius: 3px; cursor: pointer; font: inherit;
+    padding: 0.4rem 0.9rem; border-radius: var(--r-sm); cursor: pointer; font: inherit;
   }
   button:hover { background: var(--surface1); }
   button.danger { background: var(--red); color: var(--on-accent); font-weight: 600; }

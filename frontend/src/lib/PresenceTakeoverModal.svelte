@@ -68,18 +68,18 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 6px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(480px, 92vw);
     padding: 1.1rem 1.3rem;
     box-shadow: 0 10px 40px rgba(0,0,0,0.5);
     display: flex; flex-direction: column; gap: 0.7rem;
   }
   h2 {
-    margin: 0; font-size: 1rem; color: var(--text);
+    margin: 0; font-size: var(--fs-md); color: var(--text);
     display: inline-flex; align-items: center; gap: 0.4rem;
   }
   .msg { margin: 0; line-height: 1.5; color: var(--subtext1); }
-  .hint { font-size: 0.82rem; color: var(--overlay1); }
+  .hint { font-size: var(--fs-sm); color: var(--overlay1); }
   .countdown {
     align-self: center;
     font-size: 2rem;
@@ -94,7 +94,7 @@
   button {
     padding: 0.35rem 0.9rem;
     border: 1px solid var(--surface1);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     background: var(--surface0);
     color: var(--text);
     cursor: pointer;

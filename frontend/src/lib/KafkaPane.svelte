@@ -411,14 +411,14 @@
   :global(:where(.kafka-pane) select),
   :global(:where(.kafka-pane) textarea) {
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
-    padding: 0.25rem 0.45rem; font-size: 0.75rem;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
+    padding: 0.25rem 0.45rem; font-size: var(--fs-sm);
   }
   :global(:where(.kafka-pane) :is(input, select, textarea):focus) { outline: 1px solid var(--blue); border-color: var(--blue); }
   :global(:where(.kafka-pane) button) {
     background: var(--surface0); color: var(--text);
-    border: 1px solid transparent; border-radius: 3px;
-    padding: 0.22rem 0.55rem; font-size: 0.74rem; cursor: pointer;
+    border: 1px solid transparent; border-radius: var(--r-sm);
+    padding: 0.22rem 0.55rem; font-size: var(--fs-sm); cursor: pointer;
     display: inline-flex; align-items: center; gap: 0.3rem;
   }
   :global(:where(.kafka-pane) button:hover:not(:disabled)) { background: var(--surface1); }
@@ -427,26 +427,26 @@
   .kafka-pane { display: grid; grid-template-columns: minmax(13rem, 18rem) 1fr; height: 100%; min-height: 0; background: var(--base); color: var(--text); }
   .side { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--surface0); background: var(--mantle); }
   .bar { display: flex; gap: 0.25rem; padding: 0.35rem 0.4rem 0.15rem; }
-  .bar input { flex: 1; min-width: 0; font-size: 0.75rem; }
-  .chk { display: flex; gap: 0.3rem; align-items: center; padding: 0 0.6rem 0.3rem; font-size: 0.7rem; color: var(--subtext0); }
+  .bar input { flex: 1; min-width: 0; font-size: var(--fs-sm); }
+  .chk { display: flex; gap: 0.3rem; align-items: center; padding: 0 0.6rem 0.3rem; font-size: var(--fs-xs); color: var(--subtext0); }
   .list { flex: 1; overflow: auto; }
   .item { display: flex; flex-direction: column; align-items: flex-start; width: 100%; padding: 0.25rem 0.6rem; background: none; border: none; border-radius: 0; text-align: left; color: var(--text); cursor: pointer; }
   .item:hover { background: var(--surface0); }
   .item.sel { background: color-mix(in srgb, var(--blue) 20%, transparent); }
-  .tname { font-size: 0.77rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tmeta { font-size: 0.66rem; color: var(--subtext0); }
+  .tname { font-size: var(--fs-sm); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tmeta { font-size: var(--fs-xs); color: var(--subtext0); }
   .bad { color: var(--red); }
   .warn { color: var(--peach); }
-  .foot { font-size: 0.66rem; color: var(--overlay1); padding: 0.25rem 0.6rem; border-top: 1px solid var(--surface0); }
+  .foot { font-size: var(--fs-xs); color: var(--overlay1); padding: 0.25rem 0.6rem; border-top: 1px solid var(--surface0); }
   .main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
   .tabs { display: flex; gap: 0.1rem; overflow-x: auto; flex: none; padding: 0.3rem 0.4rem 0; border-bottom: 1px solid var(--surface0); background: var(--mantle); }
-  .tab { display: inline-flex; align-items: center; gap: 0.3rem; flex: none; max-width: 16rem; padding: 0.22rem 0.5rem; font-size: 0.74rem; color: var(--subtext0); background: none; border: 1px solid transparent; border-bottom: none; border-radius: 4px 4px 0 0; cursor: pointer; user-select: none; }
+  .tab { display: inline-flex; align-items: center; gap: 0.3rem; flex: none; max-width: 16rem; padding: 0.22rem 0.5rem; font-size: var(--fs-sm); color: var(--subtext0); background: none; border: 1px solid transparent; border-bottom: none; border-radius: 4px 4px 0 0; cursor: pointer; user-select: none; }
   .tab:hover { background: var(--surface0); }
   .tab.on { color: var(--text); background: var(--base); border-color: var(--surface1); }
   .tab.pin.on { color: var(--blue); }
   .tlabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cnt { font-size: 0.64rem; color: var(--green); }
-  .tab .x { padding: 0.1rem; border-radius: 3px; background: none; opacity: 0.6; }
+  .cnt { font-size: var(--fs-xs); color: var(--green); }
+  .tab .x { padding: 0.1rem; border-radius: var(--r-sm); background: none; opacity: 0.6; }
   .tab .x:hover { opacity: 1; background: var(--surface1); }
   .ldot { display: inline-block; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--green); margin-right: 0.2rem; }
   .ldot.bad { background: var(--red); }
@@ -456,18 +456,18 @@
   .views > :global(.view.off) { display: none; }
   .views > :global(.center) { flex: 1; }
   .center { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6rem; color: var(--overlay1); padding: 2rem; text-align: center; }
-  .error { color: var(--red); font-size: 0.8rem; max-width: 40rem; white-space: pre-wrap; }
-  .hint { color: var(--overlay1); font-size: 0.74rem; }
-  .meta { font-size: 0.75rem; color: var(--subtext0); }
+  .error { color: var(--red); font-size: var(--fs-sm); max-width: 40rem; white-space: pre-wrap; }
+  .hint { color: var(--overlay1); font-size: var(--fs-sm); }
+  .meta { font-size: var(--fs-sm); color: var(--subtext0); }
   .scroll { overflow: auto; padding: 0.6rem 0.8rem; }
-  table { border-collapse: collapse; font-size: 0.75rem; width: 100%; user-select: text; }
+  table { border-collapse: collapse; font-size: var(--fs-sm); width: 100%; user-select: text; }
   th { text-align: left; color: var(--subtext0); border-bottom: 1px solid var(--surface1); padding: 0.2rem 0.5rem; }
   td { padding: 0.15rem 0.5rem; border-bottom: 1px solid var(--surface0); }
   .create { display: flex; flex-direction: column; gap: 0.5rem; max-width: 34rem; }
-  .create h3 { margin: 0 0 0.3rem; font-size: 0.9rem; }
-  .create label { display: grid; grid-template-columns: 10rem 1fr; align-items: center; gap: 0.5rem; font-size: 0.78rem; }
+  .create h3 { margin: 0 0 0.3rem; font-size: var(--fs-md); }
+  .create label { display: grid; grid-template-columns: 10rem 1fr; align-items: center; gap: 0.5rem; font-size: var(--fs-sm); }
   .create label.col { grid-template-columns: 1fr; }
-  .create textarea { min-height: 6rem; font-family: var(--mono-font, monospace); font-size: 0.75rem; }
+  .create textarea { min-height: 6rem; font-family: var(--mono-font, monospace); font-size: var(--fs-sm); }
   .row { display: flex; gap: 0.5rem; }
   .spinner { width: 22px; height: 22px; border: 2px solid var(--surface1); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }

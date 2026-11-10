@@ -858,7 +858,7 @@
     height: 100%;
     color: var(--text);
     background: var(--base);
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     min-height: 0;
     position: relative;
   }
@@ -875,7 +875,7 @@
     align-items: center;
     justify-content: center;
     font-weight: 600;
-    font-size: 0.95rem;
+    font-size: var(--fs-md);
     pointer-events: none;
     z-index: 50;
   }
@@ -891,7 +891,7 @@
   .toolbar button {
     white-space: nowrap;
     background: var(--surface0); color: var(--text); border: 0;
-    border-radius: 3px; padding: 0.2rem 0.5rem; cursor: pointer; font: inherit;
+    border-radius: var(--r-sm); padding: 0.2rem 0.5rem; cursor: pointer; font: inherit;
   }
   .toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
   .toolbar button:hover:not(:disabled) { background: var(--surface1); }
@@ -947,7 +947,7 @@
     background: var(--base);
     color: var(--text);
     border: 1px solid var(--blue);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     font-family: inherit;
     font-size: inherit;
   }
@@ -958,7 +958,7 @@
     background: var(--mantle); color: var(--red);
     border-left: 3px solid var(--red);
     padding: 0.3rem 0.6rem;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .listing {
     overflow: auto;
@@ -1015,7 +1015,7 @@
   .col.owner { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .name { display: flex; align-items: center; gap: 0.3rem; min-width: 0; overflow: hidden; }
   .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .link-tgt { color: var(--overlay0); font-size: 0.72rem; }
+  .link-tgt { color: var(--overlay0); font-size: var(--fs-xs); }
   .ico { width: 1rem; text-align: center; }
 
   /* Row colouring, each rule behind its own view toggle (Colors menu). */
@@ -1029,7 +1029,7 @@
   .v-temp .row.temp:not(.selected):not(:hover) { background: color-mix(in srgb, var(--peach) 8%, transparent); }
   .v-temp .row.temp .ico, .v-temp .row.temp .nm { color: var(--peach); }
   .v-temp .row.temp .nm { font-style: italic; }
-  .temp-badge { display: none; flex: none; font-size: 0.65rem; line-height: 1.2; padding: 0 0.3rem; border: 1px solid var(--peach); border-radius: 3px; color: var(--peach); }
+  .temp-badge { display: none; flex: none; font-size: var(--fs-xs); line-height: 1.2; padding: 0 0.3rem; border: 1px solid var(--peach); border-radius: var(--r-sm); color: var(--peach); }
   .v-temp .temp-badge { display: inline-block; }
   .v-types .row.k-arch .ico { color: var(--mauve); }
   .v-types .row.k-code .ico { color: var(--green); }
@@ -1044,7 +1044,7 @@
     position: absolute; right: 0; top: calc(100% + 4px); z-index: 21;
     display: flex; flex-direction: column; gap: 0.3rem;
     padding: 0.5rem 0.7rem;
-    background: var(--mantle); border: 1px solid var(--surface1); border-radius: 4px;
+    background: var(--mantle); border: 1px solid var(--surface1); border-radius: var(--r-sm);
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
     white-space: nowrap;
   }
@@ -1064,7 +1064,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.2rem 0;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .transfer.err { color: var(--red); }
   /* Stays in view while the rows under it scroll. */
@@ -1078,13 +1078,13 @@
     font-weight: 600;
     z-index: 1;
   }
-  .x.all { font-size: 0.72rem; white-space: nowrap; }
+  .x.all { font-size: var(--fs-xs); white-space: nowrap; }
   .tname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cur { color: var(--overlay0); font-size: 0.7rem; margin-left: 0.3rem; }
+  .cur { color: var(--overlay0); font-size: var(--fs-xs); margin-left: 0.3rem; }
   .bar {
     background: var(--surface0);
     height: 6px;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     overflow: hidden;
   }
   .fill {

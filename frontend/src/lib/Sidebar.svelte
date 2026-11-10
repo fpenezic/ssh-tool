@@ -781,7 +781,7 @@
   }
   h2 {
     margin: 0;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--subtext0);
@@ -793,7 +793,7 @@
     color: var(--subtext0);
     cursor: pointer;
     padding: 0.15rem 0.35rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
   }
   .actions button:hover { background: var(--surface0); color: var(--text); }
   .tree { flex: 1; overflow: auto; padding: 0.4rem 0; }
@@ -810,10 +810,10 @@
     flex: 1;
     background: var(--crust);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     color: var(--text);
     font: inherit;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     padding: 0.25rem 0.4rem;
     outline: none;
   }
@@ -839,20 +839,20 @@
     background: transparent;
     color: inherit;
     cursor: pointer;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
   }
   .row:hover { background: var(--surface0); }
   .row.selected { background: var(--surface1); }
   .chev { width: 1rem; }
-  .icon { width: 1.2rem; text-align: center; font-size: 0.85rem; }
+  .icon { width: 1.2rem; text-align: center; font-size: var(--fs-sm); }
   .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row.connecting { opacity: 0.7; cursor: wait; }
   .row.conn.live .name { font-weight: 600; color: var(--green); }
   .row.conn.live .chev { color: var(--green); }
-  .chev.dot { font-size: 0.7rem; }
+  .chev.dot { font-size: var(--fs-xs); }
   .chev.dot.probe-up { color: var(--green); }
   .chev.dot.probe-down { color: var(--red); }
-  .conn-hint { color: var(--yellow); font-size: 0.72rem; margin-left: 0.3rem; }
+  .conn-hint { color: var(--yellow); font-size: var(--fs-xs); margin-left: 0.3rem; }
   /* Tunnel-only connection: state of its tunnel (app_tunnels.go). */
   .tun-badge { display: inline-flex; align-items: center; margin-left: 0.3rem; color: var(--overlay0); flex-shrink: 0; }
   .tun-badge.tun-connected { color: var(--green); }
@@ -867,8 +867,8 @@
     color: var(--subtext0);
   }
   .empty .ico { font-size: 2.5rem; opacity: 0.4; margin-bottom: 0.6rem; }
-  .empty p { margin: 0.3rem 0; font-size: 0.85rem; }
-  .empty p.muted { color: var(--overlay0); font-size: 0.78rem; }
+  .empty p { margin: 0.3rem 0; font-size: var(--fs-sm); }
+  .empty p.muted { color: var(--overlay0); font-size: var(--fs-sm); }
 
   /* Skeleton rows. Pulsing opacity gives a hint of motion without a
      full shimmer (and keeps the styles tiny). */
@@ -877,14 +877,14 @@
     height: 0.7rem;
     width: var(--w, 70%);
     background: var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     animation: pulse 1.4s ease-in-out infinite;
   }
   @keyframes pulse {
     0%, 100% { opacity: 0.35; }
     50%      { opacity: 0.6; }
   }
-  .conn-err  { color: var(--red); font-size: 0.78rem; margin-left: 0.3rem; cursor: help; }
+  .conn-err  { color: var(--red); font-size: var(--fs-sm); margin-left: 0.3rem; cursor: help; }
 
   .row { position: relative; }
   .row.drop-before::before,

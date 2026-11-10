@@ -224,7 +224,7 @@
     gap: 0.25rem;
     padding: var(--row-pad-y) 0.4rem var(--row-pad-y) calc(0.4rem + var(--depth, 0) * 1rem);
     cursor: pointer;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     width: 100%;
     position: relative;
   }
@@ -234,16 +234,16 @@
   .chev {
     width: 1rem; color: var(--overlay0); text-align: center;
     background: transparent; border: 0; padding: 0; cursor: pointer;
-    font: inherit; font-size: 1.05rem; line-height: 1;
+    font: inherit; font-size: var(--fs-md); line-height: 1;
   }
   .chev:hover { color: var(--text); }
-  .icon { width: 1.2rem; text-align: center; font-size: 0.85rem; }
+  .icon { width: 1.2rem; text-align: center; font-size: var(--fs-sm); }
   .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .kind-label { flex-shrink: 0; color: var(--overlay1); font-size: 0.75rem; margin-left: 0.4rem; }
-  .cred-expiry { margin-left: 0.35rem; padding: 0 0.3rem; border-radius: 999px; font-size: 0.65rem; font-weight: 600; vertical-align: middle; }
+  .kind-label { flex-shrink: 0; color: var(--overlay1); font-size: var(--fs-sm); margin-left: 0.4rem; }
+  .cred-expiry { margin-left: 0.35rem; padding: 0 0.3rem; border-radius: 999px; font-size: var(--fs-xs); font-weight: 600; vertical-align: middle; }
   .cred-expiry.soon { background: var(--yellow); color: var(--on-accent); }
   .cred-expiry.expired { background: var(--red); color: var(--on-accent); }
-  .count { color: var(--overlay0); font-size: 0.75rem; }
+  .count { color: var(--overlay0); font-size: var(--fs-sm); }
   .row.drop-inside {
     background: var(--blue)33;
     outline: 1px dashed var(--blue);

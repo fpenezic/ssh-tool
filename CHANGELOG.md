@@ -11,6 +11,10 @@ while Wails v3 was a prerelease upstream.
 
 The Database grid works more like a spreadsheet: edit cells in place, select and copy blocks of cells straight into Excel or Teams, right-click menus on cells and in the tree, and export a whole table to CSV or JSON. The app proxy routes names by the VPNs' DNS domains.
 
+### Appearance
+- **UI font size means the text size**: the number in Settings > Appearance is now the size of the main text, and hints, labels and titles are one step smaller or larger than it instead of a dozen fractions of it, with nothing under 10px. At 11, hints that were 8 to 9px are now 10px. Text fields, selects and buttons in Settings share one height that grows with the font.
+- On / off options in Settings are switches, like the App proxy one; option cards put the radio or switch beside the title instead of on a line of its own; a section heading inside a card no longer renders larger than the card's own title.
+
 ### Connection tree
 - **Filtering a large tree is several times faster**: with 1000 connections the first letter typed takes about a third of the time it did and narrowing to a few folders about a tenth; typing a word applies the filter once after a short pause instead of after every letter. The tree looks up folders and connections by id instead of scanning the whole list for every row.
 

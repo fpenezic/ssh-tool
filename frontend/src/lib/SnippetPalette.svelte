@@ -327,7 +327,7 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 8px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(640px, 92vw);
     max-height: 70vh;
     display: flex; flex-direction: column;
@@ -362,7 +362,7 @@
   .meta { flex: 1; min-width: 0; }
   .label {
     color: var(--text);
-    font-size: 0.92rem;
+    font-size: var(--fs-md);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -374,7 +374,7 @@
   }
   .sub {
     color: var(--overlay0);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     font-family: ui-monospace, monospace;
     margin-top: 0.1rem;
     white-space: nowrap;
@@ -382,7 +382,7 @@
     text-overflow: ellipsis;
   }
   .scope {
-    font-size: 0.65rem;
+    font-size: var(--fs-xs);
     background: var(--surface0);
     color: var(--yellow);
     padding: 0.05rem 0.35rem;
@@ -392,12 +392,12 @@
   }
   .hint {
     color: var(--overlay0);
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
   }
   .empty, .err {
     padding: 0.8rem 0.9rem;
     color: var(--overlay0);
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
   .err { color: var(--red); }
   footer {
@@ -406,16 +406,16 @@
     padding: 0.4rem 0.9rem;
     background: var(--crust);
     border-top: 1px solid var(--surface0);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     color: var(--overlay0);
   }
   kbd {
     background: var(--surface0);
     color: var(--text);
     padding: 0.02rem 0.3rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     font-family: ui-monospace, monospace;
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
   }
   .varform {
     display: flex;
@@ -424,7 +424,7 @@
     padding: 0.8rem 0.9rem;
   }
   .varform-head {
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
   }
   .varrow {
@@ -436,7 +436,7 @@
     flex: 0 0 8rem;
     text-align: right;
     font-family: ui-monospace, monospace;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     color: var(--mauve);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -447,9 +447,9 @@
     background: var(--mantle);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.3rem 0.5rem;
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
   }
   .varinput:focus {
     outline: none;
@@ -463,11 +463,11 @@
   }
   .varform-actions button {
     padding: 0.3rem 0.8rem;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     border: 1px solid var(--surface1);
     background: var(--surface0);
     color: var(--text);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     cursor: pointer;
   }
   .varform-actions .send {

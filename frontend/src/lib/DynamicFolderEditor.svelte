@@ -953,7 +953,7 @@
     background: var(--base);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     width: min(680px, 92vw);
     max-height: 90vh;
     overflow-y: auto;
@@ -964,43 +964,43 @@
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 0.8rem;
   }
-  header h2 { margin: 0; font-size: 1rem; }
-  .close { background: transparent; border: 0; color: var(--subtext0); cursor: pointer; padding: 0.15rem 0.35rem; border-radius: 3px; }
+  header h2 { margin: 0; font-size: var(--fs-md); }
+  .close { background: transparent; border: 0; color: var(--subtext0); cursor: pointer; padding: 0.15rem 0.35rem; border-radius: var(--r-sm); }
   .close:hover { background: var(--surface0); color: var(--text); }
 
   .form { display: flex; flex-direction: column; gap: 0.7rem; }
-  .form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; }
-  .form label .lbl { color: var(--subtext0); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--fs-sm); }
+  .form label .lbl { color: var(--subtext0); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; }
   .form label input[type="number"],
   .form label input:not([type]),
   .form label select {
     background: var(--mantle);
     color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.35rem 0.5rem;
     font: inherit;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
   .form label.check { flex-direction: row; align-items: center; gap: 0.45rem; }
-  .form .hint { color: var(--overlay0); font-size: 0.72rem; line-height: 1.4; }
+  .form .hint { color: var(--overlay0); font-size: var(--fs-xs); line-height: 1.4; }
   /* A hint that reports a problem with what the user typed, not just guidance. */
   .form .hint.bad { color: var(--warn); }
   fieldset {
     border: 1px solid var(--surface0);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.6rem 0.8rem;
     margin: 0;
     display: flex; flex-direction: column; gap: 0.5rem;
   }
-  fieldset legend { color: var(--subtext0); font-size: 0.72rem; text-transform: uppercase; padding: 0 0.3rem; }
+  fieldset legend { color: var(--subtext0); font-size: var(--fs-xs); text-transform: uppercase; padding: 0 0.3rem; }
 
-  .info-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.8rem; }
+  .info-row { display: flex; align-items: center; justify-content: space-between; font-size: var(--fs-sm); }
   .info-row button {
     background: var(--surface0); color: var(--text);
-    border: 0; border-radius: 3px;
+    border: 0; border-radius: var(--r-sm);
     padding: 0.25rem 0.55rem;
-    font: inherit; font-size: 0.78rem;
+    font: inherit; font-size: var(--fs-sm);
     cursor: pointer;
   }
 
@@ -1010,15 +1010,15 @@
     color: var(--red);
     padding: 0.5rem 0.7rem;
     border-radius: 0 3px 3px 0;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
   }
 
   .actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.4rem; }
   .actions button {
     background: var(--surface0); color: var(--text);
-    border: 0; border-radius: 3px;
+    border: 0; border-radius: var(--r-sm);
     padding: 0.4rem 0.8rem;
-    font: inherit; font-size: 0.85rem;
+    font: inherit; font-size: var(--fs-sm);
     cursor: pointer;
   }
   .actions button:hover { background: var(--surface1); }
@@ -1044,18 +1044,18 @@
     padding: 0.3rem 0.7rem;
     background: var(--surface0);
     border: 1px solid var(--surface1);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     cursor: pointer;
     font: inherit;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     color: var(--text);
   }
   .path-browse:hover { background: var(--surface1); }
   .token-add {
     background: var(--surface0); color: var(--text);
-    border: 0; border-radius: 3px;
+    border: 0; border-radius: var(--r-sm);
     padding: 0.35rem 0.65rem;
-    font: inherit; font-size: 0.78rem;
+    font: inherit; font-size: var(--fs-sm);
     cursor: pointer;
     white-space: nowrap;
   }
@@ -1065,10 +1065,10 @@
   }
   .inline-new .primary {
     background: var(--blue); color: var(--on-accent); font-weight: 600;
-    border: 0; border-radius: 3px;
+    border: 0; border-radius: var(--r-sm);
     padding: 0.4rem 0.8rem;
     cursor: pointer;
-    font: inherit; font-size: 0.85rem;
+    font: inherit; font-size: var(--fs-sm);
     align-self: flex-start;
   }
   .inline-new .primary:hover { background: var(--lavender); }

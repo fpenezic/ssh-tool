@@ -1313,7 +1313,7 @@
   }
   .modal {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 8px;
+    border: 1px solid var(--surface0); border-radius: var(--r-md);
     width: min(960px, 95vw);
     max-height: 85vh;
     display: flex; flex-direction: column;
@@ -1334,7 +1334,7 @@
   .detach {
     background: transparent; color: var(--subtext0); border: 0;
     cursor: pointer; font: inherit; padding: 0 0.4rem;
-    line-height: 1; font-size: 1rem;
+    line-height: 1; font-size: var(--fs-md);
   }
   .detach:hover { color: var(--text); }
   header {
@@ -1344,19 +1344,19 @@
     padding: 0.55rem 0.9rem;
     background: var(--mantle);
     border-bottom: 1px solid var(--surface0);
-    font-size: 0.9rem;
+    font-size: var(--fs-md);
   }
   /* Sits next to the title, before the auth state, so the engine is
      identifiable at a glance without competing with it. */
   .engine-note {
-    font-size: 0.68rem;
+    font-size: var(--fs-xs);
     color: var(--subtext0);
     background: var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.05rem 0.3rem;
     white-space: nowrap;
   }
-  .auth-state { flex: 1; font-size: 0.78rem; }
+  .auth-state { flex: 1; font-size: var(--fs-sm); }
   .auth-state .ok { color: var(--green); }
   .auth-state .warn { color: var(--yellow); }
   .capture-status {
@@ -1367,7 +1367,7 @@
     padding: 0.35rem 0.9rem;
     background: var(--crust);
     border-bottom: 1px solid var(--surface0);
-    font-size: 0.74rem;
+    font-size: var(--fs-sm);
     color: var(--subtext0);
   }
   .capture-status .cs-iface {
@@ -1379,7 +1379,7 @@
     color: var(--text);
     background: var(--surface0);
     padding: 0 0.35rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     max-width: 22rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1388,16 +1388,16 @@
   .capture-status .cs-flag {
     color: var(--overlay1);
     border: 1px solid var(--surface1);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0 0.3rem;
-    font-size: 0.68rem;
+    font-size: var(--fs-xs);
   }
   .minimize, .close {
     background: transparent; color: var(--subtext0); border: 0;
     cursor: pointer; font: inherit; padding: 0 0.4rem;
     line-height: 1;
   }
-  .minimize { font-size: 1.2rem; }
+  .minimize { font-size: var(--fs-lg); }
   .minimize:hover { color: var(--text); }
   .close:hover { color: var(--red); }
   .controls {
@@ -1412,7 +1412,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     color: var(--subtext0);
   }
   .controls label.grow { flex: 1; min-width: 200px; }
@@ -1423,19 +1423,19 @@
     align-items: center;
     gap: 0.4rem;
     color: var(--text);
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     padding-bottom: 0.1rem;
   }
   .controls input,
   .controls select {
     background: var(--mantle); color: var(--text);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     padding: 0.3rem 0.45rem;
     font: inherit;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
-  .controls button { font-size: 0.85rem; padding: 0.35rem 0.8rem; }
+  .controls button { font-size: var(--fs-sm); padding: 0.35rem 0.8rem; }
   .port-overrides {
     display: flex;
     flex-wrap: wrap;
@@ -1444,42 +1444,42 @@
     padding: 0.45rem 0.8rem;
     background: var(--mantle);
     border-bottom: 1px solid var(--surface0);
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
   }
   .po-label { color: var(--subtext0); margin-right: 0.2rem; }
-  .po-note { color: var(--overlay0); font-size: 0.72rem; font-style: italic; margin-left: 0.3rem; }
+  .po-note { color: var(--overlay0); font-size: var(--fs-xs); font-style: italic; margin-left: 0.3rem; }
   .po-chip {
     display: inline-flex; align-items: center; gap: 0.3rem;
     background: var(--surface0); color: var(--text);
-    padding: 0.15rem 0.45rem; border-radius: 12px;
-    font-size: 0.78rem;
+    padding: 0.15rem 0.45rem; border-radius: var(--r-pill);
+    font-size: var(--fs-sm);
     font-family: ui-monospace, monospace;
   }
   .po-remove {
     background: transparent; border: 0; color: var(--overlay0);
-    cursor: pointer; padding: 0 0.1rem; font-size: 0.95rem;
+    cursor: pointer; padding: 0 0.1rem; font-size: var(--fs-md);
     line-height: 1;
   }
   .po-remove:hover:not(:disabled) { color: var(--red); }
   .po-port {
     width: 5.5rem;
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.25rem 0.4rem;
     font: inherit;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
   }
   .port-overrides select {
     background: var(--base); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.2rem 0.4rem;
     font: inherit;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
   }
   .po-add {
     background: var(--surface0); color: var(--text); border: 0;
-    padding: 0.25rem 0.65rem; border-radius: 3px;
-    cursor: pointer; font: inherit; font-size: 0.78rem;
+    padding: 0.25rem 0.65rem; border-radius: var(--r-sm);
+    cursor: pointer; font: inherit; font-size: var(--fs-sm);
   }
   .po-add:hover:not(:disabled) { background: var(--surface1); }
   .po-add:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -1491,11 +1491,11 @@
     background: var(--crust);
     border-bottom: 1px solid var(--surface0);
   }
-  .pw-label { color: var(--yellow); font-size: 0.85rem; }
+  .pw-label { color: var(--yellow); font-size: var(--fs-sm); }
   .pw-prompt input[type="password"] {
     flex: 1; max-width: 220px;
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.3rem 0.45rem;
     font: inherit;
   }
@@ -1509,19 +1509,19 @@
   .row-filter input {
     flex: 1;
     background: var(--mantle); color: var(--text);
-    border: 1px solid var(--surface0); border-radius: 3px;
+    border: 1px solid var(--surface0); border-radius: var(--r-sm);
     padding: 0.3rem 0.45rem;
     font: inherit;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
-  .count { color: var(--overlay0); font-size: 0.75rem; }
+  .count { color: var(--overlay0); font-size: var(--fs-sm); }
   .rows {
     flex: 1;
     overflow-y: auto;
     background: var(--mantle);
     padding: 0.4rem 0.8rem;
     font-family: ui-monospace, "JetBrains Mono", monospace;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
   }
   .flood-nudge {
     display: flex;
@@ -1531,13 +1531,13 @@
     padding: 0.4rem 0.6rem;
     background: color-mix(in oklab, var(--yellow) 14%, var(--bg-panel));
     border: 1px solid color-mix(in oklab, var(--yellow) 35%, var(--bg-panel));
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     color: var(--text);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .flood-nudge code {
-    background: var(--crust); padding: 0 0.25rem; border-radius: 2px;
-    font-size: 0.74rem;
+    background: var(--crust); padding: 0 0.25rem; border-radius: var(--r-sm);
+    font-size: var(--fs-sm);
   }
   .flood-nudge .x {
     margin-left: auto; background: transparent; border: 0;
@@ -1553,15 +1553,15 @@
     gap: 0.4rem;
     align-items: baseline;
   }
-  .row .ts { color: var(--overlay0); font-size: 0.72rem; flex-shrink: 0; }
+  .row .ts { color: var(--overlay0); font-size: var(--fs-xs); flex-shrink: 0; }
   .row .proto {
     font-weight: 600;
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     flex-shrink: 0;
     min-width: 2.5rem;
   }
-  .row .len { color: var(--overlay1); font-size: 0.72rem; flex-shrink: 0; }
+  .row .len { color: var(--overlay1); font-size: var(--fs-xs); flex-shrink: 0; }
   .row .dir { color: var(--overlay0); flex-shrink: 0; }
   .row .raw { flex: 1; min-width: 0; word-break: break-all; }
   .row.sub { padding-left: 1rem; border-bottom: 0; }
@@ -1589,7 +1589,7 @@
     gap: 1px;
     background: var(--mantle);
     border: 1px solid var(--surface0);
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     overflow: hidden;
   }
   .view-toggle button {
@@ -1599,7 +1599,7 @@
     padding: 0.25rem 0.6rem;
     cursor: pointer;
     font: inherit;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
@@ -1614,7 +1614,7 @@
     color: var(--text);
     border-radius: 999px;
     padding: 0 0.35rem;
-    font-size: 0.65rem;
+    font-size: var(--fs-xs);
   }
   .flow {
     border-bottom: 1px solid var(--crust);
@@ -1637,7 +1637,7 @@
   }
   .flow .flow-meta {
     color: var(--overlay0);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     flex-shrink: 0;
   }
   .flow-packets {
@@ -1673,7 +1673,7 @@
     color: var(--subtext0);
     cursor: pointer;
     padding: 0.1rem 0.3rem;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     opacity: 0;
     align-self: center;
     flex: 0 0 auto;
@@ -1683,7 +1683,7 @@
   .decode-fields {
     margin: 0.3rem 0 0.5rem 2rem;
     border-collapse: collapse;
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
   }
   .decode-fields .dk {
     color: var(--subtext0);
@@ -1704,7 +1704,7 @@
   .tx-xid {
     color: var(--yellow);
     font-family: ui-monospace, monospace;
-    font-size: 0.74rem;
+    font-size: var(--fs-sm);
   }
   .tx-stages {
     display: inline-flex;
@@ -1719,7 +1719,7 @@
     border-radius: 999px;
     background: var(--surface0);
     color: var(--text);
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
     text-transform: uppercase;
   }
@@ -1736,15 +1736,15 @@
     background: var(--mantle);
     padding: 0.15rem 0.4rem;
     margin-top: 2px;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
   }
   .decode.sub > summary { padding: 0.15rem 0; }
-  .empty { color: var(--overlay0); font-size: 0.85rem; padding: 0.8rem 0; font-family: inherit; }
+  .empty { color: var(--overlay0); font-size: var(--fs-sm); padding: 0.8rem 0; font-family: inherit; }
   .err {
     padding: 0.4rem 0.8rem;
     background: color-mix(in oklab, var(--red) 14%, var(--bg-panel));
     color: var(--red);
-    font-size: 0.82rem;
+    font-size: var(--fs-sm);
     border-bottom: 1px solid var(--surface0);
   }
   .err.inline { padding: 0; background: transparent; border: 0; }
@@ -1769,7 +1769,7 @@
   }
   .insight .sev {
     text-transform: uppercase;
-    font-size: 0.62rem;
+    font-size: var(--fs-xs);
     font-weight: 700;
     letter-spacing: 0.04em;
   }
@@ -1777,15 +1777,15 @@
     flex: 1;
     color: var(--text);
     font-weight: 600;
-    font-size: 0.84rem;
+    font-size: var(--fs-sm);
   }
   .route-btn {
     background: var(--surface0);
     color: var(--text);
     border: 1px solid var(--surface1);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.15rem 0.55rem;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     cursor: pointer;
     white-space: nowrap;
   }
@@ -1793,7 +1793,7 @@
   .route-btn:disabled { opacity: 0.6; cursor: default; }
   .insight-detail {
     color: var(--subtext0);
-    font-size: 0.78rem;
+    font-size: var(--fs-sm);
     line-height: 1.45;
     margin-top: 0.3rem;
   }
@@ -1802,7 +1802,7 @@
     padding-top: 0.4rem;
     border-top: 1px dashed var(--surface0);
     font-family: var(--mono, monospace);
-    font-size: 0.76rem;
+    font-size: var(--fs-sm);
   }
   .route-line { display: flex; flex-wrap: wrap; gap: 0.45rem; padding: 0.12rem 0; }
   .route-q { color: var(--overlay1); }

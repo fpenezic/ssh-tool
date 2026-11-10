@@ -126,7 +126,7 @@
     width: 100%;
     padding: var(--row-pad-y) 0.4rem var(--row-pad-y) calc(0.4rem + var(--depth, 0) * 1rem);
     cursor: pointer;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
   }
   .row:hover { background: var(--surface0); }
   .row.selected { background: var(--surface1); }
@@ -145,9 +145,9 @@
     .row { padding-top: 0.5rem; padding-bottom: 0.5rem; }
     .chev { width: 1.8rem; }
   }
-  .def { flex-shrink: 0; font-size: 0.62rem; color: var(--teal); border: 1px solid color-mix(in srgb, var(--teal) 45%, transparent); border-radius: 6px; padding: 0 0.3rem; }
+  .def { flex-shrink: 0; font-size: var(--fs-xs); color: var(--teal); border: 1px solid color-mix(in srgb, var(--teal) 45%, transparent); border-radius: var(--r-md); padding: 0 0.3rem; }
   .host {
-    color: var(--overlay1); font-size: 0.72rem; margin-left: 0.4rem;
+    color: var(--overlay1); font-size: var(--fs-xs); margin-left: 0.4rem;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%;
   }
 </style>

@@ -196,26 +196,26 @@
 <style>
   .row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
   .path { width: 26rem; }
-  .failed { margin-bottom: 0.6rem; font-size: 0.76rem; }
+  .failed { margin-bottom: 0.6rem; font-size: var(--fs-sm); }
   .same { margin: 0 0 0.6rem; }
   .variants { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.7rem; }
   .variant {
     border: 1px solid color-mix(in srgb, var(--vc) 45%, var(--surface0));
     border-left: 3px solid var(--vc);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     padding: 0.35rem 0.6rem;
     background: color-mix(in srgb, var(--vc) 6%, transparent);
   }
-  .vhead { display: flex; align-items: center; gap: 0.6rem; font-size: 0.78rem; margin-bottom: 0.3rem; }
+  .vhead { display: flex; align-items: center; gap: 0.6rem; font-size: var(--fs-sm); margin-bottom: 0.3rem; }
   .vname { font-weight: 600; color: var(--vc); }
-  .vdiff { margin-left: auto; font-size: 0.72rem; padding: 0.1rem 0.5rem; }
+  .vdiff { margin-left: auto; font-size: var(--fs-xs); padding: 0.1rem 0.5rem; }
   .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
   .chip {
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     background: var(--mantle);
     color: var(--text);
     border: 1px solid var(--surface1);
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     padding: 0.05rem 0.45rem;
     cursor: pointer;
   }
@@ -224,7 +224,7 @@
   .vdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--vc); margin-right: 0.4rem; vertical-align: middle; }
   .diff {
     display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    font-size: 0.74rem; line-height: 1.55; border: 1px solid var(--surface0); border-radius: 6px; overflow: hidden;
+    font-size: var(--fs-sm); line-height: 1.55; border: 1px solid var(--surface0); border-radius: var(--r-md); overflow: hidden;
   }
   .dh { background: var(--mantle); color: var(--subtext0); padding: 0.3rem 0.6rem; font-family: inherit; border-bottom: 1px solid var(--surface0); }
   .dl { padding: 0 0.6rem; white-space: pre-wrap; word-break: break-all; min-height: 1.55em; }

@@ -48,22 +48,22 @@
   .grants { list-style: none; padding: 0; margin: 0.4rem 0 0; }
   .grants li {
     display: flex; align-items: center; gap: 0.6rem;
-    padding: 0.4rem 0.5rem; border-radius: 4px;
+    padding: 0.4rem 0.5rem; border-radius: var(--r-sm);
   }
   .grants li:hover { background: var(--surface0); }
   .meta { display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; }
   .name { font-weight: 600; color: var(--text); }
-  .host { color: var(--overlay0); font-size: 0.8rem; }
+  .host { color: var(--overlay0); font-size: var(--fs-sm); }
   .level {
-    font-size: 0.68rem; padding: 0.05rem 0.4rem; border-radius: 999px;
+    font-size: var(--fs-xs); padding: 0.05rem 0.4rem; border-radius: 999px;
     background: var(--surface1); color: var(--subtext0);
   }
   .level.read-run { background: var(--peach); color: var(--on-accent); }
   .level.read-run-yolo { background: var(--red); color: var(--base); font-weight: 700; }
   .revoke {
     background: transparent; border: 1px solid var(--surface1);
-    color: var(--red); border-radius: 3px; padding: 0.15rem 0.5rem;
-    cursor: pointer; font: inherit; font-size: 0.75rem;
+    color: var(--red); border-radius: var(--r-sm); padding: 0.15rem 0.5rem;
+    cursor: pointer; font: inherit; font-size: var(--fs-sm);
   }
   .revoke:hover { background: var(--surface1); }
 </style>
