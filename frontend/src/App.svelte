@@ -1529,7 +1529,7 @@
       <button
         class="search-btn"
         onclick={() => openLocalShell()}
-        title="Open the default local shell as a tab (set the default in Settings → Connection)"
+        title="Open the default local shell as a tab (set the default in Settings > Shells)"
       >
         <IconTerminal size={14} /> {localShellButtonLabel}
       </button>

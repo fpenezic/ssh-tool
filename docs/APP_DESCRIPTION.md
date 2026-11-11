@@ -5,77 +5,37 @@ Pick the length that fits the surface.
 
 ---
 
-## One-liner (≤ 200 chars)
+## One-liner (200 chars or less)
 
-> Daily-driver SSH manager for sysadmins with 300+ hosts: folder-
-> inherited tree, encrypted vault with password history + audit log,
-> multi-tab split-pane terminal, native multi-window, dynamic
-> inventory (Proxmox, Hetzner, DO, Linode, Vultr, Scaleway, EC2,
-> Ansible), SOCKS5 forwards, batch exec, RDM import.
+> SSH manager for sysadmins with hundreds of hosts: inherited folder tree, encrypted vault, split-pane terminal, VPN profiles, dynamic inventory, Kafka and Database tabs, RDM import.
 
 ---
 
-## Short (≈ 100 words)
+## Short (about 100 words)
 
-**ssh-tool** is a desktop SSH connection manager built for sysadmins
-who maintain hundreds of hosts. Cross-platform (Wails v3 + Svelte 5),
-single binary, native multi-window with tab detach/redock.
+**ssh-tool** is a desktop SSH connection manager built for sysadmins who maintain hundreds of hosts. Cross-platform (Wails v3 + Svelte 5), a single binary, native multi-window with tab detach / redock, and an Android app on the same core.
 
-Tree of connections with folder-level inherited settings, encrypted
-credential vault (Argon2id + XChaCha20-Poly1305) with idle auto-lock,
-multi-tab terminal with split panes, SFTP browser with native OS
-drag-and-drop upload, port forwards (L / R / D-SOCKS) with isolated-
-browser launcher, opkssh certificate auth, broadcast input across
-sessions and windows, dynamic inventory folders that auto-populate
-from Proxmox VE, Hetzner Cloud, DigitalOcean, Linode, Vultr,
-Scaleway, AWS EC2, and Ansible static inventory files.
+A tree of connections with folder-level inherited settings, an encrypted credential vault (Argon2id + XChaCha20-Poly1305) that can also read KeePass, Bitwarden / Vaultwarden and Infisical, a multi-tab terminal with split panes, SFTP, port forwards, opkssh certificate auth, userspace VPN profiles (WireGuard built in, NetBird, Tailscale, OpenConnect, OpenVPN and Check Point as plugins), dynamic inventory from eight providers, and Kafka, Database and VNC tabs that ride the connection's SSH session.
 
 ---
 
-## Medium (≈ 250 words)
+## Medium (about 250 words)
 
-**ssh-tool** is a desktop SSH connection manager built for sysadmins
-who maintain hundreds of hosts. Cross-platform (Wails v3 + Svelte 5),
-single binary, native multi-window with tab detach/redock.
+**ssh-tool** is a desktop SSH connection manager built for sysadmins who maintain hundreds of hosts. Cross-platform (Wails v3 + Svelte 5), a single binary, native multi-window with tab detach / redock; Android on the same Go core.
 
-**Connection tree** - folder hierarchy with inherited settings
-(username, port, credential, jump host chain, color tag, auto-
-reconnect, keepalive). Tags + auto-facets for filtering. Multi-select
-with tri-state batch editor.
+**Connection tree** - folder hierarchy with inherited settings (username, port, credential, jump host chain, network profile, colour tag, auto-reconnect, keepalive). Tags, a fast filter, a fuzzy palette, multi-select with a tri-state batch editor.
 
-**Credential vault** - Argon2id-derived key + XChaCha20-Poly1305
-authenticated encryption, optional machine-bound auto-unlock sidecar,
-idle auto-lock. Password / private key / agent / opkssh kinds, with
-custom icons and folder grouping.
+**Credentials** - Argon2id + XChaCha20-Poly1305 vault with an optional machine-bound auto-unlock and idle auto-lock; password, key, agent and opkssh kinds; secrets read from KeePass, Bitwarden / Vaultwarden or Infisical at connect time, and TOTP codes answering SSH and VPN prompts.
 
-**Terminal** - xterm.js with WebGL, multi-tab + binary pane splits,
-detachable to a second OS window, broadcast input across selected
-sessions (multi-window aware), per-session paste guard, configurable
-themes / fonts / scrollback.
+**Terminal** - xterm.js, multi-tab with split panes, detachable windows, broadcast input, session recording, command timestamps, SFTP with drag-and-drop.
 
-**SFTP** - file browser per session, native OS drag-and-drop upload
-(files and directories).
+**Networking** - local / remote / SOCKS5 forwards with an isolated-browser launcher; userspace VPN profiles (no TUN adapter, no admin rights, several at once); an app proxy and a GitLab CI runner that reach customer networks through them.
 
-**Port forwards** - local / remote / SOCKS5 dynamic, with an
-isolated-browser launcher that uses a temporary profile so your
-main browser stays clean.
+**Kafka, Database, VNC** - per-connection tabs riding the SSH session: Kafka topics, consumer (last N per partition or of the whole topic), produce and groups; PostgreSQL, MySQL, Oracle, SQL Server, Db2, ClickHouse, OpenSearch / Elasticsearch and Redis with read-only guards, a spreadsheet-like grid and whole-table export; a noVNC console.
 
-**Dynamic inventory** - folders that auto-populate from external
-sources. Proxmox VE (whole-cluster fetch via `/cluster/resources`,
-tag filter, hide-stopped, live CPU/RAM/disk bars in the detail
-pane) and Hetzner Cloud (paginated `/v1/servers`, hostname source
-picker for name vs public/private IPv4, label filter). API tokens
-stored in the vault.
+**Dynamic inventory** - Proxmox VE, Hetzner, DigitalOcean, Linode, Vultr, Scaleway, AWS EC2 and Ansible inventories as auto-populated folders.
 
-**Power tools for sysadmins** - live tcpdump panel with smart sudo
-(uses the connection's saved password automatically when possible),
-HTTP / SOAP request modal routed through an active SOCKS5 forward,
-parallel batch command exec across a multi-selection, command snippet
-library (Ctrl+Shift+P), workspaces for one-click "open my client-A
-production set", command-history-style markdown notes per host.
-
-**Import / export** - Devolutions RDM JSON, ssh_config, encrypted
-archive bundle. Exports never include credential secrets by default.
+**Import / sync** - Devolutions RDM, ssh_config, MobaXterm, PuTTY / KiTTY, SuperPuTTY and kafka-tool imports; encrypted profile sync over WebDAV, SFTP, Dropbox, OneDrive or Google Drive; encrypted backups.
 
 ---
 
@@ -185,6 +145,22 @@ archive bundle. Exports never include credential secrets by default.
   read-only auto-runs and state-changing commands gated on approval;
   terminal output is treated as untrusted and every action is logged.
 
+### VPN profiles and the app proxy
+
+- **Userspace VPN profiles** - WireGuard built in; NetBird, Tailscale, OpenConnect (AnyConnect, Fortinet, F5, GlobalProtect, Pulse), OpenVPN and Check Point as optional plugins. No TUN adapter, no admin rights, several gateways at once; a connection's first hop and provider APIs dial through its profile.
+- **App proxy** - one local SOCKS5 proxy (with a password) for other programs, reaching every marked profile, routing by networks and by the VPN's DNS domains (pushed by the gateway or added by hand), so `db1.prod.example.com` resolves on the far side.
+- **CI runner** - a GitLab runner whose jobs reach customer networks through the profiles and jump hosts.
+
+### Secrets, sync and backup
+
+- **External secrets** - KeePass, Bitwarden / Vaultwarden and Infisical read at connect time; TOTP codes from Bitwarden or KeePass items answer SSH and VPN prompts.
+- **Profile sync** - the whole profile, sealed with its own passphrase, over WebDAV, SFTP, Dropbox, OneDrive or Google Drive; pulls apply live.
+- **Encrypted backups** - manual or daily, verified on restore.
+
+### Android
+
+- The same Go core as the desktop app, with biometric vault unlock and sessions kept alive in the background; a signed APK with every release.
+
 ### File transfer + forwarding
 
 - **SFTP browser** per session with native OS drag-and-drop upload.
@@ -196,15 +172,14 @@ archive bundle. Exports never include credential secrets by default.
   managed from a Tunnels panel in the status bar.
 - **Kafka** - a connection with Kafka enabled opens a Kafka tab: topics,
   a consumer that never commits, produce, topic config and metrics,
-  consumer groups with lag and offset reset. Broker connections ride the
+  consumer groups with lag and offset reset. The consumer starts from the last N records of every partition or of the whole topic, a time, an offset, or new records only. Broker connections ride the
   connection's SSH session, so advertised broker names resolve on the far
   side - no local tunnels, no hosts-file entries.
-- **Databases** - a connection with the database enabled opens a Database tab on PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, IBM Db2, ClickHouse, OpenSearch / Elasticsearch or Redis: databases, tables and their structure, query tabs with their own sessions, a fast results grid and CSV / JSON export. Foreign keys can be followed both ways from a row, a schema has an ER diagram, filters and sorting run on the server, edited cells become an UPDATE script to read and run, Explain shows the plan (PostgreSQL, MySQL), a Sessions view stops a statement or a session, and a query timeout stops long statements. A folder can list the databases (prod, stage) every host under it has. Connections ride the connection's SSH session, so a server on the host's loopback needs no port forward; read-only mode is enforced in the backend.
+- **Databases** - a connection with the database enabled opens a Database tab on PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, IBM Db2, ClickHouse, OpenSearch / Elasticsearch or Redis: databases, tables and their structure, query tabs with their own sessions, and a results grid that works like a spreadsheet (edit cells in place, select and copy blocks straight into Excel or Teams, right-click menus) with whole-table CSV / JSON export. Foreign keys can be followed both ways from a row, a schema has an ER diagram, filters and sorting run on the server, edited cells become an UPDATE script to read and run, Explain shows the plan (PostgreSQL, MySQL), a Sessions view stops a statement or a session, and a query timeout stops long statements. A folder can list the databases (prod, stage) every host under it has. Connections ride the connection's SSH session, so a server on the host's loopback needs no port forward; read-only mode is enforced in the backend.
 
 ### Import / export
 
-- Devolutions **RDM JSON** import (folders, connections, jump
-  chains, icons).
+- Devolutions **RDM JSON** import (folders, connections, jump chains, icons), plus MobaXterm `.mxtsessions`, PuTTY / KiTTY `.reg`, SuperPuTTY `Sessions.xml` and kafka-tool profiles.
 - **ssh_config** import (ProxyJump chains; key paths recorded in
   notes - we never auto-copy private keys off disk).
 - **Encrypted archive** export (Argon2id + XChaCha20) for backup /
@@ -212,8 +187,9 @@ archive bundle. Exports never include credential secrets by default.
 
 ### Observability
 
-- In-app live log tail (Settings → Logs) plus a 5 MiB rolling log
-  file on disk.
+- In-app live log tail (Settings > Logs) plus a 5 MiB rolling log file on disk.
+- **Liveness probe** - reachability dots on the rows of open folders.
+- Local **audit log** with insights (connects, time connected, top hosts).
 - Friendly connect-error messages with raw error behind a toggle.
 - Live "TCP dial / SSH handshake / opening shell" stage hint while
   a connect is in flight.
@@ -228,5 +204,4 @@ archive bundle. Exports never include credential secrets by default.
   knows what SSH is and what RDM was.
 - **Lead with the differentiators**: scale (300+ connections),
   multi-window, batch tools, RDM replacement story.
-- **Don't oversell**: features that are deferred (health probe,
-  smart autocomplete, biometric unlock) stay off the page.
+- **Don't oversell**: features that are deferred (smart autocomplete, desktop biometric unlock, FIDO2 keys) stay off the page.
