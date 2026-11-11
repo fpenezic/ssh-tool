@@ -364,9 +364,16 @@ func (c *Cluster) Consume(ctx context.Context, req ConsumeRequest) (*Consumer, e
 // gather is the first phase of a FromNewest consumer: the newest n matching
 // records seen so far, until every partition in ends has been read up to it.
 type gather struct {
-	n    int
-	h    recHeap
-	ends map[int32]int64 // partitions still being read, and their end
+	n int
+	h recHeap
+	// hBytes is the payload the pick holds. Over the buffer's byte bound
+	// the oldest picks go (pickDropped counts them, as a buffer eviction
+	// would) and the pick is full: from then on only a newer record gets
+	// in, so an older one is never counted as kept and dropped.
+	hBytes      int
+	hFull       bool
+	pickDropped uint64
+	ends        map[int32]int64 // partitions still being read, and their end
 	// late holds the matching records past the start-time ends (and those
 	// of the partitions that were empty), in arrival order, for after the
 	// flush. It is bounded like the buffer (see queueLate); lateDropped
@@ -410,13 +417,24 @@ func (k *Consumer) offer(g *gather, r *kgo.Record) {
 	if k.filt.active() && !k.filt.match(r) {
 		return
 	}
-	if len(g.h) < g.n {
+	switch {
+	case len(g.h) < g.n && !g.hFull:
 		heap.Push(&g.h, r)
-		return
-	}
-	if older(g.h[0], r) {
+	case len(g.h) > 0 && older(g.h[0], r):
+		g.hBytes -= recordSize(g.h[0])
 		g.h[0] = r
 		heap.Fix(&g.h, 0)
+	default:
+		return
+	}
+	g.hBytes += recordSize(r)
+	k.mu.Lock()
+	maxBytes := k.maxBytes
+	k.mu.Unlock()
+	for g.hBytes > maxBytes && len(g.h) > 1 {
+		g.hBytes -= recordSize(heap.Pop(&g.h).(*kgo.Record))
+		g.pickDropped++
+		g.hFull = true
 	}
 }
 
@@ -437,6 +455,14 @@ func (k *Consumer) flush(g *gather) bool {
 		if k.keep(r, false) {
 			return true
 		}
+	}
+	if g.pickDropped > 0 {
+		// Picked, then let go for the byte bound (already counted as
+		// read in offer): the oldest of the pick, as the buffer would.
+		k.mu.Lock()
+		k.received += g.pickDropped
+		k.dropped += g.pickDropped
+		k.mu.Unlock()
 	}
 	if g.lateDropped > 0 {
 		// Read and kept, then evicted before they could show: the same
@@ -619,9 +645,16 @@ func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int6
 					// Past the end without the record at end-1: that one
 					// was a marker. The partition is read.
 					delete(g.ends, r.Partition)
-					k.queueLate(g, r)
+					if until == nil {
+						k.queueLate(g, r)
+					}
 				default:
-					k.queueLate(g, r)
+					// With stop at end, records past the start-time ends
+					// are not part of the read: queued, they would follow
+					// the pick and could push it out of the buffer.
+					if until == nil {
+						k.queueLate(g, r)
+					}
 				}
 				return
 			}
