@@ -4083,8 +4083,9 @@
 
     <h2 style="margin-top: 1.5rem;">External terminal</h2>
     <p class="hint">
-      Used by two actions: <strong>Native terminal</strong> in the
-      top tab bar (opens a fresh shell, nothing attached) and the
+      Used by two actions: <strong>External OS terminal</strong> in the
+      top bar's local shell menu (opens a fresh shell, nothing attached)
+      and the
       <strong>Open in external terminal</strong> connection
       right-click (spawns the same terminal but runs
       <code>ssh user@host</code> with resolved port + jump chain).
@@ -4748,9 +4749,10 @@
           <span class="hint inline">
             A NetBird <strong>setup key</strong> (from Setup Keys in the
             dashboard - a UUID like <code>A1B2C3D4-...</code>), NOT a
-            personal access token. Use a <strong>reusable</strong> key if
-            you sync this profile across machines - each registers as its
-            own peer.
+            personal access token. Use a <strong>reusable</strong> key: every
+            connect registers this machine as a peer again, so a one-off key
+            works only once (and a synced profile registers each machine as
+            its own peer).
           </span>
         {/if}
       </label>
@@ -6018,7 +6020,7 @@
     <p class="hint">
       Local append-only record of sensitive operations: vault
       unlock / lock / rotate, backup create / restore, SSH connect /
-      disconnect. Lives in <code>store.db</code> next to the rest of
+      disconnect. Lives in <code>audit.db</code> next to the rest of
       your data - never sent anywhere. Useful for "did I really
       connect to that host yesterday" and for shipping evidence to
       a compliance review.

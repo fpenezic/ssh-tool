@@ -221,6 +221,11 @@
     },
     {
       "icon": "shield",
+      "title": "App proxy: your tools through the VPNs",
+      "body": "One local SOCKS5 proxy, with a password, for curl, a database tool or a script: each address goes through the VPN profile whose networks contain it, and a name in a VPN's DNS domain (pushed by the gateway or added by hand) is resolved on the far side, so db1.prod.example.com works without touching this machine's DNS. Tunnels come up on first use and stop when idle; anything no profile covers is refused."
+    },
+    {
+      "icon": "shield",
       "title": "AnyConnect, Fortinet, F5 - in userspace",
       "body": "Connect to Cisco AnyConnect / ocserv, Fortinet, F5 BIG-IP, GlobalProtect and Pulse gateways without the vendor client: two gateways at once, even with overlapping subnets. Password, second login or one-time code (asked, stored, or a TOTP from Bitwarden / KeePass), and client certificates imported from .pfx or PEM into the vault - expiry tracked, renewals one click. Self-signed gateways are pinned on first use; a Details view shows routes, DNS and MTU."
     },
@@ -257,12 +262,12 @@
     {
       "icon": "list",
       "title": "Kafka, through the SSH host",
-      "body": "Turn on Kafka on a connection and get a Kafka tab: topics, a consumer that never commits, produce, config, metrics, consumer groups with lag and offset reset. Broker connections ride the connection's SSH session, so advertised broker names resolve on the far side - no local tunnels, no hosts entries. Read-only mode for production, TLS and SASL, LLM access over MCP."
+      "body": "Turn on Kafka on a connection and get a Kafka tab: topics, a consumer that never commits, produce, config, metrics, consumer groups with lag and offset reset. The consumer starts from the last N records of every partition or of the whole topic (the newest across partitions, by time), a time, an offset or new records only. Broker connections ride the connection's SSH session, so advertised broker names resolve on the far side - no local tunnels, no hosts entries. Read-only mode for production, TLS and SASL, LLM access over MCP."
     },
     {
       "icon": "database",
       "title": "PostgreSQL, MySQL, Oracle, SQL Server (MSSQL), IBM Db2, ClickHouse, OpenSearch and Redis, through the SSH host",
-      "body": "Turn on the database on a connection and get a Database tab for PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, IBM Db2, ClickHouse, OpenSearch / Elasticsearch (Kibana console requests and SQL) or Redis (keys by prefix, redis-cli commands): databases, tables with structure and DDL, query tabs with their own sessions (and transactions on PostgreSQL, MySQL and SQL Server; PL/SQL and SQL PL blocks, GO batches), Ctrl+Enter on the statement under the cursor, a results grid that stays fast at 100k rows, CSV and JSON export; foreign keys to follow both ways, an ER diagram of a schema, filter and sort on the server, cell edits that become an UPDATE script, Explain, a Sessions view and a query timeout. Through SSH, connections ride the connection's SSH session - a server on the host's loopback needs no port forward. Read-only mode enforced in the backend, LLM access over MCP (queries always read-only)."
+      "body": "Turn on the database on a connection and get a Database tab for PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, IBM Db2, ClickHouse, OpenSearch / Elasticsearch (Kibana console requests and SQL) or Redis (keys by prefix, redis-cli commands): databases, tables with structure and DDL, query tabs with their own sessions (and transactions on PostgreSQL, MySQL and SQL Server; PL/SQL and SQL PL blocks, GO batches), Ctrl+Enter on the statement under the cursor, a results grid that stays fast at 100k rows and works like a spreadsheet - edit cells in place, select blocks and copy them straight into Excel or Teams, right-click menus on cells and in the tree - with CSV and JSON export of a result or a whole table; foreign keys to follow both ways, an ER diagram of a schema, filter and sort on the server, edits that become an UPDATE script to read and run, Explain, a Sessions view and a query timeout. Through SSH, connections ride the connection's SSH session - a server on the host's loopback needs no port forward. Read-only mode enforced in the backend, LLM access over MCP (queries always read-only)."
     },
     {
       "icon": "globe",
@@ -282,7 +287,7 @@
     {
       "icon": "import",
       "title": "Import from your old tool",
-      "body": "Bring 600+ Devolutions RDM entries in one pass, your ~/.ssh/config with ProxyJump chains intact, PuTTY / KiTTY registry exports, SuperPuTTY Sessions.xml, or MobaXterm session files - and import PuTTY .ppk private keys directly (converted to OpenSSH on the way in). All imports are additive and safe to re-run."
+      "body": "Bring 600+ Devolutions RDM entries in one pass, your ~/.ssh/config with ProxyJump chains intact, PuTTY / KiTTY registry exports, SuperPuTTY Sessions.xml, MobaXterm session files or kafka-tool profiles - and import PuTTY .ppk private keys directly (converted to OpenSSH on the way in). All imports are additive and safe to re-run."
     },
     {
       "icon": "split",

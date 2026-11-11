@@ -64,12 +64,13 @@ Backend (Go 1.26):
   SQLite `VACUUM INTO`) + vault.enc. Optional daily auto-backup.
 - opkssh: `github.com/openpubkey/openpubkey` + `.../opkssh` as Go libs
   (no external binary).
-- PTY: `github.com/aymanbagabas/go-pty` (creak/pty on Unix, ConPTY on Win).
+- PTY: `github.com/aymanbagabas/go-pty` (creack/pty on Unix, ConPTY on Win).
 
 Mobile (Android, v0.36.0+):
 - Same Go core, compiled for android via the NDK (`CGO_ENABLED=1`,
-  `-buildmode=c-shared` -> libwails.so / JNI). Built locally
-  (`task android:package`), not in CI. Desktop unaffected.
+  `-buildmode=c-shared` -> libwails.so / JNI). CI builds and signs the
+  release APK (release.yml build-android); `task android:package` builds
+  one locally. Desktop unaffected.
 - Installed app id `app.sshtool`; gradle namespace stays
   `com.wails.app` for the JNI bridge (gotcha #32).
 - Biometric vault unlock via EncryptedSharedPreferences (Keystore) +
@@ -79,7 +80,7 @@ Mobile (Android, v0.36.0+):
 Frontend (Node 20):
 - Svelte 5 (runes: $state, $derived, $effect, $props).
 - Vite 6.
-- xterm.js 6 + addon-fit + addon-webgl.
+- xterm.js 6 + addon-fit + addon-canvas (default renderer) + addon-webgl (opt-in).
 - Wails autogenerates TS bindings into `frontend/bindings/`. Our
   facade in `frontend/src/lib/api.ts` wraps those with plain-object
   types - the autogen has `convertValues` members that trip strict TS.
@@ -96,7 +97,7 @@ ssh-tool/
 ├─ app_mobile_stubs.go     (android||ios) stubs for desktop-only free funcs app.go calls
 ├─ app_relaunch_{desktop,android}.go   relaunchApp(): exec+quit vs reload-message
 ├─ mobile_{events,secure,env,service}_android.go   long-poll, biometric/secure store, env, fg service
-├─ mobile_*_desktop.go     (!android&&!ios) no-op stubs for the above
+├─ mobile_*_desktop.go     (!android&&!ios) no-op stubs for events, secure, service
 ├─ wails3_runtime.go       shim: EventsEmit (+ mobile enqueue) / BrowserOpenURL
 ├─ Taskfile.yml            top-level task routing (android: namespace too)
 ├─ internal/
@@ -135,7 +136,7 @@ ssh-tool/
 │  ├─ mcpprompt/           the one MCP system prompt text
 │  └─ initcmd/             initial-command sequencing
 ├─ frontend/
-│  ├─ src/                 App.svelte + lib/* (~80 components/stores)
+│  ├─ src/                 App.svelte + lib/* (~115 components, ~125 stores/modules)
 │  ├─ bindings/            wails-generated, committed (regenerated on build)
 │  └─ package.json
 ├─ third_party/go-db2/     go-db2 vendored with one fix (PATCHES.md; go.mod replace)

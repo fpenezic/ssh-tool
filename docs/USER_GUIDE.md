@@ -68,14 +68,12 @@ Two paths:
   that protects the vault.
 - **Unlock vault** (subsequent runs) - type the same passphrase.
 
-Optional: **Remember on this machine** ticks the auto-unlock sidecar.
-The next launch skips the prompt by deriving the unlock key from a
-file kept under the OS keychain when available.
+Optional: **Remember on this machine** sets up the auto-unlock sidecar: a machine-bound file next to the vault (sealed with DPAPI on Windows, keyed to the machine id elsewhere; no OS keychain is used). The next launch skips the prompt.
 
 The vault file lives outside the SQLite DB so the encrypted secrets
 don't share blast radius with the connection tree.
 
-**Auto-lock**: Settings → Vault → "Auto-lock after idle (minutes)"
+**Auto-lock**: Settings > Vault: "Auto-lock after idle (minutes)"
 re-locks the vault and re-prompts at the VaultGate after the
 specified idle period. 0 (default) disables. Open terminal sessions
 and port forwards keep running across a lock - only the credential
@@ -90,7 +88,7 @@ The main window has a top tab bar with four sections:
 
 - **Connections** - folder tree on the left, connection editor on the
   right. With nothing selected the right side shows the home pane
-  (see §3, Home pane); the **Home** button in the tree header, **Esc**
+  (see section 3, Home pane); the **Home** button in the tree header, **Esc**
   in the tree or a click on empty tree space goes back to it.
 - **Credentials** - credential folder tree on the left, credential
   editor on the right.
@@ -100,11 +98,7 @@ The main window has a top tab bar with four sections:
 
 On the right edge of the top tab bar:
 
-- **Native terminal** button - opens a fresh local OS terminal
-  (no SSH attached). Useful for quick local commands without
-  leaving the app. Spawns Windows Terminal / PowerShell / cmd
-  per Settings → Connection → External terminal on Windows;
-  Terminal.app on macOS; `$TERMINAL` or a fallback list on Linux.
+- **Local shell** button (labelled `Local: <shell>`) - opens the default local shell as a tab (Settings > Shells). Its chevron opens any other local shell one-off, sets the default for a plain click, and has **External OS terminal**: a fresh terminal window outside the app (Windows Terminal / PowerShell / cmd / WSL per Settings > Shells > External terminal on Windows; Terminal.app on macOS; `$TERMINAL` or a fallback list on Linux).
 - **Search** button (`Ctrl+K`) - opens the quick palette.
 
 The sidebar (left column) of Connections and Credentials views is
@@ -123,8 +117,8 @@ Relaunching reopens it where you left it.
 A **status bar** along the bottom (22 px) surfaces, from left to
 right:
 
-- **Workspaces** dropdown - recent workspaces + Save current as… +
-  Manage…
+- **Workspaces** dropdown - recent workspaces + Save current as... +
+  Manage...
 - Live session count (clickable, jumps to Terminal). Coloured
   yellow if any are in error.
 - **Active tunnels** indicator (green cable + count) when at
@@ -176,7 +170,7 @@ right:
   pick one when several run.
 - Right-click the status bar to pick which items it shows; warnings
   (locked vault, issues, updates, sharing, VPN) always show.
-- Version pill on the right - click to jump to Settings → About.
+- Version pill on the right - click to jump to Settings > About.
 
 Toast notifications appear in the bottom-right corner for
 non-blocking confirmations (saves, errors). Click a toast to
@@ -242,10 +236,7 @@ An empty card says how to fill it.
 
 ### Name filter
 
-A live search bar above the tree filters by connection name OR hostname (case-insensitive substring). The tree follows a short pause in typing (about a tenth of a second), so a typed word filters it once; **Enter** or **Down** applies what is typed at once and moves to the first visible row (the folder that holds the first match, when it is in one). While the filter is active every folder containing a match auto-expands so you don't have to chase them. Clear with the **×** at the right or by emptying the input; clearing applies at once. This is separate from the Ctrl+K palette
-(see §11) - the palette is one-shot fuzzy-and-connect; the
-filter narrows the tree itself so you can still browse, select,
-right-click, and edit.
+A live search bar above the tree filters by connection name, hostname or tag (case-insensitive substring). The tree follows a short pause in typing (about a tenth of a second), so a typed word filters it once; **Enter** or **Down** applies what is typed at once and moves to the first visible row (the folder that holds the first match, when it is in one). While the filter is active every folder containing a match auto-expands so you don't have to chase them. Clear with the **×** at the right or by emptying the input; clearing applies at once. This is separate from the Ctrl+K palette (see section 11) - the palette is one-shot fuzzy-and-connect; the filter narrows the tree itself so you can still browse, select, right-click, and edit.
 
 ### Tag filter
 
@@ -267,7 +258,7 @@ A host other connections jump through gets a small mark with how many
 use it; hover for the list. The connection's detail ends with **Jump
 host for**, each entry revealing that folder or connection in the
 tree. A folder that sets its own jump chain, or an inventory folder
-with a bastion route, carries a route mark. Settings → Connection
+with a bastion route, carries a route mark. Settings > Connection
 tree picks *Off*, *Bastions only* (default) or *Bastions and routed
 connections*; the last also marks connections with a jump chain of
 their own, but not ones that only inherit their folder's.
@@ -291,7 +282,7 @@ their own, but not ones that only inherit their folder's.
   - **Set** - write this value to all selected
 - Batch panel also exposes:
   - **Connect all** - opens a terminal tab per selected connection.
-  - **▶ Run command…** - fan out a single one-off command to every
+  - **▶ Run command...** - fan out a single one-off command to every
     selected connection in parallel. No PTY, no terminal tab; each
     host opens its own quiet SSH chain, runs the command, returns
     stdout/stderr/exit. Useful for "uptime" / "df -h" / "systemctl
@@ -306,9 +297,9 @@ Selecting a folder (everything under it, subfolders and loaded cloud
 inventory entries included) or several connections shows a **Fleet**
 row in the right pane. The same entries are in the right-click menu.
 
-- **Gather facts…** - tick the facts to collect or pick a preset
+- **Gather facts...** - tick the facts to collect or pick a preset
   (*Sizing*, *Patch day*, *Health check*, *Everything*). *Save as
-  preset…* keeps the ticked facts, the custom column and the timeout
+  preset...* keeps the ticked facts, the custom column and the timeout
   under a name; a folder opens on the choice its last run used. All commands are read-only and
   run 8 hosts at a time. Update counts come from each host's cached
   package lists (`apt-get -s`, `dnf -C`), so they are as fresh as the
@@ -342,7 +333,7 @@ row in the right pane. The same entries are in the right-click menu.
   restarting, dead or exited with an error is red; one the engine
   restarted (crash, out of memory) within the last 7 days is yellow - a
   redeploy recreates the container and does not count; one that exited
-  with code 0 is listed for information. *Report settings…* takes
+  with code 0 is listed for information. *Report settings...* takes
   containers stopped on purpose (by name), like expected failed units. Chips on top count
   hosts with a filesystem over 80%, not on the newest kernel, or not
   updated in 30 days or more, measured at collection time. Failed units
@@ -363,7 +354,7 @@ row in the right pane. The same entries are in the right-click menu.
   installed, else from the last upgrade), no update for the
   set number of days, or security updates while its last update is older
   than the grace period (7 days by default - updates released since the
-  last patch day are listed, not flagged). *Report settings…* sets those
+  last patch day are listed, not flagged). *Report settings...* sets those
   thresholds and the *expected failed units* (a unit that fails by
   design, such as irqbalance on a small VM): they are listed apart and
   do not colour a host; *expected* next to a unit in the report adds it.
@@ -373,7 +364,7 @@ row in the right pane. The same entries are in the right-click menu.
   report (top and bottom, with the time the file was generated), and the
   *Logo* shown top right (PNG, JPEG, WebP or SVG; embedded in the saved
   file).
-  *Save report…* writes it as one HTML file;
+  *Save report...* writes it as one HTML file;
   open it in a browser to print or save as PDF. Runs on a folder are
   kept (the last 24) for those comparisons and trends; runs on a hand-
   picked set of hosts are not. *Changes since* appears only when you pick
@@ -388,16 +379,16 @@ row in the right pane. The same entries are in the right-click menu.
   custom column runs one command of your own and shows its first line;
   it has to pass the same read-only check as MCP commands. For a folder
   the last run is kept and shown as cards above the folder settings.
-- **Check TLS certificates…** - reaches each host on the given ports
+- **Check TLS certificates...** - reaches each host on the given ports
   the way a connect does (through its jump chain or network profile)
   and reads the certificate: expiry, subject, issuer, and whether it is trusted.
   Hosts you connect to by IP address are skipped. Under 14 days left, a
   **cert Nd** badge shows next to the host in the tree. One host at a
-  time: *Tools → TLS certificate* in the pane header.
-- **Compare file…** (two or more hosts) - reads one path on every host
+  time: *Tools > TLS certificate* in the pane header.
+- **Compare file...** (two or more hosts) - reads one path on every host
   as the login user, counts how many different versions exist, and
   diffs any two side by side. Read-only; up to 1 MiB per file.
-- **Copy SSH key…** - pick a credential that holds an SSH key, *Check
+- **Copy SSH key...** - pick a credential that holds an SSH key, *Check
   hosts* to see where it is already present, then add it where it is
   missing. The line gets a comment (prefilled with the key's own comment
   or the credential's name) so whoever reads the file later knows whose
@@ -405,7 +396,7 @@ row in the right pane. The same entries are in the right-click menu.
   under another comment counts as already present. It only appends to
   `~/.ssh/authorized_keys` and never removes or rewrites a line. Connections that log in as root are
   skipped unless you tick the option.
-- **Download files…** - a remote file, a folder (with everything in it)
+- **Download files...** - a remote file, a folder (with everything in it)
   or a pattern such as `/var/log/nginx/*.log` from every host, into one
   local folder with a subfolder per host named after the connection -
   collecting logs is the typical use. Patterns are matched over SFTP,
@@ -417,7 +408,7 @@ row in the right pane. The same entries are in the right-click menu.
   them without downloading, *Skip size check* starts at once. A file
   that fails (rotated away, unreadable) does not stop the rest of that
   host. Files already in the local folder are replaced.
-- **Upload file…** - one local file or folder to every host, into a
+- **Upload file...** - one local file or folder to every host, into a
   remote directory (`~/` by default; created when missing). When a file
   is already there: *Skip it* (default), *Replace if changed* (size
   differs or yours is newer; uploaded files keep your file's time, so a
@@ -444,19 +435,19 @@ dialog back. The x button stops the transfer (after asking) and closes.
   tab. See [VNC console](#vnc-console).
 - **Mark / Remove favourite**
 - **Clone connection** (single only)
-- **Export…** - opens an export modal carrying just this set of
+- **Export...** - opens an export modal carrying just this set of
   connections in TOML or JSON. See [Import / Export](#import-export).
-- **Move to folder…**
+- **Move to folder...**
 - **Delete connection** (with confirm dialog listing each victim)
 
 ### Right-click on a folder
 
-- **New subfolder…**
-- **New connection here…**
-- **New local shell here…** - a local-shell connection (see below)
-- **Rename…**
-- **Move to folder…**
-- **Export folder…** - bundles the whole subtree (every nested
+- **New subfolder...**
+- **New connection here...**
+- **New local shell here...** - a local-shell connection (see below)
+- **Rename...**
+- **Move to folder...**
+- **Export folder...** - bundles the whole subtree (every nested
   folder + connection) into one TOML / JSON archive.
 - **Delete folder** (cascade, with confirm)
 
@@ -474,7 +465,7 @@ dialog back. The x button stops the transfer (after asking) and closes.
 Optional reachability dots on connection rows, so opening a folder
 shows you at a glance which hosts are up.
 
-- Enable it under **Settings → Network → Liveness probe** (off by
+- Enable it under **Settings > Liveness probe** (off by
   default). The re-probe interval (default 60s, minimum 10s) is
   configurable there.
 - With it on, a hollow ○ appears on connection rows inside folders you
@@ -491,12 +482,12 @@ shows you at a glance which hosts are up.
   one. It never brings a tunnel or bastion **up** just to probe - a host
   behind a sleeping VPN, or behind a bastion you have no live session to,
   simply shows no dot (unknown) rather than a false red.
-- A folder can opt out entirely: set **Liveness probe → Off** in the
+- A folder can opt out entirely: set **Liveness probe > Off** in the
   folder's settings (tri-state, inherited by children) for hosts you
   never want probed (for example anything that alarms on port scans).
 - **Dynamic inventory hosts** are covered by a separate toggle in the
   same Settings section ("Also probe dynamic inventory hosts"). With it
-  on, dynamic entries (Proxmox, Hetzner, Ansible, …) get the same dot,
+  on, dynamic entries (Proxmox, Hetzner, Ansible, ...) get the same dot,
   but only for entries the provider reports as **running** - a stopped
   VM keeps its provider status and isn't probed. Each entry probes with
   its folder's SSH port, network profile and jump host.
@@ -559,7 +550,7 @@ tab) are saved by their own Create / Save, not by the connection's Save.
   it fails - the editor marks it as **Password overridden**.
 - **Color tag** - picker; resolves through folder ancestors if
   unset on the connection.
-- **Icon** - Upload PNG/SVG/JPG/WebP/GIF (≤256 KB). Clears to the
+- **Icon** - Upload PNG/SVG/JPG/WebP/GIF (<=256 KB). Clears to the
   default monitor icon.
 - **Tags** - chip editor: Enter, a comma or leaving the field adds the
   tag, Backspace in an empty field removes the last one, and tags
@@ -569,7 +560,7 @@ tab) are saved by their own Create / Save, not by the connection's Save.
   Supports headings (`#` through `######`), `**bold**`, `*italic*`,
   `` `inline code` ``, fenced code blocks, `-`/`*`/`+` unordered
   lists, `1.` ordered lists, `---` horizontal rules, and
-  `[link](https://…)` links. HTTP/HTTPS links open in the system
+  `[link](https://...)` links. HTTP/HTTPS links open in the system
   browser. Use it as a mini runbook per host: what it does, who
   owns it, restart command, gotchas.
 - **Quick actions** - copy buttons for Host / User / Password /
@@ -665,8 +656,8 @@ icon, favourite, and open with a double-click:
   `cd ~/project && claude -c`)
 - a REPL, `docker exec -it db psql`, `kubectl exec`, mosh, anything
 
-Create one from **New local shell…** in the tree toolbar (the `+`
-terminal button), the right-click menu, or **New local shell here…**
+Create one from **New local shell...** in the tree toolbar (the `+`
+terminal button), the right-click menu, or **New local shell here...**
 under a folder. A local connection's editor is trimmed to what
 applies:
 
@@ -712,7 +703,7 @@ Useful for: hitting a new host before you've made a saved
 credential for it, testing a credential rotation, connecting as
 root just this once to fix something, etc.
 
-A matching block exists on dynamic-inventory entries (see § 10b).
+A matching block exists on dynamic-inventory entries (see section 10b).
 
 ### Empty state
 
@@ -941,7 +932,7 @@ ssh-tool can read secrets straight out of a KeePass `.kdbx` file
 instead of storing them itself. KeePass stays the source of truth -
 the file is opened **read-only** and never written to.
 
-**Register a database** in Settings → KeePass:
+**Register a database** in Settings > External secrets > KeePass:
 
 - **Source** - a local file (a **Browse** button opens a native file
   dialog so you don't type the path), or a remote file over **WebDAV**
@@ -987,7 +978,7 @@ entry does).
 - If the remote is unreachable, the last cached copy is used and you
   are told it is **stale** rather than silently authenticating with
   old data.
-- **Refresh** (in Settings → KeePass, and in the entry picker itself)
+- **Refresh** (in Settings > External secrets > KeePass, and in the entry picker itself)
   forces a pull - use it right after adding an entry in KeePass Desktop.
 - The cached file is stored encrypted (it is the original KeePass
   blob, worthless without the vault-held master).
@@ -1003,11 +994,11 @@ included**. Like KeePass, the server stays the source of truth - it is
 read **only** and never written to; the secret is decrypted at connect
 time and never copied into ssh-tool's own store.
 
-**Register a server** in Settings → Bitwarden:
+**Register a server** in Settings > External secrets > Bitwarden:
 
 - **Server URL** - e.g. `https://vault.example.com`.
 - **API key** - sign-in uses an API key, not your password. On the
-  server, open **Settings → Security → Keys** and view the API key
+  server, open **Settings > Security > Keys** and view the API key
   (a client id + client secret). In ssh-tool, pick an existing API-key
   credential or click **Create** to add one inline.
 - **Master password** - sealed in ssh-tool's own vault and used only to
@@ -1020,8 +1011,8 @@ time and never copied into ssh-tool's own store.
 
 - Fastest: on a connection or folder, click **From Bitwarden** next to
   the Credential picker (shown once a server is registered, live - no
-  restart). The picker opens the vault as an **Organization → Collection
-  → Item** tree with a search box and a **Sync** button. Choose an item
+  restart). The picker opens the vault as an **Organization > Collection
+  > Item** tree with a search box and a **Sync** button. Choose an item
   and field, and ssh-tool creates and assigns a credential for it, filed
   under a "Bitwarden" credential folder. Bitwarden-backed credentials
   show a **shield icon** and a "bitwarden" label.
@@ -1051,7 +1042,7 @@ It is the simplest of the three external backends: Infisical decrypts
 - the value comes back over TLS and is read fresh on every connect,
 never copied into ssh-tool's own store.
 
-**Register a server** in Settings → Infisical:
+**Register a server** in Settings > External secrets > Infisical:
 
 - **Server URL** - e.g. `https://infisical.example.com`.
 - **API key** - sign-in uses a **machine identity** (Universal Auth). On
@@ -1067,7 +1058,7 @@ never copied into ssh-tool's own store.
 
 - Fastest: on a connection or folder, click **From Infisical** next to
   the Credential picker (shown once a server is registered, live - no
-  restart). The picker opens a **Project → Environment → secret** tree
+  restart). The picker opens a **Project > Environment > secret** tree
   (nested folder paths shown as a prefix on the key) with a search box.
   Choose a secret, and ssh-tool creates and assigns a credential for it,
   filed under an "Infisical" credential folder. Infisical-backed
@@ -1147,7 +1138,7 @@ on a suggestion forgets it.
   broadcast**), **Ungroup tabs** (when grouped), **Close tab**.
 - With several tabs selected (Ctrl/Cmd+click, Shift+click), right-click
   one of them for actions on all of them, among them **Upload file to N
-  tabs…**, **Download files from N tabs…** and **Reconnect N tabs**.
+  tabs...**, **Download files from N tabs...** and **Reconnect N tabs**.
   Upload and download are the Fleet tools above, but over each tab's
   open session - no new login, so hosts behind a password prompt or 2FA
   work too. Reconnect follows the bulk-connect limits in Settings.
@@ -1167,7 +1158,7 @@ file - the format asciinema and every web cast player understand.
   - the file is finalised either way, never discarded.
 - Files land in `<data dir>/recordings/` by default, named
   `<connection>-<timestamp>.cast`; change the folder under
-  **Settings > Terminal > Session recording**. A toast shows the
+  **Settings > Terminal: Session recording**. A toast shows the
   full path on every stop.
 - Recording captures **output only**. Keystrokes are never written,
   so a password typed at a sudo prompt cannot end up in the file.
@@ -1177,7 +1168,7 @@ file - the format asciinema and every web cast player understand.
 
 ### Playing recordings
 
-**Settings > Terminal > Session recording > Browse recordings…**, or
+**Settings > Terminal: Session recording > Browse recordings...**, or
 the palette command **Browse session recordings**, opens the
 recordings browser: every `.cast` file in the recordings folder with
 date, duration and size. **Play** opens the built-in player - a
@@ -1218,16 +1209,9 @@ Pane toolbar (top of each pane):
 
 ### Terminal output
 
-- xterm.js, drawn by the canvas renderer by default; **GPU rendering (WebGL)** in Settings > Terminal switches new tabs to WebGL (off by default: it garbles text on some GPUs; canvas again if WebGL fails). On Android terminal tabs always use canvas; the setting still applies to recording playback there.
-  The glyph cache is cleared on every resize so full-screen TUIs
-  (htop, btop) that repaint the whole grid don't ghost old cells over
-  new ones; **Ctrl+Shift+L** forces a redraw if it ever happens
-  in-place.
-- Scrollback persists across pane detach/redock and UI reloads -
-  backend buffers PTY output, frontend replays on mount.
-- Themes - built-in choices including One Dark Pro and several
-  Catppuccin / Dracula / Solarized variants. Persisted as
-  `terminal_theme`.
+- xterm.js, drawn by the canvas renderer by default; **GPU rendering (WebGL)** in Settings > Terminal switches new tabs to WebGL (off by default: it garbles text on some GPUs; canvas again if WebGL fails). On Android terminal tabs always use canvas; the setting still applies to recording playback there. The glyph cache is cleared on every resize so full-screen TUIs (htop, btop) that repaint the whole grid don't ghost old cells over new ones; **Ctrl+Shift+L** forces a redraw if it ever happens in-place.
+- Scrollback persists across pane detach/redock and UI reloads - backend buffers PTY output, frontend replays on mount.
+- Themes - built-in choices including One Dark Pro and several Catppuccin / Dracula / Solarized variants. Persisted as `terminal_theme`.
 - Font size - Ctrl+wheel zooms, persists as `terminal_font_size`.
 - Web links - URLs in output are click-to-open in the system browser.
 
@@ -1304,12 +1288,12 @@ ssh-tool is in the background.
 If a remote shell exits cleanly (`Ctrl+D`, `exit 0`), the tab closes
 after a 250 ms delay so the user sees the disconnect message briefly.
 Abnormal closes stay open so the reason is visible. Toggle via
-Settings → Terminal → "Auto-close tab on clean exit".
+Settings > Terminal: "Auto-close tab on clean exit".
 
 ### Auto-reconnect
 
 Connections with auto-reconnect on retry with exponential backoff
-after a non-user-initiated drop. UI shows "reconnecting…" hint with
+after a non-user-initiated drop. UI shows "reconnecting..." hint with
 attempt number. Cancel via the Reconnect button on the pane toolbar
 or by closing the tab.
 
@@ -1418,9 +1402,9 @@ first, so clicking it twice does not concatenate two commands.
 
 ### Toolbar actions
 
-- **Upload file** - native file dialog → file uploads under current
+- **Upload file** - native file dialog -> file uploads under current
   cwd with the original filename.
-- **Upload folder** - native directory dialog → recursive upload
+- **Upload folder** - native directory dialog -> recursive upload
   with progress tracking per file + aggregate.
 - **Download** - single-file download via native save dialog;
   directories use a directory picker and mirror the tree under
@@ -1599,7 +1583,7 @@ without starting their consumers. A topic opens on its own subtabs:
 
 Pick where to start - the last N records of every partition, the last N records of the topic, the beginning, new records only, an offset, or a time - a partition or all, an optional record limit, and whether to **stop at end** (the end offsets as they were when you started). The consumer never joins a consumer group and never commits an offset: reading a topic here cannot move anyone's real consumers.
 
-**Last N in topic** is the newest N records across all partitions by record time (or of the one partition picked), listed oldest first: it reads the last N offsets of every partition read, picks the newest N records among them and shows them once every partition is read, or once 5 seconds pass with nothing more from the partitions still being read (the status bar says "picking the newest of ... read" until then; a partition that slow is left out of the pick, and with stop at end the read ends there; without it, the records that partition sends later come after the pick in arrival order, older ones too, like new records). The pick is held within the buffer's bounds (with large records, fewer than N fit). Records produced while it is made are not held: each partition pauses at the end it had at start, and the read goes on from there once the pick shows, so they come after it, in order, followed by new records as they come; with stop at end the read ends with the pick. A record limit keeps the newest of the pick and, as in every mode, stops the read once reached, stop at end or not. A Keep only filter picks among the matches in what was read. Two limits come with reading only that window. On a compacted topic, or one written in transactions, the last N offsets of a partition hold fewer than N records (removed records and commit markers take offsets too), so the pick can be shorter than N, as with Last N per partition. When producers set their own record timestamps and those run out of order within a partition, a newer record at an older offset outside the window is not seen: the pick is the newest by timestamp among the last N offsets of each partition.
+**Last N in topic** is the newest N records across all partitions by record time (or of the one partition picked), listed oldest first: it reads the last N offsets of every partition read, picks the newest N records among them and shows them once every partition is read, or once 5 seconds pass with nothing more from the partitions still being read (the consumer's status line says "picking the newest of ... read" until then; a partition that slow is left out of the pick, and with stop at end the read ends there; without it, the records that partition sends later come after the pick in arrival order, older ones too, like new records). The pick is held within the buffer's bounds (with large records, fewer than N fit). Records produced while it is made are not held: each partition pauses at the end it had at start, and the read goes on from there once the pick shows, so they come after it, in order, followed by new records as they come; with stop at end the read ends with the pick. A record limit keeps the newest of the pick and, as in every mode, stops the read once reached, stop at end or not. A Keep only filter picks among the matches in what was read. Two limits come with reading only that window. On a compacted topic, or one written in transactions, the last N offsets of a partition hold fewer than N records (removed records and commit markers take offsets too), so the pick can be shorter than N, as with Last N per partition. When producers set their own record timestamps and those run out of order within a partition, a newer record at an older offset outside the window is not seen: the pick is the newest by timestamp among the last N offsets of each partition.
 
 Records arrive in a list (partition, offset, time, key, value); a record
 opens below with its value pretty-printed when it is JSON, a hex dump when
@@ -1611,7 +1595,7 @@ its consumers share equally - running ones and finished ones that still
 hold records (Clear or closing the topic tab gives the share back), so
 listening to more topics keeps fewer records of each.
 
-**Keep only** (key contains / value contains / header contains) is a match
+**Keep only** (key contains / value contains / header name / value contains) is a match
 done before storing: a record is kept only if it contains every filled text,
 ignoring case, anywhere in the full key, value or a header name or value.
 The rest are counted but not stored, so the status line reads "3 matched of
@@ -1718,17 +1702,13 @@ is what **Double-click opens -> Database** opens.
 
 ### Several databases on one host
 
-One Database tab already shows every database of its server, and each
-query tab picks the one it runs on. When a host needs more than one login or server - *prod* and *stage* with different users, read-only for one of them, or PostgreSQL and MySQL side by side - list them under **Databases on this host** in the connection's Services tab: a name, and only what differs (database, login, writes, engine, address); empty fields take the values above. Each is a row under the connection in the tree (unless its **Show in tree** is off), opens its own tab (`host / stage`) on double-click or Enter, and is in the right-click menu as **Open database stage**.
+One Database tab already shows every database of its server, and each query tab picks the one it runs on. When a host needs more than one login or server - *prod* and *stage* with different users, read-only for one of them, or PostgreSQL and MySQL side by side - list them under **Databases on this host** in the connection's Services tab: a name, and only what differs (database, login, writes, engine, address); empty fields take the values above. Each is a row under the connection in the tree (unless its **Show in tree** is off), opens its own tab (`host / stage`) on double-click or Enter, and is in the right-click menu as **Open database stage**.
 
 A folder can hold the list too (**Databases on every host in this folder** in the folder's Database settings, shown with the folder's own Database switch off as well): a replicated cluster lists *prod* and *stage* once, and every connection under the folder that has the Database on shows them, before the ones it lists itself. Empty fields take each connection's own values, so one entry works on every node. On a connection, an inherited database is shown with the folder it comes from; it is edited in that folder, but the connection can give it its own login, hide it (**Show in tree** off, or **Remove** on its tree row, which hides it on that connection only) or make it the default.
 
 ### Opening it
 
-**Open** next to Connect in the connection header (the default database;
-its arrow lists every database and Kafka), **Open database** in
-the connection's right-click menu, on a terminal tab's right-click menu, or
-the default action as above. A second open of the same connection brings its tab forward. The SSH session opens with the first request, with the usual host-key and password prompts.
+**Open** next to Connect in the connection header (the default database; its arrow lists every database and Kafka), **Open database** in the connection's right-click menu, on a terminal tab's right-click menu, or the default action as above. A second open of the same connection brings its tab forward. The SSH session opens with the first request, with the usual host-key and password prompts.
 
 While the tab is open the app checks the server every 20 seconds: a trivial `SELECT 1` (`FROM DUAL` on Oracle, `FROM SYSIBM.SYSDUMMY1` on Db2) on the SQL engines, on ClickHouse, OpenSearch and Redis the same version and current-user request the tab starts with (`SELECT version(), currentUser()...`, `GET /` with the security plugin's authenticate call, `INFO server` and `ACL WHOAMI`). The tab's dot and the database's row in the tree are green only while the server answers, red once it does not (a stopped server, a failover, a dropped VPN behind a live SSH session; the tab's tooltip says why), and plain while it connects or after the tab is closed. When the server answers again they turn green by themselves, and a list that failed to load in the meantime is read again once; if that fails too, **Try again** or the reload button at the top of the list reads it. The check keeps the SSH session in use while the tab is open; it runs on the tab's tree and table connection, not in a query tab's own session, so a server's idle timeout can still end a query tab's session (its settings and temporary tables go with it). Whether the next run recovers on its own depends on the engine; if a run fails after a long pause, close the query tab and open a new one.
 
@@ -1750,25 +1730,12 @@ opens a new query tab on it.
 A query tab has an SQL editor with highlighting for the engine and
 completion of the table names listed so far.
 
-- **Ctrl+Enter** (or **Run**) runs the statement under the cursor - or the
-  selection - and **Ctrl+Shift+Enter** (**Run all**) the whole script,
-  statement by statement, stopping at the first error. Semicolons inside
-  strings, comments and PostgreSQL `$$` bodies do not split.
-- **Limit** caps the rows a statement brings back (500 by default, up to
-  100 000); a read cut at the limit is stopped on the server, so a `SELECT`
-  without `LIMIT` on a huge table is not read to the end. Two exceptions:
-  inside a PostgreSQL transaction you opened (stopping the statement would
-  abort the transaction), and a statement that changes data while
-  returning rows (`DELETE ... RETURNING`) - those are read to the end and
-  only the limit is shown.
+- **Ctrl+Enter** (or **Run**) runs the statement under the cursor - or the selection - and **Ctrl+Shift+Enter** (**Run all**) the whole script, statement by statement, stopping at the first error. Semicolons inside strings, comments and PostgreSQL `$$` bodies do not split.
+- **Limit** caps the rows a statement brings back (500 by default, up to 100 000); a read cut at the limit is stopped on the server, so a `SELECT` without `LIMIT` on a huge table is not read to the end. Two exceptions: inside a PostgreSQL transaction you opened (stopping the statement would abort the transaction), and a statement that changes data while returning rows (`DELETE ... RETURNING`) - those are read to the end and only the limit is shown.
 - **Stop** cancels the running statement on the server.
-- Each query tab has its own server session: `SET`, temporary tables and an
-  open transaction carry from one run to the next. On PostgreSQL the tab
-  shows **in transaction** with **Commit** and **Roll back** while one is
-  open, and closing the tab asks first (closing rolls it back).
+- Each query tab has its own server session: `SET`, temporary tables and an open transaction carry from one run to the next. On PostgreSQL the tab shows **in transaction** with **Commit** and **Roll back** while one is open, and closing the tab asks first (closing rolls it back).
 - With several statements, each result is a chip above the grid. Result sets show in a grid that stays fast with many rows. Click a cell; **Shift**+click, **Shift**+arrows or a drag select a block of cells, a click on `#` selects the row (**Shift** for several) and **Ctrl+A** everything. **Ctrl+C** copies one cell's value, or a block as a table: pasted into Excel it fills the cells, into Teams or Outlook it is a table (no header row; **Copy with headers** in the right-click menu adds it). Double-click (or Enter, or **Open value** in the menu) opens the full value below - JSON pretty-printed. The right-click menu also has **Copy as Markdown** and, on SQL engines, **Copy as WHERE** (the condition that picks the selected values: `col = v`, `col IN (...)` for one column, each row's cells ANDed for more). A click on a column header sorts the rows (again for descending, a third time back to the server's order): numbers as numbers, `NULL` last; in a SQL table's Data view the header sorts the whole table on the server instead (see Tables). **Ctrl+F** (or the magnifier under the grid) keeps only the rows with the text in any column and marks the cells; **Esc** closes it. It works on the rows already fetched - on a table's Data view that is the page shown - and `#` keeps each row's number from the server. **CSV** and **JSON** save the rows as shown, including edited cell values. In JSON a result with two columns of one name (a join's two `id`s) keeps both: the repeat is named `id (2)`, or the next free number when a column already has that name.
-- On a connection marked *sensitive*, statements that change data are
-  listed for confirmation before they run.
+- On a connection marked *sensitive*, statements that change data are listed for confirmation before they run.
 
 Values are shown the way `psql`, the `mysql` client and `clickhouse-client`
 print them: numbers keep their precision, `NULL` is marked, binary columns
@@ -1840,29 +1807,13 @@ Instant Client to install. What differs:
 
 Microsoft SQL Server (MSSQL) and Azure SQL. What differs:
 
-- **The address names the port.** Named instances are not looked up (the
-  SQL Browser service is UDP, which no tunnel carries): give the
-  instance's port.
-- **Azure SQL Database** reaches only the database you log in to (no `USE`
-  of another), so that is the one the tree lists: put it in **Database**.
-- **GO ends a batch.** A line holding only `GO` separates statements like
-  `;` does; `GO 5` runs the batch five times, as sqlcmd does (up to 100000 statements in all). A `DECLARE` (its variables last the batch), a `BEGIN ... END`
-  block, an `IF` / `WHILE` and a `CREATE PROCEDURE / FUNCTION / TRIGGER` run
-  to the next `GO` as one batch. A batch with several result sets shows the
-  first and counts the rest; `PRINT` output shows under the result.
-- **Transactions** work as on PostgreSQL: `BEGIN TRAN` holds one across
-  runs, the tab shows it, and closing the tab rolls it back.
-- **Read-only.** SQL Server has no read-only transaction, and T-SQL needs
-  no semicolon between two statements (`SELECT 1 DELETE FROM t` is two), so
-  a read-only tab sends a plain `SELECT` or `WITH` only: no `EXEC`, `INTO`,
-  `OPENQUERY` / `OPENROWSET` or a second statement's keyword (including `SETUSER`, `RAISERROR`, `WAITFOR` and `CHECKPOINT`, which the rollback does not undo), inside a
-  transaction that is rolled back. A login with only `db_datareader` is the
-  real guarantee.
-- **TLS** *Off* still encrypts the login (the password), as SSMS does,
-  without checking the certificate.
-- **The tree** groups tables by schema; row counts and sizes come from the
-  partition statistics. SQL Server has no `SHOW CREATE TABLE`: **DDL** is
-  rebuilt from the catalog (views show their own definition).
+- **The address names the port.** Named instances are not looked up (the SQL Browser service is UDP, which no tunnel carries): give the instance's port.
+- **Azure SQL Database** reaches only the database you log in to (no `USE` of another), so that is the one the tree lists: put it in **Database**.
+- **GO ends a batch.** A line holding only `GO` separates statements like `;` does; `GO 5` runs the batch five times, as sqlcmd does (up to 100000 statements in all). A `DECLARE` (its variables last the batch), a `BEGIN ... END` block, an `IF` / `WHILE` and a `CREATE PROCEDURE / FUNCTION / TRIGGER` run to the next `GO` as one batch. A batch with several result sets shows the first and counts the rest; `PRINT` output shows under the result.
+- **Transactions** work as on PostgreSQL: `BEGIN TRAN` holds one across runs, the tab shows it, and closing the tab rolls it back.
+- **Read-only.** SQL Server has no read-only transaction, and T-SQL needs no semicolon between two statements (`SELECT 1 DELETE FROM t` is two), so a read-only tab sends a plain `SELECT` or `WITH` only: no `EXEC`, `INTO`, `OPENQUERY` / `OPENROWSET` or a second statement's keyword (including `SETUSER`, `RAISERROR`, `WAITFOR` and `CHECKPOINT`, which the rollback does not undo), inside a transaction that is rolled back. A login with only `db_datareader` is the real guarantee.
+- **TLS** *Off* still encrypts the login (the password), as SSMS does, without checking the certificate.
+- **The tree** groups tables by schema; row counts and sizes come from the partition statistics. SQL Server has no `SHOW CREATE TABLE`: **DDL** is rebuilt from the catalog (views show their own definition).
 
 <a id="db2"></a>
 ### Db2
@@ -1936,19 +1887,9 @@ cluster as the one database.
   ```
 
   **Ctrl+Enter** runs the request or statement under the cursor.
-- **Results.** Search hits come back as a grid (`_index`, `_id`, `_score`,
-  then the document's fields) with the total hit count below it; `_cat`
-  requests as a grid too (sent with `format=json` unless you ask for
-  another); SQL as a grid, paged through the cursor up to the row limit.
-  Anything else, aggregations included, is the response's JSON,
-  pretty-printed a line per row. An error shows the cluster's type and reason.
-- **Read-only** sends only GET and HEAD requests, POST to the search
-  endpoints (`_search`, `_count`, `_msearch`, `_mget`, `_field_caps`,
-  `_validate`, `_explain`, `_analyze`, `_termvectors`, `_rank_eval`) and
-  SQL that reads. A POST whose path a proxy in front of the cluster could rewrite into another endpoint (`.` or `..` segments, `;`, `//`, encoded slashes outside a date-math name) is refused. The cluster has no read-only session, so this check is
-  all the tab can do: a login with a read-only role is the real guard.
-- **Stop** closes the request; the cluster cancels a search whose client
-  went away. There are no sessions or transactions.
+- **Results.** Search hits come back as a grid (`_index`, `_id`, `_score`, then the document's fields) with the total hit count below it; `_cat` requests as a grid too (sent with `format=json` unless you ask for another); SQL as a grid, paged through the cursor up to the row limit. Anything else, aggregations included, is the response's JSON, pretty-printed a line per row. An error shows the cluster's type and reason.
+- **Read-only** sends only GET and HEAD requests, POST to the search endpoints (`_search`, `_count`, `_msearch`, `_mget`, `_field_caps`, `_validate`, `_explain`, `_analyze`, `_termvectors`, `_mtermvectors`, `_rank_eval`, `_search_shards`, `_render`) and SQL that reads. A POST whose path a proxy in front of the cluster could rewrite into another endpoint (`.` or `..` segments, `;`, `//`, encoded slashes outside a date-math name) is refused. The cluster has no read-only session, so this check is all the tab can do: a login with a read-only role is the real guard.
+- **Stop** closes the request; the cluster cancels a search whose client went away. There are no sessions or transactions.
 
 <a id="redis"></a>
 ### Redis
@@ -1958,27 +1899,10 @@ TLS as for the others. The login is an ACL user and password; a password
 with no username is the `requirepass` password. **Database** is the
 database number (`3` or `db3`; empty is 0).
 
-- **The tree** lists the numbered databases (all of them when the login
-  may read `CONFIG GET databases`, else the ones with keys) and, in each,
-  the keys grouped by the part before their first `:` (`user:*`,
-  `session:*`; keys without one under *(no prefix)*). Groups come from a
-  `SCAN` of up to 10 000 keys; on a bigger keyspace the counts say they
-  are from a sample.
-- **Data** lists a group's keys, sorted, with type, TTL (`-1`: none),
-  size (bytes of a string, elements of a collection) and the value: a
-  string's start, a collection's first 20 elements as JSON. **DDL** shows
-  the pattern and the types seen.
-- **Query tabs** run one command per line, quoted as in `redis-cli`
-  (`SET k "two words"`, `"\x00"` escapes); `#` and `//` lines are comments.
-  `HGETALL`, `CONFIG GET` and `... WITHSCORES` come back as two columns,
-  `INFO` as section / name / value, `SCAN` as its keys with the next cursor
-  below the grid, other arrays a row per element; `OK` and integer replies
-  show as the result's message. `SELECT` carries to the next run.
-  `MONITOR`, `SUBSCRIBE`, `SYNC`, `HELLO`, `RESET`, `QUIT` and
-  `CLIENT REPLY` are refused: they would take the connection over.
-- **Stop** closes the tab's connection, which also breaks off a blocking
-  command (`BLPOP`, `XREAD BLOCK`); the next run connects again on the
-  same database.
+- **The tree** lists the numbered databases (all of them when the login may read `CONFIG GET databases`, else the ones with keys) and, in each, the keys grouped by the part before their first `:` (`user:*`, `session:*`; keys without one under *(no prefix)*). Groups come from a `SCAN` of up to 10 000 keys; on a bigger keyspace the counts say they are from a sample.
+- **Data** lists a group's keys, sorted, with type, TTL (`-1`: none), size (bytes of a string, elements of a collection) and the value: a string's start, a collection's first 20 elements as JSON. **DDL** shows the pattern and the types seen.
+- **Query tabs** run one command per line, quoted as in `redis-cli` (`SET k "two words"`, `"\x00"` escapes); `#` and `//` lines are comments. `HGETALL`, `CONFIG GET` and `... WITHSCORES` come back as two columns, `INFO` as section / name / value, `SCAN` as its keys with the next cursor below the grid, other arrays a row per element; `OK` and integer replies show as the result's message. `SELECT` carries to the next run. `MONITOR`, `SUBSCRIBE`, `SYNC`, `HELLO`, `RESET`, `QUIT` and `CLIENT REPLY` are refused: they would take the connection over.
+- **Stop** closes the tab's connection, which also breaks off a blocking command (`BLPOP`, `XREAD BLOCK`); the next run connects again on the same database.
 - **Read-only** sends only read commands (an allowlist that checks subcommands: `CONFIG GET` reads, `CONFIG SET` does not; `EVAL_RO` and `FCALL_RO` read, `EVAL` does not). Commands whose reply carries a password are refused too: `CONFIG GET` with a pattern that matches `requirepass`, `masterauth` and the like (`CONFIG GET *`), `ACL LIST` and `ACL GETUSER`. Redis has no read-only session, so an ACL user limited to `+@read` is the real guard.
 
 ### Tables
@@ -1990,7 +1914,7 @@ CREATE`; on PostgreSQL rebuilt from the catalog, without partitioning,
 storage options, ownership and grants). **Query** opens a query tab on the
 table.
 
-**Right-click in the tree.** A table or view: **Open data**, **Structure**, **DDL**, **New query** (a `SELECT` of the first 100 rows), **Count rows** (the exact `COUNT(*)`, run on a session of its own and shown in a note; on OpenSearch the `_count` request opens in a query tab), **Copy name** (quoted and qualified the engine's way), **Copy DDL**, **Export to CSV / JSON** and **ER diagram**. A database: **New query**, **ER diagram**, **Copy name**, **Refresh tables**; a schema: **ER diagram** and **Copy name**.
+**Right-click in the tree.** A table or view: **Open data**, **Structure**, **DDL**, **New query** (a `SELECT` of the first 100 rows), **Count rows** (the exact `COUNT(*)`, run on a session of its own and shown in a note; on OpenSearch the `_count` request opens in a query tab), **Copy name** (quoted and qualified the engine's way), **Copy DDL**, **Export to CSV...**, **Export to JSON...** and **ER diagram**. A database: **New query**, **ER diagram**, **Copy name**, **Refresh tables**; a schema: **ER diagram** and **Copy name**.
 
 **Export a whole table** (PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, Db2, ClickHouse): the rows are read 10000 at a time, in primary-key order, then saved where you choose. A bar under the tree counts the rows read and has **Stop**; one export runs at a time. The file is as consistent as paging through the table is: rows written meanwhile can be missed or read twice, and a table without a primary key has no fixed order between pages, so the note at the end warns when such a table (or one whose key could not be read) took more than one page. A value longer than 256 KiB is cut, and the note at the end says how many were. OpenSearch (10000 documents at most by paging) and Redis (a sample of keys) have no export of the whole object; save the grid's rows with **CSV** / **JSON** instead.
 
@@ -2002,7 +1926,7 @@ table.
 
 **Copy as SQL** (and the right-click menu of the grid) puts `INSERT` or `DELETE` statements for the selected rows, or the whole page, on the clipboard (`INSERT` with the changed cell values as shown, `DELETE` matching the rows as they are on the server), in the engine's own syntax (binary values as hex literals, Oracle dates as `TIMESTAMP '...'`).
 
-**Editing cells.** Double-click a cell (or **F2** / **Enter**, or **Edit** in the right-click menu) and type in place: **Enter** keeps the value and moves down, **Tab** right (**Shift+Tab** left), **Esc** drops it, a click elsewhere keeps it. A long or multi-line value opens in the value pane below instead, with **Set** and **Set NULL**. **Set NULL** and **Revert** are in the right-click menu too, for every selected cell. A changed cell is yellow with a mark in its corner, and its row number turns yellow, so changes stay visible while a cell is picked or scrolled away; hovering one shows the old value. Nothing is sent: **Script** opens the changes as `UPDATE` statements in a query tab, keyed by the primary key, to read and run there (on a sensitive connection Run asks first, as for any write); **Discard** drops them. Moving to another page or table asks before it drops unsent edits. A table without a primary key gets statements that name every column and say so. Not offered on a read-only connection.
+**Editing cells.** Editing works in a table's **Data** view on a SQL engine that is not read-only; query results are not edited. Double-click a cell (or **F2** / **Enter**, or **Edit** in the right-click menu) and type in place (**Shift+Enter** opens the value pane instead): **Enter** keeps the value and moves down, **Tab** right (**Shift+Tab** left), **Esc** drops it, a click elsewhere keeps it. A long or multi-line value opens in the value pane below instead, with **Set** and **Set NULL**. **Set NULL** (**Set NULL (all selected)**) and **Revert the change** (**Revert N changes**) are in the right-click menu too, for every selected cell. A changed cell is yellow with a mark in its corner, and its row number turns yellow, so changes stay visible while a cell is picked or scrolled away; hovering one shows the old value. Nothing is sent: **Script** opens the changes as `UPDATE` statements in a query tab, keyed by the primary key, to read and run there (on a sensitive connection Run asks first, as for any write); **Discard** drops them. Moving to another page or table asks before it drops unsent edits. A table without a primary key gets statements that name every column and say so. Not offered on a read-only connection.
 
 **Query timeout.** In the connection's (or folder's) Database settings, **Query timeout (s)** stops a query tab's statement that runs longer, on the server, the way **Stop** does; the result says so. Empty inherits, 0 means no limit (the default). It applies to Database tabs opened after the change.
 
@@ -2072,7 +1996,7 @@ Below the connection editor: **Port forwards** section. Three kinds:
 
 ### Opening things in a browser
 
-Dynamic and local forwards both have an **Open URL…** button and
+Dynamic and local forwards both have an **Open URL...** button and
 per-forward **bookmarks** - the URLs you reach through that tunnel,
 as quick-launch buttons. They appear in the forwards list, in the
 tunnel popover on a pane header, and in the quick palette.
@@ -2135,7 +2059,7 @@ The dedicated profile is worth choosing when two tunnels reach the same
 software on different servers: a shared cookie jar means signing into
 one signs you out of the other.
 
-Configure which browser binary is launched in **Settings → Browser
+Configure which browser binary is launched in **Settings > Browser
 launcher** (Chrome, Chromium, Firefox and Edge are all supported - pick
 the binary path). **Use a persistent browser profile** in the same
 section sets the default for SOCKS forwards that have not chosen for
@@ -2250,7 +2174,7 @@ launch starts on each of them.
 ### Tunnels from the terminal view
 
 You don't have to scroll back to the Connections view to toggle a
-tunnel or open a bookmark - every pane header has **Tools → Port
+tunnel or open a bookmark - every pane header has **Tools > Port
 forwards** (the Tools menu in the SSH-only toolbar group):
 
 - Opens a compact popover listing every forward configured on
@@ -2311,7 +2235,7 @@ connection either, since its settings flow down to those hosts.
 
 Setup, once:
 
-1. **Settings -> LLM (MCP) access** -> tick *Allow LLM (MCP) access
+1. **Settings > LLM (MCP) access** -> tick *Allow LLM (MCP) access
    to shared sessions*. This starts a local-only bridge (a unix
    socket on Linux/macOS, a loopback pipe on Windows). Nothing is
    exposed to the network.
@@ -2460,7 +2384,7 @@ be kept in the persistent audit log (a toggle in LLM settings).
 For a system prompt that teaches your LLM client how to use these
 tools well and safely (start with `list_sessions`, treat terminal
 output as untrusted, respect approvals, be extra careful in auto-run
-mode), click **Copy system prompt** in Settings -> LLM or the
+mode), click **Copy system prompt** in Settings > LLM (MCP) access or the
 Share-with-LLM popover, then paste it where your client keeps
 instructions: **Claude Desktop** -> Project -> *Instructions* (and
 then chat inside that project), **Claude Code** -> your `CLAUDE.md`,
@@ -2481,7 +2405,7 @@ Let a colleague watch - or, with your explicit approval, type into -
 a live session from a plain web browser. Nothing is installed on their
 side; they open a link and see your terminal.
 
-1. **Settings -> Sharing** -> turn on *Enable session sharing*. This is
+1. **Settings > Session sharing** -> turn on *Enable session sharing*. This is
    off by default. While it's on, the certificate fingerprint (a short
    word-code) is shown here, and you can regenerate it.
 
@@ -2549,7 +2473,7 @@ NetBird tailnet) without setting up a system-wide VPN. Everything runs in
 **userspace**: no TUN adapter, no admin rights, no system routes, and
 several profiles can be up at once toward different networks.
 
-Manage profiles in **Settings -> Network profiles**: the list on the
+Manage profiles in **Settings > Network profiles**: the list on the
 left holds **Plugins & proxy** (plugins, defaults, the app proxy), your profiles
 (a green dot when the tunnel is up, **via proxy** when it is reachable
 through the app proxy) and **New profile**. A profile opens on four tabs:
@@ -2585,17 +2509,9 @@ refresh never starts a tunnel by itself.
 
 Each profile has a mode and a pause switch:
 
-- **Always** - the first hop always dials through the tunnel; if the
-  tunnel can't come up, the connect fails (it never silently falls
-  back to a direct dial).
-- **Auto** - probe a direct dial first (short timeout); only if that
-  fails bring the tunnel up. Good for a host reachable directly when
-  you're on-site and only via VPN from elsewhere. On-site connects
-  show no VPN badge because they really went direct. While the tunnel
-  is up, connects use it straight away without the probe. If the profile needs a plugin that is not installed, a connect that went direct says so once per profile while the app runs (click the warning to open the profile and install it); a connect the direct probe could not make fails with the same reason.
-- **Pause** - a per-profile kill switch: every connection using it
-  dials direct and the tunnel is stopped immediately. For "I'm on the
-  network, leave the VPN alone."
+- **Always** - the first hop always dials through the tunnel; if the tunnel can't come up, the connect fails (it never silently falls back to a direct dial).
+- **Auto** - probe a direct dial first (short timeout); only if that fails bring the tunnel up. Good for a host reachable directly when you're on-site and only via VPN from elsewhere. On-site connects show no VPN badge because they really went direct. While the tunnel is up, connects use it straight away without the probe. If the profile needs a plugin that is not installed, a connect that went direct says so once per profile while the app runs (click the warning to open the profile and install it); a connect the direct probe could not make fails with the same reason.
+- **Pause** - a per-profile kill switch: every connection using it dials direct and the tunnel is stopped immediately. For "I'm on the network, leave the VPN alone."
 
 ### Profiles on several machines
 
@@ -2612,20 +2528,7 @@ that, or crashed, counts as gone after about 100 seconds.
 
 ### Plugins
 
-NetBird, Tailscale, OpenConnect, OpenVPN and Check Point run as optional **plugins**: small
-helper programs, one per profile, kept out of the app to keep it small
-(and, for OpenConnect and Check Point, because their engines are GPL /
-AGPL licensed). Install them
-under **Plugins & proxy** on this page: each is downloaded from the
-[ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins)
-releases and checked against its sha256 digest before install. The card
-shows the plugin release and the engine version inside it, and an
-update is offered there (and as a status bar pill) when a newer plugin
-release is out. Downloads exist for Windows and Linux; on macOS build
-the plugin from the ssh-tool-plugins repository and put it in the
-plugins folder (`~/Library/Application Support/ssh-tool/plugins`), where
-the app finds it. The macOS build script (`scripts/macos-build.sh`)
-builds and copies the plugins you pick - see [docs/macos.md](https://github.com/fpenezic/ssh-tool/blob/main/docs/macos.md) for it and for the steps by hand.
+NetBird, Tailscale, OpenConnect, OpenVPN and Check Point run as optional **plugins**: small helper programs, one per profile, kept out of the app to keep it small (and, for OpenConnect and Check Point, because their engines are GPL / AGPL licensed). Install them under **Plugins & proxy** on this page: each is downloaded from the [ssh-tool-plugins](https://github.com/fpenezic/ssh-tool-plugins) releases and checked against its sha256 digest before install. The card shows the plugin release and the engine version inside it, and an update is offered there (and as a status bar pill) when a newer plugin release is out. Downloads exist for Windows and Linux; on macOS build the plugin from the ssh-tool-plugins repository and put it in the plugins folder (`~/Library/Application Support/ssh-tool/plugins`), where the app finds it. The macOS build script (`scripts/macos-build.sh`) builds and copies the plugins you pick - see [docs/macos.md](https://github.com/fpenezic/ssh-tool/blob/main/docs/macos.md) for it and for the steps by hand.
 
 Plugins are desktop only: Android cannot start helper processes.
 Profiles still sync to the phone, and there a plugin profile is marked
@@ -2669,15 +2572,7 @@ tunnel comes up with the first connection through it (a login or
 one-time code is asked as usual) and the idle stop applies after the last
 one closes. The app has to be running; the listener starts with it.
 
-A profile's networks are the routes the server pushed (from the last
-connect; a full-tunnel default route is left out), the addresses of
-connections in the tree that use it, and any **Extra networks** on its
-Proxy tab, which lists them all. On the Proxy tab **Reachable through the
-app proxy** and **Separate proxy for this VPN only** apply on the click;
-the listen address, port and extra networks wait for **Save** (with
-**Discard**, both greyed out while nothing changed). The app proxy's own
-listen address and port work the same way. A port that is already taken is refused and the proxy keeps listening where it was. Host names of those connections go to
-their profile as well and are resolved inside the VPN.
+A profile's networks are the routes the server pushed (from the last connect; a full-tunnel default route is left out), the addresses of connections in the tree that use it, and any **Extra networks** on its Proxy tab, which lists them all. On the Proxy tab **Reachable through the app proxy** and **Separate proxy for this VPN only** apply on the click; the listen address, port and extra networks wait for **Save** (with **Discard**, both greyed out while nothing changed). The app proxy's own listen address and port work the same way. A port that is already taken is refused and the proxy keeps listening where it was. Host names of those connections go to their profile as well and are resolved inside the VPN.
 
 **DNS domains.** A name in one of a profile's DNS domains goes through that profile as a name and is resolved by the VPN's DNS, so `db1.prod.example.com` reaches the host behind the VPN even though this machine cannot resolve it (or resolves it to something else). The domains are the ones the server reports - search domains from OpenConnect, OpenVPN and Check Point, OpenConnect's split-DNS domains, and NetBird's own domain and nameserver-group domains (NetBird plugin 1.7 and later), remembered from the last connect - plus any **Extra DNS domains** on the profile's Proxy tab (a WireGuard profile's are the search domains on its config's `DNS` line, which count as added by hand; Tailscale reports none, add them there). The Proxy tab lists them with where each came from. The longest domain wins (`prod.example.com` before `example.com`); a domain on two profiles goes by **When networks overlap**, then the profile that is up. A domain you added by hand beats one another profile's server reported, whatever their lengths: with `example.com` added on B and `vpn.example.com` pushed by A's gateway, `db1.vpn.example.com` goes to B until `vpn.example.com` is added by hand on A too. A server can push any domain, so this keeps the ones you set where you set them. Domains of different profiles that claim the same names are listed under the app proxy's summary as overlaps, with the profile that takes them; nothing is blocked. A connection's own host name still decides first. A short name with no dot (`db1`) that this machine cannot resolve is tried in the first profile's search domains, in order (`db1.example.com`); a short name this machine does resolve keeps going by its address. A WireGuard profile resolves names with the DNS servers in its configuration; without them only addresses work through it. A program that resolves names itself before it talks to the proxy (many JDBC drivers, `curl` with `--socks5` or a `socks5://` proxy URL; `--socks5-hostname` or `socks5h://` sends the name) sends an address instead, and that goes by the networks as before.
 
@@ -2818,10 +2713,7 @@ customer's DNS knows needs an address, or an `--add-host` on the gateway.
 
 ### WireGuard profiles
 
-Paste a standard `wg-quick` config (Interface + Peer). The private key
-and any preshared keys are stored in the vault; the rest lives in the
-profile. `PostUp` / `PostDown` / `Table` lines are ignored (there is
-no system interface to script). DNS servers listed in the config resolve hostnames inside the tunnel; without them only IP literals work. Names on the same `DNS` line are search domains, as in `wg-quick` (`DNS = 10.0.0.53, corp.example.com`): a short name like `db1` is tried as `db1.corp.example.com` first (the next domain only when that name does not exist), and the app proxy routes names in them through the profile, the same as domains added by hand. Search domains with no DNS server on the line resolve nothing in the tunnel; the profile still works by address, and the Proxy tab says they are not used.
+Paste a standard `wg-quick` config (Interface + Peer). The private key and any preshared keys are stored in the vault; the rest lives in the profile. `PostUp` / `PostDown` / `Table` lines are ignored (there is no system interface to script). DNS servers listed in the config resolve hostnames inside the tunnel; without them only IP literals work. Names on the same `DNS` line are search domains, as in `wg-quick` (`DNS = 10.0.0.53, corp.example.com`): a short name like `db1` is tried as `db1.corp.example.com` first (the next domain only when that name does not exist), and the app proxy routes names in them through the profile, the same as domains added by hand. Search domains with no DNS server on the line resolve nothing in the tunnel; the profile still works by address, and the Proxy tab says they are not used.
 
 Editing shows the config back with secrets replaced by a `**KEEP**`
 placeholder - leave it to keep the stored key, or paste a new key to
@@ -2848,23 +2740,15 @@ installed, the NetBird option points you at the download.
 
 A NetBird profile needs three things:
 
-- **Management URL** - your NetBird control plane. Blank uses the
-  `netbird.io` cloud; for self-hosted enter the URL (a bare host like
-  `vpn.example.com` is fine - it's normalised to `https://`).
+- **Management URL** - your NetBird control plane. Blank uses the `netbird.io` cloud; for self-hosted enter the URL (a bare host like `vpn.example.com` is fine - it's normalised to `https://`).
 - **Device name** - the name this peer registers under in NetBird.
-- **Setup key** - stored as an API-token credential (the setup-key
-  picker has a **+ New** button so you don't have to leave the page). Pasting the whole command the dashboard shows under Peers / Clients -> Add (`netbird up --management-url ... --setup-key ...`) keeps just the key, and fills an empty Management URL from it; Settings -> Setup Keys shows the key alone.
+- **Setup key** - stored as an API-token credential (the setup-key picker has a **+ New** button so you don't have to leave the page). Pasting the whole command the dashboard shows under Peers / Clients -> Add (`netbird up --management-url ... --setup-key ...`) keeps just the key, and fills an empty Management URL from it; Settings > Setup Keys shows the key alone.
 
 **Which key.** Use a **setup key**, NOT a personal access token (PAT). In the NetBird dashboard: **Setup Keys -> Create Setup Key**. The key is a UUID (e.g. `A1B2C3D4-...`); a PAT (starting `nbp_`) is a different thing, and ssh-tool refuses it at once - the key field says so and Create stays off, and a stored one fails the connect with that reason.
 
 - **Reusable** - use a reusable key. The plugin keeps no NetBird identity between runs, so each connect registers the machine as a peer again, under its device name and into the key's groups; a one-off key works for the first connect only. A synced profile then runs on every machine, each its own peer (no identity conflict, unlike WireGuard).
 - **Ephemeral** - recommended with it: an ephemeral peer is removed after it has been offline for a while, so the peers of earlier connects do not pile up.
-- **Auto-assigned group** - assign the setup key to a NetBird **group
-  that has an access policy to the hosts you need to reach**.
-  Registration alone doesn't grant access; NetBird's policies decide
-  what the peer can talk to. If SSH through the tunnel connects but
-  times out reaching the target, the peer is almost certainly not in a
-  group with a policy to that host.
+- **Auto-assigned group** - assign the setup key to a NetBird **group that has an access policy to the hosts you need to reach**. Registration alone doesn't grant access; NetBird's policies decide what the peer can talk to. If SSH through the tunnel connects but times out reaching the target, the peer is almost certainly not in a group with a policy to that host.
 - **Expiration** - an expired key stops new registrations, and since every connect is one, it stops this profile's next connect too (a tunnel that is up keeps working); set an expiry you will renew, or none.
 
 The profile syncs, the registration does not: each machine registers itself. Its NetBird DNS state lives under the data dir, and deleting the profile removes it.
@@ -2891,7 +2775,7 @@ A Tailscale profile needs three things:
   (pre-filled from your machine's hostname). Tailscale lower-cases it
   and MagicDNS exposes it as `<hostname>.<tailnet>.ts.net`.
 - **Auth key** - stored as an API-token credential. In the Tailscale
-  admin console: **Settings -> Keys -> Generate auth key**. The key
+  admin console: **Settings > Keys -> Generate auth key**. The key
   starts with `tskey-auth-`.
 
 **Which key.** Use a **reusable** auth key if you sync this profile
@@ -3145,7 +3029,7 @@ Three entry points:
 ### How it works
 
 - Groups live on the backend as `map[string]map[string]bool` -
-  group ID → member set. The empty key (`""`) is the default
+  group ID -> member set. The empty key (`""`) is the default
   group. Every window observes the same state via the
   `broadcast_groups_changed` event so detached windows stay in
   sync. The legacy `broadcast_changed` event still fires with
@@ -3194,7 +3078,7 @@ everything. Persistence is tracked in `docs/TODO.md`.
 ### Detach a tab to a new window
 
 Drag a tab out of the tab bar - the app opens a new top-level window
-carrying just that tab. Right-click → **Detach to new window** does
+carrying just that tab. Right-click > **Detach to new window** does
 the same explicitly.
 
 The session pool is shared across windows. A detached window
@@ -3234,7 +3118,7 @@ when you regularly bounce between several jobs - production for
 client A, staging for client B, your own homelab - each with its
 own 5-15 terminals open.
 
-Manage them under **Settings → Appearance → Workspaces** or via the
+Manage them under **Settings > Workspaces** or via the
 **Workspaces** segment in the status bar (bottom-left).
 
 - **New workspace from N tabs** - select tabs (Ctrl/Shift+click), then
@@ -3263,8 +3147,8 @@ Frame membership:
   it; drag it onto a tab outside the frame, or the empty end of the bar,
   to take it out. Dropped on the left edge of the frame's name, a tab
   goes in front of the frame, outside it - the way to put a tab first
-  when a workspace starts the bar. Right-click a tab for **Add to workspace "…"** and
-  **Remove from workspace "…"**, which also act on a multi-selection.
+  when a workspace starts the bar. Right-click a tab for **Add to workspace "..."** and
+  **Remove from workspace "..."**, which also act on a multi-selection.
 - A dot on the frame's name means its tabs changed since the last save.
   Nothing is saved on its own - **Save changes** writes the frame.
 - A tab opened later lands outside the frame until you add it.
@@ -3276,14 +3160,14 @@ Frame membership:
 
 ### Tab groups
 
-Tabs can be tagged with a **group name** (right-click a tab →
-*Set group name…*). The name shows as a small coloured chip in the
+Tabs can be tagged with a **group name** (right-click a tab >
+*Set group name...*). The name shows as a small coloured chip in the
 tab bar; the colour is deterministic from the name, so all tabs
 sharing a group land in the same colour. Group metadata is part of
 the workspace snapshot, so a "client-a · prod" group survives
 Open/Save cycles.
 
-Clear a group via right-click → *Clear group*, or set the name to
+Clear a group via right-click > *Clear group*, or set the name to
 empty.
 
 ---
@@ -3300,8 +3184,8 @@ runs through the standard SSH layer.
 
 ### Creating a dynamic folder
 
-- Right-click a parent folder (or empty tree area) → **New dynamic
-  subfolder…** Pick a provider, fill in the config, save.
+- Right-click a parent folder (or empty tree area) > **New dynamic
+  subfolder...** Pick a provider, fill in the config, save.
 - Required: an **API token credential** stored in the vault. The
   folder editor has an inline "+ New token credential" form so you
   don't have to switch tabs.
@@ -3324,7 +3208,7 @@ load-bearing.
 
 **DigitalOcean.** API token credential + hostname source
 (name / public IPv4 / private VPC IPv4). Read-scope token from
-Cloud → API → Tokens & Keys is enough. Droplet `tags` map straight
+Cloud > API > Tokens & Keys is enough. Droplet `tags` map straight
 to the filter tag vocabulary.
 
 **Linode (Akamai Cloud Compute).** API token credential + hostname
@@ -3354,7 +3238,7 @@ SDK dependency.
 **Ansible static inventory.** Reads a local `.ini` or `.yml`
 inventory file (format auto-detected by extension). Config:
 
-- **Inventory file path** - absolute path; **Browse…** button
+- **Inventory file path** - absolute path; **Browse...** button
   opens a native file picker.
 - **Host pattern** / **Group pattern** - optional fnmatch globs
   (`web*`, `prod_*`).
@@ -3381,7 +3265,7 @@ matches tags too. Folder structure stays **flat** (every host as
 a single entry); we don't mirror Ansible's DAG.
 
 Per-connect overrides via the entry's detail pane
-(**Use different credential…**): credential, username, password,
+(**Use different credential...**): credential, username, password,
 **jump host** (`[user@]host[:port]` - replaces the entire
 parsed chain) and **jump credential** (one-off override of the
 folder-level picker). All fields reset after Connect.
@@ -3395,15 +3279,15 @@ folder-level picker). All fields reset after Connect.
 
 - **Globe icon** instead of folder.
 - Folder name + icon tinted **teal** so dynamic folders stand out.
-- **Provider pill** (`proxmox` / `hetzner` / `ansible` / …) inline
+- **Provider pill** (`proxmox` / `hetzner` / `ansible` / ...) inline
   next to the name.
 - **Red `!` dot** when the last refresh errored - hover for the
   message.
 - Tooltip on the name shows provider + "refreshed Nm ago" + last
   error if any.
 - Count badge shows cached entry count (or hidden if empty).
-- **Per-entry icon** based on kind: VM → Monitor, LXC → Box,
-  host / server → Server tower. Consistent across the tree,
+- **Per-entry icon** based on kind: VM -> Monitor, LXC -> Box,
+  host / server -> Server tower. Consistent across the tree,
   Ctrl+K palette, and the detail-pane header.
 
 ### Inspecting an entry
@@ -3427,7 +3311,7 @@ local DB.
   - AWS EC2: instance id, public / private IPv4, public DNS.
 - Tags / labels row.
 - **Live load bars** (CPU / Memory / Disk) for Proxmox, colour-
-  coded green<60 / yellow<85 / red≥85. Hetzner doesn't expose live
+  coded green<60 / yellow<85 / red>=85. Hetzner doesn't expose live
   load on the `/servers` endpoint, so the section is hidden.
 - Collapsible **Raw provider payload** with the JSON for everything
   not covered above.
@@ -3455,18 +3339,18 @@ local DB.
   switches to a bulk view showing the count and two actions:
   - *Connect all* opens one terminal tab per selected entry in
     parallel.
-  - *Batch exec…* runs a single command across the whole selection
+  - *Batch exec...* runs a single command across the whole selection
     and shows per-host stdout / stderr / exit in a single modal
     (same component the regular multi-connection batch panel
     uses; results expanded by default).
-- The Batch exec modal also has a **Load snippet…** picker so you
+- The Batch exec modal also has a **Load snippet...** picker so you
   can pull a saved global snippet straight into the command
   field before pressing Run.
 
 ### One-shot credential / username / password override
 
 Same gesture as on regular connections: **Use different
-credential…** next to Connect opens an inline block with three
+credential...** next to Connect opens an inline block with three
 independent override fields. Resets after the next press; nothing
 persists. Useful for hitting a fresh dynamic host with a
 different identity without editing the folder's inherited
@@ -3475,14 +3359,14 @@ credential.
 ### Refresh behaviour
 
 - The folder refreshes on its configured interval (default 60s).
-- Manual refresh via right-click → **Refresh now** or the button
+- Manual refresh via right-click > **Refresh now** or the button
   in an entry's detail pane.
 - A refresh error leaves the previous entries cached (last good
   state) and surfaces the error via the red `!` dot.
 
 ### Editing the config
 
-Right-click a dynamic folder → **Edit dynamic config…** Same form
+Right-click a dynamic folder > **Edit dynamic config...** Same form
 as creation. Changing the refresh interval restarts the timer.
 
 ### Pinning a dynamic host as a permanent connection
@@ -3491,7 +3375,7 @@ Some hosts in a dynamic inventory don't really need to be
 dynamic - they don't move, you've got custom notes for them, and
 you want them to survive even if the API token gets revoked or
 the provider rotates the IP. Click the host in the tree to open
-the detail pane, then **Pin as connection…**. The host becomes
+the detail pane, then **Pin as connection...**. The host becomes
 a real connection inside the same folder (any per-attempt
 credential override you picked becomes the new connection's
 default credential; Ansible vars like `ansible_user` and the
@@ -3508,7 +3392,7 @@ ghost.
 When the source of truth stops changing - you got handed a
 one-off Ansible inventory, or you're retiring an API token but
 want to keep the snapshot - open the dynamic folder editor and
-click **Convert to static…**. Every cached host becomes a
+click **Convert to static...**. Every cached host becomes a
 regular connection in the folder, the provider link is dropped,
 the refresh timer stops, and the folder behaves like any other
 folder you created by hand. **Irreversible** from the UI; existing
@@ -3529,7 +3413,7 @@ description, or bookmark URL.
   stop a tunnel, open a bookmark.
 - **Ctrl+Enter** or **Ctrl+click** - mark a connection without
   connecting. See below.
-- **Esc** - close.
+- **Esc** - clear the query; with nothing typed, close.
 
 Connections rank slightly above folders at similar scores; tunnels
 and bookmarks rank slightly below so a query that matches both a
@@ -3540,8 +3424,7 @@ list.
 
 ### Opening several hosts at once
 
-Mark connections with **Ctrl+Enter** (or Ctrl+click) and they get a
-coloured stripe; the footer counts them. **Enter** then connects every marked host, plus the highlighted one when it is not marked yet (the footer then reads "connect 2 marked + this"): mark two, search the third and press Enter to open all three. `clear` in the footer drops the set.
+Mark connections with **Ctrl+Enter** (or Ctrl+click) and they get a coloured stripe; the footer counts them. **Enter** then connects every marked host, plus the highlighted one when it is not marked yet (the footer then reads "connect 2 marked + this"): mark two, search the third and press Enter to open all three. `clear` in the footer drops the set.
 
 Marks survive retyping the query, so hosts that no single search
 matches can still be collected: find the first, mark it, search
@@ -3606,12 +3489,12 @@ apt update`, `tail -f /var/log/syslog`, `kubectl get pods -A`, etc.
 - **Broadcast aware.** If the origin session is part of an active
   broadcast group, the snippet body is fanned out to every member
   (SSH or local PTY) instead of just the foreground tab.
-- The Batch exec modal has its own inline **Load snippet…** picker
+- The Batch exec modal has its own inline **Load snippet...** picker
   (since the global palette would fight focus with the modal) -
   picks a snippet and loads its body into the command field for
   editing before Run.
 
-Manage the library under **Settings → Snippets**:
+Manage the library under **Settings > Snippets**:
 
 - **Name** - short label shown in the palette.
 - **Body** - command text. Supports multi-line.
@@ -3625,7 +3508,7 @@ recency on an empty query.
 
 **Default snippets.** A fresh install seeds a small starter set (below).
 An existing install is never touched - click **Load defaults** in
-Settings → Snippets to add the ones you don't already have (it skips
+Settings > Snippets to add the ones you don't already have (it skips
 duplicates). The set:
 
 | Name | Body |
@@ -3650,7 +3533,7 @@ duplicates). The set:
 For when you want to see traffic on a remote interface without
 juggling a second terminal.
 
-Open it via **Tools → Packet capture** in the pane header.
+Open it via **Tools > Packet capture** in the pane header.
 
 What happens:
 
@@ -3782,7 +3665,7 @@ expandable row with a one-line summary plus a key/value table.
 | **SSH** | 22 | Plaintext banner (client/server software version) on the first packet of each side |
 | **NTP** | 123 | Mode (client/server/control), version, stratum |
 | **SNMP** | 161, 162 | Version (v1/v2c/v3), community string, PDU tag (Get/Set/Trap) |
-| **LDAP** | 389 | Op tag (bindRequest, searchRequest, …) + messageID |
+| **LDAP** | 389 | Op tag (bindRequest, searchRequest, ...) + messageID |
 | **SMB** | 445 | SMB1 vs SMB2/3 (or encrypted), command name |
 | **MQTT** | 1883, 8883 | Packet type, PUBLISH topic, CONNECT protocol version |
 | **CWMP / TR-069** | 7547 | RPC method (Inform, GetParameterValues(Response), SetParameterValues, Download, ...), Inform device identity (manufacturer, OUI, product class, serial) + event codes, and the first few ParameterValueStruct Name/Value pairs |
@@ -3824,7 +3707,7 @@ Limits:
 ## 13a. Live log tail
 
 Stream a remote log while you keep working in the terminal. Open it
-via **Tools → Log tail** in the pane header (next to Packet capture).
+via **Tools > Log tail** in the pane header (next to Packet capture).
 
 Pick a source in the start form:
 
@@ -3889,7 +3772,7 @@ For when you need to hit an HTTP endpoint that's only reachable from
 inside the remote network - or you just want a quick request panel
 without leaving the app.
 
-Open it via **Tools → HTTP / SOAP request** in the pane header.
+Open it via **Tools > HTTP / SOAP request** in the pane header.
 
 What you can do:
 
@@ -3927,7 +3810,7 @@ Insomnia via the SOCKS5 forward.
 <a id="connect-feedback"></a>
 ## 15. Connect feedback
 
-Two improvements over plain "connecting…" spinners:
+Two improvements over plain "connecting..." spinners:
 
 - **Live stage label** - the Connect button updates with the current
   step: *Connecting to bastion1*, *TCP dial bastion1*, *SSH handshake
@@ -3992,7 +3875,7 @@ key-round, lock, etc.) - emoji placeholders have been replaced. See
 <a id="import-export"></a>
 ## 18. Import / Export
 
-All import/export flows live in **Settings → Import / Export**.
+All import/export flows live in **Settings > Import** and **Settings > Export connections**.
 The **Import** section is one page with a source picker at the top:
 Devolutions RDM, OpenSSH config, MobaXterm, PuTTY / KiTTY, SuperPuTTY,
 and ssh-tool archive. Every import is additive - existing rows are
@@ -4027,8 +3910,8 @@ IdentityFile paths noted.
 
 ### MobaXterm import
 
-In MobaXterm: right-click **User sessions → Export** to produce a
-`.mxtsessions` file, then load it in **Settings → Import →
+In MobaXterm: right-click **User sessions > Export** to produce a
+`.mxtsessions` file, then load it in **Settings > Import >
 MobaXterm**. SSH sessions become connections; the bookmark folder
 tree (`SubRep` paths) is rebuilt, reusing existing folders on
 re-import. Host, port and username are read; RDP / telnet / VNC
@@ -4044,7 +3927,7 @@ first:
 reg export "HKCU\Software\SimonTatham\PuTTY\Sessions" putty-sessions.reg
 ```
 
-then load the `.reg` file in **Settings → Import → PuTTY / KiTTY**.
+then load the `.reg` file in **Settings > Import > PuTTY / KiTTY**.
 Only `Protocol=ssh` sessions import (serial / telnet are skipped);
 `user@host` in the HostName box is split into username + hostname.
 KiTTY registry exports parse identically. UTF-16 `.reg` files (the
@@ -4054,7 +3937,7 @@ nothing is lost in the move.
 ### SuperPuTTY import
 
 SuperPuTTY keeps its sessions in a `Sessions.xml` file (usually
-`%APPDATA%\SuperPuTTY\Sessions.xml`). Load it in **Settings → Import →
+`%APPDATA%\SuperPuTTY\Sessions.xml`). Load it in **Settings > Import >
 SuperPuTTY**. SSH sessions become connections and the SessionId folder
 tree is rebuilt; RDP / telnet / other protocols are counted and skipped.
 SuperPuTTY stores no passwords, so attach credentials afterwards.
@@ -4062,7 +3945,7 @@ SuperPuTTY stores no passwords, so attach credentials afterwards.
 ### kafka-tool import
 
 The kafka-tool Kafka GUI keeps its cluster profiles in
-`~/.config/kafka-tool/profiles.json`. Load it in **Settings → Import →
+`~/.config/kafka-tool/profiles.json`. Load it in **Settings > Import >
 kafka-tool**. Every profile becomes a connection with [Kafka](#kafka)
 enabled, in a `kafka-tool` folder: the SSH host (with its proxy jump) and
 the bootstrap as that host sees it when the profile used a tunnel, else the
@@ -4078,14 +3961,14 @@ credential afterwards - the import lists which connections need one.
   - Optionally credentials referenced by the included connections,
     with secrets wrapped under a user-provided passphrase
     (argon2id + XChaCha20-Poly1305 - same crypto as the vault)
-- **Copy** to clipboard or **Save as…** native dialog.
+- **Copy** to clipboard or **Save as...** native dialog.
 - Empty selection = export everything.
 
-Single-connection export shortcut: **Right-click connection →
-Export…** opens the same modal pre-loaded with just that connection
+Single-connection export shortcut: **Right-click connection >
+Export...** opens the same modal pre-loaded with just that connection
 (no credentials included).
 
-**Folder export shortcut**: **Right-click folder → Export folder…**
+**Folder export shortcut**: **Right-click folder > Export folder...**
 bundles every connection under that folder, recursively. The
 archive's internal folder structure is preserved.
 
@@ -4112,8 +3995,8 @@ Three ways to load an archive:
 - **Paste** - drop TOML or JSON straight into the textarea (format
   is auto-detected).
 - **Fetch** - pull from a URL (e.g. a sibling catalog's
-  `/api/bundle?ids=…`).
-- **Load file…** - native open dialog. Refuses files larger than
+  `/api/bundle?ids=...`).
+- **Load file...** - native open dialog. Refuses files larger than
   32 MiB to keep stray binary picks from freezing the renderer.
   The chosen path is shown under the textarea so you can verify
   before applying.
@@ -4133,7 +4016,7 @@ Options:
 - **Apply** - writes the changes; the connection / credential
   trees reload after.
 
-Internal: the importer maintains OLD→NEW id maps for folders,
+Internal: the importer maintains OLD->NEW id maps for folders,
 credentials, and `auth_ref` references. Folders are topologically
 sorted so parents land before children. Missing parents fall back
 to root with a warning.
@@ -4143,338 +4026,183 @@ to root with a warning.
 <a id="settings"></a>
 ## 19. Settings
 
-Side-nav with grouped panels (last-opened section persists as
-`settings_active_section`). A switch, tick box or choice takes effect
-on the click. Text fields (addresses, ports, paths, server settings)
-wait for **Save**, which is greyed out until something changed, with
-**Discard** and an "Unsaved changes" marker next to it. A network
-profile with unsaved changes asks Save / Discard / Stay before another
-profile opens.
+The side-nav groups the panels as the app does: **General**, **Terminal**, **Connections**, **Security**, **Data**, **Integrations** and **Diagnostics**; the headings below are `Group > Section`. The last-opened section persists as `settings_active_section`, and every section can be found by name in the command palette (`>`). A switch, tick box or choice takes effect on the click. Text fields (addresses, ports, paths, server settings) wait for **Save**, which is greyed out until something changed, with **Discard** and an "Unsaved changes" marker next to it. A network profile with unsaved changes asks Save / Discard / Stay before another profile opens.
 
-### Appearance → Appearance
+### General > Appearance
 
-- **UI theme** - Mocha / Latte / High contrast.
-  - *Mocha (default dark)* - Catppuccin Mocha. Same theme as
-    earlier releases, now routed through CSS variables so the
-    palette swap below is a one-class flip on `<html>`.
-  - *Latte (light)* - Catppuccin Latte. Light background, dark
-    text. Useful in bright rooms / projector demos. Repaints
-    every panel, not just the readability-sensitive bits - the
-    refactor that landed in this release reaches every Svelte
-    component.
-  - *High contrast (dark)* - Mocha with the muted text steps
-    and borders pushed up for direct-sun readability on a laptop
-    outdoors. Doesn't repaint the whole palette; just lifts the
-    too-dim bits.
-- **Density** - Compact / Comfortable / Cozy. Drives the row padding
-  on the connection / credential trees. Compact is the default;
-  Cozy works well on a 4K monitor.
-- **UI font size (px)** - the size of the main text: tree rows, menus, descriptions, fields. Field labels, badges and secondary columns (a host next to its name) are a step smaller, titles a step larger, and no text goes under 10px; fields and buttons grow with it. 11-18, default 13. Terminal has its own font size knob.
-- **Compact title bar (experimental)** - desktop, off by default,
-  applies after a restart. Drops the system title bar: the tab bar
-  (and a detached window's top bar) takes its place, so terminals get
-  the extra row. Drag the empty part of the bar to move the window,
-  double-click it to maximise. Windows and Linux get minimise /
-  maximise / close buttons at the right end; macOS keeps its traffic
-  lights. The log tail window keeps the system frame.
-- **Show session uptime in tab bar** - opt-in. Small "5m" / "2h" /
-  "1d3h" indicator next to each connected tab's label showing how
-  long the session has been up. Refreshes every 30 s.
+- **UI theme** - Mocha / Latte / High contrast. Applies to the app itself; terminal colours are set under Terminal.
+  - *Mocha (default dark)* - Catppuccin Mocha.
+  - *Latte (light)* - Catppuccin Latte. Light background, dark text, for bright rooms and projector demos.
+  - *High contrast (dark)* - Mocha with the muted text and borders lifted, for reading in direct sunlight.
+- **Density** - Compact / Comfortable / Cozy. Drives the row padding on the connection and credential trees. Compact is the default; Cozy works well on a 4K monitor.
+- **UI font size (px)** - the size of the main text: tree rows, menus, descriptions, fields. Field labels, badges and secondary columns (a host next to its name) are a step smaller, titles a step larger, and no text goes under 10px; fields and buttons grow with it. 11-18, default 13. The terminal has its own font size.
+- **Compact title bar (experimental)** - desktop, off by default, applies after a restart. Drops the system title bar: the tab bar (and a detached window's top bar) takes its place, so terminals get the extra row. Drag the empty part of the bar to move the window, double-click it to maximise. Windows and Linux get minimise / maximise / close buttons at the right end; macOS keeps its traffic lights. The log tail window keeps the system frame.
+- **Show session uptime in tab bar** - opt-in. A small "5m" / "2h" timer next to each connected tab's name.
+- **Show server status for the focused session** - load, memory, disk and users of the focused session's host in the status bar, every 10 s, from a read-only probe on the host.
+- **Warn about failed systemd units** - a red "N failed" next to the server status. Single units can be ignored per host in System status > Services.
 
-### Appearance → Connection tree
+### General > Connection tree
 
-- **Jump host marks** - Off / Bastions only (default) / Bastions and
-  routed connections. See *Jump host marks* in section 3.
-- **Color tag as row background** - opt-in. In addition to the
-  3px left strip, tints the whole row with the connection /
-  folder's colour tag (~14 % opacity, brighter on hover /
-  selection).
-- **Emphasise active session row** - opt-in. The tree row matching
-  the currently focused terminal pane gets a bright cyan inset on
-  the right edge so it stands out from other live (but not focused)
-  connections.
+- **Jump host marks** - Off / Bastions only (default) / Bastions and routed connections. See *Jump host marks* in section 3.
+- **Color tag as row background** - opt-in. In addition to the 3px left strip, tints the whole row with the connection or folder's colour tag.
+- **Emphasise active session row** - opt-in. The tree row of the focused terminal tab gets a brighter highlight, so it stands out from other live connections.
 
-### Appearance → Connection
+### General > Window & startup
 
-- **Connect timeout (seconds)** - applies to both TCP dial and SSH
-  handshake on every hop, and to opening a channel through a bastion.
-  Default 20s; raise for slow / unreliable links, lower to fail fast.
-  Saved as `connect_timeout_seconds`.
-- **Auto-reconnect** - number of attempts (default 5) and the longest
-  wait between them (default 16 s); the wait doubles from 1 s.
-- **Connect all** - handshakes at once (default 4, at most 10), pause
-  between starts (default 150 ms, at least 50) and the host count above
-  which it asks first (default 5). The limits exist because every
-  handshake in progress counts against a bastion's sshd `MaxStartups`
-  (default 10); past it new ones are dropped as "handshake failed:
-  EOF".
-- **Shared bastion** - how long the shared connection to a jump host
-  stays open after the last session through it closes (default 10 s,
-  0 closes it at once).
-- **In-app local shell** - which shell the top-bar **Local
-  shell** button opens on plain click. Auto + per-platform list
-  (Windows: WSL / PowerShell / cmd; macOS: zsh / bash; Linux:
-  bash / zsh / sh). The dropdown chevron next to the button
-  still lets you launch any of the others one-off, and contains
-  a "Default for plain click" selector that mirrors this
-  setting. The button label updates to show the current default
-  (e.g. `Local: WSL`). Saved as `local_shell_kind`.
-- **Start in directory** - where a local shell opens. Empty means your
-  home directory, which is what every other terminal on the system
-  does. A saved local-shell connection can override it with its own
-  directory, in the connection editor. For **WSL** this takes a Linux
-  path (`/srv/app`); a Windows path works too and is mapped to
-  `/mnt/...` the way WSL always does. Saved as `local_shell_dir`.
-- **File manager integration** - adds **Open in ssh-tool** to the
-  right-click menu on directories: Windows Explorer (folder and
-  folder background), KDE Dolphin, and the GNOME Nautilus Scripts
-  submenu. Picking it opens the default local shell (setting above)
-  as a tab already cd'd into that directory - like "Open in
-  Terminal", but inside the window that holds your SSH sessions.
-  Per-user registration, no admin rights; the same card removes it.
-  Not available on macOS yet. Under the hood it launches
-  `ssh-tool --open-dir <path>`, which also works from scripts.
-- **External terminal** - three radio cards (Windows Terminal /
-  PowerShell / Command Prompt). Drives both the **Native
-  terminal** top-bar button and the **Open in external terminal**
-  connection right-click action. Only matters on Windows;
-  macOS opens Terminal.app; Linux picks `$TERMINAL` first then a
-  fallback list. Saved as `external_terminal_kind`.
-- **Window → Minimise to tray** - when on, clicking the minimise
-  button hides the window into the system tray instead of
-  dropping it to the taskbar. Saved as `minimize_to_tray`.
-- **Window → Close to tray** - when on, clicking the close (×)
-  button hides the window into the tray instead of quitting.
-  Saved as `close_to_tray`. With this on you have to use **Quit**
-  from the tray menu (right-click) to actually exit. SSH sessions
-  and port forwards keep running while hidden. If a session is
-  alive and you click × *without* close-to-tray on, you'll get a
-  warn-before-quit confirm prompting you to disconnect.
-- **Tray icon** - a click shows or hides the window. The right-click
-  menu has **Show window**; **VPN profiles** and **Tunnels**, each
-  ticked while it runs, where a click starts or stops it without
-  opening the window (a failure comes back as a notification);
-  **Favorites** and **Recent** (the last 10 connected, favorites left
-  out - the same lists as Quick access above the tree), where a click
-  opens the window and connects like a double-click in the tree;
-  **Lock vault**; and **Quit**, which asks
-  first when sessions are open, the same as closing the window. Empty
-  submenus are left out.
-- **Startup → Reopen last session** - **Ask** (default) offers to
-  reconnect the tabs that were open at the last quit once the vault
-  unlocks, **Always** does it without asking, **Never** starts empty
-  (the last session is still remembered). SSH connections, inventory
-  hosts and local shells come back with their titles, tab groups and
-  split panes; quick connects and VNC consoles do not. A pane that
-  cannot reconnect is dropped and its split closed.
+- **Minimise to tray** - the minimise button hides the window into the system tray instead of dropping it to the taskbar. Saved as `minimize_to_tray`.
+- **Close to tray** - the close button hides the window into the tray instead of quitting; use **Quit** from the tray menu to exit. Saved as `close_to_tray`. SSH sessions and port forwards keep running while hidden. Without it, closing the window with a session alive asks first. Tray options do not apply on macOS (minimising goes to the Dock, and the menu-bar icon offers Show window / Quit). On Linux the tray icon needs StatusNotifier support; stock GNOME needs the AppIndicator extension, and without a visible tray icon close-to-tray makes the window hard to get back.
+- **Tray icon** - a click shows or hides the window. The right-click menu has **Show window**; **VPN profiles** and **Tunnels**, each ticked while it runs, where a click starts or stops it without opening the window (a failure comes back as a notification); **Favorites** and **Recent** (the last 10 connected, favorites left out - the same lists as Quick access above the tree), where a click opens the window and connects like a double-click in the tree; **Lock vault**; and **Quit**, which asks first when sessions are open. Empty submenus are left out.
+- **Startup: Reopen last session** - **Ask** (default) offers to reconnect the tabs that were open at the last quit once the vault unlocks, **Always** does it without asking, **Never** starts empty (the last session is still remembered). SSH connections, inventory hosts and local shells come back with their titles, tab groups and split panes; quick connects and VNC consoles do not. A pane that cannot reconnect is dropped and its split closed.
 
-### Appearance → Terminal
+### General > Updates
 
-- **Copy / paste mode** - Windows / Linux / Mac model.
-- **Font size** - current size + Ctrl+wheel zoom hint.
-- **Font family** - CSS font-family stack. Defaults to
-  `ui-monospace, 'JetBrains Mono', Menlo, monospace`. Clear to reset.
-- **Scrollback (lines)** - how many lines xterm keeps per session.
-  Default 5000, range 500..100000. New sessions get the limit
-  immediately; existing terminals adopt the option but don't grow
-  their buffer retroactively.
-- **Theme** - pick from the built-in list. Live preview.
-- **Auto-close tab on clean exit** - toggle. When enabled, a tab
-  whose shell exits cleanly (Ctrl+D or `exit 0`) auto-closes and
-  removes the session. Non-zero exits and network drops still leave
-  the tab around so you can read the reason.
+- **Check for updates** - on by default. The app asks GitHub Releases 5 s after launch and then every 6 hours, falling back to sshtool.app when GitHub is unreachable; a new release shows as a green pill in the status bar. Off means the pill never appears and no request leaves the app. No telemetry: the request is a plain GET.
+- **Channel** - **Stable** (releases only, the default) or **Release candidates** (also the `vX.Y.Z-rcN` test builds of the next release; leaving the channel keeps a candidate until the next release overtakes it).
+- **Install update** - **Check now**; when a newer build exists, the release notes open with a download and **Restart and install**. The status-bar pill opens the same dialog.
 
-### Appearance → Browser launcher
+### Terminal > Terminal
 
-- **Browser path** - used by SOCKS5 forwards' "Open URL…" action.
-  Detected engines: Chromium / Firefox families.
-- The launcher always uses a temporary profile; your main browser's
-  cookies / history stay untouched.
+- **Font size** - the current size and a reset to 13; Ctrl+wheel (a two-finger pinch on touch screens) zooms inside any terminal.
+- **Font family** - a CSS font-family stack. Defaults to `ui-monospace, 'JetBrains Mono', Menlo, monospace`. Clear to reset.
+- **Color scheme** - pick from the built-in list, with a live preview.
+- **GPU rendering (WebGL)** - draws the terminal on the graphics card. Off by default: on some GPUs it garbles text. Applies to newly opened tabs. On Android terminal tabs always use canvas; the setting still applies to recording playback there.
+- **Copy / paste** - Windows / Linux / macOS model, picked from your OS on first launch. *Windows*: Ctrl+Shift+C / Ctrl+Shift+V, right-click copies a selection or pastes, Ctrl+C copies and clears a selection (with none it is SIGINT). *Linux*: copy on select, Ctrl+Shift+C/V or middle-click, right-click pastes, Ctrl+C is always SIGINT. *macOS*: Cmd+C / Cmd+V, right-click pastes.
+- **Scrollback (lines)** - lines kept per tab. Default 5000, range 500..100000. New sessions get the limit at once; open terminals adopt it but do not grow their buffer retroactively. After a detach, redock or reload only the last ~8000 lines come back.
+- **Release background scrollback (s)** - frees a hidden tab's scrollback after this many seconds to save memory; it comes back when you return to the tab. 0 = at once, -1 = never.
+- **Auto-close tab on clean exit** - a tab whose shell exits cleanly (`exit 0`, Ctrl+D) closes. Errors and dropped connections stay open so you can read the reason.
+- **Show when each command was run** - the time at the right edge of each command line. Always recorded, so it also shows commands run before you turned it on.
+- **Copy button on command output** - point at the right side of a command's output and a Copy button copies the command and everything it printed. Ctrl+Shift+click selects a command and its output with this option off too.
 
-### Appearance → Snippets
+### Terminal > Shells
 
-CRUD for the command snippet library (see [Snippets](#snippets)).
-Two-column layout - list on the left, editor on the right. Tags
-input is comma-separated.
+- **In-app local shell** - which shell the top-bar **Local shell** button (labelled `Local: <shell>`) opens on a plain click. **Auto** lets the app pick: on Windows WSL when present, then PowerShell, then cmd; elsewhere `$SHELL`. The chevron next to the button opens any of the others one-off and has a "Default for plain click" selector that mirrors this setting. Saved as `local_shell_kind`.
+- **Start in directory** - where a local shell opens. Empty means your home directory. A saved local-shell connection can override it in the connection editor. For **WSL** this takes a Linux path (`/srv/app`); a Windows path works too and is mapped to `/mnt/...`. Saved as `local_shell_dir`.
+- **External terminal** - four cards on Windows: **Windows Terminal** (falls back to PowerShell when `wt` is not installed), **PowerShell**, **Command Prompt** and **WSL (default distro)** (runs `ssh` inside WSL, with its OpenSSH client, `~/.ssh/config` and `known_hosts`). It drives **External OS terminal** in the local shell menu (a fresh shell, nothing attached) and **Open in external terminal** on a connection's right-click (runs `ssh user@host` with the resolved port and jump chain). macOS always uses Terminal.app; Linux uses `$TERMINAL` when set, else the first of `x-terminal-emulator`, gnome-terminal, konsole, xfce4-terminal, alacritty, kitty, foot, xterm. Saved as `external_terminal_kind`.
 
-### Appearance → Workspaces
+### Terminal > Snippets
 
-CRUD for workspace bundles (see [Workspaces](#workspaces)). Save
-the current tab set as a new workspace, overwrite an existing one,
-or open / delete. The same actions are available in the status
-bar's Workspaces popover for quicker access.
+Add, edit and delete command snippets (see [Snippets](#snippets)). List on the left, editor on the right; tags are comma-separated.
 
-### Security → Vault
+### Terminal > Workspaces
 
-- **Auto-lock after idle (minutes)** - 0 = off (default). Mouse
-  movement / key press / scroll resets the idle timer; on timeout
-  the credential tree gets re-protected (vault re-locked) while
-  open SSH sessions + port forwards keep running. After a lock the
-  next VaultGate prompt asks for the master passphrase even when
-  the auto-unlock sidecar is present - sidecar bypass is suppressed
-  until you unlock explicitly, otherwise the lock would be
-  invisible.
+Save the current tab set as a new workspace, overwrite one, open or delete (see [Workspaces](#workspaces)). The status bar's Workspaces popover does the same.
 
-### Security → Backup & restore
+### Terminal > Session recording
 
-The vault, the SQLite store, and all settings are bundled into a
-single encrypted file sealed with your vault master passphrase
-(Argon2id 64 MiB / XChaCha20-Poly1305). Backups land in
-`<DataDir>/backups/`. The SQLite snapshot is taken via
-`VACUUM INTO`, so it's consistent even mid-write.
+Right-click a tab (or use the command palette) to record a session's terminal output to an asciicast v2 `.cast` file, replayable with asciinema or any web player. Only output is written, never keystrokes, so typed passwords do not land in the file; what the session prints does, in plaintext, and the file is not encrypted.
 
-- **Automatic daily backup** - when on, a background scheduler
-  takes a backup at app start and then once every 24h. It needs
-  the auto-unlock sidecar to recover the passphrase without
-  prompting; if the vault is locked and no sidecar is set up, the
-  run is silently skipped.
-- **Keep last N** - auto-backups (`ssh-tool-auto-*`) and
-  pre-restore safety snapshots (`pre-restore-*` directories,
-  written before every restore) are pruned to the same N (default
-  7). Manual backups (`ssh-tool-backup-*`) are never auto-deleted.
+- **Recordings folder** - **Browse recordings...** lists and plays them; **Change folder...**, **Reset to default** and **Open folder**.
+- **Ask before starting a recording** - a confirmation, so a misclick does not quietly start writing the session to disk.
+
+### Connections > Connection
+
+- **Connect timeout** - seconds, default 20. Applies to the TCP dial and SSH handshake on every hop, and to opening a channel through a bastion. Raise for slow links, lower to fail fast. Saved as `connect_timeout_seconds`.
+- **Auto-reconnect** - for sessions with auto-reconnect on: **Attempts** (default 5) and **Longest wait between attempts** (default 16 s); the wait doubles from 1 s.
+- **Connect all** - opening a folder or a multi-selection: **Handshakes at once** (default 4, at most 10), **Pause between starts** (default 150 ms, at least 50) and **Ask before connecting more than** (default 5 hosts). Every handshake in progress counts against a bastion's sshd `MaxStartups` (default 10); past it new ones are dropped as "handshake failed: EOF".
+- **Shared bastion** - **Keep open after last session**: how long the shared connection to a jump host stays open after the last session through it closes (default 10 s, 0 closes it at once).
+
+### Connections > Network profiles
+
+VPN profiles: WireGuard built in, NetBird, Tailscale, OpenConnect, OpenVPN and Check Point through plugins, and each profile's app proxy. See [Network profiles](#network-profiles).
+
+### Connections > Liveness probe
+
+Reachability dots on connection rows in open folders; see *Liveness probe* in section 3. **Enable liveness probe**, **Keep the WireGuard tunnel warm while probing** (off: the probe rides an open tunnel but does not hold it up), **Also probe dynamic inventory hosts** (running entries only) and **Re-probe every** N seconds (at least 10).
+
+### Connections > Browser launcher
+
+- **Browser path** - used by a SOCKS5 forward's **Open URL...** action. Detected engines: Chromium and Firefox families.
+- The launcher always uses a temporary profile; your main browser's cookies and history stay untouched.
+
+### Security > Vault
+
+- **Auto-lock after idle (minutes)** - 0 = never (default). Mouse movement, key presses and scrolling reset the timer. On timeout the vault locks while open SSH sessions and port forwards keep running. After a lock the next unlock asks for the master passphrase even when the auto-unlock sidecar is there, until you unlock explicitly - otherwise the lock would be invisible.
+- **Unlock vault** / **Lock now** - Lock now forgets the in-memory key and the auto-unlock sidecar, so the next launch asks for the passphrase too.
+- **Change master passphrase** - current, new and confirm. Re-encrypts every secret with a key from the new passphrase and refreshes the auto-unlock sidecar. Existing backups still need the old passphrase: make a fresh backup right after.
+- Where the platform keeps the auto-unlock sidecar in the older format (its key can fall back to the hostname), a warning says so; Lock now removes the sidecar.
+
+### Security > External secrets
+
+KeePass databases, Bitwarden / Vaultwarden and Infisical, one tab each: where credentials can read their secrets from instead of the vault. See [Credentials](#credentials).
+
+### Security > Audit log
+
+A local, append-only record of sensitive operations: vault unlock / lock / passphrase change, backup create / restore, SSH connect / disconnect, database writes, LLM (MCP) actions when their logging is on. It lives in `audit.db` next to the rest of your data and is never sent anywhere.
+
+- **Insights** - for 7 / 30 / 90 days or all: events, SSH connects, time connected, average and longest session, activity by hour, top hosts, top actions, LLM actions, and failures and denials. Clicking an item filters the list below.
+- The event list: **Filter**, **Limit**, sort by time or action, expand a row's details, **Export CSV**.
+- **Retention** - **Delete events older than (days)** and **Purge**.
+
+### Data > Backup & restore
+
+The vault, the SQLite store, and all settings are bundled into a single encrypted file sealed with your vault master passphrase (Argon2id 64 MiB / XChaCha20-Poly1305). Backups land in `<DataDir>/backups/`. The SQLite snapshot is taken via `VACUUM INTO`, so it's consistent even mid-write.
+
+- **Automatic daily backup** - when on, a background scheduler takes a backup at app start and then once every 24h. It needs the auto-unlock sidecar to recover the passphrase without prompting; if the vault is locked and no sidecar is set up, the run is silently skipped.
+- **Keep last N** - auto-backups (`ssh-tool-auto-*`) and pre-restore safety snapshots (`pre-restore-*` directories, written before every restore) are pruned to the same N (default 7). Manual backups (`ssh-tool-backup-*`) are never auto-deleted.
 - **Create backup now** - manual snapshot button.
-- **Restore** - decrypts the chosen backup, verifies its embedded
-  SHA-256 checksums, snapshots the current store + vault to
-  `backups/pre-restore-<ts>/` as a safety undo, then **stages**
-  the new files in `<DataDir>/pending-restore/`. The actual swap
-  runs at the next app start, before SQLite reopens the store -
-  in-process Windows file handles otherwise reject the overwrite.
-  Quit and reopen the app to complete the restore. The auto-unlock
-  sidecar is invalidated by the swap.
+- **Restore** - decrypts the chosen backup, verifies its embedded SHA-256 checksums, snapshots the current store + vault to `backups/pre-restore-<ts>/` as a safety undo, then **stages** the new files in `<DataDir>/pending-restore/`. The actual swap runs at the next app start, before SQLite reopens the store - in-process Windows file handles otherwise reject the overwrite. Quit and reopen the app to complete the restore. The auto-unlock sidecar is invalidated by the swap.
 - **Delete** - removes a backup file from the list.
 
-The backups directory is intentionally next to the live data so
-crash-recovery doesn't depend on external storage. For off-site
-safety, copy the `.sshtool-backup` files elsewhere - they are fully
-self-contained and verified by the passphrase + checksums on
-restore.
+The backups directory is intentionally next to the live data so crash-recovery doesn't depend on external storage. For off-site safety, copy the `.sshtool-backup` files elsewhere - they are fully self-contained and verified by the passphrase + checksums on restore.
 
-### Security → Sync
+### Data > Sync
 
-Personal multi-machine sync. The whole profile travels: connections,
-folders, credentials, the vault, custom icons, settings, snippets,
-workspaces. Pick a **Transport** at the top of the section, set the
-**sync passphrase** once (it applies to every backend), then use
-**Status**, **Manual sync**, and **Automatic** below.
+Personal multi-machine sync. The whole profile travels: connections, folders, credentials, the vault, custom icons, settings, snippets, workspaces. Pick a **Transport** at the top of the section, set the **sync passphrase** once (it applies to every backend), then use **Status**, **Manual sync**, and **Automatic** below.
 
-**Transports.** Five backends, all interchangeable - the snapshot and
-the push/pull logic are identical, only where it lands differs:
+**Transports.** Five backends, all interchangeable - the snapshot and the push/pull logic are identical, only where it lands differs:
 
-- **WebDAV** - any server you control (Nextcloud, Apache mod_dav,
-  `rclone serve webdav`, ...). URL, username, password. HTTPS required
-  (plain http only for localhost).
-- **SSH / SFTP** - a directory on any SSH server; auth reuses a vault
-  credential or a key/password you type in.
-- **Dropbox**, **OneDrive**, **Google Drive** - your own cloud
-  account. See [Cloud sync](#cloud-sync) below.
+- **WebDAV** - any server you control (Nextcloud, Apache mod_dav, `rclone serve webdav`, ...). URL, username, password. HTTPS required (plain http only for localhost).
+- **SSH / SFTP** - a directory on any SSH server; auth reuses a vault credential or a key/password you type in.
+- **Dropbox**, **OneDrive**, **Google Drive** - your own cloud account. See [Cloud sync](#cloud-sync) below.
 
-**Encrypted before upload.** The snapshot is the same sealed envelope
-backups use (argon2id + XChaCha20-Poly1305), locked with a **sync
-passphrase** independent of the vault passphrase. The remote only ever
-stores ciphertext plus a tiny meta file with a version counter - a
-compromised host learns nothing.
+**Encrypted before upload.** The snapshot is the same sealed envelope backups use (argon2id + XChaCha20-Poly1305), locked with a **sync passphrase** independent of the vault passphrase. The remote only ever stores ciphertext plus a tiny meta file with a version counter - a compromised host learns nothing.
 
-**Sync passphrase - one place.** The passphrase seals the snapshot on
-whichever backend is active, so it is a single field at the top of the
-section, not per-backend. It lives in this machine's vault (sync needs
-an unlocked vault). Use the same one on every machine. Changing an
-existing passphrase asks for confirmation: it invalidates pulls of any
-snapshot sealed with the old value until you push a fresh one over it.
+**Sync passphrase - one place.** The passphrase seals the snapshot on whichever backend is active, so it is a single field at the top of the section, not per-backend. It lives in this machine's vault (sync needs an unlocked vault). Use the same one on every machine. Changing an existing passphrase asks for confirmation: it invalidates pulls of any snapshot sealed with the old value until you push a fresh one over it.
 
-**Manual sync.** **Push** sends this machine's profile to the server.
-**Pull** replaces this machine's profile with the server's - applied
-**live, with no restart**: the connections appear immediately and
-open SSH sessions stay up. (If the machines use different *vault*
-passphrases, the connections still apply live and only the secrets
-ask for one restart - never a passphrase prompt.) A version counter
-keeps it safe: Push is refused when the server has changes this
-machine hasn't pulled; **Force push** overwrites it deliberately.
+**Manual sync.** **Push** sends this machine's profile to the server. **Pull** replaces this machine's profile with the server's - applied **live, with no restart**: the connections appear immediately and open SSH sessions stay up. (If the machines use different *vault* passphrases, the connections still apply live and only the secrets ask for one restart - never a passphrase prompt.) A version counter keeps it safe: Push is refused when the server has changes this machine hasn't pulled; **Force push** overwrites it deliberately.
 
 **Automatic** (opt-in):
 
-- **Auto sync** pushes your changes ~90 seconds after you stop
-  editing (and on quit), and checks the server for newer versions
-  every N minutes (default 5). When another machine pushed a newer
-  version, a status-bar pill and a toast offer a one-tap pull.
-  Auto-push is skipped while the server is ahead - conflicts are
-  yours to resolve.
-- **Apply incoming changes automatically** pulls newer versions in
-  the background instead of just notifying - but only when this
-  machine has no unsaved changes *and* you aren't mid-edit (no text
-  field focused, no dialog open). Otherwise it waits for an idle
-  moment or leaves the notification, so a pull never rearranges the
-  tree out from under you.
+- **Auto sync** pushes your changes ~90 seconds after you stop editing (and on quit), and checks the server for newer versions every N minutes (default 5). When another machine pushed a newer version, a status-bar pill and a toast offer a one-tap pull. Auto-push is skipped while the server is ahead - conflicts are yours to resolve.
+- **Apply incoming changes automatically** pulls newer versions in the background instead of just notifying - but only when this machine has no unsaved changes *and* you aren't mid-edit (no text field focused, no dialog open). Otherwise it waits for an idle moment or leaves the notification, so a pull never rearranges the tree out from under you.
 
-**New machine setup**: fill in the transport, hit Pull (applies live),
-and if prompted, unlock once with the vault passphrase from the source
-machine. Push and pull are recorded in the audit log.
+**New machine setup**: fill in the transport, hit Pull (applies live), and if prompted, unlock once with the vault passphrase from the source machine. Push and pull are recorded in the audit log.
 
 <a id="cloud-sync"></a>
 
 #### Cloud sync (Dropbox, OneDrive, Google Drive)
 
-Sync to your own consumer cloud account instead of a server. Sign-in
-is OAuth with PKCE and a loopback redirect: you click **Connect**, a
-browser tab opens, you authorize, and a refresh token is stored in
-this machine's vault. As with every backend the provider only ever
-holds the sealed snapshot - it never sees your connections or secrets.
+Sync to your own consumer cloud account instead of a server. Sign-in is OAuth with PKCE and a loopback redirect: you click **Connect**, a browser tab opens, you authorize, and a refresh token is stored in this machine's vault. As with every backend the provider only ever holds the sealed snapshot - it never sees your connections or secrets.
 
-You supply your **own app credentials** (a one-time setup per
-provider), so the sync runs entirely through your own cloud account -
-there is no shared ssh-tool app and no shared rate limit. Each panel
-shows the exact **redirect URI** to register, with a Copy button.
+You supply your **own app credentials** (a one-time setup per provider), so the sync runs entirely through your own cloud account - there is no shared ssh-tool app and no shared rate limit. Each panel shows the exact **redirect URI** to register, with a Copy button.
 
-- **Dropbox.** In the [Dropbox App Console](https://www.dropbox.com/developers/apps),
-  create an app with **Scoped access** and **App folder** access.
-  Under Permissions enable `files.content.read` and
-  `files.content.write` (then Submit). Under Settings - OAuth 2, keep
-  **Allow public clients (PKCE)** on and add the redirect URI the
-  panel shows. Paste the **App key**. The sync folder inside the app
-  folder is configurable.
-- **OneDrive.** In the Azure Portal (Entra ID) register an app,
-  add a **Mobile and desktop applications** platform with the redirect
-  URI the panel shows, and grant the `Files.ReadWrite.AppFolder` +
-  `offline_access` delegated permissions. Paste the **Application
-  (client) ID**. Pick an **account type** - personal (`/consumers`),
-  work / school (`/organizations`), or either (`/common`) - to match
-  your account and the app's "Supported account types". A business-only
-  OneDrive works with the work / school option.
-  > OneDrive is not yet verified against a live account. It shares the
-  > tested Dropbox / Google sign-in and transport plumbing, but treat
-  > it as beta.
-- **Google Drive.** In the Google Cloud Console create an OAuth client
-  of type **Desktop app**, and add the `drive.appdata` scope on the
-  OAuth consent screen. Paste the **client ID** and **client secret**.
-  Google requires a secret even for a Desktop app - it is not truly
-  confidential for an installed app, but is kept in this machine's
-  vault. Google accepts any loopback port, so no redirect URI needs
-  registering.
+- **Dropbox.** In the [Dropbox App Console](https://www.dropbox.com/developers/apps), create an app with **Scoped access** and **App folder** access. Under Permissions enable `files.content.read` and `files.content.write` (then Submit). Under Settings - OAuth 2, keep **Allow public clients (PKCE)** on and add the redirect URI the panel shows. Paste the **App key**. The sync folder inside the app folder is configurable.
+- **OneDrive.** In the Azure Portal (Entra ID) register an app, add a **Mobile and desktop applications** platform with the redirect URI the panel shows, and grant the `Files.ReadWrite.AppFolder` + `offline_access` delegated permissions. Paste the **Application (client) ID**. Pick an **account type** - personal (`/consumers`), work / school (`/organizations`), or either (`/common`) - to match your account and the app's "Supported account types". A business-only OneDrive works with the work / school option.
+  > OneDrive is not yet verified against a live account. It shares the tested Dropbox / Google sign-in and transport plumbing, but treat it as beta.
+- **Google Drive.** In the Google Cloud Console create an OAuth client of type **Desktop app**, and add the `drive.appdata` scope on the OAuth consent screen. Paste the **client ID** and **client secret**. Google requires a secret even for a Desktop app - it is not truly confidential for an installed app, but is kept in this machine's vault. Google accepts any loopback port, so no redirect URI needs registering.
 
-Each backend tracks its own version counter, so switching backends
-never triggers a false "this machine is ahead". To connect a fresh
-machine to the same cloud account, register the same app credentials
-there and Connect; the first Pull brings the profile down.
+Each backend tracks its own version counter, so switching backends never triggers a false "this machine is ahead". To connect a fresh machine to the same cloud account, register the same app credentials there and Connect; the first Pull brings the profile down.
 
-### Import / Export → ssh_config
+### Data > Import, Data > Export connections
 
 See [Import / Export](#import-export).
 
-### Import / Export → Devolutions RDM
+### Integrations > LLM (MCP) access, Integrations > Session sharing
 
-See above.
+See [Share a session with an LLM (MCP)](#llm-mcp) and *Share a session to a web browser* in section 7.
 
-### Import / Export → Import archive
+### Integrations > Desktop integration
 
-See above.
+Per-user, no administrator rights.
 
-### Import / Export → Export connections
+- **Install to ...** - when ssh-tool runs from somewhere it is not installed (a download folder), copies it to the per-user install location and creates the Start menu / applications menu entry; it stays updatable from inside the app. **Replace the installed copy** when another copy is installed; **Don't offer this at startup**; **Remove desktop integration** deletes the entry, icon and copy (connections, credentials and settings are not touched).
+- **File manager** - adds **Open in ssh-tool** to the right-click menu on directories: Windows Explorer (folder and folder background), KDE Dolphin and the GNOME Nautilus Scripts submenu. It opens the default local shell as a tab already in that directory. Not on macOS yet. It runs `ssh-tool --open-dir <path>`, which also works from scripts.
+- **Links** - binds `ssh-tool://` links to this app, so "Open in ssh-tool" buttons on a web page or in another tool launch it.
+- A registration that points at a different copy of ssh-tool than the one running is flagged, with a button to re-register it here.
 
-See above.
+### Diagnostics > Logs, Diagnostics > About
 
-### Diagnostics → Logs
-
-In-app live tail of backend log output. Buffer keeps the last 2000
-lines. See [Logs](#logs).
+**Logs** is a live tail of backend log lines (the last 2000); the persistent `app.log` rotates at 5 MiB and keeps the last 3. See [Logs](#logs). **About** shows the version, commit, schema, platform, installed plugins, data and log locations and the bundled components.
 
 ---
 
@@ -4516,8 +4244,7 @@ opkssh OIDC flow problems.
 | **Ctrl/Cmd+Shift+P** | Open Snippet palette (fires into active terminal) |
 | **Ctrl/Cmd+S** | Save the open editor (connection / folder / credential) |
 | **F2** | Rename the selected connection or folder in the tree, in place |
-| **Esc** | Close Quick palette / modal / context menu |
-| **F12** | Open DevTools (development aid) |
+| **Esc** | Close Quick palette (a typed query is cleared first) / modal / context menu |
 
 A `?` button next to the top-nav Search opens an in-app cheat sheet
 listing every shortcut and mouse gesture - same content as this
@@ -4532,7 +4259,7 @@ combos elsewhere in the app.
 |-------|--------|
 | **Ctrl+Tab** | Next tab (wraps around) |
 | **Ctrl+Shift+Tab** | Previous tab (wraps around) |
-| **Ctrl+1** … **Ctrl+8** | Jump to tab N |
+| **Ctrl+1** ... **Ctrl+8** | Jump to tab N |
 | **Ctrl+9** | Jump to last tab (Chrome / VS Code parity) |
 | **Ctrl+Shift+W** | Close active tab |
 | **Ctrl+Shift+T** | Reopen most recently closed tab (32-deep stack, SSH only - local shells lose identity on close) |
@@ -4669,38 +4396,27 @@ Everything lives in the app's data folder: `%APPDATA%\ssh-tool`
 - **SQLite database** (`store.db`) - connections, folders,
   credential metadata, network profiles, port forwards, known hosts,
   icons, settings, snippets, workspaces. The schema migrates itself on
-  start; Settings -> About shows its version.
+  start; Settings > About shows its version.
 - **File vault** (`vault.enc`) - encrypted credential secrets,
   per-connection passwords, client certificates.
 - **Auto-unlock sidecar** (`vault.enc.local.key`) - optional, machine-
   bound (DPAPI on Windows, machine id on Linux); no OS keychain is used.
 - **Rolling log file** - `%APPDATA%\ssh-tool\logs\app.log` (Windows)
   or the equivalent XDG dir on Linux. 5 MiB cap, three historical
-  files kept (`.1`, `.2`, `.3`). Path shown in Settings → Logs.
+  files kept (`.1`, `.2`, `.3`). Path shown in Settings > Logs.
 
 ## What's not in the app (yet)
 
 - Smart command autocomplete (designs in TODO, discussion pending)
-- Health probe / status dot per connection (deferred - scale concern
-  for 300+ connections behind VPN; see TODO)
-- Biometric vault unlock (Windows Hello / Touch ID - investigated,
-  parked; auto-lock is wired)
-- Change master passphrase (rotation flow not yet UI-exposed)
+- Biometric vault unlock on the desktop (Windows Hello / Touch ID; Android has it)
 - Bulk credential rotation wizard
-- SSH key deployment helper (ssh-copy-id-style)
-- Multi-pane split restore inside a workspace (workspaces save the
-  active leaf only for now)
-- Save/restore window position + size between launches
-- Multiple parallel broadcast groups
-- Drag remote files OUT of SFTP to the OS (download via drag)
 - Hardware key (FIDO2 / YubiKey) auth
-- HashiCorp Vault / Vaultwarden sync (placeholder kind only)
+- HashiCorp Vault as a secret backend (the credential kind exists, the integration does not)
 - ssh_config auto-import of IdentityFile content (security gate)
 - Git-as-sync (separate roadmap)
-- Packaging (.AppImage / .msi / NSIS)
-- Android: in-app auto-update, signed release build / Play / F-Droid,
-  android in CI (local sideload build only for now)
-- iOS build (shares build tags with android, not produced)
+- Installers: Windows ships a plain `.exe` (no MSI / NSIS), Linux has `.deb` / `.rpm` / the apt and dnf repository but no AppImage
+- Android: Play Store / F-Droid (updates download the APK through the browser)
+- iOS build (shares build tags with Android, not produced)
 - Onboarding tour, i18n, full a11y audit
 
 See `TODO.md` for the full backlog.

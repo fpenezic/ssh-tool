@@ -49,11 +49,7 @@ build of your own (see below).
 - **Port forwards** - local / remote / SOCKS5 dynamic with
   isolated-browser launcher.
 - **Kafka and Database tabs** per connection, riding its SSH session:
-  Kafka topics, consumer, produce and groups; PostgreSQL, MySQL, Oracle,
-  SQL Server, IBM Db2, ClickHouse, OpenSearch / Elasticsearch and Redis, with
-  read-only guards; foreign keys to follow both ways, an ER diagram, server-side
-  filter and sort, cell edits as an UPDATE script, Explain and a Sessions view.
-  Pure-Go drivers, nothing to install.
+  Kafka topics, consumer (last N per partition or of the whole topic), produce and groups; PostgreSQL, MySQL, Oracle, SQL Server, IBM Db2, ClickHouse, OpenSearch / Elasticsearch and Redis, with read-only guards; a spreadsheet-like grid (edit in place, copy blocks into Excel or Teams), whole-table export, foreign keys to follow both ways, an ER diagram, server-side filter and sort, Explain and a Sessions view. Pure-Go drivers, nothing to install.
 - **VNC console** tab (noVNC) for remote desktops and Proxmox VMs.
 - **App proxy and CI runner** - other programs, containers and a GitLab
   runner reach your customers through the VPN profiles and jump hosts.
@@ -78,7 +74,7 @@ security updates through your package manager. Install them first:
 ```bash
 sudo pacman -S webkitgtk-6.0 gtk4                 # Arch / CachyOS
 sudo apt install libwebkitgtk-6.0-4 libgtk-4-1    # Debian / Ubuntu
-sudo dnf install webkitgtk6.0 gtk4                # Fedora / RHEL
+sudo dnf install webkitgtk6.0 gtk4                # Fedora
 ```
 
 Without them the binary fails in the dynamic loader with
@@ -167,7 +163,7 @@ and where they go included: [docs/macos.md](docs/macos.md).
 
 ### Updates
 
-ssh-tool updates itself: Help > Check for updates downloads the new
+ssh-tool updates itself: the status-bar pill (or Settings > Updates > Check now) downloads the new
 build and swaps it in place, on Windows and Linux alike. It works from
 anywhere your user owns - `~/.local/bin`, `%LOCALAPPDATA%`, the desktop,
 anywhere in `$HOME`.

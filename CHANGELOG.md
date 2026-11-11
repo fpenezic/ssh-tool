@@ -17,6 +17,7 @@ The Database grid works more like a spreadsheet: edit cells in place, select and
 - **Disable WebGL renderer** in Settings > Terminal is now **GPU rendering (WebGL)** and reads the positive way round: off (the default, as before) draws with canvas, on draws new tabs on the graphics card. The stored setting is unchanged, so nothing flips on upgrade. On Android terminal tabs always use canvas.
 
 ### Connection tree
+- The tree filter's placeholder says it matches tags too, as it always has.
 - **Quick palette (Ctrl+K)**: with hosts marked (Ctrl+Enter), Enter on a host that is not marked opens it together with the marked ones; it used to open only the marked ones, so the last host picked was left out. The footer says "+ this" when it will be added.
 - **Filtering a large tree is several times faster**: with 1000 connections the first letter typed takes about a third of the time it did and narrowing to a few folders about a tenth; typing a word applies the filter once after a short pause instead of after every letter. The tree looks up folders and connections by id instead of scanning the whole list for every row.
 
@@ -28,15 +29,16 @@ The Database grid works more like a spreadsheet: edit cells in place, select and
 - A connection on an auto-mode profile whose plugin is not installed says so: the host was reachable directly, so the connect went ahead without the VPN and gave no hint the profile could never bring its tunnel up. A warning now shows once per profile while the app runs; click it to open the profile and install the plugin.
 - Changing a profile's local proxy to a port that is already taken keeps the proxy listening on its old port; before, it stopped listening until the app restarted, while the profile still showed it on.
 - **A DNS domain added by hand beats one a VPN server pushed** on another profile, whatever their lengths: with `example.com` added on B and `vpn.example.com` pushed by A's gateway, `db1.vpn.example.com` now goes to B until `vpn.example.com` is added by hand on A. A server can push any domain, even another customer's. Domains of different profiles that claim the same names are listed under the app proxy's summary as overlaps, and **Which VPN for...** says when a hand-added domain won.
+- The NetBird setup key hint says a reusable key is always needed (every connect registers the machine again), not only for a synced profile.
 - A WireGuard config whose `DNS` line also names search domains, as `wg-quick` allows (`DNS = 10.0.0.53, corp.example.com`), was refused as a bad DNS address. The names are now search domains: a short name like `db1` is tried in them inside the tunnel (the next one only when the name does not exist), and the app proxy routes names in them through the profile as if they were added by hand. A mistyped resolver address is still refused rather than taken for a domain.
 
 ### Database
 - A folder's list of databases shows and can be edited with the folder's own Database switch off, so it can list prod / stage for the connections under it that turn the Database on, without turning it on for all of them.
-- **Edit cells in place**: double-click, F2 or Enter types into the cell itself; Enter keeps the value and moves down, Tab moves right, Esc drops it. Long and multi-line values still open in the pane below.
+- **Edit cells in place** in a table's Data view (SQL engines, not on a read-only connection): double-click, F2 or Enter types into the cell itself; Enter keeps the value and moves down, Tab moves right, Esc drops it. Long and multi-line values still open in the pane below, and Shift+Enter opens it for any cell.
 - **Changed cells stay visible**: a yellow mark in the cell's corner, the row number in yellow and the old value on hover, also while the cell is picked (its blue used to hide the yellow).
 - **Select and copy blocks of cells**: Shift+click, Shift+arrows, a drag, a click on `#` for rows, Ctrl+A. Ctrl+C copies them as a table that Excel splits into cells and Teams / Outlook paste as a table.
-- **Right-click on a cell**: Edit, Set NULL, Revert, Open value, Copy, Copy with headers, Copy as Markdown, Copy as WHERE, and in a table's Data view Copy as INSERT / DELETE of the selected rows (Copy as SQL above the grid takes the selection too; INSERT carries the changed values, DELETE matches the rows as they are on the server).
-- **Right-click in the tree**: open a table's Data, Structure or DDL, New query, Count rows, Copy name, Copy DDL, Export, ER diagram; New query, Copy name and Refresh on a database.
+- **Right-click on a cell**: Edit, Set NULL, Revert the change, Open value, Copy value (or the selected block), Copy with headers, Copy as Markdown, Copy as WHERE, and in a table's Data view Copy as INSERT / DELETE of the selected rows (Copy as SQL above the grid takes the selection too; INSERT carries the changed values, DELETE matches the rows as they are on the server).
+- **Right-click in the tree**: open a table's Data, Structure or DDL, New query, Count rows, Copy name, Copy DDL, Export to CSV / JSON, ER diagram; New query, Copy name and Refresh tables on a database.
 - **Export a whole table** to CSV or JSON (SQL engines and ClickHouse), read 10000 rows at a time with a progress bar and Stop, not only the page shown.
 - Script no longer asks to drop the edits it has just put into the query tab.
 - Adding a database to a connection's list no longer turns the Query timeout field red: an empty new entry is its own error (Save says it needs a name), not the timeout's.

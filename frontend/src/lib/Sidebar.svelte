@@ -638,7 +638,7 @@
         type="text"
         class="search-input"
         bind:this={searchInputEl}
-        placeholder="Filter by name or hostname… (start typing in the tree)"
+        placeholder="Filter by name, hostname or tag… (start typing in the tree)"
         value={nameFilter.text}
         oninput={(e) => nameFilter.set((e.target as HTMLInputElement).value)}
         onkeydown={onSearchKey}
