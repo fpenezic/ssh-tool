@@ -6021,8 +6021,9 @@
       Local append-only record of sensitive operations: vault
       unlock / lock / rotate, backup create / restore, SSH connect /
       disconnect. Lives in <code>audit.db</code> next to the rest of
-      your data, never sent anywhere (if that file cannot be opened,
-      events go to <code>store.db</code>, which backups and sync carry). Useful for "did I really
+      your data and normally stays on this machine (backups and sync
+      leave it out); only if that file cannot be opened do events go to
+      <code>store.db</code>, and then backups and sync include them. Useful for "did I really
       connect to that host yesterday" and for shipping evidence to
       a compliance review.
     </p>
