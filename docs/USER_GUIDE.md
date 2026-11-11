@@ -4402,7 +4402,9 @@ Goal: reach `app1.internal.example.com`, which only the bastion `bastion.example
 3. **A folder for the customer.** New folder `customer-a`. In its editor: **General > Credential** = the opkssh credential, **Username** = your login, **Connection > Network** = the WireGuard profile. Save. Everything under the folder now inherits both.
 4. **The bastion.** New connection `bastion` in that folder, **Hostname** `bastion.example.com`. Connect once to accept its host key.
 5. **The host.** New connection `app1` in the same folder, **Hostname** `app1.internal.example.com`. On **Connection > Path** click **Edit chain**, add a hop, pick **Saved connection** > `bastion`. Save.
-6. **Connect** `app1`. The Path card shows this computer > the VPN > the bastion > app1; the first hop goes through the tunnel, which comes up on demand and stops on its own when idle.
+6. **Connect** `app1`. The Path card shows this computer > the VPN > the bastion > app1 (below, a host behind a bastion, without a VPN); the first hop goes through the tunnel, which comes up on demand and stops on its own when idle.
+
+![Connection tab: the Path card with a saved-connection bastion before the host](https://raw.githubusercontent.com/fpenezic/ssh-tool/main/docs/howto/jump-chain.png)
 
 Tips: set the chain on the folder instead of the connection when every host there sits behind the same bastion (a bastion inside that folder connects directly). The tree marks routed connections (Settings > Connection tree > **Jump host marks**). A plugin VPN (NetBird, Tailscale, OpenConnect, OpenVPN, Check Point) works the same way once its plugin is installed from **Plugins & proxy**.
 
@@ -4414,6 +4416,9 @@ Goal: look at the production PostgreSQL and Kafka that listen on `127.0.0.1` of 
 1. **The login.** Credentials > `+` > **Password**, with the database user as the default username. (A KeePass, Bitwarden or Infisical credential works too.)
 2. **Mark production.** On the `prod` folder: **General > Sensitive** = **Yes**. The LLM (MCP) cannot touch anything under it, and statements that change data ask first.
 3. **Read-only for the whole folder.** In the `prod` folder editor, **Services**: turn the database switch on, **Engine** = PostgreSQL, **Login** = the credential, **Writes** = **Read-only**. For Kafka, below it: turn Kafka on, **Bootstrap servers** `127.0.0.1:9092`, **Writes** = **Read-only**. Save. Hosts under the folder inherit it; a host without a database turns its own switch off.
+
+   ![A folder's Services tab: PostgreSQL and Kafka on, both with Writes set to Read-only](https://raw.githubusercontent.com/fpenezic/ssh-tool/main/docs/howto/services-readonly.png)
+
 4. **Open it.** Select `db1`, then **Open database** (or **Open Kafka**) on its Services tab; or set **General > Double-click opens** = **Kafka** for a host that exists for its cluster. The Database or Kafka tab rides the host's SSH session: the address `127.0.0.1` is the database host's own loopback.
 5. **Look around.** Database: the tree, a query tab (Ctrl+Enter runs the statement under the cursor), **Export to CSV...** on a table. Kafka: open a topic, pick **Last N in topic** and press **Consume**. A write is refused by the app itself, whatever the login allows.
 
