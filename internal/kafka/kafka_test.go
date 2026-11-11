@@ -1088,3 +1088,29 @@ func TestFlushPickDroppedWithinLimit(t *testing.T) {
 		t.Fatalf("received %d dropped %d buffered %d", k.received, k.dropped, len(k.buf))
 	}
 }
+
+// The pick keeps copies, not records that point into a fetched batch's
+// bytes: one kept record would otherwise hold the whole batch.
+func TestOfferDetachesFromBatch(t *testing.T) {
+	batch := make([]byte, 1<<20)
+	copy(batch, "key1value1hdr")
+	r := &kgo.Record{
+		Key: batch[0:4], Value: batch[4:10], Timestamp: t0, Partition: 2, Offset: 7,
+		Headers: []kgo.RecordHeader{{Key: "h", Value: batch[10:13]}},
+	}
+	k := &Consumer{maxMsgs: 10, maxBytes: 1 << 20}
+	g := &gather{n: 1}
+	k.offer(g, r)
+	c := g.h[0]
+	if c == r || cap(c.Key) != 4 || cap(c.Value) != 6 || cap(c.Headers[0].Value) != 3 || &c.Key[0] == &batch[0] {
+		t.Fatalf("pick shares the batch: caps %d %d %d", cap(c.Key), cap(c.Value), cap(c.Headers[0].Value))
+	}
+	if string(c.Key) != "key1" || string(c.Value) != "value1" || string(c.Headers[0].Value) != "hdr" || c.Partition != 2 || c.Offset != 7 || !c.Timestamp.Equal(t0) {
+		t.Fatalf("copy differs: %+v", c)
+	}
+	// A null key and a tombstone stay null, not empty.
+	d := detach(&kgo.Record{Value: []byte{}})
+	if d.Key != nil || d.Value == nil {
+		t.Fatalf("nil-ness lost: key %v value %v", d.Key, d.Value)
+	}
+}

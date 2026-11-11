@@ -433,11 +433,11 @@ func (k *Consumer) offer(g *gather, r *kgo.Record) {
 	switch {
 	case !match:
 	case len(g.h) < capN && (g.cut == nil || older(g.cut, r)):
-		heap.Push(&g.h, r)
+		heap.Push(&g.h, detach(r))
 		g.hBytes += recordSize(r)
 	case len(g.h) > 0 && older(g.h[0], r):
 		g.hBytes += recordSize(r) - recordSize(g.h[0])
-		g.h[0] = r
+		g.h[0] = detach(r)
 		heap.Fix(&g.h, 0)
 	}
 	// Also when the record was not taken (filtered out, or older than the
@@ -452,6 +452,37 @@ func (k *Consumer) offer(g *gather, r *kgo.Record) {
 			g.cut = &kgo.Record{Timestamp: x.Timestamp, Partition: x.Partition, Offset: x.Offset}
 		}
 	}
+}
+
+// detach copies a record the pick keeps. franz-go decodes a fetched batch
+// into one []Record, and keys, values and header values point into the
+// batch's bytes: holding one record that way holds the whole batch, so a
+// sparse pick over big batches would keep far more than its byte count.
+func detach(r *kgo.Record) *kgo.Record {
+	c := &kgo.Record{
+		Key:       cloneBytes(r.Key),
+		Value:     cloneBytes(r.Value),
+		Timestamp: r.Timestamp,
+		Topic:     r.Topic,
+		Partition: r.Partition,
+		Offset:    r.Offset,
+	}
+	if len(r.Headers) > 0 {
+		c.Headers = make([]kgo.RecordHeader, len(r.Headers))
+		for i, h := range r.Headers {
+			c.Headers[i] = kgo.RecordHeader{Key: strings.Clone(h.Key), Value: cloneBytes(h.Value)}
+		}
+	}
+	return c
+}
+
+// cloneBytes copies b, keeping nil apart from empty (a null key or a
+// tombstone value is not an empty one).
+func cloneBytes(b []byte) []byte {
+	if b == nil {
+		return nil
+	}
+	return append(make([]byte, 0, len(b)), b...)
 }
 
 // flush ends the gather phase: the pick goes into the buffer oldest first.
