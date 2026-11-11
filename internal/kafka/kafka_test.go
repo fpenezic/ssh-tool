@@ -936,7 +936,8 @@ func TestConsumeNewestLateQueueBounded(t *testing.T) {
 		// The last 3 offsets of partition 0 hold 2 records (the third is the
 		// commit marker), so 2 picked + 20 late.
 		if !s.Gathering && s.Received == 22 {
-			if got := keysOf(s.Messages); got != "p1-117 p1-118 p1-119" || s.Dropped != 19 || s.Buffered != 3 {
+			// The pick keeps its place; the queue had the one slot left.
+			if got := keysOf(s.Messages); got != "p0-11 p0-12 p1-119" || s.Dropped != 19 || s.Buffered != 3 {
 				t.Fatalf("got %q, %+v", got, s)
 			}
 			return
@@ -985,6 +986,24 @@ func TestQueueLateBounds(t *testing.T) {
 	}
 	if len(g.late) != 3 || g.lateDropped != 5 || string(g.late[2].Key) != "k07" {
 		t.Fatalf("limit over the bound: %d kept, %d dropped, last %s", len(g.late), g.lateDropped, g.late[len(g.late)-1].Key)
+	}
+	// The pick's records and bytes come off the room: 2 picked of 3 slots
+	// leave one; 26 of 40 bytes leave 14, also one.
+	k = &Consumer{maxMsgs: 3, maxBytes: 1 << 20}
+	g = &gather{h: recHeap{rec(90), rec(91)}, hBytes: 26}
+	for i := 0; i < 5; i++ {
+		k.queueLate(g, rec(i))
+	}
+	if len(g.late) != 1 || g.lateDropped != 4 || string(g.late[0].Key) != "k04" {
+		t.Fatalf("pick room by count: %d kept, %d dropped", len(g.late), g.lateDropped)
+	}
+	k = &Consumer{maxMsgs: 100, maxBytes: 40}
+	g = &gather{h: recHeap{rec(90), rec(91)}, hBytes: 26}
+	for i := 0; i < 5; i++ {
+		k.queueLate(g, rec(i))
+	}
+	if len(g.late) != 1 || g.lateBytes != 13 {
+		t.Fatalf("pick room by bytes: %d kept, %d bytes", len(g.late), g.lateBytes)
 	}
 	// The filter runs before queueing.
 	k = &Consumer{maxMsgs: 100, maxBytes: 1 << 20, filt: filter{key: "k1"}}
