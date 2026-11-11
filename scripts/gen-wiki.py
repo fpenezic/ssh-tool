@@ -33,6 +33,7 @@ PAGES = {
     "Quick-Access-and-Shortcuts": ["11", "21"],
     "Import-Export-and-Settings": ["18", "19", "20", "Storage locations"],
     "Mobile": ["22"],
+    "How-To": ["23"],
 }
 
 # guide sections that deliberately have no wiki page
