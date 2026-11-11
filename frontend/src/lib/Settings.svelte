@@ -4750,8 +4750,8 @@
             A NetBird <strong>setup key</strong> (from Setup Keys in the
             dashboard - a UUID like <code>A1B2C3D4-...</code>), NOT a
             personal access token. Use a <strong>reusable</strong> key: every
-            connect registers this machine as a peer again, so a one-off key
-            works only once (and a synced profile registers each machine as
+            time the tunnel starts it registers this machine as a peer again,
+            so a one-off key works only once (and a synced profile registers each machine as
             its own peer).
           </span>
         {/if}
@@ -6021,7 +6021,8 @@
       Local append-only record of sensitive operations: vault
       unlock / lock / rotate, backup create / restore, SSH connect /
       disconnect. Lives in <code>audit.db</code> next to the rest of
-      your data - never sent anywhere. Useful for "did I really
+      your data, never sent anywhere (if that file cannot be opened,
+      events go to <code>store.db</code>, which backups and sync carry). Useful for "did I really
       connect to that host yesterday" and for shipping evidence to
       a compliance review.
     </p>

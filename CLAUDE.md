@@ -68,9 +68,9 @@ Backend (Go 1.26):
 
 Mobile (Android, v0.36.0+):
 - Same Go core, compiled for android via the NDK (`CGO_ENABLED=1`,
-  `-buildmode=c-shared` -> libwails.so / JNI). CI builds and signs the
-  release APK (release.yml build-android); `task android:package` builds
-  one locally. Desktop unaffected.
+  `-buildmode=c-shared` -> libwails.so / JNI). CI builds the debug-variant APK,
+  signs it with the pinned key and attaches it to every release
+  (release.yml build-android); `task android:package` builds one locally. Desktop unaffected.
 - Installed app id `app.sshtool`; gradle namespace stays
   `com.wails.app` for the JNI bridge (gotcha #32).
 - Biometric vault unlock via EncryptedSharedPreferences (Keystore) +
@@ -97,7 +97,7 @@ ssh-tool/
 ├─ app_mobile_stubs.go     (android||ios) stubs for desktop-only free funcs app.go calls
 ├─ app_relaunch_{desktop,android}.go   relaunchApp(): exec+quit vs reload-message
 ├─ mobile_{events,secure,env,service}_android.go   long-poll, biometric/secure store, env, fg service
-├─ mobile_*_desktop.go     (!android&&!ios) no-op stubs for events, secure, service
+├─ mobile_*_desktop.go     (!android&&!ios) events / service no-op stubs; secure reads the auto-unlock sidecar
 ├─ wails3_runtime.go       shim: EventsEmit (+ mobile enqueue) / BrowserOpenURL
 ├─ Taskfile.yml            top-level task routing (android: namespace too)
 ├─ internal/

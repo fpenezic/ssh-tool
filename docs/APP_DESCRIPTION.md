@@ -31,7 +31,7 @@ A tree of connections with folder-level inherited settings, an encrypted credent
 
 **Networking** - local / remote / SOCKS5 forwards with an isolated-browser launcher; userspace VPN profiles (no TUN adapter, no admin rights, several at once); an app proxy and a GitLab CI runner that reach customer networks through them.
 
-**Kafka, Database, VNC** - per-connection tabs riding the SSH session: Kafka topics, consumer (last N per partition or of the whole topic), produce and groups; PostgreSQL, MySQL, Oracle, SQL Server, Db2, ClickHouse, OpenSearch / Elasticsearch and Redis with read-only guards, a spreadsheet-like grid and whole-table export; a noVNC console.
+**Kafka, Database, VNC** - per-connection tabs riding the SSH session: Kafka topics, consumer (last N per partition or of the whole topic), produce and groups; PostgreSQL, MySQL, Oracle, SQL Server, Db2, ClickHouse, OpenSearch / Elasticsearch and Redis with read-only guards, a spreadsheet-like grid (in-place editing in a table's Data view) and whole-table export; a noVNC console.
 
 **Dynamic inventory** - Proxmox VE, Hetzner, DigitalOcean, Linode, Vultr, Scaleway, AWS EC2 and Ansible inventories as auto-populated folders.
 
@@ -148,7 +148,7 @@ A tree of connections with folder-level inherited settings, an encrypted credent
 ### VPN profiles and the app proxy
 
 - **Userspace VPN profiles** - WireGuard built in; NetBird, Tailscale, OpenConnect (AnyConnect, Fortinet, F5, GlobalProtect, Pulse), OpenVPN and Check Point as optional plugins. No TUN adapter, no admin rights, several gateways at once; a connection's first hop and provider APIs dial through its profile.
-- **App proxy** - one local SOCKS5 proxy (with a password) for other programs, reaching every marked profile, routing by networks and by the VPN's DNS domains (pushed by the gateway or added by hand), so `db1.prod.example.com` resolves on the far side.
+- **App proxy** - one local SOCKS5 proxy (with a password) for other programs, reaching every marked profile, routing by networks and by the VPN's DNS domains (pushed by the gateway or added by hand), so `db1.prod.example.com` resolves on the far side for a client that passes the name to the proxy (`socks5h://`, `curl --socks5-hostname`).
 - **CI runner** - a GitLab runner whose jobs reach customer networks through the profiles and jump hosts.
 
 ### Secrets, sync and backup
@@ -172,10 +172,10 @@ A tree of connections with folder-level inherited settings, an encrypted credent
   managed from a Tunnels panel in the status bar.
 - **Kafka** - a connection with Kafka enabled opens a Kafka tab: topics,
   a consumer that never commits, produce, topic config and metrics,
-  consumer groups with lag and offset reset. The consumer starts from the last N records of every partition or of the whole topic, a time, an offset, or new records only. Broker connections ride the
+  consumer groups with lag and offset reset. The consumer starts from the last N records (offsets) of every partition or of the whole topic, a time, an offset, or new records only. Broker connections ride the
   connection's SSH session, so advertised broker names resolve on the far
   side - no local tunnels, no hosts-file entries.
-- **Databases** - a connection with the database enabled opens a Database tab on PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, IBM Db2, ClickHouse, OpenSearch / Elasticsearch or Redis: databases, tables and their structure, query tabs with their own sessions, and a results grid that works like a spreadsheet (edit cells in place, select and copy blocks straight into Excel or Teams, right-click menus) with whole-table CSV / JSON export. Foreign keys can be followed both ways from a row, a schema has an ER diagram, filters and sorting run on the server, edited cells become an UPDATE script to read and run, Explain shows the plan (PostgreSQL, MySQL), a Sessions view stops a statement or a session, and a query timeout stops long statements. A folder can list the databases (prod, stage) every host under it has. Connections ride the connection's SSH session, so a server on the host's loopback needs no port forward; read-only mode is enforced in the backend.
+- **Databases** - a connection with the database enabled opens a Database tab on PostgreSQL, MySQL / MariaDB, Oracle, SQL Server, IBM Db2, ClickHouse, OpenSearch / Elasticsearch or Redis: databases, tables and their structure, query tabs with their own sessions, and a results grid that works like a spreadsheet (edit a table's cells in place in its Data view, select and copy blocks straight into Excel or Teams, right-click menus) with whole-table CSV / JSON export. Foreign keys can be followed both ways from a row, a schema has an ER diagram, filters and sorting run on the server, edited cells become an UPDATE script to read and run, Explain shows the plan (PostgreSQL, MySQL), a Sessions view stops a statement or a session, and a query timeout stops long statements. A folder can list the databases (prod, stage) every host under it has. Connections ride the connection's SSH session, so a server on the host's loopback needs no port forward; read-only mode is enforced in the backend.
 
 ### Import / export
 
