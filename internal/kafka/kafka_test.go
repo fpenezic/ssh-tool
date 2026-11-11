@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -948,7 +949,9 @@ func TestConsumeNewestLateQueueBounded(t *testing.T) {
 }
 
 func TestQueueLateBounds(t *testing.T) {
-	rec := func(i int) *kgo.Record { return &kgo.Record{Key: []byte(fmt.Sprintf("k%02d", i)), Value: []byte("0123456789")} }
+	rec := func(i int) *kgo.Record {
+		return &kgo.Record{Key: []byte(fmt.Sprintf("k%02d", i)), Value: []byte("0123456789")}
+	}
 	k := &Consumer{maxMsgs: 3, maxBytes: 1 << 20}
 	g := &gather{}
 	for i := 0; i < 20; i++ {
@@ -991,5 +994,70 @@ func TestQueueLateBounds(t *testing.T) {
 	}
 	if len(g.late) != 10 || k.scanned != 10 {
 		t.Fatalf("filter: %d kept, %d scanned", len(g.late), k.scanned)
+	}
+}
+
+func TestOfferByteBound(t *testing.T) {
+	rec := func(sec int) *kgo.Record {
+		return &kgo.Record{Key: []byte(fmt.Sprintf("k%03d", sec)), Value: []byte("012345678"), Timestamp: t0.Add(time.Duration(sec) * time.Second)}
+	}
+	// 13 bytes a record, 30 allowed: the pick holds the newest two. Only the
+	// byte eviction counts as dropped; a pick replaced by a newer record was
+	// never shown, as with the record count bound.
+	k := &Consumer{maxMsgs: 100, maxBytes: 30}
+	g := &gather{n: 10}
+	for _, s := range []int{1, 2, 3, 4} {
+		k.offer(g, rec(s))
+	}
+	if len(g.h) != 2 || g.hBytes != 26 || g.pickDropped != 1 || !g.hFull {
+		t.Fatalf("pick %d records, %d bytes, %d dropped, full %v", len(g.h), g.hBytes, g.pickDropped, g.hFull)
+	}
+	// An older record no longer gets in (nor counts as dropped); a newer
+	// one takes the oldest one's place.
+	k.offer(g, rec(0))
+	k.offer(g, rec(9))
+	keys := []string{}
+	for _, r := range g.h {
+		keys = append(keys, string(r.Key))
+	}
+	sort.Strings(keys)
+	if strings.Join(keys, " ") != "k004 k009" || g.pickDropped != 1 || k.scanned != 6 {
+		t.Fatalf("pick %v, %d dropped, %d scanned", keys, g.pickDropped, k.scanned)
+	}
+	// One record over the bound alone is still kept.
+	k = &Consumer{maxMsgs: 100, maxBytes: 5}
+	g = &gather{n: 10}
+	k.offer(g, rec(1))
+	if len(g.h) != 1 {
+		t.Fatalf("lone record dropped")
+	}
+}
+
+// With stop at end, records past the start-time ends are not queued behind
+// the pick, so they cannot push it out of the buffer.
+func TestConsumeNewestStopAtEndSkipsLate(t *testing.T) {
+	old := stopAtEndIdle
+	stopAtEndIdle = time.Second
+	defer func() { stopAtEndIdle = old }()
+	fc := newFake(t, 0)
+	c := openFake(t, fc)
+	seeds := fc.ListenAddrs()
+	produceTx(t, seeds, 0, 10, 11, 12) // keeps the gather open until idle
+	produceAt(t, seeds, 1, 50, 51, 52)
+	k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "empty", Mode: FromNewest, N: 3, Partition: -1, BufferMessages: 3, StopAtEnd: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer k.Stop()
+	time.Sleep(200 * time.Millisecond)
+	produceAt(t, seeds, 1, 200, 201, 202, 203, 204)
+	select {
+	case <-k.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatalf("still running: %+v", k.Snapshot(0, SnapshotOptions{}))
+	}
+	s := k.Snapshot(0, SnapshotOptions{})
+	if got := keysOf(s.Messages); got != "p1-50 p1-51 p1-52" || s.Dropped != 0 {
+		t.Fatalf("got %q, %+v", got, s)
 	}
 }
