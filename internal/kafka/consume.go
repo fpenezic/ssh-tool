@@ -475,7 +475,8 @@ func (k *Consumer) queueLate(g *gather, r *kgo.Record) {
 		k.mu.Unlock()
 		return
 	}
-	if k.req.Limit > 0 && len(g.late) >= k.req.Limit {
+	// Evicted ones count too: they were kept, and count toward the limit.
+	if k.req.Limit > 0 && uint64(len(g.late))+g.lateDropped >= uint64(k.req.Limit) {
 		return
 	}
 	g.late = append(g.late, r)
