@@ -99,31 +99,30 @@ func openAuditDB(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-// migrateAuditRows moves legacy audit rows out of the main store into
-// the side file, once. Idempotent: runs only while the side file is
-// empty and the main table still has rows. The main table stays in
-// place (emptied) so the versioned migration history is untouched -
-// an empty table that's never written again doesn't dirty the sync
-// signal.
+// migrateAuditRows moves audit rows left in the main store into the side
+// file: the ones from before the split, and the ones a backup from before
+// it brings back when it is restored over an audit log that already has
+// events (those used to stay in store.db, out of the audit view and its
+// purge, and travelled with backups and sync). A row already in the side
+// file (same time, action, target and metadata) is not copied again, so a
+// run cut short between the side commit and the main delete only deletes
+// on the next start. The main table stays in place (emptied) so the
+// versioned migration history is untouched.
 func migrateAuditRows(main, audit *sql.DB) {
-	var sideCount int
-	if err := audit.QueryRow(`SELECT COUNT(*) FROM audit_events`).Scan(&sideCount); err != nil || sideCount > 0 {
-		return
-	}
 	rows, err := main.Query(`SELECT ts, action, target, metadata_json FROM audit_events ORDER BY id`)
 	if err != nil {
 		return // table absent - nothing to migrate
 	}
 	defer rows.Close()
 	// All or nothing: the main rows are deleted only once every one of
-	// them is in the side file, and a run cut short rolls back, so the
-	// next start (side file still empty) tries again.
+	// them is in the side file; a run cut short rolls back and the next
+	// start tries again.
 	atx, err := audit.Begin()
 	if err != nil {
 		return
 	}
 	defer atx.Rollback()
-	moved := 0
+	seen := 0
 	for rows.Next() {
 		var ts int64
 		var action, target, meta string
@@ -131,17 +130,19 @@ func migrateAuditRows(main, audit *sql.DB) {
 			return
 		}
 		if _, err := atx.Exec(
-			`INSERT INTO audit_events (ts, action, target, metadata_json) VALUES (?, ?, ?, ?)`,
-			ts, action, target, meta); err != nil {
+			`INSERT INTO audit_events (ts, action, target, metadata_json)
+			 SELECT ?, ?, ?, ? WHERE NOT EXISTS (
+			     SELECT 1 FROM audit_events WHERE ts = ? AND action = ? AND target = ? AND metadata_json = ?)`,
+			ts, action, target, meta, ts, action, target, meta); err != nil {
 			return
 		}
-		moved++
+		seen++
 	}
 	if rows.Err() != nil {
 		return
 	}
 	_ = rows.Close()
-	if moved == 0 || atx.Commit() != nil {
+	if seen == 0 || atx.Commit() != nil {
 		return
 	}
 	_, _ = main.Exec(`DELETE FROM audit_events`)

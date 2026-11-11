@@ -4127,7 +4127,7 @@ KeePass databases, Bitwarden / Vaultwarden and Infisical, one tab each: where cr
 
 ### Security > Audit log
 
-A local, append-only record of sensitive operations: vault unlock / lock / passphrase change, backup create / restore, SSH connect / disconnect, database writes, LLM (MCP) actions when their logging is on. It lives in `audit.db` next to the rest of your data and normally stays on this machine: backups and sync leave it out. Events end up in `store.db`, which backups and sync include, in two cases: when `audit.db` cannot be opened, and when a backup from before the split (older than the separate audit file) is restored onto a machine whose `audit.db` already has events - the restored rows then stay in `store.db`.
+A local, append-only record of sensitive operations: vault unlock / lock / passphrase change, backup create / restore, SSH connect / disconnect, database writes, LLM (MCP) actions when their logging is on. It lives in `audit.db` next to the rest of your data and normally stays on this machine: backups and sync leave it out. Only if `audit.db` cannot be opened do events go to `store.db`, which backups and sync include. Audit rows a restored older backup brings back in `store.db` move into `audit.db` on the next start.
 
 - **Insights** - for 7 / 30 / 90 days or all: events, SSH connects, time connected, average and longest session, activity by hour, top hosts, top actions, LLM actions, and failures and denials. Clicking an item filters the list below.
 - The event list: **Filter**, **Limit**, sort by time or action, expand a row's details, **Export CSV**.
