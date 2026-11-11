@@ -384,10 +384,12 @@ type gather struct {
 	overshot map[int32]bool
 	// hBytes is the payload the pick holds. Over the buffer's bounds the
 	// oldest picks go (pickDropped counts them, as a buffer eviction
-	// would) and the pick is full: from then on only a newer record gets
-	// in, so an older one is never counted as kept and dropped.
+	// would); cut is the newest of those, and only a record newer than it
+	// joins the pick from then on, so an older one is never counted as
+	// kept and dropped. Smaller newer records still grow the pick while
+	// they fit.
 	hBytes      int
-	hFull       bool
+	cut         *kgo.Record
 	pickDropped uint64
 }
 
@@ -413,6 +415,7 @@ func (h *recHeap) Push(x any)        { *h = append(*h, x.(*kgo.Record)) }
 func (h *recHeap) Pop() any {
 	old := *h
 	r := old[len(old)-1]
+	old[len(old)-1] = nil // let the evicted record's payload go
 	*h = old[:len(old)-1]
 	return r
 }
@@ -425,25 +428,28 @@ func (k *Consumer) offer(g *gather, r *kgo.Record) {
 	k.scanned++
 	maxMsgs, maxBytes := k.maxMsgs, k.maxBytes
 	k.mu.Unlock()
-	if k.filt.active() && !k.filt.match(r) {
-		return
-	}
 	capN := min(g.n, maxMsgs)
+	match := !k.filt.active() || k.filt.match(r)
 	switch {
-	case len(g.h) < capN && !g.hFull:
+	case !match:
+	case len(g.h) < capN && (g.cut == nil || older(g.cut, r)):
 		heap.Push(&g.h, r)
+		g.hBytes += recordSize(r)
 	case len(g.h) > 0 && older(g.h[0], r):
-		g.hBytes -= recordSize(g.h[0])
+		g.hBytes += recordSize(r) - recordSize(g.h[0])
 		g.h[0] = r
 		heap.Fix(&g.h, 0)
-	default:
-		return
 	}
-	g.hBytes += recordSize(r)
+	// Also when the record was not taken (filtered out, or older than the
+	// pick): the bounds may have shrunk
+	// since the last one (another consumer started on the cluster).
 	for len(g.h) > 1 && (len(g.h) > capN || g.hBytes > maxBytes) {
-		g.hBytes -= recordSize(heap.Pop(&g.h).(*kgo.Record))
+		x := heap.Pop(&g.h).(*kgo.Record)
+		g.hBytes -= recordSize(x)
 		g.pickDropped++
-		g.hFull = true
+		if g.cut == nil || older(g.cut, x) {
+			g.cut = x
+		}
 	}
 }
 

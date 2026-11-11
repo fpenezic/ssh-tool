@@ -967,38 +967,67 @@ func TestConsumeNewestRereadsPastEnds(t *testing.T) {
 }
 
 func TestOfferByteBound(t *testing.T) {
-	rec := func(sec int) *kgo.Record {
-		return &kgo.Record{Key: []byte(fmt.Sprintf("k%03d", sec)), Value: []byte("012345678"), Timestamp: t0.Add(time.Duration(sec) * time.Second)}
+	rec := func(sec, size int) *kgo.Record {
+		return &kgo.Record{Key: []byte(fmt.Sprintf("k%03d", sec)), Value: make([]byte, size-4), Timestamp: t0.Add(time.Duration(sec) * time.Second)}
 	}
-	// 13 bytes a record, 30 allowed: the pick holds the newest two. Only the
-	// byte eviction counts as dropped; a pick replaced by a newer record was
-	// never shown, as with the record count bound.
+	keys := func(g *gather) string {
+		ks := []string{}
+		for _, r := range g.h {
+			ks = append(ks, string(r.Key))
+		}
+		sort.Strings(ks)
+		return strings.Join(ks, " ")
+	}
+	// 13 bytes a record, 30 allowed: the pick holds the newest two; each
+	// newer record that pushes one out counts it, as the buffer would.
 	k := &Consumer{maxMsgs: 100, maxBytes: 30}
 	g := &gather{n: 10}
 	for _, s := range []int{1, 2, 3, 4} {
-		k.offer(g, rec(s))
+		k.offer(g, rec(s, 13))
 	}
-	if len(g.h) != 2 || g.hBytes != 26 || g.pickDropped != 1 || !g.hFull {
-		t.Fatalf("pick %d records, %d bytes, %d dropped, full %v", len(g.h), g.hBytes, g.pickDropped, g.hFull)
+	if keys(g) != "k003 k004" || g.hBytes != 26 || g.pickDropped != 2 {
+		t.Fatalf("pick %s, %d bytes, %d dropped", keys(g), g.hBytes, g.pickDropped)
 	}
-	// An older record no longer gets in (nor counts as dropped); a newer
-	// one takes the oldest one's place.
-	k.offer(g, rec(0))
-	k.offer(g, rec(9))
-	keys := []string{}
-	for _, r := range g.h {
-		keys = append(keys, string(r.Key))
-	}
-	sort.Strings(keys)
-	if strings.Join(keys, " ") != "k004 k009" || g.pickDropped != 1 || k.scanned != 6 {
-		t.Fatalf("pick %v, %d dropped, %d scanned", keys, g.pickDropped, k.scanned)
+	// Older than what was let go: not taken, not counted. Newer: in.
+	k.offer(g, rec(0, 13))
+	k.offer(g, rec(9, 13))
+	if keys(g) != "k004 k009" || g.pickDropped != 3 || k.scanned != 6 {
+		t.Fatalf("pick %s, %d dropped, %d scanned", keys(g), g.pickDropped, k.scanned)
 	}
 	// One record over the bound alone is still kept.
 	k = &Consumer{maxMsgs: 100, maxBytes: 5}
 	g = &gather{n: 10}
-	k.offer(g, rec(1))
+	k.offer(g, rec(1, 13))
 	if len(g.h) != 1 {
 		t.Fatalf("lone record dropped")
+	}
+	// A byte eviction does not freeze the pick size: smaller newer records
+	// that fit grow it again (30, 1... bytes against 30).
+	k = &Consumer{maxMsgs: 100, maxBytes: 30}
+	g = &gather{n: 4}
+	k.offer(g, rec(1, 30))
+	for _, s := range []int{2, 3, 4} {
+		k.offer(g, rec(s, 5))
+	}
+	if keys(g) != "k002 k003 k004" || g.pickDropped != 1 {
+		t.Fatalf("variable sizes: pick %s, %d dropped", keys(g), g.pickDropped)
+	}
+	// Bounds that shrink between records apply on the next record, also
+	// one that is not taken (filtered out, or older than the pick).
+	k = &Consumer{maxMsgs: 100, maxBytes: 1 << 20, filt: filter{key: "k1"}}
+	g = &gather{n: 10}
+	for _, s := range []int{100, 101, 102, 103} {
+		k.offer(g, rec(s, 13))
+	}
+	k.maxMsgs = 2
+	k.offer(g, rec(5, 13)) // filtered out
+	if len(g.h) != 2 || keys(g) != "k102 k103" {
+		t.Fatalf("shrunk count after a filtered record: %s", keys(g))
+	}
+	k.maxBytes = 13
+	k.offer(g, rec(100, 13)) // older than the pick
+	if keys(g) != "k103" {
+		t.Fatalf("shrunk bytes after an older record: %s", keys(g))
 	}
 }
 
@@ -1050,10 +1079,9 @@ func TestFlushPickDroppedWithinLimit(t *testing.T) {
 	for _, s := range []int{1, 2, 3} {
 		k.offer(g, rec(s))
 	}
-	// 13 bytes each, 20 allowed: the second evicts the first (counted), the
-	// pick is full, and the third replaces the second (never shown, so not
-	// counted), as with the record count bound.
-	if k.flush(g) || k.received != 2 || k.dropped != 1 || len(k.buf) != 1 {
+	// 13 bytes each, 20 allowed: each newer record evicts the one before
+	// it, counted as the buffer would.
+	if k.flush(g) || k.received != 3 || k.dropped != 2 || len(k.buf) != 1 {
 		t.Fatalf("received %d dropped %d buffered %d", k.received, k.dropped, len(k.buf))
 	}
 }
