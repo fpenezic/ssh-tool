@@ -43,6 +43,7 @@ implemented.
 20. [Logs](#logs)
 21. [Keyboard shortcuts](#keyboard-shortcuts)
 22. [Android / mobile](#android-mobile)
+23. [How-to: step-by-step recipes](#how-to)
 
 ---
 
@@ -626,7 +627,7 @@ when the tunnel failed or a forward is not listening.
 
 **VNC** - the [VNC console](#generic-vnc-your-own-hosts) settings.
 
-**Kafka** - the [Kafka](#kafka) settings.
+**Services** - the [Database](#databases) and [Kafka](#kafka) settings. Local-shell connections have only General and Terminal; VNC is not on Android.
 
 **Advanced**
 
@@ -639,7 +640,7 @@ when the tunnel failed or a forward is not listening.
   comes from (collapsed; for debugging).
 
 A folder's editor has the same tabs (General, Connection, Terminal,
-Tunnels, Kafka, Advanced) with the settings its connections inherit, each
+Tunnels, Services, Advanced) with the settings its connections inherit, each
 in the same place as on a connection.
 
 ### Local-shell connections
@@ -1524,8 +1525,7 @@ To have double-click / Enter open the Kafka tab instead of a terminal (a
 connection that exists for its cluster), set **Double-click opens** to
 **Kafka** on the General tab.
 
-Every setting inherits through folders like the SSH ones; **Resolved &
-inherited** on the General tab shows what applies.
+Every setting inherits through folders like the SSH ones; **Resolved & inherited** on the Advanced tab shows what applies.
 
 ### Opening it
 
@@ -4386,6 +4386,111 @@ Detach/redock multi-window, system tray, the SOCKS browser launcher,
 in-app update on android yet - sideload a newer APK from
 sshtool.app), and the SFTP native drag-out are desktop features and
 are not present on mobile. VNC on mobile is untested.
+
+<a id="how-to"></a>
+## 23. How-to
+
+Step-by-step recipes for jobs that touch several parts of the app. Each step names the screen and the field as the app shows them; the linked sections explain the details.
+
+<a id="howto-vpn-jump"></a>
+### A host behind a VPN and a jump host, with opkssh
+
+Goal: reach `app1.internal.example.com`, which only the bastion `bastion.example.com` can reach, and the bastion only over the customer's WireGuard; log in with an opkssh certificate.
+
+1. **The VPN.** Settings > Network profiles > **+ New profile**, kind **WireGuard**. Paste the customer's `wg-quick` config and save. Leave the mode on **Always**, or pick **Auto** when the bastion is also reachable directly from the office. See [WireGuard profiles](#network-profiles).
+2. **The login.** Credentials > `+` > **opkssh**. Paste the provider YAML your identity provider team gave you (issuer, client ID, redirect URI). The first connect opens a browser to sign in; the certificate and key then live in the vault and renew on their own. See [Credentials](#credentials).
+3. **A folder for the customer.** New folder `customer-a`. In its editor: **General > Credential** = the opkssh credential, **Username** = your login, **Connection > Network** = the WireGuard profile. Save. Everything under the folder now inherits both.
+4. **The bastion.** New connection `bastion` in that folder, **Hostname** `bastion.example.com`. Connect once to accept its host key.
+5. **The host.** New connection `app1` in the same folder, **Hostname** `app1.internal.example.com`. On **Connection > Path** click **Edit chain**, add a hop, pick **Saved connection** > `bastion`. Save.
+6. **Connect** `app1`. The Path card shows this computer > the VPN > the bastion > app1; the first hop goes through the tunnel, which comes up on demand and stops on its own when idle.
+
+Tips: set the chain on the folder instead of the connection when every host there sits behind the same bastion (a bastion inside that folder connects directly). The tree marks routed connections (Settings > Connection tree > **Jump host marks**). A plugin VPN (NetBird, Tailscale, OpenConnect, OpenVPN, Check Point) works the same way once its plugin is installed from **Plugins & proxy**.
+
+<a id="howto-prod-data"></a>
+### Kafka or a database on a host behind SSH, read-only for production
+
+Goal: look at the production PostgreSQL and Kafka that listen on `127.0.0.1` of `db1.example.com`, without port forwards and without any chance of writing.
+
+1. **The login.** Credentials > `+` > **Password**, with the database user as the default username. (A KeePass, Bitwarden or Infisical credential works too.)
+2. **Mark production.** On the `prod` folder: **General > Sensitive** = **Yes**. The LLM (MCP) cannot touch anything under it, and statements that change data ask first.
+3. **Read-only for the whole folder.** In the `prod` folder editor, **Services**: turn the database switch on, **Engine** = PostgreSQL, **Login** = the credential, **Writes** = **Read-only**. For Kafka, below it: turn Kafka on, **Bootstrap servers** `127.0.0.1:9092`, **Writes** = **Read-only**. Save. Hosts under the folder inherit it; a host without a database turns its own switch off.
+4. **Open it.** Select `db1`, then **Open database** (or **Open Kafka**) on its Services tab; or set **General > Double-click opens** = **Kafka** for a host that exists for its cluster. The Database or Kafka tab rides the host's SSH session: the address `127.0.0.1` is the database host's own loopback.
+5. **Look around.** Database: the tree, a query tab (Ctrl+Enter runs the statement under the cursor), **Export to CSV...** on a table. Kafka: open a topic, pick **Last N in topic** and press **Consume**. A write is refused by the app itself, whatever the login allows.
+
+Tips: a login with read-only grants is still the real guarantee; the app's read-only mode is the second lock. A folder can list several databases (**prod**, **stage**) for every host under it; see [Several databases on one host](#databases).
+
+<a id="howto-ci-runner"></a>
+### A GitLab CI job that reaches customer networks
+
+Goal: CI jobs that deploy to hosts inside two customers' VPNs, without changing `.gitlab-ci.yml`.
+
+1. **The VPNs.** Create a network profile per customer (see the first recipe) and connect each once, so the app learns its routes.
+2. **The app proxy.** Settings > Network profiles > **Plugins & proxy** > **App proxy**: turn it on. On each customer profile's **Proxy** tab tick **Reachable through the app proxy**; add **Extra networks** or **Extra DNS domains** if the server pushes none. On Linux with a native Docker (not Docker Desktop) set the proxy's listen address to the docker bridge (`172.17.0.1`).
+3. **The runner.** In GitLab create a runner (*New runner*) and copy its token. In the app: **CI runner** (under Plugins & proxy) > **Set up here**: the GitLab URL, the token, a job image. Or **Import config.toml** from an existing runner. Tokens go to the vault.
+4. **Start.** It needs Docker. The app creates the jobs' network, a gateway container and the runner; the jobs' traffic to the customers' networks goes through the VPNs, everything else (clone, cache, registries) as usual.
+5. **Run a pipeline.** A job reaches `10.20.0.15` (customer A) and `db.internal.example.com` (customer B's DNS domain) by address or name, at the same time.
+
+Tips: names only the customer's DNS knows go in **Extra hosts**. A connection with a jump host can be reached through the proxy too (the jump-host switch on the App proxy page). The runner is per machine and is not synced. See [CI runner](#network-profiles).
+
+<a id="howto-migrate"></a>
+### Moving from Devolutions RDM, MobaXterm or PuTTY
+
+Goal: your existing sessions in ssh-tool, organised so that credentials are set once per folder.
+
+1. **Export from the old tool.** RDM: export the connections as JSON. MobaXterm: right-click **User sessions** > **Export** (`.mxtsessions`). PuTTY / KiTTY: `reg export "HKCU\Software\SimonTatham\PuTTY\Sessions" putty-sessions.reg`. Or your `~/.ssh/config`.
+2. **Import.** Settings > **Import**, pick the source, load the file. Pick a **target folder** to keep the imported tree apart. Imports only add, so re-running is safe; the summary lists what needs attention (external credentials, key files).
+3. **Credentials.** Imports carry no passwords (MobaXterm and PuTTY never export them). Create them once in Credentials: a **Password**, an **Import pasted key** for an existing private key, or a **From KeePass** / **From Bitwarden** reference (next recipe).
+4. **Set them on folders, not hosts.** Select a folder, **General > Credential** and **Username**; every connection under it inherits. Override on a single connection only where it differs. Multi-select several connections (Ctrl+click) to change a field on all of them in one go.
+5. **Jump hosts and VPNs** the same way: on the folder (first recipe).
+6. **Check.** A connection's **Advanced > Resolved & inherited** shows each value and where it comes from.
+
+Tips: PuTTY `.ppk` keys import directly (converted to OpenSSH). ssh_config `IdentityFile` paths are only noted, never read: import those keys yourself. See [Import / Export](#import-export).
+
+<a id="howto-secrets"></a>
+### Passwords and one-time codes from KeePass, Bitwarden or Infisical
+
+Goal: keep secrets in the password manager you already use; ssh-tool reads them at connect time and stores nothing of its own.
+
+1. **Register the source.** Settings > **External secrets**, the KeePass, Bitwarden or Infisical tab. KeePass: the `.kdbx` (local, WebDAV or SFTP), its master password and key file. Bitwarden / Vaultwarden: the server URL, an API key and the master password. Infisical: the server URL and a machine identity's key. The access secrets are sealed in ssh-tool's vault, so unlocking ssh-tool opens them too.
+2. **Pick an entry.** On a folder or connection, next to **Credential**, click **From KeePass** (or **From Bitwarden** / **From Infisical**) and choose the entry and field: the password, a custom field with a private key, or an attachment. ssh-tool creates a credential that points at it and assigns it.
+3. **One-time codes.** If the server also asks for a verification code and the entry has a TOTP, set **One-time code from** on the folder or connection to that item. The password answers the password question and the TOTP the code question.
+4. **Connect.** The secret is read at that moment; a remote database that cannot be fetched uses its last copy and says it is stale.
+
+Tips: entries are linked by ID, so renaming or moving them in the manager does not break anything. An OpenConnect VPN profile can take its second password from a TOTP the same way. Keeping the password and the TOTP in one item puts both factors in one place. See [Credentials](#credentials).
+
+<a id="howto-sync"></a>
+### The same profile on two computers, with backups
+
+Goal: connections, credentials and settings identical on the work laptop and the home PC, and a backup you can restore.
+
+1. **First machine, sync.** Settings > **Sync**: pick the **Transport** (WebDAV, SSH / SFTP, Dropbox, OneDrive or Google Drive) and fill it in; for the cloud ones follow the app registration steps shown in the panel. Set the **sync passphrase** (it seals the snapshot; the remote only sees ciphertext). **Push**.
+2. **Second machine.** Install ssh-tool, set up its vault, then Settings > **Sync** with the same transport and passphrase, and **Pull**. The profile applies live; if prompted, unlock once with the first machine's vault passphrase.
+3. **Keep it in step.** Turn on **Auto sync** on both: changes are pushed about 90 seconds after you stop editing and checked for every few minutes; a newer version shows as a pill to pull, or is pulled on its own with **Apply incoming changes automatically**.
+4. **Backups.** Settings > **Backup & restore**: **Automatic daily backup** on (needs the vault's auto-unlock on this machine), **Keep last N**, and **Create backup now** before big changes. Copy the `.sshtool-backup` files somewhere else now and then; they are encrypted with the vault passphrase.
+
+Tips: a VPN tunnel runs on one machine at a time; the other machine offers **Take over**. The CI runner and the app proxy's listen address are per machine and do not sync. See [Settings](#settings).
+
+<a id="howto-share"></a>
+### Showing a session to a colleague, or to an AI assistant
+
+Goal: let someone (or an LLM client such as Claude Code) see a live session, with you in control.
+
+**A colleague, in a browser:**
+
+1. Settings > **Session sharing** > turn on *Enable session sharing*.
+2. Right-click the tab > **Share to browser**. Pick the tabs, **read-only** or **full control**, whether they see the existing scrollback, and the network interface.
+3. Send the link, and the word-code separately (phone or chat). Their browser warns about the self-signed certificate; that is expected.
+4. When they open it, you get a prompt with their address and the word-code: compare the code with them, then **Allow**. The status bar lists guests; kick one or stop all sharing from there.
+
+**An LLM client (MCP):**
+
+1. Settings > **LLM (MCP) access** > tick *Allow LLM (MCP) access to shared sessions*, then register ssh-tool with the client: the page shows the exact command (`claude mcp add ssh-tool -- <path> --mcp-bridge` for Claude Code) or the **Add to Claude Desktop** button.
+2. In the session's pane toolbar, click **Share with LLM** and pick **Read only** or **Read + run**. With Read + run, read-only commands run at once and anything else waits for your **Run** / **Deny**.
+3. Ask the assistant about the session. Everything it does is in the audit log; connections marked **Sensitive** are never visible to it.
+
+See [Share a session with an LLM (MCP)](#llm-mcp).
+
+---
 
 ## Storage locations
 
