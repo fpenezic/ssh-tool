@@ -6022,8 +6022,10 @@
       unlock / lock / rotate, backup create / restore, SSH connect /
       disconnect. Lives in <code>audit.db</code> next to the rest of
       your data and normally stays on this machine (backups and sync
-      leave it out); only if that file cannot be opened do events go to
-      <code>store.db</code>, and then backups and sync include them. Useful for "did I really
+      leave it out). Events land in <code>store.db</code>, which they
+      include, only when that file cannot be opened or when an old
+      backup from before the split is restored over an audit log that
+      already has events. Useful for "did I really
       connect to that host yesterday" and for shipping evidence to
       a compliance review.
     </p>
