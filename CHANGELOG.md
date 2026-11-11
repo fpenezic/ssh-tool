@@ -17,6 +17,7 @@ The Database grid works more like a spreadsheet: edit cells in place, select and
 - **Disable WebGL renderer** in Settings > Terminal is now **GPU rendering (WebGL)** and reads the positive way round: off (the default, as before) draws with canvas, on draws new tabs on the graphics card. The stored setting is unchanged, so nothing flips on upgrade. On Android terminal tabs always use canvas.
 
 ### Connection tree
+- **Quick palette (Ctrl+K)**: with hosts marked (Ctrl+Enter), Enter on a host that is not marked opens it together with the marked ones; it used to open only the marked ones, so the last host picked was left out. The footer says "+ this" when it will be added.
 - **Filtering a large tree is several times faster**: with 1000 connections the first letter typed takes about a third of the time it did and narrowing to a few folders about a tenth; typing a word applies the filter once after a short pause instead of after every letter. The tree looks up folders and connections by id instead of scanning the whole list for every row.
 
 ### Network profiles

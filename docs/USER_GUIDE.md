@@ -3544,9 +3544,7 @@ list.
 ### Opening several hosts at once
 
 Mark connections with **Ctrl+Enter** (or Ctrl+click) and they get a
-coloured stripe; the footer counts them. **Enter** then connects
-every marked host instead of the highlighted row, and `clear` in the
-footer drops the set.
+coloured stripe; the footer counts them. **Enter** then connects every marked host, plus the highlighted one when it is not marked yet (the footer then reads "connect 2 marked + this"): mark two, search the third and press Enter to open all three. `clear` in the footer drops the set.
 
 Marks survive retyping the query, so hosts that no single search
 matches can still be collected: find the first, mark it, search

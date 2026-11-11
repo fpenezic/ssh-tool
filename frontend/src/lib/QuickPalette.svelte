@@ -18,6 +18,7 @@
   import { api } from "./api";
   import { fuzzyMatch, highlightSegments, type FuzzyMatch } from "./fuzzy";
   import { clickOutside } from "./clickOutside";
+  import { enterSet } from "./paletteMarks";
   import type { Folder, Connection, PortForward, ForwardStatus, ProxyBookmark } from "./api";
   import { IconFolder, IconHost, IconTunnel, IconExternalLink, IconAction, IconWorkspace, dynamicEntryIcon, IconTerminal } from "./iconMap";
   import Icon from "./Icon.svelte";
@@ -470,6 +471,15 @@
     activeIdx = 0;
   });
 
+  // Enter on the row under the cursor would add it to the marked set: the
+  // footer says so.
+  const activeAdds = $derived.by(() => {
+    if (marks.length === 0) return false;
+    const r = results[activeIdx];
+    const m = r ? markFor(r) : null;
+    return m !== null && !marks.some((x) => x.id === m.id);
+  });
+
   // One choice per palette: a second Enter (a double press, or a key
   // repeat) before the palette unmounts must not dial again.
   let chosen = false;
@@ -478,12 +488,13 @@
   async function chooseResult(r: Result) {
     if (chosen) return;
     chosen = true;
-    // A marked set outranks the row that was clicked: having marked four
-    // hosts, Enter plainly means "open those four". Checked before the
-    // per-kind branches below, or a marked dynamic entry would dial
-    // itself alone through its own path.
+    // With hosts marked, Enter on a host opens the marked set plus that
+    // host when it is not marked yet: marking two and then picking a third
+    // means "open those three". Checked before the per-kind branches
+    // below, or a marked dynamic entry would dial itself alone through its
+    // own path.
     if (marks.length > 0 && markFor(r) !== null) {
-      const set = [...marks];
+      const set = enterSet(marks, markFor(r));
       onClose();
       queueMicrotask(() => void connectMany(set));
       return;
@@ -957,7 +968,7 @@
       <span><kbd>↑↓</kbd> navigate</span>
       {#if marks.length > 0}
         <span class="marked-count">
-          <kbd>↵</kbd> connect {marks.length} marked
+          <kbd>↵</kbd> connect {marks.length} marked{activeAdds ? " + this" : ""}
         </span>
         <button class="clear-marks" onclick={() => (marks = [])}>clear</button>
       {:else}
