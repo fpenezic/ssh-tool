@@ -988,6 +988,9 @@ func TestOfferByteBound(t *testing.T) {
 	if keys(g) != "k003 k004" || g.hBytes != 26 || g.pickDropped != 2 {
 		t.Fatalf("pick %s, %d bytes, %d dropped", keys(g), g.hBytes, g.pickDropped)
 	}
+	if g.cut == nil || g.cut.Key != nil || g.cut.Value != nil || !g.cut.Timestamp.Equal(t0.Add(2*time.Second)) {
+		t.Fatalf("cutoff keeps a payload or the wrong record: %+v", g.cut)
+	}
 	// Older than what was let go: not taken, not counted. Newer: in.
 	k.offer(g, rec(0, 13))
 	k.offer(g, rec(9, 13))

@@ -441,14 +441,15 @@ func (k *Consumer) offer(g *gather, r *kgo.Record) {
 		heap.Fix(&g.h, 0)
 	}
 	// Also when the record was not taken (filtered out, or older than the
-	// pick): the bounds may have shrunk
-	// since the last one (another consumer started on the cluster).
+	// pick): the bounds may have shrunk since the last one (another
+	// consumer started on the cluster).
 	for len(g.h) > 1 && (len(g.h) > capN || g.hBytes > maxBytes) {
 		x := heap.Pop(&g.h).(*kgo.Record)
 		g.hBytes -= recordSize(x)
 		g.pickDropped++
 		if g.cut == nil || older(g.cut, x) {
-			g.cut = x
+			// Only what older reads: the payload is let go.
+			g.cut = &kgo.Record{Timestamp: x.Timestamp, Partition: x.Partition, Offset: x.Offset}
 		}
 	}
 }
