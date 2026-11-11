@@ -49,7 +49,7 @@ build of your own (see below).
 - **Port forwards** - local / remote / SOCKS5 dynamic with
   isolated-browser launcher.
 - **Kafka and Database tabs** per connection, riding its SSH session:
-  Kafka topics, consumer (last N per partition or of the whole topic), produce and groups; PostgreSQL, MySQL, Oracle, SQL Server, IBM Db2, ClickHouse, OpenSearch / Elasticsearch and Redis, with read-only guards; a spreadsheet-like grid (edit in place, copy blocks into Excel or Teams), whole-table export, foreign keys to follow both ways, an ER diagram, server-side filter and sort, Explain and a Sessions view. Pure-Go drivers, nothing to install.
+  Kafka topics, consumer (last N per partition or of the whole topic), produce and groups; PostgreSQL, MySQL, Oracle, SQL Server, IBM Db2, ClickHouse, OpenSearch / Elasticsearch and Redis, with read-only guards; a spreadsheet-like grid (edit a table's data in place, copy blocks into Excel or Teams), whole-table export, foreign keys to follow both ways, an ER diagram, server-side filter and sort, Explain and a Sessions view. Pure-Go drivers, nothing to install.
 - **VNC console** tab (noVNC) for remote desktops and Proxmox VMs.
 - **App proxy and CI runner** - other programs, containers and a GitLab
   runner reach your customers through the VPN profiles and jump hosts.
