@@ -909,10 +909,10 @@ func TestStopAtEndTxMarkerBusyTopic(t *testing.T) {
 	}
 }
 
-// Records past the ends wait for the flush in a queue bounded like the
-// buffer: a busy partition during a long gather cannot grow it past what
-// the buffer would keep, and the counts match a plain buffer eviction.
-func TestConsumeNewestLateQueueBounded(t *testing.T) {
+// Records past the start-time ends are not held during the gather: the
+// partitions pause, and after the pick the read goes on from those ends, so
+// the records come once, in order, after the pick.
+func TestConsumeNewestRereadsPastEnds(t *testing.T) {
 	old := stopAtEndIdle
 	stopAtEndIdle = time.Second
 	defer func() { stopAtEndIdle = old }()
@@ -920,99 +920,49 @@ func TestConsumeNewestLateQueueBounded(t *testing.T) {
 	c := openFake(t, fc)
 	seeds := fc.ListenAddrs()
 	produceTx(t, seeds, 0, 10, 11, 12) // gathers until the idle rule
-	k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "empty", Mode: FromNewest, N: 3, Partition: -1, BufferMessages: 3})
+	produceAt(t, seeds, 2, 30, 31)     // read to its end, then past it
+	k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "empty", Mode: FromNewest, N: 3, Partition: -1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer k.Stop()
+	time.Sleep(200 * time.Millisecond)
 	secs := make([]int, 20)
 	for i := range secs {
 		secs[i] = 100 + i
 	}
-	produceAt(t, seeds, 1, secs...)
+	produceAt(t, seeds, 1, secs...) // empty at start
+	produceAt(t, seeds, 2, 40, 41)
+	if s := k.Snapshot(0, SnapshotOptions{}); !s.Gathering || s.Received != 0 {
+		t.Fatalf("held records during the gather: %+v", s)
+	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		s := k.Snapshot(0, SnapshotOptions{})
-		// The last 3 offsets of partition 0 hold 2 records (the third is the
-		// commit marker), so 2 picked + 20 late.
-		if !s.Gathering && s.Received == 22 {
-			// The pick keeps its place; the queue had the one slot left.
-			if got := keysOf(s.Messages); got != "p0-11 p0-12 p1-119" || s.Dropped != 19 || s.Buffered != 3 {
-				t.Fatalf("got %q, %+v", got, s)
+		if !s.Gathering && s.Received == 25 {
+			ks := strings.Fields(keysOf(s.Messages))
+			// The pick: the newest 3 of p0's last 3 offsets (2 records and
+			// the marker) and p2's 2. Then partition 1 and 2's later
+			// records, each in partition order.
+			if got := strings.Join(ks[:3], " "); got != "p0-12 p2-30 p2-31" {
+				t.Fatalf("pick %v", ks[:3])
+			}
+			seen := map[string]int{}
+			for i, key := range ks {
+				if _, dup := seen[key]; dup {
+					t.Fatalf("%s twice", key)
+				}
+				seen[key] = i
+			}
+			if seen["p1-100"] > seen["p1-119"] || seen["p2-40"] > seen["p2-41"] || s.Dropped != 0 {
+				t.Fatalf("order %v, %+v", ks, s)
 			}
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("no flush: %+v", s)
+			t.Fatalf("no pick: %+v", s)
 		}
 		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-func TestQueueLateBounds(t *testing.T) {
-	rec := func(i int) *kgo.Record {
-		return &kgo.Record{Key: []byte(fmt.Sprintf("k%02d", i)), Value: []byte("0123456789")}
-	}
-	k := &Consumer{maxMsgs: 3, maxBytes: 1 << 20}
-	g := &gather{}
-	for i := 0; i < 20; i++ {
-		k.queueLate(g, rec(i))
-	}
-	if len(g.late) != 3 || g.lateDropped != 17 || string(g.late[0].Key) != "k17" || g.lateBytes != 39 {
-		t.Fatalf("by count: %d kept, %d dropped, first %s, %d bytes", len(g.late), g.lateDropped, g.late[0].Key, g.lateBytes)
-	}
-	k = &Consumer{maxMsgs: 100, maxBytes: 30}
-	g = &gather{}
-	for i := 0; i < 20; i++ {
-		k.queueLate(g, rec(i))
-	}
-	if len(g.late) != 2 || g.lateBytes != 26 {
-		t.Fatalf("by bytes: %d kept, %d bytes", len(g.late), g.lateBytes)
-	}
-	// With a limit, records past it are never shown: not even queued.
-	k = &Consumer{maxMsgs: 100, maxBytes: 1 << 20, req: ConsumeRequest{Limit: 5}}
-	g = &gather{}
-	for i := 0; i < 20; i++ {
-		k.queueLate(g, rec(i))
-	}
-	if len(g.late) != 5 || g.lateDropped != 0 || string(g.late[4].Key) != "k04" {
-		t.Fatalf("limit: %d kept, %d dropped", len(g.late), g.lateDropped)
-	}
-	// A limit above the buffer bound: evicted records count toward it.
-	k = &Consumer{maxMsgs: 3, maxBytes: 1 << 20, req: ConsumeRequest{Limit: 8}}
-	g = &gather{}
-	for i := 0; i < 20; i++ {
-		k.queueLate(g, rec(i))
-	}
-	if len(g.late) != 3 || g.lateDropped != 5 || string(g.late[2].Key) != "k07" {
-		t.Fatalf("limit over the bound: %d kept, %d dropped, last %s", len(g.late), g.lateDropped, g.late[len(g.late)-1].Key)
-	}
-	// The pick's records and bytes come off the room: 2 picked of 3 slots
-	// leave one; 26 of 40 bytes leave 14, also one.
-	k = &Consumer{maxMsgs: 3, maxBytes: 1 << 20}
-	g = &gather{h: recHeap{rec(90), rec(91)}, hBytes: 26}
-	for i := 0; i < 5; i++ {
-		k.queueLate(g, rec(i))
-	}
-	if len(g.late) != 1 || g.lateDropped != 4 || string(g.late[0].Key) != "k04" {
-		t.Fatalf("pick room by count: %d kept, %d dropped", len(g.late), g.lateDropped)
-	}
-	k = &Consumer{maxMsgs: 100, maxBytes: 40}
-	g = &gather{h: recHeap{rec(90), rec(91)}, hBytes: 26}
-	for i := 0; i < 5; i++ {
-		k.queueLate(g, rec(i))
-	}
-	if len(g.late) != 1 || g.lateBytes != 13 {
-		t.Fatalf("pick room by bytes: %d kept, %d bytes", len(g.late), g.lateBytes)
-	}
-	// The filter runs before queueing.
-	k = &Consumer{maxMsgs: 100, maxBytes: 1 << 20, filt: filter{key: "k1"}}
-	g = &gather{}
-	for i := 0; i < 20; i++ {
-		k.queueLate(g, rec(i))
-	}
-	if len(g.late) != 10 || k.scanned != 10 {
-		t.Fatalf("filter: %d kept, %d scanned", len(g.late), k.scanned)
 	}
 }
 
@@ -1052,8 +1002,8 @@ func TestOfferByteBound(t *testing.T) {
 	}
 }
 
-// With stop at end, records past the start-time ends are not queued behind
-// the pick, so they cannot push it out of the buffer.
+// With stop at end, records past the start-time ends are not read at all:
+// the pick is the whole read.
 func TestConsumeNewestStopAtEndSkipsLate(t *testing.T) {
 	old := stopAtEndIdle
 	stopAtEndIdle = time.Second
@@ -1078,5 +1028,32 @@ func TestConsumeNewestStopAtEndSkipsLate(t *testing.T) {
 	s := k.Snapshot(0, SnapshotOptions{})
 	if got := keysOf(s.Messages); got != "p1-50 p1-51 p1-52" || s.Dropped != 0 {
 		t.Fatalf("got %q, %+v", got, s)
+	}
+}
+
+// Picks let go for the byte bound count as kept and dropped, but never past
+// the limit: the pick that stays counts first.
+func TestFlushPickDroppedWithinLimit(t *testing.T) {
+	rec := func(sec int) *kgo.Record {
+		return &kgo.Record{Key: []byte(fmt.Sprintf("k%03d", sec)), Value: []byte("012345678"), Timestamp: t0.Add(time.Duration(sec) * time.Second)}
+	}
+	k := &Consumer{maxMsgs: 100, maxBytes: 20, req: ConsumeRequest{Limit: 1}}
+	g := &gather{n: 1}
+	for _, s := range []int{1, 2, 3} {
+		k.offer(g, rec(s))
+	}
+	if !k.flush(g) || k.received != 1 || k.dropped != 0 || len(k.buf) != 1 || string(k.buf[0].Key.Text) != "k003" {
+		t.Fatalf("received %d dropped %d buffered %d", k.received, k.dropped, len(k.buf))
+	}
+	k = &Consumer{maxMsgs: 100, maxBytes: 20, req: ConsumeRequest{Limit: 5}}
+	g = &gather{n: 5}
+	for _, s := range []int{1, 2, 3} {
+		k.offer(g, rec(s))
+	}
+	// 13 bytes each, 20 allowed: the second evicts the first (counted), the
+	// pick is full, and the third replaces the second (never shown, so not
+	// counted), as with the record count bound.
+	if k.flush(g) || k.received != 2 || k.dropped != 1 || len(k.buf) != 1 {
+		t.Fatalf("received %d dropped %d buffered %d", k.received, k.dropped, len(k.buf))
 	}
 }
