@@ -21,7 +21,7 @@ func TestMigrateAuditRowsIntoNonEmptySide(t *testing.T) {
 	}
 	// Legacy rows in the main store, one of them already in audit.db too
 	// (a run cut short after the side commit).
-	if _, err := db.conn.Exec(`INSERT INTO audit_events (ts, action, target, metadata_json) VALUES (1, 'ssh.connect', 'old-host', '{}'), (2, 'ssh.disconnect', 'old-host', '{}')`); err != nil {
+	if _, err := db.conn.Exec(`INSERT INTO audit_events (ts, action, target, metadata_json) VALUES (1, 'ssh.connect', 'old-host', '{}'), (2, 'ssh.disconnect', 'old-host', '{}'), (3, 'ssh.connect', 'twice', '{}'), (3, 'ssh.connect', 'twice', '{}')`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.audit.Exec(`INSERT INTO audit_events (ts, action, target, metadata_json) VALUES (1, 'ssh.connect', 'old-host', '{}')`); err != nil {
@@ -48,6 +48,10 @@ func TestMigrateAuditRowsIntoNonEmptySide(t *testing.T) {
 	}
 	if n := count(db.audit, "WHERE target = 'old-host'"); n != 2 {
 		t.Fatalf("audit.db holds %d legacy rows, want 2 (no duplicate)", n)
+	}
+	// Two identical events (same second) are two events.
+	if n := count(db.audit, "WHERE target = 'twice'"); n != 2 {
+		t.Fatalf("audit.db holds %d of the two identical events", n)
 	}
 	if n := count(db.audit, "WHERE action = 'vault.unlock'"); n != 1 {
 		t.Fatalf("audit.db lost its own row: %d", n)
