@@ -367,9 +367,13 @@ type gather struct {
 	n    int
 	h    recHeap
 	ends map[int32]int64 // partitions still being read, and their end
-	// late holds the records past the start-time ends (and those of the
-	// partitions that were empty), in arrival order, for after the flush.
-	late []*kgo.Record
+	// late holds the matching records past the start-time ends (and those
+	// of the partitions that were empty), in arrival order, for after the
+	// flush. It is bounded like the buffer (see queueLate); lateDropped
+	// counts what it let go.
+	late        []*kgo.Record
+	lateBytes   int
+	lateDropped uint64
 }
 
 // older orders records by timestamp, then partition and offset, so ties
@@ -434,12 +438,57 @@ func (k *Consumer) flush(g *gather) bool {
 			return true
 		}
 	}
+	if g.lateDropped > 0 {
+		// Read and kept, then evicted before they could show: the same
+		// accounting as a buffer eviction.
+		k.mu.Lock()
+		k.scanned += g.lateDropped
+		k.received += g.lateDropped
+		k.dropped += g.lateDropped
+		k.mu.Unlock()
+	}
 	for _, r := range g.late {
-		if k.add(r) {
+		if k.keep(r, true) {
 			return true
 		}
 	}
 	return false
+}
+
+func recordSize(r *kgo.Record) int {
+	n := len(r.Key) + len(r.Value)
+	for _, h := range r.Headers {
+		n += len(h.Key) + len(h.Value)
+	}
+	return n
+}
+
+// queueLate holds a record past the ends until the flush. The filter runs
+// here, and the queue keeps no more than the buffer would: the newest
+// records within its bounds, as the buffer itself would after the flush
+// (the pick goes in first, so it is the first to go). With a limit, the
+// records past it are not kept at all: the consumer stops before them.
+func (k *Consumer) queueLate(g *gather, r *kgo.Record) {
+	if k.filt.active() && !k.filt.match(r) {
+		k.mu.Lock()
+		k.scanned++
+		k.mu.Unlock()
+		return
+	}
+	if k.req.Limit > 0 && len(g.late) >= k.req.Limit {
+		return
+	}
+	g.late = append(g.late, r)
+	g.lateBytes += recordSize(r)
+	k.mu.Lock()
+	maxMsgs, maxBytes := k.maxMsgs, k.maxBytes
+	k.mu.Unlock()
+	for len(g.late) > maxMsgs || (g.lateBytes > maxBytes && len(g.late) > 1) {
+		g.lateBytes -= recordSize(g.late[0])
+		g.late[0] = nil
+		g.late = g.late[1:]
+		g.lateDropped++
+	}
 }
 
 // startOffsets resolves the exact start offset of every partition read, and
@@ -569,9 +618,9 @@ func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int6
 					// Past the end without the record at end-1: that one
 					// was a marker. The partition is read.
 					delete(g.ends, r.Partition)
-					g.late = append(g.late, r)
+					k.queueLate(g, r)
 				default:
-					g.late = append(g.late, r)
+					k.queueLate(g, r)
 				}
 				return
 			}
