@@ -354,7 +354,11 @@ func (c *Cluster) Consume(ctx context.Context, req ConsumeRequest) (*Consumer, e
 			}
 			k.gathering = true
 			k.mu.Unlock()
-			g = &gather{n: n, ends: gends}
+			all := make(map[int32]int64, len(ends))
+			for p := range starts {
+				all[p] = ends[p]
+			}
+			g = &gather{n: n, ends: gends, all: all, overshot: map[int32]bool{}}
 		}
 	}
 	go k.run(runCtx, cl, until, g)
@@ -363,24 +367,28 @@ func (c *Cluster) Consume(ctx context.Context, req ConsumeRequest) (*Consumer, e
 
 // gather is the first phase of a FromNewest consumer: the newest n matching
 // records seen so far, until every partition in ends has been read up to it.
+//
+// Records past the ends are not held anywhere: a partition is paused as it
+// reaches its end (the empty ones from the start), and once the pick is in
+// the buffer the read goes on from the start-time ends, so those records
+// come again, in order, after it. Kafka keeps them; holding them here took
+// six review rounds of bounds, limits and eviction cases.
 type gather struct {
-	n int
-	h recHeap
-	// hBytes is the payload the pick holds. Over the buffer's byte bound
-	// the oldest picks go (pickDropped counts them, as a buffer eviction
+	n    int
+	h    recHeap
+	ends map[int32]int64 // partitions still being read, and their end
+	// all holds every partition's start-time end; overshot the partitions
+	// whose cursor went past it (a poll returned records beyond the end),
+	// which are set back to it before the read resumes.
+	all      map[int32]int64
+	overshot map[int32]bool
+	// hBytes is the payload the pick holds. Over the buffer's bounds the
+	// oldest picks go (pickDropped counts them, as a buffer eviction
 	// would) and the pick is full: from then on only a newer record gets
 	// in, so an older one is never counted as kept and dropped.
 	hBytes      int
 	hFull       bool
 	pickDropped uint64
-	ends        map[int32]int64 // partitions still being read, and their end
-	// late holds the matching records past the start-time ends (and those
-	// of the partitions that were empty), in arrival order, for after the
-	// flush. It is bounded like the buffer (see queueLate); lateDropped
-	// counts what it let go.
-	late        []*kgo.Record
-	lateBytes   int
-	lateDropped uint64
 }
 
 // older orders records by timestamp, then partition and offset, so ties
@@ -409,16 +417,20 @@ func (h *recHeap) Pop() any {
 	return r
 }
 
-// offer takes one record of the gather phase.
+// offer takes one record of the gather phase. The pick follows the
+// buffer's bounds as they are now: another consumer starting on the
+// cluster shrinks them, and the next record (or the flush) applies that.
 func (k *Consumer) offer(g *gather, r *kgo.Record) {
 	k.mu.Lock()
 	k.scanned++
+	maxMsgs, maxBytes := k.maxMsgs, k.maxBytes
 	k.mu.Unlock()
 	if k.filt.active() && !k.filt.match(r) {
 		return
 	}
+	capN := min(g.n, maxMsgs)
 	switch {
-	case len(g.h) < g.n && !g.hFull:
+	case len(g.h) < capN && !g.hFull:
 		heap.Push(&g.h, r)
 	case len(g.h) > 0 && older(g.h[0], r):
 		g.hBytes -= recordSize(g.h[0])
@@ -428,19 +440,15 @@ func (k *Consumer) offer(g *gather, r *kgo.Record) {
 		return
 	}
 	g.hBytes += recordSize(r)
-	k.mu.Lock()
-	maxBytes := k.maxBytes
-	k.mu.Unlock()
-	for g.hBytes > maxBytes && len(g.h) > 1 {
+	for len(g.h) > 1 && (len(g.h) > capN || g.hBytes > maxBytes) {
 		g.hBytes -= recordSize(heap.Pop(&g.h).(*kgo.Record))
 		g.pickDropped++
 		g.hFull = true
 	}
 }
 
-// flush ends the gather phase: the pick goes into the buffer oldest first,
-// then the records that came past the ends. It reports whether the limit is
-// reached.
+// flush ends the gather phase: the pick goes into the buffer oldest first.
+// It reports whether the limit is reached.
 func (k *Consumer) flush(g *gather) bool {
 	// Gathering ends once the pick is in the buffer, so a snapshot that
 	// no longer says gathering holds all of it.
@@ -449,7 +457,19 @@ func (k *Consumer) flush(g *gather) bool {
 		k.gathering = false
 		k.mu.Unlock()
 	}()
-	k.trimLate(g)
+	if g.pickDropped > 0 {
+		// Picked, then let go for the bounds (already counted as read in
+		// offer): the oldest of the pick, as the buffer would. With a
+		// limit, the pick that stays counts first.
+		d := g.pickDropped
+		if k.req.Limit > 0 {
+			d = min(d, uint64(max(k.req.Limit-len(g.h), 0)))
+		}
+		k.mu.Lock()
+		k.received += d
+		k.dropped += d
+		k.mu.Unlock()
+	}
 	recs := []*kgo.Record(g.h)
 	sort.Slice(recs, func(i, j int) bool { return older(recs[i], recs[j]) })
 	for _, r := range recs {
@@ -457,29 +477,24 @@ func (k *Consumer) flush(g *gather) bool {
 			return true
 		}
 	}
-	if g.pickDropped > 0 {
-		// Picked, then let go for the byte bound (already counted as
-		// read in offer): the oldest of the pick, as the buffer would.
-		k.mu.Lock()
-		k.received += g.pickDropped
-		k.dropped += g.pickDropped
-		k.mu.Unlock()
-	}
-	if g.lateDropped > 0 {
-		// Read and kept, then evicted before they could show: the same
-		// accounting as a buffer eviction.
-		k.mu.Lock()
-		k.scanned += g.lateDropped
-		k.received += g.lateDropped
-		k.dropped += g.lateDropped
-		k.mu.Unlock()
-	}
-	for _, r := range g.late {
-		if k.keep(r, true) {
-			return true
-		}
-	}
 	return false
+}
+
+// resumeAfter lets the partitions paused by the gather go on from their
+// start-time ends.
+func resumeAfter(cl *kgo.Client, topic string, g *gather) {
+	set := map[int32]kgo.EpochOffset{}
+	for p := range g.overshot {
+		set[p] = kgo.EpochOffset{Epoch: -1, Offset: g.all[p]}
+	}
+	if len(set) > 0 {
+		cl.SetOffsets(map[string]map[int32]kgo.EpochOffset{topic: set})
+	}
+	parts := make([]int32, 0, len(g.all))
+	for p := range g.all {
+		parts = append(parts, p)
+	}
+	cl.ResumeFetchPartitions(map[string][]int32{topic: parts})
 }
 
 func recordSize(r *kgo.Record) int {
@@ -488,44 +503,6 @@ func recordSize(r *kgo.Record) int {
 		n += len(h.Key) + len(h.Value)
 	}
 	return n
-}
-
-// queueLate holds a record past the ends until the flush. The filter runs
-// here. The queue gets only the room the pick leaves in the buffer (see
-// trimLate), so the flush never evicts the pick it has just shown and the
-// two together stay within the buffer's bounds. With a limit, the records
-// past it are not kept at all: the consumer stops before them.
-func (k *Consumer) queueLate(g *gather, r *kgo.Record) {
-	if k.filt.active() && !k.filt.match(r) {
-		k.mu.Lock()
-		k.scanned++
-		k.mu.Unlock()
-		return
-	}
-	// Evicted ones count too: they were kept, and count toward the limit.
-	if k.req.Limit > 0 && uint64(len(g.late))+g.lateDropped >= uint64(k.req.Limit) {
-		return
-	}
-	g.late = append(g.late, r)
-	g.lateBytes += recordSize(r)
-	k.trimLate(g)
-}
-
-// trimLate drops the oldest queued records until the queue fits in what
-// the pick leaves of the buffer's bounds. The pick can still grow after a
-// record is queued, so the flush trims again.
-func (k *Consumer) trimLate(g *gather) {
-	k.mu.Lock()
-	maxMsgs, maxBytes := k.maxMsgs, k.maxBytes
-	k.mu.Unlock()
-	roomMsgs, roomBytes := maxMsgs-len(g.h), maxBytes-g.hBytes
-	// As in the buffer, one record alone is kept whatever its size.
-	for len(g.late) > 0 && (len(g.late) > roomMsgs || (g.lateBytes > roomBytes && len(g.h)+len(g.late) > 1)) {
-		g.lateBytes -= recordSize(g.late[0])
-		g.late[0] = nil
-		g.late = g.late[1:]
-		g.lateDropped++
-	}
 }
 
 // startOffsets resolves the exact start offset of every partition read, and
@@ -602,6 +579,18 @@ func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int6
 		k.finish(ConsumeDone, "")
 		return
 	}
+	if g != nil {
+		// Partitions with nothing to gather wait for the pick.
+		var empty []int32
+		for p := range g.all {
+			if _, ok := g.ends[p]; !ok {
+				empty = append(empty, p)
+			}
+		}
+		if len(empty) > 0 {
+			cl.PauseFetchPartitions(map[string][]int32{k.req.Topic: empty})
+		}
+	}
 	idleSince := time.Now()
 	for {
 		pollCtx, cancel := context.WithTimeout(ctx, time.Second)
@@ -621,6 +610,7 @@ func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int6
 		// transaction marker would otherwise never end.
 		progress := false
 		limitHit := false
+		var reached []int32
 		fetches.EachError(func(_ string, _ int32, err error) {
 			if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 				k.setErr(err)
@@ -643,28 +633,23 @@ func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int6
 				}
 			}
 			if g != nil {
-				e, ok := g.ends[r.Partition]
-				switch {
-				case ok && r.Offset < e:
-					progress = true
-					k.offer(g, r)
-					if r.Offset+1 >= e {
-						delete(g.ends, r.Partition)
+				e := g.all[r.Partition]
+				_, open := g.ends[r.Partition]
+				if r.Offset < e {
+					if open {
+						progress = true
+						k.offer(g, r)
 					}
-				case ok:
-					// Past the end without the record at end-1: that one
-					// was a marker. The partition is read.
+				} else {
+					// Past the end: dropped here, read again after the
+					// pick once the cursor is set back.
+					g.overshot[r.Partition] = true
+				}
+				// At or past the end (end-1 can be a transaction marker,
+				// never delivered): the partition is read, pause it.
+				if open && r.Offset+1 >= e {
 					delete(g.ends, r.Partition)
-					if until == nil {
-						k.queueLate(g, r)
-					}
-				default:
-					// With stop at end, records past the start-time ends
-					// are not part of the read: queued, they would follow
-					// the pick and could push it out of the buffer.
-					if until == nil {
-						k.queueLate(g, r)
-					}
+					reached = append(reached, r.Partition)
 				}
 				return
 			}
@@ -672,6 +657,9 @@ func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int6
 				limitHit = true
 			}
 		})
+		if len(reached) > 0 {
+			cl.PauseFetchPartitions(map[string][]int32{k.req.Topic: reached})
+		}
 		if progress {
 			idleSince = time.Now()
 		}
@@ -679,6 +667,14 @@ func (k *Consumer) run(ctx context.Context, cl *kgo.Client, until map[int32]int6
 		// record (a transaction marker) must not keep the pick hidden.
 		if g != nil && (len(g.ends) == 0 || time.Since(idleSince) > stopAtEndIdle) {
 			limitHit = k.flush(g)
+			if !limitHit && until != nil {
+				// Stop at end: the pick is the whole read.
+				k.finish(ConsumeDone, "")
+				return
+			}
+			if !limitHit {
+				resumeAfter(cl, k.req.Topic, g)
+			}
 			g = nil
 		}
 		if limitHit {
