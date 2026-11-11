@@ -974,6 +974,15 @@ func TestQueueLateBounds(t *testing.T) {
 	if len(g.late) != 5 || g.lateDropped != 0 || string(g.late[4].Key) != "k04" {
 		t.Fatalf("limit: %d kept, %d dropped", len(g.late), g.lateDropped)
 	}
+	// A limit above the buffer bound: evicted records count toward it.
+	k = &Consumer{maxMsgs: 3, maxBytes: 1 << 20, req: ConsumeRequest{Limit: 8}}
+	g = &gather{}
+	for i := 0; i < 20; i++ {
+		k.queueLate(g, rec(i))
+	}
+	if len(g.late) != 3 || g.lateDropped != 5 || string(g.late[2].Key) != "k07" {
+		t.Fatalf("limit over the bound: %d kept, %d dropped, last %s", len(g.late), g.lateDropped, g.late[len(g.late)-1].Key)
+	}
 	// The filter runs before queueing.
 	k = &Consumer{maxMsgs: 100, maxBytes: 1 << 20, filt: filter{key: "k1"}}
 	g = &gather{}
