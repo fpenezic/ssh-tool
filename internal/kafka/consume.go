@@ -449,6 +449,7 @@ func (k *Consumer) flush(g *gather) bool {
 		k.gathering = false
 		k.mu.Unlock()
 	}()
+	k.trimLate(g)
 	recs := []*kgo.Record(g.h)
 	sort.Slice(recs, func(i, j int) bool { return older(recs[i], recs[j]) })
 	for _, r := range recs {
@@ -490,10 +491,10 @@ func recordSize(r *kgo.Record) int {
 }
 
 // queueLate holds a record past the ends until the flush. The filter runs
-// here, and the queue keeps no more than the buffer would: the newest
-// records within its bounds, as the buffer itself would after the flush
-// (the pick goes in first, so it is the first to go). With a limit, the
-// records past it are not kept at all: the consumer stops before them.
+// here. The queue gets only the room the pick leaves in the buffer (see
+// trimLate), so the flush never evicts the pick it has just shown and the
+// two together stay within the buffer's bounds. With a limit, the records
+// past it are not kept at all: the consumer stops before them.
 func (k *Consumer) queueLate(g *gather, r *kgo.Record) {
 	if k.filt.active() && !k.filt.match(r) {
 		k.mu.Lock()
@@ -507,10 +508,19 @@ func (k *Consumer) queueLate(g *gather, r *kgo.Record) {
 	}
 	g.late = append(g.late, r)
 	g.lateBytes += recordSize(r)
+	k.trimLate(g)
+}
+
+// trimLate drops the oldest queued records until the queue fits in what
+// the pick leaves of the buffer's bounds. The pick can still grow after a
+// record is queued, so the flush trims again.
+func (k *Consumer) trimLate(g *gather) {
 	k.mu.Lock()
 	maxMsgs, maxBytes := k.maxMsgs, k.maxBytes
 	k.mu.Unlock()
-	for len(g.late) > maxMsgs || (g.lateBytes > maxBytes && len(g.late) > 1) {
+	roomMsgs, roomBytes := maxMsgs-len(g.h), maxBytes-g.hBytes
+	// As in the buffer, one record alone is kept whatever its size.
+	for len(g.late) > 0 && (len(g.late) > roomMsgs || (g.lateBytes > roomBytes && len(g.h)+len(g.late) > 1)) {
 		g.lateBytes -= recordSize(g.late[0])
 		g.late[0] = nil
 		g.late = g.late[1:]
