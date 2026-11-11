@@ -375,7 +375,7 @@ func (a *App) mcpKafkaConsume(ctx context.Context, in mcpKafkaConsumeArgs) (stri
 	if req.Mode == kafka.FromLatest {
 		deadline = time.Now().Add(wait)
 	}
-	for len(matched) < maxMsgs {
+	take := func() int {
 		state = k.Snapshot(after, kafka.SnapshotOptions{MaxBytes: 4 << 20})
 		for _, m := range state.Messages {
 			after = m.Seq
@@ -386,13 +386,32 @@ func (a *App) mcpKafkaConsume(ctx context.Context, in mcpKafkaConsumeArgs) (stri
 				}
 			}
 		}
-		if len(state.Messages) > 0 {
+		return len(state.Messages)
+	}
+	for len(matched) < maxMsgs {
+		if take() > 0 {
 			continue
 		}
 		if state.State != kafka.ConsumeRunning || time.Now().After(deadline) || ctx.Err() != nil {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+	// from=newest still gathering at the deadline: Stop hands over the pick
+	// so far, and the reply says it is incomplete instead of "0 shown".
+	partialPick := false
+	if state.Gathering {
+		partialPick = true
+		k.Stop()
+		select {
+		case <-k.Done():
+		case <-time.After(5 * time.Second):
+		}
+		for len(matched) < maxMsgs {
+			if take() == 0 {
+				break
+			}
+		}
 	}
 
 	sort.SliceStable(matched, func(i, j int) bool { return matched[i].Timestamp < matched[j].Timestamp })
@@ -411,6 +430,9 @@ func (a *App) mcpKafkaConsume(ctx context.Context, in mcpKafkaConsumeArgs) (stri
 	fmt.Fprintf(&b, "%d record(s) shown, %d read", shown, state.Received)
 	if shown < len(matched) {
 		fmt.Fprintf(&b, ", %d more matched but did not fit max_bytes", len(matched)-shown)
+	}
+	if partialPick {
+		b.WriteString("; the time limit came before every partition was read, so the newest pick is incomplete (a smaller n or one partition reads faster)")
 	}
 	if state.Error != "" {
 		fmt.Fprintf(&b, "; last fetch error: %s", state.Error)

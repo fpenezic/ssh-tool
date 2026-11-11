@@ -907,3 +907,80 @@ func TestStopAtEndTxMarkerBusyTopic(t *testing.T) {
 		t.Fatalf("still running: %+v", k.Snapshot(0, SnapshotOptions{}))
 	}
 }
+
+// Records past the ends wait for the flush in a queue bounded like the
+// buffer: a busy partition during a long gather cannot grow it past what
+// the buffer would keep, and the counts match a plain buffer eviction.
+func TestConsumeNewestLateQueueBounded(t *testing.T) {
+	old := stopAtEndIdle
+	stopAtEndIdle = time.Second
+	defer func() { stopAtEndIdle = old }()
+	fc := newFake(t, 0)
+	c := openFake(t, fc)
+	seeds := fc.ListenAddrs()
+	produceTx(t, seeds, 0, 10, 11, 12) // gathers until the idle rule
+	k, err := c.Consume(ctx10(t), ConsumeRequest{Topic: "empty", Mode: FromNewest, N: 3, Partition: -1, BufferMessages: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer k.Stop()
+	secs := make([]int, 20)
+	for i := range secs {
+		secs[i] = 100 + i
+	}
+	produceAt(t, seeds, 1, secs...)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		s := k.Snapshot(0, SnapshotOptions{})
+		// The last 3 offsets of partition 0 hold 2 records (the third is the
+		// commit marker), so 2 picked + 20 late.
+		if !s.Gathering && s.Received == 22 {
+			if got := keysOf(s.Messages); got != "p1-117 p1-118 p1-119" || s.Dropped != 19 || s.Buffered != 3 {
+				t.Fatalf("got %q, %+v", got, s)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no flush: %+v", s)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestQueueLateBounds(t *testing.T) {
+	rec := func(i int) *kgo.Record { return &kgo.Record{Key: []byte(fmt.Sprintf("k%02d", i)), Value: []byte("0123456789")} }
+	k := &Consumer{maxMsgs: 3, maxBytes: 1 << 20}
+	g := &gather{}
+	for i := 0; i < 20; i++ {
+		k.queueLate(g, rec(i))
+	}
+	if len(g.late) != 3 || g.lateDropped != 17 || string(g.late[0].Key) != "k17" || g.lateBytes != 39 {
+		t.Fatalf("by count: %d kept, %d dropped, first %s, %d bytes", len(g.late), g.lateDropped, g.late[0].Key, g.lateBytes)
+	}
+	k = &Consumer{maxMsgs: 100, maxBytes: 30}
+	g = &gather{}
+	for i := 0; i < 20; i++ {
+		k.queueLate(g, rec(i))
+	}
+	if len(g.late) != 2 || g.lateBytes != 26 {
+		t.Fatalf("by bytes: %d kept, %d bytes", len(g.late), g.lateBytes)
+	}
+	// With a limit, records past it are never shown: not even queued.
+	k = &Consumer{maxMsgs: 100, maxBytes: 1 << 20, req: ConsumeRequest{Limit: 5}}
+	g = &gather{}
+	for i := 0; i < 20; i++ {
+		k.queueLate(g, rec(i))
+	}
+	if len(g.late) != 5 || g.lateDropped != 0 || string(g.late[4].Key) != "k04" {
+		t.Fatalf("limit: %d kept, %d dropped", len(g.late), g.lateDropped)
+	}
+	// The filter runs before queueing.
+	k = &Consumer{maxMsgs: 100, maxBytes: 1 << 20, filt: filter{key: "k1"}}
+	g = &gather{}
+	for i := 0; i < 20; i++ {
+		k.queueLate(g, rec(i))
+	}
+	if len(g.late) != 10 || k.scanned != 10 {
+		t.Fatalf("filter: %d kept, %d scanned", len(g.late), k.scanned)
+	}
+}
