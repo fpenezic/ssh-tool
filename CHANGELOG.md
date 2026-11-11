@@ -7,9 +7,9 @@ while Wails v3 was a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [1.2.0] - Spreadsheet-like Database grid, VPN DNS domains, Kafka last N in topic
 
-The Database grid works more like a spreadsheet: edit cells in place, select and copy blocks of cells straight into Excel or Teams, right-click menus on cells and in the tree, and export a whole table to CSV or JSON. The app proxy routes names by the VPNs' DNS domains, and the Kafka consumer can show the newest records of a whole topic.
+The Database grid works more like a spreadsheet: edit cells in place, select and copy blocks of cells straight into Excel or Teams, right-click menus on cells and in the tree, and export a whole table to CSV or JSON. The app proxy routes names by the VPNs' DNS domains, the Kafka consumer can show the newest records of a whole topic, the UI font size now means the text size, and the user guide has step-by-step How-to recipes.
 
 ### Appearance
 - **UI font size means the text size**: the number in Settings > Appearance is now the size of the main text, and field labels, badges and titles are one step smaller or larger than it instead of a dozen fractions of it, with nothing under 10px. At 11, labels and notes that were 8 to 9px are now 10px. Text fields, selects and buttons in Settings share one height that grows with the font.
