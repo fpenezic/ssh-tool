@@ -103,17 +103,39 @@ func openAuditDB(path string) (*sql.DB, error) {
 // file: the ones from before the split, and the ones a backup from before
 // it brings back when it is restored over an audit log that already has
 // events (those used to stay in store.db, out of the audit view and its
-// purge, and travelled with backups and sync). A row already in the side
-// file (same time, action, target and metadata) is not copied again, so a
-// run cut short between the side commit and the main delete only deletes
-// on the next start. The main table stays in place (emptied) so the
-// versioned migration history is untouched.
+// purge, and travelled with backups and sync). Rows are matched on (time,
+// action, target, metadata) and counted: for each such event the side file
+// gets as many copies as the main store has beyond what it already holds.
+// So two identical events (the time is in seconds) both move, a run cut
+// short between the side commit and the main delete only deletes on the
+// next start, and restoring an old backup on the machine whose audit log
+// already took those rows at the split does not double them. The main
+// table stays in place (emptied) so the versioned migration history is
+// untouched.
 func migrateAuditRows(main, audit *sql.DB) {
-	rows, err := main.Query(`SELECT ts, action, target, metadata_json FROM audit_events ORDER BY id`)
+	rows, err := main.Query(`SELECT ts, action, target, metadata_json, COUNT(*)
+		FROM audit_events GROUP BY ts, action, target, metadata_json ORDER BY MIN(id)`)
 	if err != nil {
 		return // table absent - nothing to migrate
 	}
 	defer rows.Close()
+	type event struct {
+		ts                   int64
+		action, target, meta string
+		n                    int
+	}
+	var events []event
+	for rows.Next() {
+		var e event
+		if rows.Scan(&e.ts, &e.action, &e.target, &e.meta, &e.n) != nil {
+			return
+		}
+		events = append(events, e)
+	}
+	if rows.Err() != nil || len(events) == 0 {
+		return
+	}
+	_ = rows.Close()
 	// All or nothing: the main rows are deleted only once every one of
 	// them is in the side file; a run cut short rolls back and the next
 	// start tries again.
@@ -122,27 +144,20 @@ func migrateAuditRows(main, audit *sql.DB) {
 		return
 	}
 	defer atx.Rollback()
-	seen := 0
-	for rows.Next() {
-		var ts int64
-		var action, target, meta string
-		if rows.Scan(&ts, &action, &target, &meta) != nil {
+	for _, e := range events {
+		var have int
+		if atx.QueryRow(`SELECT COUNT(*) FROM audit_events WHERE ts = ? AND action = ? AND target = ? AND metadata_json = ?`,
+			e.ts, e.action, e.target, e.meta).Scan(&have) != nil {
 			return
 		}
-		if _, err := atx.Exec(
-			`INSERT INTO audit_events (ts, action, target, metadata_json)
-			 SELECT ?, ?, ?, ? WHERE NOT EXISTS (
-			     SELECT 1 FROM audit_events WHERE ts = ? AND action = ? AND target = ? AND metadata_json = ?)`,
-			ts, action, target, meta, ts, action, target, meta); err != nil {
-			return
+		for i := have; i < e.n; i++ {
+			if _, err := atx.Exec(`INSERT INTO audit_events (ts, action, target, metadata_json) VALUES (?, ?, ?, ?)`,
+				e.ts, e.action, e.target, e.meta); err != nil {
+				return
+			}
 		}
-		seen++
 	}
-	if rows.Err() != nil {
-		return
-	}
-	_ = rows.Close()
-	if seen == 0 || atx.Commit() != nil {
+	if atx.Commit() != nil {
 		return
 	}
 	_, _ = main.Exec(`DELETE FROM audit_events`)
