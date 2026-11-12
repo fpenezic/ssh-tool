@@ -177,9 +177,9 @@
         <button onclick={copyLink}>{copied ? "✓" : "Copy"}</button>
       </div>
       <div class="fp-block">
-        <div class="fp-title">Send this fingerprint to your guest separately (not in the same message as the link):</div>
-        <div class="fp-words">{result.fingerprint.Words}</div>
-        <div class="fp-hint">When they open the link, they'll see the same words - and you'll compare them again when you allow them in.</div>
+        <div class="fp-title">Send this certificate fingerprint to your guest separately (not in the same message as the link):</div>
+        <div class="fp-words">SHA-256 {result.fingerprint.Short}</div>
+        <div class="fp-hint">They check it in their browser's certificate details (padlock or "Not secure" in the address bar): the SHA-256 should start with these digits. When they connect, their page shows a join code; you allow only the request whose code they read to you.</div>
       </div>
       <div class="actions">
         <button class="primary" onclick={onClose}>Done</button>

@@ -3,12 +3,12 @@ package share
 // Self-signed TLS certificate for the browser-share HTTPS server.
 //
 // The app has never served TLS before this, and there is no CA, no revocation,
-// and no DNS. The certificate exists to encrypt the transport; it does NOT by
-// itself authenticate the host to the guest, because a browser buries the
-// fingerprint five clicks deep behind an interstitial the guest has already
-// clicked through. Authentication is the WORD-MNEMONIC fingerprint the host and
-// guest compare out-of-band at approval time (see Fingerprint) - the same
-// trust-on-first-use model the app already uses for SSH host keys.
+// and no DNS. The certificate encrypts the transport. It authenticates the host
+// to the guest only if the guest compares its fingerprint in the browser's own
+// certificate viewer with the value the host gives them out-of-band: the words
+// and hex the guest page shows arrive over the very connection they describe,
+// so an intercepting relay simply forwards the real ones. Telling guests apart
+// is the separate per-connection join code (newJoinCode) read out at approval.
 //
 // Consequences of that design, encoded here:
 //   - The cert is LONG-LIVED (10 years). A fingerprint whose value is "compare
@@ -264,4 +264,19 @@ func dedupeIPs(in []net.IP) []net.IP {
 		out = append(out, ip)
 	}
 	return out
+}
+
+// newJoinCode returns four words from crypto/rand (32 bits) for one pending
+// guest connection. Unlike the certificate words it differs per connection,
+// so two people holding the same link produce two different approval prompts.
+func newJoinCode() (string, error) {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	words := make([]string, 4)
+	for i, v := range b {
+		words[i] = fingerprintWords[v]
+	}
+	return strings.Join(words, "-"), nil
 }

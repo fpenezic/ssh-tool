@@ -69,13 +69,18 @@ const (
 )
 
 // Pending is sent immediately on WS accept, before the host approves. The guest
-// shows "waiting for <Host>" and, prominently, the fingerprint words - the host
-// shows the SAME words in the approval modal, and they compare out-of-band.
+// shows "waiting for <Host>" and, prominently, the join code: fresh random
+// words for this connection that the host sees in that connection's approval
+// prompt, so the guest reads them out and the host allows only the matching
+// prompt. The certificate fingerprint is included for display; because it
+// arrives over the channel it cannot detect interception by itself - the guest
+// compares FpShort / FpHex with the browser's certificate viewer instead.
 type Pending struct {
-	Host    string `json:"host"`     // "alice@thinkpad"
-	FpHex   string `json:"fp_hex"`   // full SHA-256, for power users
-	FpShort string `json:"fp_short"` // grouped hex
-	FpWords string `json:"fp_words"` // the four words to compare
+	Host     string `json:"host"`      // "alice@thinkpad"
+	JoinCode string `json:"join_code"` // per-connection words to read out
+	FpHex    string `json:"fp_hex"`    // full SHA-256 of the host certificate
+	FpShort  string `json:"fp_short"`  // grouped hex
+	FpWords  string `json:"fp_words"`  // the certificate as four words
 }
 
 // Manifest is sent once, on approval. It is the single source of truth for what

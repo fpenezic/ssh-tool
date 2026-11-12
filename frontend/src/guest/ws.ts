@@ -32,6 +32,7 @@ export interface Manifest {
 
 export interface Pending {
   host: string;
+  join_code: string;
   fp_hex: string;
   fp_short: string;
   fp_words: string;

@@ -62,11 +62,10 @@
   {:else if phase.kind === "pending"}
     <div class="center">
       <div class="big">Waiting for {phase.info.host} to let you in…</div>
-      <div class="fp-label">Confirm this code matches what they see:</div>
-      <div class="fp-words">{phase.info.fp_words}</div>
+      <div class="fp-label">Read this code to the host:</div>
+      <div class="fp-words">{phase.info.join_code}</div>
       <div class="fp-hint">
-        Ask the host (by phone or chat) to read out their fingerprint. If it
-        doesn't match, do not continue.
+        The host lets you in only when your code matches theirs. To make sure nobody sits between you and the host, open the certificate details in your browser (the padlock or "Not secure" in the address bar) and check that its SHA-256 fingerprint starts with the value the host sent you. A code on this page cannot prove that by itself.
       </div>
     </div>
   {:else if phase.kind === "denied"}

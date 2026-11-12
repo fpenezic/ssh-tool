@@ -907,18 +907,19 @@
 
   // ----- browser session sharing -----
 
-  // A guest opened a share link and is waiting; the host must allow/deny after
-  // comparing the fingerprint words out-of-band.
+  // A guest opened a share link and is waiting; the host allows only the
+  // prompt whose join code the guest reads out.
   EventsOn("share_approval_request", (data: any) => {
     api.requestAttention().catch(() => {});
     api.sendPromptNotification(
       "Someone wants to join your shared session",
-      `${data.remote_ip ?? "A guest"} is waiting - check the fingerprint before allowing.`,
+      `${data.remote_ip ?? "A guest"} is waiting - allow only if they read you the join code.`,
     ).catch(() => {});
     shareApprovalStore.enqueue({
       approvalId: data.approval_id,
       shareId: data.share_id,
       remoteIp: data.remote_ip,
+      joinCode: data.join_code ?? "",
       fingerprint: data.fingerprint,
       level: data.level,
       tabs: data.tabs ?? [],
@@ -1766,7 +1767,7 @@
   {#if shareApprovalStore.pending}
     <ShareApprovalModal
       remoteIp={shareApprovalStore.pending.remoteIp}
-      fingerprint={shareApprovalStore.pending.fingerprint}
+      joinCode={shareApprovalStore.pending.joinCode}
       level={shareApprovalStore.pending.level}
       queueLength={Math.max(0, shareApprovalStore.queue.length - 1)}
       onRespond={async (decision) => {
