@@ -2300,9 +2300,7 @@ What the LLM can do:
   (they can edit files or run commands); add them to the allowlist if
   you want them auto-run. The Gather facts custom column uses the same
   list.
-- **type_into_terminal** - on approval, types text into your live
-  terminal **without pressing Enter**, so you review it and submit it
-  yourself.
+- **type_into_terminal** - on approval, types text into your live terminal **without pressing Enter**, so you review it and submit it yourself. Text with a newline or any other control character is refused, so it can never submit or rewrite the line for you.
 - **list_files / read_file** - browses directories and reads files over
   SFTP instead of shelling out to ls and cat. Same gate as those
   commands (read-run, no prompt), but exact sizes and binary files
@@ -2405,9 +2403,7 @@ Let a colleague watch - or, with your explicit approval, type into -
 a live session from a plain web browser. Nothing is installed on their
 side; they open a link and see your terminal.
 
-1. **Settings > Session sharing** -> turn on *Enable session sharing*. This is
-   off by default. While it's on, the certificate fingerprint (a short
-   word-code) is shown here, and you can regenerate it.
+1. **Settings > Session sharing** -> turn on *Enable session sharing*. This is off by default. While it's on, the certificate fingerprint is shown here, and you can regenerate it.
 
 2. **Right-click a tab -> "Share to browser".** In the dialog you pick:
    - **which tabs** to share (defaults to the current one - it's a
@@ -2421,17 +2417,9 @@ side; they open a link and see your terminal.
      (8443 by default; if it's in use the share falls back to a free
      one).
 
-3. You get a **link and a word-code** (like `cobalt-otter-viola-medley`).
-   Send the link to your guest, and send the word-code separately (by
-   phone or chat, not in the same message). When they open the link
-   their browser will warn about the self-signed certificate - that's
-   expected; they continue past it.
+3. You get a **link and the certificate fingerprint** (the start of its SHA-256). Send the link to your guest, and send the fingerprint separately (by phone or chat, not in the same message). When they open the link their browser warns about the self-signed certificate - that's expected. Before continuing past it they can open the certificate details (the padlock or "Not secure" in the address bar) and check that its SHA-256 starts with what you sent; that is what proves nobody sits between them and you.
 
-4. When the guest connects, **you get a prompt** showing their IP address
-   and the word-code. Read the code back with them out-of-band; if it
-   matches, allow them in. A leaked link is worthless without this - no
-   session is streamed until you click Allow. The prompt flashes the
-   taskbar and pops a notification if the app is in the background.
+4. When the guest connects, their page shows a **join code** (four words like `cobalt-otter-viola-medley`) and **you get a prompt** with their IP address and the same code. Every connection gets its own code. Ask the guest to read theirs out and allow only the prompt that matches: if someone else opened the link, their prompt shows a different code. No session is streamed until you click Allow. The prompt flashes the taskbar and pops a notification if the app is in the background.
 
 5. While a guest is attached you see a marker on the tab; a **full-control
    guest** is shown loudly (a red banner across the top). The status-bar
@@ -2443,16 +2431,7 @@ side; they open a link and see your terminal.
 to a share all follow through to the guest; the guest can follow your
 active tab or click around on their own ("Follow host" re-syncs).
 
-**Security model.** The connection is encrypted with a self-signed
-certificate whose fingerprint is the word-code you compare - that
-comparison, plus your per-guest approval, is what authenticates the
-session (the browser cert warning is not). Read-only is enforced on the
-backend, not just hidden in the UI. Both machines must be able to reach
-each other: use it on a LAN or over your existing WireGuard / NetBird /
-Tailscale profile. There is no cloud relay. Local shells are shareable
-too, not just SSH sessions. Optionally, guest keystrokes can be recorded
-to the audit log (off by default - the audit log is plaintext and a
-controlling guest's keystrokes can include passwords).
+**Security model.** The connection is encrypted with a self-signed certificate. Two checks authenticate it, and the browser's certificate warning is neither: the guest compares the certificate's SHA-256 in their browser with the fingerprint you sent them (this detects someone intercepting the connection), and you allow only the request whose join code the guest reads to you (this tells your guest apart from anyone else holding the link). The words and codes shown on the guest page arrive over the connection itself, so on their own they cannot prove it is not intercepted. Read-only is enforced on the backend, not just hidden in the UI. Both machines must be able to reach each other: use it on a LAN or over your existing WireGuard / NetBird / Tailscale profile. There is no cloud relay. Local shells are shareable too, not just SSH sessions. Optionally, guest keystrokes can be recorded to the audit log (off by default - the audit log is plaintext and a controlling guest's keystrokes can include passwords).
 
 ### Quick palette shortcut
 
@@ -4007,9 +3986,8 @@ Options:
   root-level connections from the archive land under the chosen
   folder; nested structure inside the archive is preserved
   relative to that root. Clear to import at root (default).
-- **On conflict**: Skip (default, keep existing rows by id),
-  Rename (append " (imported)" to the new row), or Overwrite
-  (replace by id).
+- **On conflict**: Skip (default, keep existing rows by id), Rename (append " (imported)" to the new row), or Overwrite (replace by id). The dry run lists every connection an overwrite would point at a different host, since such a row keeps its saved password.
+- **Link to existing credentials** - off by default. An archive carries credential ids; with this off, a connection, folder or dynamic folder in the archive that names a credential already in your store does not get it (it inherits instead, and the dry run lists those credentials). Turn it on to re-import your own export; leave it off for an archive from someone else, which could otherwise point a host it adds at one of your saved passwords or API tokens.
 - **Passphrase** - required only if the archive carries an
   encrypted credentials block.
 - **Dry-run** - see what would happen before applying.
@@ -4484,8 +4462,8 @@ Goal: let someone (or an LLM client such as Claude Code) see a live session, wit
 
 1. Settings > **Session sharing** > turn on *Enable session sharing*.
 2. Right-click the tab > **Share to browser**. Pick the tabs, **read-only** or **full control**, whether they see the existing scrollback, and the network interface.
-3. Send the link, and the word-code separately (phone or chat). Their browser warns about the self-signed certificate; that is expected.
-4. When they open it, you get a prompt with their address and the word-code: compare the code with them, then **Allow**. The status bar lists guests; kick one or stop all sharing from there.
+3. Send the link, and the certificate fingerprint separately (phone or chat). Their browser warns about the self-signed certificate; they can check its SHA-256 against the fingerprint in the certificate details before continuing.
+4. When they open it, their page shows a join code and you get a prompt with their address and a code: allow only if the code they read to you matches. The status bar lists guests; kick one or stop all sharing from there.
 
 **An LLM client (MCP):**
 

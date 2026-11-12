@@ -7,6 +7,22 @@ while Wails v3 was a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+Security fixes from an audit of the LLM (MCP) access, archive import and session sharing: each closes a way an untrusted input got more authority than the UI promised.
+
+### LLM (MCP) access
+- **type_into_terminal never presses Enter**: text with a newline or any other control character is now refused. Before, a carriage return in the text submitted the command at once, so the "review it and press Enter yourself" step could be skipped, and under *read + run (YOLO)* that also bypassed the prompt for dangerous commands.
+- **`ip` read-only check is an allowlist**: abbreviated write commands such as `ip r d default` or `ip link c dev eth0 down` were treated as read-only and ran without approval. Now `ip` runs without a prompt only with no command (the default listing) or with `show`, `list`, `lst`, `get` or `help`; everything else, abbreviated `show` included, asks first.
+
+### Import
+- **Archive credential references no longer bind to your existing credentials by default**: an archive could name the id of a credential already in your store and point a connection or a Proxmox dynamic folder it adds at it, sending that password or API token to a host of its choosing. Such references are now dropped (the item inherits instead) unless you tick the new **Link to existing credentials** option, meant for re-importing your own export. The dry run lists which credentials would be linked or were left out.
+- The dry run now lists every connection an **Overwrite** import points at a different host, since such a row keeps its saved password; warnings are shown in the preview, not only after applying.
+- Argon2 parameters read from an archive or a vault file are range-checked before deriving a key. Zero values used to fail the import and a huge memory value could crash the app.
+
+### Session sharing
+- **Join code per connection**: the guest page shows a fresh code for each connection, and the approval prompt shows the code of that request, so you allow only the request your guest reads to you. The four words compared before were the certificate fingerprint, the same for everyone holding the link, so they could not tell your guest apart from someone else. The share dialog now gives the certificate SHA-256 to send your guest, who checks it in the browser's certificate details; the words on the guest page cannot detect an intercepted connection by themselves, and the user guide no longer says they do.
+
 ## [1.2.1] - No edge resize on a maximised window
 
 A bugfix release for the compact title bar: a maximised or fullscreen window no longer offers to resize at its edges.
