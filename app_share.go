@@ -106,7 +106,8 @@ type ShareApprovalRequest struct {
 	ApprovalID  string   `json:"approval_id"`
 	ShareID     string   `json:"share_id"`
 	RemoteIP    string   `json:"remote_ip"`
-	Fingerprint string   `json:"fingerprint"` // the words to compare
+	JoinCode    string   `json:"join_code"`   // this connection's words; the guest reads them out
+	Fingerprint string   `json:"fingerprint"` // certificate words (for the guest's browser check)
 	Level       string   `json:"level"`
 	Tabs        []string `json:"tabs"`
 }
@@ -114,7 +115,7 @@ type ShareApprovalRequest struct {
 // requestGuestApproval blocks until the host allows/denies the guest, the app
 // shuts down, or the 2-minute timeout fires (both default to deny). Supplied to
 // the share server as its ApprovalFunc.
-func (a *App) requestGuestApproval(shareID, remoteIP, fpWords string) bool {
+func (a *App) requestGuestApproval(shareID, remoteIP, joinCode, fpWords string) bool {
 	id := uuid.NewString()
 	ch := make(chan bool, 1) // cap-1: the responder never blocks
 	a.shareApprMu.Lock()
@@ -134,13 +135,14 @@ func (a *App) requestGuestApproval(shareID, remoteIP, fpWords string) bool {
 		ApprovalID:  id,
 		ShareID:     shareID,
 		RemoteIP:    remoteIP,
+		JoinCode:    joinCode,
 		Fingerprint: fpWords,
 		Level:       level,
 		Tabs:        tabs,
 	})
 	a.RequestAttention()
 	a.SendPromptNotification("Someone wants to join your shared session",
-		remoteIP+" is waiting - check the fingerprint before allowing")
+		remoteIP+" is waiting - allow only if the guest reads you the join code")
 
 	select {
 	case ok := <-ch:

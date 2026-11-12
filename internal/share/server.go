@@ -29,9 +29,12 @@ import (
 const tokenTTL = 30 * time.Minute
 
 // ApprovalFunc is called when a guest connects, before anything is streamed. It
-// blocks until the host allows/denies (or a timeout denies). remoteIP and the
-// fingerprint words are shown to the host. Supplied by the App.
-type ApprovalFunc func(shareID, remoteIP, fpWords string) bool
+// blocks until the host allows/denies (or a timeout denies). remoteIP, the
+// connection's join code and the certificate fingerprint words are shown to the
+// host. The join code is fresh per connection and is what tells the host which
+// prompt belongs to the guest on the phone: a second holder of the link gets a
+// different code. Supplied by the App.
+type ApprovalFunc func(shareID, remoteIP, joinCode, fpWords string) bool
 
 // ShareInfo is the public identity of a share handed to audit hooks (the
 // internal shareSession stays private).
@@ -464,12 +467,21 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, share *shareSe
 	gc.auditViolation = s.audit.Violation
 	gc.onGuestTab = s.onGuestTab
 
-	// Tell the guest we're waiting, with the fingerprint words to compare.
+	// Tell the guest we're waiting, with this connection's join code to read
+	// out to the host. The certificate fingerprint rides along for display,
+	// but a value delivered over this channel cannot vouch for the channel:
+	// the guest checks the certificate in the browser's own viewer.
+	joinCode, err := newJoinCode()
+	if err != nil {
+		_ = c.Close(websocket.StatusInternalError, "join code")
+		return
+	}
 	gc.sendJSON(Frame{T: TPending, Pending: &Pending{
-		Host:    s.hostName,
-		FpHex:   cert.Fingerprint.Hex,
-		FpShort: cert.Fingerprint.Short,
-		FpWords: cert.Fingerprint.Words,
+		Host:     s.hostName,
+		JoinCode: joinCode,
+		FpHex:    cert.Fingerprint.Hex,
+		FpShort:  cert.Fingerprint.Short,
+		FpWords:  cert.Fingerprint.Words,
 	}})
 	// The write pump must run so that pending frame actually goes out while we
 	// block on approval.
@@ -481,7 +493,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, share *shareSe
 		gc.cancel()
 		return
 	}
-	allowed := s.runApproval(share, remoteIP, cert.Fingerprint.Words)
+	allowed := s.runApproval(share, remoteIP, joinCode, cert.Fingerprint.Words)
 	s.releasePending(remoteIP)
 
 	if !allowed {
@@ -529,11 +541,11 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, share *shareSe
 	go s.onChange()
 }
 
-func (s *Server) runApproval(share *shareSession, remoteIP, fpWords string) bool {
+func (s *Server) runApproval(share *shareSession, remoteIP, joinCode, fpWords string) bool {
 	if s.approve == nil {
 		return true // dev / test: auto-approve
 	}
-	return s.approve(share.id, remoteIP, fpWords)
+	return s.approve(share.id, remoteIP, joinCode, fpWords)
 }
 
 func (s *Server) sendManifest(gc *guestConn, share *shareSession) {

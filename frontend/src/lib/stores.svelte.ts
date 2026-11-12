@@ -2826,7 +2826,8 @@ export interface ShareApproval {
   approvalId: string;
   shareId: string;
   remoteIp: string;
-  fingerprint: string; // the words to compare out-of-band
+  joinCode: string; // this connection's words; the guest reads them out
+  fingerprint: string; // certificate words
   level: string;
   tabs: string[];
 }

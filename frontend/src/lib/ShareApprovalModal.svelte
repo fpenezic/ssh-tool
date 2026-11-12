@@ -1,16 +1,17 @@
 <script lang="ts">
-  // A browser guest is waiting to join a shared session. The host allows or
-  // denies AFTER comparing the fingerprint words with the guest out-of-band.
+  // A browser guest is waiting to join a shared session. Every connection gets
+  // its own join code; the host allows only when the guest reads out the code
+  // shown here, so a second holder of the link (a different code) is denied.
   // Deny is the default focus - joining a terminal (especially a control share)
   // is not something to wave through.
   interface Props {
     remoteIp: string;
-    fingerprint: string; // the words to compare
+    joinCode: string; // this connection's words
     level: string; // "read" | "control"
     queueLength: number;
     onRespond: (decision: "allow" | "deny") => void | Promise<void>;
   }
-  let { remoteIp, fingerprint, level, queueLength, onRespond }: Props = $props();
+  let { remoteIp, joinCode, level, queueLength, onRespond }: Props = $props();
 
   const isControl = $derived(level === "control");
 
@@ -37,11 +38,10 @@
     </div>
 
     <div class="fp-block">
-      <div class="fp-title">Check this matches what the guest sees:</div>
-      <div class="fp-words">{fingerprint}</div>
+      <div class="fp-title">Join code for this request:</div>
+      <div class="fp-words">{joinCode}</div>
       <div class="fp-hint">
-        Ask them (phone / chat) to read out their fingerprint. If it doesn't
-        match, deny - someone may be intercepting the connection.
+        Ask your guest (phone / chat) to read out the code on their screen. Allow only if it is exactly this one - another code means someone else opened the link.
       </div>
     </div>
 
