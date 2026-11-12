@@ -642,6 +642,12 @@ func (a *App) mcpType(sessionID, text string) (string, error) {
 	if !canRun(lvl) {
 		return "", fmt.Errorf("session not shared for running commands")
 	}
+	// The no-Enter promise (and the YOLO shortcut below) only holds if the
+	// text cannot submit or edit the line itself: refuse CR/LF and every
+	// other control byte before anything reaches the approval or the PTY.
+	if err := mcpTypeTextOK(text); err != nil {
+		return "", err
+	}
 	sess, ok := a.pool.Get(sessionID)
 	if !ok {
 		return "", fmt.Errorf("session not connected")

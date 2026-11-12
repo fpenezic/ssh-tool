@@ -301,7 +301,7 @@ type mcpRunArgs struct {
 
 type mcpTypeArgs struct {
 	SessionID string `json:"session_id" jsonschema:"the id of a shared session"`
-	Text      string `json:"text" jsonschema:"text to type into the live terminal; no newline is sent, the user reviews and presses Enter"`
+	Text      string `json:"text" jsonschema:"text to type into the live terminal; one line, no newline or control characters (they are refused); the user reviews and presses Enter"`
 }
 
 type mcpListFilesArgs struct {
