@@ -109,10 +109,64 @@ var argsReadOnly = map[string]func(args []string) bool{
 	"mount":    func(a []string) bool { return len(nonFlagArgs(a)) == 0 && !hasShortFlag(a, 'a') },
 	"ifconfig": func(a []string) bool { return len(nonFlagArgs(a)) <= 1 },
 	"env":      func(a []string) bool { return len(a) == 0 }, // env CMD runs CMD
-	"ip": func(a []string) bool {
-		return !anyArg(a, "add", "del", "delete", "set", "flush", "change", "replace",
-			"append", "prepend", "exec", "-b", "-batch", "--batch", "-force", "save", "restore", "attach", "detach")
-	},
+	"ip":       ipArgsReadOnly,
+}
+
+// ipArgsReadOnly is an allowlist, not a denylist: iproute2 accepts any
+// unique prefix of a verb or option ("ip r d default" is route delete,
+// "ip -ba FILE" is batch), so matching write verbs exactly let abbreviated
+// writes through. Here the command after the object must be absent (the
+// object's default listing) or one of the full read verbs; anything else,
+// abbreviations of show included, goes to approval.
+func ipArgsReadOnly(a []string) bool {
+	i := 0
+	for i < len(a) && strings.HasPrefix(a[i], "-") {
+		opt := a[i]
+		if strings.HasPrefix(opt, "--") {
+			opt = opt[1:] // ip treats --opt like -opt
+		}
+		if v, _, ok := strings.Cut(opt, "="); ok {
+			opt = v
+		}
+		// -b / -batch reads commands from a file; -force only matters with
+		// it. "-br" is -brief, which is not a prefix of -batch.
+		if ipOptPrefix(opt, "-batch", 2) || ipOptPrefix(opt, "-force", 3) {
+			return false
+		}
+		i++
+		// Options that take a separate value.
+		if ipOptPrefix(opt, "-family", 2) || ipOptPrefix(opt, "-netns", 2) ||
+			ipOptPrefix(opt, "-loops", 2) || ipOptPrefix(opt, "-rcvbuf", 3) {
+			i++
+		}
+	}
+	rest := a[min(i, len(a)):]
+	if len(rest) == 0 {
+		return true // bare "ip": usage text
+	}
+	rest = rest[1:] // the object (link, addr, route, ...; abbreviations allowed)
+	// Objects with a sub-object before the command: ip xfrm state list,
+	// ip mptcp endpoint show, ip sr tunsrc show, ip ioam namespace show.
+	switch obj := a[i]; {
+	case ipOptPrefix(obj, "xfrm", 1), obj == "mptcp", obj == "sr", obj == "ioam":
+		if len(rest) > 0 {
+			rest = rest[1:]
+		}
+	}
+	if len(rest) == 0 {
+		return true
+	}
+	switch rest[0] {
+	case "show", "list", "lst", "get", "help":
+		return true
+	}
+	return false
+}
+
+// ipOptPrefix reports whether opt is an iproute2 abbreviation of the full
+// option name: at least min characters long and a prefix of it.
+func ipOptPrefix(opt, full string, min int) bool {
+	return len(opt) >= min && strings.HasPrefix(full, opt)
 }
 
 // subArgsReadOnly vets the arguments after an allowed subcommand verb where
