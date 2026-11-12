@@ -23,6 +23,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -762,6 +763,14 @@ func decryptBlob(passphrase string, block *EncryptedSecretBlock, cipherB64 strin
 	if err != nil {
 		return nil, fmt.Errorf("decode cipher: %w", err)
 	}
+	// The KDF parameters come from the archive, which is untrusted: bound
+	// them before deriving, as backup.decodeAndDecrypt does. Zero values
+	// panic inside argon2 and a huge memory value is a fatal out-of-memory
+	// that no recover catches. The bounds sit well above what Build writes
+	// (19 MiB, 2 passes, 1 thread).
+	if err := checkArgon2Params(block.Iterations, block.MemoryKiB, block.Parallel); err != nil {
+		return nil, fmt.Errorf("archive %w", err)
+	}
 	key := argon2.IDKey([]byte(passphrase), salt, block.Iterations, block.MemoryKiB, block.Parallel, keyLen)
 	aead, err := chacha20poly1305.NewX(key)
 	if err != nil {
@@ -773,4 +782,19 @@ func decryptBlob(passphrase string, block *EncryptedSecretBlock, cipherB64 strin
 	nonce := raw[:aead.NonceSize()]
 	ct := raw[aead.NonceSize():]
 	return aead.Open(nil, nonce, ct, nil)
+}
+
+// checkArgon2Params bounds Argon2id parameters read from a file before
+// they reach argon2.IDKey. Same limits as the backup reader.
+func checkArgon2Params(time, memKiB uint32, threads uint8) error {
+	if time == 0 || time > 16 {
+		return errors.New("kdf time out of range")
+	}
+	if memKiB < 8 || memKiB > 1024*1024 { // 8 KiB .. 1 GiB
+		return errors.New("kdf memory out of range")
+	}
+	if threads == 0 || threads > 16 {
+		return errors.New("kdf threads out of range")
+	}
+	return nil
 }
