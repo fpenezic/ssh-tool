@@ -7,6 +7,13 @@ while Wails v3 was a prerelease upstream.
 
 ---
 
+## [1.2.1] - No edge resize on a maximised window
+
+A bugfix release for the compact title bar: a maximised or fullscreen window no longer offers to resize at its edges.
+
+### Window
+- **Compact title bar: a maximised or fullscreen window has inert edges** ([#45](https://github.com/fpenezic/ssh-tool/issues/45)). The mouse cursor turned into a resize arrow at the window edges (Windows), and on Linux (KDE, Wayland) dragging an edge resized the window off its maximised size. Edge resize now comes back only after the window is restored.
+
 ## [1.2.0] - Spreadsheet-like Database grid, VPN DNS domains, Kafka last N in topic
 
 The Database grid works more like a spreadsheet: edit cells in place, select and copy blocks of cells straight into Excel or Teams, right-click menus on cells and in the tree, and export a whole table to CSV or JSON. The app proxy routes names by the VPNs' DNS domains, the Kafka consumer can show the newest records of a whole topic, the UI font size now means the text size, and the user guide has step-by-step How-to recipes.
