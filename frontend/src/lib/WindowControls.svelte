@@ -7,11 +7,17 @@
   import { Window } from "@wailsio/runtime";
   import { onMount } from "svelte";
   import { IconMinus, IconMaximize, IconRestore, IconX } from "./iconMap";
+  import { setEdgeResizeLocked } from "./windowResizeGuard";
 
   let maximised = $state(false);
 
   async function refresh() {
-    try { maximised = await Window.IsMaximised(); } catch { /* ignore */ }
+    try {
+      const [max, full] = await Promise.all([Window.IsMaximised(), Window.IsFullscreen()]);
+      maximised = max;
+      // No edge resize (cursor or drag) on a maximised / fullscreen window.
+      setEdgeResizeLocked(max || full);
+    } catch { /* ignore */ }
   }
 
   onMount(() => {
