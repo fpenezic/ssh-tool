@@ -85,6 +85,34 @@ export class ImportSummary {
              */
             this["cred_folders_skipped"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * CredsLinked: local credentials (by name) that imported connections,
+             * folders or dynamic folders now use (LinkExistingCredentials on).
+             * CredsNotLinked: local credentials an archive reference named but
+             * that were not linked because the option is off.
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["creds_linked"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["creds_not_linked"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * HostChanges lists "name: old -> new" for connections an overwrite
+             * import points at a different hostname. Such a row keeps its saved
+             * per-connection password, so the preview has to show it.
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["host_changes"] = undefined;
+        }
         if (!("secrets_imported" in $$source)) {
             /**
              * @member
@@ -145,7 +173,10 @@ export class ImportSummary {
         const $$createField7_0 = $$createType0;
         const $$createField8_0 = $$createType0;
         const $$createField9_0 = $$createType0;
-        const $$createField14_0 = $$createType0;
+        const $$createField10_0 = $$createType0;
+        const $$createField11_0 = $$createType0;
+        const $$createField12_0 = $$createType0;
+        const $$createField17_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("folders_created" in $$parsedSource) {
             $$parsedSource["folders_created"] = $$createField0_0($$parsedSource["folders_created"]);
@@ -177,8 +208,17 @@ export class ImportSummary {
         if ("cred_folders_skipped" in $$parsedSource) {
             $$parsedSource["cred_folders_skipped"] = $$createField9_0($$parsedSource["cred_folders_skipped"]);
         }
+        if ("creds_linked" in $$parsedSource) {
+            $$parsedSource["creds_linked"] = $$createField10_0($$parsedSource["creds_linked"]);
+        }
+        if ("creds_not_linked" in $$parsedSource) {
+            $$parsedSource["creds_not_linked"] = $$createField11_0($$parsedSource["creds_not_linked"]);
+        }
+        if ("host_changes" in $$parsedSource) {
+            $$parsedSource["host_changes"] = $$createField12_0($$parsedSource["host_changes"]);
+        }
         if ("warnings" in $$parsedSource) {
-            $$parsedSource["warnings"] = $$createField14_0($$parsedSource["warnings"]);
+            $$parsedSource["warnings"] = $$createField17_0($$parsedSource["warnings"]);
         }
         return new ImportSummary(/** @type {Partial<ImportSummary>} */($$parsedSource));
     }

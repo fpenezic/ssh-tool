@@ -6059,6 +6059,9 @@ type ImportArchiveRequest struct {
 	DryRun         bool   `json:"dry_run"`
 	Passphrase     string `json:"passphrase"` // required if encrypted_secrets present
 	TargetFolderID string `json:"target_folder_id,omitempty"`
+	// LinkExistingCredentials lets archive credential references use
+	// credentials that already exist here (see exporter.ImportOptions).
+	LinkExistingCredentials bool `json:"link_existing_credentials,omitempty"`
 }
 
 func (a *App) ImportArchive(req ImportArchiveRequest) (*exporter.ImportSummary, error) {
@@ -6074,6 +6077,8 @@ func (a *App) ImportArchive(req ImportArchiveRequest) (*exporter.ImportSummary, 
 		DryRun:           req.DryRun,
 		SecretPassphrase: req.Passphrase,
 		TargetFolderID:   req.TargetFolderID,
+
+		LinkExistingCredentials: req.LinkExistingCredentials,
 	}, func(credID string, plain []byte) (string, error) {
 		// Imported secrets get a stable vault key under imp:<credID>.
 		// Mirrors how the rest of the app namespaces vault entries

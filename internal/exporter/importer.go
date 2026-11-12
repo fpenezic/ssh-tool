@@ -43,6 +43,14 @@ type ImportOptions struct {
 	// archive keep their relative structure. Empty = import at root
 	// (legacy behaviour).
 	TargetFolderID string
+	// LinkExistingCredentials lets archive credential references resolve
+	// to credentials that already exist in this store by the same id
+	// (re-importing your own export). Off by default: an archive is
+	// untrusted input, and an id it names must not be enough to point an
+	// imported host at a secret that was here before the import. With it
+	// off such references are dropped to "inherit" and listed in
+	// CredsNotLinked so the preview can offer the option.
+	LinkExistingCredentials bool
 }
 
 // ImportSummary lists what the apply did (or would do, in dry-run).
@@ -57,7 +65,17 @@ type ImportSummary struct {
 	CredsSkipped       []string `json:"creds_skipped"`
 	CredFoldersCreated []string `json:"cred_folders_created,omitempty"`
 	CredFoldersSkipped []string `json:"cred_folders_skipped,omitempty"`
-	SecretsImported    int      `json:"secrets_imported"`
+	// CredsLinked: local credentials (by name) that imported connections,
+	// folders or dynamic folders now use (LinkExistingCredentials on).
+	// CredsNotLinked: local credentials an archive reference named but
+	// that were not linked because the option is off.
+	CredsLinked    []string `json:"creds_linked,omitempty"`
+	CredsNotLinked []string `json:"creds_not_linked,omitempty"`
+	// HostChanges lists "name: old -> new" for connections an overwrite
+	// import points at a different hostname. Such a row keeps its saved
+	// per-connection password, so the preview has to show it.
+	HostChanges     []string `json:"host_changes,omitempty"`
+	SecretsImported int      `json:"secrets_imported"`
 	// ImagesImported counts custom icon blobs landed (or matched to
 	// an existing content-addressed row).
 	ImagesImported int `json:"images_imported"`
@@ -167,18 +185,62 @@ func Apply(
 	credIDMap := map[string]string{}
 
 	// resolveAuthRef maps an archive credential id to its final local id.
-	// Resolvable when the credential is in this archive (credIDMap, filled
-	// by the credentials pass below) or already exists locally by that id
-	// (credByID - e.g. re-importing onto the same machine). Anything else
-	// is unknown and gets dropped to "inherit" by the remap helpers.
+	// Resolvable when the credential is minted by this import (credIDMap,
+	// filled by the credentials pass below), or - only with
+	// LinkExistingCredentials - when it already exists locally by that id
+	// (re-importing onto the same machine). Anything else is dropped to
+	// "inherit" by the remap helpers; a local id refused here is listed in
+	// CredsNotLinked.
+	linked, notLinked := map[string]bool{}, map[string]bool{}
+	linkExisting := func(id string) bool {
+		c, ok := credByID[id]
+		if !ok {
+			return false
+		}
+		if opts.LinkExistingCredentials {
+			if !linked[id] {
+				linked[id] = true
+				sum.CredsLinked = append(sum.CredsLinked, c.Name)
+			}
+			return true
+		}
+		if !notLinked[id] {
+			notLinked[id] = true
+			sum.CredsNotLinked = append(sum.CredsNotLinked, c.Name)
+		}
+		return false
+	}
 	resolveAuthRef := func(id string) (string, bool) {
 		if newID, ok := credIDMap[id]; ok {
 			return newID, true
 		}
-		if _, ok := credByID[id]; ok {
+		if linkExisting(id) {
 			return id, true
 		}
 		return "", false
+	}
+	// Record every reference to an existing local credential up front, so
+	// a dry run (which skips the writing passes) still lists them in
+	// CredsLinked / CredsNotLinked. An archive credential whose id exists
+	// locally is never minted, so any such reference is a link.
+	probe := func(id string) (string, bool) {
+		if _, ok := credByID[id]; ok {
+			linkExisting(id)
+		}
+		return id, true
+	}
+	for _, f := range arc.Folders {
+		remapAuthRefInSettings(f.Settings, probe)
+		if f.Dynamic != nil {
+			for _, key := range dynCredConfigKeys {
+				if id, _ := f.Dynamic.Config[key].(string); id != "" {
+					probe(id)
+				}
+			}
+		}
+	}
+	for _, c := range arc.Connections {
+		remapAuthRefInSettings(c.Overrides, probe)
 	}
 	// Collect dropped (dangling) auth_refs into one deduped warning so the
 	// user sees that some connections fell back to inheriting a credential.
@@ -323,9 +385,9 @@ func Apply(
 	for _, c := range arc.Credentials {
 		if _, exists := credByID[c.ID]; exists {
 			sum.CredsSkipped = append(sum.CredsSkipped, c.Name)
-			// Existing id stays valid - remap to self so later
-			// auth_ref rewrites point at the existing credential.
-			credIDMap[c.ID] = c.ID
+			// Not mapped here: a reference to it resolves through
+			// resolveAuthRef / linkExisting, which links the existing
+			// credential only when the user opted in.
 			continue
 		}
 		sum.CredsCreated = append(sum.CredsCreated, c.Name)
@@ -440,7 +502,7 @@ func Apply(
 						df := store.DynamicFolder{
 							FolderID:       existing.ID,
 							Provider:       f.Dynamic.Provider,
-							Config:         remapDynCredRefs(f.Dynamic.Config, credIDMap, sum, f.Name),
+							Config:         remapDynCredRefs(f.Dynamic.Config, resolveAuthRef, sum, f.Name),
 							RefreshSeconds: f.Dynamic.RefreshSeconds,
 						}
 						var derr error
@@ -502,7 +564,7 @@ func Apply(
 		// Dynamic-inventory side table. Cached entries are not part of
 		// the archive - the first refresh on this side repopulates them.
 		if f.Dynamic != nil {
-			cfg := remapDynCredRefs(f.Dynamic.Config, credIDMap, sum, f.Name)
+			cfg := remapDynCredRefs(f.Dynamic.Config, resolveAuthRef, sum, f.Name)
 			if err := db.CreateDynamicFolder(store.DynamicFolder{
 				FolderID:       created.ID,
 				Provider:       f.Dynamic.Provider,
@@ -535,6 +597,10 @@ func Apply(
 			case ConflictOverwrite:
 				connPassEligible[c.ID] = true
 				sum.ConnsUpdated = append(sum.ConnsUpdated, c.Name)
+				if existing.Hostname != c.Hostname {
+					sum.HostChanges = append(sum.HostChanges,
+						fmt.Sprintf("%s: %s -> %s", existing.Name, existing.Hostname, c.Hostname))
+				}
 				if !opts.DryRun {
 					newFolderID := remapFolderID(c.FolderID, folderIDMap)
 					if newFolderID == nil && opts.TargetFolderID != "" {
@@ -766,7 +832,11 @@ func Apply(
 	// instead of carrying a broken id.
 	if n := len(droppedAuthRefs); n > 0 {
 		sum.Warnings = append(sum.Warnings,
-			fmt.Sprintf("%d credential reference(s) not in the archive were dropped; affected connections now inherit their folder's credential", n))
+			fmt.Sprintf("%d credential reference(s) the archive does not carry were dropped; affected connections now inherit their folder's credential", n))
+	}
+	if n := len(sum.CredsNotLinked); n > 0 {
+		sum.Warnings = append(sum.Warnings,
+			fmt.Sprintf("%d reference(s) name credentials that already exist here (%s) and were not linked; turn on \"Link to existing credentials\" only for an archive you trust", n, strings.Join(sum.CredsNotLinked, ", ")))
 	}
 
 	return sum, nil
@@ -927,7 +997,7 @@ func topoSortFolders(folders []ArchiveFolder) ([]ArchiveFolder, error) {
 // archive doesn't carry is dropped with a warning - the folder imports
 // working except for that one setting, instead of pointing at an id
 // that doesn't exist on this side.
-func remapDynCredRefs(cfg map[string]any, credIDMap map[string]string, sum *ImportSummary, folderName string) map[string]any {
+func remapDynCredRefs(cfg map[string]any, resolve func(string) (string, bool), sum *ImportSummary, folderName string) map[string]any {
 	out := make(map[string]any, len(cfg))
 	for k, v := range cfg {
 		out[k] = v
@@ -937,12 +1007,12 @@ func remapDynCredRefs(cfg map[string]any, credIDMap map[string]string, sum *Impo
 		if id == "" {
 			continue
 		}
-		if mapped, ok := credIDMap[id]; ok {
+		if mapped, ok := resolve(id); ok {
 			out[key] = mapped
 		} else {
 			delete(out, key)
 			sum.Warnings = append(sum.Warnings,
-				fmt.Sprintf("folder %s: %s references a credential not in the archive - cleared", folderName, key))
+				fmt.Sprintf("folder %s: %s references a credential this import does not carry - cleared", folderName, key))
 		}
 	}
 	return out

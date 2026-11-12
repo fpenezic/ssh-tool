@@ -2339,6 +2339,7 @@ export const api = {
     dry_run: boolean;
     passphrase: string;
     target_folder_id?: string;
+    link_existing_credentials?: boolean;
   }) => G.ImportArchive(req as any) as unknown as Promise<ImportSummary>,
 
   sftpList: (sessionId: string, remotePath: string) =>
@@ -2444,6 +2445,9 @@ export interface ImportSummary {
   conns_skipped: string[];
   creds_created: string[];
   creds_skipped: string[];
+  creds_linked?: string[];
+  creds_not_linked?: string[];
+  host_changes?: string[];
   secrets_imported: number;
   conn_passwords_imported: number;
   images_imported: number;
@@ -3162,7 +3166,8 @@ export interface ShareApprovalRequest {
   approval_id: string;
   share_id: string;
   remote_ip: string;
-  fingerprint: string; // the words to compare
+  join_code: string; // this connection's words; the guest reads them out
+  fingerprint: string; // certificate words
   level: string;
   tabs: string[];
 }
