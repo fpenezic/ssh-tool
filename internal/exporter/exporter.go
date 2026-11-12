@@ -771,26 +771,30 @@ func decryptBlob(passphrase string, block *EncryptedSecretBlock, cipherB64 strin
 	if err := checkArgon2Params(block.Iterations, block.MemoryKiB, block.Parallel); err != nil {
 		return nil, fmt.Errorf("archive %w", err)
 	}
+	// Reject a ciphertext that cannot hold a nonce and a tag before paying
+	// for the key derivation.
+	if len(raw) < chacha20poly1305.NonceSizeX+chacha20poly1305.Overhead {
+		return nil, fmt.Errorf("cipher too short")
+	}
 	key := argon2.IDKey([]byte(passphrase), salt, block.Iterations, block.MemoryKiB, block.Parallel, keyLen)
 	aead, err := chacha20poly1305.NewX(key)
 	if err != nil {
 		return nil, err
-	}
-	if len(raw) < aead.NonceSize() {
-		return nil, fmt.Errorf("cipher too short")
 	}
 	nonce := raw[:aead.NonceSize()]
 	ct := raw[aead.NonceSize():]
 	return aead.Open(nil, nonce, ct, nil)
 }
 
-// checkArgon2Params bounds Argon2id parameters read from a file before
-// they reach argon2.IDKey. Same limits as the backup reader.
+// checkArgon2Params bounds Argon2id parameters read from an archive before
+// they reach argon2.IDKey. Build writes 19 MiB, 2 passes, 1 thread; the
+// caps leave room above that while keeping one derivation affordable on a
+// small machine (or a phone), since an archive can trigger one per secret.
 func checkArgon2Params(time, memKiB uint32, threads uint8) error {
-	if time == 0 || time > 16 {
+	if time == 0 || time > 10 {
 		return errors.New("kdf time out of range")
 	}
-	if memKiB < 8 || memKiB > 1024*1024 { // 8 KiB .. 1 GiB
+	if memKiB < 8 || memKiB > 256*1024 { // 8 KiB .. 256 MiB
 		return errors.New("kdf memory out of range")
 	}
 	if threads == 0 || threads > 16 {

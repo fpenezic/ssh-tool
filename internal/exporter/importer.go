@@ -73,7 +73,8 @@ type ImportSummary struct {
 	CredsNotLinked []string `json:"creds_not_linked,omitempty"`
 	// HostChanges lists "name: old -> new" for connections an overwrite
 	// import points at a different hostname. Such a row keeps its saved
-	// per-connection password, so the preview has to show it.
+	// per-connection password unless the archive restores one, so the
+	// preview has to show it.
 	HostChanges     []string `json:"host_changes,omitempty"`
 	SecretsImported int      `json:"secrets_imported"`
 	// ImagesImported counts custom icon blobs landed (or matched to
@@ -229,7 +230,13 @@ func Apply(
 		}
 		return id, true
 	}
+	written := func(exists bool) bool {
+		return !exists || (opts.Conflict != ConflictSkip && opts.Conflict != "")
+	}
 	for _, f := range arc.Folders {
+		if _, exists := folderByID[f.ID]; !written(exists) {
+			continue
+		}
 		remapAuthRefInSettings(f.Settings, probe)
 		if f.Dynamic != nil {
 			for _, key := range dynCredConfigKeys {
@@ -240,6 +247,9 @@ func Apply(
 		}
 	}
 	for _, c := range arc.Connections {
+		if _, exists := connByID[c.ID]; !written(exists) {
+			continue
+		}
 		remapAuthRefInSettings(c.Overrides, probe)
 	}
 	// Collect dropped (dangling) auth_refs into one deduped warning so the
@@ -247,6 +257,9 @@ func Apply(
 	droppedAuthRefs := map[string]bool{}
 	noteDropped := func(ids []string) {
 		for _, id := range ids {
+			if _, local := credByID[id]; local {
+				continue // a refused link, reported via CredsNotLinked
+			}
 			droppedAuthRefs[id] = true
 		}
 	}
@@ -474,6 +487,16 @@ func Apply(
 		if existing, exists := folderByID[f.ID]; exists {
 			switch opts.Conflict {
 			case ConflictSkip, "":
+				// Reusing the local folder places the archive's new rows
+				// under it, where they inherit its credentials. Without
+				// the link opt-in that is the same binding resolveAuthRef
+				// refuses, so such a folder is imported as a new one.
+				if !opts.LinkExistingCredentials && folderHandsDownCreds(existing.ID, folderByID) {
+					sum.Warnings = append(sum.Warnings,
+						fmt.Sprintf("folder %s exists here and passes credentials down; imported as a new folder (turn on \"Link to existing credentials\" to merge into it)", existing.Name))
+					f.Name = f.Name + " (imported)"
+					break
+				}
 				sum.FoldersSkipped = append(sum.FoldersSkipped, f.Name)
 				folderIDMap[f.ID] = existing.ID
 				continue
@@ -884,6 +907,32 @@ func remapAuthRefInSettings(s store.InheritableSettings, resolve func(id string)
 		dropped = append(dropped, d...)
 		out.JumpHost = &store.JumpHostOverride{Kind: out.JumpHost.Kind, Chain: &newChain}
 	}
+	// The other credential references (TOTP source, Kafka and database
+	// logins) go through the same resolver: left as archive values they
+	// would name an existing local credential without the link opt-in.
+	// An empty string keeps its meaning (explicitly none).
+	remapRef := func(p **string) {
+		if *p == nil || **p == "" {
+			return
+		}
+		if newID, ok := resolve(**p); ok {
+			*p = &newID
+		} else {
+			dropped = append(dropped, **p)
+			*p = nil
+		}
+	}
+	remapRef(&out.OTPRef)
+	remapRef(&out.KafkaCredentialRef)
+	remapRef(&out.DbCredentialRef)
+	if len(out.DbTargets) > 0 {
+		targets := make([]store.DbTarget, len(out.DbTargets))
+		copy(targets, out.DbTargets)
+		for i := range targets {
+			remapRef(&targets[i].CredentialRef)
+		}
+		out.DbTargets = targets
+	}
 	return out, dropped
 }
 
@@ -1012,7 +1061,7 @@ func remapDynCredRefs(cfg map[string]any, resolve func(string) (string, bool), s
 		} else {
 			delete(out, key)
 			sum.Warnings = append(sum.Warnings,
-				fmt.Sprintf("folder %s: %s references a credential this import does not carry - cleared", folderName, key))
+				fmt.Sprintf("folder %s: %s names a credential the archive does not carry, or an existing one that was not linked - cleared", folderName, key))
 		}
 	}
 	return out
@@ -1067,6 +1116,34 @@ func hasCycle(startID string, folders []ArchiveFolder) bool {
 		}
 		seen[*cur] = true
 		cur = parent[*cur]
+	}
+	return false
+}
+
+// folderHandsDownCreds reports whether a local folder, or any folder above
+// it, sets a credential reference its children would inherit.
+func folderHandsDownCreds(id string, folders map[string]*store.Folder) bool {
+	seen := map[string]bool{}
+	for id != "" && !seen[id] {
+		seen[id] = true
+		f, ok := folders[id]
+		if !ok {
+			return false
+		}
+		found := false
+		remapAuthRefInSettings(f.Settings, func(ref string) (string, bool) {
+			if ref != "" {
+				found = true
+			}
+			return ref, true
+		})
+		if found {
+			return true
+		}
+		if f.ParentID == nil {
+			return false
+		}
+		id = *f.ParentID
 	}
 	return false
 }
