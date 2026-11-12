@@ -84,6 +84,13 @@ func deriveKey(passphrase []byte, p kdfParams) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("salt b64: %w", err)
 	}
+	// Bounded before deriving (same limits as the backup reader): zero
+	// values panic in argon2 and a huge memory value is a fatal OOM. A
+	// vault.enc normally comes from this app, but a pulled sync snapshot
+	// or a restored backup carries its own.
+	if p.Time == 0 || p.Time > 16 || p.Memory < 8 || p.Memory > 1024*1024 || p.Threads == 0 || p.Threads > 16 {
+		return nil, fmt.Errorf("vault kdf parameters out of range")
+	}
 	return argon2.IDKey(passphrase, salt, p.Time, p.Memory, p.Threads, 32), nil
 }
 
