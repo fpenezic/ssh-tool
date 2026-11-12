@@ -3986,8 +3986,8 @@ Options:
   root-level connections from the archive land under the chosen
   folder; nested structure inside the archive is preserved
   relative to that root. Clear to import at root (default).
-- **On conflict**: Skip (default, keep existing rows by id), Rename (append " (imported)" to the new row), or Overwrite (replace by id). The dry run lists every connection an overwrite would point at a different host, since such a row keeps its saved password.
-- **Link to existing credentials** - off by default. An archive carries credential ids; with this off, a connection, folder or dynamic folder in the archive that names a credential already in your store does not get it (it inherits instead, and the dry run lists those credentials). Turn it on to re-import your own export; leave it off for an archive from someone else, which could otherwise point a host it adds at one of your saved passwords or API tokens.
+- **On conflict**: Skip (default, keep existing rows by id), Rename (append " (imported)" to the new row), or Overwrite (replace by id). The dry run lists every connection an overwrite would point at a different host, since such a row keeps its saved password unless the archive restores one.
+- **Link to existing credentials** - off by default. An archive carries credential ids; with this off, a connection, folder or dynamic folder in the archive that names a credential already in your store (login, jump host, TOTP, Kafka or database) does not get it (it inherits instead, and the dry run lists those credentials), and an archive folder that matches one of yours which passes a credential down is imported as a new folder rather than merged into it. Turn it on to re-import your own export; leave it off for an archive from someone else, which could otherwise point a host it adds at one of your saved passwords or API tokens.
 - **Passphrase** - required only if the archive carries an
   encrypted credentials block.
 - **Dry-run** - see what would happen before applying.

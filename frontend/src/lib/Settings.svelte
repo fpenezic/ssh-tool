@@ -1498,6 +1498,17 @@
   // Off by default: an archive is untrusted, and a credential id it names
   // must not be enough to bind an imported host to a secret already here.
   let importLinkExisting = $state(false);
+  // A dry run describes exactly the inputs it ran with: any change drops it,
+  // so Apply never runs against a preview that no longer matches (with
+  // linking on, Apply needs a current dry run - see the Apply button).
+  $effect(() => {
+    void importText;
+    void importConflict;
+    void importLinkExisting;
+    void importTargetFolderId;
+    void importPassphrase;
+    importPreview = null;
+  });
   let importPassphrase = $state("");
   let importTargetFolderId = $state<string | null>(null);
   let importTargetPickerOpen = $state(false);
@@ -7337,10 +7348,18 @@
       <button disabled={importBusy || !importText} onclick={importDryRun}>
         Dry-run
       </button>
-      <button class="primary" disabled={importBusy || !importText} onclick={importApply}>
+      <button
+        class="primary"
+        disabled={importBusy || !importText || (importLinkExisting && !importPreview)}
+        title={importLinkExisting && !importPreview ? "Run a dry run first: with Link to existing credentials on, check which of your credentials it would use" : undefined}
+        onclick={importApply}
+      >
         {importBusy ? "Importing…" : "Apply"}
       </button>
     </div>
+    {#if importLinkExisting && !importPreview && importText}
+      <p class="hint inline">Run a dry run first - it lists which of your existing credentials this import would use.</p>
+    {/if}
     {#if importError}<div class="err">{importError}</div>{/if}
     {#if importPreview}
       {@const sum = importPreview}
@@ -7357,7 +7376,7 @@
             <li>Not linked (existing credentials the archive names): {sum.creds_not_linked.join(", ")}</li>
           {/if}
           {#if sum.host_changes?.length}
-            <li class="warn">Overwrite changes the host of: {sum.host_changes.join("; ")} - each keeps its saved password</li>
+            <li class="warn">Overwrite changes the host of: {sum.host_changes.join("; ")} - each keeps its saved password unless the archive restores one</li>
           {/if}
           {#if sum.warnings.length}
             <li class="warn">{sum.warnings.length} warning(s)</li>
@@ -7379,6 +7398,15 @@
           <li>Folders created: {sum.folders_created.length}</li>
           <li>Connections created: {sum.conns_created.length}</li>
           <li>Credentials created: {sum.creds_created.length}</li>
+          {#if sum.creds_linked?.length}
+            <li class="warn">Now using your existing credentials: {sum.creds_linked.join(", ")}</li>
+          {/if}
+          {#if sum.creds_not_linked?.length}
+            <li>Not linked (existing credentials the archive named): {sum.creds_not_linked.join(", ")}</li>
+          {/if}
+          {#if sum.host_changes?.length}
+            <li class="warn">Host changed by overwrite: {sum.host_changes.join("; ")}</li>
+          {/if}
           <li>Secrets restored: {sum.secrets_imported}</li>
           {#if sum.conn_passwords_imported > 0}
             <li>Connection passwords restored: {sum.conn_passwords_imported}</li>
