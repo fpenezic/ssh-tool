@@ -1495,6 +1495,9 @@
   let importURL = $state("");
   let importFilePath = $state("");
   let importConflict = $state<"skip" | "rename" | "overwrite">("skip");
+  // Off by default: an archive is untrusted, and a credential id it names
+  // must not be enough to bind an imported host to a secret already here.
+  let importLinkExisting = $state(false);
   let importPassphrase = $state("");
   let importTargetFolderId = $state<string | null>(null);
   let importTargetPickerOpen = $state(false);
@@ -1668,6 +1671,7 @@
         dry_run: true,
         passphrase: importPassphrase,
         target_folder_id: importTargetFolderId ?? "",
+        link_existing_credentials: importLinkExisting,
       });
     } catch (e: any) {
       importError = errMsg(e);
@@ -1686,6 +1690,7 @@
         dry_run: false,
         passphrase: importPassphrase,
         target_folder_id: importTargetFolderId ?? "",
+        link_existing_credentials: importLinkExisting,
       });
       importPreview = null;
       await tree.load();
@@ -7314,6 +7319,17 @@
         <option value="overwrite">Overwrite - replace existing row</option>
       </select>
     </label>
+    <fieldset class="check-cards">
+      <label class:active={importLinkExisting}>
+        <input type="checkbox" bind:checked={importLinkExisting} />
+        <div>
+          <div class="mode-name">Link to existing credentials</div>
+          <div class="mode-desc">
+            Lets imported connections and folders use credentials that already exist here under the same id - for re-importing your own export. Leave it off for an archive from someone else: it could point a host it adds at one of your saved passwords or tokens. The dry run lists what would be linked.
+          </div>
+        </div>
+      </label>
+    </fieldset>
     <label>Passphrase (if archive includes encrypted secrets)
       <PasswordInput bind:value={importPassphrase} placeholder="leave blank if not needed" />
     </label>
@@ -7334,10 +7350,25 @@
           <li>Folders: {sum.folders_created.length} new, {sum.folders_updated.length} updated, {sum.folders_skipped.length} skipped</li>
           <li>Connections: {sum.conns_created.length} new, {sum.conns_updated.length} updated, {sum.conns_skipped.length} skipped</li>
           <li>Credentials: {sum.creds_created.length} new, {sum.creds_skipped.length} skipped</li>
+          {#if sum.creds_linked?.length}
+            <li class="warn">Uses your existing credentials: {sum.creds_linked.join(", ")}</li>
+          {/if}
+          {#if sum.creds_not_linked?.length}
+            <li>Not linked (existing credentials the archive names): {sum.creds_not_linked.join(", ")}</li>
+          {/if}
+          {#if sum.host_changes?.length}
+            <li class="warn">Overwrite changes the host of: {sum.host_changes.join("; ")} - each keeps its saved password</li>
+          {/if}
           {#if sum.warnings.length}
             <li class="warn">{sum.warnings.length} warning(s)</li>
           {/if}
         </ul>
+        {#if sum.warnings.length}
+          <details>
+            <summary>Warnings</summary>
+            <ul>{#each sum.warnings as w}<li>{w}</li>{/each}</ul>
+          </details>
+        {/if}
       </div>
     {/if}
     {#if importDone}

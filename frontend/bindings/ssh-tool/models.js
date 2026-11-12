@@ -3691,6 +3691,15 @@ export class ImportArchiveRequest {
              */
             this["target_folder_id"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * LinkExistingCredentials lets archive credential references use
+             * credentials that already exist here (see exporter.ImportOptions).
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["link_existing_credentials"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
