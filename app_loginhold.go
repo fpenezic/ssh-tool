@@ -12,21 +12,25 @@ import (
 	"ssh-tool/internal/tunnelhelper"
 )
 
-// Login hold: a VPN login that a proxy client started on its own (DBeaver
-// retrying through the profile's proxy after the machine woke up) and that
-// did not finish is not tried again by the next client. Each try is a new
-// login, and with a push second factor (Duo) a new push on the user's
-// phone: unanswered, the gateway asks again, the prompt here times out, the
-// helper exits and the client's next retry starts it all over, a push every
-// couple of minutes for as long as the client keeps retrying. Held, proxy
-// connections through the profile fail at once until the tunnel comes up
-// some other way: Connect on the profile, or a connection the user opens
-// in the app. Only proxy-started tunnels check the hold; whatever the user
-// starts goes ahead and, once the tunnel is up, lifts it.
+// Login hold: a VPN login that something in the background started on its
+// own and that did not finish is not tried again by the next background
+// try. Background starts are the app proxy's clients (DBeaver retrying
+// through the profile's proxy after the machine woke up), the Kafka and
+// Database tabs that reach their host over the connection's SSH (the Kafka
+// client refreshes metadata every few seconds and connects again after each
+// failure) and the reconnects of a kept-up tunnel. Each try is a new login:
+// with a typed one-time code a new prompt, with a push second factor (Duo) a
+// new push on the user's phone. Unanswered, the prompt times out, the helper
+// exits and the next try starts it all over, a prompt every couple of
+// minutes for as long as nobody is at the machine (hundreds over a night).
+// Held, background starts through the profile fail at once until the tunnel
+// comes up some other way: Connect on the profile, or a connection the user
+// opens in the app. Only background starts check the hold; whatever the
+// user starts goes ahead and, once the tunnel is up, lifts it.
 var loginHolds = struct {
 	sync.Mutex
 	m map[string]*loginHold
-	// ups counts successful starts per profile: a proxy start that
+	// ups counts successful starts per profile: a background start that
 	// failed while a newer one succeeded must not hold the profile.
 	ups   map[string]uint64
 	start map[string]*sync.Mutex
@@ -38,29 +42,36 @@ type loginHold struct {
 	lastNote time.Time
 }
 
-var errLoginHeld = errors.New("VPN login needed: the last login started through a proxy did not finish; Connect the profile to log in")
+var errLoginHeld = errors.New("VPN login needed: the last login started in the background did not finish; Connect the profile to log in")
 
-type proxyStartKey struct{}
+type backgroundStartKey struct{}
 
-// withProxyStart marks a dial made for a proxy client (a jump-host route
-// of the app proxy), so a tunnel it needs is started under the hold.
-func withProxyStart(ctx context.Context) context.Context {
-	return context.WithValue(ctx, proxyStartKey{}, true)
+// withBackgroundStart marks a dial nobody is waiting on at the screen (a
+// proxy client, a Kafka or Database tab's own reconnect, a tunnel's retry),
+// so a tunnel it needs is started under the hold.
+func withBackgroundStart(ctx context.Context) context.Context {
+	return context.WithValue(ctx, backgroundStartKey{}, true)
 }
 
-// ensureTunnelCtx is ensureTunnel, held when ctx comes from a proxy client.
+// isBackgroundStart reports whether ctx carries withBackgroundStart.
+func isBackgroundStart(ctx context.Context) bool {
+	on, _ := ctx.Value(backgroundStartKey{}).(bool)
+	return on
+}
+
+// ensureTunnelCtx is ensureTunnel, held when ctx is a background start.
 func (a *App) ensureTunnelCtx(ctx context.Context, row *store.NetworkProfile) (tunnelDialer, error) {
-	if on, _ := ctx.Value(proxyStartKey{}).(bool); on {
-		return a.ensureTunnelFromProxy(row)
+	if isBackgroundStart(ctx) {
+		return a.ensureTunnelInBackground(row)
 	}
 	return a.ensureTunnel(row)
 }
 
-// ensureTunnelFromProxy starts a profile's tunnel for a proxy client. One
-// proxy start per profile at a time, so the hold a failed login sets is in
-// place before the next client looks (concurrent clients wait here, as
-// they would on the pending start).
-func (a *App) ensureTunnelFromProxy(row *store.NetworkProfile) (tunnelDialer, error) {
+// ensureTunnelInBackground starts a profile's tunnel for a background
+// start. One background start per profile at a time, so the hold a failed
+// login sets is in place before the next try looks (concurrent tries wait
+// here, as they would on the pending start).
+func (a *App) ensureTunnelInBackground(row *store.NetworkProfile) (tunnelDialer, error) {
 	if a.tunnelStatus(row.ID).Running {
 		return a.ensureTunnel(row)
 	}
@@ -90,7 +101,7 @@ func loginUps(id string) uint64 {
 	return loginHolds.ups[id]
 }
 
-// loginHeld reports whether proxy starts of the profile's tunnel are held,
+// loginHeld reports whether background starts of the profile's tunnel are held,
 // counting the refusal for the log.
 func (a *App) loginHeld(id, name string) bool {
 	loginHolds.Lock()
@@ -102,7 +113,7 @@ func (a *App) loginHeld(id, name string) bool {
 	h.refused++
 	if time.Since(h.lastNote) >= time.Minute {
 		h.lastNote = time.Now()
-		log.Printf("network: proxy %q: VPN login needed, %d connection(s) refused since %s; Connect the profile to log in", name, h.refused, h.since.Format("15:04:05"))
+		log.Printf("network: %q: VPN login needed, %d background connection(s) refused since %s; Connect the profile to log in", name, h.refused, h.since.Format("15:04:05"))
 	}
 	return true
 }
@@ -127,8 +138,8 @@ func (a *App) holdAfterLogin(id, name string, err error, gen uint64) {
 	if already {
 		return
 	}
-	log.Printf("network: proxy %q: the VPN login did not finish (%v); no new login until the profile is connected again", name, err)
-	msg := fmt.Sprintf("VPN %s: the login did not finish. Connections through its proxy wait until you press Connect on the profile.", name)
+	log.Printf("network: %q: a VPN login started in the background did not finish (%v); no new background login until the profile is connected again", name, err)
+	msg := fmt.Sprintf("VPN %s: the login did not finish. Background connections through it (app proxy, Kafka and Database tabs, tunnel reconnects) wait until you press Connect on the profile.", name)
 	EventsEmit("forward_notice", map[string]string{"level": "err", "message": msg})
 	a.SendPromptNotification("VPN login needed", msg)
 	EventsEmit("network_tunnel_changed", id)
@@ -142,6 +153,6 @@ func tunnelStarted(id string) {
 	delete(loginHolds.m, id)
 	loginHolds.Unlock()
 	if h != nil {
-		log.Printf("network: profile %s is up again, proxy login hold lifted (%d connection(s) refused while held)", id, h.refused)
+		log.Printf("network: profile %s is up again, login hold lifted (%d connection(s) refused while held)", id, h.refused)
 	}
 }

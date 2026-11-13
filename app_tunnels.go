@@ -396,6 +396,11 @@ func tunnelRetryable(err error) bool {
 	if err == nil || errors.Is(err, store.ErrNotFound) || sshlayer.ContainsVaultLocked(err) {
 		return false
 	}
+	// A held VPN login: keep trying (each try fails at once, no prompt), so
+	// the tunnel comes back by itself once the user connects the profile.
+	if errors.Is(err, errLoginHeld) {
+		return true
+	}
 	var ne net.Error
 	if errors.As(err, &ne) {
 		return true
@@ -447,7 +452,9 @@ func (a *App) tunnelConnectLoop(connectionID string, e *tunnelEntry, oldSessionI
 			}
 		}
 
-		res, err := a.sshConnectWith(connectionID, "", "", "", true)
+		// Every try but the first of a start by hand is a retry nobody is
+		// watching: its VPN login is held once one did not finish.
+		res, err := a.sshConnectWith(connectionID, "", "", "", true, try > 0 || waitFirst)
 
 		a.tunnelsMu.Lock()
 		if !a.tunnelCurrent(connectionID, e) {

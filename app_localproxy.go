@@ -541,7 +541,7 @@ func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host
 		// A tree connection with a jump host: opened from its last hop,
 		// the way its terminal connects (VPN, chain, prompts included).
 		_ = c.SetDeadline(time.Now().Add(6 * time.Minute))
-		ctx, cancel := context.WithTimeout(withProxyStart(context.Background()), 5*time.Minute)
+		ctx, cancel := context.WithTimeout(withBackgroundStart(context.Background()), 5*time.Minute)
 		up, release, err := a.jumpDial(ctx, conn, target)
 		cancel()
 		if err != nil {
@@ -564,7 +564,7 @@ func (a *App) serveSOCKS(c net.Conn, checkPass func(string) bool, pick func(host
 		// A login the last proxy client started that did not finish is
 		// not started again (app_loginhold.go).
 		_ = c.SetDeadline(time.Now().Add(6 * time.Minute))
-		if d, err = a.ensureTunnelFromProxy(row); err != nil {
+		if d, err = a.ensureTunnelInBackground(row); err != nil {
 			if !errors.Is(err, errLoginHeld) { // logged once a minute
 				log.Printf("network: local proxy %q: tunnel: %v", row.Name, err)
 			}

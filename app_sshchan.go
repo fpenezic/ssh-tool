@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 
@@ -20,6 +22,10 @@ import (
 // kind prefixes the errors and the audit action ("kafka.ssh_connect").
 func (a *App) sshChanConnect(kind, connectionID string, conn *store.Connection, resolved *store.ResolvedSettings, lazy *sshchan.LazySSH) func(context.Context) (*gossh.Client, func(), error) {
 	return func(ctx context.Context) (*gossh.Client, func(), error) {
+		// The tab's client connects again on its own after a drop (the
+		// Kafka client every few seconds), with nobody at the screen: a VPN
+		// login it starts is held once it did not finish (app_loginhold.go).
+		ctx = withBackgroundStart(ctx)
 		settings := *resolved
 		settings.TunnelOnly = true
 		if conn.PasswordVaultKey != nil && a.vault.Status().Kind == creds.StatusUnlocked {
@@ -35,6 +41,9 @@ func (a *App) sshChanConnect(kind, connectionID string, conn *store.Connection, 
 		sess, err := sshlayer.Connect(ctx, a.db, a.vault, &settings, sshChanNullSink{},
 			a.makeHostKeyCallback(), a.makeAlgoLookup(), a.connectTimeout(), nil)
 		if err != nil {
+			if !errors.Is(err, errLoginHeld) { // the hold logs once a minute
+				log.Printf("%s: ssh connect %s: %v", kind, connectionID, err)
+			}
 			return nil, nil, fmt.Errorf("%s ssh connect: %w", kind, err)
 		}
 		client := sess.TargetClient()
@@ -69,6 +78,8 @@ func (sshChanNullSink) EmitDebug(string, string)                {}
 // Database tabs.
 func (a *App) viaDial(settings *store.ResolvedSettings) func(ctx context.Context, network, addr string) (net.Conn, error) {
 	return func(ctx context.Context, _, addr string) (net.Conn, error) {
+		// Like the SSH transport above: the client redials by itself.
+		ctx = withBackgroundStart(ctx)
 		c, cleanup, err := sshlayer.DialVia(ctx, a.db, a.vault, settings, addr,
 			a.makeHostKeyCallback(), a.makeAlgoLookup(), a.connectTimeout())
 		if err != nil {
