@@ -326,3 +326,77 @@ func TestOverwriteDestinationIncludesPortAndVnc(t *testing.T) {
 		t.Fatalf("connection with a saved VNC password was moved to another port: %v", got.Overrides.Port)
 	}
 }
+
+// A folder whose subtree holds a connection with a saved secret is not
+// overwritten in place: its ports or jump settings would retarget that
+// connection while it keeps the secret.
+func TestOverwriteSkipsFolderWithCredentialSubtree(t *testing.T) {
+	db := openTestDB(t)
+	vnc := uint16(5900)
+	f, err := db.CreateFolder(store.NewFolder{Name: "Lab", Settings: store.InheritableSettings{VncPort: &vnc}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := db.CreateConnection(store.NewConnection{Name: "kvm", Hostname: "kvm.example.com", FolderID: &f.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetConnectionVncPasswordKey(c.ID, "vnc_pass:"+c.ID); err != nil {
+		t.Fatal(err)
+	}
+	arc, _ := Decode(`{"schema_version":1,"folders":[{"id":"` + f.ID + `","name":"Lab","settings":{"vnc_port":5901}}]}`)
+	sum, err := Apply(db, arc, ImportOptions{Conflict: ConflictOverwrite}, rejectSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := db.GetFolder(f.ID)
+	if got.Settings.VncPort == nil || *got.Settings.VncPort != 5900 {
+		t.Fatalf("folder above a connection with a saved VNC password was overwritten: %v", got.Settings.VncPort)
+	}
+	if len(sum.FoldersUpdated) != 0 {
+		t.Fatalf("folder reported as updated: %v", sum.FoldersUpdated)
+	}
+}
+
+// With linking off, a connection holding credentials is never overwritten,
+// even when host and ports stay the same (jump chain or folder could move).
+func TestOverwriteSkipsConnectionWithCredentials(t *testing.T) {
+	db := openTestDB(t)
+	c, err := db.CreateConnection(store.NewConnection{Name: "app", Hostname: "app.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetConnectionPasswordKey(c.ID, "conn_pass:"+c.ID); err != nil {
+		t.Fatal(err)
+	}
+	arc, _ := Decode(`{"schema_version":1,"connections":[{"id":"` + c.ID + `","name":"renamed","hostname":"app.example.com"}]}`)
+	if _, err := Apply(db, arc, ImportOptions{Conflict: ConflictOverwrite}, rejectSecrets); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := db.GetConnection(c.ID)
+	if got.Name != "app" {
+		t.Fatalf("connection with a saved password was overwritten (name %q)", got.Name)
+	}
+	// With linking on the overwrite goes through.
+	if _, err := Apply(db, arc, ImportOptions{Conflict: ConflictOverwrite, LinkExistingCredentials: true}, rejectSecrets); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := db.GetConnection(c.ID); got.Name != "renamed" {
+		t.Fatalf("opt-in overwrite did not apply (name %q)", got.Name)
+	}
+}
+
+func TestTargetFolderInheritanceReported(t *testing.T) {
+	db := openTestDB(t)
+	pw, _ := db.CreateCredential(store.NewCredential{Name: "local-pw", Kind: store.CredPassword, StorageMode: store.StorageManaged})
+	ref := pw.ID
+	f, _ := db.CreateFolder(store.NewFolder{Name: "Prod", Settings: store.InheritableSettings{AuthRef: &ref}})
+	arc, _ := Decode(`{"schema_version":1,"connections":[{"id":"cx","name":"n","hostname":"n.example.com"}]}`)
+	sum, err := Apply(db, arc, ImportOptions{DryRun: true, TargetFolderID: f.ID}, rejectSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sum.TargetInheritsCreds {
+		t.Fatal("target folder credential inheritance not reported")
+	}
+}

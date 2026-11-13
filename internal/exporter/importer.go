@@ -76,6 +76,11 @@ type ImportSummary struct {
 	// per-connection password unless the archive restores one, so the
 	// preview has to show it.
 	HostChanges     []string `json:"host_changes,omitempty"`
+	// TargetInheritsCreds: the chosen Import-into folder (or a folder above
+	// it) sets a credential, so imported rows without their own inherit
+	// it. The target is the user's choice, so this is reported, not
+	// refused.
+	TargetInheritsCreds bool `json:"target_inherits_creds,omitempty"`
 	SecretsImported int      `json:"secrets_imported"`
 	// ImagesImported counts custom icon blobs landed (or matched to
 	// an existing content-addressed row).
@@ -229,6 +234,15 @@ func Apply(
 			linkExisting(id)
 		}
 		return id, true
+	}
+	if opts.TargetFolderID != "" && folderHandsDownCreds(opts.TargetFolderID, folderByID) {
+		sum.TargetInheritsCreds = true
+		name := opts.TargetFolderID
+		if f, ok := folderByID[opts.TargetFolderID]; ok {
+			name = f.Name
+		}
+		sum.Warnings = append(sum.Warnings,
+			fmt.Sprintf("imported connections without their own credential inherit the one set on %s (or a folder above it) - and connect to the hosts the archive names", name))
 	}
 	written := func(exists bool) bool {
 		return !exists || (opts.Conflict != ConflictSkip && opts.Conflict != "")
@@ -504,9 +518,13 @@ func Apply(
 				// Overwriting keeps the folder where it is, so whatever
 				// the archive adds beneath it inherits the local chain's
 				// credentials; same rule as skip.
-				if !opts.LinkExistingCredentials && folderHandsDownCreds(existing.ID, folderByID) {
+				// Its settings (ports, jump hosts) also reach every saved
+				// connection below it, so a subtree holding credentials
+				// is left alone too.
+				if !opts.LinkExistingCredentials && (folderHandsDownCreds(existing.ID, folderByID) ||
+					folderSubtreeHasCreds(existing.ID, existingFolders, existingConns)) {
 					sum.Warnings = append(sum.Warnings,
-						fmt.Sprintf("folder %s exists here and passes credentials down; imported as a new folder instead of overwriting it (turn on \"Link to existing credentials\" to overwrite)", existing.Name))
+						fmt.Sprintf("folder %s holds or passes down credentials here; imported as a new folder instead of overwriting it (turn on \"Link to existing credentials\" to overwrite)", existing.Name))
 					f.Name = f.Name + " (imported)"
 					break
 				}
@@ -627,15 +645,16 @@ func Apply(
 				connIDMap[c.ID] = existing.ID
 				continue
 			case ConflictOverwrite:
-				// An overwrite that points a connection at another host
-				// while it keeps a saved password, its own credential
-				// references or a folder's inherited credential would
-				// send those to the archive's host. Without the link
-				// opt-in it is imported as a new connection instead.
-				if !opts.LinkExistingCredentials && destinationChanges(existing, &c) &&
-					connCarriesCreds(existing, folderByID) {
+				// Without the link opt-in, Overwrite only touches rows
+				// that hold no credentials. A connection with a saved
+				// password, its own credential references or a folder's
+				// inherited credential keeps them through an overwrite,
+				// and the archive decides where it then connects (host,
+				// ports, jump chain, folder), so it is imported as a new
+				// connection instead.
+				if !opts.LinkExistingCredentials && connCarriesCreds(existing, folderByID) {
 					sum.Warnings = append(sum.Warnings,
-						fmt.Sprintf("connection %s has credentials here and the archive changes where it connects; imported as a new connection instead of overwriting it (turn on \"Link to existing credentials\" to overwrite)", existing.Name))
+						fmt.Sprintf("connection %s holds credentials here; imported as a new connection instead of overwriting it (turn on \"Link to existing credentials\" to overwrite)", existing.Name))
 					c.Name = c.Name + " (imported)"
 					break
 				}
@@ -1208,8 +1227,36 @@ func samePort(a, b *uint16) bool {
 }
 
 func connDest(host string, o store.InheritableSettings) string {
+	d := host
 	if o.Port != nil {
-		return fmt.Sprintf("%s:%d", host, *o.Port)
+		d = fmt.Sprintf("%s:%d", host, *o.Port)
 	}
-	return host
+	if o.VncPort != nil {
+		d += fmt.Sprintf(" (VNC %d)", *o.VncPort)
+	}
+	return d
+}
+
+// folderSubtreeHasCreds reports whether any connection in a local folder or
+// its descendants carries its own credential (saved password or a credential
+// reference). Overwriting such a folder's settings would change where those
+// connections go while they keep their secrets.
+func folderSubtreeHasCreds(id string, folders []store.Folder, conns []store.Connection) bool {
+	inTree := map[string]bool{id: true}
+	for changed := true; changed; {
+		changed = false
+		for _, f := range folders {
+			if !inTree[f.ID] && f.ParentID != nil && inTree[*f.ParentID] {
+				inTree[f.ID] = true
+				changed = true
+			}
+		}
+	}
+	for i := range conns {
+		c := &conns[i]
+		if c.FolderID != nil && inTree[*c.FolderID] && connCarriesCreds(c, nil) {
+			return true
+		}
+	}
+	return false
 }
