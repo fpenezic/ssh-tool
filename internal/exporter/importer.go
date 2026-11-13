@@ -75,7 +75,7 @@ type ImportSummary struct {
 	// import points at a different hostname. Such a row keeps its saved
 	// per-connection password unless the archive restores one, so the
 	// preview has to show it.
-	HostChanges     []string `json:"host_changes,omitempty"`
+	HostChanges []string `json:"host_changes,omitempty"`
 	// TargetInheritsCreds: the chosen Import-into folder (or a folder above
 	// it) sets a credential, so imported rows without their own inherit
 	// it. The target is the user's choice, so this is reported, not
@@ -87,7 +87,7 @@ type ImportSummary struct {
 	// otherwise the hop is cleared.
 	JumpHostsLinked    []string `json:"jump_hosts_linked,omitempty"`
 	JumpHostsNotLinked []string `json:"jump_hosts_not_linked,omitempty"`
-	SecretsImported int      `json:"secrets_imported"`
+	SecretsImported    int      `json:"secrets_imported"`
 	// ImagesImported counts custom icon blobs landed (or matched to
 	// an existing content-addressed row).
 	ImagesImported int `json:"images_imported"`
