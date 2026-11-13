@@ -7383,6 +7383,9 @@
           {#if sum.creds_not_linked?.length}
             <li>Not linked (existing credentials the archive names): {sum.creds_not_linked.join(", ")}</li>
           {/if}
+          {#if sum.target_inherits_creds}
+            <li class="warn">The Import into folder passes a credential down: imported connections without their own use it, for the hosts this archive names</li>
+          {/if}
           {#if sum.host_changes?.length}
             <li class="warn">Overwrite changes the host of: {sum.host_changes.join("; ")} - each keeps its saved password unless the archive restores one</li>
           {/if}
