@@ -501,6 +501,15 @@ func Apply(
 				folderIDMap[f.ID] = existing.ID
 				continue
 			case ConflictOverwrite:
+				// Overwriting keeps the folder where it is, so whatever
+				// the archive adds beneath it inherits the local chain's
+				// credentials; same rule as skip.
+				if !opts.LinkExistingCredentials && folderHandsDownCreds(existing.ID, folderByID) {
+					sum.Warnings = append(sum.Warnings,
+						fmt.Sprintf("folder %s exists here and passes credentials down; imported as a new folder instead of overwriting it (turn on \"Link to existing credentials\" to overwrite)", existing.Name))
+					f.Name = f.Name + " (imported)"
+					break
+				}
 				sum.FoldersUpdated = append(sum.FoldersUpdated, f.Name)
 				folderIDMap[f.ID] = existing.ID
 				folderWritten[f.ID] = true
@@ -618,6 +627,18 @@ func Apply(
 				connIDMap[c.ID] = existing.ID
 				continue
 			case ConflictOverwrite:
+				// An overwrite that points a connection at another host
+				// while it keeps a saved password, its own credential
+				// references or a folder's inherited credential would
+				// send those to the archive's host. Without the link
+				// opt-in it is imported as a new connection instead.
+				if !opts.LinkExistingCredentials && existing.Hostname != c.Hostname &&
+					connCarriesCreds(existing, folderByID) {
+					sum.Warnings = append(sum.Warnings,
+						fmt.Sprintf("connection %s has credentials here and the archive changes its host; imported as a new connection instead of overwriting it (turn on \"Link to existing credentials\" to overwrite)", existing.Name))
+					c.Name = c.Name + " (imported)"
+					break
+				}
 				connPassEligible[c.ID] = true
 				sum.ConnsUpdated = append(sum.ConnsUpdated, c.Name)
 				if existing.Hostname != c.Hostname {
@@ -1146,4 +1167,24 @@ func folderHandsDownCreds(id string, folders map[string]*store.Folder) bool {
 		id = *f.ParentID
 	}
 	return false
+}
+
+// connCarriesCreds reports whether a local connection would use a credential
+// as it stands: a saved per-connection password, a credential reference of
+// its own, or one inherited from its folder chain.
+func connCarriesCreds(c *store.Connection, folders map[string]*store.Folder) bool {
+	if c.PasswordVaultKey != nil && *c.PasswordVaultKey != "" {
+		return true
+	}
+	found := false
+	remapAuthRefInSettings(c.Overrides, func(ref string) (string, bool) {
+		if ref != "" {
+			found = true
+		}
+		return ref, true
+	})
+	if found {
+		return true
+	}
+	return c.FolderID != nil && folderHandsDownCreds(*c.FolderID, folders)
 }
