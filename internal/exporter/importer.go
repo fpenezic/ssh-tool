@@ -632,18 +632,18 @@ func Apply(
 				// references or a folder's inherited credential would
 				// send those to the archive's host. Without the link
 				// opt-in it is imported as a new connection instead.
-				if !opts.LinkExistingCredentials && existing.Hostname != c.Hostname &&
+				if !opts.LinkExistingCredentials && destinationChanges(existing, &c) &&
 					connCarriesCreds(existing, folderByID) {
 					sum.Warnings = append(sum.Warnings,
-						fmt.Sprintf("connection %s has credentials here and the archive changes its host; imported as a new connection instead of overwriting it (turn on \"Link to existing credentials\" to overwrite)", existing.Name))
+						fmt.Sprintf("connection %s has credentials here and the archive changes where it connects; imported as a new connection instead of overwriting it (turn on \"Link to existing credentials\" to overwrite)", existing.Name))
 					c.Name = c.Name + " (imported)"
 					break
 				}
 				connPassEligible[c.ID] = true
 				sum.ConnsUpdated = append(sum.ConnsUpdated, c.Name)
-				if existing.Hostname != c.Hostname {
+				if destinationChanges(existing, &c) {
 					sum.HostChanges = append(sum.HostChanges,
-						fmt.Sprintf("%s: %s -> %s", existing.Name, existing.Hostname, c.Hostname))
+						fmt.Sprintf("%s: %s -> %s", existing.Name, connDest(existing.Hostname, existing.Overrides), connDest(c.Hostname, c.Overrides)))
 				}
 				if !opts.DryRun {
 					newFolderID := remapFolderID(c.FolderID, folderIDMap)
@@ -1173,8 +1173,10 @@ func folderHandsDownCreds(id string, folders map[string]*store.Folder) bool {
 // as it stands: a saved per-connection password, a credential reference of
 // its own, or one inherited from its folder chain.
 func connCarriesCreds(c *store.Connection, folders map[string]*store.Folder) bool {
-	if c.PasswordVaultKey != nil && *c.PasswordVaultKey != "" {
-		return true
+	for _, k := range []*string{c.PasswordVaultKey, c.VncPasswordVaultKey} {
+		if k != nil && *k != "" {
+			return true
+		}
 	}
 	found := false
 	remapAuthRefInSettings(c.Overrides, func(ref string) (string, bool) {
@@ -1187,4 +1189,27 @@ func connCarriesCreds(c *store.Connection, folders map[string]*store.Folder) boo
 		return true
 	}
 	return c.FolderID != nil && folderHandsDownCreds(*c.FolderID, folders)
+}
+
+// destinationChanges reports whether an overwrite points a connection at a
+// different endpoint: another hostname, or another SSH or VNC port on the
+// same host (a different service may answer there).
+func destinationChanges(existing *store.Connection, c *ArchiveConnection) bool {
+	return existing.Hostname != c.Hostname ||
+		!samePort(existing.Overrides.Port, c.Overrides.Port) ||
+		!samePort(existing.Overrides.VncPort, c.Overrides.VncPort)
+}
+
+func samePort(a, b *uint16) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func connDest(host string, o store.InheritableSettings) string {
+	if o.Port != nil {
+		return fmt.Sprintf("%s:%d", host, *o.Port)
+	}
+	return host
 }

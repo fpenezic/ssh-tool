@@ -301,3 +301,28 @@ func TestOverwriteDoesNotInheritLocalCredentials(t *testing.T) {
 		t.Fatalf("want exactly one imported 'added', got %d", addedN)
 	}
 }
+
+// A port change on the same host is a new destination too, and a saved VNC
+// password counts as a credential.
+func TestOverwriteDestinationIncludesPortAndVnc(t *testing.T) {
+	db := openTestDB(t)
+	port := uint16(22)
+	c, err := db.CreateConnection(store.NewConnection{Name: "box", Hostname: "box.example.com", Overrides: store.InheritableSettings{Port: &port}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetConnectionVncPasswordKey(c.ID, "vnc_pass:"+c.ID); err != nil {
+		t.Fatal(err)
+	}
+	arc, _ := Decode(`{"schema_version":1,"connections":[{"id":"` + c.ID + `","name":"box","hostname":"box.example.com","overrides":{"port":2222}}]}`)
+	if _, err := Apply(db, arc, ImportOptions{Conflict: ConflictOverwrite}, rejectSecrets); err != nil {
+		t.Fatal(err)
+	}
+	got, err := db.GetConnection(c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Overrides.Port == nil || *got.Overrides.Port != 22 {
+		t.Fatalf("connection with a saved VNC password was moved to another port: %v", got.Overrides.Port)
+	}
+}
