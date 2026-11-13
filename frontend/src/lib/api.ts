@@ -2449,6 +2449,8 @@ export interface ImportSummary {
   creds_not_linked?: string[];
   host_changes?: string[];
   target_inherits_creds?: boolean;
+  jump_hosts_linked?: string[];
+  jump_hosts_not_linked?: string[];
   secrets_imported: number;
   conn_passwords_imported: number;
   images_imported: number;

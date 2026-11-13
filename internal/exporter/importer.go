@@ -81,6 +81,12 @@ type ImportSummary struct {
 	// it. The target is the user's choice, so this is reported, not
 	// refused.
 	TargetInheritsCreds bool `json:"target_inherits_creds,omitempty"`
+	// JumpHostsLinked / JumpHostsNotLinked: hosts of yours (by name) that
+	// an imported jump chain goes through, which then authenticate with
+	// their saved credentials. Linked only with LinkExistingCredentials;
+	// otherwise the hop is cleared.
+	JumpHostsLinked    []string `json:"jump_hosts_linked,omitempty"`
+	JumpHostsNotLinked []string `json:"jump_hosts_not_linked,omitempty"`
 	SecretsImported int      `json:"secrets_imported"`
 	// ImagesImported counts custom icon blobs landed (or matched to
 	// an existing content-addressed row).
@@ -188,6 +194,10 @@ func Apply(
 	// overwrote - the ones whose jump-chain connection references get
 	// remapped once the connection ids are known.
 	folderWritten := map[string]bool{}
+	// skippedLocalFolder: archive folder ids skip mode mapped onto an
+	// existing local folder (its dynamic hosts keep local credentials).
+	skippedLocalFolder := map[string]bool{}
+	folderReusedLocal := func(id string) bool { return skippedLocalFolder[id] }
 	credIDMap := map[string]string{}
 
 	// resolveAuthRef maps an archive credential id to its final local id.
@@ -265,6 +275,60 @@ func Apply(
 			continue
 		}
 		remapAuthRefInSettings(c.Overrides, probe)
+	}
+	// Jump chains that go through one of the user's own hosts (a local
+	// connection or dynamic folder the import does not create).
+	archiveConn := map[string]bool{}
+	for _, c := range arc.Connections {
+		archiveConn[c.ID] = true
+	}
+	archiveFolder := map[string]bool{}
+	for _, f := range arc.Folders {
+		archiveFolder[f.ID] = true
+	}
+	skipMode := opts.Conflict == ConflictSkip || opts.Conflict == ""
+	jumpSeen := map[string]bool{}
+	probeJump := func(j *store.JumpHostOverride) {
+		if j == nil {
+			return
+		}
+		for cur := j.Chain; cur != nil; cur = cur.Via {
+			if cur.ConnectionID == nil || *cur.ConnectionID == "" {
+				continue
+			}
+			id := *cur.ConnectionID
+			name := ""
+			if fid, _, ok := resolver.ParseDynRef(id); ok {
+				if lf, here := folderByID[fid]; here && (!archiveFolder[fid] || skipMode) {
+					name = lf.Name + " (inventory host)"
+				}
+			} else if lc, here := connByID[id]; here && (!archiveConn[id] || skipMode) {
+				name = lc.Name
+			}
+			if name == "" || jumpSeen[id] {
+				continue
+			}
+			jumpSeen[id] = true
+			if opts.LinkExistingCredentials {
+				sum.JumpHostsLinked = append(sum.JumpHostsLinked, name)
+			} else {
+				sum.JumpHostsNotLinked = append(sum.JumpHostsNotLinked, name)
+			}
+		}
+	}
+	for _, f := range arc.Folders {
+		if _, exists := folderByID[f.ID]; written(exists) {
+			probeJump(f.Settings.JumpHost)
+		}
+	}
+	for _, c := range arc.Connections {
+		if _, exists := connByID[c.ID]; written(exists) {
+			probeJump(c.Overrides.JumpHost)
+		}
+	}
+	if n := len(sum.JumpHostsNotLinked); n > 0 {
+		sum.Warnings = append(sum.Warnings,
+			fmt.Sprintf("%d jump host(s) of yours are not used (%s): the archive's hops through them are cleared; turn on \"Link to existing credentials\" only for an archive you trust", n, strings.Join(sum.JumpHostsNotLinked, ", ")))
 	}
 	// Collect dropped (dangling) auth_refs into one deduped warning so the
 	// user sees that some connections fell back to inheriting a credential.
@@ -513,6 +577,7 @@ func Apply(
 				}
 				sum.FoldersSkipped = append(sum.FoldersSkipped, f.Name)
 				folderIDMap[f.ID] = existing.ID
+				skippedLocalFolder[f.ID] = true
 				continue
 			case ConflictOverwrite:
 				// Overwriting keeps the folder where it is, so whatever
@@ -637,12 +702,17 @@ func Apply(
 	// Skipped connections keep their existing row untouched, so an
 	// archived password override must NOT be written onto them.
 	connPassEligible := map[string]bool{}
+	// skippedLocalConn: archive ids that skip mode mapped onto a local
+	// connection left as it was. A jump hop naming one of those uses the
+	// local row's saved credentials, so it is a link like any other.
+	skippedLocalConn := map[string]bool{}
 	for _, c := range arc.Connections {
 		if existing, exists := connByID[c.ID]; exists {
 			switch opts.Conflict {
 			case ConflictSkip, "":
 				sum.ConnsSkipped = append(sum.ConnsSkipped, c.Name)
 				connIDMap[c.ID] = existing.ID
+				skippedLocalConn[c.ID] = true
 				continue
 			case ConflictOverwrite:
 				// Without the link opt-in, Overwrite only touches rows
@@ -759,18 +829,24 @@ func Apply(
 		remapRef := func(id string) (string, bool) {
 			// An inventory host reference names its dynamic folder, whose
 			// id the folder pass may have changed; the provider id stays.
+			// A hop through one of the user's own hosts authenticates
+			// with that host's saved credentials: allowed only with the
+			// link opt-in, otherwise the hop is cleared (and reported).
 			if fid, ext, ok := resolver.ParseDynRef(id); ok {
-				if nf, ok := folderIDMap[fid]; ok {
+				if nf, ok := folderIDMap[fid]; ok && !folderReusedLocal(fid) {
 					return resolver.DynRef(nf, ext), true
 				}
 				_, here := folderByID[fid]
-				return id, here
+				return id, here && opts.LinkExistingCredentials
 			}
 			if nid, ok := connIDMap[id]; ok {
+				if skippedLocalConn[id] && !opts.LinkExistingCredentials {
+					return "", false
+				}
 				return nid, true
 			}
 			_, here := connByID[id]
-			return id, here
+			return id, here && opts.LinkExistingCredentials
 		}
 		for _, f := range arc.Folders {
 			if !folderWritten[f.ID] || !chainHasConnRef(f.Settings.JumpHost) {
@@ -779,7 +855,7 @@ func Apply(
 			settings, _ := remapAuthRefInSettings(f.Settings, resolveAuthRef)
 			missing := remapJumpConnRefs(settings.JumpHost, remapRef)
 			for _, m := range missing {
-				sum.Warnings = append(sum.Warnings, fmt.Sprintf("folder %s: jump host connection %s is not in the archive", f.Name, m))
+				sum.Warnings = append(sum.Warnings, fmt.Sprintf("folder %s: jump host %s is not in the archive or is one of your hosts not linked - hop cleared", f.Name, m))
 			}
 			if _, err := db.UpdateFolder(store.UpdateFolder{ID: folderIDMap[f.ID], Settings: &settings}); err != nil {
 				sum.Warnings = append(sum.Warnings, fmt.Sprintf("folder %s: jump host remap: %v", f.Name, err))
@@ -793,7 +869,7 @@ func Apply(
 			overrides, _ := remapAuthRefInSettings(c.Overrides, resolveAuthRef)
 			missing := remapJumpConnRefs(overrides.JumpHost, remapRef)
 			for _, m := range missing {
-				sum.Warnings = append(sum.Warnings, fmt.Sprintf("conn %s: jump host connection %s is not in the archive", c.Name, m))
+				sum.Warnings = append(sum.Warnings, fmt.Sprintf("conn %s: jump host %s is not in the archive or is one of your hosts not linked - hop cleared", c.Name, m))
 			}
 			if _, err := db.UpdateConnection(store.UpdateConnection{ID: newID, Overrides: &overrides}); err != nil {
 				sum.Warnings = append(sum.Warnings, fmt.Sprintf("conn %s: jump host remap: %v", c.Name, err))
@@ -1020,7 +1096,11 @@ func remapJumpConnRefs(j *store.JumpHostOverride, remap func(id string) (string,
 		}
 		nid, ok := remap(*cur.ConnectionID)
 		if !ok {
+			// Cleared rather than kept dangling: a kept id would still
+			// resolve at connect time if a row by that id exists here.
 			missing = append(missing, *cur.ConnectionID)
+			cur.ConnectionID = nil
+			continue
 		}
 		cur.ConnectionID = &nid
 	}

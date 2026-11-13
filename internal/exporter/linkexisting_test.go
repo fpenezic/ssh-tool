@@ -400,3 +400,52 @@ func TestTargetFolderInheritanceReported(t *testing.T) {
 		t.Fatal("target folder credential inheritance not reported")
 	}
 }
+
+// A jump hop through one of the user's own connections authenticates with
+// that connection's saved credentials: kept only with the link opt-in.
+func TestJumpThroughLocalHostNeedsLink(t *testing.T) {
+	db := openTestDB(t)
+	bastion, err := db.CreateConnection(store.NewConnection{Name: "bastion", Hostname: "bastion.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := `{"schema_version":1,"connections":[{"id":"cx","name":"inner","hostname":"inner.example.com",
+"overrides":{"jump_host":{"kind":"chain","chain":{"connection_id":"` + bastion.ID + `"}}}}]}`
+	arc, _ := Decode(text)
+	dry, err := Apply(db, arc, ImportOptions{DryRun: true}, rejectSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dry.JumpHostsNotLinked) != 1 || dry.JumpHostsNotLinked[0] != "bastion" {
+		t.Fatalf("dry run should list the local jump host as not linked, got %v", dry.JumpHostsNotLinked)
+	}
+	if _, err := Apply(db, arc, ImportOptions{}, rejectSecrets); err != nil {
+		t.Fatal(err)
+	}
+	hopOf := func(d *store.DB) *string {
+		conns, _ := d.ListConnections(nil)
+		for _, c := range conns {
+			if c.Name == "inner" && c.Overrides.JumpHost != nil && c.Overrides.JumpHost.Chain != nil {
+				return c.Overrides.JumpHost.Chain.ConnectionID
+			}
+		}
+		return nil
+	}
+	if h := hopOf(db); h != nil {
+		t.Fatalf("hop through a local host kept without linking: %q", *h)
+	}
+
+	db2 := openTestDB(t)
+	b2, _ := db2.CreateConnection(store.NewConnection{Name: "bastion", Hostname: "bastion.example.com"})
+	arc2, _ := Decode(strings.ReplaceAll(text, bastion.ID, b2.ID))
+	sum, err := Apply(db2, arc2, ImportOptions{LinkExistingCredentials: true}, rejectSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := hopOf(db2); h == nil || *h != b2.ID {
+		t.Fatalf("opt-in should keep the hop, got %v", h)
+	}
+	if len(sum.JumpHostsLinked) != 1 {
+		t.Fatalf("linked jump host not reported: %v", sum.JumpHostsLinked)
+	}
+}

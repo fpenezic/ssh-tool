@@ -7367,6 +7367,8 @@
     </div>
     {#if importLinkExisting && !importPreview && importText}
       <p class="hint inline">Run a dry run first - it lists which of your existing credentials this import would use.</p>
+    {:else if importTargetFolderId && !importPreview && importText}
+      <p class="hint inline">A dry run shows whether the Import into folder passes a credential down to the imported hosts.</p>
     {/if}
     {#if importError}<div class="err">{importError}</div>{/if}
     {#if importPreview}
@@ -7382,6 +7384,12 @@
           {/if}
           {#if sum.creds_not_linked?.length}
             <li>Not linked (existing credentials the archive names): {sum.creds_not_linked.join(", ")}</li>
+          {/if}
+          {#if sum.jump_hosts_linked?.length}
+            <li class="warn">Jump hosts of yours used by imported hops: {sum.jump_hosts_linked.join(", ")}</li>
+          {/if}
+          {#if sum.jump_hosts_not_linked?.length}
+            <li>Jump hosts of yours not used (hops cleared): {sum.jump_hosts_not_linked.join(", ")}</li>
           {/if}
           {#if sum.target_inherits_creds}
             <li class="warn">The Import into folder passes a credential down: imported connections without their own use it, for the hosts this archive names</li>
@@ -7414,6 +7422,9 @@
           {/if}
           {#if sum.creds_not_linked?.length}
             <li>Not linked (existing credentials the archive named): {sum.creds_not_linked.join(", ")}</li>
+          {/if}
+          {#if sum.jump_hosts_linked?.length}
+            <li class="warn">Jump hosts of yours now used: {sum.jump_hosts_linked.join(", ")}</li>
           {/if}
           {#if sum.host_changes?.length}
             <li class="warn">Host changed by overwrite: {sum.host_changes.join("; ")}</li>
@@ -7803,9 +7814,7 @@
       Let a colleague watch - or, with your explicit approval, type into - a
       live session from a plain web browser, no ssh-tool needed on their side.
       Off by default. When on, right-click a tab and choose "Share to browser".
-      The connection is encrypted; you confirm a short word-code with your guest
-      to be sure no one is intercepting it, and every guest waits for you to
-      allow them in.
+      The connection is encrypted with a self-signed certificate: your guest checks its SHA-256 in the browser against the fingerprint you send them (that detects interception), and you allow only the request whose join code they read to you (that tells guests apart). Every guest waits for you to allow them in.
     </p>
 
     <fieldset class="check-cards">
@@ -7830,14 +7839,11 @@
       <div style="margin-top:1rem">
         <h3>Certificate fingerprint</h3>
         <p class="hint">
-          Read these words to your guest (by phone or chat) so they can confirm
-          they're really connected to you. They stay the same across shares and
-          restarts - a change means either you regenerated the certificate or
-          something is wrong.
+          Send the SHA-256 value below to your guest (by phone or chat); they check it in their browser's certificate details. It stays the same across shares and restarts - a change means either you regenerated the certificate or something is wrong.
         </p>
         {#if shareFingerprint}
-          <div class="fp-readout">{shareFingerprint}</div>
-          <div class="hint" style="font-family:monospace">{shareFingerprintShort}</div>
+          <div class="fp-readout">SHA-256 {shareFingerprintShort}</div>
+          <div class="hint">Words: {shareFingerprint}</div>
         {:else}
           <button onclick={loadShareFingerprint}>Show fingerprint</button>
         {/if}
