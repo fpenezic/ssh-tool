@@ -99,6 +99,7 @@
   let shareAuditOutput = $state<boolean>(false);
   let shareFingerprint = $state<string>("");
   let shareFingerprintShort = $state<string>("");
+  let shareFingerprintHex = $state<string>("");
   let mcpReadonlyExtra = $state<string>("");
   let vaultSidecarStrength = $state<"strong" | "weak" | "none" | "">("");
   let mcpExePath = $state<string>("");
@@ -635,6 +636,8 @@
       const fp = await api.shareFingerprint();
       shareFingerprint = fp.Words;
       shareFingerprintShort = fp.Short;
+      // Grouped like a browser's certificate viewer shows it.
+      shareFingerprintHex = (fp.Hex.toUpperCase().match(/../g) ?? []).join(":");
     } catch (e) { console.warn("share fingerprint:", e); }
   }
 
@@ -649,6 +652,7 @@
       const fp = await api.shareRegenerateCert();
       shareFingerprint = fp.Words;
       shareFingerprintShort = fp.Short;
+      shareFingerprintHex = (fp.Hex.toUpperCase().match(/../g) ?? []).join(":");
       toast.ok("Certificate regenerated");
     } catch (e) { toast.err("Regenerate failed: " + errMsg(e)); }
   }
@@ -7843,6 +7847,7 @@
         </p>
         {#if shareFingerprint}
           <div class="fp-readout">SHA-256 {shareFingerprintShort}</div>
+          <div class="hint" style="font-family:monospace; overflow-wrap:anywhere">{shareFingerprintHex}</div>
           <div class="hint">Words: {shareFingerprint}</div>
         {:else}
           <button onclick={loadShareFingerprint}>Show fingerprint</button>
