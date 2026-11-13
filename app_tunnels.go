@@ -452,9 +452,10 @@ func (a *App) tunnelConnectLoop(connectionID string, e *tunnelEntry, oldSessionI
 			}
 		}
 
-		// Every try but the first of a start by hand is a retry nobody is
-		// watching: its VPN login is held once one did not finish.
-		res, err := a.sshConnectWith(connectionID, "", "", "", true, try > 0 || waitFirst)
+		// Only the first try of a start by hand has the user at the screen;
+		// an automatic start (patient) and every retry are background: their
+		// VPN login is held once one did not finish.
+		res, err := a.sshConnectWith(connectionID, "", "", "", true, patient || try > 0 || waitFirst)
 
 		a.tunnelsMu.Lock()
 		if !a.tunnelCurrent(connectionID, e) {

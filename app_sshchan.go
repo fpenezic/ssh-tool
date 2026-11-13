@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 
 	gossh "golang.org/x/crypto/ssh"
 
@@ -21,11 +22,16 @@ import (
 // connection's host, with the credentials a terminal connect would use.
 // kind prefixes the errors and the audit action ("kafka.ssh_connect").
 func (a *App) sshChanConnect(kind, connectionID string, conn *store.Connection, resolved *store.ResolvedSettings, lazy *sshchan.LazySSH) func(context.Context) (*gossh.Client, func(), error) {
+	// The first connect is the tab the user just opened: it may log the VPN
+	// in, and lifts a hold. Every later one is the tab's client connecting
+	// again on its own after a drop (the Kafka client every few seconds),
+	// with nobody at the screen: a VPN login it starts is held once one did
+	// not finish (app_loginhold.go).
+	var tried atomic.Bool
 	return func(ctx context.Context) (*gossh.Client, func(), error) {
-		// The tab's client connects again on its own after a drop (the
-		// Kafka client every few seconds), with nobody at the screen: a VPN
-		// login it starts is held once it did not finish (app_loginhold.go).
-		ctx = withBackgroundStart(ctx)
+		if !tried.CompareAndSwap(false, true) {
+			ctx = withBackgroundStart(ctx)
+		}
 		settings := *resolved
 		settings.TunnelOnly = true
 		if conn.PasswordVaultKey != nil && a.vault.Status().Kind == creds.StatusUnlocked {
@@ -77,9 +83,13 @@ func (sshChanNullSink) EmitDebug(string, string)                {}
 // connection's network profile. The direct transport of the Kafka and
 // Database tabs.
 func (a *App) viaDial(settings *store.ResolvedSettings) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	// Like the SSH transport above: the first dial is the tab being opened,
+	// the rest are the client redialing by itself.
+	var tried atomic.Bool
 	return func(ctx context.Context, _, addr string) (net.Conn, error) {
-		// Like the SSH transport above: the client redials by itself.
-		ctx = withBackgroundStart(ctx)
+		if !tried.CompareAndSwap(false, true) {
+			ctx = withBackgroundStart(ctx)
+		}
 		c, cleanup, err := sshlayer.DialVia(ctx, a.db, a.vault, settings, addr,
 			a.makeHostKeyCallback(), a.makeAlgoLookup(), a.connectTimeout())
 		if err != nil {
