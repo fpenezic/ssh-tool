@@ -3334,13 +3334,15 @@ func (a *App) SshCancelConnect(key string) bool {
 }
 
 func (a *App) sshConnectInternal(connectionID, overrideCredentialID, overrideUsername, overridePassword string) (*SshConnectResult, error) {
-	return a.sshConnectWith(connectionID, overrideCredentialID, overrideUsername, overridePassword, false)
+	return a.sshConnectWith(connectionID, overrideCredentialID, overrideUsername, overridePassword, false, false)
 }
 
 // sshConnectWith is the saved-connection connect. tunnel opens the session
 // without a shell for the tunnel manager (app_tunnels.go); every other caller
 // wants a terminal, including one opened on a tunnel-only connection.
-func (a *App) sshConnectWith(connectionID, overrideCredentialID, overrideUsername, overridePassword string, tunnel bool) (*SshConnectResult, error) {
+// background marks a connect nobody started by hand (a tunnel's retry): a VPN
+// login it needs is held once one did not finish (app_loginhold.go).
+func (a *App) sshConnectWith(connectionID, overrideCredentialID, overrideUsername, overridePassword string, tunnel, background bool) (*SshConnectResult, error) {
 	settings, err := resolver.ResolveConnection(a.db, connectionID)
 	if err != nil {
 		return nil, err
@@ -3428,7 +3430,11 @@ func (a *App) sshConnectWith(connectionID, overrideCredentialID, overrideUsernam
 	// Cancelable connect context so SshCancelConnect(connectionID) can abort
 	// a hang on opkssh OIDC login (closed browser / bad config). Keyed on
 	// connectionID. Deregistered when this connect returns.
-	ctx, cancel := context.WithCancel(context.Background())
+	base := context.Background()
+	if background {
+		base = withBackgroundStart(base)
+	}
+	ctx, cancel := context.WithCancel(base)
 	cancelKey := connectionID
 	if tunnel {
 		// A terminal and the tunnel of one connection can connect at the

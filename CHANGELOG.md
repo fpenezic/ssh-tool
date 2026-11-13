@@ -9,7 +9,7 @@ while Wails v3 was a prerelease upstream.
 
 ## [Unreleased]
 
-Security fixes from an audit of the LLM (MCP) access, archive import and session sharing: each closes a way an untrusted input got more authority than the UI promised.
+Security fixes from an audit of the LLM (MCP) access, archive import and session sharing: each closes a way an untrusted input got more authority than the UI promised. Also: a VPN that needs a one-time code no longer asks for it again and again while you are away.
 
 ### LLM (MCP) access
 - **type_into_terminal never presses Enter**: text with a newline or any other control character is now refused. Before, a carriage return in the text submitted the command at once, so the "review it and press Enter yourself" step could be skipped, and under *read + run (YOLO)* that also bypassed the prompt for dangerous commands.
@@ -19,6 +19,9 @@ Security fixes from an audit of the LLM (MCP) access, archive import and session
 - **Archive credential references no longer bind to your existing credentials by default**: an archive could name the id of a credential already in your store and point a connection or a Proxmox dynamic folder it adds at it, sending that password or API token to a host of its choosing. Such references (login, jump host, TOTP, Kafka and database credentials) are now dropped, jump hops through one of your hosts are cleared, an archive folder matching one of yours that passes a credential down is imported as a new folder instead of merged, and Overwrite leaves alone every connection or folder that holds or passes down credentials (importing the archive's version as a new row), unless you tick the new **Link to existing credentials** option, meant for re-importing your own export. The dry run also warns when the **Import into** folder passes a credential down to the imported connections. With the option on, Apply needs a current dry run. The dry run lists which credentials would be linked or were left out.
 - The dry run now lists every connection an **Overwrite** import points at a different host or port, since such a row keeps its saved password unless the archive restores one; warnings are shown in the preview, not only after applying.
 - Argon2 parameters read from an archive or a vault file are range-checked before deriving a key. Zero values used to fail the import and a huge memory value could crash the app.
+
+### VPN
+- **No more login prompts every two minutes while you are away**: when a VPN session that needs a typed one-time code (or a push) expired with a Kafka or Database tab open through it, the tab kept reconnecting in the background and every try started a new VPN login with a new prompt, all night long. A tunnel's own reconnects did the same. Now a login started in the background that does not finish puts the profile on hold, as the app proxy already did: background connections through it fail at once, you get one notice, and everything resumes when you connect the profile or open a connection through it.
 
 ### Session sharing
 - **Join code per connection**: the guest page shows a fresh code for each connection, and the approval prompt shows the code of that request, so you allow only the request your guest reads to you. The four words compared before were the certificate fingerprint, the same for everyone holding the link, so they could not tell your guest apart from someone else. The share dialog now gives the certificate SHA-256 to send your guest, who checks it in the browser's certificate details; the words on the guest page cannot detect an intercepted connection by themselves, and the user guide no longer says they do.
