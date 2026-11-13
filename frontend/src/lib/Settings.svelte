@@ -1670,13 +1670,20 @@
     return parts.join(" / ") || "(missing folder)";
   });
 
+  function importInputsKey(): string {
+    return JSON.stringify([importText, importConflict, importLinkExisting, importTargetFolderId, importPassphrase]);
+  }
+
   async function importDryRun() {
     importBusy = true;
     importError = null;
     importPreview = null;
     importDone = null;
+    // The inputs this dry run describes; a response for inputs that have
+    // changed meanwhile is dropped instead of shown as current.
+    const key = importInputsKey();
     try {
-      importPreview = await api.importArchive({
+      const res = await api.importArchive({
         text: importText,
         conflict: importConflict,
         dry_run: true,
@@ -1684,6 +1691,7 @@
         target_folder_id: importTargetFolderId ?? "",
         link_existing_credentials: importLinkExisting,
       });
+      if (key === importInputsKey()) importPreview = res;
     } catch (e: any) {
       importError = errMsg(e);
     } finally {
@@ -7332,7 +7340,7 @@
     </label>
     <fieldset class="check-cards">
       <label class:active={importLinkExisting}>
-        <input type="checkbox" bind:checked={importLinkExisting} />
+        <input type="checkbox" bind:checked={importLinkExisting} disabled={importBusy} />
         <div>
           <div class="mode-name">Link to existing credentials</div>
           <div class="mode-desc">

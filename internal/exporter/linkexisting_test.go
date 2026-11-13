@@ -191,10 +191,18 @@ func TestImportDoesNotNestUnderCredentialFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	conns, _ := db.ListConnections(nil)
+	n := 0
 	for _, c := range conns {
-		if c.Name == "new-host" && c.FolderID != nil && *c.FolderID == prod.ID {
+		if c.Name != "new-host" {
+			continue
+		}
+		n++
+		if c.FolderID != nil && *c.FolderID == prod.ID {
 			t.Fatal("new connection landed in the local folder that hands down a credential")
 		}
+	}
+	if n != 1 {
+		t.Fatalf("want exactly one imported new-host, got %d", n)
 	}
 
 	// Opt-in: merged into the existing folder.
@@ -241,5 +249,55 @@ func TestDecryptRejectsShortCipherBeforeKDF(t *testing.T) {
 	b := EncryptedSecretBlock{KDF: "argon2id", Salt: "AAAAAAAAAAAAAAAAAAAAAA==", MemoryKiB: 64, Iterations: 1, Parallel: 1, CipherBy: map[string]string{"c1": "AAAA"}}
 	if _, err := DecryptSecret("pw", &b, "c1"); err == nil || !strings.Contains(err.Error(), "too short") {
 		t.Fatalf("want cipher too short, got %v", err)
+	}
+}
+
+// Overwrite follows the same rule: a local folder under a credential-bearing
+// parent is not overwritten in place, and a connection that carries
+// credentials is not retargeted to the archive's host, unless linking is on.
+func TestOverwriteDoesNotInheritLocalCredentials(t *testing.T) {
+	db := openTestDB(t)
+	pw, _ := db.CreateCredential(store.NewCredential{Name: "local-pw", Kind: store.CredPassword, StorageMode: store.StorageManaged})
+	ref := pw.ID
+	parent, err := db.CreateFolder(store.NewFolder{Name: "Prod", Settings: store.InheritableSettings{AuthRef: &ref}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := db.CreateFolder(store.NewFolder{Name: "Web", ParentID: &parent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := db.CreateConnection(store.NewConnection{Name: "db1", Hostname: "db1.example.com", FolderID: &child.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	arc, err := Decode(`{"schema_version":1,
+"folders":[{"id":"` + child.ID + `","name":"Web","settings":{}}],
+"connections":[
+ {"id":"cx","name":"added","hostname":"added.example.com","folder_id":"` + child.ID + `","overrides":{}},
+ {"id":"` + conn.ID + `","name":"db1","hostname":"other.example.com","overrides":{}}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(db, arc, ImportOptions{Conflict: ConflictOverwrite}, rejectSecrets); err != nil {
+		t.Fatal(err)
+	}
+	conns, _ := db.ListConnections(nil)
+	addedN := 0
+	for _, c := range conns {
+		switch {
+		case c.Name == "added":
+			addedN++
+			if c.FolderID != nil && *c.FolderID == child.ID {
+				t.Fatal("new connection landed under a folder that inherits a local credential")
+			}
+		case c.ID == conn.ID:
+			if c.Hostname != "db1.example.com" {
+				t.Fatalf("connection under a credential folder was retargeted to %q", c.Hostname)
+			}
+		}
+	}
+	if addedN != 1 {
+		t.Fatalf("want exactly one imported 'added', got %d", addedN)
 	}
 }
