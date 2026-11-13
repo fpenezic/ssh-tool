@@ -423,12 +423,21 @@ func TestJumpThroughLocalHostNeedsLink(t *testing.T) {
 		t.Fatal(err)
 	}
 	hopOf := func(d *store.DB) *string {
-		conns, _ := d.ListConnections(nil)
-		for _, c := range conns {
-			if c.Name == "inner" && c.Overrides.JumpHost != nil && c.Overrides.JumpHost.Chain != nil {
-				return c.Overrides.JumpHost.Chain.ConnectionID
-			}
+		t.Helper()
+		conns, err := d.ListConnections(nil)
+		if err != nil {
+			t.Fatal(err)
 		}
+		for _, c := range conns {
+			if c.Name != "inner" {
+				continue
+			}
+			if c.Overrides.JumpHost == nil || c.Overrides.JumpHost.Chain == nil {
+				t.Fatal("imported connection lost its jump chain")
+			}
+			return c.Overrides.JumpHost.Chain.ConnectionID
+		}
+		t.Fatal("imported connection missing")
 		return nil
 	}
 	if h := hopOf(db); h != nil {
@@ -447,5 +456,29 @@ func TestJumpThroughLocalHostNeedsLink(t *testing.T) {
 	}
 	if len(sum.JumpHostsLinked) != 1 {
 		t.Fatalf("linked jump host not reported: %v", sum.JumpHostsLinked)
+	}
+}
+
+// A skip-mode local folder whose jump chain goes through a saved connection
+// is not reused as a parent: children would inherit that hop's credentials.
+func TestImportDoesNotNestUnderJumpFolder(t *testing.T) {
+	db := openTestDB(t)
+	bastion, _ := db.CreateConnection(store.NewConnection{Name: "bastion", Hostname: "b.example.com"})
+	bid := bastion.ID
+	jf, err := db.CreateFolder(store.NewFolder{Name: "Behind", Settings: store.InheritableSettings{
+		JumpHost: &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{ConnectionID: &bid}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	arc, _ := Decode(`{"schema_version":1,"folders":[{"id":"` + jf.ID + `","name":"Behind","settings":{}}],
+"connections":[{"id":"cx","name":"x","hostname":"x.example.com","folder_id":"` + jf.ID + `"}]}`)
+	if _, err := Apply(db, arc, ImportOptions{}, rejectSecrets); err != nil {
+		t.Fatal(err)
+	}
+	conns, _ := db.ListConnections(nil)
+	for _, c := range conns {
+		if c.Name == "x" && c.FolderID != nil && *c.FolderID == jf.ID {
+			t.Fatal("new connection landed under a local folder whose jump chain uses a saved host")
+		}
 	}
 }

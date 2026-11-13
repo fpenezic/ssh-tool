@@ -1257,7 +1257,9 @@ func folderHandsDownCreds(id string, folders map[string]*store.Folder) bool {
 			}
 			return ref, true
 		})
-		if found {
+		// A jump chain through a saved connection logs that hop in with
+		// the connection's credentials, which children inherit too.
+		if found || chainHasConnRef(f.Settings.JumpHost) {
 			return true
 		}
 		if f.ParentID == nil {
@@ -1284,7 +1286,7 @@ func connCarriesCreds(c *store.Connection, folders map[string]*store.Folder) boo
 		}
 		return ref, true
 	})
-	if found {
+	if found || chainHasConnRef(c.Overrides.JumpHost) {
 		return true
 	}
 	return c.FolderID != nil && folderHandsDownCreds(*c.FolderID, folders)
