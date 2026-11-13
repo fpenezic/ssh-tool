@@ -34,18 +34,17 @@ func linkExistingFixture(t *testing.T) (*store.DB, *Archive, string, string) {
 
 func importedState(t *testing.T, db *store.DB) (authRef string, dynToken string) {
 	t.Helper()
-	conns, _ := db.ListConnections(nil)
-	for _, c := range conns {
-		if c.Name == "db" && c.Overrides.AuthRef != nil {
-			authRef = *c.Overrides.AuthRef
-		}
+	if c := onlyConn(t, db, "db"); c.Overrides.AuthRef != nil {
+		authRef = *c.Overrides.AuthRef
 	}
-	dyns, _ := db.ListDynamicFolders()
-	for _, d := range dyns {
-		if v, _ := d.Config["api_token_credential_id"].(string); v != "" {
-			dynToken = v
-		}
+	dyns, err := db.ListDynamicFolders()
+	if err != nil {
+		t.Fatal(err)
 	}
+	if len(dyns) != 1 {
+		t.Fatalf("want exactly one imported dynamic folder, got %d", len(dyns))
+	}
+	dynToken, _ = dyns[0].Config["api_token_credential_id"].(string)
 	return
 }
 
@@ -145,13 +144,7 @@ func TestImportOtherCredentialRefsNotLinked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conns, _ := db.ListConnections(nil)
-	var o store.InheritableSettings
-	for _, c := range conns {
-		if c.Name == "k" {
-			o = c.Overrides
-		}
-	}
+	o := onlyConn(t, db, "k").Overrides
 	if o.OTPRef != nil || o.KafkaCredentialRef != nil || o.DbCredentialRef != nil {
 		t.Fatalf("refs kept: otp=%v kafka=%v db=%v", o.OTPRef, o.KafkaCredentialRef, o.DbCredentialRef)
 	}
@@ -190,7 +183,10 @@ func TestImportDoesNotNestUnderCredentialFolder(t *testing.T) {
 	if _, err := Apply(db, arc, ImportOptions{}, rejectSecrets); err != nil {
 		t.Fatal(err)
 	}
-	conns, _ := db.ListConnections(nil)
+	conns, err := db.ListConnections(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	n := 0
 	for _, c := range conns {
 		if c.Name != "new-host" {
@@ -214,14 +210,7 @@ func TestImportDoesNotNestUnderCredentialFolder(t *testing.T) {
 	if _, err := Apply(db2, arc2, ImportOptions{LinkExistingCredentials: true}, rejectSecrets); err != nil {
 		t.Fatal(err)
 	}
-	conns2, _ := db2.ListConnections(nil)
-	found := false
-	for _, c := range conns2 {
-		if c.Name == "new-host" && c.FolderID != nil && *c.FolderID == prod2.ID {
-			found = true
-		}
-	}
-	if !found {
+	if c := onlyConn(t, db2, "new-host"); c.FolderID == nil || *c.FolderID != prod2.ID {
 		t.Fatal("with linking on, the connection should merge into the existing folder")
 	}
 }
@@ -282,7 +271,10 @@ func TestOverwriteDoesNotInheritLocalCredentials(t *testing.T) {
 	if _, err := Apply(db, arc, ImportOptions{Conflict: ConflictOverwrite}, rejectSecrets); err != nil {
 		t.Fatal(err)
 	}
-	conns, _ := db.ListConnections(nil)
+	conns, err := db.ListConnections(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	addedN := 0
 	for _, c := range conns {
 		switch {
@@ -349,7 +341,10 @@ func TestOverwriteSkipsFolderWithCredentialSubtree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, _ := db.GetFolder(f.ID)
+	got, err := db.GetFolder(f.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got.Settings.VncPort == nil || *got.Settings.VncPort != 5900 {
 		t.Fatalf("folder above a connection with a saved VNC password was overwritten: %v", got.Settings.VncPort)
 	}
@@ -373,7 +368,10 @@ func TestOverwriteSkipsConnectionWithCredentials(t *testing.T) {
 	if _, err := Apply(db, arc, ImportOptions{Conflict: ConflictOverwrite}, rejectSecrets); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := db.GetConnection(c.ID)
+	got, err := db.GetConnection(c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got.Name != "app" {
 		t.Fatalf("connection with a saved password was overwritten (name %q)", got.Name)
 	}
@@ -381,7 +379,7 @@ func TestOverwriteSkipsConnectionWithCredentials(t *testing.T) {
 	if _, err := Apply(db, arc, ImportOptions{Conflict: ConflictOverwrite, LinkExistingCredentials: true}, rejectSecrets); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := db.GetConnection(c.ID); got.Name != "renamed" {
+	if got, err := db.GetConnection(c.ID); err != nil || got.Name != "renamed" {
 		t.Fatalf("opt-in overwrite did not apply (name %q)", got.Name)
 	}
 }
@@ -475,10 +473,28 @@ func TestImportDoesNotNestUnderJumpFolder(t *testing.T) {
 	if _, err := Apply(db, arc, ImportOptions{}, rejectSecrets); err != nil {
 		t.Fatal(err)
 	}
-	conns, _ := db.ListConnections(nil)
+	if c := onlyConn(t, db, "x"); c.FolderID != nil && *c.FolderID == jf.ID {
+		t.Fatal("new connection landed under a local folder whose jump chain uses a saved host")
+	}
+}
+
+// onlyConn returns the single connection with this name, failing the test on
+// a query error or when there is not exactly one, so an import that dropped
+// the row cannot make an assertion pass by default.
+func onlyConn(t *testing.T, db *store.DB, name string) store.Connection {
+	t.Helper()
+	conns, err := db.ListConnections(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []store.Connection
 	for _, c := range conns {
-		if c.Name == "x" && c.FolderID != nil && *c.FolderID == jf.ID {
-			t.Fatal("new connection landed under a local folder whose jump chain uses a saved host")
+		if c.Name == name {
+			out = append(out, c)
 		}
 	}
+	if len(out) != 1 {
+		t.Fatalf("want exactly one connection %q, got %d", name, len(out))
+	}
+	return out[0]
 }
