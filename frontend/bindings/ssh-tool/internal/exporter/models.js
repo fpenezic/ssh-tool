@@ -107,11 +107,41 @@ export class ImportSummary {
             /**
              * HostChanges lists "name: old -> new" for connections an overwrite
              * import points at a different hostname. Such a row keeps its saved
-             * per-connection password, so the preview has to show it.
+             * per-connection password unless the archive restores one, so the
+             * preview has to show it.
              * @member
              * @type {string[] | undefined}
              */
             this["host_changes"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * TargetInheritsCreds: the chosen Import-into folder (or a folder above
+             * it) sets a credential, so imported rows without their own inherit
+             * it. The target is the user's choice, so this is reported, not
+             * refused.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["target_inherits_creds"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * JumpHostsLinked / JumpHostsNotLinked: hosts of yours (by name) that
+             * an imported jump chain goes through, which then authenticate with
+             * their saved credentials. Linked only with LinkExistingCredentials;
+             * otherwise the hop is cleared.
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["jump_hosts_linked"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["jump_hosts_not_linked"] = undefined;
         }
         if (!("secrets_imported" in $$source)) {
             /**
@@ -176,7 +206,9 @@ export class ImportSummary {
         const $$createField10_0 = $$createType0;
         const $$createField11_0 = $$createType0;
         const $$createField12_0 = $$createType0;
-        const $$createField17_0 = $$createType0;
+        const $$createField14_0 = $$createType0;
+        const $$createField15_0 = $$createType0;
+        const $$createField20_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("folders_created" in $$parsedSource) {
             $$parsedSource["folders_created"] = $$createField0_0($$parsedSource["folders_created"]);
@@ -217,8 +249,14 @@ export class ImportSummary {
         if ("host_changes" in $$parsedSource) {
             $$parsedSource["host_changes"] = $$createField12_0($$parsedSource["host_changes"]);
         }
+        if ("jump_hosts_linked" in $$parsedSource) {
+            $$parsedSource["jump_hosts_linked"] = $$createField14_0($$parsedSource["jump_hosts_linked"]);
+        }
+        if ("jump_hosts_not_linked" in $$parsedSource) {
+            $$parsedSource["jump_hosts_not_linked"] = $$createField15_0($$parsedSource["jump_hosts_not_linked"]);
+        }
         if ("warnings" in $$parsedSource) {
-            $$parsedSource["warnings"] = $$createField17_0($$parsedSource["warnings"]);
+            $$parsedSource["warnings"] = $$createField20_0($$parsedSource["warnings"]);
         }
         return new ImportSummary(/** @type {Partial<ImportSummary>} */($$parsedSource));
     }
