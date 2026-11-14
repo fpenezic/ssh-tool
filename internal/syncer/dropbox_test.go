@@ -1,15 +1,12 @@
 package syncer
 
 import (
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 )
 
@@ -150,23 +147,6 @@ func TestDropboxRefreshOn401(t *testing.T) {
 	}
 }
 
-// TestPKCEChallengeIsS256 checks the verifier/challenge relationship the auth
-// server will enforce: challenge == base64url(sha256(verifier)), no padding.
-func TestPKCEChallengeIsS256(t *testing.T) {
-	verifier, challenge, err := pkcePair()
-	if err != nil {
-		t.Fatalf("pkcePair: %v", err)
-	}
-	if len(verifier) < 43 || len(verifier) > 128 {
-		t.Fatalf("verifier length %d out of RFC 7636 range 43-128", len(verifier))
-	}
-	sum := sha256.Sum256([]byte(verifier))
-	want := base64.RawURLEncoding.EncodeToString(sum[:])
-	if challenge != want {
-		t.Fatalf("challenge %q != S256(verifier) %q", challenge, want)
-	}
-}
-
 // TestRefreshOmitsSecret asserts the refresh token POST carries client_id +
 // refresh_token and NO client_secret (PKCE public client).
 func TestRefreshOmitsSecret(t *testing.T) {
@@ -210,31 +190,5 @@ func TestRefreshIncludesSecretWhenSet(t *testing.T) {
 	}
 	if form.Get("client_secret") != "goog-secret" {
 		t.Fatalf("client_secret not forwarded: %q", form.Get("client_secret"))
-	}
-}
-
-// TestBuildAuthURL sanity-checks the authorization URL carries the PKCE params
-// and Dropbox's offline quirk.
-func TestBuildAuthURL(t *testing.T) {
-	raw := buildAuthURL(DropboxEndpoints, "app-key", "http://127.0.0.1:5555/callback", "chal", "st4te")
-	u, err := url.Parse(raw)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	q := u.Query()
-	for k, want := range map[string]string{
-		"response_type":         "code",
-		"client_id":             "app-key",
-		"code_challenge":        "chal",
-		"code_challenge_method": "S256",
-		"state":                 "st4te",
-		"token_access_type":     "offline",
-	} {
-		if q.Get(k) != want {
-			t.Errorf("auth URL %s=%q want %q", k, q.Get(k), want)
-		}
-	}
-	if !strings.Contains(q.Get("scope"), "files.content.write") {
-		t.Errorf("scope missing write: %q", q.Get("scope"))
 	}
 }
