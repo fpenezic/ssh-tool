@@ -156,6 +156,9 @@ func TestMigration28MovesSensitiveIntoOverrides(t *testing.T) {
 	_, err = db.Exec(`
 		CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 		INSERT INTO schema_meta (key, value) VALUES ('version', '27');
+		-- Later migrations (29) alter these; a real v27 DB has them.
+		CREATE TABLE folders (id TEXT PRIMARY KEY);
+		CREATE TABLE port_forwards (id TEXT PRIMARY KEY);
 		CREATE TABLE connections (id TEXT PRIMARY KEY, overrides_json TEXT NOT NULL DEFAULT '{}', sensitive INTEGER NOT NULL DEFAULT 0);
 		INSERT INTO connections VALUES ('a', '{"port":2222}', 1), ('b', '', 1), ('c', '{"port":22}', 0),
 		    ('d', 'null', 1), ('e', '[]', 1);`)

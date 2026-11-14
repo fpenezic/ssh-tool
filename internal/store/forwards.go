@@ -40,6 +40,15 @@ type PortForward struct {
 	// forwards read the app-wide browser_persistent_profile setting when
 	// this is empty - isolation is the point of a SOCKS proxy.
 	BrowserMode string `json:"browser_mode"`
+	// Disabled keeps a forward from starting at all (automatically or by
+	// hand). Mostly for catalog forwards, which the user cannot delete.
+	Disabled bool `json:"disabled"`
+	// CatalogID / RemoteUUID / RemoteRev / CatalogState: set on rows a
+	// catalog owns (see catalogSchemaSQL). All empty on local rows.
+	CatalogID    *string `json:"catalog_id,omitempty"`
+	RemoteUUID   *string `json:"remote_uuid,omitempty"`
+	RemoteRev    int64   `json:"remote_rev,omitempty"`
+	CatalogState string  `json:"catalog_state,omitempty"`
 }
 
 type NewPortForward struct {
@@ -82,7 +91,8 @@ func (d *DB) CreatePortForward(in NewPortForward) (*PortForward, error) {
 func (d *DB) GetPortForward(id string) (*PortForward, error) {
 	row := d.conn.QueryRow(
 		`SELECT id, connection_id, kind, local_addr, local_port,
-		        remote_host, remote_port, auto_start, description, bookmarks, browser_mode
+		        remote_host, remote_port, auto_start, description, bookmarks, browser_mode,
+		        disabled, catalog_id, remote_uuid, remote_rev, catalog_state
 		 FROM port_forwards WHERE id = ?`, id,
 	)
 	return scanPortForward(row)
@@ -91,7 +101,8 @@ func (d *DB) GetPortForward(id string) (*PortForward, error) {
 func (d *DB) ListPortForwards(connectionID string) ([]PortForward, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, connection_id, kind, local_addr, local_port,
-		        remote_host, remote_port, auto_start, description, bookmarks, browser_mode
+		        remote_host, remote_port, auto_start, description, bookmarks, browser_mode,
+		        disabled, catalog_id, remote_uuid, remote_rev, catalog_state
 		 FROM port_forwards WHERE connection_id = ? ORDER BY description`,
 		connectionID,
 	)
@@ -117,7 +128,8 @@ func (d *DB) ListPortForwards(connectionID string) ([]PortForward, error) {
 func (d *DB) ListAllPortForwards() ([]PortForward, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, connection_id, kind, local_addr, local_port,
-		        remote_host, remote_port, auto_start, description, bookmarks, browser_mode
+		        remote_host, remote_port, auto_start, description, bookmarks, browser_mode,
+		        disabled, catalog_id, remote_uuid, remote_rev, catalog_state
 		 FROM port_forwards ORDER BY connection_id, description`,
 	)
 	if err != nil {
@@ -229,6 +241,19 @@ func (d *DB) SetPortForwardBookmarks(id string, bookmarks []ProxyBookmark) error
 	return nil
 }
 
+// SetPortForwardDisabled switches a forward off (or back on). A disabled
+// forward never starts, automatically or by hand.
+func (d *DB) SetPortForwardDisabled(id string, disabled bool) error {
+	res, err := d.conn.Exec("UPDATE port_forwards SET disabled=? WHERE id=?", boolToInt(disabled), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (d *DB) DeletePortForward(id string) error {
 	res, err := d.conn.Exec("DELETE FROM port_forwards WHERE id=?", id)
 	if err != nil {
@@ -250,9 +275,13 @@ func scanPortForward(s scanner) (*PortForward, error) {
 		descRaw       sql.NullString
 		bookmarksJSON sql.NullString
 		browserMode   sql.NullString
+		disabled      int64
+		catalogID     sql.NullString
+		remoteUUID    sql.NullString
 	)
 	err := s.Scan(
 		&f.ID, &f.ConnectionID, &f.Kind, &la, &lp, &rh, &rp, &auto, &descRaw, &bookmarksJSON, &browserMode,
+		&disabled, &catalogID, &remoteUUID, &f.RemoteRev, &f.CatalogState,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -277,6 +306,13 @@ func scanPortForward(s scanner) (*PortForward, error) {
 		f.RemotePort = &v
 	}
 	f.AutoStart = auto != 0
+	f.Disabled = disabled != 0
+	if catalogID.Valid {
+		f.CatalogID = &catalogID.String
+	}
+	if remoteUUID.Valid {
+		f.RemoteUUID = &remoteUUID.String
+	}
 	if descRaw.Valid {
 		f.Description = strings.TrimSpace(descRaw.String)
 	}

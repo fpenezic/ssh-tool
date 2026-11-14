@@ -541,7 +541,208 @@ var migrations = []struct {
 		// (SQLite cannot drop it cheaply) and is written as 0 from now on.
 		foldLegacySensitiveSQL,
 	},
+	{
+		29,
+		// Catalog client tables and the guard on catalog-owned rows. See
+		// catalogSchemaSQL for the reasons.
+		catalogSchemaSQL,
+	},
 }
+
+// catalogSchemaSQL is migration 29: a shared connection catalog the app
+// stays attached to.
+//
+// Catalog records are materialised as ordinary folders / connections /
+// port_forwards rows so the resolver and everything that dials sees plain
+// rows with local ids. Each such row carries:
+//   - catalog_id: which configured catalog (NULL = a local row)
+//   - remote_uuid / remote_rev: the record's identity and revision there
+//   - catalog_json: the server record verbatim, for later translation
+//   - catalog_state: empty while the catalog holds it, "removed" when it left
+//     the catalog but carried the user's local data and was kept
+//
+// A catalog's top-level folder (its "root") has catalog_id set and
+// remote_uuid NULL. The local ids stay separate from the remote uuids, and
+// upserts find a row by (catalog_id, remote_uuid), so workspaces, pins and
+// jump references that point at a local id survive a resync.
+//
+// port_forwards.disabled lets a user switch off a catalog forward they
+// cannot delete (its local port is taken here, they never use it).
+//
+// The triggers are the safety net for every write path in the app: a
+// catalog-owned column on a catalog row changes only while the catalog
+// engine holds the catalog_writer marker (WithCatalogWriter inserts it
+// inside its transaction and removes it before commit, so it is never
+// visible outside that transaction). Local columns - favourite, open
+// hidden, stored passwords, recency, a forward's auto start, disabled,
+// bookmarks, browser mode - stay writable. Nothing local may be created
+// inside a catalog folder, and a local row cannot be moved into one.
+// RAISE messages start with "catalog_owned:" (IsCatalogOwned).
+const catalogSchemaSQL = `
+ALTER TABLE folders ADD COLUMN catalog_id TEXT;
+ALTER TABLE folders ADD COLUMN remote_uuid TEXT;
+ALTER TABLE folders ADD COLUMN remote_rev INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE folders ADD COLUMN catalog_json TEXT NOT NULL DEFAULT '';
+ALTER TABLE folders ADD COLUMN catalog_state TEXT NOT NULL DEFAULT '';
+ALTER TABLE connections ADD COLUMN catalog_id TEXT;
+ALTER TABLE connections ADD COLUMN remote_uuid TEXT;
+ALTER TABLE connections ADD COLUMN remote_rev INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE connections ADD COLUMN catalog_json TEXT NOT NULL DEFAULT '';
+ALTER TABLE connections ADD COLUMN catalog_state TEXT NOT NULL DEFAULT '';
+ALTER TABLE port_forwards ADD COLUMN catalog_id TEXT;
+ALTER TABLE port_forwards ADD COLUMN remote_uuid TEXT;
+ALTER TABLE port_forwards ADD COLUMN remote_rev INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE port_forwards ADD COLUMN catalog_json TEXT NOT NULL DEFAULT '';
+ALTER TABLE port_forwards ADD COLUMN catalog_state TEXT NOT NULL DEFAULT '';
+ALTER TABLE port_forwards ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0;
+CREATE UNIQUE INDEX idx_folders_remote ON folders(catalog_id, remote_uuid) WHERE remote_uuid IS NOT NULL;
+CREATE UNIQUE INDEX idx_connections_remote ON connections(catalog_id, remote_uuid) WHERE remote_uuid IS NOT NULL;
+CREATE UNIQUE INDEX idx_port_forwards_remote ON port_forwards(catalog_id, remote_uuid) WHERE remote_uuid IS NOT NULL;
+
+CREATE TABLE catalogs (
+    id                TEXT PRIMARY KEY,
+    name              TEXT NOT NULL,
+    base_url          TEXT NOT NULL,
+    server_name       TEXT NOT NULL DEFAULT '',
+    protocol_revision INTEGER NOT NULL DEFAULT 0,
+    subject           TEXT NOT NULL DEFAULT '',
+    account_name      TEXT NOT NULL DEFAULT '',
+    root_folder_id    TEXT NOT NULL,
+    cursor            TEXT NOT NULL DEFAULT '',
+    last_sync_at      INTEGER,
+    last_error        TEXT NOT NULL DEFAULT '',
+    sync_interval_sec INTEGER NOT NULL DEFAULT 300,
+    created_at        INTEGER NOT NULL,
+    updated_at        INTEGER NOT NULL
+);
+
+CREATE TABLE catalog_slots (
+    catalog_id        TEXT NOT NULL,
+    uuid              TEXT NOT NULL,
+    rev               INTEGER NOT NULL DEFAULT 0,
+    folder_uuid       TEXT NOT NULL DEFAULT '',
+    type              TEXT NOT NULL,
+    name              TEXT NOT NULL DEFAULT '',
+    kind              TEXT NOT NULL DEFAULT '',
+    backend           TEXT NOT NULL DEFAULT '',
+    external_ref_json TEXT NOT NULL DEFAULT '',
+    doc_md            TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (catalog_id, uuid)
+);
+
+CREATE TABLE catalog_bindings (
+    catalog_id TEXT NOT NULL,
+    slot_uuid  TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    target_id  TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (catalog_id, slot_uuid)
+);
+
+CREATE TABLE catalog_overrides (
+    catalog_id  TEXT NOT NULL,
+    remote_uuid TEXT NOT NULL,
+    kind        TEXT NOT NULL,
+    json        TEXT NOT NULL DEFAULT '{}',
+    updated_at  INTEGER NOT NULL,
+    PRIMARY KEY (catalog_id, remote_uuid)
+);
+
+CREATE TABLE catalog_writer (
+    id INTEGER PRIMARY KEY CHECK (id = 1)
+);
+
+CREATE TRIGGER catalog_guard_folders_insert BEFORE INSERT ON folders
+WHEN NOT EXISTS (SELECT 1 FROM catalog_writer)
+ AND (NEW.catalog_id IS NOT NULL OR NEW.remote_uuid IS NOT NULL
+      OR EXISTS (SELECT 1 FROM folders p WHERE p.id = NEW.parent_id AND p.catalog_id IS NOT NULL))
+BEGIN
+    SELECT RAISE(ABORT, 'catalog_owned: a catalog folder holds only catalog records');
+END;
+
+CREATE TRIGGER catalog_guard_folders_update BEFORE UPDATE ON folders
+WHEN NOT EXISTS (SELECT 1 FROM catalog_writer)
+ AND ((OLD.catalog_id IS NOT NULL
+       AND (NEW.parent_id IS NOT OLD.parent_id OR NEW.name IS NOT OLD.name
+            OR NEW.sort_order IS NOT OLD.sort_order OR NEW.settings_json IS NOT OLD.settings_json
+            OR NEW.icon_image_id IS NOT OLD.icon_image_id OR NEW.icon_name IS NOT OLD.icon_name
+            OR NEW.icon_color IS NOT OLD.icon_color))
+      OR NEW.catalog_id IS NOT OLD.catalog_id OR NEW.remote_uuid IS NOT OLD.remote_uuid
+      OR NEW.remote_rev IS NOT OLD.remote_rev OR NEW.catalog_json IS NOT OLD.catalog_json
+      OR NEW.catalog_state IS NOT OLD.catalog_state
+      OR (NEW.parent_id IS NOT OLD.parent_id
+          AND EXISTS (SELECT 1 FROM folders p WHERE p.id = NEW.parent_id AND p.catalog_id IS NOT NULL)))
+BEGIN
+    SELECT RAISE(ABORT, 'catalog_owned: this folder belongs to a catalog and is read-only');
+END;
+
+CREATE TRIGGER catalog_guard_folders_delete BEFORE DELETE ON folders
+WHEN NOT EXISTS (SELECT 1 FROM catalog_writer) AND OLD.catalog_id IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'catalog_owned: this folder belongs to a catalog and cannot be deleted here');
+END;
+
+CREATE TRIGGER catalog_guard_connections_insert BEFORE INSERT ON connections
+WHEN NOT EXISTS (SELECT 1 FROM catalog_writer)
+ AND (NEW.catalog_id IS NOT NULL OR NEW.remote_uuid IS NOT NULL
+      OR EXISTS (SELECT 1 FROM folders p WHERE p.id = NEW.folder_id AND p.catalog_id IS NOT NULL))
+BEGIN
+    SELECT RAISE(ABORT, 'catalog_owned: a catalog folder holds only catalog records');
+END;
+
+CREATE TRIGGER catalog_guard_connections_update BEFORE UPDATE ON connections
+WHEN NOT EXISTS (SELECT 1 FROM catalog_writer)
+ AND ((OLD.catalog_id IS NOT NULL
+       AND (NEW.folder_id IS NOT OLD.folder_id OR NEW.name IS NOT OLD.name
+            OR NEW.hostname IS NOT OLD.hostname OR NEW.sort_order IS NOT OLD.sort_order
+            OR NEW.overrides_json IS NOT OLD.overrides_json OR NEW.tags_json IS NOT OLD.tags_json
+            OR NEW.notes IS NOT OLD.notes OR NEW.protocol IS NOT OLD.protocol
+            OR NEW.local_shell_kind IS NOT OLD.local_shell_kind
+            OR NEW.local_shell_dir IS NOT OLD.local_shell_dir
+            OR NEW.icon_image_id IS NOT OLD.icon_image_id OR NEW.icon_name IS NOT OLD.icon_name
+            OR NEW.icon_color IS NOT OLD.icon_color))
+      OR NEW.catalog_id IS NOT OLD.catalog_id OR NEW.remote_uuid IS NOT OLD.remote_uuid
+      OR NEW.remote_rev IS NOT OLD.remote_rev OR NEW.catalog_json IS NOT OLD.catalog_json
+      OR NEW.catalog_state IS NOT OLD.catalog_state
+      OR (NEW.folder_id IS NOT OLD.folder_id
+          AND EXISTS (SELECT 1 FROM folders p WHERE p.id = NEW.folder_id AND p.catalog_id IS NOT NULL)))
+BEGIN
+    SELECT RAISE(ABORT, 'catalog_owned: this connection belongs to a catalog and is read-only');
+END;
+
+CREATE TRIGGER catalog_guard_connections_delete BEFORE DELETE ON connections
+WHEN NOT EXISTS (SELECT 1 FROM catalog_writer) AND OLD.catalog_id IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'catalog_owned: this connection belongs to a catalog and cannot be deleted here');
+END;
+
+CREATE TRIGGER catalog_guard_port_forwards_insert BEFORE INSERT ON port_forwards
+WHEN NOT EXISTS (SELECT 1 FROM catalog_writer)
+ AND (NEW.catalog_id IS NOT NULL OR NEW.remote_uuid IS NOT NULL)
+BEGIN
+    SELECT RAISE(ABORT, 'catalog_owned: only the catalog creates catalog forwards');
+END;
+
+CREATE TRIGGER catalog_guard_port_forwards_update BEFORE UPDATE ON port_forwards
+WHEN NOT EXISTS (SELECT 1 FROM catalog_writer)
+ AND ((OLD.remote_uuid IS NOT NULL
+       AND (NEW.connection_id IS NOT OLD.connection_id OR NEW.kind IS NOT OLD.kind
+            OR NEW.local_addr IS NOT OLD.local_addr OR NEW.local_port IS NOT OLD.local_port
+            OR NEW.remote_host IS NOT OLD.remote_host OR NEW.remote_port IS NOT OLD.remote_port
+            OR NEW.description IS NOT OLD.description))
+      OR NEW.catalog_id IS NOT OLD.catalog_id OR NEW.remote_uuid IS NOT OLD.remote_uuid
+      OR NEW.remote_rev IS NOT OLD.remote_rev OR NEW.catalog_json IS NOT OLD.catalog_json
+      OR NEW.catalog_state IS NOT OLD.catalog_state)
+BEGIN
+    SELECT RAISE(ABORT, 'catalog_owned: this forward belongs to a catalog; only its local settings can change');
+END;
+
+CREATE TRIGGER catalog_guard_port_forwards_delete BEFORE DELETE ON port_forwards
+WHEN NOT EXISTS (SELECT 1 FROM catalog_writer) AND OLD.remote_uuid IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'catalog_owned: this forward belongs to a catalog and cannot be deleted here');
+END;
+`
 
 // LatestSchemaVersion is the version a freshly-migrated DB lands on.
 // Exposed so the UI (Settings → About) can display the current
@@ -598,13 +799,43 @@ func splitSQLStatements(sqlText string) []string {
 	}
 	parts := strings.Split(b.String(), ";")
 	out := make([]string, 0, len(parts))
+	// A CREATE TRIGGER body holds its own semicolons; keep joining
+	// fragments until the statement reaches its closing END.
+	var trigger strings.Builder
 	for _, p := range parts {
+		if trigger.Len() > 0 {
+			trigger.WriteString(";")
+			trigger.WriteString(p)
+			if isTriggerEnd(p) {
+				out = append(out, trigger.String())
+				trigger.Reset()
+			}
+			continue
+		}
 		if strings.TrimSpace(p) == "" {
+			continue
+		}
+		if isTriggerStart(p) {
+			trigger.WriteString(p)
 			continue
 		}
 		out = append(out, p)
 	}
+	if trigger.Len() > 0 {
+		out = append(out, trigger.String())
+	}
 	return out
+}
+
+func isTriggerStart(stmt string) bool {
+	f := strings.Fields(strings.ToUpper(stmt))
+	return len(f) >= 2 && f[0] == "CREATE" && f[1] == "TRIGGER"
+}
+
+// isTriggerEnd: the fragment after the body's last statement is the bare
+// END keyword (the split removed the ";" that follows it).
+func isTriggerEnd(fragment string) bool {
+	return strings.EqualFold(strings.TrimSpace(fragment), "END")
 }
 
 func runMigrations(db *sql.DB) error {

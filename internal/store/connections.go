@@ -64,7 +64,8 @@ func (d *DB) GetConnection(id string) (*Connection, error) {
 	row := d.conn.QueryRow(
 		`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
 		        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
-		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir
+		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir,
+		        catalog_id, remote_uuid, remote_rev, catalog_state
 		 FROM connections WHERE id = ?`, id,
 	)
 	return scanConnection(row)
@@ -79,7 +80,8 @@ func (d *DB) ListConnections(folderID *string) ([]Connection, error) {
 		rows, err = d.conn.Query(
 			`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
 			        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
-			        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir
+			        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir,
+		        catalog_id, remote_uuid, remote_rev, catalog_state
 			 FROM connections WHERE folder_id = ? ORDER BY sort_order, name`,
 			*folderID,
 		)
@@ -87,7 +89,8 @@ func (d *DB) ListConnections(folderID *string) ([]Connection, error) {
 		rows, err = d.conn.Query(
 			`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
 			        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
-			        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir
+			        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir,
+		        catalog_id, remote_uuid, remote_rev, catalog_state
 			 FROM connections ORDER BY sort_order, name`,
 		)
 	}
@@ -433,7 +436,8 @@ func (d *DB) RecentConnections(limit int) ([]Connection, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
 		        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
-		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir
+		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir,
+		        catalog_id, remote_uuid, remote_rev, catalog_state
 		 FROM connections
 		 WHERE last_used_at IS NOT NULL
 		 ORDER BY last_used_at DESC
@@ -460,7 +464,8 @@ func (d *DB) FavoriteConnections() ([]Connection, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, folder_id, name, hostname, sort_order, overrides_json, tags_json,
 		        notes, favorite, sensitive, open_hidden, icon_image_id, icon_name, icon_color, last_used_at, created_at, updated_at,
-		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir
+		        password_vault_key, vnc_password_vault_key, protocol, local_shell_kind, local_shell_dir,
+		        catalog_id, remote_uuid, remote_rev, catalog_state
 		 FROM connections
 		 WHERE favorite = 1
 		 ORDER BY name`,
@@ -501,11 +506,14 @@ func scanConnection(s scanner) (*Connection, error) {
 		protocol     sql.NullString
 		localKind    sql.NullString
 		localDir     sql.NullString
+		catalogID    sql.NullString
+		remoteUUID   sql.NullString
 	)
 	err := s.Scan(
 		&c.ID, &folderID, &c.Name, &c.Hostname, &c.SortOrder,
 		&overridesRaw, &tagsRaw, &notes, &fav, &sens, &openHidden, &iconID, &iconName, &iconColor, &lastUsed,
 		&c.CreatedAt, &c.UpdatedAt, &passVaultKey, &vncVaultKey, &protocol, &localKind, &localDir,
+		&catalogID, &remoteUUID, &c.RemoteRev, &c.CatalogState,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -541,6 +549,12 @@ func scanConnection(s scanner) (*Connection, error) {
 	}
 	if localDir.Valid {
 		c.LocalShellDir = &localDir.String
+	}
+	if catalogID.Valid {
+		c.CatalogID = &catalogID.String
+	}
+	if remoteUUID.Valid {
+		c.RemoteUUID = &remoteUUID.String
 	}
 	if err := json.Unmarshal([]byte(overridesRaw), &c.Overrides); err != nil {
 		return nil, fmt.Errorf("unmarshal overrides: %w", err)
