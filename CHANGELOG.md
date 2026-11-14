@@ -23,6 +23,9 @@ Security fixes from an audit of the LLM (MCP) access, archive import and session
 ### VPN
 - **No more login prompts every two minutes while you are away**: when a VPN session that needs a typed one-time code (or a push) expired with a Kafka or Database tab open through it, the tab kept reconnecting in the background and every try started a new VPN login with a new prompt, all night long. A tunnel's own reconnects did the same. Now a login started in the background that does not finish puts the profile on hold, as the app proxy already did: background connections through it fail at once, you get one notice, and everything resumes when you connect the profile or open a connection through it.
 
+### Plugins
+- **The plugin update toast opens cards with the Update button**: with Settings already open on Network profiles, clicking the toast showed the cards read before the update came out, without the button, until you left the section and came back. The cards are now read again when the toast opens them and whenever the background check finds a new plugin release.
+
 ### Session sharing
 - **Join code per connection**: the guest page shows a fresh code for each connection, and the approval prompt shows the code of that request, so you allow only the request your guest reads to you. The four words compared before were the certificate fingerprint, the same for everyone holding the link, so they could not tell your guest apart from someone else. The share dialog now gives the certificate SHA-256 to send your guest, who checks it in the browser's certificate details; the words on the guest page cannot detect an intercepted connection by themselves, and the user guide no longer says they do.
 

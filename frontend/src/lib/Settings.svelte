@@ -1974,6 +1974,18 @@
     }
   }
 
+  // The background check (updateCheck, every 6 h) found other plugin
+  // updates than the cards show: read them again, so the Update button
+  // appears without leaving the section.
+  $effect(() => {
+    const key = updateCheck.pluginUpdates.map((u) => `${u.name}@${u.latest}`).join(",");
+    untrack(() => {
+      if (activeSection !== "network") return;
+      const shown = plugins.filter((p) => p.installed && p.update_available && p.latest).map((p) => `${p.name}@${p.latest}`).join(",");
+      if (key !== shown) void refreshPlugins();
+    });
+  });
+
   async function refreshPlugins() {
     try {
       plugins = (await api.pluginsStatus()) ?? [];
@@ -3680,6 +3692,11 @@
     const resolved = resolveSection(sec);
     if (resolved) {
       pinApplied = true;
+      // Already on this section (Settings stays mounted), the section
+      // effects do not run again: a "plugin update" toast would open
+      // cards read before the update was published, without the Update
+      // button. Read them again.
+      if (resolved === "network" && activeSection === "network") untrack(() => refreshPlugins());
       activeSection = resolved;
       // Persist the concrete section id (keepass/bitwarden/infisical
       // resolve to "external"); restore re-derives the tab from it.
