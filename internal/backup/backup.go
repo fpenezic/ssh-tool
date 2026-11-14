@@ -205,6 +205,34 @@ func Create(destPath, storeDBPath, vaultEncPath, passphrase, appVersion string) 
 // next sql.Open.
 const PendingDir = "pending-restore"
 
+// StageCheck, when set, vets the store of a snapshot before Restore stages
+// it for a restart-time swap; a non-nil error refuses the restore and
+// nothing is staged. The app wires it to refuse a snapshot from an older
+// version that would replace this machine's catalog rows with plain
+// copies (store.DemotedCatalogCopies). The path is a temporary file that
+// is removed afterwards.
+var StageCheck func(storeSnapshotPath string) error
+
+func checkStage(storeBytes []byte) error {
+	if StageCheck == nil {
+		return nil
+	}
+	f, err := os.CreateTemp("", "ssh-tool-stage-check-*.db")
+	if err != nil {
+		return err
+	}
+	path := f.Name()
+	defer os.Remove(path)
+	_, werr := f.Write(storeBytes)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		return werr
+	}
+	return StageCheck(path)
+}
+
 // Restore decrypts srcPath with passphrase, verifies checksums, snapshots
 // the current live store.db + vault.enc into <dataDir>/backups/pre-restore-
 // <timestamp>/, and stages the new files in <dataDir>/pending-restore/.
@@ -232,6 +260,9 @@ func Restore(srcPath, passphrase, storeDBPath, vaultEncPath string) error {
 	}
 	if sha256hex(vaultBytes) != env.VaultSHA256 {
 		return errors.New("backup: vault checksum mismatch")
+	}
+	if err := checkStage(storeBytes); err != nil {
+		return err
 	}
 
 	dataDir := filepath.Dir(storeDBPath)

@@ -550,6 +550,20 @@ func (a *App) initialise() {
 
 	a.db = db
 	a.vault = vault
+	// A restart-time restore (cold sync pull, backup restore) of a
+	// snapshot written by an app without catalog support would replace
+	// this machine's catalog rows with that app's plain copies of them.
+	backup.StageCheck = func(path string) error {
+		n, err := db.DemotedCatalogCopies(path)
+		if err != nil {
+			log.Printf("restore: catalog check: %v", err)
+			return nil
+		}
+		if n > 0 {
+			return store.ErrSnapshotDemotesCatalog
+		}
+		return nil
+	}
 	if appliedRestore {
 		// Mark the just-applied profile as the synced baseline so the
 		// auto-sync loop doesn't push it straight back out.

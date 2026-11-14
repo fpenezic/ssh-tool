@@ -85,9 +85,28 @@ func (d *DB) MirrorFrom(srcPath string) error {
 		return fmt.Errorf("mirror: %w", err)
 	}
 
+	// A snapshot from an app that predates the catalog schema carries
+	// this machine's catalog rows as plain local copies (its mirror
+	// dropped the catalog columns) and none of the catalog tables.
+	// Mirroring it as usual would demote every catalog row and wipe the
+	// attachment, bindings and local layers. See legacyCatalogMirror.
+	var legacy *legacyCatalogMirror
+	if !sourceHasCatalogSchema(src) {
+		if legacy, err = newLegacyCatalogMirror(tx); err != nil {
+			return fmt.Errorf("mirror: %w", err)
+		}
+	}
+
 	// Delete children first.
 	for i := len(order) - 1; i >= 0; i-- {
 		t := order[i]
+		if legacy != nil {
+			if done, err := legacy.clear(tx, t); err != nil {
+				return fmt.Errorf("mirror: clear %s: %w", t, err)
+			} else if done {
+				continue
+			}
+		}
 		if t == "app_settings" {
 			// Preserve machine-local keys; clear the rest.
 			if _, err := tx.Exec(
@@ -104,8 +123,20 @@ func (d *DB) MirrorFrom(srcPath string) error {
 
 	// Copy each table from the source.
 	for _, t := range order {
-		if err := copyTable(tx, src, t); err != nil {
+		var hook rowHook
+		if legacy != nil {
+			if legacy.keepsTable(t) {
+				continue
+			}
+			hook = legacy.hook(t)
+		}
+		if err := copyTable(tx, src, t, hook); err != nil {
 			return fmt.Errorf("mirror: copy %s: %w", t, err)
+		}
+	}
+	if legacy != nil {
+		if err := legacy.finish(tx); err != nil {
+			return fmt.Errorf("mirror: %w", err)
 		}
 	}
 	// A snapshot from a version before schema 28 marks sensitive
@@ -162,7 +193,11 @@ func machineLocalSettingsArgs() []any {
 // the live transaction. Column list is read from the source so the
 // copy is schema-shape agnostic. app_settings skips the machine-local
 // keys so a pulled profile can't clobber this machine's sync config.
-func copyTable(tx *sql.Tx, src *sql.DB, table string) error {
+// rowHook sees each source row before it is inserted; it may change vals
+// in place, and returning false skips the row.
+type rowHook func(cols []string, vals []any) bool
+
+func copyTable(tx *sql.Tx, src *sql.DB, table string, hook rowHook) error {
 	srcCols, err := tableColumns(src, table)
 	if err != nil {
 		return err
@@ -220,6 +255,9 @@ func copyTable(tx *sql.Tx, src *sql.DB, table string) error {
 			if k, _ := vals[keyIdx].(string); isMachineLocalSetting(k) {
 				continue // don't import another machine's local setting
 			}
+		}
+		if hook != nil && !hook(cols, vals) {
+			continue
 		}
 		if _, err := tx.Exec(insert, vals...); err != nil {
 			return err
