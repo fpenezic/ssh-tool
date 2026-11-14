@@ -52,13 +52,19 @@ func DBLookup(db *store.DB) ConnLookup {
 
 // ResolveWith is pure: same inputs -> same outputs. Used by tests exhaustively.
 func ResolveWith(conn store.Connection, folders []store.Folder) store.ResolvedSettings {
-	chain := ancestorChain(conn.FolderID, folders)
+	return finalize(EffectiveOverrides(conn, folders), conn.Hostname)
+}
+
+// EffectiveOverrides is what a connection inherits from its folders merged
+// with its own overrides, before defaults are filled in: the overrides it
+// would need to behave the same way outside those folders (a catalog
+// connection kept as a local one).
+func EffectiveOverrides(conn store.Connection, folders []store.Folder) store.InheritableSettings {
 	var merged store.InheritableSettings
-	for _, f := range chain {
+	for _, f := range ancestorChain(conn.FolderID, folders) {
 		merged = mergeSettings(merged, f.Settings)
 	}
-	merged = mergeSettings(merged, conn.Overrides)
-	return finalize(merged, conn.Hostname)
+	return mergeSettings(merged, conn.Overrides)
 }
 
 // ancestorChain walks from `start` up to root, then reverses so the returned
