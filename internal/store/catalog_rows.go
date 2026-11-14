@@ -490,3 +490,143 @@ func (d *DB) CatalogFolderDepthTx(tx *sql.Tx, id string) (int, error) {
 	}
 	return depth, nil
 }
+
+// CatalogRowRaw is one catalog row as materialisation reads it: the stored
+// server record and the current materialised value (settings_json for a
+// folder, overrides_json for a connection, local_port for a forward).
+type CatalogRowRaw struct {
+	Kind       string
+	ID         string
+	RemoteUUID string
+	RawJSON    string
+	Current    string
+	LocalPort  *int64
+}
+
+// CatalogRowsRawTx lists every catalog row of a catalog (removed ones
+// included: they keep resolving until the user decides).
+func (d *DB) CatalogRowsRawTx(tx *sql.Tx, catalogID string) ([]CatalogRowRaw, error) {
+	var out []CatalogRowRaw
+	for _, q := range []struct{ kind, sql string }{
+		{"folders", `SELECT id, remote_uuid, catalog_json, settings_json, NULL FROM folders WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
+		{"connections", `SELECT id, remote_uuid, catalog_json, overrides_json, NULL FROM connections WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
+		{"forwards", `SELECT id, remote_uuid, catalog_json, '', local_port FROM port_forwards WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
+	} {
+		rows, err := tx.Query(q.sql, catalogID)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			r := CatalogRowRaw{Kind: q.kind}
+			var lp sql.NullInt64
+			if err := rows.Scan(&r.ID, &r.RemoteUUID, &r.RawJSON, &r.Current, &lp); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if lp.Valid {
+				v := lp.Int64
+				r.LocalPort = &v
+			}
+			out = append(out, r)
+		}
+		rows.Close()
+	}
+	return out, nil
+}
+
+// SetCatalogMaterialTx writes a materialised value (no updated_at bump:
+// nothing the user did changed).
+func (d *DB) SetCatalogMaterialTx(tx *sql.Tx, kind, id, value string, localPort *uint16) error {
+	var err error
+	switch kind {
+	case "folders":
+		_, err = tx.Exec(`UPDATE folders SET settings_json = ? WHERE id = ?`, value, id)
+	case "connections":
+		_, err = tx.Exec(`UPDATE connections SET overrides_json = ? WHERE id = ?`, value, id)
+	case "forwards":
+		_, err = tx.Exec(`UPDATE port_forwards SET local_port = ? WHERE id = ?`, nullableU16(localPort), id)
+	default:
+		err = fmt.Errorf("catalog: unknown kind %q", kind)
+	}
+	return err
+}
+
+// CatalogInputsTx is what materialisation translates with.
+type CatalogInputsTx struct {
+	Slots       map[string]CatalogSlot
+	Bindings    map[string]CatalogBinding
+	Overrides   map[string]CatalogOverride
+	ConnIDs     map[string]string // remote uuid -> local id
+	Credentials map[string]bool
+	Profiles    map[string]bool
+	Connections map[string]bool
+}
+
+// CatalogInputs loads the inputs of one catalog inside tx.
+func (d *DB) CatalogInputs(tx *sql.Tx, catalogID string) (*CatalogInputsTx, error) {
+	in := &CatalogInputsTx{Slots: map[string]CatalogSlot{}, Bindings: map[string]CatalogBinding{},
+		Overrides: map[string]CatalogOverride{}, ConnIDs: map[string]string{}}
+	rows, err := tx.Query(`SELECT `+slotCols+` FROM catalog_slots WHERE catalog_id = ?`, catalogID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var s CatalogSlot
+		if err := rows.Scan(&s.CatalogID, &s.UUID, &s.Rev, &s.FolderUUID, &s.Type, &s.Name, &s.Kind,
+			&s.Backend, &s.ExternalRefJSON, &s.DocMD); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		in.Slots[s.UUID] = s
+	}
+	rows.Close()
+	rows, err = tx.Query(`SELECT catalog_id, slot_uuid, kind, target_id, updated_at FROM catalog_bindings WHERE catalog_id = ?`, catalogID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var b CatalogBinding
+		if err := rows.Scan(&b.CatalogID, &b.SlotUUID, &b.Kind, &b.TargetID, &b.UpdatedAt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		in.Bindings[b.SlotUUID] = b
+	}
+	rows.Close()
+	rows, err = tx.Query(`SELECT catalog_id, remote_uuid, kind, json, updated_at FROM catalog_overrides WHERE catalog_id = ?`, catalogID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var o CatalogOverride
+		if err := rows.Scan(&o.CatalogID, &o.RemoteUUID, &o.Kind, &o.JSON, &o.UpdatedAt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		in.Overrides[o.RemoteUUID] = o
+	}
+	rows.Close()
+	rows, err = tx.Query(`SELECT remote_uuid, id FROM connections WHERE catalog_id = ? AND remote_uuid IS NOT NULL AND catalog_state = ''`, catalogID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var u, id string
+		if err := rows.Scan(&u, &id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		in.ConnIDs[u] = id
+	}
+	rows.Close()
+	if in.Credentials, err = idSet(tx, `SELECT id FROM credential_refs`); err != nil {
+		return nil, err
+	}
+	if in.Profiles, err = idSet(tx, `SELECT id FROM network_profiles`); err != nil {
+		return nil, err
+	}
+	if in.Connections, err = idSet(tx, `SELECT id FROM connections`); err != nil {
+		return nil, err
+	}
+	return in, nil
+}

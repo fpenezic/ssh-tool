@@ -39,6 +39,9 @@ func ResolveWithRefs(db *store.DB, conn store.Connection, folders []store.Folder
 // DBLookup reads referenced connections straight from the store.
 func DBLookup(db *store.DB) ConnLookup {
 	return func(id string) (*store.Connection, error) {
+		if e, ok := store.ParseCatalogRef(id, "jump host"); ok {
+			return nil, e
+		}
 		if strings.HasPrefix(id, DynRefPrefix) {
 			return lookupDynamic(id)
 		}
@@ -416,3 +419,9 @@ func dbDefaultTarget(s store.InheritableSettings) string {
 	}
 	return ""
 }
+
+// MergeDbTargets is the database-target merge of folder inheritance (the
+// lower level's entries are added, an entry with a known id adjusts it),
+// for other layers that merge the same way (a catalog record's local
+// layer).
+func MergeDbTargets(base, over []store.DbTarget) []store.DbTarget { return mergeTargets(base, over) }

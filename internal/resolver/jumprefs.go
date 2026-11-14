@@ -72,6 +72,9 @@ func LookupFrom(conns []store.Connection) ConnLookup {
 		idx[conns[i].ID] = &conns[i]
 	}
 	return func(id string) (*store.Connection, error) {
+		if e, ok := store.ParseCatalogRef(id, "jump host"); ok {
+			return nil, e
+		}
 		if strings.HasPrefix(id, DynRefPrefix) {
 			return lookupDynamic(id)
 		}

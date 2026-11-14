@@ -31,13 +31,14 @@ const pageLimit = 500
 // writer transaction; the cursor is stored only after the last page, in the
 // same transaction as the end-of-pass work, so a pass that breaks off
 // starts again from the previous cursor (re-applying a page is harmless:
-// upserts go by rev, tombstones are idempotent).
+// upserts go by rev, tombstones are idempotent). The end of the pass also
+// materialises the catalog (materialise.go).
 //
 // A reset (first sync, grants changed, an old cursor) is a full snapshot:
 // afterwards every held record that did not appear in it is removed, under
 // the rule that a record carrying local data is kept as "removed from
 // catalog" instead.
-func Sync(ctx context.Context, db *store.DB, cat *store.Catalog, c *Client) (SyncResult, error) {
+func Sync(ctx context.Context, db *store.DB, cat *store.Catalog, c *Client, external ExternalResolver) (SyncResult, error) {
 	var res SyncResult
 	cursor := cat.Cursor
 	var snapshot map[string]bool // kind/uuid seen in the current snapshot
@@ -104,6 +105,9 @@ func Sync(ctx context.Context, db *store.DB, cat *store.Catalog, c *Client) (Syn
 		}
 		a.res.Fallback = n
 		res.add(a.res)
+		if err := materialiseTx(db, tx, cat.ID, external); err != nil {
+			return err
+		}
 		return db.SetCatalogCursorTx(tx, cat.ID, cursor, time.Now().Unix())
 	})
 	return res, err

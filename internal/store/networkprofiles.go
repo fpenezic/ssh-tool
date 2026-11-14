@@ -62,6 +62,9 @@ func (d *DB) UpdateNetworkProfile(id, name, configJSON string) (*NetworkProfile,
 }
 
 func (d *DB) GetNetworkProfile(id string) (*NetworkProfile, error) {
+	if e, ok := ParseCatalogRef(id, "network profile"); ok {
+		return nil, e
+	}
 	row := d.conn.QueryRow(
 		`SELECT id, name, config_json, created_at, updated_at
 		 FROM network_profiles WHERE id = ?`, id)
@@ -131,11 +134,15 @@ const networkDirectSentinel = "__direct__"
 // clearNetworkRefs drops the network profile references matching cond,
 // a WHERE fragment with %[1]s for the referenced value.
 func clearNetworkRefs(tx *sql.Tx, cond string, args ...any) (int64, error) {
-	type ref struct{ table, col, stamp string }
+	// Catalog rows are skipped: their references are written by catalog
+	// materialisation, which turns a deleted profile into an unbound
+	// marker itself, and the guard triggers would refuse this UPDATE for
+	// them (aborting the sweep for every row).
+	type ref struct{ table, col, stamp, only string }
 	jsonRefs := []ref{
-		{"connections", "overrides_json", "updated_at"},
-		{"folders", "settings_json", "updated_at"},
-		{"dynamic_folders", "config_json", ""},
+		{"connections", "overrides_json", "updated_at", "catalog_id IS NULL"},
+		{"folders", "settings_json", "updated_at", "catalog_id IS NULL"},
+		{"dynamic_folders", "config_json", "", ""},
 	}
 	var total int64
 	for _, r := range jsonRefs {
@@ -148,6 +155,9 @@ func clearNetworkRefs(tx *sql.Tx, cond string, args ...any) (int64, error) {
 			a = append([]any{now()}, a...)
 		}
 		q += " WHERE " + fmt.Sprintf(cond, val)
+		if r.only != "" {
+			q += " AND " + r.only
+		}
 		res, err := tx.Exec(q, a...)
 		if err != nil {
 			return 0, fmt.Errorf("%s: %w", r.table, err)
