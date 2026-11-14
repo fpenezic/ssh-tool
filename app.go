@@ -550,20 +550,6 @@ func (a *App) initialise() {
 
 	a.db = db
 	a.vault = vault
-	// A restart-time restore (cold sync pull, backup restore) of a
-	// snapshot written by an app without catalog support would replace
-	// this machine's catalog rows with that app's plain copies of them.
-	backup.StageCheck = func(path string) error {
-		n, err := db.DemotedCatalogCopies(path)
-		if err != nil {
-			log.Printf("restore: catalog check: %v", err)
-			return nil
-		}
-		if n > 0 {
-			return store.ErrSnapshotDemotesCatalog
-		}
-		return nil
-	}
 	if appliedRestore {
 		// Mark the just-applied profile as the synced baseline so the
 		// auto-sync loop doesn't push it straight back out.
@@ -2187,7 +2173,9 @@ func (a *App) BackupsRestore(in BackupRestoreInput) error {
 	if in.Passphrase == "" {
 		return fmt.Errorf("passphrase required")
 	}
-	err := backup.Restore(in.SrcPath, in.Passphrase, store.DefaultPath(), creds.DefaultPath())
+	// A local backup is this machine's own file: its catalog shadow is
+	// trusted as it is.
+	err := backup.RestoreWith(in.SrcPath, in.Passphrase, store.DefaultPath(), creds.DefaultPath(), a.stagePrepare(store.ShadowTrust{}))
 	if err != nil {
 		a.recordAudit("backup.restore.failed", filepath.Base(in.SrcPath), map[string]string{"error": err.Error()})
 		return err
@@ -3051,6 +3039,9 @@ func (a *App) SyncPush(force bool) (*syncer.PushResult, error) {
 	}
 	_ = a.db.SetSetting("sync_last_at", strconv.FormatInt(time.Now().Unix(), 10))
 	a.recordSyncPushedFingerprint()
+	// Any push carries this machine's catalog data (shadowed), so it
+	// settles a pending catalog repush too.
+	a.setCatalogRepush(false)
 	a.recordAudit("sync.push", "", map[string]string{
 		"generation": strconv.FormatInt(res.Generation, 10),
 		"force":      strconv.FormatBool(force),
@@ -3095,7 +3086,9 @@ func (a *App) SyncPull() (*syncer.PullResult, error) {
 		return nil, err
 	}
 	defer dav.Close()
-	res, err := syncer.Pull(dav, phrase, store.DefaultPath(), creds.DefaultPath())
+	res, err := syncer.Pull(dav, phrase, store.DefaultPath(), creds.DefaultPath(), func(m *syncer.Meta) backup.PrepareStore {
+		return a.stagePrepare(store.ShadowTrust{FromSync: true, Nonce: m.CatalogShadow})
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -3167,8 +3160,12 @@ func (a *App) SyncPullLive() (*SyncPullLiveResult, error) {
 	defer os.Remove(storeTmp)
 	defer os.Remove(vaultTmp)
 
-	// Mirror the store into the live DB (sessions unaffected).
-	if err := a.db.MirrorFrom(storeTmp); err != nil {
+	// Mirror the store into the live DB (sessions unaffected). The trust
+	// rule decides whether the snapshot's catalog shadow is taken back or
+	// this machine's catalog data is kept (an older app pushed it).
+	trust := store.ShadowTrust{FromSync: true, Nonce: meta.CatalogShadow}
+	mirrorInfo, err := a.db.MirrorFromWith(storeTmp, trust)
+	if err != nil {
 		return nil, fmt.Errorf("apply profile: %w", err)
 	}
 
@@ -3199,7 +3196,7 @@ func (a *App) SyncPullLive() (*SyncPullLiveResult, error) {
 		// applied, so stage only needs to carry the new secrets; the
 		// existing pending-restore path swaps both files but the
 		// re-mirrored store is identical, so it's a no-op for store).
-		if err := backup.Restore(tmpEnvPath, phrase, store.DefaultPath(), creds.DefaultPath()); err != nil {
+		if err := backup.RestoreWith(tmpEnvPath, phrase, store.DefaultPath(), creds.DefaultPath(), a.stagePrepare(trust)); err != nil {
 			return nil, fmt.Errorf("stage vault for restart: %w", err)
 		}
 	}
@@ -3210,6 +3207,10 @@ func (a *App) SyncPullLive() (*SyncPullLiveResult, error) {
 	a.recordSyncPushedFingerprint()
 	_ = a.setSyncGeneration(meta.Generation)
 	a.syncNotifiedGen = 0
+	// The remote lacks the catalog data this machine kept: push it back
+	// once so this user's other up-to-date machines get it (see
+	// syncer.CatalogRepushAction).
+	a.setCatalogRepush(mirrorInfo.KeptCatalog)
 	a.recordAudit("sync.pull", "", map[string]string{
 		"generation": strconv.FormatInt(meta.Generation, 10),
 		"device":     meta.Device,

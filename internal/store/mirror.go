@@ -24,9 +24,30 @@ import (
 // must survive a pull, exactly as they're kept out of the synced
 // snapshot's meaning elsewhere.
 func (d *DB) MirrorFrom(srcPath string) error {
+	_, err := d.MirrorFromWith(srcPath, ShadowTrust{})
+	return err
+}
+
+// MirrorInfo says how MirrorFromWith treated the catalog part of a pull.
+type MirrorInfo struct {
+	// Legacy: the snapshot had no trusted catalog shadow (an app without
+	// catalog support pushed it, or a stale shadow), so this machine's
+	// catalog data was kept rather than replaced.
+	Legacy bool
+	// KeptCatalog: Legacy, and there was catalog data here to keep - the
+	// remote now lacks it, and pushing once puts it back for this user's
+	// other up-to-date machines.
+	KeptCatalog bool
+}
+
+// MirrorFromWith is MirrorFrom with the shadow-trust rule of the pull (see
+// shadow.go): a trusted shadow is taken back into the tree tables, anything
+// else leaves this machine's catalog data alone.
+func (d *DB) MirrorFromWith(srcPath string, trust ShadowTrust) (MirrorInfo, error) {
+	var info MirrorInfo
 	src, err := sql.Open("sqlite", srcPath+"?_pragma=busy_timeout(5000)")
 	if err != nil {
-		return fmt.Errorf("mirror: open source: %w", err)
+		return info, fmt.Errorf("mirror: open source: %w", err)
 	}
 	defer src.Close()
 	src.SetMaxOpenConns(1)
@@ -68,7 +89,7 @@ func (d *DB) MirrorFrom(srcPath string) error {
 
 	tx, err := d.conn.Begin()
 	if err != nil {
-		return fmt.Errorf("mirror: begin: %w", err)
+		return info, fmt.Errorf("mirror: begin: %w", err)
 	}
 	defer tx.Rollback()
 
@@ -77,12 +98,12 @@ func (d *DB) MirrorFrom(srcPath string) error {
 	// parent not yet repopulated. Integrity is guaranteed by mirroring
 	// a self-consistent source snapshot wholesale.
 	if _, err := tx.Exec("PRAGMA defer_foreign_keys = ON"); err != nil {
-		return fmt.Errorf("mirror: defer fk: %w", err)
+		return info, fmt.Errorf("mirror: defer fk: %w", err)
 	}
 	// The mirror replaces catalog rows wholesale, which the catalog
 	// guard triggers refuse to anyone but the catalog writer.
 	if err := beginCatalogWrite(tx); err != nil {
-		return fmt.Errorf("mirror: %w", err)
+		return info, fmt.Errorf("mirror: %w", err)
 	}
 
 	// A snapshot from an app that predates the catalog schema carries
@@ -91,10 +112,13 @@ func (d *DB) MirrorFrom(srcPath string) error {
 	// Mirroring it as usual would demote every catalog row and wipe the
 	// attachment, bindings and local layers. See legacyCatalogMirror.
 	var legacy *legacyCatalogMirror
-	if !sourceHasCatalogSchema(src) {
+	trusted := trustedShadow(src, trust)
+	if !trusted {
 		if legacy, err = newLegacyCatalogMirror(tx); err != nil {
-			return fmt.Errorf("mirror: %w", err)
+			return info, fmt.Errorf("mirror: %w", err)
 		}
+		info.Legacy = true
+		info.KeptCatalog = legacy.hasCatalogData(tx)
 	}
 
 	// Delete children first.
@@ -102,7 +126,7 @@ func (d *DB) MirrorFrom(srcPath string) error {
 		t := order[i]
 		if legacy != nil {
 			if done, err := legacy.clear(tx, t); err != nil {
-				return fmt.Errorf("mirror: clear %s: %w", t, err)
+				return info, fmt.Errorf("mirror: clear %s: %w", t, err)
 			} else if done {
 				continue
 			}
@@ -112,12 +136,12 @@ func (d *DB) MirrorFrom(srcPath string) error {
 			if _, err := tx.Exec(
 				`DELETE FROM app_settings WHERE key NOT LIKE 'sync_%' AND key NOT IN (`+machineLocalSettingsPlaceholders()+`)`,
 				machineLocalSettingsArgs()...); err != nil {
-				return fmt.Errorf("mirror: clear app_settings: %w", err)
+				return info, fmt.Errorf("mirror: clear app_settings: %w", err)
 			}
 			continue
 		}
 		if _, err := tx.Exec("DELETE FROM " + t); err != nil {
-			return fmt.Errorf("mirror: clear %s: %w", t, err)
+			return info, fmt.Errorf("mirror: clear %s: %w", t, err)
 		}
 	}
 
@@ -131,27 +155,29 @@ func (d *DB) MirrorFrom(srcPath string) error {
 			hook = legacy.hook(t)
 		}
 		if err := copyTable(tx, src, t, hook); err != nil {
-			return fmt.Errorf("mirror: copy %s: %w", t, err)
+			return info, fmt.Errorf("mirror: copy %s: %w", t, err)
 		}
 	}
 	if legacy != nil {
 		if err := legacy.finish(tx); err != nil {
-			return fmt.Errorf("mirror: %w", err)
+			return info, fmt.Errorf("mirror: %w", err)
 		}
+	} else if err := unshadowFrom(tx, src); err != nil {
+		return info, fmt.Errorf("mirror: %w", err)
 	}
 	// A snapshot from a version before schema 28 marks sensitive
 	// connections in the old column, which nothing reads any more.
 	if _, err := tx.Exec(foldLegacySensitiveSQL); err != nil {
-		return fmt.Errorf("mirror: fold sensitive: %w", err)
+		return info, fmt.Errorf("mirror: fold sensitive: %w", err)
 	}
 
 	if err := endCatalogWrite(tx); err != nil {
-		return fmt.Errorf("mirror: %w", err)
+		return info, fmt.Errorf("mirror: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("mirror: commit: %w", err)
+		return info, fmt.Errorf("mirror: commit: %w", err)
 	}
-	return nil
+	return info, nil
 }
 
 // machineLocalSettings are app_settings keys that describe THIS
@@ -198,7 +224,13 @@ func machineLocalSettingsArgs() []any {
 type rowHook func(cols []string, vals []any) bool
 
 func copyTable(tx *sql.Tx, src *sql.DB, table string, hook rowHook) error {
-	srcCols, err := tableColumns(src, table)
+	return copyTableAs(tx, src, table, table, hook)
+}
+
+// copyTableAs copies src table from into dst table table (they differ for
+// shadow tables).
+func copyTableAs(tx *sql.Tx, src *sql.DB, from, table string, hook rowHook) error {
+	srcCols, err := tableColumns(src, from)
 	if err != nil {
 		return err
 	}
@@ -225,7 +257,7 @@ func copyTable(tx *sql.Tx, src *sql.DB, table string, hook rowHook) error {
 	if len(cols) == 0 {
 		return nil
 	}
-	rows, err := src.Query("SELECT " + strings.Join(cols, ",") + " FROM " + table)
+	rows, err := src.Query("SELECT " + strings.Join(cols, ",") + " FROM " + from)
 	if err != nil {
 		return err
 	}

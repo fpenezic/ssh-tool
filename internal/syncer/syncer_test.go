@@ -132,7 +132,7 @@ func TestPushPullRoundTrip(t *testing.T) {
 	}
 	_ = db2.Close()
 
-	pr, err := Pull(dav, "pw", store2, vault2)
+	pr, err := Pull(dav, "pw", store2, vault2, nil)
 	if err != nil {
 		t.Fatalf("pull: %v", err)
 	}
@@ -197,14 +197,14 @@ func TestPullWrongPassphrase(t *testing.T) {
 	dataDir2 := t.TempDir()
 	db2, _ := store.Open(filepath.Join(dataDir2, "store.db"))
 	_ = db2.Close()
-	if _, err := Pull(dav, "WRONG", filepath.Join(dataDir2, "store.db"), filepath.Join(dataDir2, "vault.enc")); err == nil {
+	if _, err := Pull(dav, "WRONG", filepath.Join(dataDir2, "store.db"), filepath.Join(dataDir2, "vault.enc"), nil); err == nil {
 		t.Fatalf("wrong passphrase must fail")
 	}
 }
 
 func TestPullEmptyRemote(t *testing.T) {
 	dav, _, dataDir := newEnv(t)
-	if _, err := Pull(dav, "pw", filepath.Join(dataDir, "store.db"), filepath.Join(dataDir, "vault.enc")); err == nil {
+	if _, err := Pull(dav, "pw", filepath.Join(dataDir, "store.db"), filepath.Join(dataDir, "vault.enc"), nil); err == nil {
 		t.Fatalf("pull from empty dir must error cleanly")
 	}
 }

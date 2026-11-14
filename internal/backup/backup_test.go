@@ -127,9 +127,9 @@ func TestRestore_TamperRejected(t *testing.T) {
 	}
 }
 
-// StageCheck sees the snapshot's store and can refuse the restore before
-// anything is staged or the live files are snapshotted.
-func TestRestore_StageCheckRefuses(t *testing.T) {
+// PrepareStore sees the snapshot's store, can replace what is staged, and
+// can refuse the restore before anything is staged.
+func TestRestoreWith_PrepareStore(t *testing.T) {
 	dir := t.TempDir()
 	storePath := filepath.Join(dir, "store.db")
 	vaultPath := filepath.Join(dir, "vault.enc")
@@ -141,24 +141,49 @@ func TestRestore_StageCheckRefuses(t *testing.T) {
 	if err := Create(dest, storePath, vaultPath, "pass", "test"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
+
 	refuse := errors.New("refused")
 	var seen string
-	StageCheck = func(path string) error {
+	err := RestoreWith(dest, "pass", storePath, vaultPath, func(path string) (string, func(), error) {
 		db, err := sql.Open("sqlite", path)
 		if err == nil {
 			_ = db.QueryRow(`SELECT v FROM t`).Scan(&seen)
 			db.Close()
 		}
-		return refuse
-	}
-	t.Cleanup(func() { StageCheck = nil })
-	if err := Restore(dest, "pass", storePath, vaultPath); !errors.Is(err, refuse) {
-		t.Fatalf("want the StageCheck error, got %v", err)
+		return "", nil, refuse
+	})
+	if !errors.Is(err, refuse) {
+		t.Fatalf("want the PrepareStore error, got %v", err)
 	}
 	if seen != "hello" {
-		t.Errorf("StageCheck did not get the snapshot's store: %q", seen)
+		t.Errorf("PrepareStore did not get the snapshot's store: %q", seen)
 	}
 	if _, err := os.Stat(filepath.Join(dir, PendingDir)); !os.IsNotExist(err) {
 		t.Fatalf("something was staged despite the refusal: %v", err)
+	}
+
+	// A replacement is what gets staged (and swapped in).
+	other := filepath.Join(t.TempDir(), "other.db")
+	db, _ := sql.Open("sqlite", other)
+	_, _ = db.Exec(`CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT); INSERT INTO t (v) VALUES ('replaced')`)
+	db.Close()
+	cleaned := false
+	if err := RestoreWith(dest, "pass", storePath, vaultPath, func(string) (string, func(), error) {
+		return other, func() { cleaned = true }, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !cleaned {
+		t.Error("cleanup not called")
+	}
+	if _, err := ApplyPending(storePath, vaultPath); err != nil {
+		t.Fatal(err)
+	}
+	db, _ = sql.Open("sqlite", storePath)
+	defer db.Close()
+	var v string
+	_ = db.QueryRow(`SELECT v FROM t`).Scan(&v)
+	if v != "replaced" {
+		t.Fatalf("staged store is not the replacement: %q", v)
 	}
 }
