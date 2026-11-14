@@ -635,6 +635,36 @@ export class Connection {
              */
             this["vnc_password_vault_key"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * CatalogID / RemoteUUID / RemoteRev / CatalogState: set on rows a
+             * catalog owns (see catalogSchemaSQL). All empty on local rows.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["catalog_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["remote_uuid"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["remote_rev"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["catalog_state"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -1448,6 +1478,37 @@ export class Folder {
              * @type {number}
              */
             this["updated_at"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * CatalogID / RemoteUUID / RemoteRev / CatalogState: set on rows a
+             * catalog owns (see catalogSchemaSQL). CatalogID alone, without a
+             * RemoteUUID, marks a catalog's root folder. All empty on local rows.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["catalog_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["remote_uuid"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["remote_rev"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["catalog_state"] = undefined;
         }
 
         Object.assign(this, $$source);
@@ -2419,6 +2480,45 @@ export class PortForward {
              * @type {string}
              */
             this["browser_mode"] = "";
+        }
+        if (!("disabled" in $$source)) {
+            /**
+             * Disabled keeps a forward from starting at all (automatically or by
+             * hand). Mostly for catalog forwards, which the user cannot delete.
+             * @member
+             * @type {boolean}
+             */
+            this["disabled"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * CatalogID / RemoteUUID / RemoteRev / CatalogState: set on rows a
+             * catalog owns (see catalogSchemaSQL). All empty on local rows.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["catalog_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["remote_uuid"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["remote_rev"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["catalog_state"] = undefined;
         }
 
         Object.assign(this, $$source);
