@@ -500,6 +500,17 @@ func applyOTPRef(db *store.DB, settings *store.ResolvedSettings, m *AuthMaterial
 		return m
 	}
 	cred, err := db.GetCredential(*settings.OTPRef)
+	var refErr *store.CatalogRefError
+	if errors.As(err, &refErr) {
+		// A catalog slot for the code that is not bound here: the code is
+		// the user's to type, not the auth credential's own item (that
+		// would be another source than the one the catalog names).
+		log.Printf("ssh: one-time code: %v", err)
+		if m != nil {
+			m.TOTP = ""
+		}
+		return m
+	}
 	if err != nil {
 		log.Printf("ssh: one-time code credential %s: %v", *settings.OTPRef, err)
 		return m

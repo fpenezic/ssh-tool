@@ -524,3 +524,33 @@ func TestMirrorCarriesCatalogs(t *testing.T) {
 	_, err = dst.UpdateConnection(UpdateConnection{ID: connID, Name: &name})
 	wantOwned(t, "guard after mirror", err)
 }
+
+// The startup sweep of dead network profile references must not abort on
+// a profile holding catalog rows (the guard refuses its UPDATE for them),
+// and must leave catalog rows to materialisation.
+func TestSweepOrphanNetworkRefsSkipsCatalogRows(t *testing.T) {
+	f := newCatalogFixture(t)
+	wantOK(t, "dead ref on a catalog row", f.db.WithCatalogWriter(func(tx *sql.Tx) error {
+		_, err := tx.Exec(`UPDATE connections SET overrides_json = '{"network_profile_id":"gone"}' WHERE id = ?`, f.connID)
+		return err
+	}))
+	dead := "gone-too"
+	if _, err := f.db.UpdateConnection(UpdateConnection{ID: f.localConn.ID, Overrides: &InheritableSettings{NetworkProfileID: &dead}}); err != nil {
+		t.Fatal(err)
+	}
+	n, err := f.db.SweepOrphanNetworkRefs()
+	if err != nil {
+		t.Fatalf("sweep aborted: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("swept %d, want 1 (the local row only)", n)
+	}
+	local, _ := f.db.GetConnection(f.localConn.ID)
+	if local.Overrides.NetworkProfileID != nil {
+		t.Error("local orphan not cleared")
+	}
+	cat, _ := f.db.GetConnection(f.connID)
+	if cat.Overrides.NetworkProfileID == nil {
+		t.Error("catalog row rewritten by the sweep")
+	}
+}

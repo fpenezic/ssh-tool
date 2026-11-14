@@ -118,7 +118,7 @@ func (e *syncEnv) sync() SyncResult {
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	res, err := Sync(context.Background(), e.db, cat, e.c)
+	res, err := Sync(context.Background(), e.db, cat, e.c, nil)
 	if err != nil {
 		e.t.Fatalf("sync: %v", err)
 	}
@@ -378,7 +378,7 @@ func TestSyncInterruptedPassResumes(t *testing.T) {
 	}
 	e.fs.mu.Unlock()
 	cat, _ := e.db.GetCatalog(e.cat.ID)
-	if _, err := Sync(context.Background(), e.db, cat, e.c); err == nil {
+	if _, err := Sync(context.Background(), e.db, cat, e.c, nil); err == nil {
 		t.Fatal("expected the second page to fail")
 	}
 	if cat, _ := e.db.GetCatalog(e.cat.ID); cat.Cursor != "" {
