@@ -1,8 +1,11 @@
 package creds
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"ssh-tool/internal/store"
@@ -368,9 +371,13 @@ func PassphraseAccountKey(credentialID string) string {
 // restart instead of prompting.
 //
 // Mirror semantics: every source account is Put (re-encrypted local);
-// local accounts absent from the source are deleted - EXCEPT the sync
-// machine-local keys, which identify this machine and must survive a
-// pull. The live vault must be unlocked.
+// local accounts absent from the source are deleted. Machine-local
+// accounts (isVaultMachineLocalAccount) are skipped in BOTH directions:
+// a pull neither deletes this machine's nor adopts the source's. That
+// matters for anything that rotates: a catalog refresh token is single
+// use, and adopting this machine's own token back from an older snapshot
+// would present a used token and end the session at the server. The live
+// vault must be unlocked.
 func (v *Vault) MergeSnapshotVault(srcVaultPath, srcPassphrase string) error {
 	v.mu.Lock()
 	live := v.file
@@ -388,6 +395,9 @@ func (v *Vault) MergeSnapshotVault(srcVaultPath, srcPassphrase string) error {
 	want := make(map[string]bool, len(srcAccounts))
 	for _, acct := range srcAccounts {
 		want[acct] = true
+		if isVaultMachineLocalAccount(acct) {
+			continue
+		}
 		secret, ok, gerr := src.Get(acct)
 		if gerr != nil || !ok {
 			continue
@@ -408,12 +418,36 @@ func (v *Vault) MergeSnapshotVault(srcVaultPath, srcPassphrase string) error {
 	return nil
 }
 
-// isVaultMachineLocalAccount guards accounts that must not be wiped by
-// a pulled profile. The sync WebDAV password and passphrase live here.
+// isVaultMachineLocalAccount guards accounts that a pulled profile must
+// neither wipe nor overwrite: the sync WebDAV password and passphrase, and
+// every catalog refresh token (CatalogTokenAccount).
 func isVaultMachineLocalAccount(account string) bool {
 	switch account {
 	case "sync:webdav_password", "sync:passphrase":
 		return true
 	}
-	return false
+	return strings.HasPrefix(account, catalogTokenPrefix)
+}
+
+const catalogTokenPrefix = "catalog-token:"
+
+// CatalogTokenAccount is the vault account holding this machine's refresh
+// token for one catalog. Each machine signs in on its own: the token
+// rotates on every use and a reused one ends the session, so it must never
+// travel through profile sync (see MergeSnapshotVault). The machine part
+// is a hash, so the raw machine id never lands in the vault (it is also
+// the auto-unlock sidecar's key input).
+func CatalogTokenAccount(catalogID string) string {
+	return catalogTokenPrefix + catalogID + ":" + catalogMachineTag()
+}
+
+// CatalogTokenAccountPrefix matches every machine's token account for one
+// catalog, for cleanup when the catalog is removed.
+func CatalogTokenAccountPrefix(catalogID string) string {
+	return catalogTokenPrefix + catalogID + ":"
+}
+
+func catalogMachineTag() string {
+	h := sha256.Sum256([]byte("ssh-tool catalog token|" + StableMachineID()))
+	return hex.EncodeToString(h[:8])
 }
