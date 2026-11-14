@@ -248,6 +248,10 @@ func (a *App) autoSyncTick() {
 	if fp == a.syncPushedFingerprint() {
 		// Clean - clear any pending dirty marker, then maybe poll.
 		a.syncDirtyFP = ""
+		if a.catalogRepushTick() {
+			a.syncLastRemoteCheck = time.Now()
+			return
+		}
 		if time.Since(a.syncLastRemoteCheck) >= time.Duration(a.syncCheckMinutes())*time.Minute {
 			a.autoSyncRemoteCheck()
 		}

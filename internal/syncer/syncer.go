@@ -2,12 +2,14 @@ package syncer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"ssh-tool/internal/backup"
+	"ssh-tool/internal/store"
 )
 
 const (
@@ -44,6 +46,11 @@ type Meta struct {
 	Device       string `json:"device"`
 	AppVersion   string `json:"app_version"`
 	SnapshotSize int64  `json:"snapshot_size"`
+	// CatalogShadow is the nonce of the snapshot's catalog shadow tables
+	// (store.ShadowSnapshot). Apps without catalog support rewrite
+	// meta.json without it, which is how a pull tells a current shadow
+	// from a stale one an older app carried along.
+	CatalogShadow string `json:"catalog_shadow,omitempty"`
 }
 
 // FetchMeta reads the remote commit record. ErrNotFound when the
@@ -95,8 +102,8 @@ func Push(dav Transport, storeDBPath, vaultEncPath, passphrase, appVersion, devi
 	}
 	if remote != nil && remote.Generation != knownGen && !force {
 		return nil, fmt.Errorf(
-			"remote has generation %d (last seen here: %d) - pull first, or force-push to overwrite",
-			remote.Generation, knownGen)
+			"remote has generation %d (last seen here: %d) - pull first, or force-push to overwrite: %w",
+			remote.Generation, knownGen, ErrGenerationConflict)
 	}
 
 	gen := knownGen + 1
@@ -119,7 +126,8 @@ func Push(dav Transport, storeDBPath, vaultEncPath, passphrase, appVersion, devi
 	tmpPath := tmp.Name()
 	_ = tmp.Close()
 	defer os.Remove(tmpPath)
-	if err := backup.Create(tmpPath, storeDBPath, vaultEncPath, passphrase, appVersion); err != nil {
+	nonce := store.NewShadowNonce()
+	if err := backup.CreateWithNonce(tmpPath, storeDBPath, vaultEncPath, passphrase, appVersion, nonce); err != nil {
 		return nil, fmt.Errorf("seal snapshot: %w", err)
 	}
 	blob, err := os.ReadFile(tmpPath)
@@ -142,18 +150,48 @@ func Push(dav Transport, storeDBPath, vaultEncPath, passphrase, appVersion, devi
 	}
 
 	meta := Meta{
-		Format:       1,
-		Generation:   gen,
-		UpdatedAt:    time.Now().UTC().Format(time.RFC3339),
-		Device:       device,
-		AppVersion:   appVersion,
-		SnapshotSize: int64(len(blob)),
+		Format:        1,
+		Generation:    gen,
+		UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
+		Device:        device,
+		AppVersion:    appVersion,
+		SnapshotSize:  int64(len(blob)),
+		CatalogShadow: nonce,
 	}
 	mraw, _ := json.Marshal(meta)
 	if err := dav.Put(metaName, mraw); err != nil {
 		return nil, fmt.Errorf("commit meta: %w", err)
 	}
 	return &PushResult{Generation: gen, SnapshotSize: int64(len(blob))}, nil
+}
+
+// ErrGenerationConflict: the remote moved on since this machine last saw
+// it; a plain push is refused.
+var ErrGenerationConflict = errors.New("generation conflict")
+
+// IsGenerationConflict reports whether a push failed only because the
+// remote moved on.
+func IsGenerationConflict(err error) bool { return errors.Is(err, ErrGenerationConflict) }
+
+// CatalogRepushAction decides what a pending catalog repush does on an
+// auto-sync tick that found the profile otherwise clean (see the app's
+// sync_catalog.go). remoteGen < 0 means the remote could not be read
+// (offline): keep the marker and try again later. The marker never causes
+// a push without catalog data here, and never survives a remote that moved
+// on, so it cannot turn into a push conflict.
+func CatalogRepushAction(pending, hasCatalog bool, remoteGen, localGen int64) (push, drop bool) {
+	switch {
+	case !pending:
+		return false, false
+	case !hasCatalog:
+		return false, true
+	case remoteGen < 0:
+		return false, false
+	case remoteGen == localGen:
+		return true, false
+	default:
+		return false, true
+	}
 }
 
 // PullResult reports what was staged.
@@ -167,7 +205,10 @@ type PullResult struct {
 // backup-restore path (pending-restore dir + READY flag, applied on
 // next start - live SQLite files can't be swapped in-process on
 // Windows). The caller tells the user to restart.
-func Pull(dav Transport, passphrase, storeDBPath, vaultEncPath string) (*PullResult, error) {
+//
+// prepare (optional) gets the pulled meta and returns the PrepareStore step
+// for the staging, so the caller can apply its catalog rules to the file.
+func Pull(dav Transport, passphrase, storeDBPath, vaultEncPath string, prepare func(*Meta) backup.PrepareStore) (*PullResult, error) {
 	if passphrase == "" {
 		return nil, fmt.Errorf("sync passphrase is not set")
 	}
@@ -209,7 +250,11 @@ func Pull(dav Transport, passphrase, storeDBPath, vaultEncPath string) (*PullRes
 		}
 	}
 
-	if err := backup.Restore(tmpPath, passphrase, storeDBPath, vaultEncPath); err != nil {
+	var ps backup.PrepareStore
+	if prepare != nil {
+		ps = prepare(meta)
+	}
+	if err := backup.RestoreWith(tmpPath, passphrase, storeDBPath, vaultEncPath, ps); err != nil {
 		return nil, err
 	}
 	return &PullResult{Generation: meta.Generation, Device: meta.Device, UpdatedAt: meta.UpdatedAt}, nil

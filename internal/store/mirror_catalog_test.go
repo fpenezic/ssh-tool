@@ -62,8 +62,8 @@ func TestMirrorFromLegacySnapshotKeepsCatalog(t *testing.T) {
 			VALUES (?, ?, 'web-2', 'h2', 0, 0, ?, 'c2-uuid')`, conn2, f.folderID, f.cat.ID)
 		return err
 	}))
-	// The user's own forward on the catalog connection, which the old
-	// machine then deleted.
+	// The user's own forward on the catalog connection, absent from the
+	// old machine's snapshot.
 	rh, rp := "127.0.0.1", uint16(22)
 	ownFwd, err := db.CreatePortForward(NewPortForward{ConnectionID: f.connID, Kind: "local", RemoteHost: &rh, RemotePort: &rp})
 	if err != nil {
@@ -94,11 +94,12 @@ func TestMirrorFromLegacySnapshotKeepsCatalog(t *testing.T) {
 		`INSERT INTO port_forwards (id, connection_id, kind, remote_host, remote_port) VALUES ('orphan', 'gone-conn', 'local', '127.0.0.1', 8080)`,
 	)
 
-	if n, err := db.DemotedCatalogCopies(snap); err != nil || n != 4 {
-		t.Fatalf("DemotedCatalogCopies = %d, %v; want 4 (root, folder, connection, forward)", n, err)
-	}
-	if err := db.MirrorFrom(snap); err != nil {
+	info, err := db.MirrorFromWith(snap, ShadowTrust{FromSync: true})
+	if err != nil {
 		t.Fatalf("mirror: %v", err)
+	}
+	if !info.Legacy || !info.KeptCatalog {
+		t.Fatalf("mirror info: %+v", info)
 	}
 
 	// The attachment and the user's catalog data are intact.
@@ -149,10 +150,12 @@ func TestMirrorFromLegacySnapshotKeepsCatalog(t *testing.T) {
 	if err != nil || nc.FolderID != nil {
 		t.Errorf("connection made there not moved to the top: %+v %v", nc, err)
 	}
-	// Forwards: the one deleted there is gone, the one added there is on
-	// the catalog connection, the orphan is dropped.
-	if _, err := db.GetPortForward(ownFwd.ID); err == nil {
-		t.Error("forward deleted on the old machine survived")
+	// Forwards: the own one is kept, the one added there is on the
+	// catalog connection, the orphan is dropped.
+	// The user's own forward on a catalog connection never reaches an
+	// older app (shadowing), so its absence there removes nothing here.
+	if _, err := db.GetPortForward(ownFwd.ID); err != nil {
+		t.Error("own forward on a catalog connection lost to an older snapshot")
 	}
 	if added, err := db.GetPortForward("added-there"); err != nil || added.ConnectionID != f.connID {
 		t.Errorf("forward added on the old machine missing: %+v %v", added, err)
@@ -178,24 +181,5 @@ func TestMirrorFromLegacySnapshotKeepsCatalog(t *testing.T) {
 	defer rows.Close()
 	if rows.Next() {
 		t.Error("foreign key violations after the legacy mirror")
-	}
-}
-
-// A snapshot that knows catalogs, or one without copies of this machine's
-// catalog rows (a backup from before the catalog was attached), is not a
-// demoting one.
-func TestDemotedCatalogCopiesOnlyCountsCopies(t *testing.T) {
-	f := newCatalogFixture(t)
-	modern := filepath.Join(t.TempDir(), "modern.db")
-	if _, err := f.db.conn.Exec(`VACUUM INTO ?`, modern); err != nil {
-		t.Fatal(err)
-	}
-	if n, err := f.db.DemotedCatalogCopies(modern); err != nil || n != 0 {
-		t.Errorf("modern snapshot: %d, %v", n, err)
-	}
-	old := filepath.Join(t.TempDir(), "old.db")
-	legacySnapshot(t, old, `INSERT INTO connections (id, name) VALUES ('unrelated', 'x')`)
-	if n, err := f.db.DemotedCatalogCopies(old); err != nil || n != 0 {
-		t.Errorf("pre-catalog backup counted as demoting: %d, %v", n, err)
 	}
 }

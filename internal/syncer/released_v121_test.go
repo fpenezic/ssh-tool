@@ -1,0 +1,907 @@
+// Code copied verbatim from the v1.2.1 tag (internal/store/migrations.go
+// and internal/store/mirror.go), identifiers prefixed rel_ / relMirrorFrom.
+// It is the released app's side of profile sync: its schema (migrations
+// 1-28) and its live-pull mirror. The mixed-version tests run it against
+// the current code; do not edit it to match the current code.
+
+package syncer
+
+import (
+	"database/sql"
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+// schema rel_migrations are versioned and applied in order; only those above the
+// current `schema_meta.version` value run.
+var rel_migrations = []struct {
+	version int64
+	sql     string
+}{
+	{
+		1,
+		`
+		CREATE TABLE folders (
+		    id            TEXT PRIMARY KEY,
+		    parent_id     TEXT REFERENCES folders(id) ON DELETE CASCADE,
+		    name          TEXT NOT NULL,
+		    sort_order    INTEGER NOT NULL DEFAULT 0,
+		    settings_json TEXT NOT NULL DEFAULT '{}',
+		    created_at    INTEGER NOT NULL,
+		    updated_at    INTEGER NOT NULL
+		);
+		CREATE INDEX idx_folders_parent ON folders(parent_id);
+
+		CREATE TABLE connections (
+		    id             TEXT PRIMARY KEY,
+		    folder_id      TEXT REFERENCES folders(id) ON DELETE CASCADE,
+		    name           TEXT NOT NULL,
+		    hostname       TEXT NOT NULL,
+		    sort_order     INTEGER NOT NULL DEFAULT 0,
+		    overrides_json TEXT NOT NULL DEFAULT '{}',
+		    tags_json      TEXT NOT NULL DEFAULT '[]',
+		    notes          TEXT NOT NULL DEFAULT '',
+		    favorite       INTEGER NOT NULL DEFAULT 0,
+		    sensitive      INTEGER NOT NULL DEFAULT 0,
+		    last_used_at   INTEGER,
+		    created_at     INTEGER NOT NULL,
+		    updated_at     INTEGER NOT NULL
+		);
+		CREATE INDEX idx_connections_folder ON connections(folder_id);
+		CREATE INDEX idx_connections_name ON connections(name);
+
+		CREATE TABLE credential_refs (
+		    id                      TEXT PRIMARY KEY,
+		    name                    TEXT NOT NULL UNIQUE,
+		    kind                    TEXT NOT NULL,
+		    storage_mode            TEXT NOT NULL DEFAULT 'managed',
+		    hint                    TEXT NOT NULL DEFAULT '',
+		    tags_json               TEXT NOT NULL DEFAULT '[]',
+		    config_json             TEXT NOT NULL DEFAULT '{}',
+		    public_key              TEXT,
+		    vault_key               TEXT,
+		    default_username        TEXT,
+		    last_rotated_at         INTEGER,
+		    expires_at              INTEGER,
+		    rotation_reminder_days  INTEGER,
+		    retain_history          INTEGER NOT NULL DEFAULT 0,
+		    created_at              INTEGER NOT NULL,
+		    updated_at              INTEGER NOT NULL
+		);
+		CREATE INDEX idx_credential_refs_kind ON credential_refs(kind);
+
+		CREATE TABLE credential_history (
+		    id            TEXT PRIMARY KEY,
+		    credential_id TEXT NOT NULL REFERENCES credential_refs(id) ON DELETE CASCADE,
+		    changed_at    INTEGER NOT NULL,
+		    note          TEXT NOT NULL DEFAULT '',
+		    rotated_by    TEXT NOT NULL DEFAULT 'user',
+		    has_value     INTEGER NOT NULL DEFAULT 0
+		);
+		CREATE INDEX idx_credential_history_cred ON credential_history(credential_id, changed_at DESC);
+
+		CREATE TABLE port_forwards (
+		    id            TEXT PRIMARY KEY,
+		    connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+		    kind          TEXT NOT NULL,
+		    local_addr    TEXT,
+		    local_port    INTEGER,
+		    remote_host   TEXT,
+		    remote_port   INTEGER,
+		    auto_start    INTEGER NOT NULL DEFAULT 0,
+		    description   TEXT NOT NULL DEFAULT ''
+		);
+
+		CREATE TABLE broadcast_groups (
+		    id    TEXT PRIMARY KEY,
+		    name  TEXT NOT NULL,
+		    color TEXT NOT NULL DEFAULT '#ff5555'
+		);
+		`,
+	},
+	{
+		2,
+		`
+		CREATE TABLE app_settings (
+		    key   TEXT PRIMARY KEY,
+		    value TEXT NOT NULL
+		);
+		`,
+	},
+	{
+		3,
+		`CREATE TABLE IF NOT EXISTS known_hosts (
+		    id          TEXT PRIMARY KEY NOT NULL DEFAULT (lower(hex(randomblob(16)))),
+		    hostname    TEXT NOT NULL,
+		    port        INTEGER NOT NULL DEFAULT 22,
+		    key_type    TEXT NOT NULL,
+		    key_b64     TEXT NOT NULL,
+		    fingerprint TEXT NOT NULL,
+		    added_at    INTEGER NOT NULL DEFAULT (unixepoch())
+		);
+		CREATE UNIQUE INDEX IF NOT EXISTS known_hosts_uniq ON known_hosts(hostname, port, key_type);
+		`,
+	},
+	{
+		4,
+		`CREATE TABLE credential_folders (
+		    id         TEXT PRIMARY KEY,
+		    parent_id  TEXT REFERENCES credential_folders(id) ON DELETE CASCADE,
+		    name       TEXT NOT NULL,
+		    sort_order INTEGER NOT NULL DEFAULT 0,
+		    created_at INTEGER NOT NULL,
+		    updated_at INTEGER NOT NULL
+		);
+		CREATE INDEX idx_credential_folders_parent ON credential_folders(parent_id);
+		ALTER TABLE credential_refs ADD COLUMN folder_id TEXT REFERENCES credential_folders(id) ON DELETE SET NULL;
+		CREATE INDEX idx_credential_refs_folder ON credential_refs(folder_id);
+		`,
+	},
+	{
+		5,
+		`-- Image blobs, content-addressed by md5 so multiple connections /
+		-- folders sharing the same icon (common with RDM imports) deduplicate
+		-- rather than storing the same PNG 50 times.
+		CREATE TABLE images (
+		    id         TEXT PRIMARY KEY,
+		    md5        TEXT NOT NULL UNIQUE,
+		    mime_type  TEXT NOT NULL DEFAULT 'image/png',
+		    data       BLOB NOT NULL,
+		    created_at INTEGER NOT NULL
+		);
+		ALTER TABLE folders     ADD COLUMN icon_image_id TEXT REFERENCES images(id);
+		ALTER TABLE connections ADD COLUMN icon_image_id TEXT REFERENCES images(id);
+		`,
+	},
+	{
+		6,
+		`ALTER TABLE credential_refs ADD COLUMN icon_image_id TEXT REFERENCES images(id);`,
+	},
+	{
+		7,
+		`ALTER TABLE connections ADD COLUMN password_vault_key TEXT;`,
+	},
+	{
+		8,
+		`ALTER TABLE port_forwards ADD COLUMN bookmarks TEXT NOT NULL DEFAULT '[]';`,
+	},
+	{
+		9,
+		`-- Snippet library: short command strings the user can fire into
+		-- an active terminal. Global by default; per-connection snippets
+		-- attach by setting connection_id (cascade-delete with conn).
+		CREATE TABLE snippets (
+		    id            TEXT PRIMARY KEY,
+		    connection_id TEXT REFERENCES connections(id) ON DELETE CASCADE,
+		    name          TEXT NOT NULL,
+		    body          TEXT NOT NULL,
+		    tags_json     TEXT NOT NULL DEFAULT '[]',
+		    use_count     INTEGER NOT NULL DEFAULT 0,
+		    last_used_at  INTEGER,
+		    created_at    INTEGER NOT NULL,
+		    updated_at    INTEGER NOT NULL
+		);
+		CREATE INDEX idx_snippets_conn ON snippets(connection_id);
+		CREATE INDEX idx_snippets_last_used ON snippets(last_used_at DESC);
+		`,
+	},
+	{
+		10,
+		`-- Workspaces: named bundles of "these tabs in this layout".
+		-- layout_json holds an array of tab records with embedded pane
+		-- trees + group metadata. Restore re-opens every listed
+		-- connection and rebuilds the splits as they were.
+		CREATE TABLE workspaces (
+		    id            TEXT PRIMARY KEY,
+		    name          TEXT NOT NULL UNIQUE,
+		    layout_json   TEXT NOT NULL DEFAULT '[]',
+		    last_opened_at INTEGER,
+		    created_at    INTEGER NOT NULL,
+		    updated_at    INTEGER NOT NULL
+		);
+		CREATE INDEX idx_workspaces_last_opened ON workspaces(last_opened_at DESC);
+		`,
+	},
+	{
+		11,
+		`-- Dynamic inventory: folders backed by an external source
+		-- (proxmox, hetzner, …). Sit in the folders tree as a row in
+		-- the folders table (so the inherit cascade keeps working);
+		-- this side table holds the provider config + last refresh
+		-- timestamp. Cached entries live in dynamic_entries below.
+		CREATE TABLE dynamic_folders (
+		    folder_id        TEXT PRIMARY KEY REFERENCES folders(id) ON DELETE CASCADE,
+		    provider         TEXT NOT NULL,
+		    config_json      TEXT NOT NULL DEFAULT '{}',
+		    refresh_seconds  INTEGER NOT NULL DEFAULT 300,
+		    last_pulled_at   INTEGER,
+		    last_error       TEXT NOT NULL DEFAULT ''
+		);
+
+		-- Cached children pulled from the provider. external_id is
+		-- the provider's stable identifier (vmid / containerid /
+		-- node name). The row is read-only from the user's POV -
+		-- regenerated on every refresh. kind buckets entries into
+		-- the "Hosts" / "Guests" pseudo-folders the tree renders.
+		CREATE TABLE dynamic_entries (
+		    id            TEXT PRIMARY KEY,
+		    folder_id     TEXT NOT NULL REFERENCES dynamic_folders(folder_id) ON DELETE CASCADE,
+		    external_id   TEXT NOT NULL,
+		    name          TEXT NOT NULL,
+		    hostname      TEXT NOT NULL,
+		    kind          TEXT NOT NULL,
+		    status        TEXT NOT NULL DEFAULT '',
+		    tags_json     TEXT NOT NULL DEFAULT '[]',
+		    raw_json      TEXT NOT NULL DEFAULT '{}',
+		    sort_order    INTEGER NOT NULL DEFAULT 0,
+		    UNIQUE (folder_id, external_id)
+		);
+		CREATE INDEX idx_dynamic_entries_folder ON dynamic_entries(folder_id);
+		CREATE INDEX idx_dynamic_entries_kind   ON dynamic_entries(folder_id, kind);
+		`,
+	},
+	{
+		12,
+		// Host-key algorithm pinning. The original schema keyed
+		// known_hosts on (hostname, port, key_type), which allowed
+		// silent algorithm downgrade: after first-trusting an
+		// ed25519 key, an active MITM serving a freshly minted RSA
+		// host key would miss the existing row and surface as an
+		// ordinary "unknown host" prompt instead of "CHANGED!".
+		//
+		// We collapse to one row per (hostname, port). If the user
+		// somehow accumulated multiple algo rows for the same host
+		// (legacy data), we keep the most recently added one - any
+		// later connect with a different algo will now flag as
+		// changed and require an explicit confirmation.
+		`-- Deduplicate: keep newest row per (hostname, port).
+		DELETE FROM known_hosts
+		WHERE id NOT IN (
+		    SELECT id FROM known_hosts kh1
+		    WHERE added_at = (
+		        SELECT MAX(added_at) FROM known_hosts kh2
+		        WHERE kh2.hostname = kh1.hostname AND kh2.port = kh1.port
+		    )
+		    GROUP BY hostname, port
+		);
+
+		-- Replace the index with the (hostname, port) form.
+		DROP INDEX IF EXISTS known_hosts_uniq;
+		CREATE UNIQUE INDEX known_hosts_uniq ON known_hosts(hostname, port);
+		`,
+	},
+	{
+		13,
+		// Local audit log: append-only record of sensitive operations
+		// (vault unlock/lock/rotate, backup create/restore, SSH
+		// connect/disconnect, forward start/stop). Visible in
+		// Settings → Audit log and CSV-exportable. metadata_json
+		// carries action-specific details (target host, error, …).
+		`CREATE TABLE audit_events (
+		    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		    ts            INTEGER NOT NULL,
+		    action        TEXT NOT NULL,
+		    target        TEXT NOT NULL DEFAULT '',
+		    metadata_json TEXT NOT NULL DEFAULT '{}'
+		);
+		CREATE INDEX idx_audit_events_ts ON audit_events(ts DESC);
+		CREATE INDEX idx_audit_events_action ON audit_events(action, ts DESC);
+		`,
+	},
+	{
+		14,
+		// Sealed secret history. Each row records one rotation of a
+		// password (or rotated API-token secret) - the previous value
+		// is kept under a fresh vault account so it can be retrieved
+		// later (paranoid rollback, audit). vault_account points at
+		// a vault entry "history:<this row's id>" sealed with the
+		// same master key as the live credential. note is a free-form
+		// label (e.g. "password rotated"); rotated_by mirrors the
+		// existing audit field.
+		//
+		// Retention is enforced at write time by the application
+		// (default keep last 5) - there is no foreign-key cascade
+		// from credential_refs because vault account cleanup must be
+		// driven by the application anyway (Vault.Delete) and a
+		// trigger that called out of the DB would defeat the
+		// fail-closed design.
+		`CREATE TABLE credential_secret_history (
+		    id            TEXT PRIMARY KEY,
+		    credential_id TEXT NOT NULL REFERENCES credential_refs(id) ON DELETE CASCADE,
+		    rotated_at    INTEGER NOT NULL,
+		    vault_account TEXT NOT NULL,
+		    note          TEXT NOT NULL DEFAULT '',
+		    rotated_by    TEXT NOT NULL DEFAULT 'user'
+		);
+		CREATE INDEX idx_cred_secret_history_cred ON credential_secret_history(credential_id, rotated_at DESC);
+		`,
+	},
+	{
+		15,
+		// Pinned dynamic entries. A "pin" promotes a single dynamic
+		// inventory entry into a permanent connection: the row in
+		// `connections` is the real record (carries user-editable
+		// overrides, port forwards, notes, tags); this side-table
+		// just remembers which dynamic external_id under which
+		// dynamic folder the connection came from, so the next
+		// inventory refresh can skip that external_id (otherwise the
+		// host would re-appear as a dynamic ghost beside its pinned
+		// twin).
+		//
+		// Unpin is the reverse: delete the connection (cascade nukes
+		// this row), the next refresh re-includes the external_id.
+		`CREATE TABLE pinned_dynamic_entries (
+		    folder_id     TEXT NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
+		    external_id   TEXT NOT NULL,
+		    connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+		    pinned_at     INTEGER NOT NULL,
+		    PRIMARY KEY (folder_id, external_id)
+		);
+		CREATE INDEX idx_pinned_dynamic_conn ON pinned_dynamic_entries(connection_id);
+		`,
+	},
+	{
+		16,
+		// VNC console support. The RFB password for a generic VNC
+		// connection lives in the vault; only the key is stored on the
+		// connection row (mirrors password_vault_key). vnc_port and
+		// vnc_use_tunnel are inheritable settings carried inside
+		// overrides_json, so they need no column.
+		`ALTER TABLE connections ADD COLUMN vnc_password_vault_key TEXT;`,
+	},
+	{
+		17,
+		// Userspace WireGuard network profiles. config_json is the
+		// parsed wg.Profile WITHOUT secrets - the interface private
+		// key and per-peer preshared keys live in the vault under
+		// wg_private_key:<id> / wg_psk:<id>:<peer_public_key>. The
+		// inheritable network_profile_id rides inside overrides_json /
+		// folder settings, so connections need no column.
+		`CREATE TABLE network_profiles (
+		    id          TEXT PRIMARY KEY,
+		    name        TEXT NOT NULL UNIQUE,
+		    config_json TEXT NOT NULL DEFAULT '{}',
+		    created_at  INTEGER NOT NULL,
+		    updated_at  INTEGER NOT NULL
+		);`,
+	},
+	{
+		18,
+		// A KeePass database ssh-tool reads secrets from at connect time. The
+		// .kdbx is never written to; only the encrypted file is cached locally
+		// (source=local means path IS the live file; remote means path is a
+		// cache under DataDir fetched from url). The master password and
+		// optional key file live in the vault under the referenced accounts,
+		// NEVER here - this row holds only pointers. A credential references an
+		// entry via config_json.keepass_ref {db_id, entry_uuid, field}.
+		`CREATE TABLE keepass_databases (
+		    id              TEXT PRIMARY KEY,
+		    name            TEXT NOT NULL UNIQUE,
+		    source          TEXT NOT NULL,          -- 'local' | 'webdav' | 'sftp'
+		    path            TEXT NOT NULL DEFAULT '', -- local file path, or empty for remote
+		    url             TEXT NOT NULL DEFAULT '', -- remote URL / sftp target, empty for local
+		    master_ref      TEXT NOT NULL DEFAULT '', -- vault account holding the master password
+		    keyfile_ref     TEXT NOT NULL DEFAULT '', -- vault account holding the key file, empty if none
+		    remote_cfg_json TEXT NOT NULL DEFAULT '{}', -- source-specific fetch config (host, user, etc.)
+		    last_fetched_at INTEGER,                 -- unix seconds of last successful remote fetch
+		    last_etag       TEXT NOT NULL DEFAULT '', -- conditional-GET validator for webdav
+		    created_at      INTEGER NOT NULL,
+		    updated_at      INTEGER NOT NULL
+		);`,
+	},
+	{
+		19,
+		// A Vaultwarden / Bitwarden server ssh-tool reads secrets from at connect
+		// time (the HTTP sibling of keepass_databases). Neither the master
+		// password nor the API key is stored here: master_ref points at a hidden
+		// sealed vault account (bitwarden:<id>:master), api_key_ref at the vault
+		// account behind a normal API-key credential. The synced vault is cached
+		// SEALED under DataDir, never here. A credential references an item via
+		// config_json.bitwarden_ref {server_id, cipher_id, field}.
+		`CREATE TABLE bitwarden_servers (
+		    id                 TEXT PRIMARY KEY,
+		    name               TEXT NOT NULL UNIQUE,
+		    server_url         TEXT NOT NULL,            -- https://vault.example.com
+		    api_key_ref        TEXT NOT NULL DEFAULT '', -- vault account behind the API-key credential
+		    master_ref         TEXT NOT NULL DEFAULT '', -- vault account holding the master password
+		    network_profile_id TEXT NOT NULL DEFAULT '', -- WireGuard profile to dial the server through, empty = direct
+		    last_synced_at     INTEGER,                  -- unix seconds of last successful sync
+		    last_hash          TEXT NOT NULL DEFAULT '', -- content hash of the last sync payload
+		    created_at         INTEGER NOT NULL,
+		    updated_at         INTEGER NOT NULL
+		);`,
+	},
+	{
+		20,
+		// An Infisical server ssh-tool reads secrets from at connect time (the
+		// per-request sibling of bitwarden_servers). Infisical decrypts
+		// server-side, so there is NO master password and NO synced/cached vault
+		// blob here - only the machine-identity API key (a normal api_token
+		// credential pointed at by api_key_ref). A credential references a secret
+		// via config_json.infisical_ref {server_id, project_id, environment,
+		// secret_path, key}.
+		`CREATE TABLE infisical_servers (
+		    id                 TEXT PRIMARY KEY,
+		    name               TEXT NOT NULL UNIQUE,
+		    server_url         TEXT NOT NULL,            -- https://infisical.example.com
+		    api_key_ref        TEXT NOT NULL DEFAULT '', -- credential id (api_token) holding client_id/secret
+		    network_profile_id TEXT NOT NULL DEFAULT '', -- WireGuard profile to dial the server through, empty = direct
+		    last_used_at       INTEGER,                  -- unix seconds of last successful read
+		    created_at         INTEGER NOT NULL,
+		    updated_at         INTEGER NOT NULL
+		);`,
+	},
+	{
+		21,
+		// Repair migration. bitwarden_servers.network_profile_id was added
+		// to migration 19's CREATE TABLE *after* migration 19 had already
+		// shipped (the WireGuard-routing feature amended it in place). A DB
+		// that ran the original migration 19 therefore has the table WITHOUT
+		// the column, and the amended CREATE never re-runs - so every
+		// bitwarden_servers read failed with "no such column:
+		// network_profile_id". Add it here. The runner treats a
+		// duplicate-column error on an ADD COLUMN as a no-op, so DBs created
+		// by the amended migration 19 (column already present) are fine too.
+		`ALTER TABLE bitwarden_servers ADD COLUMN network_profile_id TEXT NOT NULL DEFAULT '';`,
+	},
+	{
+		22,
+		// Built-in icons: a connection/folder/credential/credential-folder can
+		// carry a named lucide icon (icon_name) tinted by a palette colour
+		// (icon_color) instead of an uploaded image. Both nil = default icon;
+		// mutually exclusive with icon_image_id (the app clears one when the
+		// other is set). credential_folders never had an icon at all, so they
+		// gain both a named icon here (no icon_image_id column - named only).
+		// Nullable so absence = "no built-in icon chosen".
+		`ALTER TABLE connections ADD COLUMN icon_name TEXT;
+		 ALTER TABLE connections ADD COLUMN icon_color TEXT;
+		 ALTER TABLE folders ADD COLUMN icon_name TEXT;
+		 ALTER TABLE folders ADD COLUMN icon_color TEXT;
+		 ALTER TABLE credential_refs ADD COLUMN icon_name TEXT;
+		 ALTER TABLE credential_refs ADD COLUMN icon_color TEXT;
+		 ALTER TABLE credential_folders ADD COLUMN icon_name TEXT;
+		 ALTER TABLE credential_folders ADD COLUMN icon_color TEXT;`,
+	},
+	{
+		23,
+		// Repair migration. Migration 22 originally added icon_name/icon_color
+		// to connections + folders ONLY; the credential_refs +
+		// credential_folders columns were appended to v22's SQL afterwards.
+		// A DB that ran the earlier 2-table form of v22 is recorded at
+		// version 22 and never re-runs it, so credential reads fail with
+		// "no such column: icon_name". Re-add all four icon columns here; the
+		// runner adds each statement independently and tolerates a
+		// duplicate-column error, so the columns v22 already created are
+		// skipped and only the missing credential ones are added. Idempotent
+		// on fresh DBs too (every column already exists -> all no-ops).
+		`ALTER TABLE connections ADD COLUMN icon_name TEXT;
+		 ALTER TABLE connections ADD COLUMN icon_color TEXT;
+		 ALTER TABLE folders ADD COLUMN icon_name TEXT;
+		 ALTER TABLE folders ADD COLUMN icon_color TEXT;
+		 ALTER TABLE credential_refs ADD COLUMN icon_name TEXT;
+		 ALTER TABLE credential_refs ADD COLUMN icon_color TEXT;
+		 ALTER TABLE credential_folders ADD COLUMN icon_name TEXT;
+		 ALTER TABLE credential_folders ADD COLUMN icon_color TEXT;`,
+	},
+	{
+		24,
+		// Local-shell connections. `protocol` selects the dial path:
+		// "ssh" (default - unchanged behaviour for every existing row) or
+		// "local" (spawn a local PTY running the connection's
+		// InitialCommand - telnet client, serial console, "claude", ...).
+		// `local_shell_kind` picks the shell for a local connection
+		// (NULL = auto). Both no-ops for SSH connections.
+		`ALTER TABLE connections ADD COLUMN protocol TEXT NOT NULL DEFAULT 'ssh';
+		 ALTER TABLE connections ADD COLUMN local_shell_kind TEXT;`,
+	},
+	{
+		25,
+		// Connections that should open straight into the background: the
+		// session connects and runs as normal, but its tab is left out of
+		// the tab bar. For long-lived helpers (a keepalive loop, a tail, a
+		// watcher) the tab is pure clutter - the point is that it runs, not
+		// that it is looked at. The bar shows a count of hidden tabs, so a
+		// backgrounded session is never invisible.
+		`ALTER TABLE connections ADD COLUMN open_hidden INTEGER NOT NULL DEFAULT 0;`,
+	},
+	{
+		26,
+		// Two independent additions that would otherwise be one migration
+		// each in the same release.
+		//
+		// `local_shell_dir` is the working directory a local connection's
+		// shell starts in (NULL/empty = the app-wide `local_shell_dir`
+		// setting, which itself falls back to the user's home). Before
+		// this the shell inherited the app's own cwd, i.e. the directory
+		// the executable lives in.
+		//
+		// `browser_mode` is per-forward, and only consulted when a
+		// bookmark or the browser button opens a URL through it:
+		//   ""/"system"  - the user's normal browser, no isolation. The
+		//                  default for local forwards, because that is
+		//                  what opening localhost:<port> by hand has
+		//                  always done, and a fresh profile would lose
+		//                  every login and extension the user has.
+		//   "isolated"   - a throwaway profile, discarded on close.
+		//   "persistent" - a profile kept per forward, so logins survive.
+		// Dynamic (SOCKS) forwards keep answering to the app-wide
+		// `browser_persistent_profile` setting when this is unset: their
+		// isolation is the point of the proxy, not an opt-in.
+		`ALTER TABLE connections ADD COLUMN local_shell_dir TEXT;
+		 ALTER TABLE port_forwards ADD COLUMN browser_mode TEXT NOT NULL DEFAULT '';`,
+	},
+	{
+		27,
+		// Credential folders get an uploaded-image icon like folders,
+		// connections and credentials already have (v22 gave them only a
+		// built-in icon). Mutually exclusive with icon_name / icon_color,
+		// cleared by DeleteImage like the other three references.
+		`ALTER TABLE credential_folders ADD COLUMN icon_image_id TEXT REFERENCES images(id);`,
+	},
+	{
+		28,
+		// "Sensitive" becomes an inheritable setting inside overrides_json,
+		// so a folder can mark everything under it. A connection that had
+		// the old column set keeps it as its own override; the column stays
+		// (SQLite cannot drop it cheaply) and is written as 0 from now on.
+		rel_foldLegacySensitiveSQL,
+	},
+}
+
+// rel_isDuplicateColumnErr reports whether err is SQLite's "duplicate column
+// name" error from an ADD COLUMN that hit an already-present column. Used
+// to make idempotent column-add repair rel_migrations no-op on DBs that
+// already have the column. Matched on the message text - modernc/sqlite
+// surfaces it as "duplicate column name: <col>".
+func rel_isDuplicateColumnErr(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "duplicate column name")
+}
+
+// rel_splitSQLStatements splits a migration's SQL into individual statements
+// on the semicolon boundary, dropping blank fragments. Line comments
+// (`-- ...`) are stripped FIRST so a fragment that is only a trailing
+// comment isn't handed to the driver as a bogus statement, and so a
+// comment's own text (which may contain words like "per-connection")
+// can't be misparsed. Our migration SQL contains no string literals
+// with embedded semicolons, so a plain split is otherwise safe.
+func rel_splitSQLStatements(sqlText string) []string {
+	// Drop `--` line comments.
+	var b strings.Builder
+	for _, line := range strings.Split(sqlText, "\n") {
+		if i := strings.Index(line, "--"); i >= 0 {
+			line = line[:i]
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	parts := strings.Split(b.String(), ";")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if strings.TrimSpace(p) == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+func rel_runMigrations(db *sql.DB) error {
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+		PRAGMA foreign_keys = ON;
+		PRAGMA journal_mode = WAL;
+	`); err != nil {
+		return fmt.Errorf("bootstrap: %w", err)
+	}
+
+	var versionStr string
+	var current int64
+	row := db.QueryRow("SELECT value FROM schema_meta WHERE key = 'version'")
+	if err := row.Scan(&versionStr); err == nil {
+		if n, perr := strconv.ParseInt(versionStr, 10, 64); perr == nil {
+			current = n
+		}
+	}
+
+	for _, m := range rel_migrations {
+		if m.version <= current {
+			continue
+		}
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("begin migration %d: %w", m.version, err)
+		}
+		// Execute statement-by-statement so a duplicate-column error on ONE
+		// idempotent ADD COLUMN doesn't abort the sibling statements. This
+		// matters for repair rel_migrations (v21, v23) that re-add a set of
+		// columns where SOME may already exist on a DB that ran an earlier
+		// form of the migration - SQLite has no "ADD COLUMN IF NOT EXISTS",
+		// and a single multi-statement Exec would stop at the first
+		// duplicate, leaving the rest unapplied. The duplicate is tolerated
+		// per statement; any OTHER error is fatal as before.
+		for _, stmt := range rel_splitSQLStatements(m.sql) {
+			if _, err := tx.Exec(stmt); err != nil && !rel_isDuplicateColumnErr(err) {
+				_ = tx.Rollback()
+				return fmt.Errorf("apply migration %d: %w", m.version, err)
+			}
+		}
+		if _, err := tx.Exec(
+			"INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('version', ?)",
+			fmt.Sprintf("%d", m.version),
+		); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("bump migration %d: %w", m.version, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration %d: %w", m.version, err)
+		}
+	}
+	return nil
+}
+
+// rel_foldLegacySensitiveSQL moves the old connections.sensitive column into
+// the connection's overrides (migration 28). MirrorFrom runs it again after
+// a sync pull, since a snapshot from an older version still carries the
+// column. Idempotent. An overrides_json that is not a JSON object (empty,
+// null, an array) is replaced, so the flag is never dropped.
+const rel_foldLegacySensitiveSQL = `UPDATE connections
+    SET overrides_json = CASE WHEN NOT json_valid(overrides_json) THEN '{"sensitive":true}'
+                              WHEN json_type(overrides_json) = 'object'
+                              THEN json_set(overrides_json, '$.sensitive', json('true'))
+                              ELSE '{"sensitive":true}' END,
+        sensitive = 0
+  WHERE sensitive != 0;`
+
+// MirrorFrom replaces the contents of this store's profile tables with
+// the contents of srcPath (a pulled snapshot's store.db), in a single
+// transaction, WITHOUT swapping files - so the app keeps running, SSH
+// sessions survive, and no restart is needed.
+//
+// This is the live-apply path for sync pull. The whole-file restore
+// path (backup.ApplyPending) still exists for the cases a live apply
+// can't cover (a brand-new machine with no open DB, schema migration
+// across versions); MirrorFrom is the common case: same schema, app
+// already running, just adopt the other machine's data.
+//
+// What is mirrored: every profile table, parent-before-child for FK
+// integrity. What is NOT: the audit log (separate machine-local DB)
+// and a small set of machine-local app_settings keys (sync config and
+// generation, window/session state) - those identify THIS machine and
+// must survive a pull, exactly as they're kept out of the synced
+// snapshot's meaning elsewhere.
+func relMirrorFrom(conn *sql.DB, srcPath string) error {
+	src, err := sql.Open("sqlite", srcPath+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		return fmt.Errorf("mirror: open source: %w", err)
+	}
+	defer src.Close()
+	src.SetMaxOpenConns(1)
+
+	// Insert order: a table may only be filled after the tables it
+	// references by FK. Delete runs in reverse.
+	order := []string{
+		"images",
+		"credential_folders",
+		"folders",
+		"credential_refs",
+		"credential_history",
+		"credential_secret_history",
+		// network_profiles has no FK dependency; it must be listed or a
+		// live pull mirrors every table EXCEPT the VPN profiles, so a
+		// second machine gets the connections that inherit a profile but
+		// never the profile itself. (Cold whole-file restore is fine -
+		// this list is only the live-apply path.)
+		"network_profiles",
+		"connections",
+		"port_forwards",
+		"broadcast_groups",
+		"dynamic_folders",
+		"dynamic_entries",
+		"pinned_dynamic_entries",
+		"snippets",
+		"workspaces",
+		"known_hosts",
+		"app_settings",
+	}
+
+	tx, err := conn.Begin()
+	if err != nil {
+		return fmt.Errorf("mirror: begin: %w", err)
+	}
+	defer tx.Rollback()
+
+	// FKs off for the duration: we delete-all then insert-all, and a
+	// mid-transaction child insert would otherwise fail against a
+	// parent not yet repopulated. Integrity is guaranteed by mirroring
+	// a self-consistent source snapshot wholesale.
+	if _, err := tx.Exec("PRAGMA defer_foreign_keys = ON"); err != nil {
+		return fmt.Errorf("mirror: defer fk: %w", err)
+	}
+
+	// Delete children first.
+	for i := len(order) - 1; i >= 0; i-- {
+		t := order[i]
+		if t == "app_settings" {
+			// Preserve machine-local keys; clear the rest.
+			if _, err := tx.Exec(
+				`DELETE FROM app_settings WHERE key NOT LIKE 'sync_%' AND key NOT IN (`+rel_machineLocalSettingsPlaceholders()+`)`,
+				rel_machineLocalSettingsArgs()...); err != nil {
+				return fmt.Errorf("mirror: clear app_settings: %w", err)
+			}
+			continue
+		}
+		if _, err := tx.Exec("DELETE FROM " + t); err != nil {
+			return fmt.Errorf("mirror: clear %s: %w", t, err)
+		}
+	}
+
+	// Copy each table from the source.
+	for _, t := range order {
+		if err := rel_copyTable(tx, src, t); err != nil {
+			return fmt.Errorf("mirror: copy %s: %w", t, err)
+		}
+	}
+	// A snapshot from a version before schema 28 marks sensitive
+	// connections in the old column, which nothing reads any more.
+	if _, err := tx.Exec(rel_foldLegacySensitiveSQL); err != nil {
+		return fmt.Errorf("mirror: fold sensitive: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("mirror: commit: %w", err)
+	}
+	return nil
+}
+
+// rel_machineLocalSettings are app_settings keys that describe THIS
+// machine and must not be overwritten by a pulled profile. sync_*
+// keys are handled by a LIKE clause separately.
+var rel_machineLocalSettings = []string{
+	"window_state_v1",
+	"last_session_tabs_v1",
+	"last_session_tabs_v2",
+	"last_session_detached_v1",
+	"settings_active_section",
+	"recent_connections_count",
+	"keyring_legacy_purged_v1",
+	"app_log_tail_enabled",
+	"local_shell_dir",
+	"local_shell_kind",
+	"ci_runner",
+	"ci_runner_machine",
+	"network_shared_proxy_listen",
+}
+
+func rel_machineLocalSettingsPlaceholders() string {
+	ph := make([]string, len(rel_machineLocalSettings))
+	for i := range ph {
+		ph[i] = "?"
+	}
+	return strings.Join(ph, ",")
+}
+
+func rel_machineLocalSettingsArgs() []any {
+	args := make([]any, len(rel_machineLocalSettings))
+	for i, k := range rel_machineLocalSettings {
+		args[i] = k
+	}
+	return args
+}
+
+// rel_copyTable reads every row of one table from src and inserts it into
+// the live transaction. Column list is read from the source so the
+// copy is schema-shape agnostic. app_settings skips the machine-local
+// keys so a pulled profile can't clobber this machine's sync config.
+func rel_copyTable(tx *sql.Tx, src *sql.DB, table string) error {
+	srcCols, err := rel_tableColumns(src, table)
+	if err != nil {
+		return err
+	}
+	// Intersect with the destination's columns so the mirror tolerates a
+	// schema skew between the pushing and pulling app versions: a newer
+	// snapshot's extra columns (e.g. vnc_password_vault_key added in a
+	// later schema) are simply dropped when an older app pulls, and a
+	// newer app pulling an older snapshot leaves its extra columns at
+	// their defaults. Only columns present on BOTH sides are copied.
+	dstCols, err := rel_txTableColumns(tx, table)
+	if err != nil {
+		return err
+	}
+	dstSet := make(map[string]bool, len(dstCols))
+	for _, c := range dstCols {
+		dstSet[c] = true
+	}
+	cols := make([]string, 0, len(srcCols))
+	for _, c := range srcCols {
+		if dstSet[c] {
+			cols = append(cols, c)
+		}
+	}
+	if len(cols) == 0 {
+		return nil
+	}
+	rows, err := src.Query("SELECT " + strings.Join(cols, ",") + " FROM " + table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(cols)), ",")
+	insert := "INSERT INTO " + table + " (" + strings.Join(cols, ",") + ") VALUES (" + placeholders + ")"
+	keyIdx := -1
+	if table == "app_settings" {
+		for i, c := range cols {
+			if c == "key" {
+				keyIdx = i
+			}
+		}
+	}
+
+	for rows.Next() {
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return err
+		}
+		if keyIdx >= 0 {
+			if k, _ := vals[keyIdx].(string); relIsMachineLocalSetting(k) {
+				continue // don't import another machine's local setting
+			}
+		}
+		if _, err := tx.Exec(insert, vals...); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
+func relIsMachineLocalSetting(key string) bool {
+	if strings.HasPrefix(key, "sync_") {
+		return true
+	}
+	for _, k := range rel_machineLocalSettings {
+		if k == key {
+			return true
+		}
+	}
+	return false
+}
+
+// rel_tableColumns returns the column names of a table in definition order.
+func rel_tableColumns(db *sql.DB, table string) ([]string, error) {
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return nil, err
+	}
+	return rel_scanTableInfo(rows)
+}
+
+// rel_txTableColumns is rel_tableColumns against an open transaction (the
+// destination DB during a mirror).
+func rel_txTableColumns(tx *sql.Tx, table string) ([]string, error) {
+	rows, err := tx.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return nil, err
+	}
+	return rel_scanTableInfo(rows)
+}
+
+func rel_scanTableInfo(rows *sql.Rows) ([]string, error) {
+	defer rows.Close()
+	var cols []string
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return nil, err
+		}
+		cols = append(cols, name)
+	}
+	return cols, rows.Err()
+}

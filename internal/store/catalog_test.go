@@ -487,10 +487,18 @@ func TestMirrorCarriesCatalogs(t *testing.T) {
 	wantOK(t, "cursor", src.SetCatalogSyncState(cat.ID, "cur-9", nil, ""))
 	wantOK(t, "binding", src.SetCatalogBinding(cat.ID, "s1", "cred", "cred-1"))
 	wantOK(t, "override", src.SetCatalogOverride(cat.ID, "c-uuid", "connections", `{"port":2222}`))
+	// What a push uploads: a copy with the catalog rows shadowed.
+	snap := filepath.Join(dir, "snap.db")
+	if _, err := src.conn.Exec(`VACUUM INTO ?`, snap); err != nil {
+		t.Fatal(err)
+	}
 	_ = src.Close()
+	if err := ShadowSnapshot(snap, "nonce-1"); err != nil {
+		t.Fatal(err)
+	}
 
 	dst := newCatalogFixture(t).db // has its own catalog rows, which the pull replaces
-	if err := dst.MirrorFrom(srcPath); err != nil {
+	if _, err := dst.MirrorFromWith(snap, ShadowTrust{FromSync: true, Nonce: "nonce-1"}); err != nil {
 		t.Fatalf("mirror: %v", err)
 	}
 	cats, _ := dst.ListCatalogs()

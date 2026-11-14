@@ -62,6 +62,12 @@ func Open(path string) (*DB, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	clearStaleCatalogWriter(db)
+	// A restart-time restore may have swapped in a shadowed snapshot;
+	// take its catalog rows back before anything reads the tree.
+	if err := unshadowOnOpen(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("restore catalog rows: %w", err)
+	}
 	audit, aerr := openAuditDB(filepath.Join(filepath.Dir(path), "audit.db"))
 	if aerr != nil {
 		audit = db // degrade gracefully - audit must never break the app

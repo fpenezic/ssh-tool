@@ -33,6 +33,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"ssh-tool/internal/creds"
+	"ssh-tool/internal/store"
 )
 
 var base64Std = base64.StdEncoding
@@ -109,6 +110,15 @@ type Info struct {
 // `passphrase` must match the live vault passphrase (caller verifies
 // that separately by attempting to unlock the vault first).
 func Create(destPath, storeDBPath, vaultEncPath, passphrase, appVersion string) error {
+	return CreateWithNonce(destPath, storeDBPath, vaultEncPath, passphrase, appVersion, store.NewShadowNonce())
+}
+
+// CreateWithNonce is Create with the catalog shadow nonce given by the
+// caller: sync push writes the same nonce into its meta.json, so a later
+// pull can tell this snapshot's shadow tables from stale ones
+// (store.ShadowSnapshot). The snapshot copy is shadowed before sealing;
+// the live store is never touched.
+func CreateWithNonce(destPath, storeDBPath, vaultEncPath, passphrase, appVersion, shadowNonce string) error {
 	if passphrase == "" {
 		return errors.New("backup: empty passphrase")
 	}
@@ -128,6 +138,9 @@ func Create(destPath, storeDBPath, vaultEncPath, passphrase, appVersion string) 
 
 	if err := sqliteSnapshot(storeDBPath, tmpDBPath); err != nil {
 		return fmt.Errorf("backup: store snapshot: %w", err)
+	}
+	if err := store.ShadowSnapshot(tmpDBPath, shadowNonce); err != nil {
+		return fmt.Errorf("backup: shadow catalog rows: %w", err)
 	}
 
 	storeBytes, err := os.ReadFile(tmpDBPath)
@@ -205,21 +218,22 @@ func Create(destPath, storeDBPath, vaultEncPath, passphrase, appVersion string) 
 // next sql.Open.
 const PendingDir = "pending-restore"
 
-// StageCheck, when set, vets the store of a snapshot before Restore stages
-// it for a restart-time swap; a non-nil error refuses the restore and
-// nothing is staged. The app wires it to refuse a snapshot from an older
-// version that would replace this machine's catalog rows with plain
-// copies (store.DemotedCatalogCopies). The path is a temporary file that
-// is removed afterwards.
-var StageCheck func(storeSnapshotPath string) error
+// PrepareStore lets the caller of RestoreWith replace the snapshot's store
+// before it is staged: it gets a temporary copy of that store and returns
+// the file to stage instead (the same path when nothing changes) and a
+// cleanup for anything it created. An error refuses the restore and
+// nothing is staged. The app uses it so that a restart-time restore never
+// loses this machine's catalog data to a snapshot that cannot carry it
+// (store.PrepareStagedStore).
+type PrepareStore func(storeSnapshotPath string) (stagePath string, cleanup func(), err error)
 
-func checkStage(storeBytes []byte) error {
-	if StageCheck == nil {
-		return nil
+func prepareStage(storeBytes []byte, prepare PrepareStore) ([]byte, error) {
+	if prepare == nil {
+		return storeBytes, nil
 	}
-	f, err := os.CreateTemp("", "ssh-tool-stage-check-*.db")
+	f, err := os.CreateTemp("", "ssh-tool-stage-*.db")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	path := f.Name()
 	defer os.Remove(path)
@@ -228,9 +242,16 @@ func checkStage(storeBytes []byte) error {
 		werr = cerr
 	}
 	if werr != nil {
-		return werr
+		return nil, werr
 	}
-	return StageCheck(path)
+	stage, cleanup, err := prepare(path)
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(stage)
 }
 
 // Restore decrypts srcPath with passphrase, verifies checksums, snapshots
@@ -238,6 +259,11 @@ func checkStage(storeBytes []byte) error {
 // <timestamp>/, and stages the new files in <dataDir>/pending-restore/.
 // The actual swap happens in ApplyPending at the next app start.
 func Restore(srcPath, passphrase, storeDBPath, vaultEncPath string) error {
+	return RestoreWith(srcPath, passphrase, storeDBPath, vaultEncPath, nil)
+}
+
+// RestoreWith is Restore with a PrepareStore step before staging.
+func RestoreWith(srcPath, passphrase, storeDBPath, vaultEncPath string, prepare PrepareStore) error {
 	raw, err := os.ReadFile(srcPath)
 	if err != nil {
 		return err
@@ -261,7 +287,7 @@ func Restore(srcPath, passphrase, storeDBPath, vaultEncPath string) error {
 	if sha256hex(vaultBytes) != env.VaultSHA256 {
 		return errors.New("backup: vault checksum mismatch")
 	}
-	if err := checkStage(storeBytes); err != nil {
+	if storeBytes, err = prepareStage(storeBytes, prepare); err != nil {
 		return err
 	}
 
