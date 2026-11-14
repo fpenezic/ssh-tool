@@ -318,7 +318,11 @@ func (d *DB) DeleteCatalogTx(tx *sql.Tx, catalogID string) error {
 			return err
 		}
 	}
-	return nil
+	if _, err := tx.Exec(`DELETE FROM credential_refs WHERE id LIKE 'catcred-`+escapeLike(catalogID)+`-%' ESCAPE '\'`); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`DELETE FROM credential_folders WHERE id = ?`, CatalogCredentialFolderID(catalogID))
+	return err
 }
 
 // SetCatalogCursorTx stores the cursor with the rows it describes.

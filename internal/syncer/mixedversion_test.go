@@ -294,6 +294,14 @@ func seedCatalog(t *testing.T, db *store.DB, localConnID string) catalogSeed {
 		t.Fatal(err)
 	}
 	s.ownFwdID = own.ID
+	// A credential the catalog client made for an external reference.
+	if err := db.EnsureCatalogCredentialFolder(s.catID, "Team"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertCatalogCredential(s.catID, "ext-slot", "Team: web admin", store.CredPassword,
+		map[string]any{"bitwarden_ref": map[string]any{"server_id": "srv", "cipher_id": "c", "field": "password"}}); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.SetCatalogBinding(s.catID, "slot-1", "cred", "cred-x"); err != nil {
 		t.Fatal(err)
 	}
@@ -330,6 +338,9 @@ func assertCatalogIntact(t *testing.T, label string, db *store.DB, s catalogSeed
 	if os, _ := db.ListCatalogOverrides(s.catID); len(os) != 1 {
 		t.Fatalf("%s: overrides: %+v", label, os)
 	}
+	if _, err := db.GetCredential(store.CatalogCredentialID(s.catID, "ext-slot")); err != nil {
+		t.Fatalf("%s: catalog-made credential: %v", label, err)
+	}
 	var dups int
 	_ = db.Conn().QueryRow(`SELECT COUNT(*) FROM connections WHERE name = 'web-1'`).Scan(&dups)
 	if dups != 1 {
@@ -346,6 +357,8 @@ func assertOldSeesNothing(t *testing.T, label string, o *mvOld, s catalogSeed) {
 		`SELECT COUNT(*) FROM connections WHERE id = 'cat-conn-1'`,
 		`SELECT COUNT(*) FROM port_forwards WHERE connection_id = 'cat-conn-1' OR id = 'cat-fwd-1'`,
 		`SELECT COUNT(*) FROM port_forwards WHERE connection_id NOT IN (SELECT id FROM connections)`,
+		`SELECT COUNT(*) FROM credential_refs WHERE id LIKE 'catcred-%'`,
+		`SELECT COUNT(*) FROM credential_folders WHERE id LIKE 'catcred-%'`,
 	} {
 		if n := o.count(t, q); n != 0 {
 			t.Fatalf("%s: old app holds catalog data (%s = %d)", label, q, n)

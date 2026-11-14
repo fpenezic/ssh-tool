@@ -41,6 +41,9 @@ var shadowTables = []struct{ table, where string }{
 	{"port_forwards", `remote_uuid IS NOT NULL OR connection_id IN (SELECT id FROM connections WHERE catalog_id IS NOT NULL)`},
 	{"connections", `catalog_id IS NOT NULL`},
 	{"folders", `catalog_id IS NOT NULL`},
+	// Credentials made for external references, and their folder.
+	{"credential_refs", catalogCredWhere},
+	{"credential_folders", catalogCredWhere},
 }
 
 // NewShadowNonce returns a fresh random nonce for one snapshot.
@@ -271,7 +274,7 @@ func unshadowOnOpen(db *sql.DB) error {
 func dropShadowTables(x interface {
 	Exec(string, ...any) (sql.Result, error)
 }) error {
-	for _, t := range []string{"port_forwards", "connections", "folders", "workspaces", "meta"} {
+	for _, t := range []string{"port_forwards", "connections", "folders", "credential_refs", "credential_folders", "workspaces", "meta"} {
 		if _, err := x.Exec(`DROP TABLE IF EXISTS ` + shadowPrefix + t); err != nil {
 			return err
 		}

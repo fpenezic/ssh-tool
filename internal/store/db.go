@@ -271,7 +271,9 @@ func (d *DB) ContentFingerprint() string {
 	}{
 		{"folders", "updated_at", "catalog_id IS NULL"},
 		{"connections", "updated_at", "catalog_id IS NULL"},
-		{"credential_refs", "updated_at", ""},
+		// Credentials the catalog client makes are derived from the catalog
+		// (like catalog rows) and left out.
+		{"credential_refs", "updated_at", "id NOT LIKE 'catcred-%'"},
 		// credential_folders: content signed below (updated_at has second
 		// resolution; two edits in one second would look like one).
 		{"credential_folders", "", ""},
@@ -349,7 +351,7 @@ func (d *DB) ContentFingerprint() string {
 	if rows, err := d.conn.Query(
 		`SELECT id, IFNULL(parent_id, ''), name, sort_order, IFNULL(icon_name, ''),
 		        IFNULL(icon_color, ''), IFNULL(icon_image_id, '')
-		   FROM credential_folders ORDER BY id`); err == nil {
+		   FROM credential_folders WHERE id NOT LIKE 'catcred-%' ORDER BY id`); err == nil {
 		h := sha256.New()
 		for rows.Next() {
 			var id, parent, name, iname, icolor, image string
