@@ -126,3 +126,39 @@ func TestRestore_TamperRejected(t *testing.T) {
 		t.Fatalf("tampered backup: %v, want ErrWrongPassphrase", err)
 	}
 }
+
+// StageCheck sees the snapshot's store and can refuse the restore before
+// anything is staged or the live files are snapshotted.
+func TestRestore_StageCheckRefuses(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "store.db")
+	vaultPath := filepath.Join(dir, "vault.enc")
+	seedStore(t, storePath)
+	if err := os.WriteFile(vaultPath, []byte(`{"version":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(dir, "snap.sshtool-backup")
+	if err := Create(dest, storePath, vaultPath, "pass", "test"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	refuse := errors.New("refused")
+	var seen string
+	StageCheck = func(path string) error {
+		db, err := sql.Open("sqlite", path)
+		if err == nil {
+			_ = db.QueryRow(`SELECT v FROM t`).Scan(&seen)
+			db.Close()
+		}
+		return refuse
+	}
+	t.Cleanup(func() { StageCheck = nil })
+	if err := Restore(dest, "pass", storePath, vaultPath); !errors.Is(err, refuse) {
+		t.Fatalf("want the StageCheck error, got %v", err)
+	}
+	if seen != "hello" {
+		t.Errorf("StageCheck did not get the snapshot's store: %q", seen)
+	}
+	if _, err := os.Stat(filepath.Join(dir, PendingDir)); !os.IsNotExist(err) {
+		t.Fatalf("something was staged despite the refusal: %v", err)
+	}
+}
