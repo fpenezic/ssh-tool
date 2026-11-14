@@ -20,6 +20,13 @@ type Folder struct {
 	IconColor *string `json:"icon_color"`
 	CreatedAt int64   `json:"created_at"`
 	UpdatedAt int64   `json:"updated_at"`
+	// CatalogID / RemoteUUID / RemoteRev / CatalogState: set on rows a
+	// catalog owns (see catalogSchemaSQL). CatalogID alone, without a
+	// RemoteUUID, marks a catalog's root folder. All empty on local rows.
+	CatalogID    *string `json:"catalog_id,omitempty"`
+	RemoteUUID   *string `json:"remote_uuid,omitempty"`
+	RemoteRev    int64   `json:"remote_rev,omitempty"`
+	CatalogState string  `json:"catalog_state,omitempty"`
 }
 
 // Connection is a leaf in the tree.
@@ -70,6 +77,12 @@ type Connection struct {
 	// stored here. nil means "no stored VNC password" (noVNC prompts if
 	// the server demands auth).
 	VncPasswordVaultKey *string `json:"vnc_password_vault_key,omitempty"`
+	// CatalogID / RemoteUUID / RemoteRev / CatalogState: set on rows a
+	// catalog owns (see catalogSchemaSQL). All empty on local rows.
+	CatalogID    *string `json:"catalog_id,omitempty"`
+	RemoteUUID   *string `json:"remote_uuid,omitempty"`
+	RemoteRev    int64   `json:"remote_rev,omitempty"`
+	CatalogState string  `json:"catalog_state,omitempty"`
 }
 
 // InheritableSettings: every field is a pointer (or empty map / nil pointer

@@ -36,6 +36,8 @@ func (d *DB) MirrorFrom(srcPath string) error {
 	order := []string{
 		"images",
 		"credential_folders",
+		// catalogs before folders: a catalog's root folder names it.
+		"catalogs",
 		"folders",
 		"credential_refs",
 		"credential_history",
@@ -48,6 +50,12 @@ func (d *DB) MirrorFrom(srcPath string) error {
 		"network_profiles",
 		"connections",
 		"port_forwards",
+		// The catalog client's local state: slots as last synced,
+		// the user's bindings and local layers. The cursor rides in
+		// catalogs, so rows and cursor arrive as a consistent pair.
+		"catalog_slots",
+		"catalog_bindings",
+		"catalog_overrides",
 		"broadcast_groups",
 		"dynamic_folders",
 		"dynamic_entries",
@@ -70,6 +78,11 @@ func (d *DB) MirrorFrom(srcPath string) error {
 	// a self-consistent source snapshot wholesale.
 	if _, err := tx.Exec("PRAGMA defer_foreign_keys = ON"); err != nil {
 		return fmt.Errorf("mirror: defer fk: %w", err)
+	}
+	// The mirror replaces catalog rows wholesale, which the catalog
+	// guard triggers refuse to anyone but the catalog writer.
+	if err := beginCatalogWrite(tx); err != nil {
+		return fmt.Errorf("mirror: %w", err)
 	}
 
 	// Delete children first.
@@ -101,6 +114,9 @@ func (d *DB) MirrorFrom(srcPath string) error {
 		return fmt.Errorf("mirror: fold sensitive: %w", err)
 	}
 
+	if err := endCatalogWrite(tx); err != nil {
+		return fmt.Errorf("mirror: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("mirror: commit: %w", err)
 	}

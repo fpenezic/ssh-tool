@@ -72,7 +72,7 @@ func (a *App) syncAutoApplyEnabled() bool {
 // upgrade re-baselines silently instead of pushing an unchanged
 // profile. The body after the "|" is the content; the tag before it
 // is metadata only.
-const syncFingerprintFormat = "fp3"
+const syncFingerprintFormat = "fp4"
 
 func (a *App) syncFingerprint() string {
 	return syncFingerprintFormat + "|" + a.syncFingerprintBodyNow()

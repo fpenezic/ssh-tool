@@ -61,6 +61,7 @@ func Open(path string) (*DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	clearStaleCatalogWriter(db)
 	audit, aerr := openAuditDB(filepath.Join(filepath.Dir(path), "audit.db"))
 	if aerr != nil {
 		audit = db // degrade gracefully - audit must never break the app
@@ -255,16 +256,22 @@ func (d *DB) ContentFingerprint() string {
 	tables := []struct {
 		name       string
 		updatedCol string
+		// where narrows the signed rows. Catalog-owned folders and
+		// connections are left out: a catalog sync writes them on every
+		// machine that syncs that catalog, and signing them made each
+		// of those machines push after every catalog change. Their local
+		// parts are signed separately below (catalogLocalSignature).
+		where string
 	}{
-		{"folders", "updated_at"},
-		{"connections", "updated_at"},
-		{"credential_refs", "updated_at"},
+		{"folders", "updated_at", "catalog_id IS NULL"},
+		{"connections", "updated_at", "catalog_id IS NULL"},
+		{"credential_refs", "updated_at", ""},
 		// credential_folders: content signed below (updated_at has second
 		// resolution; two edits in one second would look like one).
-		{"credential_folders", ""},
-		{"port_forwards", ""},
-		{"snippets", "updated_at"},
-		{"workspaces", "updated_at"},
+		{"credential_folders", "", ""},
+		{"port_forwards", "", ""},
+		{"snippets", "updated_at", ""},
+		{"workspaces", "updated_at", ""},
 		// dynamic_folders: row count only, NOT last_pulled_at. That column
 		// is bumped to now on every successful inventory refresh
 		// (ReplaceDynamicEntries), which is pure local cache state, not a
@@ -273,10 +280,10 @@ func (d *DB) ContentFingerprint() string {
 		// only the timestamp moved). The folder CONFIG (provider, token
 		// ref, refresh interval) lives in config_json; a real config change
 		// also touches connections/folders, and add/remove moves the count.
-		{"dynamic_folders", ""},
-		{"dynamic_entries", ""},
-		{"images", ""},
-		{"pinned_dynamic_entries", ""},
+		{"dynamic_folders", "", ""},
+		{"dynamic_entries", "", ""},
+		{"images", "", ""},
+		{"pinned_dynamic_entries", "", ""},
 		// network_profiles: userspace WireGuard / NetBird VPN profiles.
 		// MUST be signed or a created/edited/deleted profile never
 		// dirties the sync fingerprint, so auto-sync never pushes it and
@@ -285,7 +292,7 @@ func (d *DB) ContentFingerprint() string {
 		// left orphan network_profile_id references pointing at a profile
 		// row the other machine never got - inventory then logs "network
 		// profile <id> not found" on every refresh.
-		{"network_profiles", "updated_at"},
+		{"network_profiles", "updated_at", ""},
 		// app_settings deliberately excluded: sync writes
 		// sync_generation / sync_last_at into it on every push, which
 		// would re-dirty the profile immediately. None of the
@@ -294,14 +301,18 @@ func (d *DB) ContentFingerprint() string {
 	}
 	var b strings.Builder
 	for _, t := range tables {
+		where := ""
+		if t.where != "" {
+			where = " WHERE " + t.where
+		}
 		var rows int64
-		if err := d.conn.QueryRow("SELECT COUNT(*) FROM " + t.name).Scan(&rows); err != nil {
+		if err := d.conn.QueryRow("SELECT COUNT(*) FROM " + t.name + where).Scan(&rows); err != nil {
 			continue
 		}
 		fmt.Fprintf(&b, "%s=%d", t.name, rows)
 		if t.updatedCol != "" {
 			var mx sql.NullInt64
-			if err := d.conn.QueryRow("SELECT MAX(" + t.updatedCol + ") FROM " + t.name).Scan(&mx); err == nil && mx.Valid {
+			if err := d.conn.QueryRow("SELECT MAX(" + t.updatedCol + ") FROM " + t.name + where).Scan(&mx); err == nil && mx.Valid {
 				fmt.Fprintf(&b, "/%d", mx.Int64)
 			}
 		}
@@ -348,25 +359,91 @@ func (d *DB) ContentFingerprint() string {
 	// port_forwards has no updated_at either: an edit (ports, bookmarks,
 	// browser mode) keeps the count, so its content is signed too, or the
 	// edit never pushes and a pull later overwrites it.
+	// Catalog forwards are left out here like catalog connections; their
+	// local columns are in catalogLocalSignature.
 	if rows, err := d.conn.Query(
 		`SELECT id, connection_id, kind, IFNULL(local_addr, ''), IFNULL(local_port, 0),
 		        IFNULL(remote_host, ''), IFNULL(remote_port, 0), auto_start, description,
-		        bookmarks, browser_mode
-		   FROM port_forwards ORDER BY id`); err == nil {
+		        bookmarks, browser_mode, disabled
+		   FROM port_forwards WHERE remote_uuid IS NULL ORDER BY id`); err == nil {
 		h := sha256.New()
 		for rows.Next() {
 			var id, conn, kind, laddr, rhost, desc, bm, browser string
-			var lport, rport, auto int64
-			if err := rows.Scan(&id, &conn, &kind, &laddr, &lport, &rhost, &rport, &auto, &desc, &bm, &browser); err != nil {
+			var lport, rport, auto, disabled int64
+			if err := rows.Scan(&id, &conn, &kind, &laddr, &lport, &rhost, &rport, &auto, &desc, &bm, &browser, &disabled); err != nil {
 				continue
 			}
-			fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%d\x00%s\x00%d\x00%d\x00%s\x00%s\x00%s\n",
+			fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%d\x00%s\x00%d\x00%d\x00%s\x00%s\x00%s",
 				id, conn, kind, laddr, lport, rhost, rport, auto, desc, bm, browser)
+			// Only a disabled forward signs the column, so the hash of
+			// every existing forward stays what fp3 computed.
+			if disabled != 0 {
+				fmt.Fprintf(h, "\x00disabled")
+			}
+			h.Write([]byte{'\n'})
 		}
 		rows.Close()
 		fmt.Fprintf(&b, "fwdcfg=%x;", h.Sum(nil))
 	}
+	// Absent without catalog data, so a profile that never used a catalog
+	// keeps its fp3 body and an upgrade does not push.
+	if sig := d.catalogLocalSignature(); sig != "" {
+		fmt.Fprintf(&b, "catalog=%s;", sig)
+	}
 	return b.String()
+}
+
+// catalogLocalSignature signs what the user owns in the catalog client:
+// each catalog's configuration (not its cursor or sync status, which move
+// on every pass), the bindings and local layers, and the local columns of
+// catalog rows. Catalog-owned content is deliberately absent; see the
+// where clauses in ContentFingerprint. A catalog row counts only while it
+// carries a local column, so a catalog adding or dropping plain rows does
+// not move the fingerprint. Empty when there is nothing to sign.
+func (d *DB) catalogLocalSignature() string {
+	h := sha256.New()
+	signed := false
+	sign := func(label, query string) {
+		rows, err := d.conn.Query(query)
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+		cols, _ := rows.Columns()
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		fmt.Fprintf(h, "%s\n", label)
+		for rows.Next() {
+			if err := rows.Scan(ptrs...); err != nil {
+				continue
+			}
+			signed = true
+			for _, v := range vals {
+				fmt.Fprintf(h, "%v\x00", v)
+			}
+			h.Write([]byte{'\n'})
+		}
+	}
+	sign("catalogs", `SELECT id, name, base_url, root_folder_id, sync_interval_sec FROM catalogs ORDER BY id`)
+	sign("bindings", `SELECT catalog_id, slot_uuid, kind, target_id FROM catalog_bindings ORDER BY catalog_id, slot_uuid`)
+	sign("overrides", `SELECT catalog_id, remote_uuid, kind, json FROM catalog_overrides ORDER BY catalog_id, remote_uuid`)
+	sign("conns", `SELECT id, favorite, open_hidden, IFNULL(password_vault_key, ''), IFNULL(vnc_password_vault_key, '')
+		FROM connections
+		WHERE catalog_id IS NOT NULL
+		  AND (favorite != 0 OR open_hidden != 0 OR password_vault_key IS NOT NULL OR vnc_password_vault_key IS NOT NULL)
+		ORDER BY id`)
+	sign("fwds", `SELECT id, auto_start, disabled, bookmarks, browser_mode
+		FROM port_forwards
+		WHERE remote_uuid IS NOT NULL
+		  AND (auto_start != 0 OR disabled != 0 OR bookmarks NOT IN ('', '[]') OR browser_mode != '')
+		ORDER BY id`)
+	if !signed {
+		return ""
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 // DefaultPath returns the platform-appropriate location for the store file.
