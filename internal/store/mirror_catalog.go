@@ -174,6 +174,10 @@ func (m *legacyCatalogMirror) clear(tx *sql.Tx, t string) (bool, error) {
 	case t == "port_forwards":
 		q = `DELETE FROM port_forwards WHERE remote_uuid IS NULL
 			AND connection_id NOT IN (SELECT id FROM connections WHERE catalog_id IS NOT NULL)`
+	case t == "credential_refs" || t == "credential_folders":
+		// Credentials made for catalog external references never reach an
+		// older app (shadowed), so its snapshot says nothing about them.
+		q = `DELETE FROM ` + t + ` WHERE NOT (` + catalogCredWhere + `)`
 	default:
 		return false, nil
 	}
@@ -223,6 +227,10 @@ var adoptFwdCols = []string{"auto_start", "bookmarks", "browser_mode"}
 
 func (m *legacyCatalogMirror) hook(t string) rowHook {
 	switch t {
+	case "credential_refs", "credential_folders":
+		return func(cols []string, vals []any) bool {
+			return !IsCatalogCredential(asString(vals[colIndex(cols, "id")]))
+		}
 	case "folders":
 		return func(cols []string, vals []any) bool {
 			id := asString(vals[colIndex(cols, "id")])
