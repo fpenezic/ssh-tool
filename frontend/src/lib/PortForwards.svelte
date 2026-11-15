@@ -8,6 +8,9 @@
     type Connection,
     type ProxyBookmark,
     type PortCheckResult,
+    type CatalogRecordInfo,
+    type CatalogEditInput,
+    type CatalogSaveResult,
   } from "./api";
   import { sessions, tree, paneTabs } from "./stores.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
@@ -196,6 +199,67 @@
   const editingSpec = $derived(specs.find((x) => x.id === editingForwardId));
   const editingCatalogFw = $derived(!!editingSpec?.remote_uuid);
   let suggestedAutoStart = $state(false);
+  // Writers of the connection's catalog folder: a catalog forward's record
+  // can be edited for everyone ("Catalog record"), and a new forward can
+  // go into the catalog. "My settings" stays the default.
+  let connWritable = $state(false);
+  let fwRec = $state<CatalogRecordInfo | null>(null);
+  let fwRecordMode = $state(false);
+  let fwConflict = $state<{ input: CatalogEditInput; plan: NonNullable<CatalogSaveResult["plan"]> } | null>(null);
+  let addToCatalog = $state(false);
+  const fwLocked = $derived(editingCatalogFw && !fwRecordMode);
+  $effect(() => {
+    const c = connection;
+    connWritable = false;
+    if (!c.catalog_id) return;
+    api.catalogRecord("connections", c.id).then((r) => { if (c.id === connection.id) connWritable = !!r.can_write; }).catch(() => {});
+  });
+  function setFwRecordMode(on: boolean) {
+    fwRecordMode = on;
+    fwConflict = null;
+    const spec = editingSpec;
+    if (!spec) return;
+    // The form shows the catalog's values in record mode, the user's own otherwise.
+    const f = on ? fwRec?.form : null;
+    nLocalAddr = (f ? f.local_addr : spec.local_addr) ?? "127.0.0.1";
+    nLocalPort = (f ? f.local_port : spec.local_port) ?? undefined;
+    nRemoteHost = (f ? f.remote_host : spec.remote_host) ?? "127.0.0.1";
+    nRemotePort = (f ? f.remote_port : spec.remote_port) ?? undefined;
+    nAutoStart = f ? f.auto_start : spec.auto_start;
+    nDesc = (f ? f.description : spec.description) ?? "";
+    formBase = formSnap();
+  }
+  async function saveForwardRecord(input?: CatalogEditInput): Promise<boolean> {
+    if (!fwRec?.form || !editingForwardId) return false;
+    const edited = { ...fwRec.form, local_addr: nLocalAddr || null, local_port: portOrUndef(nLocalPort) ?? null,
+      remote_host: nKind === "dynamic" ? null : nRemoteHost || null, remote_port: nKind === "dynamic" ? null : portOrUndef(nRemotePort) ?? null,
+      auto_start: nAutoStart, description: nDesc };
+    const inp: CatalogEditInput = input ?? { kind: "forwards", local_id: editingForwardId, rev: fwRec.rev, loaded: fwRec.form, edited, accept_rev: 0, resolve: {}, slot_names: {} };
+    const r = await api.catalogRecordSave(inp);
+    if (r.saved) {
+      fwConflict = null;
+      cancelForm();
+      await reload();
+      toast.ok("Saved to the catalog");
+      return true;
+    }
+    if (r.plan?.conflicts?.length) {
+      fwConflict = { input: { ...inp, accept_rev: r.plan.conflict_rev ?? 0, resolve: Object.fromEntries(r.plan.conflicts.filter((c) => c.both).map((c) => [c.field, "mine"])) }, plan: r.plan };
+      return false;
+    }
+    err = r.message ?? "not saved";
+    return false;
+  }
+  async function deleteForEveryone(spec: PortForward) {
+    const ok = await showConfirm({ title: "Delete for everyone", message: `Delete "${spec.description || spec.kind + " forward"}" from the catalog? It goes for everyone with access, and your own settings on it go too.`, okLabel: "Delete for everyone", danger: true });
+    if (!ok) return;
+    try {
+      await api.catalogDelete("forwards", spec.id, false);
+      await reload();
+    } catch (e) {
+      err = errMsg(e);
+    }
+  }
   async function toggleDisabled(spec: PortForward) {
     try {
       await api.forwardsSetDisabled(spec.id, !spec.disabled);
@@ -224,8 +288,11 @@
     nDesc = spec.description ?? "";
     nBrowserMode = spec.browser_mode ?? "";
     suggestedAutoStart = false;
+    fwRec = null;
+    fwRecordMode = false;
+    fwConflict = null;
     if (spec.remote_uuid) {
-      api.catalogRecord("forwards", spec.id).then((r) => (suggestedAutoStart = !!r.suggested_auto_start)).catch(() => {});
+      api.catalogRecord("forwards", spec.id).then((r) => { fwRec = r; suggestedAutoStart = !!r.suggested_auto_start; }).catch(() => {});
     }
     showAdd = true;
     formBase = formSnap();
@@ -234,6 +301,7 @@
   function openAdd() {
     if (fwSaving) return;
     resetForm();
+    addToCatalog = false;
     showAdd = true;
     formBase = formSnap();
   }
@@ -279,6 +347,7 @@
     if (fwSaving) return false;
     fwSaving = true;
     try {
+      if (editingForwardId && fwRecordMode) return await saveForwardRecord();
       return editingForwardId ? await updateForward() : await createForward();
     } finally {
       fwSaving = false;
@@ -287,6 +356,21 @@
 
   async function createForward(): Promise<boolean> {
     err = null;
+    if (addToCatalog && connection.catalog_id) {
+      try {
+        await api.catalogCreate({ catalog_id: connection.catalog_id, kind: "forwards", parent_id: connection.id, form: {
+          kind: nKind, local_addr: nLocalAddr || null, local_port: portOrUndef(nLocalPort) ?? null,
+          remote_host: nKind === "dynamic" ? null : nRemoteHost || null, remote_port: nKind === "dynamic" ? null : portOrUndef(nRemotePort) ?? null,
+          auto_start: nAutoStart, description: nDesc } });
+        showAdd = false;
+        resetForm();
+        await reload();
+        return true;
+      } catch (e: any) {
+        err = errMsg(e);
+        return false;
+      }
+    }
     try {
       await api.forwardsCreate({
         connection_id: connection.id,
@@ -636,6 +720,35 @@
       <!-- Locked while Save / Create runs: it resets the form when done, so a
            field typed meanwhile would be lost. -->
       <fieldset class="lock" disabled={fwSaving}>
+      {#if editingCatalogFw && fwRec?.can_write}
+        <div class="fw-mode" role="radiogroup" aria-label="What Save changes">
+          <button type="button" class:active={!fwRecordMode} onclick={() => setFwRecordMode(false)}>My settings</button>
+          <button type="button" class:active={fwRecordMode} onclick={() => setFwRecordMode(true)}><IconUsers size={11} /> Catalog record</button>
+        </div>
+        {#if fwRecordMode}<p class="fw-rec">Save changes this forward for everyone with access to "{fwRec.folder_name}". Your local port, auto start and bookmarks stay yours.</p>{/if}
+      {:else if !editingForwardId && connection.catalog_id && connWritable}
+        <div class="fw-mode" role="radiogroup" aria-label="Where the new forward goes">
+          <button type="button" class:active={!addToCatalog} onclick={() => (addToCatalog = false)}>Yours (this machine)</button>
+          <button type="button" class:active={addToCatalog} onclick={() => (addToCatalog = true)}><IconUsers size={11} /> In the catalog (everyone)</button>
+        </div>
+      {/if}
+      {#if fwConflict}
+        <div class="fw-conflict">
+          <p><IconAlertTriangle size={11} /> Someone saved this forward since you opened it.</p>
+          {#each fwConflict.plan.conflicts ?? [] as c (c.field)}
+            <div class="fw-cf" class:both={c.both}><strong>{c.field}</strong>: yours <code>{c.mine || "(empty)"}</code>, now <code>{c.theirs || "(empty)"}</code>
+              {#if c.both}
+                <label><input type="radio" name={"fc-" + c.field} checked={fwConflict.input.resolve[c.field] !== "theirs"} onchange={() => { if (fwConflict) fwConflict.input.resolve = { ...fwConflict.input.resolve, [c.field]: "mine" }; }} /> keep yours</label>
+                <label><input type="radio" name={"fc-" + c.field} checked={fwConflict.input.resolve[c.field] === "theirs"} onchange={() => { if (fwConflict) fwConflict.input.resolve = { ...fwConflict.input.resolve, [c.field]: "theirs" }; }} /> keep theirs</label>
+              {/if}
+            </div>
+          {/each}
+          <div class="fw-cf-actions">
+            <button type="button" onclick={() => { fwConflict = null; cancelForm(); void reload(); }}>Discard mine</button>
+            <button type="button" class="primary" onclick={() => fwConflict && saveForwardRecord(fwConflict.input)}>Re-apply my changes</button>
+          </div>
+        </div>
+      {/if}
       <label>Kind
         <!-- Kind is immutable once created (it changes the whole listener
              semantics); disabled while editing. -->
@@ -654,7 +767,7 @@
         <label class="grow">{nKind === "remote" ? "Remote bind address" : "Local bind address"}
           <input
             bind:value={nLocalAddr}
-            disabled={editingCatalogFw}
+            disabled={fwLocked}
             oninput={() => (nLocalAddrTouched = true)}
             placeholder="127.0.0.1"
             title={nKind === "remote"
@@ -687,7 +800,7 @@
           <label class="grow">{nKind === "remote" ? "Local target host" : "Target host"}
             <input
               bind:value={nRemoteHost}
-              disabled={editingCatalogFw}
+              disabled={fwLocked}
               oninput={() => (nRemoteHostTouched = true)}
               placeholder={nKind === "remote" ? "127.0.0.1" : "127.0.0.1 or db.internal"}
               title={nKind === "remote"
@@ -696,12 +809,12 @@
             />
           </label>
           <label class="port">{nKind === "remote" ? "Local target port" : "Target port"}
-            <input type="number" bind:value={nRemotePort} placeholder="5432" disabled={editingCatalogFw} />
+            <input type="number" bind:value={nRemotePort} placeholder="5432" disabled={fwLocked} />
           </label>
         </div>
       {/if}
       <label>Description
-        <input bind:value={nDesc} disabled={editingCatalogFw} placeholder={nKind === "dynamic" ? "Customer intranet" : nKind === "remote" ? "Package proxy for the server" : "Postgres tunnel"} />
+        <input bind:value={nDesc} disabled={fwLocked} placeholder={nKind === "dynamic" ? "Customer intranet" : nKind === "remote" ? "Package proxy for the server" : "Postgres tunnel"} />
       </label>
       {#if !tunnel}
         <!-- A tunnel starts every forward, so the flag means nothing there. -->
@@ -713,7 +826,7 @@
           <p class="fw-hint">The catalog suggests starting this forward automatically. Tick the box above to do so.</p>
         {/if}
       {/if}
-      {#if editingForwardId !== null && (nKind === "local" || nKind === "dynamic")}
+      {#if editingForwardId !== null && !fwRecordMode && (nKind === "local" || nKind === "dynamic")}
         <label>Bookmarks open in
           <select bind:value={nBrowserMode}>
             <option value="">
@@ -831,6 +944,7 @@
             <button onclick={() => openEditForward(spec)} title="Edit this forward" disabled={fwSaving}>Edit</button>
             {#if spec.remote_uuid}
               {#if !spec.disabled}<button onclick={() => toggleDisabled(spec)} title="Switch this catalog forward off on this machine">Disable</button>{/if}
+              {#if connWritable && spec.catalog_state !== "removed"}<button class="danger" onclick={() => deleteForEveryone(spec)} title="Delete it from the catalog for everyone">Delete for everyone</button>{/if}
             {:else}
               <button class="danger" onclick={() => removeForward(spec.id)}>Delete</button>
             {/if}
@@ -894,6 +1008,15 @@
   .badge.warn { color: var(--yellow); display: inline-flex; align-items: center; gap: 2px; }
   .badge.off { color: var(--overlay1, #888); text-decoration: line-through; }
   .fw-hint { margin: 0; font-size: var(--fs-sm); color: var(--sapphire); }
+  .fw-mode { display: inline-flex; align-self: flex-start; border: 1px solid var(--surface1); border-radius: var(--r-md); overflow: hidden; margin-bottom: 4px; }
+  .fw-mode button { border: 0; border-radius: 0; background: transparent; padding: 2px 10px; font-size: var(--fs-sm); display: inline-flex; align-items: center; gap: 4px; }
+  .fw-mode button.active { background: color-mix(in srgb, var(--peach) 25%, var(--surface0)); }
+  .fw-rec { margin: 0 0 4px; font-size: var(--fs-sm); color: var(--peach); }
+  .fw-conflict { border: 1px solid color-mix(in srgb, var(--yellow) 55%, var(--surface1)); border-radius: var(--r-md); padding: 4px 8px; font-size: var(--fs-sm); margin-bottom: 6px; }
+  .fw-conflict p { margin: 0 0 4px; color: var(--yellow); }
+  .fw-cf { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .fw-cf.both strong { color: var(--yellow); }
+  .fw-cf-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
   /* A catalog forward's own fields: visibly locked, not just greyed. */
   input:disabled { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--border, #333) 35%, transparent) 6px 7px); cursor: not-allowed; }
 

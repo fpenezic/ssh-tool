@@ -81,6 +81,10 @@
     <span>From the catalog <button class="linklike" onclick={() => catalogs.open(rec.catalog_id)}>{rec.catalog_name}</button></span>
     {#if rec.updated_by}<span class="cb-meta">last changed by {rec.updated_by}</span>{/if}
   </div>
+  {#if !rec.removed}
+    <p class="cb-role">{rec.can_write ? "You can edit this record for everyone." : "Read only for you."}
+      {#if catalogs.byId(rec.catalog_id)?.base_url}<button class="linklike" title="Access is managed in the catalog's web page" onclick={() => api.openURL(catalogs.byId(rec.catalog_id)!.base_url)}>Manage access</button>{/if}</p>
+  {/if}
   {#if rec.removed}
     <div class="cb-removed">
       <IconAlertTriangle size={13} />
@@ -114,6 +118,7 @@
   .cat-banner.removed { border-color: color-mix(in srgb, var(--yellow) 55%, var(--border, #333)); }
   .cb-head { display: flex; align-items: center; gap: 6px; font-weight: 600; }
   .cb-meta { margin-left: auto; font-weight: 400; font-size: var(--fs-sm); opacity: 0.65; }
+  .cb-role { margin: 0; font-size: var(--fs-sm); opacity: 0.75; display: flex; gap: 6px; align-items: center; }
   .cb-note { margin: 0; font-size: var(--fs-sm); opacity: 0.8; display: flex; align-items: center; gap: 4px; }
   .cb-removed { display: flex; align-items: center; gap: 8px; color: var(--yellow); font-size: var(--fs-sm); }
   .cb-removed span { flex: 1; }

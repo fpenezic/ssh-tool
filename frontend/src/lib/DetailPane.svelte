@@ -48,9 +48,10 @@
   import { applyDbDraft, dbDraftError, dbDraftFrom, dbDraftSame, type DbDraft } from "./dbDraft";
   import { dbDefaultFor, dbEnabledFor, dbFolderTargets, dbInheritedFrom } from "./dbState.svelte";
   import CatalogBanner from "./CatalogBanner.svelte";
+  import RecordModeBar from "./RecordModeBar.svelte";
   import { IconUsers } from "./iconMap";
   import { catalogs, parseMarker } from "./catalog.svelte";
-  import type { CatalogRecordInfo } from "./api";
+  import type { CatalogRecordInfo, CatalogSaveResult, CatalogEditInput, CatalogEditForm } from "./api";
 
   // Populate the Network dropdowns; cached after the first load and
   // refreshed via the network_tunnel_changed event inside the store.
@@ -132,6 +133,100 @@
   let saveError = $state<string | null>(null);
   const isCatalogConn = $derived(!!conn?.catalog_id);
   const isCatalogFolder = $derived(!!folder?.catalog_id && !!folder?.remote_uuid);
+  // Record mode (writers): the form edits the catalog record itself, for
+  // everyone with access to its folder. "My settings" is the default.
+  let recordMode = $state(false);
+  let recordDoc = $state("");
+  let recordPending = $state<CatalogSaveResult | null>(null);
+  let recordInput = $state<CatalogEditInput | null>(null);
+  let recordSlotNames = $state<Record<string, string>>({});
+  let recordResolve = $state<Record<string, string>>({});
+  let recordStillLocal = $state<string[]>([]);
+  let recordBusy = $state(false);
+  // Locked: a catalog row outside record mode.
+  const connLocked = $derived(isCatalogConn && !recordMode);
+  const folderLocked = $derived(isCatalogFolder && !recordMode);
+  $effect(() => {
+    void conn?.id; void folder?.id;
+    recordMode = false;
+    recordPending = null;
+    recordStillLocal = [];
+  });
+  function setRecordMode(on: boolean) {
+    if (on === recordMode) return;
+    recordMode = on;
+    recordPending = null;
+    recordInput = null;
+    recordSlotNames = {};
+    recordResolve = {};
+    recordStillLocal = [];
+    saveError = null;
+    recordDoc = catRec?.form?.doc_md ?? "";
+    draftEpoch++;
+  }
+  // What the form is built from: the row (local view) or, in record mode,
+  // the catalog record without the user's local layer.
+  const connSrc = $derived(conn && recordMode && catRec?.form
+    ? { ...conn, name: catRec.form.name, hostname: catRec.form.hostname, notes: catRec.form.notes, tags: catRec.form.tags ?? [], overrides: catRec.form.settings }
+    : conn);
+  const folderSrc = $derived(folder && recordMode && catRec?.form
+    ? { ...folder, name: catRec.form.name, settings: catRec.form.settings }
+    : folder);
+  async function saveRecord(kind: "folders" | "connections", id: string, edited: CatalogEditForm): Promise<boolean> {
+    if (!catRec?.form) return false;
+    const input: CatalogEditInput = recordInput
+      ? { ...recordInput, edited, slot_names: recordSlotNames, resolve: recordResolve }
+      : { kind, local_id: id, rev: catRec.rev, loaded: catRec.form, edited, accept_rev: 0, resolve: {}, slot_names: recordSlotNames };
+    return runRecordSave(input);
+  }
+  async function runRecordSave(input: CatalogEditInput): Promise<boolean> {
+    recordBusy = true;
+    try {
+      const r = await api.catalogRecordSave(input);
+      if (r.saved) {
+        recordPending = null;
+        recordInput = null;
+        recordSlotNames = {};
+        recordResolve = {};
+        recordStillLocal = r.still_local ?? [];
+        saveError = null;
+        await tree.load();
+        await loadCatRec();
+        draftEpoch++;
+        if (r.warnings?.length) toast.info(r.warnings.map((w) => w.message).join(" "), 10000);
+        showSaved();
+        return true;
+      }
+      if (r.plan?.conflicts?.length || r.plan?.need_slots?.length) {
+        recordPending = r;
+        recordInput = r.plan.conflicts?.length ? { ...input, accept_rev: r.plan.conflict_rev ?? 0 } : input;
+        saveError = null;
+        void setEdTab("general");
+        return false;
+      }
+      const fe = (r.field_errors ?? []).map((f) => `${f.path}: ${f.message}`).join("; ");
+      saveError = (r.message ?? "not saved") + (fe ? ` (${fe})` : "");
+      return false;
+    } catch (e) {
+      saveError = errMsg(e);
+      return false;
+    } finally {
+      recordBusy = false;
+    }
+  }
+  function retryRecord() {
+    if (!recordInput) return;
+    void runRecordSave({ ...recordInput, slot_names: recordSlotNames, resolve: recordResolve });
+  }
+  async function discardRecord() {
+    recordPending = null;
+    recordInput = null;
+    recordSlotNames = {};
+    recordResolve = {};
+    await loadCatRec();
+    recordDoc = catRec?.form?.doc_md ?? "";
+    draftEpoch++;
+  }
   async function loadCatRec() {
     const kind = conn?.catalog_id ? "connections" : isCatalogFolder ? "folders" : null;
     const id = conn?.catalog_id ? conn.id : folder?.id;
@@ -510,32 +605,34 @@
       const keep = folder.id === draftFolderId && draftEpoch === draftFolderEpoch && untrack(() => edited(editingFolder, base));
       draftFolderId = folder.id;
       draftFolderEpoch = draftEpoch;
+      void recordMode;
+      const fsrc = folderSrc ?? folder;
       const fresh = {
-        name: folder.name,
-        username: folder.settings.username ?? "",
-        port: folder.settings.port?.toString() ?? "",
-        authRef: folder.settings.auth_ref ?? "",
-        otpRef: folder.settings.otp_ref ?? "",
-        jumpHost: folder.settings.jump_host,
-        colorTag: folder.settings.color_tag ?? "",
-        autoReconnect: encodeBool(folder.settings.auto_reconnect),
-        sensitive: encodeBool(folder.settings.sensitive),
-        verbose: encodeBool(folder.settings.verbose),
-        probeLiveness: encodeBool(folder.settings.probe_liveness),
-        keepalive: folder.settings.keepalive_interval !== undefined
-          ? String(folder.settings.keepalive_interval)
+        name: fsrc.name,
+        username: fsrc.settings.username ?? "",
+        port: fsrc.settings.port?.toString() ?? "",
+        authRef: fsrc.settings.auth_ref ?? "",
+        otpRef: fsrc.settings.otp_ref ?? "",
+        jumpHost: fsrc.settings.jump_host,
+        colorTag: fsrc.settings.color_tag ?? "",
+        autoReconnect: encodeBool(fsrc.settings.auto_reconnect),
+        sensitive: encodeBool(fsrc.settings.sensitive),
+        verbose: encodeBool(fsrc.settings.verbose),
+        probeLiveness: encodeBool(fsrc.settings.probe_liveness),
+        keepalive: fsrc.settings.keepalive_interval !== undefined
+          ? String(fsrc.settings.keepalive_interval)
           : "",
-        networkProfile: encodeNetProfile(folder.settings.network_profile_id),
-        initialCommand: folder.settings.initial_command ?? "",
+        networkProfile: encodeNetProfile(fsrc.settings.network_profile_id),
+        initialCommand: fsrc.settings.initial_command ?? "",
         initialCommandDelay:
-          folder.settings.initial_command_line_delay_ms !== undefined
-            ? String(folder.settings.initial_command_line_delay_ms)
+          fsrc.settings.initial_command_line_delay_ms !== undefined
+            ? String(fsrc.settings.initial_command_line_delay_ms)
             : "",
-        tunnelOnly: encodeBool(folder.settings.tunnel_only),
-        tunnelAutostart: encodeBool(folder.settings.tunnel_autostart),
-        vncDefault: encodeBool(folder.settings.vnc_default),
-        kafka: kafkaDraftFrom(folder.settings),
-        db: dbDraftFrom(folder.settings),
+        tunnelOnly: encodeBool(fsrc.settings.tunnel_only),
+        tunnelAutostart: encodeBool(fsrc.settings.tunnel_autostart),
+        vncDefault: encodeBool(fsrc.settings.vnc_default),
+        kafka: kafkaDraftFrom(fsrc.settings),
+        db: dbDraftFrom(fsrc.settings),
       };
       const prev = untrack(() => editingFolder);
       editingFolder = keep && prev && base ? mergeDraft(prev, base, fresh) : fresh;
@@ -549,9 +646,11 @@
   // the same unsaved-changes affordance (Save * / warn on switch).
   const folderDirty = $derived.by(() => {
     if (!folder || !editingFolder) return false;
-    const s = folder.settings ?? {};
+    const fsrc = folderSrc ?? folder;
+    const s = fsrc.settings ?? {};
     return (
-      editingFolder.name !== folder.name ||
+      (recordMode && recordDoc !== (catRec?.form?.doc_md ?? "")) ||
+      editingFolder.name !== fsrc.name ||
       editingFolder.username !== (s.username ?? "") ||
       numText(editingFolder.port) !== (s.port?.toString() ?? "") ||
       editingFolder.authRef !== (s.auth_ref ?? "") ||
@@ -587,7 +686,7 @@
     }
     folderSaving = true;
     draftFolderSent = snapDraft(editingFolder);
-    const settings = { ...folder.settings };
+    const settings = { ...(folderSrc ?? folder).settings };
     settings.username = editingFolder.username.trim() || undefined;
     {
       const p = numText(editingFolder.port);
@@ -621,6 +720,10 @@
     settings.initial_command_line_delay_ms = parseDelayMs(editingFolder.initialCommandDelay);
     let ok = false;
     try {
+      if (recordMode && catRec?.form) {
+        ok = await saveRecord("folders", folder.id, { ...catRec.form, name: editingFolder.name, settings, doc_md: recordDoc });
+        return ok;
+      }
       await api.foldersUpdate({ id: folder.id, name: editingFolder.name, settings });
       await tree.load();
       showSaved();
@@ -1166,42 +1269,44 @@
       const keep = conn.id === draftConnId && draftEpoch === draftConnEpoch && untrack(() => edited(editing, base));
       draftConnId = conn.id;
       draftConnEpoch = draftEpoch;
+      void recordMode;
+      const src = connSrc ?? conn;
       const fresh = {
-        name: conn.name,
-        hostname: conn.hostname,
-        notes: conn.notes,
-        username: conn.overrides?.username ?? "",
-        port: conn.overrides?.port?.toString() ?? "",
-        authRef: encodeAuthRef(conn.overrides?.auth_ref),
-        otpRef: encodeAuthRef(conn.overrides?.otp_ref),
-        jumpHost: conn.overrides?.jump_host,
-        colorTag: conn.overrides?.color_tag ?? "",
-        autoReconnect: encodeBool(conn.overrides?.auto_reconnect),
-        sensitive: encodeBool(conn.overrides?.sensitive),
-        verbose: encodeBool(conn.overrides?.verbose),
-        keepalive: conn.overrides?.keepalive_interval !== undefined
-          ? String(conn.overrides.keepalive_interval)
+        name: src.name,
+        hostname: src.hostname,
+        notes: src.notes,
+        username: src.overrides?.username ?? "",
+        port: src.overrides?.port?.toString() ?? "",
+        authRef: encodeAuthRef(src.overrides?.auth_ref),
+        otpRef: encodeAuthRef(src.overrides?.otp_ref),
+        jumpHost: src.overrides?.jump_host,
+        colorTag: src.overrides?.color_tag ?? "",
+        autoReconnect: encodeBool(src.overrides?.auto_reconnect),
+        sensitive: encodeBool(src.overrides?.sensitive),
+        verbose: encodeBool(src.overrides?.verbose),
+        keepalive: src.overrides?.keepalive_interval !== undefined
+          ? String(src.overrides.keepalive_interval)
           : "",
-        vncEnabled: encodeBool(conn.overrides?.vnc_enabled),
-        vncPort: conn.overrides?.vnc_port !== undefined
-          ? String(conn.overrides.vnc_port)
+        vncEnabled: encodeBool(src.overrides?.vnc_enabled),
+        vncPort: src.overrides?.vnc_port !== undefined
+          ? String(src.overrides.vnc_port)
           : "",
-        vncTunnel: encodeBool(conn.overrides?.vnc_use_tunnel),
-        vncDefault: encodeBool(conn.overrides?.vnc_default),
-        networkProfile: encodeNetProfile(conn.overrides?.network_profile_id),
-        initialCommand: conn.overrides?.initial_command ?? "",
+        vncTunnel: encodeBool(src.overrides?.vnc_use_tunnel),
+        vncDefault: encodeBool(src.overrides?.vnc_default),
+        networkProfile: encodeNetProfile(src.overrides?.network_profile_id),
+        initialCommand: src.overrides?.initial_command ?? "",
         initialCommandDelay:
-          conn.overrides?.initial_command_line_delay_ms !== undefined
-            ? String(conn.overrides.initial_command_line_delay_ms)
+          src.overrides?.initial_command_line_delay_ms !== undefined
+            ? String(src.overrides.initial_command_line_delay_ms)
             : "",
-        tunnelOnly: encodeBool(conn.overrides?.tunnel_only),
-        tunnelAutostart: encodeBool(conn.overrides?.tunnel_autostart),
-        kafka: kafkaDraftFrom(conn.overrides),
-        db: dbDraftFrom(conn.overrides),
-        openHidden: !!conn.open_hidden,
-        localShellKind: conn.local_shell_kind ?? "",
-        localShellDir: conn.local_shell_dir ?? "",
-        tags: [...(conn.tags ?? [])],
+        tunnelOnly: encodeBool(src.overrides?.tunnel_only),
+        tunnelAutostart: encodeBool(src.overrides?.tunnel_autostart),
+        kafka: kafkaDraftFrom(src.overrides),
+        db: dbDraftFrom(src.overrides),
+        openHidden: !!src.open_hidden,
+        localShellKind: src.local_shell_kind ?? "",
+        localShellDir: src.local_shell_dir ?? "",
+        tags: [...(src.tags ?? [])],
       };
       const prev = untrack(() => editing);
       editing = keep && prev && base ? mergeDraft(prev, base, fresh) : fresh;
@@ -1217,14 +1322,16 @@
   // warn-before-leave prompt. Compares the same fields saveConn writes.
   const dirty = $derived.by(() => {
     if (!conn || !editing) return false;
-    const o = conn.overrides ?? {};
+    const src = connSrc ?? conn;
+    const o = src.overrides ?? {};
     const tagsEq =
-      editing.tags.length === (conn.tags?.length ?? 0) &&
-      editing.tags.every((t, i) => t === conn.tags?.[i]);
+      editing.tags.length === (src.tags?.length ?? 0) &&
+      editing.tags.every((t, i) => t === src.tags?.[i]);
     return (
-      editing.name !== conn.name ||
-      editing.hostname !== conn.hostname ||
-      editing.notes !== (conn.notes ?? "") ||
+      (recordMode && recordDoc !== (catRec?.form?.doc_md ?? "")) ||
+      editing.name !== src.name ||
+      editing.hostname !== src.hostname ||
+      editing.notes !== (src.notes ?? "") ||
       editing.username !== (o.username ?? "") ||
       numText(editing.port) !== (o.port?.toString() ?? "") ||
       editing.authRef !== encodeAuthRef(o.auth_ref) ||
@@ -1248,9 +1355,9 @@
         (o.initial_command_line_delay_ms !== undefined
           ? String(o.initial_command_line_delay_ms)
           : "") ||
-      editing.openHidden !== !!conn.open_hidden ||
-      editing.localShellKind !== (conn.local_shell_kind ?? "") ||
-      editing.localShellDir !== (conn.local_shell_dir ?? "") ||
+      editing.openHidden !== !!src.open_hidden ||
+      editing.localShellKind !== (src.local_shell_kind ?? "") ||
+      editing.localShellDir !== (src.local_shell_dir ?? "") ||
       JSON.stringify(editing.jumpHost ?? null) !== JSON.stringify(o.jump_host ?? null) ||
       !tagsEq
     );
@@ -1284,7 +1391,7 @@
       toast.err(dbErr);
       return false;
     }
-    const overrides = { ...conn.overrides };
+    const overrides = { ...(connSrc ?? conn).overrides };
     overrides.username = editing.username.trim() || undefined;
     {
       const p = numText(editing.port);
@@ -1326,6 +1433,9 @@
     overrides.network_profile_id = decodeNetProfile(editing.networkProfile);
     overrides.initial_command = editing.initialCommand.trim() || undefined;
     overrides.initial_command_line_delay_ms = parseDelayMs(editing.initialCommandDelay);
+    if (recordMode && catRec?.form) {
+      return saveRecord("connections", conn.id, { ...catRec.form, name: editing.name, hostname: editing.hostname, notes: editing.notes, tags: editing.tags, settings: overrides, doc_md: recordDoc });
+    }
     const localKind = editing.localShellKind.trim();
     const localDir = editing.localShellDir.trim();
     return api.connectionsUpdate({
@@ -1901,7 +2011,7 @@
   {:else if folder && editingFolder}
     <header class="ed-head">
       <div class="ed-title">
-        <h1><IconFolder size={18} /> <input class="title-input" bind:value={editingFolder.name} readonly={!!folder.catalog_id} title={folder.catalog_id ? "The catalog's name" : ""} /></h1>
+        <h1><IconFolder size={18} /> <input class="title-input" bind:value={editingFolder.name} readonly={!!folder.catalog_id && !recordMode} title={folder.catalog_id && !recordMode ? "The catalog's name" : ""} /></h1>
         {#if folderSub}<span class="ed-sub">{folderSub}</span>{/if}
       </div>
       <div class="head-actions">
@@ -1939,6 +2049,10 @@
     <div class="form">
       {#if isCatalogFolder && catRec}
         <CatalogBanner kind="folders" id={folder.id} name={folder.name} rec={catRec} onChanged={async () => { await tree.load(); await loadCatRec(); }} />
+        {#if catRec.can_write}
+          <RecordModeBar rec={catRec} kind="folders" {recordMode} onMode={setRecordMode} bind:doc={recordDoc} pending={recordPending}
+            bind:slotNames={recordSlotNames} bind:resolve={recordResolve} stillLocal={recordStillLocal} busy={recordBusy} onRetry={retryRecord} onDiscard={discardRecord} />
+        {/if}
       {/if}
       <p class="section-label span-2">Inherited by the connections and subfolders in this folder unless they set their own value.</p>
       <label title="What a double-click or Enter does on the connections in this folder.">
@@ -2109,6 +2223,7 @@
           bind:value={editingFolder.initialCommand}
           placeholder="(inherit) e.g. cd /var/www"
         ></textarea>
+        {#if recordMode}<span class="field-note rec-hint">Goes to everyone with access to "{catRec?.folder_name}", and through the folder outline to readers of every folder below it. Never put secrets here.</span>{/if}
         <span class="field-note">Run in the shell on connect. Inherited by connections. Blank = inherit. One command per line.</span>
       </label>
       <label title="Wait this long between the lines of a multi-line command. Needed when a line replaces the shell that reads the next one.">
@@ -2351,8 +2466,12 @@
     <div class="form">
       {#if isCatalogConn && catRec}
         <CatalogBanner kind="connections" id={conn.id} name={conn.name} rec={catRec} onChanged={async () => { await tree.load(); await loadCatRec(); }} />
+        {#if catRec.can_write}
+          <RecordModeBar rec={catRec} kind="connections" {recordMode} onMode={setRecordMode} bind:doc={recordDoc} pending={recordPending}
+            bind:slotNames={recordSlotNames} bind:resolve={recordResolve} stillLocal={recordStillLocal} busy={recordBusy} onRetry={retryRecord} onDiscard={discardRecord} />
+        {/if}
       {/if}
-      <label title={isCatalogConn ? "The catalog's name for it" : "A label for this connection in the tree - any text you like."}>Name{#if isCatalogConn} <span class="lock-mark"><IconLock size={10} /> catalog</span>{/if}<input bind:value={editing.name} placeholder="My server" readonly={isCatalogConn} class:locked={isCatalogConn} /></label>
+      <label title={isCatalogConn ? "The catalog's name for it" : "A label for this connection in the tree - any text you like."}>Name{#if connLocked} <span class="lock-mark"><IconLock size={10} /> catalog</span>{/if}<input bind:value={editing.name} placeholder="My server" readonly={connLocked} class:locked={connLocked} /></label>
       {#if !isLocal && !isWeb}
         <label title="What a double-click or Enter on this connection does. The other actions stay in the header and the right-click menu.">
           Double-click opens
@@ -2409,7 +2528,7 @@
       </label>
       {:else}
       <div class="row">
-        <label class="grow" title="The address to connect to: a DNS hostname or an IP. This is what SSH dials, not the display name above.">Hostname / IP address{#if isCatalogConn} <span class="lock-mark"><IconLock size={10} /> catalog</span>{/if}<input bind:value={editing.hostname} placeholder="host.example.com or 10.0.0.5" onblur={splitHostField} readonly={isCatalogConn} class:locked={isCatalogConn} /></label>
+        <label class="grow" title="The address to connect to: a DNS hostname or an IP. This is what SSH dials, not the display name above.">Hostname / IP address{#if connLocked} <span class="lock-mark"><IconLock size={10} /> catalog</span>{/if}<input bind:value={editing.hostname} placeholder="host.example.com or 10.0.0.5" onblur={splitHostField} readonly={connLocked} class:locked={connLocked} /></label>
         <label class="port">
           Port{#if layerHas("port")} <span class="ov-mark" title="Changed on this machine; the catalog says {catRec?.catalog.port ?? 'nothing'}">yours <button type="button" onclick={(e) => { e.preventDefault(); resetLayerKey("port"); }}>reset</button></span>{/if}
           <input
@@ -2551,8 +2670,8 @@
         onNamedChange={() => tree.load()}
       /></div>{/if}
       <div class="tag-editor span-2">
-        <span class="tag-label">Tags{#if isCatalogConn} <span class="lock-mark"><IconLock size={10} /> catalog</span>{/if}</span>
-        {#if isCatalogConn}
+        <span class="tag-label">Tags{#if connLocked} <span class="lock-mark"><IconLock size={10} /> catalog</span>{/if}</span>
+        {#if connLocked}
           <span class="locked-tags">{(conn.tags ?? []).join(", ") || "none"}</span>
         {:else}
           <TagInput bind:tags={editing.tags} known={tree.allTags()} />
@@ -2561,7 +2680,7 @@
       <div class="span-2 notes-block">
         <div class="notes-head">
           <span>Notes</span>
-          {#if isCatalogConn}<span class="lock-mark"><IconLock size={10} /> catalog</span>{:else}
+          {#if connLocked}<span class="lock-mark"><IconLock size={10} /> catalog</span>{:else}
           <div class="notes-mode">
             <button
               type="button"
@@ -2576,12 +2695,13 @@
             >Preview</button>
           </div>{/if}
         </div>
-        {#if isCatalogConn}
+        {#if connLocked}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div class="notes-preview selectable" onclick={onNotesPreviewClick}>{#if editing.notes}{@html renderedNotes}{:else}<span class="hint">No notes in the catalog.</span>{/if}</div>
         {:else if notesMode === "edit"}
-          <textarea bind:value={editing.notes} rows="6" placeholder="Markdown: # heading, **bold**, `code`, fenced ```, - lists, [link](https://…)" readonly={isCatalogConn} class:locked={isCatalogConn}></textarea>
+          <textarea bind:value={editing.notes} rows="6" placeholder="Markdown: # heading, **bold**, `code`, fenced ```, - lists, [link](https://…)" readonly={connLocked} class:locked={connLocked}></textarea>
+          {#if recordMode}<span class="field-note rec-hint">Goes to everyone with access to "{catRec?.folder_name}". Never put secrets here.</span>{/if}
         {:else}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -2731,6 +2851,7 @@
           bind:value={editing.initialCommand}
           placeholder={isLocal ? "e.g. telnet 10.0.0.5   ·   claude   ·   screen /dev/ttyUSB0" : "(inherit) e.g. cd /var/www"}
         ></textarea>
+        {#if recordMode}<span class="field-note rec-hint">Goes to everyone with access to "{catRec?.folder_name}". Never put secrets here.</span>{/if}
         <span class="field-note">
           {#if isLocal}
             The command this connection runs in the shell (the point of a local connection). Blank = just an interactive shell. One command per line.
@@ -3077,6 +3198,7 @@
 
 <style>
   /* Shared catalogs. */
+  .rec-hint { color: var(--peach); }
   .lock-mark { font-size: 10px; opacity: 0.7; display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; }
   input.locked, textarea.locked { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--border, #333) 35%, transparent) 6px 7px); cursor: not-allowed; opacity: 0.85; }
   .ov-mark { font-size: 10px; color: var(--teal); border: 1px solid color-mix(in srgb, var(--teal) 50%, transparent); border-radius: 999px; padding: 0 2px 0 6px; margin-left: 4px; display: inline-flex; align-items: center; gap: 2px; }

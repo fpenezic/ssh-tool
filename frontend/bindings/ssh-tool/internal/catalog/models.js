@@ -6,6 +6,391 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as store$0 from "../store/models.js";
+
+/**
+ * EditForm is a record as the editor shows and edits it, in local terms.
+ * Which fields apply depends on the kind.
+ */
+export class EditForm {
+    /**
+     * Creates a new EditForm instance.
+     * @param {Partial<EditForm>} [$$source = {}] - The source object to create the EditForm.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("hostname" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hostname"] = "";
+        }
+        if (!("protocol" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["protocol"] = "";
+        }
+        if (!("tags" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["tags"] = [];
+        }
+        if (!("notes" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["notes"] = "";
+        }
+        if (!("icon_name" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["icon_name"] = null;
+        }
+        if (!("icon_color" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["icon_color"] = null;
+        }
+        if (!("doc_md" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["doc_md"] = "";
+        }
+        if (!("settings" in $$source)) {
+            /**
+             * @member
+             * @type {store$0.InheritableSettings}
+             */
+            this["settings"] = (new store$0.InheritableSettings());
+        }
+        if (!("kind" in $$source)) {
+            /**
+             * Forwards.
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("local_addr" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["local_addr"] = null;
+        }
+        if (!("local_port" in $$source)) {
+            /**
+             * @member
+             * @type {number | null}
+             */
+            this["local_port"] = null;
+        }
+        if (!("remote_host" in $$source)) {
+            /**
+             * @member
+             * @type {string | null}
+             */
+            this["remote_host"] = null;
+        }
+        if (!("remote_port" in $$source)) {
+            /**
+             * @member
+             * @type {number | null}
+             */
+            this["remote_port"] = null;
+        }
+        if (!("auto_start" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["auto_start"] = false;
+        }
+        if (!("description" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["description"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new EditForm instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {EditForm}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType0;
+        const $$createField8_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("tags" in $$parsedSource) {
+            $$parsedSource["tags"] = $$createField3_0($$parsedSource["tags"]);
+        }
+        if ("settings" in $$parsedSource) {
+            $$parsedSource["settings"] = $$createField8_0($$parsedSource["settings"]);
+        }
+        return new EditForm(/** @type {Partial<EditForm>} */($$parsedSource));
+    }
+}
+
+/**
+ * EditInput is one save from the editor.
+ */
+export class EditInput {
+    /**
+     * Creates a new EditInput instance.
+     * @param {Partial<EditInput>} [$$source = {}] - The source object to create the EditInput.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("local_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["local_id"] = "";
+        }
+        if (!("rev" in $$source)) {
+            /**
+             * Rev the form was loaded at, and the values it showed then.
+             * @member
+             * @type {number}
+             */
+            this["rev"] = 0;
+        }
+        if (!("loaded" in $$source)) {
+            /**
+             * @member
+             * @type {EditForm}
+             */
+            this["loaded"] = (new EditForm());
+        }
+        if (!("edited" in $$source)) {
+            /**
+             * @member
+             * @type {EditForm}
+             */
+            this["edited"] = (new EditForm());
+        }
+        if (!("accept_rev" in $$source)) {
+            /**
+             * After a conflict: re-apply onto this rev, and for each field both
+             * sides changed, whose value wins ("mine" or "theirs").
+             * @member
+             * @type {number}
+             */
+            this["accept_rev"] = 0;
+        }
+        if (!("resolve" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in string]?: string }}
+             */
+            this["resolve"] = {};
+        }
+        if (!("slot_names" in $$source)) {
+            /**
+             * Names for slots the edit needs (by PlanSlot.Key).
+             * @member
+             * @type {{ [_ in string]?: string }}
+             */
+            this["slot_names"] = {};
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new EditInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {EditInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType2;
+        const $$createField4_0 = $$createType2;
+        const $$createField6_0 = $$createType3;
+        const $$createField7_0 = $$createType3;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("loaded" in $$parsedSource) {
+            $$parsedSource["loaded"] = $$createField3_0($$parsedSource["loaded"]);
+        }
+        if ("edited" in $$parsedSource) {
+            $$parsedSource["edited"] = $$createField4_0($$parsedSource["edited"]);
+        }
+        if ("resolve" in $$parsedSource) {
+            $$parsedSource["resolve"] = $$createField6_0($$parsedSource["resolve"]);
+        }
+        if ("slot_names" in $$parsedSource) {
+            $$parsedSource["slot_names"] = $$createField7_0($$parsedSource["slot_names"]);
+        }
+        return new EditInput(/** @type {Partial<EditInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * EditPlan is what a save does, or why it cannot yet.
+ */
+export class EditPlan {
+    /**
+     * Creates a new EditPlan instance.
+     * @param {Partial<EditPlan>} [$$source = {}] - The source object to create the EditPlan.
+     */
+    constructor($$source = {}) {
+        if (/** @type {any} */(false)) {
+            /**
+             * The user has to answer first:
+             * @member
+             * @type {PlanSlot[] | undefined}
+             */
+            this["need_slots"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {FieldChange[] | undefined}
+             */
+            this["conflicts"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["conflict_rev"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["refusals"] = undefined;
+        }
+        if (!("changed" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["changed"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new EditPlan instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {EditPlan}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType5;
+        const $$createField1_0 = $$createType7;
+        const $$createField3_0 = $$createType0;
+        const $$createField4_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("need_slots" in $$parsedSource) {
+            $$parsedSource["need_slots"] = $$createField0_0($$parsedSource["need_slots"]);
+        }
+        if ("conflicts" in $$parsedSource) {
+            $$parsedSource["conflicts"] = $$createField1_0($$parsedSource["conflicts"]);
+        }
+        if ("refusals" in $$parsedSource) {
+            $$parsedSource["refusals"] = $$createField3_0($$parsedSource["refusals"]);
+        }
+        if ("changed" in $$parsedSource) {
+            $$parsedSource["changed"] = $$createField4_0($$parsedSource["changed"]);
+        }
+        return new EditPlan(/** @type {Partial<EditPlan>} */($$parsedSource));
+    }
+}
+
+/**
+ * FieldChange is one changed field of a conflict.
+ */
+export class FieldChange {
+    /**
+     * Creates a new FieldChange instance.
+     * @param {Partial<FieldChange>} [$$source = {}] - The source object to create the FieldChange.
+     */
+    constructor($$source = {}) {
+        if (!("field" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["field"] = "";
+        }
+        if (!("base" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["base"] = "";
+        }
+        if (!("mine" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["mine"] = "";
+        }
+        if (!("theirs" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["theirs"] = "";
+        }
+        if (!("both" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["both"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FieldChange instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FieldChange}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FieldChange(/** @type {Partial<FieldChange>} */($$parsedSource));
+    }
+}
+
 /**
  * FreeText is one free-form value the user reviews before sending.
  */
@@ -375,11 +760,11 @@ export class PublishPlan {
      * @returns {PublishPlan}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType2;
-        const $$createField1_0 = $$createType4;
-        const $$createField2_0 = $$createType6;
-        const $$createField3_0 = $$createType8;
-        const $$createField4_0 = $$createType10;
+        const $$createField0_0 = $$createType9;
+        const $$createField1_0 = $$createType5;
+        const $$createField2_0 = $$createType11;
+        const $$createField3_0 = $$createType13;
+        const $$createField4_0 = $$createType15;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("records" in $$parsedSource) {
             $$parsedSource["records"] = $$createField0_0($$parsedSource["records"]);
@@ -397,6 +782,66 @@ export class PublishPlan {
             $$parsedSource["outside_jumps"] = $$createField4_0($$parsedSource["outside_jumps"]);
         }
         return new PublishPlan(/** @type {Partial<PublishPlan>} */($$parsedSource));
+    }
+}
+
+/**
+ * RecordReport is a per-record problem of a refused publish
+ * (details.records) or a warning of an accepted one.
+ */
+export class RecordReport {
+    /**
+     * Creates a new RecordReport instance.
+     * @param {Partial<RecordReport>} [$$source = {}] - The source object to create the RecordReport.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("uuid" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["uuid"] = "";
+        }
+        if (!("code" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["code"] = "";
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("message" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["message"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RecordReport instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RecordReport}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RecordReport(/** @type {Partial<RecordReport>} */($$parsedSource));
     }
 }
 
@@ -454,13 +899,18 @@ export class Refusal {
 
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
-const $$createType1 = PlanRecord.createFrom;
-const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = PlanSlot.createFrom;
-const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = FreeText.createFrom;
-const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = Refusal.createFrom;
-const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = OutsideJump.createFrom;
-const $$createType10 = $Create.Array($$createType9);
+const $$createType1 = store$0.InheritableSettings.createFrom;
+const $$createType2 = EditForm.createFrom;
+const $$createType3 = $Create.Map($Create.Any, $Create.Any);
+const $$createType4 = PlanSlot.createFrom;
+const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = FieldChange.createFrom;
+const $$createType7 = $Create.Array($$createType6);
+const $$createType8 = PlanRecord.createFrom;
+const $$createType9 = $Create.Array($$createType8);
+const $$createType10 = FreeText.createFrom;
+const $$createType11 = $Create.Array($$createType10);
+const $$createType12 = Refusal.createFrom;
+const $$createType13 = $Create.Array($$createType12);
+const $$createType14 = OutsideJump.createFrom;
+const $$createType15 = $Create.Array($$createType14);
