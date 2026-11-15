@@ -136,11 +136,11 @@ type PlanSlot struct {
 
 // FreeText is one free-form value the user reviews before sending.
 type FreeText struct {
-	Kind    string `json:"kind"`
-	UUID    string `json:"uuid"`
-	Name    string `json:"name"`
-	Field   string `json:"field"`
-	Value   string `json:"value"`
+	Kind  string `json:"kind"`
+	UUID  string `json:"uuid"`
+	Name  string `json:"name"`
+	Field string `json:"field"`
+	Value string `json:"value"`
 	// FolderLevel: set on a folder, it reaches every reader of any folder
 	// below it, also through the ancestor outline (PROTOCOL 9.1).
 	FolderLevel bool `json:"folder_level"`

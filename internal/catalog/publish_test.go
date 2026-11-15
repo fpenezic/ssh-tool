@@ -13,11 +13,11 @@ func ptr[T any](v T) *T { return &v }
 
 type pubFixture struct {
 	outer, root, sub string // folders: outer is local, above the published root
-	web, db1, inner   string // connections inside
-	bastion           string // connection outside the subtree
-	fwd               string
-	credA, credBW     string
-	prof              string
+	web, db1, inner  string // connections inside
+	bastion          string // connection outside the subtree
+	fwd              string
+	credA, credBW    string
+	prof             string
 }
 
 // publishFixture: Outer (username, env, credential A) > Mine (network
