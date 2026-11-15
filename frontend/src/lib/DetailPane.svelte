@@ -146,8 +146,14 @@
   // Locked: a catalog row outside record mode.
   const connLocked = $derived(isCatalogConn && !recordMode);
   const folderLocked = $derived(isCatalogFolder && !recordMode);
+  // Back to My settings only when another item is selected: a tree reload
+  // hands in a new object for the same row, which must not leave record
+  // mode (it happens right after a record save).
+  let recordFor = "";
   $effect(() => {
-    void conn?.id; void folder?.id;
+    const key = (conn?.id ?? "") + "|" + (folder?.id ?? "");
+    if (key === recordFor) return;
+    recordFor = key;
     recordMode = false;
     recordPending = null;
     recordStillLocal = [];
@@ -2048,7 +2054,7 @@
     {#if saveError}<div class="err save-err">{saveError}</div>{/if}
     <div class="form">
       {#if isCatalogFolder && catRec}
-        <CatalogBanner kind="folders" id={folder.id} name={folder.name} rec={catRec} onChanged={async () => { await tree.load(); await loadCatRec(); }} />
+        <CatalogBanner kind="folders" id={folder.id} name={folder.name} rec={catRec} {recordMode} onChanged={async () => { await tree.load(); await loadCatRec(); }} />
         {#if catRec.can_write}
           <RecordModeBar rec={catRec} kind="folders" {recordMode} onMode={setRecordMode} bind:doc={recordDoc} pending={recordPending}
             bind:slotNames={recordSlotNames} bind:resolve={recordResolve} stillLocal={recordStillLocal} busy={recordBusy} onRetry={retryRecord} onDiscard={discardRecord} />
@@ -2465,7 +2471,7 @@
     {#if saveError}<div class="err save-err">{saveError}</div>{/if}
     <div class="form">
       {#if isCatalogConn && catRec}
-        <CatalogBanner kind="connections" id={conn.id} name={conn.name} rec={catRec} onChanged={async () => { await tree.load(); await loadCatRec(); }} />
+        <CatalogBanner kind="connections" id={conn.id} name={conn.name} rec={catRec} {recordMode} onChanged={async () => { await tree.load(); await loadCatRec(); }} />
         {#if catRec.can_write}
           <RecordModeBar rec={catRec} kind="connections" {recordMode} onMode={setRecordMode} bind:doc={recordDoc} pending={recordPending}
             bind:slotNames={recordSlotNames} bind:resolve={recordResolve} stillLocal={recordStillLocal} busy={recordBusy} onRetry={retryRecord} onDiscard={discardRecord} />
