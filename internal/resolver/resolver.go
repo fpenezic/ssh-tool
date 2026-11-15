@@ -425,3 +425,17 @@ func dbDefaultTarget(s store.InheritableSettings) string {
 // for other layers that merge the same way (a catalog record's local
 // layer).
 func MergeDbTargets(base, over []store.DbTarget) []store.DbTarget { return mergeTargets(base, over) }
+
+// EffectiveFolderSettings is what a folder inherits from its ancestors
+// merged with its own settings: the settings it would need at the top of
+// the tree to behave the same way (a catalog folder kept as a local one).
+func EffectiveFolderSettings(folderID string, folders []store.Folder) store.InheritableSettings {
+	var merged store.InheritableSettings
+	id := folderID
+	for _, f := range ancestorChain(&id, folders) {
+		merged = mergeSettings(merged, f.Settings)
+	}
+	// mergeSettings keeps the connection-only fields from the lower level
+	// only; a folder carries none of them.
+	return merged
+}

@@ -137,6 +137,9 @@ func (a *App) ForwardsStartFreePort(forwardID, sessionID string) (*sshlayer.Forw
 	if err != nil {
 		return nil, err
 	}
+	if spec.Disabled {
+		return nil, errForwardDisabled
+	}
 	sess, ok := a.pool.Get(sessionID)
 	if !ok {
 		return nil, fmt.Errorf("session not connected")

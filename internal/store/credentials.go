@@ -384,6 +384,21 @@ func (d *DB) CredentialUsage(credentialID string) ([]UsageRef, error) {
 	if v, ok, _ := d.GetSetting("sync_sftp_cred_id"); ok && v == credentialID {
 		out = append(out, UsageRef{Kind: "sync", ID: "sync", Name: "Profile sync", Role: "SFTP login"})
 	}
+	// Catalog slots bound to it: each keeps the catalog's records it
+	// covers working, which the delete dialog has to say.
+	if rows, err := d.conn.Query(`SELECT b.catalog_id, b.slot_uuid, IFNULL(s.name, ''), IFNULL(c.name, '')
+		FROM catalog_bindings b
+		LEFT JOIN catalog_slots s ON s.catalog_id = b.catalog_id AND s.uuid = b.slot_uuid
+		LEFT JOIN catalogs c ON c.id = b.catalog_id
+		WHERE b.target_id = ? AND b.kind = 'cred'`, credentialID); err == nil {
+		for rows.Next() {
+			var catID, slot, slotName, catName string
+			if rows.Scan(&catID, &slot, &slotName, &catName) == nil {
+				out = append(out, UsageRef{Kind: "catalog_slot", ID: catID + "/" + slot, Name: catName + ": " + slotName, Role: "catalog slot"})
+			}
+		}
+		rows.Close()
+	}
 	return out, nil
 }
 

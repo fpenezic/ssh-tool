@@ -1361,6 +1361,8 @@ func (a *App) NetworkProfileDelete(id string) error {
 	}
 	a.recordAudit("network.profile.delete", id, map[string]string{"name": row.Name})
 	EventsEmit("network_tunnel_changed", id)
+	// A network slot bound to it falls back to its unbound marker.
+	go a.rematerialiseCatalogs()
 	return nil
 }
 

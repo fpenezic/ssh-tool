@@ -200,6 +200,9 @@ func (a *App) planAddFolder(name, parent string) (string, error) {
 		return "", fmt.Errorf("folder name required")
 	}
 	ref := parsePlanRef(parent)
+	if a.isCatalogFolder(ref.Existing) {
+		return "", errCatalogFolder
+	}
 	// The same name twice under one parent is always a mistake: an LLM that
 	// lost track of its own temp id stages the folder again, and the approval
 	// modal then shows two identical folders. Point it back at the one it has.
@@ -250,6 +253,9 @@ func (a *App) planSetFolderSettings(folder string, s folderSettingsInput) error 
 		return err
 	}
 	s.JumpConnection = jc
+	if a.isCatalogFolder(ref.Existing) {
+		return errCatalogOwned
+	}
 	if ref.Existing != "" && a.folderTouchesSensitive(ref.Existing) {
 		return errSensitiveFolder
 	}
@@ -530,6 +536,9 @@ func (a *App) planAddConnection(in planConnInput) (string, error) {
 			return "", fmt.Errorf("no uploaded icon with id %q", iconImage)
 		}
 	}
+	if a.isCatalogFolder(parsePlanRef(in.Folder).Existing) {
+		return "", errCatalogFolder
+	}
 	c := planConn{
 		TempID:           newTempID(),
 		Name:             name,
@@ -661,6 +670,8 @@ func (a *App) planEditConnection(in editConnInput) error {
 	// and reporting that now beats a confusing failure at commit time.
 	if c, err := a.db.GetConnection(in.ConnID); err != nil || c == nil {
 		return fmt.Errorf("no connection with id %q", in.ConnID)
+	} else if c.CatalogID != nil {
+		return errCatalogOwned
 	} else if a.isSensitive(c) {
 		return errSensitiveConn
 	}
@@ -836,6 +847,9 @@ func (a *App) planRenameFolder(folderID, name string) error {
 	}
 	if _, err := a.db.GetFolder(folderID); err != nil {
 		return fmt.Errorf("no folder with id %q", folderID)
+	}
+	if a.isCatalogFolder(folderID) {
+		return errCatalogOwned
 	}
 	if a.folderTouchesSensitive(folderID) {
 		return errSensitiveFolder

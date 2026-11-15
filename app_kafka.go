@@ -630,6 +630,9 @@ func (a *App) KafkaDeleteGroup(clusterID, group string) error {
 // Kafka enabled per profile, in a "kafka-tool" folder under rootFolderID
 // ("" = the root). SSH passwords go to the vault, never to the store.
 func (a *App) KafkaToolImport(text string, rootFolderID string) (*kafkatool.Summary, error) {
+	if a.isCatalogFolder(rootFolderID) {
+		return nil, errCatalogFolder
+	}
 	if strings.TrimSpace(text) == "" {
 		return nil, fmt.Errorf("empty import payload")
 	}

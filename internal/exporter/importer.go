@@ -173,14 +173,23 @@ func Apply(
 	folderByID := map[string]*store.Folder{}
 	connByID := map[string]*store.Connection{}
 	credByID := map[string]*store.CredentialRef{}
+	// Catalog rows and the credentials made for catalog references are
+	// not the import's to overwrite or link: they are left out, so an
+	// archive record with such an id is imported as a new local one.
 	for i := range existingFolders {
-		folderByID[existingFolders[i].ID] = &existingFolders[i]
+		if existingFolders[i].CatalogID == nil {
+			folderByID[existingFolders[i].ID] = &existingFolders[i]
+		}
 	}
 	for i := range existingConns {
-		connByID[existingConns[i].ID] = &existingConns[i]
+		if existingConns[i].CatalogID == nil {
+			connByID[existingConns[i].ID] = &existingConns[i]
+		}
 	}
 	for i := range existingCreds {
-		credByID[existingCreds[i].ID] = &existingCreds[i]
+		if !store.IsCatalogCredential(existingCreds[i].ID) {
+			credByID[existingCreds[i].ID] = &existingCreds[i]
+		}
 	}
 
 	// CreateFolder / CreateConnection / CreateCredential each mint a

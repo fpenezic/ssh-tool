@@ -476,3 +476,46 @@ func TestSyncSkeletonFolder(t *testing.T) {
 		t.Fatalf("skeleton mark lost: %s", raw)
 	}
 }
+
+func TestKeepFolderLocal(t *testing.T) {
+	e := newSyncEnv(t)
+	e.fs.serve(map[string]Feed{"": {Reset: true, Cursor: "c1", Items: []Item{
+		up(KindFolders, map[string]any{"uuid": "space", "rev": 1, "parent_uuid": nil, "name": "Space", "access": "read",
+			"settings": map[string]any{"username": "deploy"}}),
+		up(KindFolders, folderRec("cust", 1, "space", "Customer A")),
+		up(KindConnections, connRec("web", 1, "cust", "web-1")),
+		up(KindForwards, fwdRec("fw", 1, "web")),
+	}}})
+	e.sync()
+	_ = e.db.SetCatalogOverride(e.cat.ID, "cust", "folders", `{"port":2200}`)
+	_ = e.db.SetCatalogOverride(e.cat.ID, "web", "connections", `{"port":2201}`)
+	// Only "cust" and below leave the catalog.
+	e.fs.serve(map[string]Feed{"c1": {Cursor: "c2", Items: []Item{del(KindForwards, "fw", 2), del(KindConnections, "web", 2), del(KindFolders, "cust", 2)}}})
+	e.sync()
+	cust := e.folder("cust")
+	if cust == nil || cust.CatalogState != "removed" {
+		t.Fatalf("not kept: %+v", cust)
+	}
+	if err := KeepFolderLocal(e.db, cust.ID); err != nil {
+		t.Fatal(err)
+	}
+	f, _ := e.db.GetFolder(cust.ID)
+	if f.CatalogID != nil || f.ParentID != nil || f.Settings.Username == nil || *f.Settings.Username != "deploy" || *f.Settings.Port != 2200 {
+		t.Fatalf("kept folder: %+v", f)
+	}
+	conns, _ := e.db.ListConnections(&cust.ID)
+	if len(conns) != 1 || conns[0].CatalogID != nil {
+		t.Fatalf("connection below: %+v", conns)
+	}
+	if ov, _ := e.db.ListCatalogOverrides(e.cat.ID); len(ov) != 0 {
+		t.Errorf("layers of kept rows left: %+v", ov)
+	}
+	// Editable now; the space it came from is still a catalog folder.
+	n := "mine"
+	if _, err := e.db.UpdateFolder(store.UpdateFolder{ID: cust.ID, Name: &n}); err != nil {
+		t.Fatalf("kept folder not editable: %v", err)
+	}
+	if sp := e.folder("space"); sp == nil || sp.CatalogState != "" {
+		t.Fatalf("live ancestor changed: %+v", sp)
+	}
+}

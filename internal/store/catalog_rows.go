@@ -634,3 +634,85 @@ func (d *DB) CatalogInputs(tx *sql.Tx, catalogID string) (*CatalogInputsTx, erro
 	}
 	return in, nil
 }
+
+// KeepRemovedFolderLocal turns a folder that left its catalog, with
+// everything below it, into ordinary local rows: the folder moves to the
+// top of the tree with settings (what it inherited, folded in by the
+// caller), its rows lose their catalog columns and local layers. Refused
+// while anything below it is still in the catalog: that would detach a
+// live catalog record.
+func (d *DB) KeepRemovedFolderLocal(id string, settings InheritableSettings) error {
+	catID, _, state, err := d.catalogRowState("folders", id)
+	if err != nil {
+		return err
+	}
+	if catID == "" || state != "removed" {
+		return ErrNotRemoved
+	}
+	folders, err := d.ListFolders()
+	if err != nil {
+		return err
+	}
+	sub := map[string]bool{id: true}
+	for changed := true; changed; {
+		changed = false
+		for _, f := range folders {
+			if f.ParentID != nil && sub[*f.ParentID] && !sub[f.ID] {
+				sub[f.ID] = true
+				changed = true
+			}
+		}
+	}
+	var parent sql.NullString
+	if err := d.conn.QueryRow(`SELECT parent_id FROM folders WHERE id = ?`, id).Scan(&parent); err != nil {
+		return err
+	}
+	ids := make([]any, 0, len(sub))
+	ph := make([]string, 0, len(sub))
+	for f := range sub {
+		ids = append(ids, f)
+		ph = append(ph, "?")
+	}
+	in := strings.Join(ph, ",")
+	var live int
+	if err := d.conn.QueryRow(`SELECT (SELECT COUNT(*) FROM folders WHERE id IN (`+in+`) AND remote_uuid IS NOT NULL AND catalog_state != 'removed')
+		+ (SELECT COUNT(*) FROM connections WHERE folder_id IN (`+in+`) AND remote_uuid IS NOT NULL AND catalog_state != 'removed')`,
+		append(ids, ids...)...).Scan(&live); err != nil {
+		return err
+	}
+	if live > 0 {
+		return fmt.Errorf("part of this folder is still in its catalog; keep or delete the removed rows one by one")
+	}
+	b, err := json.Marshal(settings)
+	if err != nil {
+		return err
+	}
+	return d.WithCatalogWriter(func(tx *sql.Tx) error {
+		for _, q := range []string{
+			`DELETE FROM catalog_overrides WHERE catalog_id = ? AND remote_uuid IN (
+				SELECT remote_uuid FROM folders WHERE id IN (` + in + `) AND remote_uuid IS NOT NULL
+				UNION SELECT remote_uuid FROM connections WHERE folder_id IN (` + in + `) AND remote_uuid IS NOT NULL
+				UNION SELECT remote_uuid FROM port_forwards WHERE remote_uuid IS NOT NULL AND connection_id IN (SELECT id FROM connections WHERE folder_id IN (` + in + `)))`,
+		} {
+			if _, err := tx.Exec(q, append(append(append([]any{catID}, ids...), ids...), ids...)...); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.Exec(`UPDATE port_forwards SET catalog_id = NULL, remote_uuid = NULL, remote_rev = 0, catalog_json = '', catalog_state = ''
+			WHERE connection_id IN (SELECT id FROM connections WHERE folder_id IN (`+in+`))`, ids...); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE connections SET catalog_id = NULL, remote_uuid = NULL, remote_rev = 0, catalog_json = '', catalog_state = ''
+			WHERE folder_id IN (`+in+`)`, ids...); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE folders SET catalog_id = NULL, remote_uuid = NULL, remote_rev = 0, catalog_json = '', catalog_state = ''
+			WHERE id IN (`+in+`)`, ids...); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE folders SET parent_id = NULL, settings_json = ?, updated_at = ? WHERE id = ?`, string(b), now(), id); err != nil {
+			return err
+		}
+		return pruneRemovedAncestors(tx, parent.String)
+	})
+}

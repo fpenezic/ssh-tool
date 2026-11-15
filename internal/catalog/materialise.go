@@ -310,3 +310,81 @@ func sameU16(a, b *uint16) bool {
 	}
 	return *a == *b
 }
+
+// BaseSettings is a catalog record's settings translated to local ids,
+// without the user's layer: what the editor shows as the catalog's value
+// and what an edit is compared with.
+func BaseSettings(db *store.DB, catalogID string, settings json.RawMessage) (store.InheritableSettings, error) {
+	var out store.InheritableSettings
+	err := db.WithTx(func(tx *sql.Tx) error {
+		in, err := db.CatalogInputs(tx, catalogID)
+		if err != nil {
+			return err
+		}
+		t := &translator{catID: catalogID, in: in, external: func(s store.CatalogSlot) string {
+			return store.CatalogCredentialID(catalogID, s.UUID)
+		}}
+		out, err = t.translate(settings)
+		return err
+	})
+	return out, err
+}
+
+// LayerFromEdit turns an edit of a catalog record's settings into its local
+// layer: every field whose edited value differs from the catalog's. Maps
+// keep the keys that differ or are new; database targets keep the entries
+// that are new or differ (an entry with a catalog id adjusts that one).
+// Clearing a field the catalog sets cannot be expressed as a layer (absent
+// means "the catalog's value"); such a field keeps the catalog's value.
+func LayerFromEdit(base, edited store.InheritableSettings) store.InheritableSettings {
+	var layer store.InheritableSettings
+	lv := reflect.ValueOf(&layer).Elem()
+	bv, ev := reflect.ValueOf(base), reflect.ValueOf(edited)
+	for i := 0; i < ev.NumField(); i++ {
+		e, b := ev.Field(i), bv.Field(i)
+		switch e.Kind() {
+		case reflect.Ptr:
+			if !e.IsNil() && !reflect.DeepEqual(e.Interface(), b.Interface()) {
+				lv.Field(i).Set(e)
+			}
+		case reflect.Map:
+			if e.Len() == 0 {
+				continue
+			}
+			m := reflect.MakeMap(e.Type())
+			for _, k := range e.MapKeys() {
+				bvv := b.MapIndex(k)
+				if !bvv.IsValid() || !reflect.DeepEqual(bvv.Interface(), e.MapIndex(k).Interface()) {
+					m.SetMapIndex(k, e.MapIndex(k))
+				}
+			}
+			if m.Len() > 0 {
+				lv.Field(i).Set(m)
+			}
+		case reflect.Slice:
+			if e.Type() != reflect.TypeOf([]store.DbTarget(nil)) {
+				if e.Len() > 0 && !reflect.DeepEqual(e.Interface(), b.Interface()) {
+					lv.Field(i).Set(e)
+				}
+				continue
+			}
+			byID := map[string]store.DbTarget{}
+			for _, t := range base.DbTargets {
+				byID[t.ID] = t
+			}
+			var keep []store.DbTarget
+			for _, t := range edited.DbTargets {
+				bt, ok := byID[t.ID]
+				if ok && reflect.DeepEqual(bt, t) {
+					continue
+				}
+				if ok {
+					t.Override = true
+				}
+				keep = append(keep, t)
+			}
+			layer.DbTargets = keep
+		}
+	}
+	return layer
+}
