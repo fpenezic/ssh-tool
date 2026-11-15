@@ -62,7 +62,7 @@ func (d *DB) UpdateNetworkProfile(id, name, configJSON string) (*NetworkProfile,
 }
 
 func (d *DB) GetNetworkProfile(id string) (*NetworkProfile, error) {
-	if e, ok := ParseCatalogRef(id, "network profile"); ok {
+	if e, ok := d.catalogRefError(id, "network profile"); ok {
 		return nil, e
 	}
 	row := d.conn.QueryRow(

@@ -554,3 +554,14 @@ func TestSweepOrphanNetworkRefsSkipsCatalogRows(t *testing.T) {
 		t.Error("catalog row rewritten by the sweep")
 	}
 }
+
+func TestCatalogRefErrorNamesTheSlot(t *testing.T) {
+	f := newCatalogFixture(t)
+	wantOK(t, "slot", f.db.WithCatalogWriter(func(tx *sql.Tx) error {
+		return f.db.UpsertCatalogSlotTx(tx, CatalogSlot{CatalogID: f.cat.ID, UUID: "s1", Type: "cred", Name: "customer-admin", Kind: "slot"})
+	}))
+	_, err := f.db.GetCredential(CatalogUnboundRef(f.cat.ID, "s1"))
+	if err == nil || !strings.Contains(err.Error(), `"customer-admin"`) {
+		t.Fatalf("message does not name the slot: %v", err)
+	}
+}
