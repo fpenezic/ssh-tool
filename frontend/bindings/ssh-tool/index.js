@@ -113,6 +113,7 @@ export {
     ReleaseNotes,
     RemoteOwner,
     ScrollbackSnapshot,
+    SeenApp,
     SftpListResult,
     SftpPreview,
     ShareSessionInput,

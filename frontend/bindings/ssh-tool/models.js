@@ -7562,6 +7562,51 @@ export class ScrollbackSnapshot {
 }
 
 /**
+ * SeenApp is one device as last seen in the profile's meta.
+ */
+export class SeenApp {
+    /**
+     * Creates a new SeenApp instance.
+     * @param {Partial<SeenApp>} [$$source = {}] - The source object to create the SeenApp.
+     */
+    constructor($$source = {}) {
+        if (!("device" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["device"] = "";
+        }
+        if (!("version" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["version"] = "";
+        }
+        if (!("last_seen" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["last_seen"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SeenApp instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {SeenApp}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new SeenApp(/** @type {Partial<SeenApp>} */($$parsedSource));
+    }
+}
+
+/**
  * SftpListResult mirrors what we hand to the frontend on SftpList. The
  * resolved path is returned because the caller may pass "" to mean "home
  * directory" and the UI wants to render the actual path that was listed.

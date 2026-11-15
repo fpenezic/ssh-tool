@@ -19,6 +19,7 @@
   import { computeIntent, isInvalidDrop, applyDrop, applyMultiDrop, type DragKind, type DropIntent } from "./treeDnd";
   import { setMultiDragImage } from "./dragImage";
   import { contextMenu } from "./contextMenu.svelte.ts";
+  import { publishModal } from "./publishModal.svelte.ts";
   import { exportModal } from "./exportModal.svelte.ts";
   import { connectionActions } from "./connectionActions.svelte";
   import { tunnels } from "./tunnels.svelte.ts";
@@ -618,6 +619,11 @@
           );
         },
       },
+      ...(single && !isDyn && !isMobile && catalogs.list.length > 0 ? [{
+        label: "Publish to catalog…",
+        iconComponent: IconUsers,
+        onSelect: () => publishModal.show(folder.id, folder.name),
+      }] : []),
       {
         label: single ? "Delete folder" : `Delete ${ids.length} folders`,
         iconComponent: IconTrash,
