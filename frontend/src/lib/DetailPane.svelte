@@ -152,6 +152,23 @@
   let recordOfferAnswered = false;
   // Locked: a catalog row outside record mode.
   const connLocked = $derived(isCatalogConn && !recordMode);
+  // Record fields this user keeps over the catalog's (the layer's
+  // "_record" part: what a publish did not send). Shown as theirs, with
+  // reset, instead of under the catalog's lock.
+  const keptRec = $derived(((catRec?.layer as Record<string, unknown> | undefined)?._record ?? {}) as Record<string, unknown>);
+  const keptNotes = $derived(connLocked && "notes" in keptRec);
+  const keptTags = $derived(connLocked && "tags" in keptRec);
+  async function resetKept(field: "notes" | "tags") {
+    if (!conn) return;
+    try {
+      await api.catalogResetRecordField("connections", conn.id, field);
+      await tree.load();
+      await loadCatRec();
+      draftEpoch++;
+    } catch (e) {
+      toast.err("Reset: " + errMsg(e), 8000);
+    }
+  }
   const folderLocked = $derived(isCatalogFolder && !recordMode);
   // Back to My settings only when another item is selected: a tree reload
   // hands in a new object for the same row, which must not leave record
@@ -2754,7 +2771,7 @@
         onNamedChange={() => tree.load()}
       /></div>{/if}
       <div class="tag-editor span-2">
-        <span class="tag-label">Tags{#if connLocked} <span class="lock-mark"><IconLock size={10} /> catalog</span>{/if}</span>
+        <span class="tag-label">Tags{#if keptTags} <span class="lock-mark kept">Your own tags, kept on this machine (not in the catalog) <button type="button" class="linklike" onclick={() => resetKept("tags")}>reset</button></span>{:else if connLocked} <span class="lock-mark"><IconLock size={10} /> catalog</span>{/if}</span>
         {#if connLocked}
           <span class="locked-tags">{(conn.tags ?? []).join(", ") || "none"}</span>
         {:else}
@@ -2764,7 +2781,8 @@
       <div class="span-2 notes-block">
         <div class="notes-head">
           <span>Notes</span>
-          {#if connLocked}<span class="lock-mark"><IconLock size={10} /> catalog</span>{:else}
+          {#if keptNotes}<span class="lock-mark kept">Your own notes, kept on this machine (not in the catalog) <button type="button" class="linklike" onclick={() => resetKept("notes")}>reset</button></span>
+          {:else if connLocked}<span class="lock-mark"><IconLock size={10} /> catalog</span>{:else}
           <div class="notes-mode">
             <button
               type="button"
@@ -3284,6 +3302,7 @@
   /* Shared catalogs. */
   .rec-hint { color: var(--peach); }
   .lock-mark { font-size: 10px; opacity: 0.7; display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; }
+  .lock-mark.kept { opacity: 1; color: var(--teal); gap: 6px; }
   input.locked, textarea.locked { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--border, #333) 35%, transparent) 6px 7px); cursor: not-allowed; opacity: 0.85; }
   .ov-mark { font-size: 10px; color: var(--teal); border: 1px solid color-mix(in srgb, var(--teal) 50%, transparent); border-radius: 999px; padding: 0 2px 0 6px; margin-left: 4px; display: inline-flex; align-items: center; gap: 2px; }
   .ov-mark button, .bind-link { background: none; border: none; padding: 0 2px; color: var(--sapphire); cursor: pointer; font-size: 10px; }
