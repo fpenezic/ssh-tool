@@ -9,6 +9,7 @@
   import { api } from "./lib/api";
   import { errMsg as humanError } from "./lib/connectErrors";
   import { EventsOn } from "./lib/wailsRuntime";
+  import { catalogs } from "./lib/catalog.svelte";
   import { acceptTabDrag, reconstructTabFromPayload, TAB_DRAG_TYPE } from "./lib/tabTransfer";
   import { focusActivePane } from "./lib/paneFocus";
   import Sidebar from "./lib/Sidebar.svelte";
@@ -784,6 +785,7 @@
   });
   // Live pull applied the other machine's profile into the running DB.
   // Reload every store that reads from it; SSH sessions are untouched.
+  if (isMainWindow) catalogs.init();
   EventsOn("profile_reloaded", async () => {
     // Network profiles and workspaces too: their stores load once and
     // otherwise only refresh on their own changes, so what was pulled

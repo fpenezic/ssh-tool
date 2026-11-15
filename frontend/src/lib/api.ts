@@ -133,6 +133,12 @@ export interface Folder {
   icon_color: string | null;
   created_at: number;
   updated_at: number;
+  // Catalog origin (shared connection catalog): set on rows a catalog
+  // owns; catalog_id alone marks a catalog's root folder. See catalog.ts.
+  catalog_id?: string;
+  remote_uuid?: string;
+  remote_rev?: number;
+  catalog_state?: string; // "" in the catalog, "removed" when it left with local data
 }
 
 export interface Connection {
@@ -160,6 +166,12 @@ export interface Connection {
   created_at: number;
   updated_at: number;
   vnc_password_vault_key?: string;
+  // Catalog origin (shared connection catalog): set on rows a catalog
+  // owns; catalog_id alone marks a catalog's root folder. See catalog.ts.
+  catalog_id?: string;
+  remote_uuid?: string;
+  remote_rev?: number;
+  catalog_state?: string; // "" in the catalog, "removed" when it left with local data
 }
 
 export interface ResolvedSettings {
@@ -1230,6 +1242,59 @@ export type OpksshCertLifetime = {
   end: number;   // unix seconds: the next forced browser sign-in
 };
 
+// ----- Shared connection catalogs (app_catalog.go) -----
+
+export type CatalogState = "ok" | "syncing" | "no_login" | "signed_out" | "error" | "locked" | "signing_in";
+
+export interface CatalogInfo {
+  id: string;
+  name: string;
+  base_url: string;
+  server_name: string;
+  account_name: string;
+  root_folder_id: string;
+  last_sync_at: number | null;
+  last_error: string;
+  sync_interval_sec: number;
+  state: CatalogState;
+  error?: string;
+  slots: number;
+  unbound: number;
+  removed: number;
+}
+
+export interface CatalogSlotInfo {
+  catalog_id: string;
+  uuid: string;
+  type: "cred" | "net" | "jump";
+  name: string;
+  kind: string; // cred: "slot" | "external"
+  backend: string;
+  doc_md: string;
+  state: "bound" | "external" | "unbound";
+  target_id?: string;
+  target_name?: string;
+  target_gone?: boolean;
+  used_by: number;
+}
+
+export interface CatalogRecordInfo {
+  catalog_id: string;
+  catalog_name: string;
+  remote_uuid: string;
+  removed: boolean;
+  skeleton: boolean;
+  doc_md: string;
+  updated_by: string;
+  updated_at: string;
+  /** The catalog's value translated to local ids, without the user's layer. */
+  catalog: InheritableSettings;
+  /** The user's local layer (fields set here override `catalog`). */
+  layer: Record<string, unknown>;
+  suggested_auto_start?: boolean;
+  suggested_tunnel_autostart?: boolean;
+}
+
 export const api = {
   ping: (name: string) => G.Ping(name),
   setWindowTitle: (title: string) => G.SetWindowTitle(title),
@@ -1607,6 +1672,29 @@ export const api = {
   }) =>
     G.KeepassEnsureCredential(input as unknown as Parameters<typeof G.KeepassEnsureCredential>[0]) as unknown as Promise<CredentialRef>,
 
+  // Shared connection catalogs.
+  catalogList: () => G.CatalogList() as unknown as Promise<CatalogInfo[]>,
+  catalogAdd: (baseURL: string) => G.CatalogAdd(baseURL) as unknown as Promise<CatalogInfo>,
+  catalogSignIn: (id: string) => G.CatalogSignIn(id) as unknown as Promise<void>,
+  catalogCancelSignIn: (id: string) => G.CatalogCancelSignIn(id) as unknown as Promise<void>,
+  catalogSignOut: (id: string) => G.CatalogSignOut(id) as unknown as Promise<void>,
+  catalogRemove: (id: string) => G.CatalogRemove(id) as unknown as Promise<void>,
+  catalogSetConfig: (id: string, name: string, intervalSec: number) =>
+    G.CatalogSetConfig(id, name, intervalSec) as unknown as Promise<void>,
+  catalogSyncNow: (id: string) => G.CatalogSyncNow(id) as unknown as Promise<void>,
+  catalogSlots: (id: string) => G.CatalogSlots(id) as unknown as Promise<CatalogSlotInfo[]>,
+  catalogBind: (id: string, slot: string, target: string) => G.CatalogBind(id, slot, target) as unknown as Promise<void>,
+  catalogUnbind: (id: string, slot: string) => G.CatalogUnbind(id, slot) as unknown as Promise<void>,
+  catalogRecord: (kind: "folders" | "connections" | "forwards", id: string) =>
+    G.CatalogRecord(kind, id) as unknown as Promise<CatalogRecordInfo>,
+  catalogSetLayer: (kind: "folders" | "connections" | "forwards", id: string, layerJSON: string) =>
+    G.CatalogSetLayer(kind, id, layerJSON) as unknown as Promise<void>,
+  catalogKeepLocal: (kind: "folders" | "connections", id: string) =>
+    G.CatalogKeepLocal(kind, id) as unknown as Promise<void>,
+  catalogDeleteRemoved: (kind: "folders" | "connections", id: string) =>
+    G.CatalogDeleteRemoved(kind, id) as unknown as Promise<void>,
+  forwardsSetDisabled: (id: string, disabled: boolean) =>
+    G.ForwardsSetDisabled(id, disabled) as unknown as Promise<void>,
   bitwardenList: () =>
     G.BitwardenList() as unknown as Promise<BitwardenServerInfo[]>,
   bitwardenSave: (input: BitwardenSaveInput) =>
@@ -2896,6 +2984,14 @@ export interface PortForward {
    *  forward opens a browser. "" takes the per-kind default: the user's
    *  own browser for a local forward, an isolated profile for SOCKS. */
   browser_mode: string;
+  /** A disabled forward starts neither automatically nor by hand. */
+  disabled?: boolean;
+  // Catalog origin (shared connection catalog): set on rows a catalog
+  // owns; catalog_id alone marks a catalog's root folder. See catalog.ts.
+  catalog_id?: string;
+  remote_uuid?: string;
+  remote_rev?: number;
+  catalog_state?: string; // "" in the catalog, "removed" when it left with local data
 }
 
 export interface DiskPart {

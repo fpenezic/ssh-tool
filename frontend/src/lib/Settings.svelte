@@ -10,6 +10,7 @@
   import McpGrantsList from "./McpGrantsList.svelte";
   import KeepassSettings from "./KeepassSettings.svelte";
   import BitwardenSettings from "./BitwardenSettings.svelte";
+  import CatalogSettings from "./CatalogSettings.svelte";
   import InfisicalSettings from "./InfisicalSettings.svelte";
   import { windowChrome } from "./windowChrome.svelte";
   import { api, type AboutInfo, type RdmImportSummary, type ImportSummary as ArcImportSummary, type SshConfigImportSummary, type MobaXtermImportSummary, type PuttyImportSummary, type SuperPuttyImportSummary, type KafkaToolImportSummary, type Snippet, type SnippetInput, type BackupInfo, type AutoBackupPrefs, type SyncConfig, type SyncStatusResult, type NetworkProfileInfo, type PluginDownloadProgress } from "./api";
@@ -4648,6 +4649,11 @@
         </div>
       </label>
     </fieldset>
+  </div>
+
+  {:else if activeSection === "catalogs"}
+  <div class="group group-wide">
+    <CatalogSettings />
   </div>
 
   {:else if activeSection === "network"}
