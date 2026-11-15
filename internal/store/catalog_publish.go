@@ -137,3 +137,43 @@ func (d *DB) ConvertPublishedTx(tx *sql.Tx, catalogID string, rows []PublishedRo
 	}
 	return nil
 }
+
+// CompletePublishTx is the whole local side of an accepted publish in one
+// catalog writer transaction: the rows converted in place, the new slots
+// stored, the publisher's own bindings on every slot the publish created
+// or reused, and the local layers holding what the catalog does not carry
+// for them (a tunnel autostart, a broadcast group).
+func (d *DB) CompletePublishTx(tx *sql.Tx, catalogID string, rows []PublishedRow, slots []CatalogSlot,
+	bindings []CatalogBinding, layers []CatalogOverride) error {
+	if err := d.ConvertPublishedTx(tx, catalogID, rows); err != nil {
+		return err
+	}
+	for _, s := range slots {
+		s.CatalogID = catalogID
+		if err := d.UpsertCatalogSlotTx(tx, s); err != nil {
+			return err
+		}
+	}
+	ts := now()
+	for _, b := range bindings {
+		if !validBindingKind(b.Kind) || b.SlotUUID == "" || b.TargetID == "" {
+			return fmt.Errorf("publish: invalid binding %+v", b)
+		}
+		if _, err := tx.Exec(`INSERT INTO catalog_bindings (catalog_id, slot_uuid, kind, target_id, updated_at) VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT (catalog_id, slot_uuid) DO UPDATE SET kind = excluded.kind, target_id = excluded.target_id,
+			  updated_at = excluded.updated_at`, catalogID, b.SlotUUID, b.Kind, b.TargetID, ts); err != nil {
+			return err
+		}
+	}
+	for _, o := range layers {
+		if !validOverrideKind(o.Kind) {
+			return fmt.Errorf("publish: invalid layer kind %q", o.Kind)
+		}
+		if _, err := tx.Exec(`INSERT INTO catalog_overrides (catalog_id, remote_uuid, kind, json, updated_at) VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT (catalog_id, remote_uuid) DO UPDATE SET kind = excluded.kind, json = excluded.json,
+			  updated_at = excluded.updated_at`, catalogID, o.RemoteUUID, o.Kind, o.JSON, ts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
