@@ -64,7 +64,15 @@ type catalogStatus struct {
 
 // catalogOpenBrowser opens the sign-in page. Only CatalogSignIn calls it
 // (a test swaps it to prove nothing else does).
-var catalogOpenBrowser = func(u string) { _ = BrowserOpenURL(u) }
+var catalogOpenBrowser = func(u string) {
+	// Logged so a headless (server-mode) run, or a machine whose browser
+	// did not open, can still be signed in by hand. The URL carries no
+	// secret: the PKCE verifier never leaves this process, and the
+	// redirect goes to this machine's loopback listener, so only a
+	// browser on this machine can complete the sign-in.
+	log.Printf("catalog: sign in at %s", u)
+	_ = BrowserOpenURL(u)
+}
 
 // errCatalogOwned is what a write to a catalog record answers in the app.
 var errCatalogOwned = errors.New("this record comes from a shared catalog and is read-only here; local settings can be changed in its editor")
