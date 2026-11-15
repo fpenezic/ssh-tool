@@ -42,11 +42,17 @@ type CatalogRefError struct {
 	UUID      string
 	// What looked it up: "credential", "network profile", "jump host".
 	What string
+	// Name is the slot's name when known (the store fills it in).
+	Name string
 }
 
 func (e *CatalogRefError) Error() string {
 	if e.Unbound {
-		return fmt.Sprintf("the catalog %s slot %s is not bound on this machine - bind it to one of your own", e.What, e.UUID)
+		slot := e.UUID
+		if e.Name != "" {
+			slot = fmt.Sprintf("%q", e.Name)
+		}
+		return fmt.Sprintf("the catalog %s slot %s is not bound on this machine - bind it to one of your own", e.What, slot)
 	}
 	return fmt.Sprintf("the catalog %s %s is not available to you (deleted, or no access) - set a local one on this connection", e.What, e.UUID)
 }
@@ -70,4 +76,13 @@ func ParseCatalogRef(ref, what string) (*CatalogRefError, bool) {
 // IsCatalogRef reports whether ref is a marker.
 func IsCatalogRef(ref string) bool {
 	return strings.HasPrefix(ref, catalogUnboundPrefix) || strings.HasPrefix(ref, catalogMissingPrefix)
+}
+
+// catalogRefError recognises a marker and fills in the slot's name.
+func (d *DB) catalogRefError(ref, what string) (*CatalogRefError, bool) {
+	e, ok := ParseCatalogRef(ref, what)
+	if ok && e.Unbound {
+		_ = d.conn.QueryRow(`SELECT name FROM catalog_slots WHERE catalog_id = ? AND uuid = ?`, e.CatalogID, e.UUID).Scan(&e.Name)
+	}
+	return e, ok
 }

@@ -68,7 +68,7 @@ func (d *DB) CreateCredential(in NewCredential) (*CredentialRef, error) {
 }
 
 func (d *DB) GetCredential(id string) (*CredentialRef, error) {
-	if e, ok := ParseCatalogRef(id, "credential"); ok {
+	if e, ok := d.catalogRefError(id, "credential"); ok {
 		return nil, e
 	}
 	row := d.conn.QueryRow(
