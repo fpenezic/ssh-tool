@@ -55,6 +55,7 @@ type legacyCatalogMirror struct {
 // none of them, and the local ones are kept.
 var catalogTables = map[string]bool{
 	"catalogs": true, "catalog_slots": true, "catalog_bindings": true, "catalog_overrides": true,
+	"catalog_publish_pending": true,
 }
 
 // sourceHasCatalogSchema reports whether a snapshot was written by an app

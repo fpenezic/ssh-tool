@@ -111,9 +111,14 @@ func (d *DB) UpsertCatalogFolderTx(tx *sql.Tx, catalogID string, r CatalogFolder
 			localID, r.ParentLocalID, r.Name, r.SortOrder, r.IconName, r.IconColor, ts, ts, catalogID, r.RemoteUUID, r.Rev, r.RawJSON)
 		return localID, err
 	}
-	_, err := tx.Exec(`UPDATE folders SET parent_id = ?, name = ?, sort_order = ?, icon_name = ?, icon_color = ?, icon_image_id = NULL,
-		remote_rev = ?, catalog_json = ?, catalog_state = '', updated_at = ? WHERE id = ?`,
-		r.ParentLocalID, r.Name, r.SortOrder, r.IconName, r.IconColor, r.Rev, r.RawJSON, ts, localID)
+	res, err := tx.Exec(`UPDATE folders SET parent_id = ?, name = ?, sort_order = ?, icon_name = ?, icon_color = ?, icon_image_id = NULL,
+		catalog_id = ?, remote_uuid = ?, remote_rev = ?, catalog_json = ?, catalog_state = '', updated_at = ? WHERE id = ?`,
+		r.ParentLocalID, r.Name, r.SortOrder, r.IconName, r.IconColor, catalogID, r.RemoteUUID, r.Rev, r.RawJSON, ts, localID)
+	if err == nil {
+		if n, _ := res.RowsAffected(); n == 0 {
+			return d.UpsertCatalogFolderTx(tx, catalogID, r, "")
+		}
+	}
 	return localID, err
 }
 
@@ -131,11 +136,16 @@ func (d *DB) UpsertCatalogConnectionTx(tx *sql.Tx, catalogID string, r CatalogCo
 			r.Protocol, r.IconName, r.IconColor, ts, ts, catalogID, r.RemoteUUID, r.Rev, r.RawJSON)
 		return localID, err
 	}
-	_, err := tx.Exec(`UPDATE connections SET folder_id = ?, name = ?, hostname = ?, sort_order = ?, tags_json = ?, notes = ?,
-		protocol = ?, icon_name = ?, icon_color = ?, icon_image_id = NULL, remote_rev = ?, catalog_json = ?, catalog_state = '',
-		updated_at = ? WHERE id = ?`,
+	res, err := tx.Exec(`UPDATE connections SET folder_id = ?, name = ?, hostname = ?, sort_order = ?, tags_json = ?, notes = ?,
+		protocol = ?, icon_name = ?, icon_color = ?, icon_image_id = NULL, catalog_id = ?, remote_uuid = ?, remote_rev = ?,
+		catalog_json = ?, catalog_state = '', updated_at = ? WHERE id = ?`,
 		r.FolderLocalID, r.Name, strings.TrimSpace(r.Hostname), r.SortOrder, jsonTags(r.Tags), r.Notes,
-		r.Protocol, r.IconName, r.IconColor, r.Rev, r.RawJSON, ts, localID)
+		r.Protocol, r.IconName, r.IconColor, catalogID, r.RemoteUUID, r.Rev, r.RawJSON, ts, localID)
+	if err == nil {
+		if n, _ := res.RowsAffected(); n == 0 {
+			return d.UpsertCatalogConnectionTx(tx, catalogID, r, "")
+		}
+	}
 	return localID, err
 }
 
@@ -156,10 +166,15 @@ func (d *DB) UpsertCatalogForwardTx(tx *sql.Tx, catalogID string, r CatalogForwa
 			nullableStr(r.RemoteHost), nullableU16(r.RemotePort), r.Description, catalogID, r.RemoteUUID, r.Rev, r.RawJSON)
 		return localID, err
 	}
-	_, err := tx.Exec(`UPDATE port_forwards SET connection_id = ?, kind = ?, local_addr = ?, local_port = ?, remote_host = ?,
-		remote_port = ?, description = ?, remote_rev = ?, catalog_json = ?, catalog_state = '' WHERE id = ?`,
+	res, err := tx.Exec(`UPDATE port_forwards SET connection_id = ?, kind = ?, local_addr = ?, local_port = ?, remote_host = ?,
+		remote_port = ?, description = ?, catalog_id = ?, remote_uuid = ?, remote_rev = ?, catalog_json = ?, catalog_state = '' WHERE id = ?`,
 		r.ConnectionLocalID, r.Kind, nullableStr(r.LocalAddr), nullableU16(r.LocalPort),
-		nullableStr(r.RemoteHost), nullableU16(r.RemotePort), r.Description, r.Rev, r.RawJSON, localID)
+		nullableStr(r.RemoteHost), nullableU16(r.RemotePort), r.Description, catalogID, r.RemoteUUID, r.Rev, r.RawJSON, localID)
+	if err == nil {
+		if n, _ := res.RowsAffected(); n == 0 {
+			return d.UpsertCatalogForwardTx(tx, catalogID, r, "")
+		}
+	}
 	return localID, err
 }
 
