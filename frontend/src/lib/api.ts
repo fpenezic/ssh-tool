@@ -1274,6 +1274,8 @@ export interface CatalogPublishInput {
   target_uuid: string;
   jump_include: string[];
   slot_names: Record<string, string>;
+  // "What to send" categories left unticked.
+  unsent: string[];
 }
 export interface PublishPlanRecord { kind: "folders" | "connections" | "forwards"; uuid: string; local_id: string; name: string; path: string; copy_of?: string }
 export interface PublishPlanSlot {
@@ -1801,6 +1803,8 @@ export const api = {
   catalogEnrollInspect: (url: string, code: string) => G.CatalogEnrollInspect(url, code) as unknown as Promise<CatalogEnrollPreview>,
   catalogEnrollConfirm: (url: string, code: string, replace: boolean) => G.CatalogEnrollConfirm(url, code, replace) as unknown as Promise<CatalogInfo>,
   catalogPublishOldApps: () => G.CatalogPublishOldApps() as unknown as Promise<SeenApp[]>,
+  catalogResetRecordField: (kind: "folders" | "connections", id: string, field: string) =>
+    G.CatalogResetRecordField(kind, id, field) as unknown as Promise<void>,
   catalogSlots: (id: string) => G.CatalogSlots(id) as unknown as Promise<CatalogSlotInfo[]>,
   catalogBind: (id: string, slot: string, target: string) => G.CatalogBind(id, slot, target) as unknown as Promise<void>,
   catalogUnbind: (id: string, slot: string) => G.CatalogUnbind(id, slot) as unknown as Promise<void>,

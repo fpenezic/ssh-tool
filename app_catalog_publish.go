@@ -42,6 +42,9 @@ type CatalogPublishInput struct {
 	TargetUUID  string            `json:"target_uuid"`
 	JumpInclude []string          `json:"jump_include"`
 	SlotNames   map[string]string `json:"slot_names"`
+	// Unsent: the "What to send" categories left unticked
+	// (catalog.PublishCategories ids).
+	Unsent []string `json:"unsent"`
 }
 
 // CatalogPublishProblem is one per-record error of a refused publish,
@@ -158,8 +161,12 @@ func (in CatalogPublishInput) options(account string) catalog.PublishOptions {
 	for _, id := range in.JumpInclude {
 		inc[id] = true
 	}
+	unsent := map[string]bool{}
+	for _, k := range in.Unsent {
+		unsent[k] = true
+	}
 	return catalog.PublishOptions{CatalogID: in.CatalogID, RootID: in.FolderID, TargetUUID: in.TargetUUID,
-		JumpInclude: inc, SlotNames: in.SlotNames, AccountName: account}
+		JumpInclude: inc, SlotNames: in.SlotNames, AccountName: account, Unsent: unsent}
 }
 
 // CatalogPublishPreview builds the plan the dialog shows. Nothing is sent.

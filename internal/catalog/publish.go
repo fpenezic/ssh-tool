@@ -43,7 +43,53 @@ type PublishOptions struct {
 	// AccountName goes into the stored records as their author until the
 	// feed brings the server's own fields.
 	AccountName string
+	// Unsent: the "What to send" categories the user unticked
+	// (PublishCategories). What is not sent stays in the publisher's
+	// local layer, so their own tree does not change.
+	Unsent map[string]bool
 }
+
+// PublishCategories are the optional parts of a publish, in dialog
+// order. Settings categories name their settings keys; notes, tags,
+// icons and forwards are record fields. Everything else (name, address,
+// protocol, port, username, credential, one-time code, jump host,
+// network, ssh options, tunnel settings, sensitive) is always sent: the
+// connection does not work, or is not safe, without it.
+var PublishCategories = []struct {
+	ID   string
+	Keys []string
+}{
+	{"notes", nil},
+	{"tags", nil},
+	{"icons", nil},
+	{"forwards", nil},
+	{"database", []string{"db_enabled", "db_engine", "db_addr", "db_name", "db_use_tunnel", "db_default", "db_read_only",
+		"db_query_timeout", "db_tls", "db_credential_ref", "db_label", "db_in_tree", "db_default_target", "db_targets"}},
+	{"kafka", []string{"kafka_enabled", "kafka_bootstrap", "kafka_use_tunnel", "kafka_default", "kafka_read_only", "kafka_tls",
+		"kafka_tls_skip_verify", "kafka_sasl", "kafka_credential_ref"}},
+	{"vnc", []string{"vnc_enabled", "vnc_port", "vnc_use_tunnel", "vnc_default"}},
+	{"startup", []string{"initial_command", "initial_command_line_delay_ms", "env_vars"}},
+	{"terminal", []string{"color_tag", "terminal_type", "keepalive_interval", "auto_reconnect", "verbose", "probe_liveness"}},
+}
+
+// unsentKeys: the settings keys of the unticked categories.
+func (o PublishOptions) unsentKeys() map[string]bool {
+	out := map[string]bool{}
+	for _, c := range PublishCategories {
+		if o.Unsent[c.ID] {
+			for _, k := range c.Keys {
+				out[k] = true
+			}
+		}
+	}
+	return out
+}
+
+// RecordLayerKey is the key of a folder's or connection's local layer
+// that holds record fields kept for this user (notes, tags, icons) rather
+// than settings: what a publish did not send, or an uploaded icon image
+// the catalog cannot carry. A present field replaces the record's.
+const RecordLayerKey = "_record"
 
 // PublishFolder, PublishConnection, PublishForward, PublishSlot are the
 // request's records (PROTOCOL 3.x, without the read-only fields).
@@ -552,10 +598,14 @@ func (c *pubCtx) folder(fid string) error {
 	if err != nil {
 		return err
 	}
-	c.plan.Request.Folders = append(c.plan.Request.Folders, PublishFolder{
-		UUID: u, ParentUUID: parent, Name: f.Name, SortOrder: f.SortOrder, Settings: raw,
-		IconName: f.IconName, IconColor: f.IconColor,
-	})
+	pf := PublishFolder{UUID: u, ParentUUID: parent, Name: f.Name, SortOrder: f.SortOrder, Settings: raw,
+		IconName: f.IconName, IconColor: f.IconColor}
+	rec := map[string]any{}
+	c.icons(&pf.IconName, &pf.IconColor, f.IconImageID, rec)
+	if len(rec) > 0 {
+		layer[RecordLayerKey] = rec
+	}
+	c.plan.Request.Folders = append(c.plan.Request.Folders, pf)
 	c.plan.Records = append(c.plan.Records, PlanRecord{Kind: KindFolders, UUID: u, LocalID: fid, Name: f.Name,
 		Path: c.pathOf(fid), ParentLocalID: parentLocal})
 	c.layer("folders", u, layer)
@@ -576,8 +626,9 @@ func (c *pubCtx) inherited(root store.Folder, effective store.InheritableSetting
 	own := toMap(root.Settings)
 	eff := toMap(effective)
 	var keys []string
+	unsent := c.opts.unsentKeys()
 	for k := range eff {
-		if !reflect.DeepEqual(own[k], eff[k]) {
+		if !reflect.DeepEqual(own[k], eff[k]) && !unsent[k] {
 			keys = append(keys, k)
 		}
 	}
@@ -628,24 +679,43 @@ func (c *pubCtx) connection(conn store.Connection, folderUUID, copyOf string) er
 	if tags == nil {
 		tags = []string{}
 	}
-	c.plan.Request.Connections = append(c.plan.Request.Connections, PublishConnection{
-		UUID: u, FolderUUID: folderUUID, Name: conn.Name, Hostname: conn.Hostname, Protocol: proto,
+	pc := PublishConnection{UUID: u, FolderUUID: folderUUID, Name: conn.Name, Hostname: conn.Hostname, Protocol: proto,
 		SortOrder: conn.SortOrder, Settings: raw, Tags: tags, Notes: conn.Notes,
-		IconName: conn.IconName, IconColor: conn.IconColor,
-	})
+		IconName: conn.IconName, IconColor: conn.IconColor}
+	// Record fields not sent stay in the publisher's layer.
+	rec := map[string]any{}
+	if c.opts.Unsent["notes"] {
+		if conn.Notes != "" {
+			rec["notes"] = conn.Notes
+		}
+		pc.Notes = ""
+	}
+	if c.opts.Unsent["tags"] {
+		if len(conn.Tags) > 0 {
+			rec["tags"] = conn.Tags
+		}
+		pc.Tags = []string{}
+	}
+	c.icons(&pc.IconName, &pc.IconColor, conn.IconImageID, rec)
+	if len(rec) > 0 {
+		layer[RecordLayerKey] = rec
+	}
+	c.plan.Request.Connections = append(c.plan.Request.Connections, pc)
 	c.plan.Records = append(c.plan.Records, PlanRecord{Kind: KindConnections, UUID: u, LocalID: localID, Name: conn.Name,
 		Path: path, ParentLocalID: parentLocal, CopyOf: copyOf})
 	if copyOf == "" {
 		c.layer("connections", u, layer)
 	}
-	if conn.Notes != "" {
-		c.text(KindConnections, u, conn.Name, "notes", conn.Notes, false)
+	if pc.Notes != "" {
+		c.text(KindConnections, u, conn.Name, "notes", pc.Notes, false)
 	}
-	if len(conn.Tags) > 0 {
-		c.text(KindConnections, u, conn.Name, "tags", strings.Join(conn.Tags, ", "), false)
+	if len(pc.Tags) > 0 {
+		c.text(KindConnections, u, conn.Name, "tags", strings.Join(pc.Tags, ", "), false)
 	}
-	if copyOf != "" {
-		return nil // a bastion copy goes without the bastion's forwards
+	if copyOf != "" || c.opts.Unsent["forwards"] {
+		// A bastion copy goes without the bastion's forwards; unsent
+		// forwards stay the publisher's own, on the catalog connection.
+		return nil
 	}
 	for _, p := range c.fwds[conn.ID] {
 		fu := uuid.NewString()
@@ -667,6 +737,25 @@ func (c *pubCtx) connection(conn store.Connection, folderUUID, copyOf string) er
 		}
 	}
 	return nil
+}
+
+// icons handles a record's icon for publishing: a built-in icon goes
+// unless "Icons" is unticked; an uploaded image never goes (the catalog
+// has no image store yet) and stays in the publisher's layer, as does an
+// unsent built-in icon.
+func (c *pubCtx) icons(name, color **string, imageID *string, rec map[string]any) {
+	if imageID != nil && *imageID != "" {
+		rec["icon_image_id"] = *imageID
+	}
+	if c.opts.Unsent["icons"] {
+		if *name != nil {
+			rec["icon_name"] = **name
+		}
+		if *color != nil {
+			rec["icon_color"] = **color
+		}
+		*name, *color = nil, nil
+	}
 }
 
 // listed: the record already has this field in the review.
@@ -707,6 +796,15 @@ func (c *pubCtx) settings(s store.InheritableSettings, kind, u, name string, fol
 	// Sent as the catalog's suggestion; the publisher keeps their own.
 	if v, ok := m["tunnel_autostart"]; ok {
 		layer["tunnel_autostart"] = v
+	}
+	// Unticked in "What to send": kept for the publisher only. Removed
+	// before the review and the slot translation, so an unsent login
+	// lists nothing and creates no slot.
+	for k := range c.opts.unsentKeys() {
+		if v, ok := m[k]; ok {
+			layer[k] = v
+			delete(m, k)
+		}
 	}
 	for _, k := range freeKeys {
 		if c.listed(u, k) {

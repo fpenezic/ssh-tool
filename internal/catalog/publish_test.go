@@ -422,3 +422,86 @@ func TestPublishNeedsWriteOnTarget(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// "What to send": unticked categories stay out of the request, the review
+// and the slots, and stay the publisher's own, so their tree is the same
+// after publish and after the feed echoes it. An uploaded icon image is
+// never sent and stays theirs too.
+func TestPublishUnsentStaysLocal(t *testing.T) {
+	e := newSyncEnv(t)
+	x := publishFixture(t, e.db)
+	img, err := e.db.PutImage([]byte("\x89PNG\r\n\x1a\nfake"), "image/png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.db.SetConnectionIcon(x.db1, img); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.db.SetConnectionNamedIcon(x.web, "server", "blue"); err != nil {
+		t.Fatal(err)
+	}
+	before := map[string]string{}
+	for _, id := range []string{x.web, x.db1, x.inner} {
+		before[id] = resolvedJSON(t, e.db, id)
+	}
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, AccountName: "bob",
+		Unsent: map[string]bool{"notes": true, "database": true, "startup": true, "forwards": true, "icons": true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(plan.Request)
+	for _, gone := range []string{"ask ops", "db_targets", "initial_command", "cd /srv", "env_vars", `"server"`, img} {
+		if strings.Contains(string(body), gone) {
+			t.Fatalf("request carries unsent %q: %s", gone, body)
+		}
+	}
+	if len(plan.Request.Forwards) != 0 {
+		t.Fatalf("forwards sent: %+v", plan.Request.Forwards)
+	}
+	for _, f := range plan.FreeText {
+		if f.Field == "notes" || f.Field == "initial_command" || f.Field == "env_vars" || strings.HasPrefix(f.Field, "db_targets") {
+			t.Fatalf("review lists unsent %s", f.Field)
+		}
+	}
+	if !strings.Contains(string(body), `"web"`) {
+		t.Fatal("tags were sent unticked? they should go")
+	}
+
+	if err := CompletePublish(e.db, plan, accept(plan), "bob", nil); err != nil {
+		t.Fatal(err)
+	}
+	check := func(when string) {
+		t.Helper()
+		for id, want := range before {
+			if got := resolvedJSON(t, e.db, id); got != want {
+				t.Fatalf("%s: %s resolves differently:\n before %s\n after  %s", when, id, want, got)
+			}
+		}
+		w, _ := e.db.GetConnection(x.web)
+		if w.Notes != "ask ops" || w.IconName == nil || *w.IconName != "server" {
+			t.Fatalf("%s: web-1 lost its notes or icon: %q %v", when, w.Notes, w.IconName)
+		}
+		d, _ := e.db.GetConnection(x.db1)
+		if d.IconImageID == nil || *d.IconImageID != img {
+			t.Fatalf("%s: db-1 lost its image: %v", when, d.IconImageID)
+		}
+		p, _ := e.db.GetPortForward(x.fwd)
+		if p == nil || p.CatalogID != nil || p.ConnectionID != x.db1 {
+			t.Fatalf("%s: the unsent forward is not the publisher's own on db-1: %+v", when, p)
+		}
+	}
+	check("after publish")
+	var items []Item
+	for _, f := range plan.Request.Folders {
+		items = append(items, upRec(KindFolders, f, map[string]any{"rev": 1, "access": "write"}))
+	}
+	for _, c := range plan.Request.Connections {
+		items = append(items, upRec(KindConnections, c, map[string]any{"rev": 1}))
+	}
+	for _, s := range plan.Request.Slots {
+		items = append(items, upRec(KindSlots, s, map[string]any{"rev": 1}))
+	}
+	e.fs.serve(map[string]Feed{"": {Reset: true, Cursor: "c1", Items: items}})
+	e.sync()
+	check("after the feed echo")
+}

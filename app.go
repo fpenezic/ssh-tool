@@ -5823,11 +5823,19 @@ func (a *App) ImagesDeleteUnused() (int, error) {
 // ImagesSetFolder assigns an image to a folder. Pass empty imageID to
 // clear the icon (folder reverts to the default emoji).
 func (a *App) ImagesSetFolder(folderID, imageID string) error {
+	if a.isCatalogRecordFolder(folderID) {
+		_, err := a.setCatalogIcon("folders", folderID, imageID, "", "")
+		return err
+	}
 	return a.db.SetFolderIcon(folderID, imageID)
 }
 
 // ImagesSetConnection assigns an image to a connection. Empty clears.
 func (a *App) ImagesSetConnection(connID, imageID string) error {
+	if a.isCatalogConnection(connID) {
+		_, err := a.setCatalogIcon("connections", connID, imageID, "", "")
+		return err
+	}
 	return a.db.SetConnectionIcon(connID, imageID)
 }
 
@@ -5846,12 +5854,20 @@ func (a *App) ImagesSetCredentialFolder(folderID, imageID string) error {
 // folder. Empty name clears it (folder reverts to the default icon).
 // Clears any uploaded image - a folder has one icon source at a time.
 func (a *App) IconSetFolderNamed(folderID, name, color string) error {
+	if a.isCatalogRecordFolder(folderID) {
+		_, err := a.setCatalogIcon("folders", folderID, "", name, color)
+		return err
+	}
 	return a.db.SetFolderNamedIcon(folderID, name, color)
 }
 
 // IconSetConnectionNamed sets a built-in icon + palette colour on a
 // connection. Empty name clears it. Clears any uploaded image.
 func (a *App) IconSetConnectionNamed(connID, name, color string) error {
+	if a.isCatalogConnection(connID) {
+		_, err := a.setCatalogIcon("connections", connID, "", name, color)
+		return err
+	}
 	return a.db.SetConnectionNamedIcon(connID, name, color)
 }
 

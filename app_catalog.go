@@ -933,6 +933,9 @@ func (a *App) CatalogSetLayer(kind, id, layerJSON string) error {
 		b, _ := json.Marshal(s)
 		t = string(b)
 	}
+	if kind != "forwards" {
+		t = a.keepRecordLayer(catID, uuid, t)
+	}
 	if err := a.db.SetCatalogOverride(catID, uuid, kind, t); err != nil {
 		return err
 	}
@@ -977,7 +980,7 @@ func (a *App) saveCatalogConnectionEdit(existing *store.Connection, in store.Upd
 		}
 		layer := catalog.LayerFromEdit(base, *in.Overrides)
 		b, _ := json.Marshal(layer)
-		if err := a.db.SetCatalogOverride(catID, uuid, "connections", string(b)); err != nil {
+		if err := a.db.SetCatalogOverride(catID, uuid, "connections", a.keepRecordLayer(catID, uuid, string(b))); err != nil {
 			return nil, err
 		}
 		a.rematerialiseCatalogs()
@@ -1156,7 +1159,7 @@ func (a *App) saveCatalogFolderEdit(in FoldersUpdateInput) (*store.Folder, error
 			return nil, err
 		}
 		b, _ := json.Marshal(catalog.LayerFromEdit(base, *in.Settings))
-		if err := a.db.SetCatalogOverride(catID, uuid, "folders", string(b)); err != nil {
+		if err := a.db.SetCatalogOverride(catID, uuid, "folders", a.keepRecordLayer(catID, uuid, string(b))); err != nil {
 			return nil, err
 		}
 		a.rematerialiseCatalogs()
