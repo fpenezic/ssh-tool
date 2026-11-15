@@ -686,7 +686,9 @@
     const one = ids.length === 1 ? tree.connectionById(ids[0]) : undefined;
     // Export leaves catalog rows out, so it is not offered on them either.
     const catalogOwned = new Set(["Move to folder…", "Delete connection", "Export…"]);
-    const keep = (it: { label: string }) => !anyCatalog || !(catalogOwned.has(it.label) || it.label.startsWith("Move ") || it.label.startsWith("Delete ") || it.label.startsWith("Export "));
+    // "Delete for everyone" is the catalog's own entry: the prefix rule
+    // below is for the local Move / Delete / Export entries only.
+    const keep = (it: { label: string }) => !anyCatalog || it.label === "Delete for everyone…" || !(catalogOwned.has(it.label) || it.label.startsWith("Move ") || it.label.startsWith("Delete ") || it.label.startsWith("Export "));
     const oneParent = one?.folder_id ? tree.folderById(one.folder_id) : undefined;
     const canDeleteForAll = !!one?.catalog_id && !!one.remote_uuid && one.catalog_state !== "removed" && !!oneParent?.catalog_writable && !isMobile;
     contextMenu.show(e, [

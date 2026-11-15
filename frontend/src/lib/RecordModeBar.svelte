@@ -114,7 +114,7 @@
   table { border-collapse: collapse; width: 100%; }
   th, td { text-align: left; padding: 2px 6px; vertical-align: top; border-bottom: 1px solid var(--surface0); }
   th { color: var(--subtext0); font-weight: 400; }
-  td.v { font-family: var(--font-mono, monospace); word-break: break-all; white-space: pre-wrap; }
+  td.v { font-family: var(--font-mono, monospace); overflow-wrap: anywhere; white-space: pre-wrap; }
   tr.both td:first-child { color: var(--yellow); font-weight: 600; }
   td label { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
   .rm-actions { display: flex; justify-content: flex-end; gap: 6px; }

@@ -17,9 +17,10 @@
     id: string;
     name: string;
     rec: CatalogRecordInfo;
+    recordMode?: boolean;
     onChanged: () => void;
   }
-  let { kind, id, name, rec, onChanged }: Props = $props();
+  let { kind, id, name, rec, recordMode = false, onChanged }: Props = $props();
 
   // Human names for the layer's keys (the rest show their key).
   const fieldNames: Record<string, string> = {
@@ -93,7 +94,7 @@
       <button class="danger" onclick={del}>Delete</button>
     </div>
   {:else}
-    <p class="cb-note"><IconLock size={11} /> {kind === "connections" ? "Name, address, tags and notes" : "The name"} are the catalog's. Settings you change here stay on this machine.</p>
+    {#if !recordMode}<p class="cb-note"><IconLock size={11} /> {kind === "connections" ? "Name, address, tags and notes are" : "The name is"} the catalog's. Settings you change here stay on this machine.</p>{/if}
   {/if}
   {#if rec.doc_md}
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
