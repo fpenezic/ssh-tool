@@ -21,6 +21,11 @@ type SyncResult struct {
 	Kept     int  `json:"kept"`    // left the catalog, kept as "removed" for its local data
 	Skipped  int  `json:"skipped"` // refused (protocol local) or unknown kind
 	Fallback int  `json:"fallback"`
+	// Publish settlement: rows of an unfinished publish the feed
+	// converted in place, and pending rows dropped because a full
+	// snapshot showed the publish never reached the server.
+	PublishConverted int `json:"publish_converted"`
+	PublishDropped   int `json:"publish_dropped"`
 }
 
 // pageLimit is the feed page size asked for (the server caps it at 2000).
@@ -119,6 +124,8 @@ func (r *SyncResult) add(o SyncResult) {
 	r.Kept += o.Kept
 	r.Skipped += o.Skipped
 	r.Fallback += o.Fallback
+	r.PublishConverted += o.PublishConverted
+	r.PublishDropped += o.PublishDropped
 }
 
 // applier applies feed items inside one writer transaction.
@@ -128,6 +135,7 @@ type applier struct {
 	cat        *store.Catalog
 	held       *store.CatalogHeld
 	slots      map[string]int64
+	pending    map[string]store.PublishPending
 	snapshot   map[string]bool
 	pendingFwd []Item
 	res        SyncResult
@@ -142,7 +150,11 @@ func newApplier(db *store.DB, tx *sql.Tx, cat *store.Catalog, snapshot map[strin
 	if err != nil {
 		return nil, err
 	}
-	return &applier{db: db, tx: tx, cat: cat, held: held, slots: slots, snapshot: snapshot}, nil
+	pending, err := db.PendingPublishTx(tx, cat.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &applier{db: db, tx: tx, cat: cat, held: held, slots: slots, pending: pending, snapshot: snapshot}, nil
 }
 
 func key(kind, uuid string) string { return kind + "/" + uuid }
@@ -247,9 +259,14 @@ func (a *applier) upsertFolder(it Item) error {
 	id, err := a.db.UpsertCatalogFolderTx(a.tx, a.cat.ID, store.CatalogFolderRow{
 		RemoteUUID: f.UUID, Rev: f.Rev, ParentLocalID: a.folderID(f.ParentUUID), Name: f.Name,
 		SortOrder: f.SortOrder, IconName: f.IconName, IconColor: f.IconColor, RawJSON: string(it.Record),
-	}, a.held.IDs[KindFolders][f.UUID])
+	}, func() string { id, _ := a.localFor(KindFolders, f.UUID); return id }())
 	if err != nil {
 		return fmt.Errorf("catalog folder %s: %w", f.UUID, err)
+	}
+	if _, fromPending := a.pending[f.UUID]; fromPending {
+		if err := a.settled(f.UUID); err != nil {
+			return err
+		}
 	}
 	a.hold(KindFolders, f.UUID, id, f.Rev)
 	a.res.Upserted++
@@ -277,9 +294,14 @@ func (a *applier) upsertConnection(it Item) error {
 		RemoteUUID: c.UUID, Rev: c.Rev, FolderLocalID: a.folderID(&fu), Name: c.Name, Hostname: c.Hostname,
 		Protocol: c.ProtocolOrDefault(), SortOrder: c.SortOrder, Tags: c.Tags, Notes: c.Notes,
 		IconName: c.IconName, IconColor: c.IconColor, RawJSON: string(it.Record),
-	}, a.held.IDs[KindConnections][c.UUID])
+	}, func() string { id, _ := a.localFor(KindConnections, c.UUID); return id }())
 	if err != nil {
 		return fmt.Errorf("catalog connection %s: %w", c.UUID, err)
+	}
+	if _, fromPending := a.pending[c.UUID]; fromPending {
+		if err := a.settled(c.UUID); err != nil {
+			return err
+		}
 	}
 	a.hold(KindConnections, c.UUID, id, c.Rev)
 	a.res.Upserted++
@@ -304,11 +326,16 @@ func (a *applier) upsertForward(it Item) error {
 		RemoteUUID: f.UUID, Rev: f.Rev, ConnectionLocalID: conn, Kind: f.Kind, LocalAddr: f.LocalAddr,
 		LocalPort: f.LocalPort, RemoteHost: f.RemoteHost, RemotePort: f.RemotePort, Description: f.Description,
 		RawJSON: string(it.Record),
-	}, a.held.IDs[KindForwards][f.UUID])
+	}, func() string { id, _ := a.localFor(KindForwards, f.UUID); return id }())
 	if err != nil {
 		log.Printf("catalog %s: forward %s: %v; skipped", a.cat.Name, f.UUID, err)
 		a.res.Skipped++
 		return nil
+	}
+	if _, fromPending := a.pending[f.UUID]; fromPending {
+		if err := a.settled(f.UUID); err != nil {
+			return err
+		}
 	}
 	a.hold(KindForwards, f.UUID, id, f.Rev)
 	a.res.Upserted++
@@ -340,6 +367,26 @@ func (a *applier) upsertSlot(it Item) error {
 	a.slots[s.UUID] = s.Rev
 	a.res.Upserted++
 	return nil
+}
+
+// localFor is the local row an upsert writes to: the one held for this
+// uuid, else the local row of an unfinished publish of it (converted in
+// place), else "" for a new row.
+func (a *applier) localFor(kind, uuid string) (string, bool) {
+	if id, ok := a.held.IDs[kind][uuid]; ok {
+		return id, false
+	}
+	if p, ok := a.pending[uuid]; ok && p.Kind == kind {
+		return p.LocalID, true
+	}
+	return "", false
+}
+
+// settled drops a pending publish row once the feed converted it.
+func (a *applier) settled(uuid string) error {
+	delete(a.pending, uuid)
+	a.res.PublishConverted++
+	return a.db.SettlePublishPendingTx(a.tx, a.cat.ID, []string{uuid})
 }
 
 func (a *applier) hold(kind, uuid, id string, rev int64) {
@@ -404,6 +451,19 @@ func (a *applier) removeUnseen() error {
 				return err
 			}
 		}
+	}
+	// A publish whose records a complete snapshot does not contain never
+	// reached the server: its rows stay local, the pending note goes.
+	var gone []string
+	for uuid, p := range a.pending {
+		if !a.snapshot[key(p.Kind, uuid)] {
+			gone = append(gone, uuid)
+		}
+	}
+	if len(gone) > 0 {
+		a.res.PublishDropped += len(gone)
+		log.Printf("catalog %s: %d record(s) of an unfinished publish are not on the server; they stay local", a.cat.Name, len(gone))
+		return a.db.SettlePublishPendingTx(a.tx, a.cat.ID, gone)
 	}
 	return nil
 }

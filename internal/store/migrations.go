@@ -547,6 +547,23 @@ var migrations = []struct {
 		// catalogSchemaSQL for the reasons.
 		catalogSchemaSQL,
 	},
+	{
+		30,
+		// Publishing a local folder to a catalog: the client-generated
+		// uuids are recorded against the local rows BEFORE the request
+		// goes out, so a publish the server accepted but this app never
+		// finished converting (crash, lost response) is completed by the
+		// next sync, in place, instead of the feed creating a second
+		// copy next to the still-local originals.
+		`CREATE TABLE catalog_publish_pending (
+		    catalog_id  TEXT NOT NULL,
+		    kind        TEXT NOT NULL,
+		    remote_uuid TEXT NOT NULL,
+		    local_id    TEXT NOT NULL,
+		    created_at  INTEGER NOT NULL,
+		    PRIMARY KEY (catalog_id, remote_uuid)
+		);`,
+	},
 }
 
 // catalogSchemaSQL is migration 29: a shared connection catalog the app

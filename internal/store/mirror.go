@@ -77,6 +77,7 @@ func (d *DB) MirrorFromWith(srcPath string, trust ShadowTrust) (MirrorInfo, erro
 		"catalog_slots",
 		"catalog_bindings",
 		"catalog_overrides",
+		"catalog_publish_pending",
 		"broadcast_groups",
 		"dynamic_folders",
 		"dynamic_entries",

@@ -193,6 +193,18 @@ func migrationSQLFromSource(t *testing.T) map[int64]string {
 			if err != nil {
 				continue
 			}
+			// A migration whose SQL is a named constant (28, 29) still
+			// counts for the version checks; its "SQL" here is the
+			// constant's name, so a pin would catch a rename, not an
+			// edit of the constant - pin such migrations by moving the
+			// text inline before raising frozenThrough past them.
+			if id, isIdent := entry.Elts[1].(*ast.Ident); isIdent {
+				if _, dup := out[ver]; dup {
+					t.Fatalf("migration version %d appears twice in migrations.go", ver)
+				}
+				out[ver] = "const:" + id.Name
+				continue
+			}
 			sqlLit, ok := entry.Elts[1].(*ast.BasicLit)
 			if !ok || sqlLit.Kind != token.STRING {
 				continue
