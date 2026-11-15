@@ -290,6 +290,11 @@ func TestCatalogBackgroundNeverSignsIn(t *testing.T) {
 	if ca.tokenRefused != 1 {
 		t.Errorf("%d refresh attempts, want 1", ca.tokenRefused)
 	}
+	// It survives a restart (the in-memory state is gone).
+	delete(a.catalogs.state, ca.cat.ID)
+	if s := state(); s != catStateSignedOU {
+		t.Fatalf("signed out after a restart: %s", s)
+	}
 	// The scheduler leaves a signed-out catalog alone.
 	a.catalogSchedulerPass()
 	if ca.tokenRefused != 1 {
