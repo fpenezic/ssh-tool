@@ -228,7 +228,7 @@
             <p class="hint">This catalog asks for nothing.</p>
           {/if}
           {#each catalogs.slots[c.id] ?? [] as s (s.uuid)}
-            <div class="slot" class:unbound={s.state === "unbound"}>
+            <div class="slot" class:unbound={s.state === "unbound" && !s.skipped}>
               <div class="slot-head">
                 <span class="slot-icon" title={typeLabel[s.type]}>
                   {#if s.type === "cred"}<IconKey size={14} />{:else if s.type === "net"}<IconVpn size={14} />{:else}<IconBastion size={14} />{/if}
@@ -236,7 +236,11 @@
                 <span class="slot-name">{s.name}</span>
                 <span class="slot-type">{typeLabel[s.type]}</span>
                 {#if s.state === "unbound"}
-                  <span class="chip tone-warn">{s.target_gone ? "bound item deleted" : "not bound"}</span>
+                  {#if s.skipped && !s.target_gone}
+                    <span class="chip" title="Skipped in the connect dialog on this machine; bind it here to use a stored code">skipped - you type the code</span>
+                  {:else}
+                    <span class="chip tone-warn">{s.target_gone ? "bound item deleted" : "not bound"}</span>
+                  {/if}
                 {:else if s.state === "external"}
                   <span class="chip tone-ok" title="Found in your Bitwarden / Vaultwarden">from {s.target_name}</span>
                 {/if}

@@ -4,6 +4,7 @@
   import { dynRef } from "./jumpRefs";
   import { tree, selection, drag, sessions, paneTabs, view, jumpChainHostnames, liveTree } from "./stores.svelte";
   import { errMsg } from "./connectErrors";
+  import { catalogBindGate } from "./catalogBindGate.svelte";
   import { expandedConnections } from "./treeState.svelte";
   import { probeState } from "./probeState.svelte";
   import { tagFilter } from "./tagFilter.svelte.ts";
@@ -67,11 +68,12 @@
   }
 
   // A connection whose settings (own or inherited from its catalog
-  // folders) hold a catalog marker: a slot to bind or a reference this
-  // user does not hold.
-  function catalogNeedsBinding(conn: { catalog_id?: string; overrides: unknown; folder_id: string | null }): boolean {
+  // folders) name a catalog record this user does not hold (deleted, or no
+  // access). Binding cannot fix that, so it keeps a mark; an unbound slot
+  // has none - the connect dialog asks for it (catalogBindGate).
+  function catalogUnavailableRef(conn: { catalog_id?: string; overrides: unknown; folder_id: string | null }): boolean {
     if (!conn.catalog_id) return false;
-    const has = (v: unknown) => { const t = JSON.stringify(v ?? {}); return t.includes("cat-unbound:") || t.includes("cat-missing:"); };
+    const has = (v: unknown) => JSON.stringify(v ?? {}).includes("cat-missing:");
     if (has(conn.overrides)) return true;
     const byId = new Map(tree.folders.map((f) => [f.id, f] as const));
     for (let id = conn.folder_id, i = 0; id && i < 64; i++) {
@@ -150,14 +152,17 @@
     // Every way in (click, double-click, Enter) goes through the selection
     // guard: a connect does not start while an unsaved prompt says Stay.
     if (!selection.isConnectionSelected(connId) && !(await selection.selectConnection(connId))) return;
-    connectingId = connId;
     connectErrId = null;
     connectErr   = null;
+    // Unbound catalog slots are asked for before the row says
+    // "connecting"; Cancel leaves it as it was.
+    if (!(await catalogBindGate([connId]))) return;
+    connectingId = connId;
     const ok = await connectionActions.connectDefault(connId);
-    if (!ok) {
+    const last = connectionActions.lastConnectError[connId];
+    if (!ok && last) {
       // Surface a brief inline marker. The full error + debug log
       // lives in DetailPane via connectionActions.lastConnectError.
-      const last = connectionActions.lastConnectError[connId];
       connectErrId = connId;
       connectErr   = last?.message ?? "connect failed";
     }
@@ -1365,8 +1370,8 @@
           {#if conn.favorite}<span class="fav" title="Favourite"><IconStar size={11} fill="var(--yellow)" /></span>{/if}
           {#if conn.catalog_state === "removed"}
             <span class="cat-mark warn" title="Removed from its catalog. It had your local settings - right-click to keep it as your own or delete it."><IconAlertTriangle size={11} /></span>
-          {:else if catalogNeedsBinding(conn)}
-            <button class="cat-mark warn as-btn" title="A catalog slot this connection needs is not bound - click to bind" onclick={(e) => { e.stopPropagation(); catalogs.open(conn.catalog_id!, "slots"); }}><IconKey size={11} /></button>
+          {:else if catalogUnavailableRef(conn)}
+            <span class="cat-mark warn" title="Uses a catalog value that is not available to you (deleted, or no access) - set your own in My settings"><IconAlertTriangle size={11} /></span>
           {/if}
           {#if bastionMark(conn.id)}
             {@const m = bastionMark(conn.id)!}
@@ -1414,7 +1419,6 @@
   .cat-mark { display: inline-flex; align-items: center; margin-left: 3px; }
   .cat-mark.warn { color: var(--yellow); }
   .cat-mark.muted { opacity: 0.5; }
-  .cat-mark.as-btn { background: none; border: none; padding: 0; cursor: pointer; }
   .row.skeleton .name { opacity: 0.55; font-style: italic; }
 
   .row {

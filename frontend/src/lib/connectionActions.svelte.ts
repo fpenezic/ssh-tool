@@ -6,6 +6,7 @@
 import { api, type Connection } from "./api";
 import { splitHostInput, hostOverrides } from "./hostInput";
 import { tree, sessions, paneTabs, view, selection, credentials, type PaneNode } from "./stores.svelte";
+import { catalogBindGate } from "./catalogBindGate.svelte";
 import { vncSessions } from "./vncState.svelte.ts";
 import { kafkaTabs, kafkaEnabledFor } from "./kafkaState.svelte";
 import { dbTabs, dbEnabledFor, dbTabTitle, dbTargetsFor, dbTreeRows } from "./dbState.svelte";
@@ -444,6 +445,8 @@ class ConnectionActionsStore {
     if (!c) return false;
     if (c.protocol === "local") return this.connectLocal(c);
     if (c.protocol === "web") return this.openWeb(c.id);
+    // Unbound catalog slots are asked for here, on the click.
+    if (!(await catalogBindGate([id]))) { this.clearConnectError(id); return false; }
     try {
       const r = await api.connectionsResolve(id);
       if (r?.tunnel_only) {
@@ -487,6 +490,7 @@ class ConnectionActionsStore {
     // credential override, no WG take-over - none of that applies.
     if (c.protocol === "local") return this.connectLocal(c);
     if (c.protocol === "web") return this.openWeb(c.id);
+    if (!(await catalogBindGate([id]))) { this.clearConnectError(id); return false; }
     const override = opts?.overrideCredentialId ?? "";
     const attempt = async () => override
       ? api.sshConnectWithOverride(c.id, override)
@@ -720,6 +724,9 @@ class ConnectionActionsStore {
       });
       if (!ok) return;
     }
+    // One dialog for every unbound slot the batch needs; Cancel stops
+    // the whole batch.
+    if (!(await catalogBindGate(conns.map((c) => c.id)))) return;
     if (conns.length > 1) {
       toast.info(`Connecting to ${conns.length} connections in the background...`);
     }
@@ -883,6 +890,7 @@ class ConnectionActionsStore {
   async openVncConnection(id: string): Promise<boolean> {
     const c = tree.connectionById(id);
     if (!c) return false;
+    if (!(await catalogBindGate([id]))) { this.clearConnectError(id); return false; }
     try {
       let vs: import("./api").VncSession;
       try {
@@ -915,6 +923,7 @@ class ConnectionActionsStore {
   async openDb(id: string, targetId = ""): Promise<boolean> {
     const c = tree.connectionById(id);
     if (!c) return false;
+    if (!(await catalogBindGate([id], "db:" + targetId))) { this.clearConnectError(id); return false; }
     const existing = sessions.tabs.find(
       (s) => s.kind === "db" && s.connectionId === id && (dbTabs.get(s.sessionId)?.target_id ?? "") === targetId,
     );
@@ -988,6 +997,7 @@ class ConnectionActionsStore {
   async openKafka(id: string): Promise<boolean> {
     const c = tree.connectionById(id);
     if (!c) return false;
+    if (!(await catalogBindGate([id], "kafka"))) { this.clearConnectError(id); return false; }
     const existing = sessions.tabs.find((s) => s.kind === "kafka" && s.connectionId === id);
     if (existing) {
       const tab = paneTabs.tabs.find((t) => hasSession(t.root, existing.sessionId));

@@ -94,12 +94,12 @@ class CatalogStore {
     view.setTabSettingsSection("catalogs");
   }
 
-  // One toast per catalog and reason per session: unbound slots after the
-  // first sync (the first thing a new user meets), a dead session, a
-  // failing sync. Background work stays visible without a modal.
+  // One toast per catalog and reason per session: a dead session, a
+  // failing sync. Background work stays visible without a modal. Unbound
+  // slots get no toast: the connect dialog asks for them when a connection
+  // needs them (catalogBindGate), and the root's chip is the standing hint.
   private attention() {
     for (const c of this.list) {
-      const label = catalogStateLabel(c);
       let key = "";
       let msg = "";
       if (c.state === "signed_out") {
@@ -108,14 +108,10 @@ class CatalogStore {
       } else if (c.state === "error") {
         key = c.id + ":error";
         msg = `${c.name}: sync failed - ${c.error || c.last_error || "see Settings"}`;
-      } else if (c.state === "ok" && c.unbound > 0 && c.last_sync_at) {
-        key = c.id + ":unbound";
-        msg = `${c.name}: ${label.text} before its connections work - click to bind`;
       }
       if (!key || this.notified.has(key)) continue;
       this.notified.add(key);
-      const panel = key.endsWith(":unbound") ? "slots" : "";
-      toast.push(c.state === "ok" ? "info" : "err", msg, 10000, () => this.open(c.id, panel));
+      toast.push("err", msg, 10000, () => this.open(c.id, ""));
     }
   }
 }
