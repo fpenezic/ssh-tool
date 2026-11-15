@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -271,6 +272,11 @@ func Build(
 	if err != nil {
 		return nil, fmt.Errorf("list connections: %w", err)
 	}
+	// Catalog rows are not exported: a copy would carry catalog markers
+	// instead of credentials and go stale at once. Each user gets them
+	// from the catalog itself. (A local backup still holds them.)
+	allFolders = slices.DeleteFunc(allFolders, func(f store.Folder) bool { return f.CatalogID != nil })
+	allConns = slices.DeleteFunc(allConns, func(c store.Connection) bool { return c.CatalogID != nil })
 
 	keepFolder := map[string]bool{}
 	keepConn := map[string]bool{}
@@ -474,6 +480,7 @@ func Build(
 		if err != nil {
 			return nil, fmt.Errorf("list credentials: %w", err)
 		}
+		allCreds = slices.DeleteFunc(allCreds, func(c store.CredentialRef) bool { return store.IsCatalogCredential(c.ID) })
 		sort.Slice(allCreds, func(i, j int) bool { return allCreds[i].ID < allCreds[j].ID })
 
 		// Derive export key from passphrase + fresh salt.

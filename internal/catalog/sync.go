@@ -438,3 +438,14 @@ func KeepConnectionLocal(db *store.DB, id string) error {
 	}
 	return db.KeepRemovedConnectionLocal(id, resolver.EffectiveOverrides(*conn, folders))
 }
+
+// KeepFolderLocal turns a folder that left its catalog, with everything
+// below it, into local rows at the top of the tree, with what it
+// inherited folded into its own settings.
+func KeepFolderLocal(db *store.DB, id string) error {
+	folders, err := db.ListFolders()
+	if err != nil {
+		return err
+	}
+	return db.KeepRemovedFolderLocal(id, resolver.EffectiveFolderSettings(id, folders))
+}

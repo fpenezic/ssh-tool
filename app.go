@@ -58,6 +58,9 @@ import (
 
 // App is the root service exposed to the frontend.
 type App struct {
+	// catalogs is the in-memory side of the shared connection catalogs
+	// (app_catalog.go).
+	catalogs catalogRuntime
 	// quick holds quick-connect targets ("quick:<uuid>") for reconnect and
 	// pane splits; they are never written to the store. See app_quick.go.
 	quick quickConnStore
@@ -646,6 +649,7 @@ func (a *App) initialise() {
 	a.applyBackupSchedulerConfig()
 	a.backupSched.Start()
 	a.startAutoSync()
+	a.startCatalogScheduler()
 	// Profiles exposed as a local SOCKS proxy (a CI runner's gateway)
 	// listen from the start; tunnels still come up on first use.
 	a.startLocalProxies()
@@ -711,6 +715,9 @@ type FoldersCreateInput struct {
 }
 
 func (a *App) FoldersCreate(in FoldersCreateInput) (*store.Folder, error) {
+	if in.ParentID != nil && a.isCatalogFolder(*in.ParentID) {
+		return nil, errCatalogFolder
+	}
 	return a.db.CreateFolder(store.NewFolder{
 		ParentID:  in.ParentID,
 		Name:      in.Name,
@@ -729,6 +736,12 @@ type FoldersUpdateInput struct {
 }
 
 func (a *App) FoldersUpdate(in FoldersUpdateInput) (*store.Folder, error) {
+	if a.isCatalogFolder(in.ID) {
+		return nil, errCatalogOwned
+	}
+	if in.ParentID != nil && a.isCatalogFolder(*in.ParentID) {
+		return nil, errCatalogFolder
+	}
 	return a.db.UpdateFolder(store.UpdateFolder{
 		ID:          in.ID,
 		ParentID:    in.ParentID,
@@ -754,6 +767,9 @@ type DynamicFolderCreateInput struct {
 }
 
 func (a *App) DynamicFolderCreate(in DynamicFolderCreateInput) (*store.Folder, error) {
+	if in.ParentID != nil && a.isCatalogFolder(*in.ParentID) {
+		return nil, errCatalogFolder
+	}
 	folder, err := a.db.CreateFolder(store.NewFolder{
 		ParentID: in.ParentID,
 		Name:     in.Name,
@@ -1384,6 +1400,12 @@ func (a *App) connectSynthetic(syntheticConn store.Connection, folders []store.F
 }
 
 func (a *App) FoldersDelete(id string) error {
+	if f, err := a.db.GetFolder(id); err == nil && f.CatalogID != nil {
+		if f.CatalogState == "removed" {
+			return a.CatalogDeleteRemoved("folders", id)
+		}
+		return errCatalogOwned
+	}
 	// Cascade cleanup: stop any inventory timer associated with this
 	// folder before the row is gone (the side dynamic_folders row
 	// will be cascade-deleted by the FK).
@@ -1466,6 +1488,9 @@ type ConnectionsCreateInput struct {
 }
 
 func (a *App) ConnectionsCreate(in ConnectionsCreateInput) (*store.Connection, error) {
+	if in.FolderID != nil && a.isCatalogFolder(*in.FolderID) {
+		return nil, errCatalogFolder
+	}
 	return a.db.CreateConnection(store.NewConnection{
 		FolderID:       in.FolderID,
 		Name:           in.Name,
@@ -1502,7 +1527,7 @@ type ConnectionsUpdateInput struct {
 }
 
 func (a *App) ConnectionsUpdate(in ConnectionsUpdateInput) (*store.Connection, error) {
-	return a.db.UpdateConnection(store.UpdateConnection{
+	return a.updateConnection(store.UpdateConnection{
 		ID:                  in.ID,
 		FolderID:            in.FolderID,
 		ClearFolder:         in.ClearFolder,
@@ -1523,13 +1548,35 @@ func (a *App) ConnectionsUpdate(in ConnectionsUpdateInput) (*store.Connection, e
 }
 
 func (a *App) ConnectionsDelete(id string) error {
-	return a.db.DeleteConnection(id)
+	if c, err := a.db.GetConnection(id); err == nil && c.CatalogID != nil {
+		if c.CatalogState == "removed" {
+			return a.CatalogDeleteRemoved("connections", id)
+		}
+		return errCatalogOwned
+	}
+	if err := a.db.DeleteConnection(id); err != nil {
+		return err
+	}
+	// A jump slot may have been bound to it.
+	go a.rematerialiseCatalogs()
+	return nil
 }
 
 func (a *App) ConnectionsClone(id string) (*store.Connection, error) {
 	src, err := a.db.GetConnection(id)
 	if err != nil {
 		return nil, err
+	}
+	if src.CatalogID != nil {
+		// A copy of a catalog connection is the user's own: at the top
+		// of the tree, with what it inherited from the catalog folded in.
+		folders, err := a.db.ListFolders()
+		if err != nil {
+			return nil, err
+		}
+		src.Overrides = resolver.EffectiveOverrides(*src, folders)
+		src.FolderID = nil
+		src.SortOrder = 0
 	}
 	c, err := a.db.CreateConnection(store.NewConnection{
 		FolderID:       src.FolderID,
@@ -1599,6 +1646,15 @@ type ConnectionsBatchUpdateResult struct {
 }
 
 func (a *App) ConnectionsBatchUpdate(in ConnectionsBatchUpdateInput) (*ConnectionsBatchUpdateResult, error) {
+	// Catalog connections are left out of a batch edit: their settings are
+	// the catalog's, adjusted per record in its editor.
+	ids := in.IDs[:0:0]
+	for _, id := range in.IDs {
+		if !a.isCatalogConnection(id) {
+			ids = append(ids, id)
+		}
+	}
+	in.IDs = ids
 	n, err := a.db.BatchUpdateConnectionOverrides(in.IDs, store.BatchOverridePatch{
 		Patch:       in.Patch,
 		ClearFields: in.ClearFields,
@@ -1701,7 +1757,15 @@ func (a *App) CredentialsUpdate(in CredentialsUpdateInput) (*store.CredentialRef
 }
 
 func (a *App) CredentialsDelete(id string) error {
-	return a.credSvc.Delete(id)
+	if store.IsCatalogCredential(id) {
+		return fmt.Errorf("this credential belongs to a catalog reference; bind the slot to another credential instead")
+	}
+	if err := a.credSvc.Delete(id); err != nil {
+		return err
+	}
+	// A slot bound to it falls back to its unbound marker.
+	go a.rematerialiseCatalogs()
+	return nil
 }
 
 func (a *App) CredentialsRotatePassword(id, newPassword string) (*store.CredentialRef, error) {
@@ -2079,6 +2143,7 @@ func (a *App) VaultUnlock(passphrase string, rememberOnMachine bool) error {
 	}
 	a.recordAudit("vault.unlock", "", map[string]string{"sidecar": boolStr(rememberOnMachine)})
 	a.inventory.VaultUnlocked()
+	a.catalogVaultUnlocked()
 	a.ciRunnerAutoStart()
 	return nil
 }
@@ -2092,6 +2157,7 @@ func (a *App) VaultAutoUnlock() (bool, error) {
 	if ok {
 		a.recordAudit("vault.auto_unlock", "", nil)
 		a.inventory.VaultUnlocked()
+		a.catalogVaultUnlocked()
 		a.ciRunnerAutoStart()
 	}
 	return ok, nil
@@ -3164,10 +3230,14 @@ func (a *App) SyncPullLive() (*SyncPullLiveResult, error) {
 	// rule decides whether the snapshot's catalog shadow is taken back or
 	// this machine's catalog data is kept (an older app pushed it).
 	trust := store.ShadowTrust{FromSync: true, Nonce: meta.CatalogShadow}
+	// Not while a catalog pass writes the same rows.
+	a.catRT().apply.Lock()
 	mirrorInfo, err := a.db.MirrorFromWith(storeTmp, trust)
+	a.catRT().apply.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("apply profile: %w", err)
 	}
+	EventsEmit("catalog_changed", map[string]any{})
 
 	// Merge the vault in place using the local passphrase (same-user,
 	// same-passphrase case). A wrong-passphrase error means the
@@ -3387,6 +3457,11 @@ func (a *App) sshConnectWith(connectionID, overrideCredentialID, overrideUsernam
 	// Load the raw connection to access fields that live outside the
 	// inheritable settings (password_vault_key, icon, etc.).
 	rawConn, connErr := a.db.GetConnection(connectionID)
+	// A catalog connection with a protocol this build does not dial over
+	// SSH (a newer app published it) is refused rather than tried as SSH.
+	if connErr == nil && rawConn.CatalogID != nil && rawConn.Protocol != "ssh" && rawConn.Protocol != "" {
+		return nil, fmt.Errorf("this catalog connection uses protocol %q, which this version cannot open", rawConn.Protocol)
+	}
 
 	// Resolve per-connection password override from the vault.
 	// Skip when a credential override is in effect (see above).
@@ -4838,6 +4913,9 @@ type ForwardUpdateInput struct {
 }
 
 func (a *App) ForwardsUpdate(in ForwardUpdateInput) (*store.PortForward, error) {
+	if cur, err := a.db.GetPortForward(in.ID); err == nil && cur.RemoteUUID != nil {
+		return a.updateCatalogForward(cur, in)
+	}
 	return a.db.UpdatePortForward(store.UpdatePortForward{
 		ID:              in.ID,
 		LocalAddr:       in.LocalAddr,
@@ -4859,6 +4937,9 @@ func (a *App) ForwardsSetBookmarks(forwardID string, bookmarks []store.ProxyBook
 }
 
 func (a *App) ForwardsDelete(id string) error {
+	if cur, err := a.db.GetPortForward(id); err == nil && cur.RemoteUUID != nil {
+		return fmt.Errorf("this forward comes from a shared catalog; disable it instead of deleting it")
+	}
 	// Stop any active instances of this spec first.
 	for _, s := range a.forwards.List("") {
 		if s.ID == id {
@@ -5277,6 +5358,9 @@ func (a *App) ForwardsStart(forwardID, sessionID string) (*sshlayer.ForwardStatu
 	if err != nil {
 		return nil, err
 	}
+	if spec.Disabled {
+		return nil, errForwardDisabled
+	}
 	sess, ok := a.pool.Get(sessionID)
 	if !ok {
 		return nil, fmt.Errorf("session not connected")
@@ -5386,7 +5470,7 @@ func (a *App) forwardsAutoStartFor(connectionID, sessionID string, all bool, ski
 		running[st.ID] = true
 	}
 	for _, spec := range specs {
-		if (!all && !spec.AutoStart) || running[spec.ID] || skip[spec.ID] {
+		if (!all && !spec.AutoStart) || spec.Disabled || running[spec.ID] || skip[spec.ID] {
 			continue
 		}
 		if _, err := a.startForwardFor(sess, &spec, true); err != nil {
@@ -5788,6 +5872,9 @@ func (a *App) IconSetCredentialFolderNamed(folderID, name, color string) error {
 // rootFolderID optionally places all imported top-level folders under an
 // existing connection-tree folder; empty string means the DB root.
 func (a *App) RdmImport(jsonText string, rootFolderID string) (*rdm.Summary, error) {
+	if a.isCatalogFolder(rootFolderID) {
+		return nil, errCatalogFolder
+	}
 	if jsonText == "" {
 		return nil, fmt.Errorf("empty import payload")
 	}
@@ -5814,6 +5901,9 @@ func (a *App) RdmImport(jsonText string, rootFolderID string) (*rdm.Summary, err
 // connection per non-wildcard Host block. rootFolderID groups the
 // imports under an existing folder (empty = DB root).
 func (a *App) SshConfigImport(text string, rootFolderID string) (*sshconfig.Summary, error) {
+	if a.isCatalogFolder(rootFolderID) {
+		return nil, errCatalogFolder
+	}
 	if text == "" {
 		return nil, fmt.Errorf("empty config text")
 	}
@@ -5829,6 +5919,9 @@ func (a *App) SshConfigImport(text string, rootFolderID string) (*sshconfig.Summ
 // under rootFolderID ("" = DB root). Passwords aren't in the export;
 // non-SSH session types (RDP, telnet, ...) are counted and skipped.
 func (a *App) MobaXtermImport(text string, rootFolderID string) (*mobaxterm.Summary, error) {
+	if a.isCatalogFolder(rootFolderID) {
+		return nil, errCatalogFolder
+	}
 	if strings.TrimSpace(text) == "" {
 		return nil, fmt.Errorf("empty import payload")
 	}
@@ -5843,6 +5936,9 @@ func (a *App) MobaXtermImport(text string, rootFolderID string) (*mobaxterm.Summ
 // and creates one connection per Protocol=ssh session, flat under
 // rootFolderID. PuTTY stores no passwords, so nothing is lost.
 func (a *App) PuttyRegImport(text string, rootFolderID string) (*puttyreg.Summary, error) {
+	if a.isCatalogFolder(rootFolderID) {
+		return nil, errCatalogFolder
+	}
 	if strings.TrimSpace(text) == "" {
 		return nil, fmt.Errorf("empty import payload")
 	}
@@ -5857,6 +5953,9 @@ func (a *App) PuttyRegImport(text string, rootFolderID string) (*puttyreg.Summar
 // per Proto=SSH session, rebuilding the SessionId folder tree under
 // rootFolderID. SuperPuTTY stores no passwords, so nothing secret is lost.
 func (a *App) SuperPuttyImport(text string, rootFolderID string) (*superputty.Summary, error) {
+	if a.isCatalogFolder(rootFolderID) {
+		return nil, errCatalogFolder
+	}
 	if strings.TrimSpace(text) == "" {
 		return nil, fmt.Errorf("empty import payload")
 	}
@@ -6086,6 +6185,9 @@ type ImportArchiveRequest struct {
 }
 
 func (a *App) ImportArchive(req ImportArchiveRequest) (*exporter.ImportSummary, error) {
+	if a.isCatalogFolder(req.TargetFolderID) {
+		return nil, errCatalogFolder
+	}
 	if req.Text == "" {
 		return nil, fmt.Errorf("empty archive")
 	}

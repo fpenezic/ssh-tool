@@ -8,6 +8,9 @@ import { Create as $Create } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as json$0 from "../encoding/json/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as cmdmarks$0 from "./internal/cmdmarks/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -1009,6 +1012,413 @@ export class CIRunnerStatus {
 }
 
 /**
+ * CatalogInfo is one catalog as the frontend lists it.
+ */
+export class CatalogInfo {
+    /**
+     * Creates a new CatalogInfo instance.
+     * @param {Partial<CatalogInfo>} [$$source = {}] - The source object to create the CatalogInfo.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("base_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["base_url"] = "";
+        }
+        if (!("server_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["server_name"] = "";
+        }
+        if (!("protocol_revision" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["protocol_revision"] = 0;
+        }
+        if (!("subject" in $$source)) {
+            /**
+             * Subject / AccountName: who signed in last (whoami). A different
+             * subject on the next sign-in forces a full resync.
+             * @member
+             * @type {string}
+             */
+            this["subject"] = "";
+        }
+        if (!("account_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["account_name"] = "";
+        }
+        if (!("root_folder_id" in $$source)) {
+            /**
+             * RootFolderID is the catalog's top-level folder in the tree.
+             * @member
+             * @type {string}
+             */
+            this["root_folder_id"] = "";
+        }
+        if (!("last_sync_at" in $$source)) {
+            /**
+             * @member
+             * @type {number | null}
+             */
+            this["last_sync_at"] = null;
+        }
+        if (!("last_error" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["last_error"] = "";
+        }
+        if (!("sync_interval_sec" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["sync_interval_sec"] = 0;
+        }
+        if (!("created_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["created_at"] = 0;
+        }
+        if (!("updated_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["updated_at"] = 0;
+        }
+        if (!("state" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+        if (!("slots" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["slots"] = 0;
+        }
+        if (!("unbound" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["unbound"] = 0;
+        }
+        if (!("removed" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["removed"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CatalogInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CatalogInfo(/** @type {Partial<CatalogInfo>} */($$parsedSource));
+    }
+}
+
+/**
+ * CatalogRecordInfo is what the editor needs about a catalog row.
+ */
+export class CatalogRecordInfo {
+    /**
+     * Creates a new CatalogRecordInfo instance.
+     * @param {Partial<CatalogRecordInfo>} [$$source = {}] - The source object to create the CatalogRecordInfo.
+     */
+    constructor($$source = {}) {
+        if (!("catalog_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["catalog_id"] = "";
+        }
+        if (!("catalog_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["catalog_name"] = "";
+        }
+        if (!("remote_uuid" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["remote_uuid"] = "";
+        }
+        if (!("removed" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["removed"] = false;
+        }
+        if (!("skeleton" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["skeleton"] = false;
+        }
+        if (!("doc_md" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["doc_md"] = "";
+        }
+        if (!("updated_by" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["updated_by"] = "";
+        }
+        if (!("updated_at" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["updated_at"] = "";
+        }
+        if (!("catalog" in $$source)) {
+            /**
+             * Catalog: the record's settings translated to local ids, without
+             * the user's layer (the editor's placeholders and "reset to catalog").
+             * @member
+             * @type {store$0.InheritableSettings}
+             */
+            this["catalog"] = (new store$0.InheritableSettings());
+        }
+        if (!("layer" in $$source)) {
+            /**
+             * Layer: the user's local layer (fields set here override Catalog).
+             * @member
+             * @type {json$0.RawMessage}
+             */
+            this["layer"] = null;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * SuggestedAutoStart: a catalog forward the catalog suggests starting
+             * automatically (shown, never acted on).
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["suggested_auto_start"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * SuggestedTunnelAutostart: the same for a tunnel connection.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["suggested_tunnel_autostart"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogRecordInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CatalogRecordInfo}
+     */
+    static createFrom($$source = {}) {
+        const $$createField8_0 = $$createType5;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("catalog" in $$parsedSource) {
+            $$parsedSource["catalog"] = $$createField8_0($$parsedSource["catalog"]);
+        }
+        return new CatalogRecordInfo(/** @type {Partial<CatalogRecordInfo>} */($$parsedSource));
+    }
+}
+
+/**
+ * CatalogSlotInfo is a slot with what it is bound to on this machine.
+ */
+export class CatalogSlotInfo {
+    /**
+     * Creates a new CatalogSlotInfo instance.
+     * @param {Partial<CatalogSlotInfo>} [$$source = {}] - The source object to create the CatalogSlotInfo.
+     */
+    constructor($$source = {}) {
+        if (!("catalog_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["catalog_id"] = "";
+        }
+        if (!("uuid" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["uuid"] = "";
+        }
+        if (!("rev" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["rev"] = 0;
+        }
+        if (!("folder_uuid" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["folder_uuid"] = "";
+        }
+        if (!("type" in $$source)) {
+            /**
+             * cred | net | jump
+             * @member
+             * @type {string}
+             */
+            this["type"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("kind" in $$source)) {
+            /**
+             * cred only: slot | external
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("backend" in $$source)) {
+            /**
+             * external only
+             * @member
+             * @type {string}
+             */
+            this["backend"] = "";
+        }
+        if (!("external_ref_json" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["external_ref_json"] = "";
+        }
+        if (!("doc_md" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["doc_md"] = "";
+        }
+        if (!("state" in $$source)) {
+            /**
+             * State: "bound" (to TargetID), "external" (resolved through a
+             * Bitwarden server), "unbound".
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["target_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["target_name"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * TargetGone: bound to something since deleted (counts as unbound).
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["target_gone"] = undefined;
+        }
+        if (!("used_by" in $$source)) {
+            /**
+             * UsedBy: how many catalog records name the slot here.
+             * @member
+             * @type {number}
+             */
+            this["used_by"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogSlotInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CatalogSlotInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CatalogSlotInfo(/** @type {Partial<CatalogSlotInfo>} */($$parsedSource));
+    }
+}
+
+/**
  * CheckpointConfig is the stored (secretless) Check Point profile.
  */
 export class CheckpointConfig {
@@ -1149,7 +1559,7 @@ export class CheckpointProfileInput {
      * @returns {CheckpointProfileInput}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType5;
+        const $$createField1_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("config" in $$parsedSource) {
             $$parsedSource["config"] = $$createField1_0($$parsedSource["config"]);
@@ -1360,7 +1770,7 @@ export class ConnectionsBatchUpdateInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType6;
+        const $$createField1_0 = $$createType5;
         const $$createField2_0 = $$createType4;
         const $$createField3_0 = $$createType4;
         const $$createField4_0 = $$createType4;
@@ -1498,7 +1908,7 @@ export class ConnectionsCreateInput {
      * @returns {ConnectionsCreateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType6;
+        const $$createField4_0 = $$createType5;
         const $$createField5_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("overrides" in $$parsedSource) {
@@ -2346,7 +2756,7 @@ export class DynamicFolderCreateInput {
      * @returns {DynamicFolderCreateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType6;
+        const $$createField2_0 = $$createType5;
         const $$createField4_0 = $$createType9;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("settings" in $$parsedSource) {
@@ -3298,7 +3708,7 @@ export class FoldersCreateInput {
      * @returns {FoldersCreateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType6;
+        const $$createField3_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("settings" in $$parsedSource) {
             $$parsedSource["settings"] = $$createField3_0($$parsedSource["settings"]);
@@ -9019,9 +9429,9 @@ const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = AboutPlugin.createFrom;
 const $$createType3 = $Create.Array($$createType2);
 const $$createType4 = $Create.Array($Create.Any);
-const $$createType5 = CheckpointConfig.createFrom;
-const $$createType6 = store$0.InheritableSettings.createFrom;
-const $$createType7 = $Create.Nullable($$createType6);
+const $$createType5 = store$0.InheritableSettings.createFrom;
+const $$createType6 = CheckpointConfig.createFrom;
+const $$createType7 = $Create.Nullable($$createType5);
 const $$createType8 = $Create.Nullable($$createType4);
 const $$createType9 = $Create.Map($Create.Any, $Create.Any);
 const $$createType10 = $Create.Nullable($$createType9);
@@ -9054,7 +9464,7 @@ const $$createType36 = OpenConnectConfig.createFrom;
 const $$createType37 = $Create.Nullable($$createType36);
 const $$createType38 = OpenVPNConfig.createFrom;
 const $$createType39 = $Create.Nullable($$createType38);
-const $$createType40 = $Create.Nullable($$createType5);
+const $$createType40 = $Create.Nullable($$createType6);
 const $$createType41 = wg$0.Status.createFrom;
 const $$createType42 = OpenConnectGateway.createFrom;
 const $$createType43 = $Create.Array($$createType42);

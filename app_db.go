@@ -655,7 +655,7 @@ func (a *App) DbSaveLogin(connectionID, targetID, name, user, password string) (
 		}
 		over.DbTargets[i].CredentialRef = &id
 	}
-	if _, err := a.db.UpdateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over}); err != nil {
+	if _, err := a.updateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over}); err != nil {
 		return "", err
 	}
 	return id, nil
@@ -722,7 +722,7 @@ func (a *App) DbRemove(connectionID, targetID string) error {
 			over.DbEnabled = &off
 			over.DbInTree = nil
 			over.DbDefaultTarget = nil
-			_, err = a.db.UpdateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over})
+			_, err = a.updateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over})
 			return err
 		}
 		over.DbInTree = &off
@@ -756,7 +756,7 @@ func (a *App) DbRemove(connectionID, targetID string) error {
 		over.DbEnabled = &off
 		over.DbInTree = nil
 	}
-	_, err = a.db.UpdateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over})
+	_, err = a.updateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over})
 	return err
 }
 
@@ -848,6 +848,6 @@ func (a *App) DbSetDefault(connectionID, targetID string) error {
 		}
 		over.DbDefaultTarget = &targetID
 	}
-	_, err = a.db.UpdateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over})
+	_, err = a.updateConnection(store.UpdateConnection{ID: connectionID, Overrides: &over})
 	return err
 }
