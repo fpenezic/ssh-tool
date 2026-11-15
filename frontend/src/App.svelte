@@ -24,7 +24,7 @@
   import { recording, recordingsModal } from "./lib/recording.svelte";
   import { syncState } from "./lib/syncState.svelte";
   import RecordingsModal from "./lib/RecordingsModal.svelte";
-  import { deepLink } from "./lib/deepLink.svelte";
+  import { deepLink, importSourceFromLink } from "./lib/deepLink.svelte";
   import { IconHost, IconKey, IconSettings, IconTerminal, IconSearch } from "./lib/iconMap";
   import Settings from "./lib/Settings.svelte";
   import WindowControls from "./lib/WindowControls.svelte";
@@ -744,15 +744,15 @@
   // with the URL pre-fetched.
   EventsOn("deep_link_import", (url: any) => {
     if (typeof url !== "string" || !url) return;
-    // Android hands over the whole ssh-tool:// URL; desktop the source.
+    // A catalog enrollment link (Android hands over the whole URL).
     const link = parseSshToolLink(url);
     if (link?.kind === "catalog") {
       catalogs.startEnroll(link.url, link.code);
       return;
     }
-    if (link?.kind === "import") url = link.source;
-    else if (url.toLowerCase().startsWith("ssh-tool://")) return;
-    deepLink.setImportURL(url);
+    const source = importSourceFromLink(url);
+    if (!source) return;
+    deepLink.setImportURL(source);
     view.setTab("settings");
   });
   // ssh-tool://catalog/add from the catalog's web page: a confirmation,
