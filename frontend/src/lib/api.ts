@@ -1383,6 +1383,15 @@ export interface CatalogSaveResult {
   warnings?: { kind: string; uuid: string; code: string; path: string; message: string }[];
   still_local?: string[];
 }
+// "Set it on the folder instead": what setting one field on the folder
+// would do to the other connections there (CatalogFolderOffers).
+export interface CatalogFolderOffer {
+  field: string; folder_id: string; folder_name: string;
+  gain: string[]; switch: string[]; clear: string[]; keep: string[]; self_own: boolean;
+}
+export interface CatalogFolderSaveResult {
+  saved: boolean; message?: string; folder?: CatalogSaveResult; record?: CatalogSaveResult; left?: string[];
+}
 export interface CatalogCreateInput { catalog_id: string; kind: "folders" | "connections" | "forwards"; parent_id: string; form: Partial<CatalogEditForm> }
 export interface CatalogSlotInput {
   catalog_id: string; folder_id?: string; uuid?: string; type: "cred" | "net" | "jump"; name: string;
@@ -1777,6 +1786,9 @@ export const api = {
     G.CatalogSetConfig(id, name, intervalSec) as unknown as Promise<void>,
   catalogSyncNow: (id: string) => G.CatalogSyncNow(id) as unknown as Promise<void>,
   catalogRecordSave: (inp: CatalogEditInput) => G.CatalogRecordSave(inp as any) as unknown as Promise<CatalogSaveResult>,
+  catalogFolderOffers: (inp: CatalogEditInput) => G.CatalogFolderOffers(inp as any) as unknown as Promise<CatalogFolderOffer[]>,
+  catalogRecordSaveOnFolder: (inp: CatalogEditInput, fields: string[]) =>
+    G.CatalogRecordSaveOnFolder(inp as any, fields) as unknown as Promise<CatalogFolderSaveResult>,
   catalogCreate: (inp: CatalogCreateInput) => G.CatalogCreate(inp as any) as unknown as Promise<string>,
   catalogMove: (kind: "folders" | "connections" | "forwards", id: string, parentId: string) => G.CatalogMove(kind, id, parentId) as unknown as Promise<void>,
   catalogDelete: (kind: "folders" | "connections" | "forwards", id: string, recursive: boolean) => G.CatalogDelete(kind, id, recursive) as unknown as Promise<void>,

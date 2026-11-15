@@ -4,7 +4,7 @@
   // record" (the record itself, for everyone with access to its folder),
   // the documentation editor, and what a save needs answered first: names
   // for new slots, or a conflict with a change someone else saved.
-  import type { CatalogRecordInfo, CatalogSaveResult } from "./api";
+  import type { CatalogRecordInfo, CatalogSaveResult, CatalogFolderOffer } from "./api";
   import { IconUsers, IconAlertTriangle, IconLock } from "./iconMap";
 
   interface Props {
@@ -20,8 +20,15 @@
     busy: boolean;
     onRetry: () => void;
     onDiscard: () => void;
+    // "Set it on the folder instead", asked before a connection's save.
+    offers?: CatalogFolderOffer[] | null;
+    onOffer?: (onFolder: boolean) => void;
+    // Set while saving on the folder: new slots are defined there.
+    slotsOnFolder?: string;
   }
-  let { rec, kind, recordMode, onMode, doc = $bindable(), pending, slotNames = $bindable(), resolve = $bindable(), stillLocal, busy, onRetry, onDiscard }: Props = $props();
+  let { rec, kind, recordMode, onMode, doc = $bindable(), pending, slotNames = $bindable(), resolve = $bindable(), stillLocal, busy, onRetry, onDiscard, offers = null, onOffer, slotsOnFolder = "" }: Props = $props();
+  const offerFolder = $derived(offers?.[0]?.folder_name ?? "");
+  const names = (l: string[]) => l.join(", ");
 
   const fieldNames: Record<string, string> = {
     name: "Name", hostname: "Address", protocol: "Protocol", tags: "Tags", notes: "Notes", doc_md: "Documentation",
@@ -50,9 +57,31 @@
     {/if}
   {/if}
 
+  {#if offers && offers.length > 0}
+    <div class="rm-box offer">
+      <p><IconUsers size={12} /> <strong>Set it on "{offerFolder}" instead?</strong> Save changes the record for everyone with access to "{offerFolder}", and through the folder every connection in it:</p>
+      {#each offers as o (o.field)}
+        <div class="offer-field">
+          <p><strong>{label("settings." + o.field)}</strong> on the folder "{o.folder_name}":</p>
+          <ul>
+            {#if o.gain.length}<li class="gain">inherit it now (had none): {names(o.gain)}</li>{/if}
+            {#if o.switch.length}<li class="gain">inherit it instead of the folder's current value: {names(o.switch)}</li>{/if}
+            {#if o.clear.length}<li>own value removed (same as the folder): {names(o.clear)}</li>{/if}
+            <li>this connection: {o.self_own ? "its own value removed, it inherits from the folder" : "takes it from the folder"}</li>
+            {#if o.keep.length}<li class="dim">keep their own different value: {names(o.keep)}</li>{/if}
+          </ul>
+        </div>
+      {/each}
+      <div class="rm-actions">
+        <button type="button" onclick={() => onOffer?.(false)} disabled={busy}>Only this connection</button>
+        <button type="button" class="primary" onclick={() => onOffer?.(true)} disabled={busy}>Set on the folder</button>
+      </div>
+    </div>
+  {/if}
+
   {#if needSlots.length > 0}
     <div class="rm-box">
-      <p><strong>New slot{needSlots.length === 1 ? "" : "s"} for this record</strong> <span class="dim">placeholders each colleague binds to their own; yours is bound to what you picked. The name is what they see.</span></p>
+      <p><strong>New slot{needSlots.length === 1 ? "" : "s"} {slotsOnFolder ? `on the folder "${slotsOnFolder}"` : "for this record"}</strong> <span class="dim">placeholders each colleague binds to their own; yours is bound to what you picked. The name is what they see.</span></p>
       {#each needSlots as s (s.key)}
         <label class="rm-slot">{s.type === "cred" ? "Credential" : s.type === "net" ? "Network" : "Bastion"} for your "{s.bind_name}"
           <input value={slotNames[s.key] ?? s.name} oninput={(e) => (slotNames = { ...slotNames, [s.key]: (e.currentTarget as HTMLInputElement).value })} />
@@ -111,6 +140,9 @@
   .rm-box p { margin: 0; }
   .rm-box.conflict { border-color: color-mix(in srgb, var(--yellow) 55%, var(--surface1)); }
   .rm-slot { display: flex; flex-direction: column; gap: 2px; }
+  .rm-box.offer { border-color: color-mix(in srgb, var(--peach) 55%, var(--surface1)); }
+  .offer-field ul { margin: 2px 0 0; padding-left: 18px; }
+  .offer-field li.gain { color: var(--peach); }
   table { border-collapse: collapse; width: 100%; }
   th, td { text-align: left; padding: 2px 6px; vertical-align: top; border-bottom: 1px solid var(--surface0); }
   th { color: var(--subtext0); font-weight: 400; }

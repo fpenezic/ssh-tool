@@ -27,6 +27,8 @@ export {
     CIRunnerStatus,
     CatalogCreateInput,
     CatalogEnrollPreview,
+    CatalogFolderOffer,
+    CatalogFolderSaveResult,
     CatalogInfo,
     CatalogPendingSlot,
     CatalogPublishInput,

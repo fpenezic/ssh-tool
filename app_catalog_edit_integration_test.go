@@ -231,3 +231,103 @@ func TestIntegrationRecordEditing(t *testing.T) {
 		t.Fatal("space still here")
 	}
 }
+
+// "Set it on the folder instead": a credential set on one connection goes
+// on its folder; the sibling without one inherits it, the sibling that
+// held the same one as its own loses the now redundant value.
+func TestIntegrationSaveOnFolder(t *testing.T) {
+	base := os.Getenv("CATALOGTEST_URL")
+	if base == "" {
+		t.Skip("CATALOGTEST_URL not set")
+	}
+	dir := t.TempDir()
+	db, err := store.Open(filepath.Join(dir, "store.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	v := creds.NewVault()
+	v.SetPath(filepath.Join(dir, "vault.enc"))
+	if err := v.Init("pass", false); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{db: db, vault: v}
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	bobTok := itToken(t, base, "bob")
+	code := itAPI(t, base, bobTok, "POST", "/api/v1/enrollments", "", nil)["code"].(string)
+	info, err := a.CatalogEnrollConfirm(base, code, false)
+	must(err)
+	catID := info.ID
+	cat, _ := db.GetCatalog(catID)
+
+	space, err := a.CatalogCreate(CatalogCreateInput{CatalogID: catID, Kind: "folders", ParentID: cat.RootFolderID, Form: catalog.EditForm{Name: "Folder space " + time.Now().Format("150405")}})
+	must(err)
+	defer func() { _ = a.CatalogDelete("folders", space, true) }()
+	folder, err := a.CatalogCreate(CatalogCreateInput{CatalogID: catID, Kind: "folders", ParentID: space, Form: catalog.EditForm{Name: "Customer"}})
+	must(err)
+	ids := map[string]string{}
+	for _, n := range []string{"a", "b", "c"} {
+		id, err := a.CatalogCreate(CatalogCreateInput{CatalogID: catID, Kind: "connections", ParentID: folder, Form: catalog.EditForm{Name: n, Hostname: n + ".example.com"}})
+		must(err)
+		ids[n] = id
+	}
+	cr, _ := db.CreateCredential(store.NewCredential{Name: "admin", Kind: store.CredPassword, StorageMode: store.StorageManaged})
+
+	// c holds the credential as its own (a new slot on the folder).
+	rec, _ := a.CatalogRecord("connections", ids["c"])
+	edited := *rec.Form
+	edited.Settings.AuthRef = &cr.ID
+	in := catalog.EditInput{Kind: "connections", LocalID: ids["c"], Rev: rec.Rev, Loaded: *rec.Form, Edited: edited}
+	res, _ := a.CatalogRecordSave(in)
+	if len(res.Plan.NeedSlots) == 1 {
+		in.SlotNames = map[string]string{res.Plan.NeedSlots[0].Key: "admin"}
+		res, err = a.CatalogRecordSave(in)
+		must(err)
+	}
+	if !res.Saved {
+		t.Fatalf("c: %+v", res)
+	}
+
+	// a gets the same credential: offered on the folder.
+	rec, _ = a.CatalogRecord("connections", ids["a"])
+	edited = *rec.Form
+	edited.Settings.AuthRef = &cr.ID
+	edited.Notes = "set from a"
+	in = catalog.EditInput{Kind: "connections", LocalID: ids["a"], Rev: rec.Rev, Loaded: *rec.Form, Edited: edited}
+	offers, err := a.CatalogFolderOffers(in)
+	must(err)
+	if len(offers) != 1 || offers[0].Field != "auth_ref" || offers[0].FolderName != "Customer" ||
+		strings.Join(offers[0].Gain, ",") != "b" || strings.Join(offers[0].Clear, ",") != "c" || offers[0].SelfOwn {
+		t.Fatalf("offers: %+v", offers)
+	}
+	fres, err := a.CatalogRecordSaveOnFolder(in, []string{"auth_ref"})
+	must(err)
+	if !fres.Saved || len(fres.Left) > 0 {
+		t.Fatalf("save on folder: %+v (folder %+v)", fres, fres.Folder)
+	}
+	fr, _ := a.CatalogRecord("folders", folder)
+	if fr.Form.Settings.AuthRef == nil || *fr.Form.Settings.AuthRef != cr.ID {
+		t.Fatalf("folder credential: %v", fr.Form.Settings.AuthRef)
+	}
+	for _, n := range []string{"a", "c"} {
+		r, _ := a.CatalogRecord("connections", ids[n])
+		if r.Form.Settings.AuthRef != nil {
+			t.Fatalf("%s keeps its own credential: %v", n, *r.Form.Settings.AuthRef)
+		}
+	}
+	if r, _ := a.CatalogRecord("connections", ids["a"]); r.Form.Notes != "set from a" {
+		t.Fatalf("a's other change lost: %q", r.Form.Notes)
+	}
+	// Now the folder says it: nothing more to offer.
+	rec, _ = a.CatalogRecord("connections", ids["b"])
+	edited = *rec.Form
+	edited.Settings.AuthRef = &cr.ID
+	if offers, _ = a.CatalogFolderOffers(catalog.EditInput{Kind: "connections", LocalID: ids["b"], Rev: rec.Rev, Loaded: *rec.Form, Edited: edited}); len(offers) != 0 {
+		t.Fatalf("offered again: %+v", offers)
+	}
+}
