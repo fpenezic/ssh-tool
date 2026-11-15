@@ -48,8 +48,10 @@ export function isInvalidDrop(
   // "before" / "after" a catalog root lands at the top level, which is
   // fine for a local row.
   const src = sourceKind === "folder" ? tree.folderById(sourceId) : tree.connectionById(sourceId);
-  if (src?.catalog_id) return true;
   const tgt = targetKind === "folder" ? tree.folderById(targetId) : tree.connectionById(targetId);
+  const catDrop = catalogDropKind(sourceKind, sourceId, targetKind, targetId, intent);
+  if (catDrop) return false;
+  if (src?.catalog_id) return true;
   if (tgt?.catalog_id) {
     const isRoot = targetKind === "folder" && !tgt.remote_uuid;
     if (intent === "inside" || !isRoot) return true;
@@ -66,6 +68,31 @@ export function isInvalidDrop(
     }
   }
   return false;
+}
+
+/**
+ * A drop that is a catalog action rather than a local move: "move" (a
+ * catalog record into another folder of the same catalog; the backend
+ * checks the writer's access on both ends) or "publish" (a local folder
+ * onto a catalog folder opens the publish dialog with it as the target).
+ */
+export function catalogDropKind(
+  sourceKind: DragKind, sourceId: string, targetKind: DragKind, targetId: string, intent: DropIntent,
+): "move" | "publish" | null {
+  if (intent !== "inside" || targetKind !== "folder") return null;
+  const tgt = tree.folderById(targetId);
+  if (!tgt?.catalog_id || tgt.catalog_skeleton || tgt.catalog_state === "removed") return null;
+  const src = sourceKind === "folder" ? tree.folderById(sourceId) : tree.connectionById(sourceId);
+  if (!src) return null;
+  if (src.catalog_id) {
+    if (src.catalog_id !== tgt.catalog_id || !src.remote_uuid || src.catalog_state === "removed") return null;
+    if (!tgt.remote_uuid && sourceKind !== "folder") return null; // only folders sit at a catalog's top
+    if (sourceKind === "folder" && isDescendantOf(targetId, sourceId)) return null;
+    if (sourceKind === "connection" && (src as { folder_id: string | null }).folder_id === targetId) return null;
+    return "move";
+  }
+  if (sourceKind === "folder" && tgt.remote_uuid && !tree.isDynamic(sourceId)) return "publish";
+  return null;
 }
 
 function isDescendantOf(candidateID: string, ancestorID: string): boolean {

@@ -48,7 +48,8 @@ func (d *DB) GetFolder(id string) (*Folder, error) {
 	row := d.conn.QueryRow(
 		`SELECT id, parent_id, name, sort_order, settings_json, icon_image_id, icon_name, icon_color, created_at, updated_at,
 		        catalog_id, remote_uuid, remote_rev, catalog_state,
-		        CASE WHEN json_valid(catalog_json) THEN IFNULL(json_extract(catalog_json, '$.access') = 'skeleton', 0) ELSE 0 END
+		        CASE WHEN json_valid(catalog_json) THEN IFNULL(json_extract(catalog_json, '$.access') = 'skeleton', 0) ELSE 0 END,
+		        CASE WHEN json_valid(catalog_json) THEN IFNULL(json_extract(catalog_json, '$.access') IN ('write', 'manage'), 0) ELSE 0 END
 		 FROM folders WHERE id = ?`, id,
 	)
 	return scanFolder(row)
@@ -58,7 +59,8 @@ func (d *DB) ListFolders() ([]Folder, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, parent_id, name, sort_order, settings_json, icon_image_id, icon_name, icon_color, created_at, updated_at,
 		        catalog_id, remote_uuid, remote_rev, catalog_state,
-		        CASE WHEN json_valid(catalog_json) THEN IFNULL(json_extract(catalog_json, '$.access') = 'skeleton', 0) ELSE 0 END
+		        CASE WHEN json_valid(catalog_json) THEN IFNULL(json_extract(catalog_json, '$.access') = 'skeleton', 0) ELSE 0 END,
+		        CASE WHEN json_valid(catalog_json) THEN IFNULL(json_extract(catalog_json, '$.access') IN ('write', 'manage'), 0) ELSE 0 END
 		 FROM folders ORDER BY sort_order, name`,
 	)
 	if err != nil {
@@ -187,7 +189,7 @@ func scanFolder(s scanner) (*Folder, error) {
 		remoteUUID  sql.NullString
 	)
 	err := s.Scan(&f.ID, &parentID, &f.Name, &f.SortOrder, &settingsRaw, &iconID, &iconName, &iconColor, &f.CreatedAt, &f.UpdatedAt,
-		&catalogID, &remoteUUID, &f.RemoteRev, &f.CatalogState, &f.CatalogSkeleton)
+		&catalogID, &remoteUUID, &f.RemoteRev, &f.CatalogState, &f.CatalogSkeleton, &f.CatalogWritable)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound

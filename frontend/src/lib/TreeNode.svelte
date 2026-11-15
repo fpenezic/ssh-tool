@@ -16,7 +16,7 @@
   import { IconFolder, IconHost, IconTunnel, IconLoading, IconX, IconStar, IconGlobe, dynamicEntryIcon,
     IconFolderPlus, IconKey, IconPencil, IconTrash, IconSettings, IconRefresh, IconPlay,
     IconExternalLink, IconCopy, IconDownload, IconMoveToFolder, IconTerminal } from "./iconMap";
-  import { computeIntent, isInvalidDrop, applyDrop, applyMultiDrop, type DragKind, type DropIntent } from "./treeDnd";
+  import { computeIntent, isInvalidDrop, applyDrop, applyMultiDrop, catalogDropKind, type DragKind, type DropIntent } from "./treeDnd";
   import { setMultiDragImage } from "./dragImage";
   import { contextMenu } from "./contextMenu.svelte.ts";
   import { publishModal } from "./publishModal.svelte.ts";
@@ -25,6 +25,7 @@
   import { tunnels } from "./tunnels.svelte.ts";
   import { dynEditor } from "./dynEditor.svelte";
   import { showConfirm } from "./confirmModal.svelte.ts";
+  import { showPrompt } from "./promptModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
   import { isMobile } from "./platform";
   import TreeBookmarkRows from "./TreeBookmarkRows.svelte";
@@ -549,6 +550,44 @@
     };
   }
 
+  // Writers of a catalog folder: create in it and delete it, for everyone.
+  function catalogWriterItems(catalogId: string) {
+    const fail = (what: string) => (err: unknown) => toast.err(`${what}: ${errMsg(err)}`, 8000);
+    return [
+      { label: "New subfolder in the catalog…", iconComponent: IconFolderPlus, onSelect: async () => {
+        const name = (await showPrompt(`New folder in "${folder.name}" (everyone with access sees it)`))?.trim();
+        if (!name) return;
+        api.catalogCreate({ catalog_id: catalogId, kind: "folders", parent_id: folder.id, form: { name } }).then(() => tree.load()).catch(fail("New folder"));
+      } },
+      { label: "New connection in the catalog…", iconComponent: IconHost, onSelect: async () => {
+        const name = (await showPrompt(`New connection in "${folder.name}" (everyone with access sees it): name`))?.trim();
+        if (!name) return;
+        const hostname = (await showPrompt(`Hostname or IP address of "${name}"`))?.trim();
+        if (!hostname) return;
+        try {
+          const id = await api.catalogCreate({ catalog_id: catalogId, kind: "connections", parent_id: folder.id, form: { name, hostname } });
+          await tree.load();
+          if (id) await selection.selectConnection(id);
+        } catch (err) {
+          fail("New connection")(err);
+        }
+      } },
+      { label: "Delete for everyone…", iconComponent: IconTrash, danger: true, onSelect: async () => {
+        const n = tree.connections.filter((c) => c.folder_id && (c.folder_id === folder.id || isUnder(c.folder_id, folder.id))).length;
+        const ok = await showConfirm({ title: "Delete for everyone", message: `Delete "${folder.name}"${n ? ` with ${n} connection${n === 1 ? "" : "s"}` : ""} from the catalog? It goes for everyone with access, with everything in it, and your own settings on it go too.`, okLabel: "Delete for everyone", danger: true });
+        if (!ok) return;
+        api.catalogDelete("folders", folder.id, true).then(() => tree.load()).catch(fail("Delete"));
+      } },
+    ];
+  }
+  function isUnder(fid: string, ancestor: string): boolean {
+    for (let f = tree.folderById(fid), d = 0; f && d < 64; d++) {
+      if (f.parent_id === ancestor) return true;
+      f = f.parent_id ? tree.folderById(f.parent_id) : null;
+    }
+    return false;
+  }
+
   async function openFolderMenu(e: MouseEvent) {
     // Desktop right-click selects the row first (both panes are visible, so
     // selecting is harmless and lets the menu act on the multi-selection).
@@ -568,6 +607,7 @@
           ? [{ label: "Sign in", iconComponent: IconKey, onSelect: () => { api.catalogSignIn(catRoot!.id).catch((err) => toast.err("Sign in: " + errMsg(err), 8000)); } }] : []),
         ...(catRoot && catRoot.state !== "no_login" && catRoot.state !== "signed_out" && catRoot.state !== "locked"
           ? [{ label: "Sync now", iconComponent: IconRefresh, onSelect: () => { api.catalogSyncNow(catRoot!.id).catch((err) => toast.err("Sync: " + errMsg(err), 8000)); } }] : []),
+        ...(cat && folder.catalog_writable && !isMobile && folder.remote_uuid && folder.catalog_state !== "removed" ? catalogWriterItems(cat.id) : []),
         ...(cat ? [{ label: "Slots…", iconComponent: IconKey, onSelect: () => catalogs.open(cat.id, "slots") },
           { label: "Catalog settings…", iconComponent: IconSettings, onSelect: () => catalogs.open(cat.id) }] : []),
       ]);
@@ -647,8 +687,15 @@
     // Export leaves catalog rows out, so it is not offered on them either.
     const catalogOwned = new Set(["Move to folder…", "Delete connection", "Export…"]);
     const keep = (it: { label: string }) => !anyCatalog || !(catalogOwned.has(it.label) || it.label.startsWith("Move ") || it.label.startsWith("Delete ") || it.label.startsWith("Export "));
+    const oneParent = one?.folder_id ? tree.folderById(one.folder_id) : undefined;
+    const canDeleteForAll = !!one?.catalog_id && !!one.remote_uuid && one.catalog_state !== "removed" && !!oneParent?.catalog_writable && !isMobile;
     contextMenu.show(e, [
       ...(one?.catalog_state === "removed" ? removedItems("connections", one.id, one.name) : []),
+      ...(canDeleteForAll && one ? [{ label: "Delete for everyone…", iconComponent: IconTrash, danger: true, onSelect: async () => {
+        const ok = await showConfirm({ title: "Delete for everyone", message: `Delete "${one.name}" from the catalog? It goes for everyone with access, with its forwards, and your own settings on it go too.`, okLabel: "Delete for everyone", danger: true });
+        if (!ok) return;
+        api.catalogDelete("connections", one.id, false).then(() => tree.load()).catch((err) => toast.err("Delete: " + errMsg(err), 8000));
+      } }] : []),
       ...connectionActions.tunnelMenuItems(ids),
       ...(allTunnels ? [] : [{
         label: ids.length > 1 ? `Connect all (${ids.length})` : "Connect",
@@ -880,6 +927,18 @@
     const intent = computeIntent(e, e.currentTarget as HTMLElement, true);
     if (isInvalidDrop(src.kind, src.id, "folder", folder.id, intent)) return;
     drag.end();
+    const cat = catalogDropKind(src.kind, src.id, "folder", folder.id, intent);
+    if (cat === "move") {
+      api.catalogMove(src.kind === "folder" ? "folders" : "connections", src.id, folder.id)
+        .then(() => tree.load())
+        .catch((err) => toast.err("Move: " + errMsg(err), 8000));
+      return;
+    }
+    if (cat === "publish") {
+      const f = tree.folderById(src.id);
+      publishModal.show(src.id, f?.name ?? "folder", folder.remote_uuid ?? "", folder.catalog_id ?? "");
+      return;
+    }
     try {
       await applyDrop(src.kind, src.id, "folder", folder.id, intent);
     } catch (err) {
