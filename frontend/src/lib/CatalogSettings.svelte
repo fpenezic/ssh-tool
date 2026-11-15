@@ -20,6 +20,37 @@
   let busy = $state<Record<string, boolean>>({});
   let open = $state<string | null>(null); // catalog whose slots are shown
   let edit = $state<{ id: string; name: string; interval: number } | null>(null);
+  // Writers: a slot being edited, and the add-slot form.
+  let slotEdit = $state<{ uuid: string; name: string; doc: string } | null>(null);
+  let slotAdd = $state<{ catalog: string; folder: string; type: "cred" | "net" | "jump"; name: string; doc: string } | null>(null);
+  const writableFolders = (catalogId: string) => tree.folders.filter((f) => f.catalog_id === catalogId && f.remote_uuid && f.catalog_writable && f.catalog_state !== "removed");
+  async function saveSlotEdit(c: CatalogInfo, s: CatalogSlotInfo) {
+    if (!slotEdit) return;
+    const e = slotEdit;
+    await run(c.id, "Save slot", async () => {
+      await api.catalogSlotUpdate({ catalog_id: c.id, uuid: s.uuid, type: s.type, name: e.name, kind: s.kind, backend: s.backend,
+        external_ref: s.external_ref_json ? JSON.parse(s.external_ref_json) : null, doc_md: e.doc });
+      slotEdit = null;
+      await catalogs.loadSlots(c.id);
+    });
+  }
+  async function deleteSlot(c: CatalogInfo, s: CatalogSlotInfo) {
+    const ok = await showConfirm({ title: "Delete slot", message: `Delete the slot "${s.name}" from the catalog? Everyone's binding of it goes with it.`, okLabel: "Delete", danger: true });
+    if (!ok) return;
+    await run(c.id, "Delete slot", async () => {
+      await api.catalogSlotDelete(c.id, s.uuid);
+      await catalogs.loadSlots(c.id);
+    });
+  }
+  async function addSlot(c: CatalogInfo) {
+    if (!slotAdd || !slotAdd.name.trim() || !slotAdd.folder) return;
+    const a = slotAdd;
+    await run(c.id, "New slot", async () => {
+      await api.catalogSlotCreate({ catalog_id: c.id, folder_id: a.folder, type: a.type, name: a.name.trim(), doc_md: a.doc });
+      slotAdd = null;
+      await catalogs.loadSlots(c.id);
+    });
+  }
 
   onMount(async () => {
     await catalogs.load();
@@ -209,8 +240,22 @@
                 {:else if s.state === "external"}
                   <span class="chip tone-ok" title="Found in your Bitwarden / Vaultwarden">from {s.target_name}</span>
                 {/if}
-                <span class="slot-used">{s.used_by} {s.used_by === 1 ? "record" : "records"}</span>
+                <span class="slot-used">{s.used_by} {s.used_by === 1 ? "record" : "records"}{#if s.folder_name} - on {s.folder_name}{/if}</span>
+                {#if s.can_write && !isMobile}
+                  <button class="slot-act" onclick={() => (slotEdit = { uuid: s.uuid, name: s.name, doc: s.doc_md })} title="Rename or document this slot for everyone">Edit</button>
+                  <button class="slot-act danger" onclick={() => deleteSlot(c, s)} title="Delete this slot from the catalog"><IconTrash size={12} /></button>
+                {/if}
               </div>
+              {#if slotEdit && slotEdit.uuid === s.uuid}
+                <div class="cat-form">
+                  <label>Name <input bind:value={slotEdit.name} /></label>
+                  <label>How to get access <span class="hint-inline">(markdown, shown to everyone; never put secrets here)</span><textarea rows="3" bind:value={slotEdit.doc}></textarea></label>
+                  <div class="cat-form-actions">
+                    <button onclick={() => (slotEdit = null)}>Cancel</button>
+                    <button class="primary" disabled={busy[c.id] || !slotEdit.name.trim()} onclick={() => saveSlotEdit(c, s)}>Save for everyone</button>
+                  </div>
+                </div>
+              {/if}
               {#if s.doc_md}
                 <!-- eslint-disable-next-line svelte/no-at-html-tags -->
                 <div class="slot-doc md" role="presentation" onclick={onDocClick}>{@html renderMarkdown(s.doc_md)}</div>
@@ -232,6 +277,32 @@
               </div>
             </div>
           {/each}
+          {#if !isMobile && writableFolders(c.id).length > 0}
+            {#if slotAdd && slotAdd.catalog === c.id}
+              <div class="cat-form">
+                <label>On folder
+                  <select bind:value={slotAdd.folder}>
+                    {#each writableFolders(c.id) as f (f.id)}<option value={f.id}>{f.name}</option>{/each}
+                  </select>
+                </label>
+                <label>Type
+                  <select bind:value={slotAdd.type}>
+                    <option value="cred">Credential</option>
+                    <option value="net">Network</option>
+                    <option value="jump">Bastion</option>
+                  </select>
+                </label>
+                <label>Name <input bind:value={slotAdd.name} placeholder="what colleagues bind, e.g. customer-admin" /></label>
+                <label>How to get access <span class="hint-inline">(markdown, shown to everyone; never put secrets here)</span><textarea rows="2" bind:value={slotAdd.doc}></textarea></label>
+                <div class="cat-form-actions">
+                  <button onclick={() => (slotAdd = null)}>Cancel</button>
+                  <button class="primary" disabled={busy[c.id] || !slotAdd.name.trim() || !slotAdd.folder} onclick={() => addSlot(c)}>Create for everyone</button>
+                </div>
+              </div>
+            {:else}
+              <button class="slot-add" onclick={() => (slotAdd = { catalog: c.id, folder: writableFolders(c.id)[0].id, type: "cred", name: "", doc: "" })}>+ New slot</button>
+            {/if}
+          {/if}
         </div>
       {/if}
     </div>
@@ -289,4 +360,6 @@
   .hint.sub { margin: 0; font-size: var(--fs-sm); }
   .danger { color: var(--danger, #e66); }
   .linklike { background: none; border: none; padding: 0; color: var(--sapphire); cursor: pointer; font-size: inherit; text-decoration: underline; }
+  .slot-act { padding: 0 6px; font-size: var(--fs-sm); }
+  .slot-add { align-self: flex-start; margin-top: 4px; }
 </style>

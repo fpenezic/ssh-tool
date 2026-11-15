@@ -12,8 +12,8 @@
   import { clickOutside } from "./clickOutside";
   import { IconX, IconFolder, IconHost, IconTunnel, IconKey, IconVpn, IconBastion, IconAlertTriangle, IconLock, IconUsers } from "./iconMap";
 
-  interface Props { folderId: string; folderName: string; onClose: () => void }
-  let { folderId, folderName, onClose }: Props = $props();
+  interface Props { folderId: string; folderName: string; onClose: () => void; presetTarget?: string; presetCatalog?: string }
+  let { folderId, folderName, onClose, presetTarget = "", presetCatalog = "" }: Props = $props();
 
   // Catalogs this machine can publish to: signed in, vault open.
   const usable = $derived(catalogs.list.filter((c) => !["no_login", "signed_out", "locked", "signing_in"].includes(c.state)));
@@ -30,7 +30,7 @@
   let result = $state<CatalogPublishResult | null>(null);
 
   $effect(() => {
-    if (!catalogId && usable.length > 0) catalogId = usable[0].id;
+    if (!catalogId && usable.length > 0) catalogId = usable.some((c) => c.id === presetCatalog) ? presetCatalog : usable[0].id;
   });
   api.catalogPublishOldApps().then((l) => (oldApps = l ?? [])).catch(() => {});
 
@@ -43,7 +43,8 @@
     api.catalogPublishTargets(id).then((t) => {
       if (id !== catalogId) return;
       targets = t;
-      targetUUID = t.targets.length > 0 ? t.targets[0].uuid : t.can_create_space ? "" : null;
+      targetUUID = presetTarget && t.targets.some((x) => x.uuid === presetTarget) ? presetTarget
+        : t.targets.length > 0 ? t.targets[0].uuid : t.can_create_space ? "" : null;
     }).catch((e) => (planErr = errMsg(e)));
   });
 

@@ -31,6 +31,9 @@ type Folder struct {
 	// this user cannot open (an ancestor of one they can); read-only,
 	// from its catalog record.
 	CatalogSkeleton bool `json:"catalog_skeleton,omitempty"`
+	// CatalogWritable: this user may change the catalog folder and what is
+	// in it (access write or manage in the stored record).
+	CatalogWritable bool `json:"catalog_writable,omitempty"`
 }
 
 // Connection is a leaf in the tree.
