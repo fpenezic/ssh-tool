@@ -177,3 +177,36 @@ func (d *DB) CompletePublishTx(tx *sql.Tx, catalogID string, rows []PublishedRow
 	}
 	return nil
 }
+
+// CatalogLocalID is the local row of a catalog record ("" when not held).
+func (d *DB) CatalogLocalID(catalogID, kind, remoteUUID string) (string, error) {
+	t, ok := catalogKindTable[kind]
+	if !ok {
+		return "", fmt.Errorf("unknown kind %q", kind)
+	}
+	var id string
+	err := d.conn.QueryRow(`SELECT id FROM `+t+` WHERE catalog_id = ? AND remote_uuid = ?`, catalogID, remoteUUID).Scan(&id)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return id, err
+}
+
+// CatalogFolderOf is the catalog folder a row sits in (a folder: itself;
+// a connection: its folder; a forward: its connection's folder), as
+// local id, remote uuid and its stored record.
+func (d *DB) CatalogFolderOf(kind, id string) (localID, remoteUUID, raw string, err error) {
+	fid := id
+	switch kind {
+	case "connections":
+		err = d.conn.QueryRow(`SELECT COALESCE(folder_id, '') FROM connections WHERE id = ?`, id).Scan(&fid)
+	case "forwards":
+		err = d.conn.QueryRow(`SELECT COALESCE(c.folder_id, '') FROM port_forwards p JOIN connections c ON c.id = p.connection_id WHERE p.id = ?`, id).Scan(&fid)
+	}
+	if err != nil {
+		return "", "", "", err
+	}
+	var u sql.NullString
+	err = d.conn.QueryRow(`SELECT remote_uuid, COALESCE(catalog_json, '') FROM folders WHERE id = ?`, fid).Scan(&u, &raw)
+	return fid, u.String, raw, err
+}
