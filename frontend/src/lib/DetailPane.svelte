@@ -2561,6 +2561,7 @@
       <div class="span-2 notes-block">
         <div class="notes-head">
           <span>Notes</span>
+          {#if isCatalogConn}<span class="lock-mark"><IconLock size={10} /> catalog</span>{:else}
           <div class="notes-mode">
             <button
               type="button"
@@ -2573,9 +2574,13 @@
               disabled={!editing.notes}
               onclick={() => (notesMode = "preview")}
             >Preview</button>
-          </div>
+          </div>{/if}
         </div>
-        {#if notesMode === "edit"}
+        {#if isCatalogConn}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <div class="notes-preview selectable" onclick={onNotesPreviewClick}>{#if editing.notes}{@html renderedNotes}{:else}<span class="hint">No notes in the catalog.</span>{/if}</div>
+        {:else if notesMode === "edit"}
           <textarea bind:value={editing.notes} rows="6" placeholder="Markdown: # heading, **bold**, `code`, fenced ```, - lists, [link](https://…)" readonly={isCatalogConn} class:locked={isCatalogConn}></textarea>
         {:else}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
