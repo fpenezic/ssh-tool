@@ -3069,6 +3069,7 @@ func (a *App) SyncStatus() (*SyncStatusResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.noteRemoteMeta(meta)
 	res.RemoteGeneration = meta.Generation
 	res.RemoteDevice = meta.Device
 	res.RemoteUpdatedAt = meta.UpdatedAt
@@ -3207,6 +3208,7 @@ func (a *App) SyncPullLive() (*SyncPullLiveResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.noteRemoteMeta(meta)
 	blob, err := dav.Get("snapshot.stb")
 	if err != nil {
 		return nil, err
@@ -3287,6 +3289,7 @@ func (a *App) SyncPullLive() (*SyncPullLiveResult, error) {
 		"device":     meta.Device,
 		"mode":       "live",
 	})
+	a.catalogAfterProfilePull()
 	EventsEmit("profile_reloaded", meta.Generation)
 	return &SyncPullLiveResult{
 		Generation:         meta.Generation,

@@ -42,7 +42,10 @@ const (
 	catStateError    = "error"      // the last pass failed (network, server); retried
 	catStateLocked   = "locked"     // the vault is locked: no token, no sync
 	catStateSignIn   = "signing_in" // a browser sign-in is waiting
+	catStateWaiting  = "waiting"    // waits for a newer profile to be pulled first
 )
+
+const catWaitingMsg = "another machine changed the profile; the catalog syncs after it is pulled"
 
 // catalogRuntime is the in-memory side of all catalogs.
 type catalogRuntime struct {
@@ -437,6 +440,17 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 		}
 		return catalog.ErrSignedOut
 	}
+	if a.profileRemoteAhead() {
+		// A machine of this user may have published a folder this
+		// machine still holds locally: the profile pull converts it,
+		// a catalog pass first would add the records as copies.
+		a.setCatalogState(id, catStateWaiting, catWaitingMsg)
+		rt := a.catRT()
+		rt.mu.Lock()
+		rt.next[id] = time.Now().Add(time.Minute)
+		rt.mu.Unlock()
+		return errors.New(catWaitingMsg)
+	}
 	c, err := a.catalogClient(cat)
 	if err != nil {
 		return err
@@ -557,6 +571,28 @@ func (a *App) catalogVaultLocked() {
 	}
 	for _, c := range cats {
 		a.setCatalogState(c.ID, catStateLocked, "")
+	}
+}
+
+// catalogAfterProfilePull: a catalog that waited for the profile syncs
+// now.
+func (a *App) catalogAfterProfilePull() {
+	rt := a.catRT()
+	rt.mu.Lock()
+	woke := false
+	for id, st := range rt.state {
+		if st.State == catStateWaiting {
+			delete(rt.state, id)
+			delete(rt.next, id)
+			woke = true
+		}
+	}
+	rt.mu.Unlock()
+	if woke {
+		select {
+		case rt.kick <- struct{}{}:
+		default:
+		}
 	}
 }
 
