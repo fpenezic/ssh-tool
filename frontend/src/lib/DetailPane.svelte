@@ -51,7 +51,7 @@
   import RecordModeBar from "./RecordModeBar.svelte";
   import { IconUsers } from "./iconMap";
   import { catalogs, parseMarker } from "./catalog.svelte";
-  import type { CatalogRecordInfo, CatalogSaveResult, CatalogEditInput, CatalogEditForm } from "./api";
+  import type { CatalogRecordInfo, CatalogSaveResult, CatalogEditInput, CatalogEditForm, CatalogFolderOffer } from "./api";
 
   // Populate the Network dropdowns; cached after the first load and
   // refreshed via the network_tunnel_changed event inside the store.
@@ -143,6 +143,13 @@
   let recordResolve = $state<Record<string, string>>({});
   let recordStillLocal = $state<string[]>([]);
   let recordBusy = $state(false);
+  // "Set it on the folder instead": the offer shown before a connection's
+  // record save, and once chosen, the fields that go on the folder (a
+  // retry after naming new slots goes the same way).
+  let recordOffers = $state<CatalogFolderOffer[] | null>(null);
+  let recordFolderFields = $state<string[] | null>(null);
+  let recordFolderName = $state("");
+  let recordOfferAnswered = false;
   // Locked: a catalog row outside record mode.
   const connLocked = $derived(isCatalogConn && !recordMode);
   const folderLocked = $derived(isCatalogFolder && !recordMode);
@@ -157,7 +164,14 @@
     recordMode = false;
     recordPending = null;
     recordStillLocal = [];
+    resetFolderOffer();
   });
+  function resetFolderOffer() {
+    recordOffers = null;
+    recordFolderFields = null;
+    recordFolderName = "";
+    recordOfferAnswered = false;
+  }
   function setRecordMode(on: boolean) {
     if (on === recordMode) return;
     recordMode = on;
@@ -166,6 +180,7 @@
     recordSlotNames = {};
     recordResolve = {};
     recordStillLocal = [];
+    resetFolderOffer();
     saveError = null;
     recordDoc = catRec?.form?.doc_md ?? "";
     draftEpoch++;
@@ -183,24 +198,85 @@
     const input: CatalogEditInput = recordInput
       ? { ...recordInput, edited, slot_names: recordSlotNames, resolve: recordResolve }
       : { kind, local_id: id, rev: catRec.rev, loaded: catRec.form, edited, accept_rev: 0, resolve: {}, slot_names: recordSlotNames };
+    if (recordFolderFields) return runFolderSave(input);
+    // A first save of a connection: offer the folder when it would help
+    // the connections next to it, before anything is written.
+    if (kind === "connections" && !recordInput && !recordOfferAnswered) {
+      try {
+        const offers = (await api.catalogFolderOffers(input)) ?? [];
+        if (offers.length > 0) {
+          recordOffers = offers;
+          recordInput = input;
+          saveError = null;
+          void setEdTab("general");
+          return false;
+        }
+      } catch {
+        // No offer: save as asked.
+      }
+    }
     return runRecordSave(input);
+  }
+  function answerFolderOffer(onFolder: boolean) {
+    const input = recordInput;
+    const offers = recordOffers;
+    recordOffers = null;
+    recordOfferAnswered = true;
+    if (!input) return;
+    if (onFolder && offers) {
+      recordFolderFields = offers.map((o) => o.field);
+      recordFolderName = offers[0]?.folder_name ?? "";
+      void runFolderSave(input);
+    } else {
+      recordInput = null;
+      void runRecordSave(input);
+    }
+  }
+  async function afterRecordSaved(stillLocal: string[], warnings: string[]) {
+    recordPending = null;
+    recordInput = null;
+    recordSlotNames = {};
+    recordResolve = {};
+    recordStillLocal = stillLocal;
+    resetFolderOffer();
+    saveError = null;
+    await tree.load();
+    await loadCatRec();
+    draftEpoch++;
+    if (warnings.length) toast.info(warnings.join(" "), 10000);
+    showSaved();
+  }
+  async function runFolderSave(input: CatalogEditInput): Promise<boolean> {
+    if (!recordFolderFields) return false;
+    recordBusy = true;
+    try {
+      const r = await api.catalogRecordSaveOnFolder(input, recordFolderFields);
+      if (r.saved) {
+        await afterRecordSaved(r.record?.still_local ?? [], r.left?.length ? [r.message ?? ""] : []);
+        return true;
+      }
+      if (r.folder?.plan?.need_slots?.length) {
+        recordPending = r.folder;
+        recordInput = input;
+        saveError = null;
+        void setEdTab("general");
+        return false;
+      }
+      saveError = r.message ?? "not saved";
+      return false;
+    } catch (e) {
+      saveError = errMsg(e);
+      return false;
+    } finally {
+      recordBusy = false;
+    }
   }
   async function runRecordSave(input: CatalogEditInput): Promise<boolean> {
     recordBusy = true;
     try {
       const r = await api.catalogRecordSave(input);
       if (r.saved) {
-        recordPending = null;
-        recordInput = null;
-        recordSlotNames = {};
-        recordResolve = {};
-        recordStillLocal = r.still_local ?? [];
-        saveError = null;
-        await tree.load();
-        await loadCatRec();
-        draftEpoch++;
-        if (r.warnings?.length) toast.info(r.warnings.map((w) => w.message).join(" "), 10000);
-        showSaved();
+        await afterRecordSaved(r.still_local ?? [], (r.warnings ?? []).map((w) => w.message));
         return true;
       }
       if (r.plan?.conflicts?.length || r.plan?.need_slots?.length) {
@@ -222,11 +298,13 @@
   }
   function retryRecord() {
     if (!recordInput) return;
-    void runRecordSave({ ...recordInput, slot_names: recordSlotNames, resolve: recordResolve });
+    const input = { ...recordInput, slot_names: recordSlotNames, resolve: recordResolve };
+    void (recordFolderFields ? runFolderSave(input) : runRecordSave(input));
   }
   async function discardRecord() {
     recordPending = null;
     recordInput = null;
+    resetFolderOffer();
     recordSlotNames = {};
     recordResolve = {};
     await loadCatRec();
@@ -2473,7 +2551,7 @@
       {#if isCatalogConn && catRec}
         <CatalogBanner kind="connections" id={conn.id} name={conn.name} rec={catRec} {recordMode} onChanged={async () => { await tree.load(); await loadCatRec(); }} />
         {#if catRec.can_write}
-          <RecordModeBar rec={catRec} kind="connections" {recordMode} onMode={setRecordMode} bind:doc={recordDoc} pending={recordPending}
+          <RecordModeBar rec={catRec} kind="connections" {recordMode} onMode={setRecordMode} bind:doc={recordDoc} pending={recordPending} offers={recordOffers} onOffer={answerFolderOffer} slotsOnFolder={recordFolderName}
             bind:slotNames={recordSlotNames} bind:resolve={recordResolve} stillLocal={recordStillLocal} busy={recordBusy} onRetry={retryRecord} onDiscard={discardRecord} />
         {/if}
       {/if}
