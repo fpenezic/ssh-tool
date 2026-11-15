@@ -49,6 +49,16 @@
     return keys;
   });
 
+  // What the lock line claims for the catalog: not the notes or tags this
+  // user keeps as their own (the layer's record part).
+  const ownedLine = $derived.by(() => {
+    if (kind !== "connections") return "The name is";
+    const owned = ["Name", "address"];
+    if (!local.includes("rec:tags")) owned.push("tags");
+    if (!local.includes("rec:notes")) owned.push("notes");
+    return owned.slice(0, -1).join(", ") + " and " + owned[owned.length - 1] + " are";
+  });
+
   async function reset(keys: string[]) {
     const next = { ...(rec.layer ?? {}) } as Record<string, unknown>;
     const recFields = keys.filter((k) => k.startsWith("rec:")).map((k) => k.slice(4));
@@ -113,7 +123,7 @@
       <button class="danger" onclick={del}>Delete</button>
     </div>
   {:else}
-    {#if !recordMode}<p class="cb-note"><IconLock size={11} /> {kind === "connections" ? "Name, address, tags and notes are" : "The name is"} the catalog's. Settings you change here stay on this machine.</p>{/if}
+    {#if !recordMode}<p class="cb-note"><IconLock size={11} /> {ownedLine} the catalog's. Settings you change here stay on this machine.</p>{/if}
   {/if}
   {#if rec.doc_md}
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
