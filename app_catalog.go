@@ -1020,3 +1020,44 @@ func catalogShortError(err error) string {
 	}
 	return msg
 }
+
+// saveCatalogFolderEdit routes an edit of a catalog folder: its settings
+// become its local layer (the fields that differ from the catalog's), its
+// name, place and order stay the catalog's. A skeleton folder and a
+// catalog's root take no settings.
+func (a *App) saveCatalogFolderEdit(in FoldersUpdateInput) (*store.Folder, error) {
+	f, err := a.db.GetFolder(in.ID)
+	if err != nil {
+		return nil, err
+	}
+	if f.RemoteUUID == nil || f.CatalogSkeleton {
+		return nil, errCatalogOwned
+	}
+	if (in.Name != nil && *in.Name != f.Name) || in.ParentID != nil || in.ClearParent ||
+		(in.SortOrder != nil && *in.SortOrder != f.SortOrder) {
+		return nil, errCatalogOwned
+	}
+	if in.Settings != nil {
+		catID, uuid, state, raw, err := a.catalogRow("folders", f.ID)
+		if err != nil {
+			return nil, err
+		}
+		if state == "removed" {
+			return nil, fmt.Errorf("this folder left its catalog; keep it as a local folder to change it")
+		}
+		var rec struct {
+			Settings json.RawMessage `json:"settings"`
+		}
+		_ = json.Unmarshal([]byte(raw), &rec)
+		base, err := catalog.BaseSettings(a.db, catID, rec.Settings)
+		if err != nil {
+			return nil, err
+		}
+		b, _ := json.Marshal(catalog.LayerFromEdit(base, *in.Settings))
+		if err := a.db.SetCatalogOverride(catID, uuid, "folders", string(b)); err != nil {
+			return nil, err
+		}
+		a.rematerialiseCatalogs()
+	}
+	return a.db.GetFolder(f.ID)
+}

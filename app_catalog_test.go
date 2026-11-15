@@ -162,6 +162,14 @@ func TestCatalogWritePathsRefuse(t *testing.T) {
 	n := "x"
 	for name, err := range map[string]error{
 		"rename catalog folder": func() error { _, e := a.FoldersUpdate(FoldersUpdateInput{ID: ca.folderID, Name: &n}); return e }(),
+		"move catalog folder": func() error {
+			_, e := a.FoldersUpdate(FoldersUpdateInput{ID: ca.folderID, ClearParent: true})
+			return e
+		}(),
+		"edit catalog root": func() error {
+			_, e := a.FoldersUpdate(FoldersUpdateInput{ID: ca.cat.RootFolderID, Settings: &store.InheritableSettings{}})
+			return e
+		}(),
 		"delete catalog folder": a.FoldersDelete(ca.folderID),
 		"delete connection":     a.ConnectionsDelete(ca.connID),
 		"forward description": func() error {
@@ -332,5 +340,24 @@ func TestCatalogShortError(t *testing.T) {
 	}
 	if got := catalogShortError(&catalog.APIError{Status: 500, Message: "boom"}); !strings.Contains(got, "boom") {
 		t.Fatalf("api error: %q", got)
+	}
+}
+
+func TestCatalogFolderEditGoesToTheLayer(t *testing.T) {
+	ca := newCatalogApp(t)
+	f, _ := ca.a.db.GetFolder(ca.folderID)
+	edited := f.Settings
+	user := "me"
+	edited.Username = &user
+	if _, err := ca.a.FoldersUpdate(FoldersUpdateInput{ID: ca.folderID, Name: &f.Name, Settings: &edited}); err != nil {
+		t.Fatal(err)
+	}
+	f, _ = ca.a.db.GetFolder(ca.folderID)
+	if *f.Settings.Username != "me" {
+		t.Fatalf("folder layer not applied: %+v", f.Settings)
+	}
+	rec, _ := ca.a.CatalogRecord("folders", ca.folderID)
+	if string(rec.Layer) != `{"username":"me"}` {
+		t.Fatalf("folder layer: %s", rec.Layer)
 	}
 }

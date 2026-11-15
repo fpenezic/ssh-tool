@@ -14,7 +14,7 @@
   import { showConfirm } from "./confirmModal.svelte.ts";
   import { toast } from "./toast.svelte";
   import { copyText } from "./clipboard";
-  import { IconGlobe, IconBookmark } from "./iconMap";
+  import { IconGlobe, IconBookmark, IconUsers, IconAlertTriangle } from "./iconMap";
   import { treeBookmarks } from "./treeBookmarks.svelte";
   import { errMsg } from "./connectErrors";
   import { tunnels } from "./tunnels.svelte.ts";
@@ -190,6 +190,20 @@
   // semantics + backend listener), so the kind select is disabled while
   // editing - delete + recreate to change it.
   let editingForwardId = $state<string | null>(null);
+  // Shared catalogs: a catalog forward's definition is the catalog's; the
+  // user owns its local port, auto start, bookmarks, browser mode and an
+  // on / off switch. The catalog's auto_start is only a suggestion.
+  const editingSpec = $derived(specs.find((x) => x.id === editingForwardId));
+  const editingCatalogFw = $derived(!!editingSpec?.remote_uuid);
+  let suggestedAutoStart = $state(false);
+  async function toggleDisabled(spec: PortForward) {
+    try {
+      await api.forwardsSetDisabled(spec.id, !spec.disabled);
+      await reload();
+    } catch (e) {
+      toast.err((spec.disabled ? "Enable: " : "Disable: ") + errMsg(e), 8000);
+    }
+  }
 
   async function openEditForward(spec: PortForward) {
     // A save in flight closes the form when it lands.
@@ -209,6 +223,10 @@
     nAutoStart = spec.auto_start;
     nDesc = spec.description ?? "";
     nBrowserMode = spec.browser_mode ?? "";
+    suggestedAutoStart = false;
+    if (spec.remote_uuid) {
+      api.catalogRecord("forwards", spec.id).then((r) => (suggestedAutoStart = !!r.suggested_auto_start)).catch(() => {});
+    }
     showAdd = true;
     formBase = formSnap();
   }
@@ -636,6 +654,7 @@
         <label class="grow">{nKind === "remote" ? "Remote bind address" : "Local bind address"}
           <input
             bind:value={nLocalAddr}
+            disabled={editingCatalogFw}
             oninput={() => (nLocalAddrTouched = true)}
             placeholder="127.0.0.1"
             title={nKind === "remote"
@@ -668,6 +687,7 @@
           <label class="grow">{nKind === "remote" ? "Local target host" : "Target host"}
             <input
               bind:value={nRemoteHost}
+              disabled={editingCatalogFw}
               oninput={() => (nRemoteHostTouched = true)}
               placeholder={nKind === "remote" ? "127.0.0.1" : "127.0.0.1 or db.internal"}
               title={nKind === "remote"
@@ -676,12 +696,12 @@
             />
           </label>
           <label class="port">{nKind === "remote" ? "Local target port" : "Target port"}
-            <input type="number" bind:value={nRemotePort} placeholder="5432" />
+            <input type="number" bind:value={nRemotePort} placeholder="5432" disabled={editingCatalogFw} />
           </label>
         </div>
       {/if}
       <label>Description
-        <input bind:value={nDesc} placeholder={nKind === "dynamic" ? "Customer intranet" : nKind === "remote" ? "Package proxy for the server" : "Postgres tunnel"} />
+        <input bind:value={nDesc} disabled={editingCatalogFw} placeholder={nKind === "dynamic" ? "Customer intranet" : nKind === "remote" ? "Package proxy for the server" : "Postgres tunnel"} />
       </label>
       {#if !tunnel}
         <!-- A tunnel starts every forward, so the flag means nothing there. -->
@@ -689,6 +709,9 @@
           <input type="checkbox" bind:checked={nAutoStart} />
           <span>Auto-start when this connection connects</span>
         </label>
+        {#if editingCatalogFw && suggestedAutoStart && !nAutoStart}
+          <p class="fw-hint">The catalog suggests starting this forward automatically. Tick the box above to do so.</p>
+        {/if}
       {/if}
       {#if editingForwardId !== null && (nKind === "local" || nKind === "dynamic")}
         <label>Bookmarks open in
@@ -739,6 +762,13 @@
           <div class="head">
             <span class="kind kind-{spec.kind}">{spec.kind}</span>
             <span class="desc">{spec.description || "(no description)"}</span>
+            {#if spec.remote_uuid}
+              <span class="badge cat" title="From the catalog: its definition is shared, the local port, auto start and bookmarks are yours"><IconUsers size={10} /> catalog</span>
+            {:else if connection.catalog_id}
+              <span class="badge own" title="Your own forward on this catalog connection; it stays on this machine">yours</span>
+            {/if}
+            {#if spec.catalog_state === "removed"}<span class="badge warn" title="Removed from the catalog; kept because you changed it"><IconAlertTriangle size={10} /> removed</span>{/if}
+            {#if spec.disabled}<span class="badge off" title="Disabled: it does not start, automatically or by hand">disabled</span>{/if}
             {#if spec.auto_start && !tunnel}<span class="badge">auto</span>{/if}
             {#if !running && reconnecting}
               <span class="dot" style="background: var(--yellow)"></span>
@@ -788,6 +818,8 @@
                   title="Start this connection's tunnel. Every forward of the connection comes up with it.">
                   Start tunnel
                 </button>
+              {:else if spec.disabled}
+              <button onclick={() => toggleDisabled(spec)} title="Enable this forward">Enable</button>
               {:else}
               <button class="primary" onclick={() => startForward(spec)}
                 disabled={connecting || reconnecting}
@@ -797,7 +829,11 @@
               {/if}
             {/if}
             <button onclick={() => openEditForward(spec)} title="Edit this forward" disabled={fwSaving}>Edit</button>
-            <button class="danger" onclick={() => removeForward(spec.id)}>Delete</button>
+            {#if spec.remote_uuid}
+              {#if !spec.disabled}<button onclick={() => toggleDisabled(spec)} title="Switch this catalog forward off on this machine">Disable</button>{/if}
+            {:else}
+              <button class="danger" onclick={() => removeForward(spec.id)}>Delete</button>
+            {/if}
           </div>
           {#if spec.kind === "dynamic" || spec.kind === "local"}
             <div class="bookmarks">
@@ -853,6 +889,12 @@
 </div>
 
 <style>
+  .badge.cat { color: var(--sapphire); display: inline-flex; align-items: center; gap: 2px; }
+  .badge.own { color: var(--teal); }
+  .badge.warn { color: var(--yellow); display: inline-flex; align-items: center; gap: 2px; }
+  .badge.off { color: var(--overlay1, #888); text-decoration: line-through; }
+  .fw-hint { margin: 0; font-size: var(--fs-sm); color: var(--sapphire); }
+
   .forwards {
     margin-top: 0.5rem;
   }

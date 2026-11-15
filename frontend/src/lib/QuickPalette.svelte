@@ -569,6 +569,10 @@
     if (r.entry.kind === "forward") {
       const spec = r.entry.spec;
       const running = r.entry.running;
+      if (spec.disabled && !running) {
+        toast.info(`${spec.description || "This forward"} is disabled - enable it in the connection's Forwards tab`, 5000);
+        return;
+      }
       onClose();
       queueMicrotask(async () => {
         try {
@@ -938,6 +942,8 @@
             <span class="hint">^↵ mark</span>
           {:else if isConn || r.entry.kind === "dynamic_entry"}
             <span class="hint">↵ connect</span>
+          {:else if r.entry.kind === "forward" && r.entry.spec.disabled && !r.entry.running}
+            <span class="hint">disabled</span>
           {:else if r.entry.kind === "forward"}
             <span class="hint">↵ {r.entry.running ? "stop" : "start"}</span>
           {:else if r.entry.kind === "bookmark"}
