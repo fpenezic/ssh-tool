@@ -132,7 +132,7 @@ func TestPublishRoundTripResolvesTheSame(t *testing.T) {
 	if s := slotByKey(plan, "cred:"+x.credBW); s == nil || s.Kind != "external" || s.Backend != "bitwarden" {
 		t.Fatalf("bitwarden slot: %+v", s)
 	}
-	if s := slotByKey(plan, "jump:"+x.bastion); s == nil || s.BindName != "bastion" {
+	if s := slotByKey(plan, "jump:"+x.bastion); s == nil || s.BindName != "bastion" || s.Name != "bastion for Mine" {
 		t.Fatalf("jump slot: %+v", s)
 	}
 	if len(plan.OutsideJumps) != 1 || plan.OutsideJumps[0].Name != "bastion" || plan.OutsideJumps[0].Include {
