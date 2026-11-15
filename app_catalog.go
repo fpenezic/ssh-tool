@@ -664,6 +664,10 @@ type CatalogSlotInfo struct {
 	TargetGone bool `json:"target_gone,omitempty"`
 	// UsedBy: how many catalog records name the slot here.
 	UsedBy int `json:"used_by"`
+	// CanWrite: this user may rename or delete it; FolderName: where it
+	// is defined.
+	CanWrite   bool   `json:"can_write"`
+	FolderName string `json:"folder_name"`
 }
 
 func (a *App) catalogSlotInfos(catalogID string, slots []store.CatalogSlot) []CatalogSlotInfo {
@@ -675,6 +679,12 @@ func (a *App) catalogSlotInfos(catalogID string, slots []store.CatalogSlot) []Ca
 	out := make([]CatalogSlotInfo, 0, len(slots))
 	for _, s := range slots {
 		info := CatalogSlotInfo{CatalogSlot: s, State: "unbound"}
+		if ok, lid := a.slotFolderWritable(catalogID, s.FolderUUID); lid != "" {
+			info.CanWrite = ok && runtime.GOOS != "android" && runtime.GOOS != "ios"
+			if f, err := a.db.GetFolder(lid); err == nil {
+				info.FolderName = f.Name
+			}
+		}
 		if b, ok := bound[s.UUID]; ok {
 			info.TargetID = b.TargetID
 			name, ok := a.catalogTargetName(b.Kind, b.TargetID)
@@ -793,6 +803,13 @@ type CatalogRecordInfo struct {
 	SuggestedAutoStart bool `json:"suggested_auto_start,omitempty"`
 	// SuggestedTunnelAutostart: the same for a tunnel connection.
 	SuggestedTunnelAutostart bool `json:"suggested_tunnel_autostart,omitempty"`
+	// Record mode (writers): whether this user may change the record,
+	// the folder it reaches readers of, the revision and the record as
+	// the editor edits it.
+	CanWrite   bool              `json:"can_write"`
+	FolderName string            `json:"folder_name"`
+	Rev        int64             `json:"rev"`
+	Form       *catalog.EditForm `json:"form,omitempty"`
 }
 
 func (a *App) catalogRow(kind, id string) (catID, uuid, state, raw string, err error) {
@@ -853,6 +870,18 @@ func (a *App) CatalogRecord(kind, id string) (*CatalogRecordInfo, error) {
 	for _, o := range overrides {
 		if o.RemoteUUID == uuid {
 			info.Layer = json.RawMessage(o.JSON)
+		}
+	}
+	info.Rev = recordRev(raw)
+	if fid, _, fraw, err := a.db.CatalogFolderOf(kind, id); err == nil {
+		info.CanWrite = state == "" && catalogWritable(fraw) && runtime.GOOS != "android" && runtime.GOOS != "ios"
+		if f, err := a.db.GetFolder(fid); err == nil {
+			info.FolderName = f.Name
+		}
+	}
+	if info.CanWrite {
+		if f, err := catalog.FormOf(a.db, catID, kind, json.RawMessage(raw)); err == nil {
+			info.Form = &f
 		}
 	}
 	return info, nil
