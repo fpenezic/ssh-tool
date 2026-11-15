@@ -1299,6 +1299,10 @@ export interface CatalogPublishResult {
   warnings?: CatalogPublishProblem[];
   refusals?: PublishRefusal[];
 }
+export interface CatalogEnrollPreview {
+  base_url: string; normalised_url: string; server_name: string; user_name: string; user_email: string;
+  expires_in: number; device_name: string; existing_id?: string; existing_name?: string; existing_account?: string;
+}
 export interface SeenApp { device: string; version: string; last_seen: number }
 
 export interface CatalogSlotInfo {
@@ -1723,6 +1727,8 @@ export const api = {
   catalogPublishTargets: (id: string) => G.CatalogPublishTargets(id) as unknown as Promise<CatalogPublishTargets>,
   catalogPublishPreview: (inp: CatalogPublishInput) => G.CatalogPublishPreview(inp as any) as unknown as Promise<PublishPlan>,
   catalogPublish: (inp: CatalogPublishInput) => G.CatalogPublish(inp as any) as unknown as Promise<CatalogPublishResult>,
+  catalogEnrollInspect: (url: string, code: string) => G.CatalogEnrollInspect(url, code) as unknown as Promise<CatalogEnrollPreview>,
+  catalogEnrollConfirm: (url: string, code: string, replace: boolean) => G.CatalogEnrollConfirm(url, code, replace) as unknown as Promise<CatalogInfo>,
   catalogPublishOldApps: () => G.CatalogPublishOldApps() as unknown as Promise<SeenApp[]>,
   catalogSlots: (id: string) => G.CatalogSlots(id) as unknown as Promise<CatalogSlotInfo[]>,
   catalogBind: (id: string, slot: string, target: string) => G.CatalogBind(id, slot, target) as unknown as Promise<void>,

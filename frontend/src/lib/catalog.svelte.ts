@@ -24,6 +24,9 @@ class CatalogStore {
   // Which catalog the Settings section should open on (deep link from
   // the tree or a toast).
   focus = $state<{ id: string; panel: "slots" | "" } | null>(null);
+  // An enrollment waiting for the user's confirmation (a link, or the
+  // "Add with a code" form). Nothing is redeemed until they confirm.
+  enroll = $state<{ url: string; code: string } | null>(null);
   private wired = false;
   private notified = new Set<string>();
 
@@ -80,6 +83,11 @@ class CatalogStore {
     this.load();
   }
 
+  /** Show the enrollment confirmation (code may be empty: typed there). */
+  startEnroll(url: string, code: string) {
+    this.enroll = { url, code };
+  }
+
   /** Open the Catalogs section in Settings, optionally on one catalog's slots. */
   open(id?: string, panel: "slots" | "" = "") {
     this.focus = id ? { id, panel } : null;
@@ -96,7 +104,7 @@ class CatalogStore {
       let msg = "";
       if (c.state === "signed_out") {
         key = c.id + ":signed_out";
-        msg = isMobile ? `${c.name}: signed out - sign in on a desktop` : `${c.name}: signed out - click to sign in again`;
+        msg = isMobile ? `${c.name}: signed out - sign in again with a code from the catalog` : `${c.name}: signed out - click to sign in again`;
       } else if (c.state === "error") {
         key = c.id + ":error";
         msg = `${c.name}: sync failed - ${c.error || c.last_error || "see Settings"}`;

@@ -376,6 +376,17 @@ func configurePlatform(app *application.App, appInst *App) func() {
 	// (when another ssh-tool was launched with a deep-link arg
 	// while we were already running).
 	dispatchDeepLink := func(argv []string, delay time.Duration) {
+		if link := parseCatalogLink(argv); link != nil {
+			// Logged without the code: it is a credential until used.
+			log.Printf("deep link: add catalog %s", link.URL)
+			go func() {
+				if delay > 0 {
+					time.Sleep(delay)
+				}
+				EventsEmit("deep_link_catalog", link)
+			}()
+			return
+		}
 		importURL := parseDeepLinkArg(argv)
 		if importURL == "" {
 			return

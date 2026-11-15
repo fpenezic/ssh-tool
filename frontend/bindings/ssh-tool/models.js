@@ -1015,6 +1015,103 @@ export class CIRunnerStatus {
 }
 
 /**
+ * CatalogEnrollPreview is what the confirmation shows.
+ */
+export class CatalogEnrollPreview {
+    /**
+     * Creates a new CatalogEnrollPreview instance.
+     * @param {Partial<CatalogEnrollPreview>} [$$source = {}] - The source object to create the CatalogEnrollPreview.
+     */
+    constructor($$source = {}) {
+        if (!("base_url" in $$source)) {
+            /**
+             * BaseURL is the URL exactly as it arrived (link or typed);
+             * NormalisedURL what the app will use, when that differs.
+             * @member
+             * @type {string}
+             */
+            this["base_url"] = "";
+        }
+        if (!("normalised_url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["normalised_url"] = "";
+        }
+        if (!("server_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["server_name"] = "";
+        }
+        if (!("user_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["user_name"] = "";
+        }
+        if (!("user_email" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["user_email"] = "";
+        }
+        if (!("expires_in" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["expires_in"] = 0;
+        }
+        if (!("device_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["device_name"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Already attached: that catalog, and who is signed in there now.
+             * @member
+             * @type {string | undefined}
+             */
+            this["existing_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["existing_name"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["existing_account"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogEnrollPreview instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CatalogEnrollPreview}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CatalogEnrollPreview(/** @type {Partial<CatalogEnrollPreview>} */($$parsedSource));
+    }
+}
+
+/**
  * CatalogInfo is one catalog as the frontend lists it.
  */
 export class CatalogInfo {

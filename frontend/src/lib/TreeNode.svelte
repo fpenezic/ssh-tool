@@ -57,6 +57,7 @@
     const fail = (what: string) => (err: unknown) => toast.err(`${what}: ${errMsg(err)}`, 8000);
     switch (catLabel.action) {
       case "signin": api.catalogSignIn(id).catch(fail("Sign in")); break;
+      case "code": catalogs.startEnroll(catRoot.base_url, ""); break;
       case "cancel": api.catalogCancelSignIn(id).catch(() => {}); break;
       case "sync": api.catalogSyncNow(id).catch(fail("Sync")); break;
       case "unlock": view.setTab("credentials"); break;

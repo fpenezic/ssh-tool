@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -50,6 +51,9 @@ type Endpoints struct {
 	// HTTPClient sends the token requests; nil uses a plain client with a
 	// 30 s timeout.
 	HTTPClient *http.Client
+	// ExtraTokenParams are added to the authorization-code exchange (the
+	// catalog's device_name).
+	ExtraTokenParams map[string]string
 }
 
 // defaultRedirectPort is the loopback port used when a provider does not pin
@@ -106,6 +110,8 @@ type TokenError struct {
 	Status      int
 	Code        string
 	Description string
+	// RetryAfter is the server's Retry-After on a 429 or 503, else 0.
+	RetryAfter time.Duration
 }
 
 func (e *TokenError) Error() string {
@@ -250,6 +256,17 @@ func Authorize(ctx context.Context, ep Endpoints, clientID, clientSecret string,
 	if clientSecret != "" {
 		form.Set("client_secret", clientSecret)
 	}
+	for k, v := range ep.ExtraTokenParams {
+		form.Set(k, v)
+	}
+	return exchange(ctx, ep, form)
+}
+
+// Grant posts a token request with any grant type (an extension grant such
+// as the catalog's enrollment code) and parses the standard response.
+func Grant(ctx context.Context, ep Endpoints, form url.Values) (Token, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	return exchange(ctx, ep, form)
 }
 
@@ -272,6 +289,22 @@ func Refresh(ctx context.Context, ep Endpoints, clientID, clientSecret, refreshT
 		form.Set("client_secret", clientSecret)
 	}
 	return exchange(ctx, ep, form)
+}
+
+// retryAfter reads a Retry-After in seconds or as an HTTP date; anything
+// else is one minute.
+func retryAfter(v string) time.Duration {
+	v = strings.TrimSpace(v)
+	if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+		return time.Duration(n) * time.Second
+	}
+	if t, err := http.ParseTime(v); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+		return 0
+	}
+	return time.Minute
 }
 
 // exchange POSTs a token request and parses the standard OAuth response.
@@ -303,7 +336,11 @@ func exchange(ctx context.Context, ep Endpoints, form url.Values) (Token, error)
 		return Token{}, fmt.Errorf("token response HTTP %d (unparseable)", resp.StatusCode)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 || body.Error != "" {
-		return Token{}, &TokenError{Status: resp.StatusCode, Code: body.Error, Description: body.ErrorDesc}
+		te := &TokenError{Status: resp.StatusCode, Code: body.Error, Description: body.ErrorDesc}
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
+			te.RetryAfter = retryAfter(resp.Header.Get("Retry-After"))
+		}
+		return Token{}, te
 	}
 
 	tok := Token{AccessToken: body.AccessToken, RefreshToken: body.RefreshToken}

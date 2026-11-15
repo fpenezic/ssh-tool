@@ -52,6 +52,8 @@
   import FleetModals from "./lib/FleetModals.svelte";
   import ExportConnectionsModal from "./lib/ExportConnectionsModal.svelte";
   import PublishModal from "./lib/PublishModal.svelte";
+  import EnrollModal from "./lib/EnrollModal.svelte";
+  import { parseSshToolLink } from "./lib/catalogMarks";
   import { publishModal } from "./lib/publishModal.svelte.ts";
   import { exportModal } from "./lib/exportModal.svelte.ts";
   import FolderPicker from "./lib/FolderPicker.svelte";
@@ -741,10 +743,22 @@
   // arrived as a CLI arg. Land in Settings → Import (archive source)
   // with the URL pre-fetched.
   EventsOn("deep_link_import", (url: any) => {
-    if (typeof url === "string" && url) {
-      deepLink.setImportURL(url);
-      view.setTab("settings");
+    if (typeof url !== "string" || !url) return;
+    // Android hands over the whole ssh-tool:// URL; desktop the source.
+    const link = parseSshToolLink(url);
+    if (link?.kind === "catalog") {
+      catalogs.startEnroll(link.url, link.code);
+      return;
     }
+    if (link?.kind === "import") url = link.source;
+    else if (url.toLowerCase().startsWith("ssh-tool://")) return;
+    deepLink.setImportURL(url);
+    view.setTab("settings");
+  });
+  // ssh-tool://catalog/add from the catalog's web page: a confirmation,
+  // never a redemption on its own.
+  EventsOn("deep_link_catalog", (l: any) => {
+    if (l && typeof l.url === "string" && typeof l.code === "string") catalogs.startEnroll(l.url, l.code);
   });
 
   // OS file-manager integration: "Open in ssh-tool" on a directory
@@ -1818,6 +1832,9 @@
       suggestedName={exportModal.suggestedName}
       onClose={() => exportModal.close()}
     />
+  {/if}
+  {#if catalogs.enroll}
+    <EnrollModal url={catalogs.enroll.url} code={catalogs.enroll.code} onClose={() => (catalogs.enroll = null)} />
   {/if}
   {#if publishModal.open}
     <PublishModal folderId={publishModal.folderId} folderName={publishModal.folderName} onClose={() => publishModal.close()} />
