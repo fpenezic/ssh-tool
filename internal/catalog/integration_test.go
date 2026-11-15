@@ -186,8 +186,15 @@ func TestIntegrationDevServer(t *testing.T) {
 	if f := env.fwd(fwd); f == nil || f.AutoStart {
 		t.Fatalf("forward (auto start must stay off): %+v", f)
 	}
+	// Other spaces of earlier runs may be readable too: look for ours.
 	slots, _ := db.ListCatalogSlots(cat.ID)
-	if len(slots) != 1 || slots[0].UUID != slot || slots[0].DocMD != "Ask ops." {
+	var got *store.CatalogSlot
+	for i := range slots {
+		if slots[i].UUID == slot {
+			got = &slots[i]
+		}
+	}
+	if got == nil || got.DocMD != "Ask ops." {
 		t.Fatalf("skeleton's slot: %+v", slots)
 	}
 

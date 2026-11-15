@@ -520,6 +520,7 @@ type CatalogRowRaw struct {
 	RawJSON    string
 	Current    string
 	LocalPort  *int64
+	State      string // catalog_state: "" or removed
 }
 
 // CatalogRowsRawTx lists every catalog row of a catalog (removed ones
@@ -527,9 +528,9 @@ type CatalogRowRaw struct {
 func (d *DB) CatalogRowsRawTx(tx *sql.Tx, catalogID string) ([]CatalogRowRaw, error) {
 	var out []CatalogRowRaw
 	for _, q := range []struct{ kind, sql string }{
-		{"folders", `SELECT id, remote_uuid, catalog_json, settings_json, NULL FROM folders WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
-		{"connections", `SELECT id, remote_uuid, catalog_json, overrides_json, NULL FROM connections WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
-		{"forwards", `SELECT id, remote_uuid, catalog_json, '', local_port FROM port_forwards WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
+		{"folders", `SELECT id, remote_uuid, catalog_json, settings_json, NULL, catalog_state FROM folders WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
+		{"connections", `SELECT id, remote_uuid, catalog_json, overrides_json, NULL, catalog_state FROM connections WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
+		{"forwards", `SELECT id, remote_uuid, catalog_json, '', local_port, catalog_state FROM port_forwards WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
 	} {
 		rows, err := tx.Query(q.sql, catalogID)
 		if err != nil {
@@ -538,7 +539,7 @@ func (d *DB) CatalogRowsRawTx(tx *sql.Tx, catalogID string) ([]CatalogRowRaw, er
 		for rows.Next() {
 			r := CatalogRowRaw{Kind: q.kind}
 			var lp sql.NullInt64
-			if err := rows.Scan(&r.ID, &r.RemoteUUID, &r.RawJSON, &r.Current, &lp); err != nil {
+			if err := rows.Scan(&r.ID, &r.RemoteUUID, &r.RawJSON, &r.Current, &lp, &r.State); err != nil {
 				rows.Close()
 				return nil, err
 			}
