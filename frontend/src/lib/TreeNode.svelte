@@ -637,8 +637,9 @@
     const allTunnels = ids.every((id) => tunnels.isTunnel(id));
     const anyCatalog = ids.some((id) => !!tree.connectionById(id)?.catalog_id);
     const one = ids.length === 1 ? tree.connectionById(ids[0]) : undefined;
-    const catalogOwned = new Set(["Move to folder…", "Delete connection"]);
-    const keep = (it: { label: string }) => !anyCatalog || !(catalogOwned.has(it.label) || it.label.startsWith("Move ") || it.label.startsWith("Delete "));
+    // Export leaves catalog rows out, so it is not offered on them either.
+    const catalogOwned = new Set(["Move to folder…", "Delete connection", "Export…"]);
+    const keep = (it: { label: string }) => !anyCatalog || !(catalogOwned.has(it.label) || it.label.startsWith("Move ") || it.label.startsWith("Delete ") || it.label.startsWith("Export "));
     contextMenu.show(e, [
       ...(one?.catalog_state === "removed" ? removedItems("connections", one.id, one.name) : []),
       ...connectionActions.tunnelMenuItems(ids),

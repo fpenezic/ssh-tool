@@ -165,8 +165,8 @@
         </div>
       </div>
       <div class="cat-meta">
-        {#if c.account_name}signed in as {c.account_name} - {/if}{syncedLabel(c)}
-        {#if c.removed > 0} - <span class="warn-text"><IconAlertTriangle size={12} /> {c.removed} removed from the catalog</span>{/if}
+        {#if c.account_name}signed in as {c.account_name}{" - "}{/if}{syncedLabel(c)}
+        {#if c.removed > 0}{" - "}<span class="warn-text"><IconAlertTriangle size={12} /> {c.removed} removed from the catalog</span>{/if}
       </div>
       {#if (c.state === "error" || c.state === "signed_out") && (c.error || c.last_error)}
         <p class="hint warn-note">{c.error || c.last_error}</p>

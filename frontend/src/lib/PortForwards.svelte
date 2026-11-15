@@ -894,6 +894,8 @@
   .badge.warn { color: var(--yellow); display: inline-flex; align-items: center; gap: 2px; }
   .badge.off { color: var(--overlay1, #888); text-decoration: line-through; }
   .fw-hint { margin: 0; font-size: var(--fs-sm); color: var(--sapphire); }
+  /* A catalog forward's own fields: visibly locked, not just greyed. */
+  input:disabled { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--border, #333) 35%, transparent) 6px 7px); cursor: not-allowed; }
 
   .forwards {
     margin-top: 0.5rem;

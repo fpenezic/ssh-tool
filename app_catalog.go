@@ -63,6 +63,8 @@ type catalogStatus struct {
 	Error string `json:"error,omitempty"`
 }
 
+const catSignedOutMsg = "the catalog ended this machine's session; sign in again"
+
 // catalogOpenBrowser opens the sign-in page. Only CatalogSignIn calls it
 // (a test swaps it to prove nothing else does).
 var catalogOpenBrowser = func(u string) {
@@ -168,7 +170,12 @@ func (a *App) catalogInfo(c store.Catalog) CatalogInfo {
 	rt.mu.Lock()
 	st, known := rt.state[c.ID]
 	rt.mu.Unlock()
+	// A locked vault hides every token: that is what the user has to fix
+	// first, whatever the last pass said.
+	vaultLocked := a.vault == nil || a.vault.Status().Kind != creds.StatusUnlocked
 	switch {
+	case vaultLocked && st.State != catStateSignIn:
+		info.State = catStateLocked
 	case known && st.State != catStateOK && st.State != catStateError:
 		info.State, info.Error = st.State, st.Error
 	default:
@@ -176,8 +183,8 @@ func (a *App) catalogInfo(c store.Catalog) CatalogInfo {
 		switch {
 		case err != nil:
 			info.State = catStateLocked
-		case !has && known && st.State == catStateSignedOU:
-			info.State = catStateSignedOU
+		case !has && (known && st.State == catStateSignedOU || c.LastError == catSignedOutMsg):
+			info.State, info.Error = catStateSignedOU, catSignedOutMsg
 		case !has:
 			info.State = catStateNoLogin
 		case known:
@@ -316,6 +323,7 @@ func (a *App) CatalogSignIn(id string) error {
 		server, rev = meta.Server.Name, int64(meta.Protocol.Revision)
 	}
 	_ = a.db.UpdateCatalogAccount(id, w.Subject, w.Name, server, rev)
+	_ = a.db.SetCatalogSyncState(id, "", nil, "")
 	a.recordAudit("catalog.sign_in", id, map[string]string{"account": w.Name})
 	a.setCatalogState(id, catStateOK, "")
 	go a.catalogSyncNow(id, true)
@@ -424,7 +432,7 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 		rt.mu.Lock()
 		st := rt.state[id].State
 		rt.mu.Unlock()
-		if st != catStateSignedOU {
+		if st != catStateSignedOU && cat.LastError != catSignedOutMsg {
 			a.setCatalogState(id, catStateNoLogin, "")
 		}
 		return catalog.ErrSignedOut
@@ -465,7 +473,10 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 			EventsEmit("catalog_changed", map[string]any{"catalog_id": id, "result": res})
 		}
 	case errors.Is(err, catalog.ErrSignedOut):
-		a.setCatalogState(id, catStateSignedOU, "the catalog ended this machine's session; sign in again")
+		// Kept in last_error too, so "signed out" survives a restart
+		// instead of turning into "never signed in".
+		_ = a.db.SetCatalogSyncState(id, "", nil, catSignedOutMsg)
+		a.setCatalogState(id, catStateSignedOU, catSignedOutMsg)
 		a.recordAudit("catalog.signed_out", id, nil)
 	case errors.As(err, &ra):
 		next = time.Now().Add(ra.Wait)
@@ -538,6 +549,17 @@ func (a *App) catalogSchedulerPass() {
 	}
 }
 
+// catalogVaultLocked: every catalog shows "vault locked" until unlock.
+func (a *App) catalogVaultLocked() {
+	cats, err := a.db.ListCatalogs()
+	if err != nil {
+		return
+	}
+	for _, c := range cats {
+		a.setCatalogState(c.ID, catStateLocked, "")
+	}
+}
+
 // catalogVaultUnlocked: the tokens are readable now; sync without waiting
 // for the next tick.
 func (a *App) catalogVaultUnlocked() {
@@ -552,6 +574,7 @@ func (a *App) catalogVaultUnlocked() {
 		delete(rt.next, id)
 	}
 	rt.mu.Unlock()
+	EventsEmit("catalog_changed", map[string]any{})
 	select {
 	case rt.kick <- struct{}{}:
 	default:

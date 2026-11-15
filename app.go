@@ -2165,6 +2165,7 @@ func (a *App) VaultAutoUnlock() (bool, error) {
 
 func (a *App) VaultLock(forgetSidecar bool) {
 	a.vault.Lock(forgetSidecar)
+	a.catalogVaultLocked()
 	a.ciRunnerStopOnLock()
 	a.forgetKeepass()
 	a.forgetBitwarden()
