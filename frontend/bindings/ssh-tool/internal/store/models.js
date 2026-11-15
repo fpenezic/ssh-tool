@@ -1520,6 +1520,15 @@ export class Folder {
              */
             this["catalog_skeleton"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * CatalogWritable: this user may change the catalog folder and what is
+             * in it (access write or manage in the stored record).
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["catalog_writable"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

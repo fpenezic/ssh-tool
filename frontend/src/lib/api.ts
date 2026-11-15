@@ -141,6 +141,7 @@ export interface Folder {
   catalog_state?: string; // "" in the catalog, "removed" when it left with local data
   /** Only the outline of a catalog folder this user cannot open. */
   catalog_skeleton?: boolean;
+  catalog_writable?: boolean;
 }
 
 export interface Connection {
@@ -1306,12 +1307,15 @@ export interface CatalogEnrollPreview {
 export interface SeenApp { device: string; version: string; last_seen: number }
 
 export interface CatalogSlotInfo {
+  can_write?: boolean;
+  folder_name?: string;
   catalog_id: string;
   uuid: string;
   type: "cred" | "net" | "jump";
   name: string;
   kind: string; // cred: "slot" | "external"
   backend: string;
+  external_ref_json?: string;
   doc_md: string;
   state: "bound" | "external" | "unbound";
   target_id?: string;
@@ -1335,6 +1339,40 @@ export interface CatalogRecordInfo {
   layer: Record<string, unknown>;
   suggested_auto_start?: boolean;
   suggested_tunnel_autostart?: boolean;
+  /** Record mode: this user may change the record itself. */
+  can_write: boolean;
+  folder_name: string;
+  rev: number;
+  form?: CatalogEditForm;
+}
+
+/** A catalog record as the editor edits it, in local terms. */
+export interface CatalogEditForm {
+  name: string; hostname: string; protocol: string; tags: string[]; notes: string;
+  icon_name: string | null; icon_color: string | null; doc_md: string;
+  settings: InheritableSettings;
+  kind: string; local_addr: string | null; local_port: number | null; remote_host: string | null; remote_port: number | null;
+  auto_start: boolean; description: string;
+}
+export interface CatalogEditInput {
+  kind: "folders" | "connections" | "forwards"; local_id: string; rev: number;
+  loaded: CatalogEditForm; edited: CatalogEditForm;
+  accept_rev: number; resolve: Record<string, string>; slot_names: Record<string, string>;
+}
+export interface CatalogFieldChange { field: string; base: string; mine: string; theirs: string; both: boolean }
+export interface CatalogEditPlan {
+  need_slots?: PublishPlanSlot[]; conflicts?: CatalogFieldChange[]; conflict_rev?: number; refusals?: string[]; changed: string[];
+}
+export interface CatalogSaveResult {
+  saved: boolean; message?: string; plan?: CatalogEditPlan;
+  field_errors?: { kind: string; uuid: string; code: string; path: string; message: string }[];
+  warnings?: { kind: string; uuid: string; code: string; path: string; message: string }[];
+  still_local?: string[];
+}
+export interface CatalogCreateInput { catalog_id: string; kind: "folders" | "connections" | "forwards"; parent_id: string; form: Partial<CatalogEditForm> }
+export interface CatalogSlotInput {
+  catalog_id: string; folder_id?: string; uuid?: string; type: "cred" | "net" | "jump"; name: string;
+  kind?: string; backend?: string; external_ref?: unknown; doc_md: string;
 }
 
 export const api = {
@@ -1724,6 +1762,13 @@ export const api = {
   catalogSetConfig: (id: string, name: string, intervalSec: number) =>
     G.CatalogSetConfig(id, name, intervalSec) as unknown as Promise<void>,
   catalogSyncNow: (id: string) => G.CatalogSyncNow(id) as unknown as Promise<void>,
+  catalogRecordSave: (inp: CatalogEditInput) => G.CatalogRecordSave(inp as any) as unknown as Promise<CatalogSaveResult>,
+  catalogCreate: (inp: CatalogCreateInput) => G.CatalogCreate(inp as any) as unknown as Promise<string>,
+  catalogMove: (kind: "folders" | "connections" | "forwards", id: string, parentId: string) => G.CatalogMove(kind, id, parentId) as unknown as Promise<void>,
+  catalogDelete: (kind: "folders" | "connections" | "forwards", id: string, recursive: boolean) => G.CatalogDelete(kind, id, recursive) as unknown as Promise<void>,
+  catalogSlotCreate: (inp: CatalogSlotInput) => G.CatalogSlotCreate(inp as any) as unknown as Promise<void>,
+  catalogSlotUpdate: (inp: CatalogSlotInput) => G.CatalogSlotUpdate(inp as any) as unknown as Promise<void>,
+  catalogSlotDelete: (catalogId: string, uuid: string) => G.CatalogSlotDelete(catalogId, uuid) as unknown as Promise<void>,
   catalogPublishTargets: (id: string) => G.CatalogPublishTargets(id) as unknown as Promise<CatalogPublishTargets>,
   catalogPublishPreview: (inp: CatalogPublishInput) => G.CatalogPublishPreview(inp as any) as unknown as Promise<PublishPlan>,
   catalogPublish: (inp: CatalogPublishInput) => G.CatalogPublish(inp as any) as unknown as Promise<CatalogPublishResult>,
