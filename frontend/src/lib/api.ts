@@ -1265,6 +1265,42 @@ export interface CatalogInfo {
   removed: number;
 }
 
+export interface CatalogPublishTarget { uuid: string; name: string; path: string }
+export interface CatalogPublishTargets { targets: CatalogPublishTarget[]; can_create_space: boolean }
+export interface CatalogPublishInput {
+  catalog_id: string;
+  folder_id: string;
+  target_uuid: string;
+  jump_include: string[];
+  slot_names: Record<string, string>;
+}
+export interface PublishPlanRecord { kind: "folders" | "connections" | "forwards"; uuid: string; local_id: string; name: string; path: string; copy_of?: string }
+export interface PublishPlanSlot {
+  key: string; uuid: string; type: "cred" | "net" | "jump"; name: string; new: boolean;
+  kind?: string; backend?: string; bind_target: string; bind_name: string; reused_from?: string; used_by: number;
+}
+export interface PublishFreeText { kind: string; uuid: string; name: string; field: string; value: string; folder_level: boolean; inherited_from?: string }
+export interface PublishRefusal { kind: string; local_id: string; name: string; reason: string }
+export interface PublishOutsideJump { connection_id: string; name: string; used_by: string[]; include: boolean }
+export interface PublishPlan {
+  records: PublishPlanRecord[];
+  slots: PublishPlanSlot[];
+  free_text: PublishFreeText[];
+  refusals: PublishRefusal[];
+  outside_jumps: PublishOutsideJump[];
+  root_uuid: string;
+}
+export interface CatalogPublishProblem { kind: string; local_id: string; name: string; path: string; field: string; code: string; message: string }
+export interface CatalogPublishResult {
+  published: boolean;
+  unknown: boolean;
+  message: string;
+  problems?: CatalogPublishProblem[];
+  warnings?: CatalogPublishProblem[];
+  refusals?: PublishRefusal[];
+}
+export interface SeenApp { device: string; version: string; last_seen: number }
+
 export interface CatalogSlotInfo {
   catalog_id: string;
   uuid: string;
@@ -1684,6 +1720,10 @@ export const api = {
   catalogSetConfig: (id: string, name: string, intervalSec: number) =>
     G.CatalogSetConfig(id, name, intervalSec) as unknown as Promise<void>,
   catalogSyncNow: (id: string) => G.CatalogSyncNow(id) as unknown as Promise<void>,
+  catalogPublishTargets: (id: string) => G.CatalogPublishTargets(id) as unknown as Promise<CatalogPublishTargets>,
+  catalogPublishPreview: (inp: CatalogPublishInput) => G.CatalogPublishPreview(inp as any) as unknown as Promise<PublishPlan>,
+  catalogPublish: (inp: CatalogPublishInput) => G.CatalogPublish(inp as any) as unknown as Promise<CatalogPublishResult>,
+  catalogPublishOldApps: () => G.CatalogPublishOldApps() as unknown as Promise<SeenApp[]>,
   catalogSlots: (id: string) => G.CatalogSlots(id) as unknown as Promise<CatalogSlotInfo[]>,
   catalogBind: (id: string, slot: string, target: string) => G.CatalogBind(id, slot, target) as unknown as Promise<void>,
   catalogUnbind: (id: string, slot: string) => G.CatalogUnbind(id, slot) as unknown as Promise<void>,

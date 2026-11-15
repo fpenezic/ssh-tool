@@ -51,6 +51,8 @@
   import ContextMenu from "./lib/ContextMenu.svelte";
   import FleetModals from "./lib/FleetModals.svelte";
   import ExportConnectionsModal from "./lib/ExportConnectionsModal.svelte";
+  import PublishModal from "./lib/PublishModal.svelte";
+  import { publishModal } from "./lib/publishModal.svelte.ts";
   import { exportModal } from "./lib/exportModal.svelte.ts";
   import FolderPicker from "./lib/FolderPicker.svelte";
   import DeleteConfirm from "./lib/DeleteConfirm.svelte";
@@ -1816,6 +1818,9 @@
       suggestedName={exportModal.suggestedName}
       onClose={() => exportModal.close()}
     />
+  {/if}
+  {#if publishModal.open}
+    <PublishModal folderId={publishModal.folderId} folderName={publishModal.folderName} onClose={() => publishModal.close()} />
   {/if}
   <RecordingsModal />
   <PromptModal />
