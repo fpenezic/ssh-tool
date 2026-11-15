@@ -35,7 +35,7 @@
     try {
       preview = await api.catalogEnrollInspect(urlIn.trim(), codeIn.trim());
     } catch (e) {
-      err = errMsg(e);
+      err = clean(e);
     } finally {
       busy = false;
     }
@@ -52,10 +52,16 @@
       await Promise.all([catalogs.load(), tree.load()]);
       onClose();
     } catch (e) {
-      err = errMsg(e);
+      err = clean(e);
     } finally {
       busy = false;
     }
+  }
+  const clean = (e: unknown) => errMsg(e).replace(/^catalog: /, "");
+  // An edit after the check: the confirmation no longer matches.
+  function edited() {
+    preview = null;
+    err = "";
   }
 </script>
 
@@ -72,8 +78,8 @@
     {:else}
       <p class="hint">In the catalog's web page, "Connect ssh-tool" shows a code. Enter the catalog's address and the code.</p>
       <div class="form">
-        <label>Catalog URL <input bind:value={urlIn} placeholder="https://catalog.example.com" disabled={busy} /></label>
-        <label>Code <input bind:value={codeIn} placeholder="XXXXX-XXXXX-XXXXX-XXXXX" disabled={busy} onkeydown={(e) => e.key === "Enter" && inspect()} /></label>
+        <label>Catalog URL <input bind:value={urlIn} oninput={edited} placeholder="https://catalog.example.com" disabled={busy} /></label>
+        <label>Code <input bind:value={codeIn} oninput={edited} placeholder="XXXXX-XXXXX-XXXXX-XXXXX" disabled={busy} onkeydown={(e) => e.key === "Enter" && inspect()} /></label>
         <button onclick={inspect} disabled={busy || !urlIn.trim() || !codeIn.trim()}>Check</button>
       </div>
     {/if}
