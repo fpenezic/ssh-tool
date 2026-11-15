@@ -239,6 +239,14 @@ func TestPublishListsFreeTextAndInherited(t *testing.T) {
 		}
 		return nil
 	}
+	seen := map[string]bool{}
+	for _, f := range plan.FreeText {
+		k := f.UUID + "/" + f.Field
+		if seen[k] {
+			t.Fatalf("%s listed twice", k)
+		}
+		seen[k] = true
+	}
 	if f := find("env_vars"); f == nil || !f.FolderLevel || f.Value != "TEAM=ops" {
 		t.Fatalf("env vars: %+v", f)
 	}

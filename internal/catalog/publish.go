@@ -658,6 +658,16 @@ func (c *pubCtx) connection(conn store.Connection, folderUUID, copyOf string) er
 	return nil
 }
 
+// listed: the record already has this field in the review.
+func (c *pubCtx) listed(u, field string) bool {
+	for _, f := range c.plan.FreeText {
+		if f.UUID == u && f.Field == field {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *pubCtx) text(kind, u, name, field, value string, folderLevel bool) {
 	c.plan.FreeText = append(c.plan.FreeText, FreeText{Kind: kind, UUID: u, Name: name, Field: field, Value: value, FolderLevel: folderLevel})
 }
@@ -688,6 +698,9 @@ func (c *pubCtx) settings(s store.InheritableSettings, kind, u, name string, fol
 		layer["tunnel_autostart"] = v
 	}
 	for _, k := range freeKeys {
+		if c.listed(u, k) {
+			continue // already listed as folded onto the root
+		}
 		if v, ok := m[k]; ok && !isEmpty(v) {
 			c.text(kind, u, name, k, display(v), folderLevel)
 		}

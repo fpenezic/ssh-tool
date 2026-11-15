@@ -185,6 +185,9 @@ func TestCatalogPublishRefusedMapsToRows(t *testing.T) {
 	if res.Published || res.Unknown || len(res.Problems) != 1 {
 		t.Fatalf("result: %+v", res)
 	}
+	if !strings.Contains(res.Message, "1 record(s)") || strings.Contains(res.Message, ".;") {
+		t.Fatalf("message: %q", res.Message)
+	}
 	p := res.Problems[0]
 	if p.LocalID != pa.conn || p.Name != "web-1" || p.Field != "hostname" || p.Path != "Mine/web-1" {
 		t.Fatalf("problem not mapped to the row: %+v", p)

@@ -188,7 +188,7 @@
         <section class="box refuse">
           <h3><IconAlertTriangle size={13} /> Cannot publish yet</h3>
           <p class="dim">Move these out of the folder, or fix them, then try again.</p>
-          <ul>{#each refusals as r (r.kind + r.local_id + r.reason)}<li><strong>{r.name}</strong>: {r.reason}</li>{/each}</ul>
+          <ul>{#each refusals as r, ri (ri)}<li><strong>{r.name}</strong>: {r.reason}</li>{/each}</ul>
         </section>
       {/if}
 
@@ -211,11 +211,11 @@
                   {#if r.kind === "folders"}<IconFolder size={12} />{:else if r.kind === "connections"}<IconHost size={12} />{:else}<IconTunnel size={12} />{/if}
                   {r.name}
                   {#if r.copy_of}<span class="tag">copy of your bastion</span>{/if}
-                  {#each probs as p (p.field + p.message)}<span class="prob">{p.field ? fieldName(p.field) + ": " : ""}{p.message}</span>{/each}
+                  {#each probs as p, pi (pi)}<span class="prob">{p.field ? fieldName(p.field) + ": " : ""}{p.message}</span>{/each}
                 </li>
               {/each}
             </ul>
-            {#each (result?.problems ?? []).filter((p) => !p.local_id && !plan?.records.some((r) => r.name === p.name)) as p (p.name + p.message)}
+            {#each (result?.problems ?? []).filter((p) => !p.local_id && !plan?.records.some((r) => r.name === p.name)) as p, pi (pi)}
               <p class="prob">{p.name}: {p.field ? fieldName(p.field) + " - " : ""}{p.message}</p>
             {/each}
           </section>
@@ -258,10 +258,10 @@
             <section>
               <details ontoggle={(e) => { if ((e.currentTarget as HTMLDetailsElement).open) reviewed = true; }}>
                 <summary><strong>Review free text before sending</strong> <span class="dim">{plan.free_text.length} value{plan.free_text.length === 1 ? "" : "s"}: a secret typed into one of these would reach the catalog</span></summary>
-                {#each freeByRecord as g (g.kind + g.name)}
+                {#each freeByRecord as g, gi (gi)}
                   <div class="ft-rec">
                     <div class="ft-head">{#if g.kind === "folders"}<IconFolder size={12} />{:else if g.kind === "connections"}<IconHost size={12} />{:else if g.kind === "slots"}<IconKey size={12} />{:else}<IconTunnel size={12} />{/if} {g.name}</div>
-                    {#each g.items as f (f.field + f.value)}
+                    {#each g.items as f, fi (fi)}
                       <div class="ft-item">
                         <span class="ft-field">{fieldName(f.field)}</span>
                         {#if f.inherited_from}<span class="tag">inherited from {f.inherited_from}</span>{/if}
