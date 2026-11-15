@@ -218,8 +218,12 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 			_ = a.db.SetCatalogSyncState(cat.ID, "", nil, catSignedOutMsg)
 			a.setCatalogState(cat.ID, catStateSignedOU, catSignedOutMsg)
 		}
-		return &CatalogPublishResult{Message: "not published: " + catalogShortError(err) + "; nothing changed",
-			Problems: mapPublishReports(plan, catalog.PublishRecordErrors(err))}, nil
+		problems := mapPublishReports(plan, catalog.PublishRecordErrors(err))
+		msg := "The catalog refused the publish (" + strings.TrimRight(catalogShortError(err), ". ") + "). Nothing was created and nothing changed here."
+		if len(problems) > 0 {
+			msg = fmt.Sprintf("The catalog refused %d record(s), marked below. Nothing was created and nothing changed here.", len(problems))
+		}
+		return &CatalogPublishResult{Message: msg, Problems: problems}, nil
 	}
 	if catalogPublishAfterPost != nil {
 		catalogPublishAfterPost()
