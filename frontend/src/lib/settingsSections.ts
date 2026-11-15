@@ -11,6 +11,7 @@ export type SectionId =
   | "shells"
   | "connection"
   | "network"
+  | "catalogs"
   | "liveness"
   | "terminal"
   | "recording"
@@ -81,6 +82,7 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
   { id: "recording",   title: "Session recording", group: "Terminal",       keywords: ["asciicast", "asciinema", "capture", "replay"] },
   { id: "connection",  title: "Connection",        group: "Connections",    keywords: ["defaults", "keepalive", "timeout"] },
   { id: "network",     title: "Network profiles",  group: "Connections",    keywords: ["wireguard", "netbird", "tailscale", "vpn", "wg", "tunnel"] },
+  { id: "catalogs",    title: "Catalogs",          group: "Connections",    keywords: ["shared", "team", "catalog", "slot", "bind", "sign in"] },
   { id: "liveness",    title: "Liveness probe",    group: "Connections",    keywords: ["ping", "reachability", "up", "down", "probe", "status", "alive"] },
   { id: "browser",     title: "Browser launcher",  group: "Connections",    keywords: ["socks", "proxy", "chrome", "profile"] },
   { id: "vault",       title: "Vault",             group: "Security",       keywords: ["passphrase", "lock", "encryption", "master", "auto-unlock"] },
