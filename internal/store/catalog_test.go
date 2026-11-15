@@ -565,3 +565,14 @@ func TestCatalogRefErrorNamesTheSlot(t *testing.T) {
 		t.Fatalf("message does not name the slot: %v", err)
 	}
 }
+
+// A marker kept in a local row after its catalog was removed reads as
+// "nothing set - choose one", not as a slot to bind.
+func TestCatalogRefErrorDetached(t *testing.T) {
+	f := newCatalogFixture(t)
+	_, err := f.db.GetNetworkProfile(CatalogUnboundRef("gone-catalog", "s1"))
+	var re *CatalogRefError
+	if !errors.As(err, &re) || !re.Detached || !strings.Contains(err.Error(), "no network profile set - choose one") {
+		t.Fatalf("detached marker: %v", err)
+	}
+}

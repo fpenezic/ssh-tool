@@ -44,15 +44,21 @@ type CatalogRefError struct {
 	What string
 	// Name is the slot's name when known (the store fills it in).
 	Name string
+	// Detached: the catalog the marker came from is no longer attached
+	// (the value was kept in a local row), so there is no slot to bind.
+	Detached bool
 }
 
 func (e *CatalogRefError) Error() string {
+	if e.Detached {
+		return fmt.Sprintf("no %s set - choose one (this value came from a catalog that is no longer attached)", e.What)
+	}
 	if e.Unbound {
 		slot := e.UUID
 		if e.Name != "" {
 			slot = fmt.Sprintf("%q", e.Name)
 		}
-		return fmt.Sprintf("the catalog %s slot %s is not bound on this machine - bind it to one of your own", e.What, slot)
+		return fmt.Sprintf("the catalog %s slot %s is not bound on this machine - bind it to one of your own, or set one on this connection", e.What, slot)
 	}
 	return fmt.Sprintf("the catalog %s %s is not available to you (deleted, or no access) - set a local one on this connection", e.What, e.UUID)
 }
@@ -78,11 +84,23 @@ func IsCatalogRef(ref string) bool {
 	return strings.HasPrefix(ref, catalogUnboundPrefix) || strings.HasPrefix(ref, catalogMissingPrefix)
 }
 
-// catalogRefError recognises a marker and fills in the slot's name.
+// CatalogRefError recognises a marker and fills in the slot's name, or
+// marks it detached when its catalog is gone.
+func (d *DB) CatalogRefError(ref, what string) (*CatalogRefError, bool) { return d.catalogRefError(ref, what) }
+
+// catalogRefError: see CatalogRefError.
 func (d *DB) catalogRefError(ref, what string) (*CatalogRefError, bool) {
 	e, ok := ParseCatalogRef(ref, what)
-	if ok && e.Unbound {
+	if !ok {
+		return nil, false
+	}
+	var n int
+	if err := d.conn.QueryRow(`SELECT COUNT(*) FROM catalogs WHERE id = ?`, e.CatalogID).Scan(&n); err == nil && n == 0 {
+		e.Detached = true
+		return e, true
+	}
+	if e.Unbound {
 		_ = d.conn.QueryRow(`SELECT name FROM catalog_slots WHERE catalog_id = ? AND uuid = ?`, e.CatalogID, e.UUID).Scan(&e.Name)
 	}
-	return e, ok
+	return e, true
 }

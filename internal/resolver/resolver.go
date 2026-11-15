@@ -39,7 +39,7 @@ func ResolveWithRefs(db *store.DB, conn store.Connection, folders []store.Folder
 // DBLookup reads referenced connections straight from the store.
 func DBLookup(db *store.DB) ConnLookup {
 	return func(id string) (*store.Connection, error) {
-		if e, ok := store.ParseCatalogRef(id, "jump host"); ok {
+		if e, ok := db.CatalogRefError(id, "jump host"); ok {
 			return nil, e
 		}
 		if strings.HasPrefix(id, DynRefPrefix) {
