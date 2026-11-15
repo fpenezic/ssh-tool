@@ -277,6 +277,20 @@ func materialiseTx(db *store.DB, tx *sql.Tx, catalogID string, external External
 					return err
 				}
 			}
+			// Record fields: the record's, unless the local layer's
+			// record part keeps the user's own.
+			want := recordCols(r.RawJSON)
+			if layerJSON != "" && rec.Access != "skeleton" {
+				overlayRecordCols(&want, layerJSON)
+			}
+			if r.Kind == "folders" {
+				want.Notes, want.Tags = "", nil
+			}
+			if !sameRecordCols(want, r.Cols) {
+				if err := db.SetCatalogRecordColsTx(tx, r.Kind, r.ID, want); err != nil {
+					return err
+				}
+			}
 		case "forwards":
 			var rec struct {
 				LocalPort *uint16 `json:"local_port"`
@@ -387,4 +401,68 @@ func LayerFromEdit(base, edited store.InheritableSettings) store.InheritableSett
 		}
 	}
 	return layer
+}
+
+// recordCols reads a record's notes, tags and icon (a catalog record
+// carries no uploaded image).
+func recordCols(raw string) store.RecordCols {
+	var rec struct {
+		Notes     string   `json:"notes"`
+		Tags      []string `json:"tags"`
+		IconName  *string  `json:"icon_name"`
+		IconColor *string  `json:"icon_color"`
+	}
+	_ = json.Unmarshal([]byte(raw), &rec)
+	return store.RecordCols{Notes: rec.Notes, Tags: rec.Tags, IconName: rec.IconName, IconColor: rec.IconColor}
+}
+
+// overlayRecordCols applies the local layer's record part: a present
+// field replaces the record's. An icon of the user's own (built-in or an
+// image) replaces the record's icon as a whole.
+func overlayRecordCols(c *store.RecordCols, layerJSON string) {
+	var l map[string]json.RawMessage
+	if json.Unmarshal([]byte(layerJSON), &l) != nil {
+		return
+	}
+	raw, ok := l[RecordLayerKey]
+	if !ok {
+		return
+	}
+	var r struct {
+		Notes       *string   `json:"notes"`
+		Tags        *[]string `json:"tags"`
+		IconName    *string   `json:"icon_name"`
+		IconColor   *string   `json:"icon_color"`
+		IconImageID *string   `json:"icon_image_id"`
+	}
+	if json.Unmarshal(raw, &r) != nil {
+		return
+	}
+	if r.Notes != nil {
+		c.Notes = *r.Notes
+	}
+	if r.Tags != nil {
+		c.Tags = *r.Tags
+	}
+	if r.IconImageID != nil && *r.IconImageID != "" {
+		c.IconImageID, c.IconName, c.IconColor = r.IconImageID, nil, nil
+	} else if r.IconName != nil {
+		c.IconName, c.IconColor = r.IconName, r.IconColor
+	}
+}
+
+func sameRecordCols(a, b store.RecordCols) bool {
+	eq := func(x, y *string) bool { return (x == nil && y == nil) || (x != nil && y != nil && *x == *y) }
+	if a.Notes != b.Notes || !eq(a.IconName, b.IconName) || !eq(a.IconColor, b.IconColor) || !eq(a.IconImageID, b.IconImageID) {
+		return false
+	}
+	if len(a.Tags) != len(b.Tags) {
+		return false
+	}
+	for i := range a.Tags {
+		if a.Tags[i] != b.Tags[i] {
+			return false
+		}
+	}
+	return true
 }

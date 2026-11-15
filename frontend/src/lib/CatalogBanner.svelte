@@ -31,14 +31,33 @@
     db_addr: "Database address", db_name: "Database name", kafka_bootstrap: "Kafka bootstrap",
     color_tag: "Color tag", keepalive_interval: "Keepalive", terminal_type: "Terminal type",
     auto_reconnect: "Auto reconnect", verbose: "Verbose", vnc_port: "VNC port",
+    vnc_enabled: "VNC", vnc_use_tunnel: "VNC through SSH", vnc_default: "VNC by default",
+    db_enabled: "Database", db_engine: "Database engine", db_credential_ref: "Database login", db_tls: "Database TLS",
+    kafka_enabled: "Kafka", kafka_credential_ref: "Kafka login", kafka_sasl: "Kafka login method",
+    env_vars: "Environment variables", initial_command_line_delay_ms: "Initial command delay", probe_liveness: "Liveness probe",
+    "rec:notes": "Notes", "rec:tags": "Tags", "rec:icon": "Icon",
   };
-  const local = $derived(Object.keys(rec.layer ?? {}));
+  // The layer's record part ("_record": notes, tags, icon kept over the
+  // catalog's) shows as rec:<field> chips next to the settings keys.
+  const local = $derived.by(() => {
+    const layer = (rec.layer ?? {}) as Record<string, unknown>;
+    const keys = Object.keys(layer).filter((k) => k !== "_record");
+    const r = (layer._record ?? {}) as Record<string, unknown>;
+    if ("notes" in r) keys.push("rec:notes");
+    if ("tags" in r) keys.push("rec:tags");
+    if ("icon_name" in r || "icon_image_id" in r || "icon_color" in r) keys.push("rec:icon");
+    return keys;
+  });
 
   async function reset(keys: string[]) {
     const next = { ...(rec.layer ?? {}) } as Record<string, unknown>;
-    for (const k of keys) delete next[k];
+    const recFields = keys.filter((k) => k.startsWith("rec:")).map((k) => k.slice(4));
+    const settingKeys = keys.filter((k) => !k.startsWith("rec:"));
+    for (const k of settingKeys) delete next[k];
+    delete next._record;
     try {
-      await api.catalogSetLayer(kind, id, JSON.stringify(next));
+      if (settingKeys.length > 0) await api.catalogSetLayer(kind, id, JSON.stringify(next));
+      for (const f of recFields) await api.catalogResetRecordField(kind, id, f);
       toast.ok(keys.length === 1 ? `${fieldNames[keys[0]] ?? keys[0]} reset to the catalog's` : "Reset to the catalog's settings");
       onChanged();
     } catch (e) {

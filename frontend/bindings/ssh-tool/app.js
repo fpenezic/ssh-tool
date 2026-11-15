@@ -819,6 +819,18 @@ export function CatalogRemove(id) {
 }
 
 /**
+ * CatalogResetRecordField drops one field ("notes", "tags" or "icon")
+ * from a catalog row's record part: the row follows the catalog again.
+ * @param {string} kind
+ * @param {string} id
+ * @param {string} field
+ * @returns {$CancellablePromise<void>}
+ */
+export function CatalogResetRecordField(kind, id, field) {
+    return $Call.ByID(2128703170, kind, id, field);
+}
+
+/**
  * CatalogSetConfig renames a catalog or changes its sync interval.
  * @param {string} id
  * @param {string} name

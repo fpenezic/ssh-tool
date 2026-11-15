@@ -22,6 +22,21 @@
   let targetUUID = $state<string | null>(null);
   let jumpInclude = $state<Record<string, boolean>>({});
   let slotNames = $state<Record<string, string>>({});
+  // "What to send": ticked means sent. What is not sent stays in your own
+  // local layer, so your tree looks the same after publishing.
+  const sendCategories: { id: string; label: string; hint?: string }[] = [
+    { id: "notes", label: "Notes" },
+    { id: "tags", label: "Tags" },
+    { id: "icons", label: "Icons", hint: "built-in icons; uploaded images stay yours for now" },
+    { id: "forwards", label: "Port forwards" },
+    { id: "database", label: "Database settings", hint: "listed databases and their logins" },
+    { id: "kafka", label: "Kafka settings", hint: "including the Kafka login" },
+    { id: "vnc", label: "VNC settings" },
+    { id: "startup", label: "Initial command and environment variables", hint: "connections that rely on it may not work for others" },
+    { id: "terminal", label: "Terminal and behaviour", hint: "colour tag, terminal type, keepalive, auto-reconnect, verbose, liveness probe" },
+  ];
+  let send = $state<Record<string, boolean>>(Object.fromEntries(sendCategories.map((c) => [c.id, true])));
+  const unsent = $derived(sendCategories.filter((c) => !send[c.id]).map((c) => c.id));
   let plan = $state<PublishPlan | null>(null);
   let planErr = $state("");
   let oldApps = $state<SeenApp[]>([]);
@@ -54,6 +69,7 @@
     target_uuid: targetUUID ?? "",
     jump_include: Object.keys(jumpInclude).filter((k) => jumpInclude[k]),
     slot_names: { ...slotNames },
+    unsent,
   });
 
   // Preview, rebuilt on every change (debounced: slot names are typed).
@@ -221,6 +237,20 @@
             {/each}
           </section>
 
+          <section>
+            <h3>What to send <span class="dim">ticked goes to the catalog; the rest stays yours only, your tree does not change</span></h3>
+            <p class="dim always">Always sent: names, addresses, protocol, port, username, SSH options, tunnel settings, "sensitive", and the slots for credentials, one-time codes, networks and jump hosts.</p>
+            <div class="send">
+              {#each sendCategories as c (c.id)}
+                <label class="send-item">
+                  <input type="checkbox" checked={send[c.id]} disabled={busy}
+                    onchange={(e) => { send = { ...send, [c.id]: (e.currentTarget as HTMLInputElement).checked }; reviewed = false; }} />
+                  <span>{c.label}{#if c.hint}<span class="dim send-hint">{c.hint}</span>{/if}</span>
+                </label>
+              {/each}
+            </div>
+          </section>
+
           {#if plan.slots.length > 0}
             <section>
               <h3>Slots <span class="dim">placeholders each reader binds to their own; yours are bound to what you use today</span></h3>
@@ -303,6 +333,11 @@
   .scroll { overflow: auto; display: flex; flex-direction: column; gap: 0.6rem; border-top: 1px solid var(--surface0); padding-top: 0.5rem; }
   h3 { margin: 0 0 0.3rem; font-size: var(--fs-sm); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   h3 .dim { font-weight: 400; }
+  .always { margin: 0 0 0.3rem; }
+  .send { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; }
+  .send-item { display: flex; gap: 6px; align-items: flex-start; font-size: var(--fs-sm); }
+  .send-item input { margin-top: 2px; }
+  .send-hint { display: block; }
   .box { border: 1px solid var(--surface0); border-radius: var(--r-md); padding: 0.4rem 0.6rem; font-size: var(--fs-sm); }
   .box p { margin: 0.2rem 0; }
   .box ul { margin: 0.2rem 0 0; padding-left: 1.1rem; }

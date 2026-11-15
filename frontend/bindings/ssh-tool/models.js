@@ -1637,6 +1637,15 @@ export class CatalogPublishInput {
              */
             this["slot_names"] = {};
         }
+        if (!("unsent" in $$source)) {
+            /**
+             * Unsent: the "What to send" categories left unticked
+             * (catalog.PublishCategories ids).
+             * @member
+             * @type {string[]}
+             */
+            this["unsent"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -1649,12 +1658,16 @@ export class CatalogPublishInput {
     static createFrom($$source = {}) {
         const $$createField3_0 = $$createType4;
         const $$createField4_0 = $$createType8;
+        const $$createField5_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("jump_include" in $$parsedSource) {
             $$parsedSource["jump_include"] = $$createField3_0($$parsedSource["jump_include"]);
         }
         if ("slot_names" in $$parsedSource) {
             $$parsedSource["slot_names"] = $$createField4_0($$parsedSource["slot_names"]);
+        }
+        if ("unsent" in $$parsedSource) {
+            $$parsedSource["unsent"] = $$createField5_0($$parsedSource["unsent"]);
         }
         return new CatalogPublishInput(/** @type {Partial<CatalogPublishInput>} */($$parsedSource));
     }

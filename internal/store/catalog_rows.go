@@ -521,6 +521,35 @@ type CatalogRowRaw struct {
 	Current    string
 	LocalPort  *int64
 	State      string // catalog_state: "" or removed
+	// Cols: the record columns as stored (folders and connections; a
+	// folder has no notes or tags).
+	Cols RecordCols
+}
+
+// RecordCols are the record fields of a catalog row a user's local layer
+// may replace (store their "_record" part): notes, tags, icons.
+type RecordCols struct {
+	Notes       string
+	Tags        []string
+	IconName    *string
+	IconColor   *string
+	IconImageID *string
+}
+
+// SetCatalogRecordColsTx writes a catalog row's record columns as
+// materialised (no updated_at bump).
+func (d *DB) SetCatalogRecordColsTx(tx *sql.Tx, kind, id string, c RecordCols) error {
+	switch kind {
+	case "folders":
+		_, err := tx.Exec(`UPDATE folders SET icon_name = ?, icon_color = ?, icon_image_id = ? WHERE id = ?`,
+			c.IconName, c.IconColor, c.IconImageID, id)
+		return err
+	case "connections":
+		_, err := tx.Exec(`UPDATE connections SET notes = ?, tags_json = ?, icon_name = ?, icon_color = ?, icon_image_id = ? WHERE id = ?`,
+			c.Notes, jsonTags(c.Tags), c.IconName, c.IconColor, c.IconImageID, id)
+		return err
+	}
+	return fmt.Errorf("catalog: no record columns on %q", kind)
 }
 
 // CatalogRowsRawTx lists every catalog row of a catalog (removed ones
@@ -528,9 +557,9 @@ type CatalogRowRaw struct {
 func (d *DB) CatalogRowsRawTx(tx *sql.Tx, catalogID string) ([]CatalogRowRaw, error) {
 	var out []CatalogRowRaw
 	for _, q := range []struct{ kind, sql string }{
-		{"folders", `SELECT id, remote_uuid, catalog_json, settings_json, NULL, catalog_state FROM folders WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
-		{"connections", `SELECT id, remote_uuid, catalog_json, overrides_json, NULL, catalog_state FROM connections WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
-		{"forwards", `SELECT id, remote_uuid, catalog_json, '', local_port, catalog_state FROM port_forwards WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
+		{"folders", `SELECT id, remote_uuid, catalog_json, settings_json, NULL, catalog_state, '', '[]', icon_name, icon_color, icon_image_id FROM folders WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
+		{"connections", `SELECT id, remote_uuid, catalog_json, overrides_json, NULL, catalog_state, COALESCE(notes, ''), COALESCE(tags_json, '[]'), icon_name, icon_color, icon_image_id FROM connections WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
+		{"forwards", `SELECT id, remote_uuid, catalog_json, '', local_port, catalog_state, '', '[]', NULL, NULL, NULL FROM port_forwards WHERE catalog_id = ? AND remote_uuid IS NOT NULL`},
 	} {
 		rows, err := tx.Query(q.sql, catalogID)
 		if err != nil {
@@ -539,10 +568,14 @@ func (d *DB) CatalogRowsRawTx(tx *sql.Tx, catalogID string) ([]CatalogRowRaw, er
 		for rows.Next() {
 			r := CatalogRowRaw{Kind: q.kind}
 			var lp sql.NullInt64
-			if err := rows.Scan(&r.ID, &r.RemoteUUID, &r.RawJSON, &r.Current, &lp, &r.State); err != nil {
+			var tags string
+			var in, ic, ii sql.NullString
+			if err := rows.Scan(&r.ID, &r.RemoteUUID, &r.RawJSON, &r.Current, &lp, &r.State, &r.Cols.Notes, &tags, &in, &ic, &ii); err != nil {
 				rows.Close()
 				return nil, err
 			}
+			_ = json.Unmarshal([]byte(tags), &r.Cols.Tags)
+			r.Cols.IconName, r.Cols.IconColor, r.Cols.IconImageID = nullStr(in), nullStr(ic), nullStr(ii)
 			if lp.Valid {
 				v := lp.Int64
 				r.LocalPort = &v
@@ -731,4 +764,12 @@ func (d *DB) KeepRemovedFolderLocal(id string, settings InheritableSettings) err
 		}
 		return pruneRemovedAncestors(tx, parent.String)
 	})
+}
+
+func nullStr(v sql.NullString) *string {
+	if !v.Valid {
+		return nil
+	}
+	s := v.String
+	return &s
 }
