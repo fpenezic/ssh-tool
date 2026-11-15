@@ -10,6 +10,7 @@ import { api, type TunnelInfo } from "./api";
 import { EventsOn } from "./wailsRuntime";
 import { errMsg } from "./connectErrors";
 import { toast } from "./toast.svelte.ts";
+import { catalogBindGate } from "./catalogBindGate.svelte";
 
 // Detached windows mount their own status bar, and so their own copy of
 // this store: an outcome nobody asked for by hand is told by the main window
@@ -122,6 +123,8 @@ class TunnelsStore {
 
   // A start by hand: the outcome is announced (see announce).
   async start(connectionId: string) {
+    // Every caller is a click; unbound catalog slots are asked for here.
+    if (!(await catalogBindGate([connectionId]))) return;
     // Starting one that is already up is a no-op with nothing to report.
     const t = this.byConnection(connectionId);
     if (!(t && this.running(t))) this.pending.set(connectionId, t?.gen ?? 0);

@@ -1322,6 +1322,20 @@ export interface CatalogSlotInfo {
   target_name?: string;
   target_gone?: boolean;
   used_by: number;
+  skipped?: boolean;
+}
+
+// An unbound slot a connect needs (CatalogUnboundFor), in connect order.
+export interface CatalogPendingSlot {
+  catalog_id: string;
+  catalog_name: string;
+  slot_uuid: string;
+  name: string;
+  type: "cred" | "net" | "jump";
+  role: "jump" | "net" | "cred" | "otp";
+  doc_md: string;
+  folder_name: string;
+  connections: number;
 }
 
 export interface CatalogRecordInfo {
@@ -1778,6 +1792,8 @@ export const api = {
   catalogSlots: (id: string) => G.CatalogSlots(id) as unknown as Promise<CatalogSlotInfo[]>,
   catalogBind: (id: string, slot: string, target: string) => G.CatalogBind(id, slot, target) as unknown as Promise<void>,
   catalogUnbind: (id: string, slot: string) => G.CatalogUnbind(id, slot) as unknown as Promise<void>,
+  catalogUnboundFor: (ids: string[], purpose: string) => G.CatalogUnboundFor(ids, purpose) as unknown as Promise<CatalogPendingSlot[]>,
+  catalogSkipOTP: (id: string, slot: string) => G.CatalogSkipOTP(id, slot) as unknown as Promise<void>,
   catalogRecord: (kind: "folders" | "connections" | "forwards", id: string) =>
     G.CatalogRecord(kind, id) as unknown as Promise<CatalogRecordInfo>,
   catalogSetLayer: (kind: "folders" | "connections" | "forwards", id: string, layerJSON: string) =>

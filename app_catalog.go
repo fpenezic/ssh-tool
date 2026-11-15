@@ -668,6 +668,9 @@ type CatalogSlotInfo struct {
 	// is defined.
 	CanWrite   bool   `json:"can_write"`
 	FolderName string `json:"folder_name"`
+	// Skipped: an unbound slot whose one-time code the user types
+	// themselves on this machine (the connect dialog's skip).
+	Skipped bool `json:"skipped,omitempty"`
 }
 
 func (a *App) catalogSlotInfos(catalogID string, slots []store.CatalogSlot) []CatalogSlotInfo {
@@ -676,9 +679,10 @@ func (a *App) catalogSlotInfos(catalogID string, slots []store.CatalogSlot) []Ca
 	for _, b := range bindings {
 		bound[b.SlotUUID] = b
 	}
+	skipped := a.otpSkipped()
 	out := make([]CatalogSlotInfo, 0, len(slots))
 	for _, s := range slots {
-		info := CatalogSlotInfo{CatalogSlot: s, State: "unbound"}
+		info := CatalogSlotInfo{CatalogSlot: s, State: "unbound", Skipped: skipped[catalogID+"/"+s.UUID]}
 		if ok, lid := a.slotFolderWritable(catalogID, s.FolderUUID); lid != "" {
 			info.CanWrite = ok && runtime.GOOS != "android" && runtime.GOOS != "ios"
 			if f, err := a.db.GetFolder(lid); err == nil {
@@ -767,6 +771,7 @@ func (a *App) CatalogBind(catalogID, slotUUID, targetID string) error {
 	if err := a.db.SetCatalogBinding(catalogID, slotUUID, slot.Type, targetID); err != nil {
 		return err
 	}
+	_ = a.setOTPSkipped(catalogID, slotUUID, false)
 	a.recordAudit("catalog.bind", catalogID, map[string]string{"slot": slot.Name})
 	a.rematerialiseCatalogs()
 	return nil

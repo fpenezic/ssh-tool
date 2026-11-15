@@ -198,6 +198,7 @@ var machineLocalSettings = []string{
 	"ci_runner",
 	"ci_runner_machine",
 	"network_shared_proxy_listen",
+	"catalog_otp_skipped", // a catalog one-time code slot the user types on this machine
 }
 
 func machineLocalSettingsPlaceholders() string {

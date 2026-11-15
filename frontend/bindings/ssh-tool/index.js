@@ -28,6 +28,7 @@ export {
     CatalogCreateInput,
     CatalogEnrollPreview,
     CatalogInfo,
+    CatalogPendingSlot,
     CatalogPublishInput,
     CatalogPublishProblem,
     CatalogPublishResult,

@@ -62,6 +62,7 @@
   import LoginModal from "./lib/LoginModal.svelte";
   import QuickConnectModal from "./lib/QuickConnectModal.svelte";
   import ConfirmModal from "./lib/ConfirmModal.svelte";
+  import CatalogBindModal from "./lib/CatalogBindModal.svelte";
   import PresenceTakeoverModal from "./lib/PresenceTakeoverModal.svelte";
   import { connectionActions } from "./lib/connectionActions.svelte";
   import { tunnels } from "./lib/tunnels.svelte.ts";
@@ -1844,6 +1845,7 @@
   <LoginModal />
   <QuickConnectModal />
   <ConfirmModal />
+  <CatalogBindModal />
   <PresenceTakeoverModal />
 
   {#if connectionActions.movePending}

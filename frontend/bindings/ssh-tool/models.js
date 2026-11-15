@@ -1323,6 +1323,98 @@ export class CatalogInfo {
 }
 
 /**
+ * CatalogPendingSlot is one unbound slot a connect needs.
+ */
+export class CatalogPendingSlot {
+    /**
+     * Creates a new CatalogPendingSlot instance.
+     * @param {Partial<CatalogPendingSlot>} [$$source = {}] - The source object to create the CatalogPendingSlot.
+     */
+    constructor($$source = {}) {
+        if (!("catalog_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["catalog_id"] = "";
+        }
+        if (!("catalog_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["catalog_name"] = "";
+        }
+        if (!("slot_uuid" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["slot_uuid"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("type" in $$source)) {
+            /**
+             * Type is the slot's (cred, net, jump); Role is what the connect uses
+             * it for: "jump", "net", "cred" or "otp" (a credential slot used only
+             * for the one-time code, which the user may skip).
+             * @member
+             * @type {string}
+             */
+            this["type"] = "";
+        }
+        if (!("role" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["role"] = "";
+        }
+        if (!("doc_md" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["doc_md"] = "";
+        }
+        if (!("folder_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["folder_name"] = "";
+        }
+        if (!("connections" in $$source)) {
+            /**
+             * Connections: how many connections of this catalog on this machine
+             * use the slot for anything (directly or through a bastion).
+             * @member
+             * @type {number}
+             */
+            this["connections"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogPendingSlot instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CatalogPendingSlot}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CatalogPendingSlot(/** @type {Partial<CatalogPendingSlot>} */($$parsedSource));
+    }
+}
+
+/**
  * CatalogPublishInput are the dialog's choices.
  */
 export class CatalogPublishInput {
@@ -2006,6 +2098,15 @@ export class CatalogSlotInfo {
              * @type {string}
              */
             this["folder_name"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Skipped: an unbound slot whose one-time code the user types
+             * themselves on this machine (the connect dialog's skip).
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["skipped"] = undefined;
         }
 
         Object.assign(this, $$source);
