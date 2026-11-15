@@ -330,6 +330,12 @@ func (c *Client) setUA(req *http.Request) {
 // do sends one request and decodes a JSON answer into out. With auth, a
 // 401 refreshes the access token once and retries (PROTOCOL 10.3).
 func (c *Client) do(ctx context.Context, method, path string, body any, out any, auth bool) error {
+	return c.send(ctx, method, path, body, out, auth, nil)
+}
+
+// send is do with extra request headers (If-Match, a merge-patch content
+// type).
+func (c *Client) send(ctx context.Context, method, path string, body any, out any, auth bool, headers map[string]string) error {
 	var payload []byte
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -347,6 +353,9 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any,
 		req.Header.Set("Accept", "application/json")
 		if body != nil {
 			req.Header.Set("Content-Type", "application/json; charset=utf-8")
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
 		}
 		c.setUA(req)
 		var gen int

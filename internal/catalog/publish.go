@@ -236,6 +236,17 @@ type pubCtx struct {
 	rootUUID string
 	// reusedNames: folder uuid -> name along the target's chain.
 	reusedNames map[string]string
+	// passthrough (record edits): local values that already stand for a
+	// catalog reference - a marker, a credential made for an external
+	// slot - and the reference they stand for.
+	passthrough map[string]passRef
+	inScope     map[string]bool // slot uuid -> usable from the record's folder
+}
+
+// passRef is a catalog reference a local value stands for.
+type passRef struct {
+	UUID string
+	Slot bool
 }
 
 // BuildPublish plans the publish of a local folder. Refusals in the plan
@@ -746,6 +757,18 @@ func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) {
 	for depth := 0; h != nil && depth < 32; depth++ {
 		delete(h, "name")
 		if id, ok := h["connection_id"].(string); ok && id != "" {
+			if p, ok := c.passthrough[id]; ok {
+				if p.Slot {
+					if !c.inScope[p.UUID] {
+						c.refuse(kind, c.localOf(kind, u), name, "its jump host is a catalog slot that is not available in this folder")
+					}
+					h["jump_slot"] = p.UUID
+					delete(h, "connection_id")
+				} else {
+					h["connection_id"] = p.UUID
+				}
+				goto auth
+			}
 			switch {
 			case strings.HasPrefix(id, resolver.DynRefPrefix):
 				// An inventory host means nothing to others: a jump slot
@@ -785,6 +808,7 @@ func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) {
 		} else if hn, ok := h["hostname"].(string); ok && hn != "" {
 			c.text(kind, u, name, "jump_host.hostname", hn, folderLevel)
 		}
+	auth:
 		if v, ok := h["auth_ref"].(string); ok {
 			h["auth_ref"] = c.ref(v, slotCred, kind, u, name, "jump_host.auth_ref")
 		}
@@ -806,6 +830,13 @@ func (c *pubCtx) localOf(kind, u string) string {
 func (c *pubCtx) ref(v, typ, kind, u, name, field string) string {
 	if v == "" {
 		return ""
+	}
+	if p, ok := c.passthrough[v]; ok && p.Slot {
+		if !c.inScope[p.UUID] {
+			c.refuse(kind, c.localOf(kind, u), name, field+" names a catalog slot that is not available in this folder")
+			return ""
+		}
+		return p.UUID
 	}
 	if isMarker(v) {
 		c.refuse(kind, c.localOf(kind, u), name, field+" holds an unbound or missing catalog value; choose one first")
