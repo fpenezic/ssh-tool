@@ -1246,7 +1246,7 @@ export type OpksshCertLifetime = {
 
 // ----- Shared connection catalogs (app_catalog.go) -----
 
-export type CatalogState = "ok" | "syncing" | "no_login" | "signed_out" | "error" | "locked" | "signing_in";
+export type CatalogState = "ok" | "syncing" | "no_login" | "signed_out" | "error" | "locked" | "signing_in" | "waiting";
 
 export interface CatalogInfo {
   id: string;

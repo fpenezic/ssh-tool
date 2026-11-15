@@ -64,6 +64,7 @@ func (a *App) catalogRepushTick() bool {
 	remoteGen := int64(-1)
 	if dav, _, err := a.syncClient(); err == nil {
 		if meta, err := syncer.FetchMeta(dav); err == nil {
+			a.noteRemoteMeta(meta)
 			remoteGen = meta.Generation
 		} else if err == syncer.ErrNotFound {
 			remoteGen = 0

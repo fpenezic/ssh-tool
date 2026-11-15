@@ -22,6 +22,8 @@ export function catalogStateLabel(c: CatalogInfo): { text: string; tone: "ok" | 
       return { text: "sync failed", tone: "err", action: "sync" };
     case "locked":
       return { text: "vault locked", tone: "warn", action: "unlock" };
+    case "waiting":
+      return { text: "waits for profile sync", tone: "busy" };
   }
   if (c.unbound > 0) {
     return { text: `${c.unbound} slot${c.unbound === 1 ? "" : "s"} to bind`, tone: "warn", action: "slots" };

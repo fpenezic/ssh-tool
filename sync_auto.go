@@ -299,6 +299,7 @@ func (a *App) autoSyncRemoteCheck() {
 		}
 		return
 	}
+	a.noteRemoteMeta(meta)
 	if meta.Generation <= a.syncGeneration() {
 		return
 	}
