@@ -737,7 +737,7 @@ type FoldersUpdateInput struct {
 
 func (a *App) FoldersUpdate(in FoldersUpdateInput) (*store.Folder, error) {
 	if a.isCatalogFolder(in.ID) {
-		return nil, errCatalogOwned
+		return a.saveCatalogFolderEdit(in)
 	}
 	if in.ParentID != nil && a.isCatalogFolder(*in.ParentID) {
 		return nil, errCatalogFolder

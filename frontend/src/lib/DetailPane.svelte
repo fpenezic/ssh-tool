@@ -47,6 +47,10 @@
   import DbSettingsEditor from "./DbSettingsEditor.svelte";
   import { applyDbDraft, dbDraftError, dbDraftFrom, dbDraftSame, type DbDraft } from "./dbDraft";
   import { dbDefaultFor, dbEnabledFor, dbFolderTargets, dbInheritedFrom } from "./dbState.svelte";
+  import CatalogBanner from "./CatalogBanner.svelte";
+  import { IconUsers } from "./iconMap";
+  import { catalogs, parseMarker } from "./catalog.svelte";
+  import type { CatalogRecordInfo } from "./api";
 
   // Populate the Network dropdowns; cached after the first load and
   // refreshed via the network_tunnel_changed event inside the store.
@@ -120,6 +124,42 @@
     for (const d of unloadedDynamicUnder(fid)) void tree.loadDynamicEntries(d);
   });
   const conn = $derived(selection.selectedConnection());
+
+  // Shared catalogs: a catalog record's editor shows where it comes from,
+  // locks what the catalog owns, marks the fields the user changed (their
+  // local layer) and keeps a refused save's message on screen.
+  let catRec = $state<CatalogRecordInfo | null>(null);
+  let saveError = $state<string | null>(null);
+  const isCatalogConn = $derived(!!conn?.catalog_id);
+  const isCatalogFolder = $derived(!!folder?.catalog_id && !!folder?.remote_uuid);
+  async function loadCatRec() {
+    const kind = conn?.catalog_id ? "connections" : isCatalogFolder ? "folders" : null;
+    const id = conn?.catalog_id ? conn.id : folder?.id;
+    if (!kind || !id) { catRec = null; return; }
+    try { catRec = await api.catalogRecord(kind, id); } catch { catRec = null; }
+    const cid = conn?.catalog_id ?? folder?.catalog_id;
+    if (cid && !catalogs.slots[cid]) catalogs.loadSlots(cid);
+  }
+  $effect(() => {
+    void conn?.id; void folder?.id; void conn?.remote_rev; void folder?.remote_rev;
+    saveError = null;
+    loadCatRec();
+  });
+  function layerHas(key: string): boolean {
+    return !!catRec && Object.prototype.hasOwnProperty.call(catRec.layer ?? {}, key);
+  }
+  async function resetLayerKey(key: string) {
+    if (!catRec || !conn) return;
+    const next = { ...(catRec.layer ?? {}) } as Record<string, unknown>;
+    delete next[key];
+    try {
+      await api.catalogSetLayer("connections", conn.id, JSON.stringify(next));
+      await tree.load();
+      await loadCatRec();
+    } catch (e) {
+      toast.err("Reset: " + errMsg(e), 8000);
+    }
+  }
   const credList = $derived(credentials.list);
 
   // Set of credential ids that reference a KeePass entry, so the auth picker
@@ -587,7 +627,8 @@
       ok = true;
       return true;
     } catch (e: any) {
-      toast.err(`Save failed: ${errMsg(e)}`);
+      saveError = errMsg(e);
+      toast.err(`Save failed: ${errMsg(e)}`, 8000);
       return false;
     } finally {
       folderSaving = false;
@@ -1041,7 +1082,8 @@
   // kept, so opening an existing config cannot silently drop its reference.
   const credOptions = $derived([
     { value: AUTH_NONE, label: "None - do not inherit, ask at connect" },
-    ...sshCredOptions(editing?.authRef),
+    ...(parseMarker(editing?.authRef) ? [{ value: editing!.authRef, label: catalogs.markerLabel(editing!.authRef) ?? "catalog slot" }] : []),
+    ...sshCredOptions(editing?.authRef).filter((o) => !parseMarker(o.value)),
   ]);
 
   // A local-shell connection ("telnet", serial console, "claude", ...):
@@ -1302,14 +1344,19 @@
       clearLocalShellDir: isLocal && localDir === "",
       openHidden: editing.openHidden,
     }).then(async () => {
+      saveError = null;
       await tree.load();
       if (conn) {
         resolved = await api.connectionsResolve(conn.id);
       }
+      await loadCatRec();
       showSaved();
       return true;
     }).catch((e) => {
-      toast.err(`Save failed: ${errMsg(e)}`);
+      // Kept on screen until the next save or another selection: a toast
+      // alone is gone before the user looks (a refused catalog save).
+      saveError = errMsg(e);
+      toast.err(`Save failed: ${errMsg(e)}`, 8000);
       return false;
     });
   }
@@ -1836,10 +1883,25 @@
     />
   {:else if !folder && !conn}
     <HomePane />
+  {:else if folder && folder.catalog_id && !folder.remote_uuid}
+    {@const cat = catalogs.byId(folder.catalog_id)}
+    <header class="ed-head">
+      <div class="ed-title"><h1><IconUsers size={18} /> <span class="ed-name">{folder.name}</span></h1></div>
+      <div class="head-actions"><button onclick={() => catalogs.open(folder.catalog_id)}>Catalog settings</button></div>
+    </header>
+    <p class="hint">A shared catalog{cat?.account_name ? `, signed in as ${cat.account_name}` : ""}. Its connections stay in step with the catalog server; bind its slots once to use them.</p>
+    {#if cat && cat.unbound > 0}
+      <p><button class="primary" onclick={() => catalogs.open(cat.id, "slots")}>Bind {cat.unbound} slot{cat.unbound === 1 ? "" : "s"}</button></p>
+    {/if}
+  {:else if folder && folder.catalog_skeleton}
+    <header class="ed-head">
+      <div class="ed-title"><h1><IconLock size={16} /> <span class="ed-name skeleton-name">{folder.name}</span></h1></div>
+    </header>
+    <p class="hint">Only the outline of a catalog folder you cannot open. It is here because a folder below it is shared with you; the settings it hands down still apply there.</p>
   {:else if folder && editingFolder}
     <header class="ed-head">
       <div class="ed-title">
-        <h1><IconFolder size={18} /> <input class="title-input" bind:value={editingFolder.name} /></h1>
+        <h1><IconFolder size={18} /> <input class="title-input" bind:value={editingFolder.name} readonly={!!folder.catalog_id} title={folder.catalog_id ? "The catalog's name" : ""} /></h1>
         {#if folderSub}<span class="ed-sub">{folderSub}</span>{/if}
       </div>
       <div class="head-actions">
@@ -1856,9 +1918,11 @@
         >
           {#if savedHint && !folderDirty}✓ Saved{:else if folderDirty}Save *{:else}Save{/if}
         </button>
-        <button onclick={addSubfolder} title="New subfolder">+ Folder</button>
-        <button onclick={addConnectionHere} title="New connection here">+ Connection</button>
-        <button class="danger" onclick={deleteFolder}>Delete</button>
+        {#if !folder.catalog_id}
+          <button onclick={addSubfolder} title="New subfolder">+ Folder</button>
+          <button onclick={addConnectionHere} title="New connection here">+ Connection</button>
+          <button class="danger" onclick={deleteFolder}>Delete</button>
+        {/if}
       </div>
       <div class="ed-tabs" role="tablist" aria-label="Folder settings">
         {#each folderTabs as t (t.id)}
@@ -1871,7 +1935,11 @@
     {#if folderTab === "general"}
     {@const inhSens = tree.inheritedFieldForFolder(folder.id, "sensitive")}
     <FleetCards folderId={folder.id} ids={folderFleetIds} label={folder.name} />
+    {#if saveError}<div class="err save-err">{saveError}</div>{/if}
     <div class="form">
+      {#if isCatalogFolder && catRec}
+        <CatalogBanner kind="folders" id={folder.id} name={folder.name} rec={catRec} onChanged={async () => { await tree.load(); await loadCatRec(); }} />
+      {/if}
       <p class="section-label span-2">Inherited by the connections and subfolders in this folder unless they set their own value.</p>
       <label title="What a double-click or Enter does on the connections in this folder.">
         Double-click opens
@@ -2279,8 +2347,12 @@
     {@const inhAuth = tree.inheritedFieldForConnection(conn.id, "auth_ref")}
     {@const inhJump = tree.inheritedFieldForConnection(conn.id, "jump_host")}
     {#if edTab === "general"}
+    {#if saveError}<div class="err save-err">{saveError}</div>{/if}
     <div class="form">
-      <label title="A label for this connection in the tree - any text you like.">Name<input bind:value={editing.name} placeholder="My server" /></label>
+      {#if isCatalogConn && catRec}
+        <CatalogBanner kind="connections" id={conn.id} name={conn.name} rec={catRec} onChanged={async () => { await tree.load(); await loadCatRec(); }} />
+      {/if}
+      <label title={isCatalogConn ? "The catalog's name for it" : "A label for this connection in the tree - any text you like."}>Name{#if isCatalogConn} <span class="lock-mark"><IconLock size={10} /> catalog</span>{/if}<input bind:value={editing.name} placeholder="My server" readonly={isCatalogConn} class:locked={isCatalogConn} /></label>
       {#if !isLocal && !isWeb}
         <label title="What a double-click or Enter on this connection does. The other actions stay in the header and the right-click menu.">
           Double-click opens
@@ -2337,9 +2409,9 @@
       </label>
       {:else}
       <div class="row">
-        <label class="grow" title="The address to connect to: a DNS hostname or an IP. This is what SSH dials, not the display name above.">Hostname / IP address<input bind:value={editing.hostname} placeholder="host.example.com or 10.0.0.5" onblur={splitHostField} /></label>
+        <label class="grow" title="The address to connect to: a DNS hostname or an IP. This is what SSH dials, not the display name above.">Hostname / IP address{#if isCatalogConn} <span class="lock-mark"><IconLock size={10} /> catalog</span>{/if}<input bind:value={editing.hostname} placeholder="host.example.com or 10.0.0.5" onblur={splitHostField} readonly={isCatalogConn} class:locked={isCatalogConn} /></label>
         <label class="port">
-          Port
+          Port{#if layerHas("port")} <span class="ov-mark" title="Changed on this machine; the catalog says {catRec?.catalog.port ?? 'nothing'}">yours <button type="button" onclick={(e) => { e.preventDefault(); resetLayerKey("port"); }}>reset</button></span>{/if}
           <input
             type="number"
             bind:value={editing.port}
@@ -2353,7 +2425,7 @@
         </label>
       </div>
       <label>
-        Username
+        Username{#if layerHas("username")} <span class="ov-mark" title="Changed on this machine; the catalog says {catRec?.catalog.username ?? 'nothing'}">yours <button type="button" onclick={(e) => { e.preventDefault(); resetLayerKey("username"); }}>reset</button></span>{/if}
         <input
           bind:value={editing.username}
           placeholder={inhUser.value ? String(inhUser.value) : "(no inherited value)"}
@@ -2362,7 +2434,7 @@
           <span class="inh-hint">inherited from <strong>{inhUser.from.name}</strong>: {inhUser.value}</span>
         {/if}
       </label>
-      <label>Credential
+      <label>Credential{#if layerHas("auth_ref")} <span class="ov-mark" title="Changed on this machine">yours <button type="button" onclick={(e) => { e.preventDefault(); resetLayerKey("auth_ref"); }}>reset</button></span>{/if}{#if parseMarker(editing.authRef)} <button type="button" class="linklike bind-link" onclick={(e) => { e.preventDefault(); catalogs.open(parseMarker(editing!.authRef)!.catalogId, "slots"); }}>bind the slot</button>{/if}
         <div class="cred-picker-row">
           <SearchableSelect
             bind:value={editing.authRef}
@@ -2468,7 +2540,7 @@
         value={editing.colorTag}
         onChange={(v) => { if (editing) editing = { ...editing, colorTag: v }; }}
       /></div>
-      <div class="span-2"><IconPicker
+      {#if !isCatalogConn}<div class="span-2"><IconPicker
         kind="connection"
         targetId={conn.id}
         currentIconId={conn.icon_image_id}
@@ -2477,10 +2549,14 @@
         fallbackEmoji=""
         onChange={() => tree.load()}
         onNamedChange={() => tree.load()}
-      /></div>
+      /></div>{/if}
       <div class="tag-editor span-2">
-        <span class="tag-label">Tags</span>
-        <TagInput bind:tags={editing.tags} known={tree.allTags()} />
+        <span class="tag-label">Tags{#if isCatalogConn} <span class="lock-mark"><IconLock size={10} /> catalog</span>{/if}</span>
+        {#if isCatalogConn}
+          <span class="locked-tags">{(conn.tags ?? []).join(", ") || "none"}</span>
+        {:else}
+          <TagInput bind:tags={editing.tags} known={tree.allTags()} />
+        {/if}
       </div>
       <div class="span-2 notes-block">
         <div class="notes-head">
@@ -2500,7 +2576,7 @@
           </div>
         </div>
         {#if notesMode === "edit"}
-          <textarea bind:value={editing.notes} rows="6" placeholder="Markdown: # heading, **bold**, `code`, fenced ```, - lists, [link](https://…)"></textarea>
+          <textarea bind:value={editing.notes} rows="6" placeholder="Markdown: # heading, **bold**, `code`, fenced ```, - lists, [link](https://…)" readonly={isCatalogConn} class:locked={isCatalogConn}></textarea>
         {:else}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -2995,6 +3071,15 @@
 {/if}
 
 <style>
+  /* Shared catalogs. */
+  .lock-mark { font-size: 10px; opacity: 0.7; display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; }
+  input.locked, textarea.locked { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--border, #333) 35%, transparent) 6px 7px); cursor: not-allowed; opacity: 0.85; }
+  .ov-mark { font-size: 10px; color: var(--teal); border: 1px solid color-mix(in srgb, var(--teal) 50%, transparent); border-radius: 999px; padding: 0 2px 0 6px; margin-left: 4px; display: inline-flex; align-items: center; gap: 2px; }
+  .ov-mark button, .bind-link { background: none; border: none; padding: 0 2px; color: var(--sapphire); cursor: pointer; font-size: 10px; }
+  .locked-tags { font-size: var(--fs-sm); opacity: 0.85; }
+  .save-err { margin: 6px 0; }
+  .skeleton-name { opacity: 0.6; font-style: italic; }
+
   /* No top padding: the scrollport top must equal the content top so the
      sticky header can sit flush at top:0 with no gap for content to show
      through. The header supplies its own top padding. */

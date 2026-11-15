@@ -1510,6 +1510,16 @@ export class Folder {
              */
             this["catalog_state"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * CatalogSkeleton: the folder is only the outline of a catalog folder
+             * this user cannot open (an ancestor of one they can); read-only,
+             * from its catalog record.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["catalog_skeleton"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
