@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"runtime"
 	"sort"
 	"strings"
@@ -230,10 +231,13 @@ func (a *App) CatalogAdd(baseURL string) (*CatalogInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	// One attachment per server: a second one would hold the same records
+	// twice (two roots, slots bound twice, two sessions), with nothing to
+	// gain - another account on the same server is a sign-out and sign-in.
 	cats, _ := a.db.ListCatalogs()
 	for _, c := range cats {
-		if strings.EqualFold(strings.TrimRight(c.BaseURL, "/"), u) {
-			return nil, fmt.Errorf("this catalog is already attached as %q", c.Name)
+		if catalog.SameServer(c.BaseURL, u) {
+			return nil, fmt.Errorf("this catalog server is already attached as %q; to use another account there, sign out and sign in again", c.Name)
 		}
 	}
 	name := strings.TrimSpace(meta.Server.Name)
@@ -465,10 +469,11 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 		a.recordAudit("catalog.signed_out", id, nil)
 	case errors.As(err, &ra):
 		next = time.Now().Add(ra.Wait)
-		a.setCatalogState(id, catStateError, err.Error())
+		a.setCatalogState(id, catStateError, catalogShortError(err))
 	default:
-		_ = a.db.SetCatalogSyncState(id, "", nil, err.Error())
-		a.setCatalogState(id, catStateError, err.Error())
+		short := catalogShortError(err)
+		_ = a.db.SetCatalogSyncState(id, "", nil, short)
+		a.setCatalogState(id, catStateError, short)
 	}
 	rt.mu.Lock()
 	rt.next[id] = next
@@ -986,3 +991,32 @@ func (a *App) updateCatalogForward(cur *store.PortForward, in ForwardUpdateInput
 // errForwardDisabled: a disabled forward starts neither automatically nor
 // by hand.
 var errForwardDisabled = errors.New("this forward is disabled; enable it first")
+
+// catalogShortError is the one line the frontend shows for a failed pass;
+// the full error (with the request URL) stays in the log.
+func catalogShortError(err error) string {
+	var ae *catalog.APIError
+	var ra *catalog.RetryAfterError
+	var ue *url.Error
+	switch {
+	case errors.As(err, &ra):
+		return fmt.Sprintf("the catalog server is busy; retrying in %s", ra.Wait.Round(time.Second))
+	case errors.As(err, &ae):
+		if ae.Message != "" {
+			return "the catalog server refused the request: " + ae.Message
+		}
+		return fmt.Sprintf("the catalog server answered HTTP %d", ae.Status)
+	case errors.As(err, &ue):
+		if ue.Timeout() {
+			return "the catalog server did not answer in time"
+		}
+		return "cannot reach the catalog server"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "the sync took too long and was stopped; it will be retried"
+	}
+	msg := err.Error()
+	if len(msg) > 160 {
+		msg = msg[:160] + "..."
+	}
+	return msg
+}

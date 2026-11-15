@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ssh-tool/internal/catalog"
@@ -312,5 +314,23 @@ func TestExportLeavesCatalogOut(t *testing.T) {
 		if f.Name == "Customer A" || f.Name == "Team" {
 			t.Fatalf("catalog folder exported: %+v", f)
 		}
+	}
+}
+
+func TestCatalogAddRefusesTheSameServerTwice(t *testing.T) {
+	ca := newCatalogApp(t)
+	_, err := ca.a.CatalogAdd(ca.cat.BaseURL + "/")
+	if err == nil || !strings.Contains(err.Error(), "already attached") {
+		t.Fatalf("second attachment: %v", err)
+	}
+}
+
+func TestCatalogShortError(t *testing.T) {
+	long := &url.Error{Op: "Get", URL: "http://127.0.0.1:18080/api/v1/changes?since=CURSOR", Err: errors.New("connection refused")}
+	if got := catalogShortError(long); got != "cannot reach the catalog server" || strings.Contains(got, "CURSOR") {
+		t.Fatalf("short error: %q", got)
+	}
+	if got := catalogShortError(&catalog.APIError{Status: 500, Message: "boom"}); !strings.Contains(got, "boom") {
+		t.Fatalf("api error: %q", got)
 	}
 }

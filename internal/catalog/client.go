@@ -62,6 +62,31 @@ type TokenStore interface {
 	Save(refreshToken string) error
 }
 
+// SameServer reports whether two base URLs name the same catalog server:
+// scheme and host compared case-insensitively, a default port equal to
+// none, localhost equal to 127.0.0.1, trailing slashes ignored.
+func SameServer(a, b string) bool { return normaliseBase(a) == normaliseBase(b) }
+
+func normaliseBase(raw string) string {
+	u, err := url.Parse(strings.TrimRight(strings.TrimSpace(raw), "/"))
+	if err != nil {
+		return strings.ToLower(raw)
+	}
+	scheme := strings.ToLower(u.Scheme)
+	host := strings.ToLower(u.Hostname())
+	if host == "localhost" || host == "::1" {
+		host = "127.0.0.1"
+	}
+	port := u.Port()
+	if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
+		port = ""
+	}
+	if port != "" {
+		host += ":" + port
+	}
+	return scheme + "://" + host + strings.TrimRight(u.EscapedPath(), "/")
+}
+
 // ValidateBaseURL checks a catalog base URL: https, or plain http only on
 // loopback (PROTOCOL 1). Returns it without a trailing slash.
 func ValidateBaseURL(raw string) (string, error) {

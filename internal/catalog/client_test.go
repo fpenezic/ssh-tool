@@ -354,3 +354,21 @@ func TestSignInStoresTokens(t *testing.T) {
 		t.Fatalf("access token %q", c.access)
 	}
 }
+
+func TestSameServer(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		same bool
+	}{
+		{"https://catalog.example.com", "https://CATALOG.example.com/", true},
+		{"https://catalog.example.com:443", "https://catalog.example.com", true},
+		{"http://localhost:18080", "http://127.0.0.1:18080/", true},
+		{"http://127.0.0.1:18080", "http://127.0.0.1:18081", false},
+		{"https://catalog.example.com/team-a", "https://catalog.example.com/team-b", false},
+		{"https://catalog.example.com", "http://catalog.example.com", false},
+	} {
+		if got := SameServer(c.a, c.b); got != c.same {
+			t.Errorf("%s vs %s: %v", c.a, c.b, got)
+		}
+	}
+}
