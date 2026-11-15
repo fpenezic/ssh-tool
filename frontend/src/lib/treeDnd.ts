@@ -43,6 +43,18 @@ export function isInvalidDrop(
 ): boolean {
   if (sourceKind === targetKind && sourceId === targetId) return true;
 
+  // Shared catalogs: catalog rows do not move, and nothing local goes in
+  // or beside them inside a catalog (the backend refuses it too). A drop
+  // "before" / "after" a catalog root lands at the top level, which is
+  // fine for a local row.
+  const src = sourceKind === "folder" ? tree.folderById(sourceId) : tree.connectionById(sourceId);
+  if (src?.catalog_id) return true;
+  const tgt = targetKind === "folder" ? tree.folderById(targetId) : tree.connectionById(targetId);
+  if (tgt?.catalog_id) {
+    const isRoot = targetKind === "folder" && !tgt.remote_uuid;
+    if (intent === "inside" || !isRoot) return true;
+  }
+
   if (sourceKind === "folder") {
     if (intent === "inside" && targetKind === "folder") {
       if (isDescendantOf(targetId, sourceId)) return true;

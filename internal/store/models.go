@@ -27,6 +27,10 @@ type Folder struct {
 	RemoteUUID   *string `json:"remote_uuid,omitempty"`
 	RemoteRev    int64   `json:"remote_rev,omitempty"`
 	CatalogState string  `json:"catalog_state,omitempty"`
+	// CatalogSkeleton: the folder is only the outline of a catalog folder
+	// this user cannot open (an ancestor of one they can); read-only,
+	// from its catalog record.
+	CatalogSkeleton bool `json:"catalog_skeleton,omitempty"`
 }
 
 // Connection is a leaf in the tree.

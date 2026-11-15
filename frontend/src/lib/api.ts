@@ -139,6 +139,8 @@ export interface Folder {
   remote_uuid?: string;
   remote_rev?: number;
   catalog_state?: string; // "" in the catalog, "removed" when it left with local data
+  /** Only the outline of a catalog folder this user cannot open. */
+  catalog_skeleton?: boolean;
 }
 
 export interface Connection {

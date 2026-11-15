@@ -468,6 +468,9 @@ func TestSyncSkeletonFolder(t *testing.T) {
 	if top == nil || mine == nil || *mine.ParentID != top.ID {
 		t.Fatalf("skeleton chain: %+v %+v", top, mine)
 	}
+	if !top.CatalogSkeleton || mine.CatalogSkeleton {
+		t.Fatalf("skeleton flag on the folder rows: top %v, mine %v", top.CatalogSkeleton, mine.CatalogSkeleton)
+	}
 	var raw string
 	_ = e.db.Conn().QueryRow(`SELECT catalog_json FROM folders WHERE id = ?`, top.ID).Scan(&raw)
 	var f Folder
