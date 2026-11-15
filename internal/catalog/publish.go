@@ -260,6 +260,7 @@ func BuildPublish(db *store.DB, opts PublishOptions) (*PublishPlan, error) {
 	}
 	if root.CatalogID != nil {
 		c.refuse("folders", root.ID, root.Name, "already belongs to a catalog")
+		c.finish()
 		return c.plan, nil
 	}
 	if err := c.target(cat); err != nil {
@@ -403,7 +404,7 @@ func (c *pubCtx) target(cat *store.Catalog) error {
 			return err
 		}
 		for _, r := range rows {
-			if r.Kind != KindFolders {
+			if r.Kind != KindFolders || r.State != "" {
 				continue
 			}
 			var fr folderRec
@@ -886,6 +887,13 @@ func (c *pubCtx) slot(key, typ, target, kind, u, name, field string) string {
 	return ps.UUID
 }
 
+func nonNil[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}
+
 func fieldOr(f string) string {
 	if f == "" {
 		return "password"
@@ -894,6 +902,10 @@ func fieldOr(f string) string {
 }
 
 func (c *pubCtx) finish() {
+	// Lists, never null, for the dialog.
+	c.plan.Slots, c.plan.FreeText, c.plan.Refusals, c.plan.OutsideJumps = []PlanSlot{}, nonNil(c.plan.FreeText), nonNil(c.plan.Refusals), []OutsideJump{}
+	c.plan.Request.Slots = nonNil(c.plan.Request.Slots)
+	c.plan.Request.Forwards = nonNil(c.plan.Request.Forwards)
 	if c.opts.TargetUUID != "" {
 		t := c.opts.TargetUUID
 		c.plan.Request.ParentUUID = &t

@@ -411,3 +411,64 @@ func retryAfter(v string) time.Duration {
 	}
 	return time.Minute
 }
+
+// PublishResponse is a 201 from POST /api/v1/publish.
+type PublishResponse struct {
+	Records  []Accepted     `json:"records"`
+	Warnings []RecordReport `json:"warnings"`
+}
+
+// RecordReport is a per-record problem of a refused publish
+// (details.records) or a warning of an accepted one.
+type RecordReport struct {
+	Kind    string `json:"kind"`
+	UUID    string `json:"uuid"`
+	Code    string `json:"code"`
+	Path    string `json:"path"`
+	Message string `json:"message"`
+}
+
+// Publish sends a publish request (PROTOCOL 8.2). All or nothing on the
+// server: see PublishNotCreated for what an error means.
+func (c *Client) Publish(ctx context.Context, req *PublishRequest) (*PublishResponse, error) {
+	var out PublishResponse
+	if err := c.do(ctx, http.MethodPost, "/api/v1/publish", req, &out, true); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// PublishNotCreated reports whether a failed publish certainly created
+// nothing: the server answered with a client error (it checks everything
+// before it writes, in one transaction), or the request never went out
+// with a valid token. Anything else (no answer, a cut connection, a
+// server error) leaves the outcome open; the next sync settles it.
+func PublishNotCreated(err error) bool {
+	if errors.Is(err, ErrSignedOut) {
+		return true
+	}
+	var ae *APIError
+	if errors.As(err, &ae) {
+		return ae.Status >= 400 && ae.Status < 500
+	}
+	var ra *RetryAfterError
+	if errors.As(err, &ra) {
+		return ra.Status == http.StatusTooManyRequests
+	}
+	return false
+}
+
+// PublishRecordErrors is the per-record list of a refused publish.
+func PublishRecordErrors(err error) []RecordReport {
+	var ae *APIError
+	if !errors.As(err, &ae) || len(ae.Details) == 0 {
+		return nil
+	}
+	var d struct {
+		Records []RecordReport `json:"records"`
+	}
+	if json.Unmarshal(ae.Details, &d) != nil {
+		return nil
+	}
+	return d.Records
+}

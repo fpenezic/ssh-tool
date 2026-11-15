@@ -11,6 +11,9 @@ import { Create as $Create } from "@wailsio/runtime";
 import * as json$0 from "../encoding/json/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as catalog$0 from "./internal/catalog/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as cmdmarks$0 from "./internal/cmdmarks/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -1165,6 +1168,316 @@ export class CatalogInfo {
 }
 
 /**
+ * CatalogPublishInput are the dialog's choices.
+ */
+export class CatalogPublishInput {
+    /**
+     * Creates a new CatalogPublishInput instance.
+     * @param {Partial<CatalogPublishInput>} [$$source = {}] - The source object to create the CatalogPublishInput.
+     */
+    constructor($$source = {}) {
+        if (!("catalog_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["catalog_id"] = "";
+        }
+        if (!("folder_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["folder_id"] = "";
+        }
+        if (!("target_uuid" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["target_uuid"] = "";
+        }
+        if (!("jump_include" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["jump_include"] = [];
+        }
+        if (!("slot_names" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in string]?: string }}
+             */
+            this["slot_names"] = {};
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogPublishInput instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CatalogPublishInput}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType4;
+        const $$createField4_0 = $$createType5;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("jump_include" in $$parsedSource) {
+            $$parsedSource["jump_include"] = $$createField3_0($$parsedSource["jump_include"]);
+        }
+        if ("slot_names" in $$parsedSource) {
+            $$parsedSource["slot_names"] = $$createField4_0($$parsedSource["slot_names"]);
+        }
+        return new CatalogPublishInput(/** @type {Partial<CatalogPublishInput>} */($$parsedSource));
+    }
+}
+
+/**
+ * CatalogPublishProblem is one per-record error of a refused publish,
+ * mapped back to the local row.
+ */
+export class CatalogPublishProblem {
+    /**
+     * Creates a new CatalogPublishProblem instance.
+     * @param {Partial<CatalogPublishProblem>} [$$source = {}] - The source object to create the CatalogPublishProblem.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("local_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["local_id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+        if (!("field" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["field"] = "";
+        }
+        if (!("code" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["code"] = "";
+        }
+        if (!("message" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["message"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogPublishProblem instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CatalogPublishProblem}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CatalogPublishProblem(/** @type {Partial<CatalogPublishProblem>} */($$parsedSource));
+    }
+}
+
+/**
+ * CatalogPublishResult is what Publish answers. Exactly one of: Published,
+ * Unknown (no answer; settles on the next sync), or a refusal (Message,
+ * Problems; nothing was created, everything stays local).
+ */
+export class CatalogPublishResult {
+    /**
+     * Creates a new CatalogPublishResult instance.
+     * @param {Partial<CatalogPublishResult>} [$$source = {}] - The source object to create the CatalogPublishResult.
+     */
+    constructor($$source = {}) {
+        if (!("published" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["published"] = false;
+        }
+        if (!("unknown" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["unknown"] = false;
+        }
+        if (!("message" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["message"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {CatalogPublishProblem[] | undefined}
+             */
+            this["problems"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {CatalogPublishProblem[] | undefined}
+             */
+            this["warnings"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Refusals: the local check stopped it before sending.
+             * @member
+             * @type {catalog$0.Refusal[] | undefined}
+             */
+            this["refusals"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogPublishResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CatalogPublishResult}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType7;
+        const $$createField4_0 = $$createType7;
+        const $$createField5_0 = $$createType9;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("problems" in $$parsedSource) {
+            $$parsedSource["problems"] = $$createField3_0($$parsedSource["problems"]);
+        }
+        if ("warnings" in $$parsedSource) {
+            $$parsedSource["warnings"] = $$createField4_0($$parsedSource["warnings"]);
+        }
+        if ("refusals" in $$parsedSource) {
+            $$parsedSource["refusals"] = $$createField5_0($$parsedSource["refusals"]);
+        }
+        return new CatalogPublishResult(/** @type {Partial<CatalogPublishResult>} */($$parsedSource));
+    }
+}
+
+/**
+ * CatalogPublishTarget is a catalog folder the user may publish into.
+ */
+export class CatalogPublishTarget {
+    /**
+     * Creates a new CatalogPublishTarget instance.
+     * @param {Partial<CatalogPublishTarget>} [$$source = {}] - The source object to create the CatalogPublishTarget.
+     */
+    constructor($$source = {}) {
+        if (!("uuid" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["uuid"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["path"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogPublishTarget instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CatalogPublishTarget}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CatalogPublishTarget(/** @type {Partial<CatalogPublishTarget>} */($$parsedSource));
+    }
+}
+
+/**
+ * CatalogPublishTargets lists them: catalog folders this user can write
+ * to, and whether they may create a new space (admin).
+ */
+export class CatalogPublishTargets {
+    /**
+     * Creates a new CatalogPublishTargets instance.
+     * @param {Partial<CatalogPublishTargets>} [$$source = {}] - The source object to create the CatalogPublishTargets.
+     */
+    constructor($$source = {}) {
+        if (!("targets" in $$source)) {
+            /**
+             * @member
+             * @type {CatalogPublishTarget[]}
+             */
+            this["targets"] = [];
+        }
+        if (!("can_create_space" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["can_create_space"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogPublishTargets instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CatalogPublishTargets}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType11;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("targets" in $$parsedSource) {
+            $$parsedSource["targets"] = $$createField0_0($$parsedSource["targets"]);
+        }
+        return new CatalogPublishTargets(/** @type {Partial<CatalogPublishTargets>} */($$parsedSource));
+    }
+}
+
+/**
  * CatalogRecordInfo is what the editor needs about a catalog row.
  */
 export class CatalogRecordInfo {
@@ -1273,7 +1586,7 @@ export class CatalogRecordInfo {
      * @returns {CatalogRecordInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField8_0 = $$createType5;
+        const $$createField8_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("catalog" in $$parsedSource) {
             $$parsedSource["catalog"] = $$createField8_0($$parsedSource["catalog"]);
@@ -1559,7 +1872,7 @@ export class CheckpointProfileInput {
      * @returns {CheckpointProfileInput}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType6;
+        const $$createField1_0 = $$createType13;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("config" in $$parsedSource) {
             $$parsedSource["config"] = $$createField1_0($$parsedSource["config"]);
@@ -1770,7 +2083,7 @@ export class ConnectionsBatchUpdateInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType5;
+        const $$createField1_0 = $$createType12;
         const $$createField2_0 = $$createType4;
         const $$createField3_0 = $$createType4;
         const $$createField4_0 = $$createType4;
@@ -1908,7 +2221,7 @@ export class ConnectionsCreateInput {
      * @returns {ConnectionsCreateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType5;
+        const $$createField4_0 = $$createType12;
         const $$createField5_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("overrides" in $$parsedSource) {
@@ -2051,8 +2364,8 @@ export class ConnectionsUpdateInput {
      * @returns {ConnectionsUpdateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType7;
-        const $$createField7_0 = $$createType8;
+        const $$createField6_0 = $$createType14;
+        const $$createField7_0 = $$createType15;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("overrides" in $$parsedSource) {
             $$parsedSource["overrides"] = $$createField6_0($$parsedSource["overrides"]);
@@ -2486,8 +2799,8 @@ export class CredentialsUpdateInput {
      * @returns {CredentialsUpdateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType8;
-        const $$createField7_0 = $$createType10;
+        const $$createField6_0 = $$createType15;
+        const $$createField7_0 = $$createType17;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField6_0($$parsedSource["tags"]);
@@ -2684,7 +2997,7 @@ export class DbRunResult {
      * @returns {DbRunResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType13;
+        const $$createField0_0 = $$createType20;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("results" in $$parsedSource) {
             $$parsedSource["results"] = $$createField0_0($$parsedSource["results"]);
@@ -2756,8 +3069,8 @@ export class DynamicFolderCreateInput {
      * @returns {DynamicFolderCreateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType5;
-        const $$createField4_0 = $$createType9;
+        const $$createField2_0 = $$createType12;
+        const $$createField4_0 = $$createType16;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("settings" in $$parsedSource) {
             $$parsedSource["settings"] = $$createField2_0($$parsedSource["settings"]);
@@ -2813,7 +3126,7 @@ export class DynamicFolderUpdateInput {
      * @returns {DynamicFolderUpdateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType9;
+        const $$createField2_0 = $$createType16;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("config" in $$parsedSource) {
             $$parsedSource["config"] = $$createField2_0($$parsedSource["config"]);
@@ -3168,9 +3481,9 @@ export class FactsCatalogInfo {
      * @returns {FactsCatalogInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType15;
-        const $$createField1_0 = $$createType17;
-        const $$createField2_0 = $$createType18;
+        const $$createField0_0 = $$createType22;
+        const $$createField1_0 = $$createType24;
+        const $$createField2_0 = $$createType25;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("facts" in $$parsedSource) {
             $$parsedSource["facts"] = $$createField0_0($$parsedSource["facts"]);
@@ -3248,7 +3561,7 @@ export class FactsHostResult {
      * @returns {FactsHostResult}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType19;
+        const $$createField5_0 = $$createType26;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("facts" in $$parsedSource) {
             $$parsedSource["facts"] = $$createField5_0($$parsedSource["facts"]);
@@ -3451,7 +3764,7 @@ export class FactsRun {
      */
     static createFrom($$source = {}) {
         const $$createField1_0 = $$createType4;
-        const $$createField2_0 = $$createType21;
+        const $$createField2_0 = $$createType28;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("facts" in $$parsedSource) {
             $$parsedSource["facts"] = $$createField1_0($$parsedSource["facts"]);
@@ -3585,8 +3898,8 @@ export class FleetDownloadInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType22;
-        const $$createField2_0 = $$createType23;
+        const $$createField1_0 = $$createType29;
+        const $$createField2_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ids" in $$parsedSource) {
             $$parsedSource["ids"] = $$createField0_0($$parsedSource["ids"]);
@@ -3644,8 +3957,8 @@ export class FleetUploadInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType24;
-        const $$createField2_0 = $$createType23;
+        const $$createField1_0 = $$createType30;
+        const $$createField2_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ids" in $$parsedSource) {
             $$parsedSource["ids"] = $$createField0_0($$parsedSource["ids"]);
@@ -3708,7 +4021,7 @@ export class FoldersCreateInput {
      * @returns {FoldersCreateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType5;
+        const $$createField3_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("settings" in $$parsedSource) {
             $$parsedSource["settings"] = $$createField3_0($$parsedSource["settings"]);
@@ -3775,7 +4088,7 @@ export class FoldersUpdateInput {
      * @returns {FoldersUpdateInput}
      */
     static createFrom($$source = {}) {
-        const $$createField5_0 = $$createType7;
+        const $$createField5_0 = $$createType14;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("settings" in $$parsedSource) {
             $$parsedSource["settings"] = $$createField5_0($$parsedSource["settings"]);
@@ -4583,7 +4896,7 @@ export class KafkaConsumerRef {
      * @returns {KafkaConsumerRef}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType25;
+        const $$createField1_0 = $$createType31;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("request" in $$parsedSource) {
             $$parsedSource["request"] = $$createField1_0($$parsedSource["request"]);
@@ -4640,7 +4953,7 @@ export class KafkaCreateTopicInput {
      * @returns {KafkaCreateTopicInput}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType23;
+        const $$createField3_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("configs" in $$parsedSource) {
             $$parsedSource["configs"] = $$createField3_0($$parsedSource["configs"]);
@@ -4723,7 +5036,7 @@ export class KafkaTabState {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType27;
+        const $$createField1_0 = $$createType33;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("topics" in $$parsedSource) {
             $$parsedSource["topics"] = $$createField0_0($$parsedSource["topics"]);
@@ -4927,7 +5240,7 @@ export class KeepassSaveInput {
      * @returns {KeepassSaveInput}
      */
     static createFrom($$source = {}) {
-        const $$createField9_0 = $$createType23;
+        const $$createField9_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("remote_config" in $$parsedSource) {
             $$parsedSource["remote_config"] = $$createField9_0($$parsedSource["remote_config"]);
@@ -5392,7 +5705,7 @@ export class LogTailSnapshotResult {
      * @returns {LogTailSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType29;
+        const $$createField0_0 = $$createType35;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("lines" in $$parsedSource) {
             $$parsedSource["lines"] = $$createField0_0($$parsedSource["lines"]);
@@ -5883,14 +6196,14 @@ export class NetworkProfileInfo {
      * @returns {NetworkProfileInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType30;
-        const $$createField8_0 = $$createType31;
-        const $$createField9_0 = $$createType33;
-        const $$createField10_0 = $$createType35;
-        const $$createField11_0 = $$createType37;
-        const $$createField12_0 = $$createType39;
-        const $$createField13_0 = $$createType40;
-        const $$createField14_0 = $$createType41;
+        const $$createField6_0 = $$createType36;
+        const $$createField8_0 = $$createType37;
+        const $$createField9_0 = $$createType39;
+        const $$createField10_0 = $$createType41;
+        const $$createField11_0 = $$createType43;
+        const $$createField12_0 = $$createType45;
+        const $$createField13_0 = $$createType46;
+        const $$createField14_0 = $$createType47;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("local_proxy" in $$parsedSource) {
             $$parsedSource["local_proxy"] = $$createField6_0($$parsedSource["local_proxy"]);
@@ -6125,7 +6438,7 @@ export class OpenConnectConfig {
      */
     static createFrom($$source = {}) {
         const $$createField4_0 = $$createType4;
-        const $$createField5_0 = $$createType43;
+        const $$createField5_0 = $$createType49;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("pins" in $$parsedSource) {
             $$parsedSource["pins"] = $$createField4_0($$parsedSource["pins"]);
@@ -6212,7 +6525,7 @@ export class OpenConnectProfileInput {
      * @returns {OpenConnectProfileInput}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType36;
+        const $$createField1_0 = $$createType42;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("config" in $$parsedSource) {
             $$parsedSource["config"] = $$createField1_0($$parsedSource["config"]);
@@ -6400,7 +6713,7 @@ export class OpenVPNProfileInput {
      * @returns {OpenVPNProfileInput}
      */
     static createFrom($$source = {}) {
-        const $$createField2_0 = $$createType38;
+        const $$createField2_0 = $$createType44;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("config" in $$parsedSource) {
             $$parsedSource["config"] = $$createField2_0($$parsedSource["config"]);
@@ -7239,7 +7552,7 @@ export class ScrollbackSnapshot {
      * @returns {ScrollbackSnapshot}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType45;
+        const $$createField3_0 = $$createType51;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("marks" in $$parsedSource) {
             $$parsedSource["marks"] = $$createField3_0($$parsedSource["marks"]);
@@ -7292,7 +7605,7 @@ export class SftpListResult {
      * @returns {SftpListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType47;
+        const $$createField1_0 = $$createType53;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField1_0($$parsedSource["entries"]);
@@ -7476,7 +7789,7 @@ export class ShareStartInput {
      * @returns {ShareStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType49;
+        const $$createField6_0 = $$createType55;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sessions" in $$parsedSource) {
             $$parsedSource["sessions"] = $$createField6_0($$parsedSource["sessions"]);
@@ -7643,10 +7956,10 @@ export class SharedProxyDetails {
      */
     static createFrom($$source = {}) {
         const $$createField1_0 = $$createType4;
-        const $$createField2_0 = $$createType50;
-        const $$createField3_0 = $$createType50;
+        const $$createField2_0 = $$createType56;
+        const $$createField3_0 = $$createType56;
         const $$createField4_0 = $$createType4;
-        const $$createField7_0 = $$createType23;
+        const $$createField7_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("routes" in $$parsedSource) {
             $$parsedSource["routes"] = $$createField1_0($$parsedSource["routes"]);
@@ -8376,7 +8689,7 @@ export class TLSInput {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType51;
+        const $$createField1_0 = $$createType57;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("connection_ids" in $$parsedSource) {
             $$parsedSource["connection_ids"] = $$createField0_0($$parsedSource["connection_ids"]);
@@ -8741,7 +9054,7 @@ export class TcpdumpSnapshotResult {
      * @returns {TcpdumpSnapshotResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType53;
+        const $$createField0_0 = $$createType59;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("packets" in $$parsedSource) {
             $$parsedSource["packets"] = $$createField0_0($$parsedSource["packets"]);
@@ -8867,7 +9180,7 @@ export class TcpdumpStartInput {
      * @returns {TcpdumpStartInput}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType23;
+        const $$createField10_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("port_overrides" in $$parsedSource) {
             $$parsedSource["port_overrides"] = $$createField10_0($$parsedSource["port_overrides"]);
@@ -9163,7 +9476,7 @@ export class TunnelInfo {
      * @returns {TunnelInfo}
      */
     static createFrom($$source = {}) {
-        const $$createField11_0 = $$createType55;
+        const $$createField11_0 = $$createType61;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("forwards" in $$parsedSource) {
             $$parsedSource["forwards"] = $$createField11_0($$parsedSource["forwards"]);
@@ -9429,54 +9742,60 @@ const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = AboutPlugin.createFrom;
 const $$createType3 = $Create.Array($$createType2);
 const $$createType4 = $Create.Array($Create.Any);
-const $$createType5 = store$0.InheritableSettings.createFrom;
-const $$createType6 = CheckpointConfig.createFrom;
-const $$createType7 = $Create.Nullable($$createType5);
-const $$createType8 = $Create.Nullable($$createType4);
-const $$createType9 = $Create.Map($Create.Any, $Create.Any);
-const $$createType10 = $Create.Nullable($$createType9);
-const $$createType11 = dbx$0.Result.createFrom;
-const $$createType12 = $Create.Nullable($$createType11);
-const $$createType13 = $Create.Array($$createType12);
-const $$createType14 = ssh$0.FactInfo.createFrom;
-const $$createType15 = $Create.Array($$createType14);
-const $$createType16 = ssh$0.FactPreset.createFrom;
-const $$createType17 = $Create.Array($$createType16);
-const $$createType18 = FactsReportSettings.createFrom;
-const $$createType19 = ssh$0.HostFacts.createFrom;
-const $$createType20 = FactsHostResult.createFrom;
-const $$createType21 = $Create.Array($$createType20);
-const $$createType22 = ssh$0.FleetDownloadOptions.createFrom;
-const $$createType23 = $Create.Map($Create.Any, $Create.Any);
-const $$createType24 = ssh$0.FleetUploadOptions.createFrom;
-const $$createType25 = kafka$0.ConsumeRequest.createFrom;
-const $$createType26 = KafkaConsumerRef.createFrom;
-const $$createType27 = $Create.Array($$createType26);
-const $$createType28 = ssh$0.LogTailLine.createFrom;
-const $$createType29 = $Create.Array($$createType28);
-const $$createType30 = LocalProxyConfig.createFrom;
-const $$createType31 = wg$0.Profile.createFrom;
-const $$createType32 = NetbirdConfig.createFrom;
-const $$createType33 = $Create.Nullable($$createType32);
-const $$createType34 = TailscaleConfig.createFrom;
-const $$createType35 = $Create.Nullable($$createType34);
-const $$createType36 = OpenConnectConfig.createFrom;
-const $$createType37 = $Create.Nullable($$createType36);
-const $$createType38 = OpenVPNConfig.createFrom;
+const $$createType5 = $Create.Map($Create.Any, $Create.Any);
+const $$createType6 = CatalogPublishProblem.createFrom;
+const $$createType7 = $Create.Array($$createType6);
+const $$createType8 = catalog$0.Refusal.createFrom;
+const $$createType9 = $Create.Array($$createType8);
+const $$createType10 = CatalogPublishTarget.createFrom;
+const $$createType11 = $Create.Array($$createType10);
+const $$createType12 = store$0.InheritableSettings.createFrom;
+const $$createType13 = CheckpointConfig.createFrom;
+const $$createType14 = $Create.Nullable($$createType12);
+const $$createType15 = $Create.Nullable($$createType4);
+const $$createType16 = $Create.Map($Create.Any, $Create.Any);
+const $$createType17 = $Create.Nullable($$createType16);
+const $$createType18 = dbx$0.Result.createFrom;
+const $$createType19 = $Create.Nullable($$createType18);
+const $$createType20 = $Create.Array($$createType19);
+const $$createType21 = ssh$0.FactInfo.createFrom;
+const $$createType22 = $Create.Array($$createType21);
+const $$createType23 = ssh$0.FactPreset.createFrom;
+const $$createType24 = $Create.Array($$createType23);
+const $$createType25 = FactsReportSettings.createFrom;
+const $$createType26 = ssh$0.HostFacts.createFrom;
+const $$createType27 = FactsHostResult.createFrom;
+const $$createType28 = $Create.Array($$createType27);
+const $$createType29 = ssh$0.FleetDownloadOptions.createFrom;
+const $$createType30 = ssh$0.FleetUploadOptions.createFrom;
+const $$createType31 = kafka$0.ConsumeRequest.createFrom;
+const $$createType32 = KafkaConsumerRef.createFrom;
+const $$createType33 = $Create.Array($$createType32);
+const $$createType34 = ssh$0.LogTailLine.createFrom;
+const $$createType35 = $Create.Array($$createType34);
+const $$createType36 = LocalProxyConfig.createFrom;
+const $$createType37 = wg$0.Profile.createFrom;
+const $$createType38 = NetbirdConfig.createFrom;
 const $$createType39 = $Create.Nullable($$createType38);
-const $$createType40 = $Create.Nullable($$createType6);
-const $$createType41 = wg$0.Status.createFrom;
-const $$createType42 = OpenConnectGateway.createFrom;
-const $$createType43 = $Create.Array($$createType42);
-const $$createType44 = cmdmarks$0.Mark.createFrom;
-const $$createType45 = $Create.Array($$createType44);
-const $$createType46 = ssh$0.SftpEntry.createFrom;
-const $$createType47 = $Create.Array($$createType46);
-const $$createType48 = ShareSessionInput.createFrom;
+const $$createType40 = TailscaleConfig.createFrom;
+const $$createType41 = $Create.Nullable($$createType40);
+const $$createType42 = OpenConnectConfig.createFrom;
+const $$createType43 = $Create.Nullable($$createType42);
+const $$createType44 = OpenVPNConfig.createFrom;
+const $$createType45 = $Create.Nullable($$createType44);
+const $$createType46 = $Create.Nullable($$createType13);
+const $$createType47 = wg$0.Status.createFrom;
+const $$createType48 = OpenConnectGateway.createFrom;
 const $$createType49 = $Create.Array($$createType48);
-const $$createType50 = $Create.Map($Create.Any, $Create.Any);
-const $$createType51 = $Create.Array($Create.Any);
-const $$createType52 = ssh$0.ParsedPacket.createFrom;
+const $$createType50 = cmdmarks$0.Mark.createFrom;
+const $$createType51 = $Create.Array($$createType50);
+const $$createType52 = ssh$0.SftpEntry.createFrom;
 const $$createType53 = $Create.Array($$createType52);
-const $$createType54 = TunnelForwardInfo.createFrom;
+const $$createType54 = ShareSessionInput.createFrom;
 const $$createType55 = $Create.Array($$createType54);
+const $$createType56 = $Create.Map($Create.Any, $Create.Any);
+const $$createType57 = $Create.Array($Create.Any);
+const $$createType58 = ssh$0.ParsedPacket.createFrom;
+const $$createType59 = $Create.Array($$createType58);
+const $$createType60 = TunnelForwardInfo.createFrom;
+const $$createType61 = $Create.Array($$createType60);
