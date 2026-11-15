@@ -32,12 +32,68 @@
   import TreeDbToggle from "./TreeDbToggle.svelte";
   import { dbTabs, dbTreeSelectedUnder } from "./dbState.svelte";
   import { treeBookmarks } from "./treeBookmarks.svelte";
+  import { catalogs, catalogStateLabel } from "./catalog.svelte";
+  import { IconUsers, IconAlertTriangle, IconLock } from "./iconMap";
 
   interface Props {
     folder: Folder;
     depth: number;
   }
   let { folder, depth }: Props = $props();
+
+  // Shared catalogs: the root row shows the catalog's state with its
+  // action one click away; catalog rows are read-only (no rename, move,
+  // drop into); a skeleton folder is only an outline; a row that left its
+  // catalog carries a warning and the keep / delete actions.
+  const catRoot = $derived(folder.catalog_id && !folder.remote_uuid ? catalogs.byId(folder.catalog_id) : undefined);
+  const catLabel = $derived(catRoot ? catalogStateLabel(catRoot) : null);
+  const isCatalogRow = $derived(!!folder.catalog_id);
+
+  function catRootAction(e: MouseEvent) {
+    e.stopPropagation();
+    if (!catRoot || !catLabel?.action) return;
+    const id = catRoot.id;
+    const fail = (what: string) => (err: unknown) => toast.err(`${what}: ${errMsg(err)}`, 8000);
+    switch (catLabel.action) {
+      case "signin": api.catalogSignIn(id).catch(fail("Sign in")); break;
+      case "cancel": api.catalogCancelSignIn(id).catch(() => {}); break;
+      case "sync": api.catalogSyncNow(id).catch(fail("Sync")); break;
+      case "unlock": view.setTab("credentials"); break;
+      case "slots": catalogs.open(id, "slots"); break;
+    }
+  }
+
+  // A connection whose settings (own or inherited from its catalog
+  // folders) hold a catalog marker: a slot to bind or a reference this
+  // user does not hold.
+  function catalogNeedsBinding(conn: { catalog_id?: string; overrides: unknown; folder_id: string | null }): boolean {
+    if (!conn.catalog_id) return false;
+    const has = (v: unknown) => { const t = JSON.stringify(v ?? {}); return t.includes("cat-unbound:") || t.includes("cat-missing:"); };
+    if (has(conn.overrides)) return true;
+    const byId = new Map(tree.folders.map((f) => [f.id, f] as const));
+    for (let id = conn.folder_id, i = 0; id && i < 64; i++) {
+      const f = byId.get(id);
+      if (!f) break;
+      if (has(f.settings)) return true;
+      id = f.parent_id;
+    }
+    return false;
+  }
+
+  function removedItems(kind: "folders" | "connections", id: string, name: string) {
+    return [
+      { label: "Keep as local", iconComponent: IconFolderPlus, onSelect: async () => {
+        try { await api.catalogKeepLocal(kind, id); toast.ok(`${name} is yours now`); await tree.load(); }
+        catch (err) { toast.err("Keep as local: " + errMsg(err), 8000); }
+      } },
+      { label: "Delete", iconComponent: IconTrash, danger: true, onSelect: async () => {
+        const ok = await showConfirm({ title: "Delete", message: `Delete "${name}"${kind === "folders" ? " and everything in it" : ""}? It left its catalog; your local settings on it go too.`, okLabel: "Delete", danger: true });
+        if (!ok) return;
+        try { await api.catalogDeleteRemoved(kind, id); await tree.load(); }
+        catch (err) { toast.err("Delete: " + errMsg(err), 8000); }
+      } },
+    ];
+  }
 
   let connectingId = $state<string | null>(null);
   let connectErrId = $state<string | null>(null);
@@ -502,6 +558,19 @@
     if (!isMobile && !selection.isFolderSelected(folder.id)) {
       if (!(await selection.selectFolderById(folder.id))) return;
     }
+    if (folder.catalog_id) {
+      const cat = catalogs.byId(folder.catalog_id);
+      contextMenu.show(e, [
+        ...(folder.catalog_state === "removed" ? removedItems("folders", folder.id, folder.name) : []),
+        ...(catRoot && !isMobile && (catRoot.state === "no_login" || catRoot.state === "signed_out")
+          ? [{ label: "Sign in", iconComponent: IconKey, onSelect: () => { api.catalogSignIn(catRoot!.id).catch((err) => toast.err("Sign in: " + errMsg(err), 8000)); } }] : []),
+        ...(catRoot && catRoot.state !== "no_login" && catRoot.state !== "signed_out" && catRoot.state !== "locked"
+          ? [{ label: "Sync now", iconComponent: IconRefresh, onSelect: () => { api.catalogSyncNow(catRoot!.id).catch((err) => toast.err("Sync: " + errMsg(err), 8000)); } }] : []),
+        ...(cat ? [{ label: "Slots…", iconComponent: IconKey, onSelect: () => catalogs.open(cat.id, "slots") },
+          { label: "Catalog settings…", iconComponent: IconSettings, onSelect: () => catalogs.open(cat.id) }] : []),
+      ]);
+      return;
+    }
     const ids = isMobile && !selection.isFolderSelected(folder.id)
       ? [folder.id]
       : selection.selectedFolderIds();
@@ -566,7 +635,12 @@
     const ids = selection.selectedConnectionIds();
     const allFav = ids.every((id) => tree.connectionById(id)?.favorite);
     const allTunnels = ids.every((id) => tunnels.isTunnel(id));
+    const anyCatalog = ids.some((id) => !!tree.connectionById(id)?.catalog_id);
+    const one = ids.length === 1 ? tree.connectionById(ids[0]) : undefined;
+    const catalogOwned = new Set(["Move to folder…", "Delete connection"]);
+    const keep = (it: { label: string }) => !anyCatalog || !(catalogOwned.has(it.label) || it.label.startsWith("Move ") || it.label.startsWith("Delete "));
     contextMenu.show(e, [
+      ...(one?.catalog_state === "removed" ? removedItems("connections", one.id, one.name) : []),
       ...connectionActions.tunnelMenuItems(ids),
       ...(allTunnels ? [] : [{
         label: ids.length > 1 ? `Connect all (${ids.length})` : "Connect",
@@ -622,7 +696,7 @@
         danger: true,
         onSelect: () => connectionActions.openDeleteConnections(ids),
       },
-    ]);
+    ].filter(keep));
   }
   // Right-click on a dynamic (inventory) host: connect and the fleet tools,
   // acting on the dynamic multi-selection like the saved-connection menu
@@ -856,7 +930,8 @@
     aria-selected={isSelected}
     data-kind="folder"
     data-id={folder.id}
-    draggable={!renameState.editing("folder", folder.id)}
+    class:skeleton={folder.catalog_skeleton}
+    draggable={!isCatalogRow && !renameState.editing("folder", folder.id)}
     onmousedown={recordMods}
     onclick={(e) => onFolderRowClick(e)}
     ondblclick={toggle}
@@ -911,6 +986,8 @@
     <span class="icon" class:dyn-icon={isDynamicFolder}><Icon imageId={folder.icon_image_id} iconName={folder.icon_name} iconColor={folder.icon_color} size={14}>
       {#if isDynamicFolder}
         <IconGlobe size={14} />
+      {:else if catRoot}
+        <IconUsers size={14} />
       {:else}
         <IconFolder size={14} />
       {/if}
@@ -952,6 +1029,20 @@
     {/if}
     {#if folderJumpMark()}
       <span class="jump-mark routed folder-jump" title={folderJumpMark()}><IconRouted size={11} /></span>
+    {/if}
+    {#if catLabel?.text}
+      <button
+        class="cat-state tone-{catLabel.tone}"
+        title={catRoot?.error || catRoot?.last_error || (catLabel.action ? "Click to fix" : "")}
+        disabled={!catLabel.action}
+        onclick={catRootAction}
+      >{#if catLabel.tone === "busy"}<IconLoading size={10} class="spin" />{/if}{catLabel.text}</button>
+    {/if}
+    {#if folder.catalog_skeleton}
+      <span class="cat-mark muted" title="Only the outline of a catalog folder you cannot open; it is here because a folder below it is shared with you."><IconLock size={10} /></span>
+    {/if}
+    {#if folder.catalog_state === "removed"}
+      <span class="cat-mark warn" title="Removed from its catalog. You had local settings below it - right-click to keep it as your own or delete it."><IconAlertTriangle size={11} /></span>
     {/if}
     {#if isDynamicFolder}
       <span class="dyn-tag" title={dynamicTooltip}>{dynamicMeta?.provider ?? "dyn"}</span>
@@ -1119,7 +1210,7 @@
           aria-selected={selConn}
           data-kind="connection"
           data-id={conn.id}
-          draggable={!isConn && !renameState.editing("connection", conn.id)}
+          draggable={!isConn && !conn.catalog_id && !renameState.editing("connection", conn.id)}
           title={rowTitle}
           onmousedown={recordMods}
           onclick={(e) => handleConnClick(e, conn.id, conn.name, conn.hostname)}
@@ -1203,6 +1294,11 @@
             {/if}
           {/if}
           {#if conn.favorite}<span class="fav" title="Favourite"><IconStar size={11} fill="var(--yellow)" /></span>{/if}
+          {#if conn.catalog_state === "removed"}
+            <span class="cat-mark warn" title="Removed from its catalog. It had your local settings - right-click to keep it as your own or delete it."><IconAlertTriangle size={11} /></span>
+          {:else if catalogNeedsBinding(conn)}
+            <button class="cat-mark warn as-btn" title="A catalog slot this connection needs is not bound - click to bind" onclick={(e) => { e.stopPropagation(); catalogs.open(conn.catalog_id!, "slots"); }}><IconKey size={11} /></button>
+          {/if}
           {#if bastionMark(conn.id)}
             {@const m = bastionMark(conn.id)!}
             <span class="jump-mark bastion" title={m.title}><IconBastion size={11} />{m.count}</span>
@@ -1237,6 +1333,21 @@
 </div>
 
 <style>
+  /* Shared catalogs (see catalog.svelte.ts). */
+  .cat-state {
+    font-size: 10px; line-height: 1; padding: 2px 6px; margin-left: 4px; border-radius: 999px;
+    background: none; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; cursor: pointer;
+  }
+  .cat-state:disabled { cursor: default; }
+  .cat-state.tone-warn { color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent); }
+  .cat-state.tone-err { color: var(--red); border: 1px solid color-mix(in srgb, var(--red) 45%, transparent); }
+  .cat-state.tone-busy { color: var(--sapphire); border: 1px solid color-mix(in srgb, var(--sapphire) 45%, transparent); }
+  .cat-mark { display: inline-flex; align-items: center; margin-left: 3px; }
+  .cat-mark.warn { color: var(--yellow); }
+  .cat-mark.muted { opacity: 0.5; }
+  .cat-mark.as-btn { background: none; border: none; padding: 0; cursor: pointer; }
+  .row.skeleton .name { opacity: 0.55; font-style: italic; }
+
   .row {
     display: flex;
     align-items: center;
