@@ -121,6 +121,9 @@ type Client struct {
 	HTTP      *http.Client
 	UserAgent string
 	Tokens    TokenStore
+	// DeviceName is sent with sign-ins and enrollments; the user sees it
+	// in the catalog's device list (PROTOCOL 10.5, 10.6).
+	DeviceName string
 
 	mu     sync.Mutex
 	meta   *Meta
@@ -229,13 +232,17 @@ func (c *Client) Revoke(ctx context.Context) error {
 }
 
 func (c *Client) endpoints(m *Meta) oauthpkce.Endpoints {
-	return oauthpkce.Endpoints{
+	ep := oauthpkce.Endpoints{
 		AuthURL:    m.Auth.AuthorizationEndpoint,
 		TokenURL:   m.Auth.TokenEndpoint,
 		AnyPort:    true,
 		Timeout:    10 * time.Minute,
 		HTTPClient: c.HTTP,
 	}
+	if c.DeviceName != "" {
+		ep.ExtraTokenParams = map[string]string{"device_name": c.DeviceName}
+	}
+	return ep
 }
 
 // SignIn runs the browser sign-in (authorization code + PKCE on a loopback
@@ -471,4 +478,136 @@ func PublishRecordErrors(err error) []RecordReport {
 		return nil
 	}
 	return d.Records
+}
+
+// Enrollment codes (PROTOCOL 10.5): a code minted in the catalog's web UI
+// is redeemed for a session of this machine's own, without a browser.
+
+// enrollmentGrant is the extension grant type of 10.5.
+const enrollmentGrant = "urn:ssh-tool:params:oauth:grant-type:enrollment"
+
+// ErrEnrollmentInvalid: the code is unknown, already used, revoked or
+// expired, or the session that minted it has ended.
+var ErrEnrollmentInvalid = errors.New("catalog: this code is not valid any more (expired, used or revoked); create a new one in the catalog")
+
+// EnrollmentUser is whose code it is.
+type EnrollmentUser struct {
+	Name  string  `json:"name"`
+	Email *string `json:"email"`
+}
+
+// Enrollment is what inspecting a code tells.
+type Enrollment struct {
+	User      EnrollmentUser `json:"user"`
+	ExpiresIn int            `json:"expires_in"`
+}
+
+// NormaliseCode applies the server's matching rules (case, spaces,
+// dashes, Crockford look-alikes) so a typed code compares as the server
+// sees it; the server does the same, so this is cosmetic.
+func NormaliseCode(code string) string {
+	var b strings.Builder
+	for _, r := range strings.ToUpper(code) {
+		switch {
+		case r == ' ' || r == '-' || r == '\t':
+			continue
+		case r == 'O':
+			r = '0'
+		case r == 'I' || r == 'L':
+			r = '1'
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// formPost posts a form to a path of the catalog and decodes a JSON answer.
+// OAuth-style errors (RFC 6749 5.2) map to ErrEnrollmentInvalid and
+// RetryAfterError.
+func (c *Client) formPost(ctx context.Context, path string, form url.Values, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+path, strings.NewReader(form.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	c.setUA(req)
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return fmt.Errorf("catalog: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
+		return &RetryAfterError{Status: resp.StatusCode, Wait: retryAfter(resp.Header.Get("Retry-After"))}
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var e struct {
+			Error string `json:"error"`
+			Desc  string `json:"error_description"`
+		}
+		_ = json.Unmarshal(raw, &e)
+		if e.Error == "invalid_grant" {
+			return ErrEnrollmentInvalid
+		}
+		msg := e.Desc
+		if msg == "" {
+			msg = e.Error
+		}
+		return &APIError{Status: resp.StatusCode, Code: e.Error, Message: msg}
+	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		return fmt.Errorf("catalog: unreadable response from %s: %w", path, err)
+	}
+	return nil
+}
+
+// InspectEnrollment says whose a code is, without using it up. It checks
+// the server's protocol first (Meta).
+func (c *Client) InspectEnrollment(ctx context.Context, code string) (*Enrollment, error) {
+	m, err := c.Meta(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out Enrollment
+	err = c.formPost(ctx, "/oauth/enrollment/inspect", url.Values{"code": {code}, "client_id": {m.Auth.ClientID}}, &out)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RedeemEnrollment trades the code for this machine's own session and
+// stores its refresh token, like SignIn. Single use: a second redemption
+// is ErrEnrollmentInvalid.
+func (c *Client) RedeemEnrollment(ctx context.Context, code string) error {
+	m, err := c.Meta(ctx)
+	if err != nil {
+		return err
+	}
+	form := url.Values{"grant_type": {enrollmentGrant}, "code": {code}, "client_id": {m.Auth.ClientID}}
+	if c.DeviceName != "" {
+		form.Set("device_name", c.DeviceName)
+	}
+	tok, err := oauthpkce.Grant(ctx, c.endpoints(m), form)
+	if err != nil {
+		var te *oauthpkce.TokenError
+		if errors.As(err, &te) {
+			switch {
+			case te.Code == "invalid_grant":
+				return ErrEnrollmentInvalid
+			case te.Status == http.StatusTooManyRequests || te.Status == http.StatusServiceUnavailable:
+				return &RetryAfterError{Status: te.Status, Wait: te.RetryAfter}
+			}
+		}
+		return err
+	}
+	if tok.RefreshToken == "" {
+		return fmt.Errorf("catalog: the server issued no refresh token")
+	}
+	if err := c.Tokens.Save(tok.RefreshToken); err != nil {
+		return fmt.Errorf("catalog: store refresh token: %w", err)
+	}
+	c.SetAccessToken(tok.AccessToken, tok.Expiry)
+	return nil
 }

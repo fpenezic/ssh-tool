@@ -25,6 +25,7 @@ export {
     BrowserLaunchResult,
     CIRunnerConfig,
     CIRunnerStatus,
+    CatalogEnrollPreview,
     CatalogInfo,
     CatalogPublishInput,
     CatalogPublishProblem,

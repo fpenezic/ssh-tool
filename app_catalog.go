@@ -132,6 +132,7 @@ func (a *App) catalogClient(cat *store.Catalog) (*catalog.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	c.DeviceName = catalogDeviceName()
 	rt.clients[cat.ID] = c
 	return c, nil
 }
@@ -310,6 +311,14 @@ func (a *App) CatalogSignIn(id string) error {
 		a.setCatalogState(id, catStateNoLogin, err.Error())
 		return err
 	}
+	return a.catalogSignedIn(cat, c, "browser")
+}
+
+// catalogSignedIn finishes a sign-in (browser or enrollment code): records
+// who is signed in, starts from a full snapshot when that is someone else
+// than before, and syncs.
+func (a *App) catalogSignedIn(cat *store.Catalog, c *catalog.Client, via string) error {
+	id := cat.ID
 	w, err := c.WhoAmI(context.Background())
 	if err != nil {
 		a.setCatalogState(id, catStateError, err.Error())
@@ -327,7 +336,7 @@ func (a *App) CatalogSignIn(id string) error {
 	}
 	_ = a.db.UpdateCatalogAccount(id, w.Subject, w.Name, server, rev)
 	_ = a.db.SetCatalogSyncState(id, "", nil, "")
-	a.recordAudit("catalog.sign_in", id, map[string]string{"account": w.Name})
+	a.recordAudit("catalog.sign_in", id, map[string]string{"account": w.Name, "via": via})
 	a.setCatalogState(id, catStateOK, "")
 	go a.catalogSyncNow(id, true)
 	return nil

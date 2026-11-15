@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { catalogStateLabel, parseMarker } from "./catalogMarks";
+import { catalogStateLabel, parseMarker, parseSshToolLink } from "./catalogMarks";
 import type { CatalogInfo } from "./api";
 
 const cat = (over: Partial<CatalogInfo>): CatalogInfo => ({
@@ -33,5 +33,25 @@ describe("catalogStateLabel", () => {
     expect(l.text).toBe("2 slots to bind");
     expect(l.action).toBe("slots");
     expect(catalogStateLabel(cat({})).text).toBe("");
+  });
+});
+
+describe("parseSshToolLink", () => {
+  it("reads a catalog enrollment link", () => {
+    expect(parseSshToolLink("ssh-tool://catalog/add?url=https%3A%2F%2Fcatalog.example.com&code=SDKGM-F02SJ-6CM90-CPKSX")).toEqual({
+      kind: "catalog", url: "https://catalog.example.com", code: "SDKGM-F02SJ-6CM90-CPKSX",
+    });
+  });
+  it("keeps a look-alike URL exactly as sent", () => {
+    const l = parseSshToolLink("ssh-tool://catalog/add?url=https%3A%2F%2Fcata1og.example.com.evil.test&code=X");
+    expect(l).toEqual({ kind: "catalog", url: "https://cata1og.example.com.evil.test", code: "X" });
+  });
+  it("reads an import link", () => {
+    expect(parseSshToolLink("ssh-tool://import?source=https%3A%2F%2Fx.example.com%2Fa.toml")).toEqual({ kind: "import", source: "https://x.example.com/a.toml" });
+  });
+  it("ignores other links and incomplete ones", () => {
+    expect(parseSshToolLink("https://example.com")).toBeNull();
+    expect(parseSshToolLink("ssh-tool://catalog/add?url=https%3A%2F%2Fa.example.com")).toBeNull();
+    expect(parseSshToolLink("ssh-tool://other")).toBeNull();
   });
 });

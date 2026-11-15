@@ -4,7 +4,7 @@ import { isMobile } from "./platform";
 
 // Short copy for a catalog's state on its root row. action names what
 // one click does there.
-export function catalogStateLabel(c: CatalogInfo): { text: string; tone: "ok" | "warn" | "err" | "busy"; action?: "signin" | "sync" | "unlock" | "slots" | "cancel" } {
+export function catalogStateLabel(c: CatalogInfo): { text: string; tone: "ok" | "warn" | "err" | "busy"; action?: "signin" | "code" | "sync" | "unlock" | "slots" | "cancel" } {
   switch (c.state) {
     case "syncing":
       return { text: "syncing", tone: "busy" };
@@ -12,11 +12,11 @@ export function catalogStateLabel(c: CatalogInfo): { text: string; tone: "ok" | 
       return { text: "signing in", tone: "busy", action: "cancel" };
     case "no_login":
       return isMobile
-        ? { text: "sign in on desktop", tone: "warn" }
+        ? { text: "sign in with a code", tone: "warn", action: "code" }
         : { text: "sign in to sync", tone: "warn", action: "signin" };
     case "signed_out":
       return isMobile
-        ? { text: "signed out - sign in on desktop", tone: "err" }
+        ? { text: "signed out - sign in with a code", tone: "err", action: "code" }
         : { text: "signed out", tone: "err", action: "signin" };
     case "error":
       return { text: "sync failed", tone: "err", action: "sync" };
@@ -55,3 +55,33 @@ export function parseMarker(v: string | null | undefined): CatalogMarker | null 
   return { unbound, catalogId: i < 0 ? rest : rest.slice(0, i), uuid: i < 0 ? "" : rest.slice(i + 1) };
 }
 
+
+/** What an ssh-tool:// link asks for (Android hands the whole URL over). */
+export type SshToolLink =
+  | { kind: "catalog"; url: string; code: string }
+  | { kind: "import"; source: string }
+  | null;
+
+export function parseSshToolLink(raw: string): SshToolLink {
+  if (!/^ssh-tool:\/\//i.test(raw)) return null;
+  let u: URL;
+  try {
+    // URL() does not know the scheme's authority rules everywhere; parse
+    // it as http with the same host and path.
+    u = new URL("http://" + raw.slice("ssh-tool://".length));
+  } catch {
+    return null;
+  }
+  const host = u.hostname.toLowerCase();
+  const path = u.pathname.replace(/\/+$/, "");
+  if (host === "catalog" && path === "/add") {
+    const url = u.searchParams.get("url") ?? "";
+    const code = u.searchParams.get("code") ?? "";
+    return url && code ? { kind: "catalog", url, code } : null;
+  }
+  if (host === "import" || path === "/import") {
+    const source = u.searchParams.get("source") ?? "";
+    return source ? { kind: "import", source } : null;
+  }
+  return null;
+}

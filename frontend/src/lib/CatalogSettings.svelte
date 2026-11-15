@@ -155,6 +155,7 @@
             <button onclick={() => run(c.id, "Cancel", () => api.catalogCancelSignIn(c.id))}>Cancel sign-in</button>
           {:else if !isMobile && (c.state === "no_login" || c.state === "signed_out")}
             <button class="primary" disabled={busy[c.id]} onclick={() => run(c.id, "Sign in", () => api.catalogSignIn(c.id))}>Sign in</button>
+            <button title="Sign in with a code from the catalog's web page" onclick={() => catalogs.startEnroll(c.base_url, "")}>Code</button>
           {:else if c.state !== "locked" && c.state !== "no_login" && c.state !== "signed_out"}
             <button title="Sync now" disabled={busy[c.id] || c.state === "syncing"} onclick={() => run(c.id, "Sync", () => api.catalogSyncNow(c.id))}>
               <IconRefresh size={14} /> Sync
@@ -172,7 +173,7 @@
         <p class="hint warn-note">{c.error || c.last_error}</p>
       {/if}
       {#if isMobile && (c.state === "no_login" || c.state === "signed_out")}
-        <p class="hint">Sign in to this catalog on a desktop; this device gets its connections through profile sync.</p>
+        <p class="hint">Without a sign-in this device gets the catalog's connections through profile sync. <button class="linklike" onclick={() => catalogs.startEnroll(c.base_url, "")}>Sign in with a code</button></p>
       {/if}
 
       {#if edit && edit.id === c.id}
@@ -237,14 +238,18 @@
   {/each}
 </div>
 
-{#if isMobile}
-  <p class="hint">Catalogs are added and signed in on a desktop.</p>
-{:else}
+{#if !isMobile}
   <div class="cat-add">
     <input bind:value={addURL} placeholder="https://catalog.example.com" onkeydown={(e) => e.key === "Enter" && add()} />
     <button class="primary" disabled={adding || !addURL.trim()} onclick={add}>{adding ? "Waiting for sign-in..." : "Add catalog"}</button>
+    <button onclick={() => catalogs.startEnroll(addURL.trim(), "")}>Add with a code</button>
   </div>
-  <p class="hint sub">Adding opens the catalog's sign-in page in your browser.</p>
+  <p class="hint sub">Adding opens the catalog's sign-in page in your browser. With a code from the catalog's web page ("Connect ssh-tool"), no browser sign-in is needed.</p>
+{:else}
+  <div class="cat-add">
+    <button class="primary" onclick={() => catalogs.startEnroll("", "")}>Add with a code</button>
+  </div>
+  <p class="hint sub">In the catalog's web page, "Connect ssh-tool" opens this app with a code, or shows one to type here.</p>
 {/if}
 
 <style>
@@ -283,4 +288,5 @@
   .hint-inline { font-weight: 400; opacity: 0.6; font-size: var(--fs-sm); }
   .hint.sub { margin: 0; font-size: var(--fs-sm); }
   .danger { color: var(--danger, #e66); }
+  .linklike { background: none; border: none; padding: 0; color: var(--sapphire); cursor: pointer; font-size: inherit; text-decoration: underline; }
 </style>
