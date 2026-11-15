@@ -879,6 +879,11 @@ func (c *pubCtx) slot(key, typ, target, kind, u, name, field string) string {
 	}
 	ps.UUID, ps.New = uuid.NewString(), true
 	ps.Name = ps.BindName
+	if typ == slotJump {
+		// The publisher's own name for their bastion is theirs (often a
+		// person's or a host's); colleagues see what it is for.
+		ps.Name = "bastion for " + c.folders[c.opts.RootID].Name
+	}
 	if n := strings.TrimSpace(c.opts.SlotNames[key]); n != "" {
 		ps.Name = n
 	}
