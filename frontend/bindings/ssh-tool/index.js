@@ -61,6 +61,7 @@ export {
     DynamicPreviewHost,
     DynamicProbeRequest,
     DynamicProbeResult,
+    DynamicSaveResult,
     ExportSubtreeRequest,
     ExportSubtreeResult,
     FactsCatalogInfo,

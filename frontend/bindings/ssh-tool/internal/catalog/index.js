@@ -8,6 +8,7 @@ export {
     EditPlan,
     FieldChange,
     FreeText,
+    KeptRef,
     OutsideJump,
     PlanImage,
     PlanRecord,

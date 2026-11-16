@@ -38,6 +38,7 @@
   import { catalogs, catalogStateLabel } from "./catalog.svelte";
   import { IconUsers, IconAlertTriangle, IconLock } from "./iconMap";
   import { catalogLocal } from "./catalogLocal.svelte";
+  import { IconSave } from "./iconMap";
 
   interface Props {
     folder: Folder;
@@ -788,6 +789,11 @@
         label: "Copy address",
         iconComponent: IconCopy,
         onSelect: () => navigator.clipboard.writeText(entry.hostname).catch(console.warn),
+      }] : []),
+      ...(one && !isMobile ? [{
+        label: "Save as connection…",
+        iconComponent: IconSave,
+        onSelect: () => catalogLocal.startDynSave("dyn:" + entry.id, entry.name),
       }] : []),
     ]);
   }

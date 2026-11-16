@@ -11,6 +11,7 @@
   import { errMsg } from "./connectErrors";
   import { clickOutside } from "./clickOutside";
   import { EventsOn } from "./wailsRuntime";
+  import FolderTreePicker from "./FolderTreePicker.svelte";
   import { onDestroy } from "svelte";
   import Icon from "./Icon.svelte";
   import { IconX, IconFolder, IconHost, IconTunnel, IconKey, IconVpn, IconBastion, IconAlertTriangle, IconLock, IconUsers } from "./iconMap";
@@ -23,6 +24,14 @@
   let catalogId = $state("");
   let targets = $state<CatalogPublishTargets | null>(null);
   let targetUUID = $state<string | null>(null);
+  // The last target per catalog, on this machine (a convenience only).
+  const targetKey = () => "publish_target_" + catalogId;
+  function lastTarget(): string {
+    try { return localStorage.getItem(targetKey()) ?? ""; } catch { return ""; }
+  }
+  function rememberTarget(v: string) {
+    try { localStorage.setItem(targetKey(), v); } catch { /* storage off */ }
+  }
   let jumpInclude = $state<Record<string, boolean>>({});
   let slotNames = $state<Record<string, string>>({});
   // "What to send": ticked means sent. What is not sent stays in your own
@@ -37,9 +46,13 @@
     { id: "vnc", label: "VNC settings" },
     { id: "startup", label: "Initial command and environment variables", hint: "connections that rely on it may not work for others" },
     { id: "terminal", label: "Terminal and behaviour", hint: "colour tag, terminal type, keepalive, auto-reconnect, verbose, liveness probe" },
+    { id: "local_creds", label: "Credentials from your own vault, as slots", hint: "off: colleagues get these connections without them and use their own; Vaultwarden / Bitwarden items and opkssh always go" },
+    { id: "networks", label: "Network (VPN) profiles, as slots", hint: "off: colleagues use their own network" },
   ];
-  let send = $state<Record<string, boolean>>(Object.fromEntries(sendCategories.map((c) => [c.id, true])));
-  const unsent = $derived(sendCategories.filter((c) => !send[c.id]).map((c) => c.id));
+  // Off by default: references only the publisher has.
+  const optIn = new Set(["local_creds", "networks"]);
+  let send = $state<Record<string, boolean>>(Object.fromEntries(sendCategories.map((c) => [c.id, !optIn.has(c.id)])));
+  const unsent = $derived(sendCategories.filter((c) => !optIn.has(c.id) && !send[c.id]).map((c) => c.id));
   let plan = $state<PublishPlan | null>(null);
   let planErr = $state("");
   let oldApps = $state<SeenApp[]>([]);
@@ -61,7 +74,9 @@
     api.catalogPublishTargets(id).then((t) => {
       if (id !== catalogId) return;
       targets = t;
+      const last = lastTarget();
       targetUUID = presetTarget && t.targets.some((x) => x.uuid === presetTarget) ? presetTarget
+        : last && t.targets.some((x) => x.uuid === last) ? last
         : t.targets.length > 0 ? t.targets[0].uuid : t.can_create_space ? "" : null;
     }).catch((e) => (planErr = errMsg(e)));
   });
@@ -73,6 +88,8 @@
     jump_include: Object.keys(jumpInclude).filter((k) => jumpInclude[k]),
     slot_names: { ...slotNames },
     unsent,
+    send_local_creds: !!send.local_creds,
+    send_networks: !!send.networks,
   });
 
   // Preview, rebuilt on every change (debounced: slot names are typed).
@@ -192,10 +209,9 @@
         {/if}
         <label>Into
           {#if targets && (targets.targets.length > 0 || targets.can_create_space)}
-            <select bind:value={targetUUID}>
-              {#each targets.targets as t (t.uuid)}<option value={t.uuid}>{t.path}</option>{/each}
-              {#if targets.can_create_space}<option value="">New space (top level)</option>{/if}
-            </select>
+            <FolderTreePicker items={targets.targets.map((t) => ({ value: t.uuid, path: t.path }))} value={targetUUID}
+              extra={targets.can_create_space ? { value: "", path: "New space (top level)" } : null}
+              onChange={(v) => { targetUUID = v; rememberTarget(v); }} disabled={busy} />
           {:else if targets}
             <span class="warn-text">You cannot add to any folder of {catName}.</span>
           {:else}
@@ -256,7 +272,7 @@
 
           <section>
             <h3>What to send <span class="dim">ticked goes to the catalog; the rest stays yours only, your tree does not change</span></h3>
-            <p class="dim always">Always sent: names, addresses, protocol, port, username, SSH options, tunnel settings, "sensitive", and the slots for credentials, one-time codes, networks and jump hosts.</p>
+            <p class="dim always">Always sent: names, addresses, protocol, port, username, SSH options, tunnel settings, "sensitive", Vaultwarden / Bitwarden and opkssh credentials, and fixed jump hosts (as slots or a copy, below).</p>
             <div class="send">
               {#each sendCategories as c (c.id)}
                 <label class="send-item">
@@ -286,6 +302,17 @@
                   {#if !s.new}<p class="reused-note">Already in the catalog: whoever has bound it there reaches these connections with it too.</p>{/if}
                 </div>
               {/each}
+            </section>
+          {/if}
+
+          {#if (plan.kept_local ?? []).length > 0}
+            <section>
+              <details>
+                <summary><strong>Stays yours only</strong> <span class="dim">{plan.kept_local.length} reference{plan.kept_local.length === 1 ? "" : "s"} not sent: colleagues get these records without them</span></summary>
+                {#each plan.kept_local as k, i (i)}
+                  <div class="ft-item"><span class="ft-field">{k.name}</span> <span>{k.field}</span> <span class="dim">{k.reason}</span></div>
+                {/each}
+              </details>
             </section>
           {/if}
 

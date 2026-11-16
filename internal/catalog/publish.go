@@ -50,6 +50,13 @@ type PublishOptions struct {
 	// Images: the catalog's image store limits; nil when the server has
 	// none (revision 1), and uploaded icons stay in the publisher's layer.
 	Images *ImageLimits
+	// SendLocalCreds: a credential stored in the publisher's own vault goes
+	// as a slot each reader binds. Off by default: only shared sources (a
+	// Bitwarden / Vaultwarden item, opkssh) go; a local one stays the
+	// publisher's own and readers get the connection without it.
+	SendLocalCreds bool
+	// SendNetworks: a network (VPN) profile goes as a slot. Off by default.
+	SendNetworks bool
 }
 
 // PublishCategories are the optional parts of a publish, in dialog
@@ -225,6 +232,9 @@ type PublishPlan struct {
 	FreeText     []FreeText     `json:"free_text"`
 	Refusals     []Refusal      `json:"refusals"`
 	OutsideJumps []OutsideJump  `json:"outside_jumps"`
+	// KeptLocal: references that stay the publisher's own (not sent, no
+	// slot), with why. Readers get these records without them.
+	KeptLocal []KeptRef `json:"kept_local"`
 	// Images: the uploaded icons of the subtree, one per distinct image.
 	Images []PlanImage `json:"images"`
 	// Layers: remote uuid -> what stays local for the publisher (a
@@ -234,6 +244,26 @@ type PublishPlan struct {
 	TargetLocalID string `json:"-"`
 	RootUUID      string `json:"root_uuid"`
 	catalogID     string
+}
+
+// KeptRef is a reference a publish keeps local.
+type KeptRef struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Field  string `json:"field"`
+	Reason string `json:"reason"`
+}
+
+// keepRef is what ref returns for a reference that stays local.
+const keepRef = "\x00keep"
+
+func (c *pubCtx) kept(kind, name, field, reason string) {
+	c.plan.KeptLocal = append(c.plan.KeptLocal, KeptRef{Kind: kind, Name: name, Field: field, Reason: reason})
+}
+
+// sharedCred: a credential every reader can use the same way.
+func sharedCred(cr store.CredentialRef) bool {
+	return cr.Kind == store.CredOpkssh || store.ParseBitwardenRef(cr.Config) != nil
 }
 
 // PlanImage is one distinct uploaded icon of the publish.
@@ -287,9 +317,12 @@ func (p *PublishPlan) UUIDs() []string {
 }
 
 type pubCtx struct {
-	db   *store.DB
-	opts PublishOptions
-	plan *PublishPlan
+	db *store.DB
+	// strict: a record-mode edit, where the writer chose each value; a
+	// reference that no longer exists is refused instead of kept local.
+	strict bool
+	opts   PublishOptions
+	plan   *PublishPlan
 
 	folders  map[string]store.Folder
 	children map[string][]string // folder id -> child folder ids
@@ -961,11 +994,21 @@ func (c *pubCtx) settings(s store.InheritableSettings, kind, u, name string, fol
 	}
 	for _, k := range credFields {
 		if v, ok := m[k].(string); ok {
-			m[k] = c.ref(v, slotCred, kind, u, name, k)
+			if r := c.ref(v, slotCred, kind, u, name, k); r == keepRef {
+				layer[k] = v
+				delete(m, k)
+			} else {
+				m[k] = r
+			}
 		}
 	}
 	if v, ok := m["network_profile_id"].(string); ok {
-		m["network_profile_id"] = c.ref(v, slotNet, kind, u, name, "network_profile_id")
+		if r := c.ref(v, slotNet, kind, u, name, "network_profile_id"); r == keepRef {
+			layer["network_profile_id"] = v
+			delete(m, "network_profile_id")
+		} else {
+			m["network_profile_id"] = r
+		}
 	}
 	if targets, ok := m["db_targets"].([]any); ok {
 		for i, x := range targets {
@@ -974,7 +1017,15 @@ func (c *pubCtx) settings(s store.InheritableSettings, kind, u, name string, fol
 				continue
 			}
 			if v, ok := tg["credential_ref"].(string); ok {
-				tg["credential_ref"] = c.ref(v, slotCred, kind, u, name, fmt.Sprintf("db_targets.%d.credential_ref", i))
+				if r := c.ref(v, slotCred, kind, u, name, fmt.Sprintf("db_targets.%d.credential_ref", i)); r == keepRef {
+					// The publisher keeps the login on this target.
+					own := map[string]any{"id": tg["id"], "credential_ref": v, "override": true}
+					list, _ := layer["db_targets"].([]any)
+					layer["db_targets"] = append(list, own)
+					delete(tg, "credential_ref")
+				} else {
+					tg["credential_ref"] = r
+				}
 			}
 			var parts []string
 			for _, f := range []string{"name", "addr", "database"} {
@@ -989,14 +1040,22 @@ func (c *pubCtx) settings(s store.InheritableSettings, kind, u, name string, fol
 	}
 	if jh, ok := m["jump_host"].(map[string]any); ok && jh["kind"] == "chain" {
 		if hop, ok := jh["chain"].(map[string]any); ok {
-			c.hop(hop, kind, u, name, folderLevel)
+			orig := deepCopy(jh)
+			if c.hop(hop, kind, u, name, folderLevel) {
+				// A hop readers cannot have: the whole jump host stays the
+				// publisher's own.
+				layer["jump_host"] = orig
+				delete(m, "jump_host")
+			}
 		}
 	}
 	b, err := json.Marshal(m)
 	return b, layer, err
 }
 
-func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) {
+// hop translates a jump chain; true when it holds something that stays
+// local (the caller keeps the whole jump host then).
+func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) (keep bool) {
 	for depth := 0; h != nil && depth < 32; depth++ {
 		delete(h, "name")
 		if id, ok := h["connection_id"].(string); ok && id != "" {
@@ -1013,11 +1072,14 @@ func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) {
 				goto auth
 			}
 			switch {
-			case strings.HasPrefix(id, resolver.DynRefPrefix):
-				// An inventory host means nothing to others: a jump slot
-				// the publisher binds to it.
+			case strings.HasPrefix(id, resolver.DynRefPrefix) && c.strict:
 				h["jump_slot"] = c.slot("jump:"+id, slotJump, id, kind, u, name, "jump_host")
 				delete(h, "connection_id")
+			case strings.HasPrefix(id, resolver.DynRefPrefix):
+				// An inventory host means nothing to others ("Save as
+				// connection" on it makes a fixed bastion that can go).
+				c.kept(kind, name, "Jump host", "a dynamic inventory host; colleagues set their own")
+				return true
 			case c.inside[id] != "":
 				h["connection_id"] = c.inside[id]
 			case isMarker(id):
@@ -1025,8 +1087,12 @@ func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) {
 			default:
 				b, ok := c.conns[id]
 				if !ok {
-					c.refuse(kind, c.localOf(kind, u), name, "its jump host no longer exists; choose another first")
-					break
+					if c.strict {
+						c.refuse(kind, c.localOf(kind, u), name, "its jump host no longer exists; choose another first")
+						break
+					}
+					c.kept(kind, name, "Jump host", "points at a connection that no longer exists; not sent")
+					return true
 				}
 				oj := c.outside[id]
 				if oj == nil {
@@ -1053,11 +1119,24 @@ func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) {
 		}
 	auth:
 		if v, ok := h["auth_ref"].(string); ok {
-			h["auth_ref"] = c.ref(v, slotCred, kind, u, name, "jump_host.auth_ref")
+			r := c.ref(v, slotCred, kind, u, name, "jump_host.auth_ref")
+			if r == keepRef {
+				delete(h, "auth_ref")
+			} else {
+				h["auth_ref"] = r
+			}
 		}
 		next, _ := h["via"].(map[string]any)
 		h = next
 	}
+	return false
+}
+
+func deepCopy(m map[string]any) map[string]any {
+	b, _ := json.Marshal(m)
+	out := map[string]any{}
+	_ = json.Unmarshal(b, &out)
+	return out
 }
 
 func (c *pubCtx) localOf(kind, u string) string {
@@ -1085,21 +1164,56 @@ func (c *pubCtx) ref(v, typ, kind, u, name, field string) string {
 		c.refuse(kind, c.localOf(kind, u), name, field+" holds an unbound or missing catalog value; choose one first")
 		return ""
 	}
+	label := fieldLabel(field)
 	switch typ {
 	case slotCred:
-		if _, ok := c.creds[v]; !ok {
-			c.refuse(kind, c.localOf(kind, u), name, field+" names a credential that no longer exists")
-			return ""
+		cr, ok := c.creds[v]
+		if !ok {
+			if c.strict {
+				c.refuse(kind, c.localOf(kind, u), name, field+" names a credential that no longer exists")
+				return ""
+			}
+			c.kept(kind, name, label, "names a credential that no longer exists; not sent")
+			return keepRef
+		}
+		if !sharedCred(cr) && !c.opts.SendLocalCreds {
+			c.kept(kind, name, label, "a credential from your own vault ("+cr.Name+"); colleagues use their own")
+			return keepRef
 		}
 		return c.slot("cred:"+v, slotCred, v, kind, u, name, field)
 	case slotNet:
-		if _, ok := c.profiles[v]; !ok {
-			c.refuse(kind, c.localOf(kind, u), name, field+" names a network profile that no longer exists")
-			return ""
+		p, ok := c.profiles[v]
+		if !ok {
+			if c.strict {
+				c.refuse(kind, c.localOf(kind, u), name, field+" names a network profile that no longer exists")
+				return ""
+			}
+			c.kept(kind, name, label, "names a network profile that no longer exists; not sent")
+			return keepRef
+		}
+		if !c.opts.SendNetworks {
+			c.kept(kind, name, label, "your network profile ("+p.Name+"); colleagues use their own")
+			return keepRef
 		}
 		return c.slot("net:"+v, slotNet, v, kind, u, name, field)
 	}
 	return ""
+}
+
+func fieldLabel(f string) string {
+	switch {
+	case f == "auth_ref", f == "jump_host.auth_ref":
+		return "Credential"
+	case f == "otp_ref":
+		return "One-time code"
+	case f == "network_profile_id":
+		return "Network"
+	case f == "db_credential_ref", strings.HasPrefix(f, "db_targets."):
+		return "Database login"
+	case f == "kafka_credential_ref":
+		return "Kafka login"
+	}
+	return f
 }
 
 // slot finds or creates the slot for a local object.
@@ -1197,6 +1311,7 @@ func (c *pubCtx) finish() {
 	// Lists, never null, for the dialog.
 	c.plan.Slots, c.plan.FreeText, c.plan.Refusals, c.plan.OutsideJumps = []PlanSlot{}, nonNil(c.plan.FreeText), nonNil(c.plan.Refusals), []OutsideJump{}
 	c.plan.Images = nonNil(c.plan.Images)
+	c.plan.KeptLocal = nonNil(c.plan.KeptLocal)
 	c.plan.Request.Slots = nonNil(c.plan.Request.Slots)
 	c.plan.Request.Forwards = nonNil(c.plan.Request.Forwards)
 	if c.opts.TargetUUID != "" {
