@@ -33,6 +33,8 @@
     try { localStorage.setItem(targetKey(), v); } catch { /* storage off */ }
   }
   let jumpInclude = $state<Record<string, boolean>>({});
+  // Inventory bastions not to send (sent by default).
+  let dynSkip = $state<Record<string, boolean>>({});
   let slotNames = $state<Record<string, string>>({});
   // "What to send": ticked means sent. What is not sent stays in your own
   // local layer, so your tree looks the same after publishing.
@@ -90,6 +92,7 @@
     unsent,
     send_local_creds: !!send.local_creds,
     send_networks: !!send.networks,
+    dyn_skip: Object.keys(dynSkip).filter((k) => dynSkip[k]),
   });
 
   // Preview, rebuilt on every change (debounced: slot names are typed).
@@ -336,11 +339,19 @@
             <section>
               <h3>Jump hosts outside the folder</h3>
               {#each plan.outside_jumps as j (j.connection_id)}
+                {#if j.dynamic}
+                <div class="jump">
+                  <div><IconBastion size={13} /> <strong>{j.name}</strong> <span class="tag">inventory host</span> <span class="dim">used by {j.used_by.join(", ")}</span></div>
+                  <label><input type="radio" name={"j-" + j.connection_id} checked={!dynSkip[j.connection_id]} onchange={() => (dynSkip = { ...dynSkip, [j.connection_id]: false })} /> Send it as a bastion in the folder, made from its address, port and user now; you keep jumping through your inventory host</label>
+                  <label><input type="radio" name={"j-" + j.connection_id} checked={!!dynSkip[j.connection_id]} onchange={() => (dynSkip = { ...dynSkip, [j.connection_id]: true })} /> Do not send it: colleagues set their own jump host</label>
+                </div>
+                {:else}
                 <div class="jump">
                   <div><IconBastion size={13} /> <strong>{j.name}</strong> <span class="dim">used by {j.used_by.join(", ")}</span></div>
                   <label><input type="radio" name={"j-" + j.connection_id} checked={!jumpInclude[j.connection_id]} onchange={() => (jumpInclude = { ...jumpInclude, [j.connection_id]: false })} /> A jump slot: each colleague uses their own bastion (yours stays bound to {j.name})</label>
                   <label><input type="radio" name={"j-" + j.connection_id} checked={!!jumpInclude[j.connection_id]} onchange={() => (jumpInclude = { ...jumpInclude, [j.connection_id]: true })} /> Publish a copy of {j.name} inside the folder: a copy, independent from now on; your own {j.name} stays where it is</label>
                 </div>
+                {/if}
               {/each}
             </section>
           {/if}

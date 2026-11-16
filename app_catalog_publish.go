@@ -15,6 +15,8 @@ import (
 
 	"ssh-tool/internal/catalog"
 	"ssh-tool/internal/creds"
+	"ssh-tool/internal/resolver"
+	"ssh-tool/internal/store"
 )
 
 // Publishing a local folder to a catalog. Started only by the user's
@@ -49,6 +51,8 @@ type CatalogPublishInput struct {
 	// network profiles as slots (off by default).
 	SendLocalCreds bool `json:"send_local_creds"`
 	SendNetworks   bool `json:"send_networks"`
+	// DynSkip: inventory bastions not to send as a bastion record.
+	DynSkip []string `json:"dyn_skip"`
 }
 
 // CatalogPublishProblem is one per-record error of a refused publish,
@@ -171,9 +175,34 @@ func (in CatalogPublishInput) options(account string) catalog.PublishOptions {
 	for _, k := range in.Unsent {
 		unsent[k] = true
 	}
+	skip := map[string]bool{}
+	for _, id := range in.DynSkip {
+		skip[id] = true
+	}
 	return catalog.PublishOptions{CatalogID: in.CatalogID, RootID: in.FolderID, TargetUUID: in.TargetUUID,
 		JumpInclude: inc, SlotNames: in.SlotNames, AccountName: account, Unsent: unsent,
-		SendLocalCreds: in.SendLocalCreds, SendNetworks: in.SendNetworks}
+		SendLocalCreds: in.SendLocalCreds, SendNetworks: in.SendNetworks, DynSkip: skip}
+}
+
+// publishResolveDyn is a publish's view of an inventory host used as a
+// bastion: what it resolves to now, as a connection.
+func (a *App) publishResolveDyn(id string) (store.Connection, bool) {
+	entryID, ok := strings.CutPrefix(id, "dyn:")
+	if !ok {
+		return store.Connection{}, false
+	}
+	entry, err := a.db.GetDynamicEntry(entryID)
+	if err != nil || entry == nil {
+		return store.Connection{}, false
+	}
+	folders, err := a.db.ListFolders()
+	if err != nil {
+		return store.Connection{}, false
+	}
+	syn := a.dynamicConnectionFor(entry, "")
+	syn.ID = id
+	eff := resolver.EffectiveOverrides(syn, folders)
+	return store.Connection{ID: id, Name: entry.Name, Hostname: syn.Hostname, Protocol: "ssh", Overrides: eff}, true
 }
 
 // CatalogPublishPreview builds the plan the dialog shows. Nothing is sent.
@@ -185,6 +214,7 @@ func (a *App) CatalogPublishPreview(in CatalogPublishInput) (*catalog.PublishPla
 		return nil, fmt.Errorf("this folder already belongs to a catalog")
 	}
 	opts := in.options("")
+	opts.ResolveDyn = a.publishResolveDyn
 	if cat, err := a.db.GetCatalog(in.CatalogID); err == nil {
 		if c, err := a.catalogClient(cat); err == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -215,6 +245,7 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 	defer rt.apply.Unlock()
 
 	opts := in.options(cat.AccountName)
+	opts.ResolveDyn = a.publishResolveDyn
 	mctx, mcancel := context.WithTimeout(context.Background(), 20*time.Second)
 	opts.Images = catalogImageLimits(mctx, c)
 	mcancel()
