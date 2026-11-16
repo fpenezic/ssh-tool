@@ -1167,7 +1167,9 @@ func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) (
 		if v, ok := h["auth_ref"].(string); ok {
 			r := c.ref(v, slotCred, kind, u, name, "jump_host.auth_ref")
 			if r == keepRef {
+				// Sent without it; the publisher keeps their own chain.
 				delete(h, "auth_ref")
+				own = true
 			} else {
 				h["auth_ref"] = r
 			}
