@@ -564,6 +564,17 @@ var migrations = []struct {
 		    PRIMARY KEY (catalog_id, remote_uuid)
 		);`,
 	},
+	{
+		31,
+		// Catalog icon images are addressed by SHA-256 (PROTOCOL 3.6); the
+		// local table dedups by md5. The column maps a catalog address to
+		// the local row holding those bytes (a cached catalog image, or the
+		// user's own upload of the same file). NULL until filled: rows from
+		// before this migration, or from an older app's mirror, get it on
+		// the first lookup (ImageIDBySHA256).
+		`ALTER TABLE images ADD COLUMN sha256 TEXT;
+		CREATE INDEX idx_images_sha256 ON images(sha256);`,
+	},
 }
 
 // catalogSchemaSQL is migration 29: a shared connection catalog the app

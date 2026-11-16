@@ -238,6 +238,10 @@ func materialiseTx(db *store.DB, tx *sql.Tx, catalogID string, external External
 		return err
 	}
 	t := &translator{catID: catalogID, in: in, external: external}
+	imgs, err := store.ImageIDsBySHA256Tx(tx)
+	if err != nil {
+		return err
+	}
 	rows, err := db.CatalogRowsRawTx(tx, catalogID)
 	if err != nil {
 		return err
@@ -279,7 +283,7 @@ func materialiseTx(db *store.DB, tx *sql.Tx, catalogID string, external External
 			}
 			// Record fields: the record's, unless the local layer's
 			// record part keeps the user's own.
-			want := recordCols(r.RawJSON)
+			want := recordCols(r.RawJSON, imgs)
 			if layerJSON != "" && rec.Access != "skeleton" {
 				overlayRecordCols(&want, layerJSON)
 			}
@@ -403,17 +407,28 @@ func LayerFromEdit(base, edited store.InheritableSettings) store.InheritableSett
 	return layer
 }
 
-// recordCols reads a record's notes, tags and icon (a catalog record
-// carries no uploaded image).
-func recordCols(raw string) store.RecordCols {
+// recordCols reads a record's notes, tags and icon. An icon image
+// points at the local row holding its bytes (imgs: sha256 -> image id);
+// one not fetched yet shows the default icon until the fetch after the
+// sync pass (FetchImages) brings it.
+func recordCols(raw string, imgs map[string]string) store.RecordCols {
 	var rec struct {
 		Notes     string   `json:"notes"`
 		Tags      []string `json:"tags"`
 		IconName  *string  `json:"icon_name"`
 		IconColor *string  `json:"icon_color"`
+		IconImage *string  `json:"icon_image"`
 	}
 	_ = json.Unmarshal([]byte(raw), &rec)
-	return store.RecordCols{Notes: rec.Notes, Tags: rec.Tags, IconName: rec.IconName, IconColor: rec.IconColor}
+	c := store.RecordCols{Notes: rec.Notes, Tags: rec.Tags, IconName: rec.IconName, IconColor: rec.IconColor}
+	if rec.IconImage != nil {
+		if h, ok := ImageHash(*rec.IconImage); ok {
+			if id := imgs[h]; id != "" {
+				c.IconImageID, c.IconName, c.IconColor = &id, nil, nil
+			}
+		}
+	}
+	return c
 }
 
 // overlayRecordCols applies the local layer's record part: a present

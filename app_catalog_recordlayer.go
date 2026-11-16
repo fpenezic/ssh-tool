@@ -96,6 +96,7 @@ func (a *App) setCatalogIcon(kind, id, imageID, name, color string) (bool, error
 		delete(rec, "icon_image_id")
 		delete(rec, "icon_name")
 		delete(rec, "icon_color")
+		delete(rec, catalog.IconPendingKey)
 		switch {
 		case imageID != "":
 			rec["icon_image_id"] = imageID
@@ -113,6 +114,7 @@ func (a *App) setCatalogIcon(kind, id, imageID, name, color string) (bool, error
 func (a *App) CatalogResetRecordField(kind, id, field string) error {
 	_, err := a.updateRecordLayer(kind, id, func(rec map[string]any) {
 		if field == "icon" {
+			delete(rec, catalog.IconPendingKey)
 			delete(rec, "icon_image_id")
 			delete(rec, "icon_name")
 			delete(rec, "icon_color")

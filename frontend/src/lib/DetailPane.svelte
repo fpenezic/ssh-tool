@@ -143,6 +143,14 @@
   let recordResolve = $state<Record<string, string>>({});
   let recordStillLocal = $state<string[]>([]);
   let recordBusy = $state(false);
+  // Record mode: the icon picked for the record (null = unchanged). Saved
+  // with the record; an image goes to the catalog's image store first.
+  let recordIcon = $state<{ image_id: string; name: string | null; color: string | null } | null>(null);
+  const recIconShown = $derived(recordIcon ?? { image_id: catRec?.form?.icon_image_id ?? "", name: catRec?.form?.icon_name ?? null, color: catRec?.form?.icon_color ?? null });
+  function withRecordIcon(f: CatalogEditForm): CatalogEditForm {
+    if (!recordIcon) return f;
+    return { ...f, icon_image_id: recordIcon.image_id, icon_name: recordIcon.name, icon_color: recordIcon.color };
+  }
   // "Set it on the folder instead": the offer shown before a connection's
   // record save, and once chosen, the fields that go on the folder (a
   // retry after naming new slots goes the same way).
@@ -197,6 +205,7 @@
     recordSlotNames = {};
     recordResolve = {};
     recordStillLocal = [];
+    recordIcon = null;
     resetFolderOffer();
     saveError = null;
     recordDoc = catRec?.form?.doc_md ?? "";
@@ -212,6 +221,7 @@
     : folder);
   async function saveRecord(kind: "folders" | "connections", id: string, edited: CatalogEditForm): Promise<boolean> {
     if (!catRec?.form) return false;
+    edited = withRecordIcon(edited);
     const input: CatalogEditInput = recordInput
       ? { ...recordInput, edited, slot_names: recordSlotNames, resolve: recordResolve }
       : { kind, local_id: id, rev: catRec.rev, loaded: catRec.form, edited, accept_rev: 0, resolve: {}, slot_names: recordSlotNames };
@@ -255,6 +265,7 @@
     recordSlotNames = {};
     recordResolve = {};
     recordStillLocal = stillLocal;
+    recordIcon = null;
     resetFolderOffer();
     saveError = null;
     await tree.load();
@@ -320,6 +331,7 @@
   }
   async function discardRecord() {
     recordPending = null;
+    recordIcon = null;
     recordInput = null;
     resetFolderOffer();
     recordSlotNames = {};
@@ -751,6 +763,7 @@
     const s = fsrc.settings ?? {};
     return (
       (recordMode && recordDoc !== (catRec?.form?.doc_md ?? "")) ||
+      (recordMode && recordIcon !== null) ||
       editingFolder.name !== fsrc.name ||
       editingFolder.username !== (s.username ?? "") ||
       numText(editingFolder.port) !== (s.port?.toString() ?? "") ||
@@ -1430,6 +1443,7 @@
       editing.tags.every((t, i) => t === src.tags?.[i]);
     return (
       (recordMode && recordDoc !== (catRec?.form?.doc_md ?? "")) ||
+      (recordMode && recordIcon !== null) ||
       editing.name !== src.name ||
       editing.hostname !== src.hostname ||
       editing.notes !== (src.notes ?? "") ||
@@ -2244,7 +2258,20 @@
         onChange={(v) => { if (editingFolder) editingFolder = { ...editingFolder, colorTag: v }; }}
         label="Color tag (inherited by children)"
       /></div>
-      {#if folder}
+      {#if folder && recordMode && catRec?.form}
+        <div class="span-2"><IconPicker
+          kind="folder"
+          targetId={folder.id}
+          deferred
+          allowImages={!!catRec.images}
+          currentIconId={recIconShown.image_id || null}
+          currentIconName={recIconShown.name}
+          currentIconColor={recIconShown.color}
+          fallbackEmoji=""
+          onChange={(id) => (recordIcon = { image_id: id ?? "", name: null, color: null })}
+          onNamedChange={(name, color) => (recordIcon = { image_id: "", name: name || null, color: name ? color || null : null })}
+        /></div>
+      {:else if folder}
         <div class="span-2"><IconPicker
           kind="folder"
           targetId={folder.id}
@@ -2760,6 +2787,18 @@
         value={editing.colorTag}
         onChange={(v) => { if (editing) editing = { ...editing, colorTag: v }; }}
       /></div>
+      {#if isCatalogConn && recordMode && catRec?.form}<div class="span-2"><IconPicker
+        kind="connection"
+        targetId={conn.id}
+        deferred
+        allowImages={!!catRec.images}
+        currentIconId={recIconShown.image_id || null}
+        currentIconName={recIconShown.name}
+        currentIconColor={recIconShown.color}
+        fallbackEmoji=""
+        onChange={(id) => (recordIcon = { image_id: id ?? "", name: null, color: null })}
+        onNamedChange={(name, color) => (recordIcon = { image_id: "", name: name || null, color: name ? color || null : null })}
+      /></div>{/if}
       {#if !isCatalogConn}<div class="span-2"><IconPicker
         kind="connection"
         targetId={conn.id}

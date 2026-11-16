@@ -44,6 +44,7 @@ func TestMigration21AddsBitwardenNetworkProfileID(t *testing.T) {
 		CREATE TABLE folders (id TEXT PRIMARY KEY);
 		CREATE TABLE credential_refs (id TEXT PRIMARY KEY);
 		CREATE TABLE credential_folders (id TEXT PRIMARY KEY);
+		CREATE TABLE images (id TEXT PRIMARY KEY);
 		-- Not part of the icon repair under test, but a real v22 DB has
 		-- it and later migrations do touch it (v26 adds browser_mode).
 		-- Without it the run fails before reaching the assertions.
@@ -119,6 +120,7 @@ func TestMigration23RepairsCredentialIconColumns(t *testing.T) {
 		CREATE TABLE folders (id TEXT PRIMARY KEY, icon_name TEXT, icon_color TEXT);
 		CREATE TABLE credential_refs (id TEXT PRIMARY KEY);
 		CREATE TABLE credential_folders (id TEXT PRIMARY KEY);
+		CREATE TABLE images (id TEXT PRIMARY KEY);
 		-- Not part of the icon repair under test, but a real v22 DB has
 		-- it and later migrations do touch it (v26 adds browser_mode).
 		-- Without it the run fails before reaching the assertions.
@@ -159,6 +161,7 @@ func TestMigration28MovesSensitiveIntoOverrides(t *testing.T) {
 		-- Later migrations (29) alter these; a real v27 DB has them.
 		CREATE TABLE folders (id TEXT PRIMARY KEY);
 		CREATE TABLE port_forwards (id TEXT PRIMARY KEY);
+		CREATE TABLE images (id TEXT PRIMARY KEY);
 		CREATE TABLE connections (id TEXT PRIMARY KEY, overrides_json TEXT NOT NULL DEFAULT '{}', sensitive INTEGER NOT NULL DEFAULT 0);
 		INSERT INTO connections VALUES ('a', '{"port":2222}', 1), ('b', '', 1), ('c', '{"port":22}', 0),
 		    ('d', 'null', 1), ('e', '[]', 1);`)

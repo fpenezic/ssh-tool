@@ -27,6 +27,9 @@ class CatalogStore {
   // An enrollment waiting for the user's confirmation (a link, or the
   // "Add with a code" form). Nothing is redeemed until they confirm.
   enroll = $state<{ url: string; code: string } | null>(null);
+  // Icon images a publish held back for the catalog's upload limit, being
+  // sent in the background (per catalog). Shown in the status bar.
+  iconUploads = $state<Record<string, { name: string; left: number; total: number; waitingUntil?: number; message?: string }>>({});
   private wired = false;
   private notified = new Set<string>();
 
@@ -80,6 +83,20 @@ class CatalogStore {
       for (const id of Object.keys(this.slots)) this.loadSlots(id);
     });
     EventsOn("profile_reloaded", () => this.load());
+    EventsOn("catalog_icon_uploads", (e: any) => {
+      const id = String(e?.catalog_id ?? "");
+      const left = Number(e?.left ?? 0);
+      const next = { ...this.iconUploads };
+      const was = next[id];
+      if (left <= 0) {
+        delete next[id];
+        if (was && Number(e?.total ?? 0) > 0) toast.info(`${was.name}: icon images sent to the catalog`);
+      } else {
+        next[id] = { name: String(e?.catalog_name ?? ""), left, total: Number(e?.total ?? left),
+          waitingUntil: e?.waiting_until ? Number(e.waiting_until) : undefined, message: e?.message || undefined };
+      }
+      this.iconUploads = next;
+    });
     this.load();
   }
 

@@ -47,6 +47,9 @@ type PublishOptions struct {
 	// (PublishCategories). What is not sent stays in the publisher's
 	// local layer, so their own tree does not change.
 	Unsent map[string]bool
+	// Images: the catalog's image store limits; nil when the server has
+	// none (revision 1), and uploaded icons stay in the publisher's layer.
+	Images *ImageLimits
 }
 
 // PublishCategories are the optional parts of a publish, in dialog
@@ -101,6 +104,7 @@ type PublishFolder struct {
 	Settings   json.RawMessage `json:"settings"`
 	IconName   *string         `json:"icon_name"`
 	IconColor  *string         `json:"icon_color"`
+	IconImage  *string         `json:"icon_image,omitempty"`
 }
 
 type PublishConnection struct {
@@ -115,6 +119,7 @@ type PublishConnection struct {
 	Notes      string          `json:"notes"`
 	IconName   *string         `json:"icon_name"`
 	IconColor  *string         `json:"icon_color"`
+	IconImage  *string         `json:"icon_image,omitempty"`
 }
 
 type PublishForward struct {
@@ -220,6 +225,8 @@ type PublishPlan struct {
 	FreeText     []FreeText     `json:"free_text"`
 	Refusals     []Refusal      `json:"refusals"`
 	OutsideJumps []OutsideJump  `json:"outside_jumps"`
+	// Images: the uploaded icons of the subtree, one per distinct image.
+	Images []PlanImage `json:"images"`
 	// Layers: remote uuid -> what stays local for the publisher (a
 	// tunnel autostart, a broadcast group), as a local layer.
 	Layers map[string]PlanLayer `json:"-"`
@@ -228,6 +235,25 @@ type PublishPlan struct {
 	RootUUID      string `json:"root_uuid"`
 	catalogID     string
 }
+
+// PlanImage is one distinct uploaded icon of the publish.
+type PlanImage struct {
+	SHA256  string `json:"sha256"`
+	ImageID string `json:"image_id"` // the local image row
+	// Names of the records wearing it.
+	Records []string `json:"records"`
+	// Kept: the image is not sent and stays in the publisher's own layer
+	// for these records, for Reason (the catalog takes no images, the
+	// check failed, Icons unticked, the upload limit).
+	Kept   bool   `json:"kept"`
+	Reason string `json:"reason,omitempty"`
+	// Later: kept now, uploaded and set in the background after the
+	// publish (the catalog's upload limit).
+	Later bool `json:"later,omitempty"`
+	uses  []imageUse
+}
+
+type imageUse struct{ kind, uuid string }
 
 // PlanLayer is a converted record's local layer.
 type PlanLayer struct {
@@ -601,7 +627,7 @@ func (c *pubCtx) folder(fid string) error {
 	pf := PublishFolder{UUID: u, ParentUUID: parent, Name: f.Name, SortOrder: f.SortOrder, Settings: raw,
 		IconName: f.IconName, IconColor: f.IconColor}
 	rec := map[string]any{}
-	c.icons(&pf.IconName, &pf.IconColor, f.IconImageID, rec)
+	c.icons(KindFolders, u, f.Name, &pf.IconName, &pf.IconColor, &pf.IconImage, f.IconImageID, rec)
 	if len(rec) > 0 {
 		layer[RecordLayerKey] = rec
 	}
@@ -696,7 +722,7 @@ func (c *pubCtx) connection(conn store.Connection, folderUUID, copyOf string) er
 		}
 		pc.Tags = []string{}
 	}
-	c.icons(&pc.IconName, &pc.IconColor, conn.IconImageID, rec)
+	c.icons(KindConnections, u, conn.Name, &pc.IconName, &pc.IconColor, &pc.IconImage, conn.IconImageID, rec)
 	if len(rec) > 0 {
 		layer[RecordLayerKey] = rec
 	}
@@ -740,12 +766,23 @@ func (c *pubCtx) connection(conn store.Connection, folderUUID, copyOf string) er
 }
 
 // icons handles a record's icon for publishing: a built-in icon goes
-// unless "Icons" is unticked; an uploaded image never goes (the catalog
-// has no image store yet) and stays in the publisher's layer, as does an
-// unsent built-in icon.
-func (c *pubCtx) icons(name, color **string, imageID *string, rec map[string]any) {
+// unless "Icons" is unticked; an uploaded image goes when the catalog has
+// an image store and the image passes its check, else it stays in the
+// publisher's layer (as does an unsent built-in icon). Every distinct
+// image is listed in the plan with what happens to it.
+func (c *pubCtx) icons(kind, u, recName string, name, color, iconImage **string, imageID *string, rec map[string]any) {
 	if imageID != nil && *imageID != "" {
-		rec["icon_image_id"] = *imageID
+		pi := c.planImage(*imageID)
+		if pi != nil {
+			pi.Records = append(pi.Records, recName)
+			pi.uses = append(pi.uses, imageUse{kind, u})
+		}
+		if c.opts.Unsent["icons"] || pi == nil || pi.Kept {
+			rec["icon_image_id"] = *imageID
+		} else {
+			ref := "sha256:" + pi.SHA256
+			*iconImage, *name, *color = &ref, nil, nil
+		}
 	}
 	if c.opts.Unsent["icons"] {
 		if *name != nil {
@@ -757,6 +794,114 @@ func (c *pubCtx) icons(name, color **string, imageID *string, rec map[string]any
 		*name, *color = nil, nil
 	}
 }
+
+// planImage returns the plan's entry for a local image, checking it the
+// first time (nil when the row is gone).
+func (c *pubCtx) planImage(id string) *PlanImage {
+	for i := range c.plan.Images {
+		if c.plan.Images[i].ImageID == id {
+			return &c.plan.Images[i]
+		}
+	}
+	_, data, ok, err := c.db.GetImage(id)
+	if err != nil || !ok {
+		return nil
+	}
+	pi := PlanImage{SHA256: ImageSHA256(data), ImageID: id}
+	switch {
+	case c.opts.Unsent["icons"]:
+		pi.Kept, pi.Reason = true, "icons are not sent"
+	case c.opts.Images == nil:
+		pi.Kept, pi.Reason = true, "this catalog does not take icon images yet"
+	default:
+		if _, err := CheckImage(data, *c.opts.Images); err != nil {
+			pi.Kept, pi.Reason = true, err.Error()
+		}
+	}
+	c.plan.Images = append(c.plan.Images, pi)
+	return &c.plan.Images[len(c.plan.Images)-1]
+}
+
+// KeepImage takes an image out of the request (refused by the server,
+// or held back by the upload limit): the records go without it, and the
+// publisher's converted rows keep it in their layer. later marks it for
+// the background upload after the publish.
+func (p *PublishPlan) KeepImage(hash, reason string, later bool) {
+	for i := range p.Images {
+		pi := &p.Images[i]
+		if pi.SHA256 != hash || pi.Kept {
+			continue
+		}
+		pi.Kept, pi.Reason, pi.Later = true, reason, later
+		ref := "sha256:" + hash
+		for j := range p.Request.Folders {
+			if f := &p.Request.Folders[j]; f.IconImage != nil && *f.IconImage == ref {
+				f.IconImage = nil
+			}
+		}
+		for j := range p.Request.Connections {
+			if c := &p.Request.Connections[j]; c.IconImage != nil && *c.IconImage == ref {
+				c.IconImage = nil
+			}
+		}
+		for _, use := range pi.uses {
+			if !p.hasLocalRow(use.uuid) {
+				continue // a bastion copy: no row of the publisher's
+			}
+			layer := map[string]any{}
+			if l, ok := p.Layers[use.uuid]; ok {
+				_ = json.Unmarshal([]byte(l.JSON), &layer)
+			}
+			rec, _ := layer[RecordLayerKey].(map[string]any)
+			if rec == nil {
+				rec = map[string]any{}
+			}
+			rec["icon_image_id"] = pi.ImageID
+			if later {
+				rec[IconPendingKey] = true
+			}
+			layer[RecordLayerKey] = rec
+			b, _ := json.Marshal(layer)
+			p.Layers[use.uuid] = PlanLayer{Kind: use.kind, JSON: string(b)}
+		}
+	}
+}
+
+func (p *PublishPlan) hasLocalRow(u string) bool {
+	for _, r := range p.Records {
+		if r.UUID == u {
+			return r.LocalID != ""
+		}
+	}
+	return false
+}
+
+// SentImages are the images the request carries.
+func (p *PublishPlan) SentImages() []PlanImage {
+	var out []PlanImage
+	for _, pi := range p.Images {
+		if !pi.Kept {
+			out = append(out, pi)
+		}
+	}
+	return out
+}
+
+// SetPlanImageUses records which records wear a plan image (for tests
+// that build a plan by hand; BuildPublish fills it itself).
+func SetPlanImageUses(p *PublishPlan, hash, kind, uuid string) {
+	for i := range p.Images {
+		if p.Images[i].SHA256 == hash {
+			p.Images[i].uses = append(p.Images[i].uses, imageUse{kind, uuid})
+		}
+	}
+}
+
+// IconPendingKey marks, in a record's "_record" layer, an icon image that
+// still has to reach the catalog (held back by the upload limit at
+// publish): the background upload sends it and sets icon_image on the
+// record, and the mark goes. Setting another icon drops it.
+const IconPendingKey = "icon_pending"
 
 // listed: the record already has this field in the review.
 func (c *pubCtx) listed(u, field string) bool {
@@ -1051,6 +1196,7 @@ func fieldOr(f string) string {
 func (c *pubCtx) finish() {
 	// Lists, never null, for the dialog.
 	c.plan.Slots, c.plan.FreeText, c.plan.Refusals, c.plan.OutsideJumps = []PlanSlot{}, nonNil(c.plan.FreeText), nonNil(c.plan.Refusals), []OutsideJump{}
+	c.plan.Images = nonNil(c.plan.Images)
 	c.plan.Request.Slots = nonNil(c.plan.Request.Slots)
 	c.plan.Request.Forwards = nonNil(c.plan.Request.Forwards)
 	if c.opts.TargetUUID != "" {

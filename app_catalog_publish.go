@@ -70,6 +70,8 @@ type CatalogPublishResult struct {
 	Warnings  []CatalogPublishProblem `json:"warnings,omitempty"`
 	// Refusals: the local check stopped it before sending.
 	Refusals []catalog.Refusal `json:"refusals,omitempty"`
+	// Images: what happened to each uploaded icon (kept ones with why).
+	Images []catalog.PlanImage `json:"images,omitempty"`
 }
 
 // catalogPublishAfterPost runs between the server's answer and the local
@@ -177,7 +179,15 @@ func (a *App) CatalogPublishPreview(in CatalogPublishInput) (*catalog.PublishPla
 	if a.isCatalogFolder(in.FolderID) {
 		return nil, fmt.Errorf("this folder already belongs to a catalog")
 	}
-	return catalog.BuildPublish(a.db, in.options(""))
+	opts := in.options("")
+	if cat, err := a.db.GetCatalog(in.CatalogID); err == nil {
+		if c, err := a.catalogClient(cat); err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			opts.Images = catalogImageLimits(ctx, c)
+			cancel()
+		}
+	}
+	return catalog.BuildPublish(a.db, opts)
 }
 
 // CatalogPublish publishes a local folder: the plan is built again from
@@ -199,17 +209,26 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 	rt.apply.Lock()
 	defer rt.apply.Unlock()
 
-	plan, err := catalog.BuildPublish(a.db, in.options(cat.AccountName))
+	opts := in.options(cat.AccountName)
+	mctx, mcancel := context.WithTimeout(context.Background(), 20*time.Second)
+	opts.Images = catalogImageLimits(mctx, c)
+	mcancel()
+	plan, err := catalog.BuildPublish(a.db, opts)
 	if err != nil {
 		return nil, err
 	}
 	if len(plan.Refusals) > 0 {
 		return &CatalogPublishResult{Message: "some rows cannot be published", Refusals: plan.Refusals}, nil
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute+publishImageWait)
+	if err := a.uploadPublishImages(ctx, cat.ID, c, plan); err != nil {
+		cancel()
+		return &CatalogPublishResult{Message: "not published: " + catalogShortError(err) + ". Nothing was created and nothing changed here."}, nil
+	}
 	if err := a.db.RecordPublishPending(cat.ID, plan.Pending()); err != nil {
+		cancel()
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	resp, err := c.Publish(ctx, &plan.Request)
 	cancel()
 	if err != nil {
@@ -253,7 +272,9 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 		"root": plan.RootUUID,
 	})
 	EventsEmit("catalog_changed", map[string]any{"catalog_id": cat.ID})
-	// Bastion copies and the server's own fields arrive with the feed.
+	res.Images = plan.Images
+	// Bastion copies and the server's own fields arrive with the feed;
+	// images held back by the upload limit follow after that pass.
 	go func() { _ = a.catalogSyncNow(cat.ID, true) }()
 	return res, nil
 }

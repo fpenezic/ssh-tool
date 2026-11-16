@@ -100,6 +100,9 @@ func ShadowSnapshot(path, nonce string) error {
 			return fmt.Errorf("shadow %s: %w", t.table, err)
 		}
 	}
+	if err := shadowCatalogImages(tx); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`DROP TABLE IF EXISTS ` + shadowPrefix + `meta`); err != nil {
 		return err
 	}
@@ -113,6 +116,26 @@ func ShadowSnapshot(path, nonce string) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// shadowCatalogImages leaves cached catalog images (catimg-*) out of the
+// snapshot: every machine fetches them from the catalog again. The
+// shadowed rows that point at one lose the pointer (the foreign key would
+// fail on the receiving side); materialise there points them at its own
+// copy. An image a local row uses stays.
+func shadowCatalogImages(tx *sql.Tx) error {
+	if !tableExists(tx, "images") {
+		return nil
+	}
+	for _, t := range []string{"connections", "folders", "credential_refs", "credential_folders"} {
+		if _, err := tx.Exec(`UPDATE ` + shadowPrefix + t + ` SET icon_image_id = NULL WHERE icon_image_id LIKE 'catimg-%'`); err != nil {
+			return fmt.Errorf("shadow images: %w", err)
+		}
+	}
+	if _, err := tx.Exec(`DELETE FROM images WHERE id LIKE 'catimg-%'` + imageUnusedSQL); err != nil {
+		return fmt.Errorf("shadow images: %w", err)
+	}
+	return nil
 }
 
 func shadowWorkspaces(tx *sql.Tx) error {

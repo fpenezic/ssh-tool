@@ -31,15 +31,20 @@ import (
 // EditForm is a record as the editor shows and edits it, in local terms.
 // Which fields apply depends on the kind.
 type EditForm struct {
-	Name      string                    `json:"name"`
-	Hostname  string                    `json:"hostname"`
-	Protocol  string                    `json:"protocol"`
-	Tags      []string                  `json:"tags"`
-	Notes     string                    `json:"notes"`
-	IconName  *string                   `json:"icon_name"`
-	IconColor *string                   `json:"icon_color"`
-	DocMD     string                    `json:"doc_md"`
-	Settings  store.InheritableSettings `json:"settings"`
+	Name      string   `json:"name"`
+	Hostname  string   `json:"hostname"`
+	Protocol  string   `json:"protocol"`
+	Tags      []string `json:"tags"`
+	Notes     string   `json:"notes"`
+	IconName  *string  `json:"icon_name"`
+	IconColor *string  `json:"icon_color"`
+	// IconImage is the record's "sha256:<hex>"; IconImageID the local
+	// image row with those bytes (for showing it, and what the editor
+	// sets; ResolveIconImage turns it into IconImage before a save).
+	IconImage   *string                   `json:"icon_image"`
+	IconImageID string                    `json:"icon_image_id,omitempty"`
+	DocMD       string                    `json:"doc_md"`
+	Settings    store.InheritableSettings `json:"settings"`
 	// Forwards.
 	Kind        string  `json:"kind"`
 	LocalAddr   *string `json:"local_addr"`
@@ -74,7 +79,39 @@ func FormOf(db *store.DB, catalogID, kind string, raw json.RawMessage) (EditForm
 	if f.Tags == nil {
 		f.Tags = []string{}
 	}
+	f.IconImageID = ""
+	if f.IconImage != nil {
+		if h, ok := ImageHash(*f.IconImage); ok {
+			f.IconImageID, _ = db.ImageIDBySHA256(h)
+		}
+	}
 	return f, nil
+}
+
+// ResolveIconImage sets the edited form's IconImage from the local image
+// the editor picked (IconImageID), when that differs from the loaded one:
+// the image's address, the built-in icon fields cleared (the record holds
+// one icon source). Returns the image bytes when the record gets a new
+// image, for the upload before the patch.
+func ResolveIconImage(db *store.DB, in *EditInput) ([]byte, error) {
+	if in.Edited.IconImageID == in.Loaded.IconImageID {
+		in.Edited.IconImage = in.Loaded.IconImage
+		return nil, nil
+	}
+	if in.Edited.IconImageID == "" {
+		in.Edited.IconImage = nil
+		return nil, nil
+	}
+	_, data, ok, err := db.GetImage(in.Edited.IconImageID)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("the picked image is no longer on this machine")
+	}
+	ref := ImageRef(data)
+	in.Edited.IconImage, in.Edited.IconName, in.Edited.IconColor = &ref, nil, nil
+	return data, nil
 }
 
 // fieldsOf flattens a form into the fields a patch can carry, settings
@@ -84,9 +121,9 @@ func fieldsOf(kind string, f EditForm) map[string]any {
 	var names []string
 	switch kind {
 	case KindFolders:
-		names = []string{"name", "icon_name", "icon_color", "doc_md"}
+		names = []string{"name", "icon_name", "icon_color", "icon_image", "doc_md"}
 	case KindConnections:
-		names = []string{"name", "hostname", "protocol", "tags", "notes", "icon_name", "icon_color", "doc_md"}
+		names = []string{"name", "hostname", "protocol", "tags", "notes", "icon_name", "icon_color", "icon_image", "doc_md"}
 	case KindForwards:
 		names = []string{"kind", "local_addr", "local_port", "remote_host", "remote_port", "auto_start", "description"}
 	}

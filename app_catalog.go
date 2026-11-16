@@ -356,6 +356,7 @@ func (a *App) CatalogCancelSignIn(id string) {
 // CatalogSignOut ends the session at the server and forgets this
 // machine's token. The rows stay.
 func (a *App) CatalogSignOut(id string) error {
+	stopIconUploads(id)
 	cat, err := a.db.GetCatalog(id)
 	if err != nil {
 		return err
@@ -389,6 +390,9 @@ func (a *App) CatalogRemove(id string) error {
 	delete(rt.state, id)
 	delete(rt.next, id)
 	rt.mu.Unlock()
+	if _, err := catalog.PruneImages(a.db); err != nil {
+		log.Printf("catalog: prune images: %v", err)
+	}
 	a.recordAudit("catalog.remove", id, nil)
 	EventsEmit("catalog_changed", map[string]any{"catalog_id": id})
 	return nil
@@ -482,6 +486,9 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 		}
 	}
 	rt.apply.Unlock()
+	if err == nil {
+		a.catalogImagesPass(cat, c)
+	}
 	interval := time.Duration(cat.SyncIntervalSec) * time.Second
 	if interval < time.Minute {
 		interval = time.Minute
@@ -516,6 +523,33 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 		log.Printf("catalog %s: sync: %v", cat.Name, err)
 	}
 	return err
+}
+
+// catalogImagesPass fetches the icon images the catalog's records name and
+// this machine lacks, materialises again when any arrived, and drops
+// cached images nothing uses any more. Failures only log: the rows show
+// the default icon and the next pass tries again.
+func (a *App) catalogImagesPass(cat *store.Catalog, c *catalog.Client) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	n, err := catalog.FetchImages(ctx, a.db, cat.ID, c)
+	if err != nil {
+		log.Printf("catalog %s: images: %v", cat.Name, err)
+	}
+	if n > 0 {
+		rt := a.catRT()
+		rt.apply.Lock()
+		ext, _ := catalog.PrepareExternal(a.db, cat, nil)
+		if err := catalog.Materialise(a.db, cat.ID, ext); err != nil {
+			log.Printf("catalog %s: materialise: %v", cat.Name, err)
+		}
+		rt.apply.Unlock()
+		EventsEmit("catalog_changed", map[string]any{"catalog_id": cat.ID})
+	}
+	if _, err := catalog.PruneImages(a.db); err != nil {
+		log.Printf("catalog: prune images: %v", err)
+	}
+	a.startIconUploads(cat, c)
 }
 
 // startCatalogScheduler runs the background passes. A catalog is synced
@@ -815,6 +849,9 @@ type CatalogRecordInfo struct {
 	FolderName string            `json:"folder_name"`
 	Rev        int64             `json:"rev"`
 	Form       *catalog.EditForm `json:"form,omitempty"`
+	// Images: the catalog takes icon images (record mode offers the
+	// image library).
+	Images bool `json:"images,omitempty"`
 }
 
 func (a *App) catalogRow(kind, id string) (catID, uuid, state, raw string, err error) {
@@ -887,6 +924,11 @@ func (a *App) CatalogRecord(kind, id string) (*CatalogRecordInfo, error) {
 	if info.CanWrite {
 		if f, err := catalog.FormOf(a.db, catID, kind, json.RawMessage(raw)); err == nil {
 			info.Form = &f
+		}
+		if c, err := a.catalogClient(cat); err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			info.Images = catalogImageLimits(ctx, c) != nil
+			cancel()
 		}
 	}
 	return info, nil

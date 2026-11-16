@@ -132,6 +132,15 @@ func (d *DB) MirrorFromWith(srcPath string, trust ShadowTrust) (MirrorInfo, erro
 				continue
 			}
 		}
+		if t == "images" {
+			// Cached catalog images stay: snapshots leave them out
+			// (shadowCatalogImages), so clearing them would mean fetching
+			// every catalog icon again after each pull.
+			if err := clearImagesKeepingCatalogCache(tx, src); err != nil {
+				return info, fmt.Errorf("mirror: clear images: %w", err)
+			}
+			continue
+		}
 		if t == "app_settings" {
 			// Preserve machine-local keys; clear the rest.
 			if _, err := tx.Exec(
@@ -179,6 +188,43 @@ func (d *DB) MirrorFromWith(srcPath string, trust ShadowTrust) (MirrorInfo, erro
 		return info, fmt.Errorf("mirror: commit: %w", err)
 	}
 	return info, nil
+}
+
+// clearImagesKeepingCatalogCache deletes every image row except cached
+// catalog images (catimg-*), and those too when the source brings the
+// same id or the same bytes (md5 is unique), so the copy that follows
+// meets no conflict. A catalog image dropped that way is either in the
+// source now or fetched again.
+func clearImagesKeepingCatalogCache(tx *sql.Tx, src *sql.DB) error {
+	if _, err := tx.Exec(`DELETE FROM images WHERE id NOT LIKE 'catimg-%'`); err != nil {
+		return err
+	}
+	if !tableExists(src, "images") {
+		return nil
+	}
+	rows, err := src.Query(`SELECT id, md5 FROM images`)
+	if err != nil {
+		return err
+	}
+	var ids, sums []string
+	for rows.Next() {
+		var id, m string
+		if err := rows.Scan(&id, &m); err != nil {
+			rows.Close()
+			return err
+		}
+		ids, sums = append(ids, id), append(sums, m)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i := range ids {
+		if _, err := tx.Exec(`DELETE FROM images WHERE id LIKE 'catimg-%' AND (id = ? OR md5 = ?)`, ids[i], sums[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // machineLocalSettings are app_settings keys that describe THIS

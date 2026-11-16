@@ -3240,7 +3240,10 @@ func (a *App) SyncPullLive() (*SyncPullLiveResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("apply profile: %w", err)
 	}
+	// Snapshots leave cached catalog images out and the rows that wore
+	// them without the pointer: point them at this machine's copies.
 	EventsEmit("catalog_changed", map[string]any{})
+	go a.rematerialiseCatalogs()
 
 	// Merge the vault in place using the local passphrase (same-user,
 	// same-passphrase case). A wrong-passphrase error means the

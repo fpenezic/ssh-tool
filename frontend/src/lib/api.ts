@@ -1291,8 +1291,11 @@ export interface PublishPlan {
   free_text: PublishFreeText[];
   refusals: PublishRefusal[];
   outside_jumps: PublishOutsideJump[];
+  /** Uploaded icons, one per distinct image; kept ones stay local, with why. */
+  images: PublishPlanImage[];
   root_uuid: string;
 }
+export interface PublishPlanImage { sha256: string; image_id: string; records: string[]; kept: boolean; reason?: string; later?: boolean }
 export interface CatalogPublishProblem { kind: string; local_id: string; name: string; path: string; field: string; code: string; message: string }
 export interface CatalogPublishResult {
   published: boolean;
@@ -1301,6 +1304,7 @@ export interface CatalogPublishResult {
   problems?: CatalogPublishProblem[];
   warnings?: CatalogPublishProblem[];
   refusals?: PublishRefusal[];
+  images?: PublishPlanImage[];
 }
 export interface CatalogEnrollPreview {
   base_url: string; normalised_url: string; server_name: string; user_name: string; user_email: string;
@@ -1360,12 +1364,16 @@ export interface CatalogRecordInfo {
   folder_name: string;
   rev: number;
   form?: CatalogEditForm;
+  /** The catalog takes icon images: record mode offers the image library. */
+  images?: boolean;
 }
 
 /** A catalog record as the editor edits it, in local terms. */
 export interface CatalogEditForm {
   name: string; hostname: string; protocol: string; tags: string[]; notes: string;
   icon_name: string | null; icon_color: string | null; doc_md: string;
+  /** The record's "sha256:<hex>", and the local image with those bytes (what the editor sets). */
+  icon_image?: string | null; icon_image_id?: string;
   settings: InheritableSettings;
   kind: string; local_addr: string | null; local_port: number | null; remote_host: string | null; remote_port: number | null;
   auto_start: boolean; description: string;
