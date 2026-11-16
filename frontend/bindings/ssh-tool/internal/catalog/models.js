@@ -486,6 +486,58 @@ export class FreeText {
 }
 
 /**
+ * KeptRef is a reference a publish keeps local.
+ */
+export class KeptRef {
+    /**
+     * Creates a new KeptRef instance.
+     * @param {Partial<KeptRef>} [$$source = {}] - The source object to create the KeptRef.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("field" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["field"] = "";
+        }
+        if (!("reason" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["reason"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new KeptRef instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {KeptRef}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new KeptRef(/** @type {Partial<KeptRef>} */($$parsedSource));
+    }
+}
+
+/**
  * OutsideJump is a bastion outside the subtree that records inside jump
  * through.
  */
@@ -837,6 +889,15 @@ export class PublishPlan {
              */
             this["outside_jumps"] = [];
         }
+        if (!("kept_local" in $$source)) {
+            /**
+             * KeptLocal: references that stay the publisher's own (not sent, no
+             * slot), with why. Readers get these records without them.
+             * @member
+             * @type {KeptRef[]}
+             */
+            this["kept_local"] = [];
+        }
         if (!("images" in $$source)) {
             /**
              * Images: the uploaded icons of the subtree, one per distinct image.
@@ -868,6 +929,7 @@ export class PublishPlan {
         const $$createField3_0 = $$createType13;
         const $$createField4_0 = $$createType15;
         const $$createField5_0 = $$createType17;
+        const $$createField6_0 = $$createType19;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("records" in $$parsedSource) {
             $$parsedSource["records"] = $$createField0_0($$parsedSource["records"]);
@@ -884,8 +946,11 @@ export class PublishPlan {
         if ("outside_jumps" in $$parsedSource) {
             $$parsedSource["outside_jumps"] = $$createField4_0($$parsedSource["outside_jumps"]);
         }
+        if ("kept_local" in $$parsedSource) {
+            $$parsedSource["kept_local"] = $$createField5_0($$parsedSource["kept_local"]);
+        }
         if ("images" in $$parsedSource) {
-            $$parsedSource["images"] = $$createField5_0($$parsedSource["images"]);
+            $$parsedSource["images"] = $$createField6_0($$parsedSource["images"]);
         }
         return new PublishPlan(/** @type {Partial<PublishPlan>} */($$parsedSource));
     }
@@ -1020,5 +1085,7 @@ const $$createType12 = Refusal.createFrom;
 const $$createType13 = $Create.Array($$createType12);
 const $$createType14 = OutsideJump.createFrom;
 const $$createType15 = $Create.Array($$createType14);
-const $$createType16 = PlanImage.createFrom;
+const $$createType16 = KeptRef.createFrom;
 const $$createType17 = $Create.Array($$createType16);
+const $$createType18 = PlanImage.createFrom;
+const $$createType19 = $Create.Array($$createType18);

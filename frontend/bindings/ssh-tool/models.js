@@ -1646,6 +1646,22 @@ export class CatalogPublishInput {
              */
             this["unsent"] = [];
         }
+        if (!("send_local_creds" in $$source)) {
+            /**
+             * SendLocalCreds / SendNetworks: also send vault credentials and
+             * network profiles as slots (off by default).
+             * @member
+             * @type {boolean}
+             */
+            this["send_local_creds"] = false;
+        }
+        if (!("send_networks" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["send_networks"] = false;
+        }
 
         Object.assign(this, $$source);
     }
@@ -3966,6 +3982,45 @@ export class DynamicProbeResult {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new DynamicProbeResult(/** @type {Partial<DynamicProbeResult>} */($$parsedSource));
+    }
+}
+
+/**
+ * DynamicSaveResult is what a save made.
+ */
+export class DynamicSaveResult {
+    /**
+     * Creates a new DynamicSaveResult instance.
+     * @param {Partial<DynamicSaveResult>} [$$source = {}] - The source object to create the DynamicSaveResult.
+     */
+    constructor($$source = {}) {
+        if (!("connection_id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["connection_id"] = "";
+        }
+        if (!("repointed" in $$source)) {
+            /**
+             * Repointed: rows whose jump host now goes through the new connection.
+             * @member
+             * @type {number}
+             */
+            this["repointed"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DynamicSaveResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {DynamicSaveResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DynamicSaveResult(/** @type {Partial<DynamicSaveResult>} */($$parsedSource));
     }
 }
 

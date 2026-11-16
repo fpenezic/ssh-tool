@@ -60,7 +60,7 @@ func TestIntegrationPublish(t *testing.T) {
 
 	// A refused publish: a hostname over the limit, mapped to its record.
 	bad, _ := bdb.CreateConnection(store.NewConnection{Name: "too-long", Hostname: strings.Repeat("h", 300), FolderID: &mine.ID})
-	plan, err := BuildPublish(bdb, PublishOptions{CatalogID: bcat.ID, RootID: mine.ID, TargetUUID: space, AccountName: "bob"})
+	plan, err := BuildPublish(bdb, PublishOptions{CatalogID: bcat.ID, RootID: mine.ID, TargetUUID: space, AccountName: "bob", SendLocalCreds: true})
 	if err != nil || len(plan.Refusals) > 0 {
 		t.Fatalf("plan: %v %+v", err, plan.Refusals)
 	}
@@ -84,7 +84,7 @@ func TestIntegrationPublish(t *testing.T) {
 	}
 
 	// The real publish.
-	plan, err = BuildPublish(bdb, PublishOptions{CatalogID: bcat.ID, RootID: mine.ID, TargetUUID: space, AccountName: "bob"})
+	plan, err = BuildPublish(bdb, PublishOptions{CatalogID: bcat.ID, RootID: mine.ID, TargetUUID: space, AccountName: "bob", SendLocalCreds: true})
 	if err != nil || len(plan.Refusals) > 0 {
 		t.Fatalf("plan: %v %+v", err, plan.Refusals)
 	}

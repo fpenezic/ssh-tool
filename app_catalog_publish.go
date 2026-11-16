@@ -45,6 +45,10 @@ type CatalogPublishInput struct {
 	// Unsent: the "What to send" categories left unticked
 	// (catalog.PublishCategories ids).
 	Unsent []string `json:"unsent"`
+	// SendLocalCreds / SendNetworks: also send vault credentials and
+	// network profiles as slots (off by default).
+	SendLocalCreds bool `json:"send_local_creds"`
+	SendNetworks   bool `json:"send_networks"`
 }
 
 // CatalogPublishProblem is one per-record error of a refused publish,
@@ -168,7 +172,8 @@ func (in CatalogPublishInput) options(account string) catalog.PublishOptions {
 		unsent[k] = true
 	}
 	return catalog.PublishOptions{CatalogID: in.CatalogID, RootID: in.FolderID, TargetUUID: in.TargetUUID,
-		JumpInclude: inc, SlotNames: in.SlotNames, AccountName: account, Unsent: unsent}
+		JumpInclude: inc, SlotNames: in.SlotNames, AccountName: account, Unsent: unsent,
+		SendLocalCreds: in.SendLocalCreds, SendNetworks: in.SendNetworks}
 }
 
 // CatalogPublishPreview builds the plan the dialog shows. Nothing is sent.

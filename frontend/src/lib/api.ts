@@ -1276,6 +1276,8 @@ export interface CatalogPublishInput {
   slot_names: Record<string, string>;
   // "What to send" categories left unticked.
   unsent: string[];
+  send_local_creds?: boolean;
+  send_networks?: boolean;
 }
 export interface PublishPlanRecord { kind: "folders" | "connections" | "forwards"; uuid: string; local_id: string; name: string; path: string; copy_of?: string }
 export interface PublishPlanSlot {
@@ -1293,6 +1295,8 @@ export interface PublishPlan {
   outside_jumps: PublishOutsideJump[];
   /** Uploaded icons, one per distinct image; kept ones stay local, with why. */
   images: PublishPlanImage[];
+  /** References not sent (local credentials, networks, inventory bastions, missing ones), with why. */
+  kept_local: { kind: string; name: string; field: string; reason: string }[];
   root_uuid: string;
 }
 export interface PublishPlanImage { sha256: string; image_id: string; records: string[]; kept: boolean; reason?: string; later?: boolean }
@@ -1799,6 +1803,8 @@ export const api = {
   catalogCancelSignIn: (id: string) => G.CatalogCancelSignIn(id) as unknown as Promise<void>,
   catalogSignOut: (id: string) => G.CatalogSignOut(id) as unknown as Promise<void>,
   catalogRemove: (id: string) => G.CatalogRemove(id) as unknown as Promise<void>,
+  dynamicEntrySaveAsConnection: (dynId: string, folderId: string, repoint: boolean) =>
+    G.DynamicEntrySaveAsConnection(dynId, folderId, repoint) as unknown as Promise<{ connection_id: string; repointed: number }>,
   catalogRemoveKeepLocal: (id: string) => G.CatalogRemoveKeepLocal(id) as unknown as Promise<LocaliseResult>,
   catalogCopyToLocal: (kind: "folders" | "connections", id: string, targetFolderId: string) =>
     G.CatalogCopyToLocal(kind, id, targetFolderId) as unknown as Promise<LocaliseResult>,

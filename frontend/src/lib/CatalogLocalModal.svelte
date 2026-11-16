@@ -34,6 +34,19 @@
       err = "";
     }
   });
+  let repoint = $state(true);
+  $effect(() => {
+    if (catalogLocal.dynSave) {
+      target = "";
+      err = "";
+      repoint = true;
+    }
+  });
+  async function saveDyn() {
+    busy = true;
+    err = (await catalogLocal.runDynSave(target, repoint)) ?? "";
+    busy = false;
+  }
   async function copy() {
     busy = true;
     err = (await catalogLocal.runCopy(target)) ?? "";
@@ -61,6 +74,26 @@
       <footer>
         <button onclick={() => (catalogLocal.copy = null)} disabled={busy}>Cancel</button>
         <button class="primary" onclick={copy} disabled={busy}>{busy ? "Copying..." : "Copy"}</button>
+      </footer>
+    </div>
+  </div>
+{/if}
+
+{#if catalogLocal.dynSave}
+  <div class="overlay" role="presentation">
+    <div class="modal" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => { if (e.key === "Escape" && !busy) catalogLocal.dynSave = null; }}>
+      <header>
+        <h2>Save "{catalogLocal.dynSave.name}" as a connection</h2>
+        <button class="close" onclick={() => (catalogLocal.dynSave = null)} title="Cancel (Esc)" disabled={busy}><IconX size={14} /></button>
+      </header>
+      <p class="hint">A fixed connection with the address, port, user and credential this host has now. It does not follow the inventory: if the address changes, change it by hand. A fixed bastion can go to a catalog; an inventory host cannot.</p>
+      <span class="label">Into</span>
+      <SearchableSelect value={target} options={targets} placeholder="Pick a folder..." emptyLabel="(top level)" onChange={(v: string) => (target = v)} />
+      <label class="label"><input type="checkbox" bind:checked={repoint} disabled={busy} /> Point jump hosts that go through this host at the new connection</label>
+      {#if err}<p class="err"><IconAlertTriangle size={13} /> {err}</p>{/if}
+      <footer>
+        <button onclick={() => (catalogLocal.dynSave = null)} disabled={busy}>Cancel</button>
+        <button class="primary" onclick={saveDyn} disabled={busy}>{busy ? "Saving..." : "Save"}</button>
       </footer>
     </div>
   </div>

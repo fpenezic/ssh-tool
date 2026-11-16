@@ -9,6 +9,27 @@ import { errMsg } from "./connectErrors";
 class CatalogLocalStore {
   copy = $state<{ kind: "folders" | "connections"; id: string; name: string } | null>(null);
   report = $state<{ title: string; res: LocaliseResult } | null>(null);
+  // "Save as connection" on an inventory host.
+  dynSave = $state<{ id: string; name: string } | null>(null);
+
+  startDynSave(id: string, name: string) {
+    this.dynSave = { id, name };
+  }
+
+  async runDynSave(folderId: string, repoint: boolean): Promise<string | null> {
+    const d = this.dynSave;
+    if (!d) return null;
+    try {
+      const r = await api.dynamicEntrySaveAsConnection(d.id, folderId, repoint);
+      this.dynSave = null;
+      await tree.load();
+      toast.ok(`${d.name} saved as a connection${r.repointed ? `; ${r.repointed} jump host${r.repointed === 1 ? "" : "s"} now go through it` : ""}`, 8000);
+      void selection.selectConnection(r.connection_id);
+      return null;
+    } catch (e) {
+      return errMsg(e);
+    }
+  }
 
   startCopy(kind: "folders" | "connections", id: string, name: string) {
     this.copy = { kind, id, name };

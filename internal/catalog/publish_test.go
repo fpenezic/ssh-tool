@@ -116,7 +116,7 @@ func TestPublishRoundTripResolvesTheSame(t *testing.T) {
 	for _, id := range []string{x.web, x.db1, x.inner} {
 		before[id] = resolvedJSON(t, e.db, id)
 	}
-	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, AccountName: "bob"})
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, AccountName: "bob", SendLocalCreds: true, SendNetworks: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +328,7 @@ func TestPublishIncludesABastionCopy(t *testing.T) {
 func TestPublishReusesSlotsInScope(t *testing.T) {
 	e := newSyncEnv(t)
 	x := publishFixture(t, e.db)
-	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root})
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, SendLocalCreds: true, SendNetworks: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,7 +344,7 @@ func TestPublishReusesSlotsInScope(t *testing.T) {
 		Overrides: store.InheritableSettings{AuthRef: ptr(x.credA), OTPRef: ptr(cb2.ID)}}); err != nil {
 		t.Fatal(err)
 	}
-	plan2, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: more.ID, TargetUUID: plan.RootUUID})
+	plan2, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: more.ID, TargetUUID: plan.RootUUID, SendLocalCreds: true, SendNetworks: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -596,3 +596,66 @@ func TestPublishIconImages(t *testing.T) {
 		}
 	}
 }
+
+// By default only shared sources go as slots: the Bitwarden credential
+// does, the vault credential and the network profile stay the
+// publisher's own (listed, no slot), and the publisher's tree resolves
+// the same. A reference to something that no longer exists, and a jump
+// through an inventory host, are kept too instead of blocking.
+func TestPublishKeepsLocalRefs(t *testing.T) {
+	e := newSyncEnv(t)
+	x := publishFixture(t, e.db)
+	gone := "11111111-2222-3333-4444-555555555555"
+	if _, err := e.db.Conn().Exec(`UPDATE connections SET overrides_json = json_set(overrides_json, '$.network_profile_id', ?) WHERE id = ?`, gone, x.inner); err != nil {
+		t.Fatal(err)
+	}
+	dyn := "dyn:pve/101"
+	if _, err := e.db.Conn().Exec(`UPDATE connections SET overrides_json = json_set(overrides_json, '$.jump_host', json(?)) WHERE id = ?`,
+		`{"kind":"chain","chain":{"connection_id":"`+dyn+`"}}`, x.db1); err != nil {
+		t.Fatal(err)
+	}
+	// db-1 jumps through an inventory host, which a test cannot resolve:
+	// its layer is checked instead.
+	before := map[string]string{}
+	for _, id := range []string{x.web, x.inner} {
+		before[id] = resolvedJSON(t, e.db, id)
+	}
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, AccountName: "bob"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Refusals) > 0 {
+		t.Fatalf("refusals: %+v", plan.Refusals)
+	}
+	if len(plan.Slots) != 1 || slotByKey(plan, "cred:"+x.credBW) == nil {
+		t.Fatalf("slots: %+v", plan.Slots)
+	}
+	body, _ := json.Marshal(plan.Request)
+	for _, local := range []string{x.credA, x.prof, gone, dyn} {
+		if strings.Contains(string(body), local) {
+			t.Fatalf("request carries %s: %s", local, body)
+		}
+	}
+	reasons := map[string]bool{}
+	for _, k := range plan.KeptLocal {
+		reasons[k.Field] = true
+	}
+	for _, f := range []string{"Credential", "Network", "Jump host"} {
+		if !reasons[f] {
+			t.Fatalf("kept list lacks %s: %+v", f, plan.KeptLocal)
+		}
+	}
+	if err := CompletePublish(e.db, plan, accept(plan), "bob", nil); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range before {
+		if got := resolvedJSON(t, e.db, id); got != want {
+			t.Fatalf("%s resolves differently:\n before %s\n after  %s", id, want, got)
+		}
+	}
+	if c, _ := e.db.GetConnection(x.db1); c.Overrides.JumpHost == nil || !strings.Contains(mustJSONc(c.Overrides.JumpHost), dyn) {
+		t.Fatalf("db-1 lost its own jump host")
+	}
+}
+
+func mustJSONc(v any) string { b, _ := json.Marshal(v); return string(b) }

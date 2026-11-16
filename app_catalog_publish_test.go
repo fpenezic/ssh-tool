@@ -125,7 +125,7 @@ func (pa *publishApp) setMode(m string) {
 }
 
 func (pa *publishApp) in() CatalogPublishInput {
-	return CatalogPublishInput{CatalogID: pa.cat.ID, FolderID: pa.folder}
+	return CatalogPublishInput{CatalogID: pa.cat.ID, FolderID: pa.folder, SendLocalCreds: true, SendNetworks: true}
 }
 
 func (pa *publishApp) pending(t *testing.T) bool {
