@@ -721,3 +721,28 @@ func TestPublishSendsInventoryBastion(t *testing.T) {
 		t.Fatalf("skipped outside jump: %+v", plan2.OutsideJumps)
 	}
 }
+
+// A typed jump host (hostname) goes as it is; a vault credential on the
+// hop is not sent, and the publisher keeps it.
+func TestPublishManualJumpKeepsOwnCredential(t *testing.T) {
+	e := newSyncEnv(t)
+	x := publishFixture(t, e.db)
+	if _, err := e.db.Conn().Exec(`UPDATE connections SET overrides_json = json_set(overrides_json, '$.jump_host', json(?)) WHERE id = ?`,
+		`{"kind":"chain","chain":{"hostname":"pve-bastion.example.com","auth_ref":"`+x.credA+`"}}`, x.db1); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, AccountName: "bob"})
+	if err != nil || len(plan.Refusals) > 0 {
+		t.Fatalf("plan: %v %+v", err, plan.Refusals)
+	}
+	body, _ := json.Marshal(plan.Request)
+	if !strings.Contains(string(body), "pve-bastion.example.com") || strings.Contains(string(body), x.credA) {
+		t.Fatalf("request: %s", body)
+	}
+	if err := CompletePublish(e.db, plan, accept(plan), "bob", nil); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := e.db.GetConnection(x.db1); c.Overrides.JumpHost == nil || !strings.Contains(mustJSONc(c.Overrides.JumpHost), x.credA) {
+		t.Fatalf("publisher lost the hop credential: %v", mustJSONc(c.Overrides.JumpHost))
+	}
+}
