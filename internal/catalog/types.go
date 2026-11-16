@@ -43,6 +43,9 @@ type Meta struct {
 		ClientID              string   `json:"client_id"`
 		Methods               []string `json:"methods"`
 	} `json:"auth"`
+	// Images: the icon image store's limits (PROTOCOL 3.6), from
+	// revision 2. Nil on an older server.
+	Images *ImageLimits `json:"images"`
 }
 
 // WhoAmI is GET /api/v1/whoami.
@@ -94,6 +97,7 @@ type Folder struct {
 	Settings   json.RawMessage `json:"settings"`
 	IconName   *string         `json:"icon_name"`
 	IconColor  *string         `json:"icon_color"`
+	IconImage  *string         `json:"icon_image"`
 	DocMD      *string         `json:"doc_md"`
 	Access     string          `json:"access"`
 }
@@ -116,6 +120,7 @@ type Connection struct {
 	Notes      string          `json:"notes"`
 	IconName   *string         `json:"icon_name"`
 	IconColor  *string         `json:"icon_color"`
+	IconImage  *string         `json:"icon_image"`
 	DocMD      *string         `json:"doc_md"`
 }
 

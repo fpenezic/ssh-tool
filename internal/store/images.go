@@ -2,6 +2,7 @@ package store
 
 import (
 	"crypto/md5"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"errors"
@@ -37,8 +38,8 @@ func (d *DB) PutImage(data []byte, mimeType string) (string, error) {
 	}
 	id := newID()
 	_, err = d.conn.Exec(
-		`INSERT INTO images (id, md5, mime_type, data, created_at) VALUES (?, ?, ?, ?, ?)`,
-		id, hash, mimeType, data, time.Now().Unix(),
+		`INSERT INTO images (id, md5, sha256, mime_type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		id, hash, sha256Hex(data), mimeType, data, time.Now().Unix(),
 	)
 	if err != nil {
 		return "", err
@@ -466,4 +467,177 @@ func (d *DB) DeleteUnusedImages() (int, error) {
 	}
 	n, _ := res.RowsAffected()
 	return int(n), nil
+}
+
+// CatalogImagePrefix marks an image row cached from a catalog's image
+// store (PROTOCOL 3.6): catimg-<sha256>. Such rows can be fetched again at
+// any time, so they stay out of profile snapshots (ShadowSnapshot) and are
+// pruned when no catalog record uses them any more.
+const CatalogImagePrefix = "catimg-"
+
+func sha256Hex(b []byte) string {
+	s := sha256.Sum256(b)
+	return hex.EncodeToString(s[:])
+}
+
+// ImageIDBySHA256 returns the local image row holding the bytes with this
+// SHA-256 (lowercase hex), or "" when there is none. Rows without the
+// hash yet (written before migration 31, or by an older app's mirror) get
+// it filled here, once per miss.
+func (d *DB) ImageIDBySHA256(hexHash string) (string, error) {
+	q := func() (string, error) {
+		var id string
+		err := d.conn.QueryRow(`SELECT id FROM images WHERE sha256 = ? ORDER BY id LIKE 'catimg-%', created_at LIMIT 1`, hexHash).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return id, err
+	}
+	id, err := q()
+	if id != "" || err != nil {
+		return id, err
+	}
+	n, err := d.backfillImageSHA256()
+	if err != nil || n == 0 {
+		return "", err
+	}
+	return q()
+}
+
+// backfillImageSHA256 fills the hash of every row that lacks it.
+func (d *DB) backfillImageSHA256() (int, error) {
+	rows, err := d.conn.Query(`SELECT id, data FROM images WHERE sha256 IS NULL`)
+	if err != nil {
+		return 0, err
+	}
+	type row struct{ id, sum string }
+	var todo []row
+	for rows.Next() {
+		var id string
+		var data []byte
+		if err := rows.Scan(&id, &data); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		todo = append(todo, row{id, sha256Hex(data)})
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	for _, r := range todo {
+		if _, err := d.conn.Exec(`UPDATE images SET sha256 = ? WHERE id = ?`, r.sum, r.id); err != nil {
+			return 0, err
+		}
+	}
+	return len(todo), nil
+}
+
+// PutCatalogImage stores bytes fetched from a catalog under
+// catimg-<sha256>, or returns the row that already holds the same bytes
+// (the user's own upload of the file included). The caller has checked
+// the bytes and that they hash to hexHash.
+func (d *DB) PutCatalogImage(hexHash, mimeType string, data []byte) (string, error) {
+	if id, err := d.ImageIDBySHA256(hexHash); id != "" || err != nil {
+		return id, err
+	}
+	sum := md5.Sum(data)
+	m := hex.EncodeToString(sum[:])
+	var existing string
+	err := d.conn.QueryRow(`SELECT id FROM images WHERE md5 = ?`, m).Scan(&existing)
+	if err == nil {
+		_, err = d.conn.Exec(`UPDATE images SET sha256 = ? WHERE id = ?`, hexHash, existing)
+		return existing, err
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	id := CatalogImagePrefix + hexHash
+	_, err = d.conn.Exec(`INSERT INTO images (id, md5, sha256, mime_type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		id, m, hexHash, mimeType, data, time.Now().Unix())
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// PruneCatalogImages deletes cached catalog images (catimg-*) that no row
+// uses and whose hash is not in keep (the images current catalog records
+// name). Returns how many went.
+func (d *DB) PruneCatalogImages(keep map[string]bool) (int, error) {
+	rows, err := d.conn.Query(`SELECT id, IFNULL(sha256, '') FROM images WHERE id LIKE 'catimg-%'` + imageUnusedSQL)
+	if err != nil {
+		return 0, err
+	}
+	var drop []string
+	for rows.Next() {
+		var id, sum string
+		if err := rows.Scan(&id, &sum); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		if !keep[sum] {
+			drop = append(drop, id)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	for _, id := range drop {
+		if _, err := d.conn.Exec(`DELETE FROM images WHERE id = ?`, id); err != nil {
+			return 0, err
+		}
+	}
+	return len(drop), nil
+}
+
+// imageUnusedSQL narrows an images query to rows no icon column uses.
+const imageUnusedSQL = " AND id NOT IN (SELECT icon_image_id FROM folders WHERE icon_image_id IS NOT NULL)" +
+	" AND id NOT IN (SELECT icon_image_id FROM connections WHERE icon_image_id IS NOT NULL)" +
+	" AND id NOT IN (SELECT icon_image_id FROM credential_refs WHERE icon_image_id IS NOT NULL)" +
+	" AND id NOT IN (SELECT icon_image_id FROM credential_folders WHERE icon_image_id IS NOT NULL)"
+
+// ImageIDsBySHA256Tx maps the hash of every image row that has one to its
+// id (a user's own upload before a cached catalog copy of the same bytes).
+func ImageIDsBySHA256Tx(tx *sql.Tx) (map[string]string, error) {
+	rows, err := tx.Query(`SELECT sha256, id FROM images WHERE sha256 IS NOT NULL ORDER BY id LIKE 'catimg-%' DESC, created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var h, id string
+		if err := rows.Scan(&h, &id); err != nil {
+			return nil, err
+		}
+		out[h] = id // later rows win: own uploads, oldest first
+	}
+	return out, rows.Err()
+}
+
+// CatalogImageRefs returns the distinct icon_image values ("sha256:...")
+// the current catalog records of a catalog name; catalogID "" means every
+// catalog.
+func (d *DB) CatalogImageRefs(catalogID string) ([]string, error) {
+	q := `SELECT DISTINCT v FROM (
+		SELECT CASE WHEN json_valid(catalog_json) THEN json_extract(catalog_json, '$.icon_image') END AS v, catalog_id FROM folders WHERE catalog_id IS NOT NULL AND catalog_state <> 'removed'
+		UNION ALL
+		SELECT CASE WHEN json_valid(catalog_json) THEN json_extract(catalog_json, '$.icon_image') END AS v, catalog_id FROM connections WHERE catalog_id IS NOT NULL AND catalog_state <> 'removed'
+	) WHERE v IS NOT NULL AND (? = '' OR catalog_id = ?)`
+	rows, err := d.conn.Query(q, catalogID, catalogID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
 }

@@ -44,6 +44,7 @@
   import { level, rank, fullestPartition, fullestInodes } from "./serverStatsLevel";
   import { failedIgnore } from "./failedIgnore.svelte";
   import { statusBarPrefs, type StatusBarItem } from "./statusBarPrefs.svelte";
+  import { catalogs } from "./catalog.svelte";
 
   let updateModalOpen = $state(false);
   let statusModalOpen = $state(false);
@@ -784,6 +785,17 @@
       <span>{broadcast.totalMembers()}</span>
     </span>
   {/if}
+
+  {#each Object.entries(catalogs.iconUploads) as [cid, u] (cid)}
+    <button
+      class="seg"
+      onclick={() => catalogs.open(cid)}
+      title={`${u.name}: sending ${u.left} of ${u.total} icon image${u.total === 1 ? "" : "s"} to the catalog in the background${u.waitingUntil ? ` - waiting for the catalog's upload limit until ${new Date(u.waitingUntil * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}${u.message ? ` - ${u.message}` : ""}`}
+    >
+      <IconUpload size={11} />
+      <span>{u.left} icon{u.left === 1 ? "" : "s"}</span>
+    </button>
+  {/each}
 
   {#if syncState.remoteAhead}
     <button

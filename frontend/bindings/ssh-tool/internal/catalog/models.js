@@ -69,6 +69,23 @@ export class EditForm {
              */
             this["icon_color"] = null;
         }
+        if (!("icon_image" in $$source)) {
+            /**
+             * IconImage is the record's "sha256:<hex>"; IconImageID the local
+             * image row with those bytes (for showing it, and what the editor
+             * sets; ResolveIconImage turns it into IconImage before a save).
+             * @member
+             * @type {string | null}
+             */
+            this["icon_image"] = null;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["icon_image_id"] = undefined;
+        }
         if (!("doc_md" in $$source)) {
             /**
              * @member
@@ -144,13 +161,13 @@ export class EditForm {
      */
     static createFrom($$source = {}) {
         const $$createField3_0 = $$createType0;
-        const $$createField8_0 = $$createType1;
+        const $$createField10_0 = $$createType1;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField3_0($$parsedSource["tags"]);
         }
         if ("settings" in $$parsedSource) {
-            $$parsedSource["settings"] = $$createField8_0($$parsedSource["settings"]);
+            $$parsedSource["settings"] = $$createField10_0($$parsedSource["settings"]);
         }
         return new EditForm(/** @type {Partial<EditForm>} */($$parsedSource));
     }
@@ -526,6 +543,83 @@ export class OutsideJump {
 }
 
 /**
+ * PlanImage is one distinct uploaded icon of the publish.
+ */
+export class PlanImage {
+    /**
+     * Creates a new PlanImage instance.
+     * @param {Partial<PlanImage>} [$$source = {}] - The source object to create the PlanImage.
+     */
+    constructor($$source = {}) {
+        if (!("sha256" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["sha256"] = "";
+        }
+        if (!("image_id" in $$source)) {
+            /**
+             * the local image row
+             * @member
+             * @type {string}
+             */
+            this["image_id"] = "";
+        }
+        if (!("records" in $$source)) {
+            /**
+             * Names of the records wearing it.
+             * @member
+             * @type {string[]}
+             */
+            this["records"] = [];
+        }
+        if (!("kept" in $$source)) {
+            /**
+             * Kept: the image is not sent and stays in the publisher's own layer
+             * for these records, for Reason (the catalog takes no images, the
+             * check failed, Icons unticked, the upload limit).
+             * @member
+             * @type {boolean}
+             */
+            this["kept"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["reason"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Later: kept now, uploaded and set in the background after the
+             * publish (the catalog's upload limit).
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["later"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new PlanImage instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {PlanImage}
+     */
+    static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("records" in $$parsedSource) {
+            $$parsedSource["records"] = $$createField2_0($$parsedSource["records"]);
+        }
+        return new PlanImage(/** @type {Partial<PlanImage>} */($$parsedSource));
+    }
+}
+
+/**
  * PlanRecord is one record of the publish and the local row it is.
  */
 export class PlanRecord {
@@ -743,6 +837,14 @@ export class PublishPlan {
              */
             this["outside_jumps"] = [];
         }
+        if (!("images" in $$source)) {
+            /**
+             * Images: the uploaded icons of the subtree, one per distinct image.
+             * @member
+             * @type {PlanImage[]}
+             */
+            this["images"] = [];
+        }
         if (!("root_uuid" in $$source)) {
             /**
              * @member
@@ -765,6 +867,7 @@ export class PublishPlan {
         const $$createField2_0 = $$createType11;
         const $$createField3_0 = $$createType13;
         const $$createField4_0 = $$createType15;
+        const $$createField5_0 = $$createType17;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("records" in $$parsedSource) {
             $$parsedSource["records"] = $$createField0_0($$parsedSource["records"]);
@@ -780,6 +883,9 @@ export class PublishPlan {
         }
         if ("outside_jumps" in $$parsedSource) {
             $$parsedSource["outside_jumps"] = $$createField4_0($$parsedSource["outside_jumps"]);
+        }
+        if ("images" in $$parsedSource) {
+            $$parsedSource["images"] = $$createField5_0($$parsedSource["images"]);
         }
         return new PublishPlan(/** @type {Partial<PublishPlan>} */($$parsedSource));
     }
@@ -914,3 +1020,5 @@ const $$createType12 = Refusal.createFrom;
 const $$createType13 = $Create.Array($$createType12);
 const $$createType14 = OutsideJump.createFrom;
 const $$createType15 = $Create.Array($$createType14);
+const $$createType16 = PlanImage.createFrom;
+const $$createType17 = $Create.Array($$createType16);

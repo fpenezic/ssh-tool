@@ -505,3 +505,94 @@ func TestPublishUnsentStaysLocal(t *testing.T) {
 	e.sync()
 	check("after the feed echo")
 }
+
+// Uploaded icons: a valid image goes as icon_image (and the publisher's row
+// keeps showing it, through its hash); one the catalog would refuse stays
+// in the publisher's layer with the reason; one held back by the upload
+// limit is marked for the background upload.
+func TestPublishIconImages(t *testing.T) {
+	e := newSyncEnv(t)
+	x := publishFixture(t, e.db)
+	good := pngOf(t, 16, 16)
+	gid, err := e.db.PutImage(good, "image/png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bid, err := e.db.PutImage([]byte("\x89PNG\r\n\x1a\nfake"), "image/png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.db.SetConnectionIcon(x.db1, gid); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.db.SetConnectionIcon(x.web, bid); err != nil {
+		t.Fatal(err)
+	}
+	build := func() *PublishPlan {
+		t.Helper()
+		lim := DefaultImageLimits
+		plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, AccountName: "bob", Images: &lim})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return plan
+	}
+	conn := func(plan *PublishPlan, name string) PublishConnection {
+		for _, c := range plan.Request.Connections {
+			if c.Name == name {
+				return c
+			}
+		}
+		t.Fatalf("no %s in request", name)
+		return PublishConnection{}
+	}
+	uuidOf := func(plan *PublishPlan, local string) string {
+		for _, r := range plan.Records {
+			if r.LocalID == local {
+				return r.UUID
+			}
+		}
+		return ""
+	}
+
+	plan := build()
+	if c := conn(plan, "db-1"); c.IconImage == nil || *c.IconImage != ImageRef(good) || c.IconName != nil {
+		t.Fatalf("db-1 icon not sent as an image: %+v", c)
+	}
+	if c := conn(plan, "web-1"); c.IconImage != nil {
+		t.Fatalf("web-1 sent an image the catalog refuses: %v", *c.IconImage)
+	}
+	if len(plan.Images) != 2 || len(plan.SentImages()) != 1 {
+		t.Fatalf("plan images: %+v", plan.Images)
+	}
+	for _, pi := range plan.Images {
+		if pi.ImageID == bid && (!pi.Kept || pi.Reason == "") {
+			t.Fatalf("refused image without a reason: %+v", pi)
+		}
+	}
+	if l := plan.Layers[uuidOf(plan, x.web)].JSON; !strings.Contains(l, bid) {
+		t.Fatalf("web-1 layer does not keep its image: %s", l)
+	}
+
+	// Held back by the upload limit.
+	held := build()
+	held.KeepImage(ImageSHA256(good), "the catalog's upload limit - sent later", true)
+	if c := conn(held, "db-1"); c.IconImage != nil {
+		t.Fatalf("held image still in the request")
+	}
+	l := held.Layers[uuidOf(held, x.db1)].JSON
+	if !strings.Contains(l, gid) || !strings.Contains(l, IconPendingKey) {
+		t.Fatalf("db-1 layer lacks the pending image: %s", l)
+	}
+
+	// Sent: the converted row shows the user's own image row again.
+	if err := CompletePublish(e.db, plan, accept(plan), "bob", nil); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[string]string{x.db1: gid, x.web: bid} {
+		c, _ := e.db.GetConnection(id)
+		if c.IconImageID == nil || *c.IconImageID != want {
+			t.Fatalf("%s icon after publish: %v, want %s", c.Name, c.IconImageID, want)
+		}
+	}
+}

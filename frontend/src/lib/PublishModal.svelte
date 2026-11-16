@@ -10,6 +10,9 @@
   import { toast } from "./toast.svelte.ts";
   import { errMsg } from "./connectErrors";
   import { clickOutside } from "./clickOutside";
+  import { EventsOn } from "./wailsRuntime";
+  import { onDestroy } from "svelte";
+  import Icon from "./Icon.svelte";
   import { IconX, IconFolder, IconHost, IconTunnel, IconKey, IconVpn, IconBastion, IconAlertTriangle, IconLock, IconUsers } from "./iconMap";
 
   interface Props { folderId: string; folderName: string; onClose: () => void; presetTarget?: string; presetCatalog?: string }
@@ -27,7 +30,7 @@
   const sendCategories: { id: string; label: string; hint?: string }[] = [
     { id: "notes", label: "Notes" },
     { id: "tags", label: "Tags" },
-    { id: "icons", label: "Icons", hint: "built-in icons; uploaded images stay yours for now" },
+    { id: "icons", label: "Icons", hint: "built-in icons and uploaded images (PNG, JPEG, WebP)" },
     { id: "forwards", label: "Port forwards" },
     { id: "database", label: "Database settings", hint: "listed databases and their logins" },
     { id: "kafka", label: "Kafka settings", hint: "including the Kafka login" },
@@ -133,15 +136,29 @@
   };
   const fieldName = (f: string) => fieldNames[f] ?? (f.startsWith("db_targets.") ? "Database target" : f);
 
+  // Icon upload progress while Publish runs (catalog_publish_progress).
+  let imgProgress = $state<{ done: number; total: number } | null>(null);
+  const offProgress = EventsOn("catalog_publish_progress", (e: any) => {
+    if (busy && String(e?.catalog_id ?? "") === catalogId) imgProgress = { done: Number(e?.images_done ?? 0), total: Number(e?.images_total ?? 0) };
+  });
+  onDestroy(() => { if (typeof offProgress === "function") offProgress(); });
+  const imagesSent = $derived((plan?.images ?? []).filter((i) => !i.kept));
+  const imagesKept = $derived((plan?.images ?? []).filter((i) => i.kept));
+
   async function publish() {
     if (!canPublish) return;
     busy = true;
     result = null;
+    imgProgress = null;
     try {
       const r = await api.catalogPublish(input);
       result = r;
       if (r.published) {
         toast.ok(`${folderName} published to ${catName}${r.message && r.message !== "published" ? " - " + r.message : ""}`, 8000);
+        const later = (r.images ?? []).filter((i) => i.later).length;
+        const refused = (r.images ?? []).filter((i) => i.kept && !i.later && !(plan?.images ?? []).some((p) => p.sha256 === i.sha256 && p.kept));
+        if (later > 0) toast.info(`${later} icon image${later === 1 ? "" : "s"} wait for the catalog's upload limit and follow in the background (status bar)`, 10000);
+        for (const i of refused) toast.info(`Icon of ${i.records.join(", ")} stays yours only: ${i.reason}`, 10000);
         await tree.load();
         onClose();
       }
@@ -269,6 +286,22 @@
                   {#if !s.new}<p class="reused-note">Already in the catalog: whoever has bound it there reaches these connections with it too.</p>{/if}
                 </div>
               {/each}
+            </section>
+          {/if}
+
+          {#if (plan.images ?? []).length > 0}
+            <section>
+              <h3>Icon images <span class="dim">{imagesSent.length} sent{imagesKept.length ? `, ${imagesKept.length} stay${imagesKept.length === 1 ? "s" : ""} yours only` : ""}</span></h3>
+              {#each plan.images as im (im.sha256)}
+                <div class="slot" class:reused={im.kept}>
+                  <Icon imageId={im.image_id} size={16}><IconFolder size={13} /></Icon>
+                  <span>{im.records.slice(0, 3).join(", ")}{im.records.length > 3 ? ` +${im.records.length - 3}` : ""}</span>
+                  {#if im.kept}<span class="tag reused-tag">stays local</span> <span class="dim">{im.reason}</span>{:else}<span class="tag">sent</span>{/if}
+                </div>
+              {/each}
+              {#if busy && imgProgress && imgProgress.total > 0 && imgProgress.done < imgProgress.total}
+                <p class="dim">Uploading icon images: {imgProgress.done} of {imgProgress.total}. Waits at most a minute for the catalog's upload limit; the rest follows in the background.</p>
+              {/if}
             </section>
           {/if}
 

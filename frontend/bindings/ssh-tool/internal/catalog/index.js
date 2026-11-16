@@ -9,6 +9,7 @@ export {
     FieldChange,
     FreeText,
     OutsideJump,
+    PlanImage,
     PlanRecord,
     PlanSlot,
     PublishPlan,

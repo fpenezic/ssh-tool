@@ -31,9 +31,16 @@
     // Fired when a built-in icon (or clear) is chosen. name="" means
     // cleared. The parent refreshes the row from the store.
     onNamedChange?: (name: string, color: string) => void;
+    // Deferred: the picker only reports the choice (onChange /
+    // onNamedChange) and sets nothing; the parent saves it (record mode
+    // of a catalog row, where Save writes the record).
+    deferred?: boolean;
+    // false: built-in icons only (a catalog that takes no images).
+    allowImages?: boolean;
   };
 
   async function setIcon(imageId: string) {
+    if (deferred) return;
     if (kind === "folder") {
       await api.imagesSetFolder(targetId, imageId);
     } else if (kind === "connection") {
@@ -54,12 +61,14 @@
     currentIconColor = null,
     onChange,
     onNamedChange,
+    deferred = false,
+    allowImages = true,
   }: Props = $props();
 
   // All four kinds support built-in icons and uploaded images (credential
   // folders since schema v27).
   const supportsNamed = true;
-  const supportsUpload = true;
+  const supportsUpload = $derived(allowImages);
 
   // Which picker tab is showing: the uploaded-image library, or the
   // built-in lucide set.
@@ -79,6 +88,7 @@
   });
 
   async function setNamed(name: string, color: string) {
+    if (deferred) return;
     if (kind === "folder") {
       await api.iconSetFolderNamed(targetId, name, color);
     } else if (kind === "connection") {

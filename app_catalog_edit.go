@@ -129,6 +129,10 @@ func (a *App) CatalogRecordSave(in catalog.EditInput) (*CatalogSaveResult, error
 	if err != nil {
 		return nil, err
 	}
+	img, err := catalog.ResolveIconImage(a.db, &in)
+	if err != nil {
+		return &CatalogSaveResult{Message: "not saved: " + err.Error()}, nil
+	}
 	plan, err := catalog.PlanEdit(a.db, t.cat, t.scope, in, json.RawMessage(t.raw), t.rev)
 	if err != nil {
 		return nil, err
@@ -150,6 +154,12 @@ func (a *App) CatalogRecordSave(in catalog.EditInput) (*CatalogSaveResult, error
 	}
 	ctx, cancel := catalogWriteCtx()
 	defer cancel()
+	if _, sends := plan.Patch["icon_image"]; sends && img != nil {
+		if msg := a.uploadRecordImage(ctx, t.client, img); msg != "" {
+			res.Message = "not saved: " + msg
+			return res, nil
+		}
+	}
 	// New slots first (the record references them), each bound to the
 	// writer's own object.
 	var items []catalog.Item
