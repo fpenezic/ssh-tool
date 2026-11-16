@@ -659,3 +659,65 @@ func TestPublishKeepsLocalRefs(t *testing.T) {
 }
 
 func mustJSONc(v any) string { b, _ := json.Marshal(v); return string(b) }
+
+// A jump through an inventory host goes as a bastion record made from
+// what the host resolves to now; the publisher keeps jumping through
+// the inventory host. Skipped, it stays local.
+func TestPublishSendsInventoryBastion(t *testing.T) {
+	e := newSyncEnv(t)
+	x := publishFixture(t, e.db)
+	dyn := "dyn:pve/101"
+	if _, err := e.db.Conn().Exec(`UPDATE connections SET overrides_json = json_set(overrides_json, '$.jump_host', json(?)) WHERE id = ?`,
+		`{"kind":"chain","chain":{"connection_id":"`+dyn+`"}}`, x.db1); err != nil {
+		t.Fatal(err)
+	}
+	resolve := func(id string) (store.Connection, bool) {
+		return store.Connection{Name: "pve-bastion", Hostname: "10.0.0.5", Overrides: store.InheritableSettings{Username: ptr("jump"), Port: ptr(uint16(2222))}}, id == dyn
+	}
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, AccountName: "bob", ResolveDyn: resolve})
+	if err != nil || len(plan.Refusals) > 0 {
+		t.Fatalf("plan: %v %+v", err, plan.Refusals)
+	}
+	var bastion *PublishConnection
+	for i, c := range plan.Request.Connections {
+		if c.Hostname == "10.0.0.5" {
+			bastion = &plan.Request.Connections[i]
+		}
+	}
+	if bastion == nil || bastion.Name != "pve-bastion" {
+		t.Fatalf("no bastion record: %+v", plan.Request.Connections)
+	}
+	body, _ := json.Marshal(plan.Request)
+	if strings.Contains(string(body), dyn) || !strings.Contains(string(body), bastion.UUID) {
+		t.Fatalf("db-1 does not jump through the record: %s", body)
+	}
+	if len(plan.OutsideJumps) != 1 || !plan.OutsideJumps[0].Dynamic || !plan.OutsideJumps[0].Include {
+		t.Fatalf("outside jumps: %+v", plan.OutsideJumps)
+	}
+	if err := CompletePublish(e.db, plan, accept(plan), "bob", nil); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := e.db.GetConnection(x.db1); c.Overrides.JumpHost == nil || !strings.Contains(mustJSONc(c.Overrides.JumpHost), dyn) {
+		t.Fatalf("publisher lost the inventory jump")
+	}
+
+	// Skipped: nothing sent, kept local.
+	e2 := newSyncEnv(t)
+	x2 := publishFixture(t, e2.db)
+	if _, err := e2.db.Conn().Exec(`UPDATE connections SET overrides_json = json_set(overrides_json, '$.jump_host', json(?)) WHERE id = ?`,
+		`{"kind":"chain","chain":{"connection_id":"`+dyn+`"}}`, x2.db1); err != nil {
+		t.Fatal(err)
+	}
+	plan2, err := BuildPublish(e2.db, PublishOptions{CatalogID: e2.cat.ID, RootID: x2.root, ResolveDyn: resolve, DynSkip: map[string]bool{dyn: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range plan2.Request.Connections {
+		if c.Hostname == "10.0.0.5" {
+			t.Fatal("skipped bastion sent")
+		}
+	}
+	if len(plan2.OutsideJumps) != 1 || plan2.OutsideJumps[0].Include {
+		t.Fatalf("skipped outside jump: %+v", plan2.OutsideJumps)
+	}
+}

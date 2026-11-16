@@ -1278,6 +1278,7 @@ export interface CatalogPublishInput {
   unsent: string[];
   send_local_creds?: boolean;
   send_networks?: boolean;
+  dyn_skip?: string[];
 }
 export interface PublishPlanRecord { kind: "folders" | "connections" | "forwards"; uuid: string; local_id: string; name: string; path: string; copy_of?: string }
 export interface PublishPlanSlot {
@@ -1286,7 +1287,8 @@ export interface PublishPlanSlot {
 }
 export interface PublishFreeText { kind: string; uuid: string; name: string; field: string; value: string; folder_level: boolean; inherited_from?: string }
 export interface PublishRefusal { kind: string; local_id: string; name: string; reason: string }
-export interface PublishOutsideJump { connection_id: string; name: string; used_by: string[]; include: boolean }
+export interface PublishOutsideJump {
+  dynamic?: boolean; connection_id: string; name: string; used_by: string[]; include: boolean }
 export interface PublishPlan {
   records: PublishPlanRecord[];
   slots: PublishPlanSlot[];

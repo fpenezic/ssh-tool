@@ -57,6 +57,13 @@ type PublishOptions struct {
 	SendLocalCreds bool
 	// SendNetworks: a network (VPN) profile goes as a slot. Off by default.
 	SendNetworks bool
+	// ResolveDyn resolves a dynamic inventory host ("dyn:<entry>") to what
+	// it is now (address, port, user, route): a jump through one is sent as
+	// a bastion record inside the published root, made from that, unless
+	// DynSkip names it. The publisher keeps jumping through the inventory
+	// host. Nil: such jumps stay local.
+	ResolveDyn func(id string) (store.Connection, bool) `json:"-"`
+	DynSkip    map[string]bool
 }
 
 // PublishCategories are the optional parts of a publish, in dialog
@@ -222,6 +229,9 @@ type OutsideJump struct {
 	Name         string   `json:"name"`
 	UsedBy       []string `json:"used_by"`
 	Include      bool     `json:"include"`
+	// Dynamic: an inventory host; Include sends a bastion record made
+	// from what it resolves to now.
+	Dynamic bool `json:"dynamic,omitempty"`
 }
 
 // PublishPlan is everything the dialog shows and the publish sends.
@@ -1041,11 +1051,15 @@ func (c *pubCtx) settings(s store.InheritableSettings, kind, u, name string, fol
 	if jh, ok := m["jump_host"].(map[string]any); ok && jh["kind"] == "chain" {
 		if hop, ok := jh["chain"].(map[string]any); ok {
 			orig := deepCopy(jh)
-			if c.hop(hop, kind, u, name, folderLevel) {
+			keep, own := c.hop(hop, kind, u, name, folderLevel)
+			switch {
+			case keep:
 				// A hop readers cannot have: the whole jump host stays the
 				// publisher's own.
 				layer["jump_host"] = orig
 				delete(m, "jump_host")
+			case own:
+				layer["jump_host"] = orig
 			}
 		}
 	}
@@ -1055,7 +1069,9 @@ func (c *pubCtx) settings(s store.InheritableSettings, kind, u, name string, fol
 
 // hop translates a jump chain; true when it holds something that stays
 // local (the caller keeps the whole jump host then).
-func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) (keep bool) {
+// own: the chain is sent, but the publisher keeps their original (a jump
+// through an inventory host sent as a bastion record).
+func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) (keep, own bool) {
 	for depth := 0; h != nil && depth < 32; depth++ {
 		delete(h, "name")
 		if id, ok := h["connection_id"].(string); ok && id != "" {
@@ -1076,10 +1092,40 @@ func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) (
 				h["jump_slot"] = c.slot("jump:"+id, slotJump, id, kind, u, name, "jump_host")
 				delete(h, "connection_id")
 			case strings.HasPrefix(id, resolver.DynRefPrefix):
-				// An inventory host means nothing to others ("Save as
-				// connection" on it makes a fixed bastion that can go).
+				// An inventory host means nothing to others: a bastion
+				// record made from what it resolves to now goes instead,
+				// and the publisher keeps their own jump.
+				if c.opts.ResolveDyn != nil && !c.opts.DynSkip[id] {
+					if b, ok := c.opts.ResolveDyn(id); ok {
+						if b.Name == "" {
+							b.Name = strings.TrimPrefix(id, resolver.DynRefPrefix)
+						}
+						b.ID = id
+						c.conns[id] = b
+						oj := c.outside[id]
+						if oj == nil {
+							oj = &OutsideJump{ConnectionID: id, Name: b.Name, Include: true, Dynamic: true}
+							c.outside[id] = oj
+						}
+						oj.UsedBy = appendOnce(oj.UsedBy, name)
+						cu := c.inside["copy:"+id]
+						if cu == "" {
+							cu = uuid.NewString()
+							c.inside["copy:"+id] = cu
+						}
+						h["connection_id"] = cu
+						own = true
+						goto auth
+					}
+				}
+				if c.opts.ResolveDyn != nil && c.opts.DynSkip[id] && c.outside[id] == nil {
+					c.outside[id] = &OutsideJump{ConnectionID: id, Name: strings.TrimPrefix(id, resolver.DynRefPrefix), Dynamic: true}
+				}
+				if oj := c.outside[id]; oj != nil {
+					oj.UsedBy = appendOnce(oj.UsedBy, name)
+				}
 				c.kept(kind, name, "Jump host", "a dynamic inventory host; colleagues set their own")
-				return true
+				return true, false
 			case c.inside[id] != "":
 				h["connection_id"] = c.inside[id]
 			case isMarker(id):
@@ -1092,7 +1138,7 @@ func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) (
 						break
 					}
 					c.kept(kind, name, "Jump host", "points at a connection that no longer exists; not sent")
-					return true
+					return true, false
 				}
 				oj := c.outside[id]
 				if oj == nil {
@@ -1129,7 +1175,7 @@ func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) (
 		next, _ := h["via"].(map[string]any)
 		h = next
 	}
-	return false
+	return false, own
 }
 
 func deepCopy(m map[string]any) map[string]any {

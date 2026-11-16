@@ -575,6 +575,15 @@ export class OutsideJump {
              */
             this["include"] = false;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Dynamic: an inventory host; Include sends a bastion record made
+             * from what it resolves to now.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["dynamic"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

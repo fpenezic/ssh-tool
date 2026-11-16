@@ -1662,6 +1662,14 @@ export class CatalogPublishInput {
              */
             this["send_networks"] = false;
         }
+        if (!("dyn_skip" in $$source)) {
+            /**
+             * DynSkip: inventory bastions not to send as a bastion record.
+             * @member
+             * @type {string[]}
+             */
+            this["dyn_skip"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -1675,6 +1683,7 @@ export class CatalogPublishInput {
         const $$createField3_0 = $$createType4;
         const $$createField4_0 = $$createType8;
         const $$createField5_0 = $$createType4;
+        const $$createField8_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("jump_include" in $$parsedSource) {
             $$parsedSource["jump_include"] = $$createField3_0($$parsedSource["jump_include"]);
@@ -1684,6 +1693,9 @@ export class CatalogPublishInput {
         }
         if ("unsent" in $$parsedSource) {
             $$parsedSource["unsent"] = $$createField5_0($$parsedSource["unsent"]);
+        }
+        if ("dyn_skip" in $$parsedSource) {
+            $$parsedSource["dyn_skip"] = $$createField8_0($$parsedSource["dyn_skip"]);
         }
         return new CatalogPublishInput(/** @type {Partial<CatalogPublishInput>} */($$parsedSource));
     }
