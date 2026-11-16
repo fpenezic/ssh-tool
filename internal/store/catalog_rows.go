@@ -327,6 +327,7 @@ func (d *DB) DeleteCatalogTx(tx *sql.Tx, catalogID string) error {
 		`DELETE FROM catalog_slots WHERE catalog_id = ?`,
 		`DELETE FROM catalog_bindings WHERE catalog_id = ?`,
 		`DELETE FROM catalog_overrides WHERE catalog_id = ?`,
+		`DELETE FROM catalog_publish_pending WHERE catalog_id = ?`,
 		`DELETE FROM catalogs WHERE id = ?`,
 	} {
 		if _, err := tx.Exec(q, catalogID); err != nil {

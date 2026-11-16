@@ -1306,6 +1306,13 @@ export interface CatalogPublishResult {
   refusals?: PublishRefusal[];
   images?: PublishPlanImage[];
 }
+/** What keeping a catalog local, or copying from it, did (store.LocaliseResult). */
+export interface LocaliseResult {
+  folders: number; connections: number; forwards: number; credentials: number;
+  emptied: { kind: "folders" | "connections"; id: string; name: string; field: string; slot: string }[];
+  root_id: string;
+  outside_jumps?: string[];
+}
 export interface CatalogEnrollPreview {
   base_url: string; normalised_url: string; server_name: string; user_name: string; user_email: string;
   expires_in: number; device_name: string; existing_id?: string; existing_name?: string; existing_account?: string;
@@ -1792,6 +1799,9 @@ export const api = {
   catalogCancelSignIn: (id: string) => G.CatalogCancelSignIn(id) as unknown as Promise<void>,
   catalogSignOut: (id: string) => G.CatalogSignOut(id) as unknown as Promise<void>,
   catalogRemove: (id: string) => G.CatalogRemove(id) as unknown as Promise<void>,
+  catalogRemoveKeepLocal: (id: string) => G.CatalogRemoveKeepLocal(id) as unknown as Promise<LocaliseResult>,
+  catalogCopyToLocal: (kind: "folders" | "connections", id: string, targetFolderId: string) =>
+    G.CatalogCopyToLocal(kind, id, targetFolderId) as unknown as Promise<LocaliseResult>,
   catalogSetConfig: (id: string, name: string, intervalSec: number) =>
     G.CatalogSetConfig(id, name, intervalSec) as unknown as Promise<void>,
   catalogSyncNow: (id: string) => G.CatalogSyncNow(id) as unknown as Promise<void>,

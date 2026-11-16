@@ -106,7 +106,7 @@
     e.stopPropagation();
   }}>
     <h2 id="confirm-modal-title">{confirmModal.pending.title}</h2>
-    <p class="msg" id="confirm-modal-msg">{confirmModal.pending.message}</p>
+    <p class="msg" id="confirm-modal-msg">{confirmModal.pending.checked && confirmModal.pending.checkedMessage ? confirmModal.pending.checkedMessage : confirmModal.pending.message}</p>
     {#if confirmModal.pending.checkboxLabel}
       <label class="optout">
         <input

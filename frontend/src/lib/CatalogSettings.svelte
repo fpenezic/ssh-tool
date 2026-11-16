@@ -4,7 +4,8 @@
   // profiles and bastions.
   import { onMount } from "svelte";
   import SearchableSelect from "./SearchableSelect.svelte";
-  import { showConfirm } from "./confirmModal.svelte.ts";
+  import { showConfirm, showConfirmWithCheckbox } from "./confirmModal.svelte.ts";
+  import { catalogLocal } from "./catalogLocal.svelte";
   import { toast } from "./toast.svelte.ts";
   import { errMsg } from "./connectErrors";
   import { api, type CatalogInfo, type CatalogSlotInfo } from "./api";
@@ -96,13 +97,23 @@
   }
 
   async function remove(c: CatalogInfo) {
-    const ok = await showConfirm({
+    const r = await showConfirmWithCheckbox({
       title: "Remove catalog",
       message: `Remove "${c.name}" from this app? Its connections, your bindings and your local settings on them go. Nothing on the server changes.`,
+      checkedMessage: `Remove "${c.name}" from this app and keep its connections as your own local folder, working as they do now? Slots you have not bound become empty fields, noted on each connection. Nothing on the server changes.`,
+      checkboxLabel: "Keep its connections as a local folder",
       okLabel: "Remove",
       danger: true,
     });
-    if (!ok) return;
+    if (!r.ok) return;
+    if (r.checked) {
+      await run(c.id, "Remove", async () => {
+        const res = await api.catalogRemoveKeepLocal(c.id);
+        await tree.load();
+        catalogLocal.announce(`${c.name} kept as a local folder`, res);
+      });
+      return;
+    }
     await run(c.id, "Remove", () => api.catalogRemove(c.id));
     tree.load();
   }

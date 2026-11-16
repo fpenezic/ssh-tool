@@ -37,6 +37,7 @@
   import { treeBookmarks } from "./treeBookmarks.svelte";
   import { catalogs, catalogStateLabel } from "./catalog.svelte";
   import { IconUsers, IconAlertTriangle, IconLock } from "./iconMap";
+  import { catalogLocal } from "./catalogLocal.svelte";
 
   interface Props {
     folder: Folder;
@@ -612,6 +613,7 @@
           ? [{ label: "Sign in", iconComponent: IconKey, onSelect: () => { api.catalogSignIn(catRoot!.id).catch((err) => toast.err("Sign in: " + errMsg(err), 8000)); } }] : []),
         ...(catRoot && catRoot.state !== "no_login" && catRoot.state !== "signed_out" && catRoot.state !== "locked"
           ? [{ label: "Sync now", iconComponent: IconRefresh, onSelect: () => { api.catalogSyncNow(catRoot!.id).catch((err) => toast.err("Sync: " + errMsg(err), 8000)); } }] : []),
+        ...(folder.remote_uuid && folder.catalog_state !== "removed" ? [{ label: "Copy to my connections…", iconComponent: IconCopy, onSelect: () => catalogLocal.startCopy("folders", folder.id, folder.name) }] : []),
         ...(cat && folder.catalog_writable && !isMobile && folder.remote_uuid && folder.catalog_state !== "removed" ? catalogWriterItems(cat.id) : []),
         ...(cat ? [{ label: "Slots…", iconComponent: IconKey, onSelect: () => catalogs.open(cat.id, "slots") },
           { label: "Catalog settings…", iconComponent: IconSettings, onSelect: () => catalogs.open(cat.id) }] : []),
@@ -703,6 +705,7 @@
         if (!ok) return;
         api.catalogDelete("connections", one.id, false).then(() => tree.load()).catch((err) => toast.err("Delete: " + errMsg(err), 8000));
       } }] : []),
+      ...(one?.catalog_id && one.remote_uuid && one.catalog_state !== "removed" ? [{ label: "Copy to my connections…", iconComponent: IconCopy, onSelect: () => catalogLocal.startCopy("connections", one.id, one.name) }] : []),
       ...connectionActions.tunnelMenuItems(ids),
       ...(allTunnels ? [] : [{
         label: ids.length > 1 ? `Connect all (${ids.length})` : "Connect",
