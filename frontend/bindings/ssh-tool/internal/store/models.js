@@ -1398,6 +1398,70 @@ export class DynamicFolder {
 }
 
 /**
+ * EmptiedField is a setting left empty because it named a catalog slot
+ * this user had not bound.
+ */
+export class EmptiedField {
+    /**
+     * Creates a new EmptiedField instance.
+     * @param {Partial<EmptiedField>} [$$source = {}] - The source object to create the EmptiedField.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * folders | connections
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (!("id" in $$source)) {
+            /**
+             * the local row (after the action)
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("field" in $$source)) {
+            /**
+             * label: "Credential", "Jump host", ...
+             * @member
+             * @type {string}
+             */
+            this["field"] = "";
+        }
+        if (!("slot" in $$source)) {
+            /**
+             * the slot's name, "" when unknown
+             * @member
+             * @type {string}
+             */
+            this["slot"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new EmptiedField instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {EmptiedField}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new EmptiedField(/** @type {Partial<EmptiedField>} */($$parsedSource));
+    }
+}
+
+/**
  * Folder is a node in the connection tree. ParentID == nil means root.
  */
 export class Folder {
@@ -2404,6 +2468,91 @@ export const KeepassSource = {
 };
 
 /**
+ * LocaliseResult is what a keep or a copy did.
+ */
+export class LocaliseResult {
+    /**
+     * Creates a new LocaliseResult instance.
+     * @param {Partial<LocaliseResult>} [$$source = {}] - The source object to create the LocaliseResult.
+     */
+    constructor($$source = {}) {
+        if (!("folders" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["folders"] = 0;
+        }
+        if (!("connections" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["connections"] = 0;
+        }
+        if (!("forwards" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["forwards"] = 0;
+        }
+        if (!("credentials" in $$source)) {
+            /**
+             * made ordinary
+             * @member
+             * @type {number}
+             */
+            this["credentials"] = 0;
+        }
+        if (!("emptied" in $$source)) {
+            /**
+             * @member
+             * @type {EmptiedField[]}
+             */
+            this["emptied"] = [];
+        }
+        if (!("root_id" in $$source)) {
+            /**
+             * RootID: the local folder (keep) or the top copied row (copy).
+             * @member
+             * @type {string}
+             */
+            this["root_id"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * OutsideJumps: copied connections still jumping through a connection
+             * outside the copy (the original, which keeps working while it exists).
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["outside_jumps"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LocaliseResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {LocaliseResult}
+     */
+    static createFrom($$source = {}) {
+        const $$createField4_0 = $$createType14;
+        const $$createField6_0 = $$createType7;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("emptied" in $$parsedSource) {
+            $$parsedSource["emptied"] = $$createField4_0($$parsedSource["emptied"]);
+        }
+        if ("outside_jumps" in $$parsedSource) {
+            $$parsedSource["outside_jumps"] = $$createField6_0($$parsedSource["outside_jumps"]);
+        }
+        return new LocaliseResult(/** @type {Partial<LocaliseResult>} */($$parsedSource));
+    }
+}
+
+/**
  * PortForward is the persisted spec of a forward (not its running state).
  * Auto-start ones get instantiated whenever the parent connection connects.
  */
@@ -2549,7 +2698,7 @@ export class PortForward {
      * @returns {PortForward}
      */
     static createFrom($$source = {}) {
-        const $$createField9_0 = $$createType14;
+        const $$createField9_0 = $$createType16;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("bookmarks" in $$parsedSource) {
             $$parsedSource["bookmarks"] = $$createField9_0($$parsedSource["bookmarks"]);
@@ -3307,5 +3456,7 @@ const $$createType9 = DbTarget.createFrom;
 const $$createType10 = $Create.Array($$createType9);
 const $$createType11 = JumpHostSpec.createFrom;
 const $$createType12 = $Create.Nullable($$createType11);
-const $$createType13 = ProxyBookmark.createFrom;
+const $$createType13 = EmptiedField.createFrom;
 const $$createType14 = $Create.Array($$createType13);
+const $$createType15 = ProxyBookmark.createFrom;
+const $$createType16 = $Create.Array($$createType15);

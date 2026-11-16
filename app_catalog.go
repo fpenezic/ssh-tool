@@ -385,14 +385,7 @@ func (a *App) CatalogRemove(id string) error {
 	if err != nil {
 		return err
 	}
-	rt.mu.Lock()
-	delete(rt.clients, id)
-	delete(rt.state, id)
-	delete(rt.next, id)
-	rt.mu.Unlock()
-	if _, err := catalog.PruneImages(a.db); err != nil {
-		log.Printf("catalog: prune images: %v", err)
-	}
+	a.forgetCatalog(id)
 	a.recordAudit("catalog.remove", id, nil)
 	EventsEmit("catalog_changed", map[string]any{"catalog_id": id})
 	return nil

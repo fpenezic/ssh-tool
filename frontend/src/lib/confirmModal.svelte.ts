@@ -12,6 +12,9 @@ interface ConfirmState {
   // where a separate settings toggle is the long way round.
   checkboxLabel?: string;
   checked: boolean;
+  // Shown instead of message while the checkbox is ticked (an option
+  // that changes what OK does).
+  checkedMessage?: string;
   // A third button between Cancel and OK (Discard in the unsaved-changes
   // prompt). Its click resolves with alt: true and ok: false.
   altLabel?: string;
@@ -40,6 +43,7 @@ class ConfirmModalStore {
     cancelLabel?: string;
     danger?: boolean;
     checkboxLabel?: string;
+    checkedMessage?: string;
     // Initial state of the checkbox (default unchecked).
     checked?: boolean;
     altLabel?: string;
@@ -60,6 +64,7 @@ class ConfirmModalStore {
         cancelLabel: opts.cancelLabel ?? "Cancel",
         danger: !!opts.danger,
         checkboxLabel: opts.checkboxLabel,
+        checkedMessage: opts.checkedMessage,
         checked: !!opts.checked,
         altLabel: opts.altLabel,
         modal: opts.modal,
@@ -113,4 +118,5 @@ export const showConfirmWithCheckbox = (opts: {
   cancelLabel?: string;
   danger?: boolean;
   checkboxLabel: string;
+  checkedMessage?: string;
 }): Promise<ConfirmResult> => confirmModal.show(opts);
