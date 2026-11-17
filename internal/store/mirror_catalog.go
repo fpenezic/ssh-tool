@@ -175,6 +175,11 @@ func (m *legacyCatalogMirror) clear(tx *sql.Tx, t string) (bool, error) {
 	case t == "port_forwards":
 		q = `DELETE FROM port_forwards WHERE remote_uuid IS NULL
 			AND connection_id NOT IN (SELECT id FROM connections WHERE catalog_id IS NOT NULL)`
+	case t == "snippets":
+		// Snippets on catalog connections are shadowed out of snapshots;
+		// an older app's push says nothing about them.
+		q = `DELETE FROM snippets WHERE connection_id IS NULL
+			OR connection_id NOT IN (SELECT id FROM connections WHERE catalog_id IS NOT NULL)`
 	case t == "credential_refs" || t == "credential_folders":
 		// Credentials made for catalog external references never reach an
 		// older app (shadowed), so its snapshot says nothing about them.

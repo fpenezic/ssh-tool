@@ -767,13 +767,21 @@ func (d *DB) KeepRemovedFolderLocal(id string, settings InheritableSettings) err
 			return err
 		}
 		var connIDs []string
-		if rs, err := tx.Query(`SELECT id FROM connections WHERE folder_id IN (`+in+`)`, ids...); err == nil {
-			for rs.Next() {
-				var c string
-				_ = rs.Scan(&c)
-				connIDs = append(connIDs, c)
+		rs, err := tx.Query(`SELECT id FROM connections WHERE folder_id IN (`+in+`)`, ids...)
+		if err != nil {
+			return err
+		}
+		for rs.Next() {
+			var c string
+			if err := rs.Scan(&c); err != nil {
+				rs.Close()
+				return err
 			}
-			rs.Close()
+			connIDs = append(connIDs, c)
+		}
+		rs.Close()
+		if err := rs.Err(); err != nil {
+			return err
 		}
 		var folderIDs []string
 		for f := range sub {
