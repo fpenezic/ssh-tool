@@ -276,8 +276,10 @@ func (d *DB) ContentFingerprint() string {
 		{"credential_refs", "updated_at", "id NOT LIKE 'catcred-%'"},
 		// credential_folders: content signed below (updated_at has second
 		// resolution; two edits in one second would look like one).
-		{"credential_folders", "", ""},
-		{"port_forwards", "", ""},
+		{"credential_folders", "", "id NOT LIKE 'catcred-%'"},
+		// Catalog forwards are written by every catalog sync (their own
+		// columns are in catalogLocalSignature), like catalog rows.
+		{"port_forwards", "", "catalog_id IS NULL"},
 		{"snippets", "updated_at", ""},
 		{"workspaces", "updated_at", ""},
 		// dynamic_folders: row count only, NOT last_pulled_at. That column
@@ -290,7 +292,9 @@ func (d *DB) ContentFingerprint() string {
 		// also touches connections/folders, and add/remove moves the count.
 		{"dynamic_folders", "", ""},
 		{"dynamic_entries", "", ""},
-		{"images", "", ""},
+		// Cached catalog icon images are fetched per machine and left out
+		// of snapshots: not the user's edit.
+		{"images", "", "id NOT LIKE 'catimg-%'"},
 		{"pinned_dynamic_entries", "", ""},
 		// network_profiles: userspace WireGuard / NetBird VPN profiles.
 		// MUST be signed or a created/edited/deleted profile never
