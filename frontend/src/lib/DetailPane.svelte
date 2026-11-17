@@ -260,25 +260,36 @@
       void runRecordSave(input);
     }
   }
+  // The draft as a record save sent it: typing during the save must not be
+  // thrown away when the saved record reloads.
+  let recordSentDraft = "";
+  function draftSnap(): string {
+    return JSON.stringify({ c: editing, f: editingFolder, d: recordDoc, i: recordIcon });
+  }
   async function afterRecordSaved(stillLocal: string[], warnings: string[]) {
+    const typedMeanwhile = recordSentDraft !== "" && recordSentDraft !== draftSnap();
+    recordSentDraft = "";
     recordPending = null;
     recordInput = null;
     recordSlotNames = {};
     recordResolve = {};
     recordStillLocal = stillLocal;
-    recordIcon = null;
+    if (!typedMeanwhile) recordIcon = null;
     resetFolderOffer();
     saveError = null;
     await tree.load();
     await loadCatRec();
     takeRecordBase();
-    draftEpoch++;
+    // Changed during the save: keep the draft (it stays unsaved and is
+    // measured against the saved record); otherwise reload it.
+    if (!typedMeanwhile) draftEpoch++;
     if (warnings.length) toast.info(warnings.join(" "), 10000);
     showSaved();
   }
   async function runFolderSave(input: CatalogEditInput): Promise<boolean> {
     if (!recordFolderFields) return false;
     recordBusy = true;
+    recordSentDraft = draftSnap();
     try {
       const r = await api.catalogRecordSaveOnFolder(input, recordFolderFields);
       if (r.saved) {
@@ -303,6 +314,7 @@
   }
   async function runRecordSave(input: CatalogEditInput): Promise<boolean> {
     recordBusy = true;
+    recordSentDraft = draftSnap();
     try {
       const r = await api.catalogRecordSave(input);
       if (r.saved) {
