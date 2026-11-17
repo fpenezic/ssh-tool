@@ -783,3 +783,33 @@ func TestPublishListsTargetInherits(t *testing.T) {
 		t.Fatalf("target inherits: %v", plan2.TargetInherits)
 	}
 }
+
+// The user can keep a Bitwarden item local: all shared sources at once,
+// or one credential; the review offers it back.
+func TestPublishWithholdsChosenCredentials(t *testing.T) {
+	e := newSyncEnv(t)
+	x := publishFixture(t, e.db)
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, SkipCreds: map[string]bool{x.credBW: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slotByKey(plan, "cred:"+x.credBW) != nil {
+		t.Fatalf("skipped credential still a slot: %+v", plan.Slots)
+	}
+	offered := false
+	for _, k := range plan.KeptLocal {
+		offered = offered || k.Cred == x.credBW
+	}
+	if !offered {
+		t.Fatalf("kept list does not offer it back: %+v", plan.KeptLocal)
+	}
+	plan2, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, NoSharedCreds: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range plan2.Slots {
+		if s.Type == "cred" {
+			t.Fatalf("a credential slot with shared sources off: %+v", s)
+		}
+	}
+}

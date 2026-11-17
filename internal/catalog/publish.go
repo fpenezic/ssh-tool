@@ -59,6 +59,11 @@ type PublishOptions struct {
 	SendLocalCreds bool
 	// SendNetworks: a network (VPN) profile goes as a slot. Off by default.
 	SendNetworks bool
+	// NoSharedCreds: shared sources (Bitwarden / Vaultwarden items,
+	// opkssh) stay local too. SkipCreds: credentials (local ids) the user
+	// chose not to send, whatever their kind.
+	NoSharedCreds bool
+	SkipCreds     map[string]bool
 	// ResolveDyn resolves a dynamic inventory host ("dyn:<entry>") to what
 	// it is now (address, port, user, route): a jump through one is sent as
 	// a bastion record inside the published root, made from that, unless
@@ -322,6 +327,9 @@ type KeptRef struct {
 	Name   string `json:"name"`
 	Field  string `json:"field"`
 	Reason string `json:"reason"`
+	// Cred: the credential (local id) when the user can choose to send it
+	// after all (one they unticked).
+	Cred string `json:"cred,omitempty"`
 }
 
 // keepRef is what ref returns for a reference that stays local.
@@ -1305,6 +1313,15 @@ func (c *pubCtx) ref(v, typ, kind, u, name, field string) string {
 				return ""
 			}
 			c.kept(kind, name, label, "names a credential that no longer exists; not sent")
+			return keepRef
+		}
+		if c.opts.SkipCreds[v] {
+			c.plan.KeptLocal = append(c.plan.KeptLocal, KeptRef{Kind: kind, Name: name, Field: label,
+				Reason: "you chose not to send " + cr.Name, Cred: v})
+			return keepRef
+		}
+		if sharedCred(cr) && c.opts.NoSharedCreds {
+			c.kept(kind, name, label, "a shared-source credential ("+cr.Name+"); shared sources are not sent")
 			return keepRef
 		}
 		if !sharedCred(cr) && !c.opts.SendLocalCreds {

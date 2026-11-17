@@ -1279,6 +1279,8 @@ export interface CatalogPublishInput {
   send_local_creds?: boolean;
   send_networks?: boolean;
   dyn_skip?: string[];
+  no_shared_creds?: boolean;
+  skip_creds?: string[];
   review_hash?: string;
 }
 export interface PublishPlanRecord { kind: "folders" | "connections" | "forwards"; uuid: string; local_id: string; name: string; path: string; copy_of?: string }
@@ -1302,7 +1304,7 @@ export interface PublishPlan {
   /** Settings the target sets and the published folder does not (it inherits them after the publish). */
   target_inherits: string[];
   /** References not sent (local credentials, networks, inventory bastions, missing ones), with why. */
-  kept_local: { kind: string; name: string; field: string; reason: string }[];
+  kept_local: { kind: string; name: string; field: string; reason: string; cred?: string }[];
   root_uuid: string;
 }
 export interface PublishPlanImage { sha256: string; image_id: string; records: string[]; kept: boolean; reason?: string; later?: boolean }

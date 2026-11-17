@@ -51,6 +51,10 @@ type CatalogPublishInput struct {
 	// network profiles as slots (off by default).
 	SendLocalCreds bool `json:"send_local_creds"`
 	SendNetworks   bool `json:"send_networks"`
+	// NoSharedCreds: Bitwarden / Vaultwarden and opkssh credentials stay
+	// local too. SkipCreds: credentials (local ids) not to send.
+	NoSharedCreds bool     `json:"no_shared_creds"`
+	SkipCreds     []string `json:"skip_creds"`
 	// DynSkip: inventory bastions not to send as a bastion record.
 	DynSkip []string `json:"dyn_skip"`
 	// ReviewHash: the review_hash of the plan the user reviewed; a publish
@@ -184,9 +188,14 @@ func (in CatalogPublishInput) options(account string) catalog.PublishOptions {
 	for _, id := range in.DynSkip {
 		skip[id] = true
 	}
+	skipCreds := map[string]bool{}
+	for _, id := range in.SkipCreds {
+		skipCreds[id] = true
+	}
 	return catalog.PublishOptions{CatalogID: in.CatalogID, RootID: in.FolderID, TargetUUID: in.TargetUUID,
 		JumpInclude: inc, SlotNames: in.SlotNames, AccountName: account, Unsent: unsent,
-		SendLocalCreds: in.SendLocalCreds, SendNetworks: in.SendNetworks, DynSkip: skip}
+		SendLocalCreds: in.SendLocalCreds, SendNetworks: in.SendNetworks, DynSkip: skip,
+		NoSharedCreds: in.NoSharedCreds, SkipCreds: skipCreds}
 }
 
 // publishResolveDyn is a publish's view of an inventory host used as a
