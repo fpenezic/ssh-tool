@@ -3388,7 +3388,9 @@ Sync runs in the background on an interval and on **Sync now**. The catalog's ro
 ### Slots: your own credentials, networks and jump hosts
 
 - **Bind on first connect**: when you connect to a catalog connection whose slot you have not bound, a dialog lists what it needs (jump host, network, credential, one-time code) and you pick yours once. Every connection that uses that slot works from then on. A one-time code slot can be left as "I type the code myself".
-- **Settings -> Catalogs -> Slots** lists the slots with what each is bound to on this machine.
+- **Ask when connecting**: a credential slot can be bound to a prompt instead of a stored credential. The connect then asks for the user name and password, as for any connection without a credential.
+- **From the editor**: a catalog connection whose credential comes from a slot you have not bound shows a picker next to its Credential field; binding there binds the slot for every connection that uses it.
+- **Settings -> Catalogs -> Slots** lists the slots still to bind first, grouped by the folder they are defined on. The ones you have bound sit behind **Show N bound slots**, with a filter by slot, what it is bound to or folder.
 - A slot backed by a **Bitwarden / Vaultwarden** item needs no binding when you can read the same item: the app finds it.
 - Connects you did not click (workspace restore, tunnel autostart, MCP, the CI runner) never ask; they fail with the slot's message instead.
 

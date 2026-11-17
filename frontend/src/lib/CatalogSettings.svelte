@@ -8,7 +8,7 @@
   import { catalogLocal } from "./catalogLocal.svelte";
   import { toast } from "./toast.svelte.ts";
   import { errMsg } from "./connectErrors";
-  import { api, type CatalogInfo, type CatalogSlotInfo } from "./api";
+  import { api, CATALOG_BIND_ASK as ASK, type CatalogInfo, type CatalogSlotInfo } from "./api";
   import { catalogs, catalogStateLabel } from "./catalog.svelte";
   import { credentials, tree } from "./stores.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
@@ -53,10 +53,48 @@
     });
   }
 
+  // The slots panel: unbound slots first (grouped by the folder they are
+  // defined on); bound ones behind "Show bound", with a filter. A catalog
+  // can have hundreds of bound slots, which buried the few still to bind.
+  let showBound = $state<Record<string, boolean>>({});
+  let boundFilter = $state<Record<string, string>>({});
+  let flash = $state("");
+  const needsBinding = (s: CatalogSlotInfo) => s.state === "unbound" && (!s.skipped || !!s.target_gone);
+  function groupByFolder(list: CatalogSlotInfo[]): { folder: string; slots: CatalogSlotInfo[] }[] {
+    const m = new Map<string, CatalogSlotInfo[]>();
+    for (const s of list) {
+      const k = s.folder_name || "";
+      m.set(k, [...(m.get(k) ?? []), s]);
+    }
+    return [...m.entries()]
+      .sort(([a], [b]) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)))
+      .map(([folder, slots]) => ({ folder, slots }));
+  }
+  function boundShown(c: CatalogInfo): CatalogSlotInfo[] {
+    const q = (boundFilter[c.id] ?? "").trim().toLowerCase();
+    return (catalogs.slots[c.id] ?? []).filter((s) => !needsBinding(s) &&
+      (!q || s.name.toLowerCase().includes(q) || (s.target_name ?? "").toLowerCase().includes(q) || (s.folder_name ?? "").toLowerCase().includes(q)));
+  }
+  // Open on one slot: the bound list is shown filtered to it when it is
+  // bound, and the row is scrolled to and flashed.
+  async function focusSlot(catalogId: string, uuid: string) {
+    const list = await catalogs.loadSlots(catalogId);
+    const s = list.find((x) => x.uuid === uuid);
+    if (!s) return;
+    if (!needsBinding(s)) {
+      showBound = { ...showBound, [catalogId]: true };
+      boundFilter = { ...boundFilter, [catalogId]: s.name };
+    }
+    flash = uuid;
+    requestAnimationFrame(() => document.getElementById("slot-" + uuid)?.scrollIntoView({ block: "center" }));
+    setTimeout(() => { if (flash === uuid) flash = ""; }, 2500);
+  }
+
   onMount(async () => {
     await catalogs.load();
     if (catalogs.focus) {
       open = catalogs.focus.id;
+      if (catalogs.focus.slot) void focusSlot(open, catalogs.focus.slot);
       catalogs.focus = null;
     } else if (catalogs.list.length === 1) {
       open = catalogs.list[0].id;
@@ -129,11 +167,12 @@
   }
 
   // Bind targets per slot type.
-  const credOptions = $derived(
-    credentials.list
+  const credOptions = $derived([
+    { value: ASK, label: "Ask when connecting (user name and password)" },
+    ...credentials.list
       .filter((c) => !c.id.startsWith("catcred-") && c.kind !== "api_token" && c.kind !== "certificate")
       .map((c) => ({ value: c.id, label: c.name })),
-  );
+  ]);
   const netOptions = $derived(networkProfiles.list.map((p) => ({ value: p.id, label: p.name })));
   const jumpOptions = $derived(
     tree.connections
@@ -170,6 +209,63 @@
     if (href) api.openURL(href);
   }
 </script>
+
+{#snippet slotRow(c: CatalogInfo, s: CatalogSlotInfo)}
+  <div class="slot" id={"slot-" + s.uuid} class:unbound={needsBinding(s)} class:flash={flash === s.uuid}>
+    <div class="slot-head">
+      <span class="slot-icon" title={typeLabel[s.type]}>
+        {#if s.type === "cred"}<IconKey size={14} />{:else if s.type === "net"}<IconVpn size={14} />{:else}<IconBastion size={14} />{/if}
+      </span>
+      <span class="slot-name">{s.name}</span>
+      <span class="slot-type">{typeLabel[s.type]}</span>
+      {#if s.state === "unbound"}
+        {#if s.skipped && !s.target_gone}
+          <span class="chip" title="Skipped in the connect dialog on this machine; bind it here to use a stored code">skipped - you type the code</span>
+        {:else}
+          <span class="chip tone-warn">{s.target_gone ? "bound item deleted" : "not bound"}</span>
+        {/if}
+      {:else if s.state === "external"}
+        <span class="chip tone-ok" title="Found in your Bitwarden / Vaultwarden">from {s.target_name}</span>
+      {:else if s.target_id === ASK}
+        <span class="chip" title="No stored credential: the connect asks for the user name and password">asked when connecting</span>
+      {/if}
+      <span class="slot-used">{s.used_by} {s.used_by === 1 ? "record" : "records"}{#if s.folder_name} - on {s.folder_name}{/if}</span>
+      {#if s.can_write && !isMobile}
+        <button class="slot-act" onclick={() => (slotEdit = { uuid: s.uuid, name: s.name, doc: s.doc_md })} title="Rename or document this slot for everyone">Edit</button>
+        <button class="slot-act danger" onclick={() => deleteSlot(c, s)} title="Delete this slot from the catalog"><IconTrash size={12} /></button>
+      {/if}
+    </div>
+    {#if slotEdit && slotEdit.uuid === s.uuid}
+      <div class="cat-form">
+        <label>Name <input bind:value={slotEdit.name} /></label>
+        <label>How to get access <span class="hint-inline">(markdown, shown to everyone; never put secrets here)</span><textarea rows="3" bind:value={slotEdit.doc}></textarea></label>
+        <div class="cat-form-actions">
+          <button onclick={() => (slotEdit = null)}>Cancel</button>
+          <button class="primary" disabled={busy[c.id] || !slotEdit.name.trim()} onclick={() => saveSlotEdit(c, s)}>Save for everyone</button>
+        </div>
+      </div>
+    {/if}
+    {#if s.doc_md}
+      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+      <div class="slot-doc md" role="presentation" onclick={onDocClick}>{@html renderMarkdown(s.doc_md)}</div>
+    {/if}
+    {#if s.kind === "external" && s.state === "unbound"}
+      <p class="hint sub">Names an item in Bitwarden / Vaultwarden. Register a server under External secrets, or bind the slot by hand.</p>
+    {/if}
+    <div class="slot-bind">
+      <SearchableSelect
+        value={s.state === "bound" ? (s.target_id ?? "") : ""}
+        options={optionsFor(s)}
+        placeholder={`Pick a ${typeLabel[s.type].toLowerCase()}...`}
+        emptyLabel={s.state === "external" ? "(from Bitwarden)" : "(not bound)"}
+        onChange={(v: string) => bind(c, s, v)}
+      />
+      {#if s.state === "bound"}
+        <button onclick={() => unbind(c, s)}>Unbind</button>
+      {/if}
+    </div>
+  </div>
+{/snippet}
 
 <h2>Catalogs</h2>
 <p class="hint">
@@ -233,65 +329,33 @@
       {/if}
 
       {#if open === c.id}
+        {@const all = catalogs.slots[c.id] ?? []}
+        {@const todo = all.filter(needsBinding)}
+        {@const bound = all.length - todo.length}
         <div class="slots">
-          <h3>Slots <span class="hint-inline">bind each to something of your own</span></h3>
-          {#if (catalogs.slots[c.id] ?? []).length === 0}
+          <h3>Slots <span class="hint-inline">{all.length === 0 ? "" : `${all.length} - ${todo.length === 0 ? "all bound" : `${todo.length} to bind`}`}</span></h3>
+          {#if all.length === 0}
             <p class="hint">This catalog asks for nothing.</p>
+          {:else if todo.length > 0}
+            <p class="hint sub">Bind each once to something of your own; every connection that uses it works then. A connection's editor binds its own slots too.</p>
           {/if}
-          {#each catalogs.slots[c.id] ?? [] as s (s.uuid)}
-            <div class="slot" class:unbound={s.state === "unbound" && !s.skipped}>
-              <div class="slot-head">
-                <span class="slot-icon" title={typeLabel[s.type]}>
-                  {#if s.type === "cred"}<IconKey size={14} />{:else if s.type === "net"}<IconVpn size={14} />{:else}<IconBastion size={14} />{/if}
-                </span>
-                <span class="slot-name">{s.name}</span>
-                <span class="slot-type">{typeLabel[s.type]}</span>
-                {#if s.state === "unbound"}
-                  {#if s.skipped && !s.target_gone}
-                    <span class="chip" title="Skipped in the connect dialog on this machine; bind it here to use a stored code">skipped - you type the code</span>
-                  {:else}
-                    <span class="chip tone-warn">{s.target_gone ? "bound item deleted" : "not bound"}</span>
-                  {/if}
-                {:else if s.state === "external"}
-                  <span class="chip tone-ok" title="Found in your Bitwarden / Vaultwarden">from {s.target_name}</span>
-                {/if}
-                <span class="slot-used">{s.used_by} {s.used_by === 1 ? "record" : "records"}{#if s.folder_name} - on {s.folder_name}{/if}</span>
-                {#if s.can_write && !isMobile}
-                  <button class="slot-act" onclick={() => (slotEdit = { uuid: s.uuid, name: s.name, doc: s.doc_md })} title="Rename or document this slot for everyone">Edit</button>
-                  <button class="slot-act danger" onclick={() => deleteSlot(c, s)} title="Delete this slot from the catalog"><IconTrash size={12} /></button>
-                {/if}
-              </div>
-              {#if slotEdit && slotEdit.uuid === s.uuid}
-                <div class="cat-form">
-                  <label>Name <input bind:value={slotEdit.name} /></label>
-                  <label>How to get access <span class="hint-inline">(markdown, shown to everyone; never put secrets here)</span><textarea rows="3" bind:value={slotEdit.doc}></textarea></label>
-                  <div class="cat-form-actions">
-                    <button onclick={() => (slotEdit = null)}>Cancel</button>
-                    <button class="primary" disabled={busy[c.id] || !slotEdit.name.trim()} onclick={() => saveSlotEdit(c, s)}>Save for everyone</button>
-                  </div>
-                </div>
-              {/if}
-              {#if s.doc_md}
-                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                <div class="slot-doc md" role="presentation" onclick={onDocClick}>{@html renderMarkdown(s.doc_md)}</div>
-              {/if}
-              {#if s.kind === "external" && s.state === "unbound"}
-                <p class="hint sub">Names an item in Bitwarden / Vaultwarden. Register a server under External secrets, or bind the slot by hand.</p>
-              {/if}
-              <div class="slot-bind">
-                <SearchableSelect
-                  value={s.state === "bound" ? (s.target_id ?? "") : ""}
-                  options={optionsFor(s)}
-                  placeholder={`Pick a ${typeLabel[s.type].toLowerCase()}...`}
-                  emptyLabel={s.state === "external" ? "(from Bitwarden)" : "(not bound)"}
-                  onChange={(v: string) => bind(c, s, v)}
-                />
-                {#if s.state === "bound"}
-                  <button onclick={() => unbind(c, s)}>Unbind</button>
-                {/if}
-              </div>
-            </div>
+          {#each groupByFolder(todo) as g (g.folder)}
+            {#if g.folder}<div class="slot-group">{g.folder}</div>{/if}
+            {#each g.slots as s (s.uuid)}{@render slotRow(c, s)}{/each}
           {/each}
+          {#if bound > 0}
+            <button class="slot-toggle" onclick={() => (showBound = { ...showBound, [c.id]: !showBound[c.id] })} aria-expanded={!!showBound[c.id]}>
+              {showBound[c.id] ? "Hide" : "Show"} {bound} bound {bound === 1 ? "slot" : "slots"}
+            </button>
+            {#if showBound[c.id]}
+              <input class="slot-filter" placeholder="Filter by slot, what it is bound to or folder..." value={boundFilter[c.id] ?? ""}
+                oninput={(e) => (boundFilter = { ...boundFilter, [c.id]: (e.currentTarget as HTMLInputElement).value })} />
+              {@const shown = boundShown(c)}
+              {#each shown.slice(0, 200) as s (s.uuid)}{@render slotRow(c, s)}{/each}
+              {#if shown.length > 200}<p class="hint sub">{shown.length - 200} more; narrow the filter.</p>{/if}
+              {#if shown.length === 0}<p class="hint sub">No bound slot matches.</p>{/if}
+            {/if}
+          {/if}
           {#if !isMobile && writableFolders(c.id).length > 0}
             {#if slotAdd && slotAdd.catalog === c.id}
               <div class="cat-form">
@@ -361,6 +425,10 @@
   .slots h3 { margin: 0; }
   .slot { padding: 8px; border: 1px solid var(--border, #333); border-radius: var(--r-md); display: flex; flex-direction: column; gap: 6px; }
   .slot.unbound { border-color: color-mix(in srgb, var(--yellow) 45%, var(--border, #333)); }
+  .slot.flash { border-color: var(--sapphire); box-shadow: 0 0 0 1px var(--sapphire); }
+  .slot-group { font-size: var(--fs-sm); font-weight: 600; opacity: 0.8; margin-top: 4px; }
+  .slot-toggle { align-self: flex-start; }
+  .slot-filter { max-width: 420px; }
   .slot-head { display: flex; align-items: center; gap: 8px; }
   .slot-icon { display: inline-flex; opacity: 0.8; }
   .slot-name { font-weight: 600; }

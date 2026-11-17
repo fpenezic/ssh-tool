@@ -23,7 +23,8 @@ class CatalogStore {
   slots = $state<Record<string, CatalogSlotInfo[]>>({});
   // Which catalog the Settings section should open on (deep link from
   // the tree or a toast).
-  focus = $state<{ id: string; panel: "slots" | "" } | null>(null);
+  // slot: one slot to show (the editor's "bind the slot" link).
+  focus = $state<{ id: string; panel: "slots" | ""; slot?: string } | null>(null);
   // An enrollment waiting for the user's confirmation (a link, or the
   // "Add with a code" form). Nothing is redeemed until they confirm.
   enroll = $state<{ url: string; code: string } | null>(null);
@@ -106,8 +107,8 @@ class CatalogStore {
   }
 
   /** Open the Catalogs section in Settings, optionally on one catalog's slots. */
-  open(id?: string, panel: "slots" | "" = "") {
-    this.focus = id ? { id, panel } : null;
+  open(id?: string, panel: "slots" | "" = "", slot = "") {
+    this.focus = id ? { id, panel, slot: slot || undefined } : null;
     view.setTabSettingsSection("catalogs");
   }
 

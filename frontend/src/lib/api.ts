@@ -1333,6 +1333,9 @@ export interface CatalogEnrollPreview {
 }
 export interface SeenApp { device: string; version: string; last_seen: number }
 
+// A credential slot bound to this asks when connecting (store.CatalogBindingAsk).
+export const CATALOG_BIND_ASK = "ask";
+
 export interface CatalogSlotInfo {
   can_write?: boolean;
   folder_name?: string;
