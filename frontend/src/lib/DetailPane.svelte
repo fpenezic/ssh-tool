@@ -1344,14 +1344,24 @@
       .filter((c) => !c.id.startsWith("catcred-") && c.kind !== "api_token" && c.kind !== "certificate")
       .map((c) => ({ value: c.id, label: c.name })),
   );
+  // One bind at a time: two in flight for the same slot could land in
+  // either order, leaving it bound to the older choice.
+  let slotBinding = $state(false);
   async function bindSlotFromEditor(catalogId: string, uuid: string, target: string) {
     if (!target) return;
+    if (slotBinding) {
+      toast.info("The slot is still being bound; pick again when it is done");
+      return;
+    }
+    slotBinding = true;
     try {
       await api.catalogBind(catalogId, uuid, target);
       await Promise.all([tree.load(), catalogs.load(), catalogs.loadSlots(catalogId)]);
       toast.ok("Slot bound");
     } catch (e) {
       toast.err("Bind: " + errMsg(e), 8000);
+    } finally {
+      slotBinding = false;
     }
   }
 

@@ -814,8 +814,8 @@
 
   // Detach a tab, or the whole multi-selection it is part of, into one new
   // window (at the drag's end point when given).
-  async function detachTab(tabId: string, screenX = 0, screenY = 0) {
-    const tabs = ctxTargets(tabId)
+  async function detachTab(tabId: string, screenX = 0, screenY = 0, targets?: string[]) {
+    const tabs = (targets ?? ctxTargets(tabId))
       .map((id) => paneTabs.tabs.find((t) => t.tabId === id))
       .filter((t): t is NonNullable<typeof t> => !!t);
     tabSelection.clear();
@@ -1437,8 +1437,10 @@
             // the main window took stays outstanding until tab_drag_accepted.
             const id = detachedDragId;
             setTimeout(() => {
-              api.windowCancelTabDrag(id).then((cleared) => {
-                if (cleared) outstandingDrags.delete(id);
+              // Claimed: the tab leaves on tab_drag_accepted. Cleared or
+              // replaced by the next drag: nobody will take this one.
+              api.windowCancelTabDragStatus(id).then((st) => {
+                if (st !== "claimed") outstandingDrags.delete(id);
               }).catch(console.error);
             }, 1500);
           } else {
@@ -1456,11 +1458,17 @@
             // the window that is a new window, as before. Not cleared: the
             // tab leaves here on tab_drag_accepted.
             const sx = e.screenX, sy = e.screenY;
+            // The tabs this gesture dragged, before the wait: the
+            // selection may change in the meantime.
+            const targets = tabId ? ctxTargets(tabId) : [];
             setTimeout(() => {
-              api.windowCancelTabDrag(id).then((cleared) => {
-                if (!cleared) return;
+              // Claimed by another window: the tab leaves on
+              // tab_drag_accepted. Cleared, or replaced by the next drag
+              // before anyone took it: a drop outside opens a new window.
+              api.windowCancelTabDragStatus(id).then((st) => {
+                if (st === "claimed") return;
                 outstandingDrags.delete(id);
-                if (tabId && outside) void detachTab(tabId, sx, sy);
+                if (tabId && outside) void detachTab(tabId, sx, sy, targets);
               }).catch(console.error);
             }, 400);
           }

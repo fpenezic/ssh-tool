@@ -209,6 +209,10 @@ type App struct {
 
 	pendingTabDragMu sync.Mutex
 	pendingTabDrag   *TabDragPayload
+	// claimedTabDrags: drag ids a window accepted (claimed), with when, so
+	// a late cancel can tell a claimed drag from one the next gesture
+	// replaced. Pruned after a minute. Guarded by pendingTabDragMu.
+	claimedTabDrags map[string]time.Time
 	// tabDragsInFlight: drags accepted by a window whose tab is
 	// still being rebuilt (WindowAcceptTabDrag -> WindowTabDragDone /
 	// WindowTabDragFailed), by drag id. Their sessions have left the
@@ -7961,6 +7965,7 @@ func (a *App) WindowDetachTabAt(tabID string, screenX, screenY int, sessions str
 				a.detachedSessionDrop(name)
 			}
 			a.dropTabDragFrom(name)
+			a.failTabDragsTo(name)
 			a.detachedMu.Lock()
 			ids := a.detachedSessions[name]
 			delete(a.detachedSessions, name)
@@ -8111,6 +8116,18 @@ func (a *App) WindowAcceptTabDragAs(target string) (*TabDragPayload, error) {
 	}
 	p := a.pendingTabDrag
 	a.pendingTabDrag = nil
+	if p.DragID != "" {
+		now := time.Now()
+		if a.claimedTabDrags == nil {
+			a.claimedTabDrags = map[string]time.Time{}
+		}
+		for id, at := range a.claimedTabDrags {
+			if now.Sub(at) > time.Minute {
+				delete(a.claimedTabDrags, id)
+			}
+		}
+		a.claimedTabDrags[p.DragID] = now
+	}
 	log.Printf("tabdrag: accept %s into %s", p.TabID, target)
 	if p.DragID != "" {
 		// A drag carries one tab of the source window, which may hold
@@ -8168,6 +8185,23 @@ func (a *App) WindowTabDragDone(dragID string) {
 	EventsEmit("tab_drag_accepted", map[string]string{"drag_id": dragID})
 }
 
+// failTabDragsTo fails the drags a closing window accepted but had not
+// completed: their sessions go back to the source as for a failed
+// transfer, and a late WindowTabDragDone finds no record.
+func (a *App) failTabDragsTo(window string) {
+	a.detachedMu.Lock()
+	var ids []string
+	for id, f := range a.tabDragsInFlight {
+		if f.target == window {
+			ids = append(ids, id)
+		}
+	}
+	a.detachedMu.Unlock()
+	for _, id := range ids {
+		a.WindowTabDragFailed(id)
+	}
+}
+
 // WindowTabDragFailed: the main window could not rebuild the tab of an
 // accepted drag, which therefore stays in its source window. Its sessions
 // go back to the source; if the source closed meanwhile, nothing shows
@@ -8192,6 +8226,27 @@ func (a *App) WindowTabDragFailed(dragID string) {
 			a.endDetachedSession(f.source, sid)
 		}
 	}
+}
+
+// WindowCancelTabDragStatus is WindowCancelTabDrag telling the three
+// outcomes apart: "cleared" (it was pending, nobody took it), "claimed"
+// (a window accepted it; the tab leaves on tab_drag_accepted) and
+// "superseded" (the next drag replaced it before anyone took it: nobody
+// will, so a tear-off outside the window still applies).
+func (a *App) WindowCancelTabDragStatus(dragID string) string {
+	a.pendingTabDragMu.Lock()
+	defer a.pendingTabDragMu.Unlock()
+	if a.pendingTabDrag != nil && a.pendingTabDrag.DragID == dragID {
+		a.pendingTabDrag = nil
+		log.Printf("tabdrag: cancel %s, cleared", dragID)
+		return "cleared"
+	}
+	if _, ok := a.claimedTabDrags[dragID]; ok {
+		log.Printf("tabdrag: cancel %s, claimed", dragID)
+		return "claimed"
+	}
+	log.Printf("tabdrag: cancel %s, superseded", dragID)
+	return "superseded"
 }
 
 // WindowCancelTabDrag clears a pending drag without accepting it (drag ended

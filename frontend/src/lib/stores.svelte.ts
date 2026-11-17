@@ -31,6 +31,10 @@ class TreeStore {
   // proxied reads (O(N^2) per filter keystroke at a few hundred rows).
   folders = $state.raw<Folder[]>([]);
   connections = $state.raw<Connection[]>([]);
+  // Everything, hidden catalog folders included: checks that must see
+  // every row (jump referrers before a delete) read these, not the tree.
+  private allFolders: Folder[] = [];
+  private allConnections: Connection[] = [];
   // Lookups by id and by parent, rebuilt when load() replaces the arrays.
   private folderIdx = $derived(new Map(this.folders.map((f) => [f.id, f])));
   private connIdx = $derived(new Map(this.connections.map((c) => [c.id, c])));
@@ -126,7 +130,9 @@ class TreeStore {
       ]);
       // Catalog folders the user keeps out of their tree (a preference;
       // they still sync): gone from the tree, search and Quick Connect.
-      const shown = catalogVisibility.filter(folders ?? [], conns ?? []);
+      this.allFolders = folders ?? [];
+      this.allConnections = conns ?? [];
+      const shown = catalogVisibility.filter(this.allFolders, this.allConnections);
       this.folders = shown.folders;
       this.connections = shown.connections;
       // Pull the dynamic-folder side data in parallel. Errors swallowed
@@ -245,7 +251,7 @@ class TreeStore {
   // connection as a bastion. Shown before a delete: those chains would
   // fail with "the jump host connection was deleted" afterwards.
   jumpReferrers(connectionId: string): string[] {
-    return jumpReferrers(connectionId, this.folders, this.connections);
+    return jumpReferrers(connectionId, this.allFolders, this.allConnections);
   }
 
   // Delete-dialog warning for a connection other chains jump through:

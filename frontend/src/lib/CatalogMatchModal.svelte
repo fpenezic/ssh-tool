@@ -7,6 +7,7 @@
   import { tree } from "./stores.svelte";
   import { workspaces } from "./workspaces.svelte";
   import { toast } from "./toast.svelte.ts";
+  import { untrack } from "svelte";
   import { IconX, IconAlertTriangle, IconChevronRight, IconChevronDown } from "./iconMap";
 
   let { catalogId, catalogName, onclose }: { catalogId: string; catalogName: string; onclose: () => void } = $props();
@@ -19,12 +20,24 @@
   let filter = $state("");
   let confirmUndo = $state(false);
 
+  // Only the newest preview counts: picks made in quick succession must
+  // not be overwritten by an older answer arriving last. Apply waits for it.
+  let seq = 0;
+  let loading = $state(false);
   async function load() {
+    const my = ++seq;
+    loading = true;
     err = "";
-    try { pv = await api.catalogMatchPreview(catalogId, picks); }
-    catch (e) { err = String(e); }
+    try {
+      const r = await api.catalogMatchPreview(catalogId, picks);
+      if (my === seq) pv = r;
+    } catch (e) {
+      if (my === seq) err = String(e);
+    } finally {
+      if (my === seq) loading = false;
+    }
   }
-  $effect(() => { void catalogId; void load(); });
+  $effect(() => { void catalogId; untrack(() => void load()); });
 
   const pairs = $derived(pv?.pairs ?? []);
   const q = $derived(filter.trim().toLowerCase());
@@ -145,8 +158,10 @@
       toast.info(`${r.pairs} connection${r.pairs === 1 ? "" : "s"} matched to ${catalogName}${extra ? " - " + extra : ""}. Your copies are in "${r.folder}".`);
       onclose();
     } catch (e) {
-      err = String(e);
+      // Refresh first (it clears the error), then show why Apply failed.
+      const why = String(e);
       await load();
+      err = why;
     } finally {
       busy = false;
     }
@@ -308,7 +323,7 @@
         {/if}
       {/if}
       <button onclick={onclose} disabled={busy}>Cancel</button>
-      <button class="primary" onclick={apply} disabled={busy || picked.length === 0}>{busy ? "Matching..." : `Match ${picked.length}`}</button>
+      <button class="primary" onclick={apply} disabled={busy || loading || picked.length === 0}>{busy ? "Matching..." : `Match ${picked.length}`}</button>
     </footer>
   </div>
 </div>

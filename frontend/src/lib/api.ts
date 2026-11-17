@@ -2140,6 +2140,7 @@ export const api = {
   windowTabDragDone: (dragId: string) => G.WindowTabDragDone(dragId),
   windowTabDragFailed: (dragId: string) => G.WindowTabDragFailed(dragId),
   windowCancelTabDrag: (dragId: string) => G.WindowCancelTabDrag(dragId) as Promise<boolean>,
+  windowCancelTabDragStatus: (dragId: string) => G.WindowCancelTabDragStatus(dragId) as Promise<"cleared" | "claimed" | "superseded">,
   revealInMainWindow: (kind: "folder" | "connection" | "settings" | "network-profile", id: string) => G.RevealInMainWindow(kind, id),
   setDetachedWindowTitle: (name: string, title: string) => G.SetDetachedWindowTitle(name, title),
   detachedSessionSave: (window: string, tabs: string) => G.DetachedSessionSave(window, tabs),

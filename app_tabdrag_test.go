@@ -106,3 +106,35 @@ func TestTabDragMainToDetached(t *testing.T) {
 		t.Fatal("the main window got a detached set")
 	}
 }
+
+// A late cancel tells a claimed drag from one the next gesture replaced,
+// and a window that closes before completing an accepted drag fails it,
+// so a late Done adds nothing to the closed window.
+func TestTabDragCancelStatusAndClosedReceiver(t *testing.T) {
+	a := &App{detachedSessions: map[string][]string{"w2": {"x"}}}
+	a.WindowStartTabDragFrom("main", "t1", "s1", "{}", "d1")
+	if _, err := a.WindowAcceptTabDragAs("w2"); err != nil {
+		t.Fatal(err)
+	}
+	a.WindowStartTabDragFrom("main", "t2", "s2", "{}", "d2")
+	a.WindowStartTabDragFrom("main", "t3", "s3", "{}", "d3")
+	if st := a.WindowCancelTabDragStatus("d1"); st != "claimed" {
+		t.Fatalf("d1: %s", st)
+	}
+	if st := a.WindowCancelTabDragStatus("d2"); st != "superseded" {
+		t.Fatalf("d2: %s", st)
+	}
+	if st := a.WindowCancelTabDragStatus("d3"); st != "cleared" {
+		t.Fatalf("d3: %s", st)
+	}
+
+	a.failTabDragsTo("w2")
+	if _, ok := a.tabDragsInFlight["d1"]; ok {
+		t.Fatal("accepted drag of a closed window still in flight")
+	}
+	delete(a.detachedSessions, "w2")
+	a.WindowTabDragDone("d1")
+	if _, ok := a.detachedSessions["w2"]; ok {
+		t.Fatal("late Done revived the closed window's sessions")
+	}
+}

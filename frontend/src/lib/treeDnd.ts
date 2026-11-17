@@ -3,6 +3,7 @@
 
 import { api, type Folder, type Connection } from "./api";
 import { tree } from "./stores.svelte";
+import { toast } from "./toast.svelte.ts";
 
 export type DragKind = "folder" | "connection";
 export type DropIntent = "before" | "after" | "inside";
@@ -254,6 +255,21 @@ async function applyMultiToParent(
   folderIds: string[],
   destParentId: string | null,
 ): Promise<void> {
+  // Catalog records move through the catalog (one at a time, as a single
+  // drag does), and a catalog folder holds only catalog records: a multi
+  // selection leaves those out and says so, instead of a local update the
+  // store refuses.
+  const destCatalog = destParentId !== null && !!tree.folderById(destParentId)?.catalog_id;
+  const keep = (row: { catalog_id?: string | null } | null) => !!row && !row.catalog_id && !destCatalog;
+  const before = connIds.length + folderIds.length;
+  connIds = connIds.filter((id) => keep(tree.connectionById(id)));
+  folderIds = folderIds.filter((id) => keep(tree.folderById(id)));
+  const skipped = before - connIds.length - folderIds.length;
+  if (skipped > 0) {
+    toast.info(destCatalog
+      ? `${skipped} item${skipped === 1 ? "" : "s"} not moved: drag one at a time onto a catalog folder to publish it`
+      : `${skipped} catalog record${skipped === 1 ? "" : "s"} not moved: catalog records move one at a time`);
+  }
   // Filter folder moves that would create a cycle: dropping a folder
   // into itself or any of its own descendants.
   const safeFolders = folderIds.filter((id) => {

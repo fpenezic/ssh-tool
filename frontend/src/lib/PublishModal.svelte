@@ -314,7 +314,7 @@
 
           <section>
             <h3>What to send <span class="dim">ticked goes to the catalog; the rest stays yours only, your tree does not change</span></h3>
-            <p class="dim always">Always sent: names, addresses, protocol, port, username, SSH options, tunnel settings, "sensitive" and fixed jump hosts (as slots or a copy, below).</p>
+            <p class="dim always">Always sent: names, addresses, protocol, port, SSH options, tunnel settings, "sensitive" and fixed jump hosts (as slots or a copy, below).</p>
             <div class="send">
               {#each sendCategories as c (c.id)}
                 <label class="send-item">
