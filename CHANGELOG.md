@@ -19,6 +19,7 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 - **Leave a catalog** and keep its connections as a local folder, or copy part of it to your own connections. Records that left the catalog stay in your tree until you keep or delete them.
 - Catalog connections travel with profile sync and backups; an older app sharing your sync profile does not see them and leaves them alone.
 - **Save as connection** on a dynamic inventory host makes a fixed connection from what it resolves to now, and can point the jump hosts that use it at the new one.
+- **The Delete key on a catalog record** does what its menu does: "Delete for everyone" (with that confirmation) for a writer, the local delete for a record that left its catalog, and otherwise a note that it cannot be deleted. Before, it opened the plain delete prompt, which then failed.
 - **Duplicate in the catalog**: writers can duplicate a catalog connection in its folder with the same settings, slots and forwards, entering only the new name and address.
 - Publishing keeps private Vaultwarden / Bitwarden items out on request: untick shared sources in "What to send", or a single credential in the review. If the folder changes after you reviewed it, the publish stops and shows the new review.
 - A catalog link (`ssh-tool://`) only fills in the enrollment form; nothing contacts the server it names until you click Check.

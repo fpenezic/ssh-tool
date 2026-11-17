@@ -14,6 +14,7 @@ import { askLogin } from "./loginModal.svelte.ts";
 import { showPrompt } from "./promptModal.svelte.ts";
 import { showConfirm } from "./confirmModal.svelte.ts";
 import { toast } from "./toast.svelte.ts";
+import { isMobile } from "./platform";
 import { unwrapRaw } from "./connectErrors";
 import { presenceTakeover, isBusyElsewhere } from "./presenceTakeover.svelte.ts";
 import { EventsOn } from "./wailsRuntime";
@@ -1087,7 +1088,61 @@ class ConnectionActionsStore {
     }
   }
 
-  openDeleteConnections(ids: string[]) {
+  // Delete (key) on catalog rows: the same as their context menu. A
+  // catalog record goes for everyone (writers, after the same confirm as
+  // "Delete for everyone..."), one that left its catalog is deleted
+  // locally; anything else is refused with what is wrong. True when the
+  // selection held catalog rows (handled here, the local delete is not
+  // run for any of them).
+  private async deleteCatalogRows(kind: "connections" | "folders", ids: string[]): Promise<boolean> {
+    const rows = ids.map((id) => (kind === "connections" ? tree.connectionById(id) : tree.folderById(id)))
+      .filter((r): r is NonNullable<typeof r> => !!r && !!r.catalog_id);
+    if (rows.length === 0) return false;
+    if (ids.length > 1) {
+      toast.info("Catalog records are deleted one at a time (Delete for everyone in their menu)", 8000);
+      return true;
+    }
+    const r = rows[0] as { id: string; name: string; remote_uuid?: string | null; catalog_state?: string; folder_id?: string | null; parent_id?: string | null; catalog_writable?: boolean };
+    const fail = (err: unknown) => toast.err("Delete: " + (err instanceof Error ? err.message : String(err)), 8000);
+    if (r.catalog_state === "removed") {
+      const ok = await showConfirm({ title: "Delete", message: `Delete "${r.name}"${kind === "folders" ? " and everything in it" : ""}? It left its catalog; your local settings on it go too.`, okLabel: "Delete", danger: true });
+      if (ok) await api.catalogDeleteRemoved(kind, r.id).then(() => tree.load()).catch(fail);
+      return true;
+    }
+    if (!r.remote_uuid) {
+      toast.info(`"${r.name}" is the catalog's root folder; a catalog is removed under Settings - Catalogs`, 8000);
+      return true;
+    }
+    const writable = kind === "folders"
+      ? !!r.catalog_writable
+      : !!(r.folder_id && tree.folderById(r.folder_id)?.catalog_writable);
+    if (!writable || isMobile) {
+      toast.info(`"${r.name}" comes from the catalog and you cannot delete it there`, 8000);
+      return true;
+    }
+    let what = "";
+    if (kind === "folders") {
+      const under = (fid: string | null | undefined): boolean => {
+        for (let f = fid ? tree.folderById(fid) : null, d = 0; f && d < 64; d++) {
+          if (f.id === r.id) return true;
+          f = f.parent_id ? tree.folderById(f.parent_id) : null;
+        }
+        return false;
+      };
+      const n = tree.connections.filter((c) => under(c.folder_id)).length;
+      what = n ? ` with ${n} connection${n === 1 ? "" : "s"}` : "";
+    }
+    const ok = await showConfirm({ title: "Delete for everyone",
+      message: kind === "folders"
+        ? `Delete "${r.name}"${what} from the catalog? It goes for everyone with access, with everything in it, and your own settings on it go too.`
+        : `Delete "${r.name}" from the catalog? It goes for everyone with access, with its forwards, and your own settings on it go too.`,
+      okLabel: "Delete for everyone", danger: true });
+    if (ok) await api.catalogDelete(kind, r.id, kind === "folders").then(() => tree.load()).catch(fail);
+    return true;
+  }
+
+  async openDeleteConnections(ids: string[]) {
+    if (await this.deleteCatalogRows("connections", ids)) return;
     const items = ids
       .map((id) => tree.connectionById(id))
       .filter((c): c is Connection => !!c)
@@ -1102,7 +1157,8 @@ class ConnectionActionsStore {
     };
   }
 
-  openDeleteFolders(selected: string[]) {
+  async openDeleteFolders(selected: string[]) {
+    if (await this.deleteCatalogRows("folders", selected)) return;
     // A subfolder of another selected folder goes with it (the DB
     // cascades): deleting it again would only report "not found".
     const ids = topLevelOnly(selected, (id) => tree.folderById(id)?.parent_id ?? null);
