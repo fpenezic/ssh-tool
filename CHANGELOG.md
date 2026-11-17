@@ -9,7 +9,16 @@ while Wails v3 was a prerelease upstream.
 
 ## [Unreleased]
 
-Security fixes from an audit of the LLM (MCP) access, archive import and session sharing: each closes a way an untrusted input got more authority than the UI promised. Also: a VPN that needs a one-time code no longer asks for it again and again while you are away.
+Shared catalogs: a connection tree your team shares from a self-hosted catalog server, kept in step on every machine, with each person's own credentials. Security fixes from an audit of the LLM (MCP) access, archive import and session sharing: each closes a way an untrusted input got more authority than the UI promised. Also: a VPN that needs a one-time code no longer asks for it again and again while you are away.
+
+### Shared catalogs
+- **Attach a catalog** (Settings -> Catalogs): sign in through your browser, or add it with a code from the catalog's web page (also in the Android app). Its folders, connections and port forwards appear under the catalog's root folder and follow it on every sync. The catalog server is a separate self-hosted service and not open source at this time; ssh-tool is the client.
+- **Slots instead of secrets**: a credential, network or jump host each person reaches their own way is a slot in the catalog. You bind it once to your own, in a dialog that opens on the first connect that needs it; Bitwarden / Vaultwarden items are found by themselves.
+- **My settings vs the catalog record**: what you change on a catalog connection stays yours (port, username, notes, tags, icon) and can be reset. Writers edit the record itself for everyone, with a field-by-field view when someone saved first, and an offer to set a credential on the folder instead of each connection.
+- **Publish a folder** into a catalog: choose what to send, review every free-text value first, and keep your own vault credentials, VPN profiles and anything else local. A bastion from a dynamic inventory goes as a bastion record; uploaded icon images go to the catalog's image store.
+- **Leave a catalog** and keep its connections as a local folder, or copy part of it to your own connections. Records that left the catalog stay in your tree until you keep or delete them.
+- Catalog connections travel with profile sync and backups; an older app sharing your sync profile does not see them and leaves them alone.
+- **Save as connection** on a dynamic inventory host makes a fixed connection from what it resolves to now, and can point the jump hosts that use it at the new one.
 
 ### LLM (MCP) access
 - **type_into_terminal never presses Enter**: text with a newline or any other control character is now refused. Before, a carriage return in the text submitted the command at once, so the "review it and press Enter yourself" step could be skipped, and under *read + run (YOLO)* that also bypassed the prompt for dangerous commands.

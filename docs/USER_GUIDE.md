@@ -30,6 +30,7 @@ implemented.
 9. [Multi-window: detach + redock](#multi-window)
 10. [Workspaces](#workspaces)
 10b. [Dynamic inventory (Proxmox / Hetzner / DO / Linode / Vultr / Scaleway / EC2 / Ansible)](#dynamic-inventory)
+10c. [Shared catalogs](#shared-catalogs)
 11. [Quick palette (Ctrl+K)](#quick-palette)
 12. [Snippets (Ctrl+Shift+P)](#snippets)
 13. [Live tcpdump panel](#tcpdump)
@@ -3368,6 +3369,56 @@ folder you created by hand. **Irreversible** from the UI; existing
 pinned connections in the same folder are untouched.
 
 ---
+
+<a id="shared-catalogs"></a>
+## 10c. Shared catalogs
+
+A **catalog** is a connection tree your team shares. Its folders, connections and port forwards show up in your tree under the catalog's root folder and stay in step with it: when a colleague adds a host or changes a port, your tree follows on the next sync. Secrets are never shared. Wherever a connection needs a credential, a network or a jump host that each person has their own way of reaching, the catalog holds a **slot**, and you bind every slot once to something of your own.
+
+A catalog lives on a **catalog server**, a separate self-hosted service that your team or company runs. The server is not part of this repository and is not open source at this time; ssh-tool is the client. Ask whoever runs it for the catalog's address, or for a code from its web page.
+
+### Adding a catalog
+
+- **Settings -> Catalogs -> Add catalog**: enter the address and sign in through your browser (your company's identity provider, or the server's own login).
+- **Add with a code**: paste a code from the catalog's web page ("Connect ssh-tool"). No browser sign-in is needed on that machine; this is how the Android app adds a catalog.
+- Each machine signs in on its own. Signing out (or **Remove catalog**) ends that machine's session on the server.
+
+Sync runs in the background on an interval and on **Sync now**. The catalog's root folder shows its state: signed out, a sync error, or how many slots still wait for you.
+
+### Slots: your own credentials, networks and jump hosts
+
+- **Bind on first connect**: when you connect to a catalog connection whose slot you have not bound, a dialog lists what it needs (jump host, network, credential, one-time code) and you pick yours once. Every connection that uses that slot works from then on. A one-time code slot can be left as "I type the code myself".
+- **Settings -> Catalogs -> Slots** lists the slots with what each is bound to on this machine.
+- A slot backed by a **Bitwarden / Vaultwarden** item needs no binding when you can read the same item: the app finds it.
+- Connects you did not click (workspace restore, tunnel autostart, MCP, the CI runner) never ask; they fail with the slot's message instead.
+
+### My settings and the catalog record
+
+Each catalog folder and connection has two views in its editor:
+
+- **My settings (this machine)**: anything you change stays yours and overrides the catalog for you only: a port, a username, a tunnel autostart, notes, tags, an icon. **Reset** goes back to the catalog's value.
+- **Catalog record (everyone)**: shown when you have write access. Saving changes the record for everyone with access to that folder. When someone else saved first, the editor shows both versions field by field.
+- Setting a credential on one connection offers **"Set it on the folder instead"** when the connections next to it would use the same one.
+
+### Publishing a folder
+
+Right-click one of your own folders -> **Publish to catalog...** moves it into a catalog folder you can write to. The folder keeps behaving the same for you; it just becomes catalog records that everyone with access to the target sees.
+
+- **What to send**: tick what goes (notes, tags, icons, port forwards, database, Kafka and VNC settings, the initial command, terminal behaviour). What you untick stays yours only.
+- **What is never sent as is**: a credential from your own vault and a network (VPN) profile stay yours; colleagues get those connections without them and use their own. Two boxes send them as slots anyway. Bitwarden / Vaultwarden items and opkssh credentials always go, since everyone can use them the same way.
+- **Jump hosts**: a bastion outside the folder becomes a slot or a copy inside the folder, your choice. A bastion from a dynamic inventory (a Proxmox VM, say) goes as a bastion record made from its current address; you keep jumping through your inventory host.
+- **Review**: every free-text value that could carry a secret (initial command, environment variables, SSH options, addresses) is listed for review before you can publish, and so is every reference that stays local.
+- **Icon images** go to the catalog when its server takes images (PNG, JPEG or WebP, at most 256 KiB and 1024x1024). One the server would refuse stays yours, with the reason. The server takes a limited number of new images per hour; a large first publish sends the rest in the background, shown in the status bar.
+
+### Leaving a catalog
+
+- **Remove catalog** detaches it on this machine. With **Keep its connections as a local folder** ticked, the folders, connections and forwards stay as your own, working as before; slots you had not bound become empty fields, listed after the removal and noted on each connection.
+- **Copy to my connections...** (right-click a catalog folder or connection) makes an independent copy under one of your own folders. The copy does not follow the catalog.
+- A record a colleague deleted, or that you lost access to, stays in your tree marked as removed, with **Keep as local** or **Delete**.
+
+### Profile sync and backups
+
+Catalog connections travel with profile sync and backups so your other machines and a restore keep your bindings and your own settings, but each machine syncs the catalog itself. An app older than 1.3 that shares your sync profile does not see catalog connections at all and leaves them alone.
 
 <a id="quick-palette"></a>
 ## 11. Quick palette (Ctrl+K)
