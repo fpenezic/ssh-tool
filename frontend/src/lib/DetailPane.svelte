@@ -655,7 +655,12 @@
 
   // Same api_token exclusion as the connection picker, keyed on the folder's
   // own current value so an existing reference is not dropped on open.
-  const folderCredOptions = $derived(sshCredOptions(editingFolder?.authRef));
+  // A catalog folder's credential may be a slot marker: shown by the
+  // slot's name, like on a connection.
+  const folderCredOptions = $derived([
+    ...(parseMarker(editingFolder?.authRef) ? [{ value: editingFolder!.authRef, label: catalogs.markerLabel(editingFolder!.authRef) ?? "catalog slot" }] : []),
+    ...sshCredOptions(editingFolder?.authRef).filter((o) => !parseMarker(o.value)),
+  ]);
 
   function encodeBool(v: boolean | undefined): string {
     if (v === true) return "on";
@@ -2114,6 +2119,22 @@
   }
 </script>
 
+<!-- A catalog slot behind a credential field: bind it here (for every
+     record that uses it) or open it in Settings. -->
+{#snippet slotBind(m: ReturnType<typeof parseMarker>)}
+  {#if m && m.uuid}
+    {@const slotInfo = catalogs.slots[m.catalogId]?.find((x) => x.uuid === m.uuid)}
+    <div class="slot-inline">
+      {#if m.unbound && slotInfo}
+        <span class="inh-hint">Catalog slot <strong>"{slotInfo.name}"</strong> is not bound. Bind it once for every connection that uses it ({slotInfo.used_by}):</span>
+        <SearchableSelect value="" options={slotBindOptions} placeholder="Pick a credential..." emptyLabel="(not bound)"
+          onChange={(v: string) => bindSlotFromEditor(m.catalogId, m.uuid, v)} />
+      {/if}
+      <button type="button" class="linklike bind-link" onclick={() => catalogs.open(m.catalogId, "slots", m.uuid)}>slot in Settings</button>
+    </div>
+  {/if}
+{/snippet}
+
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <!-- Ctrl+S is handled by the window listener in $effect; binding it
@@ -2286,6 +2307,7 @@
           <span class="kp-badge">Infisical-backed - secret read from the server at connect</span>
         {/if}
       </label>
+      {@render slotBind(parseMarker(editingFolder.authRef))}
       {#if otpCredOptions.length > 0 || editingFolder.otpRef || hasKeepass || hasBitwarden}
         <label>One-time code from
           <div class="cred-picker-row">
@@ -2782,18 +2804,7 @@
           <span class="inh-hint"><strong>Password overridden</strong> - this connection's password is tried first, the credential's only if it fails.</span>
         {/if}
       </label>
-      {@const authSlot = parseMarker(editing.authRef) ?? (!editing.authRef && inhAuth.from ? parseMarker(String(inhAuth.value ?? "")) : null)}
-      {#if authSlot && authSlot.uuid}
-        {@const slotInfo = catalogs.slots[authSlot.catalogId]?.find((x) => x.uuid === authSlot.uuid)}
-        <div class="slot-inline">
-          {#if authSlot.unbound && slotInfo}
-            <span class="inh-hint">Catalog slot <strong>"{slotInfo.name}"</strong> is not bound. Bind it once for every connection that uses it ({slotInfo.used_by}):</span>
-            <SearchableSelect value="" options={slotBindOptions} placeholder="Pick a credential..." emptyLabel="(not bound)"
-              onChange={(v: string) => bindSlotFromEditor(authSlot.catalogId, authSlot.uuid, v)} />
-          {/if}
-          <button type="button" class="linklike bind-link" onclick={() => catalogs.open(authSlot.catalogId, "slots", authSlot.uuid)}>slot in Settings</button>
-        </div>
-      {/if}
+      {@render slotBind(parseMarker(editing.authRef) ?? (!editing.authRef && inhAuth.from ? parseMarker(String(inhAuth.value ?? "")) : null))}
       {#if otpCredOptions.length > 0 || editing.otpRef || hasKeepass || hasBitwarden}
         {@const inhOtp = tree.inheritedFieldForConnection(conn.id, "otp_ref")}
         <label>One-time code from
