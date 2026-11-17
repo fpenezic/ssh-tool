@@ -579,3 +579,73 @@ func (a *App) catalogRecordName(catalogID, kind, uuid string) string {
 	}
 	return `"` + name + `"`
 }
+
+// CatalogDuplicate makes a new catalog connection next to a catalog
+// connection, with the same settings (slots included), protocol, tags,
+// notes, icon, documentation and forwards, under a new name and address.
+// Writers of the folder only. Returns the new local id.
+func (a *App) CatalogDuplicate(id, name, hostname string) (string, error) {
+	name, hostname = strings.TrimSpace(name), strings.TrimSpace(hostname)
+	if name == "" || hostname == "" {
+		return "", fmt.Errorf("a name and a hostname are needed")
+	}
+	t, err := a.catalogWriteTarget(catalog.KindConnections, id)
+	if err != nil {
+		return "", err
+	}
+	var rec map[string]any
+	if err := json.Unmarshal([]byte(t.raw), &rec); err != nil {
+		return "", fmt.Errorf("catalog record: %w", err)
+	}
+	u := uuid.NewString()
+	body := map[string]any{"uuid": u, "name": name, "hostname": hostname}
+	// The record's own fields, in catalog terms already (slot references
+	// stay valid in the same folder).
+	for _, k := range []string{"folder_uuid", "protocol", "sort_order", "settings", "tags", "notes", "icon_name", "icon_color", "icon_image", "doc_md"} {
+		if v, ok := rec[k]; ok && v != nil {
+			body[k] = v
+		}
+	}
+	ctx, cancel := catalogWriteCtx()
+	defer cancel()
+	w, err := t.client.Create(ctx, catalog.KindConnections, body)
+	if err != nil {
+		return "", fmt.Errorf("not created: %s", catalogShortError(err))
+	}
+	items := []catalog.Item{catalog.UpsertItem(catalog.KindConnections, w.Record)}
+	// Its catalog forwards, as new records on the copy.
+	rows, err := a.db.Conn().Query(`SELECT catalog_json FROM port_forwards WHERE connection_id = ? AND remote_uuid IS NOT NULL AND catalog_state <> 'removed'`, id)
+	if err == nil {
+		var fwds []string
+		for rows.Next() {
+			var j string
+			if rows.Scan(&j) == nil {
+				fwds = append(fwds, j)
+			}
+		}
+		rows.Close()
+		for _, j := range fwds {
+			var f map[string]any
+			if json.Unmarshal([]byte(j), &f) != nil {
+				continue
+			}
+			fb := map[string]any{"uuid": uuid.NewString(), "connection_uuid": u}
+			for _, k := range []string{"kind", "local_addr", "local_port", "remote_host", "remote_port", "auto_start", "description"} {
+				if v, ok := f[k]; ok {
+					fb[k] = v
+				}
+			}
+			fw, err := t.client.Create(ctx, catalog.KindForwards, fb)
+			if err != nil {
+				log.Printf("catalog %s: duplicate forward: %v", t.cat.Name, err)
+				continue
+			}
+			items = append(items, catalog.UpsertItem(catalog.KindForwards, fw.Record))
+		}
+	}
+	if err := a.catalogApply(t.cat, items); err != nil {
+		return "", err
+	}
+	a.recordAudit("catalog.record_duplicate", t.cat.ID, map[string]string{"from": t.uuid, "uuid": u})
+	return a.db.CatalogLocalID(t.cat.ID, catalog.KindConnections, u)
+}

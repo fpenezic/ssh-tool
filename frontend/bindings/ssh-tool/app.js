@@ -667,6 +667,20 @@ export function CatalogDeleteRemoved(kind, id) {
 }
 
 /**
+ * CatalogDuplicate makes a new catalog connection next to a catalog
+ * connection, with the same settings (slots included), protocol, tags,
+ * notes, icon, documentation and forwards, under a new name and address.
+ * Writers of the folder only. Returns the new local id.
+ * @param {string} id
+ * @param {string} name
+ * @param {string} hostname
+ * @returns {$CancellablePromise<string>}
+ */
+export function CatalogDuplicate(id, name, hostname) {
+    return $Call.ByID(3072902801, id, name, hostname);
+}
+
+/**
  * CatalogEnrollConfirm redeems the code after the user confirmed. When the
  * server is already attached, replace says to end this machine's session
  * there and use the new one (the rows stay); without it, nothing happens.

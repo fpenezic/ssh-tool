@@ -705,6 +705,19 @@
         if (!ok) return;
         api.catalogDelete("connections", one.id, false).then(() => tree.load()).catch((err) => toast.err("Delete: " + errMsg(err), 8000));
       } }] : []),
+      ...(canDeleteForAll && one ? [{ label: "Duplicate in the catalog…", iconComponent: IconCopy, onSelect: async () => {
+        const name = (await showPrompt(`Duplicate "${one.name}" in the catalog (same settings, slots and forwards, for everyone with access): name`, one.name + " copy"))?.trim();
+        if (!name) return;
+        const hostname = (await showPrompt(`Hostname or IP address of "${name}"`, one.hostname))?.trim();
+        if (!hostname) return;
+        try {
+          const id = await api.catalogDuplicate(one.id, name, hostname);
+          await tree.load();
+          if (id) await selection.selectConnection(id);
+        } catch (err) {
+          toast.err("Duplicate: " + errMsg(err), 8000);
+        }
+      } }] : []),
       ...(one?.catalog_id && one.remote_uuid && one.catalog_state !== "removed" ? [{ label: "Copy to my connections…", iconComponent: IconCopy, onSelect: () => catalogLocal.startCopy("connections", one.id, one.name) }] : []),
       ...connectionActions.tunnelMenuItems(ids),
       ...(allTunnels ? [] : [{
