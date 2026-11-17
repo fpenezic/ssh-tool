@@ -326,7 +326,12 @@ func (a *App) clearIconPending(catID string, p pendingIcon, sent bool) {
 	layerMu.Lock()
 	defer layerMu.Unlock()
 	layer := map[string]any{}
-	if j := a.catalogLayerJSON(catID, p.uuid); j != "" {
+	j, err := a.catalogLayerRead(catID, p.uuid)
+	if err != nil {
+		log.Printf("catalog: read layer: %v", err)
+		return
+	}
+	if j != "" {
 		_ = json.Unmarshal([]byte(j), &layer)
 	}
 	rec, _ := layer[catalog.RecordLayerKey].(map[string]any)
