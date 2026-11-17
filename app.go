@@ -209,7 +209,7 @@ type App struct {
 
 	pendingTabDragMu sync.Mutex
 	pendingTabDrag   *TabDragPayload
-	// tabDragsInFlight: drags accepted by the main window whose tab is
+	// tabDragsInFlight: drags accepted by a window whose tab is
 	// still being rebuilt (WindowAcceptTabDrag -> WindowTabDragDone /
 	// WindowTabDragFailed), by drag id. Their sessions have left the
 	// source's detachedSessions already, so a source closed mid-rebuild
@@ -402,6 +402,7 @@ type vncSessionMeta struct {
 // tabDragInFlight is one accepted drag being rebuilt in the main window.
 type tabDragInFlight struct {
 	source string
+	target string // the window rebuilding the tab ("main" or "detached-<id>")
 	sids   []string
 }
 
@@ -420,7 +421,8 @@ type TabDragPayload struct {
 	// rebuilt tab with it (WindowTabDragDone). Empty for a "Send to
 	// window" payload, which no cancel touches.
 	DragID string `json:"drag_id"`
-	// source is the detached window the drag came from (DragID set).
+	// source is the window the drag came from (DragID set): "main" or
+	// "detached-<id>".
 	source string
 }
 
@@ -8074,24 +8076,42 @@ func (a *App) dropTabDragFrom(windowName string) {
 // titles survive the redock. dragID is unique per drag gesture; the
 // matching WindowCancelTabDrag passes it back.
 func (a *App) WindowStartTabDrag(tabID string, sessions string, layout string, dragID string) {
+	a.WindowStartTabDragFrom("detached-"+tabID, tabID, sessions, layout, dragID)
+}
+
+// WindowStartTabDragFrom registers an in-flight tab drag from any window
+// (source: "main" or "detached-<id>"), so another open window can claim
+// the tab when it is dropped there (WindowAcceptTabDragAs). The main
+// window uses it for a drag that may end over a detached window.
+func (a *App) WindowStartTabDragFrom(source, tabID, sessions, layout, dragID string) {
 	a.pendingTabDragMu.Lock()
-	a.pendingTabDrag = &TabDragPayload{TabID: tabID, Sessions: sessions, Layout: layout, DragID: dragID, source: "detached-" + tabID}
+	a.pendingTabDrag = &TabDragPayload{TabID: tabID, Sessions: sessions, Layout: layout, DragID: dragID, source: source}
 	a.pendingTabDragMu.Unlock()
-	log.Printf("tabdrag: start %s (%s)", tabID, dragID)
+	log.Printf("tabdrag: start %s (%s) from %s", tabID, dragID, source)
 }
 
 // WindowAcceptTabDrag is called by the main window when a tab is dropped onto
 // its tab bar. Returns the pending drag payload and clears it.
 func (a *App) WindowAcceptTabDrag() (*TabDragPayload, error) {
+	return a.WindowAcceptTabDragAs("main")
+}
+
+// WindowAcceptTabDragAs claims the pending drag for the window target, the
+// one the tab was dropped on. A drag from target itself is left pending
+// (its own drop handlers deal with it).
+func (a *App) WindowAcceptTabDragAs(target string) (*TabDragPayload, error) {
 	a.pendingTabDragMu.Lock()
 	defer a.pendingTabDragMu.Unlock()
 	if a.pendingTabDrag == nil {
 		log.Printf("tabdrag: accept, nothing pending")
 		return nil, fmt.Errorf("no pending tab drag")
 	}
+	if a.pendingTabDrag.source == target {
+		return nil, fmt.Errorf("the tab is already in this window")
+	}
 	p := a.pendingTabDrag
 	a.pendingTabDrag = nil
-	log.Printf("tabdrag: accept %s", p.TabID)
+	log.Printf("tabdrag: accept %s into %s", p.TabID, target)
 	if p.DragID != "" {
 		// A drag carries one tab of the source window, which may hold
 		// more. Its sessions leave the source's set now, not when the
@@ -8118,7 +8138,7 @@ func (a *App) WindowAcceptTabDrag() (*TabDragPayload, error) {
 		if a.tabDragsInFlight == nil {
 			a.tabDragsInFlight = map[string]tabDragInFlight{}
 		}
-		a.tabDragsInFlight[p.DragID] = tabDragInFlight{source: p.source, sids: sids}
+		a.tabDragsInFlight[p.DragID] = tabDragInFlight{source: p.source, target: target, sids: sids}
 		a.detachedMu.Unlock()
 	}
 	return p, nil
@@ -8130,8 +8150,16 @@ func (a *App) WindowAcceptTabDrag() (*TabDragPayload, error) {
 // it is empty. Its sessions stay with the main window.
 func (a *App) WindowTabDragDone(dragID string) {
 	a.detachedMu.Lock()
-	_, ok := a.tabDragsInFlight[dragID]
+	f, ok := a.tabDragsInFlight[dragID]
 	delete(a.tabDragsInFlight, dragID)
+	// The main window owns every session not in a detached set; a
+	// detached receiver takes them into its own.
+	if ok && f.target != "" && f.target != "main" {
+		if a.detachedSessions == nil {
+			a.detachedSessions = map[string][]string{}
+		}
+		a.detachedSessions[f.target] = append(a.detachedSessions[f.target], f.sids...)
+	}
 	a.detachedMu.Unlock()
 	if !ok {
 		return
@@ -8153,7 +8181,8 @@ func (a *App) WindowTabDragFailed(dragID string) {
 		return
 	}
 	_, open := a.detachedSessions[f.source]
-	if open {
+	open = open || f.source == "main"
+	if open && f.source != "main" {
 		a.detachedSessions[f.source] = append(a.detachedSessions[f.source], f.sids...)
 	}
 	a.detachedMu.Unlock()

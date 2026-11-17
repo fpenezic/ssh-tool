@@ -137,10 +137,12 @@ export async function reconstructTabFromPayload(p: { tab_id: string; sessions: s
 // Once rebuilt, WindowTabDragDone tells the source, which removes the tab
 // (tab_drag_accepted) and closes once it has none left, so its other tabs
 // stay where they are. A failed rebuild leaves the tab in the source.
-export async function acceptTabDrag() {
+// target: the window the tab was dropped on ("main", or a detached
+// window's "detached-<id>").
+export async function acceptTabDrag(target = "main") {
   let p: Awaited<ReturnType<typeof api.windowAcceptTabDrag>>;
   try {
-    p = await api.windowAcceptTabDrag();
+    p = await api.windowAcceptTabDragAs(target);
   } catch {
     return; // no pending drag
   }

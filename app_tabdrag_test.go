@@ -73,3 +73,36 @@ func TestTabDragRefusesSecondTransferOfSameTab(t *testing.T) {
 		t.Fatalf("another tab refused: %v", err)
 	}
 }
+
+// A tab dragged from the main window onto an open detached window: the
+// detached window claims it, its own drag stays its own, and on done the
+// sessions join the receiver's set (so closing that window ends them).
+func TestTabDragMainToDetached(t *testing.T) {
+	a := &App{detachedSessions: map[string][]string{"detached-x": {"s9"}}}
+
+	a.WindowStartTabDragFrom("main", "t1", "s1,s2", "", "m1")
+	if _, err := a.WindowAcceptTabDragAs("main"); err == nil {
+		t.Fatal("the main window claimed its own drag")
+	}
+	p, err := a.WindowAcceptTabDragAs("detached-x")
+	if err != nil || p.DragID != "m1" {
+		t.Fatalf("accept into the detached window: %v %+v", err, p)
+	}
+	a.WindowTabDragDone("m1")
+	if got := a.detachedSessions["detached-x"]; !slices.Equal(got, []string{"s9", "s1", "s2"}) {
+		t.Fatalf("receiver's sessions: %v", got)
+	}
+
+	// A failed rebuild leaves them with the main window (no set to return to).
+	a.WindowStartTabDragFrom("main", "t2", "s5", "", "m2")
+	if _, err := a.WindowAcceptTabDragAs("detached-x"); err != nil {
+		t.Fatal(err)
+	}
+	a.WindowTabDragFailed("m2")
+	if got := a.detachedSessions["detached-x"]; slices.Contains(got, "s5") {
+		t.Fatalf("failed rebuild gave s5 to the receiver: %v", got)
+	}
+	if _, ok := a.detachedSessions["main"]; ok {
+		t.Fatal("the main window got a detached set")
+	}
+}

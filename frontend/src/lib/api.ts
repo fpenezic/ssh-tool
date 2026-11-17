@@ -2113,8 +2113,12 @@ export const api = {
   windowCloseSelf: (windowName: string) => G.WindowCloseSelf(windowName),
   windowStartTabDrag: (tabId: string, sessions: string, layout: string, dragId: string) =>
     G.WindowStartTabDrag(tabId, sessions, layout, dragId),
+  windowStartTabDragFrom: (source: string, tabId: string, sessions: string, layout: string, dragId: string) =>
+    G.WindowStartTabDragFrom(source, tabId, sessions, layout, dragId),
   windowAcceptTabDrag: () =>
     G.WindowAcceptTabDrag() as unknown as Promise<{ tab_id: string; sessions: string; layout: string; drag_id?: string } | null>,
+  windowAcceptTabDragAs: (target: string) =>
+    G.WindowAcceptTabDragAs(target) as unknown as Promise<{ tab_id: string; sessions: string; layout: string; drag_id?: string } | null>,
   windowTabDragDone: (dragId: string) => G.WindowTabDragDone(dragId),
   windowTabDragFailed: (dragId: string) => G.WindowTabDragFailed(dragId),
   windowCancelTabDrag: (dragId: string) => G.WindowCancelTabDrag(dragId) as Promise<boolean>,

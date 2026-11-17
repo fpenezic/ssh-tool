@@ -1654,19 +1654,21 @@ export class CatalogPublishInput {
              */
             this["folder_id"] = "";
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * ConnID publishes one connection instead of FolderID, straight into
+             * TargetUUID (catalog servers from protocol revision 3).
+             * @member
+             * @type {string | undefined}
+             */
+            this["conn_id"] = undefined;
+        }
         if (!("target_uuid" in $$source)) {
             /**
              * @member
              * @type {string}
              */
             this["target_uuid"] = "";
-        }
-        if (!("jump_include" in $$source)) {
-            /**
-             * @member
-             * @type {string[]}
-             */
-            this["jump_include"] = [];
         }
         if (!("slot_names" in $$source)) {
             /**
@@ -1684,22 +1686,6 @@ export class CatalogPublishInput {
              */
             this["unsent"] = [];
         }
-        if (!("send_local_creds" in $$source)) {
-            /**
-             * SendLocalCreds / SendNetworks: also send vault credentials and
-             * network profiles as slots (off by default).
-             * @member
-             * @type {boolean}
-             */
-            this["send_local_creds"] = false;
-        }
-        if (!("send_networks" in $$source)) {
-            /**
-             * @member
-             * @type {boolean}
-             */
-            this["send_networks"] = false;
-        }
         if (!("no_shared_creds" in $$source)) {
             /**
              * NoSharedCreds: Bitwarden / Vaultwarden and opkssh credentials stay
@@ -1716,13 +1702,14 @@ export class CatalogPublishInput {
              */
             this["skip_creds"] = [];
         }
-        if (!("dyn_skip" in $$source)) {
+        if (!("jump_skip" in $$source)) {
             /**
-             * DynSkip: inventory bastions not to send as a bastion record.
+             * JumpSkip: outside bastions (connection or inventory ids) not to send
+             * as a bastion record.
              * @member
              * @type {string[]}
              */
-            this["dyn_skip"] = [];
+            this["jump_skip"] = [];
         }
         if (!("review_hash" in $$source)) {
             /**
@@ -1743,15 +1730,11 @@ export class CatalogPublishInput {
      * @returns {CatalogPublishInput}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType4;
         const $$createField4_0 = $$createType8;
         const $$createField5_0 = $$createType4;
-        const $$createField9_0 = $$createType4;
-        const $$createField10_0 = $$createType4;
+        const $$createField7_0 = $$createType4;
+        const $$createField8_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("jump_include" in $$parsedSource) {
-            $$parsedSource["jump_include"] = $$createField3_0($$parsedSource["jump_include"]);
-        }
         if ("slot_names" in $$parsedSource) {
             $$parsedSource["slot_names"] = $$createField4_0($$parsedSource["slot_names"]);
         }
@@ -1759,10 +1742,10 @@ export class CatalogPublishInput {
             $$parsedSource["unsent"] = $$createField5_0($$parsedSource["unsent"]);
         }
         if ("skip_creds" in $$parsedSource) {
-            $$parsedSource["skip_creds"] = $$createField9_0($$parsedSource["skip_creds"]);
+            $$parsedSource["skip_creds"] = $$createField7_0($$parsedSource["skip_creds"]);
         }
-        if ("dyn_skip" in $$parsedSource) {
-            $$parsedSource["dyn_skip"] = $$createField10_0($$parsedSource["dyn_skip"]);
+        if ("jump_skip" in $$parsedSource) {
+            $$parsedSource["jump_skip"] = $$createField8_0($$parsedSource["jump_skip"]);
         }
         return new CatalogPublishInput(/** @type {Partial<CatalogPublishInput>} */($$parsedSource));
     }
