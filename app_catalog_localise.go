@@ -128,6 +128,14 @@ func (a *App) copyConnectionSecrets(from, to string) int {
 		}
 	}
 	one(c.PasswordVaultKey, a.SetConnectionPassword, "connection password")
-	one(c.VncPasswordVaultKey, a.SetConnectionVncPassword, "VNC password")
+	// Not a.SetConnectionVncPassword: VNC is desktop-only (app_vnc.go), and
+	// a copy made on a phone still carries the password to a synced desktop.
+	one(c.VncPasswordVaultKey, func(id, pw string) error {
+		key := "conn_vnc_pass:" + id
+		if err := a.vault.Put(key, pw); err != nil {
+			return fmt.Errorf("vault put: %w", err)
+		}
+		return a.db.SetConnectionVncPasswordKey(id, key)
+	}, "VNC password")
 	return skipped
 }
