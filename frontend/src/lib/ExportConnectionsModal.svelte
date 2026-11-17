@@ -25,14 +25,16 @@
   let { connectionIds, folderIds = [], suggestedName, onClose }: Props = $props();
 
   let format = $state<"toml" | "json">("toml");
-  let stripNotes = $state(false);
-  let stripTags = $state(false);
-  let stripColor = $state(false);
-  let stripIcon = $state(false);
-  // Local-shell connections are machine-specific (a shell kind + a
-  // command tied to this box); default to leaving them out of a share.
-  let stripLocal = $state(true);
-  let convertAuthRefToInherit = $state(true);
+  // "What goes in the export": ticked = included (never "tick to leave
+  // out"). Local-shell connections are machine-specific (a shell kind + a
+  // command tied to this box), so they are off by default; a connection's
+  // own credential link too, since the credential is not exported.
+  let incNotes = $state(true);
+  let incTags = $state(true);
+  let incColor = $state(true);
+  let incIcon = $state(true);
+  let incLocal = $state(false);
+  let keepAuthRef = $state(false);
   let body = $state<string | null>(null);
   let err = $state<string | null>(null);
   let busy = $state(false);
@@ -52,12 +54,12 @@
         format,
         include_credentials: false,
         passphrase: "",
-        strip_notes: stripNotes,
-        strip_tags: stripTags,
-        strip_color: stripColor,
-        strip_icon: stripIcon,
-        strip_local: stripLocal,
-        convert_auth_ref_to_inherit: convertAuthRefToInherit,
+        strip_notes: !incNotes,
+        strip_tags: !incTags,
+        strip_color: !incColor,
+        strip_icon: !incIcon,
+        strip_local: !incLocal,
+        convert_auth_ref_to_inherit: !keepAuthRef,
       });
       body = res.body;
     } catch (e: any) {
@@ -70,12 +72,12 @@
   // Regenerate whenever any option flips.
   $effect(() => {
     void format;
-    void stripNotes;
-    void stripTags;
-    void stripColor;
-    void stripIcon;
-    void stripLocal;
-    void convertAuthRefToInherit;
+    void incNotes;
+    void incTags;
+    void incColor;
+    void incIcon;
+    void incLocal;
+    void keepAuthRef;
     generate();
   });
 
@@ -141,33 +143,32 @@
     </div>
 
     <div class="strip">
-      <div class="strip-title">Leave out of the export</div>
-      <p class="strip-note">Anything you tick here is <strong>removed from the exported file</strong>. Unticked items are included.</p>
+      <div class="strip-title">What goes in the export</div>
       <label class="check">
-        <input type="checkbox" bind:checked={stripLocal} />
-        <span>Local-shell connections <span class="dim">(telnet / serial / claude etc. - machine-specific, rarely useful elsewhere)</span></span>
-      </label>
-      <label class="check">
-        <input type="checkbox" bind:checked={stripNotes} />
+        <input type="checkbox" bind:checked={incNotes} />
         <span>Notes <span class="dim">(connection-level free text)</span></span>
       </label>
       <label class="check">
-        <input type="checkbox" bind:checked={stripTags} />
+        <input type="checkbox" bind:checked={incTags} />
         <span>Tags <span class="dim">(connection + credential labels)</span></span>
       </label>
       <label class="check">
-        <input type="checkbox" bind:checked={stripColor} />
-        <span>Color tag <span class="dim">(folder + connection overrides)</span></span>
+        <input type="checkbox" bind:checked={incColor} />
+        <span>Color tags <span class="dim">(folder + connection overrides)</span></span>
       </label>
       <label class="check">
-        <input type="checkbox" bind:checked={stripIcon} />
-        <span>Custom icons <span class="dim">(embedded icon images - recipients get default icons)</span></span>
+        <input type="checkbox" bind:checked={incIcon} />
+        <span>Custom icons <span class="dim">(embedded icon images; without them recipients get default icons)</span></span>
       </label>
       <label class="check">
-        <input type="checkbox" bind:checked={convertAuthRefToInherit} />
+        <input type="checkbox" bind:checked={incLocal} />
+        <span>Local-shell connections <span class="dim">(telnet / serial / claude etc. - machine-specific, rarely useful elsewhere)</span></span>
+      </label>
+      <label class="check">
+        <input type="checkbox" bind:checked={keepAuthRef} />
         <span>
-          Convert credential override to inherit
-          <span class="dim">(connections fall back to their folder's credential on import - no broken auth_ref)</span>
+          A connection's own credential link
+          <span class="dim">(the credential itself is not exported; without the link the connection uses its folder's credential on import)</span>
         </span>
       </label>
     </div>
@@ -244,13 +245,6 @@
     letter-spacing: 0.05em;
     margin-bottom: 0.15rem;
   }
-  .strip-note {
-    font-size: var(--fs-sm);
-    color: var(--subtext0);
-    margin: 0 0 0.3rem;
-    line-height: 1.4;
-  }
-  .strip-note strong { color: var(--text); font-weight: 600; }
   .strip .check { display: inline-flex; align-items: flex-start; gap: 0.4rem; font-size: var(--fs-sm); cursor: pointer; }
   .strip .check input { margin-top: 0.2rem; accent-color: var(--blue); flex-shrink: 0; }
   .strip .dim { color: var(--overlay0); font-size: var(--fs-sm); }

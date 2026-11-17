@@ -77,13 +77,14 @@ type PublishOptions struct {
 // PublishCategories are the optional parts of a publish, in dialog
 // order. Settings categories name their settings keys; notes, tags,
 // icons and forwards are record fields. Everything else (name, address,
-// protocol, port, username, credential, one-time code, jump host,
+// protocol, port, credential, one-time code, jump host,
 // network, ssh options, tunnel settings, sensitive) is always sent: the
 // connection does not work, or is not safe, without it.
 var PublishCategories = []struct {
 	ID   string
 	Keys []string
 }{
+	{"username", []string{"username"}},
 	{"notes", nil},
 	{"tags", nil},
 	{"icons", nil},

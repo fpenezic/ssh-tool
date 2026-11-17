@@ -922,3 +922,25 @@ func TestPublishSingleConnection(t *testing.T) {
 		t.Fatal("a single connection into a new space allowed")
 	}
 }
+
+// User names unticked: no username in the request, the publisher keeps
+// theirs in their layer and resolves as before.
+func TestPublishWithoutUsernames(t *testing.T) {
+	e := newSyncEnv(t)
+	x := publishFixture(t, e.db)
+	before := resolvedJSON(t, e.db, x.web)
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, Unsent: map[string]bool{"username": true}})
+	if err != nil || len(plan.Refusals) > 0 {
+		t.Fatalf("plan: %v %+v", err, plan.Refusals)
+	}
+	body, _ := json.Marshal(plan.Request)
+	if strings.Contains(string(body), `"username"`) {
+		t.Fatalf("a username was sent: %s", body)
+	}
+	if err := CompletePublish(e.db, plan, accept(plan), "bob", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolvedJSON(t, e.db, x.web); got != before {
+		t.Fatalf("resolves differently:\n before %s\n after  %s", before, got)
+	}
+}
