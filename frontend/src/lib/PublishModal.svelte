@@ -48,13 +48,18 @@
     { id: "vnc", label: "VNC settings" },
     { id: "startup", label: "Initial command and environment variables", hint: "connections that rely on it may not work for others" },
     { id: "terminal", label: "Terminal and behaviour", hint: "colour tag, terminal type, keepalive, auto-reconnect, verbose, liveness probe" },
+    { id: "shared_creds", label: "Vaultwarden / Bitwarden items and opkssh, as slots", hint: "each colleague with access to the same item uses it; untick for private items (or untick one credential under Slots)" },
     { id: "local_creds", label: "Credentials from your own vault, as slots", hint: "off: colleagues get these connections without them and use their own; Vaultwarden / Bitwarden items and opkssh always go" },
     { id: "networks", label: "Network (VPN) profiles, as slots", hint: "off: colleagues use their own network" },
   ];
   // Off by default: references only the publisher has.
   const optIn = new Set(["local_creds", "networks"]);
+  // Not settings categories: credential choices handled on their own.
+  const credChoice = new Set(["shared_creds", "local_creds", "networks"]);
   let send = $state<Record<string, boolean>>(Object.fromEntries(sendCategories.map((c) => [c.id, !optIn.has(c.id)])));
-  const unsent = $derived(sendCategories.filter((c) => !optIn.has(c.id) && !send[c.id]).map((c) => c.id));
+  const unsent = $derived(sendCategories.filter((c) => !credChoice.has(c.id) && !send[c.id]).map((c) => c.id));
+  // Credentials (local ids) the user chose not to send.
+  let skipCreds = $state<Record<string, boolean>>({});
   let plan = $state<PublishPlan | null>(null);
   let planErr = $state("");
   let oldApps = $state<SeenApp[]>([]);
@@ -92,6 +97,8 @@
     unsent,
     send_local_creds: !!send.local_creds,
     send_networks: !!send.networks,
+    no_shared_creds: !send.shared_creds,
+    skip_creds: Object.keys(skipCreds).filter((k) => skipCreds[k]),
     dyn_skip: Object.keys(dynSkip).filter((k) => dynSkip[k]),
   });
 
@@ -285,7 +292,7 @@
 
           <section>
             <h3>What to send <span class="dim">ticked goes to the catalog; the rest stays yours only, your tree does not change</span></h3>
-            <p class="dim always">Always sent: names, addresses, protocol, port, username, SSH options, tunnel settings, "sensitive", Vaultwarden / Bitwarden and opkssh credentials, and fixed jump hosts (as slots or a copy, below).</p>
+            <p class="dim always">Always sent: names, addresses, protocol, port, username, SSH options, tunnel settings, "sensitive" and fixed jump hosts (as slots or a copy, below).</p>
             <div class="send">
               {#each sendCategories as c (c.id)}
                 <label class="send-item">
@@ -311,6 +318,11 @@
                     <span class="tag reused-tag">reused from {s.reused_from || "the catalog"}</span>
                   {/if}
                   {#if s.kind === "external"}<span class="tag">{s.backend} item</span>{/if}
+                  {#if s.type === "cred"}
+                    <label class="dim" title="Untick to keep this credential yours only: colleagues get these connections without it">
+                      <input type="checkbox" checked disabled={busy} onchange={() => (skipCreds = { ...skipCreds, [s.bind_target]: true })} /> send
+                    </label>
+                  {/if}
                   <span class="dim">yours: {s.bind_name} - used by {s.used_by}</span>
                   {#if !s.new}<p class="reused-note">Already in the catalog: whoever has bound it there reaches these connections with it too.</p>{/if}
                 </div>
@@ -331,7 +343,8 @@
               <details>
                 <summary><strong>Stays yours only</strong> <span class="dim">{plan.kept_local.length} reference{plan.kept_local.length === 1 ? "" : "s"} not sent: colleagues get these records without them</span></summary>
                 {#each plan.kept_local as k, i (i)}
-                  <div class="ft-item"><span class="ft-field">{k.name}</span> <span>{k.field}</span> <span class="dim">{k.reason}</span></div>
+                  <div class="ft-item"><span class="ft-field">{k.name}</span> <span>{k.field}</span> <span class="dim">{k.reason}</span>
+                    {#if k.cred}<button class="linklike" disabled={busy} onclick={() => (skipCreds = { ...skipCreds, [k.cred!]: false })}>send it</button>{/if}</div>
                 {/each}
               </details>
             </section>
@@ -457,4 +470,5 @@
   footer .dim { margin-right: auto; }
   button.primary { background: var(--blue); color: var(--base); border: 0; }
   button.primary:disabled { opacity: 0.5; }
+  .linklike { background: none; border: 0; padding: 0; margin-left: 6px; color: var(--blue); cursor: pointer; text-decoration: underline; font-size: inherit; }
 </style>
