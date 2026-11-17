@@ -575,6 +575,15 @@ var migrations = []struct {
 		`ALTER TABLE images ADD COLUMN sha256 TEXT;
 		CREATE INDEX idx_images_sha256 ON images(sha256);`,
 	},
+	{
+		32,
+		// What a publish writes on the publisher's side besides the rows:
+		// the record's local layer and (on the first row) the bindings of
+		// the slots it created. A publish whose answer was lost is
+		// finished by the next sync; without these the publisher's new
+		// slots stayed unbound and their own values were lost.
+		`ALTER TABLE catalog_publish_pending ADD COLUMN extra_json TEXT NOT NULL DEFAULT '';`,
+	},
 }
 
 // catalogSchemaSQL is migration 29: a shared connection catalog the app

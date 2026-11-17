@@ -430,6 +430,9 @@ func (a *applier) localFor(kind, uuid string) (string, bool) {
 
 // settled drops a pending publish row once the feed converted it.
 func (a *applier) settled(uuid string) error {
+	if err := a.db.ApplyPublishPendingExtraTx(a.tx, a.cat.ID, uuid); err != nil {
+		return err
+	}
 	delete(a.pending, uuid)
 	a.res.PublishConverted++
 	return a.db.SettlePublishPendingTx(a.tx, a.cat.ID, []string{uuid})

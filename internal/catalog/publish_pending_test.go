@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"strings"
 	"testing"
 
 	"ssh-tool/internal/store"
@@ -42,8 +43,10 @@ func TestFeedConvertsAnUnfinishedPublish(t *testing.T) {
 	e := newSyncEnv(t)
 	fid, cid, pid := localSubtree(t, e.db)
 	if err := e.db.RecordPublishPending(e.cat.ID, []store.PublishPending{
-		{Kind: "folders", RemoteUUID: "f-pub", LocalID: fid},
-		{Kind: "connections", RemoteUUID: "c-pub", LocalID: cid},
+		{Kind: "folders", RemoteUUID: "f-pub", LocalID: fid,
+			Extra: `{"bindings":[{"slot_uuid":"s-pub","kind":"cred","target_id":"cred-own"}]}`},
+		{Kind: "connections", RemoteUUID: "c-pub", LocalID: cid,
+			Extra: `{"layer":{"remote_uuid":"c-pub","kind":"connections","json":"{\"port\":2200}"}}`},
 		{Kind: "forwards", RemoteUUID: "p-pub", LocalID: pid},
 	}); err != nil {
 		t.Fatal(err)
@@ -77,6 +80,15 @@ func TestFeedConvertsAnUnfinishedPublish(t *testing.T) {
 	}
 	if busy, _ := e.db.PendingPublishForLocal([]string{fid, cid, pid}); busy {
 		t.Fatal("pending rows left after conversion")
+	}
+	// The publisher's side, as a completed publish writes it.
+	bs, _ := e.db.ListCatalogBindings(e.cat.ID)
+	if len(bs) != 1 || bs[0].SlotUUID != "s-pub" || bs[0].TargetID != "cred-own" {
+		t.Fatalf("bindings after recovery: %+v", bs)
+	}
+	ovs, _ := e.db.ListCatalogOverrides(e.cat.ID)
+	if len(ovs) != 1 || ovs[0].RemoteUUID != "c-pub" || !strings.Contains(ovs[0].JSON, "2200") {
+		t.Fatalf("layers after recovery: %+v", ovs)
 	}
 }
 

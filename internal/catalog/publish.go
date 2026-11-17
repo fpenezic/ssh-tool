@@ -362,12 +362,32 @@ type PlanLayer struct {
 }
 
 // Pending is the plan's rows as recorded before the request goes out.
+// Each row carries its local layer, and the first one the bindings of the
+// plan's slots, so a publish whose answer was lost is finished by the
+// next sync with the publisher's side as CompletePublish would write it.
 func (p *PublishPlan) Pending() []store.PublishPending {
 	var out []store.PublishPending
+	var bindings []store.CatalogBinding
+	for _, s := range p.Slots {
+		bindings = append(bindings, store.CatalogBinding{SlotUUID: s.UUID, Kind: s.Type, TargetID: s.BindTarget})
+	}
 	for _, r := range p.Records {
-		if r.LocalID != "" {
-			out = append(out, store.PublishPending{Kind: r.Kind, RemoteUUID: r.UUID, LocalID: r.LocalID})
+		if r.LocalID == "" {
+			continue
 		}
+		var x store.PublishPendingExtra
+		if l, ok := p.Layers[r.UUID]; ok {
+			x.Layer = &store.CatalogOverride{RemoteUUID: r.UUID, Kind: l.Kind, JSON: l.JSON}
+		}
+		if len(out) == 0 {
+			x.Bindings = bindings
+		}
+		extra := ""
+		if x.Layer != nil || len(x.Bindings) > 0 {
+			b, _ := json.Marshal(x)
+			extra = string(b)
+		}
+		out = append(out, store.PublishPending{Kind: r.Kind, RemoteUUID: r.UUID, LocalID: r.LocalID, Extra: extra})
 	}
 	return out
 }
