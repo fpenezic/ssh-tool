@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"database/sql"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -744,5 +745,41 @@ func TestPublishManualJumpKeepsOwnCredential(t *testing.T) {
 	}
 	if c, _ := e.db.GetConnection(x.db1); c.Overrides.JumpHost == nil || !strings.Contains(mustJSONc(c.Overrides.JumpHost), x.credA) {
 		t.Fatalf("publisher lost the hop credential: %v", mustJSONc(c.Overrides.JumpHost))
+	}
+}
+
+// Publishing under a catalog folder that sets what the published folder
+// leaves unset lists it: the publisher's connections inherit it after.
+func TestPublishListsTargetInherits(t *testing.T) {
+	e := newSyncEnv(t)
+	x := publishFixture(t, e.db)
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := CompletePublish(e.db, plan, accept(plan), "bob", nil); err != nil {
+		t.Fatal(err)
+	}
+	// Mine (now catalog) resolves port 2222 from its settings.
+	if err := e.db.WithCatalogWriter(func(tx *sql.Tx) error {
+		_, err := tx.Exec(`UPDATE folders SET settings_json = json_set(settings_json, '$.port', 2222) WHERE id = ?`, x.root)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	more, _ := e.db.CreateFolder(store.NewFolder{Name: "More"})
+	if _, err := e.db.CreateConnection(store.NewConnection{Name: "app-1", Hostname: "app-1.example.com", FolderID: &more.ID}); err != nil {
+		t.Fatal(err)
+	}
+	plan2, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: more.ID, TargetUUID: plan.RootUUID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, s := range plan2.TargetInherits {
+		found = found || s == "port: 2222"
+	}
+	if !found {
+		t.Fatalf("target inherits: %v", plan2.TargetInherits)
 	}
 }

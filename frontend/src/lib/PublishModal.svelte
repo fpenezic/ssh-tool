@@ -316,6 +316,14 @@
             </section>
           {/if}
 
+          {#if (plan.target_inherits ?? []).length > 0}
+            <section>
+              <h3><IconAlertTriangle size={13} /> Inherited from {targetPath}</h3>
+              <p class="dim">Your folder does not set these, the target does: after publishing, your connections use them too. Set them on your folder first to keep your own.</p>
+              {#each plan.target_inherits as t, i (i)}<div class="ft-item"><span>{t}</span></div>{/each}
+            </section>
+          {/if}
+
           {#if (plan.kept_local ?? []).length > 0}
             <section>
               <details>

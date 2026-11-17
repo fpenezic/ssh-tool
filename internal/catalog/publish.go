@@ -249,6 +249,10 @@ type PublishPlan struct {
 	// previewed one is refused, so text changed after the review is never
 	// sent unseen.
 	ReviewHash string `json:"review_hash"`
+	// TargetInherits: settings the target folder (or one above it) sets
+	// that the published folder leaves unset today: after the publish
+	// the folder inherits them, for the publisher too ("port: 2222").
+	TargetInherits []string `json:"target_inherits"`
 	// KeptLocal: references that stay the publisher's own (not sent, no
 	// slot), with why. Readers get these records without them.
 	KeptLocal []KeptRef `json:"kept_local"`
@@ -284,6 +288,32 @@ func reviewHash(p *PublishPlan) string {
 	}{f, p.KeptLocal, r})
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
+}
+
+// targetInherits lists what the target's chain sets that the published
+// root, as it resolves today, leaves unset.
+func (c *pubCtx) targetInherits() {
+	if c.plan.TargetLocalID == "" {
+		return
+	}
+	all := c.allFolders()
+	target := toMap(resolver.EffectiveFolderSettings(c.plan.TargetLocalID, all))
+	root := toMap(resolver.EffectiveFolderSettings(c.opts.RootID, all))
+	keys := make([]string, 0, len(target))
+	for k := range target {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if _, set := root[k]; set || isEmpty(target[k]) {
+			continue
+		}
+		if store.IsCatalogRef(fmt.Sprint(target[k])) {
+			c.plan.TargetInherits = append(c.plan.TargetInherits, k+": a catalog slot")
+			continue
+		}
+		c.plan.TargetInherits = append(c.plan.TargetInherits, k+": "+display(target[k]))
+	}
 }
 
 // KeptRef is a reference a publish keeps local.
@@ -582,6 +612,7 @@ func (c *pubCtx) target(cat *store.Catalog) error {
 		return fmt.Errorf("publish: you cannot add to %q in this catalog", t.Name)
 	}
 	c.plan.TargetLocalID = localOf[c.opts.TargetUUID]
+	c.targetInherits()
 	chain := map[string]string{} // folder uuid -> name
 	for u, depth := c.opts.TargetUUID, 0; u != "" && depth < 64; depth++ {
 		r, ok := recs[u]
@@ -1398,6 +1429,7 @@ func (c *pubCtx) finish() {
 	c.plan.Slots, c.plan.FreeText, c.plan.Refusals, c.plan.OutsideJumps = []PlanSlot{}, nonNil(c.plan.FreeText), nonNil(c.plan.Refusals), []OutsideJump{}
 	c.plan.Images = nonNil(c.plan.Images)
 	c.plan.KeptLocal = nonNil(c.plan.KeptLocal)
+	c.plan.TargetInherits = nonNil(c.plan.TargetInherits)
 	defer func() { c.plan.ReviewHash = reviewHash(c.plan) }()
 	c.plan.Request.Slots = nonNil(c.plan.Request.Slots)
 	c.plan.Request.Forwards = nonNil(c.plan.Request.Forwards)
