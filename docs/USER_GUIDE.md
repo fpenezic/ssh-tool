@@ -3408,7 +3408,7 @@ Right-click one of your own folders -> **Publish to catalog...** moves it into a
 
 A single connection publishes the same way (right-click -> **Publish to catalog...**, or drag it onto a catalog folder), straight into the catalog folder with its port forwards. What it takes from your own folders (user, port, jump host, ...) goes onto it, so it connects the same way. It needs a catalog server that supports it; an older one says so, and a folder still publishes there.
 
-- **What to send**: tick what goes (notes, tags, icons, port forwards, database, Kafka and VNC settings, the initial command, terminal behaviour). What you untick stays yours only.
+- **What to send**: tick what goes (user names, notes, tags, icons, port forwards, database, Kafka and VNC settings, the initial command, terminal behaviour). What you untick stays yours only. Without user names colleagues log in as themselves: their own under My settings, or asked at connect.
 - **What is never sent**: a credential from your own vault and a network (VPN) profile stay yours, in your own My settings; colleagues get those connections without them and set their own. Without a credential a connection asks for the user name and password at connect. Bitwarden / Vaultwarden items and opkssh credentials go by default, since everyone with access can use them the same way; untick them all, or one credential under Slots, to keep a private item yours.
 - **Jump hosts**: a bastion outside the folder goes as a copy inside the folder, independent from then on, and you keep jumping through your own. A bastion from a dynamic inventory (a Proxmox VM, say) goes as a bastion record made from its current address; you keep jumping through your inventory host. Either can be left out ("Do not send it"); colleagues then set their own jump host. A jump host typed into the chain (an address, not a saved connection) goes as it is.
 - **Review**: every free-text value that could carry a secret (initial command, environment variables, SSH options, addresses) is listed for review before you can publish, and so is every reference that stays local.
@@ -3996,21 +3996,14 @@ Export...** opens the same modal pre-loaded with just that connection
 bundles every connection under that folder, recursively. The
 archive's internal folder structure is preserved.
 
-**Strip toggles** in the export modal control what gets included:
+**What goes in the export**: ticked means included.
 
-- **Notes** - drop per-connection free text (commonly holds
-  internal docs / ticket numbers / owner contacts).
-- **Tags** - clear connection + credential labels so the recipient
-  doesn't inherit your local taxonomy.
-- **Color tag** - clear folder + connection color overrides.
-- **Custom icons** - drop the embedded icon images (they otherwise
-  travel in the archive and are deduplicated by content on import);
-  recipients get default icons.
-- **Convert credential override to inherit** (on by default when
-  credentials aren't included) - rewrites each connection's
-  `auth_ref` override to `nil` so on import the connection falls
-  back to its folder's credential. Keeps imports usable when the
-  recipient supplies their own folder-level credentials.
+- **Notes** - per-connection free text (often internal docs, ticket numbers or owner contacts).
+- **Tags** - connection and credential labels; untick so the recipient does not inherit your local taxonomy.
+- **Color tags** - folder and connection colour overrides.
+- **Custom icons** - the embedded icon images (deduplicated by content on import); without them recipients get default icons.
+- **Local-shell connections** - off by default: telnet, serial, claude and other local shells are tied to this machine.
+- **A connection's own credential link** - off by default when credentials are not included: the connection's `auth_ref` override is dropped, so on import it uses its folder's credential, which the recipient sets themselves.
 
 ### Import archive
 

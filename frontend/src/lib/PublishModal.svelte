@@ -41,6 +41,7 @@
   // "What to send": ticked means sent. What is not sent stays in your own
   // local layer, so your tree looks the same after publishing.
   const sendCategories: { id: string; label: string; hint?: string }[] = [
+    { id: "username", label: "User names", hint: "the login set on folders and connections; untick and colleagues log in as themselves (their own under My settings, or asked at connect). A bastion's user in a jump chain still goes" },
     { id: "notes", label: "Notes" },
     { id: "tags", label: "Tags" },
     { id: "icons", label: "Icons", hint: "built-in icons and uploaded images (PNG, JPEG, WebP)" },
