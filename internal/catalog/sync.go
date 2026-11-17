@@ -66,7 +66,26 @@ func Sync(ctx context.Context, db *store.DB, cat *store.Catalog, c *Client, exte
 			if err := a.page(feed.Items); err != nil {
 				return err
 			}
-			pendingFwd = append(pendingFwd, a.pendingFwd...)
+			// A later event for a queued forward supersedes it: keep only
+			// a queued upsert that is the last word on its forward so far.
+			last := map[string]Item{}
+			for _, it := range feed.Items {
+				if it.Kind == KindForwards {
+					last[itemUUID(it)] = it
+				}
+			}
+			kept := pendingFwd[:0]
+			for _, it := range pendingFwd {
+				if _, again := last[itemUUID(it)]; !again {
+					kept = append(kept, it)
+				}
+			}
+			pendingFwd = kept
+			for _, it := range a.pendingFwd {
+				if l := last[itemUUID(it)]; l.Op == "upsert" && itemRev(l) == itemRev(it) {
+					pendingFwd = append(pendingFwd, it)
+				}
+			}
 			res.add(a.res)
 			return nil
 		})
@@ -88,6 +107,9 @@ func Sync(ctx context.Context, db *store.DB, cat *store.Catalog, c *Client, exte
 		}
 		// Forwards that arrived before their connection (across pages).
 		for _, it := range pendingFwd {
+			if !a.wants(KindForwards, itemUUID(it), itemRev(it)) {
+				continue // this machine already holds the same or newer
+			}
 			if err := a.upsertForward(it); err != nil {
 				return err
 			}
@@ -158,6 +180,30 @@ func newApplier(db *store.DB, tx *sql.Tx, cat *store.Catalog, snapshot map[strin
 }
 
 func key(kind, uuid string) string { return kind + "/" + uuid }
+
+// itemUUID / itemRev read a feed item's record identity (an upsert
+// carries them in the record, a tombstone in the item).
+func itemUUID(it Item) string {
+	if it.UUID != "" {
+		return it.UUID
+	}
+	var r struct {
+		UUID string `json:"uuid"`
+	}
+	_ = json.Unmarshal(it.Record, &r)
+	return r.UUID
+}
+
+func itemRev(it Item) int64 {
+	if it.Rev != 0 {
+		return it.Rev
+	}
+	var r struct {
+		Rev int64 `json:"rev"`
+	}
+	_ = json.Unmarshal(it.Record, &r)
+	return r.Rev
+}
 
 // wants: apply an upsert when the record is new here, newer than what is
 // held, held as "removed" (it came back), or during a snapshot.
