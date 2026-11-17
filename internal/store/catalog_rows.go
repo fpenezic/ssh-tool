@@ -454,6 +454,9 @@ func (d *DB) KeepRemovedConnectionLocal(id string, settings InheritableSettings)
 			remote_rev = 0, catalog_json = '', catalog_state = '', updated_at = ? WHERE id = ?`, string(ov), now(), id); err != nil {
 			return err
 		}
+		if err := d.ownCredentialsTx(tx, catID, credRows{"connections", "overrides_json", []string{id}}); err != nil {
+			return err
+		}
 		rows, err := tx.Query(`SELECT remote_uuid FROM port_forwards WHERE connection_id = ? AND remote_uuid IS NOT NULL`, id)
 		if err != nil {
 			return err
@@ -761,6 +764,23 @@ func (d *DB) KeepRemovedFolderLocal(id string, settings InheritableSettings) err
 			return err
 		}
 		if _, err := tx.Exec(`UPDATE folders SET parent_id = NULL, settings_json = ?, updated_at = ? WHERE id = ?`, string(b), now(), id); err != nil {
+			return err
+		}
+		var connIDs []string
+		if rs, err := tx.Query(`SELECT id FROM connections WHERE folder_id IN (`+in+`)`, ids...); err == nil {
+			for rs.Next() {
+				var c string
+				_ = rs.Scan(&c)
+				connIDs = append(connIDs, c)
+			}
+			rs.Close()
+		}
+		var folderIDs []string
+		for f := range sub {
+			folderIDs = append(folderIDs, f)
+		}
+		if err := d.ownCredentialsTx(tx, catID, credRows{"folders", "settings_json", folderIDs},
+			credRows{"connections", "overrides_json", connIDs}); err != nil {
 			return err
 		}
 		return pruneRemovedAncestors(tx, parent.String)
