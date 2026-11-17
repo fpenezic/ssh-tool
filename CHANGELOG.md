@@ -19,6 +19,13 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 - **Leave a catalog** and keep its connections as a local folder, or copy part of it to your own connections. Records that left the catalog stay in your tree until you keep or delete them.
 - Catalog connections travel with profile sync and backups; an older app sharing your sync profile does not see them and leaves them alone.
 - **Save as connection** on a dynamic inventory host makes a fixed connection from what it resolves to now, and can point the jump hosts that use it at the new one.
+- **Duplicate in the catalog**: writers can duplicate a catalog connection in its folder with the same settings, slots and forwards, entering only the new name and address.
+- Publishing keeps private Vaultwarden / Bitwarden items out on request: untick shared sources in "What to send", or a single credential in the review. If the folder changes after you reviewed it, the publish stops and shows the new review.
+- A catalog link (`ssh-tool://`) only fills in the enrollment form; nothing contacts the server it names until you click Check.
+
+### Interface
+- **Context menus no longer swallow the next click**: a click outside an open menu (on a tab, the toolbar, the title bar) now does what it clicks. Before, it only closed the menu, and on the title-bar tabs on Windows it did not even do that.
+
 
 ### LLM (MCP) access
 - **type_into_terminal never presses Enter**: text with a newline or any other control character is now refused. Before, a carriage return in the text submitted the command at once, so the "review it and press Enter yourself" step could be skipped, and under *read + run (YOLO)* that also bypassed the prompt for dangerous commands.
