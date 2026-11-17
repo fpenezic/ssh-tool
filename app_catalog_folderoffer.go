@@ -238,7 +238,9 @@ func (a *App) CatalogRecordSaveOnFolder(in catalog.EditInput, fields []string) (
 	res := &CatalogFolderSaveResult{}
 	rr, err := a.CatalogRecordSave(conn)
 	if err != nil {
-		return nil, err
+		// The folder is saved already: say so instead of a bare error.
+		res.Message = "set on the folder, but this connection was not saved: " + err.Error()
+		return res, nil
 	}
 	res.Record = rr
 	if !rr.Saved && rr.Message != "nothing changed" {
@@ -249,7 +251,9 @@ func (a *App) CatalogRecordSaveOnFolder(in catalog.EditInput, fields []string) (
 	// Siblings holding the same value as their own: now redundant.
 	sibs, err := a.catalogSiblings(t.cat.ID, fid, in.LocalID)
 	if err != nil {
-		return nil, err
+		res.Saved = true
+		res.Message = "set on the folder; the other connections were not checked: " + err.Error()
+		return res, nil
 	}
 	for _, s := range sibs {
 		own := settingsMap(s.form.Settings)
