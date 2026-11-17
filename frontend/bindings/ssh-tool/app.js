@@ -5963,6 +5963,19 @@ export function WindowAcceptTabDrag() {
 }
 
 /**
+ * WindowAcceptTabDragAs claims the pending drag for the window target, the
+ * one the tab was dropped on. A drag from target itself is left pending
+ * (its own drop handlers deal with it).
+ * @param {string} target
+ * @returns {$CancellablePromise<$models.TabDragPayload | null>}
+ */
+export function WindowAcceptTabDragAs(target) {
+    return $Call.ByID(1854180398, target).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType308($result);
+    }));
+}
+
+/**
  * WindowCancelTabDrag clears a pending drag without accepting it (drag ended
  * without being dropped on the main window). The source window sends this
  * a while after its dragend, because that dragend and the main window's
@@ -6118,6 +6131,22 @@ export function WindowSendTab(callerName, targetName, tabID, sessions, layout) {
  */
 export function WindowStartTabDrag(tabID, sessions, layout, dragID) {
     return $Call.ByID(1852490528, tabID, sessions, layout, dragID);
+}
+
+/**
+ * WindowStartTabDragFrom registers an in-flight tab drag from any window
+ * (source: "main" or "detached-<id>"), so another open window can claim
+ * the tab when it is dropped there (WindowAcceptTabDragAs). The main
+ * window uses it for a drag that may end over a detached window.
+ * @param {string} source
+ * @param {string} tabID
+ * @param {string} sessions
+ * @param {string} layout
+ * @param {string} dragID
+ * @returns {$CancellablePromise<void>}
+ */
+export function WindowStartTabDragFrom(source, tabID, sessions, layout, dragID) {
+    return $Call.ByID(141813520, source, tabID, sessions, layout, dragID);
 }
 
 /**

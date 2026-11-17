@@ -284,7 +284,18 @@ novel.
     Redock ships EVERY tab (`encodePaneLayouts` -> `{tabs:[...]}`,
     `decodePaneLayoutsMulti`), not just `tabs[0]` - the multi-tab-loss bug.
     `decodePaneLayout` still returns the first tab so single-tab callers
-    (send-to-window, initial detach `?layout=`) are unaffected. On detach
+    (send-to-window, initial detach `?layout=`) are unaffected.
+    Drags themselves do cross windows on Windows (WebView2 carries the
+    custom `application/x-ssh-tool-tab` type), so a drag is registered as
+    pending by its source (`WindowStartTabDragFrom(source, ...)`: the main
+    window for a single tab, a detached one always) and claimed by the
+    window it is dropped on (`WindowAcceptTabDragAs(target)`; the main
+    window in App.svelte, a detached one by a window-level drop listener in
+    TerminalArea). Never by its own source. The receiver's sessions join
+    its `detachedSessions` set on `WindowTabDragDone`. The source's
+    dragend and the target's drop arrive in no fixed order: the source
+    cancels after a delay, and only a cleared cancel (nobody claimed it)
+    may open a new window; otherwise the tab leaves on `tab_drag_accepted`. On detach
     replay, non-user xterm `onData` is suppressed while `replaying` so query
     responses in the scrollback don't land in the remote shell as garbage.
 

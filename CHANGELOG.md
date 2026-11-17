@@ -25,6 +25,7 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 
 ### Interface
 - **Context menus no longer swallow the next click**: a click outside an open menu (on a tab, the toolbar, the title bar) now does what it clicks. Before, it only closed the menu, and on the title-bar tabs on Windows it did not even do that.
+- **Drag a tab into a window that is already open**: a tab dragged from the main window (or from one detached window to another) onto an open detached window now moves there. Before, it always opened a new window, so a tab could not be moved to the window on the other screen by dragging. Dropped anywhere else outside, it still opens a new window.
 
 
 ### LLM (MCP) access

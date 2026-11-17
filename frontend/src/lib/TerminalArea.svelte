@@ -834,6 +834,8 @@
   const outstandingDrags = new Map<string, string>();
   // The drag in flight now (its dragend reads it).
   let detachedDragId = "";
+  // The main window's single-tab drag in flight (WindowStartTabDragFrom).
+  let mainDragId = "";
 
   async function onTabBarDrop(e: DragEvent) {
     if (isDetachedWindow) return;
@@ -918,16 +920,40 @@
     // The main window claimed a tab dragged out of this one: it is gone
     // from here, and an emptied window closes. Sessions stay connected
     // (WindowAcceptTabDrag moved them to the main window).
-    if (isDetachedWindow) unsubAccepted = EventsOn("tab_drag_accepted", async (data: any) => {
+    unsubAccepted = EventsOn("tab_drag_accepted", async (data: any) => {
       const tabId = outstandingDrags.get(data?.drag_id ?? "");
       if (tabId === undefined) return;
       outstandingDrags.delete(data.drag_id);
       paneTabs.removeTab(tabId);
-      if (paneTabs.tabs.length === 0) await api.windowCloseSelf(selfWindowName);
+      if (isDetachedWindow && paneTabs.tabs.length === 0) await api.windowCloseSelf(selfWindowName);
     });
+    // A tab dragged here from another window (the main one or another
+    // detached window) is claimed on drop anywhere in this window. The
+    // main window does this in App.svelte.
+    if (isDetachedWindow) {
+      const foreign = (e: DragEvent) => !drag.tabId && !!e.dataTransfer?.types.includes(TAB_DRAG_TYPE);
+      const over = (e: DragEvent) => {
+        if (!foreign(e)) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      };
+      const drop = (e: DragEvent) => {
+        if (!foreign(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        void acceptTabDrag(selfWindowName);
+      };
+      window.addEventListener("dragover", over, true);
+      window.addEventListener("drop", drop, true);
+      unsubForeignDrop = () => {
+        window.removeEventListener("dragover", over, true);
+        window.removeEventListener("drop", drop, true);
+      };
+    }
   });
   let unsubAccepted: (() => void) | null = null;
-  onDestroy(() => { unsubReceive?.(); unsubLogtailRedock?.(); unsubAccepted?.(); });
+  let unsubForeignDrop: (() => void) | null = null;
+  onDestroy(() => { unsubReceive?.(); unsubLogtailRedock?.(); unsubAccepted?.(); unsubForeignDrop?.(); });
 
   // The session that the tab's active pane (or first leaf) points at.
   // Duplicate keys off the SESSION, not a tree lookup: a tab can be a
@@ -1374,6 +1400,16 @@
             outstandingDrags.set(dragId, t.tabId);
             detachedDragId = dragId;
             api.windowStartTabDrag(detachedTabKey, tabSessionIds(t.tabId), tabLayoutBlob(t.tabId), dragId).catch(console.error);
+          } else if (dragN === 1) {
+            // A single tab may be dropped on an open detached window, which
+            // claims it (window-level drop there); dragend below only opens
+            // a new window when nobody did.
+            const dragId = `main-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+            outstandingDrags.set(dragId, t.tabId);
+            mainDragId = dragId;
+            api.windowStartTabDragFrom("main", t.tabId, tabSessionIds(t.tabId), tabLayoutBlob(t.tabId), dragId).catch(console.error);
+          } else {
+            mainDragId = "";
           }
           e.stopPropagation();
         }}
@@ -1408,7 +1444,25 @@
           } else {
             const outside = e.clientX < 0 || e.clientX > window.innerWidth ||
                             e.clientY < 0 || e.clientY > window.innerHeight;
-            if (tabId && outside) void detachTab(tabId, e.screenX, e.screenY);
+            const id = mainDragId;
+            mainDragId = "";
+            if (!id) {
+              if (tabId && outside) void detachTab(tabId, e.screenX, e.screenY);
+              return;
+            }
+            // Released over another of our windows (it may also lie over
+            // this one), that window claims the drag; its drop and this
+            // dragend arrive in no fixed order, so the cancel waits a moment. Cleared = nobody took it: outside
+            // the window that is a new window, as before. Not cleared: the
+            // tab leaves here on tab_drag_accepted.
+            const sx = e.screenX, sy = e.screenY;
+            setTimeout(() => {
+              api.windowCancelTabDrag(id).then((cleared) => {
+                if (!cleared) return;
+                outstandingDrags.delete(id);
+                if (tabId && outside) void detachTab(tabId, sx, sy);
+              }).catch(console.error);
+            }, 400);
           }
         }}
         oncontextmenu={(e) => openCtxMenu(e, t.tabId)}
