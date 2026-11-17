@@ -39,8 +39,11 @@ type CatalogPublishTargets struct {
 
 // CatalogPublishInput are the dialog's choices.
 type CatalogPublishInput struct {
-	CatalogID  string            `json:"catalog_id"`
-	FolderID   string            `json:"folder_id"`
+	CatalogID string `json:"catalog_id"`
+	FolderID  string `json:"folder_id"`
+	// ConnID publishes one connection instead of FolderID, straight into
+	// TargetUUID (catalog servers from protocol revision 3).
+	ConnID     string            `json:"conn_id,omitempty"`
 	TargetUUID string            `json:"target_uuid"`
 	SlotNames  map[string]string `json:"slot_names"`
 	// Unsent: the "What to send" categories left unticked
@@ -105,6 +108,22 @@ func (a *App) catalogPublishGuard(catalogID string) error {
 	}
 	if !has {
 		return fmt.Errorf("sign in to the catalog first")
+	}
+	return nil
+}
+
+// catalogSingleConnSupported: a single-connection publish needs a server
+// from protocol revision 3; an older one refuses the request.
+func catalogSingleConnSupported(ctx context.Context, c *catalog.Client, in CatalogPublishInput) error {
+	if in.ConnID == "" {
+		return nil
+	}
+	m, err := c.Meta(ctx)
+	if err != nil {
+		return fmt.Errorf("catalog: %v", err)
+	}
+	if m.Protocol.Revision < 3 {
+		return fmt.Errorf("this catalog server cannot take a single connection yet (it needs an update); publish a folder instead")
 	}
 	return nil
 }
@@ -184,7 +203,7 @@ func (in CatalogPublishInput) options(account string) catalog.PublishOptions {
 	for _, id := range in.SkipCreds {
 		skipCreds[id] = true
 	}
-	return catalog.PublishOptions{CatalogID: in.CatalogID, RootID: in.FolderID, TargetUUID: in.TargetUUID,
+	return catalog.PublishOptions{CatalogID: in.CatalogID, RootID: in.FolderID, ConnID: in.ConnID, TargetUUID: in.TargetUUID,
 		SlotNames: in.SlotNames, AccountName: account, Unsent: unsent, JumpSkip: skip,
 		NoSharedCreds: in.NoSharedCreds, SkipCreds: skipCreds}
 }
@@ -215,7 +234,7 @@ func (a *App) CatalogPublishPreview(in CatalogPublishInput) (*catalog.PublishPla
 	if err := a.catalogPublishGuard(in.CatalogID); err != nil {
 		return nil, err
 	}
-	if a.isCatalogFolder(in.FolderID) {
+	if in.ConnID == "" && a.isCatalogFolder(in.FolderID) {
 		return nil, fmt.Errorf("this folder already belongs to a catalog")
 	}
 	opts := in.options("")
@@ -224,7 +243,11 @@ func (a *App) CatalogPublishPreview(in CatalogPublishInput) (*catalog.PublishPla
 		if c, err := a.catalogClient(cat); err == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			opts.Images = catalogImageLimits(ctx, c)
+			err := catalogSingleConnSupported(ctx, c, in)
 			cancel()
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return catalog.BuildPublish(a.db, opts)
@@ -253,7 +276,11 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 	opts.ResolveDyn = a.publishResolveDyn
 	mctx, mcancel := context.WithTimeout(context.Background(), 20*time.Second)
 	opts.Images = catalogImageLimits(mctx, c)
+	serr := catalogSingleConnSupported(mctx, c, in)
 	mcancel()
+	if serr != nil {
+		return nil, serr
+	}
 	plan, err := catalog.BuildPublish(a.db, opts)
 	if err != nil {
 		return nil, err
@@ -263,7 +290,7 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 	}
 	if in.ReviewHash == "" || in.ReviewHash != plan.ReviewHash {
 		return &CatalogPublishResult{Stale: true,
-			Message: "the folder changed since the preview; look at the review again before publishing"}, nil
+			Message: "it changed since the preview; look at the review again before publishing"}, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute+publishImageWait)
 	if err := a.uploadPublishImages(ctx, cat.ID, c, plan); err != nil {
@@ -280,7 +307,7 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 		log.Printf("catalog %s: publish: %v", cat.Name, err)
 		if !catalog.PublishNotCreated(err) {
 			return &CatalogPublishResult{Unknown: true,
-				Message: "no answer from the catalog (" + catalogShortError(err) + "); the folder stays as it is until the next sync shows whether the publish arrived"}, nil
+				Message: "no answer from the catalog (" + catalogShortError(err) + "); it stays as it is here until the next sync shows whether the publish arrived"}, nil
 		}
 		if derr := a.db.DropPublishPending(cat.ID, plan.UUIDs()); derr != nil {
 			log.Printf("catalog %s: publish: drop pending: %v", cat.Name, derr)

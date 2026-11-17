@@ -1839,7 +1839,7 @@
     <EnrollModal url={catalogs.enroll.url} code={catalogs.enroll.code} onClose={() => (catalogs.enroll = null)} />
   {/if}
   {#if publishModal.open}
-    <PublishModal folderId={publishModal.folderId} folderName={publishModal.folderName} presetTarget={publishModal.targetUUID} presetCatalog={publishModal.catalogId} onClose={() => publishModal.close()} />
+    <PublishModal folderId={publishModal.folderId} folderName={publishModal.folderName} connId={publishModal.connId} presetTarget={publishModal.targetUUID} presetCatalog={publishModal.catalogId} onClose={() => publishModal.close()} />
   {/if}
   <RecordingsModal />
   <PromptModal />

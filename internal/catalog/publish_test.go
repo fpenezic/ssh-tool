@@ -3,6 +3,7 @@ package catalog
 import (
 	"database/sql"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -842,5 +843,82 @@ func TestPublishOutsideBastionSkipped(t *testing.T) {
 	}
 	if len(plan.Request.Connections) != 3 {
 		t.Fatalf("connections sent: %d (a copy of the skipped bastion?)", len(plan.Request.Connections))
+	}
+}
+
+// One connection goes straight into a catalog folder: no folder record,
+// what it inherits locally folded onto it, its forward with it, the
+// outside bastion as a copy, and the row converted in place under the
+// target with the same resolution as before.
+func TestPublishSingleConnection(t *testing.T) {
+	e := newSyncEnv(t)
+	x := publishFixture(t, e.db)
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := CompletePublish(e.db, plan, accept(plan), "bob", nil); err != nil {
+		t.Fatal(err)
+	}
+	mine, _ := e.db.CreateFolder(store.NewFolder{Name: "Mine2", Settings: store.InheritableSettings{Username: ptr("ops"), Port: ptr(uint16(2200))}})
+	solo, err := e.db.CreateConnection(store.NewConnection{Name: "solo", Hostname: "solo.example.com", FolderID: &mine.ID,
+		Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{ConnectionID: &x.bastion}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.db.CreatePortForward(store.NewPortForward{ConnectionID: solo.ID, Kind: "local", LocalPort: ptr(uint16(15432)),
+		RemoteHost: ptr("127.0.0.1"), RemotePort: ptr(uint16(5432))}); err != nil {
+		t.Fatal(err)
+	}
+	before := resolvedJSON(t, e.db, solo.ID)
+
+	p2, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, ConnID: solo.ID, TargetUUID: plan.RootUUID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p2.Refusals) > 0 {
+		t.Fatalf("refusals: %+v", p2.Refusals)
+	}
+	r := p2.Request
+	if len(r.Folders) != 0 || len(r.Forwards) != 1 || len(r.Connections) != 2 {
+		t.Fatalf("request: %d folders, %d connections, %d forwards", len(r.Folders), len(r.Connections), len(r.Forwards))
+	}
+	for _, c := range r.Connections {
+		if c.FolderUUID != plan.RootUUID {
+			t.Fatalf("%s not in the target: %s", c.Name, c.FolderUUID)
+		}
+	}
+	body, _ := json.Marshal(r.Connections[0].Settings)
+	if !strings.Contains(string(body), `"username":"ops"`) || !strings.Contains(string(body), `"port":2200`) {
+		t.Fatalf("inherited settings not folded: %s", body)
+	}
+	if len(p2.FreeText) == 0 {
+		t.Fatal("folded values not listed for review")
+	}
+	if err := CompletePublish(e.db, p2, accept(p2), "bob", nil); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := e.db.GetConnection(solo.ID)
+	if c.CatalogID == nil || c.FolderID == nil || *c.FolderID != plan.Records[0].LocalID {
+		t.Fatalf("not converted into the target: %+v", c)
+	}
+	// What it had resolves the same; what the target folder sets on top
+	// was listed in the review (target_inherits), as for a folder publish.
+	var was, now map[string]any
+	_ = json.Unmarshal([]byte(before), &was)
+	_ = json.Unmarshal([]byte(resolvedJSON(t, e.db, solo.ID)), &now)
+	for _, k := range []string{"hostname", "username", "port", "jump_host"} {
+		if !reflect.DeepEqual(was[k], now[k]) {
+			t.Fatalf("%s changed: %v -> %v", k, was[k], now[k])
+		}
+	}
+	listed := strings.Join(p2.TargetInherits, "; ")
+	if !strings.Contains(listed, "initial_command") {
+		t.Fatalf("target inherits not listed: %v", p2.TargetInherits)
+	}
+
+	// Without a target folder it is refused before anything is planned.
+	if _, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, ConnID: x.bastion}); err == nil {
+		t.Fatal("a single connection into a new space allowed")
 	}
 }

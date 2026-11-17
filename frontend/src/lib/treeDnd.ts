@@ -92,6 +92,9 @@ export function catalogDropKind(
     return "move";
   }
   if (sourceKind === "folder" && tgt.remote_uuid && !tree.isDynamic(sourceId)) return "publish";
+  // A single connection of your own, into a folder of the catalog (not its
+  // top: only folders sit there).
+  if (sourceKind === "connection" && tgt.remote_uuid && !sourceId.startsWith("dyn:") && (src as { protocol?: string }).protocol !== "local") return "publish";
   return null;
 }
 

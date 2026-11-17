@@ -3402,9 +3402,11 @@ Each catalog folder and connection has two views in its editor:
 - **Catalog record (everyone)**: shown when you have write access. Saving changes the record for everyone with access to that folder. When someone else saved first, the editor shows both versions field by field.
 - Setting a credential on one connection offers **"Set it on the folder instead"** when the connections next to it would use the same one.
 
-### Publishing a folder
+### Publishing a folder or a connection
 
-Right-click one of your own folders -> **Publish to catalog...** moves it into a catalog folder you can write to. The folder keeps behaving the same for you; it just becomes catalog records that everyone with access to the target sees.
+Right-click one of your own folders -> **Publish to catalog...** moves it into a catalog folder you can write to. The folder keeps behaving the same for you; it just becomes catalog records that everyone with access to the target sees. Dragging the folder onto a catalog folder opens the same dialog with that folder chosen.
+
+A single connection publishes the same way (right-click -> **Publish to catalog...**, or drag it onto a catalog folder), straight into the catalog folder with its port forwards. What it takes from your own folders (user, port, jump host, ...) goes onto it, so it connects the same way. It needs a catalog server that supports it; an older one says so, and a folder still publishes there.
 
 - **What to send**: tick what goes (notes, tags, icons, port forwards, database, Kafka and VNC settings, the initial command, terminal behaviour). What you untick stays yours only.
 - **What is never sent**: a credential from your own vault and a network (VPN) profile stay yours, in your own My settings; colleagues get those connections without them and set their own. Without a credential a connection asks for the user name and password at connect. Bitwarden / Vaultwarden items and opkssh credentials go by default, since everyone with access can use them the same way; untick them all, or one credential under Slots, to keep a private item yours.
