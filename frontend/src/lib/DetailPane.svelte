@@ -693,6 +693,11 @@
   // Not while a save runs: its reload would bring back what was discarded.
   function discardDraft() {
     if (connSaving || folderSaving) return;
+    // Record mode keeps the documentation and icon outside the drafts.
+    if (recordMode) {
+      recordDoc = catRec?.form?.doc_md ?? "";
+      recordIcon = null;
+    }
     draftEpoch++;
   }
   function edited(cur: object | null, orig: Record<string, unknown> | null): boolean {
