@@ -19,6 +19,10 @@ reviews:
     - "!frontend/dist/**"
     # Vendored upstream code; only its PATCHES.md and the patch are ours.
     - "!third_party/**/*.go"
+    # TEMPORARY on catalog-client only (PR over the 100-file limit with
+    # tests): revert before merge.
+    - "!**/*_test.go"
+    - "!**/*.test.ts"
   path_instructions:
     - path: "**/*"
       instructions: |
