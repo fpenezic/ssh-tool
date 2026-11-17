@@ -77,9 +77,8 @@
     if (!conn.catalog_id) return false;
     const has = (v: unknown) => JSON.stringify(v ?? {}).includes("cat-missing:");
     if (has(conn.overrides)) return true;
-    const byId = new Map(tree.folders.map((f) => [f.id, f] as const));
     for (let id = conn.folder_id, i = 0; id && i < 64; i++) {
-      const f = byId.get(id);
+      const f = tree.folderById(id);
       if (!f) break;
       if (has(f.settings)) return true;
       id = f.parent_id;

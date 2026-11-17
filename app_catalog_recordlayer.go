@@ -16,14 +16,23 @@ import (
 	"ssh-tool/internal/catalog"
 )
 
-// catalogLayerJSON is a catalog row's stored local layer ("" for none).
+// catalogLayerJSON is a catalog row's stored local layer ("" for none,
+// also on a read error; writers use catalogLayerRead).
 func (a *App) catalogLayerJSON(catID, remoteUUID string) string {
+	j, _ := a.catalogLayerRead(catID, remoteUUID)
+	return j
+}
+
+// catalogLayerRead is catalogLayerJSON with the read error, for a
+// read-modify-write: writing back after a failed read would drop the
+// user's layer.
+func (a *App) catalogLayerRead(catID, remoteUUID string) (string, error) {
 	var j string
 	err := a.db.Conn().QueryRow(`SELECT json FROM catalog_overrides WHERE catalog_id = ? AND remote_uuid = ?`, catID, remoteUUID).Scan(&j)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return ""
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
 	}
-	return j
+	return j, err
 }
 
 // keepRecordLayer returns newJSON (a settings layer) with the stored
@@ -74,7 +83,12 @@ func (a *App) updateRecordLayer(kind, id string, mut func(rec map[string]any)) (
 	}
 	layerMu.Lock()
 	layer := map[string]any{}
-	if j := a.catalogLayerJSON(catID, uuid); j != "" {
+	j, rerr := a.catalogLayerRead(catID, uuid)
+	if rerr != nil {
+		layerMu.Unlock()
+		return true, rerr
+	}
+	if j != "" {
 		_ = json.Unmarshal([]byte(j), &layer)
 	}
 	rec, _ := layer[catalog.RecordLayerKey].(map[string]any)
