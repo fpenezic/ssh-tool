@@ -11,6 +11,7 @@
     type CatalogRecordInfo,
     type CatalogEditInput,
     type CatalogSaveResult,
+    type ForwardUpdateInput,
   } from "./api";
   import { sessions, tree, paneTabs } from "./stores.svelte";
   import { showPrompt } from "./promptModal.svelte.ts";
@@ -235,7 +236,13 @@
       remote_host: nKind === "dynamic" ? null : nRemoteHost || null, remote_port: nKind === "dynamic" ? null : portOrUndef(nRemotePort) ?? null,
       auto_start: nAutoStart, description: nDesc };
     const inp: CatalogEditInput = input ?? { kind: "forwards", local_id: editingForwardId, rev: fwRec.rev, loaded: fwRec.form, edited, accept_rev: 0, resolve: {}, slot_names: {} };
-    const r = await api.catalogRecordSave(inp);
+    let r: CatalogSaveResult;
+    try {
+      r = await api.catalogRecordSave(inp);
+    } catch (e) {
+      err = errMsg(e);
+      return false;
+    }
     if (r.saved) {
       fwConflict = null;
       cancelForm();
@@ -408,6 +415,20 @@
     const localPort = portOrUndef(nLocalPort);
     const remotePort = portOrUndef(nRemotePort);
     try {
+      if (editingCatalogFw) {
+        // My settings on a catalog forward: only this user's own fields;
+        // the shared ones (and their clear flags) are the catalog's.
+        await api.forwardsUpdate({
+          id: editingForwardId,
+          local_port: localPort,
+          clear_local_port: localPort === undefined,
+          auto_start: nAutoStart,
+          browser_mode: nBrowserMode,
+        } as ForwardUpdateInput);
+        cancelForm();
+        await reload();
+        return true;
+      }
       await api.forwardsUpdate({
         id: editingForwardId,
         local_addr: nLocalAddr || undefined,

@@ -97,8 +97,11 @@
 
   // Preview, rebuilt on every change (debounced: slot names are typed).
   let seq = 0;
+  // Bumped to rebuild the preview after the folder changed under it.
+  let previewNonce = $state(0);
   $effect(() => {
     const inp = input;
+    void previewNonce;
     if (!inp.catalog_id || targetUUID === null) return;
     const mine = ++seq;
     const t = setTimeout(() => {
@@ -171,7 +174,12 @@
     result = null;
     imgProgress = null;
     try {
-      const r = await api.catalogPublish(input);
+      const r = await api.catalogPublish({ ...input, review_hash: plan?.review_hash ?? "" });
+      if (r.stale) {
+        // Changed since the review: show the new plan and ask again.
+        reviewed = false;
+        previewNonce++;
+      }
       result = r;
       if (r.published) {
         toast.ok(`${folderName} published to ${catName}${r.message && r.message !== "published" ? " - " + r.message : ""}`, 8000);

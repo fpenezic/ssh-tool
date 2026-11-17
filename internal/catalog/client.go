@@ -87,6 +87,15 @@ func normaliseBase(raw string) string {
 	return scheme + "://" + host + strings.TrimRight(u.EscapedPath(), "/")
 }
 
+// stripQuery drops a query and fragment (an endpoint may carry them; a
+// base URL may not).
+func stripQuery(u string) string {
+	if i := strings.IndexAny(u, "?#"); i >= 0 {
+		return u[:i]
+	}
+	return u
+}
+
 // ValidateBaseURL checks a catalog base URL: https, or plain http only on
 // loopback (PROTOCOL 1). Returns it without a trailing slash.
 func ValidateBaseURL(raw string) (string, error) {
@@ -167,6 +176,16 @@ func (c *Client) Meta(ctx context.Context) (*Meta, error) {
 	}
 	if m.Auth.TokenEndpoint == "" || m.Auth.AuthorizationEndpoint == "" || m.Auth.ClientID == "" {
 		return nil, fmt.Errorf("catalog: the server's meta lacks its sign-in endpoints")
+	}
+	// Tokens go to these: the same transport rule as the base URL (https,
+	// plain http only on loopback).
+	for _, e := range []string{m.Auth.TokenEndpoint, m.Auth.AuthorizationEndpoint, m.Auth.RevocationEndpoint} {
+		if e == "" {
+			continue
+		}
+		if _, err := ValidateBaseURL(stripQuery(e)); err != nil {
+			return nil, fmt.Errorf("catalog: the server advertises a sign-in endpoint this app will not use (%s): %w", e, err)
+		}
 	}
 	c.mu.Lock()
 	c.meta = &m
@@ -260,6 +279,10 @@ func (c *Client) SignIn(ctx context.Context, openBrowser func(string)) error {
 	}
 	if tok.RefreshToken == "" {
 		return fmt.Errorf("catalog: the server issued no refresh token")
+	}
+	// Cancelled meanwhile (signed out, removed): keep no token.
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if err := c.Tokens.Save(tok.RefreshToken); err != nil {
 		return fmt.Errorf("catalog: store refresh token: %w", err)

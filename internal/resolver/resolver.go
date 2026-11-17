@@ -162,8 +162,8 @@ func mergeTargets(base, over []store.DbTarget) []store.DbTarget {
 	if len(over) == 0 {
 		return base
 	}
-	out := make([]store.DbTarget, 0, len(base)+len(over))
-	idx := make(map[string]int, len(base)+len(over))
+	out := make([]store.DbTarget, 0, len(base))
+	idx := make(map[string]int, len(base))
 	for _, t := range base {
 		if t.Override {
 			continue

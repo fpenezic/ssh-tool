@@ -256,7 +256,20 @@ func PlanEdit(db *store.DB, cat *store.Catalog, scope RecordScope, in EditInput,
 			if err != nil {
 				return nil, err
 			}
+			// An object value (env_vars, jump_host) is patched member by
+			// member: a merge patch keeps members it does not name, so a
+			// removed one needs its null (RFC 7396).
+			var cur struct {
+				Settings map[string]any `json:"settings"`
+			}
+			_ = json.Unmarshal(current, &cur)
 			for k, v := range catVals {
+				nm, nIsMap := v.(map[string]any)
+				om, oIsMap := cur.Settings[k].(map[string]any)
+				if nIsMap && oIsMap {
+					sp[k] = MergePatch(om, nm)
+					continue
+				}
 				sp[k] = v
 			}
 		}

@@ -20,6 +20,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -254,7 +255,10 @@ func (l *localiser) ordinaryCredentials(tx *sql.Tx, catName string, jsons []stri
 	for _, id := range ids {
 		var name string
 		if err := tx.QueryRow(`SELECT name FROM credential_refs WHERE id = ?`, id).Scan(&name); err != nil {
-			continue // gone: the reference stays dangling, as it was
+			if errors.Is(err, sql.ErrNoRows) {
+				continue // gone: the reference stays dangling, as it was
+			}
+			return n, err
 		}
 		nid := newID()
 		if move {

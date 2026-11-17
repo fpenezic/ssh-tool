@@ -124,8 +124,14 @@ func (pa *publishApp) setMode(m string) {
 	pa.mu.Unlock()
 }
 
+// in is the dialog's input after a preview: it carries the reviewed
+// plan's hash, as the dialog does.
 func (pa *publishApp) in() CatalogPublishInput {
-	return CatalogPublishInput{CatalogID: pa.cat.ID, FolderID: pa.folder, SendLocalCreds: true, SendNetworks: true}
+	in := CatalogPublishInput{CatalogID: pa.cat.ID, FolderID: pa.folder, SendLocalCreds: true, SendNetworks: true}
+	if p, err := pa.a.CatalogPublishPreview(in); err == nil && p != nil {
+		in.ReviewHash = p.ReviewHash
+	}
+	return in
 }
 
 func (pa *publishApp) pending(t *testing.T) bool {
@@ -268,5 +274,16 @@ func TestCatalogPublishGuards(t *testing.T) {
 	pa.a.vault.Lock(false)
 	if _, err := pa.a.CatalogPublishPreview(pa.in()); err == nil || !strings.Contains(err.Error(), "unlock") {
 		t.Fatalf("locked vault: %v", err)
+	}
+}
+
+// A publish whose folder changed after the review is refused unsent.
+func TestCatalogPublishRefusesAChangedReview(t *testing.T) {
+	pa := newPublishApp(t)
+	in := pa.in()
+	in.ReviewHash = "stale"
+	res, err := pa.a.CatalogPublish(in)
+	if err != nil || res.Published || !res.Stale {
+		t.Fatalf("result: %+v %v", res, err)
 	}
 }

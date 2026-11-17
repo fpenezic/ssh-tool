@@ -462,7 +462,8 @@ func overlayRecordCols(c *store.RecordCols, layerJSON string) {
 	if r.IconImageID != nil && *r.IconImageID != "" {
 		c.IconImageID, c.IconName, c.IconColor = r.IconImageID, nil, nil
 	} else if r.IconName != nil {
-		c.IconName, c.IconColor = r.IconName, r.IconColor
+		// A built-in icon of the user's own replaces the record's image too.
+		c.IconName, c.IconColor, c.IconImageID = r.IconName, r.IconColor, nil
 	}
 }
 

@@ -82,7 +82,7 @@
   {#if open}
     <div class="panel">
       <!-- svelte-ignore a11y_autofocus -->
-      <input class="search" placeholder="Search folders..." bind:value={query} autofocus onkeydown={(e) => { if (e.key === "Escape") open = false; }} />
+      <input class="search" placeholder="Search folders..." bind:value={query} autofocus onkeydown={(e) => { if (e.key === "Escape") { e.stopPropagation(); open = false; } }} />
       <div class="list">
         {#if extra && !query}
           <button type="button" class="row" class:sel={value === extra.value} onclick={() => pick(extra.value)}>{extra.path}</button>

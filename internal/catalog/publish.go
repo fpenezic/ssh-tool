@@ -1,7 +1,9 @@
 package catalog
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -242,6 +244,11 @@ type PublishPlan struct {
 	FreeText     []FreeText     `json:"free_text"`
 	Refusals     []Refusal      `json:"refusals"`
 	OutsideJumps []OutsideJump  `json:"outside_jumps"`
+	// ReviewHash fingerprints what the user reviews (free text, references
+	// kept local, slots): a publish whose rebuilt plan differs from the
+	// previewed one is refused, so text changed after the review is never
+	// sent unseen.
+	ReviewHash string `json:"review_hash"`
 	// KeptLocal: references that stay the publisher's own (not sent, no
 	// slot), with why. Readers get these records without them.
 	KeptLocal []KeptRef `json:"kept_local"`
@@ -254,6 +261,29 @@ type PublishPlan struct {
 	TargetLocalID string `json:"-"`
 	RootUUID      string `json:"root_uuid"`
 	catalogID     string
+}
+
+func reviewHash(p *PublishPlan) string {
+	// Without the uuids: every build of the plan makes new ones.
+	type ft struct {
+		Kind, Name, Field, Value, From string
+		Folder                         bool
+	}
+	var f []ft
+	for _, x := range p.FreeText {
+		f = append(f, ft{x.Kind, x.Name, x.Field, x.Value, x.InheritedFrom, x.FolderLevel})
+	}
+	var r []string
+	for _, x := range p.Records {
+		r = append(r, x.Kind+"\x00"+x.Path)
+	}
+	b, _ := json.Marshal(struct {
+		F []ft
+		K []KeptRef
+		R []string
+	}{f, p.KeptLocal, r})
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }
 
 // KeptRef is a reference a publish keeps local.
@@ -1005,8 +1035,10 @@ func (c *pubCtx) settings(s store.InheritableSettings, kind, u, name string, fol
 	for _, k := range credFields {
 		if v, ok := m[k].(string); ok {
 			if r := c.ref(v, slotCred, kind, u, name, k); r == keepRef {
+				// Sent as an explicit empty value, so readers do not
+				// inherit a login from a folder above instead.
 				layer[k] = v
-				delete(m, k)
+				m[k] = ""
 			} else {
 				m[k] = r
 			}
@@ -1306,6 +1338,12 @@ func (c *pubCtx) slot(key, typ, target, kind, u, name, field string) string {
 			}
 		}
 		if same {
+			// Keep the binding the slot already has here (the same item
+			// through another credential): rebinding it would change every
+			// record that uses it.
+			if bound {
+				ps.BindTarget = b.TargetID
+			}
 			ps.UUID, ps.Name, ps.New = s.UUID, s.Name, false
 			ps.Kind, ps.Backend = s.Kind, s.Backend
 			ps.ReusedFrom = c.reusedNames[s.FolderUUID]
@@ -1360,6 +1398,7 @@ func (c *pubCtx) finish() {
 	c.plan.Slots, c.plan.FreeText, c.plan.Refusals, c.plan.OutsideJumps = []PlanSlot{}, nonNil(c.plan.FreeText), nonNil(c.plan.Refusals), []OutsideJump{}
 	c.plan.Images = nonNil(c.plan.Images)
 	c.plan.KeptLocal = nonNil(c.plan.KeptLocal)
+	defer func() { c.plan.ReviewHash = reviewHash(c.plan) }()
 	c.plan.Request.Slots = nonNil(c.plan.Request.Slots)
 	c.plan.Request.Forwards = nonNil(c.plan.Request.Forwards)
 	if c.opts.TargetUUID != "" {

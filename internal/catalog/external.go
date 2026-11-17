@@ -79,11 +79,23 @@ func PrepareExternal(db *store.DB, cat *store.Catalog, probe ItemProbe) (Externa
 		case 1:
 			serverID = servers[0].ID
 		default:
+			if probe == nil {
+				// No probing on this path (a rematerialise after a local
+				// edit): keep the server an earlier pass found, when it is
+				// still registered, rather than unbinding a working slot.
+				if cr, err := db.GetCredential(store.CatalogCredentialID(cat.ID, s.UUID)); err == nil && cr != nil {
+					if prev := store.ParseBitwardenRef(cr.Config); prev != nil {
+						for _, srv := range servers {
+							if srv.ID == prev.ServerID {
+								serverID = srv.ID
+							}
+						}
+					}
+				}
+				break
+			}
 			var hits []string
 			for _, srv := range servers {
-				if probe == nil {
-					break
-				}
 				ok, err := probe(srv.ID, ref.CipherID)
 				if err != nil {
 					log.Printf("catalog %s: looking for slot %s in bitwarden server %s: %v", cat.Name, s.Name, srv.Name, err)

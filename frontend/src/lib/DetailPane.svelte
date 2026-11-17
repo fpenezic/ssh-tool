@@ -209,6 +209,7 @@
     resetFolderOffer();
     saveError = null;
     recordDoc = catRec?.form?.doc_md ?? "";
+    if (on) takeRecordBase();
     draftEpoch++;
   }
   // What the form is built from: the row (local view) or, in record mode,
@@ -224,7 +225,7 @@
     edited = withRecordIcon(edited);
     const input: CatalogEditInput = recordInput
       ? { ...recordInput, edited, slot_names: recordSlotNames, resolve: recordResolve }
-      : { kind, local_id: id, rev: catRec.rev, loaded: catRec.form, edited, accept_rev: 0, resolve: {}, slot_names: recordSlotNames };
+      : { kind, local_id: id, rev: recordBase?.rev ?? catRec.rev, loaded: recordBase?.form ?? catRec.form, edited, accept_rev: 0, resolve: {}, slot_names: recordSlotNames };
     if (recordFolderFields) return runFolderSave(input);
     // A first save of a connection: offer the folder when it would help
     // the connections next to it, before anything is written.
@@ -270,6 +271,7 @@
     saveError = null;
     await tree.load();
     await loadCatRec();
+    takeRecordBase();
     draftEpoch++;
     if (warnings.length) toast.info(warnings.join(" "), 10000);
     showSaved();
@@ -337,14 +339,28 @@
     recordSlotNames = {};
     recordResolve = {};
     await loadCatRec();
+    takeRecordBase();
     recordDoc = catRec?.form?.doc_md ?? "";
     draftEpoch++;
+  }
+  let catRecGen = 0;
+  // Record mode: the record as it was when editing began. A sync that
+  // refreshes catRec meanwhile must not become the base of the save, or a
+  // colleague's change would be overwritten without a conflict.
+  let recordBase: { rev: number; form: CatalogEditForm } | null = null;
+  function takeRecordBase() {
+    recordBase = catRec?.form ? { rev: catRec.rev, form: catRec.form } : null;
   }
   async function loadCatRec() {
     const kind = conn?.catalog_id ? "connections" : isCatalogFolder ? "folders" : null;
     const id = conn?.catalog_id ? conn.id : folder?.id;
     if (!kind || !id) { catRec = null; return; }
-    try { catRec = await api.catalogRecord(kind, id); } catch { catRec = null; }
+    // A slower answer for an earlier selection must not land here.
+    const gen = ++catRecGen;
+    let r: CatalogRecordInfo | null = null;
+    try { r = await api.catalogRecord(kind, id); } catch { r = null; }
+    if (gen !== catRecGen) return;
+    catRec = r;
     const cid = conn?.catalog_id ?? folder?.catalog_id;
     if (cid && !catalogs.slots[cid]) catalogs.loadSlots(cid);
   }
