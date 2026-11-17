@@ -2529,6 +2529,15 @@ export class LocaliseResult {
              */
             this["outside_jumps"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * PasswordsSkipped: stored passwords a copy could not carry over
+             * (the vault was locked); set them on the copies by hand.
+             * @member
+             * @type {number | undefined}
+             */
+            this["passwords_skipped"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

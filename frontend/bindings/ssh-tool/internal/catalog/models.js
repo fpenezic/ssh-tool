@@ -898,6 +898,27 @@ export class PublishPlan {
              */
             this["outside_jumps"] = [];
         }
+        if (!("review_hash" in $$source)) {
+            /**
+             * ReviewHash fingerprints what the user reviews (free text, references
+             * kept local, slots): a publish whose rebuilt plan differs from the
+             * previewed one is refused, so text changed after the review is never
+             * sent unseen.
+             * @member
+             * @type {string}
+             */
+            this["review_hash"] = "";
+        }
+        if (!("target_inherits" in $$source)) {
+            /**
+             * TargetInherits: settings the target folder (or one above it) sets
+             * that the published folder leaves unset today: after the publish
+             * the folder inherits them, for the publisher too ("port: 2222").
+             * @member
+             * @type {string[]}
+             */
+            this["target_inherits"] = [];
+        }
         if (!("kept_local" in $$source)) {
             /**
              * KeptLocal: references that stay the publisher's own (not sent, no
@@ -937,8 +958,9 @@ export class PublishPlan {
         const $$createField2_0 = $$createType11;
         const $$createField3_0 = $$createType13;
         const $$createField4_0 = $$createType15;
-        const $$createField5_0 = $$createType17;
-        const $$createField6_0 = $$createType19;
+        const $$createField6_0 = $$createType0;
+        const $$createField7_0 = $$createType17;
+        const $$createField8_0 = $$createType19;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("records" in $$parsedSource) {
             $$parsedSource["records"] = $$createField0_0($$parsedSource["records"]);
@@ -955,11 +977,14 @@ export class PublishPlan {
         if ("outside_jumps" in $$parsedSource) {
             $$parsedSource["outside_jumps"] = $$createField4_0($$parsedSource["outside_jumps"]);
         }
+        if ("target_inherits" in $$parsedSource) {
+            $$parsedSource["target_inherits"] = $$createField6_0($$parsedSource["target_inherits"]);
+        }
         if ("kept_local" in $$parsedSource) {
-            $$parsedSource["kept_local"] = $$createField5_0($$parsedSource["kept_local"]);
+            $$parsedSource["kept_local"] = $$createField7_0($$parsedSource["kept_local"]);
         }
         if ("images" in $$parsedSource) {
-            $$parsedSource["images"] = $$createField6_0($$parsedSource["images"]);
+            $$parsedSource["images"] = $$createField8_0($$parsedSource["images"]);
         }
         return new PublishPlan(/** @type {Partial<PublishPlan>} */($$parsedSource));
     }

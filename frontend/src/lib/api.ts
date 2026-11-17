@@ -1811,6 +1811,8 @@ export const api = {
   catalogCancelSignIn: (id: string) => G.CatalogCancelSignIn(id) as unknown as Promise<void>,
   catalogSignOut: (id: string) => G.CatalogSignOut(id) as unknown as Promise<void>,
   catalogRemove: (id: string) => G.CatalogRemove(id) as unknown as Promise<void>,
+  catalogDuplicate: (id: string, name: string, hostname: string) =>
+    G.CatalogDuplicate(id, name, hostname) as unknown as Promise<string>,
   dynamicEntrySaveAsConnection: (dynId: string, folderId: string, repoint: boolean) =>
     G.DynamicEntrySaveAsConnection(dynId, folderId, repoint) as unknown as Promise<{ connection_id: string; repointed: number }>,
   catalogRemoveKeepLocal: (id: string) => G.CatalogRemoveKeepLocal(id) as unknown as Promise<LocaliseResult>,

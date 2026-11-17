@@ -1670,6 +1670,15 @@ export class CatalogPublishInput {
              */
             this["dyn_skip"] = [];
         }
+        if (!("review_hash" in $$source)) {
+            /**
+             * ReviewHash: the review_hash of the plan the user reviewed; a publish
+             * whose rebuilt plan differs is refused.
+             * @member
+             * @type {string}
+             */
+            this["review_hash"] = "";
+        }
 
         Object.assign(this, $$source);
     }
@@ -1831,6 +1840,14 @@ export class CatalogPublishResult {
         }
         if (/** @type {any} */(false)) {
             /**
+             * Stale: the folder changed after the preview; nothing was sent.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["stale"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * Images: what happened to each uploaded icon (kept ones with why).
              * @member
              * @type {catalog$0.PlanImage[] | undefined}
@@ -1850,7 +1867,7 @@ export class CatalogPublishResult {
         const $$createField3_0 = $$createType10;
         const $$createField4_0 = $$createType10;
         const $$createField5_0 = $$createType12;
-        const $$createField6_0 = $$createType14;
+        const $$createField7_0 = $$createType14;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("problems" in $$parsedSource) {
             $$parsedSource["problems"] = $$createField3_0($$parsedSource["problems"]);
@@ -1862,7 +1879,7 @@ export class CatalogPublishResult {
             $$parsedSource["refusals"] = $$createField5_0($$parsedSource["refusals"]);
         }
         if ("images" in $$parsedSource) {
-            $$parsedSource["images"] = $$createField6_0($$parsedSource["images"]);
+            $$parsedSource["images"] = $$createField7_0($$parsedSource["images"]);
         }
         return new CatalogPublishResult(/** @type {Partial<CatalogPublishResult>} */($$parsedSource));
     }
