@@ -13,7 +13,7 @@
   import { writeClipboard, readClipboard } from "./clipboard";
   import PasswordInput from "./PasswordInput.svelte";
   import { effectiveAuthRef, isKeyAuthKind, isSelectableSSHCred } from "./authWarning";
-  import { api, dbEngineInfo, type ResolvedSettings, type JumpHostOverride } from "./api";
+  import { api, dbEngineInfo, CATALOG_BIND_ASK, type ResolvedSettings, type JumpHostOverride } from "./api";
   import { showPrompt } from "./promptModal.svelte.ts";
   import JumpChainEditor from "./JumpChainEditor.svelte";
   import PortForwards from "./PortForwards.svelte";
@@ -1332,6 +1332,25 @@
   // SSH auth credentials for the connection picker. api_token is filtered out
   // (see sshCredOptions) but a value already stored on this connection is
   // kept, so opening an existing config cannot silently drop its reference.
+  // Binding a catalog slot from the editor: the user's own credentials, or
+  // asking at every connect. It binds the slot for every record using it.
+  const slotBindOptions = $derived([
+    { value: CATALOG_BIND_ASK, label: "Ask when connecting (user name and password)" },
+    ...credentials.list
+      .filter((c) => !c.id.startsWith("catcred-") && c.kind !== "api_token" && c.kind !== "certificate")
+      .map((c) => ({ value: c.id, label: c.name })),
+  ]);
+  async function bindSlotFromEditor(catalogId: string, uuid: string, target: string) {
+    if (!target) return;
+    try {
+      await api.catalogBind(catalogId, uuid, target);
+      await Promise.all([tree.load(), catalogs.load(), catalogs.loadSlots(catalogId)]);
+      toast.ok("Slot bound");
+    } catch (e) {
+      toast.err("Bind: " + errMsg(e), 8000);
+    }
+  }
+
   const credOptions = $derived([
     { value: AUTH_NONE, label: "None - do not inherit, ask at connect" },
     ...(parseMarker(editing?.authRef) ? [{ value: editing!.authRef, label: catalogs.markerLabel(editing!.authRef) ?? "catalog slot" }] : []),
@@ -2716,7 +2735,7 @@
           <span class="inh-hint">inherited from <strong>{inhUser.from.name}</strong>: {inhUser.value}</span>
         {/if}
       </label>
-      <label>Credential{#if layerHas("auth_ref")} <span class="ov-mark" title="Changed on this machine">yours <button type="button" onclick={(e) => { e.preventDefault(); resetLayerKey("auth_ref"); }}>reset</button></span>{/if}{#if parseMarker(editing.authRef)} <button type="button" class="linklike bind-link" onclick={(e) => { e.preventDefault(); catalogs.open(parseMarker(editing!.authRef)!.catalogId, "slots"); }}>bind the slot</button>{/if}
+      <label>Credential{#if layerHas("auth_ref")} <span class="ov-mark" title="Changed on this machine">yours <button type="button" onclick={(e) => { e.preventDefault(); resetLayerKey("auth_ref"); }}>reset</button></span>{/if}
         <div class="cred-picker-row">
           <SearchableSelect
             bind:value={editing.authRef}
@@ -2752,7 +2771,7 @@
           <span class="kp-badge">Infisical-backed - secret read from the server at connect</span>
         {/if}
         {#if inhAuth.from && !editing.authRef}
-          {@const inhCredName = credentials.byId(String(inhAuth.value))?.name ?? String(inhAuth.value)}
+          {@const inhCredName = credentials.byId(String(inhAuth.value))?.name ?? catalogs.markerLabel(String(inhAuth.value)) ?? String(inhAuth.value)}
           <span class="inh-hint">inherited from <strong>{inhAuth.from.name}</strong>: {inhCredName}</span>
         {/if}
         {#if editing.authRef === AUTH_NONE}
@@ -2764,6 +2783,18 @@
           <span class="inh-hint"><strong>Password overridden</strong> - this connection's password is tried first, the credential's only if it fails.</span>
         {/if}
       </label>
+      {@const authSlot = parseMarker(editing.authRef) ?? (!editing.authRef && inhAuth.from ? parseMarker(String(inhAuth.value ?? "")) : null)}
+      {#if authSlot && authSlot.uuid}
+        {@const slotInfo = catalogs.slots[authSlot.catalogId]?.find((x) => x.uuid === authSlot.uuid)}
+        <div class="slot-inline">
+          {#if authSlot.unbound && slotInfo}
+            <span class="inh-hint">Catalog slot <strong>"{slotInfo.name}"</strong> is not bound. Bind it once for every connection that uses it ({slotInfo.used_by}):</span>
+            <SearchableSelect value="" options={slotBindOptions} placeholder="Pick a credential..." emptyLabel="(not bound)"
+              onChange={(v: string) => bindSlotFromEditor(authSlot.catalogId, authSlot.uuid, v)} />
+          {/if}
+          <button type="button" class="linklike bind-link" onclick={() => catalogs.open(authSlot.catalogId, "slots", authSlot.uuid)}>slot in Settings</button>
+        </div>
+      {/if}
       {#if otpCredOptions.length > 0 || editing.otpRef || hasKeepass || hasBitwarden}
         {@const inhOtp = tree.inheritedFieldForConnection(conn.id, "otp_ref")}
         <label>One-time code from
@@ -3379,6 +3410,8 @@
   .lock-mark.kept { opacity: 1; color: var(--teal); gap: 6px; }
   input.locked, textarea.locked { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--border, #333) 35%, transparent) 6px 7px); cursor: not-allowed; opacity: 0.85; }
   .ov-mark { font-size: 10px; color: var(--teal); border: 1px solid color-mix(in srgb, var(--teal) 50%, transparent); border-radius: 999px; padding: 0 2px 0 6px; margin-left: 4px; display: inline-flex; align-items: center; gap: 2px; }
+  .slot-inline { display: flex; flex-direction: column; gap: 4px; margin: -4px 0 6px; }
+  .slot-inline .bind-link { align-self: flex-start; }
   .ov-mark button, .bind-link { background: none; border: none; padding: 0 2px; color: var(--sapphire); cursor: pointer; font-size: 10px; }
   .locked-tags { font-size: var(--fs-sm); opacity: 0.85; }
   .save-err { margin: 6px 0; }

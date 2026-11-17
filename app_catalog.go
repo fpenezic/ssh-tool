@@ -783,6 +783,9 @@ func (a *App) catalogSlotInfos(catalogID string, slots []store.CatalogSlot) []Ca
 func (a *App) catalogTargetName(kind, id string) (string, bool) {
 	switch kind {
 	case "cred":
+		if id == store.CatalogBindingAsk {
+			return "Ask when connecting", true
+		}
 		if c, err := a.db.GetCredential(id); err == nil {
 			return c.Name, true
 		}
@@ -811,7 +814,9 @@ func (a *App) CatalogSlots(catalogID string) ([]CatalogSlotInfo, error) {
 }
 
 // CatalogBind binds a slot to a credential, network profile or connection
-// of the user's own (the slot's type decides which).
+// of the user's own (the slot's type decides which). A credential slot
+// may also be bound to store.CatalogBindingAsk: no credential, the
+// connect asks for the user name and password.
 func (a *App) CatalogBind(catalogID, slotUUID, targetID string) error {
 	slots, err := a.db.ListCatalogSlots(catalogID)
 	if err != nil {

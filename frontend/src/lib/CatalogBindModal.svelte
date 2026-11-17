@@ -4,7 +4,7 @@
   // something of the user's own. A one-time code slot may be skipped (the
   // user types the code); the skip is remembered on this machine.
   import SearchableSelect from "./SearchableSelect.svelte";
-  import { api, type CatalogPendingSlot } from "./api";
+  import { api, CATALOG_BIND_ASK, type CatalogPendingSlot } from "./api";
   import { bindGate } from "./catalogBindGate.svelte";
   import { catalogs } from "./catalog.svelte";
   import { credentials, tree, view } from "./stores.svelte";
@@ -46,7 +46,10 @@
       .filter((c) => c.protocol !== "local" && c.protocol !== "web" && c.catalog_state !== "removed" && !bindGate.pending?.ids.includes(c.id))
       .map((c) => ({ value: c.id, label: c.name + (c.hostname ? ` (${c.hostname})` : "") })),
   );
-  const optionsFor = (s: CatalogPendingSlot) => (s.type === "cred" ? credOptions : s.type === "net" ? netOptions : jumpOptions);
+  // A login slot may also be left to a prompt at each connect.
+  const askOption = { value: CATALOG_BIND_ASK, label: "Ask when connecting (user name and password)" };
+  const ownOptions = (s: CatalogPendingSlot) => (s.type === "cred" ? credOptions : s.type === "net" ? netOptions : jumpOptions);
+  const optionsFor = (s: CatalogPendingSlot) => (s.role === "cred" ? [askOption, ...credOptions] : ownOptions(s));
   const roleLabel = { jump: "Bastion", net: "Network profile", cred: "Credential", otp: "One-time code" } as const;
   const noneYet = { cred: "You have no credentials yet.", net: "You have no network profiles yet.", jump: "You have no connections to use as a bastion yet." } as const;
 
@@ -109,9 +112,10 @@
             <label class="skip"><input type="checkbox" checked={skip[key(s)]} onchange={(e) => (skip = { ...skip, [key(s)]: (e.currentTarget as HTMLInputElement).checked })} disabled={busy} /> I type the code myself (asked once; change it later under Settings - Catalogs)</label>
           {/if}
           {#if !skip[key(s)]}
-            {#if optionsFor(s).length === 0}
+            {#if ownOptions(s).length === 0}
               <p class="hint">{noneYet[s.type]} <button class="link" onclick={() => goCreate(s.type === "cred" ? "credentials" : "settings")}>Add one first</button></p>
-            {:else}
+            {/if}
+            {#if optionsFor(s).length > 0}
               <SearchableSelect value={choice[key(s)] ?? ""} options={optionsFor(s)} placeholder={`Pick a ${roleLabel[s.role].toLowerCase()}...`} emptyLabel="(choose)"
                 onChange={(v: string) => (choice = { ...choice, [key(s)]: v })} />
             {/if}
