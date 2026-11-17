@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -59,7 +60,20 @@ func (d *DB) UpsertCatalogCredential(catalogID, slotUUID, name string, kind Cred
 		if len(short) > 8 {
 			short = short[:8]
 		}
-		name += " (" + short + ")"
+		// The suffixed name can be taken too (names are unique): widen it.
+		base := name
+		name = base + " (" + short + ")"
+		for i := 2; i < 100; i++ {
+			var x string
+			e := d.conn.QueryRow(`SELECT id FROM credential_refs WHERE name = ? AND id != ?`, name, id).Scan(&x)
+			if errors.Is(e, sql.ErrNoRows) {
+				break
+			}
+			if e != nil {
+				return e
+			}
+			name = fmt.Sprintf("%s (%s %d)", base, short, i)
+		}
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}

@@ -80,7 +80,7 @@
 
   async function add() {
     const u = addURL.trim();
-    if (!u) return;
+    if (!u || adding) return;
     adding = true;
     try {
       const c = await api.catalogAdd(u);
@@ -225,7 +225,7 @@
           <div class="cat-form-actions">
             <button class="primary" onclick={saveConfig}>Save</button>
             <button onclick={() => (edit = null)}>Cancel</button>
-            {#if !isMobile && c.state !== "no_login" && c.state !== "signed_out"}
+            {#if c.state !== "no_login" && c.state !== "signed_out"}
               <button onclick={() => run(c.id, "Sign out", () => api.catalogSignOut(c.id))}>Sign out</button>
             {/if}
           </div>

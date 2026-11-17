@@ -53,6 +53,9 @@ type CatalogPublishInput struct {
 	SendNetworks   bool `json:"send_networks"`
 	// DynSkip: inventory bastions not to send as a bastion record.
 	DynSkip []string `json:"dyn_skip"`
+	// ReviewHash: the review_hash of the plan the user reviewed; a publish
+	// whose rebuilt plan differs is refused.
+	ReviewHash string `json:"review_hash"`
 }
 
 // CatalogPublishProblem is one per-record error of a refused publish,
@@ -78,6 +81,8 @@ type CatalogPublishResult struct {
 	Warnings  []CatalogPublishProblem `json:"warnings,omitempty"`
 	// Refusals: the local check stopped it before sending.
 	Refusals []catalog.Refusal `json:"refusals,omitempty"`
+	// Stale: the folder changed after the preview; nothing was sent.
+	Stale bool `json:"stale,omitempty"`
 	// Images: what happened to each uploaded icon (kept ones with why).
 	Images []catalog.PlanImage `json:"images,omitempty"`
 }
@@ -255,6 +260,10 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 	}
 	if len(plan.Refusals) > 0 {
 		return &CatalogPublishResult{Message: "some rows cannot be published", Refusals: plan.Refusals}, nil
+	}
+	if in.ReviewHash == "" || in.ReviewHash != plan.ReviewHash {
+		return &CatalogPublishResult{Stale: true,
+			Message: "the folder changed since the preview; look at the review again before publishing"}, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute+publishImageWait)
 	if err := a.uploadPublishImages(ctx, cat.ID, c, plan); err != nil {

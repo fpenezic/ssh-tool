@@ -38,6 +38,9 @@ const shadowPrefix = "catalog_shadow_"
 
 var shadowTables = []struct{ table, where string }{
 	// Order matters for the move out: children first.
+	// Snippets attached to a catalog connection: an older app mirrors
+	// with foreign keys on and would fail on the dangling reference.
+	{"snippets", `connection_id IN (SELECT id FROM connections WHERE catalog_id IS NOT NULL)`},
 	{"port_forwards", `remote_uuid IS NOT NULL OR connection_id IN (SELECT id FROM connections WHERE catalog_id IS NOT NULL)`},
 	{"connections", `catalog_id IS NOT NULL`},
 	{"folders", `catalog_id IS NOT NULL`},
@@ -169,6 +172,10 @@ func shadowWorkspaces(tx *sql.Tx) error {
 			changed = append(changed, w)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
 	rows.Close()
 	for _, w := range changed {
 		if _, err := tx.Exec(`INSERT INTO `+shadowPrefix+`workspaces (id, layout_json) VALUES (?, ?)`, w.id, w.full); err != nil {
@@ -297,7 +304,7 @@ func unshadowOnOpen(db *sql.DB) error {
 func dropShadowTables(x interface {
 	Exec(string, ...any) (sql.Result, error)
 }) error {
-	for _, t := range []string{"port_forwards", "connections", "folders", "credential_refs", "credential_folders", "workspaces", "meta"} {
+	for _, t := range []string{"snippets", "port_forwards", "connections", "folders", "credential_refs", "credential_folders", "workspaces", "meta"} {
 		if _, err := x.Exec(`DROP TABLE IF EXISTS ` + shadowPrefix + t); err != nil {
 			return err
 		}

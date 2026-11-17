@@ -1279,6 +1279,7 @@ export interface CatalogPublishInput {
   send_local_creds?: boolean;
   send_networks?: boolean;
   dyn_skip?: string[];
+  review_hash?: string;
 }
 export interface PublishPlanRecord { kind: "folders" | "connections" | "forwards"; uuid: string; local_id: string; name: string; path: string; copy_of?: string }
 export interface PublishPlanSlot {
@@ -1297,6 +1298,7 @@ export interface PublishPlan {
   outside_jumps: PublishOutsideJump[];
   /** Uploaded icons, one per distinct image; kept ones stay local, with why. */
   images: PublishPlanImage[];
+  review_hash: string;
   /** References not sent (local credentials, networks, inventory bastions, missing ones), with why. */
   kept_local: { kind: string; name: string; field: string; reason: string }[];
   root_uuid: string;
@@ -1311,6 +1313,7 @@ export interface CatalogPublishResult {
   warnings?: CatalogPublishProblem[];
   refusals?: PublishRefusal[];
   images?: PublishPlanImage[];
+  stale?: boolean;
 }
 /** What keeping a catalog local, or copying from it, did (store.LocaliseResult). */
 export interface LocaliseResult {

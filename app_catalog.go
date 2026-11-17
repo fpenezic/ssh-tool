@@ -53,13 +53,17 @@ type catalogRuntime struct {
 	clients map[string]*catalog.Client
 	state   map[string]catalogStatus
 	next    map[string]time.Time // earliest next background pass
-	signIn  map[string]context.CancelFunc
+	signIn  map[string]*signInJob
 	// apply serialises catalog writes with a profile-sync pull (MirrorFrom
 	// replaces the same rows).
 	apply   sync.Mutex
 	started bool
 	kick    chan struct{}
 }
+
+// signInJob is a browser sign-in in progress (cancelled by a newer one, a
+// sign-out or a removal).
+type signInJob struct{ cancel context.CancelFunc }
 
 type catalogStatus struct {
 	State string `json:"state"`
@@ -90,7 +94,7 @@ func (a *App) catRT() *catalogRuntime {
 		a.catalogs.clients = map[string]*catalog.Client{}
 		a.catalogs.state = map[string]catalogStatus{}
 		a.catalogs.next = map[string]time.Time{}
-		a.catalogs.signIn = map[string]context.CancelFunc{}
+		a.catalogs.signIn = map[string]*signInJob{}
 		a.catalogs.kick = make(chan struct{}, 1)
 	}
 	return &a.catalogs
@@ -290,15 +294,18 @@ func (a *App) CatalogSignIn(id string) error {
 	}
 	rt := a.catRT()
 	ctx, cancel := context.WithCancel(context.Background())
+	job := &signInJob{cancel: cancel}
 	rt.mu.Lock()
 	if prev := rt.signIn[id]; prev != nil {
-		prev()
+		prev.cancel()
 	}
-	rt.signIn[id] = cancel
+	rt.signIn[id] = job
 	rt.mu.Unlock()
 	defer func() {
 		rt.mu.Lock()
-		delete(rt.signIn, id)
+		if rt.signIn[id] == job { // a newer sign-in owns the entry otherwise
+			delete(rt.signIn, id)
+		}
 		rt.mu.Unlock()
 		cancel()
 	}()
@@ -346,10 +353,10 @@ func (a *App) catalogSignedIn(cat *store.Catalog, c *catalog.Client, via string)
 func (a *App) CatalogCancelSignIn(id string) {
 	rt := a.catRT()
 	rt.mu.Lock()
-	cancel := rt.signIn[id]
+	j := rt.signIn[id]
 	rt.mu.Unlock()
-	if cancel != nil {
-		cancel()
+	if j != nil {
+		j.cancel()
 	}
 }
 
@@ -357,6 +364,14 @@ func (a *App) CatalogCancelSignIn(id string) {
 // machine's token. The rows stay.
 func (a *App) CatalogSignOut(id string) error {
 	stopIconUploads(id)
+	// A browser sign-in still waiting must not store a token afterwards.
+	rt := a.catRT()
+	rt.mu.Lock()
+	if j := rt.signIn[id]; j != nil {
+		j.cancel()
+		delete(rt.signIn, id)
+	}
+	rt.mu.Unlock()
 	cat, err := a.db.GetCatalog(id)
 	if err != nil {
 		return err

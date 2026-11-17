@@ -693,6 +693,11 @@ func (a *App) planEditConnection(in editConnInput) error {
 	}
 	if in.Folder != nil {
 		ref := parsePlanRef(*in.Folder)
+		// Moving a connection into a catalog folder would make it a
+		// catalog row; MCP never writes the catalog.
+		if a.isCatalogFolder(ref.Existing) {
+			return errCatalogOwned
+		}
 		e.Folder = &ref
 	}
 	if in.Notes != nil {
