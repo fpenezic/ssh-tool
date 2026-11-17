@@ -6034,6 +6034,19 @@ export function WindowCancelTabDrag(dragID) {
 }
 
 /**
+ * WindowCancelTabDragStatus is WindowCancelTabDrag telling the three
+ * outcomes apart: "cleared" (it was pending, nobody took it), "claimed"
+ * (a window accepted it; the tab leaves on tab_drag_accepted) and
+ * "superseded" (the next drag replaced it before anyone took it: nobody
+ * will, so a tear-off outside the window still applies).
+ * @param {string} dragID
+ * @returns {$CancellablePromise<string>}
+ */
+export function WindowCancelTabDragStatus(dragID) {
+    return $Call.ByID(1337298678, dragID);
+}
+
+/**
  * @returns {$CancellablePromise<$models.WindowChrome>}
  */
 export function WindowChromeGet() {

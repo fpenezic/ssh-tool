@@ -254,3 +254,128 @@ func TestCatalogMatchAmbiguousAndDuplicates(t *testing.T) {
 		t.Fatal("a wrong pair was applied")
 	}
 }
+
+// The catalog's own database target keeps its definition and takes the
+// user's login for the same database.
+func TestCatalogMatchDbTargetLogins(t *testing.T) {
+	ca := newCatalogApp(t)
+	a, db, catID := ca.a, ca.a.db, ca.cat.ID
+	err := db.WithCatalogWriter(func(tx *sql.Tx) error {
+		_, err := tx.Exec(`UPDATE connections SET catalog_json = ? WHERE id = 'cc'`,
+			`{"uuid":"c-uuid","rev":2,"folder_uuid":"f-uuid","name":"web-1","hostname":"web-1.example.com","settings":{"port":2222,"db_targets":[{"id":"t1","name":"main","addr":"db:5432","database":"app"}]}}`)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.Materialise(db, catID, nil); err != nil {
+		t.Fatal(err)
+	}
+	cred, _ := db.CreateCredential(store.NewCredential{Name: "db login", Kind: store.CredAgent})
+	port := uint16(2222)
+	addr, dbn := "DB:5432", "app"
+	l, err := db.CreateConnection(store.NewConnection{Name: "web", Hostname: "web-1.example.com", Overrides: store.InheritableSettings{Port: &port,
+		DbTargets: []store.DbTarget{{ID: "mine", Name: "main", Addr: &addr, Database: &dbn, CredentialRef: &cred.ID}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.CatalogMatchApply(catID, map[string]string{l.ID: ca.connID}); err != nil {
+		t.Fatal(err)
+	}
+	rs, err := resolver.ResolveConnection(db, ca.connID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rs.DbTargets) != 1 || rs.DbTargets[0].ID != "t1" || rs.DbTargets[0].CredentialRef == nil || *rs.DbTargets[0].CredentialRef != cred.ID {
+		t.Fatalf("targets: %+v", rs.DbTargets)
+	}
+}
+
+// A shared value goes on the folder only when no catalog connection sits
+// deeper in it: a folder layer would reach that one too.
+func TestCatalogMatchNoLiftOverDeeperConnections(t *testing.T) {
+	ca := newCatalogApp(t)
+	a, db, catID := ca.a, ca.a.db, ca.cat.ID
+	err := db.WithCatalogWriter(func(tx *sql.Tx) error {
+		for _, q := range []string{
+			`INSERT INTO connections (id, folder_id, name, hostname, created_at, updated_at, catalog_id, remote_uuid, remote_rev, catalog_json)
+			 VALUES ('cc2', 'cf', 'web-2', 'web-2.example.com', 1, 1, '` + catID + `', 'c2-uuid', 1, '{"uuid":"c2-uuid","rev":1,"folder_uuid":"f-uuid","name":"web-2","hostname":"web-2.example.com","settings":{}}')`,
+			`INSERT INTO folders (id, parent_id, name, created_at, updated_at, catalog_id, remote_uuid, remote_rev, catalog_json)
+			 VALUES ('cf2', 'cf', 'Deeper', 1, 1, '` + catID + `', 'f2-uuid', 1, '{"uuid":"f2-uuid","rev":1,"parent_uuid":"f-uuid","name":"Deeper","access":"read","settings":{}}')`,
+			`INSERT INTO connections (id, folder_id, name, hostname, created_at, updated_at, catalog_id, remote_uuid, remote_rev, catalog_json)
+			 VALUES ('cc3', 'cf2', 'web-3', 'web-3.example.com', 1, 1, '` + catID + `', 'c3-uuid', 1, '{"uuid":"c3-uuid","rev":1,"folder_uuid":"f2-uuid","name":"web-3","hostname":"web-3.example.com","settings":{}}')`,
+		} {
+			if _, err := tx.Exec(q); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.Materialise(db, catID, nil); err != nil {
+		t.Fatal(err)
+	}
+	me, port := "me", uint16(2222)
+	old, _ := db.CreateFolder(store.NewFolder{Name: "Old", Settings: store.InheritableSettings{Username: &me}})
+	l1, _ := db.CreateConnection(store.NewConnection{FolderID: &old.ID, Name: "w1", Hostname: "web-1.example.com", Overrides: store.InheritableSettings{Port: &port}})
+	l2, _ := db.CreateConnection(store.NewConnection{FolderID: &old.ID, Name: "w2", Hostname: "web-2.example.com"})
+	if _, err := a.CatalogMatchApply(catID, map[string]string{l1.ID: ca.connID, l2.ID: "cc2"}); err != nil {
+		t.Fatal(err)
+	}
+	ovs, _ := db.ListCatalogOverrides(catID)
+	for _, o := range ovs {
+		if o.Kind == "folders" {
+			t.Fatalf("lifted onto the folder over web-3: %s", o.JSON)
+		}
+	}
+	if rs, _ := resolver.ResolveConnection(db, "cc3"); rs.Username != nil && *rs.Username == "me" {
+		t.Fatal("unmatched web-3 got the user")
+	}
+	if rs, _ := resolver.ResolveConnection(db, "cc2"); rs.Username == nil || *rs.Username != "me" {
+		t.Fatal("web-2 lost its user")
+	}
+}
+
+// Undo leaves what the user changed after the match: a password saved on
+// the catalog connection, a forward's bookmarks.
+func TestCatalogMatchUndoKeepsLaterEdits(t *testing.T) {
+	ca := newCatalogApp(t)
+	a, db, catID := ca.a, ca.a.db, ca.cat.ID
+	port := uint16(2222)
+	lp, rp, host := uint16(25432), uint16(5432), "127.0.0.1"
+	l, _ := db.CreateConnection(store.NewConnection{Name: "web", Hostname: "web-1.example.com", Overrides: store.InheritableSettings{Port: &port}})
+	if err := a.SetConnectionPassword(l.ID, "old"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.CreatePortForward(store.NewPortForward{ConnectionID: l.ID, Kind: "local", LocalPort: &lp, RemoteHost: &host, RemotePort: &rp}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.CatalogMatchApply(catID, map[string]string{l.ID: ca.connID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetConnectionPassword(ca.connID, "new"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetPortForwardBookmarks(ca.fwdID, []store.ProxyBookmark{{Name: "app", URL: "http://localhost:25432/"}}); err != nil {
+		t.Fatal(err)
+	}
+	ur, err := a.CatalogMatchUndo(catID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ur.Kept < 2 {
+		t.Fatalf("kept %d", ur.Kept)
+	}
+	cc, _ := db.GetConnection(ca.connID)
+	if cc.PasswordVaultKey == nil {
+		t.Fatal("password saved after the match was dropped")
+	}
+	if v, ok, _ := a.vault.Get(*cc.PasswordVaultKey); !ok || v != "new" {
+		t.Fatal("password saved after the match was deleted")
+	}
+	if f, _ := db.GetPortForward(ca.fwdID); len(f.Bookmarks) != 1 {
+		t.Fatalf("bookmarks after undo: %+v", f.Bookmarks)
+	}
+}

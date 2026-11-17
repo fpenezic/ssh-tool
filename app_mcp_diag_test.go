@@ -5,6 +5,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -59,5 +61,42 @@ func TestMcpArgsDiagNamesWhatArrived(t *testing.T) {
 	}
 	if strings.Contains(text, "secret-value") {
 		t.Fatalf("error leaks an argument value: %s", text)
+	}
+}
+
+// The log line never carries the validator's text: a type mismatch quotes
+// the offending value, which can be a secret.
+func TestMcpArgsDiagLogHasNoValues(t *testing.T) {
+	var buf strings.Builder
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	a := &App{}
+	server := a.buildMcpServer()
+	ct, st := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ss, err := server.Connect(ctx, st, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ss.Close()
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "run", Arguments: map[string]any{"session_id": "s1", "command": []any{"secret-value"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsError {
+		t.Fatalf("want a refused call, got %+v", res)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "mcp: run refused") {
+		t.Fatalf("no refusal logged: %q", out)
+	}
+	if strings.Contains(out, "secret-value") {
+		t.Fatalf("log leaks an argument value: %s", out)
 	}
 }

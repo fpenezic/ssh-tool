@@ -11,15 +11,24 @@ class CatalogVisibilityStore {
   // catalog id -> hidden folder uuids
   hidden = $state<Record<string, string[]>>({});
   private loaded = false;
+  // Bumped by every change: a read that started before one is stale and
+  // must not put the older preference back.
+  private version = 0;
+  // Changes run one after another, each building on the one before.
+  private queue: Promise<void> = Promise.resolve();
 
   async load() {
+    const v = this.version;
+    let next: Record<string, string[]> = {};
     try {
       const raw = await api.settingsGet(KEY);
-      const v = raw ? JSON.parse(raw) : {};
-      this.hidden = v && typeof v === "object" ? v : {};
+      const parsed = raw ? JSON.parse(raw) : {};
+      next = parsed && typeof parsed === "object" ? parsed : {};
     } catch {
-      this.hidden = {};
+      next = {};
     }
+    if (v !== this.version) return;
+    this.hidden = next;
     this.loaded = true;
   }
 
@@ -31,25 +40,36 @@ class CatalogVisibilityStore {
     return (this.hidden[catalogId] ?? []).length;
   }
 
-  async set(catalogId: string, uuid: string, hide: boolean) {
-    if (!this.loaded) await this.load();
-    const cur = new Set(this.hidden[catalogId] ?? []);
-    if (hide) cur.add(uuid);
-    else cur.delete(uuid);
-    const next = { ...this.hidden };
-    if (cur.size) next[catalogId] = [...cur];
-    else delete next[catalogId];
-    this.hidden = next;
-    const empty = Object.keys(next).length === 0;
-    await (empty ? api.settingsDelete(KEY) : api.settingsSet(KEY, JSON.stringify(next)));
+  private change(mut: (cur: Record<string, string[]>) => Record<string, string[]>): Promise<void> {
+    const run = async () => {
+      if (!this.loaded) await this.load();
+      this.version++;
+      const next = mut({ ...this.hidden });
+      this.hidden = next;
+      this.loaded = true;
+      await (Object.keys(next).length === 0 ? api.settingsDelete(KEY) : api.settingsSet(KEY, JSON.stringify(next)));
+    };
+    const p = this.queue.then(run, run);
+    this.queue = p.catch(() => {});
+    return p;
   }
 
-  async showAll(catalogId: string) {
-    if (!this.loaded) await this.load();
-    const next = { ...this.hidden };
-    delete next[catalogId];
-    this.hidden = next;
-    await (Object.keys(next).length === 0 ? api.settingsDelete(KEY) : api.settingsSet(KEY, JSON.stringify(next)));
+  set(catalogId: string, uuid: string, hide: boolean): Promise<void> {
+    return this.change((next) => {
+      const cur = new Set(next[catalogId] ?? []);
+      if (hide) cur.add(uuid);
+      else cur.delete(uuid);
+      if (cur.size) next[catalogId] = [...cur];
+      else delete next[catalogId];
+      return next;
+    });
+  }
+
+  showAll(catalogId: string): Promise<void> {
+    return this.change((next) => {
+      delete next[catalogId];
+      return next;
+    });
   }
 
   /** The folders and connections left once hidden catalog folders (and

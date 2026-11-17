@@ -359,6 +359,32 @@ func (m *matchCtx) inCatalog(c *store.Connection) bool {
 	return true
 }
 
+// hasDeeperConns: a catalog connection of this catalog sits in a subfolder
+// (any depth) of folderID.
+func (m *matchCtx) hasDeeperConns(folderID string) bool {
+	for i := range m.conns {
+		c := &m.conns[i]
+		if c.CatalogID == nil || *c.CatalogID != m.cat.ID || c.FolderID == nil || *c.FolderID == folderID {
+			continue
+		}
+		own := m.fByID[*c.FolderID]
+		if own == nil {
+			continue
+		}
+		for id, d := own.ParentID, 0; id != nil && d < 64; d++ {
+			if *id == folderID {
+				return true
+			}
+			f := m.fByID[*id]
+			if f == nil {
+				break
+			}
+			id = f.ParentID
+		}
+	}
+	return false
+}
+
 // parked: the connection sits in this catalog's "Matched to" folder (a
 // run older than the journal keeps, or one moved back by hand).
 func (m *matchCtx) parked(c *store.Connection) bool {
@@ -606,8 +632,21 @@ func (m *matchCtx) plan(pairs [][2]string, a *App) *matchOps {
 				}
 				val = add.Interface()
 			case reflect.Slice:
-				if f.Len() == 0 || g.Len() > 0 {
+				if f.Len() == 0 {
 					continue
+				}
+				if g.Len() > 0 {
+					// The catalog has its own database targets: keep them and
+					// carry over only the user's login for the same database.
+					if k != "db_targets" {
+						continue
+					}
+					ov := dbTargetLogins(el.DbTargets, ec.DbTargets)
+					if len(ov) == 0 {
+						continue
+					}
+					val = ov
+					break
 				}
 				val = f.Interface()
 			default:
@@ -721,6 +760,11 @@ func (m *matchCtx) plan(pairs [][2]string, a *App) *matchOps {
 	for fid, ids := range byFolder {
 		f := m.fByID[fid]
 		if f == nil || f.ID == m.cat.RootFolderID || f.CatalogSkeleton || len(ids) < 2 {
+			continue
+		}
+		// A folder layer reaches subfolders too: lift only when no catalog
+		// connection sits deeper than the folder's own.
+		if m.hasDeeperConns(fid) {
 			continue
 		}
 		all := true
@@ -890,6 +934,37 @@ func (a *App) matchValue(k string, v json.RawMessage, repoint map[string]string)
 	out := string(v)
 	if len(out) > 60 {
 		out = out[:57] + "..."
+	}
+	return out
+}
+
+// dbTargetLogins: for each catalog database target, the user's login from
+// their own target on the same database (same address and database name,
+// else the same name), as overrides of the catalog's entries.
+func dbTargetLogins(local, cat []store.DbTarget) []store.DbTarget {
+	norm := func(p *string) string {
+		if p == nil {
+			return ""
+		}
+		return strings.ToLower(strings.TrimSpace(*p))
+	}
+	var out []store.DbTarget
+	for _, ct := range cat {
+		for _, lt := range local {
+			same := norm(lt.Addr) != "" && norm(lt.Addr) == norm(ct.Addr) && norm(lt.Database) == norm(ct.Database)
+			if !same && (strings.TrimSpace(lt.Name) == "" || !strings.EqualFold(strings.TrimSpace(lt.Name), strings.TrimSpace(ct.Name))) {
+				continue
+			}
+			if lt.CredentialRef == nil || store.IsCatalogRef(*lt.CredentialRef) {
+				break
+			}
+			if ct.CredentialRef != nil && *ct.CredentialRef == *lt.CredentialRef {
+				break
+			}
+			ref := *lt.CredentialRef
+			out = append(out, store.DbTarget{ID: ct.ID, CredentialRef: &ref, Override: true})
+			break
+		}
 	}
 	return out
 }
@@ -1087,11 +1162,16 @@ type matchBindJ struct {
 	Target string `json:"target"`
 }
 
+// matchFwdColsJ: a catalog forward's local columns before and after the
+// match; Undo restores each only while it still has the after value.
 type matchFwdColsJ struct {
-	ID          string `json:"id"`
-	AutoStart   bool   `json:"auto_start"`
-	Bookmarks   string `json:"bookmarks"`
-	BrowserMode string `json:"browser_mode"`
+	ID               string `json:"id"`
+	AutoStart        bool   `json:"auto_start"`
+	Bookmarks        string `json:"bookmarks"`
+	BrowserMode      string `json:"browser_mode"`
+	AfterAutoStart   bool   `json:"after_auto_start"`
+	AfterBookmarks   string `json:"after_bookmarks"`
+	AfterBrowserMode string `json:"after_browser_mode"`
 }
 
 type matchMoveJ struct {
@@ -1116,7 +1196,15 @@ type matchJournal struct {
 	Workspaces  []matchTextJ      `json:"workspaces"`
 	ConnRefs    []matchTextJ      `json:"conn_refs"`
 	FolderRefs  []matchTextJ      `json:"folder_refs"`
-	VaultKeys   []string          `json:"vault_keys"`
+	VaultCopies []matchVaultJ     `json:"vault_copies"`
+}
+
+// matchVaultJ: a stored password copied from the local connection's vault
+// key to the catalog row's own. Undo removes the copy only while it still
+// holds the same secret as its source (a password saved since stays).
+type matchVaultJ struct {
+	Key  string `json:"key"`
+	From string `json:"from"`
 }
 
 // matchJournalMax: runs kept per catalog (Undo reverts the last).
@@ -1161,11 +1249,13 @@ func (a *App) CatalogMatchApply(catalogID string, pairs map[string]string) (*Cat
 	if len(pairs) == 0 {
 		return nil, fmt.Errorf("no connections were picked")
 	}
+	// One lock for the whole run, secrets and their journal entry
+	// included, so an Undo or another match never sees half of it.
 	rt := a.catRT()
 	rt.apply.Lock()
+	defer rt.apply.Unlock()
 	m, err := a.matchContext(catalogID)
 	if err != nil {
-		rt.apply.Unlock()
 		return nil, err
 	}
 	found, _, _, _ := m.pairs(pairs)
@@ -1176,7 +1266,6 @@ func (a *App) CatalogMatchApply(catalogID string, pairs map[string]string) (*Cat
 		}
 	}
 	if len(chosen) != len(pairs) {
-		rt.apply.Unlock()
 		return nil, fmt.Errorf("%d of the picked connections no longer match their catalog record; the list was refreshed", len(pairs)-len(chosen))
 	}
 	o := m.plan(chosen, a)
@@ -1192,7 +1281,6 @@ func (a *App) CatalogMatchApply(catalogID string, pairs map[string]string) (*Cat
 			log.Printf("catalog %s: materialise after match: %v", m.cat.Name, merr)
 		}
 	}
-	rt.apply.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -1202,9 +1290,9 @@ func (a *App) CatalogMatchApply(catalogID string, pairs map[string]string) (*Cat
 		l, c := m.cByID[p[0]], m.cByID[p[1]]
 		res.Passwords, res.PassSkipped = a.matchCopySecrets(l, c, &j, res.Passwords, res.PassSkipped)
 	}
-	if len(j.VaultKeys) > 0 {
+	if len(j.VaultCopies) > 0 {
 		if runs := a.matchJournals(catalogID); len(runs) > 0 && runs[len(runs)-1].At == j.At {
-			runs[len(runs)-1].VaultKeys = j.VaultKeys
+			runs[len(runs)-1].VaultCopies = j.VaultCopies
 			if err := a.db.WithTx(func(tx *sql.Tx) error { return saveMatchJournalsTx(tx, catalogID, runs) }); err != nil {
 				log.Printf("match journal: %v", err)
 			}
@@ -1238,7 +1326,7 @@ func (a *App) matchCopySecrets(l, c *store.Connection, j *matchJournal, n, skipp
 			skipped++
 			return
 		}
-		j.VaultKeys = append(j.VaultKeys, key)
+		j.VaultCopies = append(j.VaultCopies, matchVaultJ{Key: key, From: *from})
 		n++
 	}
 	one(l.PasswordVaultKey, c.PasswordVaultKey, "conn_pass:"+c.ID, func(k string) error { return a.db.SetConnectionPasswordKey(c.ID, k) })
@@ -1384,6 +1472,7 @@ func (a *App) applyMatchTx(tx *sql.Tx, m *matchCtx, o *matchOps, pairs [][2]stri
 		if _, err := tx.Exec(`UPDATE port_forwards SET auto_start = ?, bookmarks = ?, browser_mode = ? WHERE id = ?`, want.AutoStart, string(bm), want.BrowserMode, id); err != nil {
 			return err
 		}
+		before.AfterAutoStart, before.AfterBookmarks, before.AfterBrowserMode = want.AutoStart, string(bm), want.BrowserMode
 		j.FwdCols = append(j.FwdCols, before)
 	}
 	for _, id := range o.fwdDelete {
@@ -1537,14 +1626,17 @@ func rowJSON(tx *sql.Tx, table, id string) (json.RawMessage, error) {
 // again since (a layer edited, a workspace saved, a connection moved on)
 // keeps its current value and is counted in Kept.
 func (a *App) CatalogMatchUndo(catalogID string) (*CatalogMatchUndoResult, error) {
+	// The journal is read under the same lock as Apply, so the run undone
+	// is the last one and a run applied meanwhile keeps its entry.
+	rt := a.catRT()
+	rt.apply.Lock()
+	defer rt.apply.Unlock()
 	runs := a.matchJournals(catalogID)
 	if len(runs) == 0 {
 		return nil, fmt.Errorf("there is no match to undo for this catalog")
 	}
 	j := runs[len(runs)-1]
 	res := &CatalogMatchUndoResult{Pairs: len(j.Pairs)}
-	rt := a.catRT()
-	rt.apply.Lock()
 	var delKeys []string
 	err := a.db.WithTx(func(tx *sql.Tx) error {
 		var err error
@@ -1562,7 +1654,6 @@ func (a *App) CatalogMatchUndo(catalogID string) (*CatalogMatchUndoResult, error
 			}
 		}
 	}
-	rt.apply.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -1681,7 +1772,35 @@ func (a *App) undoMatchTx(tx *sql.Tx, catID string, j matchJournal, res *Catalog
 		}
 	}
 	for _, f := range j.FwdCols {
-		if _, err := tx.Exec(`UPDATE port_forwards SET auto_start = ?, bookmarks = ?, browser_mode = ? WHERE id = ?`, f.AutoStart, f.Bookmarks, f.BrowserMode, f.ID); err != nil {
+		var auto bool
+		var bm, mode string
+		err := tx.QueryRow(`SELECT auto_start, bookmarks, browser_mode FROM port_forwards WHERE id = ?`, f.ID).Scan(&auto, &bm, &mode)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		kept := false
+		if auto == f.AfterAutoStart {
+			auto = f.AutoStart
+		} else {
+			kept = true
+		}
+		if bm == f.AfterBookmarks {
+			bm = f.Bookmarks
+		} else {
+			kept = true
+		}
+		if mode == f.AfterBrowserMode {
+			mode = f.BrowserMode
+		} else {
+			kept = true
+		}
+		if kept {
+			res.Kept++
+		}
+		if _, err := tx.Exec(`UPDATE port_forwards SET auto_start = ?, bookmarks = ?, browser_mode = ? WHERE id = ?`, auto, bm, mode, f.ID); err != nil {
 			return nil, err
 		}
 	}
@@ -1712,9 +1831,20 @@ func (a *App) undoMatchTx(tx *sql.Tx, catID string, j matchJournal, res *Catalog
 		}
 	}
 	var delKeys []string
+	// A copied password goes only while it still equals its source; one
+	// the user saved since stays, with its reference.
 	created := map[string]bool{}
-	for _, k := range j.VaultKeys {
-		created[k] = true
+	for _, v := range j.VaultCopies {
+		if a.vault == nil {
+			continue
+		}
+		cur, ok1, err1 := a.vault.Get(v.Key)
+		src, ok2, err2 := a.vault.Get(v.From)
+		if err1 == nil && err2 == nil && ok1 && ok2 && cur == src {
+			created[v.Key] = true
+		} else {
+			res.Kept++
+		}
 	}
 	for _, c := range j.LocalCols {
 		var pass, vnc sql.NullString

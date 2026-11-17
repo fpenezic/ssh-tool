@@ -3047,9 +3047,9 @@ everything. Persistence is tracked in `docs/TODO.md`.
 
 ### Detach a tab to a new window
 
-Drag a tab out of the tab bar - the app opens a new top-level window
-carrying just that tab. Right-click > **Detach to new window** does
-the same explicitly.
+Drag a tab out of the tab bar - the app opens a new top-level window carrying just that tab. Right-click > **Detach to new window** does the same explicitly.
+
+Dropped on a window that is already detached (on another screen, say), the tab joins that window instead of opening a new one.
 
 The session pool is shared across windows. A detached window
 recovers its session(s) from the backend pool and renders them with

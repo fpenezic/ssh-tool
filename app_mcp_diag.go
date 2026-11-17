@@ -95,7 +95,10 @@ func mcpArgsDiag(next mcp.MethodHandler) mcp.MethodHandler {
 				client = p.ClientInfo.Name + " " + p.ClientInfo.Version
 			}
 		}
-		log.Printf("mcp: %s refused (%s), client %q sent %s", call.Params.Name, tc.Text, client, shape)
+		// Not tc.Text: a type-mismatch error quotes the offending value,
+		// which can be a secret the model put in an argument. The shape
+		// names keys and kinds only.
+		log.Printf("mcp: %s refused (arguments do not match the tool's schema), client %q sent %s", call.Params.Name, client, shape)
 		tc.Text += " (received: " + shape + ")"
 		return res, err
 	}
