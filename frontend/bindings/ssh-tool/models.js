@@ -1073,6 +1073,44 @@ export class CatalogCreateInput {
 }
 
 /**
+ * CatalogDuplicateResult: the new connection, and what it lacks.
+ */
+export class CatalogDuplicateResult {
+    /**
+     * Creates a new CatalogDuplicateResult instance.
+     * @param {Partial<CatalogDuplicateResult>} [$$source = {}] - The source object to create the CatalogDuplicateResult.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["warning"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogDuplicateResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CatalogDuplicateResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CatalogDuplicateResult(/** @type {Partial<CatalogDuplicateResult>} */($$parsedSource));
+    }
+}
+
+/**
  * CatalogEnrollPreview is what the confirmation shows.
  */
 export class CatalogEnrollPreview {
@@ -1662,6 +1700,22 @@ export class CatalogPublishInput {
              */
             this["send_networks"] = false;
         }
+        if (!("no_shared_creds" in $$source)) {
+            /**
+             * NoSharedCreds: Bitwarden / Vaultwarden and opkssh credentials stay
+             * local too. SkipCreds: credentials (local ids) not to send.
+             * @member
+             * @type {boolean}
+             */
+            this["no_shared_creds"] = false;
+        }
+        if (!("skip_creds" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["skip_creds"] = [];
+        }
         if (!("dyn_skip" in $$source)) {
             /**
              * DynSkip: inventory bastions not to send as a bastion record.
@@ -1692,7 +1746,8 @@ export class CatalogPublishInput {
         const $$createField3_0 = $$createType4;
         const $$createField4_0 = $$createType8;
         const $$createField5_0 = $$createType4;
-        const $$createField8_0 = $$createType4;
+        const $$createField9_0 = $$createType4;
+        const $$createField10_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("jump_include" in $$parsedSource) {
             $$parsedSource["jump_include"] = $$createField3_0($$parsedSource["jump_include"]);
@@ -1703,8 +1758,11 @@ export class CatalogPublishInput {
         if ("unsent" in $$parsedSource) {
             $$parsedSource["unsent"] = $$createField5_0($$parsedSource["unsent"]);
         }
+        if ("skip_creds" in $$parsedSource) {
+            $$parsedSource["skip_creds"] = $$createField9_0($$parsedSource["skip_creds"]);
+        }
         if ("dyn_skip" in $$parsedSource) {
-            $$parsedSource["dyn_skip"] = $$createField8_0($$parsedSource["dyn_skip"]);
+            $$parsedSource["dyn_skip"] = $$createField10_0($$parsedSource["dyn_skip"]);
         }
         return new CatalogPublishInput(/** @type {Partial<CatalogPublishInput>} */($$parsedSource));
     }
