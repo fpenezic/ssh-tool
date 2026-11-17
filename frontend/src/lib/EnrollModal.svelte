@@ -40,7 +40,8 @@
       busy = false;
     }
   }
-  if (fromLink) inspect();
+  // A link only fills the form: nothing contacts the host it names until
+  // the user clicks Check.
 
   async function confirm(replace: boolean) {
     if (!preview) return;
@@ -74,7 +75,11 @@
     </header>
 
     {#if fromLink}
-      <p class="hint">A link asked ssh-tool to connect to a catalog. Check what it is before you connect.</p>
+      <p class="hint">A link asked ssh-tool to connect to a catalog. Check what it is before you connect: nothing is sent to it until you do.</p>
+      <div class="form">
+        <label>Catalog URL <input value={urlIn} disabled /></label>
+        <button onclick={inspect} disabled={busy || !urlIn.trim() || !codeIn.trim() || !!preview}>Check</button>
+      </div>
     {:else}
       <p class="hint">In the catalog's web page, "Connect ssh-tool" shows a code. Enter the catalog's address and the code.</p>
       <div class="form">

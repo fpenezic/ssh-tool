@@ -293,7 +293,9 @@
     try {
       const r = await api.catalogRecordSaveOnFolder(input, recordFolderFields);
       if (r.saved) {
-        await afterRecordSaved(r.record?.still_local ?? [], r.left?.length ? [r.message ?? ""] : []);
+        // Saved on the folder, with anything that did not complete said.
+        const partial = r.message && r.message !== "set on the folder" ? [r.message] : [];
+        await afterRecordSaved(r.record?.still_local ?? [], partial);
         return true;
       }
       if (r.folder?.plan?.need_slots?.length) {

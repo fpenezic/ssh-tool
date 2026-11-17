@@ -99,11 +99,14 @@ func (d *DB) PendingPublishTx(tx *sql.Tx, catalogID string) (map[string]PublishP
 func (d *DB) ApplyPublishPendingExtraTx(tx *sql.Tx, catalogID, uuid string) error {
 	var raw string
 	err := tx.QueryRow(`SELECT extra_json FROM catalog_publish_pending WHERE catalog_id = ? AND remote_uuid = ?`, catalogID, uuid).Scan(&raw)
-	if errors.Is(err, sql.ErrNoRows) || raw == "" {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return err
+	}
+	if raw == "" {
+		return nil
 	}
 	var x PublishPendingExtra
 	if err := json.Unmarshal([]byte(raw), &x); err != nil {

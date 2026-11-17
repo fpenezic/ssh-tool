@@ -104,7 +104,9 @@ func (a *App) CatalogCopyToLocal(kind, id, targetFolderID string) (*store.Locali
 func (a *App) copyConnectionSecrets(from, to string) int {
 	c, err := a.db.GetConnection(from)
 	if err != nil {
-		return 0
+		// Unknown what it stored: report it, do not pass it off as none.
+		log.Printf("copy passwords of %s: %v", from, err)
+		return 1
 	}
 	skipped := 0
 	one := func(key *string, set func(string, string) error, what string) {

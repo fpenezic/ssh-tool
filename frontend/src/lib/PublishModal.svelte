@@ -107,6 +107,8 @@
     const t = setTimeout(() => {
       api.catalogPublishPreview(inp).then((p) => {
         if (mine !== seq) return;
+        // New text to review: a review of the old plan does not cover it.
+        if (plan && p.review_hash !== plan.review_hash) reviewed = false;
         plan = p;
         planErr = "";
       }).catch((e) => {

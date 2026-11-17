@@ -63,7 +63,13 @@ type catalogRuntime struct {
 
 // signInJob is a browser sign-in in progress (cancelled by a newer one, a
 // sign-out or a removal).
-type signInJob struct{ cancel context.CancelFunc }
+type signInJob struct {
+	cancel context.CancelFunc
+	done   chan struct{} // closed when the browser sign-in returned
+	once   sync.Once
+}
+
+func (j *signInJob) finished() { j.once.Do(func() { close(j.done) }) }
 
 type catalogStatus struct {
 	State string `json:"state"`
@@ -294,7 +300,7 @@ func (a *App) CatalogSignIn(id string) error {
 	}
 	rt := a.catRT()
 	ctx, cancel := context.WithCancel(context.Background())
-	job := &signInJob{cancel: cancel}
+	job := &signInJob{cancel: cancel, done: make(chan struct{})}
 	rt.mu.Lock()
 	if prev := rt.signIn[id]; prev != nil {
 		prev.cancel()
@@ -308,9 +314,15 @@ func (a *App) CatalogSignIn(id string) error {
 		}
 		rt.mu.Unlock()
 		cancel()
+		job.finished()
 	}()
 	a.setCatalogState(id, catStateSignIn, "")
-	if err := c.SignIn(ctx, catalogOpenBrowser); err != nil {
+	err = c.SignIn(ctx, catalogOpenBrowser)
+	job.finished()
+	if err == nil && ctx.Err() != nil {
+		err = ctx.Err() // signed out or removed while it finished
+	}
+	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			a.setCatalogState(id, catStateNoLogin, "")
 			return fmt.Errorf("sign-in cancelled")
@@ -367,11 +379,20 @@ func (a *App) CatalogSignOut(id string) error {
 	// A browser sign-in still waiting must not store a token afterwards.
 	rt := a.catRT()
 	rt.mu.Lock()
-	if j := rt.signIn[id]; j != nil {
+	j := rt.signIn[id]
+	if j != nil {
 		j.cancel()
 		delete(rt.signIn, id)
 	}
 	rt.mu.Unlock()
+	if j != nil {
+		// Let it return before the tokens are cleared, so its last write
+		// cannot land after the sign-out.
+		select {
+		case <-j.done:
+		case <-time.After(10 * time.Second):
+		}
+	}
 	cat, err := a.db.GetCatalog(id)
 	if err != nil {
 		return err
