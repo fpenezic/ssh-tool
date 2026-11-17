@@ -1320,6 +1320,19 @@ export interface CatalogPublishResult {
   stale?: boolean;
 }
 /** What keeping a catalog local, or copying from it, did (store.LocaliseResult). */
+export interface CatalogMatchChange { field: string; value: string; where: "slot" | "folder" | "connection" | "record" | "local" | "forward" | "reference" }
+export interface CatalogMatchConn { id: string; name: string; path: string; hostname: string; username: string }
+export interface CatalogMatchPair { local: CatalogMatchConn; catalog: CatalogMatchConn; changes: CatalogMatchChange[] | null }
+export interface CatalogMatchPreview {
+  pairs: CatalogMatchPair[] | null;
+  ambiguous: { local: CatalogMatchConn; options: CatalogMatchConn[] }[] | null;
+  duplicates: { local: CatalogMatchConn; catalog_conn_id: string }[] | null;
+  unmatched: number;
+  last_run: number;
+  last_run_pairs: number;
+}
+export interface CatalogMatchResult { pairs: number; bindings: number; forwards: number; folder: string; passwords: number; passwords_skipped: number }
+
 export interface LocaliseResult {
   folders: number; connections: number; forwards: number; credentials: number;
   emptied: { kind: "folders" | "connections"; id: string; name: string; field: string; slot: string }[];
@@ -1817,6 +1830,11 @@ export const api = {
     G.CatalogDuplicate(id, name, hostname) as unknown as Promise<{ id: string; warning?: string }>,
   dynamicEntrySaveAsConnection: (dynId: string, folderId: string, repoint: boolean) =>
     G.DynamicEntrySaveAsConnection(dynId, folderId, repoint) as unknown as Promise<{ connection_id: string; repointed: number }>,
+  catalogMatchPreview: (id: string, picks: Record<string, string>) =>
+    G.CatalogMatchPreview(id, picks) as unknown as Promise<CatalogMatchPreview>,
+  catalogMatchApply: (id: string, pairs: Record<string, string>) =>
+    G.CatalogMatchApply(id, pairs) as unknown as Promise<CatalogMatchResult>,
+  catalogMatchUndo: (id: string) => G.CatalogMatchUndo(id) as unknown as Promise<{ pairs: number; kept: number }>,
   catalogRemoveKeepLocal: (id: string) => G.CatalogRemoveKeepLocal(id) as unknown as Promise<LocaliseResult>,
   catalogCopyToLocal: (kind: "folders" | "connections", id: string, targetFolderId: string) =>
     G.CatalogCopyToLocal(kind, id, targetFolderId) as unknown as Promise<LocaliseResult>,

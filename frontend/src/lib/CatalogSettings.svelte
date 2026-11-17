@@ -5,6 +5,7 @@
   import { onMount } from "svelte";
   import SearchableSelect from "./SearchableSelect.svelte";
   import CatalogFolderVisibility from "./CatalogFolderVisibility.svelte";
+  import CatalogMatchModal from "./CatalogMatchModal.svelte";
   import { showConfirm, showConfirmWithCheckbox } from "./confirmModal.svelte.ts";
   import { catalogLocal } from "./catalogLocal.svelte";
   import { toast } from "./toast.svelte.ts";
@@ -60,6 +61,7 @@
   let showBound = $state<Record<string, boolean>>({});
   let boundFilter = $state<Record<string, string>>({});
   let flash = $state("");
+  let matching = $state<{ id: string; name: string } | null>(null);
   const needsBinding = (s: CatalogSlotInfo) => s.state === "unbound" && (!s.skipped || !!s.target_gone);
   function groupByFolder(list: CatalogSlotInfo[]): { folder: string; slots: CatalogSlotInfo[] }[] {
     const m = new Map<string, CatalogSlotInfo[]>();
@@ -331,6 +333,11 @@
         {@const todo = all.filter(needsBinding)}
         {@const bound = all.length - todo.length}
         <CatalogFolderVisibility catalogId={c.id} rootFolderId={c.root_folder_id} />
+        <div class="match">
+          <h3>Your own copies</h3>
+          <p class="hint sub">Already had these hosts before the catalog? Match pairs your connections with the catalog's by host and port, and moves your credentials, logins, forwards and workspaces onto them.</p>
+          <button onclick={() => (matching = { id: c.id, name: c.name })}>Match my connections...</button>
+        </div>
         <div class="slots">
           <h3>Slots <span class="hint-inline">{all.length === 0 ? "" : `${all.length} - ${todo.length === 0 ? "all bound" : `${todo.length} to bind`}`}</span></h3>
           {#if all.length === 0}
@@ -401,6 +408,10 @@
   <p class="hint sub">In the catalog's web page, "Connect ssh-tool" opens this app with a code, or shows one to type here.</p>
 {/if}
 
+{#if matching}
+  <CatalogMatchModal catalogId={matching.id} catalogName={matching.name} onclose={() => (matching = null)} />
+{/if}
+
 <style>
   .cat-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
   .cat-row { padding: 8px 10px; border: 1px solid var(--border, #333); border-radius: var(--r-md); }
@@ -442,6 +453,8 @@
   .hint.sub { margin: 0; font-size: var(--fs-sm); }
   .danger { color: var(--danger, #e66); }
   .linklike { background: none; border: none; padding: 0; color: var(--sapphire); cursor: pointer; font-size: inherit; text-decoration: underline; }
+  .match { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .match h3 { margin: 0; }
   .slot-act { padding: 0 6px; font-size: var(--fs-sm); }
   .slot-add { align-self: flex-start; margin-top: 4px; }
 </style>
