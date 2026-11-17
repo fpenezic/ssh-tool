@@ -30,6 +30,7 @@ PAGES = {
     "Sessions-and-Transfer": ["5", "6", "6b", "6c", "6d", "8", "9", "10", "12", "15"],
     "Networking-and-Tunnels": ["7", "7b", "13", "13a", "14"],
     "Dynamic-Inventory": ["10b"],
+    "Shared-Catalogs": ["10c"],
     "Quick-Access-and-Shortcuts": ["11", "21"],
     "Import-Export-and-Settings": ["18", "19", "20", "Storage locations"],
     "Mobile": ["22"],

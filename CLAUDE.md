@@ -101,7 +101,7 @@ ssh-tool/
 ├─ wails3_runtime.go       shim: EventsEmit (+ mobile enqueue) / BrowserOpenURL
 ├─ Taskfile.yml            top-level task routing (android: namespace too)
 ├─ internal/
-│  ├─ store/               SQLite + migrations + CRUD (DB schema at v28; audit log in a separate audit.db)
+│  ├─ store/               SQLite + migrations + CRUD (DB schema at v31; audit log in a separate audit.db)
 │  ├─ importer/
 │  │   ├─ rdm/             Devolutions RDM JSON importer (3-pass)
 │  │   ├─ sshconfig/       ~/.ssh/config importer
@@ -110,6 +110,8 @@ ssh-tool/
 │  │   ├─ superputty/      SuperPuTTY Sessions.xml importer
 │  │   └─ kafkatool/       kafka-tool profiles.json importer
 │  ├─ syncer/              encrypted WebDAV profile sync (push/pull/live)
+│  ├─ catalog/             shared catalog client: sync, materialise, publish, record edits, icon images
+│  ├─ oauthpkce/           OAuth 2 authorization code + PKCE on a loopback redirect (catalog sign-in)
 │  ├─ recorder/            asciicast v2 session recording
 │  ├─ resolver/            inheritance: folder tree → ResolvedSettings
 │  ├─ creds/               vault lifecycle, machine-bound auto-unlock
@@ -171,9 +173,9 @@ task linux:build                   # bin/ssh-tool
 Tests + checks:
 ```bash
 go build ./...
-go test ./...                      # 32 packages carry tests
+go test ./...                      # 34 packages carry tests
 cd frontend && npm run check       # svelte-check, 0 errors expected
-cd frontend && npm run test        # vitest, 42 files / 392 cases
+cd frontend && npm run test        # vitest, 44 files / 403 cases
 ```
 
 The Database tests that need a real server skip unless `DBTEST_PG` /

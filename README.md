@@ -238,6 +238,8 @@ ssh-tool/
 │  ├─ inventory/      dynamic providers (Proxmox, Hetzner, DO, AWS, ...)
 │  ├─ httpc/          HTTP / SOAP request runner with SOCKS5 dialer
 │  ├─ resolver/       inheritable-settings resolver (folder -> conn)
+│  ├─ catalog/        shared catalog client (sync, publish, slots, record edits)
+│  ├─ oauthpkce/      OAuth 2 code + PKCE on a loopback redirect (catalog sign-in)
 │  ├─ local/          in-app local PTY (Win/Mac/Linux shells)
 │  ├─ exporter/       encrypted archive export / import
 │  ├─ importer/       RDM, ssh_config, MobaXterm, PuTTY, SuperPuTTY, kafka-tool
