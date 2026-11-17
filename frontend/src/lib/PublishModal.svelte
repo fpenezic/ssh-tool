@@ -32,9 +32,9 @@
   function rememberTarget(v: string) {
     try { localStorage.setItem(targetKey(), v); } catch { /* storage off */ }
   }
-  let jumpInclude = $state<Record<string, boolean>>({});
-  // Inventory bastions not to send (sent by default).
-  let dynSkip = $state<Record<string, boolean>>({});
+  // Outside bastions not to send (each is sent as a bastion record in
+  // the folder by default).
+  let jumpSkip = $state<Record<string, boolean>>({});
   let slotNames = $state<Record<string, string>>({});
   // "What to send": ticked means sent. What is not sent stays in your own
   // local layer, so your tree looks the same after publishing.
@@ -48,15 +48,11 @@
     { id: "vnc", label: "VNC settings" },
     { id: "startup", label: "Initial command and environment variables", hint: "connections that rely on it may not work for others" },
     { id: "terminal", label: "Terminal and behaviour", hint: "colour tag, terminal type, keepalive, auto-reconnect, verbose, liveness probe" },
-    { id: "shared_creds", label: "Vaultwarden / Bitwarden items and opkssh, as slots", hint: "each colleague with access to the same item uses it; untick for private items (or untick one credential under Slots)" },
-    { id: "local_creds", label: "Credentials from your own vault, as slots", hint: "off: colleagues get these connections without them and use their own; Vaultwarden / Bitwarden items and opkssh always go" },
-    { id: "networks", label: "Network (VPN) profiles, as slots", hint: "off: colleagues use their own network" },
+    { id: "shared_creds", label: "Vaultwarden / Bitwarden items and opkssh, as slots", hint: "each colleague with access to the same item uses it; untick for private items (or untick one credential under Slots). Credentials from your own vault and network (VPN) profiles are never sent: colleagues set their own under My settings" },
   ];
-  // Off by default: references only the publisher has.
-  const optIn = new Set(["local_creds", "networks"]);
-  // Not settings categories: credential choices handled on their own.
-  const credChoice = new Set(["shared_creds", "local_creds", "networks"]);
-  let send = $state<Record<string, boolean>>(Object.fromEntries(sendCategories.map((c) => [c.id, !optIn.has(c.id)])));
+  // Not a settings category: the credential choice handled on its own.
+  const credChoice = new Set(["shared_creds"]);
+  let send = $state<Record<string, boolean>>(Object.fromEntries(sendCategories.map((c) => [c.id, true])));
   const unsent = $derived(sendCategories.filter((c) => !credChoice.has(c.id) && !send[c.id]).map((c) => c.id));
   // Credentials (local ids) the user chose not to send.
   let skipCreds = $state<Record<string, boolean>>({});
@@ -92,14 +88,11 @@
     catalog_id: catalogId,
     folder_id: folderId,
     target_uuid: targetUUID ?? "",
-    jump_include: Object.keys(jumpInclude).filter((k) => jumpInclude[k]),
     slot_names: { ...slotNames },
     unsent,
-    send_local_creds: !!send.local_creds,
-    send_networks: !!send.networks,
     no_shared_creds: !send.shared_creds,
     skip_creds: Object.keys(skipCreds).filter((k) => skipCreds[k]),
-    dyn_skip: Object.keys(dynSkip).filter((k) => dynSkip[k]),
+    jump_skip: Object.keys(jumpSkip).filter((k) => jumpSkip[k]),
   });
 
   // Preview, rebuilt on every change (debounced: slot names are typed).
@@ -373,14 +366,14 @@
                 {#if j.dynamic}
                 <div class="jump">
                   <div><IconBastion size={13} /> <strong>{j.name}</strong> <span class="tag">inventory host</span> <span class="dim">used by {j.used_by.join(", ")}</span></div>
-                  <label><input type="radio" name={"j-" + j.connection_id} checked={!dynSkip[j.connection_id]} onchange={() => (dynSkip = { ...dynSkip, [j.connection_id]: false })} /> Send it as a bastion in the folder, made from its address, port and user now; you keep jumping through your inventory host</label>
-                  <label><input type="radio" name={"j-" + j.connection_id} checked={!!dynSkip[j.connection_id]} onchange={() => (dynSkip = { ...dynSkip, [j.connection_id]: true })} /> Do not send it: colleagues set their own jump host</label>
+                  <label><input type="radio" name={"j-" + j.connection_id} checked={!jumpSkip[j.connection_id]} onchange={() => (jumpSkip = { ...jumpSkip, [j.connection_id]: false })} /> Send it as a bastion in the folder, made from its address, port and user now; you keep jumping through your inventory host</label>
+                  <label><input type="radio" name={"j-" + j.connection_id} checked={!!jumpSkip[j.connection_id]} onchange={() => (jumpSkip = { ...jumpSkip, [j.connection_id]: true })} /> Do not send it: colleagues set their own jump host</label>
                 </div>
                 {:else}
                 <div class="jump">
                   <div><IconBastion size={13} /> <strong>{j.name}</strong> <span class="dim">used by {j.used_by.join(", ")}</span></div>
-                  <label><input type="radio" name={"j-" + j.connection_id} checked={!jumpInclude[j.connection_id]} onchange={() => (jumpInclude = { ...jumpInclude, [j.connection_id]: false })} /> A jump slot: each colleague uses their own bastion (yours stays bound to {j.name})</label>
-                  <label><input type="radio" name={"j-" + j.connection_id} checked={!!jumpInclude[j.connection_id]} onchange={() => (jumpInclude = { ...jumpInclude, [j.connection_id]: true })} /> Publish a copy of {j.name} inside the folder: a copy, independent from now on; your own {j.name} stays where it is</label>
+                  <label><input type="radio" name={"j-" + j.connection_id} checked={!jumpSkip[j.connection_id]} onchange={() => (jumpSkip = { ...jumpSkip, [j.connection_id]: false })} /> Send a copy of {j.name} as a bastion in the folder: independent from now on; you keep jumping through your own {j.name}</label>
+                  <label><input type="radio" name={"j-" + j.connection_id} checked={!!jumpSkip[j.connection_id]} onchange={() => (jumpSkip = { ...jumpSkip, [j.connection_id]: true })} /> Do not send it: colleagues set their own jump host</label>
                 </div>
                 {/if}
               {/each}

@@ -39,24 +39,20 @@ type CatalogPublishTargets struct {
 
 // CatalogPublishInput are the dialog's choices.
 type CatalogPublishInput struct {
-	CatalogID   string            `json:"catalog_id"`
-	FolderID    string            `json:"folder_id"`
-	TargetUUID  string            `json:"target_uuid"`
-	JumpInclude []string          `json:"jump_include"`
-	SlotNames   map[string]string `json:"slot_names"`
+	CatalogID  string            `json:"catalog_id"`
+	FolderID   string            `json:"folder_id"`
+	TargetUUID string            `json:"target_uuid"`
+	SlotNames  map[string]string `json:"slot_names"`
 	// Unsent: the "What to send" categories left unticked
 	// (catalog.PublishCategories ids).
 	Unsent []string `json:"unsent"`
-	// SendLocalCreds / SendNetworks: also send vault credentials and
-	// network profiles as slots (off by default).
-	SendLocalCreds bool `json:"send_local_creds"`
-	SendNetworks   bool `json:"send_networks"`
 	// NoSharedCreds: Bitwarden / Vaultwarden and opkssh credentials stay
 	// local too. SkipCreds: credentials (local ids) not to send.
 	NoSharedCreds bool     `json:"no_shared_creds"`
 	SkipCreds     []string `json:"skip_creds"`
-	// DynSkip: inventory bastions not to send as a bastion record.
-	DynSkip []string `json:"dyn_skip"`
+	// JumpSkip: outside bastions (connection or inventory ids) not to send
+	// as a bastion record.
+	JumpSkip []string `json:"jump_skip"`
 	// ReviewHash: the review_hash of the plan the user reviewed; a publish
 	// whose rebuilt plan differs is refused.
 	ReviewHash string `json:"review_hash"`
@@ -176,16 +172,12 @@ func (a *App) CatalogPublishTargets(catalogID string) (*CatalogPublishTargets, e
 }
 
 func (in CatalogPublishInput) options(account string) catalog.PublishOptions {
-	inc := map[string]bool{}
-	for _, id := range in.JumpInclude {
-		inc[id] = true
-	}
 	unsent := map[string]bool{}
 	for _, k := range in.Unsent {
 		unsent[k] = true
 	}
 	skip := map[string]bool{}
-	for _, id := range in.DynSkip {
+	for _, id := range in.JumpSkip {
 		skip[id] = true
 	}
 	skipCreds := map[string]bool{}
@@ -193,8 +185,7 @@ func (in CatalogPublishInput) options(account string) catalog.PublishOptions {
 		skipCreds[id] = true
 	}
 	return catalog.PublishOptions{CatalogID: in.CatalogID, RootID: in.FolderID, TargetUUID: in.TargetUUID,
-		JumpInclude: inc, SlotNames: in.SlotNames, AccountName: account, Unsent: unsent,
-		SendLocalCreds: in.SendLocalCreds, SendNetworks: in.SendNetworks, DynSkip: skip,
+		SlotNames: in.SlotNames, AccountName: account, Unsent: unsent, JumpSkip: skip,
 		NoSharedCreds: in.NoSharedCreds, SkipCreds: skipCreds}
 }
 

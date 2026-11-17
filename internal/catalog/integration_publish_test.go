@@ -60,7 +60,7 @@ func TestIntegrationPublish(t *testing.T) {
 
 	// A refused publish: a hostname over the limit, mapped to its record.
 	bad, _ := bdb.CreateConnection(store.NewConnection{Name: "too-long", Hostname: strings.Repeat("h", 300), FolderID: &mine.ID})
-	plan, err := BuildPublish(bdb, PublishOptions{CatalogID: bcat.ID, RootID: mine.ID, TargetUUID: space, AccountName: "bob", SendLocalCreds: true})
+	plan, err := BuildPublish(bdb, PublishOptions{CatalogID: bcat.ID, RootID: mine.ID, TargetUUID: space, AccountName: "bob"})
 	if err != nil || len(plan.Refusals) > 0 {
 		t.Fatalf("plan: %v %+v", err, plan.Refusals)
 	}
@@ -84,7 +84,7 @@ func TestIntegrationPublish(t *testing.T) {
 	}
 
 	// The real publish.
-	plan, err = BuildPublish(bdb, PublishOptions{CatalogID: bcat.ID, RootID: mine.ID, TargetUUID: space, AccountName: "bob", SendLocalCreds: true})
+	plan, err = BuildPublish(bdb, PublishOptions{CatalogID: bcat.ID, RootID: mine.ID, TargetUUID: space, AccountName: "bob"})
 	if err != nil || len(plan.Refusals) > 0 {
 		t.Fatalf("plan: %v %+v", err, plan.Refusals)
 	}
@@ -174,7 +174,7 @@ func TestIntegrationPublish(t *testing.T) {
 	app1, _ := bdb.CreateConnection(store.NewConnection{Name: "app-1", Hostname: "app-1.example.com", FolderID: &more.ID,
 		Overrides: store.InheritableSettings{JumpHost: &store.JumpHostOverride{Kind: "chain", Chain: &store.JumpHostSpec{ConnectionID: &bastion.ID}}}})
 	plan3, err := BuildPublish(bdb, PublishOptions{CatalogID: bcat.ID, RootID: more.ID, TargetUUID: space,
-		JumpInclude: map[string]bool{bastion.ID: true}, AccountName: "bob"})
+		AccountName: "bob"})
 	if err != nil || len(plan3.Refusals) > 0 {
 		t.Fatalf("plan3: %v %+v", err, plan3.Refusals)
 	}

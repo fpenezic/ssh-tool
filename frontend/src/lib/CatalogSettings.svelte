@@ -8,7 +8,7 @@
   import { catalogLocal } from "./catalogLocal.svelte";
   import { toast } from "./toast.svelte.ts";
   import { errMsg } from "./connectErrors";
-  import { api, CATALOG_BIND_ASK as ASK, type CatalogInfo, type CatalogSlotInfo } from "./api";
+  import { api, type CatalogInfo, type CatalogSlotInfo } from "./api";
   import { catalogs, catalogStateLabel } from "./catalog.svelte";
   import { credentials, tree } from "./stores.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
@@ -167,12 +167,11 @@
   }
 
   // Bind targets per slot type.
-  const credOptions = $derived([
-    { value: ASK, label: "Ask when connecting (user name and password)" },
-    ...credentials.list
+  const credOptions = $derived(
+    credentials.list
       .filter((c) => !c.id.startsWith("catcred-") && c.kind !== "api_token" && c.kind !== "certificate")
       .map((c) => ({ value: c.id, label: c.name })),
-  ]);
+  );
   const netOptions = $derived(networkProfiles.list.map((p) => ({ value: p.id, label: p.name })));
   const jumpOptions = $derived(
     tree.connections
@@ -226,8 +225,6 @@
         {/if}
       {:else if s.state === "external"}
         <span class="chip tone-ok" title="Found in your Bitwarden / Vaultwarden">from {s.target_name}</span>
-      {:else if s.target_id === ASK}
-        <span class="chip" title="No stored credential: the connect asks for the user name and password">asked when connecting</span>
       {/if}
       <span class="slot-used">{s.used_by} {s.used_by === 1 ? "record" : "records"}{#if s.folder_name} - on {s.folder_name}{/if}</span>
       {#if s.can_write && !isMobile}

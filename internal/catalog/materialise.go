@@ -56,13 +56,8 @@ func (t *translator) slot(v, typ string) string {
 	if s.Type != typ {
 		return store.CatalogUnboundRef(t.catID, v)
 	}
-	if b, ok := t.in.Bindings[v]; ok && b.Kind == typ {
-		if typ == slotCred && b.TargetID == store.CatalogBindingAsk {
-			return "" // ask when connecting: no credential, the connect prompts
-		}
-		if t.exists(typ, b.TargetID) {
-			return b.TargetID
-		}
+	if b, ok := t.in.Bindings[v]; ok && b.Kind == typ && t.exists(typ, b.TargetID) {
+		return b.TargetID
 	}
 	if typ == slotCred && s.Kind == "external" && t.external != nil {
 		if id := t.external(s); id != "" && t.in.Credentials[id] {
