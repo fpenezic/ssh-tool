@@ -16,7 +16,7 @@
   import Icon from "./Icon.svelte";
   import { IconFolder, IconHost, IconTunnel, IconLoading, IconX, IconStar, IconGlobe, dynamicEntryIcon,
     IconFolderPlus, IconKey, IconPencil, IconTrash, IconSettings, IconRefresh, IconPlay,
-    IconExternalLink, IconCopy, IconDownload, IconMoveToFolder, IconTerminal } from "./iconMap";
+    IconExternalLink, IconCopy, IconDownload, IconMoveToFolder, IconTerminal, IconEyeOff } from "./iconMap";
   import { computeIntent, isInvalidDrop, applyDrop, applyMultiDrop, catalogDropKind, type DragKind, type DropIntent } from "./treeDnd";
   import { setMultiDragImage } from "./dragImage";
   import { contextMenu } from "./contextMenu.svelte.ts";
@@ -29,6 +29,7 @@
   import { showPrompt } from "./promptModal.svelte.ts";
   import { toast } from "./toast.svelte.ts";
   import { isMobile } from "./platform";
+  import { catalogVisibility } from "./catalogVisibility.svelte";
   import TreeBookmarkRows from "./TreeBookmarkRows.svelte";
   import TreeDbRows from "./TreeDbRows.svelte";
   import TreeBookmarkToggle from "./TreeBookmarkToggle.svelte";
@@ -618,6 +619,11 @@
         ...(catRoot && catRoot.state !== "no_login" && catRoot.state !== "signed_out" && catRoot.state !== "locked"
           ? [{ label: "Sync now", iconComponent: IconRefresh, onSelect: () => { api.catalogSyncNow(catRoot!.id).catch((err) => toast.err("Sync: " + errMsg(err), 8000)); } }] : []),
         ...(folder.remote_uuid && folder.catalog_state !== "removed" ? [{ label: "Copy to my connections…", iconComponent: IconCopy, onSelect: () => catalogLocal.startCopy("folders", folder.id, folder.name) }] : []),
+        ...(folder.remote_uuid && folder.catalog_id ? [{ label: "Hide in my tree", iconComponent: IconEyeOff, onSelect: async () => {
+          await catalogVisibility.set(folder.catalog_id!, folder.remote_uuid!, true);
+          await tree.load();
+          toast.push("info", `${folder.name} hidden from your tree - click to show hidden folders`, 8000, () => catalogs.open(folder.catalog_id!));
+        } }] : []),
         ...(cat && folder.catalog_writable && !isMobile && folder.remote_uuid && folder.catalog_state !== "removed" ? catalogWriterItems(cat.id) : []),
         ...(cat ? [{ label: "Slots…", iconComponent: IconKey, onSelect: () => catalogs.open(cat.id, "slots") },
           { label: "Catalog settings…", iconComponent: IconSettings, onSelect: () => catalogs.open(cat.id) }] : []),

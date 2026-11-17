@@ -4,6 +4,7 @@
   // profiles and bastions.
   import { onMount } from "svelte";
   import SearchableSelect from "./SearchableSelect.svelte";
+  import CatalogFolderVisibility from "./CatalogFolderVisibility.svelte";
   import { showConfirm, showConfirmWithCheckbox } from "./confirmModal.svelte.ts";
   import { catalogLocal } from "./catalogLocal.svelte";
   import { toast } from "./toast.svelte.ts";
@@ -329,6 +330,7 @@
         {@const all = catalogs.slots[c.id] ?? []}
         {@const todo = all.filter(needsBinding)}
         {@const bound = all.length - todo.length}
+        <CatalogFolderVisibility catalogId={c.id} rootFolderId={c.root_folder_id} />
         <div class="slots">
           <h3>Slots <span class="hint-inline">{all.length === 0 ? "" : `${all.length} - ${todo.length === 0 ? "all bound" : `${todo.length} to bind`}`}</span></h3>
           {#if all.length === 0}
