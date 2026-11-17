@@ -113,18 +113,12 @@ func TestPlanEditReferences(t *testing.T) {
 	if got := p.Patch["settings"].(map[string]any)["otp_ref"]; got != "s1" {
 		t.Fatalf("otp_ref = %v, want the bound slot s1", got)
 	}
-	// Credential B: no slot stands for it - a new one to name first.
+	// Credential B is in the user's own vault and no slot stands for it:
+	// the edit is refused (a local credential goes under My settings), no
+	// slot is created for it.
 	p = e.plan(t, func(f *EditForm) { f.Settings.AuthRef = &e.credB }, nil)
-	if len(p.NeedSlots) != 1 || p.NeedSlots[0].Name != "deploy key" {
-		t.Fatalf("need slots: %+v", p.NeedSlots)
-	}
-	key := p.NeedSlots[0].Key
-	p = e.plan(t, func(f *EditForm) { f.Settings.AuthRef = &e.credB }, func(in *EditInput) { in.SlotNames = map[string]string{key: "deploy"} })
-	if len(p.NeedSlots) != 0 || len(p.NewSlots) != 1 || p.NewSlots[0].Name != "deploy" || p.NewSlots[0].FolderUUID != "f1" {
-		t.Fatalf("named slot: %+v", p.NewSlots)
-	}
-	if p.Patch["settings"].(map[string]any)["auth_ref"] != p.NewSlots[0].UUID {
-		t.Fatal("auth_ref does not name the new slot")
+	if len(p.Refusals) == 0 || len(p.NeedSlots) != 0 || len(p.NewSlots) != 0 {
+		t.Fatalf("local credential in a record edit: refusals %v, need %+v, new %+v", p.Refusals, p.NeedSlots, p.NewSlots)
 	}
 	// The unbound jump slot's marker goes back as the slot.
 	p = e.plan(t, func(f *EditForm) {

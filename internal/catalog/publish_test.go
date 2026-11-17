@@ -117,26 +117,24 @@ func TestPublishRoundTripResolvesTheSame(t *testing.T) {
 	for _, id := range []string{x.web, x.db1, x.inner} {
 		before[id] = resolvedJSON(t, e.db, id)
 	}
-	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, AccountName: "bob", SendLocalCreds: true, SendNetworks: true})
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, AccountName: "bob"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(plan.Refusals) > 0 {
 		t.Fatalf("refusals: %+v", plan.Refusals)
 	}
-	// Slots: credential A (folded from Outer, and the db target), the
-	// Bitwarden one as external, the profile, the outside bastion as a
-	// jump slot. The inside bastion is a reference, not a slot.
-	if len(plan.Slots) != 4 {
+	// Slots: only the Bitwarden credential, as external. Credential A (a
+	// local vault credential) and the profile stay the publisher's; the
+	// outside bastion goes as a copy inside the folder, the inside one as
+	// a reference.
+	if len(plan.Slots) != 1 {
 		t.Fatalf("slots: %+v", plan.Slots)
 	}
 	if s := slotByKey(plan, "cred:"+x.credBW); s == nil || s.Kind != "external" || s.Backend != "bitwarden" {
 		t.Fatalf("bitwarden slot: %+v", s)
 	}
-	if s := slotByKey(plan, "jump:"+x.bastion); s == nil || s.BindName != "bastion" || s.Name != "bastion for Mine" {
-		t.Fatalf("jump slot: %+v", s)
-	}
-	if len(plan.OutsideJumps) != 1 || plan.OutsideJumps[0].Name != "bastion" || plan.OutsideJumps[0].Include {
+	if len(plan.OutsideJumps) != 1 || plan.OutsideJumps[0].Name != "bastion" || !plan.OutsideJumps[0].Include {
 		t.Fatalf("outside jumps: %+v", plan.OutsideJumps)
 	}
 	// Nothing local leaves: no local ids, no broadcast group.
@@ -209,8 +207,9 @@ func TestPublishRoundTripResolvesTheSame(t *testing.T) {
 			t.Fatalf("connection %s changed after the feed echoed the publish", id)
 		}
 	}
-	if n := len(e.mustConns()); n != 4 {
-		t.Fatalf("%d connections after the echo, want 4", n)
+	// The four of the fixture plus the bastion copy published in the folder.
+	if n := len(e.mustConns()); n != 5 {
+		t.Fatalf("%d connections after the echo, want 5", n)
 	}
 }
 
@@ -279,8 +278,7 @@ func TestPublishListsFreeTextAndInherited(t *testing.T) {
 func TestPublishIncludesABastionCopy(t *testing.T) {
 	e := newSyncEnv(t)
 	x := publishFixture(t, e.db)
-	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root,
-		JumpInclude: map[string]bool{x.bastion: true}})
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,35 +323,39 @@ func TestPublishIncludesABastionCopy(t *testing.T) {
 }
 
 // Publishing again into the published folder reuses the slot bound to the
-// same credential instead of creating a second one.
+// same credential instead of creating a second one. A local credential
+// gets no slot, now or later.
 func TestPublishReusesSlotsInScope(t *testing.T) {
 	e := newSyncEnv(t)
 	x := publishFixture(t, e.db)
-	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, SendLocalCreds: true, SendNetworks: true})
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := CompletePublish(e.db, plan, accept(plan), "bob", nil); err != nil {
 		t.Fatal(err)
 	}
-	credA := slotByKey(plan, "cred:"+x.credA)
+	if slotByKey(plan, "cred:"+x.credA) != nil {
+		t.Fatal("a local credential became a slot")
+	}
+	credBW := slotByKey(plan, "cred:"+x.credBW)
 
 	more, _ := e.db.CreateFolder(store.NewFolder{Name: "More"})
 	cb2, _ := e.db.CreateCredential(store.NewCredential{Name: "bw-other-copy", Kind: store.CredPassword, StorageMode: store.StorageExternal,
 		Config: map[string]any{"bitwarden_ref": map[string]any{"server_id": "srv2", "cipher_id": "cipher-1", "field": "password"}}})
 	if _, err := e.db.CreateConnection(store.NewConnection{Name: "app-1", Hostname: "app-1.example.com", FolderID: &more.ID,
-		Overrides: store.InheritableSettings{AuthRef: ptr(x.credA), OTPRef: ptr(cb2.ID)}}); err != nil {
+		Overrides: store.InheritableSettings{AuthRef: ptr(x.credBW), OTPRef: ptr(cb2.ID)}}); err != nil {
 		t.Fatal(err)
 	}
-	plan2, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: more.ID, TargetUUID: plan.RootUUID, SendLocalCreds: true, SendNetworks: true})
+	plan2, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: more.ID, TargetUUID: plan.RootUUID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(plan2.Refusals) > 0 {
 		t.Fatalf("refusals: %+v", plan2.Refusals)
 	}
-	s := slotByKey(plan2, "cred:"+x.credA)
-	if s == nil || s.New || s.UUID != credA.UUID || s.ReusedFrom != "Mine" {
+	s := slotByKey(plan2, "cred:"+x.credBW)
+	if s == nil || s.New || s.UUID != credBW.UUID || s.ReusedFrom != "Mine" {
 		t.Fatalf("credential slot not reused: %+v", s)
 	}
 	bw := slotByKey(plan2, "cred:"+cb2.ID)
@@ -709,7 +711,7 @@ func TestPublishSendsInventoryBastion(t *testing.T) {
 		`{"kind":"chain","chain":{"connection_id":"`+dyn+`"}}`, x2.db1); err != nil {
 		t.Fatal(err)
 	}
-	plan2, err := BuildPublish(e2.db, PublishOptions{CatalogID: e2.cat.ID, RootID: x2.root, ResolveDyn: resolve, DynSkip: map[string]bool{dyn: true}})
+	plan2, err := BuildPublish(e2.db, PublishOptions{CatalogID: e2.cat.ID, RootID: x2.root, ResolveDyn: resolve, JumpSkip: map[string]bool{dyn: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -811,5 +813,34 @@ func TestPublishWithholdsChosenCredentials(t *testing.T) {
 		if s.Type == "cred" {
 			t.Fatalf("a credential slot with shared sources off: %+v", s)
 		}
+	}
+}
+
+// An outside bastion the publisher chose not to send stays theirs: no
+// copy, no slot, listed under what stays local.
+func TestPublishOutsideBastionSkipped(t *testing.T) {
+	e := newSyncEnv(t)
+	x := publishFixture(t, e.db)
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root, JumpSkip: map[string]bool{x.bastion: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.OutsideJumps) != 1 || plan.OutsideJumps[0].Include {
+		t.Fatalf("outside jumps: %+v", plan.OutsideJumps)
+	}
+	for _, s := range plan.Slots {
+		if s.Type == slotJump {
+			t.Fatalf("jump slot made: %+v", s)
+		}
+	}
+	kept := false
+	for _, k := range plan.KeptLocal {
+		kept = kept || k.Field == "Jump host"
+	}
+	if !kept {
+		t.Fatalf("skipped bastion not listed as kept: %+v", plan.KeptLocal)
+	}
+	if len(plan.Request.Connections) != 3 {
+		t.Fatalf("connections sent: %d (a copy of the skipped bastion?)", len(plan.Request.Connections))
 	}
 }

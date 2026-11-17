@@ -3373,7 +3373,7 @@ pinned connections in the same folder are untouched.
 <a id="shared-catalogs"></a>
 ## 10c. Shared catalogs
 
-A **catalog** is a connection tree your team shares. Its folders, connections and port forwards show up in your tree under the catalog's root folder and stay in step with it: when a colleague adds a host or changes a port, your tree follows on the next sync. Secrets are never shared. Wherever a connection needs a credential, a network or a jump host that each person has their own way of reaching, the catalog holds a **slot**, and you bind every slot once to something of your own.
+A **catalog** is a connection tree your team shares. Its folders, connections and port forwards show up in your tree under the catalog's root folder and stay in step with it: when a colleague adds a host or changes a port, your tree follows on the next sync. Secrets are never shared. A credential from someone's own vault and a network (VPN) profile are not part of the catalog: you set your own under **My settings** on a catalog folder or connection, like any setting, and the folders below inherit it. The catalog's notes are the place to say which credential a folder needs. Only a credential everyone can reach the same way, a **Bitwarden / Vaultwarden** item or opkssh, goes into the catalog, as a **slot**.
 
 A catalog lives on a **catalog server**, a separate self-hosted service that your team or company runs. The server is not part of this repository and is not open source at this time; ssh-tool is the client. Ask whoever runs it for the catalog's address, or for a code from its web page.
 
@@ -3385,10 +3385,10 @@ A catalog lives on a **catalog server**, a separate self-hosted service that you
 
 Sync runs in the background on an interval and on **Sync now**. The catalog's root folder shows its state: signed out, a sync error, or how many slots still wait for you.
 
-### Slots: your own credentials, networks and jump hosts
+### Your own credentials, and slots
 
-- **Bind on first connect**: when you connect to a catalog connection whose slot you have not bound, a dialog lists what it needs (jump host, network, credential, one-time code) and you pick yours once. Every connection that uses that slot works from then on. A one-time code slot can be left as "I type the code myself".
-- **Ask when connecting**: a credential slot can be bound to a prompt instead of a stored credential. The connect then asks for the user name and password, as for any connection without a credential.
+- **My settings**: open a catalog folder or connection and set your credential, network profile or jump host there, as for your own tree; it stays on your machines and is inherited below.
+- **Slots** (Bitwarden / Vaultwarden items, opkssh, and slots from older publishes): when you connect to a catalog connection whose slot you have not bound, a dialog lists what it needs and you pick yours once. Every connection that uses that slot works from then on. A one-time code slot can be left as "I type the code myself".
 - **From the editor**: a catalog connection whose credential comes from a slot you have not bound shows a picker next to its Credential field; binding there binds the slot for every connection that uses it.
 - **Settings -> Catalogs -> Slots** lists the slots still to bind first, grouped by the folder they are defined on. The ones you have bound sit behind **Show N bound slots**, with a filter by slot, what it is bound to or folder.
 - A slot backed by a **Bitwarden / Vaultwarden** item needs no binding when you can read the same item: the app finds it.
@@ -3407,8 +3407,8 @@ Each catalog folder and connection has two views in its editor:
 Right-click one of your own folders -> **Publish to catalog...** moves it into a catalog folder you can write to. The folder keeps behaving the same for you; it just becomes catalog records that everyone with access to the target sees.
 
 - **What to send**: tick what goes (notes, tags, icons, port forwards, database, Kafka and VNC settings, the initial command, terminal behaviour). What you untick stays yours only.
-- **What is never sent as is**: a credential from your own vault and a network (VPN) profile stay yours; colleagues get those connections without them and use their own. Two boxes send them as slots anyway. Bitwarden / Vaultwarden items and opkssh credentials go by default, since everyone with access can use them the same way; untick them all, or one credential under Slots, to keep a private item yours.
-- **Jump hosts**: a bastion outside the folder becomes a slot or a copy inside the folder, your choice. A bastion from a dynamic inventory (a Proxmox VM, say) goes as a bastion record made from its current address; you keep jumping through your inventory host.
+- **What is never sent**: a credential from your own vault and a network (VPN) profile stay yours, in your own My settings; colleagues get those connections without them and set their own. Without a credential a connection asks for the user name and password at connect. Bitwarden / Vaultwarden items and opkssh credentials go by default, since everyone with access can use them the same way; untick them all, or one credential under Slots, to keep a private item yours.
+- **Jump hosts**: a bastion outside the folder goes as a copy inside the folder, independent from then on, and you keep jumping through your own. A bastion from a dynamic inventory (a Proxmox VM, say) goes as a bastion record made from its current address; you keep jumping through your inventory host. Either can be left out ("Do not send it"); colleagues then set their own jump host. A jump host typed into the chain (an address, not a saved connection) goes as it is.
 - **Review**: every free-text value that could carry a secret (initial command, environment variables, SSH options, addresses) is listed for review before you can publish, and so is every reference that stays local.
 - **Icon images** go to the catalog when its server takes images (PNG, JPEG or WebP, at most 256 KiB and 1024x1024). One the server would refuse stays yours, with the reason. The server takes a limited number of new images per hour; a large first publish sends the rest in the background, shown in the status bar.
 

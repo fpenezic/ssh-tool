@@ -192,20 +192,6 @@ func TestMaterialiseRowsAndRebinding(t *testing.T) {
 	if sp = e.folder("space"); *sp.Settings.AuthRef != store.CatalogUnboundRef(e.cat.ID, "s-admin") {
 		t.Fatalf("deleted binding target: %v", *sp.Settings.AuthRef)
 	}
-	// "Ask when connecting": explicitly no credential (never inherited),
-	// so the connect prompts for the user name and password.
-	if err := e.db.SetCatalogBinding(e.cat.ID, "s-admin", "cred", store.CatalogBindingAsk); err != nil {
-		t.Fatal(err)
-	}
-	if err := Materialise(e.db, e.cat.ID, nil); err != nil {
-		t.Fatal(err)
-	}
-	if sp = e.folder("space"); sp.Settings.AuthRef == nil || *sp.Settings.AuthRef != "" {
-		t.Fatalf("ask binding: %v", sp.Settings.AuthRef)
-	}
-	if rs, err := resolver.ResolveConnection(e.db, web.ID); err != nil || (rs.AuthRef != nil && *rs.AuthRef != "") {
-		t.Fatalf("ask binding resolved: %+v %v", rs.AuthRef, err)
-	}
 	// Local columns stay writable after materialisation (the encodings
 	// match, so the full-row rewrite passes the guard).
 	fav := true

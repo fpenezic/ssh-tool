@@ -127,7 +127,7 @@ func (pa *publishApp) setMode(m string) {
 // in is the dialog's input after a preview: it carries the reviewed
 // plan's hash, as the dialog does.
 func (pa *publishApp) in() CatalogPublishInput {
-	in := CatalogPublishInput{CatalogID: pa.cat.ID, FolderID: pa.folder, SendLocalCreds: true, SendNetworks: true}
+	in := CatalogPublishInput{CatalogID: pa.cat.ID, FolderID: pa.folder}
 	if p, err := pa.a.CatalogPublishPreview(in); err == nil && p != nil {
 		in.ReviewHash = p.ReviewHash
 	}
@@ -152,8 +152,9 @@ func TestCatalogPublishConvertsInPlace(t *testing.T) {
 	if pa.postCount() != 0 {
 		t.Fatal("the preview sent something")
 	}
-	if len(plan.Slots) != 1 || plan.Slots[0].BindName != "admin" {
-		t.Fatalf("preview slots: %+v", plan.Slots)
+	// A local vault credential is not sent: no slot, the publisher keeps it.
+	if len(plan.Slots) != 0 || len(plan.KeptLocal) != 1 || plan.KeptLocal[0].Field != "Credential" {
+		t.Fatalf("preview slots %+v, kept %+v", plan.Slots, plan.KeptLocal)
 	}
 	res, err := pa.a.CatalogPublish(pa.in())
 	if err != nil || !res.Published {

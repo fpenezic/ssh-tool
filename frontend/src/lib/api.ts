@@ -1272,13 +1272,11 @@ export interface CatalogPublishInput {
   catalog_id: string;
   folder_id: string;
   target_uuid: string;
-  jump_include: string[];
   slot_names: Record<string, string>;
   // "What to send" categories left unticked.
   unsent: string[];
-  send_local_creds?: boolean;
-  send_networks?: boolean;
-  dyn_skip?: string[];
+  // Outside bastions (connection or inventory ids) not to send.
+  jump_skip?: string[];
   no_shared_creds?: boolean;
   skip_creds?: string[];
   review_hash?: string;
@@ -1332,9 +1330,6 @@ export interface CatalogEnrollPreview {
   expires_in: number; device_name: string; existing_id?: string; existing_name?: string; existing_account?: string;
 }
 export interface SeenApp { device: string; version: string; last_seen: number }
-
-// A credential slot bound to this asks when connecting (store.CatalogBindingAsk).
-export const CATALOG_BIND_ASK = "ask";
 
 export interface CatalogSlotInfo {
   can_write?: boolean;

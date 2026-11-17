@@ -13,7 +13,7 @@
   import { writeClipboard, readClipboard } from "./clipboard";
   import PasswordInput from "./PasswordInput.svelte";
   import { effectiveAuthRef, isKeyAuthKind, isSelectableSSHCred } from "./authWarning";
-  import { api, dbEngineInfo, CATALOG_BIND_ASK, type ResolvedSettings, type JumpHostOverride } from "./api";
+  import { api, dbEngineInfo, type ResolvedSettings, type JumpHostOverride } from "./api";
   import { showPrompt } from "./promptModal.svelte.ts";
   import JumpChainEditor from "./JumpChainEditor.svelte";
   import PortForwards from "./PortForwards.svelte";
@@ -1332,14 +1332,13 @@
   // SSH auth credentials for the connection picker. api_token is filtered out
   // (see sshCredOptions) but a value already stored on this connection is
   // kept, so opening an existing config cannot silently drop its reference.
-  // Binding a catalog slot from the editor: the user's own credentials, or
-  // asking at every connect. It binds the slot for every record using it.
-  const slotBindOptions = $derived([
-    { value: CATALOG_BIND_ASK, label: "Ask when connecting (user name and password)" },
-    ...credentials.list
+  // Binding a catalog slot from the editor: one of the user's own
+  // credentials. It binds the slot for every record using it.
+  const slotBindOptions = $derived(
+    credentials.list
       .filter((c) => !c.id.startsWith("catcred-") && c.kind !== "api_token" && c.kind !== "certificate")
       .map((c) => ({ value: c.id, label: c.name })),
-  ]);
+  );
   async function bindSlotFromEditor(catalogId: string, uuid: string, target: string) {
     if (!target) return;
     try {

@@ -36,10 +36,6 @@ type PublishOptions struct {
 	// TargetUUID: the catalog folder the subtree goes under; "" publishes
 	// a new space (admin only, checked by the server).
 	TargetUUID string
-	// JumpInclude: an outside bastion (local connection id) the subtree
-	// jumps through is published as a copy inside the published root
-	// instead of becoming a jump slot.
-	JumpInclude map[string]bool
 	// SlotNames: names for new slots, by PlanSlot.Key.
 	SlotNames map[string]string
 	// AccountName goes into the stored records as their author until the
@@ -52,25 +48,26 @@ type PublishOptions struct {
 	// Images: the catalog's image store limits; nil when the server has
 	// none (revision 1), and uploaded icons stay in the publisher's layer.
 	Images *ImageLimits
-	// SendLocalCreds: a credential stored in the publisher's own vault goes
-	// as a slot each reader binds. Off by default: only shared sources (a
-	// Bitwarden / Vaultwarden item, opkssh) go; a local one stays the
-	// publisher's own and readers get the connection without it.
-	SendLocalCreds bool
-	// SendNetworks: a network (VPN) profile goes as a slot. Off by default.
-	SendNetworks bool
+	// A credential from the publisher's own vault and a network (VPN)
+	// profile are never sent: they stay in the publisher's layer, and
+	// readers set their own under My settings. Only shared sources (a
+	// Bitwarden / Vaultwarden item, opkssh) go, as slots.
+	//
 	// NoSharedCreds: shared sources (Bitwarden / Vaultwarden items,
 	// opkssh) stay local too. SkipCreds: credentials (local ids) the user
 	// chose not to send, whatever their kind.
 	NoSharedCreds bool
 	SkipCreds     map[string]bool
-	// ResolveDyn resolves a dynamic inventory host ("dyn:<entry>") to what
-	// it is now (address, port, user, route): a jump through one is sent as
-	// a bastion record inside the published root, made from that, unless
-	// DynSkip names it. The publisher keeps jumping through the inventory
-	// host. Nil: such jumps stay local.
+	// A jump host outside the published folder is sent as a bastion record
+	// inside the published root: a saved connection as a copy of it, an
+	// inventory host ("dyn:<entry>") as a record made from what ResolveDyn
+	// says it is now (address, port, user, route). The publisher keeps
+	// their own jump. JumpSkip names the ones (connection or dyn id) not to
+	// send: they stay in the publisher's layer. A jump host typed into the
+	// chain (hostname, no connection) goes as it is, no record is made.
+	// ResolveDyn nil: inventory jumps stay local.
 	ResolveDyn func(id string) (store.Connection, bool) `json:"-"`
-	DynSkip    map[string]bool
+	JumpSkip   map[string]bool
 }
 
 // PublishCategories are the optional parts of a publish, in dialog
@@ -1182,13 +1179,12 @@ func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) (
 			}
 			switch {
 			case strings.HasPrefix(id, resolver.DynRefPrefix) && c.strict:
-				h["jump_slot"] = c.slot("jump:"+id, slotJump, id, kind, u, name, "jump_host")
-				delete(h, "connection_id")
+				c.refuse(kind, c.localOf(kind, u), name, "its jump host is one of your inventory hosts; pick a bastion from this catalog, or set your own under My settings")
 			case strings.HasPrefix(id, resolver.DynRefPrefix):
 				// An inventory host means nothing to others: a bastion
 				// record made from what it resolves to now goes instead,
 				// and the publisher keeps their own jump.
-				if c.opts.ResolveDyn != nil && !c.opts.DynSkip[id] {
+				if c.opts.ResolveDyn != nil && !c.opts.JumpSkip[id] {
 					if b, ok := c.opts.ResolveDyn(id); ok {
 						if b.Name == "" {
 							b.Name = strings.TrimPrefix(id, resolver.DynRefPrefix)
@@ -1211,7 +1207,7 @@ func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) (
 						goto auth
 					}
 				}
-				if c.opts.ResolveDyn != nil && c.opts.DynSkip[id] && c.outside[id] == nil {
+				if c.opts.ResolveDyn != nil && c.opts.JumpSkip[id] && c.outside[id] == nil {
 					c.outside[id] = &OutsideJump{ConnectionID: id, Name: strings.TrimPrefix(id, resolver.DynRefPrefix), Dynamic: true}
 				}
 				if oj := c.outside[id]; oj != nil {
@@ -1233,25 +1229,30 @@ func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) (
 					c.kept(kind, name, "Jump host", "points at a connection that no longer exists; not sent")
 					return true, false
 				}
+				if c.strict {
+					c.refuse(kind, c.localOf(kind, u), name, "its jump host ("+b.Name+") is not in this catalog; pick a bastion from the catalog, or set your own under My settings")
+					break
+				}
 				oj := c.outside[id]
 				if oj == nil {
-					oj = &OutsideJump{ConnectionID: id, Name: b.Name, Include: c.opts.JumpInclude[id]}
+					oj = &OutsideJump{ConnectionID: id, Name: b.Name, Include: !c.opts.JumpSkip[id]}
 					c.outside[id] = oj
 				}
 				oj.UsedBy = appendOnce(oj.UsedBy, name)
-				if oj.Include {
-					cu := c.inside["copy:"+id]
-					if cu == "" {
-						// Assigned now so references resolve; the copy
-						// record is built after the subtree.
-						cu = uuid.NewString()
-						c.inside["copy:"+id] = cu
-					}
-					h["connection_id"] = cu
-				} else {
-					h["jump_slot"] = c.slot("jump:"+id, slotJump, id, kind, u, name, "jump_host")
-					delete(h, "connection_id")
+				if !oj.Include {
+					c.kept(kind, name, "Jump host", b.Name+": you chose not to send it; colleagues set their own")
+					return true, false
 				}
+				cu := c.inside["copy:"+id]
+				if cu == "" {
+					// Assigned now so references resolve; the copy
+					// record is built after the subtree.
+					cu = uuid.NewString()
+					c.inside["copy:"+id] = cu
+				}
+				h["connection_id"] = cu
+				// The publisher keeps jumping through their own bastion.
+				own = true
 			}
 		} else if hn, ok := h["hostname"].(string); ok && hn != "" {
 			c.text(kind, u, name, "jump_host.hostname", hn, folderLevel)
@@ -1326,7 +1327,16 @@ func (c *pubCtx) ref(v, typ, kind, u, name, field string) string {
 			c.kept(kind, name, label, "a shared-source credential ("+cr.Name+"); shared sources are not sent")
 			return keepRef
 		}
-		if !sharedCred(cr) && !c.opts.SendLocalCreds {
+		if !sharedCred(cr) {
+			// Never a new slot; one already in scope and bound to it here
+			// (a colleague's, say) is used as it is.
+			if c.boundInScope(slotCred, v) {
+				return c.slot("cred:"+v, slotCred, v, kind, u, name, field)
+			}
+			if c.strict {
+				c.refuse(kind, c.localOf(kind, u), name, label+": "+cr.Name+" is in your own vault and is not shared; set it under My settings, or pick a Vaultwarden / Bitwarden item")
+				return ""
+			}
 			c.kept(kind, name, label, "a credential from your own vault ("+cr.Name+"); colleagues use their own")
 			return keepRef
 		}
@@ -1341,11 +1351,15 @@ func (c *pubCtx) ref(v, typ, kind, u, name, field string) string {
 			c.kept(kind, name, label, "names a network profile that no longer exists; not sent")
 			return keepRef
 		}
-		if !c.opts.SendNetworks {
-			c.kept(kind, name, label, "your network profile ("+p.Name+"); colleagues use their own")
-			return keepRef
+		if c.boundInScope(slotNet, v) {
+			return c.slot("net:"+v, slotNet, v, kind, u, name, field)
 		}
-		return c.slot("net:"+v, slotNet, v, kind, u, name, field)
+		if c.strict {
+			c.refuse(kind, c.localOf(kind, u), name, "network profiles are personal; set "+p.Name+" under My settings")
+			return ""
+		}
+		c.kept(kind, name, label, "your network profile ("+p.Name+"); colleagues use their own")
+		return keepRef
 	}
 	return ""
 }
@@ -1364,6 +1378,16 @@ func fieldLabel(f string) string {
 		return "Kafka login"
 	}
 	return f
+}
+
+// boundInScope: a slot of this type in scope is already bound to target.
+func (c *pubCtx) boundInScope(typ, target string) bool {
+	for _, s := range c.scope {
+		if b, ok := c.bindings[s.UUID]; ok && s.Type == typ && b.Kind == typ && b.TargetID == target {
+			return true
+		}
+	}
+	return false
 }
 
 // slot finds or creates the slot for a local object.

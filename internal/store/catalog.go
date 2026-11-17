@@ -48,15 +48,9 @@ type CatalogSlot struct {
 	DocMD           string `json:"doc_md"`
 }
 
-// CatalogBindingAsk as the target of a credential slot's binding means
-// "ask when connecting": the slot materialises as no credential, so the
-// connect asks for the user name and password like any connection without
-// one. Credential ids are uuids, so it never names a real credential.
-const CatalogBindingAsk = "ask"
-
 // CatalogBinding ties a slot to something of the user's own: a credential
-// id (cred, or CatalogBindingAsk), a network profile id (net), a
-// connection id or inventory reference (jump).
+// id (cred), a network profile id (net), a connection id or inventory
+// reference (jump).
 type CatalogBinding struct {
 	CatalogID string `json:"catalog_id"`
 	SlotUUID  string `json:"slot_uuid"`
