@@ -1271,6 +1271,8 @@ export interface CatalogPublishTargets { targets: CatalogPublishTarget[]; can_cr
 export interface CatalogPublishInput {
   catalog_id: string;
   folder_id: string;
+  // One connection instead of the folder (catalog servers from revision 3).
+  conn_id?: string;
   target_uuid: string;
   slot_names: Record<string, string>;
   // "What to send" categories left unticked.

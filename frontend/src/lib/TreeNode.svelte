@@ -720,6 +720,7 @@
         }
       } }] : []),
       ...(one?.catalog_id && one.remote_uuid && one.catalog_state !== "removed" ? [{ label: "Copy to my connections…", iconComponent: IconCopy, onSelect: () => catalogLocal.startCopy("connections", one.id, one.name) }] : []),
+      ...(one && !one.catalog_id && one.protocol !== "local" && !isMobile && catalogs.list.length > 0 ? [{ label: "Publish to catalog…", iconComponent: IconUsers, onSelect: () => publishModal.showConnection(one.id, one.name) }] : []),
       ...connectionActions.tunnelMenuItems(ids),
       ...(allTunnels ? [] : [{
         label: ids.length > 1 ? `Connect all (${ids.length})` : "Connect",
@@ -964,6 +965,10 @@
       return;
     }
     if (cat === "publish") {
+      if (src.kind === "connection") {
+        publishModal.showConnection(src.id, tree.connectionById(src.id)?.name ?? "connection", folder.remote_uuid ?? "", folder.catalog_id ?? "");
+        return;
+      }
       const f = tree.folderById(src.id);
       publishModal.show(src.id, f?.name ?? "folder", folder.remote_uuid ?? "", folder.catalog_id ?? "");
       return;

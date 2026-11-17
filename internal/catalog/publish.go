@@ -33,6 +33,10 @@ import (
 type PublishOptions struct {
 	CatalogID string
 	RootID    string // the local folder to publish
+	// ConnID publishes this one connection (with its forwards) instead of
+	// a folder, straight into TargetUUID (protocol revision 3). RootID is
+	// ignored then.
+	ConnID string
 	// TargetUUID: the catalog folder the subtree goes under; "" publishes
 	// a new space (admin only, checked by the server).
 	TargetUUID string
@@ -301,6 +305,9 @@ func (c *pubCtx) targetInherits() {
 	all := c.allFolders()
 	target := toMap(resolver.EffectiveFolderSettings(c.plan.TargetLocalID, all))
 	root := toMap(resolver.EffectiveFolderSettings(c.opts.RootID, all))
+	if conn, ok := c.conns[c.opts.ConnID]; ok && c.opts.ConnID != "" {
+		root = toMap(resolver.EffectiveOverrides(conn, all))
+	}
 	keys := make([]string, 0, len(target))
 	for k := range target {
 		keys = append(keys, k)
@@ -465,6 +472,9 @@ func BuildPublish(db *store.DB, opts PublishOptions) (*PublishPlan, error) {
 	if err := c.load(); err != nil {
 		return nil, err
 	}
+	if opts.ConnID != "" {
+		return c.buildConnection(cat)
+	}
 	root, ok := c.folders[opts.RootID]
 	if !ok {
 		return nil, fmt.Errorf("publish: folder not found")
@@ -511,7 +521,67 @@ func BuildPublish(db *store.DB, opts PublishOptions) (*PublishPlan, error) {
 			}
 		}
 	}
-	// Bastion copies (their own references may add further copies).
+	if err := c.bastionCopies(); err != nil {
+		return nil, err
+	}
+	c.finish()
+	return c.plan, nil
+}
+
+// buildConnection plans the publish of one connection (opts.ConnID)
+// straight into the target folder: no folder record, the connection's
+// slots and bastion copies go into the target too. What it inherits from
+// its local folders is folded onto it, as for a bastion copy, so it
+// dials the same way for a reader.
+func (c *pubCtx) buildConnection(cat *store.Catalog) (*PublishPlan, error) {
+	conn, ok := c.conns[c.opts.ConnID]
+	if !ok {
+		return nil, fmt.Errorf("publish: connection not found")
+	}
+	if c.opts.TargetUUID == "" {
+		return nil, fmt.Errorf("publish: a single connection goes into an existing catalog folder")
+	}
+	if conn.CatalogID != nil {
+		c.refuse("connections", conn.ID, conn.Name, "already belongs to a catalog")
+		c.finish()
+		return c.plan, nil
+	}
+	if err := c.target(cat); err != nil {
+		return nil, err
+	}
+	c.rootUUID = c.opts.TargetUUID
+	c.plan.RootUUID = c.rootUUID
+	c.inside[conn.ID] = uuid.NewString()
+	ids := []string{conn.ID}
+	if strings.EqualFold(strings.TrimSpace(conn.Protocol), "local") {
+		c.refuse("connections", conn.ID, conn.Name, "a local shell connection cannot be published (it would run on colleagues' machines)")
+	}
+	if pin, err := c.db.GetPinForConnection(conn.ID); err != nil {
+		return nil, err
+	} else if pin != nil {
+		c.refuse("connections", conn.ID, conn.Name, "pinned from a dynamic inventory folder; move it out first")
+	}
+	for _, p := range c.fwds[conn.ID] {
+		ids = append(ids, p.ID)
+	}
+	if busy, err := c.db.PendingPublishForLocal(ids); err != nil {
+		return nil, err
+	} else if busy {
+		c.refuse("connections", conn.ID, conn.Name, "an earlier publish of it has not settled yet; it settles on the next sync")
+	}
+	if err := c.connection(conn, c.rootUUID, ""); err != nil {
+		return nil, err
+	}
+	if err := c.bastionCopies(); err != nil {
+		return nil, err
+	}
+	c.finish()
+	return c.plan, nil
+}
+
+// bastionCopies adds the outside bastions that are sent as copies (their
+// own references may add further copies).
+func (c *pubCtx) bastionCopies() error {
 	for done := map[string]bool{}; ; {
 		var next []string
 		for id, oj := range c.outside {
@@ -531,12 +601,11 @@ func BuildPublish(db *store.DB, opts PublishOptions) (*PublishPlan, error) {
 				continue
 			}
 			if err := c.connection(b, c.rootUUID, id); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
-	c.finish()
-	return c.plan, nil
+	return nil
 }
 
 func (c *pubCtx) load() error {
@@ -805,6 +874,36 @@ func (c *pubCtx) inherited(root store.Folder, effective store.InheritableSetting
 	}
 }
 
+// connInherited lists, for review, the values a single published
+// connection takes from its local folders (folded onto it).
+func (c *pubCtx) connInherited(conn store.Connection, effective store.InheritableSettings, u string) {
+	own := toMap(conn.Overrides)
+	eff := toMap(effective)
+	unsent := c.opts.unsentKeys()
+	var keys []string
+	for k := range eff {
+		if !reflect.DeepEqual(own[k], eff[k]) && !unsent[k] {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		var from []string
+		for id, depth := conn.FolderID, 0; id != nil && depth < 64; depth++ {
+			f, ok := c.folders[*id]
+			if !ok {
+				break
+			}
+			if _, has := toMap(f.Settings)[k]; has {
+				from = append(from, f.Name)
+			}
+			id = f.ParentID
+		}
+		c.plan.FreeText = append(c.plan.FreeText, FreeText{Kind: KindConnections, UUID: u, Name: conn.Name, Field: k,
+			Value: display(eff[k]), InheritedFrom: strings.Join(from, ", ")})
+	}
+}
+
 func (c *pubCtx) connection(conn store.Connection, folderUUID, copyOf string) error {
 	u := c.inside[conn.ID]
 	parentLocal := ""
@@ -814,10 +913,21 @@ func (c *pubCtx) connection(conn store.Connection, folderUUID, copyOf string) er
 	localID := conn.ID
 	path := c.pathOf(parentLocal) + "/" + conn.Name
 	overrides := conn.Overrides
+	if c.opts.ConnID != "" && copyOf == "" {
+		// A single connection leaves its folders behind and is converted
+		// in place into the target folder.
+		parentLocal = c.plan.TargetLocalID
+		path = conn.Name
+		overrides = resolver.EffectiveOverrides(conn, c.allFolders())
+		c.connInherited(conn, overrides, u)
+	}
 	if copyOf != "" {
 		u = c.inside["copy:"+copyOf]
 		localID, parentLocal = "", c.opts.RootID
 		path = c.folders[c.opts.RootID].Name + "/" + conn.Name
+		if c.opts.ConnID != "" {
+			parentLocal, path = c.plan.TargetLocalID, conn.Name
+		}
 		// The copy leaves its own folders behind: what it inherited there
 		// goes onto it, so it dials the same way.
 		overrides = resolver.EffectiveOverrides(conn, c.allFolders())

@@ -16,8 +16,10 @@
   import Icon from "./Icon.svelte";
   import { IconX, IconFolder, IconHost, IconTunnel, IconKey, IconVpn, IconBastion, IconAlertTriangle, IconLock, IconUsers } from "./iconMap";
 
-  interface Props { folderId: string; folderName: string; onClose: () => void; presetTarget?: string; presetCatalog?: string }
-  let { folderId, folderName, onClose, presetTarget = "", presetCatalog = "" }: Props = $props();
+  // connId: publish one connection (straight into the target folder)
+  // instead of the folder folderId.
+  interface Props { folderId: string; folderName: string; connId?: string; onClose: () => void; presetTarget?: string; presetCatalog?: string }
+  let { folderId, folderName, connId = "", onClose, presetTarget = "", presetCatalog = "" }: Props = $props();
 
   // Catalogs this machine can publish to: signed in, vault open.
   const usable = $derived(catalogs.list.filter((c) => !["no_login", "signed_out", "locked", "signing_in"].includes(c.state)));
@@ -87,6 +89,7 @@
   const input = $derived<CatalogPublishInput>({
     catalog_id: catalogId,
     folder_id: folderId,
+    conn_id: connId || undefined,
     target_uuid: targetUUID ?? "",
     slot_names: { ...slotNames },
     unsent,
@@ -234,7 +237,11 @@
       </div>
 
       <div class="notes">
-        <p><IconFolder size={12} /> "{folderName}" moves into {targetPath || "the catalog"} in your tree. Same connections and settings, same behaviour; they become catalog records that everyone with access to that folder sees.</p>
+        {#if connId}
+          <p><IconFolder size={12} /> "{folderName}" moves into {targetPath || "the catalog"} in your tree, with its port forwards. What it takes from its folders now (user, port, jump host, ...) goes onto it, so it connects the same way; it becomes a catalog record that everyone with access to that folder sees.</p>
+        {:else}
+          <p><IconFolder size={12} /> "{folderName}" moves into {targetPath || "the catalog"} in your tree. Same connections and settings, same behaviour; they become catalog records that everyone with access to that folder sees.</p>
+        {/if}
         <p><IconLock size={12} /> Stored passwords, keys and tokens are never sent. Each colleague binds the slots below to their own.</p>
         {#if oldApps.length > 0}
           {#each oldApps as o (o.device)}
