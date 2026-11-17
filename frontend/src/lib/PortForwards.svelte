@@ -187,6 +187,11 @@
     nAutoStart = false;
     nDesc = "";
     nBrowserMode = "";
+    // The catalog edit state belongs to the form that closed.
+    fwRec = null;
+    fwRecordMode = false;
+    fwConflict = null;
+    suggestedAutoStart = false;
   }
 
   // Editing an existing forward reuses this same form. null = create mode.
@@ -299,7 +304,13 @@
     fwRecordMode = false;
     fwConflict = null;
     if (spec.remote_uuid) {
-      api.catalogRecord("forwards", spec.id).then((r) => { fwRec = r; suggestedAutoStart = !!r.suggested_auto_start; }).catch(() => {});
+      // Applied only while this forward's form is still the one open.
+      const want = spec.id;
+      api.catalogRecord("forwards", want).then((r) => {
+        if (editingForwardId !== want) return;
+        fwRec = r;
+        suggestedAutoStart = !!r.suggested_auto_start;
+      }).catch(() => {});
     }
     showAdd = true;
     formBase = formSnap();

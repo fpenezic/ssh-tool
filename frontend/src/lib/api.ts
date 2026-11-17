@@ -1321,6 +1321,7 @@ export interface LocaliseResult {
   emptied: { kind: "folders" | "connections"; id: string; name: string; field: string; slot: string }[];
   root_id: string;
   outside_jumps?: string[];
+  passwords_skipped?: number;
 }
 export interface CatalogEnrollPreview {
   base_url: string; normalised_url: string; server_name: string; user_name: string; user_email: string;

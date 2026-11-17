@@ -39,7 +39,7 @@ class CatalogLocalStore {
   announce(title: string, res: LocaliseResult) {
     const kept = `${res.connections} connection${res.connections === 1 ? "" : "s"}` + (res.folders ? `, ${res.folders} folder${res.folders === 1 ? "" : "s"}` : "");
     const empty = res.emptied.length;
-    if (empty === 0 && !(res.outside_jumps?.length)) {
+    if (empty === 0 && !(res.outside_jumps?.length) && !res.passwords_skipped) {
       toast.ok(`${title}: ${kept}`, 6000);
       return;
     }

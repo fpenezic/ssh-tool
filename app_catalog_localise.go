@@ -90,7 +90,7 @@ func (a *App) CatalogCopyToLocal(kind, id, targetFolderID string) (*store.Locali
 		return nil, err
 	}
 	for _, cc := range copied {
-		a.copyConnectionSecrets(cc.From, cc.To)
+		res.PasswordsSkipped += a.copyConnectionSecrets(cc.From, cc.To)
 	}
 	a.recordAudit("catalog.copy_local", id, map[string]string{"kind": kind, "connections": strconv.Itoa(res.Connections)})
 	EventsEmit("catalog_changed", map[string]any{})
@@ -99,23 +99,33 @@ func (a *App) CatalogCopyToLocal(kind, id, targetFolderID string) (*store.Locali
 
 // copyConnectionSecrets copies a connection's stored SSH and VNC passwords
 // to its copy. A missing or locked vault leaves the copy without them.
-func (a *App) copyConnectionSecrets(from, to string) {
+// It returns how many stored passwords could not be copied (a locked
+// vault), so the result can say so.
+func (a *App) copyConnectionSecrets(from, to string) int {
 	c, err := a.db.GetConnection(from)
-	if err != nil || a.vault == nil {
-		return
+	if err != nil {
+		return 0
 	}
-	if c.PasswordVaultKey != nil {
-		if v, ok, err := a.vault.Get(*c.PasswordVaultKey); err == nil && ok {
-			if err := a.SetConnectionPassword(to, v); err != nil {
-				log.Printf("copy connection password: %v", err)
-			}
+	skipped := 0
+	one := func(key *string, set func(string, string) error, what string) {
+		if key == nil {
+			return
+		}
+		if a.vault == nil {
+			skipped++
+			return
+		}
+		v, ok, err := a.vault.Get(*key)
+		if err != nil || !ok {
+			skipped++
+			return
+		}
+		if err := set(to, v); err != nil {
+			log.Printf("copy %s: %v", what, err)
+			skipped++
 		}
 	}
-	if c.VncPasswordVaultKey != nil {
-		if v, ok, err := a.vault.Get(*c.VncPasswordVaultKey); err == nil && ok {
-			if err := a.SetConnectionVncPassword(to, v); err != nil {
-				log.Printf("copy VNC password: %v", err)
-			}
-		}
-	}
+	one(c.PasswordVaultKey, a.SetConnectionPassword, "connection password")
+	one(c.VncPasswordVaultKey, a.SetConnectionVncPassword, "VNC password")
+	return skipped
 }

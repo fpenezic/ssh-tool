@@ -570,6 +570,7 @@
       const spec = r.entry.spec;
       const running = r.entry.running;
       if (spec.disabled && !running) {
+        chosen = false; // the palette stays open: another pick must work
         toast.info(`${spec.description || "This forward"} is disabled - enable it in the connection's Forwards tab`, 5000);
         return;
       }
@@ -593,6 +594,12 @@
       const spec = r.entry.spec;
       const bm = r.entry.bookmark;
       const running = r.entry.running;
+      // A bookmark needs its forward: a disabled one would not start.
+      if (spec.disabled && !running) {
+        chosen = false;
+        toast.info(`${spec.description || "This forward"} is disabled - enable it in the connection's Forwards tab`, 5000);
+        return;
+      }
       onClose();
       queueMicrotask(() => void openBookmark(spec, bm, running));
       return;
