@@ -522,6 +522,15 @@ export class KeptRef {
              */
             this["reason"] = "";
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Cred: the credential (local id) when the user can choose to send it
+             * after all (one they unticked).
+             * @member
+             * @type {string | undefined}
+             */
+            this["cred"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

@@ -711,9 +711,10 @@
         const hostname = (await showPrompt(`Hostname or IP address of "${name}"`, one.hostname))?.trim();
         if (!hostname) return;
         try {
-          const id = await api.catalogDuplicate(one.id, name, hostname);
+          const r = await api.catalogDuplicate(one.id, name, hostname);
           await tree.load();
-          if (id) await selection.selectConnection(id);
+          if (r.warning) toast.info(`${name} duplicated, but ${r.warning}`, 10000);
+          if (r.id) await selection.selectConnection(r.id);
         } catch (err) {
           toast.err("Duplicate: " + errMsg(err), 8000);
         }

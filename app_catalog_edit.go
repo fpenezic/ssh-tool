@@ -584,18 +584,18 @@ func (a *App) catalogRecordName(catalogID, kind, uuid string) string {
 // connection, with the same settings (slots included), protocol, tags,
 // notes, icon, documentation and forwards, under a new name and address.
 // Writers of the folder only. Returns the new local id.
-func (a *App) CatalogDuplicate(id, name, hostname string) (string, error) {
+func (a *App) CatalogDuplicate(id, name, hostname string) (*CatalogDuplicateResult, error) {
 	name, hostname = strings.TrimSpace(name), strings.TrimSpace(hostname)
 	if name == "" || hostname == "" {
-		return "", fmt.Errorf("a name and a hostname are needed")
+		return nil, fmt.Errorf("a name and a hostname are needed")
 	}
 	t, err := a.catalogWriteTarget(catalog.KindConnections, id)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	var rec map[string]any
 	if err := json.Unmarshal([]byte(t.raw), &rec); err != nil {
-		return "", fmt.Errorf("catalog record: %w", err)
+		return nil, fmt.Errorf("catalog record: %w", err)
 	}
 	u := uuid.NewString()
 	body := map[string]any{"uuid": u, "name": name, "hostname": hostname}
@@ -610,12 +610,15 @@ func (a *App) CatalogDuplicate(id, name, hostname string) (string, error) {
 	defer cancel()
 	w, err := t.client.Create(ctx, catalog.KindConnections, body)
 	if err != nil {
-		return "", fmt.Errorf("not created: %s", catalogShortError(err))
+		return nil, fmt.Errorf("not created: %s", catalogShortError(err))
 	}
 	items := []catalog.Item{catalog.UpsertItem(catalog.KindConnections, w.Record)}
+	var missed int
 	// Its catalog forwards, as new records on the copy.
 	rows, err := a.db.Conn().Query(`SELECT catalog_json FROM port_forwards WHERE connection_id = ? AND remote_uuid IS NOT NULL AND catalog_state <> 'removed'`, id)
-	if err == nil {
+	if err != nil {
+		missed = -1
+	} else {
 		var fwds []string
 		for rows.Next() {
 			var j string
@@ -638,14 +641,33 @@ func (a *App) CatalogDuplicate(id, name, hostname string) (string, error) {
 			fw, err := t.client.Create(ctx, catalog.KindForwards, fb)
 			if err != nil {
 				log.Printf("catalog %s: duplicate forward: %v", t.cat.Name, err)
+				missed++
 				continue
 			}
 			items = append(items, catalog.UpsertItem(catalog.KindForwards, fw.Record))
 		}
 	}
 	if err := a.catalogApply(t.cat, items); err != nil {
-		return "", err
+		return nil, err
 	}
 	a.recordAudit("catalog.record_duplicate", t.cat.ID, map[string]string{"from": t.uuid, "uuid": u})
-	return a.db.CatalogLocalID(t.cat.ID, catalog.KindConnections, u)
+	newID, err := a.db.CatalogLocalID(t.cat.ID, catalog.KindConnections, u)
+	if err != nil {
+		return nil, err
+	}
+	res := &CatalogDuplicateResult{ID: newID}
+	// The copy exists; say what it lacks.
+	switch {
+	case missed < 0:
+		res.Warning = "its forwards could not be read; add them on the copy"
+	case missed > 0:
+		res.Warning = fmt.Sprintf("%d forward(s) could not be created; add them on the copy", missed)
+	}
+	return res, nil
+}
+
+// CatalogDuplicateResult: the new connection, and what it lacks.
+type CatalogDuplicateResult struct {
+	ID      string `json:"id"`
+	Warning string `json:"warning,omitempty"`
 }

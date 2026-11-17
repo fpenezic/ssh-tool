@@ -1123,7 +1123,9 @@ func (c *pubCtx) settings(s store.InheritableSettings, kind, u, name string, fol
 					own := map[string]any{"id": tg["id"], "credential_ref": v, "override": true}
 					list, _ := layer["db_targets"].([]any)
 					layer["db_targets"] = append(list, own)
-					delete(tg, "credential_ref")
+					// Explicitly empty: a shared connection-level login
+					// must not stand in for the withheld one.
+					tg["credential_ref"] = ""
 				} else {
 					tg["credential_ref"] = r
 				}

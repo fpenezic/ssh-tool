@@ -26,6 +26,7 @@ export {
     CIRunnerConfig,
     CIRunnerStatus,
     CatalogCreateInput,
+    CatalogDuplicateResult,
     CatalogEnrollPreview,
     CatalogFolderOffer,
     CatalogFolderSaveResult,
