@@ -119,12 +119,14 @@ func (a *App) uploadPublishImages(ctx context.Context, catID string, c *catalog.
 
 // Background upload of held-back images -----------------------------------
 
+type iconJob struct{ cancel context.CancelFunc }
+
 type iconJobs struct {
 	mu   sync.Mutex
-	stop map[string]context.CancelFunc
+	stop map[string]*iconJob
 }
 
-var catalogIconJobs = &iconJobs{stop: map[string]context.CancelFunc{}}
+var catalogIconJobs = &iconJobs{stop: map[string]*iconJob{}}
 
 // pendingIcon is a record whose image waits for the background upload.
 type pendingIcon struct {
@@ -168,12 +170,15 @@ func (a *App) startIconUploads(cat *store.Catalog, c *catalog.Client) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	j.stop[cat.ID] = cancel
+	job := &iconJob{cancel: cancel}
+	j.stop[cat.ID] = job
 	j.mu.Unlock()
 	go func() {
 		defer func() {
 			j.mu.Lock()
-			delete(j.stop, cat.ID)
+			if j.stop[cat.ID] == job { // a newer job owns the entry otherwise
+				delete(j.stop, cat.ID)
+			}
 			j.mu.Unlock()
 			cancel()
 		}()
@@ -185,8 +190,8 @@ func (a *App) startIconUploads(cat *store.Catalog, c *catalog.Client) {
 func stopIconUploads(catID string) {
 	j := catalogIconJobs
 	j.mu.Lock()
-	if stop, ok := j.stop[catID]; ok {
-		stop()
+	if job, ok := j.stop[catID]; ok {
+		job.cancel()
 		delete(j.stop, catID)
 	}
 	j.mu.Unlock()
@@ -225,6 +230,16 @@ func (a *App) runIconUploads(ctx context.Context, cat *store.Catalog, c *catalog
 		var ra *catalog.RetryAfterError
 		switch {
 		case err == nil:
+			// The user may have set or reset the icon meanwhile, or a
+			// colleague given the record an icon: then nothing is patched
+			// and the user's own icon stays theirs.
+			if !a.stillPending(cat.ID, p) {
+				break
+			}
+			if a.recordHasIcon(cat.ID, p) {
+				a.clearIconPending(cat.ID, p, false)
+				break
+			}
 			if err := a.patchRecordIcon(ctx, cat, p, hash); err != nil {
 				log.Printf("catalog %s: icon for %s: %v", cat.Name, p.uuid, err)
 				emit(total-done, total, time.Time{}, "an icon could not be set: "+catalogShortError(err))
@@ -308,6 +323,8 @@ func (a *App) catalogRecordRev(catID, kind, u string) (int64, bool) {
 // image (the record carries it now), unless the user set another icon
 // meanwhile.
 func (a *App) clearIconPending(catID string, p pendingIcon, sent bool) {
+	layerMu.Lock()
+	defer layerMu.Unlock()
 	layer := map[string]any{}
 	if j := a.catalogLayerJSON(catID, p.uuid); j != "" {
 		_ = json.Unmarshal([]byte(j), &layer)
@@ -353,4 +370,37 @@ func (a *App) uploadRecordImage(ctx context.Context, c *catalog.Client, data []b
 		return catalog.ServerImageRefusal(err).Message
 	}
 	return "icon image: " + catalogShortError(err)
+}
+
+// stillPending: the layer still holds this image, marked pending.
+func (a *App) stillPending(catID string, p pendingIcon) bool {
+	pend, err := a.pendingIcons(catID)
+	if err != nil {
+		return false
+	}
+	for _, x := range pend {
+		if x.uuid == p.uuid && x.imageID == p.imageID {
+			return true
+		}
+	}
+	return false
+}
+
+// recordHasIcon: the catalog record carries an icon now (someone set one
+// after the publish that held this image back).
+func (a *App) recordHasIcon(catID string, p pendingIcon) bool {
+	table := map[string]string{catalog.KindFolders: "folders", catalog.KindConnections: "connections"}[p.kind]
+	if table == "" {
+		return false
+	}
+	var raw string
+	if a.db.Conn().QueryRow(`SELECT catalog_json FROM `+table+` WHERE catalog_id = ? AND remote_uuid = ?`, catID, p.uuid).Scan(&raw) != nil {
+		return false
+	}
+	var r struct {
+		IconImage *string `json:"icon_image"`
+		IconName  *string `json:"icon_name"`
+	}
+	_ = json.Unmarshal([]byte(raw), &r)
+	return (r.IconImage != nil && *r.IconImage != "") || (r.IconName != nil && *r.IconName != "")
 }

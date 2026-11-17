@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sync"
 
 	"ssh-tool/internal/catalog"
 )
@@ -50,6 +51,11 @@ func (a *App) keepRecordLayer(catID, remoteUUID, newJSON string) string {
 	return string(b)
 }
 
+// layerMu serialises read-modify-write of catalog override layers (record
+// saves, icon uploads, resets), so two writers do not drop each other's
+// change.
+var layerMu sync.Mutex
+
 // updateRecordLayer changes a catalog row's record part and
 // materialises. Not a catalog row: handled is false.
 func (a *App) updateRecordLayer(kind, id string, mut func(rec map[string]any)) (handled bool, err error) {
@@ -66,6 +72,7 @@ func (a *App) updateRecordLayer(kind, id string, mut func(rec map[string]any)) (
 			return true, errors.New("this folder is only an outline of a folder you cannot open; it takes no local settings")
 		}
 	}
+	layerMu.Lock()
 	layer := map[string]any{}
 	if j := a.catalogLayerJSON(catID, uuid); j != "" {
 		_ = json.Unmarshal([]byte(j), &layer)
@@ -81,7 +88,9 @@ func (a *App) updateRecordLayer(kind, id string, mut func(rec map[string]any)) (
 		layer[catalog.RecordLayerKey] = rec
 	}
 	b, _ := json.Marshal(layer)
-	if err := a.db.SetCatalogOverride(catID, uuid, kind, string(b)); err != nil {
+	err = a.db.SetCatalogOverride(catID, uuid, kind, string(b))
+	layerMu.Unlock()
+	if err != nil {
 		return true, err
 	}
 	a.rematerialiseCatalogs()
