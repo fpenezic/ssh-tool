@@ -119,6 +119,9 @@
           {/each}
         </div>
       {/if}
+      {#if r.passwords_skipped}
+        <p class="hint">{r.passwords_skipped} stored password{r.passwords_skipped === 1 ? "" : "s"} could not be copied (the vault was locked); set them on the copies.</p>
+      {/if}
       {#if r.outside_jumps?.length}
         <p class="hint">Still jumping through a connection outside the copy (the original): {r.outside_jumps.join(", ")}.</p>
       {/if}

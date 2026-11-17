@@ -48,6 +48,9 @@ type LocaliseResult struct {
 	// OutsideJumps: copied connections still jumping through a connection
 	// outside the copy (the original, which keeps working while it exists).
 	OutsideJumps []string `json:"outside_jumps,omitempty"`
+	// PasswordsSkipped: stored passwords a copy could not carry over
+	// (the vault was locked); set them on the copies by hand.
+	PasswordsSkipped int `json:"passwords_skipped,omitempty"`
 }
 
 var slotFieldLabels = map[string]string{

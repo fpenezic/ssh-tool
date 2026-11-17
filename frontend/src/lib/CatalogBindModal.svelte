@@ -129,8 +129,10 @@
 {/if}
 
 <style>
-  .overlay { position: fixed; inset: 0; background: rgba(17, 17, 27, 0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; }
-  /* No scroll area of its own: the pickers drop down past the edge. */
+  /* The overlay scrolls a tall list (the buttons stay reachable); the
+     dialog has no scroll area of its own, so the pickers drop down past
+     its edge. */
+  .overlay { position: fixed; inset: 0; background: rgba(17, 17, 27, 0.6); z-index: 1000; display: flex; align-items: safe center; justify-content: center; overflow-y: auto; padding: 4vh 0; }
   .modal { background: var(--base); color: var(--text); border: 1px solid var(--surface0); border-radius: var(--r-md); width: min(560px, 94vw); display: flex; flex-direction: column; gap: 0.6rem; padding: 1rem 1.2rem; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
   header { display: flex; align-items: center; justify-content: space-between; }
   header h2 { margin: 0; font-size: var(--fs-md); display: flex; align-items: center; gap: 6px; }
